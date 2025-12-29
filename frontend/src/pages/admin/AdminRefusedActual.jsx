@@ -9,25 +9,60 @@ import axios from "axios";
  *  - GET  /api/admin/refused/actual
  *  - GET  /api/admin/refused/:id
  *  - POST /api/admin/refused/:id/ask-actual?force=1
+ *
+ * IMPORTANT:
+ * This page must call the real backend API (Railway / api.travella.uz).
+ * If API base is empty and you’re on Vercel, requests hit same-origin and return HTML -> "Bad response".
  */
 
+/** Grab JWT from storages (support different keys used in your project) */
 function getAuthToken() {
-  // adjust if your project stores token differently
   return (
     localStorage.getItem("token") ||
     localStorage.getItem("adminToken") ||
+    localStorage.getItem("providerToken") ||
     sessionStorage.getItem("token") ||
     ""
   );
 }
 
-function apiBase() {
-  // Prefer explicit env; fallback to same-origin (Railway)
-  return (
-    (import.meta?.env?.VITE_API_BASE_URL || import.meta?.env?.VITE_API_URL || "")
+/** Runtime config support: window.frontend.API_BASE */
+function getRuntimeApiBase() {
+  try {
+    const v = window?.frontend?.API_BASE;
+    return (v || "").toString().trim();
+  } catch {
+    return "";
+  }
+}
+
+/** Env config support */
+function getEnvApiBase() {
+  const v =
+    (import.meta?.env?.VITE_API_BASE_URL ||
+      import.meta?.env?.VITE_API_URL ||
+      import.meta?.env?.VITE_API_BASE ||
+      "")
       .toString()
-      .trim() || ""
-  );
+      .trim();
+  return v;
+}
+
+/**
+ * Normalize API base:
+ * - removes trailing slashes
+ * - if base ends with "/api" -> we should not prefix "/api" again
+ */
+function normalizeApiBase(raw) {
+  const b = (raw || "").toString().trim().replace(/\/+$/, "");
+  return b;
+}
+
+function computeApiPrefix(base) {
+  // If base ends with /api -> no additional prefix; else prefix requests with /api
+  if (!base) return "/api"; // default for local dev same-origin (optional)
+  const b = base.replace(/\/+$/, "");
+  return b.endsWith("/api") ? "" : "/api";
 }
 
 function formatDate(iso) {
@@ -45,6 +80,46 @@ function short(s, n = 60) {
 
 function classNames(...a) {
   return a.filter(Boolean).join(" ");
+}
+
+function isProbablyHtmlPayload(data, contentType) {
+  if (contentType && String(contentType).toLowerCase().includes("text/html"))
+    return true;
+  if (typeof data !== "string") return false;
+  const t = data.trim().slice(0, 200).toLowerCase();
+  return t.startsWith("<!doctype html") || t.startsWith("<html");
+}
+
+function extractAxiosError(e) {
+  const status = e?.response?.status;
+  const contentType = e?.response?.headers?.["content-type"];
+  const data = e?.response?.data;
+
+  let msg =
+    e?.response?.data?.message ||
+    e?.response?.data?.error ||
+    e?.message ||
+    "Ошибка";
+
+  // If HTML returned instead of JSON — provide actionable message
+  if (isProbablyHtmlPayload(data, contentType)) {
+    const hint =
+      "API вернул HTML вместо JSON. Обычно это значит, что API_BASE не настроен и запрос ушёл на фронтенд (Vercel) вместо backend (Railway).";
+    msg = `${hint} (status=${status || "?"}, content-type=${
+      contentType || "?"
+    })`;
+  } else if (typeof data === "string" && data.trim()) {
+    // sometimes backend returns plain string
+    msg = `${msg} (status=${status || "?"})`;
+  } else if (status) {
+    msg = `${msg} (status=${status})`;
+  }
+
+  // For debugging: show a tiny snippet if it's string
+  const snippet =
+    typeof data === "string" ? data.trim().slice(0, 180) : null;
+
+  return { msg, status, contentType, snippet };
 }
 
 function Badge({ children, tone = "gray" }) {
@@ -101,25 +176,32 @@ function Modal({ open, title, onClose, children, footer }) {
 
 export default function AdminRefusedActual() {
   const token = useMemo(() => getAuthToken(), []);
-  const base = useMemo(() => apiBase(), []);
-  const apiPrefix = useMemo(() => {
-    const b = (base || "").replace(/\/+$/, "");
-    return b.endsWith("/api") ? "" : "/api";
-  }, [base]);
 
+  // Self-sufficient API base resolution:
+  // 1) env
+  // 2) runtime window.frontend.API_BASE
+  const base = useMemo(() => {
+    const env = normalizeApiBase(getEnvApiBase());
+    const rt = normalizeApiBase(getRuntimeApiBase());
+    // prefer env, fallback runtime
+    return env || rt || "";
+  }, []);
+
+  const apiPrefix = useMemo(() => computeApiPrefix(base), [base]);
   const apiPath = (p) => `${apiPrefix}${p.startsWith("/") ? p : `/${p}`}`;
 
   const http = useMemo(() => {
     const inst = axios.create({
-      baseURL: base || "", // "" => same-origin
+      baseURL: base || "", // if empty, same-origin (only OK for local dev proxy)
       withCredentials: true,
+      timeout: 20000,
+      validateStatus: () => true, // we handle status manually to show better errors
     });
 
     inst.interceptors.request.use((config) => {
       const t = getAuthToken();
       if (t) {
         config.headers = config.headers || {};
-        // backend expects JWT in Authorization in most routes
         config.headers.Authorization = `Bearer ${t}`;
       }
       return config;
@@ -161,11 +243,61 @@ export default function AdminRefusedActual() {
 
   const canUse = useMemo(() => !!token, [token]);
 
+  // If base is empty AND we're not in local dev, warn loudly
+  const baseLooksMissing = useMemo(() => {
+    if (base) return false;
+    const host = (window?.location?.hostname || "").toLowerCase();
+    // On local dev with proxy, empty base is OK; on real domains it's not.
+    return host && host !== "localhost" && host !== "127.0.0.1";
+  }, [base]);
+
   function showToast(kind, text) {
     setToast({ kind, text, at: Date.now() });
     setTimeout(() => {
-      setToast((t) => (t && t.at ? (Date.now() - t.at > 2500 ? null : t) : null));
+      setToast((t) =>
+        t && t.at ? (Date.now() - t.at > 2500 ? null : t) : null
+      );
     }, 2800);
+  }
+
+  function ensureJsonOrThrow(resp, where = "") {
+    const status = resp?.status;
+    const contentType = resp?.headers?.["content-type"];
+    const data = resp?.data;
+
+    // Non-2xx -> show meaningful error
+    if (!status || status < 200 || status >= 300) {
+      const msg =
+        data?.message ||
+        data?.error ||
+        (typeof data === "string" ? data.slice(0, 120) : null) ||
+        `HTTP ${status || "?"}`;
+      const err = new Error(
+        `${msg} (status=${status || "?"}${where ? `, ${where}` : ""})`
+      );
+      err.__resp = resp;
+      throw err;
+    }
+
+    // HTML => wrong API base
+    if (isProbablyHtmlPayload(data, contentType)) {
+      const err = new Error(
+        `API вернул HTML вместо JSON (${where || "request"}). Проверь VITE_API_BASE_URL или window.frontend.API_BASE.`
+      );
+      err.__resp = resp;
+      throw err;
+    }
+
+    // Expect object with success
+    if (!data || typeof data !== "object") {
+      const err = new Error(
+        `Bad response (${where || "request"}): ожидали JSON-объект`
+      );
+      err.__resp = resp;
+      throw err;
+    }
+
+    return data;
   }
 
   async function loadList(nextPage = page) {
@@ -183,19 +315,27 @@ export default function AdminRefusedActual() {
         },
       });
 
-      const data = resp?.data;
-      if (!data?.success) {
-        throw new Error(data?.message || "Bad response");
-      }
+      const data = ensureJsonOrThrow(resp, "loadList");
+      if (!data?.success) throw new Error(data?.message || "Bad response");
 
       setItems(Array.isArray(data.items) ? data.items : []);
       setTotal(Number(data.total || 0));
     } catch (e) {
-      const msg =
-        e?.response?.data?.message ||
-        e?.response?.data?.error ||
-        e?.message ||
-        "Ошибка загрузки";
+      const info = extractAxiosError(e);
+      const resp = e?.__resp;
+      const ct = resp?.headers?.["content-type"];
+      const data = resp?.data;
+
+      // Prefer our computed msg; add snippet when available
+      let msg = info.msg;
+      if (isProbablyHtmlPayload(data, ct)) {
+        msg =
+          msg +
+          " → Настрой API_BASE: VITE_API_BASE_URL (Vercel) или window.frontend.API_BASE.";
+      } else if (info.snippet) {
+        msg = `${msg}. Ответ: ${info.snippet}`;
+      }
+
       setError(msg);
       setItems([]);
       setTotal(0);
@@ -205,7 +345,6 @@ export default function AdminRefusedActual() {
   }
 
   useEffect(() => {
-    // reset to first page on filters change
     setPage(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [category, status, includeInactive, limit]);
@@ -228,17 +367,13 @@ export default function AdminRefusedActual() {
     setDetailsItem(null);
     setError("");
     try {
-      const resp = await http.get(apiPath(`/admin/refused/${id}`))
-      const data = resp?.data;
+      const resp = await http.get(apiPath(`/admin/refused/${id}`));
+      const data = ensureJsonOrThrow(resp, "openDetails");
       if (!data?.success) throw new Error(data?.message || "Bad response");
       setDetailsItem(data.item);
     } catch (e) {
-      const msg =
-        e?.response?.data?.message ||
-        e?.response?.data?.error ||
-        e?.message ||
-        "Ошибка загрузки деталей";
-      setError(msg);
+      const info = extractAxiosError(e);
+      setError(info.msg || "Ошибка загрузки деталей");
       setDetailsItem(null);
     } finally {
       setDetailsLoading(false);
@@ -249,46 +384,33 @@ export default function AdminRefusedActual() {
     setSendingId(id);
     setError("");
     try {
-      const resp = await http.post(apiPath(`/admin/refused/${id}/ask-actual`),
+      const resp = await http.post(
+        apiPath(`/admin/refused/${id}/ask-actual`),
         null,
         { params: { force: force ? "1" : "0" } }
       );
 
-      const data = resp?.data;
+      const data = ensureJsonOrThrow(resp, "askActual");
       if (!data?.success) {
-        // locked is a "soft" fail — show nice message
         if (data?.locked && data?.meta?.lockUntil) {
-          showToast(
-            "warn",
-            `⏳ Заблокировано до ${formatDate(data.meta.lockUntil)}`
-          );
+          showToast("warn", `⏳ Заблокировано до ${formatDate(data.meta.lockUntil)}`);
           return;
         }
         throw new Error(data?.message || "Не удалось отправить");
       }
 
-      if (data?.sent) {
-        showToast(
-          "ok",
-          `✅ Отправлено (${data?.used || "bot"}), chatId=${data?.chatId}`
-        );
+      // Response variants: {sent:true, used, chatId} or {ok:true,...}
+      if (data?.sent || data?.ok) {
+        showToast("ok", `✅ Отправлено, chatId=${data?.chatId || "—"}`);
       } else {
-        showToast(
-          "warn",
-          `⚠️ Не отправлено: ${data?.tg?.error || data?.message || "unknown"}`
-        );
+        showToast("warn", `⚠️ Не отправлено: ${data?.tg?.error || data?.message || "unknown"}`);
       }
 
-      // refresh list to update meta fields
       await loadList(page);
     } catch (e) {
-      const msg =
-        e?.response?.data?.message ||
-        e?.response?.data?.error ||
-        e?.message ||
-        "Ошибка отправки";
-      setError(msg);
-      showToast("err", `❌ ${msg}`);
+      const info = extractAxiosError(e);
+      setError(info.msg);
+      showToast("err", `❌ ${info.msg}`);
     } finally {
       setSendingId(null);
     }
@@ -314,13 +436,18 @@ export default function AdminRefusedActual() {
     <div className="p-4 md:p-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">
-            Актуальные отказы
-          </h1>
+          <h1 className="text-xl font-semibold text-gray-900">Актуальные отказы</h1>
           <p className="text-sm text-gray-600 mt-1">
-            Список refused_* услуг, сортировка по ближайшей дате. Можно вручную
-            спросить актуальность у поставщика в Telegram.
+            Список refused_* услуг, сортировка по ближайшей дате. Можно вручную спросить актуальность у поставщика в Telegram.
           </p>
+          <div className="mt-2 text-xs text-gray-500">
+            API base:{" "}
+            <span className="font-mono">
+              {base ? base : "— (не задан)"}
+            </span>
+            {" • "}
+            prefix: <span className="font-mono">{apiPrefix || "—"}</span>
+          </div>
         </div>
 
         {toast ? (
@@ -339,8 +466,21 @@ export default function AdminRefusedActual() {
 
       {!canUse ? (
         <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-800">
-          Не найден JWT токен в localStorage/sessionStorage. Админ-страница требует
-          авторизацию (Authorization: Bearer ...).
+          Не найден JWT токен в localStorage/sessionStorage. Админ-страница требует авторизацию (Authorization: Bearer ...).
+        </div>
+      ) : null}
+
+      {canUse && baseLooksMissing ? (
+        <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900">
+          <div className="font-semibold">API_BASE не настроен</div>
+          <div className="mt-1 text-sm">
+            Сейчас base пустой, а домен не localhost — запросы уйдут на фронтенд и вернут HTML (Bad response).
+            <div className="mt-2">
+              Настрой на Vercel env:{" "}
+              <span className="font-mono">VITE_API_BASE_URL=https://api.travella.uz</span>{" "}
+              (или домен Railway).
+            </div>
+          </div>
         </div>
       ) : null}
 
@@ -488,16 +628,25 @@ export default function AdminRefusedActual() {
 
                       <td className="px-3 py-2">
                         <div className="font-medium text-gray-900">
-                          {short(it.title || it.details?.hotel || it.details?.hotelName || "—", 70)}
+                          {short(
+                            it.title ||
+                              it.details?.hotel ||
+                              it.details?.hotelName ||
+                              "—",
+                            70
+                          )}
                         </div>
                         <div className="text-xs text-gray-600 mt-0.5">
-                          status: <span className="font-mono">{it.status}</span>
+                          status:{" "}
+                          <span className="font-mono">{it.status}</span>
                         </div>
                       </td>
 
                       <td className="px-3 py-2 whitespace-nowrap">
                         {it.startDateForSort ? (
-                          <div className="text-gray-900">{formatDate(it.startDateForSort)}</div>
+                          <div className="text-gray-900">
+                            {formatDate(it.startDateForSort)}
+                          </div>
                         ) : (
                           <div className="text-gray-500">—</div>
                         )}
@@ -505,7 +654,9 @@ export default function AdminRefusedActual() {
 
                       <td className="px-3 py-2">
                         <div className="text-gray-900 font-medium">
-                          {it?.provider?.companyName || it?.provider?.name || "—"}
+                          {it?.provider?.companyName ||
+                            it?.provider?.name ||
+                            "—"}
                         </div>
                         <div className="text-xs text-gray-600 mt-0.5">
                           {it?.provider?.phone ? `📞 ${it.provider.phone}` : ""}
@@ -565,7 +716,11 @@ export default function AdminRefusedActual() {
                                 ? "border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed"
                                 : "border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100"
                             )}
-                            title={!tgOk ? "У провайдера нет telegram chatId" : "Спросить актуальность"}
+                            title={
+                              !tgOk
+                                ? "У провайдера нет telegram chatId"
+                                : "Спросить актуальность"
+                            }
                           >
                             {sendingId === it.id ? "Отправка…" : "Спросить"}
                           </button>
@@ -622,8 +777,7 @@ export default function AdminRefusedActual() {
               ← Назад
             </button>
             <div className="text-sm text-gray-700">
-              Стр.{" "}
-              <span className="font-medium text-gray-900">{page}</span> из{" "}
+              Стр. <span className="font-medium text-gray-900">{page}</span> из{" "}
               <span className="font-medium text-gray-900">{pageCount}</span>
             </div>
             <button
@@ -665,14 +819,20 @@ export default function AdminRefusedActual() {
                 <button
                   onClick={() => askActual(detailsItem.id, false)}
                   className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-700 hover:bg-blue-100"
-                  disabled={!detailsItem?.provider?.chatId || sendingId === detailsItem.id}
+                  disabled={
+                    !detailsItem?.provider?.chatId ||
+                    sendingId === detailsItem.id
+                  }
                 >
                   Спросить
                 </button>
                 <button
                   onClick={() => askActual(detailsItem.id, true)}
                   className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900 hover:bg-amber-100"
-                  disabled={!detailsItem?.provider?.chatId || sendingId === detailsItem.id}
+                  disabled={
+                    !detailsItem?.provider?.chatId ||
+                    sendingId === detailsItem.id
+                  }
                 >
                   Force
                 </button>
@@ -733,7 +893,9 @@ export default function AdminRefusedActual() {
                   </div>
                   <div>
                     <span className="text-gray-600">Телефон:</span>{" "}
-                    <span className="font-mono">{detailsItem?.provider?.phone || "—"}</span>
+                    <span className="font-mono">
+                      {detailsItem?.provider?.phone || "—"}
+                    </span>
                   </div>
                   <div>
                     <span className="text-gray-600">Username:</span>{" "}
@@ -745,7 +907,9 @@ export default function AdminRefusedActual() {
                   </div>
                   <div>
                     <span className="text-gray-600">chatId:</span>{" "}
-                    <span className="font-mono">{detailsItem?.provider?.chatId || "—"}</span>
+                    <span className="font-mono">
+                      {detailsItem?.provider?.chatId || "—"}
+                    </span>
                   </div>
                 </div>
               </div>
