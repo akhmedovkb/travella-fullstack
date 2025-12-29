@@ -493,8 +493,15 @@ async function searchClientServices(req, res) {
             (s.details::jsonb->>'expiration') IS NULL
             OR (s.details::jsonb->>'expiration')::timestamp > NOW()
             )
-        ORDER BY s.created_at DESC
-        LIMIT 50
+          ORDER BY
+          COALESCE(
+            (s.details::jsonb->>'startDate')::date,
+            (s.details::jsonb->>'checkInDate')::date,
+            (s.details::jsonb->>'endFlightDate')::date,
+            (s.details::jsonb->>'eventDate')::date
+           ) ASC NULLS LAST,
+           s.created_at DESC
+          LIMIT 50
       `,
       [category]
     );
