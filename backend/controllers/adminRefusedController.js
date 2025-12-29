@@ -1,25 +1,27 @@
 // backend/controllers/adminRefusedController.js
 const db = require("../db");
-
-// Telegram send + keyboards/helpers
 const { tgSend } = require("../utils/telegram");
 
-// берем только то, что реально гарантированно есть
-const { isServiceActual } = require("../telegram/helpers/serviceActual");
-const { buildSvcActualKeyboard } = require("../telegram/keyboards/serviceActual");
+// keyboard builder (у тебя уже есть)
+let buildSvcActualKeyboard = null;
+try {
+  ({ buildSvcActualKeyboard } = require("../telegram/keyboards/serviceActual"));
+} catch (e) {
+  // если вдруг файл отсутствует — не валим сервер, просто шлём без клавиатуры
+  buildSvcActualKeyboard = null;
+}
 
 // -------------------------
-// local helpers (self-sufficient)
+// helpers (SELF-SUFFICIENT)
 // -------------------------
 
-// безопасный парсинг details (json/json-string/null)
-function parseDetailsAny(details) {
-  if (!details) return {};
-  if (typeof details === "object") return details;
-  if (typeof details === "string") {
+function safeJsonParseMaybe(v) {
+  if (!v) return {};
+  if (typeof v === "object") return v;
+  if (typeof v === "string") {
     try {
-      const parsed = JSON.parse(details);
-      return parsed && typeof parsed === "object" ? parsed : {};
+      const obj = JSON.parse(v);
+      return obj && typeof obj === "object" ? obj : {};
     } catch {
       return {};
     }
@@ -27,42 +29,68 @@ function parseDetailsAny(details) {
   return {};
 }
 
-// SAFE DATE PARSER (never throws)
-// поддерживает кривые форматы типа 2026-16-01 (swap mm<->dd)
-function parseDateSafe(val) {
-  if (!val) return null;
-
-  if (val instanceof Date && !Number.isNaN(val.getTime())) return val;
-
-  const s = String(val).trim();
+function toBoolLoose(v) {
+  if (v === true || v === false) return v;
+  if (v == null) return null;
+  const s = String(v).trim().toLowerCase();
   if (!s) return null;
+  if (["1", "true", "yes", "y", "да"].includes(s)) return true;
+  if (["0", "false", "no", "n", "нет"].includes(s)) return false;
+  return null;
+}
 
-  // expected YYYY-MM-DD
-  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!m) return null;
+// SAFE DATE PARSER (never throws)
+// accepts:
+// - YYYY-MM-DD
+// - ISO string
+// - Date
+// and fixes "YYYY-16-01" by swapping (mm>12 and dd<=12)
+function safeParseDate(val) {
+  try {
+    if (!val) return null;
+    if (val instanceof Date && !Number.isNaN(val.getTime())) return val;
 
-  let [, y, a, b] = m;
-  let mm = Number(a);
-  let dd = Number(b);
+    const s = String(val).trim();
+    if (!s) return null;
 
-  // swap if month > 12 but day looks like a month
-  if (mm > 12 && dd <= 12) {
-    [mm, dd] = [dd, mm];
+    // strict YYYY-MM-DD
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m) {
+      let [, y, a, b] = m;
+      let mm = Number(a);
+      let dd = Number(b);
+
+      if (mm > 12 && dd <= 12) {
+        [mm, dd] = [dd, mm];
+      }
+      if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
+
+      const iso = `${y}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return null;
+      return d;
+    }
+
+    // ISO datetime / timestamp
+    const d2 = new Date(s);
+    if (Number.isNaN(d2.getTime())) return null;
+    return d2;
+  } catch {
+    return null;
   }
-
-  if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
-
-  const iso = `${y}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  return d;
 }
 
-function nowIso() {
-  return new Date().toISOString();
+function startOfToday() {
+  const t = new Date();
+  t.setHours(0, 0, 0, 0);
+  return t;
 }
 
-function normalizeMeta(detailsObj) {
+function pickProviderChatId(p) {
+  return p.telegram_refused_chat_id || p.telegram_web_chat_id || p.telegram_chat_id || null;
+}
+
+function ensureMeta(detailsObj) {
   const d = detailsObj && typeof detailsObj === "object" ? detailsObj : {};
   if (!d.tg_actual_reminders_meta || typeof d.tg_actual_reminders_meta !== "object") {
     d.tg_actual_reminders_meta = {};
@@ -70,20 +98,18 @@ function normalizeMeta(detailsObj) {
   return d;
 }
 
-// взять chatId провайдера
-function pickProviderChatId(p) {
-  return (
-    p.telegram_refused_chat_id ||
-    p.telegram_web_chat_id ||
-    p.telegram_chat_id ||
-    null
-  );
-}
-
-// дата для сортировки/отображения
-function getStartDateForAdminSort(svc) {
-  const d = parseDetailsAny(svc.details);
-  const cat = String(svc.category || "").toLowerCase();
+/**
+ * Определяем "дату для сортировки" по категории:
+ * - refused_hotel: checkinDate/ checkInDate / startDate
+ * - refused_flight: departureFlightDate / startDate
+ * - refused_ticket: eventDate / date / startDate
+ * - refused_tour: startDate / departureFlightDate
+ *
+ * Возвращаем Date|null
+ */
+function getStartDateForSort(category, details) {
+  const d = details || {};
+  const cat = String(category || "").toLowerCase();
 
   const pick = (...keys) => {
     for (const k of keys) {
@@ -94,61 +120,122 @@ function getStartDateForAdminSort(svc) {
     return null;
   };
 
-  // 1) стартовая дата по типам
-  let raw =
-    (cat === "refused_hotel" &&
-      pick(
-        "checkinDate",
-        "checkInDate",
-        "check_in",
-        "check_in_date",
-        "startDate",
-        "start_date"
-      )) ||
-    (cat === "refused_ticket" &&
-      pick("eventDate", "event_date", "date", "startDate", "start_date")) ||
-    (cat === "refused_flight" &&
-      pick(
-        "departureFlightDate",
-        "departureDate",
-        "departure_date",
-        "startFlightDate",
-        "start_flight_date",
-        "startDate",
-        "start_date"
-      )) ||
-    pick("departureFlightDate", "startDate", "start_date", "dateFrom", "date_from");
+  let raw = null;
 
-  let dt = parseDateSafe(raw);
+  if (cat === "refused_hotel") {
+    raw = pick("checkinDate", "checkInDate", "check_in", "check_in_date", "startDate", "start_date");
+  } else if (cat === "refused_flight") {
+    raw = pick(
+      "departureFlightDate",
+      "departureDate",
+      "departure_date",
+      "startFlightDate",
+      "start_flight_date",
+      "startDate",
+      "start_date"
+    );
+  } else if (cat === "refused_ticket") {
+    raw = pick("eventDate", "event_date", "date", "startDate", "start_date");
+  } else {
+    // refused_tour и прочее refused_*
+    raw = pick("startDate", "start_date", "departureFlightDate", "dateFrom", "date_from");
+  }
+
+  let dt = safeParseDate(raw);
   if (dt) return dt;
 
-  // 2) fallback на конечную дату
-  raw = pick(
-    "endDate",
-    "end_date",
-    "checkoutDate",
-    "checkOutDate",
-    "checkout_date",
-    "returnFlightDate",
-    "endFlightDate"
-  );
-  dt = parseDateSafe(raw);
+  // fallback: end date
+  raw = pick("endDate", "end_date", "checkoutDate", "checkOutDate", "returnFlightDate", "endFlightDate");
+  dt = safeParseDate(raw);
   return dt || null;
+}
+
+/**
+ * Самодостаточная проверка актуальности:
+ * - status must be published/approved unless includeInactive=1
+ * - details.isActive если явно false -> неактуально
+ * - services.expiration_at если <= now -> неактуально
+ * - details.expiration (timestamp) если <= now -> неактуально
+ * - если есть endDate/endFlightDate/checkoutDate и оно < today -> неактуально
+ */
+function computeIsActual({ details, svcRow }) {
+  try {
+    const d = details || {};
+    const now = new Date();
+    const today = startOfToday();
+
+    // details.isActive (может быть true/false/строкой)
+    const isActive = toBoolLoose(d.isActive);
+    if (isActive === false) return false;
+
+    // services.expiration_at
+    if (svcRow && svcRow.expiration_at) {
+      const exp = safeParseDate(svcRow.expiration_at);
+      if (exp && exp.getTime() <= now.getTime()) return false;
+    }
+
+    // details.expiration (обычно ISO или "YYYY-MM-DD ...")
+    if (d.expiration) {
+      const exp2 = safeParseDate(d.expiration);
+      if (exp2 && exp2.getTime() <= now.getTime()) return false;
+    }
+
+    // end date check (не показываем явно прошедшие)
+    const endRaw =
+      d.endFlightDate ||
+      d.endDate ||
+      d.checkoutDate ||
+      d.checkOutDate ||
+      d.check_out_date ||
+      d.returnFlightDate ||
+      null;
+
+    const end = safeParseDate(endRaw);
+    if (end) {
+      // сравниваем с началом сегодняшнего дня
+      if (end.getTime() < today.getTime()) return false;
+    }
+
+    return true;
+  } catch {
+    // guard: если что-то странное — не валим сервер
+    return true;
+  }
+}
+
+function formatMeta(detailsObj) {
+  const meta = detailsObj?.tg_actual_reminders_meta || {};
+  return {
+    lastSentAt: meta.lastSentAt || null,
+    lastAnswer: meta.lastAnswer || null,
+    lastConfirmedAt: meta.lastConfirmedAt || null,
+    lockUntil: meta.lockUntil || null,
+    lastSentBy: meta.lastSentBy || null,
+  };
 }
 
 // -------------------------
 // controllers
 // -------------------------
 
+/**
+ * GET /api/admin/refused/actual
+ * query:
+ *  - category: refused_tour/refused_hotel/refused_flight/refused_ticket or ""(all refused_%)
+ *  - status: "" -> default published/approved
+ *  - q: search
+ *  - page, limit
+ *  - includeInactive: "1" to show inactive too
+ */
 exports.listActualRefused = async (req, res) => {
   try {
     const {
-      category = "",        // refused_tour / refused_hotel / refused_flight / refused_ticket
-      status = "",          // published / approved / ...
-      q = "",               // поиск
+      category = "",
+      status = "",
+      q = "",
       page = "1",
       limit = "30",
-      includeInactive = "0" // 1 = показывать всё, 0 = только актуальные по isServiceActual
+      includeInactive = "0",
     } = req.query;
 
     const pageNum = Math.max(parseInt(page, 10) || 1, 1);
@@ -158,7 +245,7 @@ exports.listActualRefused = async (req, res) => {
     const where = [];
     const params = [];
 
-    // отказные категории
+    // refused_*
     where.push(`s.category LIKE 'refused_%'`);
 
     if (category && String(category).startsWith("refused_")) {
@@ -166,44 +253,47 @@ exports.listActualRefused = async (req, res) => {
       where.push(`s.category = $${params.length}`);
     }
 
-    if (status) {
-      params.push(status);
+    if (status && String(status).trim()) {
+      params.push(String(status).trim());
       where.push(`LOWER(s.status) = LOWER($${params.length})`);
     } else {
-      // по умолчанию берём те, что реально на витрине
-      where.push(`LOWER(s.status) IN ('published', 'approved')`);
+      where.push(`LOWER(s.status) IN ('published','approved')`);
     }
 
-    // простая текстовая фильтрация
-    if (q && q.trim()) {
-      params.push(`%${q.trim().toLowerCase()}%`);
-      const pIdx = params.length;
+    if (q && String(q).trim()) {
+      params.push(`%${String(q).trim().toLowerCase()}%`);
+      const i = params.length;
       where.push(`
         (
-          LOWER(COALESCE(s.title,'')) LIKE $${pIdx}
-          OR LOWER(COALESCE(p.name,'')) LIKE $${pIdx}
-          OR LOWER(COALESCE(p.company_name,'')) LIKE $${pIdx}
-          OR LOWER(COALESCE(p.phone,'')) LIKE $${pIdx}
-          OR LOWER(COALESCE(p.telegram_username,'')) LIKE $${pIdx}
-          OR LOWER(COALESCE(s.details::text,'')) LIKE $${pIdx}
+          LOWER(COALESCE(s.title,'')) LIKE $${i}
+          OR LOWER(COALESCE(s.details::text,'')) LIKE $${i}
+          OR LOWER(COALESCE(p.name,'')) LIKE $${i}
+          OR LOWER(COALESCE(p.company_name,'')) LIKE $${i}
+          OR LOWER(COALESCE(p.phone,'')) LIKE $${i}
+          OR LOWER(COALESCE(p.telegram_username,'')) LIKE $${i}
         )
       `);
     }
 
     const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
-    const totalSql = `
+    const totalRes = await db.query(
+      `
       SELECT COUNT(*)::int AS total
       FROM services s
       JOIN providers p ON p.id = s.provider_id
       ${whereSql}
-    `;
-    const totalRes = await db.query(totalSql, params);
+      `,
+      params
+    );
     const total = totalRes.rows?.[0]?.total || 0;
 
-    const sql = `
+    const rowsRes = await db.query(
+      `
       SELECT
-        s.id, s.category, s.status, s.title, s.provider_id, s.created_at, s.updated_at,
+        s.id, s.category, s.status, s.title, s.provider_id,
+        s.created_at, s.updated_at,
+        s.expiration_at,
         s.details,
         p.id AS p_id,
         p.name AS p_name,
@@ -216,52 +306,70 @@ exports.listActualRefused = async (req, res) => {
       ${whereSql}
       ORDER BY s.id DESC
       LIMIT ${limitNum} OFFSET ${offset}
-    `;
-    const rowsRes = await db.query(sql, params);
+      `,
+      params
+    );
+
     const rows = Array.isArray(rowsRes.rows) ? rowsRes.rows : [];
 
-    // JS-фильтрация актуальности + сортировка по ближайшей дате
-    let items = rows.map((r) => {
-      const detailsObj = parseDetailsAny(r.details);
+    // row-level guard: никакой ряд не должен уронить весь ответ
+    const mapped = rows.map((r) => {
+      try {
+        const detailsObj = ensureMeta(safeJsonParseMaybe(r.details));
+        const startDt = getStartDateForSort(r.category, detailsObj);
+        const chatId = pickProviderChatId(r);
 
-      // isServiceActual у вас в проекте смотрит на details + (иногда) svc
-      const actual = isServiceActual(detailsObj, r);
+        const isActual = computeIsActual({ details: detailsObj, svcRow: r });
 
-      const dt = getStartDateForAdminSort(r);
-      const chatId = pickProviderChatId(r);
-
-      const meta = (detailsObj && detailsObj.tg_actual_reminders_meta) || {};
-      return {
-        id: r.id,
-        category: r.category,
-        status: r.status,
-        title: r.title,
-        providerId: r.provider_id,
-        provider: {
-          id: r.p_id,
-          name: r.p_name,
-          companyName: r.p_company_name,
-          phone: r.p_phone,
-          telegramUsername: r.p_telegram_username,
-          chatId,
-        },
-        details: detailsObj,
-        isActual: actual,
-        startDateForSort: dt ? dt.toISOString() : null,
-        meta: {
-          lastSentAt: meta.lastSentAt || null,
-          lastAnswer: meta.lastAnswer || null,
-          lastConfirmedAt: meta.lastConfirmedAt || null,
-          lockUntil: meta.lockUntil || null,
-          lastSentBy: meta.lastSentBy || null,
-        },
-      };
+        return {
+          id: r.id,
+          category: r.category,
+          status: r.status,
+          title: r.title,
+          providerId: r.provider_id,
+          provider: {
+            id: r.p_id,
+            name: r.p_name,
+            companyName: r.p_company_name,
+            phone: r.p_phone,
+            telegramUsername: r.p_telegram_username,
+            chatId,
+          },
+          details: detailsObj,
+          isActual,
+          startDateForSort: startDt ? startDt.toISOString() : null,
+          meta: formatMeta(detailsObj),
+        };
+      } catch (e) {
+        return {
+          id: r.id,
+          category: r.category,
+          status: r.status,
+          title: r.title,
+          providerId: r.provider_id,
+          provider: {
+            id: r.p_id,
+            name: r.p_name,
+            companyName: r.p_company_name,
+            phone: r.p_phone,
+            telegramUsername: r.p_telegram_username,
+            chatId: pickProviderChatId(r),
+          },
+          details: safeJsonParseMaybe(r.details),
+          isActual: true,
+          startDateForSort: null,
+          meta: {},
+          __rowError: true,
+        };
+      }
     });
 
-    if (includeInactive !== "1") {
+    let items = mapped;
+    if (String(includeInactive) !== "1") {
       items = items.filter((x) => x.isActual);
     }
 
+    // sort by nearest date, nulls go to bottom
     items.sort((a, b) => {
       const da = a.startDateForSort ? new Date(a.startDateForSort) : null;
       const dbb = b.startDateForSort ? new Date(b.startDateForSort) : null;
@@ -271,7 +379,7 @@ exports.listActualRefused = async (req, res) => {
       return da.getTime() - dbb.getTime();
     });
 
-    res.json({
+    return res.json({
       success: true,
       total,
       page: pageNum,
@@ -280,16 +388,20 @@ exports.listActualRefused = async (req, res) => {
     });
   } catch (e) {
     console.error("[adminRefused] listActualRefused error:", e);
-    res.status(500).json({ success: false, message: "Server error" });
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
+/**
+ * GET /api/admin/refused/:id
+ */
 exports.getRefusedById = async (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!id) return res.status(400).json({ success: false, message: "Bad id" });
 
-    const sql = `
+    const r = await db.query(
+      `
       SELECT
         s.*,
         p.id AS p_id,
@@ -302,15 +414,17 @@ exports.getRefusedById = async (req, res) => {
       JOIN providers p ON p.id = s.provider_id
       WHERE s.id = $1
       LIMIT 1
-    `;
-    const r = await db.query(sql, [id]);
+      `,
+      [id]
+    );
+
     const row = r.rows?.[0];
     if (!row) return res.status(404).json({ success: false, message: "Not found" });
 
-    const detailsObj = parseDetailsAny(row.details);
-    const chatId = pickProviderChatId(row);
+    const detailsObj = ensureMeta(safeJsonParseMaybe(row.details));
+    const startDt = getStartDateForSort(row.category, detailsObj);
 
-    res.json({
+    return res.json({
       success: true,
       item: {
         ...row,
@@ -321,37 +435,42 @@ exports.getRefusedById = async (req, res) => {
           companyName: row.p_company_name,
           phone: row.p_phone,
           telegramUsername: row.p_telegram_username,
-          chatId,
+          chatId: pickProviderChatId(row),
         },
-        isActual: isServiceActual(detailsObj, row),
-        startDateForSort: (() => {
-          const dt = getStartDateForAdminSort(row);
-          return dt ? dt.toISOString() : null;
-        })(),
+        isActual: computeIsActual({ details: detailsObj, svcRow: row }),
+        startDateForSort: startDt ? startDt.toISOString() : null,
       },
     });
   } catch (e) {
     console.error("[adminRefused] getRefusedById error:", e);
-    res.status(500).json({ success: false, message: "Server error" });
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
+/**
+ * POST /api/admin/refused/:id/ask-actual?force=1
+ */
 exports.askActualNow = async (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!id) return res.status(400).json({ success: false, message: "Bad id" });
 
-    const sql = `
+    const force = String(req.query.force || "0") === "1";
+
+    const r = await db.query(
+      `
       SELECT
-        s.id, s.category, s.status, s.title, s.details, s.provider_id,
+        s.id, s.category, s.status, s.title, s.details, s.provider_id, s.expiration_at,
         p.telegram_refused_chat_id, p.telegram_chat_id, p.telegram_web_chat_id,
         p.telegram_username, p.phone, p.name, p.company_name
       FROM services s
       JOIN providers p ON p.id = s.provider_id
       WHERE s.id = $1
       LIMIT 1
-    `;
-    const r = await db.query(sql, [id]);
+      `,
+      [id]
+    );
+
     const row = r.rows?.[0];
     if (!row) return res.status(404).json({ success: false, message: "Not found" });
 
@@ -360,61 +479,67 @@ exports.askActualNow = async (req, res) => {
       return res.json({ success: false, message: "Provider has no telegram chat id" });
     }
 
-    const detailsObj = normalizeMeta(parseDetailsAny(row.details));
-    const meta = detailsObj.tg_actual_reminders_meta;
+    const detailsObj = ensureMeta(safeJsonParseMaybe(row.details));
+    const meta = detailsObj.tg_actual_reminders_meta || {};
 
-    // антиспам: если lockUntil ещё не прошёл — не шлём (если не force)
-    const force = String(req.query.force || "0") === "1";
+    // lockUntil anti-spam (если не force)
     if (!force && meta.lockUntil) {
-      const lock = new Date(meta.lockUntil);
-      if (!Number.isNaN(lock.getTime()) && lock.getTime() > Date.now()) {
+      const lock = safeParseDate(meta.lockUntil);
+      if (lock && lock.getTime() > Date.now()) {
         return res.json({
           success: false,
           locked: true,
-          message: `Locked until ${meta.lockUntil}`,
+          message: "Locked",
           meta: { lockUntil: meta.lockUntil, lastSentAt: meta.lastSentAt || null },
         });
       }
     }
 
-    const keyboard = buildSvcActualKeyboard(row.id, { isActual: true });
+    const title = (row.title || "Услуга").toString().slice(0, 80);
     const msg =
       `⏰ *Проверка актуальности*\n\n` +
-      `Услуга: *${(row.title || "Услуга").toString().slice(0, 80)}*\n` +
+      `Услуга: *${title}*\n` +
       `Категория: \`${row.category}\`\n\n` +
       `Актуально ли предложение сейчас?`;
 
+    const replyMarkup = buildSvcActualKeyboard
+      ? buildSvcActualKeyboard(row.id, { isActual: true })
+      : undefined;
+
     const sendRes = await tgSend(chatId, msg, {
       parse_mode: "Markdown",
-      reply_markup: keyboard,
+      reply_markup: replyMarkup,
       disable_web_page_preview: true,
     });
 
-    // обновляем meta
-    meta.lastSentAt = nowIso();
-    meta.lastSentBy = "admin";
-    meta.lockUntil = new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString(); // 6 часов
-    meta.lastSendOk = !!sendRes?.ok;
+    // update meta in details
+    detailsObj.tg_actual_reminders_meta = detailsObj.tg_actual_reminders_meta || {};
+    detailsObj.tg_actual_reminders_meta.lastSentAt = new Date().toISOString();
+    detailsObj.tg_actual_reminders_meta.lastSentBy = "admin";
+    detailsObj.tg_actual_reminders_meta.lastSendOk = !!sendRes?.ok;
 
-    // пишем в details обратно
+    // lock 6h
+    detailsObj.tg_actual_reminders_meta.lockUntil = new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString();
+
     await db.query(`UPDATE services SET details = $1 WHERE id = $2`, [
       JSON.stringify(detailsObj),
       row.id,
     ]);
 
-    res.json({
+    return res.json({
       success: true,
       ok: !!sendRes?.ok,
       chatId,
-      message: "Sent",
+      message: sendRes?.ok ? "Sent" : "Not sent",
       meta: {
-        lastSentAt: meta.lastSentAt,
-        lockUntil: meta.lockUntil,
-        lastSentBy: meta.lastSentBy,
+        lastSentAt: detailsObj.tg_actual_reminders_meta.lastSentAt,
+        lockUntil: detailsObj.tg_actual_reminders_meta.lockUntil,
+        lastSentBy: detailsObj.tg_actual_reminders_meta.lastSentBy,
       },
+      tg: sendRes || null,
     });
   } catch (e) {
     console.error("[adminRefused] askActualNow error:", e);
-    res.status(500).json({ success: false, message: "Server error" });
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 };
