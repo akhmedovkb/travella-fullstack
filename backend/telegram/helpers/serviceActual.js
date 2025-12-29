@@ -122,7 +122,7 @@ function isServiceActual(detailsRaw, svc) {
   const now = new Date();
 
   // expiration
-  const expirationRaw = d.expiration || svc?.expiration || null;
+  const expirationRaw = d.expiration || svc?.expiration_at || svc?.expiration || null;
   if (expirationRaw) {
     const exp = parseDateFlexibleEndOfDay(expirationRaw);
     if (exp && exp.getTime() < now.getTime()) return false;
