@@ -4,9 +4,71 @@ const db = require("../db");
 // Telegram send + keyboards/helpers
 const { tgSend } = require("../utils/telegram");
 
-// эти helpers уже есть в проекте (используются в боте)
-const { parseDetailsAny, isServiceActual, parseDateSafe } = require("../telegram/helpers/serviceActual");
+// берем только то, что реально гарантированно есть
+const { isServiceActual } = require("../telegram/helpers/serviceActual");
 const { buildSvcActualKeyboard } = require("../telegram/keyboards/serviceActual");
+
+// -------------------------
+// local helpers (self-sufficient)
+// -------------------------
+
+// безопасный парсинг details (json/json-string/null)
+function parseDetailsAny(details) {
+  if (!details) return {};
+  if (typeof details === "object") return details;
+  if (typeof details === "string") {
+    try {
+      const parsed = JSON.parse(details);
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
+// SAFE DATE PARSER (never throws)
+// поддерживает кривые форматы типа 2026-16-01 (swap mm<->dd)
+function parseDateSafe(val) {
+  if (!val) return null;
+
+  if (val instanceof Date && !Number.isNaN(val.getTime())) return val;
+
+  const s = String(val).trim();
+  if (!s) return null;
+
+  // expected YYYY-MM-DD
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+
+  let [, y, a, b] = m;
+  let mm = Number(a);
+  let dd = Number(b);
+
+  // swap if month > 12 but day looks like a month
+  if (mm > 12 && dd <= 12) {
+    [mm, dd] = [dd, mm];
+  }
+
+  if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
+
+  const iso = `${y}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d;
+}
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function normalizeMeta(detailsObj) {
+  const d = detailsObj && typeof detailsObj === "object" ? detailsObj : {};
+  if (!d.tg_actual_reminders_meta || typeof d.tg_actual_reminders_meta !== "object") {
+    d.tg_actual_reminders_meta = {};
+  }
+  return d;
+}
 
 // взять chatId провайдера
 function pickProviderChatId(p) {
@@ -32,44 +94,61 @@ function getStartDateForAdminSort(svc) {
     return null;
   };
 
+  // 1) стартовая дата по типам
   let raw =
     (cat === "refused_hotel" &&
-      pick("checkinDate", "checkInDate", "check_in", "check_in_date", "startDate", "start_date")) ||
+      pick(
+        "checkinDate",
+        "checkInDate",
+        "check_in",
+        "check_in_date",
+        "startDate",
+        "start_date"
+      )) ||
     (cat === "refused_ticket" &&
       pick("eventDate", "event_date", "date", "startDate", "start_date")) ||
     (cat === "refused_flight" &&
-      pick("departureFlightDate", "departureDate", "departure_date", "startFlightDate", "start_flight_date", "startDate", "start_date")) ||
+      pick(
+        "departureFlightDate",
+        "departureDate",
+        "departure_date",
+        "startFlightDate",
+        "start_flight_date",
+        "startDate",
+        "start_date"
+      )) ||
     pick("departureFlightDate", "startDate", "start_date", "dateFrom", "date_from");
 
   let dt = parseDateSafe(raw);
   if (dt) return dt;
 
-  raw = pick("endDate", "end_date", "checkoutDate", "checkOutDate", "checkout_date", "returnFlightDate");
+  // 2) fallback на конечную дату
+  raw = pick(
+    "endDate",
+    "end_date",
+    "checkoutDate",
+    "checkOutDate",
+    "checkout_date",
+    "returnFlightDate",
+    "endFlightDate"
+  );
   dt = parseDateSafe(raw);
   return dt || null;
 }
 
-function normalizeMeta(detailsObj) {
-  const d = detailsObj && typeof detailsObj === "object" ? detailsObj : {};
-  if (!d.tg_actual_reminders_meta || typeof d.tg_actual_reminders_meta !== "object") {
-    d.tg_actual_reminders_meta = {};
-  }
-  return d;
-}
-
-function nowIso() {
-  return new Date().toISOString();
-}
+// -------------------------
+// controllers
+// -------------------------
 
 exports.listActualRefused = async (req, res) => {
   try {
     const {
-      category = "",      // refused_tour / refused_hotel / refused_flight / refused_ticket
-      status = "",        // published / approved
-      q = "",             // поиск по названию/отелю/направлению/провайдеру
+      category = "",        // refused_tour / refused_hotel / refused_flight / refused_ticket
+      status = "",          // published / approved / ...
+      q = "",               // поиск
       page = "1",
       limit = "30",
-      includeInactive = "0", // 1 = показывать всё, 0 = только актуальные по isServiceActual
+      includeInactive = "0" // 1 = показывать всё, 0 = только актуальные по isServiceActual
     } = req.query;
 
     const pageNum = Math.max(parseInt(page, 10) || 1, 1);
@@ -144,7 +223,10 @@ exports.listActualRefused = async (req, res) => {
     // JS-фильтрация актуальности + сортировка по ближайшей дате
     let items = rows.map((r) => {
       const detailsObj = parseDetailsAny(r.details);
+
+      // isServiceActual у вас в проекте смотрит на details + (иногда) svc
       const actual = isServiceActual(detailsObj, r);
+
       const dt = getStartDateForAdminSort(r);
       const chatId = pickProviderChatId(r);
 
@@ -285,9 +367,10 @@ exports.askActualNow = async (req, res) => {
     const force = String(req.query.force || "0") === "1";
     if (!force && meta.lockUntil) {
       const lock = new Date(meta.lockUntil);
-      if (!isNaN(lock.getTime()) && lock.getTime() > Date.now()) {
+      if (!Number.isNaN(lock.getTime()) && lock.getTime() > Date.now()) {
         return res.json({
           success: false,
+          locked: true,
           message: `Locked until ${meta.lockUntil}`,
           meta: { lockUntil: meta.lockUntil, lastSentAt: meta.lastSentAt || null },
         });
