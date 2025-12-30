@@ -369,7 +369,7 @@ async function getProfileByChat(req, res) {
 
     const result = await pool.query(
       `
-        SELECT id, name, phone, telegram_chat_id
+        SELECT id, name, phone, telegram_chat_id, account_status
           FROM ${table}
          WHERE telegram_chat_id = $1
          LIMIT 1
@@ -381,7 +381,18 @@ async function getProfileByChat(req, res) {
       return res.status(404).json({ notFound: true });
     }
 
-    return res.json({ success: true, user: result.rows[0] });
+    const u = result.rows[0];
+    const st = String(u.account_status || "pending").toLowerCase();
+    if (st !== "approved") {
+      return res.status(403).json({
+        success: false,
+        pending: true,
+        account_status: u.account_status || "pending",
+        message: "Account pending approval",
+      });
+    }
+
+    return res.json({ success: true, user: u });
   } catch (e) {
     console.error("GET /api/telegram/profile error:", e);
     return res.status(500).json({ error: "Internal error" });
@@ -452,6 +463,20 @@ async function searchClientServices(req, res) {
   try {
     const { chatId } = req.params; // формально
     const { category } = req.query || {};
+    // 🔒 Доступ к просмотру через бота — только после одобрения аккаунта админом
+    const acc = await pool.query(
+      `SELECT id, account_status FROM clients WHERE telegram_chat_id = $1 LIMIT 1`,
+      [chatId]
+    );
+    const st = String(acc.rows[0]?.account_status || "pending").toLowerCase();
+    if (!acc.rowCount || st !== "approved") {
+      return res.status(403).json({
+        success: false,
+        pending: true,
+        account_status: acc.rows[0]?.account_status || "pending",
+        message: "Account pending approval",
+      });
+    }
 
     if (!category) {
       return res
