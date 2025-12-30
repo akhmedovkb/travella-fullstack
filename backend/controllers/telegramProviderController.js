@@ -375,6 +375,28 @@ async function searchPublicServices(req, res) {
       return res.status(400).json({ success: false, error: "BAD_CATEGORY" });
     }
 
+    // 🔒 Доступ к просмотру через бота — только после одобрения аккаунта админом
+    // Разрешаем и клиенту, и провайдеру (если он одобрен)
+    const c = await pool.query(
+      `SELECT account_status FROM clients WHERE telegram_chat_id::text = $1 LIMIT 1`,
+      [chatId]
+    );
+    const p = await pool.query(
+      `SELECT account_status FROM providers WHERE telegram_chat_id::text = $1 LIMIT 1`,
+      [chatId]
+    );
+    const cst = String(c.rows[0]?.account_status || "").toLowerCase();
+    const pst = String(p.rows[0]?.account_status || "").toLowerCase();
+    const ok = (c.rowCount && cst === "approved") || (p.rowCount && pst === "approved");
+    if (!ok) {
+      return res.status(403).json({
+        success: false,
+        pending: true,
+        account_status: c.rows[0]?.account_status || p.rows[0]?.account_status || "pending",
+        message: "Account pending approval",
+      });
+    }
+
     // определим провайдера по chatId (если это провайдер)
     let providerId = null;
     try {
