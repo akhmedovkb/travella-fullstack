@@ -148,8 +148,8 @@ async function decideLead(req, res) {
         const email = `tg_${phoneDigits || Date.now()}@telegram.local`;
 
         await db.query(
-          `INSERT INTO clients (name, email, phone, password_hash, telegram_chat_id, telegram)
-           VALUES ($1,$2,$3,$4,$5,$6)`,
+          `INSERT INTO clients (name, email, phone, password_hash, telegram_chat_id, telegram, account_status)
+           VALUES ($1,$2,$3,$4,$5,$6,'approved')`,
           [
             name,
             email,
@@ -158,6 +158,15 @@ async function decideLead(req, res) {
             chatId,
             username,
           ]
+        );
+      } else {
+        await db.query(
+          `UPDATE clients
+              SET account_status='approved',
+                  telegram_chat_id = COALESCE($2, telegram_chat_id),
+                  telegram = COALESCE(NULLIF($3,''), telegram)
+            WHERE id = $1`,
+          [exists.rows[0].id, chatId, username]
         );
       }
     }
@@ -178,8 +187,8 @@ async function decideLead(req, res) {
         const providerType = normalizeProviderType(lead.requested_role);
 
         await db.query(
-          `INSERT INTO providers (name, type, phone, email, password, social, telegram_chat_id)
-           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+          `INSERT INTO providers (name, type, phone, email, password, social, telegram_chat_id, account_status)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,'approved')`,
           [
             name,
             providerType,
@@ -189,6 +198,15 @@ async function decideLead(req, res) {
             username ? `@${username}` : null,
             chatId,
           ]
+        );
+      } else {
+        await db.query(
+          `UPDATE providers
+              SET account_status='approved',
+                  telegram_chat_id = COALESCE($2, telegram_chat_id),
+                  social = COALESCE($3, social)
+            WHERE id = $1`,
+          [exists.rows[0].id, chatId, username ? `@${username}` : null]
         );
       }
     }
