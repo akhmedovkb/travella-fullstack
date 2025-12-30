@@ -59,10 +59,8 @@ function parseDateSafe(val) {
 // взять chatId провайдера
 function pickProviderChatId(p) {
   return (
-    p.telegram_refused_chat_id ||
-    p.telegram_web_chat_id ||
-    p.telegram_chat_id ||
-    null
+    // В текущей схеме используем только гарантированное поле
+    p.telegram_chat_id || null
   );
 }
 
@@ -159,9 +157,8 @@ exports.listActualRefused = async (req, res) => {
         (
           LOWER(COALESCE(s.title,'')) LIKE $${pIdx}
           OR LOWER(COALESCE(p.name,'')) LIKE $${pIdx}
-          OR LOWER(COALESCE(p.company_name,'')) LIKE $${pIdx}
           OR LOWER(COALESCE(p.phone,'')) LIKE $${pIdx}
-          OR LOWER(COALESCE(p.telegram_username,'')) LIKE $${pIdx}
+          OR LOWER(COALESCE(p.social,'')) LIKE $${pIdx}
           OR LOWER(COALESCE(s.details::text,'')) LIKE $${pIdx}
         )
       `);
@@ -185,10 +182,9 @@ exports.listActualRefused = async (req, res) => {
         s.details,
         p.id AS p_id,
         p.name AS p_name,
-        p.company_name AS p_company_name,
         p.phone AS p_phone,
-        p.telegram_username AS p_telegram_username,
-        p.telegram_refused_chat_id, p.telegram_chat_id, p.telegram_web_chat_id
+        p.social AS p_social,
+        p.telegram_chat_id
       FROM services s
       JOIN providers p ON p.id = s.provider_id
       ${whereSql}
@@ -218,9 +214,8 @@ exports.listActualRefused = async (req, res) => {
         provider: {
           id: r.p_id,
           name: r.p_name,
-          companyName: r.p_company_name,
           phone: r.p_phone,
-          telegramUsername: r.p_telegram_username,
+          telegramUsername: r.p_social,
           chatId,
         },
         details: detailsObj,
@@ -273,10 +268,9 @@ exports.getRefusedById = async (req, res) => {
         s.*,
         p.id AS p_id,
         p.name AS p_name,
-        p.company_name AS p_company_name,
         p.phone AS p_phone,
-        p.telegram_username AS p_telegram_username,
-        p.telegram_refused_chat_id, p.telegram_chat_id, p.telegram_web_chat_id
+        p.social AS p_social,
+        p.telegram_chat_id
       FROM services s
       JOIN providers p ON p.id = s.provider_id
       WHERE s.id = $1
@@ -300,9 +294,8 @@ exports.getRefusedById = async (req, res) => {
         provider: {
           id: row.p_id,
           name: row.p_name,
-          companyName: row.p_company_name,
           phone: row.p_phone,
-          telegramUsername: row.p_telegram_username,
+          telegramUsername: row.p_social,
           chatId,
         },
         isActual: isServiceActual(detailsObj, svcForActual),
@@ -326,8 +319,8 @@ exports.askActualNow = async (req, res) => {
     const sql = `
       SELECT
         s.id, s.category, s.status, s.title, s.details, s.provider_id,
-        p.telegram_refused_chat_id, p.telegram_chat_id, p.telegram_web_chat_id,
-        p.telegram_username, p.phone, p.name, p.company_name
+        p.telegram_chat_id,
+        p.social, p.phone, p.name
       FROM services s
       JOIN providers p ON p.id = s.provider_id
       WHERE s.id = $1
