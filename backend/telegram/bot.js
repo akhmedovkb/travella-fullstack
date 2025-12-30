@@ -2283,14 +2283,13 @@ async function handlePhoneRegistration(ctx, requestedRole, phone) {
       return;
     }
 
-    const finalRole =
-      data.role === "provider" || data.role === "provider_lead"
-        ? "provider"
-        : "client";
+    const isLead = data.role === "provider_lead" || data.role === "client_lead";
+    const finalRole = data.role === "provider" ? "provider" : "client";
 
     if (!ctx.session) ctx.session = {};
     ctx.session.role = finalRole;
-    ctx.session.linked = true;
+    ctx.session.linked = !isLead;
+    ctx.session.pending = !!isLead;
 
     if (data.existed && data.role === "client") {
       await ctx.reply(
@@ -2308,9 +2307,10 @@ async function handlePhoneRegistration(ctx, requestedRole, phone) {
           "ℹ️ По этому номеру уже есть аккаунт поставщика.\nЕсли хотите быть клиентом — зарегистрируйтесь на сайте отдельно."
         );
       }
-    } else if (data.created === "client") {
+     } else if (data.created === "client_lead") {
       await ctx.reply(
-        "🎉 Добро пожаловать!\n\nМы создали для вас *клиентский аккаунт* по этому номеру.",
+       "📝 Заявка принята!\n\nМы зарегистрировали вас как *клиента Travella*.\nДоступ появится после одобрения админом.\n\n" +
+          `🌐 Сайт: ${SITE_URL}`,
         { parse_mode: "Markdown" }
       );
     } else if (data.created === "provider_lead") {
@@ -2323,9 +2323,26 @@ async function handlePhoneRegistration(ctx, requestedRole, phone) {
       await ctx.reply("✅ Привязка выполнена.");
     }
 
+    if (isLead) {
+      await ctx.reply("⏳ Ожидайте одобрения. Как только админ подтвердит — меню автоматически станет доступным.");
+      return;
+    }
+
     await ctx.reply("📌 Готово! Меню доступно ниже 👇", getMainMenuKeyboard(finalRole));
   } catch (e) {
-    console.error("[tg-bot] handlePhoneRegistration error:", e?.response?.data || e);
+    const resp = e?.response;
+    if (resp?.status === 403 && resp?.data?.pending) {
+      if (!ctx.session) ctx.session = {};
+      ctx.session.linked = false;
+      ctx.session.pending = true;
+      await ctx.reply(
+        "⏳ Ваш аккаунт ещё не одобрен админом.\n\n" +
+          "Пожалуйста, подождите — после одобрения вам станут доступны просмотр и создание/редактирование через бота."
+      );
+      return;
+    }
+
+    console.error("[tg-bot] handlePhoneRegistration error:", resp?.data || e);
     await ctx.reply("⚠️ Ошибка привязки номера. Попробуйте позже.");
   }
 }
@@ -2350,6 +2367,16 @@ bot.start(async (ctx) => {
       const resClient = await axios.get(`/api/telegram/profile/client/${actorId}`);
       if (resClient.data && resClient.data.success) role = "client";
     } catch (e) {
+      if (e?.response?.status === 403 && e?.response?.data?.pending) {
+        if (!ctx.session) ctx.session = {};
+        ctx.session.linked = false;
+        ctx.session.pending = true;
+        await ctx.reply(
+          "⏳ Ваш аккаунт ещё не одобрен админом.\n\n" +
+            "Пожалуйста, подождите — после одобрения меню станет доступно."
+        );
+        return;
+      }
       if (e?.response?.status !== 404) {
         console.log("[tg-bot] profile client error:", e?.response?.data || e.message || e);
       }
@@ -2360,6 +2387,16 @@ bot.start(async (ctx) => {
         const resProv = await axios.get(`/api/telegram/profile/provider/${actorId}`);
         if (resProv.data && resProv.data.success) role = "provider";
       } catch (e) {
+        if (e?.response?.status === 403 && e?.response?.data?.pending) {
+          if (!ctx.session) ctx.session = {};
+          ctx.session.linked = false;
+          ctx.session.pending = true;
+          await ctx.reply(
+            "⏳ Ваш аккаунт ещё не одобрен админом.\n\n" +
+              "Пожалуйста, подождите — после одобрения меню станет доступно."
+          );
+          return;
+        }
         if (e?.response?.status !== 404) {
           console.log("[tg-bot] profile provider error:", e?.response?.data || e.message || e);
         }
