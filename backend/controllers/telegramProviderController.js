@@ -128,9 +128,9 @@ async function getProviderBookings(req, res) {
     const status = req.query.status || "pending";
 
     const providerRes = await pool.query(
-      `SELECT id, name
-         FROM providers
+      `SELECT id FROM providers
         WHERE telegram_chat_id = $1
+          AND COALESCE(account_status,'pending') = 'approved'
         LIMIT 1`,
       [chatId]
     );
@@ -294,9 +294,9 @@ async function getProviderServices(req, res) {
     const { chatId } = req.params;
 
     const providerRes = await pool.query(
-      `SELECT id, name
-         FROM providers
+      `SELECT id FROM providers
         WHERE telegram_chat_id = $1
+          AND COALESCE(account_status,'pending') = 'approved'
         LIMIT 1`,
       [chatId]
     );
@@ -401,7 +401,10 @@ async function searchPublicServices(req, res) {
     let providerId = null;
     try {
       const pr = await pool.query(
-        `SELECT id FROM providers WHERE telegram_chat_id::text = $1 LIMIT 1`,
+        `SELECT id FROM providers
+        WHERE telegram_chat_id = $1
+          AND COALESCE(account_status,'pending') = 'approved' 
+          LIMIT 1`,
         [chatId]
       );
       providerId = pr.rows[0]?.id || null;
@@ -462,7 +465,10 @@ async function serviceActionFromBot(req, res, action) {
     }
 
     const providerRes = await pool.query(
-      `SELECT id FROM providers WHERE telegram_chat_id = $1 LIMIT 1`,
+      `SELECT id FROM providers
+        WHERE telegram_chat_id = $1
+          AND COALESCE(account_status,'pending') = 'approved' 
+          LIMIT 1`,
       [chatId]
     );
     if (providerRes.rowCount === 0) {
@@ -678,7 +684,11 @@ async function getProviderServiceByIdFromBot(req, res) {
     }
 
     const providerRes = await pool.query(
-      `SELECT id FROM providers WHERE telegram_chat_id = $1 LIMIT 1`,
+      `SELECT id, name
+         FROM providers
+         WHERE telegram_chat_id = $1
+         AND COALESCE(account_status,'pending') = 'approved' 
+         LIMIT 1`,
       [chatId]
     );
     if (providerRes.rowCount === 0) {
@@ -734,7 +744,11 @@ async function updateServiceFromBot(req, res) {
     }
 
     const providerRes = await pool.query(
-      `SELECT id FROM providers WHERE telegram_chat_id = $1 LIMIT 1`,
+      `SELECT id, name
+         FROM providers
+        WHERE telegram_chat_id = $1
+          AND COALESCE(account_status,'pending') = 'approved' 
+        LIMIT 1`,
       [chatId]
     );
     if (providerRes.rowCount === 0) {
