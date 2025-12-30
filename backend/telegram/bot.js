@@ -1656,6 +1656,15 @@ async function resolveRoleByUserId(userId, ctx) {
       return "provider";
     }
   } catch (e) {
+    // ⛔ аккаунт найден, но ещё не одобрен админом
+    if (e?.response?.status === 403 && e?.response?.data?.pending) {
+      if (ctx && ctx.session) {
+        ctx.session.pendingApproval = true;
+        ctx.session.linked = false;
+        delete ctx.session.role;
+      }
+      return null;
+    }
     if (e?.response?.status !== 404) {
       console.log(
         "[tg-bot] resolveRoleByUserId provider error:",
@@ -1670,10 +1679,20 @@ async function resolveRoleByUserId(userId, ctx) {
       if (ctx && ctx.session) {
         ctx.session.role = "client";
         ctx.session.linked = true;
+        ctx.session.pendingApproval = false;
       }
       return "client";
     }
   } catch (e) {
+    // ⛔ аккаунт найден, но ещё не одобрен админом
+    if (e?.response?.status === 403 && e?.response?.data?.pending) {
+      if (ctx && ctx.session) {
+        ctx.session.pendingApproval = true;
+        ctx.session.linked = false;
+        delete ctx.session.role;
+      }
+      return null;
+    }
     if (e?.response?.status !== 404) {
       console.log(
         "[tg-bot] resolveRoleByUserId client error:",
@@ -4204,10 +4223,13 @@ bot.on("inline_query", async (ctx) => {
 
     // Требуем привязку аккаунта
     if (!roleForInline) {
+      const pending = Boolean(ctx.session?.pendingApproval);
       await ctx.answerInlineQuery([], {
         cache_time: 3,
         is_personal: true,
-        switch_pm_text: "🔐 Сначала привяжите аккаунт (номер телефона)",
+        switch_pm_text: pending
+          ? "⏳ Аккаунт на модерации. Открыть бота"
+          : "🔐 Сначала привяжите аккаунт (номер телефона)",
         switch_pm_parameter: "start",
       });
       return;
