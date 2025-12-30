@@ -62,7 +62,7 @@ async function findUserByPhone(normPhone) {
   // 1) Поставщик
   const prov = await pool.query(
     `
-      SELECT id, name, phone, telegram_chat_id
+      SELECT id, name, phone, telegram_chat_id, account_status
         FROM providers
        WHERE regexp_replace(phone, '\\D', '', 'g') = $1
        LIMIT 1
@@ -76,13 +76,14 @@ async function findUserByPhone(normPhone) {
       id: row.id,
       name: row.name,
       telegram_chat_id: row.telegram_chat_id,
+      account_status: row.account_status,
     };
   }
 
   // 2) Клиент
   const cli = await pool.query(
     `
-      SELECT id, name, phone, telegram_chat_id
+      SELECT id, name, phone, telegram_chat_id, account_status
         FROM clients
        WHERE regexp_replace(phone, '\\D', '', 'g') = $1
        LIMIT 1
@@ -96,6 +97,7 @@ async function findUserByPhone(normPhone) {
       id: row.id,
       name: row.name,
       telegram_chat_id: row.telegram_chat_id,
+      account_status: row.account_status,
     };
   }
 
@@ -139,6 +141,18 @@ async function linkAccount(req, res) {
     const found = await findUserByPhone(normPhone);
 
     if (found) {
+     // ⛔ Если аккаунт найден, но ещё НЕ одобрен — не даём боту считать, что всё ок
+      const stFound = String(found.account_status || "pending").toLowerCase();
+      if (stFound !== "approved") {
+        return res.status(403).json({
+          success: false,
+          pending: true,
+          role: found.role,
+          account_status: found.account_status || "pending",
+          message: "Account pending approval",
+        });
+      }
+
       // ===== ПРОВАЙДЕР НАЙДЕН =====
       if (found.role === "provider") {
         // Всегда актуализируем telegram_chat_id и social (это важно для уведомлений)
@@ -209,8 +223,8 @@ async function linkAccount(req, res) {
 
       const insertClient = await pool.query(
         `
-          INSERT INTO clients (name, email, phone, password_hash, telegram_chat_id, telegram)
-          VALUES ($1, $2, $3, $4, $5, $6)
+          INSERT INTO clients (name, email, phone, password_hash, telegram_chat_id, telegram, account_status)
+          VALUES ($1, $2, $3, $4, $5, $6, 'pending')
           RETURNING id, name
         `,
         [
