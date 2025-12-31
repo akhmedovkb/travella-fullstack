@@ -2259,93 +2259,40 @@ async function finishCreateServiceFromWizard(ctx) {
 
 /* ===================== PHONE LINKING ===================== */
 
-async function handlePhoneRegistration(ctx, requestedRole, phone) {
-  try {
-    if (ctx.chat?.type && ctx.chat.type !== "private") {
-      await ctx.reply(
-        "📌 Привязка номера доступна только в личных сообщениях.\nОткройте бота и нажмите /start."
-      );
-      return;
-    }
+// ✅ pending может прийти не только как *_lead, но и как pending_lead / pending:true
+const isPending =
+  !!data.pending ||
+  data.role === "pending_lead" ||
+  String(data.role || "").endsWith("_lead") ||
+  String(data.created || "").endsWith("_lead");
 
-    const chatId = ctx.chat.id;
-    const username = ctx.from.username || null;
-    const firstName = ctx.from.first_name || null;
+const finalRole =
+  data.role === "provider" || data.created === "provider"
+    ? "provider"
+    : "client";
 
-    const payload = { role: requestedRole, phone, chatId, username, firstName };
-    console.log("[bot] handlePhoneRegistration payload:", payload);
+if (!ctx.session) ctx.session = {};
+ctx.session.role = finalRole;
 
-    const { data } = await axios.post(`/api/telegram/link`, payload);
-    console.log("[bot] /api/telegram/link response:", data);
+if (isPending) {
+  ctx.session.linked = false;
+  ctx.session.pending = true;
 
-    if (!data || !data.success) {
-      await ctx.reply("⚠️ Не удалось привязать номер. Попробуйте позже.");
-      return;
-    }
-
-    const isLead = data.role === "provider_lead" || data.role === "client_lead";
-    const finalRole = data.role === "provider" ? "provider" : "client";
-
-    if (!ctx.session) ctx.session = {};
-    ctx.session.role = finalRole;
-    ctx.session.linked = !isLead;
-    ctx.session.pending = !!isLead;
-
-    if (data.existed && data.role === "client") {
-      await ctx.reply(
-        "✅ Готово!\n\nВаш Telegram привязан к аккаунту *клиента Travella*.",
-        { parse_mode: "Markdown" }
-      );
-    } else if (data.existed && data.role === "provider") {
-      await ctx.reply(
-        "✅ Готово!\n\nВаш Telegram привязан к аккаунту *поставщика Travella*.",
-        { parse_mode: "Markdown" }
-      );
-
-      if (data.requestedRole === "client") {
-        await ctx.reply(
-          "ℹ️ По этому номеру уже есть аккаунт поставщика.\nЕсли хотите быть клиентом — зарегистрируйтесь на сайте отдельно."
-        );
-      }
-     } else if (data.created === "client_lead") {
-      await ctx.reply(
-       "📝 Заявка принята!\n\nМы зарегистрировали вас как *клиента Travella*.\nДоступ появится после одобрения админом.\n\n" +
-          `🌐 Сайт: ${SITE_URL}`,
-        { parse_mode: "Markdown" }
-      );
-    } else if (data.created === "provider_lead") {
-      await ctx.reply(
-        "📝 Заявка принята!\n\nМы зарегистрировали вас как *нового поставщика*.\nПосле модерации менеджер свяжется с вами.\n\n" +
-          `🌐 Сайт: ${SITE_URL}`,
-        { parse_mode: "Markdown" }
-      );
-    } else {
-      await ctx.reply("✅ Привязка выполнена.");
-    }
-
-    if (isLead) {
-      await ctx.reply("⏳ Ожидайте одобрения. Как только админ подтвердит — меню автоматически станет доступным.");
-      return;
-    }
-
-    await ctx.reply("📌 Готово! Меню доступно ниже 👇", getMainMenuKeyboard(finalRole));
-  } catch (e) {
-    const resp = e?.response;
-    if (resp?.status === 403 && resp?.data?.pending) {
-      if (!ctx.session) ctx.session = {};
-      ctx.session.linked = false;
-      ctx.session.pending = true;
-      await ctx.reply(
-        "⏳ Ваш аккаунт ещё не одобрен админом.\n\n" +
-          "Пожалуйста, подождите — после одобрения вам станут доступны просмотр и создание/редактирование через бота."
-      );
-      return;
-    }
-
-    console.error("[tg-bot] handlePhoneRegistration error:", resp?.data || e);
-    await ctx.reply("⚠️ Ошибка привязки номера. Попробуйте позже.");
-  }
+  // Твои тексты можно оставить — главное, чтобы бот НЕ показывал меню
+  await ctx.reply("✅ Номер получен. Заявка отправлена админу.");
+  await ctx.reply(
+    "⏳ Ожидайте одобрения. Как только админ подтвердит — меню станет доступным.\n\nЕсли вы только что отправили номер — просто подождите."
+  );
+  return;
 }
+
+// approved
+ctx.session.linked = true;
+ctx.session.pending = false;
+
+await ctx.reply("✅ Привязка выполнена.");
+await ctx.reply("📌 Готово! Меню доступно ниже 👇", getMainMenuKeyboard(finalRole));
+return;
 
 /* ===================== /start ===================== */
 
@@ -2360,23 +2307,41 @@ bot.start(async (ctx) => {
 
   const startPayloadRaw = (ctx.startPayload || "").trim();
 
+// ✅ Если ранее отправляли номер и ждём модерации — проверим, не одобрили ли уже
+if (ctx.session?.pending) {
   try {
-    let role = null;
+    const r1 = await axios.get(`/api/telegram/profile/client/${actorId}`);
+    if (r1.data?.success) {
+      ctx.session.pending = false;
+      ctx.session.linked = true;
+      ctx.session.role = "client";
+      await ctx.reply("✅ Аккаунт подтверждён! Меню доступно ниже 👇", getMainMenuKeyboard("client"));
+      return;
+    }
+  } catch (e) {
+    // ignore 404/403 here, fallback below
+  }
 
-    try {
-      const resClient = await axios.get(`/api/telegram/profile/client/${actorId}`);
-      if (resClient.data && resClient.data.success) role = "client";
-    } catch (e) {
-      if (e?.response?.status === 403 && e?.response?.data?.pending) {
-        if (!ctx.session) ctx.session = {};
-        ctx.session.linked = false;
-        ctx.session.pending = true;
-        await ctx.reply(
-          "⏳ Ваш аккаунт ещё не одобрен админом.\n\n" +
-            "Пожалуйста, подождите — после одобрения меню станет доступно."
-        );
-        return;
-      }
+  try {
+    const r2 = await axios.get(`/api/telegram/profile/provider/${actorId}`);
+    if (r2.data?.success) {
+      ctx.session.pending = false;
+      ctx.session.linked = true;
+      ctx.session.role = "provider";
+      await ctx.reply("✅ Аккаунт подтверждён! Меню доступно ниже 👇", getMainMenuKeyboard("provider"));
+      return;
+    }
+  } catch (e) {
+    // ignore 404/403 here, fallback below
+  }
+
+  await ctx.reply(
+    "⏳ Ваша заявка уже отправлена и ожидает одобрения.\n\n" +
+      "Как только админ подтвердит — меню станет доступным."
+  );
+  return;
+}
+
       if (e?.response?.status !== 404) {
         console.log("[tg-bot] profile client error:", e?.response?.data || e.message || e);
       }
@@ -2391,6 +2356,7 @@ bot.start(async (ctx) => {
           if (!ctx.session) ctx.session = {};
           ctx.session.linked = false;
           ctx.session.pending = true;
+        
           await ctx.reply(
             "⏳ Ваш аккаунт ещё не одобрен админом.\n\n" +
               "Пожалуйста, подождите — после одобрения меню станет доступно."
