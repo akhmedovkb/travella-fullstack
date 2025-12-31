@@ -7,6 +7,38 @@ const TELEGRAM_DUMMY_PASSWORD_HASH =
   process.env.TELEGRAM_DUMMY_PASSWORD_HASH ||
   "$2b$10$N9qo8uLOickgx2ZMRZo5i.Ul5cW93vGN9VOGQsv5nPVnrwJknhkAu";
 
+/**
+ * ✅ Reply-keyboard меню (кнопки снизу), чтобы после одобрения
+ * пользователь видел именно “бот-меню”, а не web-кнопки.
+ */
+function tgMainMenuKeyboard(role) {
+  // role: "provider" | "client"
+  if (role === "provider") {
+    return {
+      reply_markup: {
+        keyboard: [
+          ["🔍 Найти услугу"],
+          ["🧳 Мои услуги", "📦 Бронирования"],
+          ["📨 Заявки", "❤️ Избранное"],
+          ["⚙️ Профиль"],
+        ],
+        resize_keyboard: true,
+      },
+    };
+  }
+
+  return {
+    reply_markup: {
+      keyboard: [
+        ["🔍 Найти объявления"],
+        ["❤️ Избранное", "📦 Бронирования"],
+        ["⚙️ Профиль"],
+      ],
+      resize_keyboard: true,
+    },
+  };
+}
+
 /* ================= CREATE LEAD ================= */
 async function createLead(req, res) {
   try {
@@ -225,36 +257,14 @@ async function decideLead(req, res) {
       if (decision === "approved_provider") {
         await tgSend(
           chatId,
-          "✅ Ваша заявка одобрена!\n\nВы зарегистрированы как поставщик Travella.",
-          {
-            reply_markup: {
-              inline_keyboard: [
-                [
-                  {
-                    text: "🧳 Мои услуги",
-                    url: "https://travella.uz/dashboard/services",
-                  },
-                ],
-                [
-                  {
-                    text: "📦 Мои брони",
-                    url: "https://travella.uz/dashboard/bookings",
-                  },
-                ],
-                [
-                  {
-                    text: "⚙️ Профиль",
-                    url: "https://travella.uz/dashboard/profile",
-                  },
-                ],
-              ],
-            },
-          }
+          "✅ Ваша заявка одобрена!\n\nВы зарегистрированы как поставщик Travella.\n\n📌 Меню доступно ниже 👇",
+          tgMainMenuKeyboard("provider")
         );
       } else if (decision === "approved_client") {
         await tgSend(
           chatId,
-          "✅ Ваша заявка одобрена! Добро пожаловать в Travella.\n\n👉 https://travella.uz"
+          "✅ Ваша заявка одобрена! Добро пожаловать в Travella.\n\n📌 Меню доступно ниже 👇",
+          tgMainMenuKeyboard("client")
         );
       } else {
         await tgSend(chatId, "❌ К сожалению, ваша заявка была отклонена.");
