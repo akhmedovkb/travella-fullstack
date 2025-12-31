@@ -62,7 +62,7 @@ async function findUserByPhone(normPhone) {
   // 1) Поставщик
   const prov = await pool.query(
     `
-      SELECT id, name, phone, telegram_chat_id, account_status
+      SELECT id, name, phone, telegram_chat_id
         FROM providers
        WHERE regexp_replace(phone, '\\D', '', 'g') = $1
        LIMIT 1
@@ -76,14 +76,13 @@ async function findUserByPhone(normPhone) {
       id: row.id,
       name: row.name,
       telegram_chat_id: row.telegram_chat_id,
-      account_status: row.account_status,
     };
   }
 
   // 2) Клиент
   const cli = await pool.query(
     `
-      SELECT id, name, phone, telegram_chat_id, account_status
+      SELECT id, name, phone, telegram_chat_id
         FROM clients
        WHERE regexp_replace(phone, '\\D', '', 'g') = $1
        LIMIT 1
@@ -97,7 +96,6 @@ async function findUserByPhone(normPhone) {
       id: row.id,
       name: row.name,
       telegram_chat_id: row.telegram_chat_id,
-      account_status: row.account_status,
     };
   }
 
@@ -111,100 +109,6 @@ function normalizeRequestedRole(raw) {
   // В БД же для турагента хотим хранить "agent".
   if (v === "provider") return "agent";
   return v;
-}
-
-async function upsertTelegramLead({ normPhone, phone, displayName, chatId, username, firstName, requestedRole }) {
-  // requestedRole: 'client' | 'agent' (agent = provider role in DB)
-  const leadSource = requestedRole === "client" ? "telegram_client" : "telegram_provider";
-
-  const existingLead = await pool.query(
-    `
-      SELECT id, telegram_chat_id
-        FROM leads
-       WHERE regexp_replace(phone,'\\D','','g') = $1
-         AND status = 'new'
-         AND decision IS NULL
-       ORDER BY id DESC
-       LIMIT 1
-    `,
-    [normPhone]
-  );
-
-  if (existingLead.rowCount > 0) {
-    const leadId = existingLead.rows[0].id;
-    const prevChat = existingLead.rows[0].telegram_chat_id || null;
-
-    await pool.query(
-      `
-        UPDATE leads
-           SET telegram_chat_id = $2,
-               telegram_username = $3,
-               telegram_first_name = $4,
-               name = COALESCE(NULLIF(name,''), $5),
-               source = COALESCE(NULLIF(source,''), $6),
-               requested_role = COALESCE(NULLIF(requested_role,''), $7)
-         WHERE id = $1
-      `,
-      [leadId, chatId, username || null, firstName || null, displayName, leadSource, requestedRole]
-    );
-
-    if (!prevChat || String(prevChat) !== String(chatId)) {
-      try {
-        await tgSendToAdmins(
-          `🆕 Заявка на привязку (Telegram)\n` +
-            `Роль: ${requestedRole}\n` +
-            `ID лида: ${leadId}\n` +
-            `Имя: ${displayName}\n` +
-            `Телефон: ${phone}\n` +
-            `Chat ID: ${chatId}\n` +
-            `Источник: ${leadSource}\n` +
-            `Открыть: https://travella.uz/admin/leads`
-        );
-      } catch (e) {
-        console.error("[tg-link] tgSendToAdmins failed:", e?.message || e);
-      }
-    }
-
-    return { leadId, existed: true };
-  }
-
-  const insertLead = await pool.query(
-    `
-      INSERT INTO leads (
-        phone,
-        name,
-        source,
-        status,
-        created_at,
-        telegram_chat_id,
-        telegram_username,
-        telegram_first_name,
-        requested_role
-      )
-      VALUES ($1, $2, $3, 'new', NOW(), $4, $5, $6, $7)
-      RETURNING id
-    `,
-    [phone, displayName, leadSource, chatId, username || null, firstName || null, requestedRole]
-  );
-
-  const leadId = insertLead.rows[0].id;
-
-  try {
-    await tgSendToAdmins(
-      `🆕 Заявка на привязку (Telegram)\n` +
-        `Роль: ${requestedRole}\n` +
-        `ID лида: ${leadId}\n` +
-        `Имя: ${displayName}\n` +
-        `Телефон: ${phone}\n` +
-        `Chat ID: ${chatId}\n` +
-        `Источник: ${leadSource}\n` +
-        `Открыть: https://travella.uz/admin/leads`
-    );
-  } catch (e) {
-    console.error("[tg-link] tgSendToAdmins failed:", e?.message || e);
-  }
-
-  return { leadId, existed: false };
 }
 
 /**
@@ -235,27 +139,6 @@ async function linkAccount(req, res) {
     const found = await findUserByPhone(normPhone);
 
     if (found) {
-      const stFound = String(found.account_status || "pending").toLowerCase();
-      if (stFound !== "approved") {
-        const { leadId } = await upsertTelegramLead({
-          normPhone,
-          phone,
-          displayName,
-          chatId,
-          username,
-          firstName,
-          requestedRole: found.role === "provider" ? "agent" : "client",
-        });
-        return res.status(202).json({
-          success: true,
-          pending: true,
-          leadId,
-          role: "pending_lead",
-          requestedRole,
-          message: "Account pending approval",
-        });
-      }
-
       // ===== ПРОВАЙДЕР НАЙДЕН =====
       if (found.role === "provider") {
         // Всегда актуализируем telegram_chat_id и social (это важно для уведомлений)
@@ -318,47 +201,145 @@ async function linkAccount(req, res) {
       }
     }
 
-    // ===== Телефон не найден: создаём LEAD и ждём решения админа =====
+    // ===== Телефон не найден: создаём нового =====
+
+    // --- новый КЛИЕНТ ---
     if (!requestedRole || requestedRole === "client") {
-      const { leadId, existed } = await upsertTelegramLead({
-        normPhone,
-        phone,
-        displayName,
-        chatId,
-        username,
-        firstName,
-        requestedRole: "client",
-      });
-      return res.status(202).json({
+      const email = `tg_${normPhone}@telegram.local`;
+
+      const insertClient = await pool.query(
+        `
+          INSERT INTO clients (name, email, phone, password_hash, telegram_chat_id, telegram)
+          VALUES ($1, $2, $3, $4, $5, $6)
+          RETURNING id, name
+        `,
+        [
+          displayName,
+          email,
+          phone,
+          TELEGRAM_DUMMY_PASSWORD_HASH,
+          chatId,
+          username || null,
+        ]
+      );
+
+      const row = insertClient.rows[0];
+      console.log("[tg-link] created NEW CLIENT from Telegram:", row);
+
+      return res.json({
         success: true,
-        pending: true,
-        role: "client_lead",
-        leadId,
-        existed,
+        role: "client",
+        id: row.id,
+        name: row.name,
+        existed: false,
+        created: "client",
         requestedRole,
-        message: "Lead created, pending approval",
       });
     }
 
     // ===== новый ПОСТАВЩИК: создаём (или реюзаем) lead =====
     if (requestedRole === "agent") {
-      const { leadId, existed } = await upsertTelegramLead({
-        normPhone,
-        phone,
-        displayName,
-        chatId,
-        username,
-        firstName,
-        requestedRole: "agent",
-      });
-      return res.status(202).json({
+      // 1) если есть активный lead — обновляем telegram-поля, чтобы ничего не “пропадало”
+      const existingLead = await pool.query(
+        `
+          SELECT id, telegram_chat_id
+            FROM leads
+           WHERE regexp_replace(phone,'\\D','','g') = $1
+             AND status = 'new'
+             AND decision IS NULL
+           ORDER BY id DESC
+           LIMIT 1
+      `,
+        [normPhone]
+      );
+
+      if (existingLead.rowCount > 0) {
+        const leadId = existingLead.rows[0].id;
+        const prevChat = existingLead.rows[0].telegram_chat_id || null;
+
+        await pool.query(
+          `
+            UPDATE leads
+               SET telegram_chat_id = $2,
+                   telegram_username = $3,
+                   telegram_first_name = $4,
+                   name = COALESCE(NULLIF(name,''), $5)
+             WHERE id = $1
+          `,
+          [leadId, chatId, username || null, firstName || null, displayName]
+        );
+
+        // уведомим админов, если это новая привязка/смена chatId (чтобы не было “тихо”)
+        if (!prevChat || String(prevChat) !== String(chatId)) {
+          try {
+            await tgSendToAdmins(
+              `🆕 Новый поставщик (Telegram)\n` +
+                `ID лида: ${leadId}\n` +
+                `Имя: ${displayName}\n` +
+                `Телефон: ${phone}\n` +
+                `Chat ID: ${chatId}\n` +
+                `Источник: telegram_provider\n` +
+                `Открыть: https://travella.uz/admin/leads`
+            );
+          } catch (e) {
+            console.error("[tg-link] tgSendToAdmins failed:", e?.message || e);
+          }
+        }
+
+        return res.json({
+          success: true,
+          role: "provider_lead",
+          leadId,
+          existed: true,
+          created: null,
+          requestedRole,
+        });
+      }
+
+      // 2) иначе создаём новый lead
+      const insertLead = await pool.query(
+        `
+          INSERT INTO leads (
+            phone,
+            name,
+            source,
+            status,
+            created_at,
+            telegram_chat_id,
+            telegram_username,
+            telegram_first_name,
+            requested_role
+          )
+          VALUES ($1, $2, 'telegram_provider', 'new', NOW(), $3, $4, $5, 'agent')
+          RETURNING id
+        `,
+        [phone, displayName, chatId, username || null, firstName || null]
+      );
+
+      const lead = insertLead.rows[0];
+      console.log("[tg-link] created NEW PROVIDER LEAD from Telegram:", lead);
+
+      try {
+        await tgSendToAdmins(
+          `🆕 Новый поставщик (Telegram)\n` +
+            `ID лида: ${lead.id}\n` +
+            `Имя: ${displayName}\n` +
+            `Телефон: ${phone}\n` +
+            `Chat ID: ${chatId}\n` +
+            `Источник: telegram_provider\n` +
+            `Открыть: https://travella.uz/admin/leads`
+        );
+      } catch (e) {
+        console.error("[tg-link] tgSendToAdmins failed:", e?.message || e);
+      }
+
+      return res.json({
         success: true,
-        pending: true,
         role: "provider_lead",
-        leadId,
-        existed,
+        leadId: lead.id,
+        existed: false,
+        created: "provider_lead",
         requestedRole,
-        message: "Lead created, pending approval",
       });
     }
 
@@ -388,7 +369,7 @@ async function getProfileByChat(req, res) {
 
     const result = await pool.query(
       `
-        SELECT id, name, phone, telegram_chat_id, account_status
+        SELECT id, name, phone, telegram_chat_id
           FROM ${table}
          WHERE telegram_chat_id = $1
          LIMIT 1
@@ -400,18 +381,7 @@ async function getProfileByChat(req, res) {
       return res.status(404).json({ notFound: true });
     }
 
-    const u = result.rows[0];
-    const st = String(u.account_status || "pending").toLowerCase();
-    if (st !== "approved") {
-      return res.status(403).json({
-        success: false,
-        pending: true,
-        account_status: u.account_status || "pending",
-        message: "Account pending approval",
-      });
-    }
-
-    return res.json({ success: true, user: u });
+    return res.json({ success: true, user: result.rows[0] });
   } catch (e) {
     console.error("GET /api/telegram/profile error:", e);
     return res.status(500).json({ error: "Internal error" });
@@ -482,20 +452,6 @@ async function searchClientServices(req, res) {
   try {
     const { chatId } = req.params; // формально
     const { category } = req.query || {};
-    // 🔒 Доступ к просмотру через бота — только после одобрения аккаунта админом
-    const acc = await pool.query(
-      `SELECT id, account_status FROM clients WHERE telegram_chat_id = $1 LIMIT 1`,
-      [chatId]
-    );
-    const st = String(acc.rows[0]?.account_status || "pending").toLowerCase();
-    if (!acc.rowCount || st !== "approved") {
-      return res.status(403).json({
-        success: false,
-        pending: true,
-        account_status: acc.rows[0]?.account_status || "pending",
-        message: "Account pending approval",
-      });
-    }
 
     if (!category) {
       return res
