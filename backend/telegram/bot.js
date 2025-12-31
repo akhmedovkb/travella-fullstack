@@ -1656,15 +1656,6 @@ async function resolveRoleByUserId(userId, ctx) {
       return "provider";
     }
   } catch (e) {
-    // ⛔ аккаунт найден, но ещё не одобрен админом
-    if (e?.response?.status === 403 && e?.response?.data?.pending) {
-      if (ctx && ctx.session) {
-        ctx.session.pendingApproval = true;
-        ctx.session.linked = false;
-        delete ctx.session.role;
-      }
-      return null;
-    }
     if (e?.response?.status !== 404) {
       console.log(
         "[tg-bot] resolveRoleByUserId provider error:",
@@ -1679,20 +1670,10 @@ async function resolveRoleByUserId(userId, ctx) {
       if (ctx && ctx.session) {
         ctx.session.role = "client";
         ctx.session.linked = true;
-        ctx.session.pendingApproval = false;
       }
       return "client";
     }
   } catch (e) {
-    // ⛔ аккаунт найден, но ещё не одобрен админом
-    if (e?.response?.status === 403 && e?.response?.data?.pending) {
-      if (ctx && ctx.session) {
-        ctx.session.pendingApproval = true;
-        ctx.session.linked = false;
-        delete ctx.session.role;
-      }
-      return null;
-    }
     if (e?.response?.status !== 404) {
       console.log(
         "[tg-bot] resolveRoleByUserId client error:",
@@ -2259,40 +2240,76 @@ async function finishCreateServiceFromWizard(ctx) {
 
 /* ===================== PHONE LINKING ===================== */
 
-// ✅ pending может прийти не только как *_lead, но и как pending_lead / pending:true
-const isPending =
-  !!data.pending ||
-  data.role === "pending_lead" ||
-  String(data.role || "").endsWith("_lead") ||
-  String(data.created || "").endsWith("_lead");
+async function handlePhoneRegistration(ctx, requestedRole, phone) {
+  try {
+    if (ctx.chat?.type && ctx.chat.type !== "private") {
+      await ctx.reply(
+        "📌 Привязка номера доступна только в личных сообщениях.\nОткройте бота и нажмите /start."
+      );
+      return;
+    }
 
-const finalRole =
-  data.role === "provider" || data.created === "provider"
-    ? "provider"
-    : "client";
+    const chatId = ctx.chat.id;
+    const username = ctx.from.username || null;
+    const firstName = ctx.from.first_name || null;
 
-if (!ctx.session) ctx.session = {};
-ctx.session.role = finalRole;
+    const payload = { role: requestedRole, phone, chatId, username, firstName };
+    console.log("[bot] handlePhoneRegistration payload:", payload);
 
-if (isPending) {
-  ctx.session.linked = false;
-  ctx.session.pending = true;
+    const { data } = await axios.post(`/api/telegram/link`, payload);
+    console.log("[bot] /api/telegram/link response:", data);
 
-  // Твои тексты можно оставить — главное, чтобы бот НЕ показывал меню
-  await ctx.reply("✅ Номер получен. Заявка отправлена админу.");
-  await ctx.reply(
-    "⏳ Ожидайте одобрения. Как только админ подтвердит — меню станет доступным.\n\nЕсли вы только что отправили номер — просто подождите."
-  );
-  return;
+    if (!data || !data.success) {
+      await ctx.reply("⚠️ Не удалось привязать номер. Попробуйте позже.");
+      return;
+    }
+
+    const finalRole =
+      data.role === "provider" || data.role === "provider_lead"
+        ? "provider"
+        : "client";
+
+    if (!ctx.session) ctx.session = {};
+    ctx.session.role = finalRole;
+    ctx.session.linked = true;
+
+    if (data.existed && data.role === "client") {
+      await ctx.reply(
+        "✅ Готово!\n\nВаш Telegram привязан к аккаунту *клиента Travella*.",
+        { parse_mode: "Markdown" }
+      );
+    } else if (data.existed && data.role === "provider") {
+      await ctx.reply(
+        "✅ Готово!\n\nВаш Telegram привязан к аккаунту *поставщика Travella*.",
+        { parse_mode: "Markdown" }
+      );
+
+      if (data.requestedRole === "client") {
+        await ctx.reply(
+          "ℹ️ По этому номеру уже есть аккаунт поставщика.\nЕсли хотите быть клиентом — зарегистрируйтесь на сайте отдельно."
+        );
+      }
+    } else if (data.created === "client") {
+      await ctx.reply(
+        "🎉 Добро пожаловать!\n\nМы создали для вас *клиентский аккаунт* по этому номеру.",
+        { parse_mode: "Markdown" }
+      );
+    } else if (data.created === "provider_lead") {
+      await ctx.reply(
+        "📝 Заявка принята!\n\nМы зарегистрировали вас как *нового поставщика*.\nПосле модерации менеджер свяжется с вами.\n\n" +
+          `🌐 Сайт: ${SITE_URL}`,
+        { parse_mode: "Markdown" }
+      );
+    } else {
+      await ctx.reply("✅ Привязка выполнена.");
+    }
+
+    await ctx.reply("📌 Готово! Меню доступно ниже 👇", getMainMenuKeyboard(finalRole));
+  } catch (e) {
+    console.error("[tg-bot] handlePhoneRegistration error:", e?.response?.data || e);
+    await ctx.reply("⚠️ Ошибка привязки номера. Попробуйте позже.");
+  }
 }
-
-// approved
-ctx.session.linked = true;
-ctx.session.pending = false;
-
-await ctx.reply("✅ Привязка выполнена.");
-await ctx.reply("📌 Готово! Меню доступно ниже 👇", getMainMenuKeyboard(finalRole));
-return;
 
 /* ===================== /start ===================== */
 
@@ -2307,41 +2324,13 @@ bot.start(async (ctx) => {
 
   const startPayloadRaw = (ctx.startPayload || "").trim();
 
-// ✅ Если ранее отправляли номер и ждём модерации — проверим, не одобрили ли уже
-if (ctx.session?.pending) {
   try {
-    const r1 = await axios.get(`/api/telegram/profile/client/${actorId}`);
-    if (r1.data?.success) {
-      ctx.session.pending = false;
-      ctx.session.linked = true;
-      ctx.session.role = "client";
-      await ctx.reply("✅ Аккаунт подтверждён! Меню доступно ниже 👇", getMainMenuKeyboard("client"));
-      return;
-    }
-  } catch (e) {
-    // ignore 404/403 here, fallback below
-  }
+    let role = null;
 
-  try {
-    const r2 = await axios.get(`/api/telegram/profile/provider/${actorId}`);
-    if (r2.data?.success) {
-      ctx.session.pending = false;
-      ctx.session.linked = true;
-      ctx.session.role = "provider";
-      await ctx.reply("✅ Аккаунт подтверждён! Меню доступно ниже 👇", getMainMenuKeyboard("provider"));
-      return;
-    }
-  } catch (e) {
-    // ignore 404/403 here, fallback below
-  }
-
-  await ctx.reply(
-    "⏳ Ваша заявка уже отправлена и ожидает одобрения.\n\n" +
-      "Как только админ подтвердит — меню станет доступным."
-  );
-  return;
-}
-
+    try {
+      const resClient = await axios.get(`/api/telegram/profile/client/${actorId}`);
+      if (resClient.data && resClient.data.success) role = "client";
+    } catch (e) {
       if (e?.response?.status !== 404) {
         console.log("[tg-bot] profile client error:", e?.response?.data || e.message || e);
       }
@@ -2352,17 +2341,6 @@ if (ctx.session?.pending) {
         const resProv = await axios.get(`/api/telegram/profile/provider/${actorId}`);
         if (resProv.data && resProv.data.success) role = "provider";
       } catch (e) {
-        if (e?.response?.status === 403 && e?.response?.data?.pending) {
-          if (!ctx.session) ctx.session = {};
-          ctx.session.linked = false;
-          ctx.session.pending = true;
-        
-          await ctx.reply(
-            "⏳ Ваш аккаунт ещё не одобрен админом.\n\n" +
-              "Пожалуйста, подождите — после одобрения меню станет доступно."
-          );
-          return;
-        }
         if (e?.response?.status !== 404) {
           console.log("[tg-bot] profile provider error:", e?.response?.data || e.message || e);
         }
@@ -4226,13 +4204,10 @@ bot.on("inline_query", async (ctx) => {
 
     // Требуем привязку аккаунта
     if (!roleForInline) {
-      const pending = Boolean(ctx.session?.pendingApproval);
       await ctx.answerInlineQuery([], {
         cache_time: 3,
         is_personal: true,
-        switch_pm_text: pending
-          ? "⏳ Аккаунт на модерации. Открыть бота"
-          : "🔐 Сначала привяжите аккаунт (номер телефона)",
+        switch_pm_text: "🔐 Сначала привяжите аккаунт (номер телефона)",
         switch_pm_parameter: "start",
       });
       return;
