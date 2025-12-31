@@ -7,38 +7,6 @@ const TELEGRAM_DUMMY_PASSWORD_HASH =
   process.env.TELEGRAM_DUMMY_PASSWORD_HASH ||
   "$2b$10$N9qo8uLOickgx2ZMRZo5i.Ul5cW93vGN9VOGQsv5nPVnrwJknhkAu";
 
-/**
- * ✅ Reply-keyboard меню (кнопки снизу), чтобы после одобрения
- * пользователь видел именно “бот-меню”, а не web-кнопки.
- */
-function tgMainMenuKeyboard(role) {
-  // role: "provider" | "client"
-  if (role === "provider") {
-    return {
-      reply_markup: {
-        keyboard: [
-          ["🔍 Найти услугу"],
-          ["🧳 Мои услуги", "📦 Бронирования"],
-          ["📨 Заявки", "❤️ Избранное"],
-          ["⚙️ Профиль"],
-        ],
-        resize_keyboard: true,
-      },
-    };
-  }
-
-  return {
-    reply_markup: {
-      keyboard: [
-        ["🔍 Найти объявления"],
-        ["❤️ Избранное", "📦 Бронирования"],
-        ["⚙️ Профиль"],
-      ],
-      resize_keyboard: true,
-    },
-  };
-}
-
 /* ================= CREATE LEAD ================= */
 async function createLead(req, res) {
   try {
@@ -180,8 +148,8 @@ async function decideLead(req, res) {
         const email = `tg_${phoneDigits || Date.now()}@telegram.local`;
 
         await db.query(
-          `INSERT INTO clients (name, email, phone, password_hash, telegram_chat_id, telegram, account_status)
-           VALUES ($1,$2,$3,$4,$5,$6,'approved')`,
+          `INSERT INTO clients (name, email, phone, password_hash, telegram_chat_id, telegram)
+           VALUES ($1,$2,$3,$4,$5,$6)`,
           [
             name,
             email,
@@ -190,15 +158,6 @@ async function decideLead(req, res) {
             chatId,
             username,
           ]
-        );
-      } else {
-        await db.query(
-          `UPDATE clients
-              SET account_status='approved',
-                  telegram_chat_id = COALESCE($2, telegram_chat_id),
-                  telegram = COALESCE(NULLIF($3,''), telegram)
-            WHERE id = $1`,
-          [exists.rows[0].id, chatId, username]
         );
       }
     }
@@ -219,8 +178,8 @@ async function decideLead(req, res) {
         const providerType = normalizeProviderType(lead.requested_role);
 
         await db.query(
-          `INSERT INTO providers (name, type, phone, email, password, social, telegram_chat_id, account_status)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,'approved')`,
+          `INSERT INTO providers (name, type, phone, email, password, social, telegram_chat_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
           [
             name,
             providerType,
@@ -230,15 +189,6 @@ async function decideLead(req, res) {
             username ? `@${username}` : null,
             chatId,
           ]
-        );
-      } else {
-        await db.query(
-          `UPDATE providers
-              SET account_status='approved',
-                  telegram_chat_id = COALESCE($2, telegram_chat_id),
-                  social = COALESCE($3, social)
-            WHERE id = $1`,
-          [exists.rows[0].id, chatId, username ? `@${username}` : null]
         );
       }
     }
@@ -257,14 +207,36 @@ async function decideLead(req, res) {
       if (decision === "approved_provider") {
         await tgSend(
           chatId,
-          "✅ Ваша заявка одобрена!\n\nВы зарегистрированы как поставщик Travella.\n\n📌 Меню доступно ниже 👇",
-          tgMainMenuKeyboard("provider")
+          "✅ Ваша заявка одобрена!\n\nВы зарегистрированы как поставщик Travella.",
+          {
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  {
+                    text: "🧳 Мои услуги",
+                    url: "https://travella.uz/dashboard/services",
+                  },
+                ],
+                [
+                  {
+                    text: "📦 Мои брони",
+                    url: "https://travella.uz/dashboard/bookings",
+                  },
+                ],
+                [
+                  {
+                    text: "⚙️ Профиль",
+                    url: "https://travella.uz/dashboard/profile",
+                  },
+                ],
+              ],
+            },
+          }
         );
       } else if (decision === "approved_client") {
         await tgSend(
           chatId,
-          "✅ Ваша заявка одобрена! Добро пожаловать в Travella.\n\n📌 Меню доступно ниже 👇",
-          tgMainMenuKeyboard("client")
+          "✅ Ваша заявка одобрена! Добро пожаловать в Travella.\n\n👉 https://travella.uz"
         );
       } else {
         await tgSend(chatId, "❌ К сожалению, ваша заявка была отклонена.");
