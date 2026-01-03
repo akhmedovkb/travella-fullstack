@@ -144,23 +144,12 @@ async function decideLead(req, res) {
         [phoneDigits]
       );
 
-      if (exists.rowCount) {
-        // ✅ если клиент уже есть — просто одобряем и обновляем telegram-поля
-        await db.query(
-          `UPDATE clients
-              SET account_status = 'approved',
-                  telegram_chat_id = COALESCE($2, telegram_chat_id),
-                  telegram = COALESCE($3, telegram),
-                  updated_at = NOW()
-            WHERE id = $1`,
-          [exists.rows[0].id, chatId, username]
-        );
-      } else {
+      if (!exists.rowCount) {
         const email = `tg_${phoneDigits || Date.now()}@telegram.local`;
 
         await db.query(
-          `INSERT INTO clients (name, email, phone, password_hash, telegram_chat_id, telegram, account_status)
-           VALUES ($1,$2,$3,$4,$5,$6,'approved')`,
+          `INSERT INTO clients (name, email, phone, password_hash, telegram_chat_id, telegram)
+           VALUES ($1,$2,$3,$4,$5,$6)`,
           [
             name,
             email,
@@ -181,27 +170,16 @@ async function decideLead(req, res) {
         [phoneDigits]
       );
 
-      // requested_role в lead (например: agent/guide/transport/hotel)
-      // Важно: для турагентов хотим хранить type="agent" (а не "provider")
-      const providerType = normalizeProviderType(lead.requested_role);
-
-      if (exists.rowCount) {
-        // ✅ если провайдер уже есть — просто одобряем и обновляем telegram-поля
-        await db.query(
-          `UPDATE providers
-              SET account_status = 'approved',
-                  telegram_chat_id = COALESCE($2, telegram_chat_id),
-                  social = COALESCE($3, social),
-                  updated_at = NOW()
-            WHERE id = $1`,
-          [exists.rows[0].id, chatId, username ? `@${username}` : null]
-        );
-      } else {
+      if (!exists.rowCount) {
         const email = `tg_${phoneDigits || Date.now()}@telegram.local`;
 
+        // requested_role в lead (например: agent/guide/transport/hotel)
+        // Важно: для турагентов хотим хранить type="agent" (а не "provider")
+        const providerType = normalizeProviderType(lead.requested_role);
+
         await db.query(
-          `INSERT INTO providers (name, type, phone, email, password, social, telegram_chat_id, account_status)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,'approved')`,
+          `INSERT INTO providers (name, type, phone, email, password, social, telegram_chat_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
           [
             name,
             providerType,
@@ -229,32 +207,36 @@ async function decideLead(req, res) {
       if (decision === "approved_provider") {
         await tgSend(
           chatId,
-          "✅ Ваша заявка одобрена!\n\nВы зарегистрированы как поставщик Travella.\n\n🏠 Главное меню доступно ниже 👇",
+          "✅ Ваша заявка одобрена!\n\nВы зарегистрированы как поставщик Travella.",
           {
             reply_markup: {
-              keyboard: [
-                [{ text: "🔎 Найти услугу" }],
-                [{ text: "🧳 Мои услуги" }, { text: "📦 Мои брони" }],
-                [{ text: "⚙️ Профиль" }],
+              inline_keyboard: [
+                [
+                  {
+                    text: "🧳 Мои услуги",
+                    url: "https://travella.uz/dashboard/services",
+                  },
+                ],
+                [
+                  {
+                    text: "📦 Мои брони",
+                    url: "https://travella.uz/dashboard/bookings",
+                  },
+                ],
+                [
+                  {
+                    text: "⚙️ Профиль",
+                    url: "https://travella.uz/dashboard/profile",
+                  },
+                ],
               ],
-              resize_keyboard: true,
             },
           }
         );
       } else if (decision === "approved_client") {
         await tgSend(
           chatId,
-          "✅ Ваша заявка одобрена! Добро пожаловать в Travella.\n\n🏠 Главное меню доступно ниже 👇",
-          {
-            reply_markup: {
-              keyboard: [
-                [{ text: "🔎 Найти услугу" }],
-                [{ text: "📦 Мои брони" }, { text: "❤️ Избранное" }],
-                [{ text: "⚙️ Профиль" }],
-              ],
-              resize_keyboard: true,
-            },
-          }
+          "✅ Ваша заявка одобрена! Добро пожаловать в Travella.\n\n👉 https://travella.uz"
         );
       } else {
         await tgSend(chatId, "❌ К сожалению, ваша заявка была отклонена.");
