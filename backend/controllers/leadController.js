@@ -136,62 +136,82 @@ async function decideLead(req, res) {
       return v;
     }
 
-    if (decision === "approved_client") {
-      const exists = await db.query(
-        `SELECT id FROM clients
-          WHERE regexp_replace(phone,'\\D','','g') = $1
-          LIMIT 1`,
-        [phoneDigits]
-      );
-
-      if (!exists.rowCount) {
-        const email = `tg_${phoneDigits || Date.now()}@telegram.local`;
-
-        await db.query(
-          `INSERT INTO clients (name, email, phone, password_hash, telegram_chat_id, telegram)
-           VALUES ($1,$2,$3,$4,$5,$6)`,
-          [
-            name,
-            email,
-            phone,
-            TELEGRAM_DUMMY_PASSWORD_HASH,
-            chatId,
-            username,
-          ]
+      if (decision === "approved_client") {
+        const exists = await db.query(
+          `SELECT id FROM clients
+            WHERE regexp_replace(phone,'\\D','','g') = $1
+            LIMIT 1`,
+          [phoneDigits]
         );
+      
+        if (!exists.rowCount) {
+          const email = `tg_${phoneDigits || Date.now()}@telegram.local`;
+      
+          await db.query(
+            `INSERT INTO clients (name, email, phone, password_hash, telegram_chat_id, telegram)
+             VALUES ($1,$2,$3,$4,$5,$6)`,
+            [
+              name,
+              email,
+              phone,
+              TELEGRAM_DUMMY_PASSWORD_HASH,
+              chatId,
+              username,
+            ]
+          );
+        } else {
+          // ✅ ВОТ СЮДА: если клиент уже существует — привязываем Telegram после модерации
+          await db.query(
+            `UPDATE clients
+                SET telegram_chat_id = $2,
+                    telegram = COALESCE($3, telegram)
+              WHERE id = $1`,
+            [exists.rows[0].id, chatId, username]
+          );
+        }
       }
-    }
 
-    if (decision === "approved_provider") {
-      const exists = await db.query(
-        `SELECT id FROM providers
-          WHERE regexp_replace(phone,'\\D','','g') = $1
-          LIMIT 1`,
-        [phoneDigits]
-      );
-
-      if (!exists.rowCount) {
-        const email = `tg_${phoneDigits || Date.now()}@telegram.local`;
-
-        // requested_role в lead (например: agent/guide/transport/hotel)
-        // Важно: для турагентов хотим хранить type="agent" (а не "provider")
-        const providerType = normalizeProviderType(lead.requested_role);
-
-        await db.query(
-          `INSERT INTO providers (name, type, phone, email, password, social, telegram_chat_id)
-           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-          [
-            name,
-            providerType,
-            phone,
-            email,
-            "telegram",
-            username ? `@${username}` : null,
-            chatId,
-          ]
+      if (decision === "approved_provider") {
+        const exists = await db.query(
+          `SELECT id FROM providers
+            WHERE regexp_replace(phone,'\\D','','g') = $1
+            LIMIT 1`,
+          [phoneDigits]
         );
+      
+        if (!exists.rowCount) {
+          const email = `tg_${phoneDigits || Date.now()}@telegram.local`;
+      
+          // requested_role в lead (например: agent/guide/transport/hotel)
+          // Важно: для турагентов хотим хранить type="agent" (а не "provider")
+          const providerType = normalizeProviderType(lead.requested_role);
+      
+          await db.query(
+            `INSERT INTO providers (name, type, phone, email, password, social, telegram_chat_id)
+             VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+            [
+              name,
+              providerType,
+              phone,
+              email,
+              "telegram",
+              username ? `@${username}` : null,
+              chatId,
+            ]
+          );
+        } else {
+          // ✅ ВОТ СЮДА: если провайдер уже существует — привязываем Telegram после модерации
+          // ВАЖНО: из-за trg_providers_tg_sync ставим оба поля
+          await db.query(
+            `UPDATE providers
+                SET telegram_chat_id = $2,
+                    tg_chat_id = $2,
+                    social = COALESCE($3, social)
+              WHERE id = $1`,
+            [exists.rows[0].id, chatId, username ? `@${username}` : null]
+          );
+        }
       }
-    }
 
     await db.query(
       `UPDATE leads
