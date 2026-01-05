@@ -12,6 +12,7 @@ const {
 
 // простая проверка роли
 const requireAdmin = require("../middleware/requireAdmin");
+const leadController = require("../controllers/leadController");
 
 function phoneToDigits(phone) {
   return String(phone || "").replace(/\D/g, "");
@@ -198,6 +199,15 @@ router.post("/services/:id(\\d+)/unpublish", authenticateToken, requireAdmin, as
   notifyModerationUnpublished({ service: rows[0].id }).catch(() => {});
   res.json({ ok: true, service: rows[0] });
 });
+
+// DELETE /api/admin/leads/:id  (жесткое удаление: lead + client/provider + хвосты)
+router.delete(
+  "/leads/:id(\\d+)",
+  authenticateToken,
+  requireAdmin,
+  leadController.deleteLeadFully
+);
+
 
 /* ===================== RESET endpoints (совместимо с фронтом Leads.jsx) ===================== */
 /**
