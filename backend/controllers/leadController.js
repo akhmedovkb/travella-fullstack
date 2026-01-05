@@ -366,4 +366,5 @@ module.exports = {
   updateLeadStatus,
   listLeadPages,
   decideLead,
+  deleteLeadFully,
 };
