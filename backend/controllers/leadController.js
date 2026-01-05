@@ -223,45 +223,43 @@ async function decideLead(req, res) {
     await db.query("COMMIT");
 
     // ✅ уведомляем пользователя в Telegram (если есть chatId)
-    if (chatId) {
-      if (decision === "approved_provider") {
-        await tgSend(
-          chatId,
-          "✅ Ваша заявка одобрена!\n\nВы зарегистрированы как поставщик Travella.",
-          {
-            reply_markup: {
-              inline_keyboard: [
-                [
-                  {
-                    text: "🧳 Мои услуги",
-                    url: "https://travella.uz/dashboard/services",
-                  },
-                ],
-                [
-                  {
-                    text: "📦 Мои брони",
-                    url: "https://travella.uz/dashboard/bookings",
-                  },
-                ],
-                [
-                  {
-                    text: "⚙️ Профиль",
-                    url: "https://travella.uz/dashboard/profile",
-                  },
-                ],
-              ],
-            },
-          }
-        );
-      } else if (decision === "approved_client") {
-        await tgSend(
-          chatId,
-          "✅ Ваша заявка одобрена! Добро пожаловать в Travella.\n\n👉 https://travella.uz"
-        );
-      } else {
-        await tgSend(chatId, "❌ К сожалению, ваша заявка была отклонена.");
-      }
+  if (chatId) {
+    // Reply keyboard (нижнее меню) — без URL
+    const providerMenu = {
+      keyboard: [
+        ["🔍 Найти услугу", "🧳 Мои услуги"],
+        ["📦 Бронирования", "🧾 Заявки"],
+        ["👤 Профиль"],
+      ],
+      resize_keyboard: true,
+    };
+  
+    const clientMenu = {
+      keyboard: [
+        ["🔍 Найти услугу"],
+        ["📦 Бронирования", "👤 Профиль"],
+      ],
+      resize_keyboard: true,
+    };
+  
+    if (decision === "approved_provider") {
+      await tgSend(
+        chatId,
+        "✅ Ваша заявка одобрена!\n\nВы зарегистрированы как поставщик Travella.\nВыберите раздел в меню ниже 👇",
+        { reply_markup: providerMenu }
+      );
+    } else if (decision === "approved_client") {
+      await tgSend(
+        chatId,
+        "✅ Ваша заявка одобрена!\n\nДобро пожаловать в Travella.\nВыберите раздел в меню ниже 👇",
+        { reply_markup: clientMenu }
+      );
+    } else {
+      await tgSend(chatId, "❌ К сожалению, ваша заявка была отклонена.", {
+        reply_markup: { remove_keyboard: true },
+      });
     }
+  }
 
     return res.json({ ok: true });
   } catch (e) {
