@@ -271,6 +271,94 @@ async function decideLead(req, res) {
   }
 }
 
+/* ================= DELETE LEAD + USER (HARD RESET) ================= */
+// DELETE /api/admin/leads/:id
+async function deleteLeadFully(req, res) {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) {
+    return res.status(400).json({ ok: false, error: "bad_id" });
+  }
+
+  const db = await pool.connect();
+  try {
+    await db.query("BEGIN");
+
+    const leadRes = await db.query(
+      `SELECT id, phone, telegram_chat_id, telegram_username
+         FROM leads
+        WHERE id = $1
+        FOR UPDATE`,
+      [id]
+    );
+
+    if (!leadRes.rowCount) {
+      await db.query("ROLLBACK");
+      return res.status(404).json({ ok: false, error: "lead_not_found" });
+    }
+
+    const lead = leadRes.rows[0];
+    const phoneDigits = String(lead.phone || "").replace(/\D/g, "");
+    const chatId = lead.telegram_chat_id || null;
+    const username = lead.telegram_username || null;
+
+    // --- 1) Если есть provider по телефону — удаляем безопасно (FK)
+    const provRes = await db.query(
+      `SELECT id FROM providers
+        WHERE regexp_replace(phone,'\\D','','g') = $1
+        LIMIT 1`,
+      [phoneDigits]
+    );
+
+    if (provRes.rowCount) {
+      const providerId = provRes.rows[0].id;
+
+      // blocked_dates -> NO ACTION, надо удалить вручную
+      await db.query(`DELETE FROM blocked_dates WHERE provider_id = $1`, [
+        providerId,
+      ]);
+
+      // leads.assignee_provider_id -> NO ACTION, надо обнулить
+      await db.query(
+        `UPDATE leads
+            SET assignee_provider_id = NULL
+          WHERE assignee_provider_id = $1`,
+        [providerId]
+      );
+
+      // остальное (bookings/services/...) у тебя CASCADE/SET NULL — пусть отработает по FK
+      await db.query(`DELETE FROM providers WHERE id = $1`, [providerId]);
+    }
+
+    // --- 2) Клиент по телефону
+    await db.query(
+      `DELETE FROM clients
+        WHERE regexp_replace(phone,'\\D','','g') = $1`,
+      [phoneDigits]
+    );
+
+    // --- 3) Удаляем все лиды по этому идентификатору (чтобы не оставалось хвостов)
+    // (и сам текущий lead тоже уйдёт)
+    if (chatId) {
+      await db.query(`DELETE FROM leads WHERE telegram_chat_id = $1`, [chatId]);
+    } else {
+      await db.query(
+        `DELETE FROM leads WHERE regexp_replace(phone,'\\D','','g') = $1`,
+        [phoneDigits]
+      );
+    }
+
+    await db.query("COMMIT");
+    return res.json({ ok: true });
+  } catch (e) {
+    await db.query("ROLLBACK");
+    console.error("deleteLeadFully error:", e);
+    return res.status(500).json({ ok: false, error: "delete_failed" });
+  } finally {
+    db.release();
+  }
+}
+
+
 /* ================= EXPORT ================= */
 module.exports = {
   createLead,
