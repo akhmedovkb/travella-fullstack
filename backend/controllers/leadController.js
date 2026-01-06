@@ -225,7 +225,20 @@ async function decideLead(req, res) {
         WHERE id=$1`,
       [id, decision]
     );
-
+    if (chatId) {
+      await db.query(
+        `
+          UPDATE leads
+             SET decision  = COALESCE(decision, $2),
+                 decided_at = COALESCE(decided_at, NOW()),
+                 status    = 'closed'
+           WHERE telegram_chat_id = $1
+             AND status = 'new'
+             AND decision IS NULL
+        `,
+        [chatId, decision]
+      );
+    }
     await db.query("COMMIT");
 
     // ✅ уведомляем пользователя в Telegram (если есть chatId)
