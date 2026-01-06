@@ -346,6 +346,40 @@ export default function AdminLeads() {
     return data;
   }
 
+async function adminDelete(path) {
+  const API_BASE = getAPIBase();
+  if (!API_BASE) throw new Error("API_BASE is not defined");
+
+  const url = `${API_BASE}${path}`;
+  const token = getAuthToken();
+
+  const res = await fetch(url, {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    credentials: "include",
+  });
+
+  let data = null;
+  try {
+    data = await res.json();
+  } catch {}
+
+  if (!res.ok) {
+    const msg = data?.message || data?.error || `Request failed (${res.status})`;
+    const extra = data?.debug
+      ? `\n\nDEBUG:\n${JSON.stringify(data.debug, null, 2)}`
+      : "";
+    throw new Error(msg + extra);
+  }
+
+  return data;
+}
+
+
+  
   function isClientLead(r) {
     const rr = String(r.requested_role || "").trim().toLowerCase();
     const src = String(r.source || "").trim().toLowerCase();
@@ -700,6 +734,34 @@ export default function AdminLeads() {
                             Reset provider
                           </button>
                         ) : null}
+
+                        <button
+                          onClick={async () => {
+                            const ok = window.confirm(
+                              `⚠️ УДАЛИТЬ ПОЛНОСТЬЮ?\n\n` +
+                              `Lead ID: ${r.id}\n` +
+                              `Телефон: ${r.phone || "—"}\n` +
+                              `chat_id: ${r.telegram_chat_id || "—"}\n\n` +
+                              `Будут удалены:\n` +
+                              `• лид\n• клиент / поставщик\n• Telegram-привязка\n\n` +
+                              `ОТМЕНЫ НЕТ`
+                            );
+                            if (!ok) return;
+                        
+                            try {
+                              await adminDelete(`/api/admin/leads/${r.id}`);
+                              showToast("🗑 Лид и пользователь полностью удалены");
+                              await fetchLeads();
+                            } catch (e) {
+                              alert(e?.message || "Delete failed");
+                            }
+                          }}
+                          className="px-2 py-1 text-xs rounded bg-black text-white hover:bg-red-700 whitespace-nowrap"
+                          title="Полностью удалить лид и пользователя"
+                        >
+                          🗑 Удалить
+                        </button>
+
                       </div>
                     ) : (
                       <span className="text-gray-400">—</span>
