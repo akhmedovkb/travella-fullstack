@@ -105,6 +105,41 @@ if (prov.rowCount > 0) {
   return null;
 }
 
+/** Ищем пользователя по chatId (сначала providers, потом clients) */
+async function findUserByChat(chatId) {
+  // providers: telegram_chat_id OR tg_chat_id
+  const prov = await pool.query(
+    `
+      SELECT id, name, phone, telegram_chat_id, tg_chat_id
+        FROM providers
+       WHERE telegram_chat_id = $1 OR tg_chat_id = $1
+       LIMIT 1
+    `,
+    [chatId]
+  );
+  if (prov.rowCount) {
+    const row = prov.rows[0];
+    return { role: "provider", ...row };
+  }
+
+  const cli = await pool.query(
+    `
+      SELECT id, name, phone, telegram_chat_id
+        FROM clients
+       WHERE telegram_chat_id = $1
+       LIMIT 1
+    `,
+    [chatId]
+  );
+  if (cli.rowCount) {
+    const row = cli.rows[0];
+    return { role: "client", ...row };
+  }
+
+  return null;
+}
+
+
 function normalizeRequestedRole(raw) {
   const v = String(raw || "").trim().toLowerCase();
   if (!v) return "client";
@@ -299,6 +334,43 @@ async function linkAccount(req, res) {
       return leadId;
     }
 
+    // 0) если chatId уже привязан к аккаунту — пускаем сразу (важнее любых pending lead)
+const byChat = await findUserByChat(chatId);
+if (byChat?.role === "provider") {
+  await pool.query(
+    `UPDATE providers SET social = COALESCE($1, social) WHERE id = $2`,
+    [username ? `@${username}` : null, byChat.id]
+  );
+  return res.json({
+    success: true,
+    role: "provider",
+    id: byChat.id,
+    name: byChat.name,
+    existed: true,
+    requestedRole,
+    alreadyLinked: true,
+    byChat: true,
+  });
+}
+
+if (byChat?.role === "client") {
+  await pool.query(
+    `UPDATE clients SET telegram = COALESCE($1, telegram) WHERE id = $2`,
+    [username || null, byChat.id]
+  );
+  return res.json({
+    success: true,
+    role: "client",
+    id: byChat.id,
+    name: byChat.name,
+    existed: true,
+    requestedRole,
+    alreadyLinked: true,
+    byChat: true,
+  });
+}
+
+    
     // 0) если уже есть pending по chatId — возвращаем lead
     const pendingByChat = await findPendingLeadByChat();
     if (pendingByChat) {
