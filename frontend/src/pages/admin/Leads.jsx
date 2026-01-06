@@ -230,18 +230,6 @@ export default function AdminLeads() {
     await fetchLeads();
   }
 
-  function getAutoDecision(r) {
-    const rr = String(r.requested_role || "").trim().toLowerCase();
-    const src = String(r.source || "").trim().toLowerCase();
-    if (rr === "client" || src === "telegram_client") return "approved_client";
-    return "approved_provider";
-  }
-
-  function autoLabel(decision) {
-    return decision === "approved_client"
-      ? "Принять (авто: клиент)"
-      : "Принять (авто: поставщик)";
-  }
 
   // ===================== RESET (самодостаточно, но максимально совместимо) =====================
   function getAPIBase() {
@@ -609,8 +597,7 @@ async function adminDelete(path) {
               const isTelegramLead = !!r.telegram_chat_id;
               const undecided = !r.decision;
               const canAutoAccept = isTelegramLead && undecided;
-              const auto = getAutoDecision(r);
-
+              
               return (
                 <tr key={r.id} className="border-b align-top">
                   <td className="py-2 pr-4 whitespace-nowrap">
@@ -684,14 +671,6 @@ async function adminDelete(path) {
                       <div className="flex flex-wrap gap-2">
                         {canAutoAccept ? (
                           <>
-                            <button
-                              onClick={() => decide(r.id, auto)}
-                              className="px-2 py-1 text-xs rounded bg-green-600 text-white hover:bg-green-700 whitespace-nowrap"
-                              title="Выбирает approved_client или approved_provider автоматически"
-                            >
-                              {autoLabel(auto)}
-                            </button>
-
                             <button
                               onClick={() => decide(r.id, "approved_client")}
                               className="px-2 py-1 text-xs rounded bg-gray-200 text-gray-800 hover:bg-gray-300 whitespace-nowrap"
