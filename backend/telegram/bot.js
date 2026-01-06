@@ -131,106 +131,6 @@ bot.use(
   })
 );
 
-// ===================== HARD MODERATION GUARD (IRONCLAD) =====================
-// Блокирует ЛЮБЫЕ действия, пока аккаунт в pending (модерация не пройдена).
-// Разрешает только: /start, выбор роли role:*, отправку номера (contact или текстом в режиме привязки).
-bot.use(async (ctx, next) => {
-  try {
-    const isStartCmd =
-      ctx.updateType === "message" &&
-      typeof ctx.message?.text === "string" &&
-      ctx.message.text.trim().startsWith("/start");
-
-    const isRolePick =
-      ctx.updateType === "callback_query" &&
-      typeof ctx.callbackQuery?.data === "string" &&
-      /^role:(client|provider)$/.test(ctx.callbackQuery.data);
-
-    const isContact =
-      ctx.updateType === "message" && !!ctx.message?.contact?.phone_number;
-
-    const isPhoneText =
-      ctx.updateType === "message" &&
-      typeof ctx.message?.text === "string" &&
-      /^\+?\d[\d\s\-()]{5,}$/i.test(ctx.message.text.trim()) &&
-      // пропускаем телефон ТОЛЬКО если пользователь реально находится в процессе привязки
-      !!ctx.session?.requestedRole;
-
-    const isInline = ctx.updateType === "inline_query";
-
-    // ✅ Если pending — режем всё, кроме /start / выбора роли / отправки телефона
-    if (ctx.session?.pending) {
-      if (isStartCmd || isRolePick || isContact || isPhoneText) {
-        return next();
-      }
-
-      // inline — тоже режем "железобетонно"
-      if (isInline) {
-        return ctx.answerInlineQuery([], {
-          cache_time: 3,
-          is_personal: true,
-          switch_pm_text: "⏳ Заявка на модерации. Дождитесь одобрения",
-          switch_pm_parameter: "start",
-        });
-      }
-
-      // callback_query: обязательно отвечаем, чтобы не крутился лоадер
-      if (ctx.updateType === "callback_query") {
-        try {
-          await ctx.answerCbQuery("⏳ Заявка на модерации. Дождитесь одобрения", {
-            show_alert: true,
-          });
-        } catch {}
-        return;
-      }
-
-      // message / всё остальное
-      await ctx.reply(
-        "⏳ Ваша заявка находится на модерации.\nПожалуйста, дождитесь одобрения администратора."
-      );
-      return;
-    }
-
-    // ✅ Если не pending, но не привязан — не даём выполнять действия в обход /start
-    // (но не мешаем самому процессу привязки)
-    const isLinked = !!ctx.session?.linked;
-
-    if (!isLinked) {
-      // разрешаем базовые шаги привязки
-      if (isStartCmd || isRolePick || isContact || isPhoneText) {
-        return next();
-      }
-
-      if (isInline) {
-        return ctx.answerInlineQuery([], {
-          cache_time: 3,
-          is_personal: true,
-          switch_pm_text: "🔐 Сначала привяжите аккаунт (номер телефона)",
-          switch_pm_parameter: "start",
-        });
-      }
-
-      if (ctx.updateType === "callback_query") {
-        try {
-          await ctx.answerCbQuery("🔐 Сначала привяжите аккаунт через /start", {
-            show_alert: true,
-          });
-        } catch {}
-        return;
-      }
-
-      await ctx.reply("🔐 Сначала привяжите аккаунт (номер телефона) через /start.");
-      return;
-    }
-
-    return next();
-  } catch (e) {
-    console.error("[tg-bot] hardGuard middleware error:", e);
-    return next();
-  }
-});
-
-
 /* ===================== TG FILE LINK CACHE ===================== */
 // file_id -> { url, ts }
 const tgFileLinkCache = new Map();
@@ -2370,37 +2270,8 @@ async function handlePhoneRegistration(ctx, requestedRole, phone) {
         : "client";
 
     if (!ctx.session) ctx.session = {};
-
-    // ✅ pending/lead = НЕ даём меню и НЕ считаем привязку "одобренной"
-    const isPending =
-      data.role === "provider_lead" ||
-      data.created === "provider_lead" ||
-      data.pending === true;
-
-    if (isPending) {
-      ctx.session.role = null;
-      ctx.session.linked = false;
-      ctx.session.pending = true;
-      ctx.session.pendingRole = finalRole;
-
-      await ctx.reply(
-        "🕒 Заявка принята и отправлена на модерацию.\n\n" +
-          "⏳ Пожалуйста, дождитесь одобрения администратора.\n" +
-          "После одобрения меню станет доступно.\n\n" +
-          `🌐 Сайт: ${SITE_URL}`,
-        { parse_mode: "Markdown" }
-      );
-
-      // ❗️ВАЖНО: тут выходим, меню ниже НЕ показываем
-      return;
-    }
-
-    // ✅ Одобрено (аккаунт найден/создан не через lead)
     ctx.session.role = finalRole;
     ctx.session.linked = true;
-    ctx.session.pending = false;
-    ctx.session.pendingRole = null;
-
 
     if (data.existed && data.role === "client") {
       await ctx.reply(
