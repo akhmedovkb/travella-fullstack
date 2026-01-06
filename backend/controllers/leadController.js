@@ -127,9 +127,6 @@ async function decideLead(req, res) {
     const username = lead.telegram_username || null;
 
     const phoneDigits = String(phone).replace(/\D/g, "");
-    const leadSource = String(lead.source || "").toLowerCase();
-    const isRefusedProviderBot = leadSource === "telegram_provider";
-
 
     function normalizeProviderType(raw) {
       const v = String(raw || "").trim().toLowerCase();
@@ -190,8 +187,8 @@ async function decideLead(req, res) {
           const providerType = normalizeProviderType(lead.requested_role);
       
           await db.query(
-            `INSERT INTO providers (name, type, phone, email, password, social, telegram_chat_id, tg_chat_id, telegram_refused_chat_id)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$7,$8)`,
+            `INSERT INTO providers (name, type, phone, email, password, social, telegram_chat_id)
+             VALUES ($1,$2,$3,$4,$5,$6,$7)`,
             [
               name,
               providerType,
@@ -200,10 +197,8 @@ async function decideLead(req, res) {
               "telegram",
               username ? `@${username}` : null,
               chatId,
-              isRefusedProviderBot ? chatId : null,
             ]
           );
-
         } else {
           // ✅ ВОТ СЮДА: если провайдер уже существует — привязываем Telegram после модерации
           // ВАЖНО: из-за trg_providers_tg_sync ставим оба поля
@@ -211,10 +206,9 @@ async function decideLead(req, res) {
             `UPDATE providers
                 SET telegram_chat_id = $2,
                     tg_chat_id = $2,
-                    telegram_refused_chat_id = CASE WHEN $4 THEN $2 ELSE telegram_refused_chat_id END,
                     social = COALESCE($3, social)
               WHERE id = $1`,
-            [exists.rows[0].id, chatId, username ? `@${username}` : null, isRefusedProviderBot]
+            [exists.rows[0].id, chatId, username ? `@${username}` : null]
           );
         }
       }
@@ -229,43 +223,45 @@ async function decideLead(req, res) {
     await db.query("COMMIT");
 
     // ✅ уведомляем пользователя в Telegram (если есть chatId)
-  if (chatId) {
-    // Reply keyboard (нижнее меню) — без URL
-    const providerMenu = {
-      keyboard: [
-        ["🔍 Найти услугу", "🧳 Мои услуги"],
-        ["📦 Бронирования", "🧾 Заявки"],
-        ["👤 Профиль"],
-      ],
-      resize_keyboard: true,
-    };
-  
-    const clientMenu = {
-      keyboard: [
-        ["🔍 Найти услугу"],
-        ["📦 Бронирования", "👤 Профиль"],
-      ],
-      resize_keyboard: true,
-    };
-  
-    if (decision === "approved_provider") {
-      await tgSend(
-        chatId,
-        "✅ Ваша заявка одобрена!\n\nВы зарегистрированы как поставщик Travella.\nВыберите раздел в меню ниже 👇",
-        { reply_markup: providerMenu }
-      );
-    } else if (decision === "approved_client") {
-      await tgSend(
-        chatId,
-        "✅ Ваша заявка одобрена!\n\nДобро пожаловать в Travella.\nВыберите раздел в меню ниже 👇",
-        { reply_markup: clientMenu }
-      );
-    } else {
-      await tgSend(chatId, "❌ К сожалению, ваша заявка была отклонена.", {
-        reply_markup: { remove_keyboard: true },
-      });
+    if (chatId) {
+      if (decision === "approved_provider") {
+        await tgSend(
+          chatId,
+          "✅ Ваша заявка одобрена!\n\nВы зарегистрированы как поставщик Travella.",
+          {
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  {
+                    text: "🧳 Мои услуги",
+                    url: "https://travella.uz/dashboard/services",
+                  },
+                ],
+                [
+                  {
+                    text: "📦 Мои брони",
+                    url: "https://travella.uz/dashboard/bookings",
+                  },
+                ],
+                [
+                  {
+                    text: "⚙️ Профиль",
+                    url: "https://travella.uz/dashboard/profile",
+                  },
+                ],
+              ],
+            },
+          }
+        );
+      } else if (decision === "approved_client") {
+        await tgSend(
+          chatId,
+          "✅ Ваша заявка одобрена! Добро пожаловать в Travella.\n\n👉 https://travella.uz"
+        );
+      } else {
+        await tgSend(chatId, "❌ К сожалению, ваша заявка была отклонена.");
+      }
     }
-  }
 
     return res.json({ ok: true });
   } catch (e) {
@@ -277,94 +273,6 @@ async function decideLead(req, res) {
   }
 }
 
-/* ================= DELETE LEAD + USER (HARD RESET) ================= */
-// DELETE /api/admin/leads/:id
-async function deleteLeadFully(req, res) {
-  const id = Number(req.params.id);
-  if (!Number.isFinite(id)) {
-    return res.status(400).json({ ok: false, error: "bad_id" });
-  }
-
-  const db = await pool.connect();
-  try {
-    await db.query("BEGIN");
-
-    const leadRes = await db.query(
-      `SELECT id, phone, telegram_chat_id, telegram_username
-         FROM leads
-        WHERE id = $1
-        FOR UPDATE`,
-      [id]
-    );
-
-    if (!leadRes.rowCount) {
-      await db.query("ROLLBACK");
-      return res.status(404).json({ ok: false, error: "lead_not_found" });
-    }
-
-    const lead = leadRes.rows[0];
-    const phoneDigits = String(lead.phone || "").replace(/\D/g, "");
-    const chatId = lead.telegram_chat_id || null;
-    const username = lead.telegram_username || null;
-
-    // --- 1) Если есть provider по телефону — удаляем безопасно (FK)
-    const provRes = await db.query(
-      `SELECT id FROM providers
-        WHERE regexp_replace(phone,'\\D','','g') = $1
-        LIMIT 1`,
-      [phoneDigits]
-    );
-
-    if (provRes.rowCount) {
-      const providerId = provRes.rows[0].id;
-
-      // blocked_dates -> NO ACTION, надо удалить вручную
-      await db.query(`DELETE FROM blocked_dates WHERE provider_id = $1`, [
-        providerId,
-      ]);
-
-      // leads.assignee_provider_id -> NO ACTION, надо обнулить
-      await db.query(
-        `UPDATE leads
-            SET assignee_provider_id = NULL
-          WHERE assignee_provider_id = $1`,
-        [providerId]
-      );
-
-      // остальное (bookings/services/...) у тебя CASCADE/SET NULL — пусть отработает по FK
-      await db.query(`DELETE FROM providers WHERE id = $1`, [providerId]);
-    }
-
-    // --- 2) Клиент по телефону
-    await db.query(
-      `DELETE FROM clients
-        WHERE regexp_replace(phone,'\\D','','g') = $1`,
-      [phoneDigits]
-    );
-
-    // --- 3) Удаляем все лиды по этому идентификатору (чтобы не оставалось хвостов)
-    // (и сам текущий lead тоже уйдёт)
-    if (chatId) {
-      await db.query(`DELETE FROM leads WHERE telegram_chat_id = $1`, [chatId]);
-    } else {
-      await db.query(
-        `DELETE FROM leads WHERE regexp_replace(phone,'\\D','','g') = $1`,
-        [phoneDigits]
-      );
-    }
-
-    await db.query("COMMIT");
-    return res.json({ ok: true });
-  } catch (e) {
-    await db.query("ROLLBACK");
-    console.error("deleteLeadFully error:", e);
-    return res.status(500).json({ ok: false, error: "delete_failed" });
-  } finally {
-    db.release();
-  }
-}
-
-
 /* ================= EXPORT ================= */
 module.exports = {
   createLead,
@@ -372,5 +280,4 @@ module.exports = {
   updateLeadStatus,
   listLeadPages,
   decideLead,
-  deleteLeadFully,
 };
