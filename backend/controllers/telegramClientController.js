@@ -699,15 +699,35 @@ async function searchClientServices(req, res) {
       .filter((row) => {
         const det = row.details || {};
 
+        const cat = String(row.category || "").toLowerCase();
+        const isRefused = cat.startsWith("refused_") || cat === "author_tour";
+
+        // старт/ключевая дата (для отказов важно НЕ показывать то, что уже началось/улетело)
+        const start =
+          safeParseDate(det.departureFlightDate) ||
+          safeParseDate(det.departureDate) ||
+          safeParseDate(det.checkInDate) ||
+          safeParseDate(det.startFlightDate) ||
+          safeParseDate(det.startDate);
+
+        // конец (fallback)
         const end =
           safeParseDate(det.endFlightDate) ||
-          safeParseDate(det.endDate);
+          safeParseDate(det.endDate) ||
+          safeParseDate(det.checkOutDate);
 
-        // если даты нет или она валидна и >= сегодня — оставляем
+        // Для refused_* / author_tour: если старт уже прошёл — скрываем (даже если end ещё впереди)
+        if (isRefused) {
+          if (start) return start >= today;
+          if (end) return end >= today;
+          return true; // если дат нет — показываем
+        }
+
+        // Для остальных: как раньше — по endDate
         if (!end) return true;
         return end >= today;
-      })
-      .map((row) => {
+     })
+     .map((row) => {
       let imgs = row.images;
 
       // привести к массиву
