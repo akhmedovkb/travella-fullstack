@@ -120,6 +120,62 @@ function cacheSet(key, data) {
   inlineCache.set(key, { ts: Date.now(), data });
 }
 
+// ===================== AUTH REHYDRATE (FIX PENDING STUCK) =====================
+// Если админ одобрил лид через сайт, Telegraf-сессия про это не знает.
+// Поэтому при pending/!linked мы раз в несколько секунд перепроверяем БД через API
+// и обновляем ctx.session (pending=false, linked=true, role=...).
+const AUTH_RECHECK_TTL_MS = 6000;
+
+async function rehydrateAuthSessionIfNeeded(ctx) {
+  try {
+    if (!ctx.session) ctx.session = {};
+
+    const actorId = ctx?.from?.id || ctx?.chat?.id || null;
+    if (!actorId) return false;
+
+    const needCheck = !!ctx.session.pending || !ctx.session.linked;
+    if (!needCheck) return false;
+
+    const last = Number(ctx.session._authRecheckTs || 0);
+    if (Date.now() - last < AUTH_RECHECK_TTL_MS) return false;
+    ctx.session._authRecheckTs = Date.now();
+
+    // 1) provider?
+    try {
+      const r = await axios.get(`/api/telegram/profile/provider/${actorId}`);
+      if (r?.data?.success && r?.data?.user?.id) {
+        ctx.session.pending = false;
+        ctx.session.linked = true;
+        ctx.session.role = "provider";
+        ctx.session.requestedRole = null;
+        return true;
+      }
+    } catch (e) {
+      // 404 ok -> try client
+    }
+
+    // 2) client?
+    try {
+      const r = await axios.get(`/api/telegram/profile/client/${actorId}`);
+      if (r?.data?.success && r?.data?.user?.id) {
+        ctx.session.pending = false;
+        ctx.session.linked = true;
+        ctx.session.role = "client";
+        ctx.session.requestedRole = null;
+        return true;
+      }
+    } catch (e) {
+      // not found -> still pending/unlinked
+    }
+
+    return false;
+  } catch (e) {
+    console.error("[tg-bot] rehydrateAuthSessionIfNeeded error:", e?.message || e);
+    return false;
+  }
+}
+
+
 /* ===================== INIT BOT ===================== */
 
 const bot = new Telegraf(BOT_TOKEN);
@@ -136,6 +192,9 @@ bot.use(
 // Разрешает только: /start, выбор роли role:*, отправку номера (contact или текстом в режиме привязки).
 bot.use(async (ctx, next) => {
   try {
+    // ✅ FIX: если одобрили через сайт — обновим pending/linked из БД
+    await rehydrateAuthSessionIfNeeded(ctx);
+
     const isStartCmd =
       ctx.updateType === "message" &&
       typeof ctx.message?.text === "string" &&
