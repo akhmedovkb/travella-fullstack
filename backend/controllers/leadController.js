@@ -127,6 +127,9 @@ async function decideLead(req, res) {
     const username = lead.telegram_username || null;
 
     const phoneDigits = String(phone).replace(/\D/g, "");
+    const leadSource = String(lead.source || "").toLowerCase();
+    const isRefusedProviderBot = leadSource === "telegram_provider";
+
 
     function normalizeProviderType(raw) {
       const v = String(raw || "").trim().toLowerCase();
@@ -187,8 +190,8 @@ async function decideLead(req, res) {
           const providerType = normalizeProviderType(lead.requested_role);
       
           await db.query(
-            `INSERT INTO providers (name, type, phone, email, password, social, telegram_chat_id)
-             VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+            `INSERT INTO providers (name, type, phone, email, password, social, telegram_chat_id, tg_chat_id, telegram_refused_chat_id)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$7,$8)`,
             [
               name,
               providerType,
@@ -197,8 +200,10 @@ async function decideLead(req, res) {
               "telegram",
               username ? `@${username}` : null,
               chatId,
+              isRefusedProviderBot ? chatId : null,
             ]
           );
+
         } else {
           // ✅ ВОТ СЮДА: если провайдер уже существует — привязываем Telegram после модерации
           // ВАЖНО: из-за trg_providers_tg_sync ставим оба поля
@@ -206,9 +211,10 @@ async function decideLead(req, res) {
             `UPDATE providers
                 SET telegram_chat_id = $2,
                     tg_chat_id = $2,
+                    telegram_refused_chat_id = CASE WHEN $4 THEN $2 ELSE telegram_refused_chat_id END,
                     social = COALESCE($3, social)
               WHERE id = $1`,
-            [exists.rows[0].id, chatId, username ? `@${username}` : null]
+            [exists.rows[0].id, chatId, username ? `@${username}` : null, isRefusedProviderBot]
           );
         }
       }
