@@ -237,10 +237,10 @@ bot.use(async (ctx, next) => {
 
 // ✅ Сессия всегда по пользователю (важно для inline/групп -> ЛС)
 bot.use(
- session({
-   getSessionKey: (ctx) => String(ctx?.from?.id || ctx?.chat?.id || "anon"),
- })
-;
+  session({
+    getSessionKey: (ctx) => String(ctx?.from?.id || ctx?.chat?.id || "anon"),
+  })
+);
 
 // ===================== HARD MODERATION GUARD (IRONCLAD) =====================
 // Блокирует ЛЮБЫЕ действия, пока аккаунт в pending (модерация не пройдена).
