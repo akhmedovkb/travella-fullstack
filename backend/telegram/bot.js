@@ -179,13 +179,68 @@ async function rehydrateAuthSessionIfNeeded(ctx) {
 /* ===================== INIT BOT ===================== */
 
 const bot = new Telegraf(BOT_TOKEN);
+// ============================================================
+// HARDENING: бот не должен падать из-за ошибок Telegram API
+// ============================================================
+function logTgErr(prefix, err) {
+  const msg = err?.response?.description || err?.message || String(err);
+  const code = err?.code || err?.response?.error_code;
+  console.error(prefix, code ? `(code=${code})` : "", msg);
+}
 
-// ✅ Сессия всегда по пользователю (важно для inline/групп -> ЛС)
-bot.use(
-  session({
-    getSessionKey: (ctx) => String(ctx?.from?.id || ctx?.chat?.id || "anon"),
-  })
-);
+// 1) Ловим любые ошибки, которые Telegraf “видит” в хендлерах
+bot.catch((err, ctx) => {
+  const who = ctx?.from?.id ? `from=${ctx.from.id}` : "";
+  const chat = ctx?.chat?.id ? `chat=${ctx.chat.id}` : "";
+  logTgErr(`[tg-bot] handler error ${who} ${chat}`.trim(), err);
+});
+
+// 2) Оборачиваем основные методы ctx.*, чтобы sendMessage/edit/etc
+//    никогда не приводили к unhandled rejection
+bot.use(async (ctx, next) => {
+  const wrap = (name, fn) => {
+    if (!fn) return fn;
+    return (...args) => {
+      try {
+        const p = fn(...args);
+        // если это Promise — гасим ошибки отправки
+        if (p && typeof p.then === "function" && typeof p.catch === "function") {
+          return p.catch((err) => {
+            logTgErr(`[tg-bot] ${name} failed`, err);
+            return null;
+          });
+        }
+        return p;
+      } catch (err) {
+        logTgErr(`[tg-bot] ${name} threw`, err);
+        return null;
+      }
+    };
+  };
+
+  // reply / media
+  ctx.reply = wrap("ctx.reply", ctx.reply?.bind(ctx));
+  ctx.replyWithPhoto = wrap("ctx.replyWithPhoto", ctx.replyWithPhoto?.bind(ctx));
+  ctx.replyWithDocument = wrap("ctx.replyWithDocument", ctx.replyWithDocument?.bind(ctx));
+  ctx.replyWithMediaGroup = wrap("ctx.replyWithMediaGroup", ctx.replyWithMediaGroup?.bind(ctx));
+
+  // callbacks / edits
+  ctx.answerCbQuery = wrap("ctx.answerCbQuery", ctx.answerCbQuery?.bind(ctx));
+  ctx.editMessageText = wrap("ctx.editMessageText", ctx.editMessageText?.bind(ctx));
+  ctx.editMessageReplyMarkup = wrap(
+    "ctx.editMessageReplyMarkup",
+    ctx.editMessageReplyMarkup?.bind(ctx)
+  );
+
+  return next();
+});
+
+/ ✅ Сессия всегда по пользователю (важно для inline/групп -> ЛС)
+ot.use(
+ session({
+   getSessionKey: (ctx) => String(ctx?.from?.id || ctx?.chat?.id || "anon"),
+ })
+;
 
 // ===================== HARD MODERATION GUARD (IRONCLAD) =====================
 // Блокирует ЛЮБЫЕ действия, пока аккаунт в pending (модерация не пройдена).
