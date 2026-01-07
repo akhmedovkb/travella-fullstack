@@ -235,8 +235,8 @@ bot.use(async (ctx, next) => {
   return next();
 });
 
-/ ✅ Сессия всегда по пользователю (важно для inline/групп -> ЛС)
-ot.use(
+// ✅ Сессия всегда по пользователю (важно для inline/групп -> ЛС)
+bot.use(
  session({
    getSessionKey: (ctx) => String(ctx?.from?.id || ctx?.chat?.id || "anon"),
  })
