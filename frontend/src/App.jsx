@@ -21,6 +21,7 @@ import AdminLeads from "./pages/admin/Leads";
 import AdminRefusedActual from "./pages/admin/AdminRefusedActual";
 import IndiaInside from "./pages/landing/IndiaInside";
 import LeadModal from "./components/LeadModal";
+import AdminBroadcast from "./pages/admin/AdminBroadcast";
 
 // Клиентские
 import ClientRegister from "./pages/ClientRegister";
@@ -349,6 +350,16 @@ export default function App() {
                 <PrivateRoute>
                   <AdminRoute>
                     <AdminInsideRequests />
+                  </AdminRoute>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/admin/broadcast"
+              element={
+                <PrivateRoute>
+                  <AdminRoute>
+                    <AdminBroadcast />
                   </AdminRoute>
                 </PrivateRoute>
               }
