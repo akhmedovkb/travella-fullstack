@@ -401,6 +401,10 @@ app.use("/api/admin/entry-fees", entryFeesAdminRoutes);
 const providerServices = require("./routes/providerServices");
 app.use(providerServices);
 
+// ✅ Массовая рассылка (админ) через Bot Otkaznyx Turov
+const adminBroadcastRoutes = require("./routes/adminBroadcastRoutes");
+app.use("/api/admin/broadcast", adminBroadcastRoutes);
+
 /** ===================== HotelsSeasons ===================== */
 const hotelSeasonsRouter = require("./routes/hotelSeasons");
 app.use("/api/hotels/:id/seasons", hotelSeasonsRouter);
