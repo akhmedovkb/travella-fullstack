@@ -102,23 +102,69 @@ const axios = axiosBase.create({
   timeout: 10000,
 });
 
-/* ===================== INLINE CACHE ===================== */
+/* ===================== INLINE CACHE (LRU + inflight + per-key TTL) ===================== */
 
-const INLINE_CACHE_TTL_MS = 8000;
-const inlineCache = new Map();
+const INLINE_CACHE_TTL_MS = 15000;          // общий дефолт (fallback)
+const INLINE_CACHE_MAX = 250;               // лимит записей, чтобы не раздувать память
+
+const inlineCache = new Map();              // key -> { ts, ttl, data }
+const inlineInflight = new Map();           // key -> Promise
 
 function cacheGet(key) {
   const v = inlineCache.get(key);
   if (!v) return null;
-  if (Date.now() - v.ts > INLINE_CACHE_TTL_MS) {
+
+  const ttl = Number(v.ttl || INLINE_CACHE_TTL_MS);
+  if (Date.now() - v.ts > ttl) {
     inlineCache.delete(key);
     return null;
   }
+
+  // LRU: освежаем порядок (последний использованный -> в конец)
+  inlineCache.delete(key);
+  inlineCache.set(key, v);
+
   return v.data;
 }
-function cacheSet(key, data) {
-  inlineCache.set(key, { ts: Date.now(), data });
+
+function cacheSet(key, data, ttlMs = INLINE_CACHE_TTL_MS) {
+  inlineCache.set(key, { ts: Date.now(), ttl: ttlMs, data });
+
+  // LRU-prune
+  while (inlineCache.size > INLINE_CACHE_MAX) {
+    const oldestKey = inlineCache.keys().next().value;
+    inlineCache.delete(oldestKey);
+  }
 }
+
+// Чтобы не долбить API при быстрых inline-вводах (Telegram шлёт много запросов)
+async function getOrFetchCached(key, ttlMs, fetcher) {
+  const cached = cacheGet(key);
+  if (cached) return cached;
+
+  if (inlineInflight.has(key)) {
+    try {
+      return await inlineInflight.get(key);
+    } catch (_) {
+      inlineInflight.delete(key);
+    }
+  }
+
+  const p = (async () => {
+    const data = await fetcher();
+    cacheSet(key, data, ttlMs);
+    return data;
+  })();
+
+  inlineInflight.set(key, p);
+
+  try {
+    return await p;
+  } finally {
+    inlineInflight.delete(key);
+  }
+}
+
 
 // ===================== AUTH REHYDRATE (FIX PENDING STUCK) =====================
 // Если админ одобрил лид через сайт, Telegraf-сессия про это не знает.
@@ -4467,21 +4513,63 @@ bot.on("inline_query", async (ctx) => {
       return;
     }
 
-    const cacheKey = `${isMy ? "my" : "search"}:${roleForInline}:${userId}:${category}`;
-    let data = cacheGet(cacheKey);
+    // === INLINE CACHE KEYS ===
+    const baseKey = `inline:${isMy ? "my" : "search"}:${roleForInline}:${userId}:${category || "all"}`;
 
-    if (!data) {
-      if (isMy) {
-        const resp = await axios.get(`/api/telegram/provider/${userId}/services`);
-        data = resp.data;
-      } else {
-        const resp = await axios.get(`/api/telegram/client/${userId}/search`, {
-          params: { category },
-        });
-        data = resp.data;
-      }
-      cacheSet(cacheKey, data);
+    // отдельно кэшируем:
+    // 1) сырой ответ API (короткий TTL)
+    // 2) уже собранные inline-results (чуть длиннее, потому что там дорого: thumbs + message build)
+    const apiKey = `${baseKey}:api`;
+    const resKey = `${baseKey}:res:v2`;
+
+    // === PAGINATION (Telegram offset) ===
+    const offset = Number(String(ctx.inlineQuery?.offset || "0").trim() || 0) || 0;
+    const pageSize = 10;        // можно 10/20, 10 обычно ок
+    const maxBuild = 50;        // Telegram лимит, и у тебя уже slice(0, 50)
+
+    // 1) пробуем отдать results из кэша (самый быстрый путь)
+    const cachedRes = cacheGet(resKey);
+    if (cachedRes && Array.isArray(cachedRes.resultsAll)) {
+      const resultsAll = cachedRes.resultsAll;
+      const page = resultsAll.slice(offset, offset + pageSize);
+      const nextOffset = offset + pageSize < resultsAll.length ? String(offset + pageSize) : "";
+
+      await ctx.answerInlineQuery(page, {
+        cache_time: 10,
+        is_personal: true,
+        next_offset: nextOffset,
+      });
+      return;
     }
+
+    // 2) иначе — берём API-данные через inflight-dedup
+    const data = await getOrFetchCached(
+      apiKey,
+      12000, // TTL для API (короткий)
+      async () => {
+        if (isMy) {
+          const resp = await axios.get(`/api/telegram/provider/${userId}/services`);
+          return resp.data;
+        } else {
+          const resp = await axios.get(`/api/telegram/client/${userId}/search`, {
+            params: { category },
+          });
+          return resp.data;
+        }
+      }
+    );
+
+    if (!data || !data.success || !Array.isArray(data.items)) {
+      console.log("[tg-bot] inline search resp malformed:", data);
+      await ctx.answerInlineQuery([], {
+        cache_time: 3,
+        is_personal: true,
+        switch_pm_text: "⚠️ Ошибка загрузки. Открыть бота",
+        switch_pm_parameter: "start",
+      });
+      return;
+    }
+
 
     if (!data || !data.success || !Array.isArray(data.items)) {
       console.log("[tg-bot] inline search resp malformed:", data);
@@ -4668,6 +4756,33 @@ bot.on("inline_query", async (ctx) => {
       });
     }
 
+          // ✅ Кэшируем уже собранные results (дорого пересобирать thumbs)
+      cacheSet(resKey, { resultsAll: results }, 30000);
+      
+      // ✅ Pagination: Telegram offset
+      const page = results.slice(offset, offset + pageSize);
+      const nextOffset = offset + pageSize < results.length ? String(offset + pageSize) : "";
+      
+      try {
+        await ctx.answerInlineQuery(page, {
+          cache_time: 10,
+          is_personal: true,
+          next_offset: nextOffset,
+        });
+      } catch (e) {
+        console.error(
+          "[tg-bot] answerInlineQuery FAILED:",
+          e?.response?.data || e?.message || e
+        );
+        try {
+          await ctx.answerInlineQuery([], {
+            cache_time: 1,
+            is_personal: true,
+            switch_pm_text: "⚠️ Ошибка inline (открыть бота)",
+            switch_pm_parameter: "start",
+          });
+        } catch {}
+      }
     try {
       await ctx.answerInlineQuery(results, { cache_time: 3, is_personal: true });
     } catch (e) {
