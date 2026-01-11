@@ -4570,18 +4570,6 @@ bot.on("inline_query", async (ctx) => {
       return;
     }
 
-
-    if (!data || !data.success || !Array.isArray(data.items)) {
-      console.log("[tg-bot] inline search resp malformed:", data);
-      await ctx.answerInlineQuery([], {
-        cache_time: 3,
-        is_personal: true,
-        switch_pm_text: "⚠️ Ошибка загрузки. Открыть бота",
-        switch_pm_parameter: "start",
-      });
-      return;
-    }
-
     // DEBUG
     const DEBUG_INLINE = String(process.env.DEBUG_INLINE || "").trim() === "1";
     if (DEBUG_INLINE) {
