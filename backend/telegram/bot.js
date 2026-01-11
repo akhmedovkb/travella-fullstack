@@ -477,88 +477,6 @@ function formatPriceWithCurrency(value) {
   return `${v} ${PRICE_CURRENCY}`;
 }
 
-/* ===================== QUICK REQUEST: helpers ===================== */
-
-async function fetchServiceForQuickRequest(serviceId) {
-  const candidates = [
-    `/api/telegram/service/${serviceId}`,
-    `/api/telegram/services/${serviceId}`,
-    `/api/services/${serviceId}`,
-    `/api/marketplace/service/${serviceId}`,
-  ];
-
-  let payload = null;
-  for (const url of candidates) {
-    try {
-      const r = await axios.get(url);
-      if (r?.data) {
-        payload = r.data;
-        break;
-      }
-    } catch (_) {}
-  }
-
-  const svc =
-    payload?.item ||
-    payload?.service ||
-    payload?.data?.item ||
-    payload?.data?.service ||
-    payload?.data ||
-    payload;
-
-  if (!svc || typeof svc !== "object") {
-    return { svc: null, providerChatId: null, providerName: null };
-  }
-
-  const d = parseDetailsAny(svc.details);
-
-  const title =
-    (typeof svc.title === "string" && svc.title.trim())
-      ? svc.title.trim()
-      : (typeof d?.title === "string" && d.title.trim())
-        ? d.title.trim()
-        : (typeof d?.hotel === "string" && d.hotel.trim())
-          ? d.hotel.trim()
-          : (typeof d?.hotelName === "string" && d.hotelName.trim())
-            ? d.hotelName.trim()
-            : null;
-
-  const providerChatId =
-    svc.provider_telegram_chat_id ||
-    svc.providerTelegramChatId ||
-    svc.provider_chat_id ||
-    svc.providerChatId ||
-    svc.provider?.telegram_chat_id ||
-    svc.provider?.telegramChatId ||
-    svc.provider?.chat_id ||
-    svc.provider?.chatId ||
-    null;
-
-  const providerName =
-    svc.provider_name ||
-    svc.providerName ||
-    svc.provider?.name ||
-    svc.provider?.company_name ||
-    null;
-
-  return {
-    svc: { ...svc, title: title || svc.title },
-    providerChatId: providerChatId ? String(providerChatId) : null,
-    providerName: providerName ? String(providerName) : null,
-  };
-}
-
-function buildQuickReplyKeyboard(clientChatId, serviceId) {
-  return Markup.inlineKeyboard([
-    [
-      Markup.button.callback(
-        "✉️ Ответить клиенту",
-        `qr_reply:${String(clientChatId)}:${String(serviceId)}`
-      ),
-    ],
-  ]);
-}
-
 function getMainMenuKeyboard(role) {
   if (role === "provider") {
     return {
@@ -3501,23 +3419,6 @@ bot.action(/^request:(\d+)$/, async (ctx) => {
   }
 });
 
-/* ===================== QUICK REQUEST: provider reply ===================== */
-bot.action(/^qr_reply:(\d+):(\d+)$/, async (ctx) => {
-  await ctx.answerCbQuery();
-
-  const clientChatId = String(ctx.match[1]);
-  const serviceId = String(ctx.match[2]);
-
-  if (!ctx.session) ctx.session = {};
-  ctx.session.state = "qr_reply_message";
-  ctx.session.qrReply = { clientChatId, serviceId };
-
-  await ctx.reply(
-    "✉️ *Ответ клиенту*\n\nНапишите сообщение клиенту.\n\nДля отмены напишите: *отмена*",
-    { parse_mode: "Markdown" }
-  );
-});
-
 /* ===================== TEXT HANDLER (wizard + quick request) ===================== */
 
 
@@ -3949,42 +3850,6 @@ bot.on("text", async (ctx, next) => {
     const state = ctx.session?.state || null;
       // ===================== EDIT WIZARD (svc_edit_*) =====================
   if (await handleSvcEditWizardText(ctx)) return;
-    // 0) Ответ поставщика клиенту
-    if (state === "qr_reply_message" && ctx.session?.qrReply?.clientChatId) {
-      const text = String(ctx.message?.text || "").trim();
-      if (!text) return;
-
-      if (text.toLowerCase() === "отмена") {
-        ctx.session.state = null;
-        ctx.session.qrReply = null;
-        await ctx.reply("❌ Отменено.");
-        return;
-      }
-
-      const from = ctx.from || {};
-      const safeFirst = escapeMarkdown(from.first_name || "");
-      const safeLast = escapeMarkdown(from.last_name || "");
-      const safeUsername = escapeMarkdown(from.username || "нет username");
-      const safeMsg = escapeMarkdown(text);
-
-      const clientChatId = String(ctx.session.qrReply.clientChatId);
-      const serviceId = String(ctx.session.qrReply.serviceId || "");
-      const serviceUrl = serviceId ? buildServiceUrl(serviceId) : null;
-
-      const header =
-        "✉️ *Сообщение от поставщика*\n\n" +
-        `От: ${safeFirst} ${safeLast} (@${safeUsername})\n` +
-        (serviceUrl ? `По услуге: ${serviceUrl}\n\n` : "\n");
-
-      await bot.telegram.sendMessage(clientChatId, header + safeMsg, {
-        parse_mode: "Markdown",
-      });
-
-      await ctx.reply("✅ Отправлено клиенту.");
-      ctx.session.state = null;
-      ctx.session.qrReply = null;
-      return;
-    }
 
 // 1) быстрый запрос
     if (state === "awaiting_request_message" && ctx.session.pendingRequestServiceId) {
@@ -3993,67 +3858,31 @@ bot.on("text", async (ctx, next) => {
       const from = ctx.from || {};
       const chatId = ctx.chat.id;
 
-      const safeFirst = escapeMarkdown(from.first_name || "");
-      const safeLast = escapeMarkdown(from.last_name || "");
-      const safeUsername = escapeMarkdown(from.username || "нет username");
-      const safeMsg = escapeMarkdown(msg);
-
-      const { svc, providerChatId, providerName } =
-        await fetchServiceForQuickRequest(serviceId);
-
-      const serviceUrl = buildServiceUrl(serviceId);
-
-      const titleRaw = svc?.title || null;
-      const titlePretty = titleRaw ? normalizeTitleSoft(titleRaw) : null;
-      const titleSafe = titlePretty ? escapeMarkdown(titlePretty) : null;
-
-      let serviceBlock = null;
-      try {
-        if (svc?.id && svc?.category) {
-          serviceBlock = buildServiceMessage(svc, svc.category, "provider");
-        }
-      } catch (_) {}
-
-      const providerLine = providerName
-        ? `Поставщик: *${escapeMarkdown(providerName)}*`
-        : null;
-
-      const fallbackChatId = MANAGER_CHAT_ID ? String(MANAGER_CHAT_ID) : null;
-      const targetChatId = providerChatId || fallbackChatId;
-
-      if (!targetChatId) {
+      if (!MANAGER_CHAT_ID) {
         await ctx.reply("⚠️ Быстрый запрос сейчас недоступен. Попробуйте позже.");
-        ctx.session.state = null;
-        ctx.session.pendingRequestServiceId = null;
-        return;
+      } else {
+        const safeFirst = escapeMarkdown(from.first_name || "");
+        const safeLast = escapeMarkdown(from.last_name || "");
+        const safeUsername = escapeMarkdown(from.username || "нет username");
+        const safeMsg = escapeMarkdown(msg);
+
+        const textForManager =
+          "🆕 *Новый быстрый запрос из бота Travella*\n\n" +
+          `Услуга ID: *${escapeMarkdown(serviceId)}*\n` +
+          `От: ${safeFirst} ${safeLast} (@${safeUsername})\n` +
+          `Telegram chatId: \`${chatId}\`\n\n` +
+          "*Сообщение:*\n" +
+          safeMsg;
+
+        await bot.telegram.sendMessage(MANAGER_CHAT_ID, textForManager, {
+          parse_mode: "Markdown",
+        });
+
+        await ctx.reply(
+          "✅ Спасибо!\n\nЗапрос отправлен менеджеру Travella.\nМы свяжемся с вами в ближайшее время."
+        );
       }
 
-      const header =
-        "🆕 *Новый быстрый запрос из бота Bot Otkaznyx Turov*\n\n" +
-        (titleSafe ? `Услуга: *${titleSafe}*\n` : "") +
-        `Услуга ID: *${escapeMarkdown(serviceId)}*\n` +
-        (providerLine ? `${providerLine}\n` : "") +
-        `От: ${safeFirst} ${safeLast} (@${safeUsername})\n` +
-        `Telegram chatId: \`${chatId}\`\n` +
-        `Ссылка: ${serviceUrl}\n\n`;
-
-      const body =
-        (serviceBlock ? `${serviceBlock}\n\n` : "") +
-        "*Сообщение:*\n" +
-        safeMsg;
-
-      const extra =
-        providerChatId
-          ? { parse_mode: "Markdown", ...buildQuickReplyKeyboard(chatId, serviceId) }
-          : { parse_mode: "Markdown" };
-
-      await bot.telegram.sendMessage(targetChatId, header + body, extra);
-
-      await ctx.reply(
-        providerChatId
-          ? "✅ Спасибо!\n\nЗапрос отправлен поставщику.\nОн свяжется с вами в ближайшее время."
-          : "✅ Спасибо!\n\nЗапрос отправлен в поддержку.\nМы свяжемся с вами в ближайшее время."
-      );
       ctx.session.state = null;
       ctx.session.pendingRequestServiceId = null;
       return;
