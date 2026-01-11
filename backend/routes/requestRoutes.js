@@ -159,4 +159,11 @@ if (has(manualCleanupExpired)) {
   router.post("/cleanup-expired", authenticateToken, manualCleanupExpired);
 }
 
+// ================= QUICK REQUEST FROM TELEGRAM =================
+// POST /api/telegram/quick-request
+router.post(
+  "/quick-request",
+  telegramClientController.createQuickRequestFromTelegram
+);
+
 module.exports = router;
