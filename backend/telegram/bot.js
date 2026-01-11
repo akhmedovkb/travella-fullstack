@@ -4786,22 +4786,6 @@ bot.on("inline_query", async (ctx) => {
           });
         } catch {}
       }
-    try {
-      await ctx.answerInlineQuery(results, { cache_time: 3, is_personal: true });
-    } catch (e) {
-      console.error(
-        "[tg-bot] answerInlineQuery FAILED:",
-        e?.response?.data || e?.message || e
-      );
-      try {
-        await ctx.answerInlineQuery([], {
-          cache_time: 1,
-          is_personal: true,
-          switch_pm_text: "⚠️ Ошибка inline (открыть бота)",
-          switch_pm_parameter: "start",
-        });
-      } catch {}
-    }
   } catch (e) {
     console.error("[tg-bot] inline_query error:", e?.response?.data || e?.message || e);
     try {
