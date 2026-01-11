@@ -3858,99 +3858,26 @@ bot.on("text", async (ctx, next) => {
       const from = ctx.from || {};
       const chatId = ctx.chat.id;
 
-      // NEW LOGIC:
-      // - Отправляем быстрый запрос владельцу объявления (поставщику)
-      // - В сообщении показываем название услуги, а не только ID
-      // - Текст подтверждения пользователю: "отправлен поставщику"
-      // Fallback: если у поставщика нет telegram_refused_chat_id — отправляем менеджеру (если задан)
-
-      const safeFirst = escapeMarkdown(from.first_name || "");
-      const safeLast = escapeMarkdown(from.last_name || "");
-      const safeUsername = escapeMarkdown(from.username || "нет username");
-      const safeMsg = escapeMarkdown(msg);
-
-      let providerChatId = null;
-      let serviceTitle = "";
-      let providerName = "";
-      let providerTg = "";
-
-      try {
-        const q = await pool.query(
-          `SELECT s.id, s.title,
-                  p.name AS provider_name,
-                  p.telegram AS provider_telegram,
-                  p.telegram_refused_chat_id,
-                  p.telegram_chat_id,
-                  p.telegram_web_chat_id
-             FROM services s
-             JOIN providers p ON p.id = s.provider_id
-            WHERE s.id = $1`,
-          [serviceId]
-        );
-
-        const row = q.rows[0] || {};
-        serviceTitle = String(row.title || "").trim();
-        providerName = String(row.provider_name || "").trim();
-        providerTg = String(row.provider_telegram || "").trim();
-
-        providerChatId =
-          row.telegram_refused_chat_id ||
-          row.telegram_web_chat_id ||
-          row.telegram_chat_id ||
-          null;
-      } catch (e) {
-        console.error("[tg-bot] quick request: failed to load service/provider:", e?.message || e);
-      }
-
-      const safeServiceTitle = escapeMarkdown(serviceTitle || "Услуга");
-
-      const textForProvider =
-        "🆕 *Новый быстрый запрос по услуге*\n\n" +
-        `📌 *${safeServiceTitle}*\n` +
-        `ID: *${escapeMarkdown(serviceId)}*\n\n` +
-        `От: ${safeFirst} ${safeLast} (@${safeUsername})\n` +
-        `Telegram chatId: \`${chatId}\`\n\n` +
-        "*Сообщение:*\n" +
-        safeMsg;
-
-      const sentToProvider = async () => {
-        if (!providerChatId) return false;
-        try {
-          await bot.telegram.sendMessage(providerChatId, textForProvider, {
-            parse_mode: "Markdown",
-          });
-          return true;
-        } catch (e) {
-          console.error("[tg-bot] quick request send to provider failed:", e?.response?.data || e?.message || e);
-          return false;
-        }
-      };
-
-      let ok = await sentToProvider();
-
-      // fallback — менеджеру (если нет поставщика/чат не найден)
-      if (!ok && MANAGER_CHAT_ID) {
-        const safeProviderName = escapeMarkdown(providerName || "");
-        const safeProviderTg = escapeMarkdown(providerTg || "");
+      if (!MANAGER_CHAT_ID) {
+        await ctx.reply("⚠️ Быстрый запрос сейчас недоступен. Попробуйте позже.");
+      } else {
+        const safeFirst = escapeMarkdown(from.first_name || "");
+        const safeLast = escapeMarkdown(from.last_name || "");
+        const safeUsername = escapeMarkdown(from.username || "нет username");
+        const safeMsg = escapeMarkdown(msg);
 
         const textForManager =
-          "🆕 *Новый быстрый запрос (fallback менеджеру)*\n\n" +
-          `📌 *${safeServiceTitle}* (ID: *${escapeMarkdown(serviceId)}*)\n` +
-          (safeProviderName || safeProviderTg
-            ? `Поставщик: ${safeProviderName}${safeProviderTg ? ` (@${safeProviderTg.replace(/^@/, "")})` : ""}\n`
-            : "") +
+          "🆕 *Новый быстрый запрос из бота Travella*\n\n" +
+          `Услуга ID: *${escapeMarkdown(serviceId)}*\n` +
           `От: ${safeFirst} ${safeLast} (@${safeUsername})\n` +
           `Telegram chatId: \`${chatId}\`\n\n` +
           "*Сообщение:*\n" +
           safeMsg;
 
-      if (!ok) {
-        await ctx.reply("⚠️ Не удалось отправить запрос поставщику. Попробуйте позже.");
-      } else {
-        await ctx.reply("✅ Спасибо!\n\nЗапрос отправлен поставщику.\nМы свяжемся с вами в ближайшее время.");
-       }
-        ok = true;
-      }
+        await bot.telegram.sendMessage(MANAGER_CHAT_ID, textForManager, {
+          parse_mode: "Markdown",
+        });
+
         await ctx.reply(
           "✅ Спасибо!\n\nЗапрос отправлен менеджеру Travella.\nМы свяжемся с вами в ближайшее время."
         );
@@ -4733,12 +4660,8 @@ bot.on("inline_query", async (ctx) => {
         title,
         description,
         input_message_content: {
-          // IMPORTANT:
-          // InlineQuery "article" uses input_message_content and Telegram parses entities
-          // strictly when parse_mode is set. Our service text may contain symbols like "_",
-          // backslashes, parentheses, etc. (e.g. flight details), which can break Markdown.
-          // To avoid "Can't parse entities" we send plain text here (no parse_mode).
           message_text: text,
+          parse_mode: "Markdown",
           disable_web_page_preview: false,
         },
         ...(inlinePhotoUrl ? { thumb_url: inlinePhotoUrl } : {}),
