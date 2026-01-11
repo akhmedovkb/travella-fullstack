@@ -4661,7 +4661,6 @@ bot.on("inline_query", async (ctx) => {
         description,
         input_message_content: {
           message_text: text,
-          parse_mode: "Markdown",
           disable_web_page_preview: false,
         },
         ...(inlinePhotoUrl ? { thumb_url: inlinePhotoUrl } : {}),
