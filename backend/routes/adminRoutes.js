@@ -14,6 +14,16 @@ const {
 const requireAdmin = require("../middleware/requireAdmin");
 const leadController = require("../controllers/leadController");
 
+// Deeplink "Открыть в боте" (Bot Otkaznyx Turov)
+const TG_BOT_USERNAME = String(process.env.TELEGRAM_BOT_USERNAME || "")
+  .replace(/^@/, "")
+  .trim();
+const CLIENT_TOKEN = process.env.TELEGRAM_CLIENT_BOT_TOKEN || "";
+function botOpenLink(serviceId) {
+  if (!TG_BOT_USERNAME) return "";
+  return `https://t.me/${TG_BOT_USERNAME}?start=svc_${serviceId}`;
+}
+
 function phoneToDigits(phone) {
   return String(phone || "").replace(/\D/g, "");
 }
@@ -88,6 +98,7 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
     const info = await pool.query(
       `SELECT 
           s.title,
+          s.category,
           p.telegram_refused_chat_id,
           p.telegram_web_chat_id,
           p.telegram_chat_id
@@ -114,6 +125,54 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
         tokenOverride
       );
     }
+
+    // 🔔 Авто-уведомление ВСЕМ о новом "отказе" (только refused_*)
+    try {
+      const cat = String(row.category || "").toLowerCase();
+      if (cat.startsWith("refused_")) {
+        // соберём chat_id всех пользователей "отказного" бота
+        // клиенты: clients.telegram_chat_id
+        // поставщики: providers.telegram_refused_chat_id
+        const [c1, c2] = await Promise.all([
+          pool.query(`SELECT telegram_chat_id FROM clients WHERE telegram_chat_id IS NOT NULL`),
+          pool.query(`SELECT telegram_refused_chat_id FROM providers WHERE telegram_refused_chat_id IS NOT NULL`),
+        ]);
+
+        const set = new Set();
+        (c1.rows || []).forEach((r) => r.telegram_chat_id && set.add(String(r.telegram_chat_id)));
+        (c2.rows || []).forEach((r) => r.telegram_refused_chat_id && set.add(String(r.telegram_refused_chat_id)));
+
+        const serviceId = rows[0].id;
+        const title = row.title || `Услуга #${serviceId}`;
+        const link = botOpenLink(serviceId);
+
+        const extra =
+          link
+            ? {
+                reply_markup: {
+                  inline_keyboard: [[{ text: "Открыть в боте", url: link }]],
+                },
+              }
+            : {};
+
+        const text = `🆕 Новый отказ опубликован!\n\n📌 ${title}`;
+
+        // отправим пачками, чтобы не зависнуть
+        const ids = Array.from(set);
+        const batchSize = 25;
+        for (let i = 0; i < ids.length; i += batchSize) {
+          const chunk = ids.slice(i, i + batchSize);
+          await Promise.all(
+            chunk.map((chatId2) =>
+              tgSend(chatId2, text, extra, CLIENT_TOKEN).catch(() => false)
+            )
+          );
+        }
+      }
+    } catch (e2) {
+      console.error("[admin approve] broadcast refused failed:", e2?.message || e2);
+    }
+    
   } catch (e) {
     console.error("[admin approve] tg notify failed:", e?.message || e);
   }
