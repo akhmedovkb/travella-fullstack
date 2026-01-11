@@ -3912,20 +3912,35 @@ bot.on("text", async (ctx, next) => {
         const safeUsername = escapeMarkdown(from.username || "нет username");
         const safeMsg = escapeMarkdown(msg);
 
+        const serviceUrl = SERVICE_URL_TEMPLATE
+          .replace("{SITE_URL}", SITE_URL)
+          .replace("{id}", String(serviceId));
+        
         const textForManager =
-          "🆕 *Новый быстрый запрос из бота Travella*\n\n" +
+          "🆕 *Новый быстрый запрос из Bot Otkaznyx Turov*\n\n" +
           `Услуга ID: *${escapeMarkdown(serviceId)}*\n` +
+          `Ссылка: ${escapeMarkdown(serviceUrl)}\n` +
           `От: ${safeFirst} ${safeLast} (@${safeUsername})\n` +
           `Telegram chatId: \`${chatId}\`\n\n` +
           "*Сообщение:*\n" +
           safeMsg;
 
+        const replyMarkup =
+          from.username
+            ? {
+                inline_keyboard: [
+                 [{ text: "💬 Написать пользователю", url: `https://t.me/${String(from.username).replace(/^@/, "")}` }],
+                ],
+              }
+            : undefined;
+
         await bot.telegram.sendMessage(MANAGER_CHAT_ID, textForManager, {
           parse_mode: "Markdown",
+          ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
         });
 
         await ctx.reply(
-          "✅ Спасибо!\n\nЗапрос отправлен менеджеру Travella.\nМы свяжемся с вами в ближайшее время."
+          "✅ Спасибо!\n\nЗапрос отправлен! С вами свяжутся в ближайшее время."
         );
       }
 
