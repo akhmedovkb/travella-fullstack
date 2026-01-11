@@ -118,6 +118,95 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
     console.error("[admin approve] tg notify failed:", e?.message || e);
   }
 
+  // TG → всем: уведомление о новом отказе (после одобрения модератором)
+  // Требование:
+  // 1) audience: all
+  // 2) кнопка: "Открыть в боте"
+  // Публикуем только "отказные" категории.
+  try {
+    const info2 = await pool.query(
+      `SELECT s.id, s.title, s.category,
+              COALESCE(p.name,'') AS provider_name,
+              COALESCE(p.telegram,'') AS provider_telegram
+         FROM services s
+         JOIN providers p ON p.id = s.provider_id
+        WHERE s.id = $1`,
+      [rows[0].id]
+    );
+
+    const svc = info2.rows[0] || null;
+    const cat = String(svc?.category || "").toLowerCase();
+
+    const isRefused = [
+      "refused_tour",
+      "refused_hotel",
+      "refused_flight",
+      "refused_ticket",
+    ].includes(cat);
+
+    if (svc && isRefused) {
+      const botUsername = String(process.env.TELEGRAM_BOT_USERNAME || "").trim();
+      const openBotUrl = botUsername ? `https://t.me/${botUsername}?start=start` : (process.env.SITE_PUBLIC_URL || "");
+
+      const title = String(svc.title || "").trim();
+      const providerName = String(svc.provider_name || "").trim();
+      const providerTg = String(svc.provider_telegram || "").trim();
+
+      const typeLabel =
+        cat === "refused_tour" ? "📍 Отказной тур" :
+        cat === "refused_hotel" ? "🏨 Отказной отель" :
+        cat === "refused_flight" ? "✈️ Отказной авиабилет" :
+        cat === "refused_ticket" ? "🎫 Отказной билет" :
+        "🆕 Новое предложение";
+
+      const msg =
+        `<b>${typeLabel}</b>\n` +
+        (title ? `\n<b>${String(title).replace(/</g, "&lt;").replace(/>/g, "&gt;")}</b>\n` : "\n") +
+        (providerName || providerTg
+          ? `Поставщик: ${String(providerName).replace(/</g, "&lt;").replace(/>/g, "&gt;")}${providerTg ? ` (@${String(providerTg).replace(/^@/, "")})` : ""}\n`
+          : "") +
+        `\nОткрыть поиск в боте: нажмите кнопку ниже 👇`;
+
+      const kb = {
+        inline_keyboard: [[{ text: "Открыть в боте", url: openBotUrl }]],
+      };
+
+      // recipients: providers.telegram_refused_chat_id + clients.telegram_chat_id
+      const recProv = await pool.query(
+        `SELECT telegram_refused_chat_id AS chat_id
+           FROM providers
+          WHERE telegram_refused_chat_id IS NOT NULL
+            AND TRIM(telegram_refused_chat_id::text) <> ''`
+      );
+      const recCli = await pool.query(
+        `SELECT telegram_chat_id AS chat_id
+           FROM clients
+          WHERE telegram_chat_id IS NOT NULL
+            AND TRIM(telegram_chat_id::text) <> ''`
+      );
+
+      const chatIds = [
+        ...recProv.rows.map((r) => String(r.chat_id || "").trim()).filter(Boolean),
+        ...recCli.rows.map((r) => String(r.chat_id || "").trim()).filter(Boolean),
+      ];
+
+      const unique = Array.from(new Set(chatIds));
+      const tokenOverrideAll = process.env.TELEGRAM_CLIENT_BOT_TOKEN || "";
+
+      // batch sending to avoid spikes
+      const BATCH = 25;
+      for (let i = 0; i < unique.length; i += BATCH) {
+        const batch = unique.slice(i, i + BATCH);
+        await Promise.all(
+          batch.map((cid) => tgSend(cid, msg, { reply_markup: kb }, tokenOverrideAll))
+        );
+      }
+    }
+  } catch (e) {
+    console.error("[admin approve] broadcast failed:", e?.message || e);
+  }
+
+
   res.json({ ok: true, service: rows[0] });
 });
 
