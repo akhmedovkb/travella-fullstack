@@ -3934,10 +3934,14 @@ bot.on("text", async (ctx, next) => {
               }
             : undefined;
 
-        await bot.telegram.sendMessage(MANAGER_CHAT_ID, textForManager, {
-          parse_mode: "Markdown",
-          ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
-        });
+          await axios.post("/api/telegram/quick-request", {
+            serviceId,
+            chatId,
+            message: msg,
+            username: from.username || null,
+            firstName: from.first_name || null,
+            lastName: from.last_name || null,
+          });
 
         await ctx.reply(
           "✅ Спасибо!\n\nЗапрос отправлен! С вами свяжутся в ближайшее время."
