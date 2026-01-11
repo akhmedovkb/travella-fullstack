@@ -767,9 +767,59 @@ async function searchClientServices(req, res) {
   }
 }
 
+async function createQuickRequestFromTelegram(req, res) {
+  try {
+    const { serviceId, chatId, message, username, firstName, lastName } = req.body || {};
+    if (!serviceId || !chatId || !message) {
+      return res.status(400).json({ success: false });
+    }
+
+    // client по telegram_chat_id
+    const c = await pool.query(
+      "SELECT id FROM clients WHERE telegram_chat_id = $1 LIMIT 1",
+      [String(chatId)]
+    );
+    if (!c.rowCount) {
+      return res.status(403).json({ success: false, reason: "client_not_linked" });
+    }
+
+    const clientId = c.rows[0].id;
+
+    // услуга
+    const s = await pool.query(
+      "SELECT provider_id FROM services WHERE id = $1 LIMIT 1",
+      [serviceId]
+    );
+    if (!s.rowCount) {
+      return res.status(404).json({ success: false, reason: "service_not_found" });
+    }
+
+    // создаём request
+    const ins = await pool.query(
+      `INSERT INTO requests (service_id, client_id, message, status, created_at)
+       VALUES ($1, $2, $3, 'new', NOW())
+       RETURNING id`,
+      [serviceId, clientId, message]
+    );
+
+    const requestId = ins.rows[0].id;
+
+    // уведомляем владельца (через уже существующую логику)
+    try {
+      await notifyReqNew({ requestId });
+    } catch (_) {}
+
+    return res.json({ success: true, requestId });
+  } catch (e) {
+    console.error("createQuickRequestFromTelegram error:", e);
+    return res.status(500).json({ success: false });
+  }
+}
+
 module.exports = {
   linkAccount,
   getProfileByChat,
   searchCategory,
+  createQuickRequestFromTelegram,
   searchClientServices,
 };
