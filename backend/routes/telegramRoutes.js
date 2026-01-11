@@ -7,6 +7,8 @@ const router = express.Router();
 const pool = require("../db");
 const telegramClientController = require("../controllers/telegramClientController");
 const telegramProviderController = require("../controllers/telegramProviderController");
+const telegramQuickRequestController = require("../controllers/telegramQuickRequestController");
+
 let sharp = null;
 try {
   // sharp опционален: если не установлен — backend не падает
@@ -438,6 +440,12 @@ router.get("/service-image/:id", async (req, res) => {
 
 // привязка аккаунта по телефону
 router.post("/link", telegramClientController.linkAccount);
+
+// быстрый запрос владельцу услуги (создаёт/шлёт сообщение)
+router.post(
+  "/quick-request",
+  telegramQuickRequestController.sendQuickRequest
+);
 
 // быстрый профиль по chatId
 router.get(
