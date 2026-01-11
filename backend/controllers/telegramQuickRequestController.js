@@ -15,7 +15,13 @@ async function sendQuickRequest(req, res) {
     // 1️⃣ услуга + владелец
     const svc = await pool.query(
       `
-      SELECT s.id, s.title, p.id AS provider_id, p.telegram_chat_id
+      SELECT 
+        s.id,
+        s.title,
+        p.id AS provider_id,
+        p.telegram_refused_chat_id,
+        p.telegram_web_chat_id,
+        p.telegram_chat_id
       FROM services s
       JOIN providers p ON p.id = s.provider_id
       WHERE s.id = $1
@@ -28,7 +34,15 @@ async function sendQuickRequest(req, res) {
       return res.status(404).json({ error: "provider_not_found" });
     }
 
-    const providerChatId = svc.rows[0].telegram_chat_id;
+    const row = svc.rows[0];
+    const providerChatId =
+      row.telegram_refused_chat_id ||
+      row.telegram_web_chat_id ||
+      row.telegram_chat_id;
+
+    if (!providerChatId) {
+      return res.status(404).json({ error: "provider_chat_not_linked" });
+    }
     const title = svc.rows[0].title || "Без названия";
 
     // 2️⃣ текст владельцу
