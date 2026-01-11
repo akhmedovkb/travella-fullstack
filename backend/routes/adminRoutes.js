@@ -146,7 +146,12 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
 
     if (svc && isRefused) {
       const botUsername = String(process.env.TELEGRAM_BOT_USERNAME || "").trim();
-      const openBotUrl = botUsername ? `https://t.me/${botUsername}?start=start` : (process.env.SITE_PUBLIC_URL || "");
+      // стартуем бот сразу в нужной категории (чтобы открыть поиск именно по типу)
+      // start payload: refused_tour / refused_hotel / refused_flight / refused_ticket
+      const startPayload = encodeURIComponent(cat || "start");
+      const openBotUrl = botUsername
+        ? `https://t.me/${botUsername}?start=${startPayload}`
+        : (process.env.SITE_PUBLIC_URL || "");
 
       const title = String(svc.title || "").trim();
       const providerName = String(svc.provider_name || "").trim();
@@ -198,7 +203,14 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
       for (let i = 0; i < unique.length; i += BATCH) {
         const batch = unique.slice(i, i + BATCH);
         await Promise.all(
-          batch.map((cid) => tgSend(cid, msg, { reply_markup: kb }, tokenOverrideAll))
+          batch.map((cid) =>
+            tgSend(
+              cid,
+              msg,
+              { parse_mode: "HTML", reply_markup: kb },
+              tokenOverrideAll
+            )
+          )
         );
       }
     }
