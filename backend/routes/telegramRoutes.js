@@ -568,9 +568,4 @@ router.post(
   telegramProviderController.archiveServiceFromBot
 );
 
-router.post(
-  "/quick-request",
-  telegramQuickRequestController.sendQuickRequest
-);
-
 module.exports = router;
