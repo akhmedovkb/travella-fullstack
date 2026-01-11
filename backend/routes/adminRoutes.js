@@ -153,10 +153,10 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
       const providerTg = String(svc.provider_telegram || "").trim();
 
       const typeLabel =
-        cat === "refused_tour" ? "📍 Отказной тур" :
-        cat === "refused_hotel" ? "🏨 Отказной отель" :
-        cat === "refused_flight" ? "✈️ Отказной авиабилет" :
-        cat === "refused_ticket" ? "🎫 Отказной билет" :
+        cat === "refused_tour" ? "🆕 📍 Новый отказной тур" :
+        cat === "refused_hotel" ? "🆕 🏨 Новый отказной отель" :
+        cat === "refused_flight" ? "🆕 ✈️  Новый отказной авиабилет" :
+        cat === "refused_ticket" ? "🆕 🎫 Новый отказной билет" :
         "🆕 Новое предложение";
 
       const msg =
