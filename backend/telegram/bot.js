@@ -3904,64 +3904,38 @@ bot.on("text", async (ctx, next) => {
       const from = ctx.from || {};
       const chatId = ctx.chat.id;
 
-      if (!MANAGER_CHAT_ID) {
-        await ctx.reply("⚠️ Быстрый запрос сейчас недоступен. Попробуйте позже.");
-      } else {
-        const safeFirst = escapeMarkdown(from.first_name || "");
-        const safeLast = escapeMarkdown(from.last_name || "");
-        const safeUsername = escapeMarkdown(from.username || "нет username");
-        const safeMsg = escapeMarkdown(msg);
+      try {
+        await axios.post("/api/telegram/quick-request", {
+          serviceId,
+          chatId,
+          message: msg,
+          username: from.username || null,
+          firstName: from.first_name || null,
+          lastName: from.last_name || null,
+        });
 
-        const serviceUrl = SERVICE_URL_TEMPLATE
-          .replace("{SITE_URL}", SITE_URL)
-          .replace("{id}", String(serviceId));
-        
-        const textForManager =
-          "🆕 *Новый быстрый запрос из Bot Otkaznyx Turov*\n\n" +
-          `Услуга ID: *${escapeMarkdown(serviceId)}*\n` +
-          `Ссылка: ${escapeMarkdown(serviceUrl)}\n` +
-          `От: ${safeFirst} ${safeLast} (@${safeUsername})\n` +
-          `Telegram chatId: \`${chatId}\`\n\n` +
-          "*Сообщение:*\n" +
-          safeMsg;
+        await ctx.reply("✅ Спасибо!\n\nЗапрос отправлен! С вами свяжутся в ближайшее время.");
 
-        const replyMarkup =
-          from.username
-            ? {
-                inline_keyboard: [
-                 [{ text: "💬 Написать пользователю", url: `https://t.me/${String(from.username).replace(/^@/, "")}` }],
-                ],
-              }
-            : undefined;
-
-        try {
-          await axios.post("/api/telegram/quick-request", {
-            serviceId,
-            chatId,
-            message: msg,
-            username: from.username || null,
-            firstName: from.first_name || null,
-            lastName: from.last_name || null,
-          });
-
-          await ctx.reply(
-            "✅ Спасибо!\n\nЗапрос отправлен! С вами свяжутся в ближайшее время."
-          );
-        } catch (err) {
-          const status = err?.response?.status;
-          if (status === 429) {
-            await ctx.reply("⏳ Подождите 3 минуты и попробуйте снова.");
-          } else {
-            console.error("[tg-bot] quick-request error:", err?.response?.data || err);
-            await ctx.reply("⚠️ Не удалось отправить запрос. Попробуйте позже.");
-          }
+        // ✅ сбрасываем состояние только при успехе
+        ctx.session.state = null;
+        ctx.session.pendingRequestServiceId = null;
+        return;
+      } catch (err) {
+        const status = err?.response?.status;
+        if (status === 429) {
+          // ⏳ антиспам: НЕ сбрасываем state/serviceId
+          await ctx.reply("⏳ Слишком часто. Подождите 3 минуты и отправьте сообщение ещё раз.");
+          return;
         }
-      }
 
-      ctx.session.state = null;
-      ctx.session.pendingRequestServiceId = null;
-      return;
-    }
+        console.error("[tg-bot] quick-request error:", err?.response?.data || err);
+        await ctx.reply("⚠️ Не удалось отправить запрос. Попробуйте позже.");
+
+        // ⚠️ на прочих ошибках сбрасываем, чтобы не зависнуть
+        ctx.session.state = null;
+        ctx.session.pendingRequestServiceId = null;
+        return;
+      }    }
 
     // 2) мастер создания отказных (tour + hotel)
     if (state && (state.startsWith("svc_create_") || state.startsWith("svc_hotel_"))) {
