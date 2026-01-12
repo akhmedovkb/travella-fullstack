@@ -196,22 +196,44 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
       ];
 
       const unique = Array.from(new Set(chatIds));
-      const tokenOverrideAll = process.env.TELEGRAM_CLIENT_BOT_TOKEN || "";
+      const tokenOverrideAll = (process.env.TELEGRAM_CLIENT_BOT_TOKEN || "").trim() || null;
+
+      console.log("[admin approve] broadcast audience:", {
+        providers: recProv.rows.length,
+        clients: recCli.rows.length,
+        totalUnique: unique.length,
+      });
 
       // batch sending to avoid spikes
       const BATCH = 25;
       for (let i = 0; i < unique.length; i += BATCH) {
         const batch = unique.slice(i, i + BATCH);
-        await Promise.all(
-          batch.map((cid) =>
-            tgSend(
-              cid,
-              msg,
-              { parse_mode: "HTML", reply_markup: kb },
-              tokenOverrideAll
-            )
-          )
+        const results = await Promise.allSettled(
+          batch.map((cid) => {
+            const opts = { parse_mode: "HTML", reply_markup: kb };
+            return tokenOverrideAll
+              ? tgSend(cid, msg, opts, tokenOverrideAll)
+              : tgSend(cid, msg, opts);
+          })
         );
+
+        const ok = results.filter((r) => r.status === "fulfilled").length;
+        const fail = results.length - ok;
+        if (fail) {
+          const sampleErr = results.find((r) => r.status === "rejected")?.reason;
+          console.warn("[admin approve] broadcast batch errors:", {
+            batchFrom: i,
+            batchSize: results.length,
+            ok,
+            fail,
+            sample: sampleErr?.message || String(sampleErr || ""),
+          });
+        } else {
+          console.log("[admin approve] broadcast batch ok:", {
+            batchFrom: i,
+            batchSize: results.length,
+          });
+        }
       }
     }
   } catch (e) {
