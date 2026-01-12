@@ -96,7 +96,6 @@ async function sendQuickRequest(req, res) {
               text: "✅ Принято",
               callback_data: `qr:ack:${requestId}`,
             }
-            },
           ],
         ],
       },
