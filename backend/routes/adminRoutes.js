@@ -124,8 +124,7 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
   try {
     const info2 = await pool.query(
       `SELECT s.id, s.title, s.category,
-              COALESCE(p.name,'') AS provider_name,
-              COALESCE(p.telegram,'') AS provider_telegram
+         COALESCE(p.name,'') AS provider_name
          FROM services s
          JOIN providers p ON p.id = s.provider_id
         WHERE s.id = $1`,
@@ -153,7 +152,6 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
 
       const title = String(svc.title || "").trim();
       const providerName = String(svc.provider_name || "").trim();
-      const providerTg = String(svc.provider_telegram || "").trim();
 
       const typeLabel =
         cat === "refused_tour" ? "🆕 📍 Новый отказной тур" :
@@ -165,8 +163,8 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
       const msg =
         `<b>${typeLabel}</b>\n` +
         (title ? `\n<b>${String(title).replace(/</g, "&lt;").replace(/>/g, "&gt;")}</b>\n` : "\n") +
-        (providerName || providerTg
-          ? `Поставщик: ${String(providerName).replace(/</g, "&lt;").replace(/>/g, "&gt;")}${providerTg ? ` (@${String(providerTg).replace(/^@/, "")})` : ""}\n`
+        (providerName
+          ? `Поставщик: ${providerName}\n`
           : "") +
         `\nОткрыть поиск в боте: нажмите кнопку ниже 👇`;
 
