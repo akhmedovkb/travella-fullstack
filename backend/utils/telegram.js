@@ -5,10 +5,10 @@ const pool = require("../db");
 const axios = require("axios");
 
 // старый (основной) бот — ВСЕ callback/edit/getChat по нему ДЛЯ СТАРЫХ СЦЕНАРИЕВ
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
+const BOT_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || "").trim();
 
 // новый клиентский бот (отказные)
-const CLIENT_BOT_TOKEN = process.env.TELEGRAM_CLIENT_BOT_TOKEN || "";
+const CLIENT_BOT_TOKEN = (process.env.TELEGRAM_CLIENT_BOT_TOKEN || "").trim();
 
 const SITE = (process.env.SITE_PUBLIC_URL || "").replace(/\/+$/, "");
 
@@ -35,7 +35,7 @@ const ADMIN_CHAT_IDS =
 /* ================== low-level helpers ================== */
 
 function _tgApiByToken(token) {
-  const t = token || "";
+  const t = String(token || "").trim();
   return t ? `https://api.telegram.org/bot${t}` : "";
 }
 
@@ -54,17 +54,24 @@ async function tgSend(
 ) {
   // Если явно указан tokenOverride — используем его.
   // Иначе пробуем старого бота, а при отсутствии — нового.
-  const primaryToken = tokenOverride || BOT_TOKEN || CLIENT_BOT_TOKEN;
+  const override = String(tokenOverride || "").trim();
+  const primaryToken = override || BOT_TOKEN || CLIENT_BOT_TOKEN;
   const primaryApi = _tgApiByToken(primaryToken);
 
-  if (!primaryToken || !primaryApi || !chatId || !text) {
+  // normalize chatId (Telegram accepts number; safer to keep numeric ids)
+  const cid =
+    typeof chatId === "string" && /^-?\d+$/.test(chatId.trim())
+      ? Number(chatId.trim())
+      : chatId;
+
+  if (!primaryToken || !primaryApi || !cid || !text) {
     const err = new Error("tgSend: missing token/api/chatId/text");
     if (throwOnError) throw err;
     return false;
   }
 
   const payload = {
-    chat_id: chatId,
+    chat_id: cid,
     text,
     parse_mode: "HTML",
     disable_web_page_preview: true,
@@ -72,7 +79,7 @@ async function tgSend(
   };
 
   const shouldFallbackToClient =
-    !tokenOverride && // fallback делаем только когда токен не задан явно
+    !override && // fallback делаем только когда токен не задан явно
     Boolean(CLIENT_BOT_TOKEN) &&
     Boolean(BOT_TOKEN) &&
     primaryToken === BOT_TOKEN; // первично шлём старым ботом
