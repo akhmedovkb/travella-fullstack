@@ -56,6 +56,20 @@ const REFUSED_CATEGORIES = [
   "refused_ticket",
 ];
 
+function isRefusedStartPayload(payload) {
+  const p = String(payload || "").trim().toLowerCase();
+  return REFUSED_CATEGORIES.includes(p);
+}
+
+function refusedTypeLabel(cat) {
+  const c = String(cat || "").toLowerCase();
+  return c === "refused_tour" ? "📍 Поиск отказных туров"
+    : c === "refused_hotel" ? "🏨 Поиск отказных отелей"
+    : c === "refused_flight" ? "✈️ Поиск отказных авиабилетов"
+    : c === "refused_ticket" ? "🎫 Поиск отказных билетов"
+    : "🔎 Поиск";
+}
+
 const API_BASE = (
   process.env.API_BASE_URL ||
   process.env.SITE_API_URL ||
@@ -564,6 +578,35 @@ async function askRole(ctx) {
   );
 }
 
+async function openRefusedSearchEntry(ctx, cat) {
+  const c = String(cat || "").trim().toLowerCase();
+  const title = refusedTypeLabel(c);
+
+  // ВАЖНО: Telegram сам не откроет inline без клика пользователя.
+  // Поэтому даём 1 кнопку, которая открывает inline-поиск сразу с нужным query.
+  const kb = {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "🔎 Открыть поиск", switch_inline_query_current_chat: `#tour ${c}` }],
+        [{ text: "🏠 В меню", callback_data: "go:menu" }],
+      ],
+    },
+  };
+
+  await safeReply(
+    ctx,
+    `${title}\n\nНажмите кнопку ниже 👇`,
+    kb
+  );
+}
+
+// (опционально) быстрый возврат в меню из inline-entry
+bot.action("go:menu", async (ctx) => {
+  try { await ctx.answerCbQuery(); } catch {}
+  const role = ctx.session?.role || "client";
+  await safeReply(ctx, "Выберите раздел в меню ниже 👇", getMainMenuKeyboard(role));
+});
+
 // ✅ Для идентификации пользователя всегда используем ctx.from.id
 function getActorId(ctx) {
   return ctx?.from?.id || ctx?.chat?.id || null;
@@ -994,6 +1037,39 @@ bot.action(/^svc_actual:(\d+):(yes|no|extend7)$/, async (ctx) => {
     try { await ctx.answerCbQuery("Ошибка. Попробуйте ещё раз", { show_alert: true }); } catch {}
   }
 });
+
+// ===================== START (deep-link payload support) =====================
+bot.start(async (ctx) => {
+  try {
+    if (!ctx.session) ctx.session = {};
+
+    const startPayloadRaw = String(ctx.startPayload || "").trim();
+    const startPayload = startPayloadRaw.toLowerCase();
+
+    // Если пришли по deep-link отказной категории:
+    // 1) если уже привязан — сразу показываем entry в поиск по категории
+    // 2) если НЕ привязан — запоминаем payload и ведём по обычному сценарию привязки
+    if (isRefusedStartPayload(startPayload)) {
+      if (ctx.session.linked && !ctx.session.pending) {
+        return openRefusedSearchEntry(ctx, startPayload);
+      }
+      ctx.session.afterLinkStartPayload = startPayload;
+      // дальше — обычный старт: спросить роль / попросить телефон
+    }
+
+    // ---- дальше твоя текущая логика /start ----
+    // Ничего не ломаем: оставляем обработку start/my_empty/search_empty и т.д.
+
+    // ВАЖНО: если у тебя ниже есть ранние return'ы на startPayloadRaw === "start" / "my_empty",
+    // то payload refused_* уже обработан выше (мы не return'им, если не привязан),
+    // и пользователь пойдёт по нормальной привязке.
+
+  } catch (e) {
+    console.error("[tg-bot] /start error:", e?.message || e);
+  }
+});
+
+  
 // ===================== /ACTUAL REMINDER CALLBACK =====================
 
 bot.action("svc_edit:skip", async (ctx) => {
@@ -1951,7 +2027,8 @@ function resetServiceWizard(ctx) {
   if (!ctx.session) return;
   ctx.session.state = null;
   ctx.session.serviceDraft = null;
-  ctx.session.wizardStack = null;
+  // лучше всегда массив, чтобы .pop/.push не падали
+  ctx.session.wizardStack = [];
 }
 
 function forceCloseEditWizard(ctx) {
@@ -1969,8 +2046,19 @@ function forceCloseEditWizard(ctx) {
     ctx.session.editWiz.step = "";
   }
 
+  // ✅ полностью вычищаем след редактирования
+  ctx.session.editWiz = null;
+  ctx.session.editDraft = null; // если где-то осталось legacy
+  ctx.session.editingServiceId = null;
+
   if (Array.isArray(ctx.session.wizardStack)) ctx.session.wizardStack = [];
   if (ctx.session.serviceDraft) delete ctx.session.serviceDraft;
+}
+// Telegram caption лимит ~1024 символа — подрезаем, чтобы фото не падало
+function safeCaption(text, limit = 950) {
+  const s = String(text || "");
+  if (s.length <= limit) return s;
+  return s.slice(0, limit - 3) + "...";
 }
 
 function parseYesNo(text) {
@@ -2593,6 +2681,17 @@ async function handlePhoneRegistration(ctx, requestedRole, phone) {
       await ctx.reply("✅ Привязка выполнена.");
     }
 
+    // ✅ NEW: если пользователь пришёл по deep-link /start refused_*,
+    // то сразу показываем entry в поиск по этой категории (вместо обычного меню).
+    const after = String(ctx.session?.afterLinkStartPayload || "").trim().toLowerCase();
+    if (after && typeof isRefusedStartPayload === "function" && isRefusedStartPayload(after)) {
+      ctx.session.afterLinkStartPayload = null;
+      // Важно: openRefusedSearchEntry должен быть объявлен выше по файлу (или импортирован).
+      if (typeof openRefusedSearchEntry === "function") {
+        return openRefusedSearchEntry(ctx, after);
+      }
+    }
+
     await ctx.reply("📌 Готово! Меню доступно ниже 👇", getMainMenuKeyboard(finalRole));
   } catch (e) {
     console.error("[tg-bot] handlePhoneRegistration error:", e?.response?.data || e);
@@ -2952,11 +3051,10 @@ bot.action("prov_services:create", async (ctx) => {
     await ctx.reply("➕ Ок! Давайте создадим новую услугу 👇");
 
     if (!ctx.session) ctx.session = {};
-    // ✅ ВАЖНО: сбрасываем edit-wizard, чтобы создание НЕ перехватывалось редактированием
-    ctx.session.editWiz = null;
-    ctx.session.editDraft = null;
-    ctx.session.editingServiceId = null;
+    // ✅ ВАЖНО: жестко закрываем edit-wizard, чтобы создание НЕ перехватывалось редактированием
+    forceCloseEditWizard(ctx);
     
+    // ✅ старт мастера создания
     ctx.session.serviceDraft = { category: null, images: [] };
     ctx.session.wizardStack = [];
     ctx.session.state = "svc_create_choose_category";
@@ -2980,26 +3078,21 @@ bot.action("prov_services:create", async (ctx) => {
 bot.action("prov_services:list", async (ctx) => {
   await ctx.answerCbQuery();
 
-  // 🔴 принудительно закрываем wizard
+  // 🔴 принудительно закрываем wizard-редактирования + мастер создания
   forceCloseEditWizard(ctx);
+  resetServiceWizard(ctx);
 
   // просто переиспользуем существующую логику
-  return ctx.telegram.sendMessage(
-    ctx.chat.id,
-    "🧳 Выберите действие:",
-    {
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "📤 Выбрать мою услугу", switch_inline_query_current_chat: "#my refused_tour" }],
-          [{ text: "🖼 Карточками", callback_data: "prov_services:list_cards" }],
-          [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
-          [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
-        ],
-      },
-    }
-  );
-});
-
+  return safeReply(ctx, "🧳 Выберите действие:", {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "📤 Выбрать мою услугу", switch_inline_query_current_chat: "#my refused_tour" }],
+        [{ text: "🖼 Карточками", callback_data: "prov_services:list_cards" }],
+        [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
+        [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
+      ],
+    },
+  });
 
 bot.action("prov_services:list_cards", async (ctx) => {
   try {
@@ -3130,13 +3223,13 @@ const keyboard = {
           if (photoUrl.startsWith("tgfile:")) {
             const fileId = photoUrl.replace(/^tgfile:/, "");
             await ctx.replyWithPhoto(fileId, {
-              caption: msg,
+              caption: safeCaption(msg),
               parse_mode: "Markdown",
               reply_markup: keyboard,
             });
           } else {
             await ctx.replyWithPhoto(photoUrl, {
-              caption: msg,
+              caption: safeCaption(msg),
               parse_mode: "Markdown",
               reply_markup: keyboard,
             });
@@ -4359,7 +4452,7 @@ bot.on("text", async (ctx, next) => {
         }
 
         case "svc_create_photo":
-          if (text.trim().toLowerCase() === "пропустить") {
+          if (["пропустить", "skip", "-", "нет"].includes(text.trim().toLowerCase())) {
             draft.images = [];
             await finishCreateServiceFromWizard(ctx);
             return;
@@ -4406,7 +4499,7 @@ bot.on("photo", async (ctx, next) => {
         return;
       }
 
-      const tgRef = `tg:${fileId}`;
+      const tgRef = `tgfile:${fileId}`;
       if (!Array.isArray(legacyDraft.images)) legacyDraft.images = [];
       legacyDraft.images.push(tgRef);
 
@@ -4440,7 +4533,7 @@ bot.on("photo", async (ctx, next) => {
       return;
     }
 
-    const tgRef = `tg:${fileId}`;
+    const tgRef = `tgfile:${fileId}`;
     if (!Array.isArray(draft.images)) draft.images = [];
     draft.images.push(tgRef);
     draft.telegramPhotoFileId = fileId;
