@@ -104,15 +104,13 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
     const chatId = refusedChatId || fallbackChatId;
 
     // если используем telegram_refused_chat_id — это чат нового (client/refused) бота
-    const tokenOverride = refusedChatId ? (process.env.TELEGRAM_CLIENT_BOT_TOKEN || "") : "";
+    const tokenOverride = refusedChatId
+      ? (process.env.TELEGRAM_CLIENT_BOT_TOKEN || "").trim() || null
+      : null;
 
     if (chatId) {
-      await tgSend(
-        chatId,
-        `✅ Ваша услуга одобрена и опубликована\n\n📌 ${row.title || ""}`,
-        {},
-        tokenOverride
-      );
+      const text = `✅ Ваша услуга одобрена и опубликована\n\n📌 ${row.title || ""}`;
+      tokenOverride ? await tgSend(chatId, text, {}, tokenOverride) : await tgSend(chatId, text, {});
     }
   } catch (e) {
     console.error("[admin approve] tg notify failed:", e?.message || e);
@@ -191,11 +189,17 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
       );
 
       const chatIds = [
-        ...recProv.rows.map((r) => String(r.chat_id || "").trim()).filter(Boolean),
-        ...recCli.rows.map((r) => String(r.chat_id || "").trim()).filter(Boolean),
+        ...recProv.rows.map((r) => r.chat_id),
+        ...recCli.rows.map((r) => r.chat_id),
       ];
 
-      const unique = Array.from(new Set(chatIds));
+      // normalize chat ids: keep only numeric ids (Telegram chat_id is integer)
+      const normalized = chatIds
+        .map((v) => String(v || "").trim())
+        .filter((s) => /^-?\d+$/.test(s))
+        .map((s) => Number(s));
+
+      const unique = Array.from(new Set(normalized));
       const tokenOverrideAll = (process.env.TELEGRAM_CLIENT_BOT_TOKEN || "").trim() || null;
 
       console.log("[admin approve] broadcast audience:", {
@@ -204,8 +208,18 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
         totalUnique: unique.length,
       });
 
+      // admins report (optional)
+      const adminChatIds = String(process.env.TELEGRAM_ADMIN_CHAT_IDS || "")
+        .split(/[,\s]+/g)
+        .map((s) => s.trim())
+        .filter((s) => /^-?\d+$/.test(s))
+        .map((s) => Number(s));
+      
       // batch sending to avoid spikes
       const BATCH = 25;
+      let delivered = 0;
+      let failed = 0;
+      const failedSample = [];
       for (let i = 0; i < unique.length; i += BATCH) {
         const batch = unique.slice(i, i + BATCH);
         const results = await Promise.allSettled(
@@ -219,6 +233,15 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
 
         const ok = results.filter((r) => r.status === "fulfilled").length;
         const fail = results.length - ok;
+        delivered += ok;
+        failed += fail;
+        if (fail && failedSample.length < 10) {
+          results.forEach((r, idx) => {
+            if (r.status === "rejected" && failedSample.length < 10) {
+              failedSample.push(batch[idx]);
+            }
+          });
+        }
         if (fail) {
           const sampleErr = results.find((r) => r.status === "rejected")?.reason;
           console.warn("[admin approve] broadcast batch errors:", {
@@ -234,6 +257,24 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
             batchSize: results.length,
           });
         }
+      }
+
+      // send final report to admins (so you don't need logs)
+      if (adminChatIds.length) {
+        const report =
+          `📣 <b>Broadcast report</b>\n` +
+          `Service: <code>${svc.id}</code>\n` +
+          `Category: <code>${cat}</code>\n` +
+          `Recipients: <b>${unique.length}</b>\n` +
+          `Delivered: <b>${delivered}</b>\n` +
+          `Failed: <b>${failed}</b>` +
+          (failedSample.length ? `\n\n❌ Failed chatIds (sample):\n<code>${failedSample.join(", ")}</code>` : "");
+
+        await Promise.allSettled(
+          adminChatIds.map((aid) =>
+            tokenOverrideAll ? tgSend(aid, report, { parse_mode: "HTML" }, tokenOverrideAll) : tgSend(aid, report, { parse_mode: "HTML" })
+          )
+        );
       }
     }
   } catch (e) {
@@ -285,15 +326,13 @@ router.post("/services/:id(\\d+)/reject", authenticateToken, requireAdmin, async
     const fallbackChatId = row.telegram_web_chat_id || row.telegram_chat_id || null;
 
     const chatId = refusedChatId || fallbackChatId;
-    const tokenOverride = refusedChatId ? (process.env.TELEGRAM_CLIENT_BOT_TOKEN || "") : "";
+    const tokenOverride = refusedChatId
+      ? (process.env.TELEGRAM_CLIENT_BOT_TOKEN || "").trim() || null
+      : null;
 
     if (chatId) {
-      await tgSend(
-        chatId,
-        `❌ Ваша услуга отклонена\n\n📌 ${row.title || ""}\n\nПричина:\n${reason || "Не указана"}`,
-        {},
-        tokenOverride
-      );
+      const text = `❌ Ваша услуга отклонена\n\n📌 ${row.title || ""}\n\nПричина:\n${reason || "Не указана"}`;
+      tokenOverride ? await tgSend(chatId, text, {}, tokenOverride) : await tgSend(chatId, text, {});
     }
   } catch (e) {
     console.error("[admin reject] tg notify failed:", e?.message || e);
