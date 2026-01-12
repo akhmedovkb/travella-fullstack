@@ -142,7 +142,12 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
     ].includes(cat);
 
     if (svc && isRefused) {
-      const botUsername = String(process.env.TELEGRAM_BOT_USERNAME || "").trim();
+      // ВАЖНО: users/provs жмут /start именно в новом боте
+      const botUsername = String(
+        process.env.TELEGRAM_CLIENT_BOT_USERNAME ||
+        process.env.TELEGRAM_BOT_USERNAME ||
+        ""
+      ).trim();
       // стартуем бот сразу в нужной категории (чтобы открыть поиск именно по типу)
       // start payload: refused_tour / refused_hotel / refused_flight / refused_ticket
       const startPayload = encodeURIComponent(cat || "start");
@@ -174,10 +179,10 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
 
       // recipients: providers.telegram_refused_chat_id + clients.telegram_chat_id
       const recProv = await pool.query(
-        `SELECT telegram_refused_chat_id AS chat_id
+        `SELECT COALESCE(telegram_refused_chat_id, telegram_web_chat_id, telegram_chat_id) AS chat_id
            FROM providers
-          WHERE telegram_refused_chat_id IS NOT NULL
-            AND TRIM(telegram_refused_chat_id::text) <> ''`
+          WHERE COALESCE(telegram_refused_chat_id, telegram_web_chat_id, telegram_chat_id) IS NOT NULL
+            AND TRIM(COALESCE(telegram_refused_chat_id, telegram_web_chat_id, telegram_chat_id)::text) <> ''`
       );
       const recCli = await pool.query(
         `SELECT telegram_chat_id AS chat_id
@@ -198,10 +203,16 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
         .map((s) => Number(s));
 
       const unique = Array.from(new Set(normalized));
-      const tokenOverrideAll =
-        (process.env.TELEGRAM_CLIENT_BOT_TOKEN || "").trim() ||
-        (process.env.TELEGRAM_BOT_TOKEN || "").trim() ||
-        null;
+      // Для текущей схемы: рассылаем новым ботом, иначе люди не получат
+      const tokenOverrideAll = (process.env.TELEGRAM_CLIENT_BOT_TOKEN || "").trim() || null;
+      if (!tokenOverrideAll) {
+        console.warn("[admin approve] broadcast skipped: TELEGRAM_CLIENT_BOT_TOKEN is missing");
+        return;
+      }
+      if (!unique.length) {
+        console.warn("[admin approve] broadcast skipped: no recipients");
+        return;
+      }
 
       console.log("[admin approve] broadcast audience:", {
         providers: recProv.rows.length,
