@@ -62,17 +62,7 @@ async function sendQuickRequest(req, res) {
     }
     const title = svc.rows[0].title || "Без названия";
 
-    // 2️⃣ текст владельцу
-    const text =
-      `🆕 *Быстрый запрос по услуге*\n\n` +
-      `📦 Услуга: *${title}*\n` +
-      `🆔 ID: ${serviceId}\n\n` +
-      `👤 От: ${firstName || ""} ${lastName || ""}` +
-      (username ? ` (@${username})` : "") +
-      `\n\n` +
-      `💬 Сообщение:\n${message}`;
-
-        // 2️⃣ сохранить запрос
+    // 2️⃣ сохранить запрос (сначала создаём requestId)
     const ins = await pool.query(
       `INSERT INTO telegram_quick_requests
        (service_id, provider_id, provider_chat_id, requester_chat_id, message)
@@ -81,6 +71,17 @@ async function sendQuickRequest(req, res) {
       [serviceId, row.provider_id, providerChatId, chatId, message]
     );
     const requestId = ins.rows[0].id;
+    
+    // 3️⃣ текст владельцу
+    const text =
+      `🆕 *Быстрый запрос по услуге*\n\n` +
+      `📦 Услуга: *${title}*\n` +
+      `🆔 ID: ${serviceId}\n` +
+      `🧾 Запрос: #${requestId}\n\n` +
+      `👤 От: ${firstName || ""} ${lastName || ""}` +
+      (username ? ` (@${username})` : "") +
+      `\n\n` +
+      `💬 Сообщение:\n${message}`;
 
     // 3️⃣ отправка владельцу
     await tgSend(providerChatId, text, {
