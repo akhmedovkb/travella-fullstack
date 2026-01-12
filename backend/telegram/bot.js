@@ -3934,6 +3934,7 @@ bot.on("text", async (ctx, next) => {
               }
             : undefined;
 
+        try {
           await axios.post("/api/telegram/quick-request", {
             serviceId,
             chatId,
@@ -3943,9 +3944,18 @@ bot.on("text", async (ctx, next) => {
             lastName: from.last_name || null,
           });
 
-        await ctx.reply(
-          "✅ Спасибо!\n\nЗапрос отправлен! С вами свяжутся в ближайшее время."
-        );
+          await ctx.reply(
+            "✅ Спасибо!\n\nЗапрос отправлен! С вами свяжутся в ближайшее время."
+          );
+        } catch (err) {
+          const status = err?.response?.status;
+          if (status === 429) {
+            await ctx.reply("⏳ Подождите 3 минуты и попробуйте снова.");
+          } else {
+            console.error("[tg-bot] quick-request error:", err?.response?.data || err);
+            await ctx.reply("⚠️ Не удалось отправить запрос. Попробуйте позже.");
+          }
+        }
       }
 
       ctx.session.state = null;
