@@ -110,7 +110,10 @@ async function handleWebhook(req, res) {
 
       if (mAck) {
         const requestId = Number(mAck[1]);
-
+        if (!Number.isFinite(requestId) || requestId <= 0) {
+          await tgAnswerCallbackQuery(cq.id, "Некорректный запрос");
+          return res.json({ ok: true });
+        }
         const r = await pool.query(
           `UPDATE telegram_quick_requests
              SET acknowledged_at = NOW()
@@ -132,7 +135,10 @@ async function handleWebhook(req, res) {
 
       if (mReply) {
         const requestId = Number(mReply[1]);
-
+        if (!Number.isFinite(requestId) || requestId <= 0) {
+          await tgAnswerCallbackQuery(cq.id, "Некорректный запрос");
+          return res.json({ ok: true });
+        }
         // сохраняем ожидание ответа провайдера (память процесса)
         global.__qrReply = global.__qrReply || {};
         global.__qrReply[String(cq.message.chat.id)] = requestId;
