@@ -47,7 +47,7 @@ async function sendQuickRequest(req, res) {
       [serviceId]
     );
 
-    if (!svc.rowCount || !svc.rows[0].telegram_chat_id) {
+    if (!svc.rowCount) {
       return res.status(404).json({ error: "provider_not_found" });
     }
 
