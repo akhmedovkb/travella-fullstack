@@ -200,7 +200,10 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
         .map((s) => Number(s));
 
       const unique = Array.from(new Set(normalized));
-      const tokenOverrideAll = (process.env.TELEGRAM_CLIENT_BOT_TOKEN || "").trim() || null;
+      const tokenOverrideAll =
+        (process.env.TELEGRAM_CLIENT_BOT_TOKEN || "").trim() ||
+        (process.env.TELEGRAM_BOT_TOKEN || "").trim() ||
+        null;
 
       console.log("[admin approve] broadcast audience:", {
         providers: recProv.rows.length,
@@ -327,7 +330,9 @@ router.post("/services/:id(\\d+)/reject", authenticateToken, requireAdmin, async
 
     const chatId = refusedChatId || fallbackChatId;
     const tokenOverride = refusedChatId
-      ? (process.env.TELEGRAM_CLIENT_BOT_TOKEN || "").trim() || null
+      ? ((process.env.TELEGRAM_CLIENT_BOT_TOKEN || "").trim() ||
+         (process.env.TELEGRAM_BOT_TOKEN || "").trim() ||
+         null)
       : null;
 
     if (chatId) {
