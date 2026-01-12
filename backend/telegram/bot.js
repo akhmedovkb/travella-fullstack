@@ -3986,10 +3986,10 @@ async function handleSvcEditWizardText(ctx) {
 
 bot.on("text", async (ctx, next) => {
   try {
-    const state = ctx.session?.state || null;
+    
       // ===================== EDIT WIZARD (svc_edit_*) =====================
   if (await handleSvcEditWizardText(ctx)) return;
-
+    const state = ctx.session?.state || null;
 // 1) быстрый запрос
     if (state === "awaiting_request_message" && ctx.session.pendingRequestServiceId) {
       const serviceId = ctx.session.pendingRequestServiceId;
@@ -4426,8 +4426,8 @@ bot.on("text", async (ctx, next) => {
 
         case "svc_create_expiration": {
           const lower = text.trim().toLowerCase();
-          const normExp = normalizeDateTimeInput(text);
-
+          const normExp = normalizeDateTimeInputHelper(text);
+          
           if (normExp === null && lower !== "нет") {
             await ctx.reply(
               "😕 Не понял дату актуальности.\nВведите *YYYY-MM-DD HH:mm* или *YYYY.MM.DD HH:mm* или `нет`.",
@@ -4691,17 +4691,6 @@ bot.on("inline_query", async (ctx) => {
       itemsForInline = itemsForInline.filter((svc) => {
         try {
           const det = parseDetailsAny(svc.details);
-          // ✅ подхватываем существующие изображения услуги
-          let imagesArr = svc.images ?? [];
-          if (typeof imagesArr === "string") {
-            try {
-              imagesArr = JSON.parse(imagesArr);
-            } catch {
-              imagesArr = imagesArr ? [imagesArr] : [];
-            }
-          }
-          if (!Array.isArray(imagesArr)) imagesArr = [];
-
           return isServiceActual(det, svc);
         } catch (_) {
           return false;
@@ -4906,7 +4895,7 @@ bot.action(/^svc_edit_img_(?:remove|del):(\d+)$/, async (ctx) => {
 
     await safeReply(
       ctx,
-      `✅ Удалено. Сейчас в услуге: ${draft.images.length} шт.\\n\\nОтправьте новое фото или нажмите «✅ Готово».`,
+      `✅ Удалено. Сейчас в услуге: ${draft.images.length} шт.\n\nОтправьте новое фото или нажмите «✅ Готово».`,
       buildEditImagesKeyboard(draft)
     );
   } catch (e) {
