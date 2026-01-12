@@ -135,7 +135,7 @@ async function handleWebhook(req, res) {
 
         // сохраняем ожидание ответа провайдера (память процесса)
         global.__qrReply = global.__qrReply || {};
-        global.__qrReply[String(cq.from.id)] = requestId;
+        global.__qrReply[String(cq.message.chat.id)] = requestId;
 
         await tgAnswerCallbackQuery(cq.id, "Напишите ответ следующим сообщением");
         return res.json({ ok: true });
