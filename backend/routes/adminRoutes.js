@@ -150,7 +150,7 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
       ).trim();
       // стартуем бот сразу в нужной категории (чтобы открыть поиск именно по типу)
       // start payload: refused_tour / refused_hotel / refused_flight / refused_ticket
-      const startPayload = encodeURIComponent(cat || "start");
+      const startPayload = encodeURIComponent(`refused_${svc.id}`);
       const openBotUrl = botUsername
         ? `https://t.me/${botUsername}?start=${startPayload}`
         : (process.env.SITE_PUBLIC_URL || "");
