@@ -56,20 +56,6 @@ const REFUSED_CATEGORIES = [
   "refused_ticket",
 ];
 
-function isRefusedStartPayload(payload) {
-  const p = String(payload || "").trim().toLowerCase();
-  return REFUSED_CATEGORIES.includes(p);
-}
-
-function refusedTypeLabel(cat) {
-  const c = String(cat || "").toLowerCase();
-  return c === "refused_tour" ? "📍 Поиск отказных туров"
-    : c === "refused_hotel" ? "🏨 Поиск отказных отелей"
-    : c === "refused_flight" ? "✈️ Поиск отказных авиабилетов"
-    : c === "refused_ticket" ? "🎫 Поиск отказных билетов"
-    : "🔎 Поиск";
-}
-
 const API_BASE = (
   process.env.API_BASE_URL ||
   process.env.SITE_API_URL ||
@@ -142,10 +128,7 @@ function cacheGet(key) {
 }
 
 function cacheSet(key, data, ttlMs = INLINE_CACHE_TTL_MS) {
-  // если ttl маленький (например 30, 60, 120), считаем что это секунды
-  const ttl = Number(ttlMs);
-  const ttlFixed = ttl > 0 && ttl < 1000 ? ttl * 1000 : ttl;
-  inlineCache.set(key, { ts: Date.now(), ttl: ttlFixed, data });
+  inlineCache.set(key, { ts: Date.now(), ttl: ttlMs, data });
 
   // LRU-prune
   while (inlineCache.size > INLINE_CACHE_MAX) {
@@ -581,35 +564,6 @@ async function askRole(ctx) {
   );
 }
 
-async function openRefusedSearchEntry(ctx, cat) {
-  const c = String(cat || "").trim().toLowerCase();
-  const title = refusedTypeLabel(c);
-
-  // ВАЖНО: Telegram сам не откроет inline без клика пользователя.
-  // Поэтому даём 1 кнопку, которая открывает inline-поиск сразу с нужным query.
-  const kb = {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "🔎 Открыть поиск", switch_inline_query_current_chat: `#tour ${c}` }],
-        [{ text: "🏠 В меню", callback_data: "go:menu" }],
-      ],
-    },
-  };
-
-  await safeReply(
-    ctx,
-    `${title}\n\nНажмите кнопку ниже 👇`,
-    kb
-  );
-}
-
-// (опционально) быстрый возврат в меню из inline-entry
-bot.action("go:menu", async (ctx) => {
-  try { await ctx.answerCbQuery(); } catch {}
-  const role = ctx.session?.role || "client";
-  await safeReply(ctx, "Выберите раздел в меню ниже 👇", getMainMenuKeyboard(role));
-});
-
 // ✅ Для идентификации пользователя всегда используем ctx.from.id
 function getActorId(ctx) {
   return ctx?.from?.id || ctx?.chat?.id || null;
@@ -770,12 +724,8 @@ async function handleSvcEditWizardPhoto(ctx) {
     return true;
   }
 
-  const tgRef = `tgfile:${fileId}`;
+  const tgRef = `tg:${fileId}`;
   if (!Array.isArray(draft.images)) draft.images = [];
- if (draft.images.length >= 10) {
-   await safeReply(ctx, "⚠️ Максимум 10 фото. Удалите лишние или нажмите «✅ Готово».", buildEditImagesKeyboard(draft));
-   return true;
- }
   draft.images.push(tgRef);
 
   const count = draft.images.length;
@@ -1044,39 +994,6 @@ bot.action(/^svc_actual:(\d+):(yes|no|extend7)$/, async (ctx) => {
     try { await ctx.answerCbQuery("Ошибка. Попробуйте ещё раз", { show_alert: true }); } catch {}
   }
 });
-
-// ===================== START (deep-link payload support) =====================
-bot.start(async (ctx) => {
-  try {
-    if (!ctx.session) ctx.session = {};
-
-    const startPayloadRaw = String(ctx.startPayload || "").trim();
-    const startPayload = startPayloadRaw.toLowerCase();
-
-    // Если пришли по deep-link отказной категории:
-    // 1) если уже привязан — сразу показываем entry в поиск по категории
-    // 2) если НЕ привязан — запоминаем payload и ведём по обычному сценарию привязки
-    if (isRefusedStartPayload(startPayload)) {
-      if (ctx.session.linked && !ctx.session.pending) {
-        return openRefusedSearchEntry(ctx, startPayload);
-      }
-      ctx.session.afterLinkStartPayload = startPayload;
-      // дальше — обычный старт: спросить роль / попросить телефон
-    }
-
-    // ---- дальше твоя текущая логика /start ----
-    // Ничего не ломаем: оставляем обработку start/my_empty/search_empty и т.д.
-
-    // ВАЖНО: если у тебя ниже есть ранние return'ы на startPayloadRaw === "start" / "my_empty",
-    // то payload refused_* уже обработан выше (мы не return'им, если не привязан),
-    // и пользователь пойдёт по нормальной привязке.
-
-  } catch (e) {
-    console.error("[tg-bot] /start error:", e?.message || e);
-  }
-});
-
-  
 // ===================== /ACTUAL REMINDER CALLBACK =====================
 
 bot.action("svc_edit:skip", async (ctx) => {
@@ -2034,8 +1951,7 @@ function resetServiceWizard(ctx) {
   if (!ctx.session) return;
   ctx.session.state = null;
   ctx.session.serviceDraft = null;
-  // лучше всегда массив, чтобы .pop/.push не падали
-  ctx.session.wizardStack = [];
+  ctx.session.wizardStack = null;
 }
 
 function forceCloseEditWizard(ctx) {
@@ -2053,19 +1969,8 @@ function forceCloseEditWizard(ctx) {
     ctx.session.editWiz.step = "";
   }
 
-  // ✅ полностью вычищаем след редактирования
-  ctx.session.editWiz = null;
-  ctx.session.editDraft = null; // если где-то осталось legacy
-  ctx.session.editingServiceId = null;
-
   if (Array.isArray(ctx.session.wizardStack)) ctx.session.wizardStack = [];
   if (ctx.session.serviceDraft) delete ctx.session.serviceDraft;
-}
-// Telegram caption лимит ~1024 символа — подрезаем, чтобы фото не падало
-function safeCaption(text, limit = 950) {
-  const s = String(text || "");
-  if (s.length <= limit) return s;
-  return s.slice(0, limit - 3) + "...";
 }
 
 function parseYesNo(text) {
@@ -2688,17 +2593,6 @@ async function handlePhoneRegistration(ctx, requestedRole, phone) {
       await ctx.reply("✅ Привязка выполнена.");
     }
 
-    // ✅ NEW: если пользователь пришёл по deep-link /start refused_*,
-    // то сразу показываем entry в поиск по этой категории (вместо обычного меню).
-    const after = String(ctx.session?.afterLinkStartPayload || "").trim().toLowerCase();
-    if (after && typeof isRefusedStartPayload === "function" && isRefusedStartPayload(after)) {
-      ctx.session.afterLinkStartPayload = null;
-      // Важно: openRefusedSearchEntry должен быть объявлен выше по файлу (или импортирован).
-      if (typeof openRefusedSearchEntry === "function") {
-        return openRefusedSearchEntry(ctx, after);
-      }
-    }
-
     await ctx.reply("📌 Готово! Меню доступно ниже 👇", getMainMenuKeyboard(finalRole));
   } catch (e) {
     console.error("[tg-bot] handlePhoneRegistration error:", e?.response?.data || e);
@@ -3058,10 +2952,11 @@ bot.action("prov_services:create", async (ctx) => {
     await ctx.reply("➕ Ок! Давайте создадим новую услугу 👇");
 
     if (!ctx.session) ctx.session = {};
-    // ✅ ВАЖНО: жестко закрываем edit-wizard, чтобы создание НЕ перехватывалось редактированием
-    forceCloseEditWizard(ctx);
+    // ✅ ВАЖНО: сбрасываем edit-wizard, чтобы создание НЕ перехватывалось редактированием
+    ctx.session.editWiz = null;
+    ctx.session.editDraft = null;
+    ctx.session.editingServiceId = null;
     
-    // ✅ старт мастера создания
     ctx.session.serviceDraft = { category: null, images: [] };
     ctx.session.wizardStack = [];
     ctx.session.state = "svc_create_choose_category";
@@ -3085,22 +2980,27 @@ bot.action("prov_services:create", async (ctx) => {
 bot.action("prov_services:list", async (ctx) => {
   await ctx.answerCbQuery();
 
-  // 🔴 принудительно закрываем wizard-редактирования + мастер создания
+  // 🔴 принудительно закрываем wizard
   forceCloseEditWizard(ctx);
-  resetServiceWizard(ctx);
 
   // просто переиспользуем существующую логику
-  return safeReply(ctx, "🧳 Выберите действие:", {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "📤 Выбрать мою услугу", switch_inline_query_current_chat: "#my refused_tour" }],
-        [{ text: "🖼 Карточками", callback_data: "prov_services:list_cards" }],
-        [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
-        [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
-      ],
-    },
-  });
+  return ctx.telegram.sendMessage(
+    ctx.chat.id,
+    "🧳 Выберите действие:",
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "📤 Выбрать мою услугу", switch_inline_query_current_chat: "#my refused_tour" }],
+          [{ text: "🖼 Карточками", callback_data: "prov_services:list_cards" }],
+          [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
+          [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
+        ],
+      },
+    }
+  );
 });
+
+
 bot.action("prov_services:list_cards", async (ctx) => {
   try {
     await ctx.answerCbQuery();
@@ -3230,13 +3130,13 @@ const keyboard = {
           if (photoUrl.startsWith("tgfile:")) {
             const fileId = photoUrl.replace(/^tgfile:/, "");
             await ctx.replyWithPhoto(fileId, {
-              caption: safeCaption(msg),
+              caption: msg,
               parse_mode: "Markdown",
               reply_markup: keyboard,
             });
           } else {
             await ctx.replyWithPhoto(photoUrl, {
-              caption: safeCaption(msg),
+              caption: msg,
               parse_mode: "Markdown",
               reply_markup: keyboard,
             });
@@ -3897,16 +3797,6 @@ async function handleSvcEditWizardText(ctx) {
             await safeReply(ctx, "⚠️ Введите корректное число или «пропустить».", editWizNavKeyboard());
             return true;
           }
-        // ✅ gross >= net
-        const netNum = Number(draft.price);
-        if (Number.isFinite(netNum) && n < netNum) {
-          await safeReply(
-            ctx,
-            `⚠️ БРУТТО не может быть меньше НЕТТО.\nНЕТТО: ${netNum}\nВведите БРУТТО ещё раз или «пропустить».`,
-            editWizNavKeyboard()
-          );
-          return true;
-        }
           draft.grossPrice = n;
         }
         await go("svc_edit_expiration", `⏳ Актуально до (YYYY-MM-DD HH:mm) или "нет"\nТекущее: ${draft.expiration || "(нет)"}\nВведите или нажмите «⏭ Пропустить»:`);
@@ -4003,10 +3893,10 @@ async function handleSvcEditWizardText(ctx) {
 
 bot.on("text", async (ctx, next) => {
   try {
-    
+    const state = ctx.session?.state || null;
       // ===================== EDIT WIZARD (svc_edit_*) =====================
   if (await handleSvcEditWizardText(ctx)) return;
-    const state = ctx.session?.state || null;
+
 // 1) быстрый запрос
     if (state === "awaiting_request_message" && ctx.session.pendingRequestServiceId) {
       const serviceId = ctx.session.pendingRequestServiceId;
@@ -4014,38 +3904,50 @@ bot.on("text", async (ctx, next) => {
       const from = ctx.from || {};
       const chatId = ctx.chat.id;
 
-      try {
-        await axios.post("/api/telegram/quick-request", {
-          serviceId,
-          chatId,
-          message: msg,
-          username: from.username || null,
-          firstName: from.first_name || null,
-          lastName: from.last_name || null,
+      if (!MANAGER_CHAT_ID) {
+        await ctx.reply("⚠️ Быстрый запрос сейчас недоступен. Попробуйте позже.");
+      } else {
+        const safeFirst = escapeMarkdown(from.first_name || "");
+        const safeLast = escapeMarkdown(from.last_name || "");
+        const safeUsername = escapeMarkdown(from.username || "нет username");
+        const safeMsg = escapeMarkdown(msg);
+
+        const serviceUrl = SERVICE_URL_TEMPLATE
+          .replace("{SITE_URL}", SITE_URL)
+          .replace("{id}", String(serviceId));
+        
+        const textForManager =
+          "🆕 *Новый быстрый запрос из Bot Otkaznyx Turov*\n\n" +
+          `Услуга ID: *${escapeMarkdown(serviceId)}*\n` +
+          `Ссылка: ${escapeMarkdown(serviceUrl)}\n` +
+          `От: ${safeFirst} ${safeLast} (@${safeUsername})\n` +
+          `Telegram chatId: \`${chatId}\`\n\n` +
+          "*Сообщение:*\n" +
+          safeMsg;
+
+        const replyMarkup =
+          from.username
+            ? {
+                inline_keyboard: [
+                 [{ text: "💬 Написать пользователю", url: `https://t.me/${String(from.username).replace(/^@/, "")}` }],
+                ],
+              }
+            : undefined;
+
+        await bot.telegram.sendMessage(MANAGER_CHAT_ID, textForManager, {
+          parse_mode: "Markdown",
+          ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
         });
 
-        await ctx.reply("✅ Спасибо!\n\nЗапрос отправлен! С вами свяжутся в ближайшее время.");
+        await ctx.reply(
+          "✅ Спасибо!\n\nЗапрос отправлен! С вами свяжутся в ближайшее время."
+        );
+      }
 
-        // ✅ сбрасываем состояние только при успехе
-        ctx.session.state = null;
-        ctx.session.pendingRequestServiceId = null;
-        return;
-      } catch (err) {
-        const status = err?.response?.status;
-        if (status === 429) {
-          // ⏳ антиспам: НЕ сбрасываем state/serviceId
-          await ctx.reply("⏳ Слишком часто. Подождите 3 минуты и отправьте сообщение ещё раз.");
-          return;
-        }
-
-        console.error("[tg-bot] quick-request error:", err?.response?.data || err);
-        await ctx.reply("⚠️ Не удалось отправить запрос. Попробуйте позже.");
-
-        // ⚠️ на прочих ошибках сбрасываем, чтобы не зависнуть
-        ctx.session.state = null;
-        ctx.session.pendingRequestServiceId = null;
-        return;
-      }    }
+      ctx.session.state = null;
+      ctx.session.pendingRequestServiceId = null;
+      return;
+    }
 
     // 2) мастер создания отказных (tour + hotel)
     if (state && (state.startsWith("svc_create_") || state.startsWith("svc_hotel_"))) {
@@ -4443,8 +4345,8 @@ bot.on("text", async (ctx, next) => {
 
         case "svc_create_expiration": {
           const lower = text.trim().toLowerCase();
-          const normExp = normalizeDateTimeInputHelper(text);
-          
+          const normExp = normalizeDateTimeInput(text);
+
           if (normExp === null && lower !== "нет") {
             await ctx.reply(
               "😕 Не понял дату актуальности.\nВведите *YYYY-MM-DD HH:mm* или *YYYY.MM.DD HH:mm* или `нет`.",
@@ -4469,7 +4371,7 @@ bot.on("text", async (ctx, next) => {
         }
 
         case "svc_create_photo":
-          if (["пропустить", "skip", "-", "нет"].includes(text.trim().toLowerCase())) {
+          if (text.trim().toLowerCase() === "пропустить") {
             draft.images = [];
             await finishCreateServiceFromWizard(ctx);
             return;
@@ -4516,7 +4418,7 @@ bot.on("photo", async (ctx, next) => {
         return;
       }
 
-      const tgRef = `tgfile:${fileId}`;
+      const tgRef = `tg:${fileId}`;
       if (!Array.isArray(legacyDraft.images)) legacyDraft.images = [];
       legacyDraft.images.push(tgRef);
 
@@ -4550,7 +4452,7 @@ bot.on("photo", async (ctx, next) => {
       return;
     }
 
-    const tgRef = `tgfile:${fileId}`;
+    const tgRef = `tg:${fileId}`;
     if (!Array.isArray(draft.images)) draft.images = [];
     draft.images.push(tgRef);
     draft.telegramPhotoFileId = fileId;
@@ -4708,6 +4610,17 @@ bot.on("inline_query", async (ctx) => {
       itemsForInline = itemsForInline.filter((svc) => {
         try {
           const det = parseDetailsAny(svc.details);
+          // ✅ подхватываем существующие изображения услуги
+          let imagesArr = svc.images ?? [];
+          if (typeof imagesArr === "string") {
+            try {
+              imagesArr = JSON.parse(imagesArr);
+            } catch {
+              imagesArr = imagesArr ? [imagesArr] : [];
+            }
+          }
+          if (!Array.isArray(imagesArr)) imagesArr = [];
+
           return isServiceActual(det, svc);
         } catch (_) {
           return false;
@@ -4825,6 +4738,13 @@ bot.on("inline_query", async (ctx) => {
 
       const title = truncate(normalizeTitleSoft(titleSource), 60);
 
+      console.log("[inline]", {
+        svcId: svc.id,
+        photoUrl,
+        thumbUrl,
+        inlinePhotoUrl,
+      });
+
       results.push({
         id: `${svcCategory}:${svc.id}`,
         type: "article",
@@ -4839,8 +4759,8 @@ bot.on("inline_query", async (ctx) => {
       });
     }
 
-      // ✅ Кэшируем уже собранные results (дорого пересобирать thumbs)
-      cacheSet(resKey, { resultsAll: results }, 30_000); // 30 секунд
+          // ✅ Кэшируем уже собранные results (дорого пересобирать thumbs)
+      cacheSet(resKey, { resultsAll: results }, 30000);
       
       // ✅ Pagination: Telegram offset
       const page = results.slice(offset, offset + pageSize);
@@ -4905,7 +4825,7 @@ bot.action(/^svc_edit_img_(?:remove|del):(\d+)$/, async (ctx) => {
 
     await safeReply(
       ctx,
-      `✅ Удалено. Сейчас в услуге: ${draft.images.length} шт.\n\nОтправьте новое фото или нажмите «✅ Готово».`,
+      `✅ Удалено. Сейчас в услуге: ${draft.images.length} шт.\\n\\nОтправьте новое фото или нажмите «✅ Готово».`,
       buildEditImagesKeyboard(draft)
     );
   } catch (e) {
