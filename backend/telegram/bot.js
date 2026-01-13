@@ -4705,6 +4705,8 @@ bot.on("inline_query", async (ctx) => {
     });
 
     const results = [];
+    
+    const TG_PLACEHOLDER = `${TG_IMAGE_BASE}/api/telegram/placeholder.png`;
 
     for (const svc of itemsSorted.slice(0, 50)) {
       const svcCategory = svc.category || category || "refused_tour";
@@ -4765,13 +4767,11 @@ bot.on("inline_query", async (ctx) => {
           thumbUrl = u;
         }
       }
-
       
-      const inlinePhotoUrl =
-        typeof thumbUrl === "string" && thumbUrl.startsWith("https://")
-          ? thumbUrl
-          : null;
-
+       const inlinePhotoUrl =
+         typeof thumbUrl === "string" && thumbUrl.startsWith("https://")
+           ? thumbUrl
+           : TG_PLACEHOLDER;
 
       // ✅ Точечный фикс по задаче:
       // - убираем "Отказной тур" как заголовок по умолчанию
@@ -4793,19 +4793,15 @@ bot.on("inline_query", async (ctx) => {
         inlinePhotoUrl,
       });
 
-      results.push({
-        id: `${svcCategory}:${svc.id}`,
-        type: "article",
-        title,
-        description,
-        input_message_content: {
-          message_text: text,
-          disable_web_page_preview: false,
-        },
-        ...(inlinePhotoUrl ? { thumb_url: inlinePhotoUrl } : {}),
-        reply_markup: isMy ? keyboardForMy : keyboardForClient,
-      });
-    }
+     results.push({
+       id: `${svcCategory}:${svc.id}`,
+       type: "photo",
+       photo_url: inlinePhotoUrl,
+       thumb_url: inlinePhotoUrl,
+       caption: text,
+       parse_mode: "HTML",
+       reply_markup: isMy ? keyboardForMy : keyboardForClient,
+     });
 
           // ✅ Кэшируем уже собранные results (дорого пересобирать thumbs)
       cacheSet(resKey, { resultsAll: results }, 30000);
