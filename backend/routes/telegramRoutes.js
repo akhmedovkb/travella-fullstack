@@ -111,7 +111,7 @@ async function handleWebhook(req, res) {
         let prov = null;
         try {
           const r = await pool.query(
-            `SELECT id, name FROM providers WHERE telegram_chat_id = $1 LIMIT 1`,
+            ` id, name FROM providers WHERE telegram_chat_id = $1 LIMIT 1`,
             [who]
           );
           prov = r.rows[0] || null;
@@ -136,7 +136,7 @@ async function handleWebhook(req, res) {
         const row =
           (
             await pool.query(
-              `SELECT phone, status FROM leads WHERE id = $1`,
+              ` phone, status FROM leads WHERE id = $1`,
               [leadId]
             )
           ).rows[0] || {};
@@ -181,7 +181,7 @@ async function handleWebhook(req, res) {
         assigneeName = null;
       try {
         const r = await pool.query(
-          `SELECT l.phone, p.name AS assignee_name
+          ` l.phone, p.name AS assignee_name
              FROM leads l
         LEFT JOIN providers p ON p.id = l.assignee_provider_id
             WHERE l.id=$1 LIMIT 1`,
@@ -313,7 +313,7 @@ router.get("/service-image/:id", async (req, res) => {
     }
 
     const result = await pool.query(
-      "SELECT images FROM services WHERE id = $1 LIMIT 1",
+      " images FROM services WHERE id = $1 LIMIT 1",
       [serviceId]
     );
 
@@ -464,7 +464,8 @@ router.get("/service/:serviceId", async (req, res) => {
       SELECT
         s.*,
         COALESCE(p.name,'') AS provider_name,
-        COALESCE(p.telegram_username,'') AS provider_telegram
+        ''::text AS provider_telegram,
+        COALESCE(p.telegram_web_chat_id, p.telegram_chat_id) AS provider_chat_id
       FROM services s
       LEFT JOIN providers p ON p.id = s.provider_id
       WHERE s.id = $1
