@@ -28,7 +28,7 @@ const {
   buildLeadKB,
 } = require("../utils/telegram");
 
-const { handleServiceActualCallback } = require("../handlers/serviceActualHandler");
+const { handleServiceActualCallback } = require("../telegram/handlers/serviceActualHandler");
 
 // ---------- ENV / секреты ----------
 const SECRET_PATH = process.env.TELEGRAM_WEBHOOK_SECRET || "devsecret"; // для URL /webhook/<SECRET>
