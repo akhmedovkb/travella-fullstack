@@ -450,6 +450,40 @@ router.get(
   telegramClientController.getProfileByChat
 );
 
+// ✅ Открыть конкретную услугу по ID (для deep-link refused_<id> из кнопки "Открыть в боте")
+// GET /api/telegram/service/284
+router.get("/service/:serviceId", async (req, res) => {
+  try {
+    const serviceId = Number(req.params.serviceId);
+    if (!Number.isFinite(serviceId) || serviceId <= 0) {
+      return res.status(400).json({ success: false, error: "bad_id" });
+    }
+
+    const r = await pool.query(
+      `
+      SELECT
+        s.*,
+        COALESCE(p.name,'') AS provider_name,
+        COALESCE(p.telegram_username,'') AS provider_telegram
+      FROM services s
+      LEFT JOIN providers p ON p.id = s.provider_id
+      WHERE s.id = $1
+      LIMIT 1
+      `,
+      [serviceId]
+    );
+
+    if (!r.rows.length) {
+      return res.status(404).json({ success: false, error: "not_found" });
+    }
+
+    return res.json({ success: true, service: r.rows[0] });
+  } catch (e) {
+    console.error("[tg] /service/:id error:", e?.message || e);
+    return res.status(500).json({ success: false, error: "server_error" });
+  }
+});
+
 // поиск отказных услуг по категории
 // GET /api/telegram/client/:chatId/search?category=refused_tour
 router.get(
