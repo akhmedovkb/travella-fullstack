@@ -229,24 +229,29 @@ async function handleWebhook(req, res) {
 
       if (mStart) {
         const norm = payload.replace(/\s+/g, "").toLowerCase();
+      
+        // ✅ ВАЖНО: refused_<id> — НЕ трогаем, пусть уходит в bot.js
+        if (/^refused_\d+$/.test(norm)) {
+          return res.json({ ok: true, passthrough: true });
+        }
+      
         let providerId = null;
         let clientId = null;
         const mp = norm.match(/^p[-_]?(\d+)$/);
         const mc = norm.match(/^c[-_]?(\d+)$/);
-        if (mp) providerId = Number(mp[1]);
-        if (mc) clientId = Number(mc[1]);
-
-        if (Number.isFinite(providerId) && providerId > 0) {
-          await linkProviderChat(providerId, chatId, username);
+      
+        if (mp) {
+          await linkProviderChat(Number(mp[1]), chatId, username);
           await tgSend(chatId, WELCOME_TEXT);
-          return res.json({ ok: true, linked: "provider", id: providerId });
+          return res.json({ ok: true, linked: "provider", id: mp[1] });
         }
-        if (Number.isFinite(clientId) && clientId > 0) {
-          await linkClientChat(clientId, chatId, username);
+      
+        if (mc) {
+          await linkClientChat(Number(mc[1]), chatId, username);
           await tgSend(chatId, WELCOME_TEXT);
-          return res.json({ ok: true, linked: "client", id: clientId });
+          return res.json({ ok: true, linked: "client", id: mc[1] });
         }
-
+      
         await tgSend(chatId, WELCOME_TEXT);
         return res.json({ ok: true, linked: null });
       }
