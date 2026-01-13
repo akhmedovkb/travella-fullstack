@@ -111,8 +111,7 @@ async function handleWebhook(req, res) {
           await handleServiceActualCallback({
             callbackQueryId: cq.id,
             data,
-            chatId: cq.message?.chat?.id,
-            fromId: cq.from?.id,
+            fromChatId: cq.message?.chat?.id,
           });
         } catch (e) {
           console.error("[tg] svc_actual callback error:", e?.message || e);
