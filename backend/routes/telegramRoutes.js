@@ -7,6 +7,8 @@ const router = express.Router();
 const pool = require("../db");
 const telegramClientController = require("../controllers/telegramClientController");
 const telegramProviderController = require("../controllers/telegramProviderController");
+const telegramQuickRequestController = require("../controllers/telegramQuickRequestController");
+
 let sharp = null;
 try {
   // sharp опционален: если не установлен — backend не падает
@@ -25,6 +27,8 @@ const {
   linkClientChat,
   buildLeadKB,
 } = require("../utils/telegram");
+
+const { handleServiceActualCallback } = require("../telegram/handlers/serviceActualHandler");
 
 // ---------- ENV / секреты ----------
 const SECRET_PATH = process.env.TELEGRAM_WEBHOOK_SECRET || "devsecret"; // для URL /webhook/<SECRET>
@@ -98,8 +102,67 @@ async function handleWebhook(req, res) {
     if (update.callback_query) {
       const cq = update.callback_query;
       const data = String(cq.data || "");
+
+      // ✅ SERVICE ACTUAL (Проверка актуальности / снять / продлить)
+      // callback_data: svc_actual:<serviceId>:yes|no|extend7|ping
+      const mSvc = data.match(/^svc_actual:(\d+):(yes|no|extend7|ping)$/);
+      if (mSvc) {
+        try {
+          await handleServiceActualCallback({
+            callbackQueryId: cq.id,
+            data,
+            fromChatId: cq.message?.chat?.id,
+          });
+        } catch (e) {
+          console.error("[tg] svc_actual callback error:", e?.message || e);
+          await tgAnswerCallbackQuery(cq.id, "⚠️ Ошибка. Попробуйте ещё раз");
+        }
+        return res.json({ ok: true });
+      }
       if (/^noop:\d+$/.test(data)) {
         await tgAnswerCallbackQuery(cq.id, "Готово ✅");
+        return res.json({ ok: true });
+      }
+      // ===== QUICK REQUEST CALLBACKS
+      let mAck = data.match(/^qr:ack:(\d+)$/);
+      let mReply = data.match(/^qr:reply:(\d+)$/);
+
+      if (mAck) {
+        const requestId = Number(mAck[1]);
+        if (!Number.isFinite(requestId) || requestId <= 0) {
+          await tgAnswerCallbackQuery(cq.id, "Некорректный запрос");
+          return res.json({ ok: true });
+        }
+        const r = await pool.query(
+          `UPDATE telegram_quick_requests
+             SET acknowledged_at = NOW()
+           WHERE id = $1
+           RETURNING requester_chat_id`,
+          [requestId]
+        );
+
+        if (r.rows[0]?.requester_chat_id) {
+          await tgSend(
+            r.rows[0].requester_chat_id,
+            "✅ Поставщик принял ваш запрос и скоро ответит."
+          );
+        }
+
+        await tgAnswerCallbackQuery(cq.id, "Принято");
+        return res.json({ ok: true });
+      }
+
+      if (mReply) {
+        const requestId = Number(mReply[1]);
+        if (!Number.isFinite(requestId) || requestId <= 0) {
+          await tgAnswerCallbackQuery(cq.id, "Некорректный запрос");
+          return res.json({ ok: true });
+        }
+        // сохраняем ожидание ответа провайдера (память процесса)
+        global.__qrReply = global.__qrReply || {};
+        global.__qrReply[String(cq.message.chat.id)] = requestId;
+
+        await tgAnswerCallbackQuery(cq.id, "Напишите ответ следующим сообщением");
         return res.json({ ok: true });
       }
 
@@ -223,6 +286,30 @@ async function handleWebhook(req, res) {
       const chatId = msg.chat.id;
       const username = msg.from?.username || msg.chat?.username || null;
       const text = String(msg.text || "").trim();
+      
+          // ===== QUICK REQUEST PROVIDER REPLY (ВСТАВИТЬ ЗДЕСЬ) =====
+      if (global.__qrReply && global.__qrReply[String(chatId)]) {
+        const requestId = global.__qrReply[String(chatId)];
+        delete global.__qrReply[String(chatId)];
+    
+        const qr = await pool.query(
+          `UPDATE telegram_quick_requests
+             SET replied_at = NOW(), reply_text = $2
+           WHERE id = $1
+           RETURNING requester_chat_id`,
+          [requestId, text]
+        );
+    
+        if (qr.rows[0]?.requester_chat_id) {
+          await tgSend(
+            qr.rows[0].requester_chat_id,
+            "💬 Ответ от поставщика:\n\n" + text
+          );
+        }
+    
+        await tgSend(chatId, "✅ Ответ отправлен клиенту");
+        return res.json({ ok: true });
+      }
 
       const mStart = text.match(/^\/start(?:@\S+)?(?:\s+(.+))?$/i);
       const payload = (mStart && mStart[1] ? mStart[1] : "").trim();
@@ -438,6 +525,12 @@ router.get("/service-image/:id", async (req, res) => {
 
 // привязка аккаунта по телефону
 router.post("/link", telegramClientController.linkAccount);
+
+// быстрый запрос владельцу услуги (создаёт/шлёт сообщение)
+router.post(
+  "/quick-request",
+  telegramQuickRequestController.sendQuickRequest
+);
 
 // быстрый профиль по chatId
 router.get(
