@@ -142,7 +142,10 @@ function cacheGet(key) {
 }
 
 function cacheSet(key, data, ttlMs = INLINE_CACHE_TTL_MS) {
-  inlineCache.set(key, { ts: Date.now(), ttl: ttlMs, data });
+  // если ttl маленький (например 30, 60, 120), считаем что это секунды
+  const ttl = Number(ttlMs);
+  const ttlFixed = ttl > 0 && ttl < 1000 ? ttl * 1000 : ttl;
+  inlineCache.set(key, { ts: Date.now(), ttl: ttlFixed, data });
 
   // LRU-prune
   while (inlineCache.size > INLINE_CACHE_MAX) {
@@ -767,8 +770,12 @@ async function handleSvcEditWizardPhoto(ctx) {
     return true;
   }
 
-  const tgRef = `tg:${fileId}`;
+  const tgRef = `tgfile:${fileId}`;
   if (!Array.isArray(draft.images)) draft.images = [];
+ if (draft.images.length >= 10) {
+   await safeReply(ctx, "⚠️ Максимум 10 фото. Удалите лишние или нажмите «✅ Готово».", buildEditImagesKeyboard(draft));
+   return true;
+ }
   draft.images.push(tgRef);
 
   const count = draft.images.length;
@@ -3890,6 +3897,16 @@ async function handleSvcEditWizardText(ctx) {
             await safeReply(ctx, "⚠️ Введите корректное число или «пропустить».", editWizNavKeyboard());
             return true;
           }
+        // ✅ gross >= net
+        const netNum = Number(draft.price);
+        if (Number.isFinite(netNum) && n < netNum) {
+          await safeReply(
+            ctx,
+            `⚠️ БРУТТО не может быть меньше НЕТТО.\nНЕТТО: ${netNum}\nВведите БРУТТО ещё раз или «пропустить».`,
+            editWizNavKeyboard()
+          );
+          return true;
+        }
           draft.grossPrice = n;
         }
         await go("svc_edit_expiration", `⏳ Актуально до (YYYY-MM-DD HH:mm) или "нет"\nТекущее: ${draft.expiration || "(нет)"}\nВведите или нажмите «⏭ Пропустить»:`);
@@ -4822,8 +4839,8 @@ bot.on("inline_query", async (ctx) => {
       });
     }
 
-          // ✅ Кэшируем уже собранные results (дорого пересобирать thumbs)
-      cacheSet(resKey, { resultsAll: results }, 30000);
+      // ✅ Кэшируем уже собранные results (дорого пересобирать thumbs)
+      cacheSet(resKey, { resultsAll: results }, 30_000); // 30 секунд
       
       // ✅ Pagination: Telegram offset
       const page = results.slice(offset, offset + pageSize);
