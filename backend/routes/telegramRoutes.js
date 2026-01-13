@@ -28,6 +28,8 @@ const {
   buildLeadKB,
 } = require("../utils/telegram");
 
+const { handleServiceActualCallback } = require("../handlers/serviceActualHandler");
+
 // ---------- ENV / секреты ----------
 const SECRET_PATH = process.env.TELEGRAM_WEBHOOK_SECRET || "devsecret"; // для URL /webhook/<SECRET>
 const HEADER_TOKEN = process.env.TELEGRAM_WEBHOOK_TOKEN || ""; // если задашь при setWebhook: secret_token=...
@@ -100,6 +102,24 @@ async function handleWebhook(req, res) {
     if (update.callback_query) {
       const cq = update.callback_query;
       const data = String(cq.data || "");
+
+      // ✅ SERVICE ACTUAL (Проверка актуальности / снять / продлить)
+      // callback_data: svc_actual:<serviceId>:yes|no|extend7|ping
+      const mSvc = data.match(/^svc_actual:(\d+):(yes|no|extend7|ping)$/);
+      if (mSvc) {
+        try {
+          await handleServiceActualCallback({
+            callbackQueryId: cq.id,
+            data,
+            chatId: cq.message?.chat?.id,
+            fromId: cq.from?.id,
+          });
+        } catch (e) {
+          console.error("[tg] svc_actual callback error:", e?.message || e);
+          await tgAnswerCallbackQuery(cq.id, "⚠️ Ошибка. Попробуйте ещё раз");
+        }
+        return res.json({ ok: true });
+      }
       if (/^noop:\d+$/.test(data)) {
         await tgAnswerCallbackQuery(cq.id, "Готово ✅");
         return res.json({ ok: true });
