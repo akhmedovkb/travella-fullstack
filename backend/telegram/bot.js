@@ -2640,6 +2640,54 @@ bot.start(async (ctx) => {
       if (!ctx.session) ctx.session = {};
       ctx.session.role = role;
       ctx.session.linked = true;
+      // ✅ Deep-link: refused_<serviceId> => показать конкретную услугу
+      const mRef = startPayloadRaw.match(/^refused_(\d+)$/i);
+      if (mRef) {
+        const serviceId = Number(mRef[1]);
+
+        try {
+          // берём услугу и данные поставщика (имена полей подстрой под свою БД)
+          const { data } = await axios.get(`/api/telegram/service/${serviceId}`, {
+            params: { role },
+          });
+
+          if (!data?.success || !data?.service) {
+            await ctx.reply("❗️Услуга не найдена или уже снята с публикации.");
+            await ctx.reply("🏠 Главное меню:", getMainMenuKeyboard(role));
+            return;
+          }
+
+          const svc = data.service;
+          const category = String(svc.category || "").toLowerCase();
+
+          // buildServiceMessage у тебя уже есть в bot.js (ты его используешь для карточек)
+          const { text, photoUrl, serviceUrl } = buildServiceMessage(svc, category, role);
+
+          const kb = {
+            inline_keyboard: [
+              [{ text: "Подробнее на сайте", url: serviceUrl }],
+              [{ text: "📩 Быстрый запрос", callback_data: `quick:${serviceId}` }],
+            ],
+          };
+
+          if (photoUrl) {
+            await ctx.replyWithPhoto(photoUrl, {
+              caption: text,
+              parse_mode: "Markdown",
+              reply_markup: kb,
+            });
+          } else {
+            await ctx.reply(text, { parse_mode: "Markdown", reply_markup: kb });
+          }
+
+          return; // ✅ не показываем главное меню вместо услуги
+        } catch (e) {
+          console.log("[tg-bot] refused_<id> open error:", e?.response?.data || e?.message || e);
+          await ctx.reply("⚠️ Не удалось открыть услугу. Попробуйте позже.");
+          await ctx.reply("🏠 Главное меню:", getMainMenuKeyboard(role));
+          return;
+        }
+      }
 
       if (startPayloadRaw === "start") {
         await ctx.reply("🏠 Главное меню:", getMainMenuKeyboard(role));
