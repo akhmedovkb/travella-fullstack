@@ -4703,11 +4703,19 @@ bot.on("inline_query", async (ctx) => {
       if (!db) return -1;
       return da.getTime() - db.getTime();
     });
-
-    const results = [];
+    
+    function placeholderKindByCategory(category) {
+      const c = String(category || "").toLowerCase();
+      if (c === "refused_tour") return "tour";
+      if (c === "refused_hotel") return "hotel";
+      if (c === "refused_flight") return "flight";
+      if (c === "refused_ticket" || c === "refused_event_ticket") return "ticket";
+      return "default";
+    }
     
     const TG_PLACEHOLDER = `${TG_IMAGE_BASE}/api/telegram/placeholder.png`;
-
+    const results = [];
+    
     for (const svc of itemsSorted.slice(0, 50)) {
       const svcCategory = svc.category || category || "refused_tour";
 
