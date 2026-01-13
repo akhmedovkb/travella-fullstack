@@ -278,10 +278,23 @@ router.get("/webhook/:secret/_debug/ping", (req, res) => {
 // =====================================================================
 // ✅ NEW: Встроенный placeholder (гарантированный 200 image/png)
 // =====================================================================
-function sendPlaceholderPng(res) {
-  const png1x1 =
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO9oG9cAAAAASUVORK5CYII=";
-  const buf = Buffer.from(png1x1, "base64");
+function sendPlaceholderPng(res, kind = "default") {
+  const MAP = {
+    // 1x1 PNG разного цвета (лёгкие, быстрые, всегда 200)
+    default:
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO9oG9cAAAAASUVORK5CYII=",
+    tour:
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgWPAfAAJDAaDaYUceAAAAAElFTkSuQmCC",
+    hotel:
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP438MAAAQZAYzvQbwjAAAAAElFTkSuQmCC",
+    flight:
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNYwPAfAALjAaBqldfwAAAAAElFTkSuQmCC",
+    ticket:
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgOFEBAAIMAUF+QUSHAAAAAElFTkSuQmCC",
+  };
+
+  const b64 = MAP[kind] || MAP.default;
+  const buf = Buffer.from(b64, "base64");
   res.setHeader("Content-Type", "image/png");
   res.setHeader("Content-Length", buf.length);
   res.setHeader("Cache-Control", "public, max-age=86400");
@@ -290,7 +303,13 @@ function sendPlaceholderPng(res) {
 
 // GET /api/telegram/placeholder.png
 router.get("/placeholder.png", (req, res) => {
-  return sendPlaceholderPng(res);
+  return sendPlaceholderPng(res, "default");
+});
+
+// GET /api/telegram/placeholder/tour.png (hotel/flight/ticket/default)
+router.get("/placeholder/:kind.png", (req, res) => {
+  const kind = String(req.params.kind || "default").toLowerCase();
+  return sendPlaceholderPng(res, kind);
 });
 
 /**
