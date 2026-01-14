@@ -4705,6 +4705,16 @@ bot.on("inline_query", async (ctx) => {
       return da.getTime() - db.getTime();
     });
 
+    function placeholderKindByCategory(category) {
+      const c = String(category || "").toLowerCase();
+      if (c === "refused_tour") return "tour";
+      if (c === "refused_hotel") return "hotel";
+      if (c === "refused_flight") return "flight";
+      if (c === "refused_ticket" || c === "refused_event_ticket") return "ticket";
+      return "default";
+    }
+
+    const TG_PLACEHOLDER_BASE = `${TG_IMAGE_BASE}/api/telegram/placeholder`;
     const results = [];
 
     for (const svc of itemsSorted.slice(0, 50)) {
@@ -4773,6 +4783,10 @@ bot.on("inline_query", async (ctx) => {
           ? thumbUrl
           : null;
 
+      // ✅ Заглушка по категории (если нет фото или Telegram не принял thumb)
+      const phKind = placeholderKindByCategory(svcCategory);
+      const placeholderUrl = `${TG_PLACEHOLDER_BASE}/${phKind}.png`;
+      const finalThumbUrl = inlinePhotoUrl || placeholderUrl;
 
       // ✅ Точечный фикс по задаче:
       // - убираем "Отказной тур" как заголовок по умолчанию
@@ -4801,9 +4815,11 @@ bot.on("inline_query", async (ctx) => {
         description,
         input_message_content: {
           message_text: text,
-          disable_web_page_preview: false,
+          // иначе Telegram показывает "preview сверху" (тот блок, что ты видел)
+          disable_web_page_preview: true,
         },
-        ...(inlinePhotoUrl ? { thumb_url: inlinePhotoUrl } : {}),
+        // ✅ Всегда показываем картинку слева в выдаче (thumb)
+        thumb_url: finalThumbUrl,
         reply_markup: isMy ? keyboardForMy : keyboardForClient,
       });
     }
