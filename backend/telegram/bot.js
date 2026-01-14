@@ -4584,7 +4584,7 @@ bot.on("inline_query", async (ctx) => {
     // 1) сырой ответ API (короткий TTL)
     // 2) уже собранные inline-results (чуть длиннее, потому что там дорого: thumbs + message build)
     const apiKey = `${baseKey}:api`;
-    const resKey = `${baseKey}:res:v2`;
+    const resKey = `${baseKey}:res:v3`;
 
     // === PAGINATION (Telegram offset) ===
     const offset = Number(String(ctx.inlineQuery?.offset || "0").trim() || 0) || 0;
@@ -4599,7 +4599,7 @@ bot.on("inline_query", async (ctx) => {
       const nextOffset = offset + pageSize < resultsAll.length ? String(offset + pageSize) : "";
 
       await ctx.answerInlineQuery(page, {
-        cache_time: 10,
+        cache_time: 1,
         is_personal: true,
         next_offset: nextOffset,
       });
@@ -4829,7 +4829,7 @@ bot.on("inline_query", async (ctx) => {
       
       try {
         await ctx.answerInlineQuery(page, {
-          cache_time: 10,
+          cache_time: 11,
           is_personal: true,
           next_offset: nextOffset,
         });
