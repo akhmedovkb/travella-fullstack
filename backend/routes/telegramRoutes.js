@@ -342,12 +342,13 @@ router.get("/placeholder/:kind.png", (req, res) => {
  * - если картинок нет/битые — отдаём placeholder 200 image/png
  */
 router.get("/service-image/:id", async (req, res) => {
+  let kind = "default";
   try {
     const serviceId = Number(req.params.id);
 
     // ✅ Telegram-friendly: всегда 200 png
     if (!Number.isFinite(serviceId) || serviceId <= 0) {
-      return sendPlaceholderPng(res, "default");
+      return sendPlaceholderPng(res, kind)
     }
 
     const result = await pool.query(
@@ -357,11 +358,11 @@ router.get("/service-image/:id", async (req, res) => {
 
     // ✅ Telegram-friendly: не 404
     if (!result.rows.length) {
-      return sendPlaceholderPng(res, "default");
+      return sendPlaceholderPng(res, kind);
     }
 
     const row = result.rows[0] || {};
-    const kind = _placeholderKindByCategory(row.category);
+    kind = _placeholderKindByCategory(row.category);
     let images = row.images;
 
     // Если картинок нет — отдаём placeholder
@@ -475,7 +476,7 @@ router.get("/service-image/:id", async (req, res) => {
   } catch (e) {
     console.error("[tg] /service-image error:", e?.message || e);
     // Telegram-friendly
-    return sendPlaceholderPng(res, kind);
+    return sendPlaceholderPng(res, kind || "default");
   }
 });
 
