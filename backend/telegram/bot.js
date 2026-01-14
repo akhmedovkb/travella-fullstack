@@ -4584,7 +4584,7 @@ bot.on("inline_query", async (ctx) => {
     // 1) сырой ответ API (короткий TTL)
     // 2) уже собранные inline-results (чуть длиннее, потому что там дорого: thumbs + message build)
     const apiKey = `${baseKey}:api`;
-    const resKey = `${baseKey}:res:v3`;
+    const resKey = `${baseKey}:res:v4`;
 
     // === PAGINATION (Telegram offset) ===
     const offset = Number(String(ctx.inlineQuery?.offset || "0").trim() || 0) || 0;
