@@ -4801,7 +4801,7 @@ bot.on("inline_query", async (ctx) => {
         svcId: svc.id,
         photoUrl,
         thumbUrl,
-        inlinePhotoUrl,
+        finalThumbUrl,
       });
 
       results.push({
