@@ -305,11 +305,21 @@ function sendPlaceholderPng(res, kind = "default") {
       ? fallbackPath
       : null;
 
-  if (chosen) {
-    res.setHeader("Content-Type", "image/png");
-    res.setHeader("Cache-Control", "public, max-age=86400");
-    return res.sendFile(chosen);
-  }
+    if (chosen) {
+      res.status(200);
+      res.setHeader("Content-Type", "image/png");
+      res.setHeader("Cache-Control", "public, max-age=86400");
+    
+      // ⚠️ важно: Telegram иногда не рисует thumb, если получает 304
+      return res.sendFile(chosen, {
+        etag: false,
+        lastModified: false,
+        headers: {
+          "Content-Type": "image/png",
+          "Cache-Control": "public, max-age=86400",
+        },
+      });
+    }
 
   // Fallback: 1x1 PNG (никогда не 404/HTML для Telegram)
   const png1x1 =
@@ -464,7 +474,7 @@ router.get("/service-image/:id", async (req, res) => {
         return res.send(out);
       } catch (e) {
         console.error("[tg] thumb sharp error:", e?.message || e);
-        return sendPlaceholderPng(res, kind);
+        return sendPlaceholderPng(res, "default");
       }
     }
 
