@@ -4714,7 +4714,8 @@ bot.on("inline_query", async (ctx) => {
       return "default";
     }
 
-    const TG_PLACEHOLDER_BASE = `${TG_IMAGE_BASE}/api/telegram/placeholder`;
+    const TG_PLACEHOLDER = (kind = "default") =>
+      `${TG_IMAGE_BASE}/api/telegram/placeholder/${encodeURIComponent(kind)}.png`;
     const results = [];
 
     for (const svc of itemsSorted.slice(0, 50)) {
@@ -4776,17 +4777,12 @@ bot.on("inline_query", async (ctx) => {
           thumbUrl = u;
         }
       }
-
       
-      const inlinePhotoUrl =
+      const phKind = placeholderKindByCategory(svcCategory);
+      const finalThumbUrl =
         typeof thumbUrl === "string" && thumbUrl.startsWith("https://")
           ? thumbUrl
-          : null;
-
-      // ✅ Заглушка по категории (если нет фото или Telegram не принял thumb)
-      const phKind = placeholderKindByCategory(svcCategory);
-      const placeholderUrl = `${TG_PLACEHOLDER_BASE}/${phKind}.png`;
-      const finalThumbUrl = inlinePhotoUrl || placeholderUrl;
+          : TG_PLACEHOLDER(phKind);
 
       // ✅ Точечный фикс по задаче:
       // - убираем "Отказной тур" как заголовок по умолчанию
