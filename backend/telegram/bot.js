@@ -1809,7 +1809,7 @@ function buildServiceMessage(svc, category, role = "client") {
   if (telegramLine) lines.push(telegramLine);
 
   lines.push("");
-  lines.push(`Подробнее и бронирование: ${serviceUrl}`);
+  lines.push(`Подробнее и бронирование: [открыть](${serviceUrl})`);
 
   const text = lines.join("\n");
   const photoUrl = getFirstImageUrl(svc);
@@ -4811,7 +4811,7 @@ bot.on("inline_query", async (ctx) => {
         description,
         input_message_content: {
           message_text: text,
-          // иначе Telegram показывает "preview сверху" (тот блок, что ты видел)
+          parse_mode: "Markdown",
           disable_web_page_preview: true,
         },
         // ✅ Всегда показываем картинку слева в выдаче (thumb)
