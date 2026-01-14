@@ -1779,7 +1779,9 @@ function buildServiceMessage(svc, category, role = "client") {
   const providerId = svc.provider_id || svc.providerId || svc.provider?.id || null;
   const providerProfileUrl = providerId ? `${SITE_URL}/profile/provider/${providerId}` : null;
 
-  const providerLine = `Поставщик: ${providerName}`;
+  const providerLine = providerProfileUrl
+    ? `Поставщик: [${providerName}](${providerProfileUrl})`
+    : `Поставщик: ${providerName}`;
 
   let telegramLine = null;
   if (providerTelegram) {
@@ -1812,7 +1814,7 @@ function buildServiceMessage(svc, category, role = "client") {
   const text = lines.join("\n");
   const photoUrl = getFirstImageUrl(svc);
 
-  return { text, photoUrl, serviceUrl, providerProfileUrl };
+  return { text, photoUrl, serviceUrl };
 }
 
 /**
@@ -4719,7 +4721,7 @@ bot.on("inline_query", async (ctx) => {
     for (const svc of itemsSorted.slice(0, 50)) {
       const svcCategory = svc.category || category || "refused_tour";
 
-      const { text, photoUrl, serviceUrl, providerProfileUrl } = buildServiceMessage(
+      const { text, photoUrl, serviceUrl } = buildServiceMessage(
         svc,
         svcCategory,
         roleForInline
@@ -4730,9 +4732,6 @@ bot.on("inline_query", async (ctx) => {
 
       const keyboardForClient = {
         inline_keyboard: [
-          ...(providerProfileUrl
-            ? [[{ text: "👤 Поставщик", url: providerProfileUrl }]]
-            : []),
           [
             { text: "Подробнее на сайте", url: serviceUrl },
             { text: "📩 Быстрый запрос", callback_data: `request:${svc.id}` },
