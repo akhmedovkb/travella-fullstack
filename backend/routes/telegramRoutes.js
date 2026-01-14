@@ -1,6 +1,8 @@
 // backend/routes/telegramRoutes.js
 const axiosBase = require("axios");
 const http = axiosBase.create({ timeout: 15000, responseType: "arraybuffer" });
+const path = require("path");
+const fs = require("fs");
 
 const express = require("express");
 const router = express.Router();
@@ -276,25 +278,43 @@ router.get("/webhook/:secret/_debug/ping", (req, res) => {
 });
 
 // =====================================================================
-// ✅ NEW: Встроенный placeholder (гарантированный 200 image/png)
+// ✅ PLACEHOLDERS: реальные PNG + fallback (Telegram-friendly 200 image/png)
 // =====================================================================
-function sendPlaceholderPng(res, kind = "default") {
-  const MAP = {
-    // 1x1 PNG разного цвета (лёгкие, быстрые, всегда 200)
-    default:
-      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO9oG9cAAAAASUVORK5CYII=",
-    tour:
-      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgWPAfAAJDAaDaYUceAAAAAElFTkSuQmCC",
-    hotel:
-      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP438MAAAQZAYzvQbwjAAAAAElFTkSuQmCC",
-    flight:
-      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNYwPAfAALjAaBqldfwAAAAAElFTkSuQmCC",
-    ticket:
-      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgOFEBAAIMAUF+QUSHAAAAAElFTkSuQmCC",
-  };
+function _placeholderKindByCategory(category) {
+  const c = String(category || "").toLowerCase();
+  if (c === "refused_tour") return "tour";
+  if (c === "refused_hotel") return "hotel";
+  if (c === "refused_flight") return "flight";
+  if (c === "refused_ticket" || c === "refused_event_ticket") return "ticket";
+  return "default";
+}
 
-  const b64 = MAP[kind] || MAP.default;
-  const buf = Buffer.from(b64, "base64");
+function sendPlaceholderPng(res, kind = "default") {
+  const safeKind = String(kind || "default")
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, "");
+
+  // backend/routes/telegramRoutes.js -> backend/public/tg-placeholders
+  const dir = path.join(__dirname, "..", "public", "tg-placeholders");
+  const filePath = path.join(dir, `${safeKind}.png`);
+  const fallbackPath = path.join(dir, "default.png");
+
+  const chosen = fs.existsSync(filePath)
+    ? filePath
+    : fs.existsSync(fallbackPath)
+      ? fallbackPath
+      : null;
+
+  if (chosen) {
+    res.setHeader("Content-Type", "image/png");
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    return res.sendFile(chosen);
+  }
+
+  // Fallback: 1x1 PNG (никогда не 404/HTML для Telegram)
+  const png1x1 =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO9oG9cAAAAASUVORK5CYII=";
+  const buf = Buffer.from(png1x1, "base64");
   res.setHeader("Content-Type", "image/png");
   res.setHeader("Content-Length", buf.length);
   res.setHeader("Cache-Control", "public, max-age=86400");
@@ -306,10 +326,9 @@ router.get("/placeholder.png", (req, res) => {
   return sendPlaceholderPng(res, "default");
 });
 
-// GET /api/telegram/placeholder/tour.png (hotel/flight/ticket/default)
+// GET /api/telegram/placeholder/:kind.png  (tour|hotel|flight|ticket|default)
 router.get("/placeholder/:kind.png", (req, res) => {
-  const kind = String(req.params.kind || "default").toLowerCase();
-  return sendPlaceholderPng(res, kind);
+  return sendPlaceholderPng(res, req.params.kind);
 });
 
 /**
@@ -328,24 +347,26 @@ router.get("/service-image/:id", async (req, res) => {
 
     // ✅ Telegram-friendly: всегда 200 png
     if (!Number.isFinite(serviceId) || serviceId <= 0) {
-      return sendPlaceholderPng(res);
+      return sendPlaceholderPng(res, "default");
     }
 
     const result = await pool.query(
-      " images FROM services WHERE id = $1 LIMIT 1",
+      "SELECT images, category FROM services WHERE id = $1 LIMIT 1",
       [serviceId]
     );
 
     // ✅ Telegram-friendly: не 404
     if (!result.rows.length) {
-      return sendPlaceholderPng(res);
+      return sendPlaceholderPng(res, "default");
     }
 
-    let images = result.rows[0].images;
+    const row = result.rows[0] || {};
+    const kind = _placeholderKindByCategory(row.category);
+    let images = row.images;
 
     // Если картинок нет — отдаём placeholder
     if (!images) {
-      return sendPlaceholderPng(res);
+      return sendPlaceholderPng(res, kind);
     }
 
     if (typeof images === "string") {
@@ -358,7 +379,7 @@ router.get("/service-image/:id", async (req, res) => {
     }
 
     if (!Array.isArray(images) || !images.length) {
-      return sendPlaceholderPng(res);
+      return sendPlaceholderPng(res, kind);
     }
 
     let v = images[0];
@@ -368,12 +389,12 @@ router.get("/service-image/:id", async (req, res) => {
     }
 
     if (!v || typeof v !== "string") {
-      return sendPlaceholderPng(res);
+      return sendPlaceholderPng(res, kind);
     }
 
     v = v.trim();
     if (!v) {
-      return sendPlaceholderPng(res);
+      return sendPlaceholderPng(res, kind);
     }
     
     // ✅ Если это внешний https URL — НЕ качаем на backend (иначе таймауты).
@@ -386,7 +407,7 @@ router.get("/service-image/:id", async (req, res) => {
     
     if (v.startsWith("http://")) {
       // Telegram часто не принимает http — безопаснее placeholder
-      return sendPlaceholderPng(res);
+      return sendPlaceholderPng(res, kind);
     }
 
     // Если относительный путь — редиректим на сайт или на API (что задано)
@@ -394,18 +415,18 @@ router.get("/service-image/:id", async (req, res) => {
       if (SITE_PUBLIC_URL) return res.redirect(SITE_PUBLIC_URL + v);
       if (API_PUBLIC_URL) return res.redirect(API_PUBLIC_URL + v);
       // если нет базового URL — вместо 400 лучше placeholder (Telegram-friendly)
-      return sendPlaceholderPng(res);
+      return sendPlaceholderPng(res, kind);
     }
 
     // Основной случай: data:image/...;base64,XXXX
     if (!v.startsWith("data:image")) {
       // вместо 400 — placeholder (Telegram-friendly)
-      return sendPlaceholderPng(res);
+      return sendPlaceholderPng(res, kind);
     }
 
     const m = v.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
     if (!m) {
-      return sendPlaceholderPng(res);
+      return sendPlaceholderPng(res, kind);
     }
 
     const mimeType = m[1] || "image/jpeg";
@@ -414,11 +435,11 @@ router.get("/service-image/:id", async (req, res) => {
     try {
       buf = Buffer.from(b64, "base64");
     } catch {
-      return sendPlaceholderPng(res);
+      return sendPlaceholderPng(res, kind);
     }
 
     if (!buf || !buf.length) {
-      return sendPlaceholderPng(res);
+      return sendPlaceholderPng(res, kind);
     }
     const wantThumb = String(req.query.thumb || "0") === "1";
     
@@ -427,7 +448,7 @@ router.get("/service-image/:id", async (req, res) => {
     if (wantThumb) {
       if (!sharp) {
         // Telegram-friendly: лучше 200 png placeholder, чем падение сервера
-        return sendPlaceholderPng(res);
+        return sendPlaceholderPng(res, kind);
       }
     
       try {
@@ -442,7 +463,7 @@ router.get("/service-image/:id", async (req, res) => {
         return res.send(out);
       } catch (e) {
         console.error("[tg] thumb sharp error:", e?.message || e);
-        return sendPlaceholderPng(res);
+        return sendPlaceholderPng(res, kind);
       }
     }
 
@@ -454,7 +475,7 @@ router.get("/service-image/:id", async (req, res) => {
   } catch (e) {
     console.error("[tg] /service-image error:", e?.message || e);
     // Telegram-friendly
-    return sendPlaceholderPng(res);
+    return sendPlaceholderPng(res, kind);
   }
 });
 
