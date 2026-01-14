@@ -5,6 +5,7 @@ const dotenv = require("dotenv");
 const { askActualReminder } = require("./jobs/askActualReminder");
 const tbTemplatesRoutes = require("./routes/TBtemplatesRoutes");
 const { getTelegramHealth } = require("./utils/telegram");
+const path = require("path");
 
 dotenv.config();
 
@@ -93,6 +94,9 @@ app.options("*", cors(corsOptions));
 /** ===================== Body ===================== */
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
+
+// ✅ static для /api (в т.ч. /api/telegram/placeholder/*.png если нужно отдавать файлы из public)
+app.use("/api", express.static(path.join(__dirname, "public")));
 
 /** ===================== Routes (основные) ===================== */
 const availabilityRoutes = require("./routes/availabilityRoutes");
