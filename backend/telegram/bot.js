@@ -240,7 +240,7 @@ async function getReqMessages(requestId, limit = 20) {
       `SELECT sender_role, sender_tg_id, text, created_at
        FROM telegram_service_request_messages
        WHERE request_id = $1
-       ORDER BY created_at ASC
+       ORDER BY created_at DESC
        LIMIT $2`,
       [Number(requestId), Number(limit)]
     );
