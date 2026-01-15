@@ -102,19 +102,20 @@ const axios = axiosBase.create({
   timeout: 10000,
 });
 
-/* ===================== OPTIONAL DB (requests thread MVP) ===================== */
-// ⚠️ Мягко: если db.js недоступен/не настроен — бот продолжит работать как раньше (без request_id)
+
+/* ===================== OPTIONAL DB (requests MVP: id + status) ===================== */
+// ⚠️ Мягко: если db.js недоступен/не настроен — бот продолжит работать как раньше (без request_id/статусов)
 let pool = null;
 try {
-  // bot.js лежит в backend/telegram, db.js в backend/db.js
+  // bot.js обычно лежит в backend/telegram/, db.js в backend/db.js
   pool = require("../db");
 } catch (e) {
-  console.warn("[tg-bot] DB pool not available for requests MVP:", e?.message || e);
+  console.warn("[tg-bot] DB pool not available (requests MVP disabled):", e?.message || e);
 }
 
-let _requestsTablesReady = false;
-async function ensureRequestsTables() {
-  if (!pool || _requestsTablesReady) return;
+let _reqTablesReady = false;
+async function ensureReqTables() {
+  if (!pool || _reqTablesReady) return;
   try {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS telegram_service_requests (
@@ -129,21 +130,16 @@ async function ensureRequestsTables() {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
     `);
-    _requestsTablesReady = true;
+    _reqTablesReady = true;
   } catch (e) {
-    console.error("[tg-bot] ensureRequestsTables error:", e?.message || e);
-    // не блокируем работу бота
-    _requestsTablesReady = false;
+    console.error("[tg-bot] ensureReqTables error:", e?.message || e);
+    _reqTablesReady = false;
   }
 }
 
-async function createServiceRequestRow({
-  serviceId,
-  from,
-  source,
-}) {
+async function createReqRow({ serviceId, from, source }) {
   try {
-    await ensureRequestsTables();
+    await ensureReqTables();
     if (!pool) return null;
     const r = await pool.query(
       `INSERT INTO telegram_service_requests
@@ -161,9 +157,28 @@ async function createServiceRequestRow({
     );
     return r?.rows?.[0]?.id ? Number(r.rows[0].id) : null;
   } catch (e) {
-    console.error("[tg-bot] createServiceRequestRow error:", e?.message || e);
+    console.error("[tg-bot] createReqRow error:", e?.message || e);
     return null;
   }
+}
+
+async function updateReqStatus(requestId, status) {
+  try {
+    await ensureReqTables();
+    if (!pool) return false;
+    await pool.query(
+      `UPDATE telegram_service_requests SET status=$2 WHERE id=$1`,
+      [Number(requestId), String(status)]
+    );
+    return true;
+  } catch (e) {
+    console.error("[tg-bot] updateReqStatus error:", e?.message || e);
+    return false;
+  }
+}
+
+function isManagerChat(ctx) {
+  return String(ctx?.chat?.id || "") === String(MANAGER_CHAT_ID || "");
 }
 
 /* ===================== INLINE CACHE (LRU + inflight + per-key TTL) ===================== */
@@ -3588,6 +3603,42 @@ bot.action(/^request:(\d+)$/, async (ctx) => {
   }
 });
 
+/* ===================== REQUEST STATUS (manager buttons) ===================== */
+bot.action(/^reqst:(\d+):(new|accepted|booked|rejected)$/, async (ctx) => {
+  try {
+    if (!MANAGER_CHAT_ID || !isManagerChat(ctx)) {
+      await ctx.answerCbQuery("⛔ Недостаточно прав", { show_alert: true });
+      return;
+    }
+
+    const requestId = Number(ctx.match[1]);
+    const status = String(ctx.match[2]);
+
+    const ok = await updateReqStatus(requestId, status);
+    if (!ok) {
+      await ctx.answerCbQuery("⚠️ Не удалось обновить статус", { show_alert: true });
+      return;
+    }
+
+    const statusLabel =
+      status === "accepted" ? "✅ Принято" :
+      status === "booked" ? "⏳ Забронировано" :
+      status === "rejected" ? "❌ Отклонено" : "🆕 Новый";
+
+    await ctx.answerCbQuery(statusLabel);
+
+    // Снимаем кнопки, чтобы не жали 10 раз
+    try {
+      await ctx.editMessageReplyMarkup(undefined);
+    } catch (_) {}
+
+    // Если хочешь — можем потом красиво "дописывать" строку статуса в тексте сообщения
+  } catch (e) {
+    console.error("[tg-bot] reqst action error:", e?.message || e);
+    try { await ctx.answerCbQuery("Ошибка", { show_alert: true }); } catch {}
+  }
+});
+
 // ✅ Alias для кнопок из deep-link карточек (refused_<id>), где callback_data = quick:<id>
 bot.action(/^quick:(\d+)$/, async (ctx) => {
   try {
@@ -4047,7 +4098,7 @@ bot.on("text", async (ctx, next) => {
 // 1) быстрый запрос
     if (state === "awaiting_request_message" && ctx.session.pendingRequestServiceId) {
       const serviceId = ctx.session.pendingRequestServiceId;
-      const reqSource = ctx.session.pendingRequestSource || null;
+      const source = ctx.session.pendingRequestSource || null;
       const msg = ctx.message.text;
       const from = ctx.from || {};
       const chatId = ctx.chat.id;
@@ -4055,13 +4106,9 @@ bot.on("text", async (ctx, next) => {
       if (!MANAGER_CHAT_ID) {
         await ctx.reply("⚠️ Быстрый запрос сейчас недоступен. Попробуйте позже.");
       } else {
-        // ✅ MVP: создаём request row и получаем request_id (если БД доступна)
-        const requestId = await createServiceRequestRow({
-          serviceId,
-          from,
-          source: reqSource,
-        });
-
+        // ✅ MVP: создаём request row (если БД доступна)
+        const requestId = await createReqRow({ serviceId, from, source });
+        
         const safeFirst = escapeMarkdown(from.first_name || "");
         const safeLast = escapeMarkdown(from.last_name || "");
         const safeUsername = escapeMarkdown(from.username || "нет username");
