@@ -4317,13 +4317,21 @@ bot.on("text", async (ctx, next) => {
           ]);
         }
 
+        // ✍️ Ответить
         if (requestId) {
           inline_keyboard.push([
             { text: "✍️ Ответить", callback_data: `reqreply:${requestId}` },
           ]);
         }
-
-        // ✅ Кнопка “написать пользователю” (как было)
+        
+        // 📜 История
+        if (requestId) {
+          inline_keyboard.push([
+            { text: "📜 История", callback_data: `reqhist:${requestId}` },
+          ]);
+        }
+        
+        // 💬 Написать пользователю (как было)
         if (from.username) {
           inline_keyboard.push([
             { text: "💬 Написать пользователю", url: `https://t.me/${String(from.username).replace(/^@/, "")}` },
