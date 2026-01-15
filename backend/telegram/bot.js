@@ -102,6 +102,70 @@ const axios = axiosBase.create({
   timeout: 10000,
 });
 
+/* ===================== OPTIONAL DB (requests thread MVP) ===================== */
+// ⚠️ Мягко: если db.js недоступен/не настроен — бот продолжит работать как раньше (без request_id)
+let pool = null;
+try {
+  // bot.js лежит в backend/telegram, db.js в backend/db.js
+  pool = require("../db");
+} catch (e) {
+  console.warn("[tg-bot] DB pool not available for requests MVP:", e?.message || e);
+}
+
+let _requestsTablesReady = false;
+async function ensureRequestsTables() {
+  if (!pool || _requestsTablesReady) return;
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS telegram_service_requests (
+        id BIGSERIAL PRIMARY KEY,
+        service_id BIGINT NOT NULL,
+        client_tg_id BIGINT NOT NULL,
+        client_username TEXT,
+        client_first_name TEXT,
+        client_last_name TEXT,
+        source TEXT,
+        status TEXT NOT NULL DEFAULT 'new',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    _requestsTablesReady = true;
+  } catch (e) {
+    console.error("[tg-bot] ensureRequestsTables error:", e?.message || e);
+    // не блокируем работу бота
+    _requestsTablesReady = false;
+  }
+}
+
+async function createServiceRequestRow({
+  serviceId,
+  from,
+  source,
+}) {
+  try {
+    await ensureRequestsTables();
+    if (!pool) return null;
+    const r = await pool.query(
+      `INSERT INTO telegram_service_requests
+       (service_id, client_tg_id, client_username, client_first_name, client_last_name, source)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       RETURNING id`,
+      [
+        Number(serviceId),
+        Number(from?.id || 0),
+        from?.username ? String(from.username) : null,
+        from?.first_name ? String(from.first_name) : null,
+        from?.last_name ? String(from.last_name) : null,
+        source ? String(source) : null,
+      ]
+    );
+    return r?.rows?.[0]?.id ? Number(r.rows[0].id) : null;
+  } catch (e) {
+    console.error("[tg-bot] createServiceRequestRow error:", e?.message || e);
+    return null;
+  }
+}
+
 /* ===================== INLINE CACHE (LRU + inflight + per-key TTL) ===================== */
 
 const INLINE_CACHE_TTL_MS = 15000;          // общий дефолт (fallback)
@@ -3508,6 +3572,7 @@ bot.action(/^request:(\d+)$/, async (ctx) => {
     const serviceId = Number(ctx.match[1]);
     if (!ctx.session) ctx.session = {};
     ctx.session.pendingRequestServiceId = serviceId;
+    ctx.session.pendingRequestSource = "inline";
     ctx.session.state = "awaiting_request_message";
 
     await ctx.answerCbQuery();
@@ -3529,6 +3594,7 @@ bot.action(/^quick:(\d+)$/, async (ctx) => {
     const serviceId = Number(ctx.match[1]);
     if (!ctx.session) ctx.session = {};
     ctx.session.pendingRequestServiceId = serviceId;
+    ctx.session.pendingRequestSource = "deeplink";
     ctx.session.state = "awaiting_request_message";
 
     await ctx.answerCbQuery();
@@ -3981,6 +4047,7 @@ bot.on("text", async (ctx, next) => {
 // 1) быстрый запрос
     if (state === "awaiting_request_message" && ctx.session.pendingRequestServiceId) {
       const serviceId = ctx.session.pendingRequestServiceId;
+      const reqSource = ctx.session.pendingRequestSource || null;
       const msg = ctx.message.text;
       const from = ctx.from || {};
       const chatId = ctx.chat.id;
@@ -3988,6 +4055,13 @@ bot.on("text", async (ctx, next) => {
       if (!MANAGER_CHAT_ID) {
         await ctx.reply("⚠️ Быстрый запрос сейчас недоступен. Попробуйте позже.");
       } else {
+        // ✅ MVP: создаём request row и получаем request_id (если БД доступна)
+        const requestId = await createServiceRequestRow({
+          serviceId,
+          from,
+          source: reqSource,
+        });
+
         const safeFirst = escapeMarkdown(from.first_name || "");
         const safeLast = escapeMarkdown(from.last_name || "");
         const safeUsername = escapeMarkdown(from.username || "нет username");
@@ -3999,6 +4073,7 @@ bot.on("text", async (ctx, next) => {
         
         const textForManager =
           "🆕 *Новый быстрый запрос из Bot Otkaznyx Turov*\n\n" +
+          (requestId ? `Заявка ID: *${escapeMarkdown(requestId)}*\n` : "") +
           `Услуга ID: *${escapeMarkdown(serviceId)}*\n` +
           `Ссылка: ${escapeMarkdown(serviceUrl)}\n` +
           `От: ${safeFirst} ${safeLast} (@${safeUsername})\n` +
@@ -4027,6 +4102,7 @@ bot.on("text", async (ctx, next) => {
 
       ctx.session.state = null;
       ctx.session.pendingRequestServiceId = null;
+      ctx.session.pendingRequestSource = null;
       return;
     }
 
