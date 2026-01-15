@@ -3523,6 +3523,29 @@ bot.action(/^request:(\d+)$/, async (ctx) => {
   }
 });
 
+// ✅ Alias для кнопок из deep-link карточек (refused_<id>), где callback_data = quick:<id>
+bot.action(/^quick:(\d+)$/, async (ctx) => {
+  try {
+    const serviceId = Number(ctx.match[1]);
+    if (!ctx.session) ctx.session = {};
+    ctx.session.pendingRequestServiceId = serviceId;
+    ctx.session.state = "awaiting_request_message";
+
+    await ctx.answerCbQuery();
+
+    await safeReply(
+      ctx,
+      "📩 *Быстрый запрос*\n\nНапишите сообщение по услуге:\n• пожелания\n• даты\n• количество человек\n\n" +
+        "Если контактный номер отличается от Telegram — добавьте его в сообщение.",
+      { parse_mode: "Markdown" }
+    );
+  } catch (e) {
+    console.error("[tg-bot] quick action error:", e);
+    try { await ctx.answerCbQuery("Ошибка. Попробуйте ещё раз", { show_alert: true }); } catch {}
+  }
+});
+
+
 /* ===================== TEXT HANDLER (wizard + quick request) ===================== */
 
 
