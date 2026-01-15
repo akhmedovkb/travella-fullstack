@@ -700,6 +700,34 @@ async function safeReply(ctx, text, extra) {
   }
 }
 
+function statusLabelForManager(status) {
+  return status === "accepted"
+    ? "✅ Принято"
+    : status === "booked"
+    ? "⏳ Забронировано"
+    : status === "rejected"
+    ? "❌ Отклонено"
+    : "🆕 Новый";
+}
+
+function replaceStatusLine(text, newStatusLabel) {
+  if (typeof text !== "string") return text;
+
+  // если строка статуса уже есть — заменяем
+  if (text.includes("\nСтатус: ")) {
+    return text.replace(
+      /\nСтатус:\s.*(\n|$)/,
+      `\nСтатус: ${newStatusLabel}\n`
+    );
+  }
+
+  // если нет — аккуратно добавляем после заголовка
+  return text.replace(
+    /\n\n/,
+    `\n\nСтатус: ${newStatusLabel}\n`
+  );
+}
+
 
 /* ===================== EDIT WIZARD NAV (svc_edit_*) ===================== */
 
@@ -3605,38 +3633,42 @@ bot.action(/^request:(\d+)$/, async (ctx) => {
 
 /* ===================== REQUEST STATUS (manager buttons) ===================== */
 bot.action(/^reqst:(\d+):(new|accepted|booked|rejected)$/, async (ctx) => {
-  try {
-    if (!MANAGER_CHAT_ID || !isManagerChat(ctx)) {
-      await ctx.answerCbQuery("⛔ Недостаточно прав", { show_alert: true });
-      return;
-    }
-
-    const requestId = Number(ctx.match[1]);
-    const status = String(ctx.match[2]);
-
-    const ok = await updateReqStatus(requestId, status);
-    if (!ok) {
-      await ctx.answerCbQuery("⚠️ Не удалось обновить статус", { show_alert: true });
-      return;
-    }
-
-    const statusLabel =
-      status === "accepted" ? "✅ Принято" :
-      status === "booked" ? "⏳ Забронировано" :
-      status === "rejected" ? "❌ Отклонено" : "🆕 Новый";
-
-    await ctx.answerCbQuery(statusLabel);
-
-    // Снимаем кнопки, чтобы не жали 10 раз
-    try {
-      await ctx.editMessageReplyMarkup(undefined);
-    } catch (_) {}
-
-    // Если хочешь — можем потом красиво "дописывать" строку статуса в тексте сообщения
-  } catch (e) {
-    console.error("[tg-bot] reqst action error:", e?.message || e);
-    try { await ctx.answerCbQuery("Ошибка", { show_alert: true }); } catch {}
+try {
+  if (!MANAGER_CHAT_ID || !isManagerChat(ctx)) {
+    await ctx.answerCbQuery("⛔ Недостаточно прав", { show_alert: true });
+    return;
   }
+
+  const requestId = Number(ctx.match[1]);
+  const status = String(ctx.match[2]);
+  const statusLabel = statusLabelForManager(status);
+
+  const ok = await updateReqStatus(requestId, status);
+  if (!ok) {
+    await ctx.answerCbQuery("⚠️ Не удалось обновить статус", { show_alert: true });
+    return;
+  }
+
+  await ctx.answerCbQuery(statusLabel);
+
+  // 🔁 Обновляем текст сообщения (показываем новый статус)
+  try {
+    const currentText = ctx.update.callback_query.message.text;
+    const updatedText = replaceStatusLine(currentText, statusLabel);
+    await ctx.editMessageText(updatedText, { parse_mode: "Markdown" });
+  } catch (_) {}
+
+  // ❌ Убираем кнопки, чтобы не нажимали повторно
+  try {
+    await ctx.editMessageReplyMarkup(undefined);
+  } catch (_) {}
+
+} catch (e) {
+  console.error("[tg-bot] reqst action error:", e);
+  try {
+    await ctx.answerCbQuery("Ошибка", { show_alert: true });
+  } catch {}
+}
 });
 
 // ✅ Alias для кнопок из deep-link карточек (refused_<id>), где callback_data = quick:<id>
