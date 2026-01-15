@@ -4228,6 +4228,13 @@ bot.on("text", async (ctx, next) => {
         ctx.session.managerReplyRequestId = null;
         return;
       }
+
+      await logReqMessage({
+        requestId,
+        senderRole: "manager",
+        senderTgId: ctx.from?.id,
+        text: replyText,
+      });
     
       const serviceUrl = SERVICE_URL_TEMPLATE
         .replace("{SITE_URL}", SITE_URL)
