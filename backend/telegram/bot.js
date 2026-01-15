@@ -785,6 +785,23 @@ function statusLabelForManager(status) {
     : "🆕 Новый";
 }
 
+function parseManagerDirectReply(text) {
+  if (!text) return null;
+  const s = String(text).trim();
+
+  // Форматы:
+  // #123 текст
+  // #123: текст
+  // #123 - текст
+  const m = s.match(/^#(\d+)\s*[:\-]?\s+([\s\S]+)$/);
+  if (!m) return null;
+
+  return {
+    requestId: Number(m[1]),
+    message: String(m[2] || "").trim(),
+  };
+}
+
 function formatTashkentTime(ts) {
   try {
     if (!ts) return "";
@@ -4311,6 +4328,56 @@ bot.on("text", async (ctx, next) => {
     const state = ctx.session?.state || null;
       // ===================== EDIT WIZARD (svc_edit_*) =====================
   if (await handleSvcEditWizardText(ctx)) return;
+          // ✅ Менеджер может ответить без кнопок: "#<id> текст"
+      if (MANAGER_CHAT_ID && isManagerChat(ctx)) {
+        const parsed = parseManagerDirectReply(ctx.message?.text);
+        if (parsed?.requestId && parsed?.message) {
+          const requestId = parsed.requestId;
+          const replyText = parsed.message;
+      
+          const req = await getReqById(requestId);
+          if (!req) {
+            await ctx.reply("⚠️ Заявка не найдена (или БД недоступна).");
+            return;
+          }
+      
+          // ✅ лог менеджера
+          await logReqMessage({
+            requestId,
+            senderRole: "manager",
+            senderTgId: ctx.from?.id,
+            text: replyText,
+          });
+      
+          const serviceUrl = SERVICE_URL_TEMPLATE
+            .replace("{SITE_URL}", SITE_URL)
+            .replace("{id}", String(req.service_id));
+      
+          const toClientText =
+            `💬 Ответ по вашему запросу #${requestId}\n\n` +
+            `Услуга ID: ${req.service_id}\n` +
+            `Ссылка: ${serviceUrl}\n\n` +
+            `Сообщение менеджера:\n${replyText}`;
+      
+          try {
+            await bot.telegram.sendMessage(Number(req.client_tg_id), toClientText, {
+              reply_markup: {
+                inline_keyboard: [[
+                  { text: "💬 Дописать", callback_data: `reqadd:${requestId}` }
+                ]]
+              }
+            });
+      
+            await ctx.reply(`✅ Отправлено клиенту (заявка #${requestId}).`);
+          } catch (e) {
+            console.error("[tg-bot] direct #reply send error:", e?.message || e);
+            await ctx.reply("⚠️ Не удалось отправить клиенту. Возможно, клиент не писал боту / запретил сообщения.");
+          }
+      
+          return; // важно: чтобы это сообщение не обрабатывалось дальше
+        }
+      }
+
     // ✅ Ответ менеджера клиенту (после нажатия "✍️ Ответить")
     if (
       MANAGER_CHAT_ID &&
