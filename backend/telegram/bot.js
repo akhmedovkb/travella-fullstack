@@ -785,6 +785,25 @@ function statusLabelForManager(status) {
     : "🆕 Новый";
 }
 
+function formatTashkentTime(ts) {
+  try {
+    if (!ts) return "";
+    const d = new Date(ts);
+    // Asia/Tashkent (UTC+5), 24h
+    const parts = new Intl.DateTimeFormat("ru-RU", {
+      timeZone: "Asia/Tashkent",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(d);
+    return parts; // например: 15.01.2026, 13:05
+  } catch {
+    return "";
+  }
+}
+
 function replaceStatusLine(text, newStatusLabel) {
   if (typeof text !== "string") return text;
 
@@ -3801,9 +3820,10 @@ bot.action(/^reqhist:(\d+)$/, async (ctx) => {
 
     const lines = msgs.map((m) => {
       const role = m.sender_role === "manager" ? "🧑‍💼 Менеджер" : "👤 Клиент";
-      // время можно не выводить, чтобы не заморачиваться с TZ — но добавим коротко
+      const when = formatTashkentTime(m.created_at);
       const txt = escapeMarkdown(String(m.text || ""));
-      return `*${role}:*\n${txt}`;
+      const whenLine = when ? `_${escapeMarkdown(when)}_` : "";
+      return `*${role}* ${whenLine}\n${txt}`;
     });
 
     // Telegram лимит ~4096 символов. Чтоб не упасть — обрежем безопасно.
