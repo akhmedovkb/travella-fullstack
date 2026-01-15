@@ -1787,7 +1787,7 @@ function buildServiceMessage(svc, category, role = "client") {
     ? `Поставщик: [${providerName}](${providerProfileUrl})`
     : `Поставщик: ${providerName}`;
   
-  // ✅ Telegram — ТОЛЬКО текст, без ссылок
+  // ✅ Telegram — кликабельный на t.me/username
   let telegramLine = null;
   if (providerTelegram) {
     let username = String(providerTelegram).trim();
@@ -1797,7 +1797,8 @@ function buildServiceMessage(svc, category, role = "client") {
   
     if (username) {
       const safeUsername = escapeMarkdown(username);
-      telegramLine = `Telegram: @${safeUsername}`;
+      const tgUrl = `https://t.me/${encodeURIComponent(username)}`; // URL в markdown можно не экранировать
+      telegramLine = `Telegram: [${safeUsername}](${tgUrl})`;
     }
   }
   const serviceUrl = buildServiceUrl(svc.id);
