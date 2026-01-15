@@ -3790,6 +3790,22 @@ bot.action(/^reqreply:(\d+)$/, async (ctx) => {
   }
 });
 
+bot.action(/^reqadd:(\d+)$/, async (ctx) => {
+  try {
+    const requestId = Number(ctx.match[1]);
+    if (!ctx.session) ctx.session = {};
+
+    ctx.session.state = "awaiting_request_add";
+    ctx.session.activeRequestId = requestId;
+
+    await ctx.answerCbQuery();
+    await ctx.reply(`💬 Дополнение к заявке #${requestId}\n\nНапишите сообщение — я отправлю менеджеру.`);
+  } catch (e) {
+    console.error("[tg-bot] reqadd action error:", e?.message || e);
+    try { await ctx.answerCbQuery("Ошибка", { show_alert: true }); } catch {}
+  }
+});
+
 bot.action(/^reqhist:(\d+)$/, async (ctx) => {
   try {
     if (!MANAGER_CHAT_ID || !isManagerChat(ctx)) {
@@ -4337,7 +4353,14 @@ bot.on("text", async (ctx, next) => {
     
       try {
         // client_tg_id = Telegram user id клиента (мы его сохраняли в createReqRow)
-        await bot.telegram.sendMessage(Number(req.client_tg_id), toClientText);
+        await bot.telegram.sendMessage(Number(req.client_tg_id), toClientText, {
+          reply_markup: {
+            inline_keyboard: [[
+              { text: "💬 Дописать", callback_data: `reqadd:${requestId}` }
+            ]]
+          }
+        });
+
         await ctx.reply(`✅ Отправлено клиенту (заявка #${requestId}).`);
     
         // (опционально) можно автоматически ставить статус accepted:
@@ -4350,6 +4373,60 @@ bot.on("text", async (ctx, next) => {
       // сброс состояния менеджера
       ctx.session.state = null;
       ctx.session.managerReplyRequestId = null;
+      return;
+    }
+    // ✅ Клиент дописывает по существующей заявке (после кнопки "💬 Дописать")
+    if (
+      ctx.session?.state === "awaiting_request_add" &&
+      ctx.session?.activeRequestId
+    ) {
+      const requestId = Number(ctx.session.activeRequestId);
+      const msg = (ctx.message?.text || "").trim();
+      const from = ctx.from || {};
+    
+      if (!msg) {
+        await ctx.reply("⚠️ Пустое сообщение. Напишите текст сообщением.");
+        return;
+      }
+    
+      const req = await getReqById(requestId);
+      if (!req) {
+        await ctx.reply("⚠️ Заявка не найдена (или БД недоступна).");
+        ctx.session.state = null;
+        ctx.session.activeRequestId = null;
+        return;
+      }
+    
+      // ✅ Логируем дописку клиента
+      await logReqMessage({
+        requestId,
+        senderRole: "client",
+        senderTgId: from?.id,
+        text: msg,
+      });
+    
+      // ✅ Отправляем менеджеру как "дополнение"
+      if (MANAGER_CHAT_ID) {
+        const safeMsg = escapeMarkdown(msg);
+        const safeUser = escapeMarkdown(from.username || "нет username");
+        const safeFirst = escapeMarkdown(from.first_name || "");
+        const safeLast = escapeMarkdown(from.last_name || "");
+    
+        await bot.telegram.sendMessage(
+          MANAGER_CHAT_ID,
+          `➕ *Дополнение по заявке #${escapeMarkdown(String(requestId))}*\n` +
+            `Услуга ID: *${escapeMarkdown(String(req.service_id))}*\n` +
+            `От: ${safeFirst} ${safeLast} (@${safeUser})\n\n` +
+            `*Сообщение:*\n${safeMsg}`,
+          { parse_mode: "Markdown" }
+        );
+      }
+    
+      await ctx.reply("✅ Дополнение отправлено менеджеру.");
+    
+      // важный момент: state сбрасываем, но activeRequestId можно оставить
+      // чтобы клиент мог нажать "Дописать" снова когда нужно
+      ctx.session.state = null;
       return;
     }
 
