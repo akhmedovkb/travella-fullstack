@@ -177,6 +177,26 @@ async function updateReqStatus(requestId, status) {
   }
 }
 
+async function getReqById(requestId) {
+  try {
+    await ensureReqTables();
+    if (!pool) return null;
+
+    const r = await pool.query(
+      `SELECT id, service_id, client_tg_id, client_username, client_first_name, client_last_name, status
+       FROM telegram_service_requests
+       WHERE id = $1
+       LIMIT 1`,
+      [Number(requestId)]
+    );
+
+    return r?.rows?.[0] || null;
+  } catch (e) {
+    console.error("[tg-bot] getReqById error:", e?.message || e);
+    return null;
+  }
+}
+
 function isManagerChat(ctx) {
   return String(ctx?.chat?.id || "") === String(MANAGER_CHAT_ID || "");
 }
@@ -3671,6 +3691,32 @@ try {
 }
 });
 
+bot.action(/^reqreply:(\d+)$/, async (ctx) => {
+  try {
+    if (!MANAGER_CHAT_ID || !isManagerChat(ctx)) {
+      await ctx.answerCbQuery("⛔ Недостаточно прав", { show_alert: true });
+      return;
+    }
+
+    const requestId = Number(ctx.match[1]);
+
+    if (!ctx.session) ctx.session = {};
+    ctx.session.state = "awaiting_manager_reply";
+    ctx.session.managerReplyRequestId = requestId;
+
+    await ctx.answerCbQuery("✍️ Напишите ответ текстом");
+
+    await ctx.reply(
+      `✍️ Ответ менеджера по заявке #${requestId}\n\n` +
+      `Отправьте одним сообщением текст, который нужно переслать клиенту.`
+    );
+  } catch (e) {
+    console.error("[tg-bot] reqreply action error:", e?.message || e);
+    try { await ctx.answerCbQuery("Ошибка", { show_alert: true }); } catch {}
+  }
+});
+
+
 // ✅ Alias для кнопок из deep-link карточек (refused_<id>), где callback_data = quick:<id>
 bot.action(/^quick:(\d+)$/, async (ctx) => {
   try {
@@ -4126,6 +4172,56 @@ bot.on("text", async (ctx, next) => {
     const state = ctx.session?.state || null;
       // ===================== EDIT WIZARD (svc_edit_*) =====================
   if (await handleSvcEditWizardText(ctx)) return;
+    // ✅ Ответ менеджера клиенту (после нажатия "✍️ Ответить")
+    if (
+      MANAGER_CHAT_ID &&
+      isManagerChat(ctx) &&
+      ctx.session?.state === "awaiting_manager_reply" &&
+      ctx.session?.managerReplyRequestId
+    ) {
+      const requestId = Number(ctx.session.managerReplyRequestId);
+      const replyText = (ctx.message?.text || "").trim();
+    
+      if (!replyText) {
+        await ctx.reply("⚠️ Пустой ответ. Напишите текст сообщением.");
+        return;
+      }
+    
+      const req = await getReqById(requestId);
+      if (!req) {
+        await ctx.reply("⚠️ Не найдена заявка в БД (или БД недоступна).");
+        ctx.session.state = null;
+        ctx.session.managerReplyRequestId = null;
+        return;
+      }
+    
+      const serviceUrl = SERVICE_URL_TEMPLATE
+        .replace("{SITE_URL}", SITE_URL)
+        .replace("{id}", String(req.service_id));
+    
+      const toClientText =
+        `💬 Ответ по вашему запросу #${requestId}\n\n` +
+        `Услуга ID: ${req.service_id}\n` +
+        `Ссылка: ${serviceUrl}\n\n` +
+        `Сообщение менеджера:\n${replyText}`;
+    
+      try {
+        // client_tg_id = Telegram user id клиента (мы его сохраняли в createReqRow)
+        await bot.telegram.sendMessage(Number(req.client_tg_id), toClientText);
+        await ctx.reply(`✅ Отправлено клиенту (заявка #${requestId}).`);
+    
+        // (опционально) можно автоматически ставить статус accepted:
+        // await updateReqStatus(requestId, "accepted");
+      } catch (e) {
+        console.error("[tg-bot] send to client error:", e?.message || e);
+        await ctx.reply("⚠️ Не удалось отправить клиенту. Возможно, клиент не писал боту / запретил сообщения.");
+      }
+    
+      // сброс состояния менеджера
+      ctx.session.state = null;
+      ctx.session.managerReplyRequestId = null;
+      return;
+    }
 
 // 1) быстрый запрос
     if (state === "awaiting_request_message" && ctx.session.pendingRequestServiceId) {
@@ -4168,6 +4264,12 @@ bot.on("text", async (ctx, next) => {
             { text: "✅ Принято", callback_data: `reqst:${requestId}:accepted` },
             { text: "⏳ Забронировано", callback_data: `reqst:${requestId}:booked` },
             { text: "❌ Отклонено", callback_data: `reqst:${requestId}:rejected` },
+          ]);
+        }
+
+        if (requestId) {
+          inline_keyboard.push([
+            { text: "✍️ Ответить", callback_data: `reqreply:${requestId}` },
           ]);
         }
 
