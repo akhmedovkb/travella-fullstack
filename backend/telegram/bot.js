@@ -4081,14 +4081,25 @@ bot.on("text", async (ctx, next) => {
           "*Сообщение:*\n" +
           safeMsg;
 
-        const replyMarkup =
-          from.username
-            ? {
-                inline_keyboard: [
-                 [{ text: "💬 Написать пользователю", url: `https://t.me/${String(from.username).replace(/^@/, "")}` }],
-                ],
-              }
-            : undefined;
+        const inline_keyboard = [];
+
+        // ✅ Кнопки статуса (только если есть requestId)
+        if (requestId) {
+          inline_keyboard.push([
+            { text: "✅ Принято", callback_data: `reqst:${requestId}:accepted` },
+            { text: "⏳ Забронировано", callback_data: `reqst:${requestId}:booked` },
+            { text: "❌ Отклонено", callback_data: `reqst:${requestId}:rejected` },
+          ]);
+        }
+
+        // ✅ Кнопка “написать пользователю” (как было)
+        if (from.username) {
+          inline_keyboard.push([
+            { text: "💬 Написать пользователю", url: `https://t.me/${String(from.username).replace(/^@/, "")}` },
+          ]);
+        }
+
+        const replyMarkup = inline_keyboard.length ? { inline_keyboard } : undefined;
 
         await bot.telegram.sendMessage(MANAGER_CHAT_ID, textForManager, {
           parse_mode: "Markdown",
