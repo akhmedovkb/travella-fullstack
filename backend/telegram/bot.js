@@ -231,6 +231,27 @@ async function logReqMessage({ requestId, senderRole, senderTgId, text }) {
   }
 }
 
+async function getReqMessages(requestId, limit = 20) {
+  try {
+    await ensureReqTables();
+    if (!pool) return [];
+
+    const r = await pool.query(
+      `SELECT sender_role, sender_tg_id, text, created_at
+       FROM telegram_service_request_messages
+       WHERE request_id = $1
+       ORDER BY created_at ASC
+       LIMIT $2`,
+      [Number(requestId), Number(limit)]
+    );
+
+    return Array.isArray(r?.rows) ? r.rows : [];
+  } catch (e) {
+    console.error("[tg-bot] getReqMessages error:", e?.message || e);
+    return [];
+  }
+}
+
 function isManagerChat(ctx) {
   return String(ctx?.chat?.id || "") === String(MANAGER_CHAT_ID || "");
 }
@@ -3746,6 +3767,54 @@ bot.action(/^reqreply:(\d+)$/, async (ctx) => {
     );
   } catch (e) {
     console.error("[tg-bot] reqreply action error:", e?.message || e);
+    try { await ctx.answerCbQuery("Ошибка", { show_alert: true }); } catch {}
+  }
+});
+
+bot.action(/^reqhist:(\d+)$/, async (ctx) => {
+  try {
+    if (!MANAGER_CHAT_ID || !isManagerChat(ctx)) {
+      await ctx.answerCbQuery("⛔ Недостаточно прав", { show_alert: true });
+      return;
+    }
+
+    const requestId = Number(ctx.match[1]);
+
+    const req = await getReqById(requestId);
+    if (!req) {
+      await ctx.answerCbQuery("Заявка не найдена", { show_alert: true });
+      return;
+    }
+
+    const msgs = await getReqMessages(requestId, 30);
+
+    const header =
+      `📜 *История по заявке #${requestId}*\n` +
+      `Услуга ID: *${escapeMarkdown(String(req.service_id))}*\n` +
+      `Статус: ${statusLabelForManager(req.status || "new")}\n`;
+
+    if (!msgs.length) {
+      await ctx.answerCbQuery();
+      await ctx.reply(header + "\n\n(сообщений пока нет)", { parse_mode: "Markdown" });
+      return;
+    }
+
+    const lines = msgs.map((m) => {
+      const role = m.sender_role === "manager" ? "🧑‍💼 Менеджер" : "👤 Клиент";
+      // время можно не выводить, чтобы не заморачиваться с TZ — но добавим коротко
+      const txt = escapeMarkdown(String(m.text || ""));
+      return `*${role}:*\n${txt}`;
+    });
+
+    // Telegram лимит ~4096 символов. Чтоб не упасть — обрежем безопасно.
+    let body = lines.join("\n\n");
+    const maxLen = 3500;
+    if (body.length > maxLen) body = body.slice(body.length - maxLen);
+
+    await ctx.answerCbQuery();
+    await ctx.reply(header + "\n\n" + body, { parse_mode: "Markdown" });
+  } catch (e) {
+    console.error("[tg-bot] reqhist action error:", e?.message || e);
     try { await ctx.answerCbQuery("Ошибка", { show_alert: true }); } catch {}
   }
 });
