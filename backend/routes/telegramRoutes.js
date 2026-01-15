@@ -515,7 +515,7 @@ router.get("/service/:serviceId", async (req, res) => {
       SELECT
         s.*,
         COALESCE(p.name,'') AS provider_name,
-        ''::text AS provider_telegram,
+        COALESCE(p.social, '') AS provider_telegram,
         COALESCE(p.telegram_web_chat_id, p.telegram_chat_id) AS provider_chat_id
       FROM services s
       LEFT JOIN providers p ON p.id = s.provider_id
