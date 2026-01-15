@@ -130,6 +130,19 @@ async function ensureReqTables() {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
     `);
+    // ✅ Таблица логов сообщений по заявкам
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS telegram_service_request_messages (
+        id BIGSERIAL PRIMARY KEY,
+        request_id BIGINT NOT NULL
+          REFERENCES telegram_service_requests(id)
+          ON DELETE CASCADE,
+        sender_role TEXT NOT NULL, -- 'client' | 'manager'
+        sender_tg_id BIGINT,
+        text TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
     _reqTablesReady = true;
   } catch (e) {
     console.error("[tg-bot] ensureReqTables error:", e?.message || e);
@@ -194,6 +207,27 @@ async function getReqById(requestId) {
   } catch (e) {
     console.error("[tg-bot] getReqById error:", e?.message || e);
     return null;
+  }
+}
+
+async function logReqMessage({ requestId, senderRole, senderTgId, text }) {
+  try {
+    await ensureReqTables();
+    if (!pool) return false;
+
+    const cleanText = String(text || "").trim();
+    if (!cleanText) return false;
+
+    await pool.query(
+      `INSERT INTO telegram_service_request_messages (request_id, sender_role, sender_tg_id, text)
+       VALUES ($1, $2, $3, $4)`,
+      [Number(requestId), String(senderRole), senderTgId ? Number(senderTgId) : null, cleanText]
+    );
+
+    return true;
+  } catch (e) {
+    console.error("[tg-bot] logReqMessage error:", e?.message || e);
+    return false;
   }
 }
 
@@ -4236,7 +4270,16 @@ bot.on("text", async (ctx, next) => {
       } else {
         // ✅ MVP: создаём request row (если БД доступна)
         const requestId = await createReqRow({ serviceId, from, source });
-        
+        // ✅ Логируем сообщение клиента (если БД доступна и requestId создан)
+        if (requestId) {
+          await logReqMessage({
+            requestId,
+            senderRole: "client",
+            senderTgId: from?.id,
+            text: msg,
+          });
+        }
+
         const safeFirst = escapeMarkdown(from.first_name || "");
         const safeLast = escapeMarkdown(from.last_name || "");
         const safeUsername = escapeMarkdown(from.username || "нет username");
