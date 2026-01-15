@@ -1777,21 +1777,29 @@ function buildServiceMessage(svc, category, role = "client") {
   const providerTelegram = svc.provider_telegram || null;
 
   const providerId = svc.provider_id || svc.providerId || svc.provider?.id || null;
-  const providerProfileUrl = providerId ? `${SITE_URL}/profile/provider/${providerId}` : null;
-
+  
+  const providerProfileUrl = providerId
+    ? `${SITE_URL}/profile/provider/${providerId}`
+    : null;
+  
+  // ✅ кликабельный ТОЛЬКО профиль
   const providerLine = providerProfileUrl
     ? `Поставщик: [${providerName}](${providerProfileUrl})`
     : `Поставщик: ${providerName}`;
-
+  
+  // ✅ Telegram — ТОЛЬКО текст, без ссылок
   let telegramLine = null;
   if (providerTelegram) {
     let username = String(providerTelegram).trim();
     username = username.replace(/^@/, "");
     username = username.replace(/^https?:\/\/t\.me\//i, "");
-    const mdUsername = escapeMarkdown(username);
-    telegramLine = `Telegram: @${mdUsername}`;
+    username = username.replace(/^tg:\/\/resolve\?domain=/i, "");
+  
+    if (username) {
+      const safeUsername = escapeMarkdown(username);
+      telegramLine = `Telegram: @${safeUsername}`;
+    }
   }
-
   const serviceUrl = buildServiceUrl(svc.id);
 
   const lines = [];
