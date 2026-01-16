@@ -338,6 +338,18 @@ exports.askActualNow = async (req, res) => {
     const detailsObj = normalizeMeta(parseDetailsAny(row.details));
     const meta = detailsObj.tg_actual_reminders_meta;
 
+    // Telegram parse_mode safety:
+    // Раньше мы отправляли Markdown и подставляли динамические значения (title/category).
+    // Из-за символов вроде "*" в названиях (например "5*") Telegram падал с
+    // "can't parse entities". Поэтому шлём в HTML (дефолт в tgSend) и экранируем.
+    const escapeHtml = (s) =>
+      String(s ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+
     // антиспам: если lockUntil ещё не прошёл — не шлём (если не force)
     const force = String(req.query.force || "0") === "1";
     if (!force && meta.lockUntil) {
@@ -352,14 +364,16 @@ exports.askActualNow = async (req, res) => {
     }
 
     const keyboard = buildSvcActualKeyboard(row.id, { isActual: true });
+    const safeTitle = escapeHtml((row.title || "Услуга").toString().slice(0, 80));
+    const safeCategory = escapeHtml(row.category);
     const msg =
-      `⏰ *Проверка актуальности*\n\n` +
-      `Услуга: *${(row.title || "Услуга").toString().slice(0, 80)}*\n` +
-      `Категория: \`${row.category}\`\n\n` +
+      `⏰ <b>Проверка актуальности</b>\n\n` +
+      `Услуга: <b>${safeTitle}</b>\n` +
+      `Категория: <code>${safeCategory}</code>\n\n` +
       `Актуально ли предложение сейчас?`;
 
-    const sendRes = await tgSend(chatId, msg, {
-      parse_mode: "Markdown",
+    // tgSend по умолчанию шлёт с parse_mode=HTML, поэтому parse_mode не передаём.
+    const sendOk = await tgSend(chatId, msg, {
       reply_markup: keyboard,
       disable_web_page_preview: true,
     });
@@ -368,7 +382,7 @@ exports.askActualNow = async (req, res) => {
     meta.lastSentAt = nowIso();
     meta.lastSentBy = "admin";
     meta.lockUntil = new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString(); // 6 часов
-    meta.lastSendOk = !!sendRes?.ok;
+    meta.lastSendOk = !!sendOk;
 
     // пишем в details обратно
     await db.query(`UPDATE services SET details = $1 WHERE id = $2`, [
@@ -378,7 +392,7 @@ exports.askActualNow = async (req, res) => {
 
     res.json({
       success: true,
-      ok: !!sendRes?.ok,
+      ok: !!sendOk,
       chatId,
       message: "Sent",
       meta: {
