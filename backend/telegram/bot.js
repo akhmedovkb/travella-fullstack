@@ -1263,7 +1263,7 @@ async function promptEditState(ctx, state) {
 
 // ===================== ACTUAL REMINDER CALLBACK (svc_actual:...) =====================
 // Эти кнопки приходят из напоминаний об актуальности. Обрабатывать должен тот же бот, который отправил кнопки.
-bot.action(/^svc_actual:(\d+):(yes|no|extend7)$/, async (ctx) => {
+bot.action(/^svc_actual:(\d+):(yes|no|extend7|ping)(?::.*)?$/, async (ctx) => {
   try {
     const cbId = ctx.callbackQuery?.id || null;
     const data = ctx.callbackQuery?.data || "";
