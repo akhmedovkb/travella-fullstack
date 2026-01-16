@@ -640,6 +640,79 @@ function escapeMarkdown(text) {
     .replace(/\)/g, "\\)")
     .replace(/`/g, "\\`");
 }
+function formatMoney(v) {
+  if (v === null || v === undefined) return "";
+  const n = Number(String(v).replace(/[^\d.]/g, ""));
+  if (!Number.isFinite(n)) return String(v);
+  // без жёсткой валюты: если хочешь, можно добавить PRICE_CURRENCY
+  return String(v).includes("USD") || String(v).includes("usd") ? String(v) : `${n}`;
+}
+
+function pickServiceTitle(service) {
+  const d = service?.details || {};
+  // refused_tour / author_tour
+  if (d.title) return String(d.title);
+  // refused_hotel
+  if (d.hotelName) return String(d.hotelName);
+  if (d.hotel) return String(d.hotel);
+  // fallback
+  if (service?.title) return String(service.title);
+  if (service?.name) return String(service.name);
+  return "";
+}
+
+function pickServicePrice(service) {
+  const d = service?.details || {};
+  // чаще всего у тебя цена в details.netPrice
+  if (d.netPrice !== undefined && d.netPrice !== null && String(d.netPrice).trim() !== "") {
+    return String(d.netPrice);
+  }
+  // fallback
+  if (service?.price !== undefined && service?.price !== null && String(service.price).trim() !== "") {
+    return String(service.price);
+  }
+  return "";
+}
+
+async function fetchServiceBrief(serviceId) {
+  try {
+    // ⚠️ ВАЖНО: endpoint должен соответствовать твоему API.
+    // 1) попробуем /services/:id
+    let r = await axios.get(`/services/${serviceId}`);
+    let service = r?.data?.service || r?.data || null;
+
+    // если API отдаёт details строкой — распарсим
+    if (service && typeof service.details === "string") {
+      try { service.details = JSON.parse(service.details); } catch {}
+    }
+
+    if (!service) return null;
+
+    const title = pickServiceTitle(service);
+    const price = pickServicePrice(service);
+
+    return { title, price, raw: service };
+  } catch (e1) {
+    // 2) запасной вариант: /api/services/:id (если у тебя так)
+    try {
+      let r2 = await axios.get(`/api/services/${serviceId}`);
+      let service2 = r2?.data?.service || r2?.data || null;
+
+      if (service2 && typeof service2.details === "string") {
+        try { service2.details = JSON.parse(service2.details); } catch {}
+      }
+
+      if (!service2) return null;
+
+      const title = pickServiceTitle(service2);
+      const price = pickServicePrice(service2);
+
+      return { title, price, raw: service2 };
+    } catch (e2) {
+      return null;
+    }
+  }
+}
 
 // Бережная нормализация заголовка
 function normalizeTitleSoft(str) {
@@ -1668,6 +1741,35 @@ function parseDetailsAny(details) {
     }
   }
   return {};
+}
+
+function getServiceDisplayTitle(svc) {
+  const d = parseDetailsAny(svc?.details);
+
+  // refused_tour / author_tour
+  if (d?.title) return normalizeTitleSoft(String(d.title));
+
+  // refused_hotel (разные варианты ключей)
+  if (d?.hotelName) return normalizeTitleSoft(String(d.hotelName));
+  if (d?.hotel) return normalizeTitleSoft(String(d.hotel));
+
+  // fallback
+  if (svc?.title) return normalizeTitleSoft(String(svc.title));
+  if (svc?.name) return normalizeTitleSoft(String(svc.name));
+
+  return "";
+}
+
+async function fetchTelegramService(serviceId, role) {
+  try {
+    const { data } = await axios.get(`/api/telegram/service/${serviceId}`, {
+      params: { role },
+    });
+    if (!data?.success || !data?.service) return null;
+    return data.service;
+  } catch {
+    return null;
+  }
 }
 
 function parseImagesAny(images) {
@@ -4352,10 +4454,33 @@ bot.on("text", async (ctx, next) => {
           const serviceUrl = SERVICE_URL_TEMPLATE
             .replace("{SITE_URL}", SITE_URL)
             .replace("{id}", String(req.service_id));
-      
+         
+          const brief = await fetchServiceBrief(req.service_id);
+     
+          const titleLine = brief?.title ? `🏷 ${brief.title}\n` : "";
+          const priceLine = brief?.price ? `💰 Цена: ${brief.price}\n` : "";
+          // ✅ подтягиваем услугу так же, как deep-link делает (но роль = client, чтобы цена была БРУТТО)
+          const svcForClient = await fetchTelegramService(req.service_id, "client");
+          
+          let titleLine = "";
+          let priceLine = "";
+          
+          if (svcForClient) {
+            const d = parseDetailsAny(svcForClient.details);
+            const title = getServiceDisplayTitle(svcForClient);
+          
+            const priceRaw = pickPrice(d, svcForClient, "client"); // ✅ БРУТТО приоритет
+            const priceWithCur = formatPriceWithCurrency(priceRaw);
+          
+            if (title) titleLine = `🏷 ${escapeMarkdown(title)}\n`;
+            if (priceWithCur) priceLine = `💳 Цена (брутто): *${escapeMarkdown(priceWithCur)}*\n`;
+          }
+
           const toClientText =
             `💬 Ответ по вашему запросу #${requestId}\n\n` +
             `Услуга ID: ${req.service_id}\n` +
+             titleLine +
+             priceLine +
             `Ссылка: ${serviceUrl}\n\n` +
             `Сообщение менеджера:\n${replyText}`;
       
