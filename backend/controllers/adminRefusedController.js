@@ -387,7 +387,7 @@ exports.askActualNow = async (req, res) => {
 
     const msg =
       `⏰ <b>Проверка актуальности</b>\n\n` +
-      `ID: <code>${row.id}</code>\n` +
+      `Код: <code>#R${row.id}</code>\n` +
       `Услуга: <b>${safeTitle}</b>\n` +
       (placeInfo ? `Направление/отель: <b>${escapeHtml(placeInfo)}</b>\n` : "") +
       (dateInfo ? `Даты: <b>${escapeHtml(dateInfo)}</b>\n` : "") +
