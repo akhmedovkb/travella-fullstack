@@ -120,6 +120,25 @@ async function handleServiceActualCallback(ctxLike) {
   const meta = getMeta(details);
   const nowIso = new Date().toISOString();
 
+  const d = details;
+
+  // даты (универсально)
+  const dateInfo =
+    (d.startDate && d.endDate && `${d.startDate} → ${d.endDate}`) ||
+    (d.checkinDate && d.checkoutDate && `${d.checkinDate} → ${d.checkoutDate}`) ||
+    (d.checkInDate && d.checkOutDate && `${d.checkInDate} → ${d.checkOutDate}`) ||
+    (d.departureFlightDate &&
+      `${d.departureFlightDate}${d.returnFlightDate ? ` → ${d.returnFlightDate}` : ""}`) ||
+    (d.eventDate && String(d.eventDate)) ||
+    "";
+  
+  // направление/локация/отель
+  const placeInfo =
+    [d.directionCountry, d.directionFrom, d.directionTo].filter(Boolean).join(" / ") ||
+    [d.country, d.city].filter(Boolean).join(" / ") ||
+    (d.hotel && String(d.hotel)) ||
+    "";
+
   // --- PING (Проверить) ---
   if (action === "ping") {
     const actual = isServiceActual(details, row);
@@ -184,7 +203,13 @@ async function handleServiceActualCallback(ctxLike) {
     }
 
     if (row.telegram_chat_id) {
-      const txt = `✅ Подтверждено: <b>${escapeHtml(row.title || "Услуга")}</b> — актуально`;
+      const txt =
+        `✅ Подтверждено: <b>${escapeHtml(row.title || "Услуга")}</b>\n` +
+        `ID: <code>${serviceId}</code>\n` +
+        (placeInfo ? `Направление/отель: <b>${escapeHtml(placeInfo)}</b>\n` : "") +
+        (dateInfo ? `Даты: <b>${escapeHtml(dateInfo)}</b>\n` : "") +
+        `— актуально`;
+
       await tgSend(row.telegram_chat_id, txt, { parse_mode: "HTML" }, tokenOverride);
     }
 
@@ -206,7 +231,12 @@ async function handleServiceActualCallback(ctxLike) {
     }
 
     if (row.telegram_chat_id) {
-      const txt = `⛔ Снято с актуальности: <b>${escapeHtml(row.title || "Услуга")}</b>`;
+      const txt =
+        `⛔ Снято с актуальности: <b>${escapeHtml(row.title || "Услуга")}</b>\n` +
+        `ID: <code>${serviceId}</code>\n` +
+        (placeInfo ? `Направление/отель: <b>${escapeHtml(placeInfo)}</b>\n` : "") +
+        (dateInfo ? `Даты: <b>${escapeHtml(dateInfo)}</b>\n` : "");
+
       await tgSend(row.telegram_chat_id, txt, { parse_mode: "HTML" }, tokenOverride);
     }
 
@@ -239,8 +269,12 @@ async function handleServiceActualCallback(ctxLike) {
     if (row.telegram_chat_id) {
       const txt =
         `♻️ Продлено на 7 дней: <b>${escapeHtml(row.title || "Услуга")}</b>\n` +
+        `ID: <code>${serviceId}</code>\n` +
+        (placeInfo ? `Направление/отель: <b>${escapeHtml(placeInfo)}</b>\n` : "") +
+        (dateInfo ? `Даты: <b>${escapeHtml(dateInfo)}</b>\n` : "") +
         `Новая актуальность до: <b>${escapeHtml(extended.toISOString().slice(0, 10))}</b>` +
         (actual ? "" : `\n\n⚠️ Но сейчас услуга всё равно выглядит неактуальной по датам/флагам.`);
+
 
       await tgSend(
         row.telegram_chat_id,
