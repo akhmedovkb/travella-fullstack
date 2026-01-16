@@ -19,6 +19,15 @@ function safeJsonParseMaybe(v) {
   return {};
 }
 
+function escapeHtml(s) {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function addDays(date, days) {
   const d = new Date(date);
   d.setDate(d.getDate() + Number(days || 0));
@@ -41,19 +50,19 @@ async function loadServiceWithProvider(serviceId) {
   return q.rows[0] || null;
 }
 
+/**
+ * ВАЖНО:
+ * Раньше getMeta() возвращал "обрезанную" мету (только часть ключей),
+ * из-за чего при сохранении пропадали lockUntil/lastSentBy/lastSendOk и т.п.
+ * Теперь возвращаем meta-объект целиком.
+ */
 function getMeta(details) {
   const d = details || {};
   const meta =
     d.tg_actual_reminders_meta && typeof d.tg_actual_reminders_meta === "object"
       ? d.tg_actual_reminders_meta
       : {};
-  return {
-    totalSent: Number(meta.totalSent || 0),
-    lastSentAt: meta.lastSentAt || null,
-    lastConfirmedAt: meta.lastConfirmedAt || null,
-    lastSlotKeySent: meta.lastSlotKeySent || null,
-    ignoredDays: Number(meta.ignoredDays || 0),
-  };
+  return meta;
 }
 
 async function saveDetails(serviceId, details) {
@@ -66,10 +75,12 @@ async function saveDetails(serviceId, details) {
 async function handleServiceActualCallback(ctxLike) {
   // ctxLike: { callbackQueryId, data, fromChatId }
   const { callbackQueryId, data, fromChatId } = ctxLike;
-  const tokenOverride = ctxLike.tokenOverride || process.env.TELEGRAM_CLIENT_BOT_TOKEN || "";
+  const tokenOverride =
+    ctxLike.tokenOverride || process.env.TELEGRAM_CLIENT_BOT_TOKEN || "";
 
   // data: svc_actual:<id>:<action>
-  const m = /^svc_actual:(\d+):(yes|no|extend7)$/.exec(String(data || ""));
+  // Добавили ping
+  const m = /^svc_actual:(\d+):(yes|no|extend7|ping)$/.exec(String(data || ""));
   if (!m) return { handled: false };
 
   const serviceId = Number(m[1]);
@@ -77,14 +88,31 @@ async function handleServiceActualCallback(ctxLike) {
 
   const row = await loadServiceWithProvider(serviceId);
   if (!row) {
-    if (callbackQueryId) await tgAnswerCallbackQuery(callbackQueryId, "Услуга не найдена", { show_alert: true }, tokenOverride);
+    if (callbackQueryId) {
+      await tgAnswerCallbackQuery(
+        callbackQueryId,
+        "Услуга не найдена",
+        { show_alert: true },
+        tokenOverride
+      );
+    }
     return { handled: true };
   }
 
   // Защита: отвечать может только владелец чата (провайдер)
-  // (если хочешь разрешить админам — расширим)
-  if (row.telegram_chat_id && fromChatId && String(row.telegram_chat_id) !== String(fromChatId)) {
-    if (callbackQueryId) await tgAnswerCallbackQuery(callbackQueryId, "Нет доступа", { show_alert: true }, tokenOverride);
+  if (
+    row.telegram_chat_id &&
+    fromChatId &&
+    String(row.telegram_chat_id) !== String(fromChatId)
+  ) {
+    if (callbackQueryId) {
+      await tgAnswerCallbackQuery(
+        callbackQueryId,
+        "Нет доступа",
+        { show_alert: true },
+        tokenOverride
+      );
+    }
     return { handled: true };
   }
 
@@ -92,54 +120,100 @@ async function handleServiceActualCallback(ctxLike) {
   const meta = getMeta(details);
   const nowIso = new Date().toISOString();
 
-  // Всегда: при любом ответе сбрасываем ignoredDays (иначе авто-снятие будет ошибочным)
+  // --- PING (Проверить) ---
+  if (action === "ping") {
+    const actual = isServiceActual(details, row);
+
+    if (callbackQueryId) {
+      await tgAnswerCallbackQuery(
+        callbackQueryId,
+        actual ? "✅ Сейчас отмечено как актуально" : "⛔ Сейчас отмечено как неактуально",
+        { show_alert: false },
+        tokenOverride
+      );
+    }
+
+    if (row.telegram_chat_id) {
+      const txt =
+        `🔄 <b>Проверка статуса</b>\n\n` +
+        `Услуга: <b>${escapeHtml(row.title || "Услуга")}</b>\n` +
+        `Категория: <code>${escapeHtml(row.category)}</code>\n` +
+        `Сейчас: ${actual ? "✅ актуально" : "⛔ неактуально"}`;
+
+      await tgSend(
+        row.telegram_chat_id,
+        txt,
+        { parse_mode: "HTML", reply_markup: buildSvcActualKeyboard(serviceId, { isActual: actual }) },
+        tokenOverride
+      );
+    }
+
+    return { handled: true };
+  }
+
+  // --- Общая заготовка next ---
+  // Всегда при любом ответе:
+  // - сбрасываем ignoredDays
+  // - фиксируем lastAnswer/lastAnswerAt
+  // - lastConfirmedAt
+  // - сбрасываем lockUntil (если был выставлен админом)
   const next = {
     ...details,
     tg_actual_reminders_meta: {
       ...meta,
       ignoredDays: 0,
-      lastConfirmedAt: nowIso, // считаем подтверждением и extend7, и yes, и no (это “ответ”)
+      lockUntil: null,
+      lastConfirmedAt: nowIso,
       lastAnswer: action,
       lastAnswerAt: nowIso,
     },
   };
 
+  // --- YES ---
   if (action === "yes") {
     next.isActive = true;
     await saveDetails(serviceId, next);
 
-    if (callbackQueryId) await tgAnswerCallbackQuery(callbackQueryId, "Отлично ✅", { show_alert: false }, tokenOverride);
+    if (callbackQueryId) {
+      await tgAnswerCallbackQuery(
+        callbackQueryId,
+        "Отлично ✅",
+        { show_alert: false },
+        tokenOverride
+      );
+    }
 
-    // можно обновить клавиатуру (покажем, что всё ок)
-    // тут мы не редактируем сообщение (у тебя edit идёт старым ботом),
-    // но можно послать отдельное короткое уведомление:
     if (row.telegram_chat_id) {
-      const txt = `✅ Подтверждено: <b>${row.title || "Услуга"}</b> — актуально`;
-      // отправляем тем же ботом, который показал кнопки
-      const CLIENT_BOT_TOKEN = tokenOverride;
-      await tgSend(row.telegram_chat_id, txt, { parse_mode: "HTML" }, CLIENT_BOT_TOKEN);
+      const txt = `✅ Подтверждено: <b>${escapeHtml(row.title || "Услуга")}</b> — актуально`;
+      await tgSend(row.telegram_chat_id, txt, { parse_mode: "HTML" }, tokenOverride);
     }
 
     return { handled: true };
   }
 
+  // --- NO ---
   if (action === "no") {
     next.isActive = false;
     await saveDetails(serviceId, next);
 
-    if (callbackQueryId) await tgAnswerCallbackQuery(callbackQueryId, "Снято с актуальности ⛔", { show_alert: false }, tokenOverride);
+    if (callbackQueryId) {
+      await tgAnswerCallbackQuery(
+        callbackQueryId,
+        "Снято с актуальности ⛔",
+        { show_alert: false },
+        tokenOverride
+      );
+    }
 
     if (row.telegram_chat_id) {
-      const txt = `⛔ Снято с актуальности: <b>${row.title || "Услуга"}</b>`;
-      // отправляем тем же ботом, который показал кнопки
-      const CLIENT_BOT_TOKEN = tokenOverride;
-      await tgSend(row.telegram_chat_id, txt, { parse_mode: "HTML" }, CLIENT_BOT_TOKEN);
+      const txt = `⛔ Снято с актуальности: <b>${escapeHtml(row.title || "Услуга")}</b>`;
+      await tgSend(row.telegram_chat_id, txt, { parse_mode: "HTML" }, tokenOverride);
     }
 
     return { handled: true };
   }
 
-  // extend7
+  // --- EXTEND7 ---
   {
     // продлеваем expiration на 7 дней
     const cur = details.expiration ? new Date(details.expiration) : null;
@@ -151,23 +225,31 @@ async function handleServiceActualCallback(ctxLike) {
 
     await saveDetails(serviceId, next);
 
-    // если после продления всё равно не актуально — предупредим (на всякий случай)
     const actual = isServiceActual(next, row);
 
-    if (callbackQueryId) await tgAnswerCallbackQuery(callbackQueryId, "Продлено на 7 дней ♻️", { show_alert: false }, tokenOverride);
+    if (callbackQueryId) {
+      await tgAnswerCallbackQuery(
+        callbackQueryId,
+        "Продлено на 7 дней ♻️",
+        { show_alert: false },
+        tokenOverride
+      );
+    }
 
     if (row.telegram_chat_id) {
       const txt =
-        `♻️ Продлено на 7 дней: <b>${row.title || "Услуга"}</b>\n` +
-        `Новая актуальность до: <b>${extended.toISOString().slice(0, 10)}</b>` +
+        `♻️ Продлено на 7 дней: <b>${escapeHtml(row.title || "Услуга")}</b>\n` +
+        `Новая актуальность до: <b>${escapeHtml(extended.toISOString().slice(0, 10))}</b>` +
         (actual ? "" : `\n\n⚠️ Но сейчас услуга всё равно выглядит неактуальной по датам/флагам.`);
-      // отправляем тем же ботом, который показал кнопки
-      const CLIENT_BOT_TOKEN = tokenOverride;
+
       await tgSend(
         row.telegram_chat_id,
         txt,
-        { parse_mode: "HTML", reply_markup: buildSvcActualKeyboard(serviceId, { isActual: actual }) },
-        CLIENT_BOT_TOKEN
+        {
+          parse_mode: "HTML",
+          reply_markup: buildSvcActualKeyboard(serviceId, { isActual: actual }),
+        },
+        tokenOverride
       );
     }
 
