@@ -5625,7 +5625,6 @@ bot.on("inline_query", async (ctx) => {
         description,
         input_message_content: {
           message_text: text,
-          parse_mode: "Markdown",
           disable_web_page_preview: true,
         },
         // ✅ Всегда показываем картинку слева в выдаче (thumb)
