@@ -153,11 +153,14 @@ async function handleServiceActualCallback(ctxLike) {
     }
 
     if (row.telegram_chat_id) {
-      const txt =
-        `🔄 <b>Проверка статуса</b>\n\n` +
-        `Услуга: <b>${escapeHtml(row.title || "Услуга")}</b>\n` +
-        `Категория: <code>${escapeHtml(row.category)}</code>\n` +
-        `Сейчас: ${actual ? "✅ актуально" : "⛔ неактуально"}`;
+    const txt =
+      `🔄 <b>Проверка статуса</b>\n\n` +
+      `Код: <code>#R${serviceId}</code>\n` +
+      `Услуга: <b>${escapeHtml(row.title || "Услуга")}</b>\n` +
+      (placeInfo ? `Направление/отель: <b>${escapeHtml(placeInfo)}</b>\n` : "") +
+      (dateInfo ? `Даты: <b>${escapeHtml(dateInfo)}</b>\n` : "") +
+      `Категория: <code>${escapeHtml(row.category)}</code>\n` +
+      `Сейчас: ${actual ? "✅ актуально" : "⛔ неактуально"}`;
 
       await tgSend(
         row.telegram_chat_id,
@@ -205,7 +208,7 @@ async function handleServiceActualCallback(ctxLike) {
     if (row.telegram_chat_id) {
       const txt =
         `✅ Подтверждено: <b>${escapeHtml(row.title || "Услуга")}</b>\n` +
-        `ID: <code>${serviceId}</code>\n` +
+        `Код: <code>#R${serviceId}</code>\n` +
         (placeInfo ? `Направление/отель: <b>${escapeHtml(placeInfo)}</b>\n` : "") +
         (dateInfo ? `Даты: <b>${escapeHtml(dateInfo)}</b>\n` : "") +
         `— актуально`;
@@ -233,7 +236,7 @@ async function handleServiceActualCallback(ctxLike) {
     if (row.telegram_chat_id) {
       const txt =
         `⛔ Снято с актуальности: <b>${escapeHtml(row.title || "Услуга")}</b>\n` +
-        `ID: <code>${serviceId}</code>\n` +
+        `Код: <code>#R${serviceId}</code>\n` +
         (placeInfo ? `Направление/отель: <b>${escapeHtml(placeInfo)}</b>\n` : "") +
         (dateInfo ? `Даты: <b>${escapeHtml(dateInfo)}</b>\n` : "");
 
@@ -269,7 +272,7 @@ async function handleServiceActualCallback(ctxLike) {
     if (row.telegram_chat_id) {
       const txt =
         `♻️ Продлено на 7 дней: <b>${escapeHtml(row.title || "Услуга")}</b>\n` +
-        `ID: <code>${serviceId}</code>\n` +
+        `Код: <code>#R${serviceId}</code>\n` +
         (placeInfo ? `Направление/отель: <b>${escapeHtml(placeInfo)}</b>\n` : "") +
         (dateInfo ? `Даты: <b>${escapeHtml(dateInfo)}</b>\n` : "") +
         `Новая актуальность до: <b>${escapeHtml(extended.toISOString().slice(0, 10))}</b>` +
