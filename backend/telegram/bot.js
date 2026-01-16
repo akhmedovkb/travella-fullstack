@@ -2051,177 +2051,91 @@ function getFirstImageUrl(svc) {
 function buildServiceMessage(svc, category, role = "client") {
   const d = parseDetailsAny(svc.details);
 
-  const serviceId = svc.id;
-  const serviceUrl = buildServiceUrl(serviceId);
-
   const titleRaw = svc.title || CATEGORY_LABELS[category] || "Услуга";
   const titlePretty = normalizeTitleSoft(titleRaw);
 
   const emoji = CATEGORY_EMOJI[category] || "";
   const stars = extractStars(d);
   const titleDecor = [emoji, titlePretty, stars].filter(Boolean).join(" ");
+  const title = escapeMarkdown(titleDecor);
 
-  // направление
+  const directionParts = [];
   const from = d.directionFrom ? normalizeWeirdSeparator(d.directionFrom) : null;
   const to = d.directionTo ? normalizeWeirdSeparator(d.directionTo) : null;
   const country = d.directionCountry ? normalizeWeirdSeparator(d.directionCountry) : null;
 
-  const dirLineRaw =
-    from && to ? `${from} → ${to}` : (to || from || "");
-  const dirLine = dirLineRaw ? escapeMarkdown(dirLineRaw) : null;
-  const countrySafe = country ? escapeMarkdown(country) : null;
-
-  // даты
-  const startRaw = d.departureFlightDate || d.startDate || d.startFlightDate || null;
-  const endRaw = d.returnFlightDate || d.endDate || d.endFlightDate || null;
-
-  const startClean = startRaw ? normalizeWeirdSeparator(startRaw) : null;
-  const endClean = endRaw ? normalizeWeirdSeparator(endRaw) : null;
-
-  let datesShort = null;
-  if (startClean && endClean && String(startClean) !== String(endClean)) {
-    datesShort = `${escapeMarkdown(startClean)} → ${escapeMarkdown(endClean)}`;
-  } else if (startClean) {
-    datesShort = `${escapeMarkdown(startClean)}`;
-  }
-
-  // ночи (если удаётся распарсить)
-  let nights = null;
-  try {
-    const sdt = startClean ? parseDateFlexible(startClean) : null;
-    const edt = endClean ? parseDateFlexible(endClean) : null;
-    if (sdt && edt) {
-      const diff = Math.round((edt.getTime() - sdt.getTime()) / (24 * 60 * 60 * 1000));
-      if (diff > 0 && diff < 60) nights = diff;
-    }
-  } catch {}
-
-  // отель / размещение
-  const hotel = d.hotel || d.hotelName || null;
-  const hotelSafe = hotel ? escapeMarkdown(hotel) : null;
-
-  const accommodation = d.accommodation || null;
-  const accommodationSafe = accommodation ? escapeMarkdown(accommodation) : null;
-
-  // цена (ВАЖНО: твой pickPrice уже делает: client->gross, provider->net)
-  const priceRaw = pickPrice(d, svc, role);
-  const priceWithCur = formatPriceWithCurrency(priceRaw);
-  const priceSafe = priceWithCur != null ? escapeMarkdown(priceWithCur) : null;
-
-  const priceKind =
-    role === "provider"
-      ? "нетто"
-      : (d.grossPrice != null ? "брутто" : "брутто"); // клиенту всегда называем брутто
-
-  // срок (badge)
-  const badge = getExpiryBadge(d, svc);
-  const badgeSafe = badge ? escapeMarkdown(badge) : null;
-
-  // провайдер (оставляем внизу, но аккуратно)
-  const providerNameRaw = svc.provider_name || "Поставщик";
-  const providerName = escapeMarkdown(providerNameRaw);
-  const providerTelegram = svc.provider_telegram || null;
-
-  const providerId = svc.provider_id || svc.providerId || svc.provider?.id || null;
-  const providerProfileUrl = providerId ? `${SITE_URL}/profile/provider/${providerId}` : null;
-
-  const providerLine = providerProfileUrl
-    ? `Поставщик: [${providerName}](${providerProfileUrl})`
-    : `Поставщик: ${providerName}`;
-
-  let telegramLine = null;
-  if (providerTelegram) {
-    let username = String(providerTelegram).trim();
-    username = username.replace(/^@/, "");
-    username = username.replace(/^https?:\/\/t\.me\//i, "");
-    username = username.replace(/^tg:\/\/resolve\?domain=/i, "");
-
-    if (username) {
-      const safeUsername = escapeMarkdown(username);
-      const tgUrl = `https://t.me/${encodeURIComponent(username)}`;
-      telegramLine = `Telegram: [${safeUsername}](${tgUrl})`;
-    }
-  }
-
-  // ==========================
-  // ✅ ВАРИАНТ B (продающий) — ТОЛЬКО для клиента и refused_tour
-  // ==========================
-  if (role !== "provider" && String(category) === "refused_tour") {
-    const lines = [];
-
-    const botLine = BOT_USERNAME ? `_через @${escapeMarkdown(BOT_USERNAME)}_` : null;
-    if (botLine) lines.push(botLine);
-
-    lines.push(`🔥 *ОТКАЗНОЙ ТУР*  \\|  \`#R${serviceId}\``);
-
-    // направление + страна
-    const dirParts = [];
-    if (dirLine) dirParts.push(`✈️ *${dirLine}*`);
-    if (countrySafe) dirParts.push(`${countrySafe}`);
-    if (dirParts.length) lines.push(dirParts.join(" • "));
-
-    // даты + ночи
-    if (datesShort) {
-      const n = nights ? ` (${n} ноч.)` : "";
-      lines.push(`🗓 *${datesShort}*${escapeMarkdown(n)}`);
-    }
-
-    if (hotelSafe) lines.push(`🏨 *${hotelSafe}*`);
-    if (accommodationSafe) lines.push(`🛏 ${accommodationSafe}`);
-
-    if (priceSafe) lines.push(`💸 *${priceSafe}*  _(${escapeMarkdown(priceKind)})_`);
-    if (badgeSafe) lines.push(`⏳ *Срок:* ${badgeSafe.replace("⏳ ", "")}`);
-
-    // короткий продающий дисклеймер
-    lines.push(`✅ Фикс-пакет (отказной): без замен, кто успел — тот забрал`);
-
-    // кто владелец (внизу аккуратно)
-    lines.push("");
-    lines.push(providerLine);
-    if (telegramLine) lines.push(telegramLine);
-
-    lines.push("");
-    lines.push(`Подробнее и бронирование: [открыть](${serviceUrl})`);
-
-    const text = lines.join("\n");
-    const photoUrl = getFirstImageUrl(svc);
-    return { text, photoUrl, serviceUrl };
-  }
-
-  // ==========================
-  // Старый универсальный формат (поставщик/другое)
-  // ==========================
-  const title = escapeMarkdown(titleDecor);
-
-  const lines = [];
-  lines.push(`*${title}*`);
-
-  const directionParts = [];
   if (from && to) directionParts.push(`${escapeMarkdown(from)} → ${escapeMarkdown(to)}`);
   else if (from) directionParts.push(escapeMarkdown(from));
   else if (to) directionParts.push(escapeMarkdown(to));
   if (country) directionParts.push(escapeMarkdown(country));
 
   const direction = directionParts.length ? directionParts.join(" · ") : null;
-  if (direction) lines.push(direction);
 
-  if (datesShort) {
-    if (startClean && endClean && String(startClean) !== String(endClean)) {
-      lines.push(`Даты: ${datesShort}`);
-    } else {
-      lines.push(`Дата: ${datesShort}`);
+  const startRaw = d.departureFlightDate || d.startDate || d.startFlightDate || null;
+  const endRaw = d.returnFlightDate || d.endDate || d.endFlightDate || null;
+
+  const startClean = startRaw ? normalizeWeirdSeparator(startRaw) : null;
+  const endClean = endRaw ? normalizeWeirdSeparator(endRaw) : null;
+
+  let dates = null;
+  if (startClean && endClean && String(startClean) !== String(endClean)) {
+    dates = `Даты: ${escapeMarkdown(startClean)} → ${escapeMarkdown(endClean)}`;
+  } else if (startClean) {
+    dates = `Дата: ${escapeMarkdown(startClean)}`;
+  }
+
+  const hotel = d.hotel || d.hotelName || null;
+  const hotelSafe = hotel ? escapeMarkdown(hotel) : null;
+
+  const accommodation = d.accommodation || null;
+  const accommodationSafe = accommodation ? escapeMarkdown(accommodation) : null;
+
+  const priceRaw = pickPrice(d, svc, role);
+  const priceWithCur = formatPriceWithCurrency(priceRaw);
+  const price = priceWithCur != null ? escapeMarkdown(priceWithCur) : null;
+  const priceLabel = role === "provider" ? "Цена (netto)" : "Цена";
+
+  const providerNameRaw = svc.provider_name || "Поставщик Travella";
+  const providerName = escapeMarkdown(providerNameRaw);
+  const providerTelegram = svc.provider_telegram || null;
+
+  const providerId = svc.provider_id || svc.providerId || svc.provider?.id || null;
+  
+  const providerProfileUrl = providerId
+    ? `${SITE_URL}/profile/provider/${providerId}`
+    : null;
+  
+  // ✅ кликабельный ТОЛЬКО профиль
+  const providerLine = providerProfileUrl
+    ? `Поставщик: [${providerName}](${providerProfileUrl})`
+    : `Поставщик: ${providerName}`;
+  
+  // ✅ Telegram — кликабельный на t.me/username
+  let telegramLine = null;
+  if (providerTelegram) {
+    let username = String(providerTelegram).trim();
+    username = username.replace(/^@/, "");
+    username = username.replace(/^https?:\/\/t\.me\//i, "");
+    username = username.replace(/^tg:\/\/resolve\?domain=/i, "");
+  
+    if (username) {
+      const safeUsername = escapeMarkdown(username);
+      const tgUrl = `https://t.me/${encodeURIComponent(username)}`; // URL в markdown можно не экранировать
+      telegramLine = `Telegram: [${safeUsername}](${tgUrl})`;
     }
   }
+  const serviceUrl = buildServiceUrl(svc.id);
 
+  const lines = [];
+  lines.push(`*${title}*`);
+  if (direction) lines.push(direction);
+  if (dates) lines.push(dates);
   if (hotelSafe) lines.push(`Отель: ${hotelSafe}`);
   if (accommodationSafe) lines.push(`Размещение: ${accommodationSafe}`);
+  if (price) lines.push(`${priceLabel}: *${price}*`);
 
-  if (priceSafe) {
-    const priceLabel = role === "provider" ? "Цена (нетто)" : "Цена (брутто)";
-    lines.push(`${priceLabel}: *${priceSafe}*`);
-  }
-
-  if (badgeSafe) lines.push(badgeSafe);
+  const badge = getExpiryBadge(d, svc);
+  if (badge) lines.push(escapeMarkdown(badge));
 
   lines.push(providerLine);
   if (telegramLine) lines.push(telegramLine);
@@ -2234,7 +2148,6 @@ function buildServiceMessage(svc, category, role = "client") {
 
   return { text, photoUrl, serviceUrl };
 }
-
 
 /**
  * ✅ Точечный фикс по задаче:
