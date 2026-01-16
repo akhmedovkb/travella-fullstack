@@ -4943,27 +4943,27 @@ bot.on("text", async (ctx, next) => {
           return;
 
         // ===== HOTEL FLOW =====
-      case "svc_hotel_country": {
-        const v = await requireTextField(ctx, text, "Страна", { min: 2 });
-        if (!v) return;
-        draft.country = v;
-      
-        pushWizardState(ctx, "svc_hotel_country");
-        ctx.session.state = "svc_hotel_city";
-        await promptWizardState(ctx, "svc_hotel_city");
-        return;
-      }
-      
-      case "svc_hotel_city": {
-        const v = await requireTextField(ctx, text, "Город", { min: 2 });
-        if (!v) return;
-        draft.toCity = v;
-      
-        pushWizardState(ctx, "svc_hotel_city");
-        ctx.session.state = "svc_hotel_name";
-        await promptWizardState(ctx, "svc_hotel_name");
-        return;
-      }
+        case "svc_hotel_country": {
+          const v = await requireTextField(ctx, text, "Страна", { min: 2 });
+          if (!v) return;
+          draft.country = v;
+        
+          pushWizardState(ctx, "svc_hotel_country");
+          ctx.session.state = "svc_hotel_city";
+          await promptWizardState(ctx, "svc_hotel_city");
+          return;
+        }
+        
+        case "svc_hotel_city": {
+          const v = await requireTextField(ctx, text, "Город", { min: 2 });
+          if (!v) return;
+          draft.toCity = v;
+        
+          pushWizardState(ctx, "svc_hotel_city");
+          ctx.session.state = "svc_hotel_name";
+          await promptWizardState(ctx, "svc_hotel_name");
+          return;
+        }
 
         case "svc_hotel_name":
           draft.hotel = text;
