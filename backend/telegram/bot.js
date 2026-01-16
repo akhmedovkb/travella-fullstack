@@ -1278,7 +1278,10 @@ bot.action(/^svc_actual:(\d+):(yes|no|extend7|ping)(?::.*)?$/, async (ctx) => {
     });
 
     // если не наш обработчик — просто пропустим
-    if (!res || !res.handled) return;
+    if (!res || !res.handled) {
+      try { await ctx.answerCbQuery(); } catch {}
+      return;
+    }
   } catch (e) {
     console.error("[tg-bot] svc_actual handler error:", e?.response?.data || e?.message || e);
     // обязательно снимем “часики” в Telegram
