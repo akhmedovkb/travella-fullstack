@@ -4486,7 +4486,7 @@ bot.on("text", async (ctx, next) => {
           titleLine +
           priceLine +
           `Ссылка: ${serviceUrl}\n\n` +
-          `Сообщение менеджера:\n${replyText}`;
+          `Сообщение менеджера:\n${escapeMarkdown(replyText)}`;
 
         try {
           await bot.telegram.sendMessage(Number(req.client_tg_id), toClientText, {
@@ -4566,7 +4566,7 @@ bot.on("text", async (ctx, next) => {
         titleLine +
         priceLine +
         `Ссылка: ${serviceUrl}\n\n` +
-        `Сообщение менеджера:\n${replyText}`;
+        `Сообщение менеджера:\n${escapeMarkdown(replyText)}`;
 
       try {
         await bot.telegram.sendMessage(Number(req.client_tg_id), toClientText, {
