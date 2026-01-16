@@ -2162,8 +2162,8 @@ function buildServiceMessage(svc, category, role = "client") {
 
     // даты + ночи
     if (datesShort) {
-      const n = nights ? ` (${n} ноч.)` : "";
-      lines.push(`🗓 *${datesShort}*${escapeMarkdown(n)}`);
+      const nightsLabel = nights ? ` (${nights} ноч.)` : "";
+      lines.push(`🗓 *${datesShort}*${escapeMarkdown(nightsLabel)}`);
     }
 
     if (hotelSafe) lines.push(`🏨 *${hotelSafe}*`);
