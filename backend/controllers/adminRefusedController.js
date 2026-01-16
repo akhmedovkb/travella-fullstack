@@ -366,9 +366,31 @@ exports.askActualNow = async (req, res) => {
     const keyboard = buildSvcActualKeyboard(row.id, { isActual: true });
     const safeTitle = escapeHtml((row.title || "Услуга").toString().slice(0, 80));
     const safeCategory = escapeHtml(row.category);
+    const d = parseDetailsAny(row.details);
+
+    // даты (берём самые вероятные поля по категориям)
+    const dateInfo =
+      (d.startDate && d.endDate && `${d.startDate} → ${d.endDate}`) ||
+      (d.checkinDate && d.checkoutDate && `${d.checkinDate} → ${d.checkoutDate}`) ||
+      (d.checkInDate && d.checkOutDate && `${d.checkInDate} → ${d.checkOutDate}`) ||
+      (d.departureFlightDate &&
+        `${d.departureFlightDate}${d.returnFlightDate ? ` → ${d.returnFlightDate}` : ""}`) ||
+      (d.eventDate && String(d.eventDate)) ||
+      "";
+    
+    // направление/локация/отель
+    const placeInfo =
+      [d.directionCountry, d.directionFrom, d.directionTo].filter(Boolean).join(" / ") ||
+      [d.country, d.city].filter(Boolean).join(" / ") ||
+      (d.hotel && String(d.hotel)) ||
+      "";
+
     const msg =
       `⏰ <b>Проверка актуальности</b>\n\n` +
+      `ID: <code>${row.id}</code>\n` +
       `Услуга: <b>${safeTitle}</b>\n` +
+      (placeInfo ? `Направление/отель: <b>${escapeHtml(placeInfo)}</b>\n` : "") +
+      (dateInfo ? `Даты: <b>${escapeHtml(dateInfo)}</b>\n` : "") +
       `Категория: <code>${safeCategory}</code>\n\n` +
       `Актуально ли предложение сейчас?`;
 
