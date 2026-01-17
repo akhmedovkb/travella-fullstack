@@ -3005,7 +3005,11 @@ bot.start(async (ctx) => {
               reply_markup: kb,
             });
           } else {
-            await ctx.reply(text, { parse_mode: "Markdown", reply_markup: kb });
+            await ctx.reply(text, {
+              parse_mode: "HTML",
+              reply_markup: kb,
+              disable_web_page_preview: true,
+            });
           }
 
           return; // ✅ не показываем главное меню вместо услуги
