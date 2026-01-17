@@ -10,6 +10,8 @@ const {
   notifyModerationUnpublished,
 } = require("../utils/telegram");
 
+const { buildServiceMessage } = require("../utils/telegramServiceCard");
+
 // простая проверка роли
 const requireAdmin = require("../middleware/requireAdmin");
 const leadController = require("../controllers/leadController");
@@ -123,8 +125,9 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
   // Публикуем только "отказные" категории.
   try {
     const info2 = await pool.query(
-      `SELECT s.id, s.title, s.category,
-         COALESCE(p.name,'') AS provider_name
+      `SELECT s.*, 
+              COALESCE(p.name,'') AS provider_name,
+              p.type AS provider_type
          FROM services s
          JOIN providers p ON p.id = s.provider_id
         WHERE s.id = $1`,
@@ -155,23 +158,9 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
         ? `https://t.me/${botUsername}?start=${startPayload}`
         : (process.env.SITE_PUBLIC_URL || "");
 
-      const title = String(svc.title || "").trim();
-      const providerName = String(svc.provider_name || "").trim();
-
-      const typeLabel =
-        cat === "refused_tour" ? "🆕 📍 Новый отказной тур" :
-        cat === "refused_hotel" ? "🆕 🏨 Новый отказной отель" :
-        cat === "refused_flight" ? "🆕 ✈️  Новый отказной авиабилет" :
-        cat === "refused_ticket" ? "🆕 🎫 Новый отказной билет" :
-        "🆕 Новое предложение";
-
-      const msg =
-        `<b>${typeLabel}</b>\n` +
-        (title ? `\n<b>${String(title).replace(/</g, "&lt;").replace(/>/g, "&gt;")}</b>\n` : "\n") +
-        (providerName
-          ? `Поставщик: ${providerName}\n`
-          : "") +
-        `\nОткрыть поиск в боте: нажмите кнопку ниже 👇`;
+      // единый шаблон карточки (как в боте)
+      const card = buildServiceMessage(svc, cat, "client");
+      const msg = card.text;
 
       const kb = {
         inline_keyboard: [[{ text: "Открыть в боте", url: openBotUrl }]],
@@ -226,7 +215,32 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
         .map((s) => s.trim())
         .filter((s) => /^-?\d+$/.test(s))
         .map((s) => Number(s));
+      async function tgSendPhoto(chatId, photo, caption, opts = {}, tokenOverride = null) {
+        const token =
+          tokenOverride ||
+          (process.env.TELEGRAM_CLIENT_BOT_TOKEN || "").trim() ||
+          (process.env.TELEGRAM_BOT_TOKEN || "").trim() ||
+          null;
       
+        if (!token) throw new Error("TELEGRAM_TOKEN_MISSING");
+      
+        const api = `https://api.telegram.org/bot${token}`;
+      
+        const payload = {
+          chat_id: chatId,
+          photo: String(photo || "").startsWith("tgfile:")
+            ? String(photo).replace(/^tgfile:/, "").trim()
+            : photo,
+          caption: String(caption || "").slice(0, 1024),
+          parse_mode: "HTML",
+          reply_markup: opts.reply_markup,
+          // disable_web_page_preview для sendPhoto не нужен (он для sendMessage)
+        };
+      
+        const axios = require("axios");
+        return axios.post(`${api}/sendPhoto`, payload);
+      }
+
       // batch sending to avoid spikes
       const BATCH = 25;
       let delivered = 0;
@@ -236,10 +250,11 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
         const batch = unique.slice(i, i + BATCH);
         const results = await Promise.allSettled(
           batch.map((cid) => {
-            const opts = { parse_mode: "HTML", reply_markup: kb };
-            return tokenOverrideAll
-              ? tgSend(cid, msg, opts, tokenOverrideAll)
-              : tgSend(cid, msg, opts);
+            const opts = { parse_mode: "HTML", reply_markup: kb, disable_web_page_preview: true };
+            
+            return card.photoUrl
+              ? tgSendPhoto(cid, card.photoUrl, msg, opts, tokenOverrideAll)
+              : tgSend(cid, msg, opts, tokenOverrideAll);
           })
         );
 
