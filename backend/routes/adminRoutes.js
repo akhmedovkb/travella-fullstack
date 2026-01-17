@@ -191,23 +191,21 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
         .filter((s) => /^-?\d+$/.test(s))
         .map((s) => Number(s));
 
-      const unique = Array.from(new Set(normalized));
-      // Для текущей схемы: рассылаем новым ботом, иначе люди не получат
-      const tokenOverrideAll = (process.env.TELEGRAM_CLIENT_BOT_TOKEN || "").trim() || null;
-      if (!tokenOverrideAll) {
-        console.warn("[admin approve] broadcast skipped: TELEGRAM_CLIENT_BOT_TOKEN is missing");
-        return;
-      }
-      if (!unique.length) {
-        console.warn("[admin approve] broadcast skipped: no recipients");
-        return;
-      }
-
-      console.log("[admin approve] broadcast audience:", {
-        providers: recProv.rows.length,
-        clients: recCli.rows.length,
-        totalUnique: unique.length,
-      });
+        const unique = Array.from(new Set(normalized));
+        
+        // Для текущей схемы: рассылаем новым ботом, иначе люди не получат
+        const tokenOverrideAll = (process.env.TELEGRAM_CLIENT_BOT_TOKEN || "").trim() || null;
+        
+        if (!tokenOverrideAll) {
+          console.warn("[admin approve] broadcast skipped: TELEGRAM_CLIENT_BOT_TOKEN is missing");
+        } else if (!unique.length) {
+          console.warn("[admin approve] broadcast skipped: no recipients");
+        } else {
+          console.log("[admin approve] broadcast audience:", {
+            providers: recProv.rows.length,
+            clients: recCli.rows.length,
+            totalUnique: unique.length,
+          });
 
       // admins report (optional)
       const adminChatIds = String(process.env.TELEGRAM_ADMIN_CHAT_IDS || "")
