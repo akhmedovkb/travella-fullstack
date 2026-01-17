@@ -848,6 +848,27 @@ async function safeReply(ctx, text, extra) {
   }
 }
 
+// Безопасная отправка фото: БЕЗ parse_mode, чтобы не ловить Telegram 400 "can't parse entities".
+// Если фото не отправилось — падаем в текст (и не маскируем это под "ошибка сохранения").
+async function safeReplyWithPhoto(ctx, photo, caption, extra = {}) {
+  const cap = String(caption || "").slice(0, 1024); // Telegram caption limit
+  try {
+    if (ctx.chat?.id) {
+      return await ctx.replyWithPhoto(photo, { caption: cap, ...extra });
+    }
+    const uid = ctx.from?.id || ctx.chat?.id;
+    if (!uid) throw new Error("NO_USER_ID");
+    return await bot.telegram.sendPhoto(uid, photo, { caption: cap, ...extra });
+  } catch (e) {
+    console.error(
+      "[tg-bot] safeReplyWithPhoto failed, fallback to text:",
+      e?.response?.data || e?.message || e
+    );
+    const textExtra = { ...extra };
+    return await safeReply(ctx, cap || "(фото)", textExtra);
+  }
+}
+
 function statusLabelForManager(status) {
   return status === "accepted"
     ? "✅ Принято"
@@ -1936,6 +1957,49 @@ function normalizeDateInput(raw) {
 
 function normalizeDateTimeInput(raw) {
   return normalizeDateTimeInputHelper(raw);
+}
+
+// Строгая валидация даты/времени после normalizeDateTimeInputHelper.
+// Нужна, чтобы отсеять случаи вроде "2026.29.01" (месяц=29) — helper может пропустить по regex.
+function isValidNormalizedDateTime(norm) {
+  if (!norm) return false;
+  const s = String(norm).trim();
+
+  // допускаем:
+  // - YYYY-MM-DD
+  // - YYYY-MM-DD HH:mm
+  const m = s.match(
+    /^([0-9]{4})-([0-9]{2})-([0-9]{2})(?:\s+([0-9]{2}):([0-9]{2}))?$/
+  );
+  if (!m) return false;
+
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  const hh = m[4] != null ? Number(m[4]) : 0;
+  const mm = m[5] != null ? Number(m[5]) : 0;
+
+  if (mo < 1 || mo > 12) return false;
+  if (d < 1 || d > 31) return false;
+  if (hh < 0 || hh > 23) return false;
+  if (mm < 0 || mm > 59) return false;
+
+  // проверяем реальную календарную дату (учёт 30/31 и февраля)
+  const dt = new Date(y, mo - 1, d, hh, mm, 0, 0);
+  if (Number.isNaN(dt.getTime())) return false;
+  if (dt.getFullYear() !== y) return false;
+  if (dt.getMonth() !== mo - 1) return false;
+  if (dt.getDate() !== d) return false;
+  if (dt.getHours() !== hh) return false;
+  if (dt.getMinutes() !== mm) return false;
+
+  return true;
+}
+
+function normalizeDateTimeInputStrict(raw) {
+  const norm = normalizeDateTimeInputHelper(raw);
+  if (!isValidNormalizedDateTime(norm)) return null;
+  return norm;
 }
 
 function isPastDateTime(value) {
@@ -3055,9 +3119,7 @@ bot.start(async (ctx) => {
           };
 
           if (photoUrl) {
-            await ctx.replyWithPhoto(photoUrl, {
-              caption: text,
-              parse_mode: "Markdown",
+            await safeReplyWithPhoto(ctx, photoUrl, text, {
               reply_markup: kb,
             });
           } else {
@@ -3558,28 +3620,10 @@ const keyboard = {
 
 
       if (photoUrl) {
-        try {
-          if (photoUrl.startsWith("tgfile:")) {
-            const fileId = photoUrl.replace(/^tgfile:/, "");
-            await ctx.replyWithPhoto(fileId, {
-              caption: msg,
-              parse_mode: "Markdown",
-              reply_markup: keyboard,
-            });
-          } else {
-            await ctx.replyWithPhoto(photoUrl, {
-              caption: msg,
-              parse_mode: "Markdown",
-              reply_markup: keyboard,
-            });
-          }
-        } catch (e) {
-          console.error(
-            "[tg-bot] replyWithPhoto failed, fallback to text:",
-            e?.response?.data || e?.message || e
-          );
-          await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: keyboard });
-        }
+        const photo = photoUrl.startsWith("tgfile:")
+          ? photoUrl.replace(/^tgfile:/, "")
+          : photoUrl;
+        await safeReplyWithPhoto(ctx, photo, msg, { reply_markup: keyboard });
       } else {
         await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: keyboard });
       }
@@ -4396,11 +4440,21 @@ async function handleSvcEditWizardText(ctx) {
             if (isNo()) {
               draft.expiration = null;
             } else {
-              const norm = normalizeDateTimeInputHelper(text); // ✅ из helpers/serviceActual
+              // строгая проверка, чтобы не пропускать "2026.29.01" и похожие
+              const norm = normalizeDateTimeInputStrict(text);
               if (!norm) {
                 await safeReply(
                   ctx,
                   "⚠️ Нужна дата: YYYY-MM-DD HH:mm (или YYYY.MM.DD HH:mm) или просто YYYY-MM-DD. Или «нет» / «пропустить».",
+                  editWizNavKeyboard()
+                );
+                return true;
+              }
+
+              if (isPastDateTime(norm)) {
+                await safeReply(
+                  ctx,
+                  "⚠️ Дата актуальности уже в прошлом. Укажите будущую дату/время или «нет» / «пропустить».",
                   editWizNavKeyboard()
                 );
                 return true;
@@ -5176,7 +5230,8 @@ bot.on("text", async (ctx, next) => {
 
         case "svc_create_expiration": {
           const lower = text.trim().toLowerCase();
-          const normExp = normalizeDateTimeInput(text);
+          // строгая проверка, чтобы не пропускать "2026.29.01" и похожие
+          const normExp = normalizeDateTimeInputStrict(text);
 
           if (normExp === null && lower !== "нет") {
             await ctx.reply(
