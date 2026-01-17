@@ -257,6 +257,61 @@ function isManagerChat(ctx) {
   return String(ctx?.chat?.id || "") === String(MANAGER_CHAT_ID || "");
 }
 
+async function getOwnerChatIdByServiceId(serviceId) {
+  try {
+    await ensureReqTables();
+    if (!pool) return null;
+
+    const sid = Number(serviceId);
+    if (!sid) return null;
+
+    const r = await pool.query(
+      `
+      SELECT
+        s.provider_id,
+        COALESCE(p.telegram_chat_id, p.tg_chat_id) AS chat_id
+      FROM services s
+      JOIN providers p ON p.id = s.provider_id
+      WHERE s.id = $1
+      LIMIT 1
+      `,
+      [sid]
+    );
+
+    const row = r?.rows?.[0];
+    if (!row) return null;
+
+    if (!row.chat_id) {
+      console.warn("[tg-bot] owner tg chat_id is NULL", {
+        serviceId: sid,
+        providerId: row.provider_id,
+      });
+      return null;
+    }
+
+    return String(row.chat_id);
+  } catch (e) {
+    console.error("[tg-bot] getOwnerChatIdByServiceId error:", e?.message || e);
+    return null;
+  }
+}
+
+
+async function isOwnerOfService(serviceId, chatId) {
+  const ownerChatId = await getOwnerChatIdByServiceId(serviceId);
+  return ownerChatId && String(ownerChatId) === String(chatId);
+}
+
+async function isRequestOperatorChat(ctx, requestId) {
+  // менеджеру можно оставить полный доступ (если хочешь)
+  if (isManagerChat(ctx)) return true;
+
+  const req = await getReqById(requestId);
+  if (!req?.service_id) return false;
+
+  return await isOwnerOfService(req.service_id, ctx?.chat?.id);
+}
+
 /* ===================== INLINE CACHE (LRU + inflight + per-key TTL) ===================== */
 
 const INLINE_CACHE_TTL_MS = 15000;          // общий дефолт (fallback)
@@ -641,6 +696,45 @@ function escapeMarkdown(text) {
     .replace(/\)/g, "\\)")
     .replace(/`/g, "\\`");
 }
+const WIZARD_TTL_MS = 10 * 60 * 1000; // 10 минут
+
+function touchSessionState(ctx, stateName) {
+  if (!ctx.session) ctx.session = {};
+  ctx.session.state = stateName;
+  ctx.session._state_ts = Date.now();
+}
+
+function isSessionStateExpired(ctx) {
+  const ts = Number(ctx.session?._state_ts || 0);
+  if (!ts) return false;
+  return (Date.now() - ts) > WIZARD_TTL_MS;
+}
+
+function resetPendingClientInput(ctx) {
+  if (!ctx.session) return;
+  // сбрасываем только “ожидания ввода”
+  if (
+    ctx.session.state === "awaiting_request_message" ||
+    ctx.session.state === "awaiting_request_add" ||
+    ctx.session.state === "awaiting_request_add_message" ||
+    ctx.session.state === "awaiting_operator_reply" ||
+    ctx.session.state === "awaiting_manager_reply"
+  ) {
+    ctx.session.state = null;
+  }
+
+  ctx.session.pendingRequestServiceId = null;
+  ctx.session.pendingRequestSource = null;
+
+  ctx.session.activeRequestId = null;
+  ctx.session.pendingAddRequestId = null;
+
+  ctx.session.operatorReplyRequestId = null;
+  ctx.session.managerReplyRequestId = null;
+
+  ctx.session._state_ts = null;
+}
+
 function formatMoney(v) {
   if (v === null || v === undefined) return "";
   const n = Number(String(v).replace(/[^\d.]/g, ""));
@@ -3877,61 +3971,61 @@ bot.action(/^request:(\d+)$/, async (ctx) => {
 
 /* ===================== REQUEST STATUS (manager buttons) ===================== */
 bot.action(/^reqst:(\d+):(new|accepted|booked|rejected)$/, async (ctx) => {
-try {
-  if (!MANAGER_CHAT_ID || !isManagerChat(ctx)) {
-    await ctx.answerCbQuery("⛔ Недостаточно прав", { show_alert: true });
-    return;
-  }
-
-  const requestId = Number(ctx.match[1]);
-  const status = String(ctx.match[2]);
-  const statusLabel = statusLabelForManager(status);
-
-  const ok = await updateReqStatus(requestId, status);
-  if (!ok) {
-    await ctx.answerCbQuery("⚠️ Не удалось обновить статус", { show_alert: true });
-    return;
-  }
-
-  await ctx.answerCbQuery(statusLabel);
-
-  // 🔁 Обновляем текст сообщения (показываем новый статус)
   try {
-    const currentText = ctx.update.callback_query.message.text;
-    const updatedText = replaceStatusLine(currentText, statusLabel);
-    await ctx.editMessageText(updatedText, { parse_mode: "Markdown" });
-  } catch (_) {}
+    const requestId = Number(ctx.match[1]);
 
-  // ❌ Убираем кнопки, чтобы не нажимали повторно
-  try {
-    await ctx.editMessageReplyMarkup(undefined);
-  } catch (_) {}
-
-} catch (e) {
-  console.error("[tg-bot] reqst action error:", e);
-  try {
-    await ctx.answerCbQuery("Ошибка", { show_alert: true });
-  } catch {}
-}
-});
-
-bot.action(/^reqreply:(\d+)$/, async (ctx) => {
-  try {
-    if (!MANAGER_CHAT_ID || !isManagerChat(ctx)) {
+    if (!(await isRequestOperatorChat(ctx, requestId))) {
       await ctx.answerCbQuery("⛔ Недостаточно прав", { show_alert: true });
       return;
     }
 
+    const status = String(ctx.match[2]);
+    const statusLabel = statusLabelForManager(status);
+
+    const ok = await updateReqStatus(requestId, status);
+    if (!ok) {
+      await ctx.answerCbQuery("⚠️ Не удалось обновить статус", { show_alert: true });
+      return;
+    }
+
+    await ctx.answerCbQuery(statusLabel);
+
+    // 🔁 Обновляем текст сообщения (показываем новый статус)
+    try {
+      const currentText = ctx.update.callback_query.message.text;
+      const updatedText = replaceStatusLine(currentText, statusLabel);
+      await ctx.editMessageText(updatedText, { parse_mode: "Markdown" });
+    } catch (_) {}
+
+    // ❌ Убираем кнопки, чтобы не нажимали повторно
+    try {
+      await ctx.editMessageReplyMarkup(undefined);
+    } catch (_) {}
+  } catch (e) {
+    console.error("[tg-bot] reqst action error:", e);
+    try {
+      await ctx.answerCbQuery("Ошибка", { show_alert: true });
+    } catch {}
+  }
+});
+
+bot.action(/^reqreply:(\d+)$/, async (ctx) => {
+  try {
     const requestId = Number(ctx.match[1]);
 
+    if (!(await isRequestOperatorChat(ctx, requestId))) {
+      await ctx.answerCbQuery("⛔ Недостаточно прав", { show_alert: true });
+      return;
+    }
+
     if (!ctx.session) ctx.session = {};
-    ctx.session.state = "awaiting_manager_reply";
-    ctx.session.managerReplyRequestId = requestId;
+    ctx.session.state = "awaiting_operator_reply";
+    ctx.session.operatorReplyRequestId = requestId;
 
     await ctx.answerCbQuery("✍️ Напишите ответ текстом");
 
     await ctx.reply(
-      `✍️ Ответ менеджера по заявке #${requestId}\n\n` +
+      `✍️ Ответ по заявке #${requestId}\n\n` +
       `Отправьте одним сообщением текст, который нужно переслать клиенту.`
     );
   } catch (e) {
@@ -3942,14 +4036,28 @@ bot.action(/^reqreply:(\d+)$/, async (ctx) => {
 
 bot.action(/^reqadd:(\d+)$/, async (ctx) => {
   try {
-    const requestId = Number(ctx.match[1]);
-    if (!ctx.session) ctx.session = {};
-
-    ctx.session.state = "awaiting_request_add";
-    ctx.session.activeRequestId = requestId;
-
     await ctx.answerCbQuery();
-    await ctx.reply(`💬 Дополнение к заявке #${requestId}\n\nНапишите сообщение — я отправлю менеджеру.`);
+
+    const requestId = Number(ctx.match[1]);
+    if (!requestId) {
+      await safeReply(ctx, "⚠️ Некорректный ID заявки.");
+      return;
+    }
+
+    const req = await getReqById(requestId);
+    if (!req) {
+      await safeReply(ctx, "⚠️ Заявка не найдена (или БД недоступна).");
+      return;
+    }
+
+    if (!ctx.session) ctx.session = {};
+    ctx.session.state = "awaiting_request_add_message";
+    ctx.session.pendingAddRequestId = requestId;
+
+    await safeReply(
+      ctx,
+      `💬 Дополнение к заявке #${requestId}\n\nНапишите сообщение — я отправлю владельцу услуги.`
+    );
   } catch (e) {
     console.error("[tg-bot] reqadd action error:", e?.message || e);
     try { await ctx.answerCbQuery("Ошибка", { show_alert: true }); } catch {}
@@ -3958,12 +4066,12 @@ bot.action(/^reqadd:(\d+)$/, async (ctx) => {
 
 bot.action(/^reqhist:(\d+)$/, async (ctx) => {
   try {
-    if (!MANAGER_CHAT_ID || !isManagerChat(ctx)) {
+    const requestId = Number(ctx.match[1]);
+
+    if (!(await isRequestOperatorChat(ctx, requestId))) {
       await ctx.answerCbQuery("⛔ Недостаточно прав", { show_alert: true });
       return;
     }
-
-    const requestId = Number(ctx.match[1]);
 
     const req = await getReqById(requestId);
     if (!req) {
@@ -3985,14 +4093,16 @@ bot.action(/^reqhist:(\d+)$/, async (ctx) => {
     }
 
     const lines = msgs.map((m) => {
-      const role = m.sender_role === "manager" ? "🧑‍💼 Менеджер" : "👤 Клиент";
+      const role =
+      m.sender_role === "operator" ? "🧑‍💼 Оператор" :
+      m.sender_role === "manager" ? "🧑‍💼 Менеджер" :
+      "👤 Клиент";
       const when = formatTashkentTime(m.created_at);
       const txt = escapeMarkdown(String(m.text || ""));
       const whenLine = when ? `_${escapeMarkdown(when)}_` : "";
       return `*${role}* ${whenLine}\n${txt}`;
     });
 
-    // Telegram лимит ~4096 символов. Чтоб не упасть — обрежем безопасно.
     let body = lines.join("\n\n");
     const maxLen = 3500;
     if (body.length > maxLen) body = body.slice(body.length - maxLen);
@@ -4004,7 +4114,6 @@ bot.action(/^reqhist:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery("Ошибка", { show_alert: true }); } catch {}
   }
 });
-
 
 // ✅ Alias для кнопок из deep-link карточек (refused_<id>), где callback_data = quick:<id>
 bot.action(/^quick:(\d+)$/, async (ctx) => {
@@ -4469,6 +4578,12 @@ async function handleSvcEditWizardText(ctx) {
 bot.on("text", async (ctx, next) => {
   try {
     const state = ctx.session?.state || null;
+    // ⏱ TTL: если состояние протухло — сбрасываем ожидания
+    if (ctx.session?.state && isSessionStateExpired(ctx)) {
+      resetPendingClientInput(ctx);
+      await ctx.reply("⏱ Время ожидания истекло. Начните действие заново.");
+      return;
+    }
 
     // ===================== EDIT WIZARD (svc_edit_*) =====================
     // Важно: чтобы редактирование услуг работало как раньше
@@ -4549,218 +4664,277 @@ bot.on("text", async (ctx, next) => {
       }
     }
 
-    // ✅ 1) Ответ менеджера клиенту (после нажатия "✍️ Ответить")
-    if (
-      MANAGER_CHAT_ID &&
-      isManagerChat(ctx) &&
-      ctx.session?.state === "awaiting_manager_reply" &&
-      ctx.session?.managerReplyRequestId
-    ) {
-      const requestId = Number(ctx.session.managerReplyRequestId);
-      const replyText = (ctx.message?.text || "").trim();
-
-      if (!replyText) {
-        await ctx.reply("⚠️ Пустой ответ. Напишите текст сообщением.");
-        return;
-      }
-
-      const req = await getReqById(requestId);
-      if (!req) {
-        await ctx.reply("⚠️ Не найдена заявка в БД (или БД недоступна).");
-        ctx.session.state = null;
-        ctx.session.managerReplyRequestId = null;
-        return;
-      }
-
-      // ✅ лог менеджера
-      await logReqMessage({
-        requestId,
-        senderRole: "manager",
-        senderTgId: ctx.from?.id,
-        text: replyText,
-      });
-
-      // ✅ подтягиваем услугу для клиента (чтобы цена была БРУТТО)
-      const svcForClient = await fetchTelegramService(req.service_id, "client");
-
-      let titleLine = "";
-      let priceLine = "";
-
-      if (svcForClient) {
-        const d = parseDetailsAny(svcForClient.details);
-        const title = getServiceDisplayTitle(svcForClient);
-
-        const priceRaw = pickPrice(d, svcForClient, "client"); // ✅ БРУТТО
-        const priceWithCur = formatPriceWithCurrency(priceRaw);
-
-        if (title) titleLine = `🏷 ${escapeMarkdown(title)}\n`;
-        if (priceWithCur) priceLine = `💳 Цена (брутто): *${escapeMarkdown(priceWithCur)}*\n`;
-      }
-
-      const serviceUrl = SERVICE_URL_TEMPLATE
-        .replace("{SITE_URL}", SITE_URL)
-        .replace("{id}", String(req.service_id));
-
-      const toClientText =
-        `💬 Ответ по вашему запросу #${requestId}\n\n` +
-        `Услуга ID: ${req.service_id}\n` +
-        titleLine +
-        priceLine +
-        `Ссылка: ${serviceUrl}\n\n` +
-        `Сообщение менеджера:\n${escapeMarkdown(replyText)}`;
-
-      try {
-        await bot.telegram.sendMessage(Number(req.client_tg_id), toClientText, {
-          parse_mode: "Markdown",
-          reply_markup: {
-            inline_keyboard: [[
-              { text: "💬 Дописать", callback_data: `reqadd:${requestId}` }
-            ]]
-          }
+         // ✅ 1) Ответ оператора (владельца услуги / менеджера) клиенту (после нажатия "✍️ Ответить")
+      if (
+        ctx.session?.state === "awaiting_operator_reply" &&
+        ctx.session?.operatorReplyRequestId
+      ) {
+        const requestId = Number(ctx.session.operatorReplyRequestId);
+        const replyText = (ctx.message?.text || "").trim();
+      
+        if (!replyText) {
+          await ctx.reply("⚠️ Пустой ответ. Напишите текст сообщением.");
+          return;
+        }
+      
+        // ✅ доступ: владелец своей услуги (или менеджер, если оставили доступ в isRequestOperatorChat)
+        if (!(await isRequestOperatorChat(ctx, requestId))) {
+          await ctx.reply("⛔ Недостаточно прав для ответа по этой заявке.");
+          ctx.session.state = null;
+          ctx.session.operatorReplyRequestId = null;
+          return;
+        }
+      
+        const req = await getReqById(requestId);
+        if (!req) {
+          await ctx.reply("⚠️ Не найдена заявка в БД (или БД недоступна).");
+          ctx.session.state = null;
+          ctx.session.operatorReplyRequestId = null;
+          return;
+        }
+      
+        // ✅ лог оператора
+        await logReqMessage({
+          requestId,
+          senderRole: "operator",        // было "manager"
+          senderTgId: ctx.from?.id,
+          text: replyText,
         });
-
-        await ctx.reply(`✅ Отправлено клиенту (заявка #${requestId}).`);
-      } catch (e) {
-        console.error("[tg-bot] send to client error:", e?.message || e);
-        await ctx.reply("⚠️ Не удалось отправить клиенту. Возможно, клиент не писал боту / запретил сообщения.");
-      }
-
-      // ✅ сброс состояния менеджера
-      ctx.session.state = null;
-      ctx.session.managerReplyRequestId = null;
-      return;
-    }
-
-    // ✅ 2) Клиент дописывает по существующей заявке (после кнопки "💬 Дописать")
-    if (
-      ctx.session?.state === "awaiting_request_add" &&
-      ctx.session?.activeRequestId
-    ) {
-      const requestId = Number(ctx.session.activeRequestId);
-      const msg = (ctx.message?.text || "").trim();
-      const from = ctx.from || {};
-
-      if (!msg) {
-        await ctx.reply("⚠️ Пустое сообщение. Напишите текст сообщением.");
+      
+        // ✅ подтягиваем услугу для клиента (чтобы цена была БРУТТО)
+        const svcForClient = await fetchTelegramService(req.service_id, "client");
+      
+        let titleLine = "";
+        let priceLine = "";
+      
+        if (svcForClient) {
+          const d = parseDetailsAny(svcForClient.details);
+          const title = getServiceDisplayTitle(svcForClient);
+      
+          const priceRaw = pickPrice(d, svcForClient, "client"); // ✅ БРУТТО
+          const priceWithCur = formatPriceWithCurrency(priceRaw);
+      
+          if (title) titleLine = `🏷 ${escapeMarkdown(title)}\n`;
+          if (priceWithCur) priceLine = `💳 Цена (брутто): *${escapeMarkdown(priceWithCur)}*\n`;
+        }
+      
+        const serviceUrl = SERVICE_URL_TEMPLATE
+          .replace("{SITE_URL}", SITE_URL)
+          .replace("{id}", String(req.service_id));
+      
+        const toClientText =
+          `💬 Ответ по вашему запросу #${requestId}\n\n` +
+          `Услуга ID: ${req.service_id}\n` +
+          titleLine +
+          priceLine +
+          `Ссылка: ${serviceUrl}\n\n` +
+          `Сообщение:\n${escapeMarkdown(replyText)}`;
+      
+        try {
+          await bot.telegram.sendMessage(Number(req.client_tg_id), toClientText, {
+            parse_mode: "Markdown",
+            reply_markup: {
+              inline_keyboard: [[
+                { text: "💬 Дописать", callback_data: `reqadd:${requestId}` }
+              ]]
+            }
+          });
+      
+          await ctx.reply(`✅ Отправлено клиенту (заявка #${requestId}).`);
+        } catch (e) {
+          console.error("[tg-bot] send to client error:", e?.message || e);
+          await ctx.reply("⚠️ Не удалось отправить клиенту. Возможно, клиент не писал боту / запретил сообщения.");
+        }
+      
+        // ✅ сброс состояния
+        ctx.session.state = null;
+        ctx.session.operatorReplyRequestId = null;
         return;
       }
 
-      const req = await getReqById(requestId);
-      if (!req) {
-        await ctx.reply("⚠️ Заявка не найдена (или БД недоступна).");
+      // ✅ 2) Клиент дописывает по существующей заявке (после кнопки "💬 Дописать")
+      if (
+        ctx.session?.state === "awaiting_request_add" &&
+        ctx.session?.activeRequestId
+      ) {
+        const requestId = Number(ctx.session.activeRequestId);
+        const dk = makeDedupKey(ctx, "ra", requestId);
+          if (isDuplicateAndMark(ctx, dk)) {
+            await ctx.reply("⚠️ Дополнение уже отправлено. Подождите немного.");
+            ctx.session.state = null;
+            ctx.session.activeRequestId = null;
+            return;
+          }
+        const msg = (ctx.message?.text || "").trim();
+        const from = ctx.from || {};
+      
+        if (!msg) {
+          await ctx.reply("⚠️ Пустое сообщение. Напишите текст сообщением.");
+          return;
+        }
+      
+        const req = await getReqById(requestId);
+        if (!req) {
+          await ctx.reply("⚠️ Заявка не найдена (или БД недоступна).");
+          ctx.session.state = null;
+          ctx.session.activeRequestId = null;
+          return;
+        }
+      
+        // ✅ Логируем дописку клиента
+        await logReqMessage({
+          requestId,
+          senderRole: "client",
+          senderTgId: from?.id,
+          text: msg,
+        });
+      
+        // ✅ Находим владельца услуги
+        const ownerChatId = await getOwnerChatIdByServiceId(req.service_id);
+        if (!ownerChatId) {
+          await ctx.reply(
+            "⚠️ Владелец этой услуги ещё не подключил Telegram для получения заявок.\n" +
+            "Попробуйте позже или выберите другую услугу."
+          );
+          ctx.session.state = null;
+          ctx.session.activeRequestId = null;
+          return;
+        }
+      
+        const safeMsg = escapeMarkdown(msg);
+        const safeUser = escapeMarkdown(from.username || "нет username");
+        const safeFirst = escapeMarkdown(from.first_name || "");
+        const safeLast = escapeMarkdown(from.last_name || "");
+      
+        const serviceUrl = SERVICE_URL_TEMPLATE
+          .replace("{SITE_URL}", SITE_URL)
+          .replace("{id}", String(req.service_id));
+      
+        const textForOwner =
+          `➕ *Дополнение по заявке #${escapeMarkdown(String(requestId))}*\n` +
+          `Услуга ID: *${escapeMarkdown(String(req.service_id))}*\n` +
+          `Ссылка: ${escapeMarkdown(serviceUrl)}\n\n` +
+          `От: ${safeFirst} ${safeLast} (@${safeUser})\n\n` +
+          `*Сообщение:*\n${safeMsg}`;
+      
+        // ✅ Кнопки владельцу (удобно)
+        const reply_markup = {
+          inline_keyboard: [
+            [{ text: "✍️ Ответить", callback_data: `reqreply:${requestId}` }],
+            [{ text: "📜 История", callback_data: `reqhist:${requestId}` }],
+          ],
+        };
+      
+        await bot.telegram.sendMessage(ownerChatId, textForOwner, {
+          parse_mode: "Markdown",
+          reply_markup,
+        });
+      
+        await ctx.reply("✅ Дополнение отправлено владельцу услуги.");
+      
+        // сброс состояния (activeRequestId можно чистить, чтобы не зависало)
         ctx.session.state = null;
         ctx.session.activeRequestId = null;
         return;
       }
 
-      // ✅ Логируем дописку клиента
-      await logReqMessage({
-        requestId,
-        senderRole: "client",
-        senderTgId: from?.id,
-        text: msg,
-      });
-
-      // ✅ (опционально красиво) менеджеру тоже можно показать название + НЕТТО
-      // если хочешь — включим отдельно
-      if (MANAGER_CHAT_ID) {
-        const safeMsg = escapeMarkdown(msg);
-        const safeUser = escapeMarkdown(from.username || "нет username");
-        const safeFirst = escapeMarkdown(from.first_name || "");
-        const safeLast = escapeMarkdown(from.last_name || "");
-
-        await bot.telegram.sendMessage(
-          MANAGER_CHAT_ID,
-          `➕ *Дополнение по заявке #${escapeMarkdown(String(requestId))}*\n` +
-            `Услуга ID: *${escapeMarkdown(String(req.service_id))}*\n\n` +
-            `От: ${safeFirst} ${safeLast} (@${safeUser})\n\n` +
-            `*Сообщение:*\n${safeMsg}`,
-          { parse_mode: "Markdown" }
-        );
-      }
-
-      await ctx.reply("✅ Дополнение отправлено менеджеру.");
-
-      ctx.session.state = null; // activeRequestId оставляем
-      return;
-    }
-
-    // ✅ 3) Быстрый запрос
+    // ✅ 3) Быстрый запрос (ТОЛЬКО владельцу услуги)
     if (state === "awaiting_request_message" && ctx.session?.pendingRequestServiceId) {
       const serviceId = ctx.session.pendingRequestServiceId;
+      const dk = makeDedupKey(ctx, "rq", serviceId);
+        if (isDuplicateAndMark(ctx, dk)) {
+          await ctx.reply("⚠️ Сообщение уже отправлено. Подождите немного.");
+          ctx.session.state = null;
+          ctx.session.pendingRequestServiceId = null;
+          ctx.session.pendingRequestSource = null;
+          return;
+        }
+
       const source = ctx.session.pendingRequestSource || null;
       const msg = ctx.message.text;
       const from = ctx.from || {};
       const chatId = ctx.chat.id;
-
-      if (!MANAGER_CHAT_ID) {
-        await ctx.reply("⚠️ Быстрый запрос сейчас недоступен. Попробуйте позже.");
-      } else {
-        const requestId = await createReqRow({ serviceId, from, source });
-
-        // ✅ Логируем сообщение клиента (если БД доступна)
-        if (requestId) {
-          await logReqMessage({
-            requestId,
-            senderRole: "client",
-            senderTgId: from?.id,
-            text: msg,
-          });
-        }
-
-        const safeFirst = escapeMarkdown(from.first_name || "");
-        const safeLast = escapeMarkdown(from.last_name || "");
-        const safeUsername = escapeMarkdown(from.username || "нет username");
-        const safeMsg = escapeMarkdown(msg);
-
-        const serviceUrl = SERVICE_URL_TEMPLATE
-          .replace("{SITE_URL}", SITE_URL)
-          .replace("{id}", String(serviceId));
-
-        const textForManager =
-          "🆕 *Новый быстрый запрос из Bot Otkaznyx Turov*\n\n" +
-          (requestId ? `Заявка ID: *${escapeMarkdown(requestId)}*\n` : "") +
-          `Услуга ID: *${escapeMarkdown(serviceId)}*\n` +
-          `Ссылка: ${escapeMarkdown(serviceUrl)}\n` +
-          `От: ${safeFirst} ${safeLast} (@${safeUsername})\n` +
-          `Telegram chatId: \`${chatId}\`\n\n` +
-          "*Сообщение:*\n" +
-          safeMsg;
-
-        const inline_keyboard = [];
-
-        if (requestId) {
-          inline_keyboard.push([
-            { text: "✅ Принято", callback_data: `reqst:${requestId}:accepted` },
-            { text: "⏳ Забронировано", callback_data: `reqst:${requestId}:booked` },
-            { text: "❌ Отклонено", callback_data: `reqst:${requestId}:rejected` },
-          ]);
-
-          inline_keyboard.push([
-            { text: "✍️ Ответить", callback_data: `reqreply:${requestId}` },
-          ]);
-
-          inline_keyboard.push([
-            { text: "📜 История", callback_data: `reqhist:${requestId}` },
-          ]);
-        }
-
-        if (from.username) {
-          inline_keyboard.push([
-            { text: "💬 Написать пользователю", url: `https://t.me/${String(from.username).replace(/^@/, "")}` },
-          ]);
-        }
-
-        const replyMarkup = inline_keyboard.length ? { inline_keyboard } : undefined;
-
-        await bot.telegram.sendMessage(MANAGER_CHAT_ID, textForManager, {
-          parse_mode: "Markdown",
-          ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+    
+      // 1) создаём заявку
+      const requestId = await createReqRow({ serviceId, from, source });
+    
+      // 2) логируем сообщение клиента (если БД доступна)
+      if (requestId) {
+        await logReqMessage({
+          requestId,
+          senderRole: "client",
+          senderTgId: from?.id,
+          text: msg,
         });
-
-        await ctx.reply("✅ Спасибо!\n\nЗапрос отправлен! С вами свяжутся в ближайшее время.");
       }
-
+    
+      // 3) находим владельца услуги
+      let ownerChatId = null;
+      try {
+        ownerChatId = await getOwnerChatIdByServiceId(serviceId);
+      } catch (e) {
+        console.error("[tg-bot] getOwnerChatIdByServiceId error:", e?.message || e);
+      }
+    
+      if (!ownerChatId) {
+        await ctx.reply(
+          "⚠️ Владелец этой услуги ещё не подключил Telegram для получения заявок.\n" +
+          "Попробуйте позже."
+        );
+      ctx.session.state = null;
+      ctx.session.pendingRequestServiceId = null;
+      ctx.session.pendingRequestSource = null;
+      return;
+      }
+    
+      const safeFirst = escapeMarkdown(from.first_name || "");
+      const safeLast = escapeMarkdown(from.last_name || "");
+      const safeUsername = escapeMarkdown(from.username || "нет username");
+      const safeMsg = escapeMarkdown(msg);
+    
+      const serviceUrl = SERVICE_URL_TEMPLATE
+        .replace("{SITE_URL}", SITE_URL)
+        .replace("{id}", String(serviceId));
+    
+      const textForOwner =
+        "🆕 *Новый быстрый запрос из Bot Otkaznyx Turov*\n\n" +
+        (requestId ? `Заявка ID: *${escapeMarkdown(requestId)}*\n` : "") +
+        `Услуга ID: *${escapeMarkdown(serviceId)}*\n` +
+        `Ссылка: ${escapeMarkdown(serviceUrl)}\n` +
+        `От: ${safeFirst} ${safeLast} (@${safeUsername})\n` +
+        `Telegram chatId клиента: \`${chatId}\`\n\n` +
+        "*Сообщение:*\n" +
+        safeMsg;
+    
+      const inline_keyboard = [];
+    
+      if (requestId) {
+        inline_keyboard.push([
+          { text: "✅ Принято", callback_data: `reqst:${requestId}:accepted` },
+          { text: "⏳ Забронировано", callback_data: `reqst:${requestId}:booked` },
+          { text: "❌ Отклонено", callback_data: `reqst:${requestId}:rejected` },
+        ]);
+    
+        inline_keyboard.push([{ text: "✍️ Ответить", callback_data: `reqreply:${requestId}` }]);
+        inline_keyboard.push([{ text: "📜 История", callback_data: `reqhist:${requestId}` }]);
+      }
+    
+      if (from.username) {
+        inline_keyboard.push([
+          { text: "💬 Написать пользователю", url: `https://t.me/${String(from.username).replace(/^@/, "")}` },
+        ]);
+      }
+    
+      const replyMarkup = inline_keyboard.length ? { inline_keyboard } : undefined;
+    
+      // ✅ отправляем ТОЛЬКО владельцу услуги
+      await bot.telegram.sendMessage(ownerChatId, textForOwner, {
+        parse_mode: "Markdown",
+        ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+      });
+    
+      await ctx.reply("✅ Спасибо!\n\nЗапрос отправлен владельцу услуги.");
+    
       ctx.session.state = null;
       ctx.session.pendingRequestServiceId = null;
       ctx.session.pendingRequestSource = null;
