@@ -3,6 +3,11 @@ const express = require("express");
 const router = express.Router();
 const pool = require("../db");
 const authenticateToken = require("../middleware/authenticateToken");
+const requireAdmin = require("../middleware/requireAdmin");
+const leadController = require("../controllers/leadController");
+
+const axios = require("axios");
+
 const {
   tgSend,
   notifyModerationApproved,
@@ -11,10 +16,6 @@ const {
 } = require("../utils/telegram");
 
 const { buildServiceMessage } = require("../utils/telegramServiceCard");
-
-// простая проверка роли
-const requireAdmin = require("../middleware/requireAdmin");
-const leadController = require("../controllers/leadController");
 
 function phoneToDigits(phone) {
   return String(phone || "").replace(/\D/g, "");
@@ -137,30 +138,23 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
     const svc = info2.rows[0] || null;
     const cat = String(svc?.category || "").toLowerCase();
 
-    const isRefused = [
-      "refused_tour",
-      "refused_hotel",
-      "refused_flight",
-      "refused_ticket",
-    ].includes(cat);
+    const isRefused = ["refused_tour", "refused_hotel", "refused_flight", "refused_ticket"].includes(cat);
 
     if (svc && isRefused) {
       // ВАЖНО: users/provs жмут /start именно в новом боте
       const botUsername = String(
-        process.env.TELEGRAM_CLIENT_BOT_USERNAME ||
-        process.env.TELEGRAM_BOT_USERNAME ||
-        ""
+        process.env.TELEGRAM_CLIENT_BOT_USERNAME || process.env.TELEGRAM_BOT_USERNAME || ""
       ).trim();
-      // стартуем бот сразу в нужной категории (чтобы открыть поиск именно по типу)
-      // start payload: refused_tour / refused_hotel / refused_flight / refused_ticket
+
       const startPayload = encodeURIComponent(`refused_${svc.id}`);
       const openBotUrl = botUsername
         ? `https://t.me/${botUsername}?start=${startPayload}`
         : (process.env.SITE_PUBLIC_URL || "");
 
-      // единый шаблон карточки (как в боте)
+      // ✅ ЕДИНЫЙ шаблон карточки
       const card = buildServiceMessage(svc, cat, "client");
-      const msg = card.text;
+      const msg = card.text; // HTML
+      const photoUrl = card.photoUrl || null;
 
       const kb = {
         inline_keyboard: [[{ text: "Открыть в боте", url: openBotUrl }]],
@@ -173,6 +167,7 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
           WHERE COALESCE(telegram_refused_chat_id, telegram_web_chat_id, telegram_chat_id) IS NOT NULL
             AND TRIM(COALESCE(telegram_refused_chat_id, telegram_web_chat_id, telegram_chat_id)::text) <> ''`
       );
+
       const recCli = await pool.query(
         `SELECT telegram_chat_id AS chat_id
            FROM clients
@@ -185,127 +180,126 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
         ...recCli.rows.map((r) => r.chat_id),
       ];
 
-      // normalize chat ids: keep only numeric ids (Telegram chat_id is integer)
       const normalized = chatIds
         .map((v) => String(v || "").trim())
         .filter((s) => /^-?\d+$/.test(s))
         .map((s) => Number(s));
 
-        const unique = Array.from(new Set(normalized));
-        
-        // Для текущей схемы: рассылаем новым ботом, иначе люди не получат
-        const tokenOverrideAll = (process.env.TELEGRAM_CLIENT_BOT_TOKEN || "").trim() || null;
-        
-        if (!tokenOverrideAll) {
-          console.warn("[admin approve] broadcast skipped: TELEGRAM_CLIENT_BOT_TOKEN is missing");
-        } else if (!unique.length) {
-          console.warn("[admin approve] broadcast skipped: no recipients");
-        } else {
-          console.log("[admin approve] broadcast audience:", {
-            providers: recProv.rows.length,
-            clients: recCli.rows.length,
-            totalUnique: unique.length,
-          });
+      const unique = Array.from(new Set(normalized));
 
-      // admins report (optional)
-      const adminChatIds = String(process.env.TELEGRAM_ADMIN_CHAT_IDS || "")
-        .split(/[,\s]+/g)
-        .map((s) => s.trim())
-        .filter((s) => /^-?\d+$/.test(s))
-        .map((s) => Number(s));
-      async function tgSendPhoto(chatId, photo, caption, opts = {}, tokenOverride = null) {
-        const token =
-          tokenOverride ||
-          (process.env.TELEGRAM_CLIENT_BOT_TOKEN || "").trim() ||
-          (process.env.TELEGRAM_BOT_TOKEN || "").trim() ||
-          null;
-      
-        if (!token) throw new Error("TELEGRAM_TOKEN_MISSING");
-      
-        const api = `https://api.telegram.org/bot${token}`;
-      
-        const payload = {
-          chat_id: chatId,
-          photo: String(photo || "").startsWith("tgfile:")
-            ? String(photo).replace(/^tgfile:/, "").trim()
-            : photo,
-          caption: String(caption || "").slice(0, 1024),
-          parse_mode: "HTML",
-          reply_markup: opts.reply_markup,
-          // disable_web_page_preview для sendPhoto не нужен (он для sendMessage)
-        };
-      
-        const axios = require("axios");
-        return axios.post(`${api}/sendPhoto`, payload);
-      }
+      // Для текущей схемы: рассылаем новым ботом, иначе люди не получат
+      const tokenOverrideAll = (process.env.TELEGRAM_CLIENT_BOT_TOKEN || "").trim() || null;
 
-      // batch sending to avoid spikes
-      const BATCH = 25;
-      let delivered = 0;
-      let failed = 0;
-      const failedSample = [];
-      for (let i = 0; i < unique.length; i += BATCH) {
-        const batch = unique.slice(i, i + BATCH);
-        const results = await Promise.allSettled(
-          batch.map((cid) => {
-            const opts = { parse_mode: "HTML", reply_markup: kb, disable_web_page_preview: true };
-            
-            return card.photoUrl
-              ? tgSendPhoto(cid, card.photoUrl, msg, opts, tokenOverrideAll)
-              : tgSend(cid, msg, opts, tokenOverrideAll);
-          })
-        );
+      if (!tokenOverrideAll) {
+        console.warn("[admin approve] broadcast skipped: TELEGRAM_CLIENT_BOT_TOKEN is missing");
+      } else if (!unique.length) {
+        console.warn("[admin approve] broadcast skipped: no recipients");
+      } else {
+        console.log("[admin approve] broadcast audience:", {
+          providers: recProv.rows.length,
+          clients: recCli.rows.length,
+          totalUnique: unique.length,
+        });
 
-        const ok = results.filter((r) => r.status === "fulfilled").length;
-        const fail = results.length - ok;
-        delivered += ok;
-        failed += fail;
-        if (fail && failedSample.length < 10) {
-          results.forEach((r, idx) => {
-            if (r.status === "rejected" && failedSample.length < 10) {
-              failedSample.push(batch[idx]);
-            }
-          });
+        // admins report (optional)
+        const adminChatIds = String(process.env.TELEGRAM_ADMIN_CHAT_IDS || "")
+          .split(/[,\s]+/g)
+          .map((s) => s.trim())
+          .filter((s) => /^-?\d+$/.test(s))
+          .map((s) => Number(s));
+
+        async function tgSendPhoto(chatId, photo, caption, opts = {}, tokenOverride = null) {
+          const token =
+            tokenOverride ||
+            (process.env.TELEGRAM_CLIENT_BOT_TOKEN || "").trim() ||
+            (process.env.TELEGRAM_BOT_TOKEN || "").trim() ||
+            null;
+
+          if (!token) throw new Error("TELEGRAM_TOKEN_MISSING");
+
+          const api = `https://api.telegram.org/bot${token}`;
+
+          const payload = {
+            chat_id: chatId,
+            photo: String(photo || "").startsWith("tgfile:")
+              ? String(photo).replace(/^tgfile:/, "").trim()
+              : photo,
+            caption: String(caption || "").slice(0, 1024),
+            parse_mode: "HTML",
+            reply_markup: opts.reply_markup,
+          };
+
+          return axios.post(`${api}/sendPhoto`, payload);
         }
-        if (fail) {
-          const sampleErr = results.find((r) => r.status === "rejected")?.reason;
-          console.warn("[admin approve] broadcast batch errors:", {
-            batchFrom: i,
-            batchSize: results.length,
-            ok,
-            fail,
-            sample: sampleErr?.message || String(sampleErr || ""),
-          });
-        } else {
-          console.log("[admin approve] broadcast batch ok:", {
-            batchFrom: i,
-            batchSize: results.length,
-          });
+
+        const BATCH = 25;
+        let delivered = 0;
+        let failed = 0;
+        const failedSample = [];
+
+        for (let i = 0; i < unique.length; i += BATCH) {
+          const batch = unique.slice(i, i + BATCH);
+
+          const results = await Promise.allSettled(
+            batch.map((cid) => {
+              if (photoUrl) {
+                return tgSendPhoto(cid, photoUrl, msg, { reply_markup: kb }, tokenOverrideAll);
+              }
+              return tgSend(cid, msg, { parse_mode: "HTML", reply_markup: kb }, tokenOverrideAll);
+            })
+          );
+
+          const ok = results.filter((r) => r.status === "fulfilled").length;
+          const fail = results.length - ok;
+          delivered += ok;
+          failed += fail;
+
+          if (fail && failedSample.length < 10) {
+            results.forEach((r, idx) => {
+              if (r.status === "rejected" && failedSample.length < 10) {
+                failedSample.push(batch[idx]);
+              }
+            });
+          }
+
+          if (fail) {
+            const sampleErr = results.find((r) => r.status === "rejected")?.reason;
+            console.warn("[admin approve] broadcast batch errors:", {
+              batchFrom: i,
+              batchSize: results.length,
+              ok,
+              fail,
+              sample: sampleErr?.message || String(sampleErr || ""),
+            });
+          } else {
+            console.log("[admin approve] broadcast batch ok:", {
+              batchFrom: i,
+              batchSize: results.length,
+            });
+          }
         }
-      }
 
-      // send final report to admins (so you don't need logs)
-      if (adminChatIds.length) {
-        const report =
-          `📣 <b>Broadcast report</b>\n` +
-          `Service: <code>${svc.id}</code>\n` +
-          `Category: <code>${cat}</code>\n` +
-          `Recipients: <b>${unique.length}</b>\n` +
-          `Delivered: <b>${delivered}</b>\n` +
-          `Failed: <b>${failed}</b>` +
-          (failedSample.length ? `\n\n❌ Failed chatIds (sample):\n<code>${failedSample.join(", ")}</code>` : "");
+        if (adminChatIds.length) {
+          const report =
+            `📣 <b>Broadcast report</b>\n` +
+            `Service: <code>${svc.id}</code>\n` +
+            `Category: <code>${cat}</code>\n` +
+            `Recipients: <b>${unique.length}</b>\n` +
+            `Delivered: <b>${delivered}</b>\n` +
+            `Failed: <b>${failed}</b>` +
+            (failedSample.length
+              ? `\n\n❌ Failed chatIds (sample):\n<code>${failedSample.join(", ")}</code>`
+              : "");
 
-        await Promise.allSettled(
-          adminChatIds.map((aid) =>
-            tokenOverrideAll ? tgSend(aid, report, { parse_mode: "HTML" }, tokenOverrideAll) : tgSend(aid, report, { parse_mode: "HTML" })
-          )
-        );
+          await Promise.allSettled(
+            adminChatIds.map((aid) => tgSend(aid, report, { parse_mode: "HTML" }, tokenOverrideAll))
+          );
+        }
       }
     }
   } catch (e) {
     console.error("[admin approve] broadcast failed:", e?.message || e);
   }
-
 
   res.json({ ok: true, service: rows[0] });
 });
@@ -353,8 +347,8 @@ router.post("/services/:id(\\d+)/reject", authenticateToken, requireAdmin, async
     const chatId = refusedChatId || fallbackChatId;
     const tokenOverride = refusedChatId
       ? ((process.env.TELEGRAM_CLIENT_BOT_TOKEN || "").trim() ||
-         (process.env.TELEGRAM_BOT_TOKEN || "").trim() ||
-         null)
+          (process.env.TELEGRAM_BOT_TOKEN || "").trim() ||
+          null)
       : null;
 
     if (chatId) {
@@ -384,27 +378,16 @@ router.post("/services/:id(\\d+)/unpublish", authenticateToken, requireAdmin, as
   );
   if (!rows.length) return res.status(400).json({ message: "Service not in published" });
 
-  // TG → администраторам
   notifyModerationUnpublished({ service: rows[0].id }).catch(() => {});
   res.json({ ok: true, service: rows[0] });
 });
 
 // DELETE /api/admin/leads/:id  (жесткое удаление: lead + client/provider + хвосты)
-router.delete(
-  "/leads/:id(\\d+)",
-  authenticateToken,
-  requireAdmin,
-  leadController.deleteLeadFully
-);
-
+router.delete("/leads/:id(\\d+)", authenticateToken, requireAdmin, leadController.deleteLeadFully);
 
 /* ===================== RESET endpoints (совместимо с фронтом Leads.jsx) ===================== */
-/**
- * POST /api/admin/reset-provider
- * body: { leadId }
- * - удаляет provider по телефону лида
- * - сбрасывает lead: decision/status/decided_at
- */
+
+// POST /api/admin/reset-provider
 router.post("/reset-provider", authenticateToken, requireAdmin, async (req, res) => {
   const leadId = Number(req.body?.leadId);
   if (!Number.isFinite(leadId)) {
@@ -457,12 +440,7 @@ router.post("/reset-provider", authenticateToken, requireAdmin, async (req, res)
   }
 });
 
-/**
- * POST /api/admin/reset-client
- * body: { leadId }
- * - удаляет client по телефону лида
- * - сбрасывает lead: decision/status/decided_at
- */
+// POST /api/admin/reset-client
 router.post("/reset-client", authenticateToken, requireAdmin, async (req, res) => {
   const leadId = Number(req.body?.leadId);
   if (!Number.isFinite(leadId)) {
@@ -516,42 +494,35 @@ router.post("/reset-client", authenticateToken, requireAdmin, async (req, res) =
 });
 
 /* --- Change provider password (admin only) --- */
-// PATCH /api/admin/providers/:id/password
-// body: { password: "NewPass123" }
-router.patch(
-  "/providers/:id(\\d+)/password",
-  authenticateToken,
-  requireAdmin,
-  async (req, res) => {
-    const id = Number(req.params.id);
-    const { password } = req.body || {};
+router.patch("/providers/:id(\\d+)/password", authenticateToken, requireAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  const { password } = req.body || {};
 
-    if (!Number.isInteger(id) || id <= 0) {
-      return res.status(400).json({ message: "Bad provider id" });
-    }
-    if (typeof password !== "string" || password.trim().length < 6) {
-      return res.status(400).json({ message: "Password must be at least 6 chars" });
-    }
-
-    try {
-      const q = `
-        UPDATE public.providers
-           SET password  = $1,
-               updated_at = NOW()
-         WHERE id = $2
-         RETURNING id, name, email
-      `;
-      const { rows } = await pool.query(q, [password.trim(), id]);
-      if (!rows.length) {
-        return res.status(404).json({ message: "Provider not found" });
-      }
-
-      return res.json({ ok: true, provider: rows[0] });
-    } catch (e) {
-      console.error("admin change password error:", e);
-      return res.status(500).json({ message: "Internal error" });
-    }
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ message: "Bad provider id" });
   }
-);
+  if (typeof password !== "string" || password.trim().length < 6) {
+    return res.status(400).json({ message: "Password must be at least 6 chars" });
+  }
+
+  try {
+    const q = `
+      UPDATE public.providers
+         SET password  = $1,
+             updated_at = NOW()
+       WHERE id = $2
+       RETURNING id, name, email
+    `;
+    const { rows } = await pool.query(q, [password.trim(), id]);
+    if (!rows.length) {
+      return res.status(404).json({ message: "Provider not found" });
+    }
+
+    return res.json({ ok: true, provider: rows[0] });
+  } catch (e) {
+    console.error("admin change password error:", e);
+    return res.status(500).json({ message: "Internal error" });
+  }
+});
 
 module.exports = router;
