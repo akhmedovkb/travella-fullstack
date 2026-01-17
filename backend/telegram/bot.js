@@ -269,7 +269,11 @@ async function getOwnerChatIdByServiceId(serviceId) {
       `
       SELECT
         s.provider_id,
-        COALESCE(p.telegram_chat_id, p.tg_chat_id) AS chat_id
+        COALESCE(
+          p.telegram_refused_chat_id,
+          p.telegram_chat_id,
+          p.tg_chat_id
+        ) AS chat_id
       FROM services s
       JOIN providers p ON p.id = s.provider_id
       WHERE s.id = $1
@@ -279,17 +283,25 @@ async function getOwnerChatIdByServiceId(serviceId) {
     );
 
     const row = r?.rows?.[0];
-    if (!row) return null;
-
-    if (!row.chat_id) {
+    if (!row || !row.chat_id) {
       console.warn("[tg-bot] owner tg chat_id is NULL", {
         serviceId: sid,
-        providerId: row.provider_id,
+        providerId: row?.provider_id,
       });
       return null;
     }
 
-    return String(row.chat_id);
+    const chatIdNum = Number(String(row.chat_id).trim());
+    if (!chatIdNum) {
+      console.warn("[tg-bot] owner tg chat_id invalid", {
+        serviceId: sid,
+        providerId: row.provider_id,
+        chat_id: row.chat_id,
+      });
+      return null;
+    }
+
+    return String(chatIdNum);
   } catch (e) {
     console.error("[tg-bot] getOwnerChatIdByServiceId error:", e?.message || e);
     return null;
@@ -4825,11 +4837,11 @@ bot.on("text", async (ctx, next) => {
           ],
         };
       
-        await bot.telegram.sendMessage(ownerChatId, textForOwner, {
+        await bot.telegram.sendMessage(Number(ownerChatId), textForOwner, {
           parse_mode: "Markdown",
           reply_markup,
         });
-      
+
         await ctx.reply("✅ Дополнение отправлено владельцу услуги.");
       
         // сброс состояния (activeRequestId можно чистить, чтобы не зависало)
@@ -4851,7 +4863,11 @@ bot.on("text", async (ctx, next) => {
         }
 
       const source = ctx.session.pendingRequestSource || null;
-      const msg = ctx.message.text;
+      const msg = String(ctx.message?.text || "").trim();
+      if (!msg) {
+        await ctx.reply("⚠️ Пустое сообщение. Напишите текст.");
+        return;
+      }
       const from = ctx.from || {};
       const chatId = ctx.chat.id;
     
