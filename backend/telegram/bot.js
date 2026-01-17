@@ -3442,6 +3442,13 @@ bot.action("prov_services:list_cards", async (ctx) => {
       if (!db) return -1;
       return da.getTime() - db.getTime();
     });
+    const escapeHtml = (s) =>
+      String(s ?? "")
+       .replace(/&/g, "&amp;")
+       .replace(/</g, "&lt;")
+       .replace(/>/g, "&gt;")
+       .replace(/"/g, "&quot;")
+       .replace(/'/g, "&#39;");
 
     for (const svc of itemsSorted.slice(0, 10)) {
       const category = svc.category || svc.type || "refused_tour";
@@ -3451,15 +3458,7 @@ bot.action("prov_services:list_cards", async (ctx) => {
       const status = svc.status || "draft";
       const isActive = isServiceActual(details, svc);
       const expirationRaw = details.expiration || svc.expiration || null;
-      
-      const escapeHtml = (s) =>
-        String(s ?? "")
-          .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;")
-          .replace(/"/g, "&quot;")
-          .replace(/'/g, "&#39;");
-      
+
       const isPending = svc.status === "pending" || svc.moderation_status === "pending";
       const isRejected = svc.status === "rejected" || svc.moderation_status === "rejected";
       
