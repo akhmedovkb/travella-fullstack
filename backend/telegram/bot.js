@@ -3002,6 +3002,7 @@ bot.start(async (ctx) => {
 
           if (photoUrl) {
             await safeReplyWithPhoto(ctx, photoUrl, text, {
+              parse_mode: "HTML",
               reply_markup: kb,
             });
           } else {
@@ -3450,68 +3451,69 @@ bot.action("prov_services:list_cards", async (ctx) => {
       const status = svc.status || "draft";
       const isActive = isServiceActual(details, svc);
       const expirationRaw = details.expiration || svc.expiration || null;
-
-      const headerLines = [];
-      headerLines.push(
-        escapeMarkdown(`#${svc.id} · ${CATEGORY_LABELS[category] || "Услуга"}`)
-      );
-      const isPending =
-        svc.status === "pending" || svc.moderation_status === "pending";
-      const isRejected =
-        svc.status === "rejected" || svc.moderation_status === "rejected";
-
-      const moderationComment =
-        svc.moderation_comment ||
-        svc.moderationComment ||
-        null;
-
+      
+      const escapeHtml = (s) =>
+        String(s ?? "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      
+      const isPending = svc.status === "pending" || svc.moderation_status === "pending";
+      const isRejected = svc.status === "rejected" || svc.moderation_status === "rejected";
+      
+      const moderationComment = svc.moderation_comment || svc.moderationComment || null;
+      
       let statusLabel = status;
-
       if (isPending) statusLabel = "⏳ На модерации";
       if (isRejected) statusLabel = "❌ Отклонено";
       
-      headerLines.push(
-        escapeMarkdown(
-          `Статус: ${statusLabel}${!isPending && !isRejected && !isActive ? " (неактуально)" : ""}`
-        )
-      );
+      const titleLine = `#${svc.id} · ${CATEGORY_LABELS[category] || "Услуга"}`;
+      const statusLine = `Статус: ${statusLabel}${!isPending && !isRejected && !isActive ? " (неактуально)" : ""}`;
+      
+      let headerHtml = `<b>${escapeHtml(titleLine)}</b>\n${escapeHtml(statusLine)}`;
       
       if (isRejected && moderationComment) {
-        headerLines.push(
-          escapeMarkdown(`Причина: ${moderationComment}`)
-        );
+        headerHtml += `\n<b>Причина:</b> ${escapeHtml(moderationComment)}`;
+      }
+      if (expirationRaw) {
+        headerHtml += `\n<b>Актуально до:</b> ${escapeHtml(expirationRaw)}`;
       }
       
-      if (expirationRaw) headerLines.push(escapeMarkdown(`Актуально до: ${expirationRaw}`));
-
-      const msg = headerLines.join("\n") + "\n\n" + text;
+      // ⚠️ text уже HTML из buildServiceMessage
+      const msg = headerHtml + "\n\n" + text;
       const manageUrl = `${SITE_URL}/dashboard?from=tg&service=${svc.id}`;
 
-const keyboard = {
-  inline_keyboard: [
-    [
-      { text: "✏️ Редактировать", callback_data: `svc_edit_start:${svc.id}` },
-      { text: "⏳ Продлить", callback_data: `svc_extend:${svc.id}` },
-    ],
-    [
-      { text: "⛔ Снять", callback_data: `svc_unpublish:${svc.id}` },
-      { text: "🗄 Архивировать", callback_data: `svc_archive:${svc.id}` },
-    ],
-    [
-      { text: "🌐 Открыть в кабинете", url: manageUrl },
-    ],
-  ],
-};
-
-
+      const keyboard = {
+        inline_keyboard: [
+          [
+            { text: "✏️ Редактировать", callback_data: `svc_edit_start:${svc.id}` },
+            { text: "⏳ Продлить", callback_data: `svc_extend:${svc.id}` },
+          ],
+          [
+            { text: "⛔ Снять", callback_data: `svc_unpublish:${svc.id}` },
+            { text: "🗄 Архивировать", callback_data: `svc_archive:${svc.id}` },
+          ],
+          [{ text: "🌐 Открыть в кабинете", url: manageUrl }],
+        ],
+      };
 
       if (photoUrl) {
-        const photo = photoUrl.startsWith("tgfile:")
-          ? photoUrl.replace(/^tgfile:/, "")
+        const photo = String(photoUrl).startsWith("tgfile:")
+          ? String(photoUrl).replace(/^tgfile:/, "").trim()
           : photoUrl;
-        await safeReplyWithPhoto(ctx, photo, msg, { reply_markup: keyboard });
+      
+        await safeReplyWithPhoto(ctx, photo, msg, {
+          parse_mode: "HTML",
+          reply_markup: keyboard,
+        });
       } else {
-        await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: keyboard });
+        await ctx.reply(msg, {
+          parse_mode: "HTML",
+          reply_markup: keyboard,
+          disable_web_page_preview: true,
+        });
       }
     }
 
