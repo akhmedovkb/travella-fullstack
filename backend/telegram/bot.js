@@ -2066,10 +2066,21 @@ function isValidNormalizedDateTime(norm) {
 }
 
 function normalizeDateTimeInputStrict(raw) {
-  const norm = normalizeDateTimeInputHelper(raw);
+  const s = String(raw || "").trim();
+
+  // принимает: YYYY-MM-DD HH:mm  и  YYYY.MM.DD HH:mm
+  const m = s.match(/^(\d{4})[-.](\d{2})[-.](\d{2})\s+(\d{2}):(\d{2})$/);
+  if (!m) return null;
+
+  // приводим к единому виду: YYYY-MM-DD HH:mm
+  const norm = `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}`;
+
+  // строгая проверка реальной даты/времени (чтобы не пропустить 2026-29-01)
   if (!isValidNormalizedDateTime(norm)) return null;
+
   return norm;
 }
+
 
 function isPastDateTime(value) {
   const dt = parseDateFlexible(value);
