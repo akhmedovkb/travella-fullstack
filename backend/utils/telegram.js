@@ -45,13 +45,7 @@ function _tgApiByToken(token) {
  * - можно передать tokenOverride (4-й аргумент), чтобы слать через другой токен (например, новый бот)
  * Это НЕ ломает существующие вызовы.
  */
-async function tgSend(
-  chatId,
-  text,
-  extra = {},
-  tokenOverride = "",
-  throwOnError = false
-) {
+async function tgSend(chatId, text, extra = {}, tokenOverride = "", throwOnError = false) {
   // Если явно указан tokenOverride — используем его.
   // Иначе пробуем старого бота, а при отсутствии — нового.
   const override = String(tokenOverride || "").trim();
@@ -90,7 +84,7 @@ async function tgSend(
 
     console.error("[tg] sendMessage not ok:", res?.data);
 
-    // мягкий fallback на клиент-бота (частая причина: пользователь не нажимал /start в старом боте)
+    // мягкий fallback на клиент-бота
     if (shouldFallbackToClient) {
       try {
         const api2 = _tgApiByToken(CLIENT_BOT_TOKEN);
@@ -98,10 +92,7 @@ async function tgSend(
         if (res2?.data?.ok) return true;
         console.error("[tg] sendMessage (fallback client) not ok:", res2?.data);
       } catch (e2) {
-        console.error(
-          "[tg] sendMessage (fallback client) error:",
-          e2?.response?.data || e2?.message || e2
-        );
+        console.error("[tg] sendMessage (fallback client) error:", e2?.response?.data || e2?.message || e2);
       }
     }
 
@@ -113,7 +104,6 @@ async function tgSend(
     const data = e?.response?.data;
     console.error("[tg] sendMessage error:", data || e?.message || e);
 
-    // fallback на клиент-бота при типичных ошибках "chat not found / blocked"
     if (shouldFallbackToClient) {
       const desc = String(data?.description || "");
       const code = Number(data?.error_code || 0);
@@ -131,10 +121,7 @@ async function tgSend(
           if (res2?.data?.ok) return true;
           console.error("[tg] sendMessage (fallback client) not ok:", res2?.data);
         } catch (e2) {
-          console.error(
-            "[tg] sendMessage (fallback client) error:",
-            e2?.response?.data || e2?.message || e2
-          );
+          console.error("[tg] sendMessage (fallback client) error:", e2?.response?.data || e2?.message || e2);
         }
       }
     }
@@ -144,6 +131,42 @@ async function tgSend(
   }
 }
 
+// token-aware: отправка фото (sendPhoto) с caption.
+// photo: url | file_id | "tgfile:<file_id>"
+async function tgSendPhoto(chatId, photo, caption, opts = {}, tokenOverride = null, throwOnError = false) {
+  const token = tokenOverride || BOT_TOKEN || CLIENT_BOT_TOKEN;
+  const api = _tgApiByToken(token);
+
+  // normalize chatId
+  const cid =
+    typeof chatId === "string" && /^-?\d+$/.test(chatId.trim())
+      ? Number(chatId.trim())
+      : chatId;
+
+  if (!token || !api || !cid) return false;
+
+  const cleanPhoto = String(photo || "").startsWith("tgfile:")
+    ? String(photo || "").replace(/^tgfile:/, "").trim()
+    : photo;
+
+  const payload = {
+    chat_id: cid,
+    photo: cleanPhoto,
+    caption: String(caption || "").slice(0, 1024),
+    parse_mode: opts?.parse_mode || "HTML",
+    reply_markup: opts?.reply_markup,
+  };
+
+  try {
+    const { data } = await axios.post(`${api}/sendPhoto`, payload);
+    return data;
+  } catch (e) {
+    const desc = e?.response?.data?.description || e?.message || String(e);
+    console.error("[tg] sendPhoto error:", desc);
+    if (throwOnError) throw e;
+    return false;
+  }
+}
 
 // token-aware
 async function tgAnswerCallbackQuery(cbQueryId, text, opts = {}, tokenOverride = "") {
@@ -1221,6 +1244,7 @@ async function getTelegramHealth({ probe = false } = {}) {
 module.exports = {
   enabled,
   tgSend,
+  tgSendPhoto,
   tgSendToAdmins,
 
   // HEALTH:
