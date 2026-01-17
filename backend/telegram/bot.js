@@ -324,6 +324,29 @@ async function isRequestOperatorChat(ctx, requestId) {
   return await isOwnerOfService(req.service_id, ctx?.chat?.id);
 }
 
+// ===================== DEDUP HELPERS =====================
+// защита от двойной отправки одного и того же сообщения
+
+function makeDedupKey(ctx, prefix, id) {
+  const chatId = ctx?.chat?.id || "0";
+  return `${prefix}:${chatId}:${id}`;
+}
+
+function isDuplicateAndMark(ctx, key, ttlMs = 10_000) {
+  if (!ctx.session) ctx.session = {};
+  if (!ctx.session.__dedup) ctx.session.__dedup = {};
+
+  const now = Date.now();
+  const last = ctx.session.__dedup[key];
+
+  if (last && now - last < ttlMs) {
+    return true; // дубликат
+  }
+
+  ctx.session.__dedup[key] = now;
+  return false;
+}
+
 /* ===================== INLINE CACHE (LRU + inflight + per-key TTL) ===================== */
 
 const INLINE_CACHE_TTL_MS = 15000;          // общий дефолт (fallback)
