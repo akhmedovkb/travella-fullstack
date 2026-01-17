@@ -11,6 +11,7 @@ const {
 } = require("./helpers/serviceActual");
 const { buildSvcActualKeyboard } = require("./keyboards/serviceActual");
 const { handleServiceActualCallback } = require("./handlers/serviceActualHandler");
+const { buildServiceMessage } = require("../utils/telegramServiceCard");
 
 /* ===================== CONFIG ===================== */
 
@@ -852,22 +853,55 @@ async function safeReply(ctx, text, extra) {
 // Если фото не отправилось — падаем в текст (и не маскируем это под "ошибка сохранения").
 async function safeReplyWithPhoto(ctx, photo, caption, extra = {}) {
   const cap = String(caption || "").slice(0, 1024); // Telegram caption limit
-  try {
+
+  const send = async (opts) => {
     if (ctx.chat?.id) {
-      return await ctx.replyWithPhoto(photo, { caption: cap, ...extra });
+      return await ctx.replyWithPhoto(photo, opts);
     }
     const uid = ctx.from?.id || ctx.chat?.id;
     if (!uid) throw new Error("NO_USER_ID");
-    return await bot.telegram.sendPhoto(uid, photo, { caption: cap, ...extra });
-  } catch (e) {
-    console.error(
-      "[tg-bot] safeReplyWithPhoto failed, fallback to text:",
-      e?.response?.data || e?.message || e
-    );
+    return await bot.telegram.sendPhoto(uid, photo, opts);
+  };
+
+  // 1) пробуем HTML (по умолчанию)
+  try {
+    const opts = { caption: cap, parse_mode: "HTML", ...extra };
+    return await send(opts);
+  } catch (e1) {
+    const desc =
+      e1?.response?.description ||
+      e1?.response?.data?.description ||
+      e1?.message ||
+      "";
+    const isEntities = String(desc).toLowerCase().includes("can't parse entities");
+
+    if (isEntities) {
+      // 2) если HTML где-то сломался — ретрай без parse_mode
+      try {
+        const opts2 = { caption: cap, ...extra };
+        // на всякий: если extra содержит parse_mode, уберём
+        delete opts2.parse_mode;
+        return await send(opts2);
+      } catch (e2) {
+        console.error(
+          "[tg-bot] safeReplyWithPhoto failed (fallback also failed):",
+          e2?.response?.data || e2?.message || e2
+        );
+      }
+    } else {
+      console.error(
+        "[tg-bot] safeReplyWithPhoto failed:",
+        e1?.response?.data || e1?.message || e1
+      );
+    }
+
+    // 3) последний fallback — текстом
     const textExtra = { ...extra };
+    delete textExtra.parse_mode;
     return await safeReply(ctx, cap || "(фото)", textExtra);
   }
 }
+
 
 function statusLabelForManager(status) {
   return status === "accepted"
@@ -2110,158 +2144,6 @@ function getFirstImageUrl(svc) {
   // <-- ключевой фикс: если путь без "/" — тоже собираем URL
   return `${TG_IMAGE_BASE}/${v.replace(/^\/+/, "")}`;
 
-}
-
-function buildServiceMessage(svc, category, role = "client") {
-  const d = parseDetailsAny(svc.details);
-
-  const serviceId = svc.id;
-  const serviceUrl = buildServiceUrl(serviceId);
-
-  // ---------- helpers (самодостаточно) ----------
-  const escapeHtml = (s) =>
-    String(s ?? "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");
-
-  const a = (url, label) => {
-    if (!url) return escapeHtml(label || "");
-    return `<a href="${escapeHtml(url)}">${escapeHtml(label || url)}</a>`;
-  };
-
-  const joinClean = (arr, sep = " • ") =>
-    arr.map((x) => String(x || "").trim()).filter(Boolean).join(sep);
-
-  const norm = (v) => (v ? normalizeWeirdSeparator(String(v)) : "");
-
-  // ---------- data normalize ----------
-  const titleRaw = (svc.title || CATEGORY_LABELS?.[category] || "Услуга").trim();
-  const titlePretty = normalizeTitleSoft(titleRaw);
-
-  const emoji = CATEGORY_EMOJI?.[category] || "";
-  const stars = extractStars ? extractStars(d) : "";
-  const titleDecor = joinClean([emoji, titlePretty, stars], " ");
-
-  // direction
-  const from = norm(d.directionFrom);
-  const to = norm(d.directionTo);
-  const country = norm(d.directionCountry);
-  const route = joinClean([from && to ? `${from} → ${to}` : (to || from), country]);
-
-  // dates
-  const startRaw = d.departureFlightDate || d.startDate || d.startFlightDate || "";
-  const endRaw = d.returnFlightDate || d.endDate || d.endFlightDate || "";
-  const start = norm(startRaw);
-  const end = norm(endRaw);
-
-  const dates =
-    start && end && start !== end ? `${start} → ${end}` : (start || end || "");
-
-  // nights
-  let nights = null;
-  try {
-    const sdt = start ? parseDateFlexible(start) : null;
-    const edt = end ? parseDateFlexible(end) : null;
-    if (sdt && edt) {
-      const diff = Math.round((edt.getTime() - sdt.getTime()) / 86400000);
-      if (diff > 0 && diff < 60) nights = diff;
-    }
-  } catch {}
-
-  // hotel / accommodation
-  const hotel = norm(d.hotel || d.hotelName);
-  const accommodation = norm(d.accommodation);
-
-  // price: client -> gross, provider -> net (твой pickPrice уже так делает)
-  const priceRaw = pickPrice(d, svc, role);
-  const priceWithCur = formatPriceWithCurrency(priceRaw);
-
-  // badge (expiry)
-  const badge = getExpiryBadge(d, svc); // может вернуть "⏳ истекает завтра" и т.п.
-  const badgeClean = badge ? String(badge).replace(/^⏳\s*/g, "").trim() : "";
-
-  // provider lines
-  const providerNameRaw = (svc.provider_name || "Поставщик").trim();
-  const providerId = svc.provider_id || svc.providerId || svc.provider?.id || null;
-  const providerProfileUrl = providerId ? `${SITE_URL}/profile/provider/${providerId}` : null;
-
-  const providerLine = providerProfileUrl
-    ? `Поставщик: ${a(providerProfileUrl, providerNameRaw)}`
-    : `Поставщик: ${escapeHtml(providerNameRaw)}`;
-
-  let telegramLine = "";
-  if (svc.provider_telegram) {
-    let u = String(svc.provider_telegram).trim().replace(/^@/, "");
-    u = u.replace(/^https?:\/\/t\.me\//i, "");
-    u = u.replace(/^tg:\/\/resolve\?domain=/i, "");
-    if (u) telegramLine = `Telegram: ${a(`https://t.me/${encodeURIComponent(u)}`, u)}`;
-  }
-
-  // ---------- SELLING CARD (Variant B) ----------
-  // client: показываем продающий формат. provider: можно оставить более “деловой”.
-  if (role !== "provider" && String(category) === "refused_tour") {
-    const parts = [];
-
-    if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
-
-    parts.push(`🔥 <b>ОТКАЗНОЙ ТУР</b> <code>#R${serviceId}</code>`);
-    if (route) parts.push(`✈️ <b>${escapeHtml(route)}</b>`);
-
-    if (dates) {
-      parts.push(`🗓 <b>${escapeHtml(dates)}${nights ? ` (${nights} ноч.)` : ""}</b>`);
-    }
-
-    if (hotel) parts.push(`🏨 <b>${escapeHtml(hotel)}</b>`);
-    if (accommodation) parts.push(`🛏 ${escapeHtml(accommodation)}`);
-
-    if (priceWithCur != null && String(priceWithCur).trim()) {
-      parts.push(`💸 <b>${escapeHtml(String(priceWithCur))}</b> <i>(брутто)</i>`);
-    }
-
-    if (badgeClean) parts.push(`⏳ <b>Срок:</b> ${escapeHtml(badgeClean)}`);
-
-    // продающий блок (без “воды”, но убедительно)
-    parts.push(`✅ <b>Фикс-пакет</b>: без замен (отель/даты/размещение)`);
-    parts.push(`⚡ <b>Горящее</b>: такие варианты уходят быстро`);
-
-    parts.push("");
-    parts.push(providerLine);
-    if (telegramLine) parts.push(telegramLine);
-
-    parts.push("");
-    parts.push(`👉 Подробнее и бронирование: ${a(serviceUrl, "открыть")}`);
-
-    return { text: parts.join("\n"), photoUrl: getFirstImageUrl(svc), serviceUrl };
-  }
-
-  // ---------- fallback (универсальный HTML, не падает) ----------
-  // Здесь можно оставить “сухой” формат для провайдера и других категорий
-  const parts = [];
-  if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
-  parts.push(`<b>${escapeHtml(titleDecor)}</b>`);
-  if (route) parts.push(`✈️ ${escapeHtml(route)}`);
-  if (dates) parts.push(`🗓 ${escapeHtml(dates)}${nights ? ` (${nights} ноч.)` : ""}`);
-  if (hotel) parts.push(`🏨 ${escapeHtml(hotel)}`);
-  if (accommodation) parts.push(`🛏 ${escapeHtml(accommodation)}`);
-
-  if (priceWithCur != null && String(priceWithCur).trim()) {
-    const kind = role === "provider" ? "нетто" : "брутто";
-    parts.push(`💸 <b>${escapeHtml(String(priceWithCur))}</b> <i>(${escapeHtml(kind)})</i>`);
-  }
-
-  if (badgeClean) parts.push(`⏳ ${escapeHtml(badgeClean)}`);
-
-  parts.push("");
-  parts.push(providerLine);
-  if (telegramLine) parts.push(telegramLine);
-
-  parts.push("");
-  parts.push(`👉 Подробнее и бронирование: ${a(serviceUrl, "открыть")}`);
-
-  return { text: parts.join("\n"), photoUrl: getFirstImageUrl(svc), serviceUrl };
 }
 
 /**
