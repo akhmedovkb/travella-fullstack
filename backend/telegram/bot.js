@@ -1589,7 +1589,7 @@ async function finishEditWizard(ctx) {
   }
 
   try {
-        // ✅ ВАЛИДАЦИИ
+    // ✅ ВАЛИДАЦИИ
     const title = String(draft.title || "").trim();
 
     const category = String(draft.category || "").trim();
@@ -1600,7 +1600,10 @@ async function finishEditWizard(ctx) {
 
     // обязательные поля
     if (!title) {
-      await safeReply(ctx, "⚠️ Укажите *Название* (обязательное поле).", { parse_mode: "Markdown", ...editWizNavKeyboard() });
+      await safeReply(ctx, "⚠️ Укажите *Название* (обязательное поле).", {
+        parse_mode: "Markdown",
+        ...editWizNavKeyboard(),
+      });
       ctx.session.state = "svc_edit_title";
       ctx.session.editWiz = ctx.session.editWiz || {};
       ctx.session.editWiz.step = "svc_edit_title";
@@ -1610,7 +1613,10 @@ async function finishEditWizard(ctx) {
 
     if (!country) {
       const next = isHotel ? "svc_edit_hotel_country" : "svc_edit_tour_country";
-      await safeReply(ctx, "⚠️ Укажите *Страну* (обязательное поле).", { parse_mode: "Markdown", ...editWizNavKeyboard() });
+      await safeReply(ctx, "⚠️ Укажите *Страну* (обязательное поле).", {
+        parse_mode: "Markdown",
+        ...editWizNavKeyboard(),
+      });
       ctx.session.state = next;
       ctx.session.editWiz = ctx.session.editWiz || {};
       ctx.session.editWiz.step = next;
@@ -1621,7 +1627,11 @@ async function finishEditWizard(ctx) {
     // для тура: нужны оба города, для отеля: нужен город (toCity)
     if (!isHotel && (!fromCity || !toCity)) {
       const next = !fromCity ? "svc_edit_tour_from" : "svc_edit_tour_to";
-      await safeReply(ctx, "⚠️ Укажите *города вылета и прибытия* (обязательные поля).", { parse_mode: "Markdown", ...editWizNavKeyboard() });
+      await safeReply(
+        ctx,
+        "⚠️ Укажите *города вылета и прибытия* (обязательные поля).",
+        { parse_mode: "Markdown", ...editWizNavKeyboard() }
+      );
       ctx.session.state = next;
       ctx.session.editWiz = ctx.session.editWiz || {};
       ctx.session.editWiz.step = next;
@@ -1630,7 +1640,10 @@ async function finishEditWizard(ctx) {
     }
 
     if (isHotel && !toCity) {
-      await safeReply(ctx, "⚠️ Укажите *Город* (обязательное поле).", { parse_mode: "Markdown", ...editWizNavKeyboard() });
+      await safeReply(ctx, "⚠️ Укажите *Город* (обязательное поле).", {
+        parse_mode: "Markdown",
+        ...editWizNavKeyboard(),
+      });
       ctx.session.state = "svc_edit_hotel_city";
       ctx.session.editWiz = ctx.session.editWiz || {};
       ctx.session.editWiz.step = "svc_edit_hotel_city";
@@ -1649,25 +1662,42 @@ async function finishEditWizard(ctx) {
       if (!ok) return;
     }
 
+    const expirationValue =
+      draft.expiration === "" ? null : (draft.expiration ?? null);
+
     const payload = {
+      // ✅ базовые поля
       title: draft.title || "",
+
+      // ✅ важно: обновляем category в корне тоже
+      category: category || undefined,
+
       price: draft.price ?? null,
       grossPrice: draft.grossPrice ?? null,
+
       status: "pending",
-      expiration: (draft.expiration === "" ? null : (draft.expiration ?? null)),
+      expiration: expirationValue,
       isActive: !!draft.isActive,
 
-
       details: {
-        // оставляем совместимость с твоими ключами
+        // совместимость
         category: draft.category,
-        // цены: дублируем в details для совместимости с витриной/карточкой
+
+        // цены: дублируем в details для витрины/карточек
         netPrice: draft.price ?? null,
         price: draft.price ?? null,
         grossPrice: draft.grossPrice ?? null,
+
+        // ✅ НОВЫЕ ключи (их читают карточки/inline/витрина)
+        directionCountry: draft.country || "",
+        directionFrom: draft.fromCity || "",
+        directionTo: draft.toCity || "",
+
+        // ✅ legacy (чтобы старые места не поломать)
         country: draft.country || "",
         fromCity: draft.fromCity || "",
         toCity: draft.toCity || "",
+
         startDate: draft.startDate || "",
         endDate: draft.endDate || "",
         hotel: draft.hotel || "",
@@ -1685,14 +1715,16 @@ async function finishEditWizard(ctx) {
         returnFlightDate: draft.returnFlightDate || null,
         flightDetails: draft.flightDetails || null,
 
-        expiration: (draft.expiration === "" ? null : (draft.expiration ?? null)),
+        expiration: expirationValue,
         isActive: !!draft.isActive,
       },
 
-      // ✅ images опционально: если не хочешь трогать — НЕ передавай вообще
-      // но раз ты их уже тащишь в draft, можно отправлять (тогда будет replace)
+      // ✅ images опционально
       ...(Array.isArray(draft.images) ? { images: draft.images } : {}),
     };
+
+    // чтобы не отправлять category: undefined (если пустая)
+    if (!payload.category) delete payload.category;
 
     const { data } = await axios.patch(
       `/api/telegram/provider/${actorId}/services/${draft.id}`,
@@ -1707,7 +1739,10 @@ async function finishEditWizard(ctx) {
 
     await safeReply(ctx, `✅ Изменения сохранены (#${draft.id}).`);
   } catch (e) {
-    console.error("[tg-bot] finishEditWizard error:", e?.response?.data || e?.message || e);
+    console.error(
+      "[tg-bot] finishEditWizard error:",
+      e?.response?.data || e?.message || e
+    );
     await safeReply(ctx, "⚠️ Ошибка сохранения изменений.");
   } finally {
     resetServiceWizard(ctx);
