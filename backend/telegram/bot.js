@@ -4086,8 +4086,9 @@ bot.action(/^reqadd:(\d+)$/, async (ctx) => {
     }
 
     if (!ctx.session) ctx.session = {};
-    ctx.session.state = "awaiting_request_add_message";
-    ctx.session.pendingAddRequestId = requestId;
+    ctx.session.state = "awaiting_request_add";
+    ctx.session.activeRequestId = requestId;
+    ctx.session.pendingAddRequestId = null;
 
     await safeReply(
       ctx,
