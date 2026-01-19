@@ -744,6 +744,42 @@ async function getProviderServiceByIdFromBot(req, res) {
 }
 
 /**
+ Soft-delete (status = deleted)
+ МОИ КАРТОЧКИ
+ */
+
+async function deleteServiceFromBot(req, res) {
+  try {
+    const { chatId, serviceId } = req.params;
+
+    const provRes = await pool.query(
+      `SELECT id FROM providers WHERE telegram_chat_id = $1 LIMIT 1`,
+      [chatId]
+    );
+    if (!provRes.rowCount) {
+      return res.status(403).json({ success: false });
+    }
+
+    await pool.query(
+      `
+      UPDATE services
+         SET status = 'deleted',
+             updated_at = NOW()
+       WHERE id = $1
+         AND provider_id = $2
+      `,
+      [serviceId, provRes.rows[0].id]
+    );
+
+    return res.json({ success: true });
+  } catch (e) {
+    console.error("[tg] deleteServiceFromBot error:", e);
+    return res.status(500).json({ success: false });
+  }
+}
+
+
+/**
  * PATCH /api/telegram/provider/:chatId/services/:serviceId
  * body: { title?, price?, details?, images? }
  */
@@ -869,6 +905,7 @@ module.exports = {
   rejectBooking,
   getProviderServices,
   getProviderServicesAll,
+  deleteServiceFromBot,
   searchPublicServices,
   getProviderServiceByIdFromBot,
   updateServiceFromBot,
