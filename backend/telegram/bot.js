@@ -3120,22 +3120,24 @@ bot.start(async (ctx) => {
   try {
     let role = null;
 
+    // ✅ ПРИОРИТЕТ: СНАЧАЛА provider, ПОТОМ client
     try {
-      const resClient = await axios.get(`/api/telegram/profile/client/${actorId}`);
-      if (resClient.data && resClient.data.success) role = "client";
+      const resProv = await axios.get(`/api/telegram/profile/provider/${actorId}`);
+      if (resProv.data && resProv.data.success) role = "provider";
     } catch (e) {
       if (e?.response?.status !== 404) {
-        console.log("[tg-bot] profile client error:", e?.response?.data || e.message || e);
+        console.log("[tg-bot] profile provider error:", e?.response?.data || e.message || e);
       }
     }
 
+    // client проверяем ТОЛЬКО если провайдера нет
     if (!role) {
       try {
-        const resProv = await axios.get(`/api/telegram/profile/provider/${actorId}`);
-        if (resProv.data && resProv.data.success) role = "provider";
+        const resClient = await axios.get(`/api/telegram/profile/client/${actorId}`);
+        if (resClient.data && resClient.data.success) role = "client";
       } catch (e) {
         if (e?.response?.status !== 404) {
-          console.log("[tg-bot] profile provider error:", e?.response?.data || e.message || e);
+          console.log("[tg-bot] profile client error:", e?.response?.data || e.message || e);
         }
       }
     }
@@ -3144,7 +3146,7 @@ bot.start(async (ctx) => {
       if (!ctx.session) ctx.session = {};
       ctx.session.role = role;
       ctx.session.linked = true;
-      
+
       // ✅ Deep-link: refused_<serviceId> => показать конкретную услугу
       const mRef = startPayloadRaw.match(/^refused_(\d+)$/i);
       if (mRef) {
