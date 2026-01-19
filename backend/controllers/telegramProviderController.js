@@ -358,39 +358,27 @@ async function getProviderServicesAll(req, res) {
   try {
     const { chatId } = req.params;
 
-    const providerRes = await pool.query(
-      `SELECT id
-         FROM providers
-        WHERE telegram_chat_id = $1
-        LIMIT 1`,
+    const provRes = await pool.query(
+      `SELECT id FROM providers WHERE telegram_chat_id = $1 LIMIT 1`,
       [chatId]
     );
 
-    if (providerRes.rowCount === 0) {
+    if (!provRes.rowCount) {
       return res.json({ success: true, items: [] });
     }
 
-    const providerId = providerRes.rows[0].id;
+    const providerId = provRes.rows[0].id;
 
     const servicesRes = await pool.query(
       `
       SELECT
-        s.id,
-        s.category,
-        s.status,
-        s.title,
-        s.price,
-        s.details,
-        s.images,
-        s.expiration_at AS expiration,
-        s.created_at,
+        s.*,
         p.name   AS provider_name,
         p.social AS provider_telegram
       FROM services s
       LEFT JOIN providers p ON p.id = s.provider_id
       WHERE s.provider_id = $1
-      ORDER BY COALESCE(s.updated_at, s.created_at) DESC
-      LIMIT 200
+      ORDER BY s.created_at DESC
       `,
       [providerId]
     );
@@ -399,15 +387,11 @@ async function getProviderServicesAll(req, res) {
       success: true,
       items: servicesRes.rows,
     });
-  } catch (err) {
-    console.error("[telegram] getProviderServicesAll error:", err);
-    return res.status(500).json({
-      success: false,
-      error: "SERVER_ERROR",
-    });
+  } catch (e) {
+    console.error("[tg] getProviderServicesAll error:", e);
+    return res.status(500).json({ success: false });
   }
 }
-
 
 /**
  * ✅ Публичный поиск (маркетплейс) для provider-бота
