@@ -3610,7 +3610,9 @@ bot.action("prov_services:list_cards", async (ctx) => {
       ctx,
       `✅ Найдено услуг: ${data.items.length}.\nПоказываю первые 10 (по ближайшей дате).`
     );
-
+    const PAGE_SIZE = 5;
+    const offset = Number(ctx.session?.cardsOffset || 0);
+    
     const itemsSorted = [...data.items].sort((a, b) => {
       const da = getStartDateForSort(a);
       const db = getStartDateForSort(b);
@@ -3627,7 +3629,9 @@ bot.action("prov_services:list_cards", async (ctx) => {
        .replace(/"/g, "&quot;")
        .replace(/'/g, "&#39;");
 
-    for (const svc of itemsSorted.slice(0, 10)) {
+    const pageItems = itemsSorted.slice(offset, offset + PAGE_SIZE);
+
+    for (const svc of pageItems) {
       const category = svc.category || svc.type || "refused_tour";
       const details = parseDetailsAny(svc.details);
 
@@ -3694,6 +3698,21 @@ bot.action("prov_services:list_cards", async (ctx) => {
           disable_web_page_preview: true,
         });
       }
+    }
+    ctx.session.cardsOffset = offset + PAGE_SIZE;
+
+    if (itemsSorted.length > ctx.session.cardsOffset) {
+      await ctx.reply("⬇️ Показать ещё?", {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "⬇️ Показать ещё", callback_data: "prov_services:list_cards" }],
+            [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
+          ],
+        },
+      });
+      return; // ⛔ важно: не показываем "Что делаем дальше?"
+    } else {
+      ctx.session.cardsOffset = 0;
     }
 
     await safeReply(ctx, "Что делаем дальше? 👇", {
