@@ -214,6 +214,29 @@ function getFirstImageUrl(svc) {
 }
 
 /* ===================== MAIN CARD BUILDER (1:1 из bot.js) ===================== */
+function getPriceDropBadge(detailsRaw, svc, role) {
+  const d = parseDetailsAny(detailsRaw);
+
+  const prev =
+    d.previousPrice ??
+    d.oldPrice ??
+    null;
+
+  const current = pickPrice(d, svc, role);
+
+  if (!prev || !current) return null;
+
+  const p = Number(String(prev).replace(/[^\d.]/g, ""));
+  const c = Number(String(current).replace(/[^\d.]/g, ""));
+
+  if (!Number.isFinite(p) || !Number.isFinite(c)) return null;
+
+  if (c < p) {
+    return "⬇️ <b>Стоимость стала ниже</b>";
+  }
+
+  return null;
+}
 
 function buildServiceMessage(svc, category, role = "client") {
   const d = parseDetailsAny(svc.details);
@@ -311,7 +334,11 @@ function buildServiceMessage(svc, category, role = "client") {
     if (priceWithCur != null && String(priceWithCur).trim()) {
       parts.push(`💸 <b>${escapeHtml(String(priceWithCur))}</b> <i>(брутто)</i>`);
     }
-
+    const priceDropBadge = getPriceDropBadge(svc.details, svc, role);
+      if (priceDropBadge) {
+        parts.push(priceDropBadge);
+      }
+    
     if (badgeClean) parts.push(`⏳ <b>Срок:</b> ${escapeHtml(badgeClean)}`);
 
     parts.push(`✅ <b>Фикс-пакет</b>: без замен (отель/даты/размещение)`);
