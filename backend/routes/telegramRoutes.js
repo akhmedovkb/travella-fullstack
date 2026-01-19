@@ -617,6 +617,9 @@ router.get(
   telegramProviderController.getProviderServices
 );
 
+//услуги поставщика (ВСЕ услуги) — для кнопки "🖼 Карточками" в telegram боте
+router.get("/provider/:chatId/services/all", telegramProviderController.getProviderServicesAll);
+
 // одна услуга поставщика (для редактирования в боте)
 router.get(
   "/provider/:chatId/services/:serviceId",
