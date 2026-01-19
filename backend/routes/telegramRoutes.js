@@ -654,4 +654,9 @@ router.post(
   telegramProviderController.archiveServiceFromBot
 );
 
+// удаление услуги через МОИ КАРТОЧКИ в боте
+router.post(
+  "/provider/:chatId/services/:serviceId/delete",
+  telegramProviderController.deleteServiceFromBot
+);
 module.exports = router;
