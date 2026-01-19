@@ -213,30 +213,42 @@ function getFirstImageUrl(svc) {
   return `${TG_IMAGE_BASE}/${v.replace(/^\/+/, "")}`;
 }
 
-/* ===================== MAIN CARD BUILDER (1:1 из bot.js) ===================== */
-function getPriceDropBadge(detailsRaw, svc, role) {
+/* ===================== PRICE DROP (header + diff) ===================== */
+
+function toNumberPrice(v) {
+  if (v === null || v === undefined) return null;
+  const s = String(v).trim();
+  if (!s) return null;
+  const num = Number(s.replace(/[^\d.]/g, ""));
+  return Number.isFinite(num) ? num : null;
+}
+
+function getPriceDropMeta(detailsRaw, svc, role) {
   const d = parseDetailsAny(detailsRaw);
 
-  const prev =
-    d.previousPrice ??
-    d.oldPrice ??
-    null;
+  // current price exactly as card uses
+  const currentRaw = pickPrice(d, svc, role);
+  const current = toNumberPrice(currentRaw);
 
-  const current = pickPrice(d, svc, role);
+  // previous price stored in details
+  const prevRaw = d.previousPrice ?? d.prevPrice ?? d.oldPrice ?? null;
+  const prev = toNumberPrice(prevRaw);
 
-  if (!prev || !current) return null;
+  if (!Number.isFinite(prev) || !Number.isFinite(current)) return null;
+  if (current >= prev) return null;
 
-  const p = Number(String(prev).replace(/[^\d.]/g, ""));
-  const c = Number(String(current).replace(/[^\d.]/g, ""));
+  const diff = prev - current;
 
-  if (!Number.isFinite(p) || !Number.isFinite(c)) return null;
+  // currency: reuse PRICE_CURRENCY (USD by default)
+  const cur = PRICE_CURRENCY || "USD";
 
-  if (c < p) {
-    return "⬇️ <b>Стоимость стала ниже</b>";
-  }
-
-  return null;
+  return {
+    header: `📉 <b>ЦЕНА СНИЖЕНА</b>`,
+    diffLine: `⬇️ <b>−${diff} ${cur}</b>`,
+  };
 }
+
+/* ===================== MAIN CARD BUILDER (1:1 из bot.js) ===================== */
 
 function buildServiceMessage(svc, category, role = "client") {
   const d = parseDetailsAny(svc.details);
@@ -272,14 +284,14 @@ function buildServiceMessage(svc, category, role = "client") {
   const from = norm(d.directionFrom);
   const to = norm(d.directionTo);
   const country = norm(d.directionCountry);
-  const route = joinClean([from && to ? `${from} → ${to}` : (to || from), country]);
+  const route = joinClean([from && to ? `${from} → ${to}` : to || from, country]);
 
   const startRaw = d.departureFlightDate || d.startDate || d.startFlightDate || "";
   const endRaw = d.returnFlightDate || d.endDate || d.endFlightDate || "";
   const start = norm(startRaw);
   const end = norm(endRaw);
 
-  const dates = start && end && start !== end ? `${start} → ${end}` : (start || end || "");
+  const dates = start && end && start !== end ? `${start} → ${end}` : start || end || "";
 
   let nights = null;
   try {
@@ -316,12 +328,21 @@ function buildServiceMessage(svc, category, role = "client") {
     if (u) telegramLine = `Telegram: ${a(`https://t.me/${encodeURIComponent(u)}`, u)}`;
   }
 
+  // special template for refused_tour to match your group card format
   if (role !== "provider" && String(category) === "refused_tour") {
     const parts = [];
 
     if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
 
     parts.push(`🆕 <b>НОВЫЙ ОТКАЗНОЙ ТУР</b> <code>#R${serviceId}</code>`);
+
+    // ✅ price drop header + diff (only when previousPrice exists and current < previous)
+    const priceDrop = getPriceDropMeta(svc.details, svc, role);
+    if (priceDrop) {
+      parts.push(priceDrop.header);
+      parts.push(priceDrop.diffLine);
+    }
+
     if (route) parts.push(`✈️ <b>${escapeHtml(route)}</b>`);
 
     if (dates) {
@@ -334,11 +355,7 @@ function buildServiceMessage(svc, category, role = "client") {
     if (priceWithCur != null && String(priceWithCur).trim()) {
       parts.push(`💸 <b>${escapeHtml(String(priceWithCur))}</b> <i>(брутто)</i>`);
     }
-    const priceDropBadge = getPriceDropBadge(svc.details, svc, role);
-      if (priceDropBadge) {
-        parts.push(priceDropBadge);
-      }
-    
+
     if (badgeClean) parts.push(`⏳ <b>Срок:</b> ${escapeHtml(badgeClean)}`);
 
     parts.push(`✅ <b>Фикс-пакет</b>: без замен (отель/даты/размещение)`);
@@ -354,6 +371,7 @@ function buildServiceMessage(svc, category, role = "client") {
     return { text: parts.join("\n"), photoUrl: getFirstImageUrl(svc), serviceUrl };
   }
 
+  // default template for all other cases
   const parts = [];
   if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
   parts.push(`<b>${escapeHtml(titleDecor)}</b>`);
