@@ -3789,6 +3789,20 @@ bot.action(/^svc_delete:(\d+)$/, async (ctx) => {
   );
 });
 
+// Подтверждение в боте
+
+bot.action(/^svc_delete_confirm:(\d+)$/, async (ctx) => {
+  const serviceId = ctx.match[1];
+  await ctx.answerCbQuery();
+
+  const actorId = getActorId(ctx);
+
+  await axios.post(
+    `/api/telegram/provider/${actorId}/services/${serviceId}/delete`
+  );
+
+  await ctx.reply(`✅ Услуга #${serviceId} удалена.`);
+});
 
 /* ===================== WIZARD: CANCEL/BACK ===================== */
 
