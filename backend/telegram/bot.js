@@ -3767,6 +3767,29 @@ bot.action(/^svc_archive:(\d+)$/, async (ctx) => {
   }
 });
 
+/* ===================== УДАЛЕНИЕ УСЛУГИ ИЗ "МОИ КАРТОЧКИ" ===================== */
+
+bot.action(/^svc_delete:(\d+)$/, async (ctx) => {
+  const serviceId = ctx.match[1];
+  await ctx.answerCbQuery();
+
+  await ctx.reply(
+    `🗑 <b>Удалить услугу #${serviceId}?</b>\n\nУслуга будет скрыта из всех списков.`,
+    {
+      parse_mode: "HTML",
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: "❌ Отмена", callback_data: "noop:0" },
+            { text: "🗑 Удалить", callback_data: `svc_delete_confirm:${serviceId}` },
+          ],
+        ],
+      },
+    }
+  );
+});
+
+
 /* ===================== WIZARD: CANCEL/BACK ===================== */
 
 bot.action("svc_wiz:cancel", async (ctx) => {
