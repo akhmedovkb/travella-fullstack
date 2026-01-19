@@ -313,24 +313,29 @@ async function getProviderServices(req, res) {
 
     const servicesRes = await pool.query(
       `
-        SELECT
-          s.id,
-          s.category,
-          s.status,
-          s.title,
-          s.price,
-          s.details,
-          s.images,
-          s.expiration_at AS expiration,
-          s.created_at,
-          p.name   AS provider_name,
-          p.social AS provider_telegram
-        FROM services s
-        LEFT JOIN providers p ON p.id = s.provider_id
-       WHERE s.provider_id = $1
-         AND s.category = ANY($2::text[])
-       ORDER BY s.created_at DESC
-       LIMIT 100
+      SELECT
+        s.id,
+        s.category,
+        s.status,
+        s.title,
+        s.price,
+        s.details,
+        s.images,
+        s.expiration_at AS expiration,
+        s.created_at,
+        p.name   AS provider_name,
+        p.social AS provider_telegram
+      FROM services s
+      LEFT JOIN providers p ON p.id = s.provider_id
+      WHERE s.provider_id = $1
+        AND s.category = ANY($2::text[])
+        AND s.status != 'archived'
+        AND (
+          s.expiration_at IS NULL
+          OR s.expiration_at > NOW()
+        )
+      ORDER BY s.created_at DESC
+      LIMIT 100
       `,
       [providerId, categories]
     );
@@ -347,6 +352,62 @@ async function getProviderServices(req, res) {
     });
   }
 }
+
+// 🟢 ВСЕ услуги провайдера (для кнопки "Карточками")
+async function getProviderServicesAll(req, res) {
+  try {
+    const { chatId } = req.params;
+
+    const providerRes = await pool.query(
+      `SELECT id
+         FROM providers
+        WHERE telegram_chat_id = $1
+        LIMIT 1`,
+      [chatId]
+    );
+
+    if (providerRes.rowCount === 0) {
+      return res.json({ success: true, items: [] });
+    }
+
+    const providerId = providerRes.rows[0].id;
+
+    const servicesRes = await pool.query(
+      `
+      SELECT
+        s.id,
+        s.category,
+        s.status,
+        s.title,
+        s.price,
+        s.details,
+        s.images,
+        s.expiration_at AS expiration,
+        s.created_at,
+        p.name   AS provider_name,
+        p.social AS provider_telegram
+      FROM services s
+      LEFT JOIN providers p ON p.id = s.provider_id
+      WHERE s.provider_id = $1
+      ORDER BY COALESCE(s.updated_at, s.created_at) DESC
+      LIMIT 200
+      `,
+      [providerId]
+    );
+
+    return res.json({
+      success: true,
+      items: servicesRes.rows,
+    });
+  } catch (err) {
+    console.error("[telegram] getProviderServicesAll error:", err);
+    return res.status(500).json({
+      success: false,
+      error: "SERVER_ERROR",
+    });
+  }
+}
+
 
 /**
  * ✅ Публичный поиск (маркетплейс) для provider-бота
@@ -823,6 +884,7 @@ module.exports = {
   confirmBooking,
   rejectBooking,
   getProviderServices,
+  getProviderServicesAll,
   searchPublicServices,
   getProviderServiceByIdFromBot,
   updateServiceFromBot,
