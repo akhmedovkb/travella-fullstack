@@ -3579,7 +3579,9 @@ bot.action("prov_services:list_cards", async (ctx) => {
     }
 
     await safeReply(ctx, "⏳ Загружаю ваши услуги...");
-    const { data } = await axios.get(`/api/telegram/provider/${actorId}/services`);
+    const { data } = await axios.get(
+        `/api/telegram/provider/${actorId}/services/all`
+      );
 
     if (!data || !data.success || !Array.isArray(data.items)) {
       console.log("[tg-bot] provider services malformed:", data);
@@ -3631,7 +3633,7 @@ bot.action("prov_services:list_cards", async (ctx) => {
 
       const { text, photoUrl } = buildServiceMessage(svc, category, "provider");
       const status = svc.status || "draft";
-      const isActive = isServiceActual(details, svc);
+      const isActive = isServiceActual(details, svc); // ТОЛЬКО для подписи
       const expirationRaw = details.expiration || svc.expiration || null;
 
       const isPending = svc.status === "pending" || svc.moderation_status === "pending";
@@ -3640,8 +3642,10 @@ bot.action("prov_services:list_cards", async (ctx) => {
       const moderationComment = svc.moderation_comment || svc.moderationComment || null;
       
       let statusLabel = status;
+      
       if (isPending) statusLabel = "⏳ На модерации";
-      if (isRejected) statusLabel = "❌ Отклонено";
+      else if (isRejected) statusLabel = "❌ Отклонено";
+      else if (!isActive) statusLabel += " · ⛔ неактуально";
       
       const titleLine = `#${svc.id} · ${CATEGORY_LABELS[category] || "Услуга"}`;
       const statusLine = `Статус: ${statusLabel}${!isPending && !isRejected && !isActive ? " (неактуально)" : ""}`;
@@ -3668,6 +3672,7 @@ bot.action("prov_services:list_cards", async (ctx) => {
           [
             { text: "⛔ Снять", callback_data: `svc_unpublish:${svc.id}` },
             { text: "🗄 Архивировать", callback_data: `svc_archive:${svc.id}` },
+            { text: "🗑 Удалить", callback_data: `svc_delete:${svc.id}` },
           ],
           [{ text: "🌐 Открыть в кабинете", url: manageUrl }],
         ],
