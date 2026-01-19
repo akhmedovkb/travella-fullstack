@@ -62,6 +62,80 @@ router.get("/services/:id(\\d+)", authenticateToken, requireAdmin, async (req, r
   res.json(q.rows[0]);
 });
 
+/**
+ * ✅ Авто-запись previousPrice при изменении цены в админке
+ * PATCH /api/admin/services/:id/price
+ *
+ * Ожидаем: { grossPrice: "1750" } (можно число/строку, с валютой или без)
+ * Логика:
+ * - читаем текущие details
+ * - oldCurrent = details.grossPrice || details.price || details.netPrice || services.price
+ * - пишем details.previousPrice = oldCurrent, если новая цена реально изменилась
+ * - обновляем details.grossPrice
+ *
+ * Ничего из текущего approve/broadcast не ломаем.
+ */
+router.patch("/services/:id(\\d+)/price", authenticateToken, requireAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ message: "Bad service id" });
+
+  const { grossPrice } = req.body || {};
+  if (grossPrice === undefined) {
+    return res.status(400).json({ message: "grossPrice is required" });
+  }
+
+  const toNum = (v) => {
+    const n = Number(String(v ?? "").replace(/[^\d.]/g, ""));
+    return Number.isFinite(n) ? n : null;
+  };
+
+  try {
+    const cur = await pool.query(`SELECT id, price, details FROM services WHERE id=$1`, [id]);
+    if (!cur.rows.length) return res.status(404).json({ message: "Not found" });
+
+    const row = cur.rows[0];
+
+    // parse details robustly
+    let d = {};
+    if (row.details && typeof row.details === "object") d = row.details;
+    else if (typeof row.details === "string") {
+      try {
+        d = JSON.parse(row.details);
+      } catch {
+        d = {};
+      }
+    }
+
+    // "старая" цена — в том же порядке, как её берёт карточка для client
+    const oldCurrent = d.grossPrice ?? d.price ?? d.netPrice ?? row.price ?? null;
+
+    // проставляем новую цену
+    d.grossPrice = grossPrice;
+
+    const oldNum = toNum(oldCurrent);
+    const newNum = toNum(grossPrice);
+
+    // если реально поменялось — фиксируем previousPrice
+    if (oldNum !== null && newNum !== null && newNum !== oldNum) {
+      d.previousPrice = oldCurrent;
+    }
+
+    const upd = await pool.query(
+      `UPDATE services
+          SET details = $2::jsonb,
+              updated_at = NOW()
+        WHERE id = $1
+        RETURNING id, details, updated_at`,
+      [id, JSON.stringify(d)]
+    );
+
+    return res.json({ ok: true, service: upd.rows[0] });
+  } catch (e) {
+    console.error("[admin service price] error:", e);
+    return res.status(500).json({ message: "Internal error" });
+  }
+});
+
 // approve (только для pending)
 router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, async (req, res) => {
   const adminId = req.user.id;
@@ -149,7 +223,7 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
       const startPayload = encodeURIComponent(`refused_${svc.id}`);
       const openBotUrl = botUsername
         ? `https://t.me/${botUsername}?start=${startPayload}`
-        : (process.env.SITE_PUBLIC_URL || "");
+        : process.env.SITE_PUBLIC_URL || "";
 
       // ✅ ЕДИНЫЙ шаблон карточки
       const card = buildServiceMessage(svc, cat, "client");
