@@ -298,7 +298,7 @@ function buildServiceMessage(svc, category, role = "client") {
 
     if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
 
-    parts.push(`🔥 <b>ОТКАЗНОЙ ТУР</b> <code>#R${serviceId}</code>`);
+    parts.push(`🆕 <b>НОВЫЙ ОТКАЗНОЙ ТУР</b> <code>#R${serviceId}</code>`);
     if (route) parts.push(`✈️ <b>${escapeHtml(route)}</b>`);
 
     if (dates) {
