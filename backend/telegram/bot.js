@@ -5636,29 +5636,19 @@ bot.on("inline_query", async (ctx) => {
     }
 
     if (isMy) {
-      itemsForInline = itemsForInline.filter(
-        (svc) => String(svc.status || "").toLowerCase() !== "archived"
-      );
-    } else {
+      // ✅ МОИ УСЛУГИ — только актуальные и не archived
       itemsForInline = itemsForInline.filter((svc) => {
         try {
+          if (String(svc.status || "").toLowerCase() === "archived") return false;
           const det = parseDetailsAny(svc.details);
-          // ✅ подхватываем существующие изображения услуги
-          let imagesArr = svc.images ?? [];
-          if (typeof imagesArr === "string") {
-            try {
-              imagesArr = JSON.parse(imagesArr);
-            } catch {
-              imagesArr = imagesArr ? [imagesArr] : [];
-            }
-          }
-          if (!Array.isArray(imagesArr)) imagesArr = [];
-
           return isServiceActual(det, svc);
         } catch (_) {
           return false;
         }
       });
+    } else {
+      // ✅ КАРТОЧКАМИ — ВСЕ услуги (без фильтра актуальности)
+      itemsForInline = itemsForInline.filter((svc) => !!svc);
     }
 
     if (!itemsForInline.length) {
