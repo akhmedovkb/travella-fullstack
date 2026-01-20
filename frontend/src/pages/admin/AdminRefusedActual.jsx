@@ -355,12 +355,10 @@ const thClass = (field) =>
       "cursor-pointer hover:text-blue-700",
       sortBy === field ? "bg-blue-50/60 text-blue-900" : ""
     );
-const tdClass = (field) =>
+  const tdClass = (field) =>
     classNames(
       "px-3 py-2",
-      sortBy === field
-        ? "bg-blue-50/30"
-        : ""
+      sortBy === field ? "bg-blue-50/30" : ""
     );
 
   const iconClass = (field) =>
@@ -667,7 +665,7 @@ const tdClass = (field) =>
 
         <div className="mt-4 overflow-auto rounded-xl border border-gray-200">
           <table className="min-w-[980px] w-full text-sm">
-            <thead className="bg-gray-50 text-gray-700">
+            <thead className="bg-gray-50 text-gray-700 sticky top-0 z-10">
               <tr>
                 <th className="px-3 py-2 text-left font-medium">ID</th>
                 <th className="px-3 py-2 text-left font-medium">Категория</th>
@@ -722,8 +720,11 @@ const tdClass = (field) =>
                   const lastAnswer = meta.lastAnswer;
 
                   return (
-                    <tr key={it.id} className="bg-white">
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-900">
+                    <tr
+                      key={it.id}
+                      className="bg-white hover:bg-gray-50"
+                    >
+                     <td className="px-3 py-2 whitespace-nowrap text-gray-900">
                         {it.id}
                       </td>
 
@@ -751,20 +752,16 @@ const tdClass = (field) =>
                           <span className="font-mono">{it.status}</span>
                         </div>
                       </td>
-                      <td className="px-3 py-2 whitespace-nowrap">
+                      {/* Дата создания (ОДНА колонка) */}
+                      <td className={classNames(tdClass("created_at"), "whitespace-nowrap")}>
                         {it.createdAt ? (
                           <div className="text-gray-900">{formatDate(it.createdAt)}</div>
                         ) : (
                           <div className="text-gray-500">—</div>
                         )}
                       </td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        {/* Дата создания */}
-                        <div className={tdClass("created_at")}>
-                          {it.createdAt ? formatDate(it.createdAt) : "—"}
-                        </div>
-                      </td>
-                      <td className={tdClass("sort_date")}>
+
+                      <td className={classNames(tdClass("sort_date"), "whitespace-nowrap")}>
                         {it.startDateForSort ? (
                           <div className="text-gray-900">
                             {formatDate(it.startDateForSort)}
