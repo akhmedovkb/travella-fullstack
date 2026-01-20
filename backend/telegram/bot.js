@@ -905,7 +905,7 @@ function getMainMenuKeyboard(role) {
     },
   };
 }
-
+async function askRole(ctx) {
   const text =
     "👋 <b>Добро пожаловать в Bot Otkaznyx Turov</b>\n\n" +
     "👤 <b>Клиент</b>\n" +
@@ -927,6 +927,7 @@ function getMainMenuKeyboard(role) {
     },
     disable_web_page_preview: true,
   });
+}
 
 // ✅ Для идентификации пользователя всегда используем ctx.from.id
 function getActorId(ctx) {
