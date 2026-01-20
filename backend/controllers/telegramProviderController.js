@@ -130,7 +130,11 @@ async function getProviderBookings(req, res) {
     const providerRes = await pool.query(
       `SELECT id, name
          FROM providers
-        WHERE telegram_chat_id = $1
+        WHERE
+          telegram_chat_id = $1
+          OR tg_chat_id = $1
+          OR telegram_refused_chat_id = $1
+          OR telegram_web_chat_id = $1
         LIMIT 1`,
       [chatId]
     );
@@ -377,7 +381,11 @@ async function getProviderServicesAll(req, res) {
         p.social AS provider_telegram
       FROM services s
       LEFT JOIN providers p ON p.id = s.provider_id
-      WHERE s.provider_id = $1
+      WHERE
+        telegram_chat_id = $1
+        OR tg_chat_id = $1
+        OR telegram_refused_chat_id = $1
+        OR telegram_web_chat_id = $1
       ORDER BY s.created_at DESC
       `,
       [providerId]
