@@ -124,7 +124,15 @@ exports.listActualRefused = async (req, res) => {
       page = "1",
       limit = "30",
       includeInactive = "0", // 1 = показывать всё, 0 = только актуальные по isServiceActual
+      // sorting
+      // created_at | provider | sort_date
+      sortBy: sortByRaw = "sort_date",
+      // asc | desc
+      sortOrder: sortOrderRaw = "asc",
     } = req.query;
+    const sortBy = String(sortByRaw || "sort_date").toLowerCase();
+    const sortOrder = String(sortOrderRaw || "asc").toLowerCase() === "desc" ? "desc" : "asc";
+    const dir = sortOrder === "desc" ? -1 : 1;
 
     const pageNum = Math.max(parseInt(page, 10) || 1, 1);
     const limitNum = Math.min(Math.max(parseInt(limit, 10) || 30, 1), 100);
@@ -211,6 +219,7 @@ exports.listActualRefused = async (req, res) => {
         status: r.status,
         title: r.title,
         providerId: r.provider_id,
+        createdAt: r.created_at ? new Date(r.created_at).toISOString() : null,
         provider: {
           id: r.p_id,
           name: r.p_name,
@@ -235,20 +244,39 @@ exports.listActualRefused = async (req, res) => {
       items = items.filter((x) => x.isActual);
     }
 
-    // ближняя дата выше
+    // сортировка (после фильтра includeInactive — важно)
     items.sort((a, b) => {
+      if (sortBy === "created_at") {
+        const da = a.createdAt ? new Date(a.createdAt) : null;
+        const dbb = b.createdAt ? new Date(b.createdAt) : null;
+        if (!da && !dbb) return 0;
+        if (!da) return 1;
+        if (!dbb) return -1;
+        return (da.getTime() - dbb.getTime()) * dir;
+      }
+
+      if (sortBy === "provider") {
+        const pa = (a.provider?.name || "").toString().toLowerCase();
+        const pb = (b.provider?.name || "").toString().toLowerCase();
+        // localeCompare даёт стабильную сортировку для кириллицы/латиницы
+        return pa.localeCompare(pb, "ru", { sensitivity: "base" }) * dir;
+      }
+
+      // default: sort_date (твоя "Дата (сорт)" = startDateForSort)
       const da = a.startDateForSort ? new Date(a.startDateForSort) : null;
       const dbb = b.startDateForSort ? new Date(b.startDateForSort) : null;
       if (!da && !dbb) return 0;
       if (!da) return 1;
       if (!dbb) return -1;
-      return da.getTime() - dbb.getTime();
+      return (da.getTime() - dbb.getTime()) * dir;
     });
 
     res.json({
       success: true,
       total,
       page: pageNum,
+      sortBy,
+      sortOrder,
       limit: limitNum,
       items,
     });
