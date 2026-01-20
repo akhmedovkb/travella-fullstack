@@ -130,7 +130,10 @@ async function getProviderBookings(req, res) {
     const providerRes = await pool.query(
       `SELECT id, name
          FROM providers
-        WHERE telegram_chat_id = $1
+        WHERE telegram_chat_id::text = $1
+           OR tg_chat_id::text = $1
+           OR telegram_web_chat_id::text = $1
+           OR telegram_refused_chat_id::text = $1
         LIMIT 1`,
       [chatId]
     );
@@ -195,7 +198,12 @@ async function confirmBooking(req, res) {
        JOIN providers p ON p.id = b.provider_id
        JOIN clients  c ON c.id = b.client_id
       WHERE b.id = $1
-        AND p.telegram_chat_id = $2
+        AND (
+          p.telegram_chat_id::text = $2
+          OR p.tg_chat_id::text = $2
+          OR p.telegram_web_chat_id::text = $2
+          OR p.telegram_refused_chat_id::text = $2
+        )
       LIMIT 1`,
       [bookingId, chatId]
     );
@@ -250,7 +258,12 @@ async function rejectBooking(req, res) {
        JOIN providers p ON p.id = b.provider_id
        JOIN clients  c ON c.id = b.client_id
       WHERE b.id = $1
-        AND p.telegram_chat_id = $2
+        AND (
+          p.telegram_chat_id::text = $2
+          OR p.tg_chat_id::text = $2
+          OR p.telegram_web_chat_id::text = $2
+          OR p.telegram_refused_chat_id::text = $2
+        )
       LIMIT 1`,
       [bookingId, chatId]
     );
@@ -296,7 +309,10 @@ async function getProviderServices(req, res) {
     const providerRes = await pool.query(
       `SELECT id, name
          FROM providers
-        WHERE telegram_chat_id = $1
+        WHERE telegram_chat_id::text = $1
+           OR tg_chat_id::text = $1
+           OR telegram_web_chat_id::text = $1
+           OR telegram_refused_chat_id::text = $1
         LIMIT 1`,
       [chatId]
     );
@@ -359,7 +375,14 @@ async function getProviderServicesAll(req, res) {
     const { chatId } = req.params;
 
     const provRes = await pool.query(
-      `SELECT id FROM providers WHERE telegram_chat_id = $1 LIMIT 1`,
+      `SELECT id
+         FROM providers
+        WHERE telegram_chat_id::text = $1
+           OR tg_chat_id::text = $1
+           OR telegram_web_chat_id::text = $1
+           OR telegram_refused_chat_id::text = $1
+        LIMIT 1`,
+
       [chatId]
     );
 
@@ -424,7 +447,13 @@ async function searchPublicServices(req, res) {
     let providerId = null;
     try {
       const pr = await pool.query(
-        `SELECT id FROM providers WHERE telegram_chat_id::text = $1 LIMIT 1`,
+        `SELECT id
+           FROM providers
+          WHERE telegram_chat_id::text = $1
+             OR tg_chat_id::text = $1
+             OR telegram_web_chat_id::text = $1
+             OR telegram_refused_chat_id::text = $1
+          LIMIT 1`,
         [chatId]
       );
       providerId = pr.rows[0]?.id || null;
@@ -485,7 +514,13 @@ async function serviceActionFromBot(req, res, action) {
     }
 
     const providerRes = await pool.query(
-      `SELECT id FROM providers WHERE telegram_chat_id = $1 LIMIT 1`,
+      `SELECT id
+         FROM providers
+        WHERE telegram_chat_id::text = $1
+           OR tg_chat_id::text = $1
+           OR telegram_web_chat_id::text = $1
+           OR telegram_refused_chat_id::text = $1
+        LIMIT 1`,
       [chatId]
     );
     if (providerRes.rowCount === 0) {
@@ -622,7 +657,13 @@ async function createServiceFromBot(req, res) {
     const safeTitle = clampString(title, MAX_TITLE_LEN);
 
     const providerRes = await pool.query(
-      `SELECT id FROM providers WHERE telegram_chat_id = $1 LIMIT 1`,
+      `SELECT id
+         FROM providers
+        WHERE telegram_chat_id::text = $1
+           OR tg_chat_id::text = $1
+           OR telegram_web_chat_id::text = $1
+           OR telegram_refused_chat_id::text = $1
+        LIMIT 1`,
       [chatId]
     );
     if (providerRes.rowCount === 0) {
@@ -701,7 +742,13 @@ async function getProviderServiceByIdFromBot(req, res) {
     }
 
     const providerRes = await pool.query(
-      `SELECT id FROM providers WHERE telegram_chat_id = $1 LIMIT 1`,
+      `SELECT id
+         FROM providers
+        WHERE telegram_chat_id::text = $1
+           OR tg_chat_id::text = $1
+           OR telegram_web_chat_id::text = $1
+           OR telegram_refused_chat_id::text = $1
+        LIMIT 1`,
       [chatId]
     );
     if (providerRes.rowCount === 0) {
@@ -753,7 +800,13 @@ async function deleteServiceFromBot(req, res) {
     const { chatId, serviceId } = req.params;
 
     const provRes = await pool.query(
-      `SELECT id FROM providers WHERE telegram_chat_id = $1 LIMIT 1`,
+      `SELECT id
+         FROM providers
+        WHERE telegram_chat_id::text = $1
+           OR tg_chat_id::text = $1
+           OR telegram_web_chat_id::text = $1
+           OR telegram_refused_chat_id::text = $1
+        LIMIT 1`,
       [chatId]
     );
     if (!provRes.rowCount) {
@@ -793,7 +846,13 @@ async function updateServiceFromBot(req, res) {
     }
 
     const providerRes = await pool.query(
-      `SELECT id FROM providers WHERE telegram_chat_id = $1 LIMIT 1`,
+       `SELECT id
+         FROM providers
+        WHERE telegram_chat_id::text = $1
+           OR tg_chat_id::text = $1
+           OR telegram_web_chat_id::text = $1
+           OR telegram_refused_chat_id::text = $1
+        LIMIT 1`,
       [chatId]
     );
     if (providerRes.rowCount === 0) {
