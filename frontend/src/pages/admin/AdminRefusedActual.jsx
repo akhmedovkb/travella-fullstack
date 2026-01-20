@@ -355,6 +355,13 @@ const thClass = (field) =>
       "cursor-pointer hover:text-blue-700",
       sortBy === field ? "bg-blue-50/60 text-blue-900" : ""
     );
+const tdClass = (field) =>
+    classNames(
+      "px-3 py-2",
+      sortBy === field
+        ? "bg-blue-50/30"
+        : ""
+    );
 
   const iconClass = (field) =>
     classNames(
@@ -752,6 +759,12 @@ const thClass = (field) =>
                         )}
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap">
+                        {/* Дата создания */}
+                        <div className={tdClass("created_at")}>
+                          {it.createdAt ? formatDate(it.createdAt) : "—"}
+                        </div>
+                      </td>
+                      <td className={tdClass("sort_date")}>
                         {it.startDateForSort ? (
                           <div className="text-gray-900">
                             {formatDate(it.startDateForSort)}
@@ -761,7 +774,7 @@ const thClass = (field) =>
                         )}
                       </td>
 
-                      <td className="px-3 py-2">
+                      <td className={tdClass("provider")}>
                         <div className="text-gray-900 font-medium">
                           {it?.provider?.companyName ||
                             it?.provider?.name ||
