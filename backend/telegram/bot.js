@@ -3076,12 +3076,12 @@ async function handlePhoneRegistration(ctx, requestedRole, phone) {
 
     if (data.existed && data.role === "client") {
       await ctx.reply(
-        "✅ Готово!\n\nВаш Telegram привязан к аккаунту *клиента Travella*.",
+        "✅ Готово!\n\nВаш Telegram привязан к аккаунту *клиента*.",
         { parse_mode: "Markdown" }
       );
     } else if (data.existed && data.role === "provider") {
       await ctx.reply(
-        "✅ Готово!\n\nВаш Telegram привязан к аккаунту *поставщика Travella*.",
+        "✅ Готово!\n\nВаш Telegram привязан к аккаунту *поставщика*.",
         { parse_mode: "Markdown" }
       );
 
