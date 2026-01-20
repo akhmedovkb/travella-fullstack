@@ -150,6 +150,22 @@ function writeUrlSort(sortBy, sortOrder) {
   }
 }
 
+function SortBadge({ active, dir }) {
+  if (!active) return null;
+  return (
+    <span
+      className={classNames(
+        "ml-2 inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-semibold leading-none",
+        dir === "asc"
+          ? "border-blue-200 bg-blue-50 text-blue-700"
+          : "border-indigo-200 bg-indigo-50 text-indigo-700"
+      )}
+    >
+      {dir === "asc" ? "ASC" : "DESC"}
+    </span>
+  );
+}
+
 function Badge({ children, tone = "gray" }) {
   const tones = {
     gray: "bg-gray-100 text-gray-700 border-gray-200",
@@ -332,6 +348,20 @@ export default function AdminRefusedActual() {
 
     return data;
   }
+
+const thClass = (field) =>
+    classNames(
+      "px-3 py-2 text-left font-medium select-none",
+      "cursor-pointer hover:text-blue-700",
+      sortBy === field ? "bg-blue-50/60 text-blue-900" : ""
+    );
+
+  const iconClass = (field) =>
+    classNames(
+      sortBy === field ? "text-blue-700" : "text-gray-400",
+      "ml-1"
+    );
+
   function toggleSort(field) {
     setPage(1);
     setSortBy((prev) => {
@@ -636,43 +666,31 @@ export default function AdminRefusedActual() {
                 <th className="px-3 py-2 text-left font-medium">Категория</th>
                 <th className="px-3 py-2 text-left font-medium">Название</th>
                 <th
-                  className={classNames(
-                    "px-3 py-2 text-left font-medium select-none",
-                    "cursor-pointer hover:text-blue-700"
-                  )}
+                  className={thClass("created_at")}
                   onClick={() => toggleSort("created_at")}
                   title="Сортировать по дате создания"
                 >
                   Дата создания{" "}
-                  <span className={classNames(sortBy === "created_at" ? "text-blue-700" : "text-gray-400")}>
-                    {sortIcon("created_at")}
-                  </span>
+                  <span className={iconClass("created_at")}>{sortIcon("created_at")}</span>
+                  <SortBadge active={sortBy === "created_at"} dir={sortOrder} />
                 </th>
                 <th
-                  className={classNames(
-                    "px-3 py-2 text-left font-medium select-none",
-                    "cursor-pointer hover:text-blue-700"
-                  )}
+                  className={thClass("sort_date")}
                   onClick={() => toggleSort("sort_date")}
                   title="Сортировать по ближайшей дате услуги"
                 >
                   Дата (сорт){" "}
-                  <span className={classNames(sortBy === "sort_date" ? "text-blue-700" : "text-gray-400")}>
-                    {sortIcon("sort_date")}
-                  </span>
+                  <span className={iconClass("sort_date")}>{sortIcon("sort_date")}</span>
+                  <SortBadge active={sortBy === "sort_date"} dir={sortOrder} />
                 </th>
                 <th
-                  className={classNames(
-                    "px-3 py-2 text-left font-medium select-none",
-                    "cursor-pointer hover:text-blue-700"
-                  )}
+                  className={thClass("provider")}
                   onClick={() => toggleSort("provider")}
                   title="Сортировать по провайдеру"
                 >
                   Провайдер{" "}
-                  <span className={classNames(sortBy === "provider" ? "text-blue-700" : "text-gray-400")}>
-                    {sortIcon("provider")}
-                  </span>
+                  <span className={iconClass("provider")}>{sortIcon("provider")}</span>
+                  <SortBadge active={sortBy === "provider"} dir={sortOrder} />
                 </th>
                 <th className="px-3 py-2 text-left font-medium">TG</th>
                 <th className="px-3 py-2 text-left font-medium">Meta</th>
