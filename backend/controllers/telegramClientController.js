@@ -107,21 +107,31 @@ if (prov.rowCount > 0) {
 
 /** Ищем пользователя по chatId (сначала providers, потом clients) */
 async function findUserByChat(chatId) {
-  // providers: telegram_chat_id OR tg_chat_id
+  // providers: проверяем ВСЕ telegram-поля
   const prov = await pool.query(
     `
-      SELECT id, name, phone, telegram_chat_id, tg_chat_id
+      SELECT id, name, phone,
+             telegram_chat_id,
+             tg_chat_id,
+             telegram_web_chat_id,
+             telegram_refused_chat_id
         FROM providers
-       WHERE telegram_chat_id = $1 OR tg_chat_id = $1
+       WHERE
+         telegram_chat_id = $1
+         OR tg_chat_id = $1
+         OR telegram_web_chat_id = $1
+         OR telegram_refused_chat_id = $1
        LIMIT 1
     `,
     [chatId]
   );
+
   if (prov.rowCount) {
     const row = prov.rows[0];
     return { role: "provider", ...row };
   }
 
+  // clients — без изменений
   const cli = await pool.query(
     `
       SELECT id, name, phone, telegram_chat_id
@@ -131,6 +141,7 @@ async function findUserByChat(chatId) {
     `,
     [chatId]
   );
+
   if (cli.rowCount) {
     const row = cli.rows[0];
     return { role: "client", ...row };
@@ -138,6 +149,7 @@ async function findUserByChat(chatId) {
 
   return null;
 }
+
 
 
 function normalizeRequestedRole(raw) {
@@ -530,9 +542,17 @@ async function getProfileByChat(req, res) {
     const result = await pool.query(
       table === "providers"
         ? `
-            SELECT id, name, phone, telegram_chat_id
+            SELECT id, name, phone,
+                   telegram_chat_id,
+                   tg_chat_id,
+                   telegram_web_chat_id,
+                   telegram_refused_chat_id
               FROM providers
-             WHERE telegram_chat_id = $1 OR tg_chat_id = $1
+             WHERE
+               telegram_chat_id = $1
+               OR tg_chat_id = $1
+               OR telegram_web_chat_id = $1
+               OR telegram_refused_chat_id = $1
              LIMIT 1
           `
         : `
