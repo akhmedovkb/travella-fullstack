@@ -122,6 +122,34 @@ function extractAxiosError(e) {
   return { msg, status, contentType, snippet };
 }
 
+function readUrlSort() {
+  try {
+    const sp = new URLSearchParams(window.location.search || "");
+    const sortBy = (sp.get("sortBy") || "sort_date").toLowerCase();
+    const sortOrder = (sp.get("sortOrder") || "asc").toLowerCase() === "desc" ? "desc" : "asc";
+
+    // whitelist
+    const allowed = new Set(["created_at", "provider", "sort_date"]);
+    return {
+      sortBy: allowed.has(sortBy) ? sortBy : "sort_date",
+      sortOrder,
+    };
+  } catch {
+    return { sortBy: "sort_date", sortOrder: "asc" };
+  }
+}
+
+function writeUrlSort(sortBy, sortOrder) {
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set("sortBy", sortBy);
+    url.searchParams.set("sortOrder", sortOrder);
+    window.history.replaceState({}, "", url.toString());
+  } catch {
+    // ignore
+  }
+}
+
 function Badge({ children, tone = "gray" }) {
   const tones = {
     gray: "bg-gray-100 text-gray-700 border-gray-200",
@@ -224,6 +252,11 @@ export default function AdminRefusedActual() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(30);
 
+  // Sorting (persisted in URL)
+  const initialSort = useMemo(() => readUrlSort(), []);
+  const [sortBy, setSortBy] = useState(initialSort.sortBy);
+  const [sortOrder, setSortOrder] = useState(initialSort.sortOrder);
+  
   // UI messages
   const [error, setError] = useState("");
   const [toast, setToast] = useState(null);
@@ -299,6 +332,19 @@ export default function AdminRefusedActual() {
 
     return data;
   }
+  function toggleSort(field) {
+    setPage(1);
+    setSortBy((prev) => {
+      const nextBy = field;
+      const nextOrder =
+        prev === nextBy ? (sortOrder === "asc" ? "desc" : "asc") : "asc";
+      setSortOrder(nextOrder);
+      writeUrlSort(nextBy, nextOrder);
+      return nextBy;
+    });
+  }
+
+  const sortIcon = (field) => (sortBy === field ? (sortOrder === "asc" ? "▲" : "▼") : "");
 
   async function loadList(nextPage = page) {
     setLoading(true);
@@ -312,6 +358,8 @@ export default function AdminRefusedActual() {
           page: nextPage,
           limit,
           includeInactive: includeInactive ? "1" : "0",
+          sortBy,
+          sortOrder,
         },
       });
 
@@ -347,13 +395,13 @@ export default function AdminRefusedActual() {
   useEffect(() => {
     setPage(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [category, status, includeInactive, limit]);
+  }, [category, status, includeInactive, limit, sortBy, sortOrder]);
 
   useEffect(() => {
     if (!canUse) return;
     loadList(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canUse, category, status, includeInactive, limit]);
+  }, [canUse, category, status, includeInactive, limit, sortBy, sortOrder]);
 
   useEffect(() => {
     if (!canUse) return;
@@ -587,8 +635,45 @@ export default function AdminRefusedActual() {
                 <th className="px-3 py-2 text-left font-medium">ID</th>
                 <th className="px-3 py-2 text-left font-medium">Категория</th>
                 <th className="px-3 py-2 text-left font-medium">Название</th>
-                <th className="px-3 py-2 text-left font-medium">Дата (сорт)</th>
-                <th className="px-3 py-2 text-left font-medium">Провайдер</th>
+                <th
+                  className={classNames(
+                    "px-3 py-2 text-left font-medium select-none",
+                    "cursor-pointer hover:text-blue-700"
+                  )}
+                  onClick={() => toggleSort("created_at")}
+                  title="Сортировать по дате создания"
+                >
+                  Дата создания{" "}
+                  <span className={classNames(sortBy === "created_at" ? "text-blue-700" : "text-gray-400")}>
+                    {sortIcon("created_at")}
+                  </span>
+                </th>
+                <th
+                  className={classNames(
+                    "px-3 py-2 text-left font-medium select-none",
+                    "cursor-pointer hover:text-blue-700"
+                  )}
+                  onClick={() => toggleSort("sort_date")}
+                  title="Сортировать по ближайшей дате услуги"
+                >
+                  Дата (сорт){" "}
+                  <span className={classNames(sortBy === "sort_date" ? "text-blue-700" : "text-gray-400")}>
+                    {sortIcon("sort_date")}
+                  </span>
+                </th>
+                <th
+                  className={classNames(
+                    "px-3 py-2 text-left font-medium select-none",
+                    "cursor-pointer hover:text-blue-700"
+                  )}
+                  onClick={() => toggleSort("provider")}
+                  title="Сортировать по провайдеру"
+                >
+                  Провайдер{" "}
+                  <span className={classNames(sortBy === "provider" ? "text-blue-700" : "text-gray-400")}>
+                    {sortIcon("provider")}
+                  </span>
+                </th>
                 <th className="px-3 py-2 text-left font-medium">TG</th>
                 <th className="px-3 py-2 text-left font-medium">Meta</th>
                 <th className="px-3 py-2 text-left font-medium">Действия</th>
@@ -597,7 +682,7 @@ export default function AdminRefusedActual() {
             <tbody className="divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td className="px-3 py-3 text-gray-600" colSpan={8}>
+                  <td className="px-3 py-3 text-gray-600" colSpan={9}>
                     Загрузка…
                   </td>
                 </tr>
@@ -641,7 +726,13 @@ export default function AdminRefusedActual() {
                           <span className="font-mono">{it.status}</span>
                         </div>
                       </td>
-
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {it.createdAt ? (
+                          <div className="text-gray-900">{formatDate(it.createdAt)}</div>
+                        ) : (
+                          <div className="text-gray-500">—</div>
+                        )}
+                      </td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         {it.startDateForSort ? (
                           <div className="text-gray-900">
@@ -754,7 +845,7 @@ export default function AdminRefusedActual() {
                 })
               ) : (
                 <tr>
-                  <td className="px-3 py-3 text-gray-600" colSpan={8}>
+                  <td className="px-3 py-3 text-gray-600" colSpan={9}>
                     Нет данных.
                   </td>
                 </tr>
