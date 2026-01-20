@@ -514,6 +514,16 @@ const thClass = (field) =>
     { value: "draft", label: "draft" },
     { value: "rejected", label: "rejected" },
   ];
+  const sortLabel = useMemo(() => {
+    const name =
+      sortBy === "created_at"
+        ? "Дата создания"
+        : sortBy === "provider"
+        ? "Провайдер"
+        : "Дата (сорт)";
+    const arrow = sortOrder === "asc" ? "↑" : "↓";
+    return `${name} ${arrow}`;
+  }, [sortBy, sortOrder]);
 
   return (
     <div className="p-4 md:p-6">
@@ -662,6 +672,14 @@ const thClass = (field) =>
             {error}
           </div>
         ) : null}
+        <div className="mt-4 flex items-center justify-between gap-3">
+          <div className="text-xs text-gray-600">
+            Сортировка:{" "}
+            <span className="inline-flex items-center rounded-lg border border-gray-200 bg-gray-50 px-2 py-1 font-mono text-gray-800">
+              {sortLabel}
+            </span>
+          </div>
+        </div>
 
         <div className="mt-4 overflow-auto rounded-xl border border-gray-200">
           <table className="min-w-[980px] w-full text-sm">
