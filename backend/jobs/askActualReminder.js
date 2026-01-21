@@ -13,6 +13,10 @@ const SLOTS_HOURS = [10, 14, 18];
 // “Окно” в минутах от начала часа для авто-планировщика
 const WINDOW_MINUTES = 25;
 
+// Сколько дней подряд можно игнорировать напоминания, прежде чем снять с актуальности
+// (считаем по дням в Ташкенте)
+const MAX_IGNORED_DAYS = Number(process.env.ACTUAL_REMINDER_MAX_IGNORED_DAYS || 2);
+
 function safeJsonParseMaybe(v) {
   if (!v) return {};
   if (typeof v === "object") return v;
@@ -105,6 +109,29 @@ function pickTokenForChat(row) {
   return row?.use_client_bot && clientToken ? clientToken : "";
 }
 
+function getMeta(detailsObj) {
+  const d = detailsObj && typeof detailsObj === "object" ? detailsObj : {};
+  return d.tg_actual_reminders_meta && typeof d.tg_actual_reminders_meta === "object"
+    ? d.tg_actual_reminders_meta
+    : {};
+}
+
+function escapeHtml(s) {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+async function saveDetails(serviceId, detailsObj) {
+  await db.query(`UPDATE services SET details = $2 WHERE id = $1`, [
+    serviceId,
+    JSON.stringify(detailsObj || {}),
+  ]);
+}
+
 async function askActualReminder(options = {}) {
   const now = options.now instanceof Date ? options.now : new Date();
   const slot = getActiveSlot(now, options);
@@ -150,9 +177,18 @@ async function askActualReminder(options = {}) {
 
     const { id, title, details, telegram_chat_id } = row;
     const parsedDetails = safeJsonParseMaybe(details);
+    const meta = getMeta(parsedDetails);
 
-    // 0) Если уже отвечал сегодня — НЕ спрашиваем вообще
-    const meta = parsedDetails?.tg_actual_reminders_meta || parsedDetails?.tgActualMeta || {};
+    // 0) Если стоит lockUntil (админ/система заморозила) — не трогаем до окончания
+    if (meta.lockUntil) {
+      const lock = new Date(meta.lockUntil);
+      if (!Number.isNaN(lock.getTime()) && lock.getTime() > Date.now()) {
+        stats.locked_out += 1;
+        continue;
+      }
+    }
+
+    // 1) Если уже отвечал сегодня — НЕ спрашиваем вообще
     if (meta.lastConfirmedAt) {
       const last = new Date(meta.lastConfirmedAt);
       if (!Number.isNaN(last.getTime())) {
@@ -164,7 +200,67 @@ async function askActualReminder(options = {}) {
       }
     }
 
-    // 1) Спрашиваем ТОЛЬКО пока актуально
+    // 2) Учёт игнора: если вчера (или раньше) мы слали напоминание, а подтверждения нет,
+    // то увеличиваем ignoredDays 1 раз за день. После MAX_IGNORED_DAYS — снимаем с актуальности.
+    const lastSentAt = meta.lastSentAt ? new Date(meta.lastSentAt) : null;
+    const lastConfirmedAt = meta.lastConfirmedAt ? new Date(meta.lastConfirmedAt) : null;
+    const lastIgnoredDate = typeof meta.lastIgnoredDate === "string" ? meta.lastIgnoredDate : null;
+
+    const lastSentLocal =
+      lastSentAt && !Number.isNaN(lastSentAt.getTime()) ? getLocalParts(lastSentAt, TZ).dateStr : null;
+    const lastConfirmedLocal =
+      lastConfirmedAt && !Number.isNaN(lastConfirmedAt.getTime())
+        ? getLocalParts(lastConfirmedAt, TZ).dateStr
+        : null;
+
+    const hasUnconfirmedPrevSend = Boolean(
+      lastSentLocal &&
+        lastSentLocal !== dateStr &&
+        (!lastConfirmedLocal || lastConfirmedLocal !== lastSentLocal)
+    );
+
+    if (hasUnconfirmedPrevSend && lastIgnoredDate !== dateStr) {
+      const nextIgnored = Math.max(0, Number(meta.ignoredDays || 0)) + 1;
+      parsedDetails.tg_actual_reminders_meta = {
+        ...meta,
+        ignoredDays: nextIgnored,
+        lastIgnoredDate: dateStr,
+      };
+
+      // если превысили лимит — снимаем с актуальности сразу
+      if (MAX_IGNORED_DAYS > 0 && nextIgnored >= MAX_IGNORED_DAYS) {
+        parsedDetails.isActive = false;
+        await saveDetails(id, parsedDetails);
+
+        // мягкое уведомление провайдеру
+        try {
+          const tokenOverride = pickTokenForChat(row);
+          await tgSend(
+            telegram_chat_id,
+            `⛔ <b>Снято с актуальности</b> (нет ответа на напоминания)\n\n` +
+              `🧾 ID: <code>#R${id}</code>\n` +
+              `🧳 Услуга: <b>${escapeHtml(title || "Услуга")}</b>\n\n` +
+              `Если предложение снова актуально — откройте услугу в боте и подтвердите/продлите.`,
+            {
+              parse_mode: "HTML",
+              reply_markup: buildSvcActualKeyboard(id, { isActual: false }),
+            },
+            tokenOverride,
+            false
+          );
+        } catch {
+          // не критично
+        }
+
+        stats.skipped_not_actual += 1;
+        continue;
+      }
+
+      // сохраняем обновлённую meta даже если дальше будем отправлять напоминание
+      await saveDetails(id, parsedDetails);
+    }
+
+    // 3) Спрашиваем ТОЛЬКО пока актуально
     const isActualNow = isServiceActual(parsedDetails, row);
     if (!isActualNow) {
       stats.skipped_not_actual += 1;
@@ -172,7 +268,7 @@ async function askActualReminder(options = {}) {
     }
     stats.eligible_actual += 1;
 
-    // 2) 🔒 Антидубль на слот
+    // 4) 🔒 Антидубль на слот
     const lockRes = await db.query(
       `
       UPDATE services
@@ -217,11 +313,28 @@ async function askActualReminder(options = {}) {
       continue;
     }
 
-    // 3) Текст — СРАЗУ понятно какая услуга
+    // 4.1) Зафиксируем, что напоминание сейчас уходит (для статистики/анти-игнора)
+    try {
+      const qDet = await db.query(`SELECT details FROM services WHERE id = $1 LIMIT 1`, [id]);
+      const curDetails = safeJsonParseMaybe(qDet.rows?.[0]?.details);
+      const curMeta = getMeta(curDetails);
+      curDetails.tg_actual_reminders_meta = {
+        ...curMeta,
+        lastSentAt: now.toISOString(),
+        lastSentBy: "job",
+        lastSentSlot: slotKey,
+        lastSendOk: null,
+      };
+      await saveDetails(id, curDetails);
+    } catch {
+      // не критично
+    }
+
+    // 5) Текст — в HTML, чтобы не падало на символах вроде "5*" в названиях
     const text =
-      `⏳ *Отказ ещё актуален?*\n\n` +
-      `🧾 *ID:* #${id}\n` +
-      `🧳 *Услуга:* ${title}\n\n` +
+      `⏳ <b>Отказ ещё актуален?</b>\n\n` +
+      `🧾 <b>ID:</b> <code>#R${id}</code>\n` +
+      `🧳 <b>Услуга:</b> <b>${escapeHtml(title || "Услуга")}</b>\n\n` +
       `Нажмите кнопку ниже 👇`;
 
     const tokenOverride = pickTokenForChat(row);
@@ -231,17 +344,44 @@ async function askActualReminder(options = {}) {
         telegram_chat_id,
         text,
         {
-          parse_mode: "Markdown",
+          parse_mode: "HTML",
           reply_markup: buildSvcActualKeyboard(id, { isActual: true }),
         },
         tokenOverride,
         false
       );
 
-      if (ok) stats.sent += 1;
-      else throw new Error("tgSend returned false");
+      if (ok) {
+        stats.sent += 1;
+        try {
+          const qDet = await db.query(`SELECT details FROM services WHERE id = $1 LIMIT 1`, [id]);
+          const curDetails = safeJsonParseMaybe(qDet.rows?.[0]?.details);
+          const curMeta = getMeta(curDetails);
+          curDetails.tg_actual_reminders_meta = { ...curMeta, lastSendOk: true };
+          await saveDetails(id, curDetails);
+        } catch {}
+      } else {
+        throw new Error("tgSend returned false");
+      }
     } catch (e) {
       stats.send_failed += 1;
+
+      // отметим, что отправка не удалась
+      try {
+        const fresh = await db.query(`SELECT details FROM services WHERE id = $1`, [id]);
+        const latestDetails = safeJsonParseMaybe(fresh.rows?.[0]?.details);
+        const latestMeta = getMeta(latestDetails);
+        latestDetails.tg_actual_reminders_meta = {
+          ...latestMeta,
+          lastSentAt: new Date().toISOString(),
+          lastSentBy: "job",
+          lastSentSlot: slotKey,
+          lastSendOk: false,
+        };
+        await saveDetails(id, latestDetails);
+      } catch {
+        // ignore
+      }
 
       console.error("[askActualReminder] tgSend failed:", {
         serviceId: id,
