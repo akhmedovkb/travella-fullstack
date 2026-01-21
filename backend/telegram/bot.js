@@ -2717,12 +2717,22 @@ async function validateGrossNotLessThanNet(ctx, netStr, grossStr, backToState) {
 
 async function promptWizardState(ctx, state) {
   switch (state) {
-    case "svc_create_title":
+    case "svc_create_title": {
+      const category = String(ctx.session?.serviceDraft?.category || "");
+    
+      const label =
+        category === "refused_flight"
+          ? "авиабилета"
+          : category === "refused_hotel"
+            ? "отеля"
+            : "тура";
+    
       await ctx.reply(
-        "🆕 Создаём *Отказной тур*.\n\n✍️ Напишите *название тура*.",
+        `✍️ Напишите *название ${label}*.\n\nЕсли не нужно — нажмите «⏭ Пропустить».`,
         { parse_mode: "Markdown", ...wizNavKeyboard() }
       );
       return;
+    }
 
     case "svc_create_tour_country":
       await ctx.reply("🌍 Укажите *страну направления* (например: Таиланд):", {
