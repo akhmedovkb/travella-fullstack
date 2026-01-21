@@ -2722,10 +2722,10 @@ async function promptWizardState(ctx, state) {
     
       const label =
         category === "refused_flight"
-          ? "авиабилета"
+          ? "отказного авиабилета"
           : category === "refused_hotel"
-            ? "отеля"
-            : "тура";
+            ? "отказного отеля"
+            : "отказного тура";
     
       await ctx.reply(
         `✍️ Напишите *название ${label}*.\n\nЕсли не нужно — нажмите «⏭ Пропустить».`,
