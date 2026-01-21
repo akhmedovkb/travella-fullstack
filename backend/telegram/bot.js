@@ -4079,8 +4079,13 @@ bot.action(
       if (!ctx.session) ctx.session = {};
       if (!ctx.session.serviceDraft) ctx.session.serviceDraft = {};
       ctx.session.serviceDraft.category = category;
-      // ✅ Разрешаем создание через бот для: refused_tour, refused_hotel, refused_flight
-      if (category !== "refused_tour" && category !== "refused_hotel" && category !== "refused_flight") {
+
+      // ✅ Разрешаем создание через бот только для: tour, hotel, flight
+      if (
+        category !== "refused_tour" &&
+        category !== "refused_hotel" &&
+        category !== "refused_flight"
+      ) {
         await ctx.reply(
           "⚠️ Создание через бот пока доступно только для «Отказной тур», «Отказной отель» и «Отказной авиабилет».\n\n" +
             "Для остальных категорий используйте личный кабинет:\n" +
@@ -4089,44 +4094,26 @@ bot.action(
         resetServiceWizard(ctx);
         return;
       }
-      
+
+      // старт мастера (очищаем историю шагов)
       ctx.session.wizardStack = [];
-      
-      // refused_tour
-      if (category === "refused_tour") {
-        ctx.session.state = "svc_create_title";
-        await promptWizardState(ctx, "svc_create_title");
-        return;
-      }
-      
-      // refused_hotel
+
+      // refused_hotel — отдельный поток
       if (category === "refused_hotel") {
         ctx.session.state = "svc_hotel_country";
         await promptWizardState(ctx, "svc_hotel_country");
         return;
-      }    
-      // ✅ refused_flight: стартуем с того же потока, что и тур (страна/города)
-      // (название можно спросить первым — как у тура)
-      ctx.session.state = "svc_create_title";
-      await promptWizardState(ctx, "svc_create_title");
-      return;
-
-
-      ctx.session.wizardStack = [];
-
-      if (category === "refused_tour") {
-        ctx.session.state = "svc_create_title";
-        await promptWizardState(ctx, "svc_create_title");
-        return;
       }
 
-      ctx.session.state = "svc_hotel_country";
-      await promptWizardState(ctx, "svc_hotel_country");
+      // refused_tour и refused_flight начинаем одинаково (с title)
+      ctx.session.state = "svc_create_title";
+      await promptWizardState(ctx, "svc_create_title");
     } catch (e) {
       console.error("[tg-bot] svc_new_cat action error:", e);
     }
   }
 );
+
 
 /* ===================== QUICK REQUEST ===================== */
 
@@ -5190,6 +5177,14 @@ bot.on("text", async (ctx, next) => {
           draft.toCity = v;
         
           pushWizardState(ctx, "svc_create_tour_to");
+        
+          const cat = String(draft.category || "");
+          if (cat === "refused_flight") {
+            ctx.session.state = "svc_create_flight_departure";
+            await promptWizardState(ctx, "svc_create_flight_departure");
+            return;
+          }
+        
           ctx.session.state = "svc_create_tour_start";
           await promptWizardState(ctx, "svc_create_tour_start");
           return;
