@@ -2544,6 +2544,37 @@ function autoTitleRefusedTour(draft) {
   if (!parts.length) return "Отказной тур";
   return parts.join(" · ");
 }
+function autoTitleRefusedFlight(draft) {
+  const from = String(draft.fromCity || draft.directionFrom || "").trim();
+  const to = String(draft.toCity || draft.directionTo || "").trim();
+  const dep = String(draft.departureFlightDate || "").trim();
+  const ret = String(draft.returnFlightDate || "").trim();
+
+  const route = [from, to].filter(Boolean).join(" → ");
+  const dates = dep && ret ? `${dep}–${ret}` : (dep || ret || "");
+  const parts = [route, dates].filter(Boolean);
+
+  return parts.length ? `✈️ ${parts.join(" · ")}` : "✈️ Отказной авиабилет";
+}
+
+function buildDetailsForRefusedFlight(draft, netPriceNum) {
+  // ВАЖНО: netPriceNum = уже нормализованная priceNum
+  return {
+    directionCountry: draft.country || null,
+    directionFrom: draft.fromCity || null,
+    directionTo: draft.toCity || null,
+
+    departureFlightDate: draft.departureFlightDate || null,
+    returnFlightDate: draft.returnFlightDate || null,
+    flightDetails: draft.flightDetails || null,
+
+    netPrice: netPriceNum,
+    grossPrice: draft.grossPriceNum ?? null,
+    expiration: draft.expiration || null,
+
+    isActive: true,
+  };
+}
 
 function autoTitleRefusedHotel(draft) {
   const hotel = (draft.hotel || "Отель").trim();
@@ -2896,7 +2927,7 @@ async function finishCreateServiceFromWizard(ctx) {
     const draft = ctx.session?.serviceDraft;
     const category = draft?.category;
 
-    if (!draft || (category !== "refused_tour" && category !== "refused_hotel")) {
+    if (!draft || (category !== "refused_tour" && category !== "refused_hotel" && category !== "refused_flight")) {
       await ctx.reply(
         "⚠️ Не вижу данных мастера.\nПожалуйста, начните заново через «🧳 Мои услуги»."
       );
@@ -2952,6 +2983,14 @@ async function finishCreateServiceFromWizard(ctx) {
         draft.title && draft.title.trim()
           ? draft.title.trim()
           : autoTitleRefusedTour(draft);
+    
+    } else if (category === "refused_flight") {
+      details = buildDetailsForRefusedFlight(draft, priceNum);
+      title =
+        draft.title && draft.title.trim()
+          ? draft.title.trim()
+          : autoTitleRefusedFlight(draft);
+    
     } else {
       details = buildDetailsForRefusedHotel(draft, priceNum);
       title =
@@ -3937,8 +3976,23 @@ bot.action("svc_wiz:skip", async (ctx) => {
       "svc_create_photo",
     ];
 
+    const flightOrder = [
+      "svc_create_title",
+      "svc_create_tour_country",
+      "svc_create_tour_from",
+      "svc_create_tour_to",
+      "svc_create_flight_departure",
+      "svc_create_flight_return",
+      "svc_create_flight_details",
+      "svc_create_price",
+      "svc_create_grossPrice",
+      "svc_create_expiration",
+      "svc_create_photo",
+    ];
+
     const isHotelFlow = category === "refused_hotel" || state.startsWith("svc_hotel_");
-    const order = isHotelFlow ? hotelOrder : tourOrder;
+    const isFlightFlow = category === "refused_flight";
+    const order = isFlightFlow ? flightOrder : (isHotelFlow ? hotelOrder : tourOrder);
 
     // какие шаги реально можно пропустить кнопкой
     const optional = new Set([
@@ -3975,18 +4029,18 @@ bot.action("svc_wiz:skip", async (ctx) => {
     // Иногда пользователи нажимают кнопку «Пропустить» под старым сообщением,
     // когда ctx.session.state уже успел измениться. Чтобы не получать
     // «Уже нечего пропускать», делаем явные переходы для optional-шагов.
-    const forcedNext =
-      state === "svc_create_flight_departure"
-        ? "svc_create_flight_return"
-        : state === "svc_create_flight_return"
-          ? "svc_create_flight_details"
-          : state === "svc_create_flight_details"
-            ? "svc_create_tour_hotel"
-            : state === "svc_create_grossPrice"
-              ? "svc_create_expiration"
-              : state === "svc_create_expiration"
-                ? "svc_create_photo"
-                : null;
+  const forcedNext =
+    state === "svc_create_flight_departure"
+      ? "svc_create_flight_return"
+      : state === "svc_create_flight_return"
+        ? "svc_create_flight_details"
+        : state === "svc_create_flight_details"
+          ? (category === "refused_flight" ? "svc_create_price" : "svc_create_tour_hotel")
+          : state === "svc_create_grossPrice"
+            ? "svc_create_expiration"
+            : state === "svc_create_expiration"
+              ? "svc_create_photo"
+              : null;
 
     const idx = order.indexOf(state);
     const nextState = forcedNext || (idx >= 0 ? order[idx + 1] : null);
@@ -4025,16 +4079,38 @@ bot.action(
       if (!ctx.session) ctx.session = {};
       if (!ctx.session.serviceDraft) ctx.session.serviceDraft = {};
       ctx.session.serviceDraft.category = category;
-
-      if (category !== "refused_tour" && category !== "refused_hotel") {
+      // ✅ Разрешаем создание через бот для: refused_tour, refused_hotel, refused_flight
+      if (category !== "refused_tour" && category !== "refused_hotel" && category !== "refused_flight") {
         await ctx.reply(
-          "⚠️ Создание через бот пока доступно только для «Отказной тур» и «Отказной отель».\n\n" +
+          "⚠️ Создание через бот пока доступно только для «Отказной тур», «Отказной отель» и «Отказной авиабилет».\n\n" +
             "Для остальных категорий используйте личный кабинет:\n" +
             `${SITE_URL}`
         );
         resetServiceWizard(ctx);
         return;
       }
+      
+      ctx.session.wizardStack = [];
+      
+      // refused_tour
+      if (category === "refused_tour") {
+        ctx.session.state = "svc_create_title";
+        await promptWizardState(ctx, "svc_create_title");
+        return;
+      }
+      
+      // refused_hotel
+      if (category === "refused_hotel") {
+        ctx.session.state = "svc_hotel_country";
+        await promptWizardState(ctx, "svc_hotel_country");
+        return;
+      }    
+      // ✅ refused_flight: стартуем с того же потока, что и тур (страна/города)
+      // (название можно спросить первым — как у тура)
+      ctx.session.state = "svc_create_title";
+      await promptWizardState(ctx, "svc_create_title");
+      return;
+
 
       ctx.session.wizardStack = [];
 
@@ -5249,8 +5325,15 @@ bot.on("text", async (ctx, next) => {
           const low = text.toLowerCase();
           draft.flightDetails = ["пропустить", "skip", "-", "нет"].includes(low) ? null : text;
           pushWizardState(ctx, "svc_create_flight_details");
-          ctx.session.state = "svc_create_tour_hotel";
-          await promptWizardState(ctx, "svc_create_tour_hotel");
+        
+          const cat = String(ctx.session?.serviceDraft?.category || "");
+          if (cat === "refused_flight") {
+            ctx.session.state = "svc_create_price";
+            await promptWizardState(ctx, "svc_create_price");
+          } else {
+            ctx.session.state = "svc_create_tour_hotel";
+            await promptWizardState(ctx, "svc_create_tour_hotel");
+          }
           return;
         }
 
