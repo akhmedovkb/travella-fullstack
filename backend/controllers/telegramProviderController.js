@@ -401,6 +401,7 @@ async function getProviderServicesAll(req, res) {
       FROM services s
       LEFT JOIN providers p ON p.id = s.provider_id
       WHERE s.provider_id = $1
+        AND s.status NOT IN ('deleted', 'archived')
       ORDER BY s.created_at DESC
       `,
       [providerId]
