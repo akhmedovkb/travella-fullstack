@@ -1288,8 +1288,18 @@ const deleteProviderService = async (req, res) => {
       return res.status(403).json({ message: "Forbidden" });
     }
     const del = await pool.query(
-      `DELETE FROM provider_services WHERE id=$1 AND provider_id=$2`,
-      [id, providerId]
+      `
+      UPDATE services
+         SET
+           status = 'deleted',
+           deleted_at = NOW(),
+           deleted_by = $2,
+           updated_at = NOW()
+       WHERE id = $1
+         AND provider_id = $2
+         AND deleted_at IS NULL
+      `,
+      [serviceId, providerId]
     );
     if (!del.rowCount) return res.status(404).json({ message: "Услуга не найдена" });
     res.json({ ok: true });
