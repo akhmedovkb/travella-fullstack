@@ -423,10 +423,15 @@ exports.askActualNow = async (req, res) => {
       `Актуально ли предложение сейчас?`;
 
     // tgSend по умолчанию шлёт с parse_mode=HTML, поэтому parse_mode не передаём.
-    const sendOk = await tgSend(chatId, msg, {
-      reply_markup: keyboard,
-      disable_web_page_preview: true,
-    });
+    const sendOk = await tgSend(
+      chatId,
+      msg,
+      {
+        reply_markup: keyboard,
+        disable_web_page_preview: true,
+      },
+      process.env.TELEGRAM_CLIENT_BOT_TOKEN
+    );
 
     // обновляем meta
     meta.lastSentAt = nowIso();
