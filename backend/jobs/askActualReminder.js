@@ -17,7 +17,7 @@ const WINDOW_MINUTES = 25;
 // (считаем по дням в Ташкенте)
 const MAX_IGNORED_DAYS = Number(process.env.ACTUAL_REMINDER_MAX_IGNORED_DAYS || 2);
 
-// ✅ Для проверки актуальности используем ТОЛЬКО Bot Otkaznyx Turov (client bot)
+// ✅ Токен Bot Otkaznyx Turov (client bot)
 const CLIENT_TG_TOKEN = process.env.TELEGRAM_CLIENT_BOT_TOKEN || "";
 
 function safeJsonParseMaybe(v) {
@@ -106,6 +106,11 @@ function getActiveSlot(now, options = {}) {
   return { dateStr, slotKey: String(hour), hour, minute, forced: false };
 }
 
+// ✅ Всегда отправляем через Bot Otkaznyx Turov
+function pickTokenForChat() {
+  return CLIENT_TG_TOKEN;
+}
+
 function getMeta(detailsObj) {
   const d = detailsObj && typeof detailsObj === "object" ? detailsObj : {};
   return d.tg_actual_reminders_meta && typeof d.tg_actual_reminders_meta === "object"
@@ -138,7 +143,7 @@ async function askActualReminder(options = {}) {
     return { ok: true, skipped: true, reason: "no_active_slot" };
   }
 
-  // ✅ Если не настроен token нового бота — не шлём (иначе будет “молчаливое” падение)
+  // ✅ Если токена нового бота нет — не пытаемся слать
   if (!CLIENT_TG_TOKEN) {
     console.warn("[askActualReminder] TELEGRAM_CLIENT_BOT_TOKEN is empty — skip sending");
     return { ok: false, skipped: true, reason: "no_client_token" };
@@ -158,8 +163,9 @@ async function askActualReminder(options = {}) {
     send_failed: 0,
   };
 
-  // ✅ Шлём ТОЛЬКО в refused-чат провайдера (Bot Otkaznyx Turov),
-  // чтобы callback 100% попадал в Telegraf обработчики нового бота.
+  // ✅ Ключевая правка:
+  // 1) Берём ТОЛЬКО telegram_refused_chat_id
+  // 2) Отсекаем всех без него (те самые 110 "старых")
   const res = await db.query(`
     SELECT
       s.id,
@@ -210,7 +216,9 @@ async function askActualReminder(options = {}) {
     const lastIgnoredDate = typeof meta.lastIgnoredDate === "string" ? meta.lastIgnoredDate : null;
 
     const lastSentLocal =
-      lastSentAt && !Number.isNaN(lastSentAt.getTime()) ? getLocalParts(lastSentAt, TZ).dateStr : null;
+      lastSentAt && !Number.isNaN(lastSentAt.getTime())
+        ? getLocalParts(lastSentAt, TZ).dateStr
+        : null;
     const lastConfirmedLocal =
       lastConfirmedAt && !Number.isNaN(lastConfirmedAt.getTime())
         ? getLocalParts(lastConfirmedAt, TZ).dateStr
@@ -237,7 +245,7 @@ async function askActualReminder(options = {}) {
 
         // мягкое уведомление провайдеру
         try {
-          const tokenOverride = CLIENT_TG_TOKEN;
+          const tokenOverride = pickTokenForChat();
           await tgSend(
             telegram_chat_id,
             `⛔ <b>Снято с актуальности</b> (нет ответа на напоминания)\n\n` +
@@ -340,7 +348,7 @@ async function askActualReminder(options = {}) {
       `🧳 <b>Услуга:</b> <b>${escapeHtml(title || "Услуга")}</b>\n\n` +
       `Нажмите кнопку ниже 👇`;
 
-    const tokenOverride = CLIENT_TG_TOKEN;
+    const tokenOverride = pickTokenForChat();
 
     try {
       const ok = await tgSend(
