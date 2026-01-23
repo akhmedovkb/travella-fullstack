@@ -178,6 +178,7 @@ async function askActualReminder(options = {}) {
     WHERE
       s.category LIKE 'refused_%'
       AND s.status IN ('approved','published')
+      AND s.deleted_at IS NULL
       AND p.telegram_refused_chat_id IS NOT NULL
   `);
 
