@@ -104,8 +104,8 @@ function parseDateFlexibleEndOfDay(value) {
 // === Актуальность услуги (для inline/списков) ===
 // Правила:
 // - если details.isActive === false -> неактуально
-// - если expiration (details.expiration или svc.expiration) в прошлом -> неактуально
-// - если endDate/returnFlightDate/endFlightDate в прошлом -> неактуально
+// - если expiration (details.expiration или svc.expiration_at / svc.expiration) в прошлом -> неактуально
+// - если "последняя релевантная дата" услуги в прошлом -> неактуально
 function isServiceActual(detailsRaw, svc) {
   let d = detailsRaw || {};
   if (typeof d === "string") {
@@ -122,17 +122,47 @@ function isServiceActual(detailsRaw, svc) {
   const now = new Date();
 
   // expiration
-  const expirationRaw = d.expiration || svc?.expiration_at || svc?.expiration || null;
+  const expirationRaw =
+    d.expiration || svc?.expiration_at || svc?.expiration || null;
+
   if (expirationRaw) {
     const exp = parseDateFlexibleEndOfDay(expirationRaw);
     if (exp && exp.getTime() < now.getTime()) return false;
   }
 
-  // end date (tour/hotel) or return flight date
-  const endRaw = d.endFlightDate || d.returnFlightDate || d.endDate || null;
-  if (endRaw) {
-    const endD = parseDateFlexibleEndOfDay(endRaw);
-    if (endD && endD.getTime() < now.getTime()) return false;
+  // приоритет — конечные даты (если есть)
+  const endRaw =
+    d.endFlightDate ||
+    d.returnFlightDate ||
+    d.endDate ||
+    d.checkoutDate ||
+    d.checkOutDate ||
+    d.checkout_date ||
+    d.check_out_date ||
+    null;
+
+  // если конечных нет — берём стартовую/одиночную дату
+  const startRaw =
+    d.departureFlightDate ||
+    d.departureDate ||
+    d.departure_date ||
+    d.eventDate ||
+    d.event_date ||
+    d.checkinDate ||
+    d.checkInDate ||
+    d.check_in_date ||
+    d.startDate ||
+    d.start_date ||
+    d.dateFrom ||
+    d.date_from ||
+    d.date ||
+    null;
+
+  const lastRaw = endRaw || startRaw;
+
+  if (lastRaw) {
+    const lastD = parseDateFlexibleEndOfDay(lastRaw);
+    if (lastD && lastD.getTime() < now.getTime()) return false;
   }
 
   return true;
