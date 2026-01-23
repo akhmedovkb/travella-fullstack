@@ -3,6 +3,7 @@ const db = require("../db");
 
 // Telegram send + keyboards/helpers
 const { tgSend } = require("../utils/telegram");
+const CLIENT_BOT_TOKEN = (process.env.TELEGRAM_CLIENT_BOT_TOKEN || "").trim();
 
 // helpers для проверки актуальности услуги
 // Важно: serviceActual.js НЕ экспортирует parseDetailsAny/parseDateSafe.
@@ -430,7 +431,7 @@ exports.askActualNow = async (req, res) => {
         reply_markup: keyboard,
         disable_web_page_preview: true,
       },
-      process.env.TELEGRAM_CLIENT_BOT_TOKEN
+      CLIENT_BOT_TOKEN || ""
     );
 
     // обновляем meta
