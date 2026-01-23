@@ -401,7 +401,8 @@ async function getProviderServicesAll(req, res) {
       FROM services s
       LEFT JOIN providers p ON p.id = s.provider_id
       WHERE s.provider_id = $1
-        AND s.status NOT IN ('deleted', 'archived')
+        AND s.deleted_at IS NULL
+        AND s.status != 'archived'
       ORDER BY s.created_at DESC
       `,
       [providerId]
@@ -817,8 +818,11 @@ async function deleteServiceFromBot(req, res) {
     await pool.query(
       `
       UPDATE services
-         SET status = 'deleted',
-             updated_at = NOW()
+         SET
+           status = 'deleted',
+           deleted_at = NOW(),
+           deleted_by = $2,
+           updated_at = NOW()
        WHERE id = $1
          AND provider_id = $2
       `,
