@@ -258,6 +258,7 @@ module.exports.search = async (req, res, next) => {
     let p = 1;
 
     where.push(`(s.status IS NULL OR lower(s.status) IN ('published','active','approved'))`);
+    where.push(`s.deleted_at IS NULL`);
     if (only_active) {
       where.push(`COALESCE((s.details->>'isActive')::boolean, TRUE) = TRUE`);
       where.push(`(s.expiration_at IS NULL OR s.expiration_at > now())`);
