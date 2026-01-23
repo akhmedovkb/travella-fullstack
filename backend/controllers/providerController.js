@@ -832,7 +832,15 @@ const deleteService = async (req, res) => {
     const providerId = req.user.id;
     const serviceId = req.params.id;
     const del = await pool.query(
-      "DELETE FROM services WHERE id=$1 AND provider_id=$2",
+      `
+      UPDATE services
+         SET
+           status = 'deleted',
+           deleted_at = NOW(),
+           deleted_by = $2,
+           updated_at = NOW()
+       WHERE id = $1 AND provider_id = $2
+      `,
       [serviceId, providerId]
     );
     if (!del.rowCount) return res.status(404).json({ message: "Услуга не найдена" });
