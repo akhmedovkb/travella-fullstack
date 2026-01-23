@@ -17,6 +17,9 @@ const WINDOW_MINUTES = 25;
 // (считаем по дням в Ташкенте)
 const MAX_IGNORED_DAYS = Number(process.env.ACTUAL_REMINDER_MAX_IGNORED_DAYS || 2);
 
+// ✅ Для проверки актуальности используем ТОЛЬКО Bot Otkaznyx Turov (client bot)
+const CLIENT_TG_TOKEN = process.env.TELEGRAM_CLIENT_BOT_TOKEN || "";
+
 function safeJsonParseMaybe(v) {
   if (!v) return {};
   if (typeof v === "object") return v;
@@ -103,12 +106,6 @@ function getActiveSlot(now, options = {}) {
   return { dateStr, slotKey: String(hour), hour, minute, forced: false };
 }
 
-function pickTokenForChat(row) {
-  // если напоминание идёт в отдельный refused-чат — шлём клиентским ботом
-  const clientToken = process.env.TELEGRAM_CLIENT_BOT_TOKEN || "";
-  return row?.use_client_bot && clientToken ? clientToken : "";
-}
-
 function getMeta(detailsObj) {
   const d = detailsObj && typeof detailsObj === "object" ? detailsObj : {};
   return d.tg_actual_reminders_meta && typeof d.tg_actual_reminders_meta === "object"
@@ -141,6 +138,12 @@ async function askActualReminder(options = {}) {
     return { ok: true, skipped: true, reason: "no_active_slot" };
   }
 
+  // ✅ Если не настроен token нового бота — не шлём (иначе будет “молчаливое” падение)
+  if (!CLIENT_TG_TOKEN) {
+    console.warn("[askActualReminder] TELEGRAM_CLIENT_BOT_TOKEN is empty — skip sending");
+    return { ok: false, skipped: true, reason: "no_client_token" };
+  }
+
   const { dateStr, slotKey } = slot;
 
   const stats = {
@@ -155,21 +158,21 @@ async function askActualReminder(options = {}) {
     send_failed: 0,
   };
 
+  // ✅ Шлём ТОЛЬКО в refused-чат провайдера (Bot Otkaznyx Turov),
+  // чтобы callback 100% попадал в Telegraf обработчики нового бота.
   const res = await db.query(`
     SELECT
       s.id,
       s.title,
       s.details,
       s.tg_last_actual_check_at,
-
-      COALESCE(p.telegram_refused_chat_id, p.telegram_chat_id, p.telegram_web_chat_id) AS telegram_chat_id,
-      (p.telegram_refused_chat_id IS NOT NULL) AS use_client_bot
+      p.telegram_refused_chat_id AS telegram_chat_id
     FROM services s
     JOIN providers p ON p.id = s.provider_id
     WHERE
       s.category LIKE 'refused_%'
       AND s.status IN ('approved','published')
-      AND (p.telegram_refused_chat_id IS NOT NULL OR p.telegram_chat_id IS NOT NULL OR p.telegram_web_chat_id IS NOT NULL)
+      AND p.telegram_refused_chat_id IS NOT NULL
   `);
 
   for (const row of res.rows) {
@@ -234,7 +237,7 @@ async function askActualReminder(options = {}) {
 
         // мягкое уведомление провайдеру
         try {
-          const tokenOverride = pickTokenForChat(row);
+          const tokenOverride = CLIENT_TG_TOKEN;
           await tgSend(
             telegram_chat_id,
             `⛔ <b>Снято с актуальности</b> (нет ответа на напоминания)\n\n` +
@@ -337,7 +340,7 @@ async function askActualReminder(options = {}) {
       `🧳 <b>Услуга:</b> <b>${escapeHtml(title || "Услуга")}</b>\n\n` +
       `Нажмите кнопку ниже 👇`;
 
-    const tokenOverride = pickTokenForChat(row);
+    const tokenOverride = CLIENT_TG_TOKEN;
 
     try {
       const ok = await tgSend(
