@@ -647,6 +647,7 @@ async function searchClientServices(req, res) {
         LEFT JOIN providers p ON p.id = s.provider_id
         WHERE s.category = $1
           AND s.status IN ('approved', 'published', 'active')
+          AND s.deleted_at IS NULL
           AND (
             s.details IS NULL
             OR (s.details::jsonb->>'isActive') IS NULL
