@@ -825,7 +825,6 @@ async function deleteServiceFromBot(req, res) {
            updated_at = NOW()
        WHERE id = $1
          AND provider_id = $2
-         AND deleted_at IS NULL
       `,
       [serviceId, provRes.rows[0].id]
     );
