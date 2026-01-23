@@ -59,10 +59,7 @@ function parseDateSafe(val) {
 
 // взять chatId провайдера
 function pickProviderChatId(p) {
-  return (
-    // В текущей схеме используем только гарантированное поле
-    p.telegram_chat_id || null
-  );
+  return p.telegram_refused_chat_id || null;
 }
 
 // дата для сортировки/отображения
@@ -144,6 +141,7 @@ exports.listActualRefused = async (req, res) => {
 
     // отказные категории
     where.push(`s.category LIKE 'refused_%'`);
+    where.push(`s.deleted_at IS NULL`);
 
     if (category && String(category).startsWith("refused_")) {
       params.push(category);
@@ -193,7 +191,7 @@ exports.listActualRefused = async (req, res) => {
         p.name AS p_name,
         p.phone AS p_phone,
         p.social AS p_social,
-        p.telegram_chat_id
+        p.telegram_refused_chat_id
       FROM services s
       JOIN providers p ON p.id = s.provider_id
       ${whereSql}
@@ -299,10 +297,11 @@ exports.getRefusedById = async (req, res) => {
         p.name AS p_name,
         p.phone AS p_phone,
         p.social AS p_social,
-        p.telegram_chat_id
+        p.telegram_refused_chat_id
       FROM services s
       JOIN providers p ON p.id = s.provider_id
       WHERE s.id = $1
+        AND s.deleted_at IS NULL
       LIMIT 1
     `;
     const r = await db.query(sql, [id]);
@@ -348,11 +347,12 @@ exports.askActualNow = async (req, res) => {
     const sql = `
       SELECT
         s.id, s.category, s.status, s.title, s.details, s.provider_id,
-        p.telegram_chat_id,
+        p.telegram_refused_chat_id,
         p.social, p.phone, p.name
       FROM services s
       JOIN providers p ON p.id = s.provider_id
       WHERE s.id = $1
+        AND s.deleted_at IS NULL
       LIMIT 1
     `;
     const r = await db.query(sql, [id]);
