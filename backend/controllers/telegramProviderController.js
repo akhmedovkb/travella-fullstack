@@ -878,6 +878,62 @@ async function deleteServiceFromBot(req, res) {
   }
 }
 
+async function restoreServiceFromBot(req, res) {
+  const { chatId, serviceId } = req.params;
+
+  const prov = await pool.query(
+    `SELECT id FROM providers
+     WHERE telegram_chat_id::text = $1
+        OR tg_chat_id::text = $1
+        OR telegram_web_chat_id::text = $1
+        OR telegram_refused_chat_id::text = $1
+     LIMIT 1`,
+    [chatId]
+  );
+  if (!prov.rowCount) return res.sendStatus(403);
+
+  const r = await pool.query(
+    `
+    UPDATE services
+       SET deleted_at = NULL,
+           deleted_by = NULL,
+           status = 'draft',
+           updated_at = NOW()
+     WHERE id = $1
+       AND provider_id = $2
+       AND deleted_at IS NOT NULL
+    `,
+    [serviceId, prov.rows[0].id]
+  );
+
+  if (!r.rowCount) return res.sendStatus(404);
+  res.json({ ok: true });
+}
+
+async function purgeServiceFromBot(req, res) {
+  const { chatId, serviceId } = req.params;
+
+  const prov = await pool.query(
+    `SELECT id FROM providers
+     WHERE telegram_chat_id::text = $1
+        OR tg_chat_id::text = $1
+        OR telegram_web_chat_id::text = $1
+        OR telegram_refused_chat_id::text = $1
+     LIMIT 1`,
+    [chatId]
+  );
+  if (!prov.rowCount) return res.sendStatus(403);
+
+  await pool.query(
+    `DELETE FROM services
+     WHERE id = $1
+       AND provider_id = $2
+       AND deleted_at IS NOT NULL`,
+    [serviceId, prov.rows[0].id]
+  );
+
+  res.json({ ok: true });
+}
 
 /**
  * PATCH /api/telegram/provider/:chatId/services/:serviceId
@@ -1013,6 +1069,8 @@ module.exports = {
   getProviderServicesAll,
   getProviderDeletedServices,
   deleteServiceFromBot,
+  restoreServiceFromBot,
+  purgeServiceFromBot,
   searchPublicServices,
   getProviderServiceByIdFromBot,
   updateServiceFromBot,
