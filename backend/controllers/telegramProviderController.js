@@ -418,6 +418,47 @@ async function getProviderServicesAll(req, res) {
   }
 }
 
+async function getProviderDeletedServices(req, res) {
+  try {
+    const { chatId } = req.params;
+
+    const provRes = await pool.query(
+      `SELECT id
+         FROM providers
+        WHERE telegram_chat_id::text = $1
+           OR tg_chat_id::text = $1
+           OR telegram_web_chat_id::text = $1
+           OR telegram_refused_chat_id::text = $1
+        LIMIT 1`,
+      [chatId]
+    );
+
+    if (!provRes.rowCount) {
+      return res.status(403).json({ success: false });
+    }
+
+    const providerId = provRes.rows[0].id;
+
+    const q = await pool.query(
+      `
+      SELECT id, title, category, deleted_at
+        FROM services
+       WHERE provider_id = $1
+         AND deleted_at IS NOT NULL
+       ORDER BY deleted_at DESC
+       LIMIT 50
+      `,
+      [providerId]
+    );
+
+    return res.json({ success: true, items: q.rows });
+  } catch (e) {
+    console.error("[tg] getProviderDeletedServices error:", e);
+    return res.status(500).json({ success: false });
+  }
+}
+
+
 /**
  * ✅ Публичный поиск (маркетплейс) для provider-бота
  * GET /api/telegram/provider/:chatId/search?category=refused_tour
@@ -970,6 +1011,7 @@ module.exports = {
   rejectBooking,
   getProviderServices,
   getProviderServicesAll,
+  getProviderDeletedServices,
   deleteServiceFromBot,
   searchPublicServices,
   getProviderServiceByIdFromBot,
