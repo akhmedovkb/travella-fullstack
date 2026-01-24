@@ -631,7 +631,7 @@ router.post(
   telegramProviderController.restoreServiceFromBot
 );
 
-router.post(
+router.delete(
   "/provider/:chatId/services/:serviceId/purge",
   telegramProviderController.purgeServiceFromBot
 );
