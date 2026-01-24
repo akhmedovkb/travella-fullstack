@@ -1309,6 +1309,97 @@ const deleteProviderService = async (req, res) => {
   }
 };
 
+// GET /api/providers/:providerId/services/deleted
+const getProviderDeletedServices = async (req, res) => {
+  try {
+    const providerId = Number(req.params.providerId);
+    if (!Number.isFinite(providerId) || providerId !== req.user.id) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
+    const q = await pool.query(
+      `
+      SELECT
+        id, provider_id, title, description, category, price, currency,
+        images, availability, details, status,
+        created_at, updated_at,
+        deleted_at, deleted_by
+      FROM services
+      WHERE provider_id = $1
+        AND deleted_at IS NOT NULL
+      ORDER BY deleted_at DESC
+      LIMIT 200
+      `,
+      [providerId]
+    );
+
+    return res.json({ ok: true, items: q.rows });
+  } catch (err) {
+    console.error("getProviderDeletedServices error:", err);
+    return res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+// POST /api/providers/:providerId/services/:id/restore
+const restoreProviderService = async (req, res) => {
+  try {
+    const providerId = Number(req.params.providerId);
+    const id = Number(req.params.id);
+    if (!Number.isFinite(providerId) || providerId !== req.user.id) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
+    const upd = await pool.query(
+      `
+      UPDATE services
+         SET deleted_at = NULL,
+             deleted_by = NULL,
+             updated_at = NOW(),
+             status = CASE WHEN status = 'deleted' THEN 'approved' ELSE status END
+       WHERE id = $1
+         AND provider_id = $2
+         AND deleted_at IS NOT NULL
+      RETURNING id
+      `,
+      [id, providerId]
+    );
+
+    if (!upd.rowCount) return res.status(404).json({ message: "Не найдено в корзине" });
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("restoreProviderService error:", err);
+    return res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+// DELETE /api/providers/:providerId/services/:id/purge
+const purgeProviderService = async (req, res) => {
+  try {
+    const providerId = Number(req.params.providerId);
+    const id = Number(req.params.id);
+    if (!Number.isFinite(providerId) || providerId !== req.user.id) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
+    const del = await pool.query(
+      `
+      DELETE FROM services
+       WHERE id = $1
+         AND provider_id = $2
+         AND deleted_at IS NOT NULL
+      RETURNING id
+      `,
+      [id, providerId]
+    );
+
+    if (!del.rowCount) return res.status(404).json({ message: "Не найдено в корзине" });
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("purgeProviderService error:", err);
+    return res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
 module.exports = {
   isExtendedCategory,
   registerProvider,
@@ -1340,6 +1431,11 @@ module.exports = {
   deleteProviderService,
   // public provider_services
   getProviderServicesPublic,
+  // korzina for deleted services
+  getProviderDeletedServices,
+  restoreProviderService,
+  purgeProviderService,
+
 };
 
 
