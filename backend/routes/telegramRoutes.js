@@ -620,6 +620,12 @@ router.get(
 //услуги поставщика (ВСЕ услуги) — для кнопки "🖼 Карточками" в telegram боте
 router.get("/provider/:chatId/services/all", telegramProviderController.getProviderServicesAll);
 
+// корзина удалённых услуг поставщика
+router.get(
+  "/provider/:chatId/services/deleted",
+  telegramProviderController.getProviderDeletedServices
+);
+
 // одна услуга поставщика (для редактирования в боте)
 router.get(
   "/provider/:chatId/services/:serviceId",
