@@ -951,41 +951,51 @@ async function sendTrashList(ctx) {
   const items = r?.data?.items || r?.data?.services || [];
 
   if (!items.length) {
-    await ctx.reply("🧺 Корзина пуста.");
+    await ctx.reply("🧺 Корзина пуста.", {
+      reply_markup: {
+        inline_keyboard: [[{ text: "⬅️ В меню", callback_data: "trash:menu" }]],
+      },
+    });
     return;
   }
 
-  await ctx.reply(`🧺 <b>Корзина удалённых услуг</b>\n\nВыберите действие:`, {
-    parse_mode: "HTML",
-  });
-
-  for (const s of items) {
+  const lines = items.slice(0, 20).map((s, idx) => {
+    const id = s.id;
     const title = escapeHtml(s.title || "Услуга");
     const cat = escapeHtml(s.category || "");
-    const id = s.id;
-
     const deletedAt = s.deleted_at ? new Date(s.deleted_at).toLocaleString("ru-RU") : "";
+    return (
+      `${idx + 1}) <code>#${id}</code> — <b>${title}</b>` +
+      (cat ? `\n   📌 <i>${cat}</i>` : "") +
+      (deletedAt ? `\n   🕒 <i>${escapeHtml(deletedAt)}</i>` : "")
+    );
+  });
 
-    const text =
-      `🧾 <b>ID:</b> <code>#${id}</code>\n` +
-      (cat ? `📌 <b>Категория:</b> <b>${cat}</b>\n` : "") +
-      `🧳 <b>${title}</b>\n` +
-      (deletedAt ? `🕒 <b>Удалено:</b> ${escapeHtml(deletedAt)}\n` : "") +
-      `\nЧто сделать?`;
+  const text =
+    `🧺 <b>Корзина удалённых услуг</b>\n\n` +
+    `Выберите услугу ниже, чтобы восстановить или удалить навсегда.\n\n` +
+    lines.join("\n\n") +
+    (items.length > 20 ? `\n\n…и ещё ${items.length - 20} шт.` : "");
 
-    await ctx.reply(text, {
-      parse_mode: "HTML",
-      reply_markup: {
-        inline_keyboard: [
-          [
-            { text: "♻️ Восстановить", callback_data: `svc_restore:${id}` },
-            { text: "❌ Удалить навсегда", callback_data: `svc_purge:${id}` },
-          ],
-        ],
-      },
-    });
+  // Клавиатура: по 2 услуги в ряд (кнопки “#id”)
+  const buttons = items.slice(0, 20).map((s) => ({
+    text: `#${s.id}`,
+    callback_data: `trash:pick:${s.id}`,
+  }));
+
+  const keyboardRows = [];
+  for (let i = 0; i < buttons.length; i += 2) {
+    keyboardRows.push(buttons.slice(i, i + 2));
   }
+
+  keyboardRows.push([{ text: "⬅️ В меню", callback_data: "trash:menu" }]);
+
+  await ctx.reply(text, {
+    parse_mode: "HTML",
+    reply_markup: { inline_keyboard: keyboardRows },
+  });
 }
+
 
 async function safeReply(ctx, text, extra) {
   const uid = ctx.from?.id;
@@ -1764,6 +1774,55 @@ bot.action(/^svc_edit_start:(\d+)$/, async (ctx) => {
   } catch (e) {
     console.error("[tg-bot] svc_edit_start error:", e?.response?.data || e?.message || e);
     await safeReply(ctx, "⚠️ Не удалось запустить редактирование. Попробуйте позже.");
+  }
+});
+
+bot.action(/^trash:pick:(\d+)$/, async (ctx) => {
+  try {
+    const serviceId = ctx.match[1];
+    await ctx.answerCbQuery();
+
+    // Показываем панель действий для выбранной услуги (в ответ отдельным сообщением)
+    await ctx.reply(
+      `🧺 Выбрана услуга <code>#${serviceId}</code>\n\nЧто сделать?`,
+      {
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: "♻️ Восстановить", callback_data: `svc_restore:${serviceId}` },
+              { text: "❌ Удалить навсегда", callback_data: `svc_purge:${serviceId}` },
+            ],
+            [{ text: "⬅️ Назад к корзине", callback_data: "trash:back" }],
+          ],
+        },
+      }
+    );
+  } catch (e) {
+    console.error("[bot] trash:pick error:", e?.message || e);
+    return ctx.reply("❌ Ошибка. Попробуйте ещё раз.");
+  }
+});
+
+bot.action(/^trash:back$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    await sendTrashList(ctx);
+  } catch (e) {
+    console.error("[bot] trash:back error:", e?.message || e);
+    return ctx.reply("❌ Не удалось обновить корзину.");
+  }
+});
+
+bot.action(/^trash:menu$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    // возвращаем главное меню (reply keyboard)
+    const role = "provider"; // в твоём боте провайдер в этом меню
+    await ctx.reply("🏠 Главное меню", getMainMenuKeyboard(role));
+  } catch (e) {
+    console.error("[bot] trash:menu error:", e?.message || e);
+    return ctx.reply("❌ Ошибка.");
   }
 });
 
