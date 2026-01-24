@@ -626,6 +626,16 @@ router.get(
   telegramProviderController.getProviderDeletedServices
 );
 
+router.post(
+  "/provider/:chatId/services/:serviceId/restore",
+  telegramProviderController.restoreServiceFromBot
+);
+
+router.post(
+  "/provider/:chatId/services/:serviceId/purge",
+  telegramProviderController.purgeServiceFromBot
+);
+
 // одна услуга поставщика (для редактирования в боте)
 router.get(
   "/provider/:chatId/services/:serviceId",
