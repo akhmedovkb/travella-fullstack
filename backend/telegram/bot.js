@@ -944,6 +944,49 @@ function escapeHtml(s) {
     .replace(/'/g, "&#39;");
 }
 
+async function sendTrashList(ctx) {
+  const actorId = getActorId(ctx);
+
+  const r = await axios.get(`/api/telegram/provider/${actorId}/services/deleted`);
+  const items = r?.data?.items || r?.data?.services || [];
+
+  if (!items.length) {
+    await ctx.reply("🧺 Корзина пуста.");
+    return;
+  }
+
+  await ctx.reply(`🧺 <b>Корзина удалённых услуг</b>\n\nВыберите действие:`, {
+    parse_mode: "HTML",
+  });
+
+  for (const s of items) {
+    const title = escapeHtml(s.title || "Услуга");
+    const cat = escapeHtml(s.category || "");
+    const id = s.id;
+
+    const deletedAt = s.deleted_at ? new Date(s.deleted_at).toLocaleString("ru-RU") : "";
+
+    const text =
+      `🧾 <b>ID:</b> <code>#${id}</code>\n` +
+      (cat ? `📌 <b>Категория:</b> <b>${cat}</b>\n` : "") +
+      `🧳 <b>${title}</b>\n` +
+      (deletedAt ? `🕒 <b>Удалено:</b> ${escapeHtml(deletedAt)}\n` : "") +
+      `\nЧто сделать?`;
+
+    await ctx.reply(text, {
+      parse_mode: "HTML",
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: "♻️ Восстановить", callback_data: `svc_restore:${id}` },
+            { text: "❌ Удалить навсегда", callback_data: `svc_purge:${id}` },
+          ],
+        ],
+      },
+    });
+  }
+}
+
 async function safeReply(ctx, text, extra) {
   const uid = ctx.from?.id;
 
@@ -3558,45 +3601,7 @@ await ctx.reply("🧳 Выберите действие:", {
 
 bot.hears("🧺 Корзина", async (ctx) => {
   try {
-    const actorId = getActorId(ctx); // chatId
-
-    const r = await axios.get(`/api/telegram/provider/${actorId}/services/deleted`);
-    const items = r?.data?.services || r?.data?.items || [];
-
-    if (!items.length) {
-      return ctx.reply("🧺 Корзина пуста.");
-    }
-
-    await ctx.reply(`🧺 <b>Корзина удалённых услуг</b>\n\nВыберите действие:`, {
-      parse_mode: "HTML",
-    });
-
-    for (const s of items) {
-      const title = escapeHtml(s.title || "Услуга");
-      const cat = escapeHtml(s.category || "");
-      const id = s.id;
-
-      const deletedAt = s.deleted_at ? new Date(s.deleted_at).toLocaleString("ru-RU") : "";
-
-      const text =
-        `🧾 <b>ID:</b> <code>#${id}</code>\n` +
-        (cat ? `📌 <b>Категория:</b> <b>${cat}</b>\n` : "") +
-        `🧳 <b>${title}</b>\n` +
-        (deletedAt ? `🕒 <b>Удалено:</b> ${escapeHtml(deletedAt)}\n` : "") +
-        `\nЧто сделать?`;
-
-      await ctx.reply(text, {
-        parse_mode: "HTML",
-        reply_markup: {
-          inline_keyboard: [
-            [
-              { text: "♻️ Восстановить", callback_data: `svc_restore:${id}` },
-              { text: "❌ Удалить навсегда", callback_data: `svc_purge:${id}` },
-            ],
-          ],
-        },
-      });
-    }
+    await sendTrashList(ctx);
   } catch (e) {
     console.error("[bot] trash list error:", e?.message || e);
     return ctx.reply("❌ Не удалось загрузить корзину. Попробуйте позже.");
@@ -3942,16 +3947,29 @@ bot.action(/^svc_delete_confirm:(\d+)$/, async (ctx) => {
 bot.action(/^svc_restore:(\d+)$/, async (ctx) => {
   try {
     const serviceId = ctx.match[1];
-    await ctx.answerCbQuery();
+
+    // ответ на callback сразу (чтобы не крутилось)
+    await ctx.answerCbQuery("Восстанавливаю...");
 
     const actorId = getActorId(ctx);
 
     const r = await axios.post(`/api/telegram/provider/${actorId}/services/${serviceId}/restore`);
+
     if (r?.data?.success || r?.data?.ok) {
-      return ctx.reply(`♻️ Услуга <code>#${serviceId}</code> восстановлена.`, {
+      // гасим кнопки у сообщения, где нажали
+      try {
+        await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+      } catch {}
+
+      await ctx.reply(`♻️ Услуга <code>#${serviceId}</code> восстановлена.`, {
         parse_mode: "HTML",
       });
+
+      // показать обновлённую корзину
+      await sendTrashList(ctx);
+      return;
     }
+
     return ctx.reply(`❌ Не удалось восстановить услугу <code>#${serviceId}</code>.`, {
       parse_mode: "HTML",
     });
@@ -3960,6 +3978,7 @@ bot.action(/^svc_restore:(\d+)$/, async (ctx) => {
     return ctx.reply("❌ Ошибка при восстановлении.");
   }
 });
+
 
 // ❌ Purge (confirm screen)
 bot.action(/^svc_purge:(\d+)$/, async (ctx) => {
@@ -3986,16 +4005,28 @@ bot.action(/^svc_purge:(\d+)$/, async (ctx) => {
 bot.action(/^svc_purge_confirm:(\d+)$/, async (ctx) => {
   try {
     const serviceId = ctx.match[1];
-    await ctx.answerCbQuery();
+
+    await ctx.answerCbQuery("Удаляю...");
 
     const actorId = getActorId(ctx);
 
     const r = await axios.delete(`/api/telegram/provider/${actorId}/services/${serviceId}/purge`);
+
     if (r?.data?.success || r?.data?.ok) {
-      return ctx.reply(`✅ Услуга <code>#${serviceId}</code> удалена навсегда.`, {
+      // гасим кнопки у confirm-сообщения
+      try {
+        await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+      } catch {}
+
+      await ctx.reply(`✅ Услуга <code>#${serviceId}</code> удалена навсегда.`, {
         parse_mode: "HTML",
       });
+
+      // показать обновлённую корзину
+      await sendTrashList(ctx);
+      return;
     }
+
     return ctx.reply(`❌ Не удалось удалить навсегда <code>#${serviceId}</code>.`, {
       parse_mode: "HTML",
     });
