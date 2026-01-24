@@ -33,10 +33,15 @@ const {
   bulkCreateProviderServices,
   deleteProviderService,
   getProviderServicesPublic,
+
+  // ✅ TRASH (корзина)
+  getProviderDeletedServices,
+  restoreProviderService,
+  purgeProviderService,
 } = require("../controllers/providerController");
 
 const { notifyModerationNew } = require("../utils/telegram");
-  
+
 function requireProvider(req, res, next) {
   if (!req.user || !req.user.id) {
     return res.status(401).json({ message: "Требуется авторизация" });
@@ -79,6 +84,11 @@ router.post("/:providerId(\\d+)/services", authenticateToken, requireProvider, c
 router.patch("/:providerId(\\d+)/services/:id(\\d+)", authenticateToken, requireProvider, patchProviderService);
 router.post("/:providerId(\\d+)/services/bulk", authenticateToken, requireProvider, bulkCreateProviderServices);
 router.delete("/:providerId(\\d+)/services/:id(\\d+)", authenticateToken, requireProvider, deleteProviderService);
+
+/* -------------------- ✅ TRASH / корзина (каскадные услуги) -------------------- */
+router.get("/:providerId(\\d+)/services/deleted", authenticateToken, requireProvider, getProviderDeletedServices);
+router.post("/:providerId(\\d+)/services/:id(\\d+)/restore", authenticateToken, requireProvider, restoreProviderService);
+router.delete("/:providerId(\\d+)/services/:id(\\d+)/purge", authenticateToken, requireProvider, purgeProviderService);
 
 router.get("/booked-dates", authenticateToken, requireProvider, getBookedDates);
 router.get("/blocked-dates", authenticateToken, requireProvider, getBlockedDates);
@@ -228,10 +238,7 @@ router.get("/:id(\\d+)", getProviderPublicById);
 router.get("/me", authenticateToken, requireProvider, async (req, res) => {
   try {
     const providerId = req.user.id;
-    const q = await pool.query(
-      "SELECT id FROM hotels WHERE provider_id=$1 LIMIT 1",
-      [providerId]
-    );
+    const q = await pool.query("SELECT id FROM hotels WHERE provider_id=$1 LIMIT 1", [providerId]);
     return res.json({
       id: providerId,
       hotel_id: q.rows?.[0]?.id || null,
