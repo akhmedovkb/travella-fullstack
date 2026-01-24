@@ -935,6 +935,15 @@ function getActorId(ctx) {
   return ctx?.from?.id || ctx?.chat?.id || null;
 }
 
+function escapeHtml(s) {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 async function safeReply(ctx, text, extra) {
   const uid = ctx.from?.id;
 
