@@ -1299,7 +1299,7 @@ const deleteProviderService = async (req, res) => {
          AND provider_id = $2
          AND deleted_at IS NULL
       `,
-      [serviceId, providerId]
+        [id, providerId]
     );
     if (!del.rowCount) return res.status(404).json({ message: "Услуга не найдена" });
     res.json({ ok: true });
