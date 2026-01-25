@@ -410,6 +410,8 @@ export default function Header() {
                     <DropdownItem to="/admin/entry-fees" label={t("nav.entry_fees_admin", "Entry fees")} icon={<IconTicket />} />
                     <DropdownItem to="/admin/hotels" label={t("nav.hotels_admin", "Отели (админ)")} icon={<IconHotel />} />
                     <DropdownItem to="/admin/pages" label={t("nav.cms_pages", "Подвал")} icon={<IconDoc />} />
+                    {/* ✅ DONA'S DOSAS — только админу */}
+                    <DropdownItem to="/donas-dosas/finance" label="DONA’S DOSAS" icon={<IconBurger />}/>
                     <div className="border-t border-white/10 p-2">
                       <AdminQuickTools />
                     </div>
@@ -531,6 +533,8 @@ export default function Header() {
                 <NavItemMobileDark to="/admin/entry-fees" label={t("nav.entry_fees_admin", "Entry fees")} icon={<IconTicket />} />
                 <NavItemMobileDark to="/admin/hotels" label={t("nav.hotels_admin", "Отели (админ)")} icon={<IconHotel />} />
                 <NavItemMobileDark to="/admin/pages" label={t("nav.cms_pages", "Подвал")} icon={<IconDoc />} />
+                <NavItemMobileDark to="/admin/pages" label={t("nav.cms_pages", "Подвал")} icon={<IconDoc />} />
+
               </RowGroupDark>
             )}
           </nav>
