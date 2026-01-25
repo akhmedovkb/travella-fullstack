@@ -946,6 +946,7 @@ function escapeHtml(s) {
 
 // ===== "Живая корзина" в одном сообщении =====
 const TRASH_MSG_BY_CHAT = new Map(); // chatId -> { chatId, messageId }
+const TRASH_ITEMS_BY_CHAT = new Map(); // chatId -> items[]
 
 function buildTrashListText(items) {
   if (!items.length) {
@@ -970,6 +971,64 @@ function buildTrashListText(items) {
     lines.join("\n\n") +
     (items.length > 20 ? `\n\n…и ещё ${items.length - 20} шт.` : "")
   );
+}
+
+function pickDetails(s) {
+  const d = s?.details;
+  if (!d) return {};
+  if (typeof d === "object") return d;
+  if (typeof d === "string") {
+    try { return JSON.parse(d); } catch { return {}; }
+  }
+  return {};
+}
+
+function formatMoney(v) {
+  if (v === null || v === undefined || v === "") return "";
+  const n = Number(v);
+  if (!Number.isFinite(n)) return escapeHtml(String(v));
+  return escapeHtml(n.toLocaleString("ru-RU"));
+}
+
+function buildTrashItemText(s) {
+  const id = s.id;
+  const cat = escapeHtml(s.category || "");
+  const title = escapeHtml(s.title || "Услуга");
+
+  const d = pickDetails(s);
+
+  // hotel / accommodation / price (под разные формы)
+  const hotel =
+    d.hotelName || d.hotel || d.hotel_title || d.hotelTitle || "";
+  const acc =
+    d.accommodation || d.roomCategory || d.room || d.placement || "";
+  const price =
+    d.netPrice ?? d.price ?? s.price ?? "";
+
+  // направление (если есть)
+  const dir =
+    [d.directionCountry, d.directionTo, d.city, d.directionFrom]
+      .filter(Boolean)
+      .join(" / ");
+
+  const deletedAt = s.deleted_at
+    ? new Date(s.deleted_at).toLocaleString("ru-RU")
+    : "";
+
+  let text =
+    `🧺 <b>Выбрана услуга</b>\n\n` +
+    `🧾 <b>ID:</b> <code>#${id}</code>\n` +
+    (cat ? `📌 <b>Категория:</b> <b>${cat}</b>\n` : "") +
+    `🧳 <b>${title}</b>\n`;
+
+  if (dir) text += `📍 <b>Направление:</b> ${escapeHtml(dir)}\n`;
+  if (hotel) text += `🏨 <b>Отель:</b> ${escapeHtml(hotel)}\n`;
+  if (acc) text += `🛏 <b>Размещение:</b> ${escapeHtml(acc)}\n`;
+  if (price !== "") text += `💰 <b>Цена:</b> ${formatMoney(price)}\n`;
+  if (deletedAt) text += `🕒 <b>Удалено:</b> ${escapeHtml(deletedAt)}\n`;
+
+  text += `\nЧто сделать?`;
+  return text;
 }
 
 function buildTrashListKeyboard(items) {
@@ -997,12 +1056,13 @@ async function fetchTrashItems(ctx) {
 }
 
 async function renderTrash(ctx, opts = {}) {
+  const chatId = ctx.chat?.id || ctx.update?.callback_query?.message?.chat?.id;
+  
   const items = await fetchTrashItems(ctx);
-
+  TRASH_ITEMS_BY_CHAT.set(String(chatId), items);
+  
   const text = buildTrashListText(items);
   const reply_markup = buildTrashListKeyboard(items);
-
-  const chatId = ctx.chat?.id || ctx.update?.callback_query?.message?.chat?.id;
 
   // если пришли из callback — можно редактировать текущее сообщение
   const canEditFromCallback = Boolean(ctx.update?.callback_query?.message?.message_id);
@@ -4175,12 +4235,15 @@ bot.action(/^trash:open$/, async (ctx) => {
 
 bot.action(/^trash:item:(\d+)$/, async (ctx) => {
   await ctx.answerCbQuery();
-  const serviceId = ctx.match[1];
+  const serviceId = Number(ctx.match[1]);
 
-  const text =
-    `🧺 <b>Услуга из корзины</b>\n\n` +
-    `🧾 <b>ID:</b> <code>#${serviceId}</code>\n\n` +
-    `Выберите действие:`;
+  const chatId = ctx.update?.callback_query?.message?.chat?.id;
+  const items = TRASH_ITEMS_BY_CHAT.get(String(chatId)) || [];
+  const s = items.find((x) => Number(x.id) === serviceId);
+
+  const text = s
+    ? buildTrashItemText(s)
+    : (`🧺 <b>Выбрана услуга</b>\n\n🧾 <b>ID:</b> <code>#${serviceId}</code>\n\nЧто сделать?`);
 
   const reply_markup = {
     inline_keyboard: [
