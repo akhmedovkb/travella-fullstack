@@ -1,18 +1,16 @@
 // backend/routes/financeModelRoutes.js
-import express from "express";
-import {
+const express = require("express");
+const router = express.Router();
+
+const {
   listFinanceModels,
   getFinanceModel,
   createFinanceModel,
   deleteFinanceModel,
-} from "../controllers/financeModelController.js";
+} = require("../controllers/financeModelController");
 
-// Если у тебя есть JWT middleware — можешь подключить его тут,
-// но для старта можно оставить публично, или ограничить потом.
-// import authenticateToken from "../middleware/authenticateToken.js";
-
-const router = express.Router();
-
+// Если захочешь закрыть авторизацией — раскомментируй:
+// const authenticateToken = require("../middleware/authenticateToken");
 // router.use(authenticateToken);
 
 router.get("/", listFinanceModels);
@@ -20,4 +18,4 @@ router.post("/", createFinanceModel);
 router.get("/:id", getFinanceModel);
 router.delete("/:id", deleteFinanceModel);
 
-export default router;
+module.exports = router;
