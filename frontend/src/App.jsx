@@ -376,14 +376,16 @@ export default function App() {
             {/* Инструменты */}
             <Route path="/tour-builder" element={<TourBuilder />} />
             <Route path="/templates" element={<TemplateCreator />} />
-
-            {/* Fallback — всегда последним */}
-            <Route path="*" element={<Navigate to="/" replace />} />
-          {/* Donas Dosas */}
+            
+            {/* Donas Dosas */}
             <Route
               path="/donas-dosas/finance"
               element={<DonasFinanceModel />}
             />
+
+            {/* Fallback — всегда последним */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+
           </Routes>
         </main>
         <Footer />
