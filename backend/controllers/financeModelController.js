@@ -1,12 +1,11 @@
 // backend/controllers/financeModelController.js
-import pool from "../db.js";
+const pool = require("../db"); // если у тебя экспорт другой — замени тут
 
-// Если у тебя другая система auth — подстрой getActor() под неё
 function getActor(req) {
-  // варианты:
-  // - req.user from JWT middleware
-  // - req.provider / req.client
+  // jwt middleware кладёт req.user
   const user = req.user || null;
+
+  // если не залогинен — сохраним как guest
   return {
     user_id: user?.id || null,
     user_role: user?.role || "guest",
@@ -32,7 +31,11 @@ async function ensureTable() {
   `);
 }
 
-export async function listFinanceModels(req, res) {
+async function touchUpdatedAt(id) {
+  await pool.query(`UPDATE finance_models SET updated_at = now() WHERE id = $1`, [id]);
+}
+
+exports.listFinanceModels = async (req, res) => {
   try {
     await ensureTable();
     const actor = getActor(req);
@@ -44,7 +47,7 @@ export async function listFinanceModels(req, res) {
       WHERE (user_id = $1 AND user_role = $2)
          OR ($1 IS NULL AND user_role = 'guest')
       ORDER BY updated_at DESC
-      LIMIT 50
+      LIMIT 100
       `,
       [actor.user_id, actor.user_role]
     );
@@ -53,9 +56,9 @@ export async function listFinanceModels(req, res) {
   } catch (e) {
     return res.status(500).json({ ok: false, message: e.message });
   }
-}
+};
 
-export async function getFinanceModel(req, res) {
+exports.getFinanceModel = async (req, res) => {
   try {
     await ensureTable();
     const actor = getActor(req);
@@ -78,15 +81,17 @@ export async function getFinanceModel(req, res) {
   } catch (e) {
     return res.status(500).json({ ok: false, message: e.message });
   }
-}
+};
 
-export async function createFinanceModel(req, res) {
+exports.createFinanceModel = async (req, res) => {
   try {
     await ensureTable();
     const actor = getActor(req);
 
     const { name, data } = req.body || {};
-    if (!name || !data) return res.status(400).json({ ok: false, message: "name and data required" });
+    if (!name || !data) {
+      return res.status(400).json({ ok: false, message: "name and data required" });
+    }
 
     const r = await pool.query(
       `
@@ -101,9 +106,9 @@ export async function createFinanceModel(req, res) {
   } catch (e) {
     return res.status(500).json({ ok: false, message: e.message });
   }
-}
+};
 
-export async function deleteFinanceModel(req, res) {
+exports.deleteFinanceModel = async (req, res) => {
   try {
     await ensureTable();
     const actor = getActor(req);
@@ -125,4 +130,4 @@ export async function deleteFinanceModel(req, res) {
   } catch (e) {
     return res.status(500).json({ ok: false, message: e.message });
   }
-}
+};
