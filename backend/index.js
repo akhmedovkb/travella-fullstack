@@ -122,6 +122,10 @@ app.use("/api/clients", clientRoutes);
 const profileRoutes = require("./routes/profileRoutes");
 app.use("/api/profile", profileRoutes);
 
+// ✅ Dona's Dosas finance model (save/load versions)
+const financeModelRoutes = require("./routes/financeModelRoutes");
+app.use("/api/finance-models", financeModelRoutes);
+
 /**
  * requestRoutes может экспортировать:
  * 1) только router  -> module.exports = router
