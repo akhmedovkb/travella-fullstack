@@ -944,19 +944,12 @@ function escapeHtml(s) {
     .replace(/'/g, "&#39;");
 }
 
-async function sendTrashList(ctx) {
-  const actorId = getActorId(ctx);
+// ===== "Живая корзина" в одном сообщении =====
+const TRASH_MSG_BY_CHAT = new Map(); // chatId -> { chatId, messageId }
 
-  const r = await axios.get(`/api/telegram/provider/${actorId}/services/deleted`);
-  const items = r?.data?.items || r?.data?.services || [];
-
+function buildTrashListText(items) {
   if (!items.length) {
-    await ctx.reply("🧺 Корзина пуста.", {
-      reply_markup: {
-        inline_keyboard: [[{ text: "⬅️ В меню", callback_data: "trash:menu" }]],
-      },
-    });
-    return;
+    return `🧺 <b>Корзина удалённых услуг</b>\n\nКорзина пуста.`;
   }
 
   const lines = items.slice(0, 20).map((s, idx) => {
@@ -971,31 +964,86 @@ async function sendTrashList(ctx) {
     );
   });
 
-  const text =
+  return (
     `🧺 <b>Корзина удалённых услуг</b>\n\n` +
-    `Выберите услугу ниже, чтобы восстановить или удалить навсегда.\n\n` +
+    `Нажмите на услугу ниже 👇\n\n` +
     lines.join("\n\n") +
-    (items.length > 20 ? `\n\n…и ещё ${items.length - 20} шт.` : "");
-
-  // Клавиатура: по 2 услуги в ряд (кнопки “#id”)
-  const buttons = items.slice(0, 20).map((s) => ({
-    text: `#${s.id}`,
-    callback_data: `trash:pick:${s.id}`,
-  }));
-
-  const keyboardRows = [];
-  for (let i = 0; i < buttons.length; i += 2) {
-    keyboardRows.push(buttons.slice(i, i + 2));
-  }
-
-  keyboardRows.push([{ text: "⬅️ В меню", callback_data: "trash:menu" }]);
-
-  await ctx.reply(text, {
-    parse_mode: "HTML",
-    reply_markup: { inline_keyboard: keyboardRows },
-  });
+    (items.length > 20 ? `\n\n…и ещё ${items.length - 20} шт.` : "")
+  );
 }
 
+function buildTrashListKeyboard(items) {
+  const buttons = items.slice(0, 20).map((s) => ({
+    text: `#${s.id}`,
+    callback_data: `trash:item:${s.id}`,
+  }));
+
+  const rows = [];
+  for (let i = 0; i < buttons.length; i += 2) {
+    rows.push(buttons.slice(i, i + 2));
+  }
+
+  // можно добавить "обновить"
+  rows.push([{ text: "🔄 Обновить", callback_data: "trash:open" }]);
+  rows.push([{ text: "⬅️ В меню", callback_data: "trash:menu" }]);
+
+  return { inline_keyboard: rows };
+}
+
+async function fetchTrashItems(ctx) {
+  const actorId = getActorId(ctx);
+  const r = await axios.get(`/api/telegram/provider/${actorId}/services/deleted`);
+  return r?.data?.services || r?.data?.items || [];
+}
+
+async function renderTrash(ctx, opts = {}) {
+  const items = await fetchTrashItems(ctx);
+
+  const text = buildTrashListText(items);
+  const reply_markup = buildTrashListKeyboard(items);
+
+  const chatId = ctx.chat?.id || ctx.update?.callback_query?.message?.chat?.id;
+
+  // если пришли из callback — можно редактировать текущее сообщение
+  const canEditFromCallback = Boolean(ctx.update?.callback_query?.message?.message_id);
+
+  // если у нас запомнено messageId корзины — пытаемся редактировать именно его
+  const saved = TRASH_MSG_BY_CHAT.get(String(chatId));
+  const messageIdToEdit = saved?.messageId;
+
+  // 1) Если вызываем из callback и сообщение то самое — просто editMessageText
+  if (canEditFromCallback) {
+    try {
+      await ctx.editMessageText(text, { parse_mode: "HTML", reply_markup });
+      // запомним message_id текущего сообщения как "корзина"
+      const mid = ctx.update.callback_query.message.message_id;
+      TRASH_MSG_BY_CHAT.set(String(chatId), { chatId, messageId: mid });
+      return;
+    } catch (e) {
+      // если редактирование не удалось — fallback на отправку нового
+    }
+  }
+
+  // 2) Если у нас есть сохранённый messageId корзины — пробуем редактировать его через API
+  if (messageIdToEdit) {
+    try {
+      await ctx.telegram.editMessageText(chatId, messageIdToEdit, undefined, text, {
+        parse_mode: "HTML",
+        reply_markup,
+      });
+      return;
+    } catch (e) {
+      // не удалось (сообщение удалено/устарело) — отправим новое и перезапомним
+      TRASH_MSG_BY_CHAT.delete(String(chatId));
+    }
+  }
+
+  // 3) Иначе отправляем новое сообщение и запоминаем
+  const sent = await ctx.reply(text, { parse_mode: "HTML", reply_markup });
+  if (sent?.message_id) {
+    TRASH_MSG_BY_CHAT.set(String(chatId), { chatId, messageId: sent.message_id });
+  }
+}
 
 async function safeReply(ctx, text, extra) {
   const uid = ctx.from?.id;
@@ -3660,9 +3708,9 @@ await ctx.reply("🧳 Выберите действие:", {
 
 bot.hears("🧺 Корзина", async (ctx) => {
   try {
-    await sendTrashList(ctx);
+    await renderTrash(ctx);
   } catch (e) {
-    console.error("[bot] trash list error:", e?.message || e);
+    console.error("[bot] trash hears error:", e?.message || e);
     return ctx.reply("❌ Не удалось загрузить корзину. Попробуйте позже.");
   }
 });
@@ -3734,7 +3782,6 @@ bot.action("prov_services:list", async (ctx) => {
     }
   );
 });
-
 
 bot.action("prov_services:list_cards", async (ctx) => {
   try {
@@ -4114,6 +4161,141 @@ bot.action(/^svc_purge_confirm:(\d+)$/, async (ctx) => {
     console.error("[bot] svc_purge_confirm error:", e?.message || e);
     return ctx.reply("❌ Ошибка при удалении навсегда.");
   }
+});
+
+bot.action(/^trash:open$/, async (ctx) => {
+  await ctx.answerCbQuery();
+  try {
+    await renderTrash(ctx);
+  } catch (e) {
+    console.error("[bot] trash:open error:", e?.message || e);
+    return ctx.reply("❌ Не удалось обновить корзину.");
+  }
+});
+
+bot.action(/^trash:item:(\d+)$/, async (ctx) => {
+  await ctx.answerCbQuery();
+  const serviceId = ctx.match[1];
+
+  const text =
+    `🧺 <b>Услуга из корзины</b>\n\n` +
+    `🧾 <b>ID:</b> <code>#${serviceId}</code>\n\n` +
+    `Выберите действие:`;
+
+  const reply_markup = {
+    inline_keyboard: [
+      [
+        { text: "♻️ Восстановить", callback_data: `trash:restore:${serviceId}` },
+        { text: "❌ Удалить навсегда", callback_data: `trash:purge:${serviceId}` },
+      ],
+      [{ text: "⬅️ Назад", callback_data: "trash:open" }],
+    ],
+  };
+
+  try {
+    await ctx.editMessageText(text, { parse_mode: "HTML", reply_markup });
+  } catch (e) {
+    console.error("[bot] trash:item edit error:", e?.message || e);
+  }
+});
+
+bot.action(/^trash:restore:(\d+)$/, async (ctx) => {
+  try {
+    const serviceId = ctx.match[1];
+    await ctx.answerCbQuery("Восстанавливаю...");
+
+    // гасим кнопки СРАЗУ
+    try {
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+    } catch {}
+
+    const actorId = getActorId(ctx);
+    const r = await axios.post(`/api/telegram/provider/${actorId}/services/${serviceId}/restore`);
+
+    if (r?.data?.ok === true || r?.data?.success === true) {
+      await ctx.answerCbQuery("✅ Восстановлено");
+      // возвращаемся в корзину (редактируем тот же message)
+      await renderTrash(ctx);
+      return;
+    }
+
+    if (r?.data?.ok === false && r?.data?.reason === "NOT_IN_TRASH") {
+      await ctx.answerCbQuery("⚠️ Уже не в корзине");
+      await renderTrash(ctx);
+      return;
+    }
+
+    await ctx.answerCbQuery("❌ Не удалось", { show_alert: true });
+    return renderTrash(ctx);
+  } catch (e) {
+    console.error("[bot] trash:restore error:", e?.message || e);
+    await ctx.answerCbQuery("❌ Ошибка", { show_alert: true });
+    return renderTrash(ctx);
+  }
+});
+
+bot.action(/^trash:purge:(\d+)$/, async (ctx) => {
+  await ctx.answerCbQuery();
+  const serviceId = ctx.match[1];
+
+  const text =
+    `❌ <b>Удалить навсегда услугу</b> <code>#${serviceId}</code>?\n\n` +
+    `Это действие нельзя отменить.`;
+
+  const reply_markup = {
+    inline_keyboard: [
+      [
+        { text: "↩️ Отмена", callback_data: `trash:item:${serviceId}` },
+        { text: "❌ Удалить навсегда", callback_data: `trash:purge_confirm:${serviceId}` },
+      ],
+      [{ text: "⬅️ В корзину", callback_data: "trash:open" }],
+    ],
+  };
+
+  try {
+    await ctx.editMessageText(text, { parse_mode: "HTML", reply_markup });
+  } catch (e) {
+    console.error("[bot] trash:purge confirm screen error:", e?.message || e);
+  }
+});
+
+bot.action(/^trash:purge_confirm:(\d+)$/, async (ctx) => {
+  try {
+    const serviceId = ctx.match[1];
+    await ctx.answerCbQuery("Удаляю...");
+
+    // гасим кнопки СРАЗУ
+    try {
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+    } catch {}
+
+    const actorId = getActorId(ctx);
+    const r = await axios.delete(`/api/telegram/provider/${actorId}/services/${serviceId}/purge`);
+
+    if (r?.data?.ok === true || r?.data?.success === true) {
+      await ctx.answerCbQuery("✅ Удалено");
+      await renderTrash(ctx);
+      return;
+    }
+
+    if (r?.data?.ok === false && r?.data?.reason === "NOT_IN_TRASH") {
+      await ctx.answerCbQuery("⚠️ Уже не в корзине");
+      await renderTrash(ctx);
+      return;
+    }
+
+    await ctx.answerCbQuery("❌ Не удалось", { show_alert: true });
+    return renderTrash(ctx);
+  } catch (e) {
+    console.error("[bot] trash:purge_confirm error:", e?.message || e);
+    await ctx.answerCbQuery("❌ Ошибка", { show_alert: true });
+    return renderTrash(ctx);
+  }
+});
+
+bot.action(/^trash:menu$/, async (ctx) => {
+  await ctx.answerCbQuery();
+  await ctx.reply("🏠 Главное меню", getMainMenuKeyboard("provider"));
 });
 
 // noop (если ещё нет)
