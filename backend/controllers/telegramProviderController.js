@@ -906,9 +906,13 @@ async function restoreServiceFromBot(req, res) {
     [serviceId, prov.rows[0].id]
   );
 
-  if (!r.rowCount) return res.sendStatus(404);
-  res.json({ ok: true });
+  if (!r.rowCount) {
+    return res.json({ ok: false, reason: "NOT_IN_TRASH" });
+  }
+
+  return res.json({ ok: true });
 }
+
 
 async function purgeServiceFromBot(req, res) {
   const { chatId, serviceId } = req.params;
@@ -924,15 +928,18 @@ async function purgeServiceFromBot(req, res) {
   );
   if (!prov.rowCount) return res.sendStatus(403);
 
-  await pool.query(
-    `DELETE FROM services
-     WHERE id = $1
-       AND provider_id = $2
-       AND deleted_at IS NOT NULL`,
-    [serviceId, prov.rows[0].id]
-  );
+const del = await pool.query(
+  `DELETE FROM services
+   WHERE id = $1
+     AND provider_id = $2
+     AND deleted_at IS NOT NULL`,
+  [serviceId, prov.rows[0].id]
+);
 
-  res.json({ ok: true });
+if (!del.rowCount) {
+  return res.json({ ok: false, reason: "NOT_IN_TRASH" });
+}
+return res.json({ ok: true });
 }
 
 /**
