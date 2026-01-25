@@ -467,6 +467,11 @@ export default function Header() {
               <LanguageSelector />
             </div>
           </div>
+          <NavItemDark
+            to="/donas-dosas/finance"
+            label="DONA’S DOSAS"
+            icon={<IconDoc />}
+          />
 
           {/* Mobile lang */}
           <div className="md:hidden flex items-center">
@@ -508,6 +513,11 @@ export default function Header() {
               {role === "provider" && (
                 <NavItemMobileDark to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />
               )}
+              <NavItemMobileDark
+                to="/donas-dosas/finance"
+                label="DONA’S DOSAS"
+                icon={<IconDoc />}
+              />
               <NavItemMobileDark to="/hotels" label={t("nav.hotels", "Отели")} icon={<IconHotel />} />
             </RowGroupDark>
 
