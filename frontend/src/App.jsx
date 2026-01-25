@@ -69,6 +69,9 @@ import Contacts from "./pages/landing/Contacts";
 // IndiaInside
 import AdminInsideRequests from "./pages/admin/AdminInsideRequests";
 
+//donasdosas
+import DonasFinanceModel from "./pages/DonasFinanceModel";
+
 function ClientPrivateRoute({ children }) {
   const token = localStorage.getItem("clientToken");
   return token ? children : <Navigate to="/client/login" replace />;
