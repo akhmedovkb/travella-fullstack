@@ -4010,21 +4010,30 @@ bot.action(/^svc_restore:(\d+)$/, async (ctx) => {
     // ответ на callback сразу (чтобы не крутилось)
     await ctx.answerCbQuery("Восстанавливаю...");
 
+    // ✅ гасим кнопки СРАЗУ (до API), чтобы не было double-click
+    try {
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+    } catch {}
+
     const actorId = getActorId(ctx);
 
-    const r = await axios.post(`/api/telegram/provider/${actorId}/services/${serviceId}/restore`);
+    const r = await axios.post(
+      `/api/telegram/provider/${actorId}/services/${serviceId}/restore`
+    );
 
-    if (r?.data?.success || r?.data?.ok) {
-      // гасим кнопки у сообщения, где нажали
-      try {
-        await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
-      } catch {}
-
+    // ✅ server теперь возвращает { ok: true } или { ok:false, reason:"NOT_IN_TRASH" }
+    if (r?.data?.ok === true || r?.data?.success === true) {
       await ctx.reply(`♻️ Услуга <code>#${serviceId}</code> восстановлена.`, {
         parse_mode: "HTML",
       });
+      await sendTrashList(ctx);
+      return;
+    }
 
-      // показать обновлённую корзину
+    if (r?.data?.ok === false && r?.data?.reason === "NOT_IN_TRASH") {
+      await ctx.reply(`⚠️ Услуга <code>#${serviceId}</code> уже не в корзине.`, {
+        parse_mode: "HTML",
+      });
       await sendTrashList(ctx);
       return;
     }
@@ -4038,11 +4047,15 @@ bot.action(/^svc_restore:(\d+)$/, async (ctx) => {
   }
 });
 
-
 // ❌ Purge (confirm screen)
 bot.action(/^svc_purge:(\d+)$/, async (ctx) => {
   const serviceId = ctx.match[1];
   await ctx.answerCbQuery();
+
+  // ✅ гасим кнопки на панели выбора (restore/purge), чтобы не нажали 2 раза
+  try {
+    await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+  } catch {}
 
   return ctx.reply(
     `❌ <b>Удалить навсегда услугу</b> <code>#${serviceId}</code>?\n\nЭто действие нельзя отменить.`,
@@ -4067,21 +4080,29 @@ bot.action(/^svc_purge_confirm:(\d+)$/, async (ctx) => {
 
     await ctx.answerCbQuery("Удаляю...");
 
+    // ✅ гасим кнопки confirm-сообщения СРАЗУ (до API)
+    try {
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+    } catch {}
+
     const actorId = getActorId(ctx);
 
-    const r = await axios.delete(`/api/telegram/provider/${actorId}/services/${serviceId}/purge`);
+    const r = await axios.delete(
+      `/api/telegram/provider/${actorId}/services/${serviceId}/purge`
+    );
 
-    if (r?.data?.success || r?.data?.ok) {
-      // гасим кнопки у confirm-сообщения
-      try {
-        await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
-      } catch {}
-
+    if (r?.data?.ok === true || r?.data?.success === true) {
       await ctx.reply(`✅ Услуга <code>#${serviceId}</code> удалена навсегда.`, {
         parse_mode: "HTML",
       });
+      await sendTrashList(ctx);
+      return;
+    }
 
-      // показать обновлённую корзину
+    if (r?.data?.ok === false && r?.data?.reason === "NOT_IN_TRASH") {
+      await ctx.reply(`⚠️ Услуга <code>#${serviceId}</code> уже не в корзине.`, {
+        parse_mode: "HTML",
+      });
       await sendTrashList(ctx);
       return;
     }
