@@ -379,6 +379,11 @@ export default function App() {
 
             {/* Fallback — всегда последним */}
             <Route path="*" element={<Navigate to="/" replace />} />
+          {/* Donas Dosas */}
+            <Route
+              path="/donas-dosas/finance"
+              element={<DonasFinanceModel />}
+            />
           </Routes>
         </main>
         <Footer />
