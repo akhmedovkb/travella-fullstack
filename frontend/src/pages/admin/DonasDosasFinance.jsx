@@ -1,4 +1,4 @@
-//frontend/src/pages/admin/DonasDosasFinance.jsx
+// frontend/src/pages/admin/DonasDosasFinance.jsx
 
 import { useEffect, useMemo, useState } from "react";
 import { apiGet, apiPut } from "../../api";
@@ -30,6 +30,31 @@ function downloadCSV(filename, rows) {
   a.download = filename;
   a.click();
   URL.revokeObjectURL(a.href);
+}
+
+// ✅ cash_end chain: cash_end = prev_cash + (NetOp - loan_paid - capex)
+function recalcCashChain(months, cashStart) {
+  let cash = Number(cashStart || 0);
+
+  return months.map((m) => {
+    const revenue = toNum(m.revenue);
+    const cogs = toNum(m.cogs);
+    const opex = toNum(m.opex);
+    const capex = toNum(m.capex);
+    const loan = toNum(m.loan_paid);
+
+    const gross = revenue - cogs;
+    const netOp = gross - opex;
+    const cashFlow = netOp - loan - capex;
+
+    cash = cash + cashFlow;
+
+    return {
+      ...m,
+      cash_end: cash,
+      _calc: { gross, netOp, cashFlow },
+    };
+  });
 }
 
 export default function DonasDosasFinance() {
@@ -81,7 +106,8 @@ export default function DonasDosasFinance() {
     const netOpPlan = grossMonthPlan - opexPlan;
 
     const dscrPlan = loan > 0 ? netOpPlan / loan : null;
-    const breakevenPerDay = unitMargin > 0 ? (opexPlan + loan) / unitMargin / days : null;
+    const breakevenPerDay =
+      unitMargin > 0 ? (opexPlan + loan) / unitMargin / days : null;
 
     return {
       avgCheck,
@@ -102,25 +128,69 @@ export default function DonasDosasFinance() {
     };
   }, [settings]);
 
+  // ✅ LIVE: monthsWithCash всегда пересчитывается из текущих months + cash_start
+  const monthsWithCash = useMemo(() => {
+    if (!settings) return months;
+    const sorted = [...months].sort((a, b) =>
+      String(a.month).localeCompare(String(b.month))
+    );
+    return recalcCashChain(sorted, settings.cash_start);
+  }, [months, settings]);
+
   const onSaveSettings = async () => {
     setErr("");
     try {
-      const s = await apiPut("/api/admin/donas/finance/settings", settings, "provider");
+      const s = await apiPut(
+        "/api/admin/donas/finance/settings",
+        settings,
+        "provider"
+      );
       setSettings(s);
     } catch (e) {
       setErr(e?.message || "Failed to save settings");
     }
   };
 
+  // ✅ LIVE update row in months state (no API)
+  const onChangeRow = (patch) => {
+    // patch должен содержать хотя бы { month: "YYYY-MM-01" }
+    const key = String(patch?.month || "");
+    if (!key) return;
+
+    setMonths((prev) => {
+      const map = new Map(prev.map((x) => [String(x.month), x]));
+      const cur = map.get(key) || { slug: "donas-dosas", month: key };
+
+      // IMPORTANT: не “перетираем” computed cash_end — его всё равно пересчитает monthsWithCash
+      const next = {
+        ...cur,
+        ...patch,
+      };
+
+      map.set(String(next.month), next);
+      return Array.from(map.values()).sort((a, b) =>
+        String(a.month).localeCompare(String(b.month))
+      );
+    });
+  };
+
   const upsertMonth = async (row) => {
     setErr("");
     try {
       const month = row.month; // YYYY-MM-01
-      const saved = await apiPut(`/api/admin/donas/finance/months/${month}`, row, "provider");
+      const saved = await apiPut(
+        `/api/admin/donas/finance/months/${month}`,
+        row,
+        "provider"
+      );
+
       setMonths((prev) => {
-        const map = new Map(prev.map((x) => [x.month, x]));
-        map.set(saved.month, saved);
-        return Array.from(map.values()).sort((a, b) => String(a.month).localeCompare(String(b.month)));
+        const map = new Map(prev.map((x) => [String(x.month), x]));
+        // сохраняем то, что вернул backend (включая cash_end)
+        map.set(String(saved.month), saved);
+        return Array.from(map.values()).sort((a, b) =>
+          String(a.month).localeCompare(String(b.month))
+        );
       });
     } catch (e) {
       setErr(e?.message || "Failed to save month");
@@ -143,7 +213,7 @@ export default function DonasDosasFinance() {
         opex: 0,
         capex: 0,
         loan_paid: 0,
-        cash_end: 0,
+        cash_end: 0, // будет пересчитано в monthsWithCash
         notes: "",
       },
     ]);
@@ -151,17 +221,8 @@ export default function DonasDosasFinance() {
 
   const exportCSV = () => {
     const rows = [
-      [
-        "month",
-        "revenue",
-        "cogs",
-        "opex",
-        "capex",
-        "loan_paid",
-        "cash_end",
-        "notes",
-      ],
-      ...months.map((m) => [
+      ["month", "revenue", "cogs", "opex", "capex", "loan_paid", "cash_end", "notes"],
+      ...monthsWithCash.map((m) => [
         monthKey(m.month),
         toNum(m.revenue),
         toNum(m.cogs),
@@ -182,16 +243,11 @@ export default function DonasDosasFinance() {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Dona’s Dosas — Finance (Admin)</h1>
-          <p className="text-sm text-gray-600">
-            MVP управленки: CAPEX / OPEX / DSCR / Runway
-          </p>
+          <p className="text-sm text-gray-600">MVP управленки: CAPEX / OPEX / DSCR / Runway</p>
         </div>
 
         <div className="flex gap-2">
-          <button
-            onClick={exportCSV}
-            className="px-3 py-2 rounded-lg bg-gray-900 text-white"
-          >
+          <button onClick={exportCSV} className="px-3 py-2 rounded-lg bg-gray-900 text-white">
             Export CSV
           </button>
           <button onClick={load} className="px-3 py-2 rounded-lg bg-white border">
@@ -286,8 +342,14 @@ export default function DonasDosasFinance() {
               <Kpi title="Net Operating" value={`${fmt(derivedPlan.netOpPlan)} ${currency}`} />
               <Kpi title="OPEX / month" value={`${fmt(derivedPlan.opexPlan)} ${currency}`} />
               <Kpi title="Loan / month" value={`${fmt(derivedPlan.loan)} ${currency}`} />
-              <Kpi title="DSCR" value={derivedPlan.loan > 0 ? (derivedPlan.dscrPlan?.toFixed(2) ?? "0.00") : "—"} />
-              <Kpi title="Breakeven units/day" value={derivedPlan.breakevenPerDay ? derivedPlan.breakevenPerDay.toFixed(1) : "—"} />
+              <Kpi
+                title="DSCR"
+                value={derivedPlan.loan > 0 ? derivedPlan.dscrPlan?.toFixed(2) ?? "0.00" : "—"}
+              />
+              <Kpi
+                title="Breakeven units/day"
+                value={derivedPlan.breakevenPerDay ? derivedPlan.breakevenPerDay.toFixed(1) : "—"}
+              />
             </div>
           ) : (
             <div className="text-gray-500 text-sm">No data</div>
@@ -322,11 +384,12 @@ export default function DonasDosasFinance() {
               </tr>
             </thead>
             <tbody>
-              {months.map((m) => (
+              {monthsWithCash.map((m) => (
                 <MonthRow
                   key={m.month}
                   row={m}
                   currency={currency}
+                  onChangeRow={onChangeRow}
                   onSave={upsertMonth}
                 />
               ))}
@@ -335,8 +398,8 @@ export default function DonasDosasFinance() {
         </div>
 
         <div className="mt-2 text-xs text-gray-500">
-          Формулы: GP = revenue−cogs · NetOp = GP−opex · CF = NetOp−loan_paid−capex ·
-          DSCR = NetOp/loan_paid (если loan_paid&gt;0) · Runway = cash_end/(opex+loan_paid)
+          Формулы: GP = revenue−cogs · NetOp = GP−opex · CF = NetOp−loan_paid−capex · DSCR = NetOp/loan_paid
+          (если loan_paid&gt;0) · Runway = cash_end/(opex+loan_paid) · Cash end = prev_cash_end + CF
         </div>
       </div>
     </div>
@@ -368,52 +431,99 @@ function Kpi({ title, value }) {
   );
 }
 
-function MonthRow({ row, currency, onSave }) {
+function MonthRow({ row, currency, onChangeRow, onSave }) {
   const [r, setR] = useState(row);
 
   useEffect(() => {
     setR(row);
   }, [row]);
 
+  // derived for the row (row.cash_end already computed by monthsWithCash)
   const gross = toNum(r.revenue) - toNum(r.cogs);
   const netOp = gross - toNum(r.opex);
   const cashFlow = netOp - toNum(r.loan_paid) - toNum(r.capex);
+  const cashEnd = toNum(r.cash_end);
+
   const dscr = toNum(r.loan_paid) > 0 ? netOp / toNum(r.loan_paid) : null;
-  const runway = (toNum(r.opex) + toNum(r.loan_paid)) > 0
-    ? toNum(r.cash_end) / (toNum(r.opex) + toNum(r.loan_paid))
-    : null;
+  const runway =
+    (toNum(r.opex) + toNum(r.loan_paid)) > 0
+      ? cashEnd / (toNum(r.opex) + toNum(r.loan_paid))
+      : null;
+
+  const patch = (k, v) => {
+    setR((prev) => {
+      const next = { ...prev, [k]: v };
+      // LIVE: пушим в parent months сразу (без API)
+      onChangeRow?.({
+        month: next.month,
+        slug: next.slug ?? "donas-dosas",
+        revenue: next.revenue,
+        cogs: next.cogs,
+        opex: next.opex,
+        capex: next.capex,
+        loan_paid: next.loan_paid,
+        notes: next.notes ?? "",
+      });
+      return next;
+    });
+  };
 
   return (
     <tr className="border-t align-top">
       <td className="py-2 pr-2 w-[120px]">
         <input
           value={r.month}
-          onChange={(e) => setR((x) => ({ ...x, month: e.target.value }))}
+          onChange={(e) => {
+            const v = e.target.value;
+            // month менять можно, но лучше аккуратно: сразу отправим patch с новым month
+            setR((prev) => {
+              const next = { ...prev, month: v };
+              onChangeRow?.({
+                month: next.month,
+                slug: next.slug ?? "donas-dosas",
+                revenue: next.revenue,
+                cogs: next.cogs,
+                opex: next.opex,
+                capex: next.capex,
+                loan_paid: next.loan_paid,
+                notes: next.notes ?? "",
+              });
+              return next;
+            });
+          }}
           className="w-full px-2 py-1 rounded border"
         />
       </td>
 
-      {["revenue", "cogs", "opex", "capex", "loan_paid", "cash_end"].map((k) => (
+      {["revenue", "cogs", "opex", "capex", "loan_paid"].map((k) => (
         <td key={k} className="py-2 pr-2">
           <input
             value={r[k] ?? 0}
-            onChange={(e) => setR((x) => ({ ...x, [k]: e.target.value }))}
+            onChange={(e) => patch(k, e.target.value)}
             className="w-full px-2 py-1 rounded border"
           />
         </td>
       ))}
 
+      {/* cash_end display-only (computed live) */}
+      <td className="py-2 pr-2 whitespace-nowrap">
+        {fmt(cashEnd)} {currency}
+      </td>
+
       <td className="py-2 pr-2 min-w-[220px]">
         <input
           value={r.notes ?? ""}
-          onChange={(e) => setR((x) => ({ ...x, notes: e.target.value }))}
+          onChange={(e) => patch("notes", e.target.value)}
           className="w-full px-2 py-1 rounded border"
           placeholder="notes…"
         />
         <div className="mt-1 text-xs text-gray-600">
-          GP: {fmt(gross)} {currency} · Net: {fmt(netOp)} {currency}<br />
-          CF: {fmt(cashFlow)} {currency} · DSCR: {dscr == null ? "—" : dscr.toFixed(2)} ·
-          Runway: {runway == null ? "—" : runway.toFixed(1)} m
+          GP: {fmt(gross)} {currency} · Net: {fmt(netOp)} {currency}
+          <br />
+          CF: {fmt(cashFlow)} {currency} · Cash end: {fmt(cashEnd)} {currency}
+          <br />
+          DSCR: {dscr == null ? "—" : dscr.toFixed(2)} · Runway:{" "}
+          {runway == null ? "—" : runway.toFixed(1)} m
         </div>
       </td>
 
@@ -421,13 +531,15 @@ function MonthRow({ row, currency, onSave }) {
         <button
           onClick={() =>
             onSave({
-              ...r,
+              ...row, // важно: сохраняем month как в строке списка
+              month: r.month,
+              slug: r.slug ?? "donas-dosas",
               revenue: toNum(r.revenue),
               cogs: toNum(r.cogs),
               opex: toNum(r.opex),
               capex: toNum(r.capex),
               loan_paid: toNum(r.loan_paid),
-              cash_end: toNum(r.cash_end),
+              cash_end: cashEnd, // ✅ computed
               notes: r.notes ?? "",
             })
           }
