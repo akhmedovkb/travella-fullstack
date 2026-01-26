@@ -140,4 +140,101 @@ export default function DonasInvestor() {
         <Kpi title="Cash Flow" value={fmt(totals.cashFlow)} />
         <Kpi
           title="DSCR"
-          valu
+          value={
+            totals.avgDscr == null
+              ? "—"
+              : `${totals.avgDscr} (min ${totals.minDscr})`
+          }
+        />
+      </div>
+
+      {/* Table */}
+      <div className="overflow-auto border rounded">
+        <table className="min-w-full text-sm">
+          <thead className="bg-gray-50">
+            <tr>
+              <Th>Month</Th>
+              <Th>Revenue</Th>
+              <Th>COGS</Th>
+              <Th>Payroll</Th>
+              <Th>OPEX</Th>
+              <Th>Net Operating</Th>
+              <Th>Cash Flow</Th>
+              <Th>DSCR</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.month} className="border-t">
+                <Td>{monthLabel(r.month)}</Td>
+                <Td>{fmt(r.revenue)}</Td>
+                <Td>{fmt(r.cogs)}</Td>
+                <Td>{fmt(r.payroll)}</Td>
+                <Td>{fmt(r.opex)}</Td>
+                <Td
+                  className={
+                    r.netOperating < 0 ? "text-red-600 font-medium" : ""
+                  }
+                >
+                  {fmt(r.netOperating)}
+                </Td>
+                <Td>{fmt(r.cashFlow)}</Td>
+                <Td>
+                  {r.dscr == null ? "—" : r.dscr < 1 ? (
+                    <span className="text-red-600 font-medium">
+                      {r.dscr}
+                    </span>
+                  ) : (
+                    r.dscr
+                  )}
+                </Td>
+              </tr>
+            ))}
+            {!rows.length && !loading && (
+              <tr>
+                <Td colSpan={8} className="text-center text-gray-400 py-6">
+                  No data
+                </Td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {loading && (
+        <div className="text-sm text-gray-500">Loading…</div>
+      )}
+    </div>
+  );
+}
+
+/* ================= helpers ================= */
+
+function Kpi({ title, value, sub }) {
+  return (
+    <div className="border rounded p-3">
+      <div className="text-xs text-gray-500">{title}</div>
+      <div className="text-lg font-semibold">{value}</div>
+      {sub && <div className="text-xs text-gray-400">{sub}</div>}
+    </div>
+  );
+}
+
+function Th({ children }) {
+  return (
+    <th className="px-3 py-2 text-left font-medium text-gray-600">
+      {children}
+    </th>
+  );
+}
+
+function Td({ children, colSpan, className = "" }) {
+  return (
+    <td
+      colSpan={colSpan}
+      className={`px-3 py-2 whitespace-nowrap ${className}`}
+    >
+      {children}
+    </td>
+  );
+}
