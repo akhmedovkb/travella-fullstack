@@ -513,7 +513,38 @@ export default function DonasDosasFinance() {
       })
     );
   };
-  
+ 
+  const getCurrentMonthISO = () => {
+    const now = new Date();
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    return d.toISOString().slice(0, 10); // YYYY-MM-01
+  };
+
+  const lockAllBeforeCurrentMonth = () => {
+    const cur = getCurrentMonthISO();
+    setMonths((prev) =>
+      prev.map((m) => {
+        const mm = String(m.month || "");
+        if (!mm) return m;
+        // lock only strictly before current month
+        if (mm.localeCompare(cur) >= 0) return m;
+        return { ...m, notes: addLockedTag(m.notes) };
+      })
+    );
+  };
+
+  const unlockAllBeforeCurrentMonth = () => {
+    const cur = getCurrentMonthISO();
+    setMonths((prev) =>
+      prev.map((m) => {
+        const mm = String(m.month || "");
+        if (!mm) return m;
+        if (mm.localeCompare(cur) >= 0) return m;
+        return { ...m, notes: removeLockedTag(m.notes) };
+      })
+    );
+  };
+
   const autofillFromPlan = () => {
   if (!settings) return;
 
@@ -827,6 +858,32 @@ export default function DonasDosasFinance() {
               title="Уберёт #locked всем месяцам до выбранного (включительно). Не сохраняет — потом Save/Save all."
             >
               Unlock up to
+            </button>
+
+            <button
+              onClick={lockAllBeforeCurrentMonth}
+              disabled={savingAll || monthsWithCash.length === 0}
+              className={`px-3 py-2 rounded-lg border ${
+                savingAll || monthsWithCash.length === 0
+                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                  : "bg-white"
+              }`}
+              title="Заморозит все месяцы ДО текущего месяца (по времени браузера). Не сохраняет — потом Save/Save all."
+            >
+              Lock past months
+            </button>
+
+            <button
+              onClick={unlockAllBeforeCurrentMonth}
+              disabled={savingAll || monthsWithCash.length === 0}
+              className={`px-3 py-2 rounded-lg border ${
+                savingAll || monthsWithCash.length === 0
+                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                  : "bg-white"
+              }`}
+              title="Снимет #locked со всех месяцев ДО текущего месяца (по времени браузера). Не сохраняет — потом Save/Save all."
+            >
+              Unlock past months
             </button>
           </div>
           <button
