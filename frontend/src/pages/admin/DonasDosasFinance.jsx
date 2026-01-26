@@ -238,6 +238,8 @@ export default function DonasDosasFinance() {
   // Plan → Month behavior
   const [planFillOnlyEmpty, setPlanFillOnlyEmpty] = useState(true);
 
+  // Bulk lock
+  const [lockUpToMonth, setLockUpToMonth] = useState("");
   // cash_end preview
   const [cashPreview, setCashPreview] = useState(null);
 
@@ -262,6 +264,14 @@ export default function DonasDosasFinance() {
     load();
   }, []);
 
+  useEffect(() => {
+    // default: last month in table
+    if (!lockUpToMonth && monthsWithCash.length) {
+      setLockUpToMonth(monthsWithCash[monthsWithCash.length - 1].month);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [monthsWithCash.length]);
+  
   const scenarioPlan = useMemo(() => {
     if (scenarioId === "base") return null;
     return getScenarioById(scenarioId)?.plan || null;
@@ -474,6 +484,36 @@ export default function DonasDosasFinance() {
     });
   };
 
+  const monthLeq = (a, b) => {
+    // both expected YYYY-MM-01
+    const aa = String(a || "");
+    const bb = String(b || "");
+    if (!aa || !bb) return false;
+    return aa.localeCompare(bb) <= 0;
+  };
+
+  const lockAllUpToSelected = () => {
+    if (!lockUpToMonth) return;
+    setMonths((prev) =>
+      prev.map((m) => {
+        if (!monthLeq(m.month, lockUpToMonth)) return m;
+        const nextNotes = addLockedTag(m.notes);
+        return { ...m, notes: nextNotes };
+      })
+    );
+  };
+
+  const unlockAllUpToSelected = () => {
+    if (!lockUpToMonth) return;
+    setMonths((prev) =>
+      prev.map((m) => {
+        if (!monthLeq(m.month, lockUpToMonth)) return m;
+        const nextNotes = removeLockedTag(m.notes);
+        return { ...m, notes: nextNotes };
+      })
+    );
+  };
+  
   const autofillFromPlan = () => {
   if (!settings) return;
 
@@ -748,6 +788,47 @@ export default function DonasDosasFinance() {
               + Add month
             </button>
 
+          <div className="flex items-center gap-2">
+            <select
+              value={lockUpToMonth || ""}
+              onChange={(e) => setLockUpToMonth(e.target.value)}
+              className="px-3 py-2 rounded-lg border bg-white text-sm"
+              disabled={savingAll || monthsWithCash.length === 0}
+              title="Выбери месяц, до которого закрываем (включительно)"
+            >
+              {monthsWithCash.map((m) => (
+                <option key={m.month} value={m.month}>
+                  Lock up to: {monthKey(m.month)}
+                </option>
+              ))}
+            </select>
+
+            <button
+              onClick={lockAllUpToSelected}
+              disabled={savingAll || !lockUpToMonth || monthsWithCash.length === 0}
+              className={`px-3 py-2 rounded-lg border ${
+                savingAll || !lockUpToMonth || monthsWithCash.length === 0
+                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                  : "bg-white"
+              }`}
+              title="Добавит #locked всем месяцам до выбранного (включительно). Не сохраняет — потом Save/Save all."
+            >
+              Lock up to
+            </button>
+
+            <button
+              onClick={unlockAllUpToSelected}
+              disabled={savingAll || !lockUpToMonth || monthsWithCash.length === 0}
+              className={`px-3 py-2 rounded-lg border ${
+                savingAll || !lockUpToMonth || monthsWithCash.length === 0
+                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                  : "bg-white"
+              }`}
+              title="Уберёт #locked всем месяцам до выбранного (включительно). Не сохраняет — потом Save/Save all."
+            >
+              Unlock up to
+            </button>
+          </div>
           <button
             onClick={autofillFromPlan}
             disabled={savingAll || !settings || monthsWithCash.length === 0}
