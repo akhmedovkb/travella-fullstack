@@ -57,6 +57,40 @@ function recalcCashChain(months, cashStart) {
   });
 }
 
+function toMonthStartISO(s) {
+  if (!s || typeof s !== "string") return null;
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return null;
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
+}
+
+function addMonthsUTC(d, n) {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + n, 1));
+}
+
+function isSameMonthUTC(a, b) {
+  return (
+    a &&
+    b &&
+    a.getUTCFullYear() === b.getUTCFullYear() &&
+    a.getUTCMonth() === b.getUTCMonth()
+  );
+}
+
+function makeEmptyMonthRow(iso) {
+  return {
+    slug: "donas-dosas",
+    month: iso,
+    revenue: 0,
+    cogs: 0,
+    opex: 0,
+    capex: 0,
+    loan_paid: 0,
+    cash_end: 0, // пересчитается
+    notes: "",
+  };
+}
+
 export default function DonasDosasFinance() {
   const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState(null);
@@ -128,7 +162,7 @@ export default function DonasDosasFinance() {
     };
   }, [settings]);
 
-  // ✅ LIVE: monthsWithCash всегда пересчитывается из текущих months + cash_start
+  // ✅ LIVE: monthsWithCash always derived from months + cash_start
   const monthsWithCash = useMemo(() => {
     if (!settings) return months;
     const sorted = [...months].sort((a, b) =>
@@ -136,6 +170,44 @@ export default function DonasDosasFinance() {
     );
     return recalcCashChain(sorted, settings.cash_start);
   }, [months, settings]);
+
+  // ✅ GAP CHECK: find missing months & mark rows that start after a gap
+  const gaps = useMemo(() => {
+    const rows = monthsWithCash || [];
+    const result = [];
+    for (let i = 1; i < rows.length; i++) {
+      const prev = toMonthStartISO(rows[i - 1]?.month);
+      const cur = toMonthStartISO(rows[i]?.month);
+      if (!prev || !cur) continue;
+
+      const expected = addMonthsUTC(prev, 1);
+      if (!isSameMonthUTC(expected, cur)) {
+        const missing = [];
+        let t = expected;
+        let guard = 0;
+        while (t < cur && guard < 120) {
+          missing.push(t.toISOString().slice(0, 10));
+          t = addMonthsUTC(t, 1);
+          guard++;
+        }
+        result.push({
+          afterMonth: rows[i - 1]?.month,
+          beforeMonth: rows[i]?.month,
+          missing,
+          highlightMonth: rows[i]?.month,
+        });
+      }
+    }
+    return result;
+  }, [monthsWithCash]);
+
+  const highlightMonths = useMemo(() => {
+    const set = new Set();
+    for (const g of gaps) {
+      if (g?.highlightMonth) set.add(String(g.highlightMonth));
+    }
+    return set;
+  }, [gaps]);
 
   const onSaveSettings = async () => {
     setErr("");
@@ -153,21 +225,15 @@ export default function DonasDosasFinance() {
 
   // ✅ LIVE update row in months state (no API)
   const onChangeRow = (patch) => {
-    // patch должен содержать хотя бы { month: "YYYY-MM-01" }
     const key = String(patch?.month || "");
     if (!key) return;
 
     setMonths((prev) => {
       const map = new Map(prev.map((x) => [String(x.month), x]));
       const cur = map.get(key) || { slug: "donas-dosas", month: key };
-
-      // IMPORTANT: не “перетираем” computed cash_end — его всё равно пересчитает monthsWithCash
-      const next = {
-        ...cur,
-        ...patch,
-      };
-
+      const next = { ...cur, ...patch };
       map.set(String(next.month), next);
+
       return Array.from(map.values()).sort((a, b) =>
         String(a.month).localeCompare(String(b.month))
       );
@@ -186,7 +252,6 @@ export default function DonasDosasFinance() {
 
       setMonths((prev) => {
         const map = new Map(prev.map((x) => [String(x.month), x]));
-        // сохраняем то, что вернул backend (включая cash_end)
         map.set(String(saved.month), saved);
         return Array.from(map.values()).sort((a, b) =>
           String(a.month).localeCompare(String(b.month))
@@ -203,20 +268,45 @@ export default function DonasDosasFinance() {
     const d = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() + 1, 1));
     const iso = d.toISOString().slice(0, 10);
 
-    setMonths((prev) => [
-      ...prev,
-      {
-        slug: "donas-dosas",
-        month: iso,
-        revenue: 0,
-        cogs: 0,
-        opex: 0,
-        capex: 0,
-        loan_paid: 0,
-        cash_end: 0, // будет пересчитано в monthsWithCash
-        notes: "",
-      },
-    ]);
+    setMonths((prev) => [...prev, makeEmptyMonthRow(iso)]);
+  };
+
+  // ✅ NEW: Fill missing months (insert rows with 0s)
+  const fillMissingMonths = () => {
+    setMonths((prev) => {
+      const sorted = [...prev].sort((a, b) =>
+        String(a.month).localeCompare(String(b.month))
+      );
+
+      // Map existing months for fast check
+      const existing = new Set(sorted.map((x) => String(x.month)));
+      const additions = [];
+
+      for (let i = 1; i < sorted.length; i++) {
+        const prevD = toMonthStartISO(sorted[i - 1]?.month);
+        const curD = toMonthStartISO(sorted[i]?.month);
+        if (!prevD || !curD) continue;
+
+        let t = addMonthsUTC(prevD, 1);
+        let guard = 0;
+        while (t < curD && guard < 120) {
+          const iso = t.toISOString().slice(0, 10);
+          if (!existing.has(iso)) {
+            existing.add(iso);
+            additions.push(makeEmptyMonthRow(iso));
+          }
+          t = addMonthsUTC(t, 1);
+          guard++;
+        }
+      }
+
+      if (!additions.length) return sorted;
+
+      const merged = [...sorted, ...additions].sort((a, b) =>
+        String(a.month).localeCompare(String(b.month))
+      );
+      return merged;
+    });
   };
 
   const exportCSV = () => {
@@ -365,8 +455,37 @@ export default function DonasDosasFinance() {
             <button onClick={addNextMonth} className="px-3 py-2 rounded-lg bg-white border">
               + Add month
             </button>
+
+            <button
+              onClick={fillMissingMonths}
+              disabled={gaps.length === 0}
+              className={`px-3 py-2 rounded-lg border ${
+                gaps.length === 0
+                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                  : "bg-white"
+              }`}
+              title={gaps.length === 0 ? "Нет пропусков" : "Вставить пропущенные месяцы с нулями"}
+            >
+              + Fill missing months
+            </button>
           </div>
         </div>
+
+        {gaps.length > 0 && (
+          <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-900 text-sm">
+            <div className="font-semibold">⚠️ Пропуски месяцев (можно заполнить кнопкой)</div>
+            <div className="mt-1 space-y-1">
+              {gaps.map((g, idx) => (
+                <div key={idx}>
+                  Между <b>{monthKey(g.afterMonth)}</b> и <b>{monthKey(g.beforeMonth)}</b> отсутствуют:{" "}
+                  <span className="font-mono text-xs">
+                    {g.missing.map((x) => monthKey(x)).join(", ")}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="mt-3 overflow-auto">
           <table className="min-w-[1200px] w-full text-sm">
@@ -391,6 +510,7 @@ export default function DonasDosasFinance() {
                   currency={currency}
                   onChangeRow={onChangeRow}
                   onSave={upsertMonth}
+                  highlight={highlightMonths.has(String(m.month))}
                 />
               ))}
             </tbody>
@@ -431,14 +551,13 @@ function Kpi({ title, value }) {
   );
 }
 
-function MonthRow({ row, currency, onChangeRow, onSave }) {
+function MonthRow({ row, currency, onChangeRow, onSave, highlight }) {
   const [r, setR] = useState(row);
 
   useEffect(() => {
     setR(row);
   }, [row]);
 
-  // derived for the row (row.cash_end already computed by monthsWithCash)
   const gross = toNum(r.revenue) - toNum(r.cogs);
   const netOp = gross - toNum(r.opex);
   const cashFlow = netOp - toNum(r.loan_paid) - toNum(r.capex);
@@ -453,7 +572,6 @@ function MonthRow({ row, currency, onChangeRow, onSave }) {
   const patch = (k, v) => {
     setR((prev) => {
       const next = { ...prev, [k]: v };
-      // LIVE: пушим в parent months сразу (без API)
       onChangeRow?.({
         month: next.month,
         slug: next.slug ?? "donas-dosas",
@@ -469,28 +587,11 @@ function MonthRow({ row, currency, onChangeRow, onSave }) {
   };
 
   return (
-    <tr className="border-t align-top">
+    <tr className={`border-t align-top ${highlight ? "bg-amber-50" : ""}`}>
       <td className="py-2 pr-2 w-[120px]">
         <input
           value={r.month}
-          onChange={(e) => {
-            const v = e.target.value;
-            // month менять можно, но лучше аккуратно: сразу отправим patch с новым month
-            setR((prev) => {
-              const next = { ...prev, month: v };
-              onChangeRow?.({
-                month: next.month,
-                slug: next.slug ?? "donas-dosas",
-                revenue: next.revenue,
-                cogs: next.cogs,
-                opex: next.opex,
-                capex: next.capex,
-                loan_paid: next.loan_paid,
-                notes: next.notes ?? "",
-              });
-              return next;
-            });
-          }}
+          onChange={(e) => patch("month", e.target.value)}
           className="w-full px-2 py-1 rounded border"
         />
       </td>
@@ -505,7 +606,6 @@ function MonthRow({ row, currency, onChangeRow, onSave }) {
         </td>
       ))}
 
-      {/* cash_end display-only (computed live) */}
       <td className="py-2 pr-2 whitespace-nowrap">
         {fmt(cashEnd)} {currency}
       </td>
@@ -531,7 +631,7 @@ function MonthRow({ row, currency, onChangeRow, onSave }) {
         <button
           onClick={() =>
             onSave({
-              ...row, // важно: сохраняем month как в строке списка
+              ...row,
               month: r.month,
               slug: r.slug ?? "donas-dosas",
               revenue: toNum(r.revenue),
@@ -539,7 +639,7 @@ function MonthRow({ row, currency, onChangeRow, onSave }) {
               opex: toNum(r.opex),
               capex: toNum(r.capex),
               loan_paid: toNum(r.loan_paid),
-              cash_end: cashEnd, // ✅ computed
+              cash_end: cashEnd,
               notes: r.notes ?? "",
             })
           }
