@@ -1021,6 +1021,9 @@ export default function DonasDosasFinance() {
                 <div className="mt-1">
                   Changed months: <b>{cashPreview.changedCount}</b>
                 </div>
+                <div className="mt-1">
+                  Locked months (will be skipped on Apply): <b>{cashPreview.lockedCount || 0}</b>
+                </div>
                 <div className="text-xs mt-1 text-blue-800">
                   Это preview. Чтобы записать значения в таблицу (перед Save all), нажми Apply.
                 </div>
