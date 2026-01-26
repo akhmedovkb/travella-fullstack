@@ -988,6 +988,7 @@ function MonthRow({
     setR(row);
   }, [row]);
 
+  const locked = isLockedNotes(r.notes);
   // baseline row calc
   const gross = toNum(r.revenue) - toNum(r.cogs);
   const netOp = gross - toNum(r.opex);
@@ -1092,7 +1093,7 @@ function MonthRow({
           value={r.month}
           onChange={(e) => patch("month", e.target.value)}
           className="w-full px-2 py-1 rounded border"
-          disabled={savingAll}
+          disabled={savingAll || locked}
         />
 
         {/* Scenario per month */}
@@ -1101,7 +1102,7 @@ function MonthRow({
             value={scenarioId || "base"}
             onChange={(e) => onScenarioChange?.(e.target.value)}
             className="w-full px-2 py-1 rounded border text-xs bg-white"
-            disabled={savingAll}
+            disabled={savingAll || locked}
             title="Scenario preview for this month (no save)"
           >
             <option value="base">Scenario: Base</option>
@@ -1120,7 +1121,7 @@ function MonthRow({
             value={r[k] ?? 0}
             onChange={(e) => patch(k, e.target.value)}
             className="w-full px-2 py-1 rounded border"
-            disabled={savingAll}
+            disabled={savingAll || locked}
           />
         </td>
       ))}
@@ -1143,7 +1144,7 @@ function MonthRow({
           onChange={(e) => patch("notes", e.target.value)}
           className="w-full px-2 py-1 rounded border"
           placeholder="notes…"
-          disabled={savingAll}
+          disabled={savingAll || locked}
         />
 
         <div className="mt-2 text-xs text-gray-600">
@@ -1221,7 +1222,7 @@ function MonthRow({
               type="checkbox"
               checked={!!planFillOnlyEmpty}
               onChange={(e) => setPlanFillOnlyEmpty?.(e.target.checked)}
-              disabled={savingAll}
+              disabled={savingAll || locked}
             />
             only empty
           </label>
@@ -1229,14 +1230,41 @@ function MonthRow({
           <button
             onClick={applyPlanToThis}
             className={`px-3 py-1.5 rounded-lg border ${
-              savingAll ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-white"
+              savingAll || locked ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-white"
             }`}
-            disabled={savingAll}
+            disabled={savingAll || locked}
             title="Скопировать Plan (Assumptions) в этот месяц"
           >
             Plan → This
           </button>
 
+          <button
+            onClick={() => {
+              const nextNotes = locked ? removeLockedTag(r.notes) : addLockedTag(r.notes);
+              const next = { ...r, notes: nextNotes };
+              setR(next);
+              onChangeRow?.({
+                month: next.month,
+                slug: next.slug ?? "donas-dosas",
+                revenue: next.revenue,
+                cogs: next.cogs,
+                opex: next.opex,
+                capex: next.capex,
+                loan_paid: next.loan_paid,
+                cash_end: next.cash_end,
+                notes: nextNotes ?? "",
+              });
+            }}
+            className={`px-3 py-1.5 rounded-lg border ${
+              locked
+                ? "bg-gray-900 text-white border-gray-900"
+                : "bg-white"
+            } ${savingAll ? "opacity-50 cursor-not-allowed" : ""}`}
+            disabled={savingAll}
+            title={locked ? "Разморозить месяц" : "Заморозить месяц (#locked в notes)"}
+          >
+            {locked ? "Unlock" : "Lock"}
+          </button>
           <button
             onClick={() =>
               onSave({
@@ -1253,9 +1281,11 @@ function MonthRow({
               })
             }
             className={`px-3 py-1.5 rounded-lg ${
-              savingAll ? "bg-gray-200 text-gray-500 cursor-not-allowed" : "bg-gray-900 text-white"
+              savingAll || locked
+                ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+                : "bg-gray-900 text-white"
             }`}
-            disabled={savingAll}
+            disabled={savingAll || locked}
           >
             Save
           </button>
