@@ -445,6 +445,8 @@ app.use("/api/inside", insideRoutes);
 const adminJobsRoutes = require("./routes/adminJobsRoutes");
 app.use("/api/admin", adminJobsRoutes);
 
+app.use("/api/admin/donas", adminDonasShiftRoutes);
+const adminDonasShiftRoutes = require("./routes/adminDonasShiftRoutes");
 
 /** ===================== Start (в самом конце) ===================== */
 const PORT = process.env.PORT || 5000;
