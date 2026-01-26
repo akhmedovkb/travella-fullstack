@@ -563,17 +563,18 @@ export default function DonasDosasFinance() {
   const opexPlan = fixedOpex + varOpex;
 
   setMonths((prev) =>
-    prev.map((m) => ({
-      ...m,
-      revenue: revenuePlan,
-      cogs: cogsPlan,
-      opex: opexPlan,
-      loan_paid: loan,
-      // capex не трогаем
-      notes: m.notes
-        ? `${m.notes} | auto: plan`
-        : "auto: plan",
-    }))
+    prev.map((m) => {
+      if (isLockedNotes(m.notes)) return m; // ✅ skip locked months
+      return {
+        ...m,
+        revenue: revenuePlan,
+        cogs: cogsPlan,
+        opex: opexPlan,
+        loan_paid: loan,
+        // capex не трогаем
+        notes: m.notes ? `${m.notes} | auto: plan` : "auto: plan",
+      };
+    })
   );
 };
 
@@ -592,6 +593,7 @@ export default function DonasDosasFinance() {
 
     const byMonth = new Map();
     let changedCount = 0;
+    let lockedCount = 0;
 
     for (const m of recalced) {
       byMonth.set(String(m.month), toNum(m.cash_end));
@@ -599,7 +601,11 @@ export default function DonasDosasFinance() {
       if (Math.round(oldVal) !== Math.round(toNum(m.cash_end))) changedCount++;
     }
 
-    setCashPreview({ byMonth, changedCount, baseStart: cashStart });
+    // count locked months in current table
+    for (const x of list) {
+      if (isLockedNotes(x.notes)) lockedCount++;
+    }
+    setCashPreview({ byMonth, changedCount, lockedCount, baseStart: cashStart });
   };
 
   const discardCashPreview = () => setCashPreview(null);
@@ -611,7 +617,10 @@ export default function DonasDosasFinance() {
       const map = new Map(prev.map((x) => [String(x.month), { ...x }]));
       for (const [month, cashEnd] of cashPreview.byMonth.entries()) {
         const cur = map.get(String(month));
-        if (cur) map.set(String(month), { ...cur, cash_end: toNum(cashEnd) });
+        if (cur) {
+          if (isLockedNotes(cur.notes)) continue; // ✅ skip locked months
+          map.set(String(month), { ...cur, cash_end: toNum(cashEnd) });
+        }
       }
       return Array.from(map.values()).sort((a, b) =>
         String(a.month).localeCompare(String(b.month))
