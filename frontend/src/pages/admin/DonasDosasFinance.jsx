@@ -228,7 +228,8 @@ export default function DonasDosasFinance() {
   // Save all state
   const [savingAll, setSavingAll] = useState(false);
   const [saveAllProgress, setSaveAllProgress] = useState(null); // { i, total, month }
-
+  const [autoLockAfterSaveAll, setAutoLockAfterSaveAll] = useState(true);
+  
   // Scenario state (Plan KPI only)
   const [scenarioId, setScenarioId] = useState("base");
 
@@ -632,6 +633,7 @@ export default function DonasDosasFinance() {
       );
 
       const total = list.length;
+      let lastSavedMonth = null;
       for (let idx = 0; idx < total; idx++) {
         const m = list[idx];
         setSaveAllProgress({ i: idx + 1, total, month: m.month });
@@ -650,6 +652,7 @@ export default function DonasDosasFinance() {
 
         // eslint-disable-next-line no-await-in-loop
         const saved = await apiPut(`/api/admin/donas/finance/months/${m.month}`, payload, "provider");
+        lastSavedMonth = saved?.month || m.month;
 
         setMonths((prev) => {
           const map = new Map(prev.map((x) => [String(x.month), x]));
@@ -658,6 +661,19 @@ export default function DonasDosasFinance() {
             String(a.month).localeCompare(String(b.month))
           );
         });
+      }
+      // ✅ Auto-lock after successful Save all (optional)
+      if (autoLockAfterSaveAll && lastSavedMonth) {
+        setMonths((prev) =>
+          prev.map((m) => {
+            const mm = String(m.month || "");
+            if (!mm) return m;
+            if (mm.localeCompare(String(lastSavedMonth)) <= 0) {
+              return { ...m, notes: addLockedTag(m.notes) };
+            }
+            return m;
+          })
+        );
       }
 
       setSaveAllProgress(null);
@@ -936,6 +952,16 @@ export default function DonasDosasFinance() {
               Recalculate cash_end (preview)
             </button>
 
+            <label className="flex items-center gap-2 text-sm text-gray-700 select-none px-2">
+              <input
+                type="checkbox"
+                checked={autoLockAfterSaveAll}
+                onChange={(e) => setAutoLockAfterSaveAll(e.target.checked)}
+                disabled={savingAll}
+              />
+              Auto-lock after Save all
+            </label>
+            
             <button
               onClick={saveAll}
               disabled={savingAll || monthsWithCash.length === 0}
