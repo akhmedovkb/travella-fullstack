@@ -20,6 +20,28 @@ function pct(actual, plan) {
   return ((a - p) / p) * 100;
 }
 
+function isLockedNotes(notes) {
+  return String(notes || "").toLowerCase().includes("#locked");
+}
+
+function addLockedTag(notes) {
+  const s = String(notes || "").trim();
+  if (!s) return "#locked";
+  if (isLockedNotes(s)) return s;
+  return `${s} | #locked`;
+}
+
+function removeLockedTag(notes) {
+  const s = String(notes || "");
+  // убираем #locked и лишние разделители
+  return s
+    .replace(/(\|\s*)?#locked\b/gi, "")
+    .replace(/\s*\|\s*\|\s*/g, " | ")
+    .replace(/^\s*\|\s*/g, "")
+    .replace(/\s*\|\s*$/g, "")
+    .trim();
+}
+
 function monthKey(d) {
   return String(d || "").slice(0, 7); // YYYY-MM
 }
