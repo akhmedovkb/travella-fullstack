@@ -8,7 +8,7 @@ const { getTelegramHealth } = require("./utils/telegram");
 const path = require("path");
 const adminDonasShiftRoutes = require("./routes/adminDonasShiftRoutes");
 const adminDonasPurchasesRoutes = require("./routes/adminDonasPurchasesRoutes");
-
+const adminDonasRecipeRoutes = require("./routes/adminDonasRecipeRoutes");
 
 dotenv.config();
 
@@ -451,6 +451,7 @@ app.use("/api/admin", adminJobsRoutes);
 /** ===================== Donas Dosas ===================== */
 app.use("/api/admin/donas", adminDonasShiftRoutes);
 app.use("/api/admin/donas", adminDonasPurchasesRoutes);
+app.use("/api/admin/donas", adminDonasRecipeRoutes);
 
 /** ===================== Start (в самом конце) ===================== */
 const PORT = process.env.PORT || 5000;
