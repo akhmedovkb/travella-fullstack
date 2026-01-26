@@ -890,6 +890,7 @@ export default function DonasDosasFinance() {
                 <MonthRow
                   key={m.month}
                   row={m}
+                  plan={planBase}
                   currency={currency}
                   reserveMonths={reserveMonths}
                   onChangeRow={onChangeRow}
@@ -942,6 +943,7 @@ function Kpi({ title, value }) {
 
 function MonthRow({
   row,
+  plan,
   currency,
   reserveMonths,
   onChangeRow,
@@ -969,6 +971,25 @@ function MonthRow({
 
   const target = runwayTargetStatus(cashEnd, r.opex, r.loan_paid, reserveMonths);
 
+  // Plan vs Fact (from Assumptions)
+  const planRevenue = toNum(plan?.revenuePlan);
+  const planCogs = toNum(plan?.cogsPlan);
+  const planOpex = toNum(plan?.opexPlan);
+  const planLoan = toNum(plan?.loan);
+  const planGross = planRevenue - planCogs;
+  const planNetOp = planGross - planOpex;
+  const planCF = planNetOp - planLoan; // capex в плане не учитываем
+
+  const revDelta = pct(r.revenue, planRevenue);
+  const netDelta = pct(netOp, planNetOp);
+  const cfDelta = pct(cashFlow, planCF);
+
+  const status =
+    target.rm > 0 && !target.ok
+      ? "red"
+      : netOp >= 0
+      ? "green"
+      : "yellow";
   // scenario preview
   const sc = getScenarioById(scenarioId);
   const scCalc = sc ? applyMonthScenario(r, sc) : null;
@@ -1081,8 +1102,35 @@ function MonthRow({
                 {target.ok ? "OK" : "LOW"} (target)
               </span>
             )}
+
+            <span
+              className={`px-2 py-0.5 rounded-full border text-[11px] font-semibold ${
+                status === "green"
+                  ? "bg-green-50 text-green-800 border-green-200"
+                  : status === "yellow"
+                  ? "bg-amber-50 text-amber-800 border-amber-200"
+                  : "bg-red-50 text-red-800 border-red-200"
+              }`}
+              title="Traffic-light: 🟢 netOp>=0 & target OK · 🟡 netOp<0 but target OK · 🔴 target LOW"
+            >
+              {status === "green" ? "🟢 OK" : status === "yellow" ? "🟡 RISK" : "🔴 LOW"}
+            </span>
           </div>
 
+          <div className="mt-1 text-[11px] text-gray-700">
+            Plan vs Fact:{" "}
+            <span className={revDelta != null && revDelta < 0 ? "text-red-700" : "text-green-700"}>
+              Rev {revDelta == null ? "—" : `${revDelta.toFixed(1)}%`}
+            </span>
+            {" · "}
+            <span className={netDelta != null && netDelta < 0 ? "text-red-700" : "text-green-700"}>
+              NetOp {netDelta == null ? "—" : `${netDelta.toFixed(1)}%`}
+            </span>
+            {" · "}
+            <span className={cfDelta != null && cfDelta < 0 ? "text-red-700" : "text-green-700"}>
+              CF {cfDelta == null ? "—" : `${cfDelta.toFixed(1)}%`}
+            </span>
+          </div>
           {scCalc && (
             <div className="mt-2 rounded-lg border bg-white/70 p-2">
               <div className="font-semibold text-gray-800">
