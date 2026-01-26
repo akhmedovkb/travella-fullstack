@@ -42,6 +42,27 @@ function removeLockedTag(notes) {
     .trim();
 }
 
+function hasClosedAt(notes) {
+  return /\bclosed_at:\s*\d{4}-\d{2}-\d{2}\b/i.test(String(notes || ""));
+}
+
+function addClosedAt(notes, dateISO) {
+  const s = String(notes || "").trim();
+  if (hasClosedAt(s)) return s;
+  const tag = `closed_at: ${dateISO}`;
+  if (!s) return tag;
+  return `${s} | ${tag}`;
+}
+
+function todayISO() {
+  const d = new Date();
+  // local date yyyy-mm-dd
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function monthKey(d) {
   return String(d || "").slice(0, 7); // YYYY-MM
 }
@@ -1416,7 +1437,10 @@ function MonthRow({
 
           <button
             onClick={() => {
-              const nextNotes = locked ? removeLockedTag(r.notes) : addLockedTag(r.notes);
+              // Close month: add #locked + closed_at: YYYY-MM-DD (once)
+              const dateISO = todayISO();
+              let nextNotes = addLockedTag(r.notes);
+              nextNotes = addClosedAt(nextNotes, dateISO);
               const next = { ...r, notes: nextNotes };
               setR(next);
               onChangeRow?.({
@@ -1432,14 +1456,39 @@ function MonthRow({
               });
             }}
             className={`px-3 py-1.5 rounded-lg border ${
-              locked
-                ? "bg-gray-900 text-white border-gray-900"
-                : "bg-white"
-            } ${savingAll ? "opacity-50 cursor-not-allowed" : ""}`}
-            disabled={savingAll}
-            title={locked ? "Разморозить месяц" : "Заморозить месяц (#locked в notes)"}
+              locked ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-gray-900 text-white border-gray-900"
+            }`}
+            disabled={savingAll || locked}
+            title="Закрыть месяц: добавит #locked и closed_at. Потом сохрани (Save/Save all)."
           >
-            {locked ? "Unlock" : "Lock"}
+            Close month
+          </button>
+
+          <button
+            onClick={() => {
+              // Reopen: remove only #locked (keep closed_at history)
+              const nextNotes = removeLockedTag(r.notes);
+              const next = { ...r, notes: nextNotes };
+              setR(next);
+              onChangeRow?.({
+                month: next.month,
+                slug: next.slug ?? "donas-dosas",
+                revenue: next.revenue,
+                cogs: next.cogs,
+                opex: next.opex,
+                capex: next.capex,
+                loan_paid: next.loan_paid,
+                cash_end: next.cash_end,
+                notes: nextNotes ?? "",
+              });
+            }}
+            className={`px-3 py-1.5 rounded-lg border ${
+              !locked ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-white"
+            }`}
+            disabled={savingAll || !locked}
+            title="Переоткрыть месяц: снимет только #locked (closed_at останется). Потом сохрани."
+          >
+            Reopen
           </button>
           <button
             onClick={() =>
