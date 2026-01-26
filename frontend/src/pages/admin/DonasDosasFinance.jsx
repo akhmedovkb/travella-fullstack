@@ -442,6 +442,38 @@ export default function DonasDosasFinance() {
     });
   };
 
+  const autofillFromPlan = () => {
+  if (!settings) return;
+
+  const avgCheck = toNum(settings.avg_check);
+  const cogsUnit = toNum(settings.cogs_per_unit);
+  const unitsDay = toNum(settings.units_per_day);
+  const days = toNum(settings.days_per_month) || 26;
+
+  const fixedOpex = toNum(settings.fixed_opex_month);
+  const varOpex = toNum(settings.variable_opex_month);
+  const loan = toNum(settings.loan_payment_month);
+
+  const revenuePlan = avgCheck * unitsDay * days;
+  const cogsPlan = cogsUnit * unitsDay * days;
+  const opexPlan = fixedOpex + varOpex;
+
+  setMonths((prev) =>
+    prev.map((m) => ({
+      ...m,
+      revenue: revenuePlan,
+      cogs: cogsPlan,
+      opex: opexPlan,
+      loan_paid: loan,
+      // capex не трогаем
+      notes: m.notes
+        ? `${m.notes} | auto: plan`
+        : "auto: plan",
+    }))
+  );
+};
+
+
   // Recalculate cash_end (preview) — does NOT save and does NOT mutate months (until Apply)
   const recalcCashPreview = () => {
     const cashStart = toNum(settings?.cash_start);
@@ -683,6 +715,19 @@ export default function DonasDosasFinance() {
             <button onClick={addNextMonth} className="px-3 py-2 rounded-lg bg-white border" disabled={savingAll}>
               + Add month
             </button>
+
+          <button
+            onClick={autofillFromPlan}
+            disabled={savingAll || !settings || monthsWithCash.length === 0}
+            className={`px-3 py-2 rounded-lg border ${
+              savingAll || !settings || monthsWithCash.length === 0
+                ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                : "bg-white"
+            }`}
+            title="Заполнить фактические месяцы по Assumptions (Plan)"
+          >
+            Auto-fill from Plan
+          </button>
 
             <button
               onClick={fillMissingMonths}
