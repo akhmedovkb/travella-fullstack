@@ -7,20 +7,18 @@ const requireAdmin = require("../middleware/requireAdmin");
 
 const router = express.Router();
 
-const SLUG = "donas-dosas";
+const SLUG = null; // slug в таблицах сейчас нет
 
-/** GET settings (создаёт дефолт при первом заходе) */
+/** GET settings (самодостаточный: без slug, создаёт дефолт при первом заходе) */
 router.get("/donas/finance/settings", authenticateToken, requireAdmin, async (_req, res) => {
   try {
     const q = await pool.query(
-      "select * from donas_finance_settings where slug=$1 limit 1",
-      [SLUG]
+      "select * from donas_finance_settings order by id asc limit 1"
     );
 
     if (!q.rows[0]) {
       const ins = await pool.query(
-        "insert into donas_finance_settings(slug) values($1) returning *",
-        [SLUG]
+        "insert into donas_finance_settings default values returning *"
       );
       return res.json(ins.rows[0]);
     }
@@ -32,11 +30,22 @@ router.get("/donas/finance/settings", authenticateToken, requireAdmin, async (_r
   }
 });
 
-/** PUT settings */
+
+/** PUT settings (самодостаточный: без slug, создаёт дефолт если пусто) */
 router.put("/donas/finance/settings", authenticateToken, requireAdmin, async (req, res) => {
   try {
     const s = req.body || {};
 
+    // 1) гарантируем, что в таблице есть хотя бы 1 строка
+    const first = await pool.query(
+      "select id from donas_finance_settings order by id asc limit 1"
+    );
+
+    if (!first.rows[0]) {
+      await pool.query("insert into donas_finance_settings default values");
+    }
+
+    // 2) собираем динамический UPDATE
     const fields = [
       "currency",
       "avg_check",
@@ -60,13 +69,18 @@ router.put("/donas/finance/settings", authenticateToken, requireAdmin, async (re
       vals.push(s[f]);
     }
 
-    // where slug = $i
-    vals.push(SLUG);
+    // если ничего не пришло — просто вернём текущие настройки
+    if (!sets.length) {
+      const cur = await pool.query(
+        "select * from donas_finance_settings order by id asc limit 1"
+      );
+      return res.json(cur.rows[0] || {});
+    }
 
     const sql = `
       update donas_finance_settings
-      set ${sets.length ? sets.join(", ") + ", " : ""} updated_at=now()
-      where slug=$${i}
+      set ${sets.join(", ")}, updated_at=now()
+      where id = (select id from donas_finance_settings order by id asc limit 1)
       returning *
     `;
 
@@ -338,31 +352,41 @@ router.get("/donas/finance/summary", authenticateToken, requireAdmin, async (req
   try {
     const month = String(req.query.month || "");
 
+    // 1. settings — просто первая строка
     const settingsQ = await pool.query(
-      `select * from donas_finance_settings where slug=$1 limit 1`,
-      [SLUG]
+      `select * from donas_finance_settings order by id asc limit 1`
     );
     const s = settingsQ.rows[0] || {};
 
+    // 2. revenue (выручка)
     const revenueQ = await pool.query(
-      `select coalesce(sum(revenue),0) as v
-       from donas_shifts
-       where slug=$1 and to_char(date,'YYYY-MM')=$2`,
-      [SLUG, month]
+      `
+      select coalesce(sum(revenue),0) as v
+      from donas_shifts
+      where to_char(date,'YYYY-MM')=$1
+      `,
+      [month]
     );
 
+    // 3. COGS (закупки)
     const cogsQ = await pool.query(
-      `select coalesce(sum(total),0) as v
-       from donas_purchases
-       where slug=$1 and type='purchase' and to_char(date,'YYYY-MM')=$2`,
-      [SLUG, month]
+      `
+      select coalesce(sum(total),0) as v
+      from donas_purchases
+      where type='purchase'
+        and to_char(date,'YYYY-MM')=$1
+      `,
+      [month]
     );
 
+    // 4. payroll (выплаты персоналу)
     const payrollQ = await pool.query(
-      `select coalesce(sum(total_pay),0) as v
-       from donas_shifts
-       where slug=$1 and to_char(date,'YYYY-MM')=$2`,
-      [SLUG, month]
+      `
+      select coalesce(sum(total_pay),0) as v
+      from donas_shifts
+      where to_char(date,'YYYY-MM')=$1
+      `,
+      [month]
     );
 
     const R = Number(revenueQ.rows[0]?.v || 0);
@@ -372,7 +396,7 @@ router.get("/donas/finance/summary", authenticateToken, requireAdmin, async (req
     const fixedOpex = Number(s.fixed_opex_month || 0);
     const variableOpex = Number(s.variable_opex_month || 0);
 
-    // OPEX = fixed + variable + payroll (чтобы payroll не терялся)
+    // OPEX = fixed + variable + payroll
     const O = fixedOpex + variableOpex + payroll;
 
     const loan = Number(s.loan_payment_month || 0);
@@ -397,5 +421,6 @@ router.get("/donas/finance/summary", authenticateToken, requireAdmin, async (req
     return res.status(500).json({ error: "Failed to calc summary" });
   }
 });
+
 
 module.exports = router;
