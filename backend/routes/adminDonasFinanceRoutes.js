@@ -422,5 +422,91 @@ router.get("/donas/finance/summary", authenticateToken, requireAdmin, async (req
   }
 });
 
+/** GET finance summary range (months list) */
+router.get("/donas/finance/summary-range", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const from = String(req.query.from || "");
+    const to = String(req.query.to || "");
+
+    if (!from || !to) return res.status(400).json({ error: "from/to required" });
+
+    const settingsQ = await pool.query(
+      `select * from donas_finance_settings order by id asc limit 1`
+    );
+    const s = settingsQ.rows[0] || {};
+
+    const fixedOpex = Number(s.fixed_opex_month || 0);
+    const variableOpex = Number(s.variable_opex_month || 0);
+    const loan = Number(s.loan_payment_month || 0);
+
+    // revenue + payroll by month
+    const shiftsQ = await pool.query(
+      `
+      select to_char(date,'YYYY-MM') as month,
+             coalesce(sum(revenue),0) as revenue,
+             coalesce(sum(total_pay),0) as payroll
+      from donas_shifts
+      where to_char(date,'YYYY-MM') between $1 and $2
+      group by 1
+      order by 1
+      `,
+      [from, to]
+    );
+
+    // cogs by month
+    const cogsQ = await pool.query(
+      `
+      select to_char(date,'YYYY-MM') as month,
+             coalesce(sum(total),0) as cogs
+      from donas_purchases
+      where type='purchase'
+        and to_char(date,'YYYY-MM') between $1 and $2
+      group by 1
+      order by 1
+      `,
+      [from, to]
+    );
+
+    const map = new Map();
+    for (const r of shiftsQ.rows) {
+      map.set(r.month, {
+        month: r.month,
+        revenue: Number(r.revenue || 0),
+        payroll: Number(r.payroll || 0),
+        cogs: 0,
+      });
+    }
+    for (const r of cogsQ.rows) {
+      const cur = map.get(r.month) || { month: r.month, revenue: 0, payroll: 0, cogs: 0 };
+      cur.cogs = Number(r.cogs || 0);
+      map.set(r.month, cur);
+    }
+
+    const out = Array.from(map.values()).map((m) => {
+      const opex = fixedOpex + variableOpex + m.payroll;
+      const netOperating = m.revenue - m.cogs - opex;
+      const cashFlow = netOperating - loan;
+      const dscr = loan > 0 && netOperating > 0 ? netOperating / loan : null;
+
+      return {
+        month: m.month,
+        revenue: Math.round(m.revenue),
+        cogs: Math.round(m.cogs),
+        payroll: Math.round(m.payroll),
+        opex: Math.round(opex),
+        loan: Math.round(loan),
+        netOperating: Math.round(netOperating),
+        cashFlow: Math.round(cashFlow),
+        dscr: dscr == null ? null : Number(dscr.toFixed(2)),
+      };
+    });
+
+    return res.json(out);
+  } catch (e) {
+    console.error("GET /donas/finance/summary-range error:", e);
+    return res.status(500).json({ error: "Failed to calc summary range" });
+  }
+});
+
 
 module.exports = router;
