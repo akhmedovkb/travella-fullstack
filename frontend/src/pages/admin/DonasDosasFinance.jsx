@@ -109,14 +109,12 @@ function computePlan(settings, scenario) {
 
   const fixedOpexBase = toNum(settings.fixed_opex_month);
   const varOpexBase = toNum(settings.variable_opex_month);
-
   const loan = toNum(settings.loan_payment_month);
 
-  // scenario modifiers (no saving)
   const avgCheck = avgCheckBase * (scenario?.avgCheckMul ?? 1);
   const cogsUnit = cogsUnitBase * (scenario?.cogsUnitMul ?? 1);
   const fixedOpex = fixedOpexBase + (scenario?.fixedOpexAdd ?? 0);
-  const varOpex = varOpexBase; // оставляем как есть
+  const varOpex = varOpexBase;
 
   const unitMargin = Math.max(0, avgCheck - cogsUnit);
   const revenuePlan = avgCheck * unitsDay * days;
@@ -130,9 +128,8 @@ function computePlan(settings, scenario) {
   const breakevenPerDay =
     unitMargin > 0 ? (opexPlan + loan) / unitMargin / days : null;
 
-  // runway plan — по cash_start (сколько месяцев проживём, если netOp отрицательный)
   const cashStart = toNum(settings.cash_start);
-  const burn = Math.max(0, -netOpPlan); // если прибыль, burn=0
+  const burn = Math.max(0, -netOpPlan);
   const runwayPlan = burn > 0 ? cashStart / burn : null;
 
   return {
@@ -156,12 +153,42 @@ function computePlan(settings, scenario) {
   };
 }
 
+// Scenarios (also used for per-month preview)
 const SCENARIOS = [
-  { id: "bad20", label: "Bad month −20% revenue", avgCheckMul: 0.8 },
-  { id: "price10", label: "Price +10%", avgCheckMul: 1.1 },
-  { id: "cogs10", label: "COGS +10%", cogsUnitMul: 1.1 },
-  { id: "opex2m", label: "OPEX +2 000 000", fixedOpexAdd: 2_000_000 },
+  { id: "bad20", label: "Bad month −20% revenue", revenueMul: 0.8, plan: { avgCheckMul: 0.8 } },
+  { id: "price10", label: "Price +10%", revenueMul: 1.1, plan: { avgCheckMul: 1.1 } },
+  { id: "cogs10", label: "COGS +10%", cogsMul: 1.1, plan: { cogsUnitMul: 1.1 } },
+  { id: "opex2m", label: "OPEX +2 000 000", opexAdd: 2_000_000, plan: { fixedOpexAdd: 2_000_000 } },
 ];
+
+function getScenarioById(id) {
+  if (!id || id === "base") return null;
+  return SCENARIOS.find((s) => s.id === id) || null;
+}
+
+// Apply scenario to a month row calc (preview only)
+function applyMonthScenario(row, scenario) {
+  const revenue = toNum(row.revenue) * (scenario?.revenueMul ?? 1);
+  const cogs = toNum(row.cogs) * (scenario?.cogsMul ?? 1);
+  const opex = toNum(row.opex) + (scenario?.opexAdd ?? 0);
+  const capex = toNum(row.capex);
+  const loan = toNum(row.loan_paid);
+
+  const gross = revenue - cogs;
+  const netOp = gross - opex;
+  const cashFlow = netOp - loan - capex;
+
+  const dscr = loan > 0 ? netOp / loan : null;
+
+  return { revenue, cogs, opex, capex, loan, gross, netOp, cashFlow, dscr };
+}
+
+function runwayTargetStatus(cashEnd, opex, loanPaid, reserveMonths) {
+  const rm = Math.max(0, Math.floor(toNum(reserveMonths || 0)));
+  const need = (toNum(opex) + toNum(loanPaid)) * rm;
+  const ok = toNum(cashEnd) >= need && rm > 0;
+  return { ok, need, rm };
+}
 
 export default function DonasDosasFinance() {
   const [loading, setLoading] = useState(true);
@@ -173,8 +200,14 @@ export default function DonasDosasFinance() {
   const [savingAll, setSavingAll] = useState(false);
   const [saveAllProgress, setSaveAllProgress] = useState(null); // { i, total, month }
 
-  // Scenario state (UI-only)
+  // Scenario state (Plan KPI only)
   const [scenarioId, setScenarioId] = useState("base");
+
+  // Per-month scenario preview map: { [month]: scenarioId }
+  const [monthScenario, setMonthScenario] = useState({});
+
+  // cash_end preview
+  const [cashPreview, setCashPreview] = useState(null);
 
   const currency = settings?.currency || "UZS";
 
@@ -197,26 +230,44 @@ export default function DonasDosasFinance() {
     load();
   }, []);
 
-  const scenario = useMemo(() => {
+  const scenarioPlan = useMemo(() => {
     if (scenarioId === "base") return null;
-    const s = SCENARIOS.find((x) => x.id === scenarioId);
-    return s || null;
+    return getScenarioById(scenarioId)?.plan || null;
   }, [scenarioId]);
 
   const planBase = useMemo(() => computePlan(settings, null), [settings]);
-  const planScenario = useMemo(
-    () => computePlan(settings, scenario),
-    [settings, scenario]
-  );
+  const planScenario = useMemo(() => computePlan(settings, scenarioPlan), [settings, scenarioPlan]);
+
+  // sorted months (raw)
+  const sortedMonths = useMemo(() => {
+    return [...months].sort((a, b) => String(a.month).localeCompare(String(b.month)));
+  }, [months]);
 
   // LIVE monthsWithCash derived from months + cash_start
   const monthsWithCash = useMemo(() => {
-    if (!settings) return months;
-    const sorted = [...months].sort((a, b) =>
-      String(a.month).localeCompare(String(b.month))
-    );
-    return recalcCashChain(sorted, settings.cash_start);
-  }, [months, settings]);
+    if (!settings) return sortedMonths;
+    return recalcCashChain(sortedMonths, settings.cash_start);
+  }, [sortedMonths, settings]);
+
+  // With prev cash for each row (for what-if cash end)
+  const monthsWithPrevCash = useMemo(() => {
+    const arr = monthsWithCash || [];
+    const cashStart = toNum(settings?.cash_start);
+    let prev = cashStart;
+    return arr.map((m) => {
+      const out = { ...m, _prev_cash: prev };
+      prev = toNum(m.cash_end);
+      return out;
+    });
+  }, [monthsWithCash, settings]);
+
+  const lastMonth = monthsWithCash.length ? monthsWithCash[monthsWithCash.length - 1] : null;
+  const reserveMonths = toNum(settings?.reserve_target_months || 0);
+
+  const lastTarget = useMemo(() => {
+    if (!lastMonth) return null;
+    return runwayTargetStatus(lastMonth.cash_end, lastMonth.opex, lastMonth.loan_paid, reserveMonths);
+  }, [lastMonth, reserveMonths]);
 
   // GAP CHECK
   const gaps = useMemo(() => {
@@ -391,7 +442,49 @@ export default function DonasDosasFinance() {
     });
   };
 
-  // Save all months sequentially (with computed cash_end)
+  // Recalculate cash_end (preview) — does NOT save and does NOT mutate months (until Apply)
+  const recalcCashPreview = () => {
+    const cashStart = toNum(settings?.cash_start);
+    const list = (monthsWithCash || []).slice().sort((a, b) =>
+      String(a.month).localeCompare(String(b.month))
+    );
+
+    const recalced = recalcCashChain(
+      list.map((m) => ({ ...m, cash_end: 0 })),
+      cashStart
+    );
+
+    const byMonth = new Map();
+    let changedCount = 0;
+
+    for (const m of recalced) {
+      byMonth.set(String(m.month), toNum(m.cash_end));
+      const oldVal = toNum(list.find((x) => String(x.month) === String(m.month))?.cash_end);
+      if (Math.round(oldVal) !== Math.round(toNum(m.cash_end))) changedCount++;
+    }
+
+    setCashPreview({ byMonth, changedCount, baseStart: cashStart });
+  };
+
+  const discardCashPreview = () => setCashPreview(null);
+
+  // Apply preview to months state (still not saving to DB)
+  const applyCashPreviewToTable = () => {
+    if (!cashPreview?.byMonth) return;
+    setMonths((prev) => {
+      const map = new Map(prev.map((x) => [String(x.month), { ...x }]));
+      for (const [month, cashEnd] of cashPreview.byMonth.entries()) {
+        const cur = map.get(String(month));
+        if (cur) map.set(String(month), { ...cur, cash_end: toNum(cashEnd) });
+      }
+      return Array.from(map.values()).sort((a, b) =>
+        String(a.month).localeCompare(String(b.month))
+      );
+    });
+    setCashPreview(null);
+  };
+
+  // Save all months sequentially (with computed cash_end from monthsWithCash)
   const saveAll = async () => {
     if (savingAll) return;
     setErr("");
@@ -616,6 +709,19 @@ export default function DonasDosasFinance() {
             </button>
 
             <button
+              onClick={recalcCashPreview}
+              disabled={savingAll || monthsWithCash.length === 0}
+              className={`px-3 py-2 rounded-lg border ${
+                savingAll || monthsWithCash.length === 0
+                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                  : "bg-white"
+              }`}
+              title="Recalculate cash_end for all months (preview only)"
+            >
+              Recalculate cash_end (preview)
+            </button>
+
+            <button
               onClick={saveAll}
               disabled={savingAll || monthsWithCash.length === 0}
               className={`px-3 py-2 rounded-lg ${
@@ -628,6 +734,66 @@ export default function DonasDosasFinance() {
             </button>
           </div>
         </div>
+
+        {/* RUNWAY TARGET SUMMARY */}
+        {lastMonth && lastTarget && reserveMonths > 0 && (
+          <div className="mt-3 rounded-xl border bg-gray-50 p-3 text-sm">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div>
+                <div className="font-semibold">Runway target (last month: {monthKey(lastMonth.month)})</div>
+                <div className="text-gray-700 mt-1">
+                  cash_end: <b>{fmt(lastMonth.cash_end)} {currency}</b>{" "}
+                  · target: <b>{fmt(lastTarget.need)} {currency}</b>{" "}
+                  <span className="text-gray-500">
+                    ({lastTarget.rm} months × (opex + loan_paid))
+                  </span>
+                </div>
+              </div>
+
+              <div
+                className={`px-3 py-1.5 rounded-lg text-sm font-semibold border ${
+                  lastTarget.ok
+                    ? "bg-green-50 text-green-800 border-green-200"
+                    : "bg-red-50 text-red-800 border-red-200"
+                }`}
+              >
+                {lastTarget.ok ? "OK" : "LOW"}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {cashPreview && (
+          <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50 p-3 text-blue-900 text-sm">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <div className="font-semibold">💡 cash_end recalculated (preview)</div>
+                <div className="mt-1">
+                  Changed months: <b>{cashPreview.changedCount}</b>
+                </div>
+                <div className="text-xs mt-1 text-blue-800">
+                  Это preview. Чтобы записать значения в таблицу (перед Save all), нажми Apply.
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={applyCashPreviewToTable}
+                  className="px-3 py-2 rounded-lg bg-gray-900 text-white"
+                  disabled={savingAll}
+                >
+                  Apply preview to table
+                </button>
+                <button
+                  onClick={() => setCashPreview(null)}
+                  className="px-3 py-2 rounded-lg bg-white border"
+                  disabled={savingAll}
+                >
+                  Discard
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {saveAllProgress && (
           <div className="mt-3 rounded-xl border bg-gray-50 p-3 text-sm text-gray-700">
@@ -653,7 +819,7 @@ export default function DonasDosasFinance() {
         )}
 
         <div className="mt-3 overflow-auto">
-          <table className="min-w-[1200px] w-full text-sm">
+          <table className="min-w-[1400px] w-full text-sm">
             <thead>
               <tr className="text-left text-gray-600">
                 <th className="py-2 pr-2">Month</th>
@@ -668,15 +834,20 @@ export default function DonasDosasFinance() {
               </tr>
             </thead>
             <tbody>
-              {monthsWithCash.map((m) => (
+              {monthsWithPrevCash.map((m) => (
                 <MonthRow
                   key={m.month}
                   row={m}
                   currency={currency}
+                  reserveMonths={reserveMonths}
                   onChangeRow={onChangeRow}
                   onSave={upsertMonth}
                   highlight={highlightMonths.has(String(m.month))}
                   savingAll={savingAll}
+                  scenarioId={monthScenario[String(m.month)] || "base"}
+                  onScenarioChange={(sid) =>
+                    setMonthScenario((prev) => ({ ...prev, [String(m.month)]: sid }))
+                  }
                 />
               ))}
             </tbody>
@@ -685,7 +856,7 @@ export default function DonasDosasFinance() {
 
         <div className="mt-2 text-xs text-gray-500">
           Формулы: GP = revenue−cogs · NetOp = GP−opex · CF = NetOp−loan_paid−capex · DSCR = NetOp/loan_paid
-          (если loan_paid&gt;0) · Runway = cash_end/(opex+loan_paid) · Cash end = prev_cash_end + CF
+          (если loan_paid&gt;0) · Runway = cash_end/(opex+loan_paid) · Target cash = (opex+loan_paid)*reserve_target_months
         </div>
       </div>
     </div>
@@ -717,22 +888,44 @@ function Kpi({ title, value }) {
   );
 }
 
-function MonthRow({ row, currency, onChangeRow, onSave, highlight, savingAll }) {
+function MonthRow({
+  row,
+  currency,
+  reserveMonths,
+  onChangeRow,
+  onSave,
+  highlight,
+  savingAll,
+  scenarioId,
+  onScenarioChange,
+}) {
   const [r, setR] = useState(row);
 
   useEffect(() => {
     setR(row);
   }, [row]);
 
+  // baseline row calc
   const gross = toNum(r.revenue) - toNum(r.cogs);
   const netOp = gross - toNum(r.opex);
   const cashFlow = netOp - toNum(r.loan_paid) - toNum(r.capex);
   const cashEnd = toNum(r.cash_end);
 
   const dscr = toNum(r.loan_paid) > 0 ? netOp / toNum(r.loan_paid) : null;
-  const runway =
-    (toNum(r.opex) + toNum(r.loan_paid)) > 0
-      ? cashEnd / (toNum(r.opex) + toNum(r.loan_paid))
+  const denom = toNum(r.opex) + toNum(r.loan_paid);
+  const runway = denom > 0 ? cashEnd / denom : null;
+
+  const target = runwayTargetStatus(cashEnd, r.opex, r.loan_paid, reserveMonths);
+
+  // scenario preview
+  const sc = getScenarioById(scenarioId);
+  const scCalc = sc ? applyMonthScenario(r, sc) : null;
+
+  const prevCash = toNum(r._prev_cash); // provided by parent
+  const scCashEnd = scCalc ? prevCash + toNum(scCalc.cashFlow) : null;
+  const scRunway =
+    scCalc && (toNum(scCalc.opex) + toNum(scCalc.loan)) > 0
+      ? scCashEnd / (toNum(scCalc.opex) + toNum(scCalc.loan))
       : null;
 
   const patch = (k, v) => {
@@ -747,6 +940,7 @@ function MonthRow({ row, currency, onChangeRow, onSave, highlight, savingAll }) 
         capex: next.capex,
         loan_paid: next.loan_paid,
         notes: next.notes ?? "",
+        cash_end: next.cash_end,
       });
       return next;
     });
@@ -761,6 +955,24 @@ function MonthRow({ row, currency, onChangeRow, onSave, highlight, savingAll }) 
           className="w-full px-2 py-1 rounded border"
           disabled={savingAll}
         />
+
+        {/* Scenario per month */}
+        <div className="mt-2">
+          <select
+            value={scenarioId || "base"}
+            onChange={(e) => onScenarioChange?.(e.target.value)}
+            className="w-full px-2 py-1 rounded border text-xs bg-white"
+            disabled={savingAll}
+            title="Scenario preview for this month (no save)"
+          >
+            <option value="base">Scenario: Base</option>
+            {SCENARIOS.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </div>
       </td>
 
       {["revenue", "cogs", "opex", "capex", "loan_paid"].map((k) => (
@@ -776,9 +988,17 @@ function MonthRow({ row, currency, onChangeRow, onSave, highlight, savingAll }) 
 
       <td className="py-2 pr-2 whitespace-nowrap">
         {fmt(cashEnd)} {currency}
+        {scCalc && (
+          <div className="mt-1 text-xs text-gray-700">
+            <span className="text-gray-500">what-if:</span>{" "}
+            <b>
+              {fmt(scCashEnd)} {currency}
+            </b>
+          </div>
+        )}
       </td>
 
-      <td className="py-2 pr-2 min-w-[220px]">
+      <td className="py-2 pr-2 min-w-[280px]">
         <input
           value={r.notes ?? ""}
           onChange={(e) => patch("notes", e.target.value)}
@@ -786,13 +1006,45 @@ function MonthRow({ row, currency, onChangeRow, onSave, highlight, savingAll }) 
           placeholder="notes…"
           disabled={savingAll}
         />
-        <div className="mt-1 text-xs text-gray-600">
-          GP: {fmt(gross)} {currency} · Net: {fmt(netOp)} {currency}
-          <br />
-          CF: {fmt(cashFlow)} {currency} · Cash end: {fmt(cashEnd)} {currency}
-          <br />
-          DSCR: {dscr == null ? "—" : dscr.toFixed(2)} · Runway:{" "}
-          {runway == null ? "—" : runway.toFixed(1)} m
+
+        <div className="mt-2 text-xs text-gray-600">
+          <div>
+            Base → GP: {fmt(gross)} {currency} · Net: {fmt(netOp)} {currency} · CF: {fmt(cashFlow)} {currency}
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <span>
+              Base → DSCR: {dscr == null ? "—" : dscr.toFixed(2)} · Runway: {runway == null ? "—" : runway.toFixed(1)} m
+            </span>
+
+            {target.rm > 0 && (
+              <span
+                className={`px-2 py-0.5 rounded-full border text-[11px] font-semibold ${
+                  target.ok
+                    ? "bg-green-50 text-green-800 border-green-200"
+                    : "bg-red-50 text-red-800 border-red-200"
+                }`}
+                title={`Target cash: ${(toNum(r.opex) + toNum(r.loan_paid)).toLocaleString("ru-RU")} × ${target.rm} = ${fmt(target.need)} ${currency}`}
+              >
+                {target.ok ? "OK" : "LOW"} (target)
+              </span>
+            )}
+          </div>
+
+          {scCalc && (
+            <div className="mt-2 rounded-lg border bg-white/70 p-2">
+              <div className="font-semibold text-gray-800">
+                Scenario → GP: {fmt(scCalc.gross)} {currency} · Net: {fmt(scCalc.netOp)} {currency} · CF: {fmt(scCalc.cashFlow)} {currency}
+              </div>
+              <div className="text-gray-700">
+                Scenario → DSCR: {scCalc.dscr == null ? "—" : scCalc.dscr.toFixed(2)} · Runway:{" "}
+                {scRunway == null ? "—" : scRunway.toFixed(1)} m
+              </div>
+              <div className="text-gray-500 mt-1">
+                prev cash: {fmt(prevCash)} {currency} → what-if cash end: {fmt(scCashEnd)} {currency}
+              </div>
+            </div>
+          )}
         </div>
       </td>
 
