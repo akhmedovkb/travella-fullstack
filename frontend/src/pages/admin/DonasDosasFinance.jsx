@@ -13,6 +13,13 @@ function fmt(n) {
   return v.toLocaleString("ru-RU");
 }
 
+function pct(actual, plan) {
+  const a = toNum(actual);
+  const p = toNum(plan);
+  if (!p) return null;
+  return ((a - p) / p) * 100;
+}
+
 function monthKey(d) {
   return String(d || "").slice(0, 7); // YYYY-MM
 }
