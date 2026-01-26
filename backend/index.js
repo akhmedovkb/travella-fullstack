@@ -1,4 +1,5 @@
 // backend/index.js
+const pool = require("./db");
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
@@ -275,6 +276,77 @@ app.post(
 
 /** ===================== Health ===================== */
 app.get("/", (_req, res) => res.send("🚀 Travella API OK"));
+
+/** ===================== Donas Dosas: Public Investor/Bank Summary ===================== */
+app.get("/api/public/donas/summary", async (req, res) => {
+  try {
+    const key = String(req.query.key || "");
+    if (!process.env.DONAS_PUBLIC_KEY || key !== process.env.DONAS_PUBLIC_KEY) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const month = String(req.query.month || "");
+
+    const settingsQ = await pool.query(
+      `select * from donas_finance_settings order by id asc limit 1`
+    );
+    const s = settingsQ.rows[0] || {};
+
+    const revenueQ = await pool.query(
+      `select coalesce(sum(revenue),0) as v
+       from donas_shifts
+       where to_char(date,'YYYY-MM')=$1`,
+      [month]
+    );
+
+    const cogsQ = await pool.query(
+      `select coalesce(sum(total),0) as v
+       from donas_purchases
+       where type='purchase'
+         and to_char(date,'YYYY-MM')=$1`,
+      [month]
+    );
+
+    const payrollQ = await pool.query(
+      `select coalesce(sum(total_pay),0) as v
+       from donas_shifts
+       where to_char(date,'YYYY-MM')=$1`,
+      [month]
+    );
+
+    const R = Number(revenueQ.rows[0]?.v || 0);
+    const C = Number(cogsQ.rows[0]?.v || 0);
+    const payroll = Number(payrollQ.rows[0]?.v || 0);
+
+    const fixedOpex = Number(s.fixed_opex_month || 0);
+    const variableOpex = Number(s.variable_opex_month || 0);
+    const loan = Number(s.loan_payment_month || 0);
+
+    const opex = fixedOpex + variableOpex + payroll;
+    const netOperating = R - C - opex;
+    const cashFlow = netOperating - loan;
+
+    // для банка: dscr только если netOperating > 0
+    const dscr = loan > 0 && netOperating > 0 ? netOperating / loan : null;
+
+    return res.json({
+      month,
+      revenue: Math.round(R),
+      cogs: Math.round(C),
+      payroll: Math.round(payroll),
+      fixedOpex: Math.round(fixedOpex),
+      variableOpex: Math.round(variableOpex),
+      opex: Math.round(opex),
+      loan: Math.round(loan),
+      netOperating: Math.round(netOperating),
+      cashFlow: Math.round(cashFlow),
+      dscr: dscr == null ? null : Number(dscr.toFixed(2)),
+    });
+  } catch (e) {
+    console.error("GET /api/public/donas/summary error:", e);
+    return res.status(500).json({ error: "Failed" });
+  }
+});
 
 /** ===================== Telegram Bot (НОВЫЙ клиентский) ===================== */
 /**
