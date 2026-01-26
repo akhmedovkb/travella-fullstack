@@ -174,6 +174,10 @@ app.use("/api/admin", adminRoutes);
 const adminResetRoutes = require("./routes/adminResetRoutes");
 app.use("/api/admin", adminResetRoutes);
 
+// ✅ NEW: Dona's Dosas (Admin Finance)
+const adminDonasFinanceRoutes = require("./routes/adminDonasFinanceRoutes");
+app.use("/api/admin", adminDonasFinanceRoutes);
+
 // Секции маркетплейса
 const marketplaceSectionsRoutes = require("./routes/marketplaceSectionsRoutes");
 app.use("/api/marketplace/sections", marketplaceSectionsRoutes);
