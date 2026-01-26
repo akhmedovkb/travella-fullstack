@@ -6,6 +6,7 @@ const { askActualReminder } = require("./jobs/askActualReminder");
 const tbTemplatesRoutes = require("./routes/TBtemplatesRoutes");
 const { getTelegramHealth } = require("./utils/telegram");
 const path = require("path");
+const adminDonasShiftRoutes = require("./routes/adminDonasShiftRoutes");
 
 dotenv.config();
 
@@ -445,8 +446,8 @@ app.use("/api/inside", insideRoutes);
 const adminJobsRoutes = require("./routes/adminJobsRoutes");
 app.use("/api/admin", adminJobsRoutes);
 
+/** ===================== Donas Dosas ===================== */
 app.use("/api/admin/donas", adminDonasShiftRoutes);
-const adminDonasShiftRoutes = require("./routes/adminDonasShiftRoutes");
 
 /** ===================== Start (в самом конце) ===================== */
 const PORT = process.env.PORT || 5000;
