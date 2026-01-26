@@ -203,7 +203,7 @@ function computePlan(settings, scenario) {
   };
 }
 
-// Scenarios (also used for per-month preview)
+// Scenarios
 const SCENARIOS = [
   { id: "bad20", label: "Bad month −20% revenue", revenueMul: 0.8, plan: { avgCheckMul: 0.8 } },
   { id: "price10", label: "Price +10%", revenueMul: 1.1, plan: { avgCheckMul: 1.1 } },
@@ -216,7 +216,6 @@ function getScenarioById(id) {
   return SCENARIOS.find((s) => s.id === id) || null;
 }
 
-// Apply scenario to a month row calc (preview only)
 function applyMonthScenario(row, scenario) {
   const revenue = toNum(row.revenue) * (scenario?.revenueMul ?? 1);
   const cogs = toNum(row.cogs) * (scenario?.cogsMul ?? 1);
@@ -250,7 +249,7 @@ export default function DonasDosasFinance() {
   const [savingAll, setSavingAll] = useState(false);
   const [saveAllProgress, setSaveAllProgress] = useState(null); // { i, total, month }
   const [autoLockAfterSaveAll, setAutoLockAfterSaveAll] = useState(true);
-  
+
   // Scenario state (Plan KPI only)
   const [scenarioId, setScenarioId] = useState("base");
 
@@ -286,21 +285,16 @@ export default function DonasDosasFinance() {
     load();
   }, []);
 
-  useEffect(() => {
-    // default: last month in table
-    if (!lockUpToMonth && monthsWithCash.length) {
-      setLockUpToMonth(monthsWithCash[monthsWithCash.length - 1].month);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [monthsWithCash.length]);
-  
   const scenarioPlan = useMemo(() => {
     if (scenarioId === "base") return null;
     return getScenarioById(scenarioId)?.plan || null;
   }, [scenarioId]);
 
   const planBase = useMemo(() => computePlan(settings, null), [settings]);
-  const planScenario = useMemo(() => computePlan(settings, scenarioPlan), [settings, scenarioPlan]);
+  const planScenario = useMemo(
+    () => computePlan(settings, scenarioPlan),
+    [settings, scenarioPlan]
+  );
 
   // sorted months (raw)
   const sortedMonths = useMemo(() => {
@@ -312,6 +306,14 @@ export default function DonasDosasFinance() {
     if (!settings) return sortedMonths;
     return recalcCashChain(sortedMonths, settings.cash_start);
   }, [sortedMonths, settings]);
+
+  // default lock selector
+  useEffect(() => {
+    if (!lockUpToMonth && monthsWithCash.length) {
+      setLockUpToMonth(monthsWithCash[monthsWithCash.length - 1].month);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [monthsWithCash.length]);
 
   // With prev cash for each row (for what-if cash end)
   const monthsWithPrevCash = useMemo(() => {
@@ -330,7 +332,12 @@ export default function DonasDosasFinance() {
 
   const lastTarget = useMemo(() => {
     if (!lastMonth) return null;
-    return runwayTargetStatus(lastMonth.cash_end, lastMonth.opex, lastMonth.loan_paid, reserveMonths);
+    return runwayTargetStatus(
+      lastMonth.cash_end,
+      lastMonth.opex,
+      lastMonth.loan_paid,
+      reserveMonths
+    );
   }, [lastMonth, reserveMonths]);
 
   // GAP CHECK
@@ -427,9 +434,7 @@ export default function DonasDosasFinance() {
   // Fill missing months
   const fillMissingMonths = () => {
     setMonths((prev) => {
-      const sorted = [...prev].sort((a, b) =>
-        String(a.month).localeCompare(String(b.month))
-      );
+      const sorted = [...prev].sort((a, b) => String(a.month).localeCompare(String(b.month)));
 
       const existing = new Set(sorted.map((x) => String(x.month)));
       const additions = [];
@@ -500,14 +505,11 @@ export default function DonasDosasFinance() {
         }
       }
 
-      return Array.from(byMonth.values()).sort((a, b) =>
-        String(a.month).localeCompare(String(b.month))
-      );
+      return Array.from(byMonth.values()).sort((a, b) => String(a.month).localeCompare(String(b.month)));
     });
   };
 
   const monthLeq = (a, b) => {
-    // both expected YYYY-MM-01
     const aa = String(a || "");
     const bb = String(b || "");
     if (!aa || !bb) return false;
@@ -516,10 +518,12 @@ export default function DonasDosasFinance() {
 
   const lockAllUpToSelected = () => {
     if (!lockUpToMonth) return;
+    const d = todayISO();
     setMonths((prev) =>
       prev.map((m) => {
         if (!monthLeq(m.month, lockUpToMonth)) return m;
-        const nextNotes = addLockedTag(m.notes);
+        let nextNotes = addLockedTag(m.notes);
+        nextNotes = addClosedAt(nextNotes, d);
         return { ...m, notes: nextNotes };
       })
     );
@@ -535,7 +539,7 @@ export default function DonasDosasFinance() {
       })
     );
   };
- 
+
   const getCurrentMonthISO = () => {
     const now = new Date();
     const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
@@ -544,13 +548,15 @@ export default function DonasDosasFinance() {
 
   const lockAllBeforeCurrentMonth = () => {
     const cur = getCurrentMonthISO();
+    const d = todayISO();
     setMonths((prev) =>
       prev.map((m) => {
         const mm = String(m.month || "");
         if (!mm) return m;
-        // lock only strictly before current month
         if (mm.localeCompare(cur) >= 0) return m;
-        return { ...m, notes: addLockedTag(m.notes) };
+        let nextNotes = addLockedTag(m.notes);
+        nextNotes = addClosedAt(nextNotes, d);
+        return { ...m, notes: nextNotes };
       })
     );
   };
@@ -568,44 +574,40 @@ export default function DonasDosasFinance() {
   };
 
   const autofillFromPlan = () => {
-  if (!settings) return;
+    if (!settings) return;
 
-  const avgCheck = toNum(settings.avg_check);
-  const cogsUnit = toNum(settings.cogs_per_unit);
-  const unitsDay = toNum(settings.units_per_day);
-  const days = toNum(settings.days_per_month) || 26;
+    const avgCheck = toNum(settings.avg_check);
+    const cogsUnit = toNum(settings.cogs_per_unit);
+    const unitsDay = toNum(settings.units_per_day);
+    const days = toNum(settings.days_per_month) || 26;
 
-  const fixedOpex = toNum(settings.fixed_opex_month);
-  const varOpex = toNum(settings.variable_opex_month);
-  const loan = toNum(settings.loan_payment_month);
+    const fixedOpex = toNum(settings.fixed_opex_month);
+    const varOpex = toNum(settings.variable_opex_month);
+    const loan = toNum(settings.loan_payment_month);
 
-  const revenuePlan = avgCheck * unitsDay * days;
-  const cogsPlan = cogsUnit * unitsDay * days;
-  const opexPlan = fixedOpex + varOpex;
+    const revenuePlan = avgCheck * unitsDay * days;
+    const cogsPlan = cogsUnit * unitsDay * days;
+    const opexPlan = fixedOpex + varOpex;
 
-  setMonths((prev) =>
-    prev.map((m) => {
-      if (isLockedNotes(m.notes)) return m; // ✅ skip locked months
-      return {
-        ...m,
-        revenue: revenuePlan,
-        cogs: cogsPlan,
-        opex: opexPlan,
-        loan_paid: loan,
-        // capex не трогаем
-        notes: m.notes ? `${m.notes} | auto: plan` : "auto: plan",
-      };
-    })
-  );
-};
+    setMonths((prev) =>
+      prev.map((m) => {
+        if (isLockedNotes(m.notes)) return m; // ✅ skip locked months
+        return {
+          ...m,
+          revenue: revenuePlan,
+          cogs: cogsPlan,
+          opex: opexPlan,
+          loan_paid: loan,
+          notes: m.notes ? `${m.notes} | auto: plan` : "auto: plan",
+        };
+      })
+    );
+  };
 
-
-  // Recalculate cash_end (preview) — does NOT save and does NOT mutate months (until Apply)
+  // Recalculate cash_end (preview)
   const recalcCashPreview = () => {
     const cashStart = toNum(settings?.cash_start);
-    const list = (monthsWithCash || []).slice().sort((a, b) =>
-      String(a.month).localeCompare(String(b.month))
-    );
+    const list = (monthsWithCash || []).slice().sort((a, b) => String(a.month).localeCompare(String(b.month)));
 
     const recalced = recalcCashChain(
       list.map((m) => ({ ...m, cash_end: 0 })),
@@ -622,14 +624,12 @@ export default function DonasDosasFinance() {
       if (Math.round(oldVal) !== Math.round(toNum(m.cash_end))) changedCount++;
     }
 
-    // count locked months in current table
     for (const x of list) {
       if (isLockedNotes(x.notes)) lockedCount++;
     }
+
     setCashPreview({ byMonth, changedCount, lockedCount, baseStart: cashStart });
   };
-
-  const discardCashPreview = () => setCashPreview(null);
 
   // Apply preview to months state (still not saving to DB)
   const applyCashPreviewToTable = () => {
@@ -643,14 +643,12 @@ export default function DonasDosasFinance() {
           map.set(String(month), { ...cur, cash_end: toNum(cashEnd) });
         }
       }
-      return Array.from(map.values()).sort((a, b) =>
-        String(a.month).localeCompare(String(b.month))
-      );
+      return Array.from(map.values()).sort((a, b) => String(a.month).localeCompare(String(b.month)));
     });
     setCashPreview(null);
   };
 
-  // Save all months sequentially (with computed cash_end from monthsWithCash)
+  // Save all months sequentially
   const saveAll = async () => {
     if (savingAll) return;
     setErr("");
@@ -658,12 +656,11 @@ export default function DonasDosasFinance() {
     setSaveAllProgress(null);
 
     try {
-      const list = (monthsWithCash || []).slice().sort((a, b) =>
-        String(a.month).localeCompare(String(b.month))
-      );
+      const list = (monthsWithCash || []).slice().sort((a, b) => String(a.month).localeCompare(String(b.month)));
 
       const total = list.length;
       let lastSavedMonth = null;
+
       for (let idx = 0; idx < total; idx++) {
         const m = list[idx];
         setSaveAllProgress({ i: idx + 1, total, month: m.month });
@@ -687,19 +684,21 @@ export default function DonasDosasFinance() {
         setMonths((prev) => {
           const map = new Map(prev.map((x) => [String(x.month), x]));
           map.set(String(saved.month), saved);
-          return Array.from(map.values()).sort((a, b) =>
-            String(a.month).localeCompare(String(b.month))
-          );
+          return Array.from(map.values()).sort((a, b) => String(a.month).localeCompare(String(b.month)));
         });
       }
+
       // ✅ Auto-lock after successful Save all (optional)
       if (autoLockAfterSaveAll && lastSavedMonth) {
+        const d = todayISO();
         setMonths((prev) =>
           prev.map((m) => {
             const mm = String(m.month || "");
             if (!mm) return m;
             if (mm.localeCompare(String(lastSavedMonth)) <= 0) {
-              return { ...m, notes: addLockedTag(m.notes) };
+              let nextNotes = addLockedTag(m.notes);
+              nextNotes = addClosedAt(nextNotes, d);
+              return { ...m, notes: nextNotes };
             }
             return m;
           })
@@ -865,93 +864,92 @@ export default function DonasDosasFinance() {
               + Add month
             </button>
 
-          <div className="flex items-center gap-2">
-            <select
-              value={lockUpToMonth || ""}
-              onChange={(e) => setLockUpToMonth(e.target.value)}
-              className="px-3 py-2 rounded-lg border bg-white text-sm"
-              disabled={savingAll || monthsWithCash.length === 0}
-              title="Выбери месяц, до которого закрываем (включительно)"
-            >
-              {monthsWithCash.map((m) => (
-                <option key={m.month} value={m.month}>
-                  Lock up to: {monthKey(m.month)}
-                </option>
-              ))}
-            </select>
+            <div className="flex items-center gap-2">
+              <select
+                value={lockUpToMonth || ""}
+                onChange={(e) => setLockUpToMonth(e.target.value)}
+                className="px-3 py-2 rounded-lg border bg-white text-sm"
+                disabled={savingAll || monthsWithCash.length === 0}
+                title="Выбери месяц, до которого закрываем (включительно)"
+              >
+                {monthsWithCash.map((m) => (
+                  <option key={m.month} value={m.month}>
+                    Lock up to: {monthKey(m.month)}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                onClick={lockAllUpToSelected}
+                disabled={savingAll || !lockUpToMonth || monthsWithCash.length === 0}
+                className={`px-3 py-2 rounded-lg border ${
+                  savingAll || !lockUpToMonth || monthsWithCash.length === 0
+                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                    : "bg-white"
+                }`}
+                title="Добавит #locked всем месяцам до выбранного (включительно) + closed_at. Не сохраняет — потом Save/Save all."
+              >
+                Lock up to
+              </button>
+
+              <button
+                onClick={unlockAllUpToSelected}
+                disabled={savingAll || !lockUpToMonth || monthsWithCash.length === 0}
+                className={`px-3 py-2 rounded-lg border ${
+                  savingAll || !lockUpToMonth || monthsWithCash.length === 0
+                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                    : "bg-white"
+                }`}
+                title="Уберёт #locked всем месяцам до выбранного (включительно). Не сохраняет — потом Save/Save all."
+              >
+                Unlock up to
+              </button>
+
+              <button
+                onClick={lockAllBeforeCurrentMonth}
+                disabled={savingAll || monthsWithCash.length === 0}
+                className={`px-3 py-2 rounded-lg border ${
+                  savingAll || monthsWithCash.length === 0
+                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                    : "bg-white"
+                }`}
+                title="Заморозит все месяцы ДО текущего месяца + closed_at. Не сохраняет — потом Save/Save all."
+              >
+                Lock past months
+              </button>
+
+              <button
+                onClick={unlockAllBeforeCurrentMonth}
+                disabled={savingAll || monthsWithCash.length === 0}
+                className={`px-3 py-2 rounded-lg border ${
+                  savingAll || monthsWithCash.length === 0
+                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                    : "bg-white"
+                }`}
+                title="Снимет #locked со всех месяцев ДО текущего месяца. Не сохраняет — потом Save/Save all."
+              >
+                Unlock past months
+              </button>
+            </div>
 
             <button
-              onClick={lockAllUpToSelected}
-              disabled={savingAll || !lockUpToMonth || monthsWithCash.length === 0}
+              onClick={autofillFromPlan}
+              disabled={savingAll || !settings || monthsWithCash.length === 0}
               className={`px-3 py-2 rounded-lg border ${
-                savingAll || !lockUpToMonth || monthsWithCash.length === 0
+                savingAll || !settings || monthsWithCash.length === 0
                   ? "bg-gray-100 text-gray-400 cursor-not-allowed"
                   : "bg-white"
               }`}
-              title="Добавит #locked всем месяцам до выбранного (включительно). Не сохраняет — потом Save/Save all."
+              title="Заполнить фактические месяцы по Assumptions (Plan). Locked месяцы пропускаются."
             >
-              Lock up to
+              Auto-fill from Plan
             </button>
-
-            <button
-              onClick={unlockAllUpToSelected}
-              disabled={savingAll || !lockUpToMonth || monthsWithCash.length === 0}
-              className={`px-3 py-2 rounded-lg border ${
-                savingAll || !lockUpToMonth || monthsWithCash.length === 0
-                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                  : "bg-white"
-              }`}
-              title="Уберёт #locked всем месяцам до выбранного (включительно). Не сохраняет — потом Save/Save all."
-            >
-              Unlock up to
-            </button>
-
-            <button
-              onClick={lockAllBeforeCurrentMonth}
-              disabled={savingAll || monthsWithCash.length === 0}
-              className={`px-3 py-2 rounded-lg border ${
-                savingAll || monthsWithCash.length === 0
-                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                  : "bg-white"
-              }`}
-              title="Заморозит все месяцы ДО текущего месяца (по времени браузера). Не сохраняет — потом Save/Save all."
-            >
-              Lock past months
-            </button>
-
-            <button
-              onClick={unlockAllBeforeCurrentMonth}
-              disabled={savingAll || monthsWithCash.length === 0}
-              className={`px-3 py-2 rounded-lg border ${
-                savingAll || monthsWithCash.length === 0
-                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                  : "bg-white"
-              }`}
-              title="Снимет #locked со всех месяцев ДО текущего месяца (по времени браузера). Не сохраняет — потом Save/Save all."
-            >
-              Unlock past months
-            </button>
-          </div>
-          <button
-            onClick={autofillFromPlan}
-            disabled={savingAll || !settings || monthsWithCash.length === 0}
-            className={`px-3 py-2 rounded-lg border ${
-              savingAll || !settings || monthsWithCash.length === 0
-                ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                : "bg-white"
-            }`}
-            title="Заполнить фактические месяцы по Assumptions (Plan)"
-          >
-            Auto-fill from Plan
-          </button>
 
             <button
               onClick={fillMissingMonths}
               disabled={gaps.length === 0 || savingAll}
               className={`px-3 py-2 rounded-lg border ${
-                gaps.length === 0 || savingAll
-                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                  : "bg-white"
+                gaps.length === 0 || savingAll ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-white"
               }`}
             >
               + Fill missing months
@@ -961,9 +959,7 @@ export default function DonasDosasFinance() {
               onClick={normalizeMonths}
               disabled={savingAll || monthsWithCash.length === 0}
               className={`px-3 py-2 rounded-lg border ${
-                savingAll || monthsWithCash.length === 0
-                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                  : "bg-white"
+                savingAll || monthsWithCash.length === 0 ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-white"
               }`}
             >
               Normalize months
@@ -973,9 +969,7 @@ export default function DonasDosasFinance() {
               onClick={recalcCashPreview}
               disabled={savingAll || monthsWithCash.length === 0}
               className={`px-3 py-2 rounded-lg border ${
-                savingAll || monthsWithCash.length === 0
-                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                  : "bg-white"
+                savingAll || monthsWithCash.length === 0 ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-white"
               }`}
               title="Recalculate cash_end for all months (preview only)"
             >
@@ -991,7 +985,7 @@ export default function DonasDosasFinance() {
               />
               Auto-lock after Save all
             </label>
-            
+
             <button
               onClick={saveAll}
               disabled={savingAll || monthsWithCash.length === 0}
@@ -1186,6 +1180,10 @@ function MonthRow({
   }, [row]);
 
   const locked = isLockedNotes(r.notes);
+
+  const inputCls = (extra = "") =>
+    `w-full px-2 py-1 rounded border ${locked || savingAll ? "bg-gray-100 text-gray-400 cursor-not-allowed" : ""} ${extra}`;
+
   // baseline row calc
   const gross = toNum(r.revenue) - toNum(r.cogs);
   const netOp = gross - toNum(r.opex);
@@ -1210,12 +1208,11 @@ function MonthRow({
   const revDelta = pct(r.revenue, planRevenue);
   const netDelta = pct(netOp, planNetOp);
   const cfDelta = pct(cashFlow, planCF);
-  const isEmpty = (v) => {
-    const n = toNum(v);
-    return !n; // 0, NaN, empty => считаем пустым
-  };
+
+  const isEmpty = (v) => !toNum(v);
 
   const applyPlanToThis = () => {
+    if (savingAll || locked) return;
     const next = { ...r };
 
     const shouldSet = (key) => {
@@ -1227,13 +1224,9 @@ function MonthRow({
     if (shouldSet("cogs")) next.cogs = planCogs;
     if (shouldSet("opex")) next.opex = planOpex;
     if (shouldSet("loan_paid")) next.loan_paid = planLoan;
-    // capex не трогаем
 
-    next.notes = next.notes
-      ? `${next.notes} | plan→month`
-      : "plan→month";
+    next.notes = next.notes ? `${next.notes} | plan→month` : "plan→month";
 
-    // обновляем локально + пробрасываем наверх (live cash chain пересчитается)
     setR(next);
     onChangeRow?.({
       month: next.month,
@@ -1249,11 +1242,8 @@ function MonthRow({
   };
 
   const status =
-    target.rm > 0 && !target.ok
-      ? "red"
-      : netOp >= 0
-      ? "green"
-      : "yellow";
+    target.rm > 0 && !target.ok ? "red" : netOp >= 0 ? "green" : "yellow";
+
   // scenario preview
   const sc = getScenarioById(scenarioId);
   const scCalc = sc ? applyMonthScenario(r, sc) : null;
@@ -1289,7 +1279,7 @@ function MonthRow({
         <input
           value={r.month}
           onChange={(e) => patch("month", e.target.value)}
-          className="w-full px-2 py-1 rounded border"
+          className={inputCls()}
           disabled={savingAll || locked}
         />
 
@@ -1298,7 +1288,7 @@ function MonthRow({
           <select
             value={scenarioId || "base"}
             onChange={(e) => onScenarioChange?.(e.target.value)}
-            className="w-full px-2 py-1 rounded border text-xs bg-white"
+            className={`w-full px-2 py-1 rounded border text-xs ${locked || savingAll ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-white"}`}
             disabled={savingAll || locked}
             title="Scenario preview for this month (no save)"
           >
@@ -1317,7 +1307,7 @@ function MonthRow({
           <input
             value={r[k] ?? 0}
             onChange={(e) => patch(k, e.target.value)}
-            className="w-full px-2 py-1 rounded border"
+            className={inputCls()}
             disabled={savingAll || locked}
           />
         </td>
@@ -1339,7 +1329,7 @@ function MonthRow({
         <input
           value={r.notes ?? ""}
           onChange={(e) => patch("notes", e.target.value)}
-          className="w-full px-2 py-1 rounded border"
+          className={inputCls()}
           placeholder="notes…"
           disabled={savingAll || locked}
         />
@@ -1395,6 +1385,7 @@ function MonthRow({
               CF {cfDelta == null ? "—" : `${cfDelta.toFixed(1)}%`}
             </span>
           </div>
+
           {scCalc && (
             <div className="mt-2 rounded-lg border bg-white/70 p-2">
               <div className="font-semibold text-gray-800">
@@ -1438,6 +1429,7 @@ function MonthRow({
           <button
             onClick={() => {
               // Close month: add #locked + closed_at: YYYY-MM-DD (once)
+              if (savingAll || locked) return;
               const dateISO = todayISO();
               let nextNotes = addLockedTag(r.notes);
               nextNotes = addClosedAt(nextNotes, dateISO);
@@ -1467,6 +1459,7 @@ function MonthRow({
           <button
             onClick={() => {
               // Reopen: remove only #locked (keep closed_at history)
+              if (savingAll || !locked) return;
               const nextNotes = removeLockedTag(r.notes);
               const next = { ...r, notes: nextNotes };
               setR(next);
@@ -1490,6 +1483,7 @@ function MonthRow({
           >
             Reopen
           </button>
+
           <button
             onClick={() =>
               onSave({
