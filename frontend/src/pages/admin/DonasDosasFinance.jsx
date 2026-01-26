@@ -213,6 +213,9 @@ export default function DonasDosasFinance() {
   // Per-month scenario preview map: { [month]: scenarioId }
   const [monthScenario, setMonthScenario] = useState({});
 
+  // Plan → Month behavior
+  const [planFillOnlyEmpty, setPlanFillOnlyEmpty] = useState(true);
+
   // cash_end preview
   const [cashPreview, setCashPreview] = useState(null);
 
@@ -897,6 +900,8 @@ export default function DonasDosasFinance() {
                   onSave={upsertMonth}
                   highlight={highlightMonths.has(String(m.month))}
                   savingAll={savingAll}
+                  planFillOnlyEmpty={planFillOnlyEmpty}
+                  setPlanFillOnlyEmpty={setPlanFillOnlyEmpty}
                   scenarioId={monthScenario[String(m.month)] || "base"}
                   onScenarioChange={(sid) =>
                     setMonthScenario((prev) => ({ ...prev, [String(m.month)]: sid }))
@@ -950,6 +955,8 @@ function MonthRow({
   onSave,
   highlight,
   savingAll,
+  planFillOnlyEmpty,
+  setPlanFillOnlyEmpty,
   scenarioId,
   onScenarioChange,
 }) {
@@ -983,6 +990,43 @@ function MonthRow({
   const revDelta = pct(r.revenue, planRevenue);
   const netDelta = pct(netOp, planNetOp);
   const cfDelta = pct(cashFlow, planCF);
+  const isEmpty = (v) => {
+    const n = toNum(v);
+    return !n; // 0, NaN, empty => считаем пустым
+  };
+
+  const applyPlanToThis = () => {
+    const next = { ...r };
+
+    const shouldSet = (key) => {
+      if (!planFillOnlyEmpty) return true;
+      return isEmpty(next[key]);
+    };
+
+    if (shouldSet("revenue")) next.revenue = planRevenue;
+    if (shouldSet("cogs")) next.cogs = planCogs;
+    if (shouldSet("opex")) next.opex = planOpex;
+    if (shouldSet("loan_paid")) next.loan_paid = planLoan;
+    // capex не трогаем
+
+    next.notes = next.notes
+      ? `${next.notes} | plan→month`
+      : "plan→month";
+
+    // обновляем локально + пробрасываем наверх (live cash chain пересчитается)
+    setR(next);
+    onChangeRow?.({
+      month: next.month,
+      slug: next.slug ?? "donas-dosas",
+      revenue: next.revenue,
+      cogs: next.cogs,
+      opex: next.opex,
+      capex: next.capex,
+      loan_paid: next.loan_paid,
+      cash_end: next.cash_end,
+      notes: next.notes ?? "",
+    });
+  };
 
   const status =
     target.rm > 0 && !target.ok
@@ -1149,28 +1193,51 @@ function MonthRow({
       </td>
 
       <td className="py-2 pr-2">
-        <button
-          onClick={() =>
-            onSave({
-              ...row,
-              month: r.month,
-              slug: r.slug ?? "donas-dosas",
-              revenue: toNum(r.revenue),
-              cogs: toNum(r.cogs),
-              opex: toNum(r.opex),
-              capex: toNum(r.capex),
-              loan_paid: toNum(r.loan_paid),
-              cash_end: cashEnd,
-              notes: r.notes ?? "",
-            })
-          }
-          className={`px-3 py-1.5 rounded-lg ${
-            savingAll ? "bg-gray-200 text-gray-500 cursor-not-allowed" : "bg-gray-900 text-white"
-          }`}
-          disabled={savingAll}
-        >
-          Save
-        </button>
+        <div className="flex flex-col gap-2">
+          <label className="flex items-center gap-2 text-xs text-gray-700 select-none">
+            <input
+              type="checkbox"
+              checked={!!planFillOnlyEmpty}
+              onChange={(e) => setPlanFillOnlyEmpty?.(e.target.checked)}
+              disabled={savingAll}
+            />
+            only empty
+          </label>
+
+          <button
+            onClick={applyPlanToThis}
+            className={`px-3 py-1.5 rounded-lg border ${
+              savingAll ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-white"
+            }`}
+            disabled={savingAll}
+            title="Скопировать Plan (Assumptions) в этот месяц"
+          >
+            Plan → This
+          </button>
+
+          <button
+            onClick={() =>
+              onSave({
+                ...row,
+                month: r.month,
+                slug: r.slug ?? "donas-dosas",
+                revenue: toNum(r.revenue),
+                cogs: toNum(r.cogs),
+                opex: toNum(r.opex),
+                capex: toNum(r.capex),
+                loan_paid: toNum(r.loan_paid),
+                cash_end: cashEnd,
+                notes: r.notes ?? "",
+              })
+            }
+            className={`px-3 py-1.5 rounded-lg ${
+              savingAll ? "bg-gray-200 text-gray-500 cursor-not-allowed" : "bg-gray-900 text-white"
+            }`}
+            disabled={savingAll}
+          >
+            Save
+          </button>
+        </div>
       </td>
     </tr>
   );
