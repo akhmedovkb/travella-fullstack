@@ -32,7 +32,7 @@ function downloadCSV(filename, rows) {
   URL.revokeObjectURL(a.href);
 }
 
-// ✅ cash_end chain: cash_end = prev_cash + (NetOp - loan_paid - capex)
+// cash_end chain: cash_end = prev_cash + (NetOp - loan_paid - capex)
 function recalcCashChain(months, cashStart) {
   let cash = Number(cashStart || 0);
 
@@ -77,6 +77,14 @@ function isSameMonthUTC(a, b) {
   );
 }
 
+function normalizeToISOMonthStart(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  const monthStart = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
+  return monthStart.toISOString().slice(0, 10);
+}
+
 function makeEmptyMonthRow(iso) {
   return {
     slug: "donas-dosas",
@@ -86,16 +94,87 @@ function makeEmptyMonthRow(iso) {
     opex: 0,
     capex: 0,
     loan_paid: 0,
-    cash_end: 0, // пересчитается
+    cash_end: 0,
     notes: "",
   };
 }
+
+function computePlan(settings, scenario) {
+  if (!settings) return null;
+
+  const avgCheckBase = toNum(settings.avg_check);
+  const cogsUnitBase = toNum(settings.cogs_per_unit);
+  const unitsDay = toNum(settings.units_per_day);
+  const days = toNum(settings.days_per_month) || 26;
+
+  const fixedOpexBase = toNum(settings.fixed_opex_month);
+  const varOpexBase = toNum(settings.variable_opex_month);
+
+  const loan = toNum(settings.loan_payment_month);
+
+  // scenario modifiers (no saving)
+  const avgCheck = avgCheckBase * (scenario?.avgCheckMul ?? 1);
+  const cogsUnit = cogsUnitBase * (scenario?.cogsUnitMul ?? 1);
+  const fixedOpex = fixedOpexBase + (scenario?.fixedOpexAdd ?? 0);
+  const varOpex = varOpexBase; // оставляем как есть
+
+  const unitMargin = Math.max(0, avgCheck - cogsUnit);
+  const revenuePlan = avgCheck * unitsDay * days;
+  const cogsPlan = cogsUnit * unitsDay * days;
+
+  const grossMonthPlan = revenuePlan - cogsPlan;
+  const opexPlan = fixedOpex + varOpex;
+  const netOpPlan = grossMonthPlan - opexPlan;
+
+  const dscrPlan = loan > 0 ? netOpPlan / loan : null;
+  const breakevenPerDay =
+    unitMargin > 0 ? (opexPlan + loan) / unitMargin / days : null;
+
+  // runway plan — по cash_start (сколько месяцев проживём, если netOp отрицательный)
+  const cashStart = toNum(settings.cash_start);
+  const burn = Math.max(0, -netOpPlan); // если прибыль, burn=0
+  const runwayPlan = burn > 0 ? cashStart / burn : null;
+
+  return {
+    avgCheck,
+    cogsUnit,
+    unitsDay,
+    days,
+    fixedOpex,
+    varOpex,
+    opexPlan,
+    loan,
+    unitMargin,
+    revenuePlan,
+    cogsPlan,
+    grossMonthPlan,
+    netOpPlan,
+    dscrPlan,
+    breakevenPerDay,
+    cashStart,
+    runwayPlan,
+  };
+}
+
+const SCENARIOS = [
+  { id: "bad20", label: "Bad month −20% revenue", avgCheckMul: 0.8 },
+  { id: "price10", label: "Price +10%", avgCheckMul: 1.1 },
+  { id: "cogs10", label: "COGS +10%", cogsUnitMul: 1.1 },
+  { id: "opex2m", label: "OPEX +2 000 000", fixedOpexAdd: 2_000_000 },
+];
 
 export default function DonasDosasFinance() {
   const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState(null);
   const [months, setMonths] = useState([]);
   const [err, setErr] = useState("");
+
+  // Save all state
+  const [savingAll, setSavingAll] = useState(false);
+  const [saveAllProgress, setSaveAllProgress] = useState(null); // { i, total, month }
+
+  // Scenario state (UI-only)
+  const [scenarioId, setScenarioId] = useState("base");
 
   const currency = settings?.currency || "UZS";
 
@@ -118,51 +197,19 @@ export default function DonasDosasFinance() {
     load();
   }, []);
 
-  const derivedPlan = useMemo(() => {
-    if (!settings) return null;
+  const scenario = useMemo(() => {
+    if (scenarioId === "base") return null;
+    const s = SCENARIOS.find((x) => x.id === scenarioId);
+    return s || null;
+  }, [scenarioId]);
 
-    const avgCheck = toNum(settings.avg_check);
-    const cogsUnit = toNum(settings.cogs_per_unit);
-    const unitsDay = toNum(settings.units_per_day);
-    const days = toNum(settings.days_per_month) || 26;
+  const planBase = useMemo(() => computePlan(settings, null), [settings]);
+  const planScenario = useMemo(
+    () => computePlan(settings, scenario),
+    [settings, scenario]
+  );
 
-    const fixedOpex = toNum(settings.fixed_opex_month);
-    const varOpex = toNum(settings.variable_opex_month);
-
-    const loan = toNum(settings.loan_payment_month);
-
-    const unitMargin = Math.max(0, avgCheck - cogsUnit);
-    const revenuePlan = avgCheck * unitsDay * days;
-    const cogsPlan = cogsUnit * unitsDay * days;
-
-    const grossMonthPlan = revenuePlan - cogsPlan;
-    const opexPlan = fixedOpex + varOpex;
-    const netOpPlan = grossMonthPlan - opexPlan;
-
-    const dscrPlan = loan > 0 ? netOpPlan / loan : null;
-    const breakevenPerDay =
-      unitMargin > 0 ? (opexPlan + loan) / unitMargin / days : null;
-
-    return {
-      avgCheck,
-      cogsUnit,
-      unitsDay,
-      days,
-      fixedOpex,
-      varOpex,
-      opexPlan,
-      loan,
-      unitMargin,
-      revenuePlan,
-      cogsPlan,
-      grossMonthPlan,
-      netOpPlan,
-      dscrPlan,
-      breakevenPerDay,
-    };
-  }, [settings]);
-
-  // ✅ LIVE: monthsWithCash always derived from months + cash_start
+  // LIVE monthsWithCash derived from months + cash_start
   const monthsWithCash = useMemo(() => {
     if (!settings) return months;
     const sorted = [...months].sort((a, b) =>
@@ -171,7 +218,7 @@ export default function DonasDosasFinance() {
     return recalcCashChain(sorted, settings.cash_start);
   }, [months, settings]);
 
-  // ✅ GAP CHECK: find missing months & mark rows that start after a gap
+  // GAP CHECK
   const gaps = useMemo(() => {
     const rows = monthsWithCash || [];
     const result = [];
@@ -212,18 +259,14 @@ export default function DonasDosasFinance() {
   const onSaveSettings = async () => {
     setErr("");
     try {
-      const s = await apiPut(
-        "/api/admin/donas/finance/settings",
-        settings,
-        "provider"
-      );
+      const s = await apiPut("/api/admin/donas/finance/settings", settings, "provider");
       setSettings(s);
     } catch (e) {
       setErr(e?.message || "Failed to save settings");
     }
   };
 
-  // ✅ LIVE update row in months state (no API)
+  // LIVE update row in months state (no API)
   const onChangeRow = (patch) => {
     const key = String(patch?.month || "");
     if (!key) return;
@@ -244,11 +287,7 @@ export default function DonasDosasFinance() {
     setErr("");
     try {
       const month = row.month; // YYYY-MM-01
-      const saved = await apiPut(
-        `/api/admin/donas/finance/months/${month}`,
-        row,
-        "provider"
-      );
+      const saved = await apiPut(`/api/admin/donas/finance/months/${month}`, row, "provider");
 
       setMonths((prev) => {
         const map = new Map(prev.map((x) => [String(x.month), x]));
@@ -267,18 +306,16 @@ export default function DonasDosasFinance() {
     const base = last ? new Date(last) : new Date();
     const d = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() + 1, 1));
     const iso = d.toISOString().slice(0, 10);
-
     setMonths((prev) => [...prev, makeEmptyMonthRow(iso)]);
   };
 
-  // ✅ NEW: Fill missing months (insert rows with 0s)
+  // Fill missing months
   const fillMissingMonths = () => {
     setMonths((prev) => {
       const sorted = [...prev].sort((a, b) =>
         String(a.month).localeCompare(String(b.month))
       );
 
-      // Map existing months for fast check
       const existing = new Set(sorted.map((x) => String(x.month)));
       const additions = [];
 
@@ -302,11 +339,107 @@ export default function DonasDosasFinance() {
 
       if (!additions.length) return sorted;
 
-      const merged = [...sorted, ...additions].sort((a, b) =>
+      return [...sorted, ...additions].sort((a, b) =>
         String(a.month).localeCompare(String(b.month))
       );
-      return merged;
     });
+  };
+
+  // Normalize months to YYYY-MM-01 + merge duplicates
+  const normalizeMonths = () => {
+    setErr("");
+    setMonths((prev) => {
+      const byMonth = new Map();
+
+      for (const row of prev) {
+        const norm = normalizeToISOMonthStart(row.month);
+        if (!norm) {
+          const key = String(row.month);
+          byMonth.set(key, { ...row });
+          continue;
+        }
+
+        const existing = byMonth.get(norm);
+        if (!existing) {
+          byMonth.set(norm, {
+            ...row,
+            month: norm,
+            slug: row.slug ?? "donas-dosas",
+            revenue: toNum(row.revenue),
+            cogs: toNum(row.cogs),
+            opex: toNum(row.opex),
+            capex: toNum(row.capex),
+            loan_paid: toNum(row.loan_paid),
+            notes: row.notes ?? "",
+          });
+        } else {
+          byMonth.set(norm, {
+            ...existing,
+            revenue: toNum(existing.revenue) + toNum(row.revenue),
+            cogs: toNum(existing.cogs) + toNum(row.cogs),
+            opex: toNum(existing.opex) + toNum(row.opex),
+            capex: toNum(existing.capex) + toNum(row.capex),
+            loan_paid: toNum(existing.loan_paid) + toNum(row.loan_paid),
+            notes: [existing.notes, row.notes].filter(Boolean).join(" | "),
+          });
+        }
+      }
+
+      return Array.from(byMonth.values()).sort((a, b) =>
+        String(a.month).localeCompare(String(b.month))
+      );
+    });
+  };
+
+  // Save all months sequentially (with computed cash_end)
+  const saveAll = async () => {
+    if (savingAll) return;
+    setErr("");
+    setSavingAll(true);
+    setSaveAllProgress(null);
+
+    try {
+      const list = (monthsWithCash || []).slice().sort((a, b) =>
+        String(a.month).localeCompare(String(b.month))
+      );
+
+      const total = list.length;
+      for (let idx = 0; idx < total; idx++) {
+        const m = list[idx];
+        setSaveAllProgress({ i: idx + 1, total, month: m.month });
+
+        const payload = {
+          month: m.month,
+          slug: m.slug ?? "donas-dosas",
+          revenue: toNum(m.revenue),
+          cogs: toNum(m.cogs),
+          opex: toNum(m.opex),
+          capex: toNum(m.capex),
+          loan_paid: toNum(m.loan_paid),
+          cash_end: toNum(m.cash_end),
+          notes: m.notes ?? "",
+        };
+
+        // eslint-disable-next-line no-await-in-loop
+        const saved = await apiPut(`/api/admin/donas/finance/months/${m.month}`, payload, "provider");
+
+        setMonths((prev) => {
+          const map = new Map(prev.map((x) => [String(x.month), x]));
+          map.set(String(saved.month), saved);
+          return Array.from(map.values()).sort((a, b) =>
+            String(a.month).localeCompare(String(b.month))
+          );
+        });
+      }
+
+      setSaveAllProgress(null);
+    } catch (e) {
+      const p = saveAllProgress;
+      const where = p?.month ? ` (month ${p.month})` : "";
+      setErr((e?.message || "Failed to save all") + where);
+    } finally {
+      setSavingAll(false);
+    }
   };
 
   const exportCSV = () => {
@@ -327,6 +460,12 @@ export default function DonasDosasFinance() {
   };
 
   if (loading) return <div className="p-4">Loading…</div>;
+
+  const activePlan = planScenario || planBase;
+  const base = planBase;
+
+  const deltaNet =
+    base && activePlan ? toNum(activePlan.netOpPlan) - toNum(base.netOpPlan) : 0;
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -358,91 +497,86 @@ export default function DonasDosasFinance() {
           <h2 className="font-semibold mb-3">Assumptions</h2>
 
           <div className="grid grid-cols-2 gap-3">
-            <Field
-              label="Avg check"
-              value={settings?.avg_check}
-              onChange={(v) => setSettings((s) => ({ ...s, avg_check: v }))}
-              suffix={currency}
-            />
-            <Field
-              label="COGS / unit"
-              value={settings?.cogs_per_unit}
-              onChange={(v) => setSettings((s) => ({ ...s, cogs_per_unit: v }))}
-              suffix={currency}
-            />
-            <Field
-              label="Units / day"
-              value={settings?.units_per_day}
-              onChange={(v) => setSettings((s) => ({ ...s, units_per_day: v }))}
-            />
-            <Field
-              label="Days / month"
-              value={settings?.days_per_month}
-              onChange={(v) => setSettings((s) => ({ ...s, days_per_month: v }))}
-            />
-            <Field
-              label="Fixed OPEX / month"
-              value={settings?.fixed_opex_month}
-              onChange={(v) => setSettings((s) => ({ ...s, fixed_opex_month: v }))}
-              suffix={currency}
-            />
-            <Field
-              label="Variable OPEX / month"
-              value={settings?.variable_opex_month}
-              onChange={(v) => setSettings((s) => ({ ...s, variable_opex_month: v }))}
-              suffix={currency}
-            />
-            <Field
-              label="Loan payment / month"
-              value={settings?.loan_payment_month}
-              onChange={(v) => setSettings((s) => ({ ...s, loan_payment_month: v }))}
-              suffix={currency}
-            />
-            <Field
-              label="Cash start"
-              value={settings?.cash_start}
-              onChange={(v) => setSettings((s) => ({ ...s, cash_start: v }))}
-              suffix={currency}
-            />
-            <Field
-              label="Reserve target (months)"
-              value={settings?.reserve_target_months}
-              onChange={(v) => setSettings((s) => ({ ...s, reserve_target_months: v }))}
-            />
+            <Field label="Avg check" value={settings?.avg_check} onChange={(v) => setSettings((s) => ({ ...s, avg_check: v }))} suffix={currency} />
+            <Field label="COGS / unit" value={settings?.cogs_per_unit} onChange={(v) => setSettings((s) => ({ ...s, cogs_per_unit: v }))} suffix={currency} />
+            <Field label="Units / day" value={settings?.units_per_day} onChange={(v) => setSettings((s) => ({ ...s, units_per_day: v }))} />
+            <Field label="Days / month" value={settings?.days_per_month} onChange={(v) => setSettings((s) => ({ ...s, days_per_month: v }))} />
+            <Field label="Fixed OPEX / month" value={settings?.fixed_opex_month} onChange={(v) => setSettings((s) => ({ ...s, fixed_opex_month: v }))} suffix={currency} />
+            <Field label="Variable OPEX / month" value={settings?.variable_opex_month} onChange={(v) => setSettings((s) => ({ ...s, variable_opex_month: v }))} suffix={currency} />
+            <Field label="Loan payment / month" value={settings?.loan_payment_month} onChange={(v) => setSettings((s) => ({ ...s, loan_payment_month: v }))} suffix={currency} />
+            <Field label="Cash start" value={settings?.cash_start} onChange={(v) => setSettings((s) => ({ ...s, cash_start: v }))} suffix={currency} />
+            <Field label="Reserve target (months)" value={settings?.reserve_target_months} onChange={(v) => setSettings((s) => ({ ...s, reserve_target_months: v }))} />
           </div>
 
           <div className="mt-3 flex gap-2">
-            <button
-              onClick={onSaveSettings}
-              className="px-3 py-2 rounded-lg bg-orange-500 text-white"
-            >
+            <button onClick={onSaveSettings} className="px-3 py-2 rounded-lg bg-orange-500 text-white">
               Save assumptions
             </button>
           </div>
         </div>
 
         <div className="rounded-2xl bg-white border p-4">
-          <h2 className="font-semibold mb-3">KPI (Plan)</h2>
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <h2 className="font-semibold">KPI (Plan)</h2>
+              <div className="text-xs text-gray-500 mt-0.5">
+                Сценарии — только preview (не сохраняют settings)
+              </div>
+            </div>
 
-          {derivedPlan ? (
-            <div className="grid grid-cols-2 gap-3">
-              <Kpi title="Revenue / month" value={`${fmt(derivedPlan.revenuePlan)} ${currency}`} />
-              <Kpi title="COGS / month" value={`${fmt(derivedPlan.cogsPlan)} ${currency}`} />
-              <Kpi title="Gross Profit" value={`${fmt(derivedPlan.grossMonthPlan)} ${currency}`} />
-              <Kpi title="Net Operating" value={`${fmt(derivedPlan.netOpPlan)} ${currency}`} />
-              <Kpi title="OPEX / month" value={`${fmt(derivedPlan.opexPlan)} ${currency}`} />
-              <Kpi title="Loan / month" value={`${fmt(derivedPlan.loan)} ${currency}`} />
-              <Kpi
-                title="DSCR"
-                value={derivedPlan.loan > 0 ? derivedPlan.dscrPlan?.toFixed(2) ?? "0.00" : "—"}
-              />
-              <Kpi
-                title="Breakeven units/day"
-                value={derivedPlan.breakevenPerDay ? derivedPlan.breakevenPerDay.toFixed(1) : "—"}
-              />
+            <div className="flex flex-wrap gap-2 justify-end">
+              <button
+                onClick={() => setScenarioId("base")}
+                className={`px-3 py-1.5 rounded-lg border text-sm ${
+                  scenarioId === "base" ? "bg-gray-900 text-white border-gray-900" : "bg-white"
+                }`}
+              >
+                Reset
+              </button>
+
+              {SCENARIOS.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => setScenarioId(s.id)}
+                  className={`px-3 py-1.5 rounded-lg border text-sm ${
+                    scenarioId === s.id ? "bg-gray-900 text-white border-gray-900" : "bg-white"
+                  }`}
+                  title={s.label}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {scenarioId !== "base" && base && activePlan && (
+            <div className="mt-3 rounded-xl border bg-gray-50 p-3 text-sm text-gray-700">
+              Active scenario: <b>{SCENARIOS.find((x) => x.id === scenarioId)?.label}</b>
+              <span className="ml-2">
+                · Net Operating Δ:{" "}
+                <b className={deltaNet >= 0 ? "text-green-700" : "text-red-700"}>
+                  {deltaNet >= 0 ? "+" : ""}
+                  {fmt(deltaNet)} {currency}
+                </b>
+              </span>
+            </div>
+          )}
+
+          {activePlan ? (
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <Kpi title="Revenue / month" value={`${fmt(activePlan.revenuePlan)} ${currency}`} />
+              <Kpi title="COGS / month" value={`${fmt(activePlan.cogsPlan)} ${currency}`} />
+              <Kpi title="Gross Profit" value={`${fmt(activePlan.grossMonthPlan)} ${currency}`} />
+              <Kpi title="Net Operating" value={`${fmt(activePlan.netOpPlan)} ${currency}`} />
+              <Kpi title="OPEX / month" value={`${fmt(activePlan.opexPlan)} ${currency}`} />
+              <Kpi title="Loan / month" value={`${fmt(activePlan.loan)} ${currency}`} />
+              <Kpi title="DSCR" value={activePlan.loan > 0 ? (activePlan.dscrPlan?.toFixed(2) ?? "0.00") : "—"} />
+              <Kpi title="Breakeven units/day" value={activePlan.breakevenPerDay ? activePlan.breakevenPerDay.toFixed(1) : "—"} />
+              <Kpi title="Cash start" value={`${fmt(activePlan.cashStart)} ${currency}`} />
+              <Kpi title="Runway (plan, if loss)" value={activePlan.runwayPlan == null ? "—" : `${activePlan.runwayPlan.toFixed(1)} mo`} />
             </div>
           ) : (
-            <div className="text-gray-500 text-sm">No data</div>
+            <div className="text-gray-500 text-sm mt-2">No data</div>
           )}
         </div>
       </div>
@@ -451,29 +585,60 @@ export default function DonasDosasFinance() {
       <div className="mt-4 rounded-2xl bg-white border p-4">
         <div className="flex items-center justify-between gap-2">
           <h2 className="font-semibold">Months (Actuals)</h2>
-          <div className="flex gap-2">
-            <button onClick={addNextMonth} className="px-3 py-2 rounded-lg bg-white border">
+
+          <div className="flex gap-2 flex-wrap justify-end">
+            <button onClick={addNextMonth} className="px-3 py-2 rounded-lg bg-white border" disabled={savingAll}>
               + Add month
             </button>
 
             <button
               onClick={fillMissingMonths}
-              disabled={gaps.length === 0}
+              disabled={gaps.length === 0 || savingAll}
               className={`px-3 py-2 rounded-lg border ${
-                gaps.length === 0
+                gaps.length === 0 || savingAll
                   ? "bg-gray-100 text-gray-400 cursor-not-allowed"
                   : "bg-white"
               }`}
-              title={gaps.length === 0 ? "Нет пропусков" : "Вставить пропущенные месяцы с нулями"}
             >
               + Fill missing months
+            </button>
+
+            <button
+              onClick={normalizeMonths}
+              disabled={savingAll || monthsWithCash.length === 0}
+              className={`px-3 py-2 rounded-lg border ${
+                savingAll || monthsWithCash.length === 0
+                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                  : "bg-white"
+              }`}
+            >
+              Normalize months
+            </button>
+
+            <button
+              onClick={saveAll}
+              disabled={savingAll || monthsWithCash.length === 0}
+              className={`px-3 py-2 rounded-lg ${
+                savingAll || monthsWithCash.length === 0
+                  ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+                  : "bg-gray-900 text-white"
+              }`}
+            >
+              {savingAll ? "Saving all…" : "Save all"}
             </button>
           </div>
         </div>
 
+        {saveAllProgress && (
+          <div className="mt-3 rounded-xl border bg-gray-50 p-3 text-sm text-gray-700">
+            Saving {saveAllProgress.i}/{saveAllProgress.total}…{" "}
+            <span className="font-mono">{saveAllProgress.month}</span>
+          </div>
+        )}
+
         {gaps.length > 0 && (
           <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-900 text-sm">
-            <div className="font-semibold">⚠️ Пропуски месяцев (можно заполнить кнопкой)</div>
+            <div className="font-semibold">⚠️ Пропуски месяцев</div>
             <div className="mt-1 space-y-1">
               {gaps.map((g, idx) => (
                 <div key={idx}>
@@ -511,6 +676,7 @@ export default function DonasDosasFinance() {
                   onChangeRow={onChangeRow}
                   onSave={upsertMonth}
                   highlight={highlightMonths.has(String(m.month))}
+                  savingAll={savingAll}
                 />
               ))}
             </tbody>
@@ -551,7 +717,7 @@ function Kpi({ title, value }) {
   );
 }
 
-function MonthRow({ row, currency, onChangeRow, onSave, highlight }) {
+function MonthRow({ row, currency, onChangeRow, onSave, highlight, savingAll }) {
   const [r, setR] = useState(row);
 
   useEffect(() => {
@@ -593,6 +759,7 @@ function MonthRow({ row, currency, onChangeRow, onSave, highlight }) {
           value={r.month}
           onChange={(e) => patch("month", e.target.value)}
           className="w-full px-2 py-1 rounded border"
+          disabled={savingAll}
         />
       </td>
 
@@ -602,6 +769,7 @@ function MonthRow({ row, currency, onChangeRow, onSave, highlight }) {
             value={r[k] ?? 0}
             onChange={(e) => patch(k, e.target.value)}
             className="w-full px-2 py-1 rounded border"
+            disabled={savingAll}
           />
         </td>
       ))}
@@ -616,6 +784,7 @@ function MonthRow({ row, currency, onChangeRow, onSave, highlight }) {
           onChange={(e) => patch("notes", e.target.value)}
           className="w-full px-2 py-1 rounded border"
           placeholder="notes…"
+          disabled={savingAll}
         />
         <div className="mt-1 text-xs text-gray-600">
           GP: {fmt(gross)} {currency} · Net: {fmt(netOp)} {currency}
@@ -643,7 +812,10 @@ function MonthRow({ row, currency, onChangeRow, onSave, highlight }) {
               notes: r.notes ?? "",
             })
           }
-          className="px-3 py-1.5 rounded-lg bg-gray-900 text-white"
+          className={`px-3 py-1.5 rounded-lg ${
+            savingAll ? "bg-gray-200 text-gray-500 cursor-not-allowed" : "bg-gray-900 text-white"
+          }`}
+          disabled={savingAll}
         >
           Save
         </button>
