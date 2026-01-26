@@ -347,6 +347,187 @@ app.get("/api/public/donas/summary", async (req, res) => {
     return res.status(500).json({ error: "Failed" });
   }
 });
+/** ===================== Donas Dosas: Public Investor/Bank Summary RANGE ===================== */
+/**
+ * GET /api/public/donas/summary-range?key=...&months=12&end=YYYY-MM
+ * - months: default 12
+ * - end: YYYY-MM (default текущий месяц Asia/Tashkent)
+ * Возвращает 12 месяцев (включая пустые) + totals
+ */
+function getTzYearMonth(timeZone = "Asia/Tashkent", d = new Date()) {
+  const dtf = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+  });
+  const parts = dtf.formatToParts(d);
+  const map = {};
+  for (const p of parts) if (p.type !== "literal") map[p.type] = p.value;
+  return `${map.year}-${map.month}`;
+}
+
+function clampInt(n, def, min, max) {
+  const x = Number.parseInt(String(n || ""), 10);
+  if (!Number.isFinite(x)) return def;
+  return Math.max(min, Math.min(max, x));
+}
+
+function ymToFirstDay(ym) {
+  // ym: YYYY-MM
+  if (!/^\d{4}-\d{2}$/.test(String(ym))) return null;
+  return `${ym}-01`;
+}
+
+app.get("/api/public/donas/summary-range", async (req, res) => {
+  try {
+    const key = String(req.query.key || "");
+    if (!process.env.DONAS_PUBLIC_KEY || key !== process.env.DONAS_PUBLIC_KEY) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const months = clampInt(req.query.months, 12, 1, 60);
+    const endYM = String(req.query.end || "").trim() || getTzYearMonth("Asia/Tashkent");
+    const endDate = ymToFirstDay(endYM);
+    if (!endDate) return res.status(400).json({ error: "Invalid end (use YYYY-MM)" });
+
+    // settings (как в public summary)
+    const settingsQ = await pool.query(
+      `select * from donas_finance_settings order by id asc limit 1`
+    );
+    const s = settingsQ.rows[0] || {};
+    const currency = String(s.currency || "UZS");
+
+    const fixedOpex = Number(s.fixed_opex_month || 0);
+    const variableOpex = Number(s.variable_opex_month || 0);
+    const loan = Number(s.loan_payment_month || 0);
+
+    // Возвращаем 12 месяцев всегда (generate_series), даже если данных нет
+    const q = await pool.query(
+      `
+      WITH params AS (
+        SELECT
+          date_trunc('month', $1::date) AS end_month,
+          date_trunc('month', $1::date) - (($2::int - 1) || ' months')::interval AS start_month
+      ),
+      months AS (
+        SELECT generate_series(
+          (SELECT start_month FROM params),
+          (SELECT end_month FROM params),
+          interval '1 month'
+        )::date AS month
+      ),
+      shifts AS (
+        SELECT
+          date_trunc('month', date)::date AS month,
+          coalesce(sum(revenue),0)::numeric AS revenue,
+          coalesce(sum(total_pay),0)::numeric AS payroll
+        FROM donas_shifts
+        WHERE date >= (SELECT start_month FROM params)
+          AND date <  (SELECT end_month FROM params) + interval '1 month'
+        GROUP BY 1
+      ),
+      cogs AS (
+        SELECT
+          date_trunc('month', date)::date AS month,
+          coalesce(sum(total),0)::numeric AS cogs
+        FROM donas_purchases
+        WHERE type='purchase'
+          AND date >= (SELECT start_month FROM params)
+          AND date <  (SELECT end_month FROM params) + interval '1 month'
+        GROUP BY 1
+      )
+      SELECT
+        to_char(m.month,'YYYY-MM') AS month,
+        coalesce(s.revenue,0) AS revenue,
+        coalesce(c.cogs,0) AS cogs,
+        coalesce(s.payroll,0) AS payroll
+      FROM months m
+      LEFT JOIN shifts s ON s.month = m.month
+      LEFT JOIN cogs c ON c.month = m.month
+      ORDER BY m.month;
+      `,
+      [endDate, months]
+    );
+
+    const monthsRows = q.rows || [];
+
+    let tRevenue = 0;
+    let tCogs = 0;
+    let tPayroll = 0;
+    let tOpex = 0;
+    let tNetOperating = 0;
+    let tCashFlow = 0;
+
+    const dscrValues = [];
+
+    const outMonths = monthsRows.map((r) => {
+      const R = Number(r.revenue || 0);
+      const C = Number(r.cogs || 0);
+      const payroll = Number(r.payroll || 0);
+
+      const opex = fixedOpex + variableOpex + payroll;
+      const netOperating = R - C - opex;
+      const cashFlow = netOperating - loan;
+
+      // как у тебя в /api/public/donas/summary: dscr только если netOperating > 0
+      const dscr = loan > 0 && netOperating > 0 ? netOperating / loan : null;
+
+      tRevenue += R;
+      tCogs += C;
+      tPayroll += payroll;
+      tOpex += opex;
+      tNetOperating += netOperating;
+      tCashFlow += cashFlow;
+
+      if (dscr != null && Number.isFinite(dscr)) dscrValues.push(dscr);
+
+      return {
+        month: String(r.month),
+        revenue: Math.round(R),
+        cogs: Math.round(C),
+        payroll: Math.round(payroll),
+        fixedOpex: Math.round(fixedOpex),
+        variableOpex: Math.round(variableOpex),
+        opex: Math.round(opex),
+        loan: Math.round(loan),
+        netOperating: Math.round(netOperating),
+        cashFlow: Math.round(cashFlow),
+        dscr: dscr == null ? null : Number(dscr.toFixed(2)),
+      };
+    });
+
+    const fromYM = outMonths[0]?.month || null;
+    const toYM = outMonths[outMonths.length - 1]?.month || null;
+
+    const avgDscr =
+      dscrValues.length ? dscrValues.reduce((a, b) => a + b, 0) / dscrValues.length : null;
+    const minDscr = dscrValues.length ? Math.min(...dscrValues) : null;
+
+    return res.json({
+      meta: {
+        from: fromYM,
+        to: toYM,
+        months,
+        currency,
+      },
+      months: outMonths,
+      totals: {
+        revenue: Math.round(tRevenue),
+        cogs: Math.round(tCogs),
+        payroll: Math.round(tPayroll),
+        opex: Math.round(tOpex),
+        loan: Math.round(loan * months), // справочно, фикс. платёж * кол-во месяцев
+        netOperating: Math.round(tNetOperating),
+        cashFlow: Math.round(tCashFlow),
+        avgDscr: avgDscr == null ? null : Number(avgDscr.toFixed(2)),
+        minDscr: minDscr == null ? null : Number(minDscr.toFixed(2)),
+      },
+    });
+  } catch (e) {
+    console.error("GET /api/public/donas/summary-range error:", e);
+    return res.status(500).json({ error: "Failed" });
+  }
+});
 
 /** ===================== Telegram Bot (НОВЫЙ клиентский) ===================== */
 /**
