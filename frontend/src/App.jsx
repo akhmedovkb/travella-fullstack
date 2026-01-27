@@ -379,6 +379,10 @@ export default function App() {
                   </PrivateRoute>
                 }
               />
+            <Route
+              path="/admin/donas-dosas/investor"
+              element={<DonasInvestor />}
+            />
 
             {/* Отели (публичные) */}
             <Route path="/hotels" element={<Hotels />} />
