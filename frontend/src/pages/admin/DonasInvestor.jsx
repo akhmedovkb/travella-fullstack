@@ -1,5 +1,4 @@
 //frontend/src/pages/admin/DonasInvestor.jsx
-
 import { useEffect, useMemo, useState } from "react";
 import { apiGet } from "../../api";
 
@@ -12,21 +11,47 @@ import { apiGet } from "../../api";
  *   VITE_DONAS_PUBLIC_KEY в env фронта
  */
 
+function toNum(x) {
+  const n = Number(x);
+  return Number.isFinite(n) ? n : 0;
+}
+
 function fmt(n) {
-  const v = Number(n || 0);
+  const v = Math.round(toNum(n));
   return v.toLocaleString("ru-RU");
 }
 
 function pct(a, b) {
-  if (!b) return "—";
-  return ((a / b) * 100).toFixed(1) + "%";
+  const A = toNum(a);
+  const B = toNum(b);
+  if (!B) return "—";
+  return ((A / B) * 100).toFixed(1) + "%";
 }
 
 function monthLabel(ym) {
   // YYYY-MM → MM.YYYY
   if (!ym) return "";
-  const [y, m] = ym.split("-");
+  const [y, m] = String(ym).split("-");
   return `${m}.${y}`;
+}
+
+function escCsvCell(v) {
+  const s = String(v ?? "");
+  // если есть спецсимволы — экранируем
+  if (/[",\n\r;]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+function downloadTextFile(filename, text, mime = "text/plain;charset=utf-8") {
+  const blob = new Blob([text], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 export default function DonasInvestor() {
@@ -67,26 +92,103 @@ export default function DonasInvestor() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const meta = data?.meta || {};
   const totals = data?.totals || {};
   const rows = data?.months || [];
 
-  const grossProfit = useMemo(
-    () => (totals.revenue || 0) - (totals.cogs || 0),
-    [totals]
-  );
+  const grossProfit = useMemo(() => toNum(totals.revenue) - toNum(totals.cogs), [totals]);
+
+  function handleExportCsv() {
+    if (!rows.length) return;
+
+    const header = [
+      "Month",
+      "Revenue",
+      "COGS",
+      "Payroll",
+      "OPEX",
+      "NetOperating",
+      "CashFlow",
+      "DSCR",
+      "Currency",
+    ];
+
+    const lines = [];
+    lines.push(header.map(escCsvCell).join(";"));
+
+    for (const r of rows) {
+      const line = [
+        r.month,
+        toNum(r.revenue),
+        toNum(r.cogs),
+        toNum(r.payroll),
+        toNum(r.opex),
+        toNum(r.netOperating),
+        toNum(r.cashFlow),
+        r.dscr == null ? "" : r.dscr,
+        meta.currency || "UZS",
+      ];
+      lines.push(line.map(escCsvCell).join(";"));
+    }
+
+    // totals row
+    lines.push("");
+    lines.push(["TOTALS", "", "", "", "", "", "", "", meta.currency || "UZS"].map(escCsvCell).join(";"));
+    lines.push(
+      [
+        `Period ${meta.from || ""}..${meta.to || ""}`,
+        toNum(totals.revenue),
+        toNum(totals.cogs),
+        toNum(totals.payroll),
+        toNum(totals.opex),
+        toNum(totals.netOperating),
+        toNum(totals.cashFlow),
+        totals.avgDscr == null ? "" : totals.avgDscr,
+        meta.currency || "UZS",
+      ]
+        .map(escCsvCell)
+        .join(";")
+    );
+
+    const filename = `donas_investor_${meta.from || "from"}_${meta.to || "to"}.csv`;
+    // Excel (RU) часто любит ; разделитель — поэтому используем ;
+    downloadTextFile(filename, lines.join("\n"), "text/csv;charset=utf-8");
+  }
+
+  function handlePrintPdf() {
+    // Для банка: печать → "Save as PDF"
+    window.print();
+  }
 
   return (
     <div className="p-6 space-y-6">
+      {/* Print styles */}
+      <style>{`
+        @media print {
+          .no-print { display: none !important; }
+          body { background: #fff !important; }
+          header { display: none !important; } /* если у тебя Header sticky */
+          .print-box { border: 1px solid #e5e7eb !important; }
+          table { font-size: 12px !important; }
+          .page-title { margin-bottom: 8px !important; }
+        }
+      `}</style>
+
       {/* Header */}
-      <div className="flex flex-wrap items-end gap-4">
+      <div className="flex flex-wrap items-end gap-4 no-print">
         <div>
-          <h1 className="text-2xl font-semibold">Dona’s Dosas — Investor View</h1>
+          <h1 className="text-2xl font-semibold page-title">Dona’s Dosas — Investor View</h1>
           <p className="text-sm text-gray-500">
             Summary-range • cash flow • DSCR
           </p>
+          {meta.from && meta.to && (
+            <p className="text-xs text-gray-400 mt-1">
+              Period: {meta.from} → {meta.to} • {meta.currency || "UZS"}
+            </p>
+          )}
         </div>
 
-        <div className="ml-auto flex gap-2">
+        <div className="ml-auto flex flex-wrap gap-2">
           <div>
             <label className="block text-xs text-gray-500">Months</label>
             <select
@@ -118,24 +220,37 @@ export default function DonasInvestor() {
           >
             Refresh
           </button>
+
+          <button
+            onClick={handleExportCsv}
+            disabled={!rows.length}
+            className="h-9 mt-4 px-4 rounded border border-black/20 bg-white hover:bg-gray-50 disabled:opacity-50"
+            title="Export CSV (Excel)"
+          >
+            Export CSV
+          </button>
+
+          <button
+            onClick={handlePrintPdf}
+            className="h-9 mt-4 px-4 rounded border border-black/20 bg-white hover:bg-gray-50"
+            title="Print / Save as PDF"
+          >
+            Print / PDF
+          </button>
         </div>
       </div>
 
       {error && (
-        <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded">
+        <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded no-print">
           {error}
         </div>
       )}
 
       {/* KPI */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 print-box">
         <Kpi title="Revenue" value={fmt(totals.revenue)} />
         <Kpi title="COGS" value={fmt(totals.cogs)} />
-        <Kpi
-          title="Gross Profit"
-          value={fmt(grossProfit)}
-          sub={pct(grossProfit, totals.revenue)}
-        />
+        <Kpi title="Gross Profit" value={fmt(grossProfit)} sub={pct(grossProfit, totals.revenue)} />
         <Kpi title="OPEX" value={fmt(totals.opex)} />
         <Kpi title="Cash Flow" value={fmt(totals.cashFlow)} />
         <Kpi
@@ -149,7 +264,7 @@ export default function DonasInvestor() {
       </div>
 
       {/* Table */}
-      <div className="overflow-auto border rounded">
+      <div className="overflow-auto border rounded print-box">
         <table className="min-w-full text-sm">
           <thead className="bg-gray-50">
             <tr>
@@ -171,25 +286,22 @@ export default function DonasInvestor() {
                 <Td>{fmt(r.cogs)}</Td>
                 <Td>{fmt(r.payroll)}</Td>
                 <Td>{fmt(r.opex)}</Td>
-                <Td
-                  className={
-                    r.netOperating < 0 ? "text-red-600 font-medium" : ""
-                  }
-                >
+                <Td className={toNum(r.netOperating) < 0 ? "text-red-600 font-medium" : ""}>
                   {fmt(r.netOperating)}
                 </Td>
                 <Td>{fmt(r.cashFlow)}</Td>
                 <Td>
-                  {r.dscr == null ? "—" : r.dscr < 1 ? (
-                    <span className="text-red-600 font-medium">
-                      {r.dscr}
-                    </span>
+                  {r.dscr == null ? (
+                    "—"
+                  ) : toNum(r.dscr) < 1 ? (
+                    <span className="text-red-600 font-medium">{r.dscr}</span>
                   ) : (
                     r.dscr
                   )}
                 </Td>
               </tr>
             ))}
+
             {!rows.length && !loading && (
               <tr>
                 <Td colSpan={8} className="text-center text-gray-400 py-6">
@@ -201,9 +313,12 @@ export default function DonasInvestor() {
         </table>
       </div>
 
-      {loading && (
-        <div className="text-sm text-gray-500">Loading…</div>
-      )}
+      {loading && <div className="text-sm text-gray-500 no-print">Loading…</div>}
+
+      {/* Print footer note */}
+      <div className="hidden print:block text-xs text-gray-500">
+        Dona’s Dosas — Investor Summary • {meta.from || ""} → {meta.to || ""} • Currency: {meta.currency || "UZS"}
+      </div>
     </div>
   );
 }
@@ -230,10 +345,7 @@ function Th({ children }) {
 
 function Td({ children, colSpan, className = "" }) {
   return (
-    <td
-      colSpan={colSpan}
-      className={`px-3 py-2 whitespace-nowrap ${className}`}
-    >
+    <td colSpan={colSpan} className={`px-3 py-2 whitespace-nowrap ${className}`}>
       {children}
     </td>
   );
