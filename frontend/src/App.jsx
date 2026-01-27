@@ -390,6 +390,12 @@ export default function App() {
               }
             />
 
+            {/* fallback alias (на случай старых ссылок) */}
+            <Route
+              path="/donas-dosas/investor"
+              element={<DonasInvestor />}
+            />
+
             {/* Отели (публичные) */}
             <Route path="/hotels" element={<Hotels />} />
             <Route path="/hotels/:hotelId" element={<HotelDetails />} />
