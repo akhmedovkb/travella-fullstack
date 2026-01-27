@@ -1185,9 +1185,15 @@ function MonthRow({
   }, [row]);
 
   const locked = isLockedNotes(r.notes);
-
-  const inputCls = (extra = "") =>
-    `w-full px-2 py-1 rounded border ${locked || savingAll ? "bg-gray-100 text-gray-400 cursor-not-allowed" : ""} ${extra}`;
+  
+  // В Dona's Dosas Finance фактические значения (revenue/cogs/opex/capex/loan)
+  // считаются автоматически из OPS-данных. Ручное редактирование чисел разрешаем
+  // только если месяц залочен через #locked.
+  const numDisabled = savingAll || !locked;
+  const notesDisabled = savingAll; // заметки можно править всегда
+  
+  const inputCls = (disabled, extra = "") =>
+    `w-full px-2 py-1 rounded border ${disabled ? "bg-gray-100 text-gray-400 cursor-not-allowed" : ""} ${extra}`;
 
   // baseline row calc
   const gross = toNum(r.revenue) - toNum(r.cogs);
@@ -1217,7 +1223,9 @@ function MonthRow({
   const isEmpty = (v) => !toNum(v);
 
   const applyPlanToThis = () => {
-    if (savingAll || locked) return;
+  // Ввод плана в месяц допустим только если месяц залочен (#locked), иначе
+  // его перезапишет автоматическая синхронизация из OPS.
+  if (savingAll || !locked) return;
     const next = { ...r };
 
     const shouldSet = (key) => {
@@ -1284,8 +1292,8 @@ function MonthRow({
         <input
           value={r.month}
           onChange={(e) => patch("month", e.target.value)}
-          className={inputCls()}
-          disabled={savingAll || locked}
+          className={inputCls(true)}
+          disabled
         />
 
         {/* Scenario per month */}
@@ -1312,8 +1320,8 @@ function MonthRow({
           <input
             value={r[k] ?? 0}
             onChange={(e) => patch(k, e.target.value)}
-            className={inputCls()}
-            disabled={savingAll || locked}
+            className={inputCls(numDisabled)}
+            disabled={numDisabled}
           />
         </td>
       ))}
@@ -1334,11 +1342,10 @@ function MonthRow({
         <input
           value={r.notes ?? ""}
           onChange={(e) => patch("notes", e.target.value)}
-          className={inputCls()}
+          className={inputCls(notesDisabled)}
           placeholder="notes…"
-          disabled={savingAll || locked}
+          disabled={notesDisabled}
         />
-
         <div className="mt-2 text-xs text-gray-600">
           <div>
             Base → GP: {fmt(gross)} {currency} · Net: {fmt(netOp)} {currency} · CF: {fmt(cashFlow)} {currency}
