@@ -8,7 +8,11 @@ function fmt(n) {
 }
 
 function getDefaultMonth() {
-  const d = new Date();
+  // UX: по умолчанию показываем предыдущий месяц (последний "закрытый" месяц),
+  // чтобы "last month" не выглядел как будущий и чтобы сразу были данные.
+  const now = new Date();
+  const d = new Date(now.getFullYear(), now.getMonth(), 1);
+  d.setMonth(d.getMonth() - 1);
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   return `${y}-${m}`; // YYYY-MM
@@ -86,14 +90,13 @@ export default function DonasExpensesPanel({ onChanged, initialMonth }) {
       await load(month);
       onChanged?.();
     } catch (e) {
-      setErr(e?.message || "Failed to save expense");
+      setErr(e?.message || "Failed to create expense");
     }
   };
 
-  const remove = async (id) => {
-    if (!window.confirm("Удалить расход?")) return;
+  const del = async (id) => {
+    setErr("");
     try {
-      setErr("");
       await apiDelete(`/api/admin/donas/ops/expenses/${id}`, null, "provider");
       await load(month);
       onChanged?.();
@@ -106,79 +109,80 @@ export default function DonasExpensesPanel({ onChanged, initialMonth }) {
     <div className="mt-4 rounded-2xl bg-white border p-4">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h2 className="font-semibold">Разовый расход (OPEX / CAPEX)</h2>
+          <h2 className="font-semibold">OPEX / CAPEX events</h2>
           <div className="text-xs text-gray-500 mt-0.5">
-            Итого за {month}: <b>{fmt(total)}</b>
+            Эти события автоматически попадают в Months (Actuals).
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <div className="text-sm text-gray-600">Месяц:</div>
+          <label className="text-sm text-gray-700">Month</label>
           <input
-            type="month"
             value={month}
             onChange={(e) => setMonth(e.target.value)}
             className="px-3 py-2 rounded-lg border"
+            placeholder="YYYY-MM"
           />
+          <button onClick={() => load(month)} className="px-3 py-2 rounded-lg bg-white border">
+            Refresh
+          </button>
         </div>
       </div>
 
-      {err && <div className="mt-2 text-sm text-red-600">{err}</div>}
+      {err && (
+        <div className="mt-3 p-3 rounded-lg bg-red-50 text-red-700 border border-red-200">
+          {err}
+        </div>
+      )}
 
-      <div className="mt-3 grid grid-cols-1 md:grid-cols-5 gap-2">
+      <div className="mt-4 grid grid-cols-1 lg:grid-cols-5 gap-2">
         <input
           type="date"
           value={form.date}
-          onChange={(e) => {
-            const v = e.target.value;
-            setForm((f) => ({ ...f, date: v }));
-            if (v && v.length >= 7) setMonth(v.slice(0, 7)); // YYYY-MM
-          }}
+          onChange={(e) => setForm((s) => ({ ...s, date: e.target.value }))}
           className="px-3 py-2 rounded-lg border"
-          placeholder="ДД.ММ.ГГГГ"
         />
-
         <input
           value={form.amount}
-          onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
+          onChange={(e) => setForm((s) => ({ ...s, amount: e.target.value }))}
           className="px-3 py-2 rounded-lg border"
-          placeholder="Сумма"
+          placeholder="Amount"
         />
-
         <select
           value={form.kind}
-          onChange={(e) => setForm((f) => ({ ...f, kind: e.target.value }))}
+          onChange={(e) => setForm((s) => ({ ...s, kind: e.target.value }))}
           className="px-3 py-2 rounded-lg border bg-white"
         >
           <option value="opex">OPEX</option>
           <option value="capex">CAPEX</option>
         </select>
-
         <input
           value={form.category}
-          onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
+          onChange={(e) => setForm((s) => ({ ...s, category: e.target.value }))}
           className="px-3 py-2 rounded-lg border"
-          placeholder="Категория"
+          placeholder="Category (optional)"
         />
-
-        <input
-          value={form.note}
-          onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))}
-          className="px-3 py-2 rounded-lg border"
-          placeholder="Комментарий"
-        />
+        <div className="flex gap-2">
+          <input
+            value={form.note}
+            onChange={(e) => setForm((s) => ({ ...s, note: e.target.value }))}
+            className="w-full px-3 py-2 rounded-lg border"
+            placeholder="Note (optional)"
+          />
+          <button onClick={submit} className="px-3 py-2 rounded-lg bg-gray-900 text-white">
+            Add
+          </button>
+        </div>
       </div>
 
-      <div className="mt-3">
-        <button
-          onClick={submit}
-          className="px-3 py-2 rounded-lg bg-gray-900 text-white"
-        >
-          Add expense
-        </button>
+      <div className="mt-4 flex items-center justify-between text-sm">
+        <div className="text-gray-700">
+          Total for {month}: <b>{fmt(total)}</b>
+        </div>
+        {loading && <div className="text-gray-500">Loading…</div>}
       </div>
 
-      <div className="mt-4 overflow-auto">
+      <div className="mt-3 overflow-auto">
         <table className="min-w-[900px] w-full text-sm">
           <thead>
             <tr className="text-left text-gray-600">
@@ -187,32 +191,34 @@ export default function DonasExpensesPanel({ onChanged, initialMonth }) {
               <th className="py-2 pr-2">Category</th>
               <th className="py-2 pr-2">Note</th>
               <th className="py-2 pr-2">Amount</th>
-              <th className="py-2 pr-2"></th>
+              <th className="py-2 pr-2">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {loading ? (
-              <tr><td className="py-2 text-gray-500" colSpan={6}>Loading…</td></tr>
-            ) : items.length ? (
-              items.map((it) => (
-                <tr key={it.id} className="border-t">
-                  <td className="py-2 pr-2 whitespace-nowrap">{String(it.date).slice(0, 10)}</td>
-                  <td className="py-2 pr-2">{String(it.kind || "").toUpperCase()}</td>
-                  <td className="py-2 pr-2">{it.category || "—"}</td>
-                  <td className="py-2 pr-2">{it.note || "—"}</td>
-                  <td className="py-2 pr-2 whitespace-nowrap">{fmt(it.amount)}</td>
-                  <td className="py-2 pr-2">
-                    <button
-                      onClick={() => remove(it.id)}
-                      className="px-2 py-1 rounded border bg-white"
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <tr><td className="py-2 text-gray-500" colSpan={6}>No expenses</td></tr>
+            {(items || []).map((it) => (
+              <tr key={it.id} className="border-t">
+                <td className="py-2 pr-2">{String(it.date).slice(0, 10)}</td>
+                <td className="py-2 pr-2">{String(it.kind || "").toUpperCase()}</td>
+                <td className="py-2 pr-2">{it.category || "—"}</td>
+                <td className="py-2 pr-2">{it.note || "—"}</td>
+                <td className="py-2 pr-2 whitespace-nowrap">{fmt(it.amount)}</td>
+                <td className="py-2 pr-2">
+                  <button
+                    onClick={() => del(it.id)}
+                    className="px-3 py-1.5 rounded-lg border bg-white"
+                  >
+                    Delete
+                  </button>
+                </td>
+              </tr>
+            ))}
+
+            {(!items || items.length === 0) && !loading && (
+              <tr className="border-t">
+                <td className="py-3 text-gray-500" colSpan={6}>
+                  No expenses for this month.
+                </td>
+              </tr>
             )}
           </tbody>
         </table>
