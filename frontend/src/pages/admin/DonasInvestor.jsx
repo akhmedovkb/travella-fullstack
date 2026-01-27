@@ -331,7 +331,24 @@ export default function DonasInvestor() {
                 <Td>{fmt(r.revenue)}</Td>
                 <Td>{fmt(r.cogs)}</Td>
                 <Td>{fmt(r.payroll)}</Td>
-                <Td>{fmt(r.opex)}</Td>
+                <Td>
+                  <div className="flex items-center gap-2">
+                    <span>{fmt(r.opex)}</span>
+                    {r.opexSource && (
+                      <span
+                        className={[
+                          "text-[10px] px-2 py-[2px] rounded-full border",
+                          r.opexSource === "manual"
+                            ? "bg-blue-50 border-blue-200 text-blue-700"
+                            : "bg-gray-50 border-gray-200 text-gray-600",
+                        ].join(" ")}
+                        title={r.opexSource === "manual" ? "Manual OPEX (finance months)" : "Auto OPEX (settings + payroll)"}
+                      >
+                        {String(r.opexSource).toUpperCase()}
+                      </span>
+                    )}
+                  </div>
+                </Td>
                 <Td className={r.netOperating < 0 ? "text-red-600 font-medium" : ""}>
                   {fmt(r.netOperating)}
                 </Td>
