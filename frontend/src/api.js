@@ -11,10 +11,18 @@ function getApiBase() {
 const buildUrl = (path) => {
   const base = getApiBase();
   if (!base) {
-    // поможет увидеть проблему сразу в консоли
     console.warn("[API] Empty API base, request will go to same-origin:", path);
   }
-  return `${base}${path.startsWith("/") ? path : `/${path}`}`;
+
+  // Нормализуем путь и избегаем частой ошибки ".../api" + "/api/..." => ".../api/api/...".
+  // Это особенно важно для прод-окружений, где VITE_API_BASE_URL иногда задают как "https://host.tld/api".
+  const p = path.startsWith("/") ? path : `/${path}`;
+  const baseNoSlash = String(base || "").replace(/\/+$/, "");
+  if (baseNoSlash.endsWith("/api") && p.startsWith("/api/")) {
+    return `${baseNoSlash}${p.slice(4)}`; // drop leading "/api"
+  }
+
+  return `${baseNoSlash}${p}`;
 };
 
 function getTokenByRole(role) {
