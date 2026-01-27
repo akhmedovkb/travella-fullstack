@@ -413,6 +413,7 @@ export default function Header() {
                     {/* ✅ DONA'S DOSAS — только админу */}
                     <DropdownItem to="/donas-dosas/finance" label="DONA’S DOSAS" icon={<IconBurger />}/>
                     <DropdownItem to="/admin/donas-dosas/finance" label="Dona’s Dosas — Finance" icon={<IconBurger />} />
+                    <DropdownItem to="/admin/donas-dosas/investor" label="Dona’s Dosas — Investor" icon={<IconBurger />} />
                     <div className="border-t border-white/10 p-2">
                       <AdminQuickTools />
                     </div>
@@ -525,6 +526,7 @@ export default function Header() {
                 <NavItemMobileDark to="/admin/hotels" label={t("nav.hotels_admin", "Отели (админ)")} icon={<IconHotel />} />
                 <NavItemMobileDark to="/admin/pages" label={t("nav.cms_pages", "Подвал")} icon={<IconDoc />} />
                 <NavItemMobileDark to="/admin/donas-dosas/finance" label="Dona’s Dosas — Finance" icon={<IconBurger />} />
+                <NavItemMobileDark to="/admin/donas-dosas/investor" label="Dona’s Dosas — Investor" icon={<IconBurger />} />
 
               </RowGroupDark>
             )}
