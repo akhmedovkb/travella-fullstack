@@ -404,7 +404,8 @@ export default function App() {
               path="/donas-dosas/finance"
               element={<DonasFinanceModel />}
             />
-            
+            <Route path="/public/donas/investor" element={<DonasInvestor />} />
+
             {/* Fallback — всегда последним */}
             <Route path="*" element={<Navigate to="/" replace />} />
 
