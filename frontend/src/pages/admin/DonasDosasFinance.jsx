@@ -330,47 +330,6 @@ export default function DonasDosasFinance() {
 
   const lastMonth = monthsWithCash.length ? monthsWithCash[monthsWithCash.length - 1] : null;
   const reserveMonths = toNum(settings?.reserve_target_months || 0);
-  // === OWNER DASHBOARD (FACT: last month) ===
-const fact = useMemo(() => {
-  if (!lastMonth) return null;
-
-  const revenue = toNum(lastMonth.revenue);
-  const cogs = toNum(lastMonth.cogs);
-  const opex = toNum(lastMonth.opex);
-  const capex = toNum(lastMonth.capex);
-  const loan = toNum(lastMonth.loan_paid);
-  const cash_end = toNum(lastMonth.cash_end);
-
-  const gross = revenue - cogs;
-  const netOp = gross - opex;
-  const cashFlow = netOp - loan - capex;
-
-  const dscr = loan > 0 ? netOp / loan : null;
-  const denom = opex + loan;
-  const runway = denom > 0 ? cash_end / denom : null;
-
-  return { revenue, cogs, opex, capex, loan, cash_end, gross, netOp, cashFlow, dscr, runway };
-}, [lastMonth]);
-
-const planFact = useMemo(() => {
-  if (!planBase || !fact) return null;
-
-  const pRevenue = toNum(planBase.revenuePlan);
-  const pCogs = toNum(planBase.cogsPlan);
-  const pOpex = toNum(planBase.opexPlan);
-  const pLoan = toNum(planBase.loan);
-  const pGross = pRevenue - pCogs;
-  const pNetOp = pGross - pOpex;
-  const pCF = pNetOp - pLoan; // capex в плане не учитываем
-
-  return {
-    pRevenue, pCogs, pOpex, pLoan, pGross, pNetOp, pCF,
-    dRevenue: pct(fact.revenue, pRevenue),
-    dNetOp: pct(fact.netOp, pNetOp),
-    dCF: pct(fact.cashFlow, pCF),
-  };
-}, [planBase, fact]);
-
 
   const lastTarget = useMemo(() => {
     if (!lastMonth) return null;
@@ -895,127 +854,6 @@ const planFact = useMemo(() => {
           )}
         </div>
       </div>
-            {/* OWNER DASHBOARD (FACT vs PLAN) */}
-      {lastMonth && fact && (
-        <div className="mt-4 rounded-2xl bg-white border p-4">
-          <div className="flex items-start justify-between gap-2 flex-wrap">
-            <div>
-              <h2 className="font-semibold">Owner dashboard</h2>
-              <div className="text-xs text-gray-500 mt-0.5">
-                Fact (last month): <b>{monthKey(lastMonth.month)}</b>
-              </div>
-            </div>
-
-            {planFact && (
-              <div className="text-xs text-gray-600">
-                Plan baseline from Assumptions · deltas are vs Plan
-              </div>
-            )}
-          </div>
-
-          <div className="mt-3 grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <Kpi title="Revenue (Fact)" value={`${fmt(fact.revenue)} ${currency}`} />
-            <Kpi title="Gross Profit" value={`${fmt(fact.gross)} ${currency}`} />
-            <Kpi title="Net Operating" value={`${fmt(fact.netOp)} ${currency}`} />
-            <Kpi title="Cash Flow" value={`${fmt(fact.cashFlow)} ${currency}`} />
-
-            <Kpi title="OPEX (Fact)" value={`${fmt(fact.opex)} ${currency}`} />
-            <Kpi title="CAPEX (Fact)" value={`${fmt(fact.capex)} ${currency}`} />
-            <Kpi title="Loan paid" value={`${fmt(fact.loan)} ${currency}`} />
-            <Kpi title="Cash end" value={`${fmt(fact.cash_end)} ${currency}`} />
-          </div>
-
-          <div className="mt-3 grid grid-cols-1 lg:grid-cols-3 gap-3">
-            <div className="rounded-xl bg-gray-50 border p-3">
-              <div className="text-xs text-gray-600">DSCR</div>
-              <div className="text-lg font-semibold">
-                {fact.loan > 0 ? (fact.dscr?.toFixed(2) ?? "0.00") : "—"}
-              </div>
-              <div className="text-xs text-gray-500 mt-1">
-                DSCR = NetOp / Loan (если Loan &gt; 0)
-              </div>
-            </div>
-
-            <div className="rounded-xl bg-gray-50 border p-3">
-              <div className="text-xs text-gray-600">Runway</div>
-              <div className="text-lg font-semibold">
-                {fact.runway == null ? "—" : `${fact.runway.toFixed(1)} mo`}
-              </div>
-              <div className="text-xs text-gray-500 mt-1">
-                Runway = cash_end / (opex + loan_paid)
-              </div>
-            </div>
-
-            <div className="rounded-xl bg-gray-50 border p-3">
-              <div className="text-xs text-gray-600">Reserve target</div>
-              <div className="text-lg font-semibold">
-                {reserveMonths > 0 ? `${reserveMonths} mo` : "—"}
-              </div>
-              <div className="text-xs text-gray-500 mt-1">
-                Target cash = (opex + loan_paid) × reserve_target_months
-              </div>
-            </div>
-          </div>
-
-          {/* Plan vs Fact deltas */}
-          {planFact && (
-            <div className="mt-3 rounded-xl border bg-gray-50 p-3 text-sm">
-              <div className="font-semibold text-gray-800">Plan vs Fact (last month)</div>
-              <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2">
-                <div className="rounded-lg bg-white border p-2">
-                  <div className="text-xs text-gray-600">Revenue Δ</div>
-                  <div className={`text-base font-semibold ${planFact.dRevenue != null && planFact.dRevenue < 0 ? "text-red-700" : "text-green-700"}`}>
-                    {planFact.dRevenue == null ? "—" : `${planFact.dRevenue.toFixed(1)}%`}
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    Plan: {fmt(planFact.pRevenue)} {currency}
-                  </div>
-                </div>
-
-                <div className="rounded-lg bg-white border p-2">
-                  <div className="text-xs text-gray-600">NetOp Δ</div>
-                  <div className={`text-base font-semibold ${planFact.dNetOp != null && planFact.dNetOp < 0 ? "text-red-700" : "text-green-700"}`}>
-                    {planFact.dNetOp == null ? "—" : `${planFact.dNetOp.toFixed(1)}%`}
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    Plan: {fmt(planFact.pNetOp)} {currency}
-                  </div>
-                </div>
-
-                <div className="rounded-lg bg-white border p-2">
-                  <div className="text-xs text-gray-600">Cash Flow Δ</div>
-                  <div className={`text-base font-semibold ${planFact.dCF != null && planFact.dCF < 0 ? "text-red-700" : "text-green-700"}`}>
-                    {planFact.dCF == null ? "—" : `${planFact.dCF.toFixed(1)}%`}
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    Plan: {fmt(planFact.pCF)} {currency}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Target badge (reuse your lastTarget if exists) */}
-          {lastTarget && reserveMonths > 0 && (
-            <div className="mt-3 flex items-center justify-between gap-2 flex-wrap rounded-xl border p-3">
-              <div className="text-sm text-gray-700">
-                Target cash: <b>{fmt(lastTarget.need)} {currency}</b>{" "}
-                <span className="text-gray-500">
-                  ({lastTarget.rm} mo × (opex + loan_paid))
-                </span>
-              </div>
-              <div className={`px-3 py-1.5 rounded-lg text-sm font-semibold border ${
-                lastTarget.ok
-                  ? "bg-green-50 text-green-800 border-green-200"
-                  : "bg-red-50 text-red-800 border-red-200"
-              }`}>
-                {lastTarget.ok ? "OK" : "LOW"}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
       <DonasExpensesPanel
         onChanged={() => {
           load(); // пересчёт summary-range + месяцев
@@ -1347,13 +1185,21 @@ function MonthRow({
   }, [row]);
 
   const locked = isLockedNotes(r.notes);
-  
-  // В Dona's Dosas Finance фактические значения (revenue/cogs/opex/capex/loan)
-  // считаются автоматически из OPS-данных. Ручное редактирование чисел разрешаем
-  // только если месяц залочен через #locked.
+
+  // backend may send _source for UI badges
+  const src = r?._source || {};
+  const badge = locked ? (src.mixed ? "MIXED" : "LOCKED") : "AUTO";
+  const badgeClass =
+    badge === "AUTO"
+      ? "bg-blue-50 text-blue-800 border-blue-200"
+      : badge === "MIXED"
+      ? "bg-amber-50 text-amber-800 border-amber-200"
+      : "bg-gray-50 text-gray-800 border-gray-200";
+
+  // ✅ manual edits allowed ONLY when month is locked
   const numDisabled = savingAll || !locked;
-  const notesDisabled = savingAll; // заметки можно править всегда
-  
+  const notesDisabled = savingAll;
+
   const inputCls = (disabled, extra = "") =>
     `w-full px-2 py-1 rounded border ${disabled ? "bg-gray-100 text-gray-400 cursor-not-allowed" : ""} ${extra}`;
 
@@ -1385,9 +1231,7 @@ function MonthRow({
   const isEmpty = (v) => !toNum(v);
 
   const applyPlanToThis = () => {
-  // Ввод плана в месяц допустим только если месяц залочен (#locked), иначе
-  // его перезапишет автоматическая синхронизация из OPS.
-  if (savingAll || !locked) return;
+    if (savingAll || locked) return;
     const next = { ...r };
 
     const shouldSet = (key) => {
@@ -1451,11 +1295,27 @@ function MonthRow({
   return (
     <tr className={`border-t align-top ${highlight ? "bg-amber-50" : ""}`}>
       <td className="py-2 pr-2 w-[120px]">
-      <input
-        value={r.month}
-        className={inputCls(true)}
-        disabled
-      />
+        <input
+          value={r.month}
+          onChange={(e) => patch("month", e.target.value)}
+          className={inputCls(true)}
+          disabled
+        />
+
+        <div className="mt-1">
+          <span
+            className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] font-semibold ${badgeClass}`}
+            title={
+              badge === "AUTO"
+                ? `Auto from OPS (OPEX source: ${src.opex_source || "auto"})`
+                : badge === "MIXED"
+                ? "Locked month + manual adjustments differ from auto"
+                : "Locked month"
+            }
+          >
+            {badge}
+          </span>
+        </div>
 
         {/* Scenario per month */}
         <div className="mt-2">
@@ -1507,6 +1367,7 @@ function MonthRow({
           placeholder="notes…"
           disabled={notesDisabled}
         />
+
         <div className="mt-2 text-xs text-gray-600">
           <div>
             Base → GP: {fmt(gross)} {currency} · Net: {fmt(netOp)} {currency} · CF: {fmt(cashFlow)} {currency}
@@ -1591,9 +1452,9 @@ function MonthRow({
           <button
             onClick={applyPlanToThis}
             className={`px-3 py-1.5 rounded-lg border ${
-              savingAll || locked ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-white"
+              savingAll || !locked ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-white"
             }`}
-            disabled={savingAll || locked}
+            disabled={savingAll || !locked}
             title="Скопировать Plan (Assumptions) в этот месяц"
           >
             Plan → This
@@ -1673,11 +1534,11 @@ function MonthRow({
               })
             }
             className={`px-3 py-1.5 rounded-lg ${
-              savingAll
+              savingAll || !locked
                 ? "bg-gray-200 text-gray-500 cursor-not-allowed"
                 : "bg-gray-900 text-white"
             }`}
-            disabled={savingAll || locked}
+            disabled={savingAll || !locked}
           >
             Save
           </button>
