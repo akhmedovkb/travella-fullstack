@@ -347,6 +347,269 @@ app.get("/api/public/donas/summary", async (req, res) => {
     return res.status(500).json({ error: "Failed" });
   }
 });
+
+const crypto = require("crypto");
+
+/** ===================== Donas Dosas: Share Tokens (no key in URL) ===================== */
+
+// простая проверка "админ ли"
+function isAdminUser(u) {
+  const user = u || {};
+  const roles = []
+    .concat(user.role || [])
+    .concat(user.roles || [])
+    .flatMap((r) => String(r).split(","))
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+
+  const perms = []
+    .concat(user.permissions || user.perms || [])
+    .flatMap((p) => String(p).split(","))
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+
+  return (
+    user.role === "admin" ||
+    user.is_admin === true ||
+    user.admin === true ||
+    roles.includes("admin") ||
+    roles.includes("root") ||
+    roles.includes("super") ||
+    perms.includes("moderation") ||
+    perms.includes("admin:moderation")
+  );
+}
+
+// base64url helpers
+function b64urlEncode(buf) {
+  return Buffer.from(buf).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+function b64urlDecodeToString(s) {
+  const b64 = String(s).replace(/-/g, "+").replace(/_/g, "/") + "===".slice((String(s).length + 3) % 4);
+  return Buffer.from(b64, "base64").toString("utf8");
+}
+
+function getShareSecret() {
+  // отдельный секрет лучше, но чтобы не ломать — есть fallback на DONAS_PUBLIC_KEY
+  return (
+    process.env.DONAS_PUBLIC_TOKEN_SECRET ||
+    process.env.DONAS_PUBLIC_KEY ||
+    "donas-dev-secret"
+  );
+}
+
+function signShareToken(payloadObj) {
+  const json = JSON.stringify(payloadObj);
+  const body = b64urlEncode(json);
+  const sig = b64urlEncode(
+    crypto.createHmac("sha256", getShareSecret()).update(body).digest()
+  );
+  return `${body}.${sig}`;
+}
+
+function verifyShareToken(token) {
+  const t = String(token || "");
+  const [body, sig] = t.split(".");
+  if (!body || !sig) return { ok: false, error: "bad_format" };
+
+  const expected = b64urlEncode(
+    crypto.createHmac("sha256", getShareSecret()).update(body).digest()
+  );
+  // constant-time compare
+  const a = Buffer.from(expected);
+  const b = Buffer.from(sig);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    return { ok: false, error: "bad_sig" };
+  }
+
+  let payload;
+  try {
+    payload = JSON.parse(b64urlDecodeToString(body));
+  } catch {
+    return { ok: false, error: "bad_payload" };
+  }
+
+  const now = Date.now();
+  const exp = Number(payload?.exp || 0);
+  if (!exp || now > exp) return { ok: false, error: "expired" };
+
+  if (payload?.scope !== "donas_investor_range") {
+    return { ok: false, error: "bad_scope" };
+  }
+
+  return { ok: true, payload };
+}
+
+/**
+ * ADMIN: выдаём share-token (TTL по умолчанию 7 дней)
+ * POST /api/admin/donas/share-token
+ * body: { months?: number, end?: "YYYY-MM", ttl_days?: number }
+ */
+app.post("/api/admin/donas/share-token", authenticateToken, async (req, res) => {
+  try {
+    if (!isAdminUser(req.user)) return res.status(403).json({ error: "Forbidden" });
+
+    const months = Math.max(1, Math.min(60, Number(req.body?.months || 12)));
+    const end = String(req.body?.end || "").trim() || getTzYearMonth("Asia/Tashkent");
+    if (!/^\d{4}-\d{2}$/.test(end)) return res.status(400).json({ error: "Invalid end (use YYYY-MM)" });
+
+    const ttlDays = Math.max(1, Math.min(60, Number(req.body?.ttl_days || 7)));
+    const exp = Date.now() + ttlDays * 24 * 60 * 60 * 1000;
+
+    const token = signShareToken({ scope: "donas_investor_range", months, end, exp });
+
+    // ссылка на фронт (если есть), иначе относительная
+    const base =
+      process.env.FRONTEND_URL ||
+      "https://travella.uz";
+
+    const url = `${base}/public/donas/investor?t=${encodeURIComponent(token)}`;
+
+    return res.json({ ok: true, token, url, exp });
+  } catch (e) {
+    console.error("POST /api/admin/donas/share-token error:", e);
+    return res.status(500).json({ error: "Failed" });
+  }
+});
+
+/**
+ * PUBLIC: summary-range по share-token (без key)
+ * GET /api/public/donas/summary-range-token?t=TOKEN
+ * Возвращает тот же формат, что /api/public/donas/summary-range
+ */
+app.get("/api/public/donas/summary-range-token", async (req, res) => {
+  try {
+    const t = String(req.query.t || "");
+    const v = verifyShareToken(t);
+    if (!v.ok) return res.status(401).json({ error: "Unauthorized", reason: v.error });
+
+    const months = Math.max(1, Math.min(60, Number(v.payload.months || 12)));
+    const endYM = String(v.payload.end || "").trim();
+    const endDate = ymToFirstDay(endYM);
+    if (!endDate) return res.status(400).json({ error: "Invalid end (use YYYY-MM)" });
+
+    // settings как в summary-range
+    const settingsQ = await pool.query(
+      `select * from donas_finance_settings order by id asc limit 1`
+    );
+    const s = settingsQ.rows[0] || {};
+    const currency = String(s.currency || "UZS");
+
+    const fixedOpex = Number(s.fixed_opex_month || 0);
+    const variableOpex = Number(s.variable_opex_month || 0);
+    const loan = Number(s.loan_payment_month || 0);
+
+    // тот же SQL, что в /api/public/donas/summary-range
+    const q = await pool.query(
+      `
+      WITH params AS (
+        SELECT
+          date_trunc('month', $1::date) AS end_month,
+          date_trunc('month', $1::date) - (($2::int - 1) || ' months')::interval AS start_month
+      ),
+      months AS (
+        SELECT generate_series(
+          (SELECT start_month FROM params),
+          (SELECT end_month FROM params),
+          interval '1 month'
+        )::date AS month
+      ),
+      shifts AS (
+        SELECT
+          date_trunc('month', date)::date AS month,
+          coalesce(sum(revenue),0)::numeric AS revenue,
+          coalesce(sum(total_pay),0)::numeric AS payroll
+        FROM donas_shifts
+        WHERE date >= (SELECT start_month FROM params)
+          AND date <  (SELECT end_month FROM params) + interval '1 month'
+        GROUP BY 1
+      ),
+      cogs AS (
+        SELECT
+          date_trunc('month', date)::date AS month,
+          coalesce(sum(total),0)::numeric AS cogs
+        FROM donas_purchases
+        WHERE type='purchase'
+          AND date >= (SELECT start_month FROM params)
+          AND date <  (SELECT end_month FROM params) + interval '1 month'
+        GROUP BY 1
+      )
+      SELECT
+        to_char(m.month,'YYYY-MM') AS month,
+        coalesce(s.revenue,0) AS revenue,
+        coalesce(c.cogs,0) AS cogs,
+        coalesce(s.payroll,0) AS payroll
+      FROM months m
+      LEFT JOIN shifts s ON s.month = m.month
+      LEFT JOIN cogs c ON c.month = m.month
+      ORDER BY m.month;
+      `,
+      [endDate, months]
+    );
+
+    const monthsRows = q.rows || [];
+
+    let tRevenue = 0, tCogs = 0, tPayroll = 0, tOpex = 0, tNetOperating = 0, tCashFlow = 0;
+    const dscrValues = [];
+
+    const outMonths = monthsRows.map((r) => {
+      const R = Number(r.revenue || 0);
+      const C = Number(r.cogs || 0);
+      const payroll = Number(r.payroll || 0);
+
+      const opex = fixedOpex + variableOpex + payroll;
+      const netOperating = R - C - opex;
+      const cashFlow = netOperating - loan;
+
+      const dscr = loan > 0 && netOperating > 0 ? netOperating / loan : null;
+
+      tRevenue += R; tCogs += C; tPayroll += payroll; tOpex += opex;
+      tNetOperating += netOperating; tCashFlow += cashFlow;
+
+      if (dscr != null && Number.isFinite(dscr)) dscrValues.push(dscr);
+
+      return {
+        month: String(r.month),
+        revenue: Math.round(R),
+        cogs: Math.round(C),
+        payroll: Math.round(payroll),
+        fixedOpex: Math.round(fixedOpex),
+        variableOpex: Math.round(variableOpex),
+        opex: Math.round(opex),
+        loan: Math.round(loan),
+        netOperating: Math.round(netOperating),
+        cashFlow: Math.round(cashFlow),
+        dscr: dscr == null ? null : Number(dscr.toFixed(2)),
+      };
+    });
+
+    const fromYM = outMonths[0]?.month || null;
+    const toYM = outMonths[outMonths.length - 1]?.month || null;
+
+    const avgDscr = dscrValues.length ? dscrValues.reduce((a, b) => a + b, 0) / dscrValues.length : null;
+    const minDscr = dscrValues.length ? Math.min(...dscrValues) : null;
+
+    return res.json({
+      meta: { from: fromYM, to: toYM, months, currency },
+      months: outMonths,
+      totals: {
+        revenue: Math.round(tRevenue),
+        cogs: Math.round(tCogs),
+        payroll: Math.round(tPayroll),
+        opex: Math.round(tOpex),
+        loan: Math.round(loan * months),
+        netOperating: Math.round(tNetOperating),
+        cashFlow: Math.round(tCashFlow),
+        avgDscr: avgDscr == null ? null : Number(avgDscr.toFixed(2)),
+        minDscr: minDscr == null ? null : Number(minDscr.toFixed(2)),
+      },
+    });
+  } catch (e) {
+    console.error("GET /api/public/donas/summary-range-token error:", e);
+    return res.status(500).json({ error: "Failed" });
+  }
+});
+
 /** ===================== Donas Dosas: Public Investor/Bank Summary RANGE ===================== */
 /**
  * GET /api/public/donas/summary-range?key=...&months=12&end=YYYY-MM
