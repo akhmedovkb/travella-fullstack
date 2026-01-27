@@ -286,6 +286,7 @@ app.get("/api/public/donas/summary", async (req, res) => {
     }
 
     const month = String(req.query.month || "");
+    const SLUG = "donas-dosas";
 
     const settingsQ = await pool.query(
       `select * from donas_finance_settings order by id asc limit 1`
@@ -295,23 +296,23 @@ app.get("/api/public/donas/summary", async (req, res) => {
     const revenueQ = await pool.query(
       `select coalesce(sum(revenue),0) as v
        from donas_shifts
-       where to_char(date,'YYYY-MM')=$1`,
-      [month]
+       where slug=$1 and to_char(date,'YYYY-MM')=$2`,
+      [SLUG, month]
     );
 
     const cogsQ = await pool.query(
       `select coalesce(sum(total),0) as v
        from donas_purchases
        where type='purchase'
-         and to_char(date,'YYYY-MM')=$1`,
-      [month]
+         and slug=$1 and to_char(date,'YYYY-MM')=$2`,
+      [SLUG, month]
     );
 
     const payrollQ = await pool.query(
       `select coalesce(sum(total_pay),0) as v
        from donas_shifts
-       where to_char(date,'YYYY-MM')=$1`,
-      [month]
+       where slug=$1 and to_char(date,'YYYY-MM')=$2`,
+      [SLUG, month]
     );
 
     const R = Number(revenueQ.rows[0]?.v || 0);
@@ -322,9 +323,23 @@ app.get("/api/public/donas/summary", async (req, res) => {
     const variableOpex = Number(s.variable_opex_month || 0);
     const loan = Number(s.loan_payment_month || 0);
 
-    const opex = fixedOpex + variableOpex + payroll;
+    // one-off expenses (opex/capex) for month
+    const expQ = await pool.query(
+      `
+      select
+        coalesce(sum(case when kind='opex' then amount else 0 end),0) as opex_extra,
+        coalesce(sum(case when kind='capex' then amount else 0 end),0) as capex
+      from donas_expenses
+      where slug=$1 and to_char(date,'YYYY-MM')=$2
+      `,
+      [SLUG, month]
+    );
+    const opexExtra = Number(expQ.rows[0]?.opex_extra || 0);
+    const capex = Number(expQ.rows[0]?.capex || 0);
+
+    const opex = fixedOpex + variableOpex + payroll + opexExtra;
     const netOperating = R - C - opex;
-    const cashFlow = netOperating - loan;
+    const cashFlow = netOperating - loan - capex;
 
     // для банка: dscr только если netOperating > 0
     const dscr = loan > 0 && netOperating > 0 ? netOperating / loan : null;
@@ -337,6 +352,8 @@ app.get("/api/public/donas/summary", async (req, res) => {
       fixedOpex: Math.round(fixedOpex),
       variableOpex: Math.round(variableOpex),
       opex: Math.round(opex),
+      opexExtra: Math.round(opexExtra),
+      capex: Math.round(capex)
       loan: Math.round(loan),
       netOperating: Math.round(netOperating),
       cashFlow: Math.round(cashFlow),
@@ -487,6 +504,7 @@ app.get("/api/public/donas/summary-range-token", async (req, res) => {
     const endYM = String(v.payload.end || "").trim();
     const endDate = ymToFirstDay(endYM);
     if (!endDate) return res.status(400).json({ error: "Invalid end (use YYYY-MM)" });
+    const SLUG = "donas-dosas";
 
     // settings как в summary-range
     const settingsQ = await pool.query(
@@ -530,6 +548,18 @@ app.get("/api/public/donas/summary-range-token", async (req, res) => {
           coalesce(sum(total),0)::numeric AS cogs
         FROM donas_purchases
         WHERE type='purchase'
+          AND slug=$3
+          AND date >= (SELECT start_month FROM params)
+          AND date <  (SELECT end_month FROM params) + interval '1 month'
+        GROUP BY 1
+      ),
+      expenses AS (
+        SELECT
+          date_trunc('month', date)::date AS month,
+          coalesce(sum(case when kind='opex' then amount else 0 end),0)::numeric AS opex_extra,
+          coalesce(sum(case when kind='capex' then amount else 0 end),0)::numeric AS capex
+        FROM donas_expenses
+        WHERE slug=$3
           AND date >= (SELECT start_month FROM params)
           AND date <  (SELECT end_month FROM params) + interval '1 month'
         GROUP BY 1
@@ -538,32 +568,37 @@ app.get("/api/public/donas/summary-range-token", async (req, res) => {
         to_char(m.month,'YYYY-MM') AS month,
         coalesce(s.revenue,0) AS revenue,
         coalesce(c.cogs,0) AS cogs,
-        coalesce(s.payroll,0) AS payroll
+        coalesce(s.payroll,0) AS payroll,
+        coalesce(e.opex_extra,0) AS opex_extra,
+        coalesce(e.capex,0) AS capex
       FROM months m
       LEFT JOIN shifts s ON s.month = m.month
       LEFT JOIN cogs c ON c.month = m.month
+      LEFT JOIN expenses e ON e.month = m.month
       ORDER BY m.month;
       `,
-      [endDate, months]
+      [endDate, months, SLUG]
     );
 
     const monthsRows = q.rows || [];
 
-    let tRevenue = 0, tCogs = 0, tPayroll = 0, tOpex = 0, tNetOperating = 0, tCashFlow = 0;
+    let tRevenue = 0, tCogs = 0, tPayroll = 0, tOpex = 0, tOpexExtra = 0, tCapex = 0, tNetOperating = 0, tCashFlow = 0;
     const dscrValues = [];
 
     const outMonths = monthsRows.map((r) => {
       const R = Number(r.revenue || 0);
       const C = Number(r.cogs || 0);
       const payroll = Number(r.payroll || 0);
-
-      const opex = fixedOpex + variableOpex + payroll;
+      const opexExtra = Number(r.opex_extra || 0);
+      const capex = Number(r.capex || 0);
+      const opex = fixedOpex + variableOpex + payroll + opexExtra;
       const netOperating = R - C - opex;
-      const cashFlow = netOperating - loan;
+      const cashFlow = netOperating - loan - capex;
 
       const dscr = loan > 0 && netOperating > 0 ? netOperating / loan : null;
 
       tRevenue += R; tCogs += C; tPayroll += payroll; tOpex += opex;
+      tOpexExtra += opexExtra; tCapex += capex;
       tNetOperating += netOperating; tCashFlow += cashFlow;
 
       if (dscr != null && Number.isFinite(dscr)) dscrValues.push(dscr);
@@ -576,6 +611,8 @@ app.get("/api/public/donas/summary-range-token", async (req, res) => {
         fixedOpex: Math.round(fixedOpex),
         variableOpex: Math.round(variableOpex),
         opex: Math.round(opex),
+        opexExtra: Math.round(opexExtra),
+        capex: Math.round(capex),
         loan: Math.round(loan),
         netOperating: Math.round(netOperating),
         cashFlow: Math.round(cashFlow),
@@ -695,6 +732,18 @@ app.get("/api/public/donas/summary-range", async (req, res) => {
           coalesce(sum(total),0)::numeric AS cogs
         FROM donas_purchases
         WHERE type='purchase'
+        AND slug=$3
+          AND date >= (SELECT start_month FROM params)
+          AND date <  (SELECT end_month FROM params) + interval '1 month'
+        GROUP BY 1
+      ),
+      expenses AS (
+        SELECT
+          date_trunc('month', date)::date AS month,
+          coalesce(sum(case when kind='opex' then amount else 0 end),0)::numeric AS opex_extra,
+          coalesce(sum(case when kind='capex' then amount else 0 end),0)::numeric AS capex
+        FROM donas_expenses
+        WHERE slug=$3
           AND date >= (SELECT start_month FROM params)
           AND date <  (SELECT end_month FROM params) + interval '1 month'
         GROUP BY 1
@@ -703,13 +752,16 @@ app.get("/api/public/donas/summary-range", async (req, res) => {
         to_char(m.month,'YYYY-MM') AS month,
         coalesce(s.revenue,0) AS revenue,
         coalesce(c.cogs,0) AS cogs,
-        coalesce(s.payroll,0) AS payroll
+        coalesce(s.payroll,0) AS payroll,
+        coalesce(e.opex_extra,0) AS opex_extra,
+        coalesce(e.capex,0) AS capex
       FROM months m
       LEFT JOIN shifts s ON s.month = m.month
       LEFT JOIN cogs c ON c.month = m.month
+      LEFT JOIN expenses e ON e.month = m.month
       ORDER BY m.month;
       `,
-      [endDate, months]
+      [endDate, months, SLUG]
     );
 
     const monthsRows = q.rows || [];
@@ -718,6 +770,8 @@ app.get("/api/public/donas/summary-range", async (req, res) => {
     let tCogs = 0;
     let tPayroll = 0;
     let tOpex = 0;
+    let tOpexExtra = 0;
+    let tCapex = 0;
     let tNetOperating = 0;
     let tCashFlow = 0;
 
@@ -727,11 +781,12 @@ app.get("/api/public/donas/summary-range", async (req, res) => {
       const R = Number(r.revenue || 0);
       const C = Number(r.cogs || 0);
       const payroll = Number(r.payroll || 0);
-
-      const opex = fixedOpex + variableOpex + payroll;
+      const opexExtra = Number(r.opex_extra || 0);
+      const capex = Number(r.capex || 0);
+      const opex = fixedOpex + variableOpex + payroll + opexExtra;
       const netOperating = R - C - opex;
-      const cashFlow = netOperating - loan;
-
+      const cashFlow = netOperating - loan - capex;
+      
       // как у тебя в /api/public/donas/summary: dscr только если netOperating > 0
       const dscr = loan > 0 && netOperating > 0 ? netOperating / loan : null;
 
@@ -739,6 +794,8 @@ app.get("/api/public/donas/summary-range", async (req, res) => {
       tCogs += C;
       tPayroll += payroll;
       tOpex += opex;
+      tOpexExtra += opexExtra;
+      tCapex += capex;
       tNetOperating += netOperating;
       tCashFlow += cashFlow;
 
@@ -752,6 +809,8 @@ app.get("/api/public/donas/summary-range", async (req, res) => {
         fixedOpex: Math.round(fixedOpex),
         variableOpex: Math.round(variableOpex),
         opex: Math.round(opex),
+        opexExtra: Math.round(opexExtra),
+        capex: Math.round(capex),
         loan: Math.round(loan),
         netOperating: Math.round(netOperating),
         cashFlow: Math.round(cashFlow),
@@ -779,6 +838,10 @@ app.get("/api/public/donas/summary-range", async (req, res) => {
         cogs: Math.round(tCogs),
         payroll: Math.round(tPayroll),
         opex: Math.round(tOpex),
+        opexExtra: Math.round(tOpexExtra),
+        capex: Math.round(tCapex),
+        opexExtra: Math.round(tOpexExtra),
+        capex: Math.round(tCapex),
         loan: Math.round(loan * months), // справочно, фикс. платёж * кол-во месяцев
         netOperating: Math.round(tNetOperating),
         cashFlow: Math.round(tCashFlow),
