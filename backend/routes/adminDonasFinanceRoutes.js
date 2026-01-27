@@ -400,6 +400,21 @@ router.get("/donas/finance/summary", authenticateToken, requireAdmin, async (req
     const O = fixedOpex + variableOpex + payroll;
 
     const loan = Number(s.loan_payment_month || 0);
+    // manual opex by month (if exists)
+    const manualOpexQ = await pool.query(
+      `
+      select to_char(month,'YYYY-MM') as month,
+             opex
+      from donas_finance_months
+      where slug=$1
+        and to_char(month,'YYYY-MM') between $2 and $3
+      order by 1
+      `,
+      [SLUG, from, to]
+    );
+    const manualOpexMap = new Map(
+      (manualOpexQ.rows || []).map((r) => [String(r.month), r.opex])
+    );
 
     const netOperating = R - C - O;
     const cashFlow = netOperating - loan;
@@ -482,8 +497,16 @@ router.get("/donas/finance/summary-range", authenticateToken, requireAdmin, asyn
       map.set(r.month, cur);
     }
 
+    // ensure months that exist only in manual table are also present
+    for (const [m] of manualOpexMap.entries()) {
+      if (!map.has(m)) map.set(m, { month: m, revenue: 0, payroll: 0, cogs: 0 });
+    }
+   
     const out = Array.from(map.values()).map((m) => {
-      const opex = fixedOpex + variableOpex + m.payroll;
+      const manualVal = manualOpexMap.has(m.month) ? manualOpexMap.get(m.month) : null;
+      const hasManual = manualVal !== null && manualVal !== undefined;
+      const opexAuto = fixedOpex + variableOpex + m.payroll;
+      const opex = hasManual ? Number(manualVal || 0) : opexAuto;
       const netOperating = m.revenue - m.cogs - opex;
       const cashFlow = netOperating - loan;
       const dscr = loan > 0 && netOperating > 0 ? netOperating / loan : null;
@@ -493,7 +516,10 @@ router.get("/donas/finance/summary-range", authenticateToken, requireAdmin, asyn
         revenue: Math.round(m.revenue),
         cogs: Math.round(m.cogs),
         payroll: Math.round(m.payroll),
+        fixedOpex: Math.round(fixedOpex),
+        variableOpex: Math.round(variableOpex),
         opex: Math.round(opex),
+        opexSource: hasManual ? "manual" : "auto",
         loan: Math.round(loan),
         netOperating: Math.round(netOperating),
         cashFlow: Math.round(cashFlow),
