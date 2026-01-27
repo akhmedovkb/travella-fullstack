@@ -854,9 +854,6 @@ export default function DonasDosasFinance() {
           )}
         </div>
       </div>
-      <div style={{ background: "yellow", padding: 10 }}>
-  EXPENSES HERE
-</div>
       <DonasExpensesPanel
         onChanged={() => {
           load(); // пересчёт summary-range + месяцев
