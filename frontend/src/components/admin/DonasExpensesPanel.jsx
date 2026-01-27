@@ -23,7 +23,7 @@ export default function DonasExpensesPanel({ onChanged }) {
   const load = async () => {
     setLoading(true);
     try {
-      const r = await apiGet("/api/admin/donas/expenses", "provider");
+      const r = await apiGet("/api/admin/donas/ops/expenses", "provider");
       setItems(r || []);
     } catch (e) {
       setErr(e.message || "Failed to load expenses");
@@ -39,7 +39,7 @@ export default function DonasExpensesPanel({ onChanged }) {
   const submit = async () => {
     setErr("");
     try {
-      await apiPost("/api/admin/donas/expenses", form, "provider");
+      await apiPost("/api/admin/donas/ops/expenses", form, "provider");
       setForm({ date: "", amount: "", kind: "opex", category: "", note: "" });
       await load();
       onChanged?.();
@@ -50,7 +50,7 @@ export default function DonasExpensesPanel({ onChanged }) {
 
   const remove = async (id) => {
     if (!window.confirm("Удалить расход?")) return;
-    await apiDelete(`/api/admin/donas/expenses/${id}`, null, "provider");
+    await apiDelete(`/api/admin/donas/ops/expenses/${id}`, null, "provider");
     await load();
     onChanged?.();
   };
