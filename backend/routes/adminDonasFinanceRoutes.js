@@ -7,7 +7,7 @@ const requireAdmin = require("../middleware/requireAdmin");
 
 const router = express.Router();
 
-const SLUG = null; // slug в таблицах сейчас нет
+const SLUG = "donas-dosas"; // один фудтрак: фиксируем slug (в ops/months/expenses он используется)
 
 /** GET settings (самодостаточный: без slug, создаёт дефолт при первом заходе) */
 router.get("/donas/finance/settings", authenticateToken, requireAdmin, async (_req, res) => {
@@ -347,6 +347,93 @@ router.get("/donas/ops/cogs-check", authenticateToken, requireAdmin, async (req,
   }
 });
 
+/** =========================================================
+ *  OPS: ONE-OFF EXPENSES (OPEX/CAPEX events)
+ *  ========================================================= */
+
+/** POST expense { date, amount, kind:'opex'|'capex', category?, note? } */
+router.post("/donas/ops/expenses", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const date = b.date;
+    const kind = String(b.kind || "").toLowerCase();
+    const amount = Number(b.amount || 0);
+    const category = b.category ? String(b.category) : null;
+    const note = b.note ? String(b.note) : null;
+
+    if (!date) return res.status(400).json({ error: "date required" });
+    if (kind !== "opex" && kind !== "capex") return res.status(400).json({ error: "kind must be opex/capex" });
+
+    const q = await pool.query(
+      `
+      insert into donas_expenses(slug, date, amount, kind, category, note)
+      values($1,$2,$3,$4,$5,$6)
+      returning *
+      `,
+      [SLUG, date, amount, kind, category, note]
+    );
+    return res.json(q.rows[0]);
+  } catch (e) {
+    console.error("POST /donas/ops/expenses error:", e);
+    return res.status(500).json({ error: "Failed to create expense" });
+  }
+});
+
+/** GET expenses (month=YYYY-MM) OR (from/to=YYYY-MM) */
+router.get("/donas/ops/expenses", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const month = String(req.query.month || "");
+    const from = String(req.query.from || "");
+    const to = String(req.query.to || "");
+
+    let q;
+    if (month) {
+      q = await pool.query(
+        `
+        select * from donas_expenses
+        where slug=$1 and to_char(date,'YYYY-MM')=$2
+        order by date desc, id desc
+        `,
+        [SLUG, month]
+      );
+      return res.json(q.rows);
+    }
+
+    if (from && to) {
+      q = await pool.query(
+        `
+        select * from donas_expenses
+        where slug=$1 and to_char(date,'YYYY-MM') between $2 and $3
+        order by date desc, id desc
+        `,
+        [SLUG, from, to]
+      );
+      return res.json(q.rows);
+    }
+
+    return res.status(400).json({ error: "month or from/to required" });
+  } catch (e) {
+    console.error("GET /donas/ops/expenses error:", e);
+    return res.status(500).json({ error: "Failed to load expenses" });
+  }
+});
+
+/** DELETE expense */
+router.delete("/donas/ops/expenses/:id", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const id = Number(req.params.id || 0);
+    if (!id) return res.status(400).json({ error: "id required" });
+    const q = await pool.query(
+      `delete from donas_expenses where slug=$1 and id=$2 returning id`,
+      [SLUG, id]
+    );
+    return res.json({ ok: true, id: q.rows[0]?.id || id });
+  } catch (e) {
+    console.error("DELETE /donas/ops/expenses/:id error:", e);
+    return res.status(500).json({ error: "Failed to delete expense" });
+  }
+});
+
 /** GET finance summary (CF + DSCR) from ops data + settings */
 router.get("/donas/finance/summary", authenticateToken, requireAdmin, async (req, res) => {
   try {
@@ -396,29 +483,28 @@ router.get("/donas/finance/summary", authenticateToken, requireAdmin, async (req
     const fixedOpex = Number(s.fixed_opex_month || 0);
     const variableOpex = Number(s.variable_opex_month || 0);
 
+    // one-off expenses (opex/capex) for month
+    const expQ = await pool.query(
+      `
+      select
+        coalesce(sum(case when kind='opex' then amount else 0 end),0) as opex_extra,
+        coalesce(sum(case when kind='capex' then amount else 0 end),0) as capex
+      from donas_expenses
+      where slug=$1 and to_char(date,'YYYY-MM')=$2
+      `,
+      [SLUG, month]
+    );
+    const opexExtra = Number(expQ.rows[0]?.opex_extra || 0);
+    const capex = Number(expQ.rows[0]?.capex || 0);
+
     // OPEX = fixed + variable + payroll
-    const O = fixedOpex + variableOpex + payroll;
+    const O = fixedOpex + variableOpex + payroll + opexExtra;
 
     const loan = Number(s.loan_payment_month || 0);
-    // manual opex by month (if exists)
-    const manualOpexQ = await pool.query(
-      `
-      select to_char(month,'YYYY-MM') as month,
-             opex
-      from donas_finance_months
-      where slug=$1
-        and to_char(month,'YYYY-MM') between $2 and $3
-      order by 1
-      `,
-      [SLUG, from, to]
-    );
-    const manualOpexMap = new Map(
-      (manualOpexQ.rows || []).map((r) => [String(r.month), r.opex])
-    );
 
     const netOperating = R - C - O;
-    const cashFlow = netOperating - loan;
-    const dscr = loan > 0 ? netOperating / loan : null;
+    const cashFlow = netOperating - loan - capex;
+    const dscr = loan > 0 && netOperating > 0 ? netOperating / loan : null;
 
     return res.json({
       month,
@@ -426,6 +512,8 @@ router.get("/donas/finance/summary", authenticateToken, requireAdmin, async (req
       cogs: Math.round(C),
       payroll: Math.round(payroll),
       opex: Math.round(O),
+      opexExtra: Math.round(opexExtra),
+      capex: Math.round(capex),
       loan: Math.round(loan),
       netOperating: Math.round(netOperating),
       cashFlow: Math.round(cashFlow),
@@ -453,6 +541,22 @@ router.get("/donas/finance/summary-range", authenticateToken, requireAdmin, asyn
     const fixedOpex = Number(s.fixed_opex_month || 0);
     const variableOpex = Number(s.variable_opex_month || 0);
     const loan = Number(s.loan_payment_month || 0);
+
+        // manual OPEX override by month (optional)
+    const manualOpexQ = await pool.query(
+      `
+      select to_char(month,'YYYY-MM') as month,
+             opex
+      from donas_finance_months
+      where slug=$1
+        and to_char(month,'YYYY-MM') between $2 and $3
+      order by 1
+      `,
+      [SLUG, from, to]
+    );
+    const manualOpexMap = new Map(
+      (manualOpexQ.rows || []).map((r) => [String(r.month), r.opex])
+    );
 
     // revenue + payroll by month
     const shiftsQ = await pool.query(
@@ -482,6 +586,20 @@ router.get("/donas/finance/summary-range", authenticateToken, requireAdmin, asyn
       [from, to]
     );
 
+    // one-off expenses by month
+    const expQ = await pool.query(
+      `
+      select to_char(date,'YYYY-MM') as month,
+             coalesce(sum(case when kind='opex' then amount else 0 end),0) as opex_extra,
+             coalesce(sum(case when kind='capex' then amount else 0 end),0) as capex
+      from donas_expenses
+      where slug=$1 and to_char(date,'YYYY-MM') between $2 and $3
+      group by 1
+      order by 1
+      `,
+      [SLUG, from, to]
+    );
+
     const map = new Map();
     for (const r of shiftsQ.rows) {
       map.set(r.month, {
@@ -489,6 +607,8 @@ router.get("/donas/finance/summary-range", authenticateToken, requireAdmin, asyn
         revenue: Number(r.revenue || 0),
         payroll: Number(r.payroll || 0),
         cogs: 0,
+        opexExtra: 0,
+        capex: 0,
       });
     }
     for (const r of cogsQ.rows) {
@@ -497,18 +617,23 @@ router.get("/donas/finance/summary-range", authenticateToken, requireAdmin, asyn
       map.set(r.month, cur);
     }
 
-    // ensure months that exist only in manual table are also present
+    // ensure months that exist only in manual months are also present
     for (const [m] of manualOpexMap.entries()) {
-      if (!map.has(m)) map.set(m, { month: m, revenue: 0, payroll: 0, cogs: 0 });
+      if (!map.has(m)) map.set(m, { month: m, revenue: 0, payroll: 0, cogs: 0, opexExtra: 0, capex: 0 });
     }
-   
+    for (const r of expQ.rows) {
+      const cur = map.get(r.month) || { month: r.month, revenue: 0, payroll: 0, cogs: 0, opexExtra: 0, capex: 0 };
+      cur.opexExtra = Number(r.opex_extra || 0);
+      cur.capex = Number(r.capex || 0);
+      map.set(r.month, cur);
+    }   
     const out = Array.from(map.values()).map((m) => {
       const manualVal = manualOpexMap.has(m.month) ? manualOpexMap.get(m.month) : null;
       const hasManual = manualVal !== null && manualVal !== undefined;
-      const opexAuto = fixedOpex + variableOpex + m.payroll;
+      const opexAuto = fixedOpex + variableOpex + m.payroll + (m.opexExtra || 0);
       const opex = hasManual ? Number(manualVal || 0) : opexAuto;
       const netOperating = m.revenue - m.cogs - opex;
-      const cashFlow = netOperating - loan;
+      const cashFlow = netOperating - loan - (m.capex || 0);
       const dscr = loan > 0 && netOperating > 0 ? netOperating / loan : null;
 
       return {
@@ -520,6 +645,8 @@ router.get("/donas/finance/summary-range", authenticateToken, requireAdmin, asyn
         variableOpex: Math.round(variableOpex),
         opex: Math.round(opex),
         opexSource: hasManual ? "manual" : "auto",
+        opexExtra: Math.round(m.opexExtra || 0),
+        capex: Math.round(m.capex || 0),
         loan: Math.round(loan),
         netOperating: Math.round(netOperating),
         cashFlow: Math.round(cashFlow),
