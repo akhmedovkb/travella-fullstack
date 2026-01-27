@@ -353,7 +353,7 @@ app.get("/api/public/donas/summary", async (req, res) => {
       variableOpex: Math.round(variableOpex),
       opex: Math.round(opex),
       opexExtra: Math.round(opexExtra),
-      capex: Math.round(capex)
+      capex: Math.round(capex),
       loan: Math.round(loan),
       netOperating: Math.round(netOperating),
       cashFlow: Math.round(cashFlow),
