@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { apiGet, apiPut } from "../../api";
+import DonasExpensesPanel from "../../components/admin/DonasExpensesPanel";
 
 function toNum(x) {
   const n = Number(x);
@@ -853,7 +854,11 @@ export default function DonasDosasFinance() {
           )}
         </div>
       </div>
-
+      <DonasExpensesPanel
+        onChanged={() => {
+          load(); // пересчёт summary-range + месяцев
+        }}
+      />
       {/* MONTHS */}
       <div className="mt-4 rounded-2xl bg-white border p-4">
         <div className="flex items-center justify-between gap-2">
