@@ -1289,12 +1289,11 @@ function MonthRow({
   return (
     <tr className={`border-t align-top ${highlight ? "bg-amber-50" : ""}`}>
       <td className="py-2 pr-2 w-[120px]">
-        <input
-          value={r.month}
-          onChange={(e) => patch("month", e.target.value)}
-          className={inputCls(true)}
-          disabled
-        />
+      <input
+        value={r.month}
+        className={inputCls(true)}
+        disabled
+      />
 
         {/* Scenario per month */}
         <div className="mt-2">
@@ -1512,7 +1511,7 @@ function MonthRow({
               })
             }
             className={`px-3 py-1.5 rounded-lg ${
-              savingAll || locked
+              savingAll
                 ? "bg-gray-200 text-gray-500 cursor-not-allowed"
                 : "bg-gray-900 text-white"
             }`}
