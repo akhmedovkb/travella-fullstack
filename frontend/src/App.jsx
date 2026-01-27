@@ -23,7 +23,7 @@ import IndiaInside from "./pages/landing/IndiaInside";
 import LeadModal from "./components/LeadModal";
 import AdminBroadcast from "./pages/admin/AdminBroadcast";
 import DonasDosasFinance from "./pages/admin/DonasDosasFinance";
-
+import DonasInvestor from "./pages/admin/DonasInvestor";
 
 // Клиентские
 import ClientRegister from "./pages/ClientRegister";
@@ -381,7 +381,13 @@ export default function App() {
               />
             <Route
               path="/admin/donas-dosas/investor"
-              element={<DonasInvestor />}
+              element={
+                <PrivateRoute>
+                  <AdminRoute>
+                    <DonasInvestor />
+                  </AdminRoute>
+                </PrivateRoute>
+              }
             />
 
             {/* Отели (публичные) */}
@@ -398,8 +404,7 @@ export default function App() {
               path="/donas-dosas/finance"
               element={<DonasFinanceModel />}
             />
-            <Route path="/public/donas/investor" element={<DonasInvestor />} />
-
+            
             {/* Fallback — всегда последним */}
             <Route path="*" element={<Navigate to="/" replace />} />
 
