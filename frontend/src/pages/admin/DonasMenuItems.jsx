@@ -30,8 +30,7 @@ export default function DonasMenuItems() {
   const [category, setCategory] = useState("dosa");
   const [isActive, setIsActive] = useState(true);
 
-  // рецепт (пока упрощённо: ingredient_id + qty + unit)
-  // Ингредиенты подключим следующим шагом, пока id вводим руками.
+  // рецепт (упрощенно: ingredient_id + qty + unit)
   const [recipe, setRecipe] = useState([{ ingredient_id: "", qty: "", unit: "g" }]);
   const [recipeOpen, setRecipeOpen] = useState(false);
 
@@ -41,6 +40,7 @@ export default function DonasMenuItems() {
     setLoading(true);
     try {
       const q = showArchived ? "?includeArchived=true" : "";
+      // ✅ было: /api/donas/menu-items
       const r = await apiGet(`/api/admin/donas/menu-items${q}`);
       setItems(r?.items || []);
     } finally {
@@ -75,6 +75,7 @@ export default function DonasMenuItems() {
 
     // подтянуть рецепт
     try {
+      // ✅ было: /api/donas/menu-items/:id/recipe
       const r = await apiGet(`/api/admin/donas/menu-items/${item.id}/recipe`);
       const rec =
         Array.isArray(r?.recipe) && r.recipe.length
@@ -104,6 +105,7 @@ export default function DonasMenuItems() {
     if (!payload.name) return alert("Название обязательно");
 
     if (!editing) {
+      // ✅ было: /api/donas/menu-items
       const r = await apiPost("/api/admin/donas/menu-items", payload);
       const created = r?.item;
       if (!created?.id) {
@@ -119,6 +121,7 @@ export default function DonasMenuItems() {
       return;
     }
 
+    // ✅ было: /api/donas/menu-items/:id
     await apiPut(`/api/admin/donas/menu-items/${editing.id}`, payload);
     await saveRecipe(editing.id);
 
@@ -144,11 +147,13 @@ export default function DonasMenuItems() {
       })),
     };
 
+    // ✅ было: /api/donas/menu-items/:id/recipe
     await apiPut(`/api/admin/donas/menu-items/${menuItemId}/recipe`, payload);
   }
 
   async function archive(item) {
     if (!confirm(`Архивировать позицию “${item.name}”?`)) return;
+    // ✅ было: /api/donas/menu-items/:id
     await apiDelete(`/api/admin/donas/menu-items/${item.id}`);
     await load();
   }
@@ -205,72 +210,80 @@ export default function DonasMenuItems() {
             {loading && <div className="text-sm text-gray-500">Загрузка…</div>}
           </div>
 
-          <div className="mt-3 divide-y">
-            {items.map((it) => (
-              <div key={it.id} className="py-3 flex items-start justify-between gap-3">
-                <div>
-                  <div className="font-medium">
-                    {it.name}{" "}
-                    {!it.is_active && (
-                      <span className="text-xs text-gray-500">(архив)</span>
-                    )}
+          <div className="mt-3 space-y-2">
+            {items.length === 0 ? (
+              <div className="text-sm text-gray-500">Пока пусто</div>
+            ) : (
+              items.map((it) => (
+                <div
+                  key={it.id}
+                  className="p-3 rounded-xl border flex items-start justify-between gap-3"
+                >
+                  <div className="min-w-0">
+                    <div className="font-medium truncate">
+                      #{it.id} • {it.name}
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      Категория: <span className="font-medium">{it.category}</span>{" "}
+                      • Статус:{" "}
+                      <span className={cls(it.is_active ? "text-green-700" : "text-gray-500")}>
+                        {it.is_active ? "active" : "archived"}
+                      </span>
+                    </div>
                   </div>
-                  <div className="text-sm text-gray-500">
-                    Категория: {it.category || "dosa"}
-                  </div>
-                </div>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => startEdit(it)}
-                    className="px-3 py-1.5 rounded-lg border text-sm"
-                  >
-                    Редактировать
-                  </button>
-                  {it.is_active && (
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => startEdit(it)}
+                      className="px-3 py-1.5 rounded-lg border text-sm hover:bg-gray-50"
+                    >
+                      Edit
+                    </button>
                     <button
                       onClick={() => archive(it)}
-                      className="px-3 py-1.5 rounded-lg border text-sm text-red-600"
+                      className="px-3 py-1.5 rounded-lg border text-sm text-red-600 hover:bg-red-50"
                     >
-                      Архивировать
+                      Archive
                     </button>
-                  )}
+                  </div>
                 </div>
-              </div>
-            ))}
-
-            {!items.length && !loading && (
-              <div className="py-6 text-sm text-gray-500">
-                Пока нет позиций меню. Нажми “Добавить позицию”.
-              </div>
+              ))
             )}
           </div>
         </div>
 
         {/* FORM */}
         <div className="rounded-2xl border bg-white p-4">
-          <div className="font-medium">
-            {editing ? `Редактирование #${editing.id}` : "Новая позиция"}
+          <div className="flex items-center justify-between">
+            <div className="font-medium">{editing ? `Редактирование #${editing.id}` : "Создание"}</div>
+            {(editing || name || recipeOpen) && (
+              <button
+                onClick={resetForm}
+                className="text-sm text-gray-500 hover:text-black"
+              >
+                Reset
+              </button>
+            )}
           </div>
 
-          <form onSubmit={saveItem} className="mt-3 space-y-4">
-            <div className="space-y-2">
+          <form onSubmit={saveItem} className="mt-3 space-y-3">
+            <div>
               <label className="text-sm text-gray-600">Название</label>
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full border rounded-xl px-3 py-2"
-                placeholder="Напр. Masala Dosa"
+                className="mt-1 w-full rounded-xl border px-3 py-2"
+                placeholder="Например: Masala Dosa"
               />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
+              <div>
                 <label className="text-sm text-gray-600">Категория</label>
                 <select
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
-                  className="w-full border rounded-xl px-3 py-2"
+                  className="mt-1 w-full rounded-xl border px-3 py-2"
                 >
                   {CATS.map((c) => (
                     <option key={c.value} value={c.value}>
@@ -280,70 +293,58 @@ export default function DonasMenuItems() {
                 </select>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-sm text-gray-600">Активна</label>
-                <div className="flex items-center gap-2 pt-2">
+              <div className="flex items-end">
+                <label className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
                     checked={isActive}
                     onChange={(e) => setIsActive(e.target.checked)}
                   />
-                  <span className="text-sm text-gray-700">
-                    {isActive ? "Да" : "Нет"}
-                  </span>
-                </div>
+                  Активно
+                </label>
               </div>
             </div>
 
-            <div className="border rounded-2xl p-3">
-              <div className="flex items-center justify-between">
-                <div className="font-medium">Рецепт</div>
-                <button
-                  type="button"
-                  onClick={() => setRecipeOpen((v) => !v)}
-                  className="text-sm underline"
-                >
-                  {recipeOpen ? "Свернуть" : "Развернуть"}
-                </button>
-              </div>
+            <div className="pt-2 border-t">
+              <button
+                type="button"
+                onClick={() => setRecipeOpen((v) => !v)}
+                className="text-sm underline"
+              >
+                {recipeOpen ? "Скрыть рецепт" : "Редактировать рецепт"}
+              </button>
 
               {recipeOpen && (
                 <div className="mt-3 space-y-2">
                   <div className="text-xs text-gray-500">
-                    Пока без справочника ингредиентов: вводи <b>ingredient_id</b> руками.
-                    Следующим шагом подключим “Ингредиенты” с поиском/селектом.
+                    Пока ингредиенты вводим как ID (следующим шагом подключим справочник ингредиентов).
                   </div>
 
-                  {recipe.map((r, idx) => (
-                    <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+                  {recipe.map((r, i) => (
+                    <div key={i} className="grid grid-cols-12 gap-2 items-center">
                       <input
-                        className="col-span-4 border rounded-xl px-3 py-2 text-sm"
+                        className="col-span-5 rounded-xl border px-3 py-2 text-sm"
                         placeholder="ingredient_id"
                         value={r.ingredient_id}
-                        onChange={(e) =>
-                          updateRecipeRow(idx, { ingredient_id: e.target.value })
-                        }
+                        onChange={(e) => updateRecipeRow(i, { ingredient_id: e.target.value })}
                       />
                       <input
-                        className="col-span-4 border rounded-xl px-3 py-2 text-sm"
+                        className="col-span-4 rounded-xl border px-3 py-2 text-sm"
                         placeholder="qty"
                         value={r.qty}
-                        onChange={(e) => updateRecipeRow(idx, { qty: e.target.value })}
+                        onChange={(e) => updateRecipeRow(i, { qty: e.target.value })}
                       />
                       <input
-                        className="col-span-3 border rounded-xl px-3 py-2 text-sm"
-                        placeholder="unit (g/ml/pcs)"
+                        className="col-span-2 rounded-xl border px-3 py-2 text-sm"
+                        placeholder="unit"
                         value={r.unit}
-                        onChange={(e) => updateRecipeRow(idx, { unit: e.target.value })}
+                        onChange={(e) => updateRecipeRow(i, { unit: e.target.value })}
                       />
                       <button
                         type="button"
-                        onClick={() => removeRecipeRow(idx)}
-                        className={cls(
-                          "col-span-1 rounded-lg border px-2 py-2 text-sm",
-                          "hover:bg-gray-50"
-                        )}
-                        title="Удалить строку"
+                        onClick={() => removeRecipeRow(i)}
+                        className="col-span-1 text-red-600 text-sm"
+                        title="Удалить"
                       >
                         ✕
                       </button>
@@ -355,30 +356,29 @@ export default function DonasMenuItems() {
                     onClick={addRecipeRow}
                     className="px-3 py-2 rounded-lg border text-sm"
                   >
-                    + Добавить ингредиент
+                    + строка
                   </button>
                 </div>
               )}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="pt-2 flex gap-2">
               <button
                 type="submit"
                 className="px-4 py-2 rounded-xl bg-black text-white text-sm"
               >
                 {editing ? "Сохранить" : "Создать"}
               </button>
-              <button
-                type="button"
-                onClick={resetForm}
-                className="px-4 py-2 rounded-xl border text-sm"
-              >
-                Сброс
-              </button>
-            </div>
 
-            <div className="text-xs text-gray-500">
-              Удаление = <b>архивирование</b>, чтобы не ломать историю.
+              {editing && (
+                <button
+                  type="button"
+                  onClick={startCreate}
+                  className="px-4 py-2 rounded-xl border text-sm"
+                >
+                  Новая позиция
+                </button>
+              )}
             </div>
           </form>
         </div>
