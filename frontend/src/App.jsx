@@ -24,6 +24,7 @@ import LeadModal from "./components/LeadModal";
 import AdminBroadcast from "./pages/admin/AdminBroadcast";
 import DonasDosasFinance from "./pages/admin/DonasDosasFinance";
 import DonasInvestor from "./pages/admin/DonasInvestor";
+import DonasMenuItems from "./pages/admin/DonasMenuItems";
 
 // Клиентские
 import ClientRegister from "./pages/ClientRegister";
@@ -389,7 +390,16 @@ export default function App() {
                 </PrivateRoute>
               }
             />
-
+            <Route
+              path="/admin/donas-dosas/menu-items"
+              element={
+                <PrivateRoute>
+                  <AdminRoute>
+                    <DonasMenuItems />
+                  </AdminRoute>
+                </PrivateRoute>
+              }
+            />
             {/* fallback alias (на случай старых ссылок) */}
             <Route
               path="/donas-dosas/investor"
