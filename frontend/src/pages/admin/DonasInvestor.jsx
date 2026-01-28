@@ -40,13 +40,107 @@ function calcRow(m) {
   const denom = opex + loan;
   const runway = denom > 0 ? cashEnd / denom : null;
 
-  return { revenue, cogs, opex, capex, loan, cashEnd, gross, netOp, cashFlow, dscr, runway };
+  return {
+    revenue,
+    cogs,
+    opex,
+    capex,
+    loan,
+    cashEnd,
+    gross,
+    netOp,
+    cashFlow,
+    dscr,
+    runway,
+    denom,
+  };
 }
 
-function avg(list, key) {
-  const arr = (list || []).map((x) => toNum(x?.[key])).filter((x) => Number.isFinite(x));
+function avg(list, pick) {
+  const arr = (list || [])
+    .map((x) => toNum(pick(x)))
+    .filter((x) => Number.isFinite(x));
   if (!arr.length) return null;
   return arr.reduce((a, b) => a + b, 0) / arr.length;
+}
+
+function median(list, pick) {
+  const arr = (list || [])
+    .map((x) => toNum(pick(x)))
+    .filter((x) => Number.isFinite(x))
+    .sort((a, b) => a - b);
+  if (!arr.length) return null;
+  const mid = Math.floor(arr.length / 2);
+  return arr.length % 2 ? arr[mid] : (arr[mid - 1] + arr[mid]) / 2;
+}
+
+function buildForecast({ lastCashEnd, avgCashFlow, avgDenom, months = 6 }) {
+  const out = [];
+  let cash = toNum(lastCashEnd);
+  for (let i = 1; i <= months; i++) {
+    cash = cash + toNum(avgCashFlow);
+    const runway = avgDenom > 0 ? cash / avgDenom : null;
+    out.push({ step: i, cashEnd: cash, runway });
+  }
+  return out;
+}
+
+function badgeCls(kind) {
+  if (kind === "red") return "bg-red-50 text-red-800 border-red-200";
+  if (kind === "amber") return "bg-amber-50 text-amber-800 border-amber-200";
+  if (kind === "green") return "bg-green-50 text-green-800 border-green-200";
+  return "bg-gray-50 text-gray-800 border-gray-200";
+}
+
+function SparkLine({ points, height = 44 }) {
+  const w = 220;
+  const h = height;
+
+  const safe = Array.isArray(points) ? points.map((p) => toNum(p)).filter((x) => Number.isFinite(x)) : [];
+  if (!safe.length) {
+    return (
+      <div className="h-[44px] w-[220px] rounded-lg border bg-gray-50 flex items-center justify-center text-xs text-gray-500">
+        —
+      </div>
+    );
+  }
+
+  const min = Math.min(...safe);
+  const max = Math.max(...safe);
+  const pad = 6;
+
+  const scaleX = (i) => {
+    if (safe.length === 1) return w / 2;
+    return pad + (i * (w - pad * 2)) / (safe.length - 1);
+  };
+
+  const scaleY = (v) => {
+    if (max === min) return h / 2;
+    const t = (v - min) / (max - min);
+    return h - pad - t * (h - pad * 2);
+  };
+
+  const d = safe
+    .map((v, i) => `${scaleX(i)},${scaleY(v)}`)
+    .join(" ");
+
+  return (
+    <svg width={w} height={h} className="rounded-lg border bg-white">
+      <polyline
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        points={d}
+        className="text-gray-900"
+      />
+      <circle
+        cx={scaleX(safe.length - 1)}
+        cy={scaleY(safe[safe.length - 1])}
+        r="3"
+        className="fill-gray-900"
+      />
+    </svg>
+  );
 }
 
 export default function DonasInvestor() {
@@ -69,6 +163,12 @@ export default function DonasInvestor() {
   const [shareToken, setShareToken] = useState("");
 
   const currency = settings?.currency || "UZS";
+  const reserveTargetMonths = toNum(settings?.reserve_target_months || settings?.reserve_target_months || settings?.reserve_target_months || settings?.reserve_target_months); // noop safe
+  const reserveTarget = toNum(settings?.reserve_target_months ?? settings?.reserve_target_months ?? settings?.reserve_target_months);
+  const reserveMonths = toNum(settings?.reserve_target_months ?? settings?.reserve_target_months ?? settings?.reserve_target_months);
+  // ✅ правильное поле у тебя в settings: reserve_target_months (как на скрине внизу таблицы)
+  const reserve_target_months = toNum(settings?.reserve_target_months || settings?.reserve_target_months || settings?.reserve_target_months);
+  const targetMonths = toNum(settings?.reserve_target_months ?? settings?.reserve_target_months ?? settings?.reserve_target_months) || toNum(settings?.reserve_target_months || 0);
 
   const loadAdmin = async () => {
     setErr("");
@@ -148,17 +248,111 @@ export default function DonasInvestor() {
 
   const last = rows.length ? rows[rows.length - 1] : null;
 
+  const last3Tail = useMemo(() => rows.slice(Math.max(0, rows.length - 3)), [rows]);
+
   const last3 = useMemo(() => {
-    const tail = rows.slice(Math.max(0, rows.length - 3));
+    const tail = last3Tail.map((x) => x._calc);
     return {
-      revenue: avg(tail.map((x) => x._calc), "revenue"),
-      cogs: avg(tail.map((x) => x._calc), "cogs"),
-      opex: avg(tail.map((x) => x._calc), "opex"),
-      netOp: avg(tail.map((x) => x._calc), "netOp"),
-      cashFlow: avg(tail.map((x) => x._calc), "cashFlow"),
-      dscr: avg(tail.map((x) => x._calc), "dscr"),
+      netOp_avg: avg(tail, (x) => x.netOp),
+      cashFlow_avg: avg(tail, (x) => x.cashFlow),
+      denom_avg: avg(tail, (x) => x.denom), // opex + loan
+      dscr_med: median(tail, (x) => (x.dscr == null ? NaN : x.dscr)),
     };
-  }, [rows]);
+  }, [last3Tail]);
+
+  // ✅ Alerts
+  const alerts = useMemo(() => {
+    const out = [];
+    if (!last) return out;
+
+    const dscr = last._calc.dscr;
+    const runway = last._calc.runway;
+
+    if (dscr != null && dscr < 1) {
+      out.push({
+        kind: "red",
+        title: "DSCR ниже 1",
+        text: `DSCR=${dscr.toFixed(2)}. Это значит NetOp не покрывает платёж по займу.`,
+      });
+    } else if (dscr != null && dscr < 1.2) {
+      out.push({
+        kind: "amber",
+        title: "DSCR на грани",
+        text: `DSCR=${dscr.toFixed(2)}. Лучше держать запас.`,
+      });
+    }
+
+    if (targetMonths > 0 && runway != null && runway < targetMonths) {
+      out.push({
+        kind: "red",
+        title: "Runway ниже цели",
+        text: `Runway=${runway.toFixed(1)}м, target=${targetMonths}м.`,
+      });
+    }
+
+    if (last._calc.cashEnd <= 0) {
+      out.push({
+        kind: "red",
+        title: "cash_end ≤ 0",
+        text: "Денежный остаток не положительный — нужен план действий.",
+      });
+    }
+
+    if (!out.length) {
+      out.push({
+        kind: "green",
+        title: "ОК",
+        text: "Критических алертов нет (DSCR и runway в норме по текущим данным).",
+      });
+    }
+
+    return out;
+  }, [last, targetMonths]);
+
+  // ✅ Charts series
+  const cashSeries = useMemo(() => rows.map((x) => x._calc.cashEnd), [rows]);
+  const runwaySeries = useMemo(() => rows.map((x) => (x._calc.runway == null ? NaN : x._calc.runway)), [rows]);
+
+  // ✅ Forecast runway: если NetOp = avg 3 мес (точнее — avg cashflow)
+  const forecast = useMemo(() => {
+    if (!last) return null;
+    const avgCF = last3.cashFlow_avg;
+    const avgDenom = last3.denom_avg;
+
+    if (avgCF == null || avgDenom == null || avgDenom <= 0) return null;
+
+    const proj = buildForecast({
+      lastCashEnd: last._calc.cashEnd,
+      avgCashFlow: avgCF,
+      avgDenom,
+      months: 6,
+    });
+
+    // сколько месяцев до cash<=0 (грубо)
+    let monthsToZero = null;
+    if (avgCF < 0) {
+      const m = last._calc.cashEnd / Math.abs(avgCF);
+      monthsToZero = Number.isFinite(m) ? m : null;
+    }
+
+    // сколько месяцев до target (reserve)
+    let monthsToTarget = null;
+    if (targetMonths > 0) {
+      const targetCash = avgDenom * targetMonths;
+      if (avgCF < 0) {
+        const m = (last._calc.cashEnd - targetCash) / Math.abs(avgCF);
+        monthsToTarget = Number.isFinite(m) ? m : null;
+      }
+    }
+
+    return {
+      avgCF,
+      avgDenom,
+      proj,
+      monthsToZero,
+      monthsToTarget,
+    };
+  }, [last, last3, targetMonths]);
 
   const makeShare = async () => {
     setErr("");
@@ -226,7 +420,26 @@ export default function DonasInvestor() {
         </div>
       )}
 
-      {/* TOP KPI */}
+      {/* ALERTS */}
+      <div className="mt-4 rounded-2xl bg-white border p-4">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <h2 className="font-semibold">Alerts</h2>
+          <div className="text-xs text-gray-500">
+            Правила: DSCR&lt;1 · runway&lt;target · cash_end≤0
+          </div>
+        </div>
+
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+          {alerts.map((a, idx) => (
+            <div key={idx} className={`rounded-xl border p-3 ${badgeCls(a.kind)}`}>
+              <div className="font-semibold">{a.title}</div>
+              <div className="text-sm mt-1">{a.text}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* TOP KPI + CHARTS */}
       <div className="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-3">
         <Kpi
           title={`Last month cash_end (${last ? monthKey(last.month) : "—"})`}
@@ -236,23 +449,82 @@ export default function DonasInvestor() {
               ? `Runway: ${last._calc.runway == null ? "—" : `${last._calc.runway.toFixed(1)} mo`}`
               : ""
           }
+          right={<SparkLine points={cashSeries} />}
         />
         <Kpi
           title="Last month Net Operating"
           value={last ? `${fmt(last._calc.netOp)} ${currency}` : "—"}
           sub={last ? `DSCR: ${last._calc.dscr == null ? "—" : last._calc.dscr.toFixed(2)}` : ""}
+          right={
+            <div className="h-[44px] w-[220px] rounded-lg border bg-gray-50 flex items-center justify-center text-xs text-gray-500">
+              NetOp
+            </div>
+          }
         />
         <Kpi
-          title="3-mo avg (NetOp / DSCR)"
+          title="3-mo avg (cashflow / DSCR median)"
           value={
-            last3.netOp == null
+            last3.cashFlow_avg == null
               ? "—"
-              : `${fmt(last3.netOp)} ${currency} · DSCR ${last3.dscr == null ? "—" : last3.dscr.toFixed(2)}`
+              : `${fmt(last3.cashFlow_avg)} ${currency} · DSCR ${last3.dscr_med == null ? "—" : last3.dscr_med.toFixed(2)}`
           }
-          sub={
-            last3.cashFlow == null ? "" : `3-mo avg cashflow: ${fmt(last3.cashFlow)} ${currency}`
-          }
+          sub={last3.denom_avg == null ? "" : `avg(opex+loan): ${fmt(last3.denom_avg)} ${currency}`}
+          right={<SparkLine points={runwaySeries} />}
         />
+      </div>
+
+      {/* FORECAST */}
+      <div className="mt-4 rounded-2xl bg-white border p-4">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <h2 className="font-semibold">Auto-forecast runway</h2>
+          <div className="text-xs text-gray-500">
+            Если CF = avg(последние 3 месяца) · прогноз на 6 месяцев вперёд
+          </div>
+        </div>
+
+        {!forecast ? (
+          <div className="mt-3 text-sm text-gray-500">Недостаточно данных для прогноза (нужны последние 3 месяца).</div>
+        ) : (
+          <>
+            <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+              <MiniKpi title="avg cashflow / month" value={`${fmt(forecast.avgCF)} ${currency}`} />
+              <MiniKpi title="avg (opex+loan) / month" value={`${fmt(forecast.avgDenom)} ${currency}`} />
+              <MiniKpi
+                title="months to zero (если CF<0)"
+                value={forecast.monthsToZero == null ? "—" : `${forecast.monthsToZero.toFixed(1)} mo`}
+              />
+            </div>
+
+            {targetMonths > 0 && (
+              <div className="mt-3 text-sm text-gray-700">
+                Target runway: <b>{targetMonths} mo</b>{" "}
+                · est. months to drop below target:{" "}
+                <b>{forecast.monthsToTarget == null ? "—" : `${forecast.monthsToTarget.toFixed(1)} mo`}</b>
+              </div>
+            )}
+
+            <div className="mt-3 overflow-auto">
+              <table className="min-w-[700px] w-full text-sm">
+                <thead>
+                  <tr className="text-left text-gray-600">
+                    <th className="py-2 pr-2">+month</th>
+                    <th className="py-2 pr-2">Cash end</th>
+                    <th className="py-2 pr-2">Runway</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {forecast.proj.map((p) => (
+                    <tr key={p.step} className="border-t">
+                      <td className="py-2 pr-2">+{p.step}</td>
+                      <td className="py-2 pr-2">{fmt(p.cashEnd)} {currency}</td>
+                      <td className="py-2 pr-2">{p.runway == null ? "—" : `${p.runway.toFixed(1)} mo`}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </div>
 
       {/* SHARE TOKEN (admin only) */}
@@ -383,12 +655,26 @@ function Field({ label, value, onChange }) {
   );
 }
 
-function Kpi({ title, value, sub }) {
+function Kpi({ title, value, sub, right }) {
   return (
     <div className="rounded-2xl bg-white border p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-xs text-gray-600">{title}</div>
+          <div className="text-2xl font-semibold mt-1">{value}</div>
+          {sub ? <div className="text-xs text-gray-500 mt-1">{sub}</div> : null}
+        </div>
+        {right ? <div className="shrink-0">{right}</div> : null}
+      </div>
+    </div>
+  );
+}
+
+function MiniKpi({ title, value }) {
+  return (
+    <div className="rounded-xl border bg-gray-50 p-3">
       <div className="text-xs text-gray-600">{title}</div>
-      <div className="text-2xl font-semibold mt-1">{value}</div>
-      {sub ? <div className="text-xs text-gray-500 mt-1">{sub}</div> : null}
+      <div className="text-lg font-semibold mt-1">{value}</div>
     </div>
   );
 }
