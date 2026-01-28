@@ -854,11 +854,13 @@ export default function DonasDosasFinance() {
           )}
         </div>
       </div>
+
       <DonasExpensesPanel
         onChanged={() => {
           load(); // пересчёт summary-range + месяцев
         }}
       />
+
       {/* MONTHS */}
       <div className="mt-4 rounded-2xl bg-white border p-4">
         <div className="flex items-center justify-between gap-2">
@@ -1196,9 +1198,9 @@ function MonthRow({
       ? "bg-amber-50 text-amber-800 border-amber-200"
       : "bg-gray-50 text-gray-800 border-gray-200";
 
-  // ✅ locked = редактирование запрещено
-  const numDisabled = savingAll || locked;
-  const notesDisabled = savingAll || locked;
+  // ✅ manual edits allowed ONLY when month is locked
+  const numDisabled = savingAll || !locked;
+  const notesDisabled = savingAll;
 
   const inputCls = (disabled, extra = "") =>
     `w-full px-2 py-1 rounded border ${disabled ? "bg-gray-100 text-gray-400 cursor-not-allowed" : ""} ${extra}`;
@@ -1438,143 +1440,131 @@ function MonthRow({
       </td>
 
       <td className="py-2 pr-2">
-      <div className="flex flex-col gap-2">
-        <label className="flex items-center gap-2 text-xs text-gray-700 select-none">
-          <input
-            type="checkbox"
-            checked={!!planFillOnlyEmpty}
-            onChange={(e) => setPlanFillOnlyEmpty?.(e.target.checked)}
-            disabled={savingAll || locked}
-          />
-          only empty
-        </label>
-      
-        <button
-          onClick={applyPlanToThis}
-          className={`px-3 py-1.5 rounded-lg border ${
-            savingAll || locked ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-white"
-          }`}
-          disabled={savingAll || locked}
-          title="Скопировать Plan (Assumptions) в этот месяц"
-        >
-          Plan → This
-        </button>
-      
-        {/* ✅ Close month = lock + closed_at + SAVE immediately */}
-        <button
-          onClick={async () => {
-            if (savingAll || locked) return;
-      
-            const dateISO = todayISO();
-            let nextNotes = addLockedTag(r.notes);
-            nextNotes = addClosedAt(nextNotes, dateISO);
-      
-            const next = { ...r, notes: nextNotes };
-            setR(next);
-      
-            // локально обновляем таблицу
-            onChangeRow?.({
-              month: next.month,
-              slug: next.slug ?? "donas-dosas",
-              revenue: next.revenue,
-              cogs: next.cogs,
-              opex: next.opex,
-              capex: next.capex,
-              loan_paid: next.loan_paid,
-              cash_end: next.cash_end,
-              notes: nextNotes ?? "",
-            });
-      
-            // ✅ сохраняем на backend
-            await onSave?.({
-              ...row,
-              month: next.month,
-              slug: next.slug ?? "donas-dosas",
-              revenue: toNum(next.revenue),
-              cogs: toNum(next.cogs),
-              opex: toNum(next.opex),
-              capex: toNum(next.capex),
-              loan_paid: toNum(next.loan_paid),
-              cash_end: toNum(next.cash_end),
-              notes: nextNotes ?? "",
-            });
-          }}
-          className={`px-3 py-1.5 rounded-lg border ${
-            savingAll || locked ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-gray-900 text-white border-gray-900"
-          }`}
-          disabled={savingAll || locked}
-          title="Закрыть месяц: #locked + closed_at + сразу сохраняет"
-        >
-          Close month
-        </button>
-      
-        {/* ✅ Reopen = remove #locked + SAVE immediately */}
-        <button
-          onClick={async () => {
-            if (savingAll || !locked) return;
-      
-            const nextNotes = removeLockedTag(r.notes);
-            const next = { ...r, notes: nextNotes };
-            setR(next);
-      
-            onChangeRow?.({
-              month: next.month,
-              slug: next.slug ?? "donas-dosas",
-              revenue: next.revenue,
-              cogs: next.cogs,
-              opex: next.opex,
-              capex: next.capex,
-              loan_paid: next.loan_paid,
-              cash_end: next.cash_end,
-              notes: nextNotes ?? "",
-            });
-      
-            await onSave?.({
-              ...row,
-              month: next.month,
-              slug: next.slug ?? "donas-dosas",
-              revenue: toNum(next.revenue),
-              cogs: toNum(next.cogs),
-              opex: toNum(next.opex),
-              capex: toNum(next.capex),
-              loan_paid: toNum(next.loan_paid),
-              cash_end: toNum(next.cash_end),
-              notes: nextNotes ?? "",
-            });
-          }}
-          className={`px-3 py-1.5 rounded-lg border ${
-            savingAll || !locked ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-white"
-          }`}
-          disabled={savingAll || !locked}
-          title="Переоткрыть месяц: снимет #locked (closed_at останется) и сразу сохранит"
-        >
-          Reopen
-        </button>
-      
-        {/* Save — оставим как ручную кнопку (можно всегда) */}
-        <button
-          onClick={() =>
-            onSave?.({
-              ...row,
-              month: r.month,
-              slug: r.slug ?? "donas-dosas",
-              revenue: toNum(r.revenue),
-              cogs: toNum(r.cogs),
-              opex: toNum(r.opex),
-              capex: toNum(r.capex),
-              loan_paid: toNum(r.loan_paid),
-              cash_end: toNum(r.cash_end),
-              notes: r.notes ?? "",
-            })
-          }
-          className={`px-3 py-1.5 rounded-lg ${savingAll ? "bg-gray-200 text-gray-500 cursor-not-allowed" : "bg-gray-900 text-white"}`}
-          disabled={savingAll}
-          title="Сохранить текущие значения месяца"
-        >
-          Save
-        </button>
-      </div>
+        <div className="flex flex-col gap-2">
+          <label className="flex items-center gap-2 text-xs text-gray-700 select-none">
+            <input
+              type="checkbox"
+              checked={!!planFillOnlyEmpty}
+              onChange={(e) => setPlanFillOnlyEmpty?.(e.target.checked)}
+              disabled={savingAll || locked}
+            />
+            only empty
+          </label>
 
+          <button
+            onClick={applyPlanToThis}
+            className={`px-3 py-1.5 rounded-lg border ${
+              savingAll || !locked ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-white"
+            }`}
+            disabled={savingAll || !locked}
+            title="Скопировать Plan (Assumptions) в этот месяц"
+          >
+            Plan → This
+          </button>
+
+          <button
+            onClick={() => {
+              // Close month: add #locked + closed_at: YYYY-MM-DD (once)
+              if (savingAll || locked) return;
+              const dateISO = todayISO();
+              let nextNotes = addLockedTag(r.notes);
+              nextNotes = addClosedAt(nextNotes, dateISO);
+              const next = { ...r, notes: nextNotes };
+              setR(next);
+              onChangeRow?.({
+                month: next.month,
+                slug: next.slug ?? "donas-dosas",
+                revenue: next.revenue,
+                cogs: next.cogs,
+                opex: next.opex,
+                capex: next.capex,
+                loan_paid: next.loan_paid,
+                cash_end: next.cash_end,
+                notes: nextNotes ?? "",
+              });
+            }}
+            className={`px-3 py-1.5 rounded-lg border ${
+              locked ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-gray-900 text-white border-gray-900"
+            }`}
+            disabled={savingAll || locked}
+            title="Закрыть месяц: добавит #locked и closed_at. Потом сохрани (Save/Save all)."
+          >
+            Close month
+          </button>
+
+          <button
+            onClick={async () => {
+              // Close month: add #locked + closed_at and IMMEDIATELY save snapshot
+              if (savingAll || locked) return;
+
+              const dateISO = todayISO();
+              let nextNotes = addLockedTag(r.notes);
+              nextNotes = addClosedAt(nextNotes, dateISO);
+
+              const next = { ...r, notes: nextNotes };
+              setR(next);
+
+              // синхроним в таблицу (локально)
+              onChangeRow?.({
+                month: next.month,
+                slug: next.slug ?? "donas-dosas",
+                revenue: next.revenue,
+                cogs: next.cogs,
+                opex: next.opex,
+                capex: next.capex,
+                loan_paid: next.loan_paid,
+                cash_end: next.cash_end,
+                notes: nextNotes ?? "",
+              });
+
+              // ✅ и сразу сохраняем на backend
+              await onSave?.({
+                ...row,
+                month: next.month,
+                slug: next.slug ?? "donas-dosas",
+                revenue: toNum(next.revenue),
+                cogs: toNum(next.cogs),
+                opex: toNum(next.opex),
+                capex: toNum(next.capex),
+                loan_paid: toNum(next.loan_paid),
+                cash_end: toNum(next.cash_end),
+                notes: nextNotes ?? "",
+              });
+            }}
+            className={`px-3 py-1.5 rounded-lg border ${
+              !locked ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-white"
+            }`}
+            disabled={savingAll || !locked}
+            title="Сделать снапшот сразу: закрыть месяц и сразу сохранить"
+          >
+            Close + Save snapshot
+          </button>
+
+          <button
+            onClick={() =>
+              onSave({
+                ...row,
+                month: r.month,
+                slug: r.slug ?? "donas-dosas",
+                revenue: toNum(r.revenue),
+                cogs: toNum(r.cogs),
+                opex: toNum(r.opex),
+                capex: toNum(r.capex),
+                loan_paid: toNum(r.loan_paid),
+                cash_end: cashEnd,
+                notes: r.notes ?? "",
+              })
+            }
+            className={`px-3 py-1.5 rounded-lg ${
+              savingAll || !locked
+                ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+                : "bg-gray-900 text-white"
+            }`}
+            disabled={savingAll || !locked}
+          >
+            Save
+          </button>
+        </div>
       </td>
     </tr>
   );
