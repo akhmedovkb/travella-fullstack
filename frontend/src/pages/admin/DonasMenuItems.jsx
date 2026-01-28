@@ -50,7 +50,8 @@ export default function DonasMenuItems() {
   async function loadMenuItems() {
     setLoading(true);
     try {
-      const r = await apiGet("/api/donas/menu-items");
+      // ✅ только admin endpoint
+      const r = await apiGet("/api/admin/donas/menu-items?includeArchived=1", true);
       setItems(Array.isArray(r?.items) ? r.items : []);
     } finally {
       setLoading(false);
@@ -58,14 +59,13 @@ export default function DonasMenuItems() {
   }
 
   async function loadIngredients() {
-    // берём только активные (не архив)
-    const r = await apiGet("/api/admin/donas/ingredients");
+    // ✅ только admin endpoint
+    const r = await apiGet("/api/admin/donas/ingredients", true);
     setIngredients(Array.isArray(r?.items) ? r.items : []);
   }
 
   useEffect(() => {
     loadMenuItems();
-    // подгружаем ингредиенты заранее (чтобы селект был мгновенный)
     loadIngredients().catch(() => {});
   }, []);
 
@@ -81,7 +81,7 @@ export default function DonasMenuItems() {
     setForm({
       name: it.name || "",
       category: it.category || "",
-      price: it.price ?? "",
+      price: it.sell_price ?? it.price ?? "",
       is_active: !!it.is_active,
       description: it.description || "",
     });
@@ -95,7 +95,9 @@ export default function DonasMenuItems() {
       const payload = {
         name: String(form.name || "").trim(),
         category: String(form.category || "").trim() || null,
+        // поддержим несколько имён полей (в разных версиях БД/кода)
         price: form.price === "" ? null : toNum(form.price),
+        sell_price: form.price === "" ? null : toNum(form.price),
         is_active: !!form.is_active,
         description: String(form.description || "").trim() || null,
       };
@@ -103,9 +105,9 @@ export default function DonasMenuItems() {
       if (!payload.name) return;
 
       if (editingId) {
-        await apiPut(`/api/donas/menu-items/${editingId}`, payload);
+        await apiPut(`/api/admin/donas/menu-items/${editingId}`, payload, true);
       } else {
-        await apiPost("/api/donas/menu-items", payload);
+        await apiPost("/api/admin/donas/menu-items", payload, true);
       }
 
       await loadMenuItems();
@@ -116,7 +118,7 @@ export default function DonasMenuItems() {
   }
 
   async function remove(id) {
-    await apiDelete(`/api/donas/menu-items/${id}`);
+    await apiDelete(`/api/admin/donas/menu-items/${id}`, null, true);
     if (editingId === id) startCreate();
     await loadMenuItems();
   }
@@ -127,10 +129,9 @@ export default function DonasMenuItems() {
     setRecipeRows([]);
 
     try {
-      // recipes for a menu item
-      const r = await apiGet(`/api/admin/donas/recipes?menu_item_id=${itemId}`);
-      setRecipeRows(Array.isArray(r?.items) ? r.items : []);
-      // на всякий — обновим ингредиенты (если кто-то добавил новые)
+      // ✅ только admin endpoint
+      const r = await apiGet(`/api/admin/donas/menu-items/${itemId}/recipe`, true);
+      setRecipeRows(Array.isArray(r?.recipe) ? r.recipe : []);
       await loadIngredients();
     } finally {
       setRecipeLoading(false);
@@ -150,7 +151,6 @@ export default function DonasMenuItems() {
         ingredient_id: "",
         qty: "",
         unit: "g",
-        notes: "",
       },
     ]);
   }
@@ -176,43 +176,29 @@ export default function DonasMenuItems() {
     if (recipeSaving) return;
     setRecipeSaving(true);
     try {
-      // сохраним построчно
-      for (const row of recipeRows) {
-        const payload = {
-          menu_item_id: menuItemId,
+      const cleaned = recipeRows
+        .map((row) => ({
           ingredient_id: row.ingredient_id === "" ? null : Number(row.ingredient_id),
-          qty: row.qty === "" ? null : toNum(row.qty),
-          unit: String(row.unit || "").trim() || null,
-          notes: String(row.notes || "").trim() || null,
-        };
+          qty: row.qty === "" ? 0 : toNum(row.qty),
+          unit: String(row.unit || "").trim() || "g",
+        }))
+        .filter((r) => Number.isFinite(r.ingredient_id) && r.ingredient_id > 0);
 
-        if (!payload.ingredient_id || !payload.qty) {
-          continue; // пропускаем пустые строки
-        }
+      // ✅ только admin endpoint
+      const r = await apiPut(
+        `/api/admin/donas/menu-items/${menuItemId}/recipe`,
+        { recipe: cleaned },
+        true
+      );
 
-        if (row.id) {
-          await apiPut(`/api/admin/donas/recipes/${row.id}`, payload);
-        } else {
-          await apiPost(`/api/admin/donas/recipes`, payload);
-        }
-      }
-
-      // перезагрузим
-      const r = await apiGet(`/api/admin/donas/recipes?menu_item_id=${menuItemId}`);
-      setRecipeRows(Array.isArray(r?.items) ? r.items : []);
+      setRecipeRows(Array.isArray(r?.recipe) ? r.recipe : []);
     } finally {
       setRecipeSaving(false);
     }
   }
 
-  async function deleteRecipeRow(row) {
-    if (!row?.id) {
-      // локальная строка
-      setRecipeRows((rows) => rows.filter((r) => r !== row));
-      return;
-    }
-    await apiDelete(`/api/admin/donas/recipes/${row.id}`);
-    setRecipeRows((rows) => rows.filter((r) => r.id !== row.id));
+  function deleteRecipeRow(row) {
+    setRecipeRows((rows) => rows.filter((r) => r !== row));
   }
 
   return (
@@ -328,7 +314,9 @@ export default function DonasMenuItems() {
                 <tr key={it.id} className="border-t">
                   <td className="px-4 py-2 font-medium">{it.name}</td>
                   <td className="px-4 py-2">{it.category || "—"}</td>
-                  <td className="px-4 py-2 text-right">{it.price != null ? fmt(it.price) : "—"}</td>
+                  <td className="px-4 py-2 text-right">
+                    {it.sell_price != null || it.price != null ? fmt(it.sell_price ?? it.price) : "—"}
+                  </td>
                   <td className="px-4 py-2">{it.is_active ? "active" : "inactive"}</td>
                   <td className="px-4 py-2 text-right whitespace-nowrap">
                     <div className="inline-flex gap-2">
@@ -348,7 +336,7 @@ export default function DonasMenuItems() {
                         onClick={() => remove(it.id)}
                         className="px-3 py-1.5 rounded-xl border border-red-200 text-red-700 hover:bg-red-50"
                       >
-                        Delete
+                        Archive
                       </button>
                     </div>
                   </td>
@@ -406,21 +394,19 @@ export default function DonasMenuItems() {
                           <th className="text-left px-3 py-2">Ingredient</th>
                           <th className="text-right px-3 py-2">Qty</th>
                           <th className="text-left px-3 py-2">Unit</th>
-                          <th className="text-left px-3 py-2">Notes</th>
                           <th className="text-right px-3 py-2">Action</th>
                         </tr>
                       </thead>
                       <tbody>
                         {recipeRows.length === 0 && (
                           <tr>
-                            <td className="px-3 py-5 text-gray-500" colSpan={5}>
+                            <td className="px-3 py-5 text-gray-500" colSpan={4}>
                               Рецепт пустой — добавь строки.
                             </td>
                           </tr>
                         )}
 
                         {recipeRows.map((row, idx) => {
-                          const ingId = row.ingredient_id === "" ? "" : Number(row.ingredient_id);
                           return (
                             <tr key={row.id ?? `new-${idx}`} className="border-t">
                               <td className="px-3 py-2">
@@ -436,71 +422,17 @@ export default function DonasMenuItems() {
                                     </option>
                                   ))}
                                 </select>
-                                {ingId ? (
-                                  <div className="text-[11px] text-gray-500 mt-1">
-                                    selected: #{ingId}
-                                  </div>
-                                ) : null}
                               </td>
 
                               <td className="px-3 py-2 text-right">
                                 <input
                                   className="border rounded-xl px-2 py-1 w-28 text-right"
                                   value={row.qty ?? ""}
-                                  onChange={(e) =>
-                                    updateRecipeRow(idx, { qty: e.target.value })
-                                  }
+                                  onChange={(e) => updateRecipeRow(idx, { qty: e.target.value })}
                                 />
                               </td>
 
                               <td className="px-3 py-2">
                                 <select
                                   className="border rounded-xl px-2 py-1"
-                                  value={row.unit ?? "g"}
-                                  onChange={(e) =>
-                                    updateRecipeRow(idx, { unit: e.target.value })
-                                  }
-                                >
-                                  <option value="g">g</option>
-                                  <option value="ml">ml</option>
-                                  <option value="pcs">pcs</option>
-                                </select>
-                              </td>
-
-                              <td className="px-3 py-2">
-                                <input
-                                  className="border rounded-xl px-2 py-1 w-full"
-                                  value={row.notes ?? ""}
-                                  onChange={(e) =>
-                                    updateRecipeRow(idx, { notes: e.target.value })
-                                  }
-                                />
-                              </td>
-
-                              <td className="px-3 py-2 text-right">
-                                <button
-                                  onClick={() => deleteRecipeRow(row)}
-                                  className="px-3 py-1.5 rounded-xl border border-red-200 text-red-700 hover:bg-red-50"
-                                >
-                                  Remove
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div className="text-xs text-gray-500">
-                    Ингредиенты берутся из <b>Dona’s Dosas — Ingredients</b>. Unit подставляется автоматически по выбранному ингредиенту.
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+                                  value
