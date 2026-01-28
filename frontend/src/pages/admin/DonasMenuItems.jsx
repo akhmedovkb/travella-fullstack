@@ -435,4 +435,39 @@ export default function DonasMenuItems() {
                               <td className="px-3 py-2">
                                 <select
                                   className="border rounded-xl px-2 py-1"
-                                  value
+                                  value={row.unit ?? "g"}
+                                  onChange={(e) => updateRecipeRow(idx, { unit: e.target.value })}
+                                >
+                                  <option value="g">g</option>
+                                  <option value="ml">ml</option>
+                                  <option value="pcs">pcs</option>
+                                </select>
+                              </td>
+
+                              <td className="px-3 py-2 text-right">
+                                <button
+                                  onClick={() => deleteRecipeRow(row)}
+                                  className="px-3 py-1.5 rounded-xl border border-red-200 text-red-700 hover:bg-red-50"
+                                >
+                                  Remove
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="text-xs text-gray-500">
+                    Ингредиенты берутся из <b>Dona’s Dosas — Ingredients</b>. Unit подставляется автоматически.
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
