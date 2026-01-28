@@ -1,4 +1,5 @@
 // backend/routes/donasPublicMenuRoutes.js
+// ✅ Public menu (HTML + PDF via PDFKit) — no puppeteer
 
 const express = require("express");
 const pool = require("../db");
@@ -13,10 +14,6 @@ function toNum(x) {
 function money(n) {
   const v = Math.round(toNum(n));
   return v.toLocaleString("ru-RU");
-}
-function moneySpaced(n) {
-  const v = Math.round(toNum(n));
-  return v.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
 }
 function esc(s) {
   return String(s ?? "")
@@ -78,7 +75,7 @@ async function fetchMenuData() {
       cogs += ppu * qty;
     }
 
-    // если нет рецепта или все строки "нулевые" → считаем, что COGS неизвестен
+    // если нет рецепта или всё "нулевое" — COGS неизвестен (null)
     const cogsVal = recipe.length === 0 || !hasAnyValid ? null : cogs;
     const profit = cogsVal === null ? null : price - cogsVal;
     const margin = cogsVal === null || price <= 0 ? null : (profit / price) * 100;
@@ -100,6 +97,7 @@ async function fetchMenuData() {
 }
 
 function renderMenuHTML({ items, updatedAt, mode }) {
+  // mode: "public" (только название+цена) или "admin" (с COGS/маржой)
   const showFinance = mode === "admin";
 
   const rows = items
@@ -135,7 +133,9 @@ function renderMenuHTML({ items, updatedAt, mode }) {
 
   const note = showFinance
     ? `<div class="note">COGS/Маржа видны только в админ-режиме.</div>`
-    : `<div class="note">Цены в UZS. Обновлено: ${esc(new Date(updatedAt).toLocaleString("ru-RU"))}</div>`;
+    : `<div class="note">Цены в UZS. Обновлено: ${esc(
+        new Date(updatedAt).toLocaleString("ru-RU")
+      )}</div>`;
 
   return `<!doctype html>
 <html lang="ru">
@@ -150,7 +150,6 @@ function renderMenuHTML({ items, updatedAt, mode }) {
       --text:#111827;
       --muted:#6b7280;
       --line:#e5e7eb;
-      --accent:#111827;
     }
     *{ box-sizing:border-box; }
     body{
@@ -255,128 +254,87 @@ function renderMenuHTML({ items, updatedAt, mode }) {
 </html>`;
 }
 
-// PDF (без puppeteer)
-function sendMenuPdf(res, { items, updatedAt }) {
-  res.status(200);
+// ✅ PDF generator (stream) — no puppeteer, works on Railway
+function streamMenuPdf(res, { items, updatedAt }) {
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", 'inline; filename="donas-dosas-menu.pdf"');
-  res.setHeader("Cache-Control", "no-store");
 
-  const doc = new PDFDocument({
-    size: "A4",
-    margins: { top: 48, left: 48, right: 48, bottom: 48 },
-  });
-
+  const doc = new PDFDocument({ margin: 40, size: "A4" });
   doc.pipe(res);
 
-  doc.fontSize(20).text("Dona’s Dosas — Menu", { align: "center" });
-  doc.moveDown(0.25);
-  doc.fontSize(10).fillColor("#666").text("Fresh • Simple • Tasty", { align: "center" });
-  doc.fillColor("#000");
-  doc.moveDown(0.8);
+  // Title
+  doc.font("Helvetica-Bold").fontSize(22).text("Dona’s Dosas — Menu", {
+    align: "center",
+  });
+  doc.moveDown(0.35);
+  doc.font("Helvetica").fontSize(12).fillColor("#6b7280").text(
+    "Fresh • Simple • Tasty",
+    { align: "center" }
+  );
+  doc.moveDown(1);
+  doc.fillColor("#111827");
 
-  doc
-    .fontSize(10)
-    .fillColor("#666")
-    .text(`Prices in UZS • Updated: ${new Date(updatedAt).toLocaleString("ru-RU")}`, {
-      align: "center",
-    });
-  doc.fillColor("#000");
-  doc.moveDown(1.2);
+  // Table header
+  const leftX = 40;
+  const rightX = 555;
+  const priceX = 470;
 
-  const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-  const colNameW = Math.floor(pageWidth * 0.72);
-  const colPriceW = pageWidth - colNameW;
+  doc.font("Helvetica-Bold").fontSize(11);
+  doc.text("Dish", leftX, doc.y, { width: priceX - leftX - 10 });
+  doc.text("Price (UZS)", priceX, doc.y, { width: rightX - priceX, align: "right" });
 
-  function drawHeader() {
-    doc.fontSize(11).fillColor("#000");
-    const y = doc.y;
-    doc.text("DISH", doc.page.margins.left, y, { width: colNameW, continued: true });
-    doc.text("PRICE", doc.page.margins.left + colNameW, y, { width: colPriceW, align: "right" });
+  doc.moveDown(0.4);
+  doc.moveTo(leftX, doc.y).lineTo(rightX, doc.y).stroke("#e5e7eb");
+  doc.moveDown(0.6);
 
-    doc.moveDown(0.5);
-    const lineY = doc.y;
-    doc
-      .moveTo(doc.page.margins.left, lineY)
-      .lineTo(doc.page.margins.left + pageWidth, lineY)
-      .lineWidth(1)
-      .strokeColor("#E5E7EB")
-      .stroke();
-    doc.moveDown(0.6);
-  }
+  doc.font("Helvetica").fontSize(11).fillColor("#111827");
 
-  function ensureSpace(heightNeeded = 22) {
-    const bottomY = doc.page.height - doc.page.margins.bottom;
-    if (doc.y + heightNeeded > bottomY) {
-      doc.addPage();
-      drawHeader();
-    }
-  }
-
-  drawHeader();
-
-  if (!items?.length) {
-    doc.fontSize(12).fillColor("#666").text("No active items yet.", { align: "center" });
-    doc.end();
-    return;
-  }
-
-  // группируем по category для красоты
-  const byCat = new Map();
   for (const it of items) {
-    const cat = String(it.category || "Other").trim() || "Other";
-    if (!byCat.has(cat)) byCat.set(cat, []);
-    byCat.get(cat).push(it);
-  }
-
-  for (const [cat, list] of byCat.entries()) {
-    ensureSpace(34);
-    doc.fontSize(12).fillColor("#111827").text(String(cat).toUpperCase());
-    doc.moveDown(0.35);
-
-    const lineY = doc.y;
-    doc
-      .moveTo(doc.page.margins.left, lineY)
-      .lineTo(doc.page.margins.left + pageWidth, lineY)
-      .lineWidth(1)
-      .strokeColor("#F3F4F6")
-      .stroke();
-    doc.moveDown(0.6);
-
-    for (const it of list) {
-      ensureSpace(22);
-
-      const name = String(it.name || `Item #${it.id}`).trim();
-      const price = moneySpaced(it.price);
-
-      const y = doc.y;
-      doc.fontSize(11).fillColor("#111827");
-      doc.text(name, doc.page.margins.left, y, { width: colNameW, continued: true });
-      doc.text(price, doc.page.margins.left + colNameW, y, { width: colPriceW, align: "right" });
-
-      doc.moveDown(0.75);
-
-      const rowLineY = doc.y;
-      doc
-        .moveTo(doc.page.margins.left, rowLineY)
-        .lineTo(doc.page.margins.left + pageWidth, rowLineY)
-        .lineWidth(1)
-        .strokeColor("#F3F4F6")
-        .stroke();
-
-      doc.moveDown(0.5);
+    // Page break safety
+    if (doc.y > 760) {
+      doc.addPage();
     }
+
+    const name = String(it.name || "");
+    const priceStr = money(it.price);
+
+    const y0 = doc.y;
+
+    // Name
+    doc.text(name, leftX, y0, { width: priceX - leftX - 10 });
+
+    // Price
+    doc.text(priceStr, priceX, y0, { width: rightX - priceX, align: "right" });
+
+    // Optional description
+    if (it.description) {
+      doc.moveDown(0.2);
+      doc.fontSize(9).fillColor("#6b7280");
+      doc.text(String(it.description), leftX + 12, doc.y, {
+        width: rightX - (leftX + 12),
+      });
+      doc.fontSize(11).fillColor("#111827");
+    }
+
+    doc.moveDown(0.7);
+    doc.moveTo(leftX, doc.y).lineTo(rightX, doc.y).stroke("#f3f4f6");
+    doc.moveDown(0.6);
   }
+
+  doc.moveDown(0.8);
+  doc.fontSize(9).fillColor("#6b7280").text(
+    `Prices in UZS • Updated: ${new Date(updatedAt).toLocaleString("ru-RU")}`,
+    { align: "right" }
+  );
 
   doc.end();
 }
 
 // Public HTML menu (QR/Print)
-router.get("/menu/donas-dosas", async (req, res) => {
+router.get("/menu/donas-dosas", async (_req, res) => {
   try {
     const data = await fetchMenuData();
     const html = renderMenuHTML({ ...data, mode: "public" });
-
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     return res.send(html);
   } catch (e) {
@@ -385,14 +343,14 @@ router.get("/menu/donas-dosas", async (req, res) => {
   }
 });
 
-// PDF menu (реальный PDF, без puppeteer)
-router.get("/menu/donas-dosas.pdf", async (req, res) => {
+// Public PDF menu
+router.get("/menu/donas-dosas.pdf", async (_req, res) => {
   try {
     const data = await fetchMenuData();
-    return sendMenuPdf(res, data);
+    return streamMenuPdf(res, data);
   } catch (e) {
     console.error("GET /menu/donas-dosas.pdf error:", e);
-    return res.status(500).type("text/plain").send("PDF error");
+    return res.status(500).send("PDF error");
   }
 });
 
