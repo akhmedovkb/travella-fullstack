@@ -9,657 +9,330 @@ const router = express.Router();
 
 const SLUG = "donas-dosas"; // один фудтрак: фиксируем slug (в ops/months/expenses он используется)
 
-/** GET settings (самодостаточный: без slug, создаёт дефолт при первом заходе) */
-router.get("/donas/finance/settings", authenticateToken, requireAdmin, async (_req, res) => {
+function isLockedNotes(notes) {
+  return String(notes || "").toLowerCase().includes("#locked");
+}
+
+function ymFromDateLike(x) {
+  const s = String(x || "");
+  if (!s) return null;
+  // "YYYY-MM-01" or "YYYY-MM-31T..." -> "YYYY-MM"
+  if (/^\d{4}-\d{2}/.test(s)) return s.slice(0, 7);
+  // "YYYY-MM"
+  if (/^\d{4}-\d{2}$/.test(s)) return s;
+  return null;
+}
+
+function isoMonthStartFromYM(ym) {
+  const m = ymFromDateLike(ym);
+  if (!m) return null;
+  return `${m}-01`;
+}
+
+function toNum(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+// CF = NetOp - loan_paid - capex
+// cash_end = prev_cash + CF
+function recalcCashChain(rows, cashStart) {
+  let cash = toNum(cashStart);
+  return rows.map((r) => {
+    const revenue = toNum(r.revenue);
+    const cogs = toNum(r.cogs);
+    const opex = toNum(r.opex);
+    const capex = toNum(r.capex);
+    const loan_paid = toNum(r.loan_paid);
+
+    const gp = revenue - cogs;
+    const netOp = gp - opex;
+    const cf = netOp - loan_paid - capex;
+
+    cash = cash + cf;
+
+    return {
+      ...r,
+      cash_end: cash,
+      _calc: { gp, netOp, cf },
+    };
+  });
+}
+
+/**
+ * SETTINGS
+ * GET  /api/admin/donas/finance/settings
+ * PUT  /api/admin/donas/finance/settings
+ */
+router.get("/settings", authenticateToken, requireAdmin, async (req, res) => {
   try {
     const q = await pool.query(
-      "select * from donas_finance_settings order by id asc limit 1"
-    );
-
-    if (!q.rows[0]) {
-      const ins = await pool.query(
-        "insert into donas_finance_settings default values returning *"
-      );
-      return res.json(ins.rows[0]);
-    }
-
-    return res.json(q.rows[0]);
-  } catch (e) {
-    console.error("GET /donas/finance/settings error:", e);
-    return res.status(500).json({ error: "Failed to load settings" });
-  }
-});
-
-
-/** PUT settings (самодостаточный: без slug, создаёт дефолт если пусто) */
-router.put("/donas/finance/settings", authenticateToken, requireAdmin, async (req, res) => {
-  try {
-    const s = req.body || {};
-
-    // 1) гарантируем, что в таблице есть хотя бы 1 строка
-    const first = await pool.query(
-      "select id from donas_finance_settings order by id asc limit 1"
-    );
-
-    if (!first.rows[0]) {
-      await pool.query("insert into donas_finance_settings default values");
-    }
-
-    // 2) собираем динамический UPDATE
-    const fields = [
-      "currency",
-      "avg_check",
-      "cogs_per_unit",
-      "units_per_day",
-      "days_per_month",
-      "fixed_opex_month",
-      "variable_opex_month",
-      "loan_payment_month",
-      "cash_start",
-      "reserve_target_months",
-    ];
-
-    const sets = [];
-    const vals = [];
-    let i = 1;
-
-    for (const f of fields) {
-      if (s[f] == null) continue;
-      sets.push(`${f}=$${i++}`);
-      vals.push(s[f]);
-    }
-
-    // если ничего не пришло — просто вернём текущие настройки
-    if (!sets.length) {
-      const cur = await pool.query(
-        "select * from donas_finance_settings order by id asc limit 1"
-      );
-      return res.json(cur.rows[0] || {});
-    }
-
-    const sql = `
-      update donas_finance_settings
-      set ${sets.join(", ")}, updated_at=now()
-      where id = (select id from donas_finance_settings order by id asc limit 1)
-      returning *
-    `;
-
-    const q = await pool.query(sql, vals);
-    return res.json(q.rows[0]);
-  } catch (e) {
-    console.error("PUT /donas/finance/settings error:", e);
-    return res.status(500).json({ error: "Failed to save settings" });
-  }
-});
-
-/** GET months list */
-router.get("/donas/finance/months", authenticateToken, requireAdmin, async (_req, res) => {
-  try {
-    const q = await pool.query(
-      "select * from donas_finance_months where slug=$1 order by month asc",
-      [SLUG]
-    );
-    return res.json(q.rows);
-  } catch (e) {
-    console.error("GET /donas/finance/months error:", e);
-    return res.status(500).json({ error: "Failed to load months" });
-  }
-});
-
-/** PUT month upsert */
-router.put("/donas/finance/months/:month", authenticateToken, requireAdmin, async (req, res) => {
-  try {
-    const month = req.params.month; // YYYY-MM-01
-    const b = req.body || {};
-
-    const q = await pool.query(
-      `
-      insert into donas_finance_months(
-        slug, month, revenue, cogs, opex, capex, loan_paid, cash_end, notes
-      )
-      values($1,$2,$3,$4,$5,$6,$7,$8,$9)
-      on conflict (slug, month) do update set
-        revenue=excluded.revenue,
-        cogs=excluded.cogs,
-        opex=excluded.opex,
-        capex=excluded.capex,
-        loan_paid=excluded.loan_paid,
-        cash_end=excluded.cash_end,
-        notes=excluded.notes,
-        updated_at=now()
-      returning *
-      `,
-      [
-        SLUG,
-        month,
-        Number(b.revenue || 0),
-        Number(b.cogs || 0),
-        Number(b.opex || 0),
-        Number(b.capex || 0),
-        Number(b.loan_paid || 0),
-        Number(b.cash_end || 0),
-        b.notes || null,
-      ]
-    );
-
-    return res.json(q.rows[0]);
-  } catch (e) {
-    console.error("PUT /donas/finance/months/:month error:", e);
-    return res.status(500).json({ error: "Failed to save month" });
-  }
-});
-
-/* =========================================================
-   OPS: SHIFTS / PURCHASES / RECIPE NORMS / COGS CHECK / SUMMARY
-   Все под admin + slug фиксированный (donas-dosas)
-   ========================================================= */
-
-/** POST shift */
-router.post("/donas/ops/shifts", authenticateToken, requireAdmin, async (req, res) => {
-  try {
-    const b = req.body || {};
-    const fixed = Number(b.fixed_pay || 0);
-    const perc = Number(b.percent_pay || 0);
-    const bonus = Number(b.bonus || 0);
-    const total = fixed + perc + bonus;
-
-    const q = await pool.query(
-      `
-      insert into donas_shifts(
-        slug, date, staff_name, units_sold, revenue, gross_profit,
-        fixed_pay, percent_pay, bonus, total_pay, status
-      )
-      values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-      returning *
-      `,
-      [
-        SLUG,
-        b.date,
-        b.staff_name || null,
-        Number(b.units_sold || 0),
-        Number(b.revenue || 0),
-        Number(b.gross_profit || 0),
-        fixed,
-        perc,
-        bonus,
-        total,
-        b.status || "ok",
-      ]
-    );
-
-    return res.json(q.rows[0]);
-  } catch (e) {
-    console.error("POST /donas/ops/shifts error:", e);
-    return res.status(500).json({ error: "Failed to create shift" });
-  }
-});
-
-/** GET shifts by month (YYYY-MM) */
-router.get("/donas/ops/shifts", authenticateToken, requireAdmin, async (req, res) => {
-  try {
-    const month = String(req.query.month || "");
-    const q = await pool.query(
-      `
-      select * from donas_shifts
-      where slug=$1 and to_char(date,'YYYY-MM')=$2
-      order by date desc, id desc
-      `,
-      [SLUG, month]
-    );
-    return res.json(q.rows);
-  } catch (e) {
-    console.error("GET /donas/ops/shifts error:", e);
-    return res.status(500).json({ error: "Failed to load shifts" });
-  }
-});
-
-/** POST purchase/writeoff */
-router.post("/donas/ops/purchases", authenticateToken, requireAdmin, async (req, res) => {
-  try {
-    const b = req.body || {};
-    const q = await pool.query(
-      `
-      insert into donas_purchases(slug, date, ingredient, qty, price, type)
-      values($1,$2,$3,$4,$5,$6)
-      returning *
-      `,
-      [
-        SLUG,
-        b.date,
-        b.ingredient,
-        Number(b.qty || 0),
-        Number(b.price || 0),
-        b.type, // 'purchase' | 'writeoff'
-      ]
-    );
-    return res.json(q.rows[0]);
-  } catch (e) {
-    console.error("POST /donas/ops/purchases error:", e);
-    return res.status(500).json({ error: "Failed to add purchase" });
-  }
-});
-
-/** GET purchases by month (YYYY-MM) */
-router.get("/donas/ops/purchases", authenticateToken, requireAdmin, async (req, res) => {
-  try {
-    const month = String(req.query.month || "");
-    const q = await pool.query(
-      `
-      select * from donas_purchases
-      where slug=$1 and to_char(date,'YYYY-MM')=$2
-      order by date desc, id desc
-      `,
-      [SLUG, month]
-    );
-    return res.json(q.rows);
-  } catch (e) {
-    console.error("GET /donas/ops/purchases error:", e);
-    return res.status(500).json({ error: "Failed to load purchases" });
-  }
-});
-
-/** UPSERT recipe norm */
-router.post("/donas/ops/recipe-norms", authenticateToken, requireAdmin, async (req, res) => {
-  try {
-    const b = req.body || {};
-    const q = await pool.query(
-      `
-      insert into donas_recipe_norms(slug, ingredient, grams_per_unit, price_per_kg)
-      values($1,$2,$3,$4)
-      on conflict (slug, ingredient) do update set
-        grams_per_unit=excluded.grams_per_unit,
-        price_per_kg=excluded.price_per_kg,
-        updated_at=now()
-      returning *
-      `,
-      [SLUG, b.ingredient, Number(b.grams_per_unit || 0), Number(b.price_per_kg || 0)]
-    );
-    return res.json(q.rows[0]);
-  } catch (e) {
-    console.error("POST /donas/ops/recipe-norms error:", e);
-    return res.status(500).json({ error: "Failed to save recipe norm" });
-  }
-});
-
-/** GET recipe norms */
-router.get("/donas/ops/recipe-norms", authenticateToken, requireAdmin, async (_req, res) => {
-  try {
-    const q = await pool.query(
-      `select * from donas_recipe_norms where slug=$1 order by ingredient asc`,
-      [SLUG]
-    );
-    return res.json(q.rows);
-  } catch (e) {
-    console.error("GET /donas/ops/recipe-norms error:", e);
-    return res.status(500).json({ error: "Failed to load recipe norms" });
-  }
-});
-
-/** GET COGS check (month=YYYY-MM) */
-router.get("/donas/ops/cogs-check", authenticateToken, requireAdmin, async (req, res) => {
-  try {
-    const month = String(req.query.month || "");
-
-    const soldQ = await pool.query(
-      `select coalesce(sum(units_sold),0) as units
-       from donas_shifts
-       where slug=$1 and to_char(date,'YYYY-MM')=$2`,
-      [SLUG, month]
-    );
-
-    const normsQ = await pool.query(
-      `select grams_per_unit, price_per_kg
-       from donas_recipe_norms
-       where slug=$1`,
-      [SLUG]
-    );
-
-    const actualQ = await pool.query(
-      `select coalesce(sum(total),0) as actual
-       from donas_purchases
-       where slug=$1 and type='purchase' and to_char(date,'YYYY-MM')=$2`,
-      [SLUG, month]
-    );
-
-    const sold = Number(soldQ.rows[0]?.units || 0);
-
-    let ideal = 0;
-    for (const n of normsQ.rows) {
-      ideal += (sold * Number(n.grams_per_unit) * Number(n.price_per_kg)) / 1000;
-    }
-
-    const actual = Number(actualQ.rows[0]?.actual || 0);
-    const diff = actual - ideal;
-
-    // алерт только если перерасход > 10% от ideal и ideal > 0
-    if (ideal > 0 && diff > ideal * 0.1) {
-      await pool.query(
-        `insert into donas_alerts(slug, type, severity, message)
-         values($1,'cogs','warn',$2)`,
-        [SLUG, `COGS превышен на ${Math.round(diff)} UZS за ${month}`]
-      );
-    }
-
-    return res.json({ sold, ideal: Math.round(ideal), actual: Math.round(actual), diff: Math.round(diff) });
-  } catch (e) {
-    console.error("GET /donas/ops/cogs-check error:", e);
-    return res.status(500).json({ error: "Failed to check cogs" });
-  }
-});
-
-/** =========================================================
- *  OPS: ONE-OFF EXPENSES (OPEX/CAPEX events)
- *  ========================================================= */
-
-/** POST expense { date, amount, kind:'opex'|'capex', category?, note? } */
-router.post("/donas/ops/expenses", authenticateToken, requireAdmin, async (req, res) => {
-  try {
-    const b = req.body || {};
-    const date = b.date;
-    const kind = String(b.kind || "").toLowerCase();
-    const amount = Number(b.amount || 0);
-    const category = b.category ? String(b.category) : null;
-    const note = b.note ? String(b.note) : null;
-
-    if (!date) return res.status(400).json({ error: "date required" });
-    if (kind !== "opex" && kind !== "capex") return res.status(400).json({ error: "kind must be opex/capex" });
-
-    const q = await pool.query(
-      `
-      insert into donas_expenses(slug, date, amount, kind, category, note)
-      values($1,$2,$3,$4,$5,$6)
-      returning *
-      `,
-      [SLUG, date, amount, kind, category, note]
-    );
-    return res.json(q.rows[0]);
-  } catch (e) {
-    console.error("POST /donas/ops/expenses error:", e);
-    return res.status(500).json({ error: "Failed to create expense" });
-  }
-});
-
-/** GET expenses (month=YYYY-MM) OR (from/to=YYYY-MM) */
-router.get("/donas/ops/expenses", authenticateToken, requireAdmin, async (req, res) => {
-  try {
-    const month = String(req.query.month || "");
-    const from = String(req.query.from || "");
-    const to = String(req.query.to || "");
-
-    let q;
-    if (month) {
-      q = await pool.query(
-        `
-        select * from donas_expenses
-        where slug=$1 and to_char(date,'YYYY-MM')=$2
-        order by date desc, id desc
-        `,
-        [SLUG, month]
-      );
-      return res.json(q.rows);
-    }
-
-    if (from && to) {
-      q = await pool.query(
-        `
-        select * from donas_expenses
-        where slug=$1 and to_char(date,'YYYY-MM') between $2 and $3
-        order by date desc, id desc
-        `,
-        [SLUG, from, to]
-      );
-      return res.json(q.rows);
-    }
-
-    return res.status(400).json({ error: "month or from/to required" });
-  } catch (e) {
-    console.error("GET /donas/ops/expenses error:", e);
-    return res.status(500).json({ error: "Failed to load expenses" });
-  }
-});
-
-/** DELETE expense */
-router.delete("/donas/ops/expenses/:id", authenticateToken, requireAdmin, async (req, res) => {
-  try {
-    const id = Number(req.params.id || 0);
-    if (!id) return res.status(400).json({ error: "id required" });
-    const q = await pool.query(
-      `delete from donas_expenses where slug=$1 and id=$2 returning id`,
-      [SLUG, id]
-    );
-    return res.json({ ok: true, id: q.rows[0]?.id || id });
-  } catch (e) {
-    console.error("DELETE /donas/ops/expenses/:id error:", e);
-    return res.status(500).json({ error: "Failed to delete expense" });
-  }
-});
-
-/** GET finance summary (CF + DSCR) from ops data + settings */
-router.get("/donas/finance/summary", authenticateToken, requireAdmin, async (req, res) => {
-  try {
-    const month = String(req.query.month || "");
-
-    // 1. settings — просто первая строка
-    const settingsQ = await pool.query(
-      `select * from donas_finance_settings order by id asc limit 1`
-    );
-    const s = settingsQ.rows[0] || {};
-
-    // 2. revenue (выручка)
-    const revenueQ = await pool.query(
-      `
-      select coalesce(sum(revenue),0) as v
-      from donas_shifts
-      where to_char(date,'YYYY-MM')=$1
-      `,
-      [month]
-    );
-
-    // 3. COGS (закупки)
-    const cogsQ = await pool.query(
-      `
-      select coalesce(sum(total),0) as v
-      from donas_purchases
-      where type='purchase'
-        and to_char(date,'YYYY-MM')=$1
-      `,
-      [month]
-    );
-
-    // 4. payroll (выплаты персоналу)
-    const payrollQ = await pool.query(
-      `
-      select coalesce(sum(total_pay),0) as v
-      from donas_shifts
-      where to_char(date,'YYYY-MM')=$1
-      `,
-      [month]
-    );
-
-    const R = Number(revenueQ.rows[0]?.v || 0);
-    const C = Number(cogsQ.rows[0]?.v || 0);
-    const payroll = Number(payrollQ.rows[0]?.v || 0);
-
-    const fixedOpex = Number(s.fixed_opex_month || 0);
-    const variableOpex = Number(s.variable_opex_month || 0);
-
-    // one-off expenses (opex/capex) for month
-    const expQ = await pool.query(
       `
       select
-        coalesce(sum(case when kind='opex' then amount else 0 end),0) as opex_extra,
-        coalesce(sum(case when kind='capex' then amount else 0 end),0) as capex
-      from donas_expenses
-      where slug=$1 and to_char(date,'YYYY-MM')=$2
+        slug,
+        currency,
+        avg_check,
+        cogs_per_unit,
+        units_per_day,
+        days_per_month,
+        fixed_opex_month,
+        variable_opex_month,
+        loan_payment_month,
+        cash_start,
+        reserve_target_months
+      from donas_finance_settings
+      where slug = $1
+      limit 1
       `,
-      [SLUG, month]
+      [SLUG]
     );
-    const opexExtra = Number(expQ.rows[0]?.opex_extra || 0);
-    const capex = Number(expQ.rows[0]?.capex || 0);
 
-    // OPEX = fixed + variable + payroll
-    const O = fixedOpex + variableOpex + payroll + opexExtra;
+    if (!q.rows.length) {
+      // дефолт
+      return res.json({
+        slug: SLUG,
+        currency: "UZS",
+        avg_check: 0,
+        cogs_per_unit: 0,
+        units_per_day: 0,
+        days_per_month: 26,
+        fixed_opex_month: 0,
+        variable_opex_month: 0,
+        loan_payment_month: 0,
+        cash_start: 0,
+        reserve_target_months: 6,
+      });
+    }
 
-    const loan = Number(s.loan_payment_month || 0);
-
-    const netOperating = R - C - O;
-    const cashFlow = netOperating - loan - capex;
-    const dscr = loan > 0 && netOperating > 0 ? netOperating / loan : null;
-
-    return res.json({
-      month,
-      revenue: Math.round(R),
-      cogs: Math.round(C),
-      payroll: Math.round(payroll),
-      opex: Math.round(O),
-      opexExtra: Math.round(opexExtra),
-      capex: Math.round(capex),
-      loan: Math.round(loan),
-      netOperating: Math.round(netOperating),
-      cashFlow: Math.round(cashFlow),
-      dscr: dscr == null ? null : Number(dscr.toFixed(2)),
-    });
+    res.json(q.rows[0]);
   } catch (e) {
-    console.error("GET /donas/finance/summary error:", e);
-    return res.status(500).json({ error: "Failed to calc summary" });
+    console.error("finance/settings GET error:", e);
+    res.status(500).json({ error: "Failed to load settings" });
   }
 });
 
-/** GET finance summary range (months list) */
-router.get("/donas/finance/summary-range", authenticateToken, requireAdmin, async (req, res) => {
+router.put("/settings", authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const from = String(req.query.from || "");
-    const to = String(req.query.to || "");
+    const b = req.body || {};
 
-    if (!from || !to) return res.status(400).json({ error: "from/to required" });
+    const payload = {
+      slug: SLUG,
+      currency: b.currency || "UZS",
+      avg_check: toNum(b.avg_check),
+      cogs_per_unit: toNum(b.cogs_per_unit),
+      units_per_day: toNum(b.units_per_day),
+      days_per_month: toNum(b.days_per_month) || 26,
+      fixed_opex_month: toNum(b.fixed_opex_month),
+      variable_opex_month: toNum(b.variable_opex_month),
+      loan_payment_month: toNum(b.loan_payment_month),
+      cash_start: toNum(b.cash_start),
+      reserve_target_months: toNum(b.reserve_target_months) || 0,
+    };
 
-    const settingsQ = await pool.query(
-      `select * from donas_finance_settings order by id asc limit 1`
-    );
-    const s = settingsQ.rows[0] || {};
-
-    const fixedOpex = Number(s.fixed_opex_month || 0);
-    const variableOpex = Number(s.variable_opex_month || 0);
-    const loan = Number(s.loan_payment_month || 0);
-
-        // manual OPEX override by month (optional)
-    const manualOpexQ = await pool.query(
+    const q = await pool.query(
       `
-      select to_char(month,'YYYY-MM') as month,
-             opex
+      insert into donas_finance_settings (
+        slug, currency, avg_check, cogs_per_unit, units_per_day, days_per_month,
+        fixed_opex_month, variable_opex_month, loan_payment_month,
+        cash_start, reserve_target_months
+      ) values (
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11
+      )
+      on conflict (slug) do update set
+        currency = excluded.currency,
+        avg_check = excluded.avg_check,
+        cogs_per_unit = excluded.cogs_per_unit,
+        units_per_day = excluded.units_per_day,
+        days_per_month = excluded.days_per_month,
+        fixed_opex_month = excluded.fixed_opex_month,
+        variable_opex_month = excluded.variable_opex_month,
+        loan_payment_month = excluded.loan_payment_month,
+        cash_start = excluded.cash_start,
+        reserve_target_months = excluded.reserve_target_months
+      returning *
+      `,
+      [
+        payload.slug,
+        payload.currency,
+        payload.avg_check,
+        payload.cogs_per_unit,
+        payload.units_per_day,
+        payload.days_per_month,
+        payload.fixed_opex_month,
+        payload.variable_opex_month,
+        payload.loan_payment_month,
+        payload.cash_start,
+        payload.reserve_target_months,
+      ]
+    );
+
+    res.json(q.rows[0]);
+  } catch (e) {
+    console.error("finance/settings PUT error:", e);
+    res.status(500).json({ error: "Failed to save settings" });
+  }
+});
+
+/**
+ * MONTHS
+ * GET  /api/admin/donas/finance/months
+ * PUT  /api/admin/donas/finance/months/:month
+ *
+ * Важно:
+ * - month в URL может быть "YYYY-MM" или "YYYY-MM-01"
+ * - cash_end мы считаем цепочкой на сервере (чтобы Investor/Finance совпадали)
+ * - locked месяцы: числа НЕ трогаем, а cash_end считаем как пришло (фикс снапшот)
+ */
+router.get("/months", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const s = await pool.query(
+      `select cash_start from donas_finance_settings where slug=$1 limit 1`,
+      [SLUG]
+    );
+    const cashStart = toNum(s.rows?.[0]?.cash_start);
+
+    const q = await pool.query(
+      `
+      select
+        slug,
+        month,
+        revenue,
+        cogs,
+        opex,
+        capex,
+        loan_paid,
+        cash_end,
+        notes
       from donas_finance_months
-      where slug=$1
-        and to_char(month,'YYYY-MM') between $2 and $3
-      order by 1
+      where slug = $1
+      order by month asc
       `,
-      [SLUG, from, to]
-    );
-    const manualOpexMap = new Map(
-      (manualOpexQ.rows || []).map((r) => [String(r.month), r.opex])
+      [SLUG]
     );
 
-    // revenue + payroll by month
-    const shiftsQ = await pool.query(
-      `
-      select to_char(date,'YYYY-MM') as month,
-             coalesce(sum(revenue),0) as revenue,
-             coalesce(sum(total_pay),0) as payroll
-      from donas_shifts
-      where to_char(date,'YYYY-MM') between $1 and $2
-      group by 1
-      order by 1
-      `,
-      [from, to]
-    );
+    const rows = q.rows || [];
 
-    // cogs by month
-    const cogsQ = await pool.query(
-      `
-      select to_char(date,'YYYY-MM') as month,
-             coalesce(sum(total),0) as cogs
-      from donas_purchases
-      where type='purchase'
-        and to_char(date,'YYYY-MM') between $1 and $2
-      group by 1
-      order by 1
-      `,
-      [from, to]
-    );
+    // 1) пометим источники для UI (AUTO/LOCKED/MIXED)
+    // 2) пересчитаем cash_end только для НЕ locked, чтобы цепочка была консистентна
+    const normalized = rows.map((r) => ({
+      ...r,
+      revenue: toNum(r.revenue),
+      cogs: toNum(r.cogs),
+      opex: toNum(r.opex),
+      capex: toNum(r.capex),
+      loan_paid: toNum(r.loan_paid),
+      cash_end: toNum(r.cash_end),
+      notes: r.notes || "",
+      _source: {
+        opex_source: "ops",
+        mixed: false,
+      },
+    }));
 
-    // one-off expenses by month
-    const expQ = await pool.query(
-      `
-      select to_char(date,'YYYY-MM') as month,
-             coalesce(sum(case when kind='opex' then amount else 0 end),0) as opex_extra,
-             coalesce(sum(case when kind='capex' then amount else 0 end),0) as capex
-      from donas_expenses
-      where slug=$1 and to_char(date,'YYYY-MM') between $2 and $3
-      group by 1
-      order by 1
-      `,
-      [SLUG, from, to]
-    );
+    // разделим на locked/nonlocked для корректного поведения:
+    // - locked: считаем, что они снапшот (не меняем числа)
+    // - nonlocked: cash_end выстраиваем цепочкой от cashStart и данных ряда
+    // НО: чтобы цепочка шла через locked, нам нужен cash на входе.
+    let cash = cashStart;
 
-    const map = new Map();
-    for (const r of shiftsQ.rows) {
-      map.set(r.month, {
-        month: r.month,
-        revenue: Number(r.revenue || 0),
-        payroll: Number(r.payroll || 0),
-        cogs: 0,
-        opexExtra: 0,
-        capex: 0,
-      });
-    }
-    for (const r of cogsQ.rows) {
-      const cur = map.get(r.month) || { month: r.month, revenue: 0, payroll: 0, cogs: 0 };
-      cur.cogs = Number(r.cogs || 0);
-      map.set(r.month, cur);
-    }
+    const out = normalized.map((r) => {
+      const locked = isLockedNotes(r.notes);
 
-    // ensure months that exist only in manual months are also present
-    for (const [m] of manualOpexMap.entries()) {
-      if (!map.has(m)) map.set(m, { month: m, revenue: 0, payroll: 0, cogs: 0, opexExtra: 0, capex: 0 });
-    }
-    for (const r of expQ.rows) {
-      const cur = map.get(r.month) || { month: r.month, revenue: 0, payroll: 0, cogs: 0, opexExtra: 0, capex: 0 };
-      cur.opexExtra = Number(r.opex_extra || 0);
-      cur.capex = Number(r.capex || 0);
-      map.set(r.month, cur);
-    }   
-    const out = Array.from(map.values()).map((m) => {
-      const manualVal = manualOpexMap.has(m.month) ? manualOpexMap.get(m.month) : null;
-      const hasManual = manualVal !== null && manualVal !== undefined;
-      const opexAuto = fixedOpex + variableOpex + m.payroll + (m.opexExtra || 0);
-      const opex = hasManual ? Number(manualVal || 0) : opexAuto;
-      const netOperating = m.revenue - m.cogs - opex;
-      const cashFlow = netOperating - loan - (m.capex || 0);
-      const dscr = loan > 0 && netOperating > 0 ? netOperating / loan : null;
+      const revenue = toNum(r.revenue);
+      const cogs = toNum(r.cogs);
+      const opex = toNum(r.opex);
+      const capex = toNum(r.capex);
+      const loan_paid = toNum(r.loan_paid);
 
+      const gp = revenue - cogs;
+      const netOp = gp - opex;
+      const cf = netOp - loan_paid - capex;
+
+      if (locked) {
+        // locked месяц — cash_end фиксируем как есть (снапшот),
+        // но для продолжения цепочки берём именно его (чтобы дальше шло от снапшота)
+        cash = toNum(r.cash_end);
+        return {
+          ...r,
+          cash_end: cash,
+          _calc: { gp, netOp, cf },
+          _source: { ...r._source, mixed: false },
+        };
+      }
+
+      cash = cash + cf;
       return {
-        month: m.month,
-        revenue: Math.round(m.revenue),
-        cogs: Math.round(m.cogs),
-        payroll: Math.round(m.payroll),
-        fixedOpex: Math.round(fixedOpex),
-        variableOpex: Math.round(variableOpex),
-        opex: Math.round(opex),
-        opexSource: hasManual ? "manual" : "auto",
-        opexExtra: Math.round(m.opexExtra || 0),
-        capex: Math.round(m.capex || 0),
-        loan: Math.round(loan),
-        netOperating: Math.round(netOperating),
-        cashFlow: Math.round(cashFlow),
-        dscr: dscr == null ? null : Number(dscr.toFixed(2)),
+        ...r,
+        cash_end: cash,
+        _calc: { gp, netOp, cf },
       };
     });
 
-    return res.json(out);
+    res.json(out);
   } catch (e) {
-    console.error("GET /donas/finance/summary-range error:", e);
-    return res.status(500).json({ error: "Failed to calc summary range" });
+    console.error("finance/months GET error:", e);
+    res.status(500).json({ error: "Failed to load months" });
   }
 });
 
+router.put("/months/:month", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const monthParam = req.params.month;
+    const month = isoMonthStartFromYM(monthParam) || monthParam;
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(month))) {
+      return res.status(400).json({ error: "Bad month format (expected YYYY-MM or YYYY-MM-01)" });
+    }
+
+    const b = req.body || {};
+
+    const payload = {
+      slug: SLUG,
+      month,
+      revenue: toNum(b.revenue),
+      cogs: toNum(b.cogs),
+      opex: toNum(b.opex),
+      capex: toNum(b.capex),
+      loan_paid: toNum(b.loan_paid),
+      cash_end: toNum(b.cash_end),
+      notes: String(b.notes || ""),
+    };
+
+    const q = await pool.query(
+      `
+      insert into donas_finance_months (
+        slug, month, revenue, cogs, opex, capex, loan_paid, cash_end, notes
+      ) values (
+        $1,$2,$3,$4,$5,$6,$7,$8,$9
+      )
+      on conflict (slug, month) do update set
+        revenue = excluded.revenue,
+        cogs = excluded.cogs,
+        opex = excluded.opex,
+        capex = excluded.capex,
+        loan_paid = excluded.loan_paid,
+        cash_end = excluded.cash_end,
+        notes = excluded.notes
+      returning *
+      `,
+      [
+        payload.slug,
+        payload.month,
+        payload.revenue,
+        payload.cogs,
+        payload.opex,
+        payload.capex,
+        payload.loan_paid,
+        payload.cash_end,
+        payload.notes,
+      ]
+    );
+
+    res.json(q.rows[0]);
+  } catch (e) {
+    console.error("finance/month PUT error:", e);
+    res.status(500).json({ error: "Failed to save month" });
+  }
+});
 
 module.exports = router;
