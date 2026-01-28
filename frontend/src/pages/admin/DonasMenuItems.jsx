@@ -41,7 +41,7 @@ export default function DonasMenuItems() {
     setLoading(true);
     try {
       const q = showArchived ? "?includeArchived=true" : "";
-      const r = await apiGet(`/api/donas/menu-items${q}`);
+      const r = await apiGet(`/api/admin/donas/menu-items${q}`);
       setItems(r?.items || []);
     } finally {
       setLoading(false);
@@ -75,14 +75,15 @@ export default function DonasMenuItems() {
 
     // подтянуть рецепт
     try {
-      const r = await apiGet(`/api/donas/menu-items/${item.id}/recipe`);
-      const rec = Array.isArray(r?.recipe) && r.recipe.length
-        ? r.recipe.map((x) => ({
-            ingredient_id: String(x.ingredient_id ?? ""),
-            qty: String(x.qty ?? ""),
-            unit: String(x.unit ?? "g"),
-          }))
-        : [{ ingredient_id: "", qty: "", unit: "g" }];
+      const r = await apiGet(`/api/admin/donas/menu-items/${item.id}/recipe`);
+      const rec =
+        Array.isArray(r?.recipe) && r.recipe.length
+          ? r.recipe.map((x) => ({
+              ingredient_id: String(x.ingredient_id ?? ""),
+              qty: String(x.qty ?? ""),
+              unit: String(x.unit ?? "g"),
+            }))
+          : [{ ingredient_id: "", qty: "", unit: "g" }];
       setRecipe(rec);
     } catch {
       setRecipe([{ ingredient_id: "", qty: "", unit: "g" }]);
@@ -103,7 +104,7 @@ export default function DonasMenuItems() {
     if (!payload.name) return alert("Название обязательно");
 
     if (!editing) {
-      const r = await apiPost("/api/donas/menu-items", payload);
+      const r = await apiPost("/api/admin/donas/menu-items", payload);
       const created = r?.item;
       if (!created?.id) {
         alert("Не удалось создать позицию");
@@ -118,7 +119,7 @@ export default function DonasMenuItems() {
       return;
     }
 
-    await apiPut(`/api/donas/menu-items/${editing.id}`, payload);
+    await apiPut(`/api/admin/donas/menu-items/${editing.id}`, payload);
     await saveRecipe(editing.id);
 
     await load();
@@ -135,7 +136,6 @@ export default function DonasMenuItems() {
       }))
       .filter((r) => r.ingredient_id && r.unit);
 
-    // если пользователь вообще не заполнил — сохраняем пустой рецепт
     const payload = {
       recipe: normalized.map((r) => ({
         ingredient_id: Number(r.ingredient_id),
@@ -144,12 +144,12 @@ export default function DonasMenuItems() {
       })),
     };
 
-    await apiPut(`/api/donas/menu-items/${menuItemId}/recipe`, payload);
+    await apiPut(`/api/admin/donas/menu-items/${menuItemId}/recipe`, payload);
   }
 
   async function archive(item) {
     if (!confirm(`Архивировать позицию “${item.name}”?`)) return;
-    await apiDelete(`/api/donas/menu-items/${item.id}`);
+    await apiDelete(`/api/admin/donas/menu-items/${item.id}`);
     await load();
   }
 
@@ -320,7 +320,9 @@ export default function DonasMenuItems() {
                         className="col-span-4 border rounded-xl px-3 py-2 text-sm"
                         placeholder="ingredient_id"
                         value={r.ingredient_id}
-                        onChange={(e) => updateRecipeRow(idx, { ingredient_id: e.target.value })}
+                        onChange={(e) =>
+                          updateRecipeRow(idx, { ingredient_id: e.target.value })
+                        }
                       />
                       <input
                         className="col-span-4 border rounded-xl px-3 py-2 text-sm"
