@@ -27,6 +27,7 @@ import DonasInvestor from "./pages/admin/DonasInvestor";
 import DonasMenuItems from "./pages/admin/DonasMenuItems";
 import DonasIngredients from "./pages/admin/DonasIngredients";
 import DonasCogs from "./pages/admin/DonasCogs";
+import DonasProfit from "./pages/admin/DonasProfit";
 
 // Клиентские
 import ClientRegister from "./pages/ClientRegister";
@@ -418,6 +419,16 @@ export default function App() {
                 <PrivateRoute>
                   <AdminRoute>
                     <DonasCogs />
+                  </AdminRoute>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/admin/donas-dosas/profit"
+              element={
+                <PrivateRoute>
+                  <AdminRoute>
+                    <DonasProfit />
                   </AdminRoute>
                 </PrivateRoute>
               }
