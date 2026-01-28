@@ -417,6 +417,7 @@ export default function Header() {
                     <DropdownItem to="/admin/donas-dosas/menu-items" label="Dona’s Dosas — Menu Items" icon={<IconBurger />} />
                     <DropdownItem to="/admin/donas-dosas/ingredients" label="Dona’s Dosas — Ingredients" icon={<IconBurger />} />
                     <DropdownItem to="/admin/donas-dosas/cogs" label="Dona’s Dosas — COGS" icon={<IconChart />} />
+                    <DropdownItem to="/admin/donas-dosas/profit" label="Dona’s Dosas — Profit / Margin" icon={<IconChart />} />
                     <div className="border-t border-white/10 p-2">
                       <AdminQuickTools />
                     </div>
@@ -533,7 +534,7 @@ export default function Header() {
                 <NavItemMobileDark to="/admin/donas-dosas/menu-items" label="Dona’s Dosas — Menu Items" icon={<IconBurger />} />
                 <NavItemMobileDark to="/admin/donas-dosas/ingredients" label="Dona’s Dosas — Ingredients" icon={<IconBurger />} />
                 <NavItemMobileDark to="/admin/donas-dosas/cogs" label="Dona’s Dosas — COGS" icon={<IconChart />} />
-
+                <NavItemMobileDark to="/admin/donas-dosas/profit" label="Dona’s Dosas — Profit / Margin" icon={<IconChart />} />
               </RowGroupDark>
             )}
           </nav>
