@@ -1,3 +1,5 @@
+// frontend/src/pages/admin/DonasMenuItems.jsx
+
 import { useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost, apiPut, apiDelete } from "../../api";
 
@@ -16,24 +18,15 @@ function toNum(x) {
   return Number.isFinite(n) ? n : 0;
 }
 
-function fmtNum(n) {
-  const v = toNum(n);
-  // компактно, без лишних нулей
-  if (!Number.isFinite(v)) return "0";
-  if (Math.abs(v) >= 1) return String(Math.round(v));
-  // для мелких цен за единицу — до 6 знаков, но без хвостов
-  return String(v.toFixed(6)).replace(/\.?0+$/, "");
-}
-
 export default function DonasMenuItems() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
 
   const [showArchived, setShowArchived] = useState(false);
 
-  // ✅ ingredients directory
+  // ✅ ингредиенты (справочник)
   const [ingredients, setIngredients] = useState([]);
-  const [ingredientsLoading, setIngredientsLoading] = useState(false);
+  const [ingLoading, setIngLoading] = useState(false);
 
   // форма создания/редактирования
   const [editing, setEditing] = useState(null); // item or null
@@ -41,7 +34,7 @@ export default function DonasMenuItems() {
   const [category, setCategory] = useState("dosa");
   const [isActive, setIsActive] = useState(true);
 
-  // рецепт (ingredient_id + qty + unit)
+  // рецепт: ingredient_id + qty + unit
   const [recipe, setRecipe] = useState([{ ingredient_id: "", qty: "", unit: "g" }]);
   const [recipeOpen, setRecipeOpen] = useState(false);
 
@@ -50,10 +43,27 @@ export default function DonasMenuItems() {
   const ingredientsById = useMemo(() => {
     const m = new Map();
     for (const it of ingredients || []) {
-      m.set(String(it.id), it);
+      if (it?.id != null) m.set(Number(it.id), it);
     }
     return m;
   }, [ingredients]);
+
+  const ingredientOptions = useMemo(() => {
+    const arr = Array.isArray(ingredients) ? [...ingredients] : [];
+    arr.sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), "ru"));
+    return arr;
+  }, [ingredients]);
+
+  async function loadIngredients() {
+    setIngLoading(true);
+    try {
+      // берем ВСЕ (в т.ч. архив), чтобы старые рецепты не “ломались”
+      const r = await apiGet(`/api/admin/donas/ingredients?includeArchived=true`);
+      setIngredients(r?.items || []);
+    } finally {
+      setIngLoading(false);
+    }
+  }
 
   async function load() {
     setLoading(true);
@@ -63,19 +73,6 @@ export default function DonasMenuItems() {
       setItems(r?.items || []);
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function loadIngredients() {
-    setIngredientsLoading(true);
-    try {
-      // по умолчанию берём только неархивные ингредиенты
-      const r = await apiGet(`/api/admin/donas/ingredients`);
-      setIngredients(r?.items || []);
-    } catch {
-      setIngredients([]);
-    } finally {
-      setIngredientsLoading(false);
     }
   }
 
@@ -114,15 +111,11 @@ export default function DonasMenuItems() {
       const r = await apiGet(`/api/admin/donas/menu-items/${item.id}/recipe`);
       const rec =
         Array.isArray(r?.recipe) && r.recipe.length
-          ? r.recipe.map((x) => {
-              const idStr = String(x.ingredient_id ?? "");
-              const ing = ingredientsById.get(idStr);
-              return {
-                ingredient_id: idStr,
-                qty: String(x.qty ?? ""),
-                unit: String(x.unit ?? (ing?.unit || "g")),
-              };
-            })
+          ? r.recipe.map((x) => ({
+              ingredient_id: String(x.ingredient_id ?? ""),
+              qty: String(x.qty ?? ""),
+              unit: String(x.unit ?? "g"),
+            }))
           : [{ ingredient_id: "", qty: "", unit: "g" }];
       setRecipe(rec);
     } catch {
@@ -151,6 +144,7 @@ export default function DonasMenuItems() {
         return;
       }
 
+      // сохранить рецепт сразу после создания
       await saveRecipe(created.id);
 
       await load();
@@ -166,7 +160,6 @@ export default function DonasMenuItems() {
   }
 
   async function saveRecipe(menuItemId) {
-    // фильтруем пустые строки
     const normalized = recipe
       .map((r) => ({
         ingredient_id: String(r.ingredient_id || "").trim(),
@@ -188,6 +181,7 @@ export default function DonasMenuItems() {
 
   async function archive(item) {
     if (!confirm(`Архивировать позицию “${item.name}”?`)) return;
+    // ✅ FIX: путь должен быть admin
     await apiDelete(`/api/admin/donas/menu-items/${item.id}`);
     await load();
   }
@@ -204,15 +198,6 @@ export default function DonasMenuItems() {
     setRecipe((prev) => {
       const next = prev.filter((_, idx) => idx !== i);
       return next.length ? next : [{ ingredient_id: "", qty: "", unit: "g" }];
-    });
-  }
-
-  function onSelectIngredient(rowIdx, ingredientIdStr) {
-    const ing = ingredientsById.get(String(ingredientIdStr));
-    // авто-юнит из справочника, если есть
-    updateRecipeRow(rowIdx, {
-      ingredient_id: String(ingredientIdStr || ""),
-      unit: ing?.unit ? String(ing.unit) : "g",
     });
   }
 
@@ -253,82 +238,72 @@ export default function DonasMenuItems() {
             {loading && <div className="text-sm text-gray-500">Загрузка…</div>}
           </div>
 
-          <div className="mt-3 space-y-2">
-            {items.length === 0 ? (
-              <div className="text-sm text-gray-500">Пока пусто</div>
-            ) : (
-              items.map((it) => (
-                <div
-                  key={it.id}
-                  className="p-3 rounded-xl border flex items-start justify-between gap-3"
-                >
-                  <div className="min-w-0">
-                    <div className="font-medium truncate">
-                      #{it.id} • {it.name}
-                    </div>
-                    <div className="text-xs text-gray-500 mt-1">
-                      Категория: <span className="font-medium">{it.category}</span>{" "}
-                      • Статус:{" "}
-                      <span className={cls(it.is_active ? "text-green-700" : "text-gray-500")}>
-                        {it.is_active ? "active" : "archived"}
-                      </span>
-                    </div>
+          <div className="mt-3 divide-y">
+            {items.map((it) => (
+              <div key={it.id} className="py-3 flex items-start justify-between gap-3">
+                <div>
+                  <div className="font-medium">
+                    {it.name}{" "}
+                    {!it.is_active && (
+                      <span className="text-xs text-gray-500">(архив)</span>
+                    )}
                   </div>
-
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      onClick={() => startEdit(it)}
-                      className="px-3 py-1.5 rounded-lg border text-sm hover:bg-gray-50"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => archive(it)}
-                      className="px-3 py-1.5 rounded-lg border text-sm text-red-600 hover:bg-red-50"
-                    >
-                      Archive
-                    </button>
+                  <div className="text-sm text-gray-500">
+                    Категория: {it.category || "dosa"}
                   </div>
                 </div>
-              ))
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => startEdit(it)}
+                    className="px-3 py-1.5 rounded-lg border text-sm"
+                  >
+                    Редактировать
+                  </button>
+                  {it.is_active && (
+                    <button
+                      onClick={() => archive(it)}
+                      className="px-3 py-1.5 rounded-lg border text-sm text-red-600"
+                    >
+                      Архивировать
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            {!items.length && !loading && (
+              <div className="py-6 text-sm text-gray-500">
+                Пока нет позиций меню. Нажми “Добавить позицию”.
+              </div>
             )}
           </div>
         </div>
 
         {/* FORM */}
         <div className="rounded-2xl border bg-white p-4">
-          <div className="flex items-center justify-between">
-            <div className="font-medium">
-              {editing ? `Редактирование #${editing.id}` : "Создание"}
-            </div>
-            {(editing || name || recipeOpen) && (
-              <button
-                onClick={resetForm}
-                className="text-sm text-gray-500 hover:text-black"
-              >
-                Reset
-              </button>
-            )}
+          <div className="font-medium">
+            {editing ? `Редактирование #${editing.id}` : "Новая позиция"}
           </div>
 
-          <form onSubmit={saveItem} className="mt-3 space-y-3">
-            <div>
+          <form onSubmit={saveItem} className="mt-3 space-y-4">
+            <div className="space-y-2">
               <label className="text-sm text-gray-600">Название</label>
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="mt-1 w-full rounded-xl border px-3 py-2"
-                placeholder="Например: Masala Dosa"
+                className="w-full border rounded-xl px-3 py-2"
+                placeholder="Напр. Masala Dosa"
               />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <div>
+              <div className="space-y-2">
                 <label className="text-sm text-gray-600">Категория</label>
                 <select
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
-                  className="mt-1 w-full rounded-xl border px-3 py-2"
+                  className="w-full border rounded-xl px-3 py-2"
                 >
                   {CATS.map((c) => (
                     <option key={c.value} value={c.value}>
@@ -338,96 +313,114 @@ export default function DonasMenuItems() {
                 </select>
               </div>
 
-              <div className="flex items-end">
-                <label className="flex items-center gap-2 text-sm">
+              <div className="space-y-2">
+                <label className="text-sm text-gray-600">Активна</label>
+                <div className="flex items-center gap-2 pt-2">
                   <input
                     type="checkbox"
                     checked={isActive}
                     onChange={(e) => setIsActive(e.target.checked)}
                   />
-                  Активно
-                </label>
+                  <span className="text-sm text-gray-700">
+                    {isActive ? "Да" : "Нет"}
+                  </span>
+                </div>
               </div>
             </div>
 
-            <div className="pt-2 border-t">
+            <div className="border rounded-2xl p-3">
               <div className="flex items-center justify-between">
+                <div className="font-medium">Рецепт</div>
                 <button
                   type="button"
                   onClick={() => setRecipeOpen((v) => !v)}
                   className="text-sm underline"
                 >
-                  {recipeOpen ? "Скрыть рецепт" : "Редактировать рецепт"}
+                  {recipeOpen ? "Свернуть" : "Развернуть"}
                 </button>
-
-                <div className="text-xs text-gray-500">
-                  {ingredientsLoading ? "Ингредиенты: загрузка…" : `Ингредиенты: ${ingredients.length}`}
-                </div>
               </div>
 
               {recipeOpen && (
                 <div className="mt-3 space-y-2">
-                  {ingredients.length === 0 && (
-                    <div className="text-xs text-red-600">
-                      Нет ингредиентов. Сначала добавь их в справочник ингредиентов.
-                    </div>
-                  )}
+                  <div className="text-xs text-gray-500">
+                    {ingLoading ? (
+                      <>Загружаю справочник ингредиентов…</>
+                    ) : ingredients.length ? (
+                      <>Выбирай ингредиенты из списка, указывай количество и единицу.</>
+                    ) : (
+                      <>
+                        Ингредиенты пока пустые. Сначала добавь их в разделе “Ингредиенты”.
+                      </>
+                    )}
+                  </div>
 
-                  {recipe.map((r, i) => {
-                    const ing = ingredientsById.get(String(r.ingredient_id));
+                  {recipe.map((r, idx) => {
+                    const ingIdNum = Number(String(r.ingredient_id || "").trim());
+                    const ing = Number.isFinite(ingIdNum) ? ingredientsById.get(ingIdNum) : null;
+
                     return (
-                      <div key={i} className="grid grid-cols-12 gap-2 items-center">
-                        {/* ingredient select */}
+                      <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+                        {/* ingredient */}
                         <div className="col-span-5">
                           <select
-                            className="w-full rounded-xl border px-3 py-2 text-sm"
+                            className="w-full border rounded-xl px-3 py-2 text-sm"
                             value={r.ingredient_id}
-                            onChange={(e) => onSelectIngredient(i, e.target.value)}
-                            disabled={ingredients.length === 0}
+                            onChange={(e) => {
+                              const nextId = e.target.value;
+                              const ing2 = ingredientsById.get(Number(nextId));
+                              // если unit пустой/дефолт — подставим unit из ингредиента (если есть)
+                              const nextUnit =
+                                String(r.unit || "").trim() && String(r.unit || "").trim() !== "g"
+                                  ? r.unit
+                                  : String(ing2?.unit || r.unit || "g");
+
+                              updateRecipeRow(idx, {
+                                ingredient_id: nextId,
+                                unit: nextUnit,
+                              });
+                            }}
                           >
-                            <option value="">
-                              {ingredients.length ? "Выбери ингредиент" : "Ингредиенты не загружены"}
-                            </option>
-                            {ingredients.map((x) => (
+                            <option value="">— ингредиент —</option>
+                            {ingredientOptions.map((x) => (
                               <option key={x.id} value={String(x.id)}>
                                 {x.name}
+                                {x.unit ? ` (${x.unit})` : ""}
+                                {x.is_active === false ? " [архив]" : ""}
                               </option>
                             ))}
                           </select>
-
-                          <div className="mt-1 text-[11px] text-gray-500">
-                            {ing ? (
-                              <>
-                                unit: <span className="font-medium">{ing.unit}</span> • цена/ед:{" "}
-                                <span className="font-medium">{fmtNum(ing.price_per_unit)}</span>
-                              </>
-                            ) : (
-                              <span> </span>
-                            )}
-                          </div>
+                          {!!ing?.price_per_unit && (
+                            <div className="text-[11px] text-gray-500 mt-1">
+                              Цена/ед: {Number(ing.price_per_unit).toLocaleString("ru-RU")}
+                            </div>
+                          )}
                         </div>
 
                         {/* qty */}
                         <input
-                          className="col-span-4 rounded-xl border px-3 py-2 text-sm"
+                          className="col-span-3 border rounded-xl px-3 py-2 text-sm"
                           placeholder="qty"
                           value={r.qty}
-                          onChange={(e) => updateRecipeRow(i, { qty: e.target.value })}
+                          onChange={(e) => updateRecipeRow(idx, { qty: e.target.value })}
                         />
 
-                        {/* unit (можно вручную поправить) */}
+                        {/* unit */}
                         <input
-                          className="col-span-2 rounded-xl border px-3 py-2 text-sm"
-                          placeholder="unit"
+                          className="col-span-3 border rounded-xl px-3 py-2 text-sm"
+                          placeholder="unit (g/ml/pcs)"
                           value={r.unit}
-                          onChange={(e) => updateRecipeRow(i, { unit: e.target.value })}
+                          onChange={(e) => updateRecipeRow(idx, { unit: e.target.value })}
                         />
 
+                        {/* remove */}
                         <button
                           type="button"
-                          onClick={() => removeRecipeRow(i)}
-                          className="col-span-1 text-red-600 text-sm"
-                          title="Удалить"
+                          onClick={() => removeRecipeRow(idx)}
+                          className={cls(
+                            "col-span-1 rounded-lg border px-2 py-2 text-sm",
+                            "hover:bg-gray-50"
+                          )}
+                          title="Удалить строку"
                         >
                           ✕
                         </button>
@@ -440,29 +433,30 @@ export default function DonasMenuItems() {
                     onClick={addRecipeRow}
                     className="px-3 py-2 rounded-lg border text-sm"
                   >
-                    + строка
+                    + Добавить ингредиент
                   </button>
                 </div>
               )}
             </div>
 
-            <div className="pt-2 flex gap-2">
+            <div className="flex items-center gap-2">
               <button
                 type="submit"
                 className="px-4 py-2 rounded-xl bg-black text-white text-sm"
               >
                 {editing ? "Сохранить" : "Создать"}
               </button>
+              <button
+                type="button"
+                onClick={resetForm}
+                className="px-4 py-2 rounded-xl border text-sm"
+              >
+                Сброс
+              </button>
+            </div>
 
-              {editing && (
-                <button
-                  type="button"
-                  onClick={startCreate}
-                  className="px-4 py-2 rounded-xl border text-sm"
-                >
-                  Новая позиция
-                </button>
-              )}
+            <div className="text-xs text-gray-500">
+              Удаление = <b>архивирование</b>, чтобы не ломать историю.
             </div>
           </form>
         </div>
