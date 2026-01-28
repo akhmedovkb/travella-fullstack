@@ -7,14 +7,25 @@ function toNum(x) {
   const n = Number(x);
   return Number.isFinite(n) ? n : 0;
 }
+
 function money(n) {
   return Math.round(toNum(n)).toLocaleString("ru-RU");
 }
+
 function pct(n) {
   if (!Number.isFinite(n)) return "—";
   return `${n.toFixed(1)}%`;
 }
 
+// qty — красиво: 50, 0.5, 10.25 (без 50.000)
+function fmtQty(x) {
+  const n = Number(x);
+  if (!Number.isFinite(n)) return String(x ?? "");
+  if (Number.isInteger(n)) return String(n);
+  return n.toFixed(2);
+}
+
+// price per unit
 function calcPpu(ing) {
   const packSize = toNum(ing?.pack_size);
   const packPrice = toNum(ing?.pack_price);
@@ -34,7 +45,7 @@ export default function DonasProfit() {
   const [recipe, setRecipe] = useState([]);
   const [sellPrice, setSellPrice] = useState("");
 
-  // загрузка справочников
+  // load menu + ingredients
   useEffect(() => {
     (async () => {
       try {
@@ -43,11 +54,12 @@ export default function DonasProfit() {
         const m = await apiGet("/api/admin/donas/menu-items");
         setMenuItems(m?.items || []);
 
+        // разные версии query-параметров — пробуем оба
         let i;
         try {
           i = await apiGet("/api/admin/donas/ingredients?include_archived=1");
         } catch {
-          i = await apiGet("/api/admin/donas/ingredients?includeArchived=true");
+          i = await apiGet("/api/admin/donas/ingredients?includeArchived=1");
         }
         setIngredients(i?.items || []);
       } catch (e) {
@@ -60,7 +72,7 @@ export default function DonasProfit() {
 
   const ingredientsById = useMemo(() => {
     const m = new Map();
-    ingredients.forEach((x) => m.set(x.id, x));
+    ingredients.forEach((x) => m.set(Number(x.id), x));
     return m;
   }, [ingredients]);
 
@@ -69,7 +81,7 @@ export default function DonasProfit() {
     return menuItems.find((x) => Number(x.id) === id) || null;
   }, [menuItems, menuItemId]);
 
-  // загрузка рецепта для выбранного блюда
+  // load recipe for selected item
   useEffect(() => {
     if (!menuItemId) {
       setRecipe([]);
@@ -106,8 +118,8 @@ export default function DonasProfit() {
 
   const rows = useMemo(() => {
     return (recipe || []).map((r) => {
-      const ing = ingredientsById.get(r.ingredient_id);
-      const ppu = calcPpu(ing);
+      const ing = ingredientsById.get(Number(r.ingredient_id));
+      const ppu = calcPpu(ing); // raw (может быть дробный)
       const qty = toNum(r.qty);
       const cost = ppu * qty;
 
@@ -195,7 +207,7 @@ export default function DonasProfit() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* selector */}
+        {/* left selector */}
         <div className="rounded-2xl bg-white border border-gray-200 p-4 shadow-sm">
           <label className="block text-xs text-gray-600 mb-2">Блюдо</label>
           <select
@@ -218,7 +230,7 @@ export default function DonasProfit() {
           )}
         </div>
 
-        {/* summary */}
+        {/* right content */}
         <div className="lg:col-span-2 rounded-2xl bg-white border border-gray-200 p-4 shadow-sm relative">
           {loading && (
             <div className="absolute inset-0 bg-white/70 backdrop-blur-[1px] flex items-center justify-center rounded-2xl z-10">
@@ -230,10 +242,8 @@ export default function DonasProfit() {
             <div className="text-gray-600 text-sm">Выбери блюдо слева.</div>
           ) : (
             <>
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-lg font-semibold text-gray-900">
-                  {selectedItem?.name || "Блюдо"}
-                </div>
+              <div className="text-lg font-semibold text-gray-900">
+                {selectedItem?.name || "Блюдо"}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
@@ -279,7 +289,6 @@ export default function DonasProfit() {
                 </div>
               </div>
 
-              {/* breakdown */}
               <div className="mt-5">
                 <div className="text-sm text-gray-800 font-medium mb-2">
                   Разбор по ингредиентам
@@ -300,10 +309,10 @@ export default function DonasProfit() {
                         <tr key={idx} className="bg-white">
                           <td className="px-4 py-3 text-gray-900">{r.name}</td>
                           <td className="px-4 py-3 text-right text-gray-700">
-                            {r.qty} {r.unit}
+                            {fmtQty(r.qty)} {r.unit}
                           </td>
                           <td className="px-4 py-3 text-right text-gray-700">
-                            {r.ppu ? money(r.ppu) : "—"}
+                            {r.ppu ? money(Math.round(r.ppu)) : "—"}
                           </td>
                           <td className="px-4 py-3 text-right text-gray-900 font-medium">
                             {money(r.cost)}
