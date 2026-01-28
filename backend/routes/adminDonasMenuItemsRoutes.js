@@ -32,20 +32,25 @@ router.get("/menu-items", async (req, res) => {
 });
 
 // POST /api/admin/donas/menu-items
+// Поддерживаем цену/описание. В разных версиях это может быть price или sell_price — принимаем оба.
 router.post("/menu-items", async (req, res) => {
   try {
-    const { name, category, is_active } = req.body || {};
+    const { name, category, is_active, price, sell_price, description } = req.body || {};
     const nm = String(name || "").trim();
     if (!nm) return res.status(400).json({ ok: false, error: "Name is required" });
 
     const cat = normalizeCategory(category);
     const active = is_active === undefined ? true : toBool(is_active);
 
+    const pRaw = sell_price ?? price;
+    const p = pRaw === null || pRaw === undefined || pRaw === "" ? null : Number(pRaw);
+    const desc = description === undefined ? null : String(description || "").trim() || null;
+
     const r = await pool.query(
-      `INSERT INTO donas_menu_items (name, category, is_active)
-       VALUES ($1, $2, $3)
+      `INSERT INTO donas_menu_items (name, category, is_active, price, sell_price, description)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [nm, cat, active]
+      [nm, cat, active, p, p, desc]
     );
 
     return res.json({ ok: true, item: r.rows[0] });
@@ -56,24 +61,48 @@ router.post("/menu-items", async (req, res) => {
 });
 
 // PUT /api/admin/donas/menu-items/:id
+// Важно: не требуем name/category (чтобы Menu Builder мог обновлять только price).
 router.put("/menu-items/:id", async (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: "Bad id" });
 
-    const { name, category, is_active } = req.body || {};
-    const nm = String(name || "").trim();
-    if (!nm) return res.status(400).json({ ok: false, error: "Name is required" });
+    const existingR = await pool.query(`SELECT * FROM donas_menu_items WHERE id = $1`, [id]);
+    const existing = existingR.rows[0];
+    if (!existing) return res.status(404).json({ ok: false, error: "Not found" });
 
-    const cat = normalizeCategory(category);
-    const active = is_active === undefined ? true : toBool(is_active);
+    const body = req.body || {};
+    const nm = body.name === undefined ? existing.name : String(body.name || "").trim();
+    const cat = body.category === undefined ? existing.category : normalizeCategory(body.category);
+    const active = body.is_active === undefined ? existing.is_active : toBool(body.is_active);
+
+    const pRaw = body.sell_price ?? body.price;
+    const nextPrice =
+      pRaw === undefined
+        ? existing.sell_price ?? existing.price ?? null
+        : pRaw === null || pRaw === ""
+          ? null
+          : Number(pRaw);
+
+    const desc =
+      body.description === undefined
+        ? existing.description ?? null
+        : String(body.description || "").trim() || null;
+
+    if (!nm) return res.status(400).json({ ok: false, error: "Name is required" });
 
     const r = await pool.query(
       `UPDATE donas_menu_items
-       SET name = $1, category = $2, is_active = $3, updated_at = NOW()
-       WHERE id = $4
+       SET name = $1,
+           category = $2,
+           is_active = $3,
+           price = $4,
+           sell_price = $4,
+           description = $5,
+           updated_at = NOW()
+       WHERE id = $6
        RETURNING *`,
-      [nm, cat, active, id]
+      [nm, cat, active, nextPrice, desc, id]
     );
 
     if (!r.rows[0]) return res.status(404).json({ ok: false, error: "Not found" });
