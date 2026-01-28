@@ -32,8 +32,6 @@ export default function DonasProfit() {
   const [menuItemId, setMenuItemId] = useState("");
 
   const [recipe, setRecipe] = useState([]);
-
-  // price editing
   const [sellPrice, setSellPrice] = useState("");
 
   // загрузка справочников
@@ -45,7 +43,6 @@ export default function DonasProfit() {
         const m = await apiGet("/api/admin/donas/menu-items");
         setMenuItems(m?.items || []);
 
-        // у тебя в ингредиентах есть include_archived / includeArchived — поддержим оба
         let i;
         try {
           i = await apiGet("/api/admin/donas/ingredients?include_archived=1");
@@ -88,11 +85,9 @@ export default function DonasProfit() {
         setErr("");
         setOkMsg("");
 
-        // рецепт
         const r = await apiGet(`/api/admin/donas/menu-items/${menuItemId}/recipe`);
         setRecipe(r?.recipe || []);
 
-        // price из menuItem (поддержим разные названия поля)
         const p =
           selectedItem?.sell_price ??
           selectedItem?.price ??
@@ -106,7 +101,6 @@ export default function DonasProfit() {
         setLoading(false);
       }
     })();
-    // важно: selectedItem меняется вместе с menuItemId
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [menuItemId]);
 
@@ -141,8 +135,6 @@ export default function DonasProfit() {
       setErr("");
       setOkMsg("");
 
-      // сохраняем цену в menu item
-      // (в бэке может быть sell_price или price — отправим оба, чтобы точно попало)
       const payload = {
         sell_price: toNum(sellPrice),
         price: toNum(sellPrice),
@@ -150,7 +142,6 @@ export default function DonasProfit() {
 
       await apiPut(`/api/admin/donas/menu-items/${menuItemId}`, payload);
 
-      // обновим список menuItems локально
       setMenuItems((prev) =>
         prev.map((x) =>
           Number(x.id) === Number(menuItemId)
@@ -171,14 +162,16 @@ export default function DonasProfit() {
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-5">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">Dona’s Dosas — Profit / Margin</h1>
-          <p className="text-sm text-white/60 mt-1">
+          <h1 className="text-2xl font-semibold text-gray-900">
+            Dona’s Dosas — Profit / Margin
+          </h1>
+          <p className="text-sm text-gray-600 mt-1">
             Цена продажи, себестоимость и маржа по рецепту
           </p>
         </div>
 
         <button
-          className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-sm"
+          className="px-3 py-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-sm text-gray-800 disabled:opacity-60"
           onClick={() => window.location.reload()}
           disabled={loading}
         >
@@ -189,12 +182,12 @@ export default function DonasProfit() {
       {(err || okMsg) && (
         <div className="space-y-2">
           {err && (
-            <div className="p-3 rounded-xl bg-red-500/15 border border-red-500/25 text-red-200 text-sm">
+            <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
               {err}
             </div>
           )}
           {okMsg && (
-            <div className="p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/25 text-emerald-200 text-sm">
+            <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm">
               {okMsg}
             </div>
           )}
@@ -203,12 +196,12 @@ export default function DonasProfit() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* selector */}
-        <div className="rounded-2xl bg-white/5 border border-white/10 p-4">
-          <label className="block text-xs text-white/60 mb-2">Блюдо</label>
+        <div className="rounded-2xl bg-white border border-gray-200 p-4 shadow-sm">
+          <label className="block text-xs text-gray-600 mb-2">Блюдо</label>
           <select
             value={menuItemId}
             onChange={(e) => setMenuItemId(e.target.value)}
-            className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm outline-none focus:border-white/25"
+            className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-gray-400"
           >
             <option value="">— выбери —</option>
             {menuItems.map((m) => (
@@ -219,71 +212,82 @@ export default function DonasProfit() {
           </select>
 
           {selectedItem && (
-            <div className="mt-4 text-xs text-white/50">
-              ID: <span className="text-white/70">#{selectedItem.id}</span>
+            <div className="mt-4 text-xs text-gray-500">
+              ID: <span className="text-gray-800 font-medium">#{selectedItem.id}</span>
             </div>
           )}
         </div>
 
         {/* summary */}
-        <div className="lg:col-span-2 rounded-2xl bg-white/5 border border-white/10 p-4">
+        <div className="lg:col-span-2 rounded-2xl bg-white border border-gray-200 p-4 shadow-sm relative">
+          {loading && (
+            <div className="absolute inset-0 bg-white/70 backdrop-blur-[1px] flex items-center justify-center rounded-2xl z-10">
+              <div className="text-sm text-gray-700">Загрузка…</div>
+            </div>
+          )}
+
           {!menuItemId ? (
-            <div className="text-white/60 text-sm">Выбери блюдо слева.</div>
+            <div className="text-gray-600 text-sm">Выбери блюдо слева.</div>
           ) : (
             <>
               <div className="flex items-center justify-between gap-3">
-                <div className="text-lg font-semibold">
+                <div className="text-lg font-semibold text-gray-900">
                   {selectedItem?.name || "Блюдо"}
                 </div>
-                {loading && <div className="text-sm text-white/50">загрузка…</div>}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
-                <div className="rounded-xl bg-white/5 border border-white/10 p-3">
-                  <div className="text-xs text-white/60">Цена продажи</div>
+                <div className="rounded-xl bg-white border border-gray-200 p-3">
+                  <div className="text-xs text-gray-600">Цена продажи</div>
                   <div className="mt-2 flex items-center gap-2">
                     <input
                       value={sellPrice}
                       onChange={(e) => setSellPrice(e.target.value)}
-                      className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm outline-none focus:border-white/25"
+                      className="flex-1 bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-gray-400"
                       placeholder="Напр. 65000"
                       inputMode="decimal"
                     />
                     <button
                       onClick={savePrice}
                       disabled={loading}
-                      className="px-3 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/25 text-emerald-100 border border-emerald-500/25 text-sm"
+                      className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm disabled:opacity-60"
                     >
                       Сохранить
                     </button>
                   </div>
                 </div>
 
-                <div className="rounded-xl bg-white/5 border border-white/10 p-3">
-                  <div className="text-xs text-white/60">COGS (себестоимость)</div>
-                  <div className="text-2xl font-semibold mt-2">{money(cogs)}</div>
+                <div className="rounded-xl bg-white border border-gray-200 p-3">
+                  <div className="text-xs text-gray-600">COGS (себестоимость)</div>
+                  <div className="text-2xl font-semibold mt-2 text-gray-900">
+                    {money(cogs)}
+                  </div>
                 </div>
 
-                <div className="rounded-xl bg-white/5 border border-white/10 p-3">
-                  <div className="text-xs text-white/60">Прибыль (Price − COGS)</div>
-                  <div className="text-2xl font-semibold mt-2">
+                <div className="rounded-xl bg-white border border-gray-200 p-3">
+                  <div className="text-xs text-gray-600">Прибыль (Price − COGS)</div>
+                  <div className="text-2xl font-semibold mt-2 text-gray-900">
                     {money(profit)}
                   </div>
                 </div>
 
-                <div className="rounded-xl bg-white/5 border border-white/10 p-3">
-                  <div className="text-xs text-white/60">Маржа</div>
-                  <div className="text-2xl font-semibold mt-2">{pct(margin)}</div>
+                <div className="rounded-xl bg-white border border-gray-200 p-3">
+                  <div className="text-xs text-gray-600">Маржа</div>
+                  <div className="text-2xl font-semibold mt-2 text-gray-900">
+                    {pct(margin)}
+                  </div>
                 </div>
               </div>
 
               {/* breakdown */}
               <div className="mt-5">
-                <div className="text-sm text-white/80 mb-2">Разбор по ингредиентам</div>
+                <div className="text-sm text-gray-800 font-medium mb-2">
+                  Разбор по ингредиентам
+                </div>
 
-                <div className="overflow-x-auto rounded-xl border border-white/10">
+                <div className="overflow-x-auto rounded-xl border border-gray-200">
                   <table className="min-w-full text-sm">
-                    <thead className="text-white/60 border-b border-white/10">
+                    <thead className="text-gray-600 border-b border-gray-200 bg-gray-50">
                       <tr>
                         <th className="text-left font-medium px-4 py-3">Ингредиент</th>
                         <th className="text-right font-medium px-4 py-3">Кол-во</th>
@@ -291,17 +295,17 @@ export default function DonasProfit() {
                         <th className="text-right font-medium px-4 py-3">Сумма</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-white/10">
+                    <tbody className="divide-y divide-gray-200">
                       {rows.map((r, idx) => (
-                        <tr key={idx}>
-                          <td className="px-4 py-3 text-white">{r.name}</td>
-                          <td className="px-4 py-3 text-right text-white/80">
+                        <tr key={idx} className="bg-white">
+                          <td className="px-4 py-3 text-gray-900">{r.name}</td>
+                          <td className="px-4 py-3 text-right text-gray-700">
                             {r.qty} {r.unit}
                           </td>
-                          <td className="px-4 py-3 text-right text-white/80">
+                          <td className="px-4 py-3 text-right text-gray-700">
                             {r.ppu ? money(r.ppu) : "—"}
                           </td>
-                          <td className="px-4 py-3 text-right text-white/80">
+                          <td className="px-4 py-3 text-right text-gray-900 font-medium">
                             {money(r.cost)}
                           </td>
                         </tr>
@@ -309,7 +313,7 @@ export default function DonasProfit() {
 
                       {!rows.length && (
                         <tr>
-                          <td colSpan={4} className="px-4 py-10 text-center text-white/50">
+                          <td colSpan={4} className="px-4 py-10 text-center text-gray-500">
                             Рецепт пустой — добавь ингредиенты в рецепте блюда
                           </td>
                         </tr>
@@ -318,7 +322,7 @@ export default function DonasProfit() {
                   </table>
                 </div>
 
-                <div className="text-xs text-white/50 mt-2">
+                <div className="text-xs text-gray-500 mt-2">
                   COGS считается из: (pack_price / pack_size) × qty
                 </div>
               </div>
