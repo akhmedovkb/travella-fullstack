@@ -120,7 +120,7 @@ export default function DonasMenuBuilder() {
     updatePrice(mi.id, next);
   }
 
-  const baseUrl = window.location.origin;
+  const menuBase = import.meta.env.VITE_API_BASE_URL.replace(/\/$/, "");
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 space-y-4">
@@ -132,31 +132,31 @@ export default function DonasMenuBuilder() {
         </div>
 
         <div className="flex gap-2">
-          <a
-            href={`${baseUrl}/menu/donas-dosas`}
-            target="_blank"
-            className="px-3 py-2 rounded-xl border hover:bg-gray-50 text-sm"
-          >
-            Меню (HTML)
-          </a>
-
-          <a
-            href={`${baseUrl}/menu/donas-dosas.pdf`}
-            target="_blank"
-            className="px-3 py-2 rounded-xl border hover:bg-gray-50 text-sm"
-          >
-            PDF
-          </a>
-
-          <a
-            href={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(
-              `${baseUrl}/menu/donas-dosas`
-            )}`}
-            target="_blank"
-            className="px-3 py-2 rounded-xl border hover:bg-gray-50 text-sm"
-          >
-            QR
-          </a>
+        <a
+          href={`${menuBase}/menu/donas-dosas`}
+          target="_blank"
+          className="px-3 py-2 rounded-xl border hover:bg-gray-50 text-sm"
+        >
+          Меню (HTML)
+        </a>
+        
+        <a
+          href={`${menuBase}/menu/donas-dosas.pdf`}
+          target="_blank"
+          className="px-3 py-2 rounded-xl border hover:bg-gray-50 text-sm"
+        >
+          PDF
+        </a>
+        
+        <a
+          href={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(
+            `${menuBase}/menu/donas-dosas`
+          )}`}
+          target="_blank"
+          className="px-3 py-2 rounded-xl border hover:bg-gray-50 text-sm"
+        >
+          QR
+        </a>
 
           <button
             onClick={loadAll}
