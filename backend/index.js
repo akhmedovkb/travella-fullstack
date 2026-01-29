@@ -14,7 +14,6 @@ const adminDonasCogsRoutes = require("./routes/adminDonasCogsRoutes");
 const adminDonasMenuItemsRoutes = require("./routes/adminDonasMenuItemsRoutes");
 const adminDonasIngredientsRoutes = require("./routes/adminDonasIngredientsRoutes");
 const donasPublicMenuRoutes = require("./routes/donasPublicMenuRoutes");
-const adminDonasCogsRoutes = require("./routes/adminDonasCogsRoutes");
 
 dotenv.config();
 
@@ -1040,7 +1039,6 @@ app.use("/api/admin/donas", adminDonasCogsRoutes);
 app.use("/api/admin/donas", adminDonasMenuItemsRoutes);
 app.use("/api/admin/donas", adminDonasIngredientsRoutes);
 app.use(donasPublicMenuRoutes);
-app.use("/api/admin/donas", adminDonasCogsRoutes);
 
 /** ===================== Start (в самом конце) ===================== */
 const PORT = process.env.PORT || 5000;
