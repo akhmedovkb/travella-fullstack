@@ -7,6 +7,8 @@ const pool = require("../db");
 const authenticateToken = require("../middleware/authenticateToken");
 const requireAdmin = require("../middleware/requireAdmin");
 
+const { getMarginImpact } = require("../controllers/donasIngredientImpactController");
+
 const SLUG = "donas-dosas";
 
 function toNum(v) {
@@ -24,6 +26,17 @@ function isTruthy(v) {
   const s = String(v || "").toLowerCase().trim();
   return s === "1" || s === "true" || s === "yes" || s === "on";
 }
+
+/**
+ * ✅ GET /api/admin/donas/ingredients/:id/margin-impact?threshold=40
+ * Проверка: какие блюда упали по марже после изменения ингредиента
+ */
+router.get(
+  "/ingredients/:id/margin-impact",
+  authenticateToken,
+  requireAdmin,
+  getMarginImpact
+);
 
 /**
  * GET /api/admin/donas/ingredients?includeArchived=true
