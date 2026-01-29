@@ -43,6 +43,7 @@ export default function DonasMenuItems() {
 
   // Recipe modal / panel
   const [recipeOpen, setRecipeOpen] = useState(false);
+  const [recipeItem, setRecipeItem] = useState(null);
   const [recipeLoading, setRecipeLoading] = useState(false);
   const [recipeSaving, setRecipeSaving] = useState(false);
   const [recipeRows, setRecipeRows] = useState([]);
@@ -123,14 +124,16 @@ export default function DonasMenuItems() {
     await loadMenuItems();
   }
 
-  async function openRecipe(itemId) {
+  async function openRecipe(item) {
+    const fresh = items.find((x) => x.id === item.id) || item; // ✅ берём актуальные данные
+    setRecipeItem(fresh);
+  
     setRecipeOpen(true);
     setRecipeLoading(true);
     setRecipeRows([]);
-
+  
     try {
-      // ✅ только admin endpoint
-      const r = await apiGet(`/api/admin/donas/menu-items/${itemId}/recipe`, true);
+      const r = await apiGet(`/api/admin/donas/menu-items/${fresh.id}/recipe`, true);
       setRecipeRows(Array.isArray(r?.recipe) ? r.recipe : []);
       await loadIngredients();
     } finally {
@@ -141,6 +144,7 @@ export default function DonasMenuItems() {
   function closeRecipe() {
     setRecipeOpen(false);
     setRecipeRows([]);
+    setRecipeItem(null);
   }
 
   function addRecipeRow() {
@@ -271,8 +275,9 @@ export default function DonasMenuItems() {
               </button>
               <button
                 type="button"
-                onClick={() => openRecipe(editingId)}
-                className="px-3 py-2 rounded-xl border hover:bg-gray-50"
+                onClick={() => editItem && openRecipe(editItem)}
+                disabled={!editItem}
+                className="px-3 py-2 rounded-xl border hover:bg-gray-50 disabled:opacity-60"
               >
                 Рецепт / COGS
               </button>
@@ -327,7 +332,7 @@ export default function DonasMenuItems() {
                         Edit
                       </button>
                       <button
-                        onClick={() => openRecipe(it.id)}
+                        onClick={() => openRecipe(it)}
                         className="px-3 py-1.5 rounded-xl border hover:bg-gray-50"
                       >
                         Recipe
@@ -355,7 +360,7 @@ export default function DonasMenuItems() {
               <div>
                 <div className="font-semibold">Рецепт / COGS</div>
                 <div className="text-xs text-gray-600">
-                  {editItem ? `Блюдо: ${editItem.name}` : ""}
+                  {recipeItem ? `Блюдо: ${recipeItem.name} (#${recipeItem.id})` : ""}
                 </div>
               </div>
               <button onClick={closeRecipe} className="px-3 py-1.5 rounded-xl border hover:bg-gray-50">
@@ -378,8 +383,8 @@ export default function DonasMenuItems() {
 
                     <div className="flex gap-2">
                       <button
-                        onClick={() => saveRecipe(editItem?.id)}
-                        disabled={recipeSaving || !editItem?.id}
+                        onClick={() => saveRecipe(recipeItem?.id)}
+                        disabled={recipeSaving || !recipeItem?.id}
                         className="px-4 py-2 rounded-xl bg-black text-white hover:opacity-90 disabled:opacity-60"
                       >
                         Save
