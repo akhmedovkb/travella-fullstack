@@ -237,9 +237,12 @@ export default function DonasIngredients() {
           <div className="flex items-center gap-2 text-sm">
             <span className="text-gray-600">Порог, %</span>
             <input
+              type="number"
+              min="0"
+              max="100"
               className="border rounded-xl px-2 py-1 w-20 text-right"
               value={marginThreshold}
-              onChange={(e) => setMarginThreshold(e.target.value)}
+              onChange={(e) => setMarginThreshold(Number(e.target.value || 0))}
             />
           </div>
         </div>
