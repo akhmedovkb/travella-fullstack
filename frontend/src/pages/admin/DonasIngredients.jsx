@@ -12,10 +12,45 @@ function fmt(n) {
   return v.toLocaleString("ru-RU");
 }
 
+// --- simple local toasts (без зависимости от shared/toast)
+function Toasts({ items, onClose }) {
+  return (
+    <div className="fixed top-4 right-4 z-[9999] space-y-2 w-[340px] max-w-[90vw]">
+      {items.map((t) => {
+        const tone =
+          t.type === "success"
+            ? "border-green-200 bg-green-50 text-green-900"
+            : t.type === "error"
+            ? "border-red-200 bg-red-50 text-red-900"
+            : "border-yellow-200 bg-yellow-50 text-yellow-900";
+        return (
+          <div
+            key={t.id}
+            className={`rounded-2xl border shadow px-3 py-2 ${tone} flex items-start gap-3`}
+          >
+            <div className="text-sm flex-1">
+              <div className="font-semibold leading-5">{t.title}</div>
+              {t.message ? (
+                <div className="text-xs opacity-90 mt-0.5">{t.message}</div>
+              ) : null}
+            </div>
+            <button
+              onClick={() => onClose(t.id)}
+              className="text-xs px-2 py-1 rounded-xl border bg-white/60 hover:bg-white"
+            >
+              OK
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function DonasIngredients() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  
+
   // Margin impact (after ingredient change)
   const [marginThreshold, setMarginThreshold] = useState(40);
   const [impactLoading, setImpactLoading] = useState(false);
@@ -40,12 +75,28 @@ export default function DonasIngredients() {
   );
   const [editForm, setEditForm] = useState(null);
 
+  // toasts
+  const [toasts, setToasts] = useState([]);
+  function pushToast(type, title, message) {
+    const id = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    setToasts((s) => [...s, { id, type, title, message }]);
+    // auto-close after 4s
+    setTimeout(() => {
+      setToasts((s) => s.filter((x) => x.id !== id));
+    }, 4000);
+  }
+  function closeToast(id) {
+    setToasts((s) => s.filter((x) => x.id !== id));
+  }
+
   async function load() {
     setLoading(true);
     try {
       const q = includeArchived ? "?includeArchived=1" : "";
-      const r = await apiGet(`/api/admin/donas/ingredients${q}`, true);
+      const r = await apiGet(`/api/admin/donas/ingredients${q}`);
       setItems(Array.isArray(r?.items) ? r.items : []);
+    } catch (e) {
+      pushToast("error", "Не удалось загрузить ингредиенты", e?.message || "");
     } finally {
       setLoading(false);
     }
@@ -88,11 +139,14 @@ export default function DonasIngredients() {
       notes: String(form.notes || "").trim() || null,
     };
 
-    if (!payload.name) return;
+    if (!payload.name) {
+      pushToast("warning", "Название обязательно");
+      return;
+    }
 
     setCreating(true);
     try {
-      await apiPost("/api/admin/donas/ingredients", payload, true);
+      await apiPost("/api/admin/donas/ingredients", payload);
       setForm({
         name: "",
         unit: "g",
@@ -101,9 +155,29 @@ export default function DonasIngredients() {
         supplier: "",
         notes: "",
       });
+      pushToast("success", "Ингредиент добавлен");
       await load();
+    } catch (e2) {
+      pushToast("error", "Ошибка добавления", e2?.message || "");
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function checkMarginImpact(ingredientId) {
+    setImpactLoading(true);
+    try {
+      const r = await apiGet(
+        `/api/admin/donas/ingredients/${ingredientId}/margin-impact?threshold=${marginThreshold}`
+      );
+      setImpactResult(r || null);
+      return true;
+    } catch (e) {
+      // важно: impact — это доп. проверка, не должна ломать основной save
+      pushToast("warning", "COGS/маржа: отчёт не построился", e?.message || "");
+      return false;
+    } finally {
+      setImpactLoading(false);
     }
   }
 
@@ -120,37 +194,41 @@ export default function DonasIngredients() {
       notes: String(editForm.notes || "").trim() || null,
     };
 
-    if (!payload.name) return;
-    await apiPut(`/api/admin/donas/ingredients/${editingId}`, payload, true);
-    // ✅ проверяем, не “упала ли” маржа после изменения ингредиента
-    await checkMarginImpact(editingId);
+    if (!payload.name) {
+      pushToast("warning", "Название обязательно");
+      return;
+    }
 
-    cancelEdit();
-    await load();
+    try {
+      await apiPut(`/api/admin/donas/ingredients/${editingId}`, payload);
+      pushToast("success", "Сохранено", `${payload.name}`);
+
+      // ✅ check impact, но не ломаем сохранение
+      await checkMarginImpact(editingId);
+
+      cancelEdit();
+      await load();
+    } catch (e2) {
+      pushToast("error", "Ошибка сохранения", e2?.message || "");
+    }
   }
 
   async function archive(id) {
     if (!id) return;
-    await apiDelete(`/api/admin/donas/ingredients/${id}`, null, true);
-    if (editingId === id) cancelEdit();
-    await load();
-  }
-  
-  async function checkMarginImpact(ingredientId) {
-      setImpactLoading(true);
-      try {
-        const r = await apiGet(
-          `/api/admin/donas/ingredients/${ingredientId}/margin-impact?threshold=${marginThreshold}`,
-          true
-        );
-        setImpactResult(r || null);
-      } finally {
-        setImpactLoading(false);
-      }
+    try {
+      await apiDelete(`/api/admin/donas/ingredients/${id}`);
+      if (editingId === id) cancelEdit();
+      pushToast("success", "Перемещено в архив");
+      await load();
+    } catch (e) {
+      pushToast("error", "Ошибка архивации", e?.message || "");
     }
-  
+  }
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
+      <Toasts items={toasts} onClose={closeToast} />
+
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-bold">Dona’s Dosas — Ingredients</h1>
@@ -228,7 +306,7 @@ export default function DonasIngredients() {
           />
         </form>
       </div>
-      
+
       {/* Margin impact after ingredient change */}
       <div className="bg-white rounded-2xl shadow p-4">
         <div className="flex items-center justify-between gap-3">
@@ -459,11 +537,9 @@ export default function DonasIngredients() {
         </div>
       </div>
 
-      {/* Hint */}
       <div className="text-xs text-gray-500">
         Unit: g/ml/pcs. Pack size/price нужны для расчёта себестоимости (COGS) по рецепту.
       </div>
     </div>
   );
 }
-
