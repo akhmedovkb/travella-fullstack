@@ -120,8 +120,11 @@ export default function DonasIngredients() {
     };
 
     if (!payload.name) return;
-
     await apiPut(`/api/admin/donas/ingredients/${editingId}`, payload);
+
+    // ✅ проверяем, не “упала ли” маржа после изменения ингредиента
+    await checkMarginImpact(editingId);
+
     cancelEdit();
     await load();
   }
@@ -223,6 +226,56 @@ export default function DonasIngredients() {
             onChange={(e) => setForm((s) => ({ ...s, notes: e.target.value }))}
           />
         </form>
+      </div>
+      
+      {/* Margin impact after ingredient change */}
+      <div className="bg-white rounded-2xl shadow p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="font-semibold">Контроль маржи после изменения ингредиента</div>
+
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-gray-600">Порог, %</span>
+            <input
+              className="border rounded-xl px-2 py-1 w-20 text-right"
+              value={marginThreshold}
+              onChange={(e) => setMarginThreshold(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {impactLoading ? (
+          <div className="text-sm text-gray-600 mt-2">Проверяю влияние на маржу...</div>
+        ) : impactResult?.below?.length ? (
+          <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3">
+            <div className="font-semibold text-red-800">
+              ⚠️ Маржа стала ниже {impactResult.threshold}% у {impactResult.below.length} блюд
+            </div>
+            <div className="text-sm text-red-900 mt-2 space-y-1">
+              {impactResult.below.slice(0, 10).map((x) => (
+                <div key={x.menu_item_id} className="flex items-center justify-between gap-3">
+                  <span>
+                    #{x.menu_item_id} — <b>{x.name}</b>
+                  </span>
+                  <span className="whitespace-nowrap">
+                    маржа: <b>{Math.round(x.margin * 10) / 10}%</b> • COGS:{" "}
+                    <b>{fmt(x.cogs)}</b> • цена: <b>{fmt(x.price)}</b>
+                  </span>
+                </div>
+              ))}
+              {impactResult.below.length > 10 && (
+                <div className="text-xs text-red-800">
+                  …и ещё {impactResult.below.length - 10}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : impactResult ? (
+          <div className="mt-2 text-sm text-green-700">✅ Ни одно блюдо не упало ниже порога.</div>
+        ) : (
+          <div className="mt-2 text-sm text-gray-600">
+            Сохраните изменение ингредиента — и тут появится отчёт.
+          </div>
+        )}
       </div>
 
       {/* List */}
