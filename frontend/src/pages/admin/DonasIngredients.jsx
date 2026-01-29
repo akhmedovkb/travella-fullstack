@@ -1,5 +1,9 @@
 // frontend/src/pages/admin/DonasIngredients.jsx
 
+const [marginThreshold, setMarginThreshold] = useState(40);
+const [impactLoading, setImpactLoading] = useState(false);
+const [impactResult, setImpactResult] = useState(null); // {threshold, below:[...]}
+
 import { useEffect, useMemo, useState } from "react";
 import { apiDelete, apiGet, apiPost, apiPut } from "../../api";
 
@@ -128,7 +132,19 @@ export default function DonasIngredients() {
     if (editingId === id) cancelEdit();
     await load();
   }
-
+  
+  async function checkMarginImpact(ingredientId) {
+      setImpactLoading(true);
+      try {
+        const r = await apiGet(
+          `/api/admin/donas/ingredients/${ingredientId}/margin-impact?threshold=${marginThreshold}`
+        );
+        setImpactResult(r || null);
+      } finally {
+        setImpactLoading(false);
+      }
+    }
+  
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
