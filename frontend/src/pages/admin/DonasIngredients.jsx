@@ -316,7 +316,7 @@ export default function DonasIngredients() {
 
               {items.map((it) => {
                 const isEditing = editingId === it.id;
-                const archived = !!it.archived;
+                const archived = !!it.is_archived;
 
                 return (
                   <tr key={it.id} className={`border-t ${archived ? "opacity-60" : ""}`}>
