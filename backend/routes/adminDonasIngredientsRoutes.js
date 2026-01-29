@@ -29,7 +29,6 @@ function isTruthy(v) {
 
 /**
  * ✅ GET /api/admin/donas/ingredients/:id/margin-impact?threshold=40
- * Проверка: какие блюда упали по марже после изменения ингредиента
  */
 router.get(
   "/ingredients/:id/margin-impact",
@@ -54,6 +53,8 @@ router.get("/ingredients", authenticateToken, requireAdmin, async (req, res) => 
         unit,
         pack_size,
         pack_price,
+        supplier,
+        notes,
         is_active,
         is_archived,
         created_at,
@@ -88,7 +89,7 @@ router.get("/ingredients", authenticateToken, requireAdmin, async (req, res) => 
 
 /**
  * POST /api/admin/donas/ingredients
- * body: { name, unit, pack_size, pack_price, is_active }
+ * body: { name, unit, pack_size, pack_price, supplier, notes, is_active }
  */
 router.post("/ingredients", authenticateToken, requireAdmin, async (req, res) => {
   try {
@@ -99,17 +100,20 @@ router.post("/ingredients", authenticateToken, requireAdmin, async (req, res) =>
     const unit = cleanUnit(b.unit);
     const pack_size = Math.max(0, toNum(b.pack_size));
     const pack_price = Math.max(0, toNum(b.pack_price));
-    const is_active = !!b.is_active;
+    const supplier = String(b.supplier || "").trim() || null;
+    const notes = String(b.notes || "").trim() || null;
+
+    const is_active = b.is_active == null ? true : !!b.is_active;
 
     const q = await pool.query(
       `
       INSERT INTO donas_ingredients (
-        slug, name, unit, pack_size, pack_price, is_active, is_archived
+        slug, name, unit, pack_size, pack_price, supplier, notes, is_active, is_archived
       )
-      VALUES ($1,$2,$3,$4,$5,$6,false)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,false)
       RETURNING *
       `,
-      [SLUG, name, unit, pack_size, pack_price, is_active]
+      [SLUG, name, unit, pack_size, pack_price, supplier, notes, is_active]
     );
 
     res.json(q.rows[0]);
@@ -134,7 +138,10 @@ router.put("/ingredients/:id", authenticateToken, requireAdmin, async (req, res)
     const unit = cleanUnit(b.unit);
     const pack_size = Math.max(0, toNum(b.pack_size));
     const pack_price = Math.max(0, toNum(b.pack_price));
-    const is_active = !!b.is_active;
+    const supplier = String(b.supplier || "").trim() || null;
+    const notes = String(b.notes || "").trim() || null;
+
+    const is_active = b.is_active == null ? true : !!b.is_active;
     const is_archived = !!b.is_archived;
 
     const q = await pool.query(
@@ -144,13 +151,15 @@ router.put("/ingredients/:id", authenticateToken, requireAdmin, async (req, res)
              unit=$2,
              pack_size=$3,
              pack_price=$4,
-             is_active=$5,
-             is_archived=$6,
+             supplier=$5,
+             notes=$6,
+             is_active=$7,
+             is_archived=$8,
              updated_at=NOW()
-       WHERE id=$7 AND slug=$8
+       WHERE id=$9 AND slug=$10
        RETURNING *
       `,
-      [name, unit, pack_size, pack_price, is_active, is_archived, id, SLUG]
+      [name, unit, pack_size, pack_price, supplier, notes, is_active, is_archived, id, SLUG]
     );
 
     if (!q.rows.length) return res.status(404).json({ error: "Not found" });
