@@ -44,7 +44,7 @@ export default function DonasIngredients() {
     setLoading(true);
     try {
       const q = includeArchived ? "?includeArchived=1" : "";
-      const r = await apiGet(`/api/admin/donas/ingredients${q}`);
+      const r = await apiGet(`/api/admin/donas/ingredients${q}`, true);
       setItems(Array.isArray(r?.items) ? r.items : []);
     } finally {
       setLoading(false);
@@ -92,7 +92,7 @@ export default function DonasIngredients() {
 
     setCreating(true);
     try {
-      await apiPost("/api/admin/donas/ingredients", payload);
+      await apiPost("/api/admin/donas/ingredients", payload, true);
       setForm({
         name: "",
         unit: "g",
@@ -121,8 +121,7 @@ export default function DonasIngredients() {
     };
 
     if (!payload.name) return;
-    await apiPut(`/api/admin/donas/ingredients/${editingId}`, payload);
-
+    await apiPut(`/api/admin/donas/ingredients/${editingId}`, payload, true);
     // ✅ проверяем, не “упала ли” маржа после изменения ингредиента
     await checkMarginImpact(editingId);
 
@@ -132,7 +131,7 @@ export default function DonasIngredients() {
 
   async function archive(id) {
     if (!id) return;
-    await apiDelete(`/api/admin/donas/ingredients/${id}`);
+    await apiDelete(`/api/admin/donas/ingredients/${id}`, null, true);
     if (editingId === id) cancelEdit();
     await load();
   }
@@ -141,7 +140,8 @@ export default function DonasIngredients() {
       setImpactLoading(true);
       try {
         const r = await apiGet(
-          `/api/admin/donas/ingredients/${ingredientId}/margin-impact?threshold=${marginThreshold}`
+          `/api/admin/donas/ingredients/${ingredientId}/margin-impact?threshold=${marginThreshold}`,
+          true
         );
         setImpactResult(r || null);
       } finally {
