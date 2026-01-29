@@ -1,9 +1,5 @@
 // frontend/src/pages/admin/DonasIngredients.jsx
 
-const [marginThreshold, setMarginThreshold] = useState(40);
-const [impactLoading, setImpactLoading] = useState(false);
-const [impactResult, setImpactResult] = useState(null); // {threshold, below:[...]}
-
 import { useEffect, useMemo, useState } from "react";
 import { apiDelete, apiGet, apiPost, apiPut } from "../../api";
 
@@ -19,6 +15,11 @@ function fmt(n) {
 export default function DonasIngredients() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // Margin impact (after ingredient change)
+  const [marginThreshold, setMarginThreshold] = useState(40);
+  const [impactLoading, setImpactLoading] = useState(false);
+  const [impactResult, setImpactResult] = useState(null); // {threshold, below:[...]}
 
   const [includeArchived, setIncludeArchived] = useState(false);
 
