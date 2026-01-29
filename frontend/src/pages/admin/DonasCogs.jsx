@@ -12,6 +12,48 @@ function money(n) {
   return Math.round(toNum(n)).toLocaleString("ru-RU");
 }
 
+function Sparkline({ values }) {
+  const w = 260;
+  const h = 60;
+  const pad = 4;
+
+  if (!values || values.length < 2) {
+    return <div className="text-xs text-gray-500">История: нет данных</div>;
+  }
+
+  const vmin = Math.min(...values);
+  const vmax = Math.max(...values);
+  const rng = Math.max(1e-9, vmax - vmin);
+
+  const pts = values
+    .slice()
+    .reverse() // чтобы слева было “старое”, справа “новое”
+    .map((v, i) => {
+      const x = pad + (i * (w - pad * 2)) / (values.length - 1);
+      const y = pad + (h - pad * 2) * (1 - (v - vmin) / rng);
+      return `${x},${y}`;
+    })
+    .join(" ");
+
+  const last = values[0];
+  const prev = values[1];
+  const delta = last - prev;
+
+  return (
+    <div className="space-y-1">
+      <svg width={w} height={h} className="block">
+        <polyline points={pts} fill="none" stroke="black" strokeWidth="2" />
+      </svg>
+      <div className="text-xs text-gray-600 flex items-center justify-between">
+        <span>Последний: <b>{money(last)}</b></span>
+        <span>
+          Δ: <b>{money(delta)}</b>
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export default function DonasCogs() {
   const [menuItems, setMenuItems] = useState([]);
   const [ingredients, setIngredients] = useState([]);
@@ -19,6 +61,11 @@ export default function DonasCogs() {
 
   const [menuItemId, setMenuItemId] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // history
+  const [history, setHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [savedMsg, setSavedMsg] = useState("");
 
   // загрузка меню + ингредиентов
   useEffect(() => {
@@ -31,10 +78,25 @@ export default function DonasCogs() {
     })();
   }, []);
 
-  // загрузка рецепта блюда
+  async function loadHistory(mid) {
+    if (!mid) {
+      setHistory([]);
+      return;
+    }
+    setHistoryLoading(true);
+    try {
+      const r = await apiGet(`/api/admin/donas/cogs?menu_item_id=${mid}&limit=30`);
+      setHistory(Array.isArray(r?.items) ? r.items : []);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
+  // загрузка рецепта блюда + истории
   useEffect(() => {
     if (!menuItemId) {
       setRecipe([]);
+      setHistory([]);
       return;
     }
 
@@ -47,6 +109,8 @@ export default function DonasCogs() {
         setLoading(false);
       }
     })();
+
+    loadHistory(menuItemId).catch(() => {});
   }, [menuItemId]);
 
   const ingredientsById = useMemo(() => {
@@ -59,9 +123,7 @@ export default function DonasCogs() {
     return recipe.map((r) => {
       const ing = ingredientsById.get(r.ingredient_id);
       const ppu =
-        ing && ing.pack_size
-          ? toNum(ing.pack_price) / toNum(ing.pack_size)
-          : 0;
+        ing && ing.pack_size ? toNum(ing.pack_price) / toNum(ing.pack_size) : 0;
 
       const cost = ppu * toNum(r.qty);
 
@@ -75,9 +137,11 @@ export default function DonasCogs() {
     });
   }, [recipe, ingredientsById]);
 
-  const totalCost = useMemo(
-    () => rows.reduce((s, r) => s + r.cost, 0),
-    [rows]
+  const totalCost = useMemo(() => rows.reduce((s, r) => s + r.cost, 0), [rows]);
+
+  const historyValues = useMemo(
+    () => history.map((x) => toNum(x.total_cost)),
+    [history]
   );
 
   async function saveSnapshot() {
@@ -94,7 +158,10 @@ export default function DonasCogs() {
       })),
     });
 
-    alert("COGS сохранён");
+    setSavedMsg("COGS сохранён ✅");
+    setTimeout(() => setSavedMsg(""), 2500);
+
+    await loadHistory(menuItemId);
   }
 
   return (
@@ -106,81 +173,97 @@ export default function DonasCogs() {
         </p>
       </div>
 
-      {/* selector */}
-      <div className="bg-white rounded-2xl border p-4">
-        <label className="text-sm text-gray-600 block mb-2">
-          Выбери блюдо
-        </label>
-        <select
-          value={menuItemId}
-          onChange={(e) => setMenuItemId(e.target.value)}
-          className="w-full border rounded-xl px-3 py-2"
-        >
-          <option value="">— выбери —</option>
-          {menuItems.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.name}
-            </option>
-          ))}
-        </select>
-      </div>
+      <div className="bg-white rounded-2xl shadow p-4 space-y-4">
+        <div className="space-y-2">
+          <div className="text-sm font-medium">Выбери блюдо</div>
+          <select
+            className="w-full border rounded-xl px-3 py-2"
+            value={menuItemId}
+            onChange={(e) => setMenuItemId(e.target.value)}
+          >
+            <option value="">—</option>
+            {menuItems.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+        </div>
 
-      {/* table */}
-      {menuItemId && (
-        <div className="bg-white rounded-2xl border p-4">
-          <div className="font-medium mb-3">Состав</div>
+        {menuItemId && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="border rounded-2xl p-3">
+              <div className="font-semibold mb-2">История COGS</div>
+              {historyLoading ? (
+                <div className="text-sm text-gray-600">Загрузка истории...</div>
+              ) : (
+                <Sparkline values={historyValues} />
+              )}
+            </div>
+
+            <div className="border rounded-2xl p-3 flex items-center justify-between">
+              <div>
+                <div className="text-sm text-gray-600">Текущий расчёт</div>
+                <div className="text-2xl font-semibold">{money(totalCost)}</div>
+                {savedMsg && <div className="text-sm text-green-700 mt-1">{savedMsg}</div>}
+              </div>
+              <button
+                onClick={saveSnapshot}
+                className="rounded-xl bg-black text-white px-4 py-2 hover:opacity-90"
+              >
+                Сохранить COGS
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="border rounded-2xl p-3">
+          <div className="font-semibold mb-2">Состав</div>
 
           {loading ? (
-            <div className="text-sm text-gray-500">Загрузка…</div>
+            <div className="text-sm text-gray-600">Загрузка рецепта...</div>
           ) : (
-            <table className="w-full text-sm">
-              <thead className="border-b">
-                <tr>
-                  <th className="text-left py-2">Ингредиент</th>
-                  <th className="text-right py-2">Кол-во</th>
-                  <th className="text-right py-2">Цена / ед</th>
-                  <th className="text-right py-2">Сумма</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r, i) => (
-                  <tr key={i} className="border-b last:border-0">
-                    <td className="py-2">{r.name}</td>
-                    <td className="py-2 text-right">
-                      {r.qty} {r.unit}
-                    </td>
-                    <td className="py-2 text-right">
-                      {money(r.ppu)}
-                    </td>
-                    <td className="py-2 text-right font-medium">
-                      {money(r.cost)}
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="text-gray-700 border-b">
+                  <tr>
+                    <th className="text-left py-2">Ингредиент</th>
+                    <th className="text-right py-2">Кол-во</th>
+                    <th className="text-right py-2">Цена / ед</th>
+                    <th className="text-right py-2">Сумма</th>
                   </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td colSpan={3} className="pt-3 text-right font-semibold">
-                    Итого:
-                  </td>
-                  <td className="pt-3 text-right text-lg font-bold">
-                    {money(totalCost)}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
+                </thead>
+                <tbody>
+                  {rows.map((r, idx) => (
+                    <tr key={`${r.ingredient_id}-${idx}`} className="border-b">
+                      <td className="py-2">{r.name}</td>
+                      <td className="py-2 text-right">
+                        {toNum(r.qty).toFixed(3)} {r.unit}
+                      </td>
+                      <td className="py-2 text-right">{money(r.ppu)}</td>
+                      <td className="py-2 text-right">{money(r.cost)}</td>
+                    </tr>
+                  ))}
+                  {rows.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="py-4 text-gray-500">
+                        Нет рецепта — добавь рецепт в Menu items → Recipe
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           )}
 
-          <div className="mt-4 flex justify-end">
-            <button
-              onClick={saveSnapshot}
-              className="px-4 py-2 rounded-xl bg-black text-white"
-            >
-              Сохранить COGS
-            </button>
+          <div className="flex justify-end pt-3">
+            <div className="text-right">
+              <div className="text-sm text-gray-600">Итого:</div>
+              <div className="text-2xl font-semibold">{money(totalCost)}</div>
+            </div>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
