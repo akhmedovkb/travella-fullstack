@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { apiDelete, apiGet, apiPost, apiPut } from "../../api";
+import { toast } from "../../shared/toast";
 
 function toNum(x) {
   const n = Number(x);
@@ -12,39 +13,14 @@ function fmt(n) {
   return v.toLocaleString("ru-RU");
 }
 
-// --- simple local toasts (без зависимости от shared/toast)
-function Toasts({ items, onClose }) {
-  return (
-    <div className="fixed top-4 right-4 z-[9999] space-y-2 w-[340px] max-w-[90vw]">
-      {items.map((t) => {
-        const tone =
-          t.type === "success"
-            ? "border-green-200 bg-green-50 text-green-900"
-            : t.type === "error"
-            ? "border-red-200 bg-red-50 text-red-900"
-            : "border-yellow-200 bg-yellow-50 text-yellow-900";
-        return (
-          <div
-            key={t.id}
-            className={`rounded-2xl border shadow px-3 py-2 ${tone} flex items-start gap-3`}
-          >
-            <div className="text-sm flex-1">
-              <div className="font-semibold leading-5">{t.title}</div>
-              {t.message ? (
-                <div className="text-xs opacity-90 mt-0.5">{t.message}</div>
-              ) : null}
-            </div>
-            <button
-              onClick={() => onClose(t.id)}
-              className="text-xs px-2 py-1 rounded-xl border bg-white/60 hover:bg-white"
-            >
-              OK
-            </button>
-          </div>
-        );
-      })}
-    </div>
-  );
+function notify(type, message) {
+  try {
+    if (toast && typeof toast[type] === "function") return toast[type](message);
+    if (toast && typeof toast === "function") return toast(message);
+    console[type === "error" ? "error" : "log"](message);
+  } catch {
+    // ignore
+  }
 }
 
 export default function DonasIngredients() {
@@ -75,20 +51,6 @@ export default function DonasIngredients() {
   );
   const [editForm, setEditForm] = useState(null);
 
-  // toasts
-  const [toasts, setToasts] = useState([]);
-  function pushToast(type, title, message) {
-    const id = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
-    setToasts((s) => [...s, { id, type, title, message }]);
-    // auto-close after 4s
-    setTimeout(() => {
-      setToasts((s) => s.filter((x) => x.id !== id));
-    }, 4000);
-  }
-  function closeToast(id) {
-    setToasts((s) => s.filter((x) => x.id !== id));
-  }
-
   async function load() {
     setLoading(true);
     try {
@@ -96,7 +58,8 @@ export default function DonasIngredients() {
       const r = await apiGet(`/api/admin/donas/ingredients${q}`);
       setItems(Array.isArray(r?.items) ? r.items : []);
     } catch (e) {
-      pushToast("error", "Не удалось загрузить ингредиенты", e?.message || "");
+      notify("error", "❌ Не удалось загрузить ингредиенты");
+      setItems([]);
     } finally {
       setLoading(false);
     }
@@ -137,16 +100,18 @@ export default function DonasIngredients() {
       pack_price: form.pack_price === "" ? null : toNum(form.pack_price),
       supplier: String(form.supplier || "").trim() || null,
       notes: String(form.notes || "").trim() || null,
+      is_active: true,
     };
 
     if (!payload.name) {
-      pushToast("warning", "Название обязательно");
+      notify("error", "Название обязательно");
       return;
     }
 
     setCreating(true);
     try {
       await apiPost("/api/admin/donas/ingredients", payload);
+      notify("success", "✅ Ингредиент добавлен");
       setForm({
         name: "",
         unit: "g",
@@ -155,29 +120,11 @@ export default function DonasIngredients() {
         supplier: "",
         notes: "",
       });
-      pushToast("success", "Ингредиент добавлен");
       await load();
     } catch (e2) {
-      pushToast("error", "Ошибка добавления", e2?.message || "");
+      notify("error", "❌ Не удалось добавить ингредиент");
     } finally {
       setCreating(false);
-    }
-  }
-
-  async function checkMarginImpact(ingredientId) {
-    setImpactLoading(true);
-    try {
-      const r = await apiGet(
-        `/api/admin/donas/ingredients/${ingredientId}/margin-impact?threshold=${marginThreshold}`
-      );
-      setImpactResult(r || null);
-      return true;
-    } catch (e) {
-      // важно: impact — это доп. проверка, не должна ломать основной save
-      pushToast("warning", "COGS/маржа: отчёт не построился", e?.message || "");
-      return false;
-    } finally {
-      setImpactLoading(false);
     }
   }
 
@@ -192,24 +139,25 @@ export default function DonasIngredients() {
       pack_price: editForm.pack_price === "" ? null : toNum(editForm.pack_price),
       supplier: String(editForm.supplier || "").trim() || null,
       notes: String(editForm.notes || "").trim() || null,
+      is_active: true,
     };
 
     if (!payload.name) {
-      pushToast("warning", "Название обязательно");
+      notify("error", "Название обязательно");
       return;
     }
 
     try {
       await apiPut(`/api/admin/donas/ingredients/${editingId}`, payload);
-      pushToast("success", "Сохранено", `${payload.name}`);
+      notify("success", `✅ Сохранено: ${payload.name}`);
 
-      // ✅ check impact, но не ломаем сохранение
+      // ✅ проверяем влияние на маржу (но не ломаем сохранение, если отчёт упал)
       await checkMarginImpact(editingId);
 
       cancelEdit();
       await load();
     } catch (e2) {
-      pushToast("error", "Ошибка сохранения", e2?.message || "");
+      notify("error", "❌ Не удалось сохранить изменения");
     }
   }
 
@@ -217,18 +165,31 @@ export default function DonasIngredients() {
     if (!id) return;
     try {
       await apiDelete(`/api/admin/donas/ingredients/${id}`);
+      notify("success", "🗄️ Перемещено в архив");
       if (editingId === id) cancelEdit();
-      pushToast("success", "Перемещено в архив");
       await load();
     } catch (e) {
-      pushToast("error", "Ошибка архивации", e?.message || "");
+      notify("error", "❌ Не удалось архивировать");
+    }
+  }
+
+  async function checkMarginImpact(ingredientId) {
+    setImpactLoading(true);
+    try {
+      const r = await apiGet(
+        `/api/admin/donas/ingredients/${ingredientId}/margin-impact?threshold=${marginThreshold}`
+      );
+      setImpactResult(r || null);
+    } catch (e) {
+      setImpactResult(null);
+      notify("warn", "COGS/маржа: отчёт не построился");
+    } finally {
+      setImpactLoading(false);
     }
   }
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      <Toasts items={toasts} onClose={closeToast} />
-
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-bold">Dona’s Dosas — Ingredients</h1>
@@ -403,9 +364,7 @@ export default function DonasIngredients() {
                         <input
                           className="border rounded-xl px-2 py-1 w-full"
                           value={editForm?.name ?? ""}
-                          onChange={(e) =>
-                            setEditForm((s) => ({ ...s, name: e.target.value }))
-                          }
+                          onChange={(e) => setEditForm((s) => ({ ...s, name: e.target.value }))}
                         />
                       ) : (
                         <div className="font-medium">
@@ -424,9 +383,7 @@ export default function DonasIngredients() {
                         <select
                           className="border rounded-xl px-2 py-1"
                           value={editForm?.unit ?? "g"}
-                          onChange={(e) =>
-                            setEditForm((s) => ({ ...s, unit: e.target.value }))
-                          }
+                          onChange={(e) => setEditForm((s) => ({ ...s, unit: e.target.value }))}
                         >
                           <option value="g">g</option>
                           <option value="ml">ml</option>
@@ -442,9 +399,7 @@ export default function DonasIngredients() {
                         <input
                           className="border rounded-xl px-2 py-1 w-28 text-right"
                           value={editForm?.pack_size ?? ""}
-                          onChange={(e) =>
-                            setEditForm((s) => ({ ...s, pack_size: e.target.value }))
-                          }
+                          onChange={(e) => setEditForm((s) => ({ ...s, pack_size: e.target.value }))}
                         />
                       ) : (
                         it.pack_size ?? "—"
@@ -456,9 +411,7 @@ export default function DonasIngredients() {
                         <input
                           className="border rounded-xl px-2 py-1 w-32 text-right"
                           value={editForm?.pack_price ?? ""}
-                          onChange={(e) =>
-                            setEditForm((s) => ({ ...s, pack_price: e.target.value }))
-                          }
+                          onChange={(e) => setEditForm((s) => ({ ...s, pack_price: e.target.value }))}
                         />
                       ) : (
                         it.pack_price != null ? fmt(it.pack_price) : "—"
@@ -470,9 +423,7 @@ export default function DonasIngredients() {
                         <input
                           className="border rounded-xl px-2 py-1 w-full"
                           value={editForm?.supplier ?? ""}
-                          onChange={(e) =>
-                            setEditForm((s) => ({ ...s, supplier: e.target.value }))
-                          }
+                          onChange={(e) => setEditForm((s) => ({ ...s, supplier: e.target.value }))}
                         />
                       ) : (
                         it.supplier || "—"
@@ -484,9 +435,7 @@ export default function DonasIngredients() {
                         <input
                           className="border rounded-xl px-2 py-1 w-full"
                           value={editForm?.notes ?? ""}
-                          onChange={(e) =>
-                            setEditForm((s) => ({ ...s, notes: e.target.value }))
-                          }
+                          onChange={(e) => setEditForm((s) => ({ ...s, notes: e.target.value }))}
                         />
                       ) : (
                         it.notes || "—"
