@@ -1,3 +1,5 @@
+//frontend/src/pages/admin/DonasDosasMenuLayout.jsx
+
 import { NavLink, Outlet } from "react-router-dom";
 
 export default function DonasDosasMenuLayout() {
