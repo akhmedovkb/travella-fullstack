@@ -434,7 +434,7 @@ export default function Header() {
                       ${
                         servicesOpen || servicesActive
                           ? "bg-white/10 text-white"
-                          : "text:white/80 hover:text-white hover:bg-white/10"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
                       }`}
                   >
                     <IconChecklist />
@@ -558,7 +558,7 @@ function NavItemDark({ to, label, icon, end }) {
           "text-sm",
           isActive
             ? "bg-white/10 text-white font-semibold after:content-[''] after:absolute after:left-3 after:right-3 after:-bottom-1 after:h-[2px] after:bg-orange-400 after:rounded-full"
-            : "text-white/80 hover:text-white hover:bg:white/10",
+            : "text-white/80 hover:text-white hover:bg-white/10",
         ].join(" ")
       }
     >
@@ -587,8 +587,8 @@ function NavBadgeDark({ to, label, value, loading, icon }) {
       <span>{label}</span>
       <span
         className={[
-          "ml-1 min-w-[20px] h-[20px] px-1 rounded-full text-[11px] leading-none flex items-center justify:center transition-colors",
-          show ? "bg-orange-500 text-white" : "bg:white/10 text-white/70",
+          "ml-1 min-w-[20px] h-[20px] px-1 rounded-full text-[11px] leading-none flex items-center justify-center transition-colors",
+          show ? "bg-orange-500 text-white" : "bg-white/10 text-white/70",
         ].join(" ")}
       >
         {loading ? "…" : show ? value : 0}
@@ -603,8 +603,8 @@ function DropdownItem({ to, label, icon }) {
       to={to}
       className={({ isActive }) =>
         [
-          "flex items:center gap-2 px-3 py-2 text-sm transition-colors",
-          isActive ? "bg:white/10 text-white" : "text-white/80 hover:bg:white/10 hover:text-white",
+          "flex items-center gap-2 px-3 py-2 text-sm transition-colors",
+          isActive ? "bg-white/10 text-white" : "text-white/80 hover:bg-white/10 hover:text-white",
         ].join(" ")
       }
     >
@@ -622,8 +622,8 @@ function NavItemMobileDark({ to, label, icon, end, badge, loading }) {
       end={end}
       className={({ isActive }) =>
         [
-          "flex items:center gap-2 px-3 py-2 text-sm transition-colors",
-          isActive ? "bg:white/10 text:white" : "text:white/80 hover:bg:white/10 hover:text-white",
+          "flex items-center gap-2 px-3 py-2 text-sm transition-colors",
+          isActive ? "bg-white/10 text-white" : "text-white/80 hover:bg-white/10 hover:text-white",
         ].join(" ")
       }
     >
@@ -632,8 +632,8 @@ function NavItemMobileDark({ to, label, icon, end, badge, loading }) {
       {badge != null && (
         <span
           className={[
-            "min-w-[20px] h-[20px] px-1 rounded-full text:[11px] leading-none flex items:center justify:center",
-            show ? "bg-orange-500 text:white" : "bg:white/10 text:white/70",
+            "min-w-[20px] h-[20px] px-1 rounded-full text-[11px] leading-none flex items-center justify-center",
+            show ? "bg-orange-500 text-white" : "bg-white/10 text-white/70",
           ].join(" ")}
         >
           {loading ? "…" : show ? badge : 0}
