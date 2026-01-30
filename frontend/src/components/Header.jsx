@@ -181,7 +181,8 @@ export default function Header() {
   const servicesRef = useRef(null);
 
   const [mobileOpen, setMobileOpen] = useState(false);
-
+  const [donasMobileOpen, setDonasMobileOpen] = useState(false);
+  
   const [counts, setCounts] = useState(null);
   const [loading, setLoading] = useState(false);
   const [favCount, setFavCount] = useState(0);
@@ -338,6 +339,7 @@ export default function Header() {
     setAdminOpen(false);
     setServicesOpen(false);
     setDonasOpen(false);
+    setDonasMobileOpen(false);
   }, [location]);
 
   // активен ли блок "Услуги"
@@ -548,9 +550,28 @@ export default function Header() {
                 <NavItemMobileDark to="/admin/hotels" label={t("nav.hotels_admin", "Отели (админ)")} icon={<IconHotel />} />
                 <NavItemMobileDark to="/admin/pages" label={t("nav.cms_pages", "Подвал")} icon={<IconDoc />} />
                 
-                {/* ✅ DONA'S DOSAS — B (один пункт) */}
-                <NavItemMobileDark to="/admin/donas-dosas/finance" label="DONA’S DOSAS" icon={<IconBurger />} />
+                {/* ✅ DONA'S DOSAS — mobile submenu */}
+                <button
+                  type="button"
+                  onClick={() => setDonasMobileOpen((v) => !v)}
+                  className={[
+                    "w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors",
+                    donasMobileOpen ? "bg-white/10 text-white" : "text-white/80 hover:bg-white/10 hover:text-white",
+                  ].join(" ")}
+                >
+                  <div className="w-5 h-5"><IconBurger /></div>
+                  <div className="flex-1 text-left">DONA’S DOSAS</div>
+                  <IconChevron className={`transition ${donasMobileOpen ? "rotate-180" : ""}`} />
+                </button>
 
+                {donasMobileOpen && (
+                  <div className="px-2 pb-2">
+                    <div className="rounded-xl bg-black/20 ring-1 ring-white/10 overflow-hidden">
+                      <NavItemMobileDark to="/admin/donas-dosas/finance" label="Finance" icon={<IconBurger />} />
+                      <NavItemMobileDark to="/admin/donas-dosas/menu" label="Menu" icon={<IconBurger />} />
+                    </div>
+                  </div>
+                )}
               </RowGroupDark>
             )}
           </nav>
