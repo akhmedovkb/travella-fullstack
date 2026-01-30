@@ -58,7 +58,7 @@ export default function DonasMenuItems() {
   async function loadMenuItems() {
     setLoading(true);
     try {
-      // ✅ только admin endpoint
+      // ✅ сначала пытаемся взять finance (COGS/Profit/Margin), если роут отсутствует — падаем на обычный список
       let r;
       try {
         r = await apiGet("/api/admin/donas/menu-items/finance?includeArchived=1", true);
@@ -219,6 +219,7 @@ export default function DonasMenuItems() {
       );
 
       setRecipeRows(Array.isArray(r?.recipe) ? r.recipe : []);
+      await loadMenuItems(); // чтобы пересчитались COGS/маржа в таблице
     } finally {
       setRecipeSaving(false);
     }
@@ -347,6 +348,7 @@ export default function DonasMenuItems() {
                   <td className="px-4 py-2 text-right">
                     {it.sell_price != null || it.price != null ? fmt(it.sell_price ?? it.price) : "—"}
                   </td>
+
                   <td className="px-4 py-2 text-right">{it.has_recipe ? fmt(it.cogs) : "—"}</td>
                   <td className="px-4 py-2 text-right">{it.has_recipe ? fmt(it.profit) : "—"}</td>
                   <td className="px-4 py-2 text-right">
@@ -369,6 +371,7 @@ export default function DonasMenuItems() {
                       "—"
                     )}
                   </td>
+
                   <td className="px-4 py-2">{it.is_active ? "active" : "inactive"}</td>
                   <td className="px-4 py-2 text-right whitespace-nowrap">
                     <div className="inline-flex gap-2">
@@ -399,7 +402,7 @@ export default function DonasMenuItems() {
         </div>
       </div>
 
-      {/* Recipe drawer/modal */}
+      {/* Recipe modal */}
       {recipeOpen && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center justify-center p-3">
           <div className="w-full max-w-4xl bg-white rounded-2xl shadow-lg overflow-hidden">
@@ -458,55 +461,53 @@ export default function DonasMenuItems() {
                           </tr>
                         )}
 
-                        {recipeRows.map((row, idx) => {
-                          return (
-                            <tr key={row.id ?? `new-${idx}`} className="border-t">
-                              <td className="px-3 py-2">
-                                <select
-                                  className="border rounded-xl px-2 py-1 w-full"
-                                  value={row.ingredient_id ?? ""}
-                                  onChange={(e) => onSelectIngredient(idx, e.target.value)}
-                                >
-                                  <option value="">— choose ingredient —</option>
-                                  {ingredients.map((ing) => (
-                                    <option key={ing.id} value={ing.id}>
-                                      #{ing.id} — {ing.name} ({ing.unit || "g"})
-                                    </option>
-                                  ))}
-                                </select>
-                              </td>
+                        {recipeRows.map((row, idx) => (
+                          <tr key={row.id ?? `new-${idx}`} className="border-t">
+                            <td className="px-3 py-2">
+                              <select
+                                className="border rounded-xl px-2 py-1 w-full"
+                                value={row.ingredient_id ?? ""}
+                                onChange={(e) => onSelectIngredient(idx, e.target.value)}
+                              >
+                                <option value="">— choose ingredient —</option>
+                                {ingredients.map((ing) => (
+                                  <option key={ing.id} value={ing.id}>
+                                    #{ing.id} — {ing.name} ({ing.unit || "g"})
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
 
-                              <td className="px-3 py-2 text-right">
-                                <input
-                                  className="border rounded-xl px-2 py-1 w-28 text-right"
-                                  value={row.qty ?? ""}
-                                  onChange={(e) => updateRecipeRow(idx, { qty: e.target.value })}
-                                />
-                              </td>
+                            <td className="px-3 py-2 text-right">
+                              <input
+                                className="border rounded-xl px-2 py-1 w-28 text-right"
+                                value={row.qty ?? ""}
+                                onChange={(e) => updateRecipeRow(idx, { qty: e.target.value })}
+                              />
+                            </td>
 
-                              <td className="px-3 py-2">
-                                <select
-                                  className="border rounded-xl px-2 py-1"
-                                  value={row.unit ?? "g"}
-                                  onChange={(e) => updateRecipeRow(idx, { unit: e.target.value })}
-                                >
-                                  <option value="g">g</option>
-                                  <option value="ml">ml</option>
-                                  <option value="pcs">pcs</option>
-                                </select>
-                              </td>
+                            <td className="px-3 py-2">
+                              <select
+                                className="border rounded-xl px-2 py-1"
+                                value={row.unit ?? "g"}
+                                onChange={(e) => updateRecipeRow(idx, { unit: e.target.value })}
+                              >
+                                <option value="g">g</option>
+                                <option value="ml">ml</option>
+                                <option value="pcs">pcs</option>
+                              </select>
+                            </td>
 
-                              <td className="px-3 py-2 text-right">
-                                <button
-                                  onClick={() => deleteRecipeRow(row)}
-                                  className="px-3 py-1.5 rounded-xl border border-red-200 text-red-700 hover:bg-red-50"
-                                >
-                                  Remove
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
+                            <td className="px-3 py-2 text-right">
+                              <button
+                                onClick={() => deleteRecipeRow(row)}
+                                className="px-3 py-1.5 rounded-xl border border-red-200 text-red-700 hover:bg-red-50"
+                              >
+                                Remove
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
                       </tbody>
                     </table>
                   </div>
