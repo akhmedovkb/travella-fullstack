@@ -32,7 +32,7 @@ import DonasOpex from "./pages/admin/DonasOpex";
 import DonasCapex from "./pages/admin/DonasCapex";
 import DonasDosasCogsTab from "./pages/admin/DonasDosasCogsTab";
 import DonasDosasProfitTab from "./pages/admin/DonasDosasProfitTab";
-
+import DonasDosasMenuLayout from "./pages/admin/DonasDosasMenuLayout";
 
 // Клиентские
 import ClientRegister from "./pages/ClientRegister";
@@ -377,22 +377,38 @@ export default function App() {
                 </PrivateRoute>
               }
             />
-          <Route
-            path="/admin/donas-dosas/finance"
-            element={
-              <PrivateRoute>
-                <AdminRoute>
-                  <DonasDosasFinanceLayout />
-                </AdminRoute>
-              </PrivateRoute>
-            }
-          >
+            <Route
+              path="/admin/donas-dosas/finance"
+              element={
+                <PrivateRoute>
+                  <AdminRoute>
+                    <DonasDosasFinanceLayout />
+                  </AdminRoute>
+                </PrivateRoute>
+              }
+            >
             <Route index element={<DonasDosasFinanceOverview />} />
             <Route path="opex" element={<DonasOpex />} />
             <Route path="capex" element={<DonasCapex />} />
             <Route path="cogs" element={<DonasDosasCogsTab />} />
             <Route path="profit" element={<DonasDosasProfitTab />} />
           </Route>
+            <Route
+              path="/admin/donas-dosas/menu"
+              element={
+                <PrivateRoute>
+                  <AdminRoute>
+                    <DonasDosasMenuLayout />
+                  </AdminRoute>
+                </PrivateRoute>
+              }
+            >
+              <Route index element={<Navigate to="ingredients" replace />} />
+              <Route path="ingredients" element={<DonasIngredients />} />
+              <Route path="items" element={<DonasMenuItems />} />
+              <Route path="builder" element={<DonasMenuBuilder />} />
+            </Route>
+
             <Route
               path="/admin/donas-dosas/investor"
               element={
@@ -405,23 +421,15 @@ export default function App() {
             />
             <Route
               path="/admin/donas-dosas/menu-items"
-              element={
-                <PrivateRoute>
-                  <AdminRoute>
-                    <DonasMenuItems />
-                  </AdminRoute>
-                </PrivateRoute>
-              }
+              element={<Navigate to="/admin/donas-dosas/menu/items" replace />}
             />
             <Route
               path="/admin/donas-dosas/ingredients"
-              element={
-                <PrivateRoute>
-                  <AdminRoute>
-                    <DonasIngredients />
-                  </AdminRoute>
-                </PrivateRoute>
-              }
+              element={<Navigate to="/admin/donas-dosas/menu/ingredients" replace />}
+            />
+            <Route
+              path="/admin/donas-dosas/menu-builder"
+              element={<Navigate to="/admin/donas-dosas/menu/builder" replace />}
             />
             <Route
               path="/admin/donas-dosas/cogs"
@@ -430,16 +438,6 @@ export default function App() {
             <Route
               path="/admin/donas-dosas/profit"
               element={<Navigate to="/admin/donas-dosas/finance/profit" replace />}
-            />
-            <Route
-              path="/admin/donas-dosas/menu-builder"
-              element={
-                <PrivateRoute>
-                  <AdminRoute>
-                    <DonasMenuBuilder />
-                  </AdminRoute>
-                </PrivateRoute>
-              }
             />
 
             {/* fallback alias (на случай старых ссылок) */}
