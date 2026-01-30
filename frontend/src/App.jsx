@@ -426,23 +426,11 @@ export default function App() {
             />
             <Route
               path="/admin/donas-dosas/cogs"
-              element={
-                <PrivateRoute>
-                  <AdminRoute>
-                    <DonasCogs />
-                  </AdminRoute>
-                </PrivateRoute>
-              }
+              element={<Navigate to="/admin/donas-dosas/finance/cogs" replace />}
             />
             <Route
               path="/admin/donas-dosas/profit"
-              element={
-                <PrivateRoute>
-                  <AdminRoute>
-                    <DonasProfit />
-                  </AdminRoute>
-                </PrivateRoute>
-              }
+              element={<Navigate to="/admin/donas-dosas/finance/profit" replace />}
             />
             <Route
               path="/admin/donas-dosas/menu-builder"
