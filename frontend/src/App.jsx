@@ -392,6 +392,7 @@ export default function App() {
             <Route path="capex" element={<DonasCapex />} />
             <Route path="cogs" element={<DonasDosasCogsTab />} />
             <Route path="profit" element={<DonasDosasProfitTab />} />
+            <Route path="investor" element={<DonasInvestor />} />
           </Route>
             <Route
               path="/admin/donas-dosas/menu"
@@ -411,14 +412,9 @@ export default function App() {
 
             <Route
               path="/admin/donas-dosas/investor"
-              element={
-                <PrivateRoute>
-                  <AdminRoute>
-                    <DonasInvestor />
-                  </AdminRoute>
-                </PrivateRoute>
-              }
+              element={<Navigate to="/admin/donas-dosas/finance/investor" replace />}
             />
+
             <Route
               path="/admin/donas-dosas/menu-items"
               element={<Navigate to="/admin/donas-dosas/menu/items" replace />}
