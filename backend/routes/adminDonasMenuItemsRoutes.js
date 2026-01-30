@@ -31,6 +31,71 @@ router.get("/menu-items", async (req, res) => {
   }
 });
 
+// GET /api/admin/donas/menu-items/finance?includeArchived=true
+// Возвращает агрегаты по блюдам: price, cogs, profit, margin, has_recipe
+router.get("/menu-items/finance", async (req, res) => {
+  try {
+    const includeArchived = toBool(req.query.includeArchived);
+
+    const where = includeArchived ? "" : "WHERE mi.is_active = TRUE";
+
+    // cogs считается по формуле: (pack_price / pack_size) * qty
+    // pack_size может быть 0/NULL — тогда стоимость строки считается NULL и в сумме даёт 0 через COALESCE
+    const q = `
+      SELECT
+        mi.id,
+        mi.name,
+        mi.category,
+        mi.is_active,
+        mi.price,
+        mi.sell_price,
+        COALESCE(
+          SUM(
+            (
+              COALESCE(i.pack_price, 0)::numeric
+              / NULLIF(COALESCE(i.pack_size, 0)::numeric, 0)
+            ) * COALESCE(c.qty, 0)::numeric
+          ),
+          0
+        ) AS cogs,
+        COUNT(c.id) AS recipe_rows
+      FROM donas_menu_items mi
+      LEFT JOIN donas_menu_item_components c ON c.menu_item_id = mi.id
+      LEFT JOIN donas_ingredients i ON i.id = c.ingredient_id
+      ${where}
+      GROUP BY mi.id
+      ORDER BY mi.is_active DESC, mi.id DESC
+    `;
+
+    const r = await pool.query(q);
+
+    const items = r.rows.map((row) => {
+      const price = Number(row.sell_price ?? row.price ?? 0) || 0;
+      const cogs = Number(row.cogs ?? 0) || 0;
+      const profit = price - cogs;
+      const margin = price > 0 ? (profit / price) * 100 : null;
+
+      return {
+        id: row.id,
+        name: row.name,
+        category: row.category,
+        is_active: row.is_active,
+        price: row.price,
+        sell_price: row.sell_price,
+        cogs,
+        profit,
+        margin,
+        has_recipe: Number(row.recipe_rows || 0) > 0,
+      };
+    });
+
+    return res.json({ ok: true, items });
+  } catch (e) {
+    console.error("GET /api/admin/donas/menu-items/finance error:", e);
+    return res.status(500).json({ ok: false, error: "Server error" });
+  }
+});
+
 // POST /api/admin/donas/menu-items
 // Поддерживаем цену/описание. В разных версиях это может быть price или sell_price — принимаем оба.
 router.post("/menu-items", async (req, res) => {
