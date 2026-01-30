@@ -55,8 +55,8 @@ exports.getCogsSnapshotsForItem = async (req, res) => {
 exports.createCogsSnapshot = async (req, res) => {
   const menuItemId = Number(req.body?.menu_item_id);
   const totalCost = Number(req.body?.total_cost);
-  const sellPrice = req.body?.sell_price == null ? null : Number(req.body.sell_price);
-  const margin = req.body?.margin == null ? null : Number(req.body.margin);
+  const sellPriceRaw = req.body?.sell_price;
+  const marginRaw = req.body?.margin;
   const breakdown = Array.isArray(req.body?.breakdown) ? req.body.breakdown : [];
 
   if (!Number.isFinite(menuItemId) || menuItemId <= 0) {
@@ -64,8 +64,8 @@ exports.createCogsSnapshot = async (req, res) => {
   }
 
   const safeTotal = Number.isFinite(totalCost) ? totalCost : 0;
-  const safeSell = sellPrice == null ? null : Number.isFinite(sellPrice) ? sellPrice : null;
-  const safeMargin = margin == null ? null : Number.isFinite(margin) ? margin : null;
+  const safeSellPrice = sellPriceRaw == null ? null : Number(sellPriceRaw);
+  const safeMargin = marginRaw == null ? null : Number(marginRaw);
 
   // немного “чистим” breakdown
   const safeBreakdown = breakdown
@@ -83,7 +83,13 @@ exports.createCogsSnapshot = async (req, res) => {
     VALUES ($1, $2, $3, $4, $5)
     RETURNING id, menu_item_id, total_cost, sell_price, margin, breakdown, created_at
     `,
-    [menuItemId, safeTotal, safeSell, safeMargin, JSON.stringify(safeBreakdown)]
+    [
+      menuItemId,
+      safeTotal,
+      Number.isFinite(safeSellPrice) ? safeSellPrice : null,
+      Number.isFinite(safeMargin) ? safeMargin : null,
+      JSON.stringify(safeBreakdown),
+    ]
   );
 
   res.json({ ok: true, item: ins.rows?.[0] || null });
