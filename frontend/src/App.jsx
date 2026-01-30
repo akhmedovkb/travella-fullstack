@@ -80,8 +80,7 @@ import Contacts from "./pages/landing/Contacts";
 // IndiaInside
 import AdminInsideRequests from "./pages/admin/AdminInsideRequests";
 
-//donasdosas
-import DonasFinanceModel from "./pages/DonasFinanceModel";
+// donasdosas (legacy публичный путь /donas-dosas/finance теперь будет алиасом)
 
 function ClientPrivateRoute({ children }) {
   const token = localStorage.getItem("clientToken");
@@ -461,7 +460,7 @@ export default function App() {
             {/* Donas Dosas */}
             <Route
               path="/donas-dosas/finance"
-              element={<DonasFinanceModel />}
+              element={<Navigate to="/admin/donas-dosas/finance" replace />}
             />
             <Route path="/public/donas/investor" element={<DonasInvestor />} />
 
