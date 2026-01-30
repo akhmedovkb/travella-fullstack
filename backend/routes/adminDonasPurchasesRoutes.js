@@ -1,12 +1,26 @@
-//backend/routes/adminDonasPurchasesRoutes.js
+// backend/routes/adminDonasPurchasesRoutes.js
 
-const router = require("express").Router();
+const express = require("express");
+const authenticateToken = require("../middleware/authenticateToken");
+const requireAdmin = require("../middleware/requireAdmin");
 const {
   addPurchase,
-  listPurchases
+  listPurchases,
+  deletePurchase,
 } = require("../controllers/donasPurchasesController");
 
-router.post("/purchases", addPurchase);
+const router = express.Router();
+
+// все purchase endpoints — только для админа
+router.use(authenticateToken, requireAdmin);
+
+// list
 router.get("/purchases", listPurchases);
+
+// add
+router.post("/purchases", addPurchase);
+
+// delete
+router.delete("/purchases/:id", deletePurchase);
 
 module.exports = router;
