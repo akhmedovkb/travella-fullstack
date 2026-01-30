@@ -16,7 +16,7 @@ exports.listCogsSnapshots = async (req, res) => {
   params.push(limit);
 
   const q = `
-    SELECT id, menu_item_id, total_cost, breakdown, created_at
+    SELECT id, menu_item_id, total_cost, sell_price, margin, breakdown, created_at
     FROM donas_cogs
     ${where}
     ORDER BY created_at DESC, id DESC
@@ -38,7 +38,7 @@ exports.getCogsSnapshotsForItem = async (req, res) => {
 
   const r = await db.query(
     `
-    SELECT id, menu_item_id, total_cost, breakdown, created_at
+    SELECT id, menu_item_id, total_cost, sell_price, margin, breakdown, created_at
     FROM donas_cogs
     WHERE menu_item_id = $1
     ORDER BY created_at DESC, id DESC
@@ -51,10 +51,12 @@ exports.getCogsSnapshotsForItem = async (req, res) => {
 };
 
 // POST /api/admin/donas/cogs
-// body: { menu_item_id, total_cost, breakdown:[{ingredient_id,qty,unit,cost}] }
+// body: { menu_item_id, total_cost, sell_price?, margin?, breakdown:[{ingredient_id,qty,unit,cost}] }
 exports.createCogsSnapshot = async (req, res) => {
   const menuItemId = Number(req.body?.menu_item_id);
   const totalCost = Number(req.body?.total_cost);
+  const sellPrice = req.body?.sell_price == null ? null : Number(req.body.sell_price);
+  const margin = req.body?.margin == null ? null : Number(req.body.margin);
   const breakdown = Array.isArray(req.body?.breakdown) ? req.body.breakdown : [];
 
   if (!Number.isFinite(menuItemId) || menuItemId <= 0) {
@@ -62,6 +64,8 @@ exports.createCogsSnapshot = async (req, res) => {
   }
 
   const safeTotal = Number.isFinite(totalCost) ? totalCost : 0;
+  const safeSell = sellPrice == null ? null : Number.isFinite(sellPrice) ? sellPrice : null;
+  const safeMargin = margin == null ? null : Number.isFinite(margin) ? margin : null;
 
   // немного “чистим” breakdown
   const safeBreakdown = breakdown
@@ -75,11 +79,11 @@ exports.createCogsSnapshot = async (req, res) => {
 
   const ins = await db.query(
     `
-    INSERT INTO donas_cogs (menu_item_id, total_cost, breakdown)
-    VALUES ($1, $2, $3)
-    RETURNING id, menu_item_id, total_cost, breakdown, created_at
+    INSERT INTO donas_cogs (menu_item_id, total_cost, sell_price, margin, breakdown)
+    VALUES ($1, $2, $3, $4, $5)
+    RETURNING id, menu_item_id, total_cost, sell_price, margin, breakdown, created_at
     `,
-    [menuItemId, safeTotal, JSON.stringify(safeBreakdown)]
+    [menuItemId, safeTotal, safeSell, safeMargin, JSON.stringify(safeBreakdown)]
   );
 
   res.json({ ok: true, item: ins.rows?.[0] || null });
