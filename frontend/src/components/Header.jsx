@@ -175,14 +175,15 @@ export default function Header() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
   const adminRef = useRef(null);
+
   const [donasOpen, setDonasOpen] = useState(false);
+  const [donasMobileOpen, setDonasMobileOpen] = useState(false);
 
   const [servicesOpen, setServicesOpen] = useState(false);
   const servicesRef = useRef(null);
 
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [donasMobileOpen, setDonasMobileOpen] = useState(false);
-  
+
   const [counts, setCounts] = useState(null);
   const [loading, setLoading] = useState(false);
   const [favCount, setFavCount] = useState(0);
@@ -219,7 +220,6 @@ export default function Header() {
     const onDoc = (e) => {
       if (adminRef.current && !adminRef.current.contains(e.target)) {
         setAdminOpen(false);
-        setDonasOpen(false);
       }
       if (servicesRef.current && !servicesRef.current.contains(e.target)) {
         setServicesOpen(false);
@@ -330,8 +330,7 @@ export default function Header() {
   }, [role, location]);
 
   const providerRequests = (counts?.requests_open || 0) + (counts?.requests_accepted || 0);
-  const bookingsBadge =
-    (counts?.bookings_pending ?? counts?.bookings_total ?? 0) || 0;
+  const bookingsBadge = (counts?.bookings_pending ?? counts?.bookings_total ?? 0) || 0;
 
   // close mobile & dropdowns on route change
   useEffect(() => {
@@ -344,18 +343,18 @@ export default function Header() {
 
   // активен ли блок "Услуги"
   const servicesActive =
-    location.pathname.startsWith("/dashboard/services/") ||
-    location.pathname === "/dashboard/calendar";
+    location.pathname.startsWith("/dashboard/services/") || location.pathname === "/dashboard/calendar";
+
+  // активен ли DONA'S DOSAS
+  const donasActive = location.pathname.startsWith("/admin/donas-dosas/");
 
   return (
     <header className="sticky top-0 z-40 bg-[#111] text-white border-b border-black/40">
       <div className="mx-auto max-w-7xl px-2 sm:px-3">
         {/* One-row header */}
         <div className="relative z-10 h-14 flex items-center justify-between gap-2">
-
           {/* Left group */}
           <div className="flex items-center gap-2">
-
             {/* Бургер */}
             <button
               type="button"
@@ -366,23 +365,23 @@ export default function Header() {
               {mobileOpen ? <IconClose /> : <IconBurger />}
             </button>
 
-            {/* ЛОГО — теперь внутри флекса */}
+            {/* ЛОГО */}
             <Link to="/" className="inline-flex items-center mr-2" aria-label="Travella Home">
               <img
                 src="/logo1.jpg"
                 alt="Travella"
                 className="h-10 w-auto object-contain sm:h-11 md:h-12"
                 loading="lazy"
-                onError={(e) => { e.currentTarget.src = "/logo7.jpg"; }}
+                onError={(e) => {
+                  e.currentTarget.src = "/logo7.jpg";
+                }}
               />
             </Link>
 
             {/* Продукты */}
             <nav className="hidden md:flex items-center gap-2 lg:gap-3">
               <NavItemDark to="/" label="MARKETPLACE" end />
-              {role === "provider" && (
-                <NavItemDark to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />
-              )}
+              {role === "provider" && <NavItemDark to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />}
               <NavItemDark to="/hotels" label={t("nav.hotels", "Отели")} icon={<IconHotel />} />
             </nav>
 
@@ -393,11 +392,7 @@ export default function Header() {
                   type="button"
                   onClick={() => setAdminOpen((v) => !v)}
                   className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full text-sm transition
-                    ${
-                      adminOpen
-                        ? "bg-white/10 text-white"
-                        : "text-white/80 hover:text-white hover:bg-white/10"
-                    }`}
+                    ${adminOpen ? "bg-white/10 text-white" : "text-white/80 hover:text-white hover:bg-white/10"}`}
                 >
                   <IconModeration className="opacity-90" />
                   <span>{t("nav.admin", "Админ")}</span>
@@ -408,33 +403,42 @@ export default function Header() {
                   <div className="absolute left-0 mt-2 w-64 rounded-2xl bg-[#171717] ring-1 ring-white/10 shadow-xl overflow-hidden">
                     <DropdownItem to="/admin/moderation" label={t("moderation.title", "Модерация")} icon={<IconModeration />} />
                     <DropdownItem to="/admin/leads" label={t("nav.leads", "Leads")} icon={<IconUsers />} />
-                    <DropdownItem to="/admin/refused-actual" label={t("nav.refused_actual", "Актуальные отказы")} icon={<IconChecklist />} />
+                    <DropdownItem
+                      to="/admin/refused-actual"
+                      label={t("nav.refused_actual", "Актуальные отказы")}
+                      icon={<IconChecklist />}
+                    />
                     <DropdownItem to="/admin/broadcast" label={t("nav.broadcast", "Рассылка")} icon={<IconDoc />} />
-                    <DropdownItem to="/admin/inside-requests" label={t("nav.inside_requests", "Inside заявки")} icon={<IconChecklist />} />
+                    <DropdownItem
+                      to="/admin/inside-requests"
+                      label={t("nav.inside_requests", "Inside заявки")}
+                      icon={<IconChecklist />}
+                    />
                     <DropdownItem to="/admin/providers" label={t("nav.providers_admin", "Провайдеры")} icon={<IconUsers />} />
                     <DropdownItem to="/admin/entry-fees" label={t("nav.entry_fees_admin", "Entry fees")} icon={<IconTicket />} />
                     <DropdownItem to="/admin/hotels" label={t("nav.hotels_admin", "Отели (админ)")} icon={<IconHotel />} />
                     <DropdownItem to="/admin/pages" label={t("nav.cms_pages", "Подвал")} icon={<IconDoc />} />
 
-                    {/* ✅ DONA'S DOSAS — подменю */}
+                    {/* ✅ DONA'S DOSAS — компактное подменю */}
                     <button
                       type="button"
                       onClick={() => setDonasOpen((v) => !v)}
                       className={[
                         "w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors",
-                        donasOpen ? "bg-white/10 text-white" : "text-white/80 hover:bg-white/10 hover:text-white",
+                        donasActive ? "bg-white/10 text-white" : "text-white/80 hover:bg-white/10 hover:text-white",
                       ].join(" ")}
                     >
-                      <div className="w-5 h-5"><IconBurger /></div>
+                      <div className="w-5 h-5">
+                        <IconBurger />
+                      </div>
                       <div className="flex-1 text-left">DONA’S DOSAS</div>
                       <IconChevron className={`transition ${donasOpen ? "rotate-180" : ""}`} />
                     </button>
+
                     {donasOpen && (
-                      <div className="px-2 pb-2">
-                        <div className="rounded-xl bg-black/20 ring-1 ring-white/10 overflow-hidden">
-                          <DropdownItem to="/admin/donas-dosas/finance" label="Finance" icon={<IconDoc />} />
-                          <DropdownItem to="/admin/donas-dosas/menu" label="Menu" icon={<IconDoc />} />
-                        </div>
+                      <div className="bg-black/20">
+                        <DropdownItem to="/admin/donas-dosas/finance" label="Finance" icon={<IconDoc />} />
+                        <DropdownItem to="/admin/donas-dosas/menu" label="Menu" icon={<IconDoc />} />
                       </div>
                     )}
 
@@ -460,7 +464,7 @@ export default function Header() {
                       ${
                         servicesOpen || servicesActive
                           ? "bg-white/10 text-white"
-                          : "text-white/80 hover:text-white hover:bg-white/10"
+                          : "text:white/80 hover:text-white hover:bg-white/10"
                       }`}
                   >
                     <IconChecklist />
@@ -470,16 +474,41 @@ export default function Header() {
 
                   {servicesOpen && (
                     <div className="absolute right-0 mt-2 w-72 rounded-2xl bg-[#171717] ring-1 ring-white/10 shadow-xl overflow-hidden z-30">
-                      <DropdownItem to="/dashboard/services/tourbuilder" label={t("nav.services_tourbuilder", "Услуги для Tour Builder")} icon={<IconChecklist />} />
-                      <DropdownItem to="/dashboard/services/marketplace" label={t("nav.services_marketplace", "Услуги для MARKETPLACE")} icon={<IconChecklist />} />
+                      <DropdownItem
+                        to="/dashboard/services/tourbuilder"
+                        label={t("nav.services_tourbuilder", "Услуги для Tour Builder")}
+                        icon={<IconChecklist />}
+                      />
+                      <DropdownItem
+                        to="/dashboard/services/marketplace"
+                        label={t("nav.services_marketplace", "Услуги для MARKETPLACE")}
+                        icon={<IconChecklist />}
+                      />
                       <DropdownItem to="/dashboard/calendar" label={t("nav.provider_calendar", "Календарь")} icon={<IconBookings />} />
                     </div>
                   )}
                 </div>
 
-                <NavBadgeDark to="/dashboard/requests" label={t("nav.requests")} icon={<IconRequests />} value={providerRequests} loading={loading} />
-                <NavBadgeDark to="/dashboard/favorites" label={t("nav.favorites") || "Избранное"} icon={<IconHeart />} value={favCount} />
-                <NavBadgeDark to="/dashboard/bookings" label={t("nav.bookings")} icon={<IconBookings />} value={bookingsBadge} loading={loading} />
+                <NavBadgeDark
+                  to="/dashboard/requests"
+                  label={t("nav.requests")}
+                  icon={<IconRequests />}
+                  value={providerRequests}
+                  loading={loading}
+                />
+                <NavBadgeDark
+                  to="/dashboard/favorites"
+                  label={t("nav.favorites") || "Избранное"}
+                  icon={<IconHeart />}
+                  value={favCount}
+                />
+                <NavBadgeDark
+                  to="/dashboard/bookings"
+                  label={t("nav.bookings")}
+                  icon={<IconBookings />}
+                  value={bookingsBadge}
+                  loading={loading}
+                />
                 <NavItemDark to="/dashboard/profile" label={t("nav.profile", "Профиль")} icon={<IconProfile />} />
               </>
             )}
@@ -487,7 +516,12 @@ export default function Header() {
             {role === "client" && (
               <>
                 <NavBadgeDark to="/client/dashboard" label={t("client.header.cabinet", "Кабинет")} icon={<IconDashboard />} />
-                <NavBadgeDark to="/client/dashboard?tab=favorites" label={t("client.header.favorites", "Избранное")} icon={<IconHeart />} value={favCount} />
+                <NavBadgeDark
+                  to="/client/dashboard?tab=favorites"
+                  label={t("client.header.favorites", "Избранное")}
+                  icon={<IconHeart />}
+                  value={favCount}
+                />
               </>
             )}
 
@@ -503,21 +537,47 @@ export default function Header() {
         </div>
 
         {/* ===== Mobile drawer ===== */}
-        <div className={`md:hidden overflow-hidden transition-[max-height] duration-300 ${
-          mobileOpen ? "max-h-[80vh]" : "max-h-0"
-        }`} aria-hidden={!mobileOpen}>
+        <div
+          className={`md:hidden overflow-hidden transition-[max-height] duration-300 ${mobileOpen ? "max-h-[80vh]" : "max-h-0"}`}
+          aria-hidden={!mobileOpen}
+        >
           <nav className="pb-3 -mx-1">
             {role && (
               <RowGroupDark title={t("nav.ops", "Операционка")}>
                 {role === "provider" && (
                   <>
-                    <NavItemMobileDark to="/dashboard/services/tourbuilder" label={t("nav.services_tourbuilder", "Услуги для Tour Builder")} icon={<IconChecklist />} />
-                    <NavItemMobileDark to="/dashboard/services/marketplace" label={t("nav.services_marketplace", "Услуги для MARKETPLACE")} icon={<IconChecklist />} />
+                    <NavItemMobileDark
+                      to="/dashboard/services/tourbuilder"
+                      label={t("nav.services_tourbuilder", "Услуги для Tour Builder")}
+                      icon={<IconChecklist />}
+                    />
+                    <NavItemMobileDark
+                      to="/dashboard/services/marketplace"
+                      label={t("nav.services_marketplace", "Услуги для MARKETPLACE")}
+                      icon={<IconChecklist />}
+                    />
                     <NavItemMobileDark to="/dashboard/calendar" label={t("nav.provider_calendar", "Календарь")} icon={<IconBookings />} />
                     <NavItemMobileDark to="/admin/broadcast" label={t("nav.broadcast", "Рассылка")} icon={<IconDoc />} />
-                    <NavItemMobileDark to="/dashboard/requests" label={t("nav.requests")} icon={<IconRequests />} badge={providerRequests} loading={loading} />
-                    <NavItemMobileDark to="/dashboard/favorites" label={t("nav.favorites") || "Избранное"} icon={<IconHeart />} badge={favCount} />
-                    <NavItemMobileDark to="/dashboard/bookings" label={t("nav.bookings")} icon={<IconBookings />} badge={bookingsBadge} loading={loading} />
+                    <NavItemMobileDark
+                      to="/dashboard/requests"
+                      label={t("nav.requests")}
+                      icon={<IconRequests />}
+                      badge={providerRequests}
+                      loading={loading}
+                    />
+                    <NavItemMobileDark
+                      to="/dashboard/favorites"
+                      label={t("nav.favorites") || "Избранное"}
+                      icon={<IconHeart />}
+                      badge={favCount}
+                    />
+                    <NavItemMobileDark
+                      to="/dashboard/bookings"
+                      label={t("nav.bookings")}
+                      icon={<IconBookings />}
+                      badge={bookingsBadge}
+                      loading={loading}
+                    />
                     <NavItemMobileDark to="/dashboard/profile" label={t("nav.profile", "Профиль")} icon={<IconProfile />} />
                   </>
                 )}
@@ -525,7 +585,12 @@ export default function Header() {
                 {role === "client" && (
                   <>
                     <NavItemMobileDark to="/client/dashboard" label={t("client.header.cabinet", "Кабинет")} icon={<IconDashboard />} />
-                    <NavItemMobileDark to="/client/dashboard?tab=favorites" label={t("client.header.favorites", "Избранное")} icon={<IconHeart />} badge={favCount} />
+                    <NavItemMobileDark
+                      to="/client/dashboard?tab=favorites"
+                      label={t("client.header.favorites", "Избранное")}
+                      icon={<IconHeart />}
+                      badge={favCount}
+                    />
                   </>
                 )}
               </RowGroupDark>
@@ -533,9 +598,7 @@ export default function Header() {
 
             <RowGroupDark title={t("nav.products", "Продукты")}>
               <NavItemMobileDark to="/marketplace" label="MARKETPLACE" />
-              {role === "provider" && (
-                <NavItemMobileDark to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />
-              )}
+              {role === "provider" && <NavItemMobileDark to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />}
               <NavItemMobileDark to="/hotels" label={t("nav.hotels", "Отели")} icon={<IconHotel />} />
             </RowGroupDark>
 
@@ -543,33 +606,37 @@ export default function Header() {
               <RowGroupDark title={t("nav.admin", "Админ")}>
                 <NavItemMobileDark to="/admin/moderation" label={t("moderation.title", "Модерация")} icon={<IconModeration />} />
                 <NavItemMobileDark to="/admin/leads" label={t("nav.leads", "Leads")} icon={<IconUsers />} />
-                <NavItemMobileDark to="/admin/refused-actual" label={t("nav.refused_actual", "Актуальные отказы")} icon={<IconChecklist />} />
+                <NavItemMobileDark
+                  to="/admin/refused-actual"
+                  label={t("nav.refused_actual", "Актуальные отказы")}
+                  icon={<IconChecklist />}
+                />
                 <NavItemMobileDark to="/admin/inside-requests" label={t("nav.inside_requests", "Inside заявки")} icon={<IconChecklist />} />
                 <NavItemMobileDark to="/admin/providers" label={t("nav.providers_admin", "Провайдеры")} icon={<IconUsers />} />
                 <NavItemMobileDark to="/admin/entry-fees" label={t("nav.entry_fees_admin", "Entry fees")} icon={<IconTicket />} />
                 <NavItemMobileDark to="/admin/hotels" label={t("nav.hotels_admin", "Отели (админ)")} icon={<IconHotel />} />
                 <NavItemMobileDark to="/admin/pages" label={t("nav.cms_pages", "Подвал")} icon={<IconDoc />} />
-                
-                {/* ✅ DONA'S DOSAS — mobile submenu */}
+
+                {/* ✅ DONA'S DOSAS — компактное подменю */}
                 <button
                   type="button"
                   onClick={() => setDonasMobileOpen((v) => !v)}
                   className={[
                     "w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors",
-                    donasMobileOpen ? "bg-white/10 text-white" : "text-white/80 hover:bg-white/10 hover:text-white",
+                    donasActive ? "bg-white/10 text-white" : "text-white/80 hover:bg-white/10 hover:text-white",
                   ].join(" ")}
                 >
-                  <div className="w-5 h-5"><IconBurger /></div>
+                  <div className="w-5 h-5">
+                    <IconBurger />
+                  </div>
                   <div className="flex-1 text-left">DONA’S DOSAS</div>
                   <IconChevron className={`transition ${donasMobileOpen ? "rotate-180" : ""}`} />
                 </button>
 
                 {donasMobileOpen && (
-                  <div className="px-2 pb-2">
-                    <div className="rounded-xl bg-black/20 ring-1 ring-white/10 overflow-hidden">
-                      <NavItemMobileDark to="/admin/donas-dosas/finance" label="Finance" icon={<IconBurger />} />
-                      <NavItemMobileDark to="/admin/donas-dosas/menu" label="Menu" icon={<IconBurger />} />
-                    </div>
+                  <div className="bg-black/20">
+                    <NavItemMobileDark to="/admin/donas-dosas/finance" label="Finance" icon={<IconDoc />} />
+                    <NavItemMobileDark to="/admin/donas-dosas/menu" label="Menu" icon={<IconDoc />} />
                   </div>
                 )}
               </RowGroupDark>
@@ -603,7 +670,7 @@ function NavItemDark({ to, label, icon, end }) {
           "text-sm",
           isActive
             ? "bg-white/10 text-white font-semibold after:content-[''] after:absolute after:left-3 after:right-3 after:-bottom-1 after:h-[2px] after:bg-orange-400 after:rounded-full"
-            : "text-white/80 hover:text-white hover:bg-white/10",
+            : "text-white/80 hover:text-white hover:bg:white/10",
         ].join(" ")
       }
     >
@@ -632,8 +699,8 @@ function NavBadgeDark({ to, label, value, loading, icon }) {
       <span>{label}</span>
       <span
         className={[
-          "ml-1 min-w-[20px] h-[20px] px-1 rounded-full text-[11px] leading-none flex items-center justify-center transition-colors",
-          show ? "bg-orange-500 text-white" : "bg-white/10 text-white/70",
+          "ml-1 min-w-[20px] h-[20px] px-1 rounded-full text-[11px] leading-none flex items-center justify:center transition-colors",
+          show ? "bg-orange-500 text-white" : "bg:white/10 text-white/70",
         ].join(" ")}
       >
         {loading ? "…" : show ? value : 0}
@@ -648,8 +715,8 @@ function DropdownItem({ to, label, icon }) {
       to={to}
       className={({ isActive }) =>
         [
-          "flex items-center gap-2 px-3 py-2 text-sm transition-colors",
-          isActive ? "bg-white/10 text-white" : "text-white/80 hover:bg-white/10 hover:text-white",
+          "flex items:center gap-2 px-3 py-2 text-sm transition-colors",
+          isActive ? "bg:white/10 text-white" : "text-white/80 hover:bg:white/10 hover:text-white",
         ].join(" ")
       }
     >
@@ -667,8 +734,8 @@ function NavItemMobileDark({ to, label, icon, end, badge, loading }) {
       end={end}
       className={({ isActive }) =>
         [
-          "flex items-center gap-2 px-3 py-2 text-sm transition-colors",
-          isActive ? "bg-white/10 text-white" : "text-white/80 hover:bg-white/10 hover:text-white",
+          "flex items:center gap-2 px-3 py-2 text-sm transition-colors",
+          isActive ? "bg:white/10 text:white" : "text:white/80 hover:bg:white/10 hover:text-white",
         ].join(" ")
       }
     >
@@ -677,8 +744,8 @@ function NavItemMobileDark({ to, label, icon, end, badge, loading }) {
       {badge != null && (
         <span
           className={[
-            "min-w-[20px] h-[20px] px-1 rounded-full text-[11px] leading-none flex items-center justify-center",
-            show ? "bg-orange-500 text-white" : "bg-white/10 text-white/70",
+            "min-w-[20px] h-[20px] px-1 rounded-full text:[11px] leading-none flex items:center justify:center",
+            show ? "bg-orange-500 text:white" : "bg:white/10 text:white/70",
           ].join(" ")}
         >
           {loading ? "…" : show ? badge : 0}
