@@ -31,6 +31,50 @@ function calcPpu(ing) {
   return packPrice / packSize;
 }
 
+function SparklinePct({ values }) {
+  const w = 260;
+  const h = 60;
+  const pad = 4;
+
+  if (!values || values.length < 2) {
+    return <div className="text-xs text-gray-500">История: нет данных</div>;
+  }
+
+  const vmin = Math.min(...values);
+  const vmax = Math.max(...values);
+  const rng = Math.max(1e-9, vmax - vmin);
+
+  const pts = values
+    .slice()
+    .reverse() // слева “старое”, справа “новое”
+    .map((v, i) => {
+      const x = pad + (i * (w - pad * 2)) / (values.length - 1);
+      const y = pad + (h - pad * 2) * (1 - (v - vmin) / rng);
+      return `${x},${y}`;
+    })
+    .join(" ");
+
+  const last = values[0];
+  const prev = values[1];
+  const delta = last - prev;
+
+  return (
+    <div className="space-y-1">
+      <svg width={w} height={h} className="block" role="img" aria-label="Margin history">
+        <polyline points={pts} fill="none" stroke="black" strokeWidth="2" />
+      </svg>
+      <div className="text-xs text-gray-600 flex items-center justify-between">
+        <span>
+          Последний: <b>{pct(last)}</b>
+        </span>
+        <span>
+          Δ: <b>{pct(delta)}</b>
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export default function DonasProfit() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
@@ -147,6 +191,20 @@ export default function DonasProfit() {
   const profit = price - cogs;
   const margin = price > 0 ? (profit / price) * 100 : NaN;
 
+  const marginHistoryValues = useMemo(() => {
+    const vals = (cogsHistory || [])
+      .map((h) => {
+        const m = Number(h?.margin);
+        if (Number.isFinite(m)) return m;
+        const sp = toNum(h?.sell_price);
+        const tc = toNum(h?.total_cost);
+        if (sp > 0) return ((sp - tc) / sp) * 100;
+        return NaN;
+      })
+      .filter((v) => Number.isFinite(v));
+    return vals;
+  }, [cogsHistory]);
+
   async function savePrice() {
     if (!menuItemId) return;
 
@@ -184,7 +242,6 @@ export default function DonasProfit() {
       await apiPost("/api/admin/donas/cogs", {
         menu_item_id: menuItemId,
         total_cost: cogs,
-        // фиксируем “контекст” снапшота: цена продажи и маржа на момент сохранения
         sell_price: price,
         margin: Number.isFinite(margin) ? margin : null,
         breakdown: rows.map((r) => ({
@@ -228,9 +285,7 @@ export default function DonasProfit() {
             <div className="p-3 rounded-xl bg-red-50 text-red-700 border border-red-200">{err}</div>
           )}
           {okMsg && (
-            <div className="p-3 rounded-xl bg-green-50 text-green-700 border border-green-200">
-              {okMsg}
-            </div>
+            <div className="p-3 rounded-xl bg-green-50 text-green-700 border border-green-200">{okMsg}</div>
           )}
         </div>
       )}
@@ -307,7 +362,7 @@ export default function DonasProfit() {
 
           <div className="mt-5 rounded-2xl bg-white border border-gray-200 p-4">
             <div className="flex items-center justify-between gap-3">
-              <div className="text-sm font-medium text-gray-900">История COGS</div>
+              <div className="text-sm font-medium text-gray-900">История (COGS / Маржа)</div>
               {historyLoading && <div className="text-xs text-gray-500">Загрузка…</div>}
             </div>
 
@@ -316,33 +371,59 @@ export default function DonasProfit() {
             ) : (cogsHistory || []).length === 0 ? (
               <div className="text-sm text-gray-500 mt-2">История: нет данных.</div>
             ) : (
-              <div className="mt-3 overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead>
-                    <tr className="text-left text-gray-600">
-                      <th className="py-2 pr-4">Дата</th>
-                      <th className="py-2 pr-4 text-right">COGS</th>
-                      <th className="py-2 pr-4 text-right">Цена</th>
-                      <th className="py-2 pr-4 text-right">Маржа</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {cogsHistory.slice(0, 10).map((h) => (
-                      <tr key={h.id} className="border-t">
-                        <td className="py-2 pr-4">
-                          {h.created_at ? new Date(h.created_at).toLocaleString("ru-RU") : "—"}
-                        </td>
-                        <td className="py-2 pr-4 text-right">{money(h.total_cost)}</td>
-                        <td className="py-2 pr-4 text-right">
-                          {h.sell_price == null ? "—" : money(h.sell_price)}
-                        </td>
-                        <td className="py-2 pr-4 text-right">
-                          {h.margin == null ? "—" : pct(Number(h.margin))}
-                        </td>
+              <div className="mt-3 space-y-3">
+                <div className="border rounded-xl p-3">
+                  <div className="text-xs text-gray-600 mb-2">Маржа (sparkline)</div>
+                  <SparklinePct values={marginHistoryValues} />
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-gray-600">
+                        <th className="py-2 pr-4">Дата</th>
+                        <th className="py-2 pr-4 text-right">Цена</th>
+                        <th className="py-2 pr-4 text-right">COGS</th>
+                        <th className="py-2 pr-4 text-right">Маржа</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {cogsHistory.slice(0, 10).map((h) => (
+                        <tr key={h.id} className="border-t">
+                          <td className="py-2 pr-4">
+                            {h.created_at ? new Date(h.created_at).toLocaleString("ru-RU") : "—"}
+                          </td>
+                          <td className="py-2 pr-4 text-right">
+                            {h.sell_price == null ? "—" : money(h.sell_price)}
+                          </td>
+                          <td className="py-2 pr-4 text-right">{money(h.total_cost)}</td>
+                          <td
+                            className="py-2 pr-4 text-right"
+                            title={(() => {
+                              const sp = toNum(h.sell_price);
+                              const tc = toNum(h.total_cost);
+                              if (!sp) return "";
+                              const p = sp - tc;
+                              const m = Number.isFinite(Number(h?.margin))
+                                ? Number(h?.margin)
+                                : ((sp - tc) / sp) * 100;
+                              return `Прибыль: ${money(p)} | Маржа: ${pct(m)}`;
+                            })()}
+                          >
+                            {(() => {
+                              const m = Number(h?.margin);
+                              if (Number.isFinite(m)) return pct(m);
+                              const sp = toNum(h.sell_price);
+                              const tc = toNum(h.total_cost);
+                              if (sp > 0) return pct(((sp - tc) / sp) * 100);
+                              return "—";
+                            })()}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </div>
