@@ -67,11 +67,11 @@ router.get("/ingredients", authenticateToken, requireAdmin, async (req, res) => 
       [SLUG, includeArchived]
     );
 
-    // price_per_unit считаем на бэке, чтобы фронту было проще
     const items = (q.rows || []).map((r) => {
       const packSize = toNum(r.pack_size);
       const packPrice = toNum(r.pack_price);
       const ppu = packSize > 0 ? packPrice / packSize : 0;
+
       return {
         ...r,
         pack_size: packSize,
@@ -103,6 +103,7 @@ router.post("/ingredients", authenticateToken, requireAdmin, async (req, res) =>
     const supplier = String(b.supplier || "").trim() || null;
     const notes = String(b.notes || "").trim() || null;
 
+    // если фронт не шлёт is_active — считаем, что true
     const is_active = b.is_active == null ? true : !!b.is_active;
 
     const q = await pool.query(
@@ -141,6 +142,7 @@ router.put("/ingredients/:id", authenticateToken, requireAdmin, async (req, res)
     const supplier = String(b.supplier || "").trim() || null;
     const notes = String(b.notes || "").trim() || null;
 
+    // если фронт не шлёт is_active — оставляем true (чтобы не “гасить” ингредиент)
     const is_active = b.is_active == null ? true : !!b.is_active;
     const is_archived = !!b.is_archived;
 
