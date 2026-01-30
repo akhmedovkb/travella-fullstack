@@ -410,15 +410,8 @@ export default function Header() {
                     <DropdownItem to="/admin/entry-fees" label={t("nav.entry_fees_admin", "Entry fees")} icon={<IconTicket />} />
                     <DropdownItem to="/admin/hotels" label={t("nav.hotels_admin", "Отели (админ)")} icon={<IconHotel />} />
                     <DropdownItem to="/admin/pages" label={t("nav.cms_pages", "Подвал")} icon={<IconDoc />} />
-                    {/* ✅ DONA'S DOSAS — только админу */}
-                    <DropdownItem to="/donas-dosas/finance" label="DONA’S DOSAS" icon={<IconBurger />}/>
-                    <DropdownItem to="/admin/donas-dosas/finance" label="Dona’s Dosas — Finance" icon={<IconBurger />} />
-                    <DropdownItem to="/admin/donas-dosas/investor" label="Dona’s Dosas — Investor" icon={<IconBurger />} />
-                    <DropdownItem to="/admin/donas-dosas/menu-items" label="Dona’s Dosas — Menu Items" icon={<IconBurger />} />
-                    <DropdownItem to="/admin/donas-dosas/ingredients" label="Dona’s Dosas — Ingredients" icon={<IconBurger />} />
-                    <DropdownItem to="/admin/donas-dosas/cogs" label="Dona’s Dosas — COGS" icon={<IconBurger />} />
-                    <DropdownItem to="/admin/donas-dosas/profit" label="Dona’s Dosas — Profit / Margin" icon={<IconBurger />} />
-                    <DropdownItem to="/admin/donas-dosas/menu-builder" label="Dona’s Dosas — Menu Builder" icon={<IconBurger />} />
+                    {/* ✅ DONA'S DOSAS — B (один пункт) */}
+                    <DropdownItem to="/admin/donas-dosas/finance" label="DONA’S DOSAS" icon={<IconBurger />} />
                     <div className="border-t border-white/10 p-2">
                       <AdminQuickTools />
                     </div>
@@ -530,13 +523,10 @@ export default function Header() {
                 <NavItemMobileDark to="/admin/entry-fees" label={t("nav.entry_fees_admin", "Entry fees")} icon={<IconTicket />} />
                 <NavItemMobileDark to="/admin/hotels" label={t("nav.hotels_admin", "Отели (админ)")} icon={<IconHotel />} />
                 <NavItemMobileDark to="/admin/pages" label={t("nav.cms_pages", "Подвал")} icon={<IconDoc />} />
-                <NavItemMobileDark to="/admin/donas-dosas/finance" label="Dona’s Dosas — Finance" icon={<IconBurger />} />
-                <NavItemMobileDark to="/admin/donas-dosas/investor" label="Dona’s Dosas — Investor" icon={<IconBurger />} />
-                <NavItemMobileDark to="/admin/donas-dosas/menu-items" label="Dona’s Dosas — Menu Items" icon={<IconBurger />} />
-                <NavItemMobileDark to="/admin/donas-dosas/ingredients" label="Dona’s Dosas — Ingredients" icon={<IconBurger />} />
-                <NavItemMobileDark to="/admin/donas-dosas/cogs" label="Dona’s Dosas — COGS" icon={<IconBurger />} />
-                <NavItemMobileDark to="/admin/donas-dosas/profit" label="Dona’s Dosas — Profit / Margin" icon={<IconBurger />} />
-                <NavItemMobileDark to="/admin/donas-dosas/menu-builder" label="Dona’s Dosas — Menu Builder" icon={<IconBurger />} />
+                
+                {/* ✅ DONA'S DOSAS — B (один пункт) */}
+                <NavItemMobileDark to="/admin/donas-dosas/finance" label="DONA’S DOSAS" icon={<IconBurger />} />
+
               </RowGroupDark>
             )}
           </nav>
