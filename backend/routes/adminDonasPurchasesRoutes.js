@@ -1,26 +1,18 @@
 // backend/routes/adminDonasPurchasesRoutes.js
 
-const express = require("express");
+const router = require("express").Router();
 const authenticateToken = require("../middleware/authenticateToken");
 const requireAdmin = require("../middleware/requireAdmin");
+
 const {
   addPurchase,
   listPurchases,
   deletePurchase,
 } = require("../controllers/donasPurchasesController");
 
-const router = express.Router();
-
-// все purchase endpoints — только для админа
-router.use(authenticateToken, requireAdmin);
-
-// list
-router.get("/purchases", listPurchases);
-
-// add
-router.post("/purchases", addPurchase);
-
-// delete
-router.delete("/purchases/:id", deletePurchase);
+// Mounted in backend/index.js at: /api/admin/donas
+router.get("/purchases", authenticateToken, requireAdmin, listPurchases);
+router.post("/purchases", authenticateToken, requireAdmin, addPurchase);
+router.delete("/purchases/:id", authenticateToken, requireAdmin, deletePurchase);
 
 module.exports = router;
