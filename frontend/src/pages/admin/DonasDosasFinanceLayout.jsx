@@ -1,33 +1,43 @@
-// frontend/src/pages/admin/DonasDosasMenuLayout.jsx
+// frontend/src/pages/admin/DonasDosasFinanceLayout.jsx
+import React from "react";
 import { NavLink, Outlet } from "react-router-dom";
 
-export default function DonasDosasMenuLayout() {
-  const tabs = [
-    { to: "/admin/donas-dosas/menu/ingredients", label: "Ingredients" },
-    { to: "/admin/donas-dosas/menu/items", label: "Items" },
-    { to: "/admin/donas-dosas/menu/builder", label: "Builder" },
-  ];
+function Tab({ to, label }) {
+  return (
+    <NavLink
+      to={to}
+      end
+      className={({ isActive }) =>
+        [
+          "inline-flex items-center justify-center px-3 py-1.5 rounded-full text-sm transition",
+          isActive ? "bg-black text-white" : "bg-white ring-1 ring-black/10 hover:bg-black/5",
+        ].join(" ")
+      }
+    >
+      {label}
+    </NavLink>
+  );
+}
 
+export default function DonasDosasFinanceLayout() {
   return (
     <div className="max-w-6xl mx-auto">
-      <div className="flex items-center gap-2 mb-4">
-        {tabs.map((t) => (
-          <NavLink
-            key={t.to}
-            to={t.to}
-            className={({ isActive }) =>
-              [
-                "px-3 py-1.5 rounded-lg text-sm border transition",
-                isActive ? "bg-orange-500 text-white border-orange-500" : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50",
-              ].join(" ")
-            }
-          >
-            {t.label}
-          </NavLink>
-        ))}
+      <div className="mb-4">
+        <h1 className="text-2xl font-semibold">Dona’s Dosas — Finance</h1>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Tab to="/admin/donas-dosas/finance" label="Overview" />
+          <Tab to="/admin/donas-dosas/finance/opex" label="OPEX" />
+          <Tab to="/admin/donas-dosas/finance/capex" label="CAPEX" />
+          <Tab to="/admin/donas-dosas/finance/cogs" label="COGS" />
+          <Tab to="/admin/donas-dosas/finance/profit" label="Profit" />
+          <Tab to="/admin/donas-dosas/finance/investor" label="Investor" />
+        </div>
       </div>
 
-      <Outlet />
+      <div className="rounded-2xl bg-white ring-1 ring-black/10 p-4">
+        <Outlet />
+      </div>
     </div>
   );
 }
