@@ -1,124 +1,73 @@
 // backend/controllers/donasIngredientImpactController.js
 
-const db = require("../db");
+const pool = require("../db");
 
-function toNum(x) {
-  const n = Number(x);
+function toNum(v) {
+  const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 }
 
-// GET /api/admin/donas/ingredients/:id/margin-impact?threshold=40
+/**
+ * GET /api/admin/donas/ingredients/:id/margin-impact?threshold=40
+ * Возвращает блюда, где маржа стала ниже порога (после изменения цены ингредиента).
+ *
+ * Требования к схеме:
+ * - donas_menu_items: id, slug, name, price
+ * - donas_menu_item_recipe: menu_item_id, ingredient_id, qty
+ * - donas_ingredients: id, slug, pack_size, pack_price, is_archived
+ * - donas_cogs: menu_item_id, total_cost   (!!! именно total_cost)
+ */
 exports.getMarginImpact = async (req, res) => {
+  const ingredientId = Number(req.params.id);
+  if (!Number.isInteger(ingredientId) || ingredientId <= 0) {
+    return res.status(400).json({ error: "Bad ingredient id" });
+  }
+
+  const threshold = Math.max(0, Math.min(100, toNum(req.query.threshold ?? 40)));
+
   try {
-    const ingredientId = Number(req.params.id);
-    const threshold =
-      req.query.threshold != null ? toNum(req.query.threshold) : 40;
+    // 1) Берём все блюда, где есть этот ингредиент в рецепте
+    // 2) Берём текущую цену блюда (price)
+    // 3) Берём текущий total_cost (COGS) из donas_cogs
+    // 4) Считаем маржу = (price - cogs) / price * 100
+    // 5) Фильтруем по threshold
 
-    if (!Number.isFinite(ingredientId) || ingredientId <= 0) {
-      return res.status(400).json({ error: "Bad ingredient id" });
-    }
-
-    // какие блюда используют этот ингредиент
-    const mi = await db.query(
+    const q = await pool.query(
       `
-      SELECT DISTINCT menu_item_id
-      FROM donas_menu_item_recipe
-      WHERE ingredient_id = $1
+      WITH affected AS (
+        SELECT DISTINCT r.menu_item_id
+        FROM donas_menu_item_recipe r
+        WHERE r.ingredient_id = $1
+      )
+      SELECT
+        mi.id AS menu_item_id,
+        mi.name,
+        mi.price,
+        COALESCE(c.total_cost, 0) AS cogs,
+        CASE
+          WHEN COALESCE(mi.price, 0) <= 0 THEN NULL
+          ELSE ((COALESCE(mi.price, 0) - COALESCE(c.total_cost, 0)) / COALESCE(mi.price, 0)) * 100
+        END AS margin
+      FROM affected a
+      JOIN donas_menu_items mi ON mi.id = a.menu_item_id
+      LEFT JOIN donas_cogs c ON c.menu_item_id = mi.id
+      ORDER BY mi.id ASC
       `,
       [ingredientId]
     );
 
-    const menuItemIds = (mi.rows || [])
-      .map((r) => Number(r.menu_item_id))
-      .filter(Boolean);
+    const rows = q.rows || [];
+    const below = rows
+      .map((r) => ({
+        menu_item_id: Number(r.menu_item_id),
+        name: r.name,
+        price: toNum(r.price),
+        cogs: toNum(r.cogs),
+        margin: r.margin == null ? null : toNum(r.margin),
+      }))
+      .filter((x) => x.margin != null && x.margin < threshold);
 
-    if (menuItemIds.length === 0) {
-      return res.json({ threshold, items: [], below: [] });
-    }
-
-    // тянем рецепты и ингредиенты пачкой
-    const recipeRows = await db.query(
-      `
-      SELECT
-        r.menu_item_id,
-        r.ingredient_id,
-        r.qty,
-        r.unit,
-        i.name as ing_name,
-        i.unit as ing_unit,
-        i.pack_size,
-        i.pack_price
-      FROM donas_menu_item_recipe r
-      JOIN donas_ingredients i ON i.id = r.ingredient_id
-      WHERE r.menu_item_id = ANY($1::int[])
-      `,
-      [menuItemIds]
-    );
-
-    // цены блюда (sell_price если есть, иначе price)
-    const menuItems = await db.query(
-      `
-      SELECT id, name, COALESCE(sell_price, price) as price
-      FROM donas_menu_items
-      WHERE id = ANY($1::int[])
-      `,
-      [menuItemIds]
-    );
-
-    const byMenu = new Map();
-    for (const r of recipeRows.rows || []) {
-      const id = Number(r.menu_item_id);
-      if (!byMenu.has(id)) byMenu.set(id, []);
-      byMenu.get(id).push(r);
-    }
-
-    const menuMap = new Map();
-    for (const m of menuItems.rows || []) menuMap.set(Number(m.id), m);
-
-    const out = [];
-
-    for (const id of menuItemIds) {
-      const m = menuMap.get(id);
-      const price = toNum(m?.price);
-
-      const lines = byMenu.get(id) || [];
-      let cogs = 0;
-
-      for (const line of lines) {
-        const packSize = toNum(line.pack_size);
-        const packPrice = toNum(line.pack_price);
-        const ppu = packSize > 0 ? packPrice / packSize : 0; // цена за 1 unit (g/ml/pcs)
-        const qty = toNum(line.qty);
-        cogs += ppu * qty;
-      }
-
-      let margin = null;
-      let profit = null;
-      if (price > 0) {
-        profit = price - cogs;
-        margin = (profit / price) * 100;
-      }
-
-      out.push({
-        menu_item_id: id,
-        name: m?.name || `#${id}`,
-        price: price || null,
-        cogs,
-        profit,
-        margin,
-      });
-    }
-
-    // сначала самые низкие маржи
-    out.sort((a, b) => {
-      const am = a.margin == null ? 999999 : a.margin;
-      const bm = b.margin == null ? 999999 : b.margin;
-      return am - bm;
-    });
-
-    const below = out.filter((x) => x.margin != null && x.margin < threshold);
-
-    return res.json({ threshold, items: out, below });
+    return res.json({ threshold, below });
   } catch (e) {
     console.error("getMarginImpact error:", e);
     return res.status(500).json({ error: "Failed to calculate margin impact" });
