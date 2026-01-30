@@ -175,6 +175,7 @@ export default function Header() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
   const adminRef = useRef(null);
+  const [donasOpen, setDonasOpen] = useState(false);
 
   const [servicesOpen, setServicesOpen] = useState(false);
   const servicesRef = useRef(null);
@@ -217,6 +218,7 @@ export default function Header() {
     const onDoc = (e) => {
       if (adminRef.current && !adminRef.current.contains(e.target)) {
         setAdminOpen(false);
+        setDonasOpen(false);
       }
       if (servicesRef.current && !servicesRef.current.contains(e.target)) {
         setServicesOpen(false);
@@ -335,6 +337,7 @@ export default function Header() {
     setMobileOpen(false);
     setAdminOpen(false);
     setServicesOpen(false);
+    setDonasOpen(false);
   }, [location]);
 
   // активен ли блок "Услуги"
@@ -410,8 +413,29 @@ export default function Header() {
                     <DropdownItem to="/admin/entry-fees" label={t("nav.entry_fees_admin", "Entry fees")} icon={<IconTicket />} />
                     <DropdownItem to="/admin/hotels" label={t("nav.hotels_admin", "Отели (админ)")} icon={<IconHotel />} />
                     <DropdownItem to="/admin/pages" label={t("nav.cms_pages", "Подвал")} icon={<IconDoc />} />
-                    {/* ✅ DONA'S DOSAS — B (один пункт) */}
-                    <DropdownItem to="/admin/donas-dosas/finance" label="DONA’S DOSAS" icon={<IconBurger />} />
+
+                    {/* ✅ DONA'S DOSAS — подменю */}
+                    <button
+                      type="button"
+                      onClick={() => setDonasOpen((v) => !v)}
+                      className={[
+                        "w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors",
+                        donasOpen ? "bg-white/10 text-white" : "text-white/80 hover:bg-white/10 hover:text-white",
+                      ].join(" ")}
+                    >
+                      <div className="w-5 h-5"><IconBurger /></div>
+                      <div className="flex-1 text-left">DONA’S DOSAS</div>
+                      <IconChevron className={`transition ${donasOpen ? "rotate-180" : ""}`} />
+                    </button>
+                    {donasOpen && (
+                      <div className="px-2 pb-2">
+                        <div className="rounded-xl bg-black/20 ring-1 ring-white/10 overflow-hidden">
+                          <DropdownItem to="/admin/donas-dosas/finance" label="Finance" icon={<IconDoc />} />
+                          <DropdownItem to="/admin/donas-dosas/menu" label="Menu" icon={<IconDoc />} />
+                        </div>
+                      </div>
+                    )}
+
                     <div className="border-t border-white/10 p-2">
                       <AdminQuickTools />
                     </div>
