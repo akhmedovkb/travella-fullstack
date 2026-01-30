@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { apiDelete, apiGet, apiPost, apiPut } from "../../api";
-import { toast } from "../../shared/toast";
+import { tSuccess, tError, tInfo, tWarn } from "../../shared/toast";
 
 function toNum(x) {
   const n = Number(x);
@@ -11,16 +11,6 @@ function toNum(x) {
 function fmt(n) {
   const v = Math.round(toNum(n));
   return v.toLocaleString("ru-RU");
-}
-
-function notify(type, message) {
-  try {
-    if (toast && typeof toast[type] === "function") return toast[type](message);
-    if (toast && typeof toast === "function") return toast(message);
-    console[type === "error" ? "error" : "log"](message);
-  } catch {
-    // ignore
-  }
 }
 
 export default function DonasIngredients() {
@@ -45,11 +35,9 @@ export default function DonasIngredients() {
   });
 
   const [editingId, setEditingId] = useState(null);
-  const editItem = useMemo(
-    () => items.find((x) => x.id === editingId) || null,
-    [items, editingId]
-  );
   const [editForm, setEditForm] = useState(null);
+
+  const isEditingNow = (id) => editingId === id;
 
   async function load() {
     setLoading(true);
@@ -58,8 +46,8 @@ export default function DonasIngredients() {
       const r = await apiGet(`/api/admin/donas/ingredients${q}`);
       setItems(Array.isArray(r?.items) ? r.items : []);
     } catch (e) {
-      notify("error", "❌ Не удалось загрузить ингредиенты");
       setItems([]);
+      tError("Не удалось загрузить ингредиенты");
     } finally {
       setLoading(false);
     }
@@ -73,6 +61,7 @@ export default function DonasIngredients() {
   function startEdit(id) {
     const it = items.find((x) => x.id === id);
     if (!it) return;
+
     setEditingId(id);
     setEditForm({
       name: it.name || "",
@@ -104,14 +93,14 @@ export default function DonasIngredients() {
     };
 
     if (!payload.name) {
-      notify("error", "Название обязательно");
+      tWarn("Название обязательно");
       return;
     }
 
     setCreating(true);
     try {
       await apiPost("/api/admin/donas/ingredients", payload);
-      notify("success", "✅ Ингредиент добавлен");
+      tSuccess("Ингредиент добавлен");
       setForm({
         name: "",
         unit: "g",
@@ -122,7 +111,7 @@ export default function DonasIngredients() {
       });
       await load();
     } catch (e2) {
-      notify("error", "❌ Не удалось добавить ингредиент");
+      tError("Не удалось добавить ингредиент");
     } finally {
       setCreating(false);
     }
@@ -143,21 +132,21 @@ export default function DonasIngredients() {
     };
 
     if (!payload.name) {
-      notify("error", "Название обязательно");
+      tWarn("Название обязательно");
       return;
     }
 
     try {
       await apiPut(`/api/admin/donas/ingredients/${editingId}`, payload);
-      notify("success", `✅ Сохранено: ${payload.name}`);
+      tSuccess("Сохранено");
 
-      // ✅ проверяем влияние на маржу (но не ломаем сохранение, если отчёт упал)
+      // margin impact — НЕ ломаем сохранение, если упало
       await checkMarginImpact(editingId);
 
       cancelEdit();
       await load();
     } catch (e2) {
-      notify("error", "❌ Не удалось сохранить изменения");
+      tError("Не удалось сохранить изменения");
     }
   }
 
@@ -165,11 +154,11 @@ export default function DonasIngredients() {
     if (!id) return;
     try {
       await apiDelete(`/api/admin/donas/ingredients/${id}`);
-      notify("success", "🗄️ Перемещено в архив");
+      tInfo("Перемещено в архив");
       if (editingId === id) cancelEdit();
       await load();
     } catch (e) {
-      notify("error", "❌ Не удалось архивировать");
+      tError("Не удалось архивировать");
     }
   }
 
@@ -180,9 +169,16 @@ export default function DonasIngredients() {
         `/api/admin/donas/ingredients/${ingredientId}/margin-impact?threshold=${marginThreshold}`
       );
       setImpactResult(r || null);
+
+      // если есть падения — покажем warning
+      if (r?.below?.length) {
+        tWarn(`Маржа ниже ${r.threshold}% у ${r.below.length} блюд`);
+      } else {
+        tInfo("Маржа не упала ниже порога");
+      }
     } catch (e) {
       setImpactResult(null);
-      notify("warn", "COGS/маржа: отчёт не построился");
+      tWarn("COGS/маржа: отчёт не построился");
     } finally {
       setImpactLoading(false);
     }
@@ -354,7 +350,7 @@ export default function DonasIngredients() {
               )}
 
               {items.map((it) => {
-                const isEditing = editingId === it.id;
+                const isEditing = isEditingNow(it.id);
                 const archived = !!it.is_archived;
 
                 return (
@@ -364,7 +360,9 @@ export default function DonasIngredients() {
                         <input
                           className="border rounded-xl px-2 py-1 w-full"
                           value={editForm?.name ?? ""}
-                          onChange={(e) => setEditForm((s) => ({ ...s, name: e.target.value }))}
+                          onChange={(e) =>
+                            setEditForm((s) => ({ ...s, name: e.target.value }))
+                          }
                         />
                       ) : (
                         <div className="font-medium">
@@ -383,7 +381,9 @@ export default function DonasIngredients() {
                         <select
                           className="border rounded-xl px-2 py-1"
                           value={editForm?.unit ?? "g"}
-                          onChange={(e) => setEditForm((s) => ({ ...s, unit: e.target.value }))}
+                          onChange={(e) =>
+                            setEditForm((s) => ({ ...s, unit: e.target.value }))
+                          }
                         >
                           <option value="g">g</option>
                           <option value="ml">ml</option>
@@ -399,7 +399,9 @@ export default function DonasIngredients() {
                         <input
                           className="border rounded-xl px-2 py-1 w-28 text-right"
                           value={editForm?.pack_size ?? ""}
-                          onChange={(e) => setEditForm((s) => ({ ...s, pack_size: e.target.value }))}
+                          onChange={(e) =>
+                            setEditForm((s) => ({ ...s, pack_size: e.target.value }))
+                          }
                         />
                       ) : (
                         it.pack_size ?? "—"
@@ -411,7 +413,9 @@ export default function DonasIngredients() {
                         <input
                           className="border rounded-xl px-2 py-1 w-32 text-right"
                           value={editForm?.pack_price ?? ""}
-                          onChange={(e) => setEditForm((s) => ({ ...s, pack_price: e.target.value }))}
+                          onChange={(e) =>
+                            setEditForm((s) => ({ ...s, pack_price: e.target.value }))
+                          }
                         />
                       ) : (
                         it.pack_price != null ? fmt(it.pack_price) : "—"
@@ -423,7 +427,9 @@ export default function DonasIngredients() {
                         <input
                           className="border rounded-xl px-2 py-1 w-full"
                           value={editForm?.supplier ?? ""}
-                          onChange={(e) => setEditForm((s) => ({ ...s, supplier: e.target.value }))}
+                          onChange={(e) =>
+                            setEditForm((s) => ({ ...s, supplier: e.target.value }))
+                          }
                         />
                       ) : (
                         it.supplier || "—"
@@ -435,7 +441,9 @@ export default function DonasIngredients() {
                         <input
                           className="border rounded-xl px-2 py-1 w-full"
                           value={editForm?.notes ?? ""}
-                          onChange={(e) => setEditForm((s) => ({ ...s, notes: e.target.value }))}
+                          onChange={(e) =>
+                            setEditForm((s) => ({ ...s, notes: e.target.value }))
+                          }
                         />
                       ) : (
                         it.notes || "—"
