@@ -22,13 +22,17 @@ import AdminRefusedActual from "./pages/admin/AdminRefusedActual";
 import IndiaInside from "./pages/landing/IndiaInside";
 import LeadModal from "./components/LeadModal";
 import AdminBroadcast from "./pages/admin/AdminBroadcast";
-import DonasDosasFinance from "./pages/admin/DonasDosasFinance";
 import DonasInvestor from "./pages/admin/DonasInvestor";
 import DonasMenuItems from "./pages/admin/DonasMenuItems";
 import DonasIngredients from "./pages/admin/DonasIngredients";
-import DonasCogs from "./pages/admin/DonasCogs";
-import DonasProfit from "./pages/admin/DonasProfit";
 import DonasMenuBuilder from "./pages/admin/DonasMenuBuilder";
+import DonasDosasFinanceLayout from "./pages/admin/DonasDosasFinanceLayout";
+import DonasDosasFinanceOverview from "./pages/admin/DonasDosasFinanceOverview";
+import DonasOpex from "./pages/admin/DonasOpex";
+import DonasCapex from "./pages/admin/DonasCapex";
+import DonasDosasCogsTab from "./pages/admin/DonasDosasCogsTab";
+import DonasDosasProfitTab from "./pages/admin/DonasDosasProfitTab";
+
 
 // Клиентские
 import ClientRegister from "./pages/ClientRegister";
@@ -374,16 +378,22 @@ export default function App() {
                 </PrivateRoute>
               }
             />
-            <Route
-                path="/admin/donas-dosas/finance"
-                element={
-                  <PrivateRoute>
-                    <AdminRoute>
-                      <DonasDosasFinance />
-                    </AdminRoute>
-                  </PrivateRoute>
-                }
-              />
+          <Route
+            path="/admin/donas-dosas/finance"
+            element={
+              <PrivateRoute>
+                <AdminRoute>
+                  <DonasDosasFinanceLayout />
+                </AdminRoute>
+              </PrivateRoute>
+            }
+          >
+            <Route index element={<DonasDosasFinanceOverview />} />
+            <Route path="opex" element={<DonasOpex />} />
+            <Route path="capex" element={<DonasCapex />} />
+            <Route path="cogs" element={<DonasDosasCogsTab />} />
+            <Route path="profit" element={<DonasDosasProfitTab />} />
+          </Route>
             <Route
               path="/admin/donas-dosas/investor"
               element={
