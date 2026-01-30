@@ -1,42 +1,33 @@
-//frontend/src/pages/admin/DonasDosasFinanceLayout.jsx
-
+// frontend/src/pages/admin/DonasDosasMenuLayout.jsx
 import { NavLink, Outlet } from "react-router-dom";
 
-function Tab({ to, label, end }) {
+export default function DonasDosasMenuLayout() {
+  const tabs = [
+    { to: "/admin/donas-dosas/menu/ingredients", label: "Ingredients" },
+    { to: "/admin/donas-dosas/menu/items", label: "Items" },
+    { to: "/admin/donas-dosas/menu/builder", label: "Builder" },
+  ];
+
   return (
-    <NavLink
-      to={to}
-      end={end}
-      className={({ isActive }) =>
-        [
-          "px-3 py-1.5 rounded-full text-sm transition",
-          isActive ? "bg-black text-white" : "bg-white text-black/70 hover:text-black hover:bg-black/10",
-        ].join(" ")
-      }
-    >
-      {label}
-    </NavLink>
-  );
-}
-
-export default function DonasDosasFinanceLayout() {
-  return (
-    <div className="max-w-6xl mx-auto space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">Dona’s Dosas — Finance</h1>
+    <div className="max-w-6xl mx-auto">
+      <div className="flex items-center gap-2 mb-4">
+        {tabs.map((t) => (
+          <NavLink
+            key={t.to}
+            to={t.to}
+            className={({ isActive }) =>
+              [
+                "px-3 py-1.5 rounded-lg text-sm border transition",
+                isActive ? "bg-orange-500 text-white border-orange-500" : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50",
+              ].join(" ")
+            }
+          >
+            {t.label}
+          </NavLink>
+        ))}
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        <Tab to="" end label="Overview" />
-        <Tab to="opex" label="OPEX" />
-        <Tab to="capex" label="CAPEX" />
-        <Tab to="cogs" label="COGS" />
-        <Tab to="profit" label="Profit" />
-      </div>
-
-      <div className="rounded-2xl bg-white p-4 ring-1 ring-black/10">
-        <Outlet />
-      </div>
+      <Outlet />
     </div>
   );
 }
