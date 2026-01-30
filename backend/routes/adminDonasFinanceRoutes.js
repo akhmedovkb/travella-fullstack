@@ -34,37 +34,16 @@ function toNum(v) {
   return Number.isFinite(n) ? n : 0;
 }
 
-// CF = NetOp - loan_paid - capex
-// cash_end = prev_cash + CF
-function recalcCashChain(rows, cashStart) {
-  let cash = toNum(cashStart);
-  return rows.map((r) => {
-    const revenue = toNum(r.revenue);
-    const cogs = toNum(r.cogs);
-    const opex = toNum(r.opex);
-    const capex = toNum(r.capex);
-    const loan_paid = toNum(r.loan_paid);
-
-    const gp = revenue - cogs;
-    const netOp = gp - opex;
-    const cf = netOp - loan_paid - capex;
-
-    cash = cash + cf;
-
-    return {
-      ...r,
-      cash_end: cash,
-      _calc: { gp, netOp, cf },
-    };
-  });
-}
-
 /**
  * SETTINGS
  * GET  /api/admin/donas/finance/settings
  * PUT  /api/admin/donas/finance/settings
+ *
+ * Важно: этот роут подключён в backend/index.js как:
+ *   app.use('/api/admin', adminDonasFinanceRoutes)
+ * поэтому здесь держим полный префикс /donas/finance/*
  */
-router.get("/settings", authenticateToken, requireAdmin, async (req, res) => {
+router.get("/donas/finance/settings", authenticateToken, requireAdmin, async (req, res) => {
   try {
     const q = await pool.query(
       `
@@ -88,7 +67,6 @@ router.get("/settings", authenticateToken, requireAdmin, async (req, res) => {
     );
 
     if (!q.rows.length) {
-      // дефолт
       return res.json({
         slug: SLUG,
         currency: "UZS",
@@ -111,7 +89,7 @@ router.get("/settings", authenticateToken, requireAdmin, async (req, res) => {
   }
 });
 
-router.put("/settings", authenticateToken, requireAdmin, async (req, res) => {
+router.put("/donas/finance/settings", authenticateToken, requireAdmin, async (req, res) => {
   try {
     const b = req.body || {};
 
@@ -177,13 +155,8 @@ router.put("/settings", authenticateToken, requireAdmin, async (req, res) => {
  * MONTHS
  * GET  /api/admin/donas/finance/months
  * PUT  /api/admin/donas/finance/months/:month
- *
- * Важно:
- * - month в URL может быть "YYYY-MM" или "YYYY-MM-01"
- * - cash_end мы считаем цепочкой на сервере (чтобы Investor/Finance совпадали)
- * - locked месяцы: числа НЕ трогаем, а cash_end считаем как пришло (фикс снапшот)
  */
-router.get("/months", authenticateToken, requireAdmin, async (req, res) => {
+router.get("/donas/finance/months", authenticateToken, requireAdmin, async (req, res) => {
   try {
     const s = await pool.query(
       `select cash_start from donas_finance_settings where slug=$1 limit 1`,
@@ -212,8 +185,6 @@ router.get("/months", authenticateToken, requireAdmin, async (req, res) => {
 
     const rows = q.rows || [];
 
-    // 1) пометим источники для UI (AUTO/LOCKED/MIXED)
-    // 2) пересчитаем cash_end только для НЕ locked, чтобы цепочка была консистентна
     const normalized = rows.map((r) => ({
       ...r,
       revenue: toNum(r.revenue),
@@ -223,16 +194,9 @@ router.get("/months", authenticateToken, requireAdmin, async (req, res) => {
       loan_paid: toNum(r.loan_paid),
       cash_end: toNum(r.cash_end),
       notes: r.notes || "",
-      _source: {
-        opex_source: "ops",
-        mixed: false,
-      },
+      _source: { opex_source: "ops", mixed: false },
     }));
 
-    // разделим на locked/nonlocked для корректного поведения:
-    // - locked: считаем, что они снапшот (не меняем числа)
-    // - nonlocked: cash_end выстраиваем цепочкой от cashStart и данных ряда
-    // НО: чтобы цепочка шла через locked, нам нужен cash на входе.
     let cash = cashStart;
 
     const out = normalized.map((r) => {
@@ -249,23 +213,12 @@ router.get("/months", authenticateToken, requireAdmin, async (req, res) => {
       const cf = netOp - loan_paid - capex;
 
       if (locked) {
-        // locked месяц — cash_end фиксируем как есть (снапшот),
-        // но для продолжения цепочки берём именно его (чтобы дальше шло от снапшота)
         cash = toNum(r.cash_end);
-        return {
-          ...r,
-          cash_end: cash,
-          _calc: { gp, netOp, cf },
-          _source: { ...r._source, mixed: false },
-        };
+        return { ...r, cash_end: cash, _calc: { gp, netOp, cf } };
       }
 
       cash = cash + cf;
-      return {
-        ...r,
-        cash_end: cash,
-        _calc: { gp, netOp, cf },
-      };
+      return { ...r, cash_end: cash, _calc: { gp, netOp, cf } };
     });
 
     res.json(out);
@@ -275,7 +228,7 @@ router.get("/months", authenticateToken, requireAdmin, async (req, res) => {
   }
 });
 
-router.put("/months/:month", authenticateToken, requireAdmin, async (req, res) => {
+router.put("/donas/finance/months/:month", authenticateToken, requireAdmin, async (req, res) => {
   try {
     const monthParam = req.params.month;
     const month = isoMonthStartFromYM(monthParam) || monthParam;
