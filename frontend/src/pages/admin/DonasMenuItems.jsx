@@ -12,6 +12,12 @@ function fmt(n) {
   return v.toLocaleString("ru-RU");
 }
 
+function pct(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return "—";
+  return `${v.toFixed(1)}%`;
+}
+
 const emptyForm = {
   name: "",
   category: "",
@@ -53,7 +59,12 @@ export default function DonasMenuItems() {
     setLoading(true);
     try {
       // ✅ только admin endpoint
-      const r = await apiGet("/api/admin/donas/menu-items?includeArchived=1", true);
+      let r;
+      try {
+        r = await apiGet("/api/admin/donas/menu-items/finance?includeArchived=1", true);
+      } catch {
+        r = await apiGet("/api/admin/donas/menu-items?includeArchived=1", true);
+      }
       setItems(Array.isArray(r?.items) ? r.items : []);
     } finally {
       setLoading(false);
@@ -312,6 +323,9 @@ export default function DonasMenuItems() {
                 <th className="text-left px-4 py-2">Название</th>
                 <th className="text-left px-4 py-2">Категория</th>
                 <th className="text-right px-4 py-2">Цена</th>
+                <th className="text-right px-4 py-2">COGS</th>
+                <th className="text-right px-4 py-2">Прибыль</th>
+                <th className="text-right px-4 py-2">Маржа</th>
                 <th className="text-left px-4 py-2">Статус</th>
                 <th className="text-right px-4 py-2">Действия</th>
               </tr>
@@ -320,7 +334,7 @@ export default function DonasMenuItems() {
             <tbody>
               {!loading && items.length === 0 && (
                 <tr>
-                  <td className="px-4 py-6 text-gray-500" colSpan={5}>
+                  <td className="px-4 py-6 text-gray-500" colSpan={8}>
                     Пока пусто — добавь позиции сверху.
                   </td>
                 </tr>
@@ -332,6 +346,28 @@ export default function DonasMenuItems() {
                   <td className="px-4 py-2">{it.category || "—"}</td>
                   <td className="px-4 py-2 text-right">
                     {it.sell_price != null || it.price != null ? fmt(it.sell_price ?? it.price) : "—"}
+                  </td>
+                  <td className="px-4 py-2 text-right">{it.has_recipe ? fmt(it.cogs) : "—"}</td>
+                  <td className="px-4 py-2 text-right">{it.has_recipe ? fmt(it.profit) : "—"}</td>
+                  <td className="px-4 py-2 text-right">
+                    {it.has_recipe ? (
+                      <span
+                        className={
+                          "inline-flex items-center px-2 py-1 rounded-lg text-xs border " +
+                          (it.margin == null
+                            ? "border-gray-200 text-gray-700"
+                            : it.margin >= 60
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                              : it.margin >= 40
+                                ? "border-amber-200 bg-amber-50 text-amber-800"
+                                : "border-red-200 bg-red-50 text-red-700")
+                        }
+                      >
+                        {pct(it.margin)}
+                      </span>
+                    ) : (
+                      "—"
+                    )}
                   </td>
                   <td className="px-4 py-2">{it.is_active ? "active" : "inactive"}</td>
                   <td className="px-4 py-2 text-right whitespace-nowrap">
