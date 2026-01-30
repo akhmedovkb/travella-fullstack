@@ -184,6 +184,9 @@ export default function DonasProfit() {
       await apiPost("/api/admin/donas/cogs", {
         menu_item_id: menuItemId,
         total_cost: cogs,
+        // фиксируем “контекст” снапшота: цена продажи и маржа на момент сохранения
+        sell_price: price,
+        margin: Number.isFinite(margin) ? margin : null,
         breakdown: rows.map((r) => ({
           ingredient_id: r.ingredient_id,
           qty: toNum(r.qty),
@@ -221,8 +224,14 @@ export default function DonasProfit() {
 
       {(err || okMsg) && (
         <div className="space-y-2">
-          {err && <div className="p-3 rounded-xl bg-red-50 text-red-700 border border-red-200">{err}</div>}
-          {okMsg && <div className="p-3 rounded-xl bg-green-50 text-green-700 border border-green-200">{okMsg}</div>}
+          {err && (
+            <div className="p-3 rounded-xl bg-red-50 text-red-700 border border-red-200">{err}</div>
+          )}
+          {okMsg && (
+            <div className="p-3 rounded-xl bg-green-50 text-green-700 border border-green-200">
+              {okMsg}
+            </div>
+          )}
         </div>
       )}
 
@@ -242,11 +251,7 @@ export default function DonasProfit() {
             ))}
           </select>
 
-          {menuItemId && (
-            <div className="text-xs text-gray-500 mt-2">
-              ID: #{menuItemId}
-            </div>
-          )}
+          {menuItemId && <div className="text-xs text-gray-500 mt-2">ID: #{menuItemId}</div>}
         </div>
 
         <div className="lg:col-span-2 rounded-2xl bg-white border border-gray-200 p-4">
@@ -317,6 +322,8 @@ export default function DonasProfit() {
                     <tr className="text-left text-gray-600">
                       <th className="py-2 pr-4">Дата</th>
                       <th className="py-2 pr-4 text-right">COGS</th>
+                      <th className="py-2 pr-4 text-right">Цена</th>
+                      <th className="py-2 pr-4 text-right">Маржа</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -326,6 +333,12 @@ export default function DonasProfit() {
                           {h.created_at ? new Date(h.created_at).toLocaleString("ru-RU") : "—"}
                         </td>
                         <td className="py-2 pr-4 text-right">{money(h.total_cost)}</td>
+                        <td className="py-2 pr-4 text-right">
+                          {h.sell_price == null ? "—" : money(h.sell_price)}
+                        </td>
+                        <td className="py-2 pr-4 text-right">
+                          {h.margin == null ? "—" : pct(Number(h.margin))}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -362,9 +375,7 @@ export default function DonasProfit() {
               </table>
             </div>
 
-            <div className="text-xs text-gray-500 mt-2">
-              COGS считается из: (pack_price / pack_size) × qty
-            </div>
+            <div className="text-xs text-gray-500 mt-2">COGS считается из: (pack_price / pack_size) × qty</div>
           </div>
         </div>
       </div>
