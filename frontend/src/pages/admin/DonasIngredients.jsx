@@ -13,6 +13,9 @@ function fmt(n) {
   return v.toLocaleString("ru-RU");
 }
 
+// маленькая пауза, чтобы не долбить бэк слишком резко при bulk
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 export default function DonasIngredients() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -20,7 +23,10 @@ export default function DonasIngredients() {
   // Margin impact (after ingredient change)
   const [marginThreshold, setMarginThreshold] = useState(40);
   const [impactLoading, setImpactLoading] = useState(false);
-  const [impactResult, setImpactResult] = useState(null); // {threshold, below:[...]}
+  const [impactResult, setImpactResult] = useState(null); // { threshold, below:[...], mode?, checked? }
+
+  const [bulkRunning, setBulkRunning] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0 });
 
   const [includeArchived, setIncludeArchived] = useState(false);
 
@@ -37,17 +43,15 @@ export default function DonasIngredients() {
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState(null);
 
-  const isEditingNow = (id) => editingId === id;
-
   async function load() {
     setLoading(true);
     try {
       const q = includeArchived ? "?includeArchived=1" : "";
       const r = await apiGet(`/api/admin/donas/ingredients${q}`);
       setItems(Array.isArray(r?.items) ? r.items : []);
-    } catch (e) {
-      setItems([]);
+    } catch {
       tError("Не удалось загрузить ингредиенты");
+      setItems([]);
     } finally {
       setLoading(false);
     }
@@ -61,7 +65,6 @@ export default function DonasIngredients() {
   function startEdit(id) {
     const it = items.find((x) => x.id === id);
     if (!it) return;
-
     setEditingId(id);
     setEditForm({
       name: it.name || "",
@@ -70,12 +73,23 @@ export default function DonasIngredients() {
       pack_price: it.pack_price ?? "",
       supplier: it.supplier || "",
       notes: it.notes || "",
+      is_archived: !!it.is_archived,
+      is_active: it.is_active !== false,
     });
   }
 
   function cancelEdit() {
     setEditingId(null);
     setEditForm(null);
+  }
+
+  function warnIfPackSizeZero(packSize, name) {
+    const ps = toNum(packSize);
+    if (!ps || ps <= 0) {
+      tWarn(`Pack size = 0 у "${name || "ингредиента"}" — COGS может считаться неверно`);
+      return true;
+    }
+    return false;
   }
 
   async function createIngredient(e) {
@@ -93,9 +107,12 @@ export default function DonasIngredients() {
     };
 
     if (!payload.name) {
-      tWarn("Название обязательно");
+      tError("Название обязательно");
       return;
     }
+
+    // 🟡 авто-предупреждение при pack_size = 0
+    warnIfPackSizeZero(payload.pack_size, payload.name);
 
     setCreating(true);
     try {
@@ -110,7 +127,7 @@ export default function DonasIngredients() {
         notes: "",
       });
       await load();
-    } catch (e2) {
+    } catch {
       tError("Не удалось добавить ингредиент");
     } finally {
       setCreating(false);
@@ -128,24 +145,28 @@ export default function DonasIngredients() {
       pack_price: editForm.pack_price === "" ? null : toNum(editForm.pack_price),
       supplier: String(editForm.supplier || "").trim() || null,
       notes: String(editForm.notes || "").trim() || null,
-      is_active: true,
+      is_active: editForm.is_active !== false,
+      is_archived: !!editForm.is_archived,
     };
 
     if (!payload.name) {
-      tWarn("Название обязательно");
+      tError("Название обязательно");
       return;
     }
 
+    // 🟡 авто-предупреждение при pack_size = 0
+    warnIfPackSizeZero(payload.pack_size, payload.name);
+
     try {
       await apiPut(`/api/admin/donas/ingredients/${editingId}`, payload);
-      tSuccess("Сохранено");
+      tSuccess(`Сохранено: ${payload.name}`);
 
-      // margin impact — НЕ ломаем сохранение, если упало
+      // ✅ проверяем влияние на маржу (но не ломаем сохранение, если отчёт упал)
       await checkMarginImpact(editingId);
 
       cancelEdit();
       await load();
-    } catch (e2) {
+    } catch {
       tError("Не удалось сохранить изменения");
     }
   }
@@ -154,34 +175,142 @@ export default function DonasIngredients() {
     if (!id) return;
     try {
       await apiDelete(`/api/admin/donas/ingredients/${id}`);
-      tInfo("Перемещено в архив");
+      tSuccess("Перемещено в архив");
       if (editingId === id) cancelEdit();
       await load();
-    } catch (e) {
+    } catch {
       tError("Не удалось архивировать");
     }
   }
 
+  function normalizeBelow(list, ingredient) {
+    const ingId = ingredient?.id ?? null;
+    const ingName = ingredient?.name ?? "";
+    return (Array.isArray(list) ? list : []).map((x) => ({
+      ...x,
+      ingredient_id: ingId,
+      ingredient_name: ingName,
+    }));
+  }
+
   async function checkMarginImpact(ingredientId) {
+    const ing = items.find((x) => x.id === ingredientId) || null;
+
+    // 🔒 toast при старте
+    tInfo("Маржа проверяется…");
+
     setImpactLoading(true);
     try {
       const r = await apiGet(
         `/api/admin/donas/ingredients/${ingredientId}/margin-impact?threshold=${marginThreshold}`
       );
-      setImpactResult(r || null);
 
-      // если есть падения — покажем warning
-      if (r?.below?.length) {
-        tWarn(`Маржа ниже ${r.threshold}% у ${r.below.length} блюд`);
-      } else {
-        tInfo("Маржа не упала ниже порога");
-      }
-    } catch (e) {
+      const below = normalizeBelow(r?.below, ing);
+      setImpactResult({
+        threshold: r?.threshold ?? marginThreshold,
+        below,
+        mode: "single",
+        checked: ing ? [{ id: ing.id, name: ing.name }] : [],
+      });
+    } catch {
       setImpactResult(null);
-      tWarn("COGS/маржа: отчёт не построился");
+      tWarn("COGS / маржа: отчёт не построился");
     } finally {
       setImpactLoading(false);
     }
+  }
+
+  async function recalcAll() {
+    if (bulkRunning || impactLoading) return;
+
+    const list = (items || []).filter((x) => !x?.is_archived);
+    if (!list.length) {
+      tInfo("Нет активных ингредиентов для пересчёта");
+      return;
+    }
+
+    const ok = window.confirm(
+      `Пересчитать маржу по всем активным ингредиентам (${list.length})?\nЭто может занять время.`
+    );
+    if (!ok) return;
+
+    setBulkRunning(true);
+    setImpactLoading(true);
+    setBulkProgress({ done: 0, total: list.length });
+
+    tInfo("Маржа проверяется…");
+
+    try {
+      let allBelow = [];
+      for (let i = 0; i < list.length; i++) {
+        const ing = list[i];
+        try {
+          const r = await apiGet(
+            `/api/admin/donas/ingredients/${ing.id}/margin-impact?threshold=${marginThreshold}`
+          );
+          allBelow = allBelow.concat(normalizeBelow(r?.below, ing));
+        } catch {
+          // не валим весь bulk — просто продолжим
+        }
+
+        setBulkProgress({ done: i + 1, total: list.length });
+        // небольшая пауза, чтобы не устроить DDOS
+        await sleep(120);
+      }
+
+      // объединение дублей по блюду: если одно блюдо упало из-за разных ингредиентов,
+      // показываем блюдо один раз, но с перечнем ингредиентов
+      const byMenu = new Map();
+      for (const row of allBelow) {
+        const key = String(row.menu_item_id ?? "");
+        if (!key) continue;
+
+        const prev = byMenu.get(key);
+        if (!prev) {
+          byMenu.set(key, {
+            ...row,
+            ingredients: [
+              { id: row.ingredient_id, name: row.ingredient_name || "" },
+            ],
+          });
+        } else {
+          const exists = (prev.ingredients || []).some((z) => z.id === row.ingredient_id);
+          if (!exists) {
+            prev.ingredients = (prev.ingredients || []).concat([
+              { id: row.ingredient_id, name: row.ingredient_name || "" },
+            ]);
+          }
+          // margin/cogs/price оставляем из первого ответа (они должны совпадать на блюдо)
+          byMenu.set(key, prev);
+        }
+      }
+
+      const merged = Array.from(byMenu.values()).sort((a, b) => {
+        const am = toNum(a.margin);
+        const bm = toNum(b.margin);
+        return am - bm; // самые низкие сверху
+      });
+
+      setImpactResult({
+        threshold: marginThreshold,
+        below: merged,
+        mode: "bulk",
+        checked: list.map((x) => ({ id: x.id, name: x.name })),
+      });
+
+      if (!merged.length) tSuccess("✅ Ни одно блюдо не упало ниже порога.");
+      else tWarn(`⚠️ Есть блюда ниже ${marginThreshold}% (см. отчёт)`);
+    } finally {
+      setImpactLoading(false);
+      setBulkRunning(false);
+    }
+  }
+
+  // ссылка в Recipe/COGS
+  function cogsLink(menuItemId) {
+    // если в DonasCogs есть поддержка query-параметра — отлично.
+    // если нет — хотя бы откроется страница COGS, и ты быстро найдёшь #ID в списке.
+    return `/admin/donas-dosas/cogs?menuItemId=${encodeURIComponent(menuItemId)}`;
   }
 
   return (
@@ -266,8 +395,25 @@ export default function DonasIngredients() {
 
       {/* Margin impact after ingredient change */}
       <div className="bg-white rounded-2xl shadow p-4">
-        <div className="flex items-center justify-between gap-3">
-          <div className="font-semibold">Контроль маржи после изменения ингредиента</div>
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="font-semibold">Контроль маржи после изменения ингредиента</div>
+            <button
+              type="button"
+              onClick={recalcAll}
+              disabled={impactLoading || bulkRunning || loading || !items.length}
+              className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 disabled:opacity-60"
+              title="Пересчитать отчёт по всем активным ингредиентам"
+            >
+              Пересчитать всё
+            </button>
+
+            {bulkRunning && (
+              <div className="text-xs text-gray-600">
+                {bulkProgress.done}/{bulkProgress.total}
+              </div>
+            )}
+          </div>
 
           <div className="flex items-center gap-2 text-sm">
             <span className="text-gray-600">Порог, %</span>
@@ -283,28 +429,56 @@ export default function DonasIngredients() {
         </div>
 
         {impactLoading ? (
-          <div className="text-sm text-gray-600 mt-2">Проверяю влияние на маржу...</div>
+          <div className="text-sm text-gray-600 mt-2">
+            Проверяю влияние на маржу{bulkRunning ? `… (${bulkProgress.done}/${bulkProgress.total})` : "…"}
+          </div>
         ) : impactResult?.below?.length ? (
           <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3">
             <div className="font-semibold text-red-800">
               ⚠️ Маржа стала ниже {impactResult.threshold}% у {impactResult.below.length} блюд
             </div>
+
             <div className="text-sm text-red-900 mt-2 space-y-1">
               {impactResult.below.slice(0, 10).map((x) => (
-                <div key={x.menu_item_id} className="flex items-center justify-between gap-3">
-                  <span>
-                    #{x.menu_item_id} — <b>{x.name}</b>
-                  </span>
-                  <span className="whitespace-nowrap">
-                    маржа: <b>{Math.round(x.margin * 10) / 10}%</b> • COGS:{" "}
+                <div key={x.menu_item_id} className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <a
+                      href={cogsLink(x.menu_item_id)}
+                      className="underline hover:opacity-80"
+                      title="Открыть в Recipe/COGS"
+                    >
+                      #{x.menu_item_id} — <b>{x.name}</b>
+                    </a>
+
+                    {/* 🧾 какие ингредиенты могли повлиять (bulk) */}
+                    {Array.isArray(x.ingredients) && x.ingredients.length > 0 && (
+                      <span className="text-xs bg-white/70 border px-2 py-0.5 rounded-full">
+                        {x.ingredients
+                          .slice(0, 3)
+                          .map((z) => z?.name || `#${z?.id}`)
+                          .filter(Boolean)
+                          .join(", ")}
+                        {x.ingredients.length > 3 ? ` +${x.ingredients.length - 3}` : ""}
+                      </span>
+                    )}
+
+                    {/* single-mode: покажем ингредиент */}
+                    {!x.ingredients && x.ingredient_name ? (
+                      <span className="text-xs bg-white/70 border px-2 py-0.5 rounded-full">
+                        {x.ingredient_name}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <div className="whitespace-nowrap">
+                    маржа: <b>{Math.round(toNum(x.margin) * 10) / 10}%</b> • COGS:{" "}
                     <b>{fmt(x.cogs)}</b> • цена: <b>{fmt(x.price)}</b>
-                  </span>
+                  </div>
                 </div>
               ))}
+
               {impactResult.below.length > 10 && (
-                <div className="text-xs text-red-800">
-                  …и ещё {impactResult.below.length - 10}
-                </div>
+                <div className="text-xs text-red-800">…и ещё {impactResult.below.length - 10}</div>
               )}
             </div>
           </div>
@@ -312,7 +486,7 @@ export default function DonasIngredients() {
           <div className="mt-2 text-sm text-green-700">✅ Ни одно блюдо не упало ниже порога.</div>
         ) : (
           <div className="mt-2 text-sm text-gray-600">
-            Сохраните изменение ингредиента — и тут появится отчёт.
+            Сохраните изменение ингредиента — и тут появится отчёт. Или нажмите «Пересчитать всё».
           </div>
         )}
       </div>
@@ -321,9 +495,7 @@ export default function DonasIngredients() {
       <div className="bg-white rounded-2xl shadow overflow-hidden">
         <div className="px-4 py-3 border-b flex items-center justify-between">
           <h2 className="font-semibold">Список ингредиентов</h2>
-          <div className="text-sm text-gray-600">
-            {loading ? "Загрузка..." : `Всего: ${items.length}`}
-          </div>
+          <div className="text-sm text-gray-600">{loading ? "Загрузка..." : `Всего: ${items.length}`}</div>
         </div>
 
         <div className="overflow-x-auto">
@@ -350,7 +522,7 @@ export default function DonasIngredients() {
               )}
 
               {items.map((it) => {
-                const isEditing = isEditingNow(it.id);
+                const isEditing = editingId === it.id;
                 const archived = !!it.is_archived;
 
                 return (
@@ -360,9 +532,7 @@ export default function DonasIngredients() {
                         <input
                           className="border rounded-xl px-2 py-1 w-full"
                           value={editForm?.name ?? ""}
-                          onChange={(e) =>
-                            setEditForm((s) => ({ ...s, name: e.target.value }))
-                          }
+                          onChange={(e) => setEditForm((s) => ({ ...s, name: e.target.value }))}
                         />
                       ) : (
                         <div className="font-medium">
@@ -370,6 +540,12 @@ export default function DonasIngredients() {
                           {archived && (
                             <span className="ml-2 text-xs bg-gray-100 border px-2 py-0.5 rounded-full">
                               archived
+                            </span>
+                          )}
+                          {/* 🟡 визуальный хинт если pack_size = 0 */}
+                          {toNum(it.pack_size) <= 0 && (
+                            <span className="ml-2 text-xs bg-yellow-50 border border-yellow-200 px-2 py-0.5 rounded-full text-yellow-800">
+                              pack size = 0
                             </span>
                           )}
                         </div>
@@ -381,9 +557,7 @@ export default function DonasIngredients() {
                         <select
                           className="border rounded-xl px-2 py-1"
                           value={editForm?.unit ?? "g"}
-                          onChange={(e) =>
-                            setEditForm((s) => ({ ...s, unit: e.target.value }))
-                          }
+                          onChange={(e) => setEditForm((s) => ({ ...s, unit: e.target.value }))}
                         >
                           <option value="g">g</option>
                           <option value="ml">ml</option>
@@ -399,9 +573,7 @@ export default function DonasIngredients() {
                         <input
                           className="border rounded-xl px-2 py-1 w-28 text-right"
                           value={editForm?.pack_size ?? ""}
-                          onChange={(e) =>
-                            setEditForm((s) => ({ ...s, pack_size: e.target.value }))
-                          }
+                          onChange={(e) => setEditForm((s) => ({ ...s, pack_size: e.target.value }))}
                         />
                       ) : (
                         it.pack_size ?? "—"
@@ -413,9 +585,7 @@ export default function DonasIngredients() {
                         <input
                           className="border rounded-xl px-2 py-1 w-32 text-right"
                           value={editForm?.pack_price ?? ""}
-                          onChange={(e) =>
-                            setEditForm((s) => ({ ...s, pack_price: e.target.value }))
-                          }
+                          onChange={(e) => setEditForm((s) => ({ ...s, pack_price: e.target.value }))}
                         />
                       ) : (
                         it.pack_price != null ? fmt(it.pack_price) : "—"
@@ -427,9 +597,7 @@ export default function DonasIngredients() {
                         <input
                           className="border rounded-xl px-2 py-1 w-full"
                           value={editForm?.supplier ?? ""}
-                          onChange={(e) =>
-                            setEditForm((s) => ({ ...s, supplier: e.target.value }))
-                          }
+                          onChange={(e) => setEditForm((s) => ({ ...s, supplier: e.target.value }))}
                         />
                       ) : (
                         it.supplier || "—"
@@ -441,9 +609,7 @@ export default function DonasIngredients() {
                         <input
                           className="border rounded-xl px-2 py-1 w-full"
                           value={editForm?.notes ?? ""}
-                          onChange={(e) =>
-                            setEditForm((s) => ({ ...s, notes: e.target.value }))
-                          }
+                          onChange={(e) => setEditForm((s) => ({ ...s, notes: e.target.value }))}
                         />
                       ) : (
                         it.notes || "—"
