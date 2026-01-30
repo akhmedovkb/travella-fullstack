@@ -32,15 +32,13 @@ router.get("/menu-items", async (req, res) => {
 });
 
 // GET /api/admin/donas/menu-items/finance?includeArchived=true
-// Возвращает агрегаты по блюдам: price, cogs, profit, margin, has_recipe
+// Агрегаты по блюдам: COGS/Profit/Margin (COGS считается 'на лету' по текущим ингредиентам).
+// Важно: этот роут должен идти ДО '/menu-items/:id/...', иначе 'finance' попадёт в :id.
 router.get("/menu-items/finance", async (req, res) => {
   try {
     const includeArchived = toBool(req.query.includeArchived);
-
     const where = includeArchived ? "" : "WHERE mi.is_active = TRUE";
 
-    // cogs считается по формуле: (pack_price / pack_size) * qty
-    // pack_size может быть 0/NULL — тогда стоимость строки считается NULL и в сумме даёт 0 через COALESCE
     const q = `
       SELECT
         mi.id,
@@ -69,7 +67,7 @@ router.get("/menu-items/finance", async (req, res) => {
 
     const r = await pool.query(q);
 
-    const items = r.rows.map((row) => {
+    const items = (r.rows || []).map((row) => {
       const price = Number(row.sell_price ?? row.price ?? 0) || 0;
       const cogs = Number(row.cogs ?? 0) || 0;
       const profit = price - cogs;
@@ -146,145 +144,3 @@ router.put("/menu-items/:id", async (req, res) => {
       pRaw === undefined
         ? existing.sell_price ?? existing.price ?? null
         : pRaw === null || pRaw === ""
-          ? null
-          : Number(pRaw);
-
-    const desc =
-      body.description === undefined
-        ? existing.description ?? null
-        : String(body.description || "").trim() || null;
-
-    if (!nm) return res.status(400).json({ ok: false, error: "Name is required" });
-
-    const r = await pool.query(
-      `UPDATE donas_menu_items
-       SET name = $1,
-           category = $2,
-           is_active = $3,
-           price = $4,
-           sell_price = $4,
-           description = $5,
-           updated_at = NOW()
-       WHERE id = $6
-       RETURNING *`,
-      [nm, cat, active, nextPrice, desc, id]
-    );
-
-    if (!r.rows[0]) return res.status(404).json({ ok: false, error: "Not found" });
-    return res.json({ ok: true, item: r.rows[0] });
-  } catch (e) {
-    console.error("PUT /api/admin/donas/menu-items/:id error:", e);
-    return res.status(500).json({ ok: false, error: "Server error" });
-  }
-});
-
-// DELETE /api/admin/donas/menu-items/:id  (архивирование)
-router.delete("/menu-items/:id", async (req, res) => {
-  try {
-    const id = Number(req.params.id);
-    if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: "Bad id" });
-
-    const r = await pool.query(
-      `UPDATE donas_menu_items
-       SET is_active = FALSE, updated_at = NOW()
-       WHERE id = $1
-       RETURNING *`,
-      [id]
-    );
-
-    if (!r.rows[0]) return res.status(404).json({ ok: false, error: "Not found" });
-    return res.json({ ok: true, item: r.rows[0] });
-  } catch (e) {
-    console.error("DELETE /api/admin/donas/menu-items/:id error:", e);
-    return res.status(500).json({ ok: false, error: "Server error" });
-  }
-});
-
-// GET /api/admin/donas/menu-items/:id/recipe
-router.get("/menu-items/:id/recipe", async (req, res) => {
-  try {
-    const id = Number(req.params.id);
-    if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: "Bad id" });
-
-    const itemR = await pool.query(`SELECT * FROM donas_menu_items WHERE id = $1`, [id]);
-    if (!itemR.rows[0]) return res.status(404).json({ ok: false, error: "Not found" });
-
-    const compR = await pool.query(
-      `SELECT id, menu_item_id, ingredient_id, qty, unit
-       FROM donas_menu_item_components
-       WHERE menu_item_id = $1
-       ORDER BY id ASC`,
-      [id]
-    );
-
-    return res.json({ ok: true, item: itemR.rows[0], recipe: compR.rows });
-  } catch (e) {
-    console.error("GET /api/admin/donas/menu-items/:id/recipe error:", e);
-    return res.status(500).json({ ok: false, error: "Server error" });
-  }
-});
-
-// PUT /api/admin/donas/menu-items/:id/recipe  (полная замена)
-router.put("/menu-items/:id/recipe", async (req, res) => {
-  const client = await pool.connect();
-  try {
-    const id = Number(req.params.id);
-    if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: "Bad id" });
-
-    const rows = Array.isArray(req.body?.recipe) ? req.body.recipe : [];
-
-    for (const r of rows) {
-      const ingredient_id = Number(r.ingredient_id);
-      const qty = Number(r.qty);
-      const unit = String(r.unit || "").trim();
-
-      if (!Number.isFinite(ingredient_id) || ingredient_id <= 0) {
-        return res.status(400).json({ ok: false, error: "Bad ingredient_id" });
-      }
-      if (!Number.isFinite(qty) || qty < 0) {
-        return res.status(400).json({ ok: false, error: "Bad qty" });
-      }
-      if (!unit) {
-        return res.status(400).json({ ok: false, error: "Unit is required" });
-      }
-    }
-
-    await client.query("BEGIN");
-
-    const itemR = await client.query(`SELECT id FROM donas_menu_items WHERE id = $1`, [id]);
-    if (!itemR.rows[0]) {
-      await client.query("ROLLBACK");
-      return res.status(404).json({ ok: false, error: "Not found" });
-    }
-
-    await client.query(`DELETE FROM donas_menu_item_components WHERE menu_item_id = $1`, [id]);
-
-    for (const r of rows) {
-      await client.query(
-        `INSERT INTO donas_menu_item_components (menu_item_id, ingredient_id, qty, unit)
-         VALUES ($1, $2, $3, $4)`,
-        [id, Number(r.ingredient_id), Number(r.qty), String(r.unit).trim()]
-      );
-    }
-
-    await client.query("COMMIT");
-
-    const compR = await client.query(
-      `SELECT id, menu_item_id, ingredient_id, qty, unit
-       FROM donas_menu_item_components
-       WHERE menu_item_id = $1
-       ORDER BY id ASC`,
-      [id]
-    );
-
-    return res.json({ ok: true, recipe: compR.rows });
-  } catch (e) {
-    try { await client.query("ROLLBACK"); } catch {}
-    console.error("PUT /api/admin/donas/menu-items/:id/recipe error:", e);
-    return res.status(500).json({ ok: false, error: "Server error" });
-  } finally {
-    client.release();
-  }
-});
-
-module.exports = router;
