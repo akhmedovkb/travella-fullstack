@@ -4,19 +4,9 @@ const express = require("express");
 const pool = require("../db");
 const authenticateToken = require("../middleware/authenticateToken");
 const requireAdmin = require("../middleware/requireAdmin");
-const {
-  ensureDonasFinanceGuardrails,
-  allowLockedWrite,
-} = require("../utils/donasFinanceGuardrails");
 
 const router = express.Router();
 const SLUG = "donas-dosas";
-
-// init guardrails once (idempotent)
-const _guardrailsReady = ensureDonasFinanceGuardrails(pool).catch((e) => {
-  console.error("[donas-finance] guardrails init failed:", e);
-  throw e;
-});
 
 /**
  * =========================
@@ -122,11 +112,7 @@ function diffMonth(prev, next) {
   return d;
 }
 
-async function writeAudit(
-  client,
-  req,
-  { action, monthIso = null, meta = null, prev = null, next = null }
-) {
+async function writeAudit(client, req, { action, monthIso = null, meta = null, prev = null, next = null }) {
   await ensureAuditTable(client);
   const actor = getActor(req);
   const diff = diffMonth(prev, next);
@@ -181,10 +167,7 @@ function removeLockedTag(notes) {
 }
 
 async function getCashStart(client = pool) {
-  const s = await client.query(
-    `select cash_start from donas_finance_settings where slug=$1 limit 1`,
-    [SLUG]
-  );
+  const s = await client.query(`select cash_start from donas_finance_settings where slug=$1 limit 1`, [SLUG]);
   return toNum(s.rows?.[0]?.cash_start);
 }
 
@@ -390,9 +373,6 @@ function computeChainWithSnapshots({ cashStart, monthRows, purchasesByYm }) {
 }
 
 async function snapshotMonthByISO(client, monthIso) {
-  // DB guardrails: allow writes that set #locked / update locked rows
-  await allowLockedWrite(client);
-
   const rows = await loadMonthsRaw(client);
   const targetYm = ymFromDateLike(monthIso);
 
@@ -441,9 +421,6 @@ async function snapshotMonthByISO(client, monthIso) {
 }
 
 async function snapshotUpToISO(client, targetMonthIso) {
-  // DB guardrails: allow writes that set #locked / update locked rows
-  await allowLockedWrite(client);
-
   const targetYm = ymFromDateLike(targetMonthIso);
   if (!targetYm) throw new Error("Bad month");
 
@@ -453,13 +430,11 @@ async function snapshotUpToISO(client, targetMonthIso) {
   );
   const minYmDb = minMonthDb.rows?.[0]?.min_ym || null;
 
-  const minMonthPurch = await client.query(
-    `
+  const minMonthPurch = await client.query(`
     select min(to_char(date,'YYYY-MM')) as min_ym
     from donas_purchases
     where type in ('opex','capex')
-    `
-  );
+  `);
   const minYmPurch = minMonthPurch.rows?.[0]?.min_ym || null;
 
   const fromYm = ymFromDateLike(minYmDb || minYmPurch || targetYm) || targetYm;
@@ -521,9 +496,6 @@ async function snapshotUpToISO(client, targetMonthIso) {
 }
 
 async function resnapshotLockedUpToISO(client, targetMonthIso) {
-  // DB guardrails: allow writes to locked rows
-  await allowLockedWrite(client);
-
   const targetYm = ymFromDateLike(targetMonthIso);
   if (!targetYm) throw new Error("Bad month");
 
@@ -583,6 +555,22 @@ async function resnapshotLockedUpToISO(client, targetMonthIso) {
 
 /**
  * =========================
+ * CSV helpers (export)
+ * =========================
+ */
+
+function csvEscape(v) {
+  const s = v === null || v === undefined ? "" : String(v);
+  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+function csvRow(arr) {
+  return `${arr.map(csvEscape).join(",")}\n`;
+}
+
+/**
+ * =========================
  * SETTINGS
  * =========================
  */
@@ -635,8 +623,6 @@ router.get("/donas/finance/settings", authenticateToken, requireAdmin, async (re
 
 router.put("/donas/finance/settings", authenticateToken, requireAdmin, async (req, res) => {
   try {
-    await _guardrailsReady;
-
     const b = req.body || {};
 
     const payload = {
@@ -728,6 +714,114 @@ router.get("/donas/finance/months", authenticateToken, requireAdmin, async (req,
   } catch (e) {
     console.error("finance/months GET error:", e);
     res.status(500).json({ error: "Failed to load months" });
+  }
+});
+
+/**
+ * =========================
+ * EXPORT: Months CSV
+ * =========================
+ */
+
+router.get("/donas/finance/months/export.csv", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const fromYm = ymFromDateLike(req.query.from || "");
+    const toYm = ymFromDateLike(req.query.to || "");
+
+    const cashStart = await getCashStart(pool);
+    const rows = await loadMonthsRaw(pool);
+
+    const yms = rows.map((r) => r._ym).filter(Boolean);
+    const purchasesByYm = await getPurchasesSumsByMonth(pool, yms);
+
+    const computed = computeChainWithSnapshots({ cashStart, monthRows: rows, purchasesByYm });
+
+    const filtered = computed.filter((r) => {
+      const ym = ymFromDateLike(r.month);
+      if (!ym) return false;
+      if (fromYm && ym < fromYm) return false;
+      if (toYm && ym > toYm) return false;
+      return true;
+    });
+
+    const filename = `donas_finance_months_${new Date().toISOString().slice(0, 10)}.csv`;
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+
+    res.write(
+      csvRow([
+        "ym",
+        "locked",
+        "revenue",
+        "cogs",
+        "opex",
+        "capex",
+        "loan_paid",
+        "cash_end",
+        "gp",
+        "netOp",
+        "cf",
+        "source_opex",
+        "source_capex",
+        "purchases_opex",
+        "purchases_capex",
+        "snapshot_opex",
+        "snapshot_capex",
+        "diff_opex",
+        "diff_capex",
+        "notes",
+      ])
+    );
+
+    for (const r of filtered) {
+      const ym = ymFromDateLike(r.month);
+      const pur = purchasesByYm?.[ym] || { opex: 0, capex: 0 };
+      const snapOpex = toNum(r._snapshot?.opex);
+      const snapCapex = toNum(r._snapshot?.capex);
+
+      const revenue = toNum(r.revenue);
+      const cogs = toNum(r.cogs);
+      const opex = toNum(r.opex);
+      const capex = toNum(r.capex);
+      const loan_paid = toNum(r.loan_paid);
+
+      const gp = revenue - cogs;
+      const netOp = gp - opex;
+      const cf = netOp - loan_paid - capex;
+
+      const diffOpex = toNum(pur.opex) - toNum(snapOpex);
+      const diffCapex = toNum(pur.capex) - toNum(snapCapex);
+
+      res.write(
+        csvRow([
+          ym,
+          r._locked ? "1" : "0",
+          revenue,
+          cogs,
+          opex,
+          capex,
+          loan_paid,
+          toNum(r.cash_end),
+          gp,
+          netOp,
+          cf,
+          String(r._source?.opex || ""),
+          String(r._source?.capex || ""),
+          toNum(pur.opex),
+          toNum(pur.capex),
+          snapOpex,
+          snapCapex,
+          diffOpex,
+          diffCapex,
+          String(r.notes || ""),
+        ])
+      );
+    }
+
+    res.end();
+  } catch (e) {
+    console.error("finance/months export.csv error:", e);
+    res.status(500).json({ error: "Failed to export months CSV" });
   }
 });
 
@@ -831,6 +925,188 @@ router.get("/donas/finance/months/:month/audit", authenticateToken, requireAdmin
     return res.status(500).json({ error: "Failed to load month audit" });
   }
 });
+
+/**
+ * =========================
+ * EXPORT: Audit CSV
+ * =========================
+ */
+
+router.get("/donas/finance/audit/export.csv", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    await ensureAuditTable(pool);
+
+    const fromYm = ymFromDateLike(req.query.from || "");
+    const toYm = ymFromDateLike(req.query.to || "");
+    const limit = Math.min(5000, Math.max(1, Number(req.query.limit || 500)));
+
+    let where = `where slug = $1`;
+    const params = [SLUG];
+
+    if (fromYm) {
+      params.push(`${fromYm}-01`);
+      where += ` and month >= $${params.length}`;
+    }
+    if (toYm) {
+      params.push(`${toYm}-01`);
+      where += ` and month <= $${params.length}`;
+    }
+
+    params.push(limit);
+
+    const q = await pool.query(
+      `
+      select
+        id,
+        to_char(month,'YYYY-MM') as ym,
+        action,
+        actor_id,
+        actor_role,
+        actor_email,
+        actor_name,
+        meta,
+        diff,
+        prev,
+        next,
+        created_at
+      from donas_finance_months_audit
+      ${where}
+      order by created_at desc
+      limit $${params.length}
+      `,
+      params
+    );
+
+    const filename = `donas_finance_audit_${new Date().toISOString().slice(0, 10)}.csv`;
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+
+    res.write(
+      csvRow([
+        "id",
+        "created_at",
+        "ym",
+        "action",
+        "actor_id",
+        "actor_role",
+        "actor_email",
+        "actor_name",
+        "diff_keys",
+        "meta_json",
+      ])
+    );
+
+    for (const r of q.rows || []) {
+      const diffKeys = Object.keys(r.diff || {});
+      res.write(
+        csvRow([
+          r.id,
+          r.created_at,
+          r.ym || "",
+          r.action || "",
+          r.actor_id ?? "",
+          r.actor_role || "",
+          r.actor_email || "",
+          r.actor_name || "",
+          diffKeys.join("|"),
+          r.meta ? JSON.stringify(r.meta) : "",
+        ])
+      );
+    }
+
+    res.end();
+  } catch (e) {
+    console.error("finance/audit export.csv error:", e);
+    res.status(500).json({ error: "Failed to export audit CSV" });
+  }
+});
+
+router.get(
+  "/donas/finance/months/:month/audit/export.csv",
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      await ensureAuditTable(pool);
+
+      const monthParam = req.params.month;
+      const monthIso = isoMonthStartFromYM(monthParam) || monthParam;
+
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(monthIso))) {
+        return res.status(400).json({ error: "Bad month format (expected YYYY-MM or YYYY-MM-01)" });
+      }
+
+      const limit = Math.min(5000, Math.max(1, Number(req.query.limit || 500)));
+
+      const q = await pool.query(
+        `
+        select
+          id,
+          to_char(month,'YYYY-MM') as ym,
+          action,
+          actor_id,
+          actor_role,
+          actor_email,
+          actor_name,
+          meta,
+          diff,
+          prev,
+          next,
+          created_at
+        from donas_finance_months_audit
+        where slug=$1 and month=$2
+        order by created_at desc
+        limit $3
+        `,
+        [SLUG, monthIso, limit]
+      );
+
+      const filename = `donas_finance_audit_${ymFromDateLike(monthIso)}_${new Date()
+        .toISOString()
+        .slice(0, 10)}.csv`;
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+
+      res.write(
+        csvRow([
+          "id",
+          "created_at",
+          "ym",
+          "action",
+          "actor_id",
+          "actor_role",
+          "actor_email",
+          "actor_name",
+          "diff_keys",
+          "meta_json",
+        ])
+      );
+
+      for (const r of q.rows || []) {
+        const diffKeys = Object.keys(r.diff || {});
+        res.write(
+          csvRow([
+            r.id,
+            r.created_at,
+            r.ym || "",
+            r.action || "",
+            r.actor_id ?? "",
+            r.actor_role || "",
+            r.actor_email || "",
+            r.actor_name || "",
+            diffKeys.join("|"),
+            r.meta ? JSON.stringify(r.meta) : "",
+          ])
+        );
+      }
+
+      res.end();
+    } catch (e) {
+      console.error("finance/month audit export.csv error:", e);
+      res.status(500).json({ error: "Failed to export month audit CSV" });
+    }
+  }
+);
 
 /**
  * =========================
@@ -1109,8 +1385,6 @@ router.get(
 
 router.post("/donas/finance/months/sync", authenticateToken, requireAdmin, async (req, res) => {
   try {
-    await _guardrailsReady;
-
     const r = await pool.query(`
       select
         min(to_char(date,'YYYY-MM')) as min_ym,
@@ -1147,8 +1421,6 @@ router.post("/donas/finance/months/sync", authenticateToken, requireAdmin, async
 router.post("/donas/finance/months/:month/lock", authenticateToken, requireAdmin, async (req, res) => {
   const client = await pool.connect();
   try {
-    await _guardrailsReady;
-
     const monthParam = req.params.month;
     const monthIso = isoMonthStartFromYM(monthParam) || monthParam;
 
@@ -1157,7 +1429,6 @@ router.post("/donas/finance/months/:month/lock", authenticateToken, requireAdmin
     }
 
     await client.query("begin");
-    await allowLockedWrite(client);
     await ensureMonthExists(client, monthIso);
 
     const prevQ = await client.query(
@@ -1194,8 +1465,6 @@ router.post("/donas/finance/months/:month/lock", authenticateToken, requireAdmin
 router.post("/donas/finance/months/:month/lock-up-to", authenticateToken, requireAdmin, async (req, res) => {
   const client = await pool.connect();
   try {
-    await _guardrailsReady;
-
     const monthParam = req.params.month;
     const monthIso = isoMonthStartFromYM(monthParam) || monthParam;
 
@@ -1204,8 +1473,6 @@ router.post("/donas/finance/months/:month/lock-up-to", authenticateToken, requir
     }
 
     await client.query("begin");
-    await allowLockedWrite(client);
-
     const { lockedCount } = await snapshotUpToISO(client, monthIso);
 
     await writeAudit(client, req, {
@@ -1229,10 +1496,7 @@ router.post("/donas/finance/months/:month/lock-up-to", authenticateToken, requir
 });
 
 router.post("/donas/finance/months/:month/unlock", authenticateToken, requireAdmin, async (req, res) => {
-  const client = await pool.connect();
   try {
-    await _guardrailsReady;
-
     const monthParam = req.params.month;
     const monthIso = isoMonthStartFromYM(monthParam) || monthParam;
 
@@ -1240,21 +1504,15 @@ router.post("/donas/finance/months/:month/unlock", authenticateToken, requireAdm
       return res.status(400).json({ error: "Bad month format (expected YYYY-MM or YYYY-MM-01)" });
     }
 
-    await client.query("begin");
-    await allowLockedWrite(client);
-
-    const prev = await client.query(
-      `select * from donas_finance_months where slug=$1 and month=$2 limit 1`,
-      [SLUG, monthIso]
-    );
-    if (!prev.rows.length) {
-      await client.query("rollback");
-      return res.status(404).json({ error: "Month not found" });
-    }
+    const prev = await pool.query(`select * from donas_finance_months where slug=$1 and month=$2 limit 1`, [
+      SLUG,
+      monthIso,
+    ]);
+    if (!prev.rows.length) return res.status(404).json({ error: "Month not found" });
 
     const cleaned = removeLockedTag(prev.rows?.[0]?.notes);
 
-    const q = await client.query(
+    const q = await pool.query(
       `
       update donas_finance_months
       set
@@ -1268,32 +1526,23 @@ router.post("/donas/finance/months/:month/unlock", authenticateToken, requireAdm
       [SLUG, monthIso, cleaned]
     );
 
-    await writeAudit(client, req, {
+    await writeAudit(pool, req, {
       action: "unlock",
       monthIso,
       prev: pickMonthRowForAudit(prev.rows?.[0]),
       next: pickMonthRowForAudit(q.rows?.[0]),
     });
 
-    await client.query("commit");
-
     return res.json({ ok: true, month: q.rows[0] });
   } catch (e) {
-    try {
-      await client.query("rollback");
-    } catch {}
     console.error("finance/month unlock error:", e);
     res.status(500).json({ error: "Failed to unlock month" });
-  } finally {
-    client.release();
   }
 });
 
 router.post("/donas/finance/months/:month/resnapshot", authenticateToken, requireAdmin, async (req, res) => {
   const client = await pool.connect();
   try {
-    await _guardrailsReady;
-
     const monthParam = req.params.month;
     const monthIso = isoMonthStartFromYM(monthParam) || monthParam;
 
@@ -1301,17 +1550,16 @@ router.post("/donas/finance/months/:month/resnapshot", authenticateToken, requir
       return res.status(400).json({ error: "Bad month format (expected YYYY-MM or YYYY-MM-01)" });
     }
 
-    const cur = await client.query(
-      `select * from donas_finance_months where slug=$1 and month=$2 limit 1`,
-      [SLUG, monthIso]
-    );
+    const cur = await client.query(`select * from donas_finance_months where slug=$1 and month=$2 limit 1`, [
+      SLUG,
+      monthIso,
+    ]);
     if (!cur.rows.length) return res.status(404).json({ error: "Month not found" });
     if (!isLockedNotes(cur.rows?.[0]?.notes)) {
       return res.status(400).json({ error: "Month is not locked. Lock it first." });
     }
 
     await client.query("begin");
-    await allowLockedWrite(client);
 
     const prevRow = pickMonthRowForAudit(cur.rows?.[0]);
 
@@ -1343,8 +1591,6 @@ router.post("/donas/finance/months/:month/resnapshot", authenticateToken, requir
 router.post("/donas/finance/months/:month/resnapshot-up-to", authenticateToken, requireAdmin, async (req, res) => {
   const client = await pool.connect();
   try {
-    await _guardrailsReady;
-
     const monthParam = req.params.month;
     const monthIso = isoMonthStartFromYM(monthParam) || monthParam;
 
@@ -1353,8 +1599,6 @@ router.post("/donas/finance/months/:month/resnapshot-up-to", authenticateToken, 
     }
 
     await client.query("begin");
-    await allowLockedWrite(client);
-
     const { updatedCount } = await resnapshotLockedUpToISO(client, monthIso);
 
     await writeAudit(client, req, {
@@ -1382,8 +1626,6 @@ router.post("/donas/finance/months/:month/resnapshot-up-to", authenticateToken, 
  */
 router.put("/donas/finance/months/:month", authenticateToken, requireAdmin, async (req, res) => {
   try {
-    await _guardrailsReady;
-
     const monthParam = req.params.month;
     const monthIso = isoMonthStartFromYM(monthParam) || monthParam;
 
@@ -1394,10 +1636,10 @@ router.put("/donas/finance/months/:month", authenticateToken, requireAdmin, asyn
     const b = req.body || {};
     const incomingNotes = String(b.notes || "");
 
-    const prev = await pool.query(
-      `select * from donas_finance_months where slug=$1 and month=$2 limit 1`,
-      [SLUG, monthIso]
-    );
+    const prev = await pool.query(`select * from donas_finance_months where slug=$1 and month=$2 limit 1`, [
+      SLUG,
+      monthIso,
+    ]);
 
     const prevNotes = String(prev.rows?.[0]?.notes || "");
     const wasLocked = isLockedNotes(prevNotes);
