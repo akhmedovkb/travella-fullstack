@@ -34,7 +34,28 @@ function emptyDraft(ym) {
     loan_paid: 0,
     cash_end: 0,
     notes: "",
+    _source: null,
+    _snapshot: null,
+    _purchases: null,
   };
+}
+
+function sourceLabel(src) {
+  if (!src) return "";
+  const o = src?.opex || "";
+  const c = src?.capex || "";
+  if (o && c && o === c) return o; // purchases | snapshot
+  if (!o && c) return c;
+  if (o && !c) return o;
+  if (o || c) return `opex:${o || "?"}, capex:${c || "?"}`;
+  return "";
+}
+
+function diffBadgeClass(v) {
+  const n = toNum(v);
+  if (n > 0) return "bg-red-50 text-red-700 border-red-200";
+  if (n < 0) return "bg-green-50 text-green-700 border-green-200";
+  return "bg-gray-50 text-gray-700 border-gray-200";
 }
 
 export default function DonasDosasFinanceMonths() {
@@ -90,6 +111,9 @@ export default function DonasDosasFinanceMonths() {
       loan_paid: toNum(r?.loan_paid),
       cash_end: toNum(r?.cash_end),
       notes: String(r?.notes || ""),
+      _source: r?._source || null,
+      _snapshot: r?._snapshot || null,
+      _purchases: r?._purchases || null,
     });
 
     setErr("");
@@ -136,6 +160,24 @@ export default function DonasDosasFinanceMonths() {
     }
   }
 
+  async function resnapshotMonth() {
+    if (!editYm) return;
+    setSaving(true);
+    setErr("");
+    setOk("");
+    try {
+      await apiPost(`/api/admin/donas/finance/months/${editYm}/resnapshot`, {});
+      setOk("Re-snapshot ✅ Снапшот обновлён по текущим Purchases + chain cash_end.");
+      setTimeout(() => setOk(""), 2600);
+      await load();
+      stopEdit();
+    } catch (e) {
+      setErr(e?.response?.data?.error || e?.message || "Failed to resnapshot month");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function saveDraft() {
     if (!editYm) return;
 
@@ -145,10 +187,6 @@ export default function DonasDosasFinanceMonths() {
     try {
       const locked = isLocked(draft.notes);
 
-      // IMPORTANT:
-      // unlocked -> opex/capex берутся из purchases, cash_end считается на сервере,
-      // поэтому их НЕ отправляем.
-      // locked -> snapshot, можно править opex/capex/cash_end вручную.
       const payload = {
         revenue: toNum(draft.revenue),
         cogs: toNum(draft.cogs),
@@ -215,14 +253,31 @@ export default function DonasDosasFinanceMonths() {
       const netOp = gp - opex;
       const cf = netOp - loan_paid - capex;
 
+      const locked = isLocked(r.notes);
+
+      const snapO = toNum(r?._snapshot?.opex);
+      const snapC = toNum(r?._snapshot?.capex);
+      const purO = toNum(r?._purchases?.opex);
+      const purC = toNum(r?._purchases?.capex);
+
+      const diffO = purO - snapO;
+      const diffC = purC - snapC;
+
       return {
         ...r,
         _ym: ymFromDateLike(r.month),
-        _locked: isLocked(r.notes),
+        _locked: locked,
         _calc: { gp, netOp, cf },
+        _source: r?._source || null,
+        _snapshot: r?._snapshot || null,
+        _purchases: r?._purchases || null,
+        _diff: { opex: diffO, capex: diffC },
       };
     });
   }, [sorted]);
+
+  const draftLocked = isLocked(draft.notes);
+  const draftSourceText = sourceLabel(draft._source);
 
   return (
     <div className="max-w-6xl mx-auto space-y-4">
@@ -294,7 +349,7 @@ export default function DonasDosasFinanceMonths() {
 
           <div className="text-xs text-gray-500">
             Чтобы “зафиксировать” месяц: добавь <b>#locked</b> в notes.
-            <span className="ml-2">Unlocked месяцы берут OPEX/CAPEX из Purchases.</span>
+            <span className="ml-2">Locked = snapshot. Auto = purchases + server cashflow.</span>
           </div>
         </div>
 
@@ -310,67 +365,118 @@ export default function DonasDosasFinanceMonths() {
                 <th className="py-2 pr-4 text-right">Loan paid</th>
                 <th className="py-2 pr-4 text-right">CF</th>
                 <th className="py-2 pr-4 text-right">Cash end</th>
+                <th className="py-2 pr-4 text-right">
+                  Diff (P−S)
+                  <div className="text-[11px] text-gray-400">locked only</div>
+                </th>
                 <th className="py-2 pr-4">Notes</th>
                 <th className="py-2 pr-2 text-right"> </th>
               </tr>
             </thead>
 
             <tbody>
-              {viewRows.map((r) => (
-                <tr key={`${r.slug || "donas"}-${r._ym}`} className="border-b last:border-b-0">
-                  <td className="py-2 pr-4 whitespace-nowrap">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{r._ym || "—"}</span>
+              {viewRows.map((r) => {
+                const srcTxt = sourceLabel(r._source);
+                const locked = r._locked;
 
-                      {r._locked ? (
-                        <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 border border-gray-200">
-                          locked
-                        </span>
-                      ) : (
-                        <span
-                          className="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200"
-                          title="OPEX/CAPEX подтягиваются из Purchases"
-                        >
-                          auto
-                        </span>
-                      )}
-                    </div>
-                  </td>
+                const snapO = toNum(r?._snapshot?.opex);
+                const snapC = toNum(r?._snapshot?.capex);
+                const purO = toNum(r?._purchases?.opex);
+                const purC = toNum(r?._purchases?.capex);
 
-                  <td className="py-2 pr-4 text-right">{money(r.revenue)}</td>
-                  <td className="py-2 pr-4 text-right">{money(r.cogs)}</td>
-                  <td className="py-2 pr-4 text-right">{money(r.opex)}</td>
-                  <td className="py-2 pr-4 text-right">{money(r.capex)}</td>
-                  <td className="py-2 pr-4 text-right">{money(r.loan_paid)}</td>
-                  <td
-                    className="py-2 pr-4 text-right"
-                    title={`GP: ${money(r._calc?.gp)} | NetOp: ${money(r._calc?.netOp)}`}
-                  >
-                    {money(r._calc?.cf)}
-                  </td>
-                  <td className="py-2 pr-4 text-right">{money(r.cash_end)}</td>
+                const diffO = toNum(r?._diff?.opex);
+                const diffC = toNum(r?._diff?.capex);
 
-                  <td className="py-2 pr-4 max-w-[320px]">
-                    <div className="truncate" title={String(r.notes || "")}>
-                      {String(r.notes || "") || "—"}
-                    </div>
-                  </td>
+                const diffTitle = locked
+                  ? `OPEX: purchases ${money(purO)} − snapshot ${money(snapO)} = ${money(diffO)}\n` +
+                    `CAPEX: purchases ${money(purC)} − snapshot ${money(snapC)} = ${money(diffC)}`
+                  : "Diff показывается только для locked месяцев";
 
-                  <td className="py-2 pr-2 text-right whitespace-nowrap">
-                    <button
-                      type="button"
-                      className="px-3 py-1.5 rounded-lg border bg-white hover:bg-gray-50"
-                      onClick={() => startEdit(r)}
+                return (
+                  <tr key={`${r.slug || "donas"}-${r._ym}`} className="border-b last:border-b-0">
+                    <td className="py-2 pr-4 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{r._ym || "—"}</span>
+
+                        {locked ? (
+                          <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 border border-gray-200">
+                            snapshot
+                          </span>
+                        ) : (
+                          <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                            auto
+                          </span>
+                        )}
+
+                        {srcTxt ? (
+                          <span
+                            className="text-[11px] px-2 py-0.5 rounded-full bg-white border border-gray-200 text-gray-600"
+                            title={`OPEX/CAPEX source: ${srcTxt}`}
+                          >
+                            {srcTxt}
+                          </span>
+                        ) : null}
+                      </div>
+                    </td>
+
+                    <td className="py-2 pr-4 text-right">{money(r.revenue)}</td>
+                    <td className="py-2 pr-4 text-right">{money(r.cogs)}</td>
+                    <td className="py-2 pr-4 text-right">{money(r.opex)}</td>
+                    <td className="py-2 pr-4 text-right">{money(r.capex)}</td>
+                    <td className="py-2 pr-4 text-right">{money(r.loan_paid)}</td>
+
+                    <td
+                      className="py-2 pr-4 text-right"
+                      title={`GP: ${money(r._calc?.gp)} | NetOp: ${money(r._calc?.netOp)} | CF: ${money(
+                        r._calc?.cf
+                      )}`}
                     >
-                      Edit
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                      {money(r._calc?.cf)}
+                    </td>
+
+                    <td className="py-2 pr-4 text-right">{money(r.cash_end)}</td>
+
+                    <td className="py-2 pr-4 text-right whitespace-nowrap" title={diffTitle}>
+                      {locked ? (
+                        <div className="inline-flex flex-col items-end gap-1">
+                          <span
+                            className={`text-[11px] px-2 py-0.5 rounded-full border ${diffBadgeClass(diffO)}`}
+                          >
+                            O: {money(diffO)}
+                          </span>
+                          <span
+                            className={`text-[11px] px-2 py-0.5 rounded-full border ${diffBadgeClass(diffC)}`}
+                          >
+                            C: {money(diffC)}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-gray-300">—</span>
+                      )}
+                    </td>
+
+                    <td className="py-2 pr-4 max-w-[320px]">
+                      <div className="truncate" title={String(r.notes || "")}>
+                        {String(r.notes || "") || "—"}
+                      </div>
+                    </td>
+
+                    <td className="py-2 pr-2 text-right whitespace-nowrap">
+                      <button
+                        type="button"
+                        className="px-3 py-1.5 rounded-lg border bg-white hover:bg-gray-50"
+                        onClick={() => startEdit(r)}
+                      >
+                        Edit
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
 
               {!loading && viewRows.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="py-6 text-center text-gray-500">
+                  <td colSpan={11} className="py-6 text-center text-gray-500">
                     Нет месяцев. Добавь первый месяц сверху или нажми Sync.
                   </td>
                 </tr>
@@ -383,25 +489,59 @@ export default function DonasDosasFinanceMonths() {
           <div className="mt-4 rounded-2xl border border-gray-200 p-4 bg-gray-50 space-y-3">
             <div className="flex items-center justify-between gap-2">
               <div>
-                <div className="text-sm font-semibold">Редактирование: {editYm}</div>
+                <div className="flex items-center gap-2">
+                  <div className="text-sm font-semibold">Редактирование: {editYm}</div>
+
+                  {draftLocked ? (
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 border border-gray-200">
+                      snapshot
+                    </span>
+                  ) : (
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                      auto
+                    </span>
+                  )}
+
+                  {draftSourceText ? (
+                    <span
+                      className="text-[11px] px-2 py-0.5 rounded-full bg-white border border-gray-200 text-gray-600"
+                      title={`OPEX/CAPEX source: ${draftSourceText}`}
+                    >
+                      {draftSourceText}
+                    </span>
+                  ) : null}
+                </div>
+
                 <div className="text-xs text-gray-500">
-                  {isLocked(draft.notes)
+                  {draftLocked
                     ? "locked: это снепшот. Можно править cash_end (и при необходимости OPEX/CAPEX)."
                     : "OPEX/CAPEX подтягиваются из Purchases, cash_end считается цепочкой на сервере."}
                 </div>
               </div>
 
               <div className="flex items-center gap-2">
-                {isLocked(draft.notes) && (
-                  <button
-                    type="button"
-                    className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
-                    onClick={unlockMonth}
-                    disabled={saving}
-                    title="Снимает #locked и возвращает месяц в auto-режим"
-                  >
-                    Unlock month
-                  </button>
+                {draftLocked && (
+                  <>
+                    <button
+                      type="button"
+                      className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
+                      onClick={resnapshotMonth}
+                      disabled={saving}
+                      title="Переснять снапшот: opex/capex из Purchases + новый cash_end по цепочке"
+                    >
+                      Re-snapshot
+                    </button>
+
+                    <button
+                      type="button"
+                      className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
+                      onClick={unlockMonth}
+                      disabled={saving}
+                      title="Снимает #locked и возвращает месяц в auto-режим"
+                    >
+                      Unlock month
+                    </button>
+                  </>
                 )}
 
                 <button
@@ -434,11 +574,7 @@ export default function DonasDosasFinanceMonths() {
                         [k]: e.target.value,
                       }))
                     }
-                    disabled={
-                      saving ||
-                      // В unlocked режиме OPEX/CAPEX read-only (тянутся из purchases)
-                      ((k === "opex" || k === "capex") && !isLocked(draft.notes))
-                    }
+                    disabled={saving || ((k === "opex" || k === "capex") && !draftLocked)}
                     inputMode="numeric"
                     placeholder={currency}
                   />
@@ -451,7 +587,7 @@ export default function DonasDosasFinanceMonths() {
                   className="w-full border rounded-lg px-3 py-2 bg-white"
                   value={draft.cash_end}
                   onChange={(e) => setDraft((d) => ({ ...d, cash_end: e.target.value }))}
-                  disabled={saving || !isLocked(draft.notes)}
+                  disabled={saving || !draftLocked}
                   inputMode="numeric"
                   placeholder={currency}
                 />
