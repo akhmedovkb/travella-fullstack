@@ -28,6 +28,7 @@ import DonasIngredients from "./pages/admin/DonasIngredients";
 import DonasMenuBuilder from "./pages/admin/DonasMenuBuilder";
 import DonasDosasFinanceLayout from "./pages/admin/DonasDosasFinanceLayout";
 import DonasDosasFinanceOverview from "./pages/admin/DonasDosasFinanceOverview";
+import DonasDosasFinanceMonths from "./pages/admin/DonasDosasFinanceMonths";
 import DonasOpex from "./pages/admin/DonasOpex";
 import DonasCapex from "./pages/admin/DonasCapex";
 import DonasDosasCogsTab from "./pages/admin/DonasDosasCogsTab";
@@ -394,6 +395,24 @@ export default function App() {
             <Route path="profit" element={<DonasDosasProfitTab />} />
             <Route path="investor" element={<DonasInvestor />} />
           </Route>
+            <Route
+              path="/admin/donas-dosas/finance"
+              element={
+                <PrivateRoute>
+                  <AdminRoute>
+                    <DonasDosasFinanceLayout />
+                  </AdminRoute>
+                </PrivateRoute>
+              }
+            >
+              <Route index element={<DonasDosasFinanceOverview />} />
+              <Route path="months" element={<DonasDosasFinanceMonths />} />
+              <Route path="opex" element={<DonasOpex />} />
+              <Route path="capex" element={<DonasCapex />} />
+              <Route path="cogs" element={<DonasDosasCogsTab />} />
+              <Route path="profit" element={<DonasDosasProfitTab />} />
+              <Route path="investor" element={<DonasInvestor />} />
+            </Route>
             <Route
               path="/admin/donas-dosas/menu"
               element={
