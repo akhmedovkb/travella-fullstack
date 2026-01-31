@@ -4,9 +4,19 @@ const express = require("express");
 const pool = require("../db");
 const authenticateToken = require("../middleware/authenticateToken");
 const requireAdmin = require("../middleware/requireAdmin");
+const {
+  ensureDonasFinanceGuardrails,
+  allowLockedWrite,
+} = require("../utils/donasFinanceGuardrails");
 
 const router = express.Router();
 const SLUG = "donas-dosas";
+
+// init guardrails once (idempotent)
+const _guardrailsReady = ensureDonasFinanceGuardrails(pool).catch((e) => {
+  console.error("[donas-finance] guardrails init failed:", e);
+  throw e;
+});
 
 /**
  * =========================
@@ -380,6 +390,9 @@ function computeChainWithSnapshots({ cashStart, monthRows, purchasesByYm }) {
 }
 
 async function snapshotMonthByISO(client, monthIso) {
+  // DB guardrails: allow writes that set #locked / update locked rows
+  await allowLockedWrite(client);
+
   const rows = await loadMonthsRaw(client);
   const targetYm = ymFromDateLike(monthIso);
 
@@ -428,6 +441,9 @@ async function snapshotMonthByISO(client, monthIso) {
 }
 
 async function snapshotUpToISO(client, targetMonthIso) {
+  // DB guardrails: allow writes that set #locked / update locked rows
+  await allowLockedWrite(client);
+
   const targetYm = ymFromDateLike(targetMonthIso);
   if (!targetYm) throw new Error("Bad month");
 
@@ -505,6 +521,9 @@ async function snapshotUpToISO(client, targetMonthIso) {
 }
 
 async function resnapshotLockedUpToISO(client, targetMonthIso) {
+  // DB guardrails: allow writes to locked rows
+  await allowLockedWrite(client);
+
   const targetYm = ymFromDateLike(targetMonthIso);
   if (!targetYm) throw new Error("Bad month");
 
@@ -616,6 +635,8 @@ router.get("/donas/finance/settings", authenticateToken, requireAdmin, async (re
 
 router.put("/donas/finance/settings", authenticateToken, requireAdmin, async (req, res) => {
   try {
+    await _guardrailsReady;
+
     const b = req.body || {};
 
     const payload = {
@@ -1088,6 +1109,8 @@ router.get(
 
 router.post("/donas/finance/months/sync", authenticateToken, requireAdmin, async (req, res) => {
   try {
+    await _guardrailsReady;
+
     const r = await pool.query(`
       select
         min(to_char(date,'YYYY-MM')) as min_ym,
@@ -1124,6 +1147,8 @@ router.post("/donas/finance/months/sync", authenticateToken, requireAdmin, async
 router.post("/donas/finance/months/:month/lock", authenticateToken, requireAdmin, async (req, res) => {
   const client = await pool.connect();
   try {
+    await _guardrailsReady;
+
     const monthParam = req.params.month;
     const monthIso = isoMonthStartFromYM(monthParam) || monthParam;
 
@@ -1132,6 +1157,7 @@ router.post("/donas/finance/months/:month/lock", authenticateToken, requireAdmin
     }
 
     await client.query("begin");
+    await allowLockedWrite(client);
     await ensureMonthExists(client, monthIso);
 
     const prevQ = await client.query(
@@ -1168,6 +1194,8 @@ router.post("/donas/finance/months/:month/lock", authenticateToken, requireAdmin
 router.post("/donas/finance/months/:month/lock-up-to", authenticateToken, requireAdmin, async (req, res) => {
   const client = await pool.connect();
   try {
+    await _guardrailsReady;
+
     const monthParam = req.params.month;
     const monthIso = isoMonthStartFromYM(monthParam) || monthParam;
 
@@ -1176,6 +1204,8 @@ router.post("/donas/finance/months/:month/lock-up-to", authenticateToken, requir
     }
 
     await client.query("begin");
+    await allowLockedWrite(client);
+
     const { lockedCount } = await snapshotUpToISO(client, monthIso);
 
     await writeAudit(client, req, {
@@ -1199,7 +1229,10 @@ router.post("/donas/finance/months/:month/lock-up-to", authenticateToken, requir
 });
 
 router.post("/donas/finance/months/:month/unlock", authenticateToken, requireAdmin, async (req, res) => {
+  const client = await pool.connect();
   try {
+    await _guardrailsReady;
+
     const monthParam = req.params.month;
     const monthIso = isoMonthStartFromYM(monthParam) || monthParam;
 
@@ -1207,15 +1240,21 @@ router.post("/donas/finance/months/:month/unlock", authenticateToken, requireAdm
       return res.status(400).json({ error: "Bad month format (expected YYYY-MM or YYYY-MM-01)" });
     }
 
-    const prev = await pool.query(
+    await client.query("begin");
+    await allowLockedWrite(client);
+
+    const prev = await client.query(
       `select * from donas_finance_months where slug=$1 and month=$2 limit 1`,
       [SLUG, monthIso]
     );
-    if (!prev.rows.length) return res.status(404).json({ error: "Month not found" });
+    if (!prev.rows.length) {
+      await client.query("rollback");
+      return res.status(404).json({ error: "Month not found" });
+    }
 
     const cleaned = removeLockedTag(prev.rows?.[0]?.notes);
 
-    const q = await pool.query(
+    const q = await client.query(
       `
       update donas_finance_months
       set
@@ -1229,23 +1268,32 @@ router.post("/donas/finance/months/:month/unlock", authenticateToken, requireAdm
       [SLUG, monthIso, cleaned]
     );
 
-    await writeAudit(pool, req, {
+    await writeAudit(client, req, {
       action: "unlock",
       monthIso,
       prev: pickMonthRowForAudit(prev.rows?.[0]),
       next: pickMonthRowForAudit(q.rows?.[0]),
     });
 
+    await client.query("commit");
+
     return res.json({ ok: true, month: q.rows[0] });
   } catch (e) {
+    try {
+      await client.query("rollback");
+    } catch {}
     console.error("finance/month unlock error:", e);
     res.status(500).json({ error: "Failed to unlock month" });
+  } finally {
+    client.release();
   }
 });
 
 router.post("/donas/finance/months/:month/resnapshot", authenticateToken, requireAdmin, async (req, res) => {
   const client = await pool.connect();
   try {
+    await _guardrailsReady;
+
     const monthParam = req.params.month;
     const monthIso = isoMonthStartFromYM(monthParam) || monthParam;
 
@@ -1263,6 +1311,7 @@ router.post("/donas/finance/months/:month/resnapshot", authenticateToken, requir
     }
 
     await client.query("begin");
+    await allowLockedWrite(client);
 
     const prevRow = pickMonthRowForAudit(cur.rows?.[0]);
 
@@ -1294,6 +1343,8 @@ router.post("/donas/finance/months/:month/resnapshot", authenticateToken, requir
 router.post("/donas/finance/months/:month/resnapshot-up-to", authenticateToken, requireAdmin, async (req, res) => {
   const client = await pool.connect();
   try {
+    await _guardrailsReady;
+
     const monthParam = req.params.month;
     const monthIso = isoMonthStartFromYM(monthParam) || monthParam;
 
@@ -1302,6 +1353,8 @@ router.post("/donas/finance/months/:month/resnapshot-up-to", authenticateToken, 
     }
 
     await client.query("begin");
+    await allowLockedWrite(client);
+
     const { updatedCount } = await resnapshotLockedUpToISO(client, monthIso);
 
     await writeAudit(client, req, {
@@ -1329,6 +1382,8 @@ router.post("/donas/finance/months/:month/resnapshot-up-to", authenticateToken, 
  */
 router.put("/donas/finance/months/:month", authenticateToken, requireAdmin, async (req, res) => {
   try {
+    await _guardrailsReady;
+
     const monthParam = req.params.month;
     const monthIso = isoMonthStartFromYM(monthParam) || monthParam;
 
