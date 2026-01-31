@@ -500,7 +500,7 @@ router.put("/donas/finance/settings", authenticateToken, requireAdmin, async (re
 });
 
 /**
- * MONTHS (server cashflow + snapshot/auto sources)
+ * MONTHS (server cashflow + snapshot/auto)
  */
 router.get("/donas/finance/months", authenticateToken, requireAdmin, async (req, res) => {
   try {
@@ -532,6 +532,151 @@ router.get("/donas/finance/months", authenticateToken, requireAdmin, async (req,
   }
 });
 
+// (Шаг 10) PREVIEW: что будет если зафиксировать месяц / все <= месяц
+router.get("/donas/finance/months/:month/lock-preview", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const monthParam = req.params.month;
+    const monthIso = isoMonthStartFromYM(monthParam) || monthParam;
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(monthIso))) {
+      return res.status(400).json({ error: "Bad month format (expected YYYY-MM or YYYY-MM-01)" });
+    }
+
+    const scope = String(req.query.scope || "single").toLowerCase(); // single | upto
+    const targetYm = ymFromDateLike(monthIso);
+
+    await ensureMonthExists(pool, monthIso);
+
+    const cashStart = await getCashStart(pool);
+    const baseRows = await loadMonthsRaw(pool);
+
+    const yms = baseRows.map((r) => r._ym).filter(Boolean);
+    const purchasesByYm = await getPurchasesSumsByMonth(pool, yms);
+
+    // current (как сейчас считается)
+    const currentComputed = computeChainWithSnapshots({
+      cashStart,
+      monthRows: baseRows,
+      purchasesByYm,
+    });
+
+    // planned (как будет считаться после lock)
+    const plannedRows = baseRows.map((r) => {
+      const ym = r._ym;
+      const alreadyLocked = Boolean(r._locked);
+
+      const shouldAffect =
+        scope === "upto"
+          ? Boolean(ym && ym <= targetYm)
+          : Boolean(ym && ym === targetYm);
+
+      // Уже locked не трогаем в preview (это снепшот). Для обновления — resnapshot.
+      if (alreadyLocked) return r;
+
+      // Только кандидаты на lock меняем: notes + snapshot opex/capex (из purchases)
+      if (shouldAffect) {
+        const pur = purchasesByYm?.[ym] || { opex: 0, capex: 0 };
+        return {
+          ...r,
+          _locked: true,
+          notes: ensureLockedTag(r.notes),
+          opex: toNum(pur.opex),
+          capex: toNum(pur.capex),
+          cash_end: 0,
+        };
+      }
+
+      return r;
+    });
+
+    const plannedComputed = computeChainWithSnapshots({
+      cashStart,
+      monthRows: plannedRows,
+      purchasesByYm,
+    });
+
+    const byYmCurrent = {};
+    const byYmPlanned = {};
+    for (const r of currentComputed) {
+      const ym = ymFromDateLike(r.month);
+      if (ym) byYmCurrent[ym] = r;
+    }
+    for (const r of plannedComputed) {
+      const ym = ymFromDateLike(r.month);
+      if (ym) byYmPlanned[ym] = r;
+    }
+
+    const affectedYms = currentComputed
+      .map((r) => ymFromDateLike(r.month))
+      .filter(Boolean)
+      .filter((ym) => (scope === "upto" ? ym <= targetYm : ym === targetYm));
+
+    const items = affectedYms.map((ym) => {
+      const cur = byYmCurrent[ym];
+      const plan = byYmPlanned[ym];
+      const pur = purchasesByYm?.[ym] || { opex: 0, capex: 0 };
+
+      const curLocked = Boolean(cur?._locked);
+      const planLocked = Boolean(plan?._locked);
+
+      const snapOpex = toNum(cur?._snapshot?.opex);
+      const snapCapex = toNum(cur?._snapshot?.capex);
+
+      return {
+        ym,
+        current: {
+          locked: curLocked,
+          cash_end: toNum(cur?.cash_end),
+          opex: toNum(cur?.opex),
+          capex: toNum(cur?.capex),
+          notes: String(cur?.notes || ""),
+        },
+        planned: {
+          locked: planLocked,
+          cash_end: toNum(plan?.cash_end),
+          opex: toNum(plan?.opex),
+          capex: toNum(plan?.capex),
+          notes: String(plan?.notes || ""),
+        },
+        purchases: {
+          opex: toNum(pur.opex),
+          capex: toNum(pur.capex),
+        },
+        snapshot: {
+          opex: snapOpex,
+          capex: snapCapex,
+          cash_end: toNum(cur?._snapshot?.cash_end),
+          notes: String(cur?._snapshot?.notes || ""),
+        },
+        diff: {
+          // полезно для already locked: purchases - snapshot
+          opex: toNum(pur.opex) - toNum(snapOpex),
+          capex: toNum(pur.capex) - toNum(snapCapex),
+        },
+      };
+    });
+
+    const curTarget = byYmCurrent[targetYm] || null;
+    const planTarget = byYmPlanned[targetYm] || null;
+
+    return res.json({
+      ok: true,
+      scope,
+      targetYm,
+      summary: {
+        targetWasLocked: Boolean(curTarget?._locked),
+        currentCashEndAtTarget: toNum(curTarget?.cash_end),
+        plannedCashEndAtTarget: toNum(planTarget?.cash_end),
+        deltaCashEndAtTarget: toNum(planTarget?.cash_end) - toNum(curTarget?.cash_end),
+      },
+      items,
+    });
+  } catch (e) {
+    console.error("finance/month lock-preview error:", e);
+    res.status(500).json({ error: "Failed to build lock preview" });
+  }
+});
+
 // Create missing months based on purchases min/max
 router.post("/donas/finance/months/sync", authenticateToken, requireAdmin, async (req, res) => {
   try {
@@ -550,38 +695,23 @@ router.post("/donas/finance/months/sync", authenticateToken, requireAdmin, async
       return res.json({ ok: true, inserted: 0, message: "No purchases found" });
     }
 
-    const months = [];
-    const [minY, minM] = minYm.split("-").map((x) => Number(x));
-    const [maxY, maxM] = maxYm.split("-").map((x) => Number(x));
+    await ensureMonthsRange(pool, minYm, maxYm);
 
-    let y = minY;
-    let m = minM;
-
-    while (y < maxY || (y === maxY && m <= maxM)) {
-      const mm = String(m).padStart(2, "0");
-      months.push(`${y}-${mm}-01`);
-      m += 1;
-      if (m === 13) {
-        m = 1;
-        y += 1;
-      }
-    }
-
-    const ins = await pool.query(
+    const q = await pool.query(
       `
-      insert into donas_finance_months (slug, month, revenue, cogs, opex, capex, loan_paid, cash_end, notes)
-      select $1 as slug, x.month::date, 0,0,0,0,0,0,''
-      from unnest($2::text[]) as x(month)
-      on conflict (slug, month) do nothing
-      returning month
+      select count(*)::int as cnt
+      from donas_finance_months
+      where slug=$1
+        and to_char(month,'YYYY-MM') between $2 and $3
       `,
-      [SLUG, months]
+      [SLUG, minYm, maxYm]
     );
 
     return res.json({
       ok: true,
-      inserted: ins.rows?.length || 0,
+      inserted: 0,
       range: { minYm, maxYm },
+      countInRange: q.rows?.[0]?.cnt ?? 0,
     });
   } catch (e) {
     console.error("finance/months sync error:", e);
@@ -718,6 +848,8 @@ router.post("/donas/finance/months/:month/resnapshot", authenticateToken, requir
  * ШАГ 9 (guardrails):
  * - если месяц locked -> запрещаем любые изменения через PUT (read-only).
  * - lock/unlock/resnapshot выполняются отдельными роутами.
+ * - нельзя "залочить" через notes.
+ * - для auto месяцев opex/capex/cash_end не сохраняем (сервер считает).
  */
 router.put("/donas/finance/months/:month", authenticateToken, requireAdmin, async (req, res) => {
   try {
@@ -740,29 +872,29 @@ router.put("/donas/finance/months/:month", authenticateToken, requireAdmin, asyn
     const wasLocked = isLockedNotes(prevNotes);
     const willBeLocked = isLockedNotes(incomingNotes);
 
-    // ✅ Guardrail: locked month is read-only via PUT
     if (wasLocked) {
       return res.status(400).json({
         error: "Locked month is read-only. Unlock first (or use Re-snapshot).",
       });
     }
 
-    // ✅ Guardrail: нельзя “залочить” через notes в PUT — только через POST /lock /lock-up-to
     if (!wasLocked && willBeLocked) {
       return res.status(400).json({
         error: "To lock a month use the Lock button (POST /lock). Notes cannot lock via Save.",
       });
     }
 
+    await ensureMonthExists(pool, monthIso);
+
     const payload = {
       slug: SLUG,
       month: monthIso,
       revenue: toNum(b.revenue),
       cogs: toNum(b.cogs),
-      // auto months: opex/capex/cash_end НЕ сохраняем (сервер считает)
+      loan_paid: toNum(b.loan_paid),
+      // auto months: opex/capex/cash_end не сохраняем
       opex: 0,
       capex: 0,
-      loan_paid: toNum(b.loan_paid),
       cash_end: 0,
       notes: incomingNotes,
     };
