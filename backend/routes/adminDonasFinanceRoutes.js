@@ -34,6 +34,87 @@ function toNum(v) {
   return Number.isFinite(n) ? n : 0;
 }
 
+function monthStartISOFromYM(ym) {
+  const m = ymFromDateLike(ym);
+  if (!m) return null;
+  return `${m}-01`;
+}
+
+async function getPurchasesSumsByMonth(ymList) {
+  const months = (Array.isArray(ymList) ? ymList : [])
+    .map((x) => ymFromDateLike(x))
+    .filter(Boolean);
+  if (!months.length) return {};
+
+  const q = await pool.query(
+    `
+    select
+      to_char(date,'YYYY-MM') as ym,
+      type,
+      coalesce(sum(total),0) as total
+    from donas_purchases
+    where to_char(date,'YYYY-MM') = any($1)
+      and type in ('opex','capex')
+    group by 1,2
+    `,
+    [months]
+  );
+
+  const out = {};
+  for (const r of q.rows || []) {
+    const ym = ymFromDateLike(r.ym);
+    if (!ym) continue;
+    if (!out[ym]) out[ym] = { opex: 0, capex: 0 };
+    if (r.type === "opex") out[ym].opex = toNum(r.total);
+    if (r.type === "capex") out[ym].capex = toNum(r.total);
+  }
+  return out;
+}
+
+function computeChainWithSnapshots({ cashStart, monthRows, purchasesByYm }) {
+  // monthRows: sorted asc, each item already normalized and contains _locked
+  let cash = toNum(cashStart);
+
+  return (monthRows || []).map((r) => {
+    const ym = ymFromDateLike(r.month);
+    const locked = Boolean(r._locked);
+
+    const revenue = toNum(r.revenue);
+    const cogs = toNum(r.cogs);
+    const loan_paid = toNum(r.loan_paid);
+
+    const purchases = purchasesByYm?.[ym] || { opex: 0, capex: 0 };
+    const opex = locked ? toNum(r.opex) : toNum(purchases.opex);
+    const capex = locked ? toNum(r.capex) : toNum(purchases.capex);
+
+    const gp = revenue - cogs;
+    const netOp = gp - opex;
+    const cf = netOp - loan_paid - capex;
+
+    if (locked) {
+      cash = toNum(r.cash_end);
+      return {
+        ...r,
+        opex,
+        capex,
+        cash_end: cash,
+        _calc: { gp, netOp, cf },
+        _source: { opex_source: "snapshot", capex_source: "snapshot", mixed: false },
+      };
+    }
+
+    cash = cash + cf;
+    return {
+      ...r,
+      opex,
+      capex,
+      cash_end: cash,
+      _calc: { gp, netOp, cf },
+      _source: { opex_source: "purchases", capex_source: "purchases", mixed: false },
+    };
+  });
+}
+
 /**
  * SETTINGS
  * GET  /api/admin/donas/finance/settings
@@ -185,107 +266,13 @@ router.get("/donas/finance/months", authenticateToken, requireAdmin, async (req,
 
     const rows = q.rows || [];
 
-    const normalized = rows.map((r) => ({
-      ...r,
-      revenue: toNum(r.revenue),
-      cogs: toNum(r.cogs),
-      opex: toNum(r.opex),
-      capex: toNum(r.capex),
-      loan_paid: toNum(r.loan_paid),
-      cash_end: toNum(r.cash_end),
-      notes: r.notes || "",
-      _source: { opex_source: "ops", mixed: false },
-    }));
-
-    let cash = cashStart;
-
-    const out = normalized.map((r) => {
-      const locked = isLockedNotes(r.notes);
-
-      const revenue = toNum(r.revenue);
-      const cogs = toNum(r.cogs);
-      const opex = toNum(r.opex);
-      const capex = toNum(r.capex);
-      const loan_paid = toNum(r.loan_paid);
-
-      const gp = revenue - cogs;
-      const netOp = gp - opex;
-      const cf = netOp - loan_paid - capex;
-
-      if (locked) {
-        cash = toNum(r.cash_end);
-        return { ...r, cash_end: cash, _calc: { gp, netOp, cf } };
-      }
-
-      cash = cash + cf;
-      return { ...r, cash_end: cash, _calc: { gp, netOp, cf } };
-    });
-
-    res.json(out);
-  } catch (e) {
-    console.error("finance/months GET error:", e);
-    res.status(500).json({ error: "Failed to load months" });
-  }
-});
-
-router.put("/donas/finance/months/:month", authenticateToken, requireAdmin, async (req, res) => {
-  try {
-    const monthParam = req.params.month;
-    const month = isoMonthStartFromYM(monthParam) || monthParam;
-
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(month))) {
-      return res.status(400).json({ error: "Bad month format (expected YYYY-MM or YYYY-MM-01)" });
-    }
-
-    const b = req.body || {};
-
-    const payload = {
-      slug: SLUG,
-      month,
-      revenue: toNum(b.revenue),
-      cogs: toNum(b.cogs),
-      opex: toNum(b.opex),
-      capex: toNum(b.capex),
-      loan_paid: toNum(b.loan_paid),
-      cash_end: toNum(b.cash_end),
-      notes: String(b.notes || ""),
-    };
-
-    const q = await pool.query(
-      `
-      insert into donas_finance_months (
-        slug, month, revenue, cogs, opex, capex, loan_paid, cash_end, notes
-      ) values (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9
-      )
-      on conflict (slug, month) do update set
-        revenue = excluded.revenue,
-        cogs = excluded.cogs,
-        opex = excluded.opex,
-        capex = excluded.capex,
-        loan_paid = excluded.loan_paid,
-        cash_end = excluded.cash_end,
-        notes = excluded.notes
-      returning *
-      `,
-      [
-        payload.slug,
-        payload.month,
-        payload.revenue,
-        payload.cogs,
-        payload.opex,
-        payload.capex,
-        payload.loan_paid,
-        payload.cash_end,
-        payload.notes,
-      ]
-    );
-
-    res.json(q.rows[0]);
-  } catch (e) {
-    console.error("finance/month PUT error:", e);
-    res.status(500).json({ error: "Failed to save month" });
-  }
-});
-
-module.exports = router;
+    const normalized = rows
+      .map((r) => {
+        const ym = ymFromDateLike(r.month);
+        const month = monthStartISOFromYM(ym) || r.month;
+        const notes = r.notes || "";
+        return {
+          ...r,
+          month,
+          revenue: toNum(r.revenue),
+          cogs: t
