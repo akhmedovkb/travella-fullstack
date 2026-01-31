@@ -388,6 +388,67 @@ async function snapshotUpToISO(client, targetMonthIso) {
   return { lockedCount };
 }
 
+// (Шаг 11) BULK RESNAPSHOT: обновляем ВСЕ locked месяцы <= target
+async function resnapshotLockedUpToISO(client, targetMonthIso) {
+  const targetYm = ymFromDateLike(targetMonthIso);
+  if (!targetYm) throw new Error("Bad month");
+
+  const rows = await loadMonthsRaw(client);
+  const cashStart = await getCashStart(client);
+
+  const yms = rows.map((r) => r._ym).filter(Boolean);
+  const purchasesByYmAll = await getPurchasesSumsByMonth(client, yms);
+
+  // Обновляем snapshot-поля только у locked месяцев <= target
+  const work = rows.map((r) => {
+    const ym = r._ym;
+    const shouldResnap = Boolean(r._locked && ym && ym <= targetYm);
+    if (!shouldResnap) return r;
+
+    const pur = purchasesByYmAll?.[ym] || { opex: 0, capex: 0 };
+    return {
+      ...r,
+      _locked: true,
+      notes: ensureLockedTag(r.notes),
+      opex: toNum(pur.opex),
+      capex: toNum(pur.capex),
+      cash_end: 0, // пересчитаем ниже
+    };
+  });
+
+  // Пересчитываем cash_end цепочкой (locked месяцы используют snapshot cash_end)
+  const computed = computeChainWithSnapshots({
+    cashStart,
+    monthRows: work,
+    purchasesByYm: purchasesByYmAll,
+  });
+
+  let updatedCount = 0;
+
+  for (const r of computed) {
+    const ym = ymFromDateLike(r.month);
+    const shouldUpdate = Boolean(r._locked && ym && ym <= targetYm);
+    if (!shouldUpdate) continue;
+
+    // eslint-disable-next-line no-await-in-loop
+    await upsertMonthRow(client, {
+      slug: SLUG,
+      month: normalizeMonthISO(r.month),
+      revenue: toNum(r.revenue),
+      cogs: toNum(r.cogs),
+      loan_paid: toNum(r.loan_paid),
+      opex: toNum(r.opex),
+      capex: toNum(r.capex),
+      cash_end: toNum(r.cash_end),
+      notes: ensureLockedTag(r.notes),
+    });
+
+    updatedCount += 1;
+  }
+
+  return { updatedCount };
+}
+
 /**
  * SETTINGS
  */
@@ -553,14 +614,14 @@ router.get("/donas/finance/months/:month/lock-preview", authenticateToken, requi
     const yms = baseRows.map((r) => r._ym).filter(Boolean);
     const purchasesByYm = await getPurchasesSumsByMonth(pool, yms);
 
-    // current (как сейчас считается)
+    // current
     const currentComputed = computeChainWithSnapshots({
       cashStart,
       monthRows: baseRows,
       purchasesByYm,
     });
 
-    // planned (как будет считаться после lock)
+    // planned (как будет после lock: только если month не locked)
     const plannedRows = baseRows.map((r) => {
       const ym = r._ym;
       const alreadyLocked = Boolean(r._locked);
@@ -570,10 +631,8 @@ router.get("/donas/finance/months/:month/lock-preview", authenticateToken, requi
           ? Boolean(ym && ym <= targetYm)
           : Boolean(ym && ym === targetYm);
 
-      // Уже locked не трогаем в preview (это снепшот). Для обновления — resnapshot.
       if (alreadyLocked) return r;
 
-      // Только кандидаты на lock меняем: notes + snapshot opex/capex (из purchases)
       if (shouldAffect) {
         const pur = purchasesByYm?.[ym] || { opex: 0, capex: 0 };
         return {
@@ -616,23 +675,20 @@ router.get("/donas/finance/months/:month/lock-preview", authenticateToken, requi
       const plan = byYmPlanned[ym];
       const pur = purchasesByYm?.[ym] || { opex: 0, capex: 0 };
 
-      const curLocked = Boolean(cur?._locked);
-      const planLocked = Boolean(plan?._locked);
-
       const snapOpex = toNum(cur?._snapshot?.opex);
       const snapCapex = toNum(cur?._snapshot?.capex);
 
       return {
         ym,
         current: {
-          locked: curLocked,
+          locked: Boolean(cur?._locked),
           cash_end: toNum(cur?.cash_end),
           opex: toNum(cur?.opex),
           capex: toNum(cur?.capex),
           notes: String(cur?.notes || ""),
         },
         planned: {
-          locked: planLocked,
+          locked: Boolean(plan?._locked),
           cash_end: toNum(plan?.cash_end),
           opex: toNum(plan?.opex),
           capex: toNum(plan?.capex),
@@ -649,7 +705,6 @@ router.get("/donas/finance/months/:month/lock-preview", authenticateToken, requi
           notes: String(cur?._snapshot?.notes || ""),
         },
         diff: {
-          // полезно для already locked: purchases - snapshot
           opex: toNum(pur.opex) - toNum(snapOpex),
           capex: toNum(pur.capex) - toNum(snapCapex),
         },
@@ -843,6 +898,31 @@ router.post("/donas/finance/months/:month/resnapshot", authenticateToken, requir
   }
 });
 
+// (Шаг 11) Bulk re-snapshot ALL locked months <= selected
+router.post("/donas/finance/months/:month/resnapshot-up-to", authenticateToken, requireAdmin, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const monthParam = req.params.month;
+    const monthIso = isoMonthStartFromYM(monthParam) || monthParam;
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(monthIso))) {
+      return res.status(400).json({ error: "Bad month format (expected YYYY-MM or YYYY-MM-01)" });
+    }
+
+    await client.query("begin");
+    const { updatedCount } = await resnapshotLockedUpToISO(client, monthIso);
+    await client.query("commit");
+
+    return res.json({ ok: true, updatedCount });
+  } catch (e) {
+    try { await client.query("rollback"); } catch {}
+    console.error("finance/month resnapshot-up-to error:", e);
+    res.status(500).json({ error: "Failed to bulk resnapshot" });
+  } finally {
+    client.release();
+  }
+});
+
 /**
  * PUT month
  * ШАГ 9 (guardrails):
@@ -892,7 +972,6 @@ router.put("/donas/finance/months/:month", authenticateToken, requireAdmin, asyn
       revenue: toNum(b.revenue),
       cogs: toNum(b.cogs),
       loan_paid: toNum(b.loan_paid),
-      // auto months: opex/capex/cash_end не сохраняем
       opex: 0,
       capex: 0,
       cash_end: 0,
