@@ -6,12 +6,11 @@ const authenticateToken = require("../middleware/authenticateToken");
 const requireAdmin = require("../middleware/requireAdmin");
 
 const router = express.Router();
-
 const SLUG = "donas-dosas";
 
 /**
  * =========================
- * AUDIT (DB + helpers)
+ * Audit (DB + helpers)
  * =========================
  */
 
@@ -53,6 +52,31 @@ async function ensureAuditTable(client = pool) {
     CREATE INDEX IF NOT EXISTS idx_donas_fin_audit_slug_time
     ON donas_finance_months_audit(slug, created_at DESC);
   `);
+}
+
+function toNum(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function normalizeMonthISO(d) {
+  const s = String(d || "");
+  if (!s) return "";
+  return s.slice(0, 10);
+}
+
+function ymFromDateLike(x) {
+  const s = String(x || "");
+  if (!s) return null;
+  if (/^\d{4}-\d{2}/.test(s)) return s.slice(0, 7);
+  if (/^\d{4}-\d{2}$/.test(s)) return s;
+  return null;
+}
+
+function isoMonthStartFromYM(ym) {
+  const m = ymFromDateLike(ym);
+  if (!m) return null;
+  return `${m}-01`;
 }
 
 function pickMonthRowForAudit(row) {
@@ -122,7 +146,7 @@ async function writeAudit(
 
 /**
  * =========================
- * CORE helpers
+ * Core helpers
  * =========================
  */
 
@@ -144,31 +168,6 @@ function removeLockedTag(notes) {
     .filter((t) => t && t.toLowerCase() !== "#locked")
     .join(" ")
     .trim();
-}
-
-function ymFromDateLike(x) {
-  const s = String(x || "");
-  if (!s) return null;
-  if (/^\d{4}-\d{2}/.test(s)) return s.slice(0, 7);
-  if (/^\d{4}-\d{2}$/.test(s)) return s;
-  return null;
-}
-
-function isoMonthStartFromYM(ym) {
-  const m = ymFromDateLike(ym);
-  if (!m) return null;
-  return `${m}-01`;
-}
-
-function normalizeMonthISO(d) {
-  const s = String(d || "");
-  if (!s) return "";
-  return s.slice(0, 10);
-}
-
-function toNum(v) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
 }
 
 async function getCashStart(client = pool) {
@@ -677,7 +676,7 @@ router.put("/donas/finance/settings", authenticateToken, requireAdmin, async (re
 
 /**
  * =========================
- * MONTHS (server cashflow + snapshot/auto)
+ * MONTHS (server cashflow + auto/snapshot)
  * =========================
  */
 
@@ -988,7 +987,6 @@ router.get(
         purchasesByYm,
       });
 
-      // planned: only locked months <= target get refreshed (opex/capex) then chain recomputed
       const plannedRows = baseRows.map((r) => {
         const ym = r._ym;
         const shouldResnap = Boolean(r._locked && ym && ym <= targetYm);
@@ -1001,7 +999,7 @@ router.get(
           notes: ensureLockedTag(r.notes),
           opex: toNum(pur.opex),
           capex: toNum(pur.capex),
-          cash_end: 0, // recompute
+          cash_end: 0,
         };
       });
 
@@ -1039,10 +1037,24 @@ router.get(
         return {
           ym,
           purchases: { opex: toNum(pur.opex), capex: toNum(pur.capex) },
-          snapshot_before: { opex: curSnapOpex, capex: curSnapCapex, cash_end: toNum(cur?.cash_end) },
-          snapshot_after: { opex: toNum(plan?.opex), capex: toNum(plan?.capex), cash_end: toNum(plan?.cash_end) },
-          diff_before: { opex: toNum(pur.opex) - toNum(curSnapOpex), capex: toNum(pur.capex) - toNum(curSnapCapex) },
-          diff_after: { opex: toNum(pur.opex) - toNum(plan?.opex), capex: toNum(pur.capex) - toNum(plan?.capex) },
+          snapshot_before: {
+            opex: curSnapOpex,
+            capex: curSnapCapex,
+            cash_end: toNum(cur?.cash_end),
+          },
+          snapshot_after: {
+            opex: toNum(plan?.opex),
+            capex: toNum(plan?.capex),
+            cash_end: toNum(plan?.cash_end),
+          },
+          diff_before: {
+            opex: toNum(pur.opex) - toNum(curSnapOpex),
+            capex: toNum(pur.capex) - toNum(curSnapCapex),
+          },
+          diff_after: {
+            opex: toNum(pur.opex) - toNum(plan?.opex),
+            capex: toNum(pur.capex) - toNum(plan?.capex),
+          },
           delta_cash_end: toNum(plan?.cash_end) - toNum(cur?.cash_end),
         };
       });
@@ -1070,7 +1082,7 @@ router.get(
 
 /**
  * =========================
- * sync / lock / unlock / resnapshot / bulk
+ * Actions: sync / lock / unlock / resnapshot / bulk
  * =========================
  */
 
