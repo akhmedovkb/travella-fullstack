@@ -16,9 +16,7 @@ function isLockedNotes(notes) {
 function ymFromDateLike(x) {
   const s = String(x || "");
   if (!s) return null;
-  // "YYYY-MM-01" or "YYYY-MM-31T..." -> "YYYY-MM"
   if (/^\d{4}-\d{2}/.test(s)) return s.slice(0, 7);
-  // "YYYY-MM"
   if (/^\d{4}-\d{2}$/.test(s)) return s;
   return null;
 }
@@ -35,7 +33,6 @@ function toNum(v) {
 }
 
 function normalizeMonthISO(d) {
-  // DB date -> "YYYY-MM-01"
   const s = String(d || "");
   if (!s) return "";
   return s.slice(0, 10);
@@ -86,35 +83,51 @@ function computeChainWithSnapshots({ cashStart, monthRows, purchasesByYm }) {
 
     const purchases = purchasesByYm?.[ym] || { opex: 0, capex: 0 };
 
-    // Для unlocked: берём из purchases
-    // Для locked: берём snapshot из donas_finance_months
-    const opex = locked ? toNum(r.opex) : toNum(purchases.opex);
-    const capex = locked ? toNum(r.capex) : toNum(purchases.capex);
+    // effective opex/capex used in computations:
+    const opexEff = locked ? toNum(r.opex) : toNum(purchases.opex);
+    const capexEff = locked ? toNum(r.capex) : toNum(purchases.capex);
 
     const gp = revenue - cogs;
-    const netOp = gp - opex;
-    const cf = netOp - loan_paid - capex;
+    const netOp = gp - opexEff;
+    const cf = netOp - loan_paid - capexEff;
+
+    // Attach debug blocks for UI:
+    const snapshot = {
+      opex: toNum(r.opex),
+      capex: toNum(r.capex),
+      cash_end: toNum(r.cash_end),
+      notes: String(r.notes || ""),
+    };
+
+    const purchasesBlock = {
+      opex: toNum(purchases.opex),
+      capex: toNum(purchases.capex),
+    };
 
     if (locked) {
       cash = toNum(r.cash_end);
       return {
         ...r,
-        opex,
-        capex,
+        opex: opexEff,
+        capex: capexEff,
         cash_end: cash,
         _calc: { gp, netOp, cf },
         _source: { opex: "snapshot", capex: "snapshot" },
+        _snapshot: snapshot,
+        _purchases: purchasesBlock,
       };
     }
 
     cash = cash + cf;
     return {
       ...r,
-      opex,
-      capex,
+      opex: opexEff,
+      capex: capexEff,
       cash_end: cash,
       _calc: { gp, netOp, cf },
       _source: { opex: "purchases", capex: "purchases" },
+      _snapshot: snapshot, // будет 0/пусто, если snapshot не заполнен — нормально
+      _purchases: purchasesBlock,
     };
   });
 }
@@ -290,7 +303,6 @@ router.get("/donas/finance/months", authenticateToken, requireAdmin, async (req,
     const purchasesByYm = await getPurchasesSumsByMonth(yms);
 
     const computed = computeChainWithSnapshots({ cashStart, monthRows: rows, purchasesByYm });
-
     res.json(computed);
   } catch (e) {
     console.error("finance/months GET error:", e);
@@ -298,7 +310,7 @@ router.get("/donas/finance/months", authenticateToken, requireAdmin, async (req,
   }
 });
 
-// ✅ Sync months from donas_purchases (auto-create missing months)
+// ✅ Sync months from purchases (auto-create missing months)
 router.post("/donas/finance/months/sync", authenticateToken, requireAdmin, async (req, res) => {
   try {
     const r = await pool.query(`
@@ -355,7 +367,7 @@ router.post("/donas/finance/months/sync", authenticateToken, requireAdmin, async
   }
 });
 
-// ✅ Proper unlock: remove #locked and clear snapshot fields (so month becomes auto again)
+// ✅ Proper unlock: remove #locked and clear snapshot fields
 router.post("/donas/finance/months/:month/unlock", authenticateToken, requireAdmin, async (req, res) => {
   try {
     const monthParam = req.params.month;
@@ -414,7 +426,6 @@ router.put("/donas/finance/months/:month", authenticateToken, requireAdmin, asyn
     const b = req.body || {};
     const nextNotes = String(b.notes || "");
 
-    // determine lock transition
     const prev = await pool.query(
       `select notes from donas_finance_months where slug=$1 and month=$2 limit 1`,
       [SLUG, month]
@@ -429,21 +440,20 @@ router.put("/donas/finance/months/:month", authenticateToken, requireAdmin, asyn
       revenue: toNum(b.revenue),
       cogs: toNum(b.cogs),
       loan_paid: toNum(b.loan_paid),
-      // default for unlocked: do not store derived fields
       opex: 0,
       capex: 0,
       cash_end: 0,
       notes: nextNotes,
     };
 
-    // If month is locked and stays locked: allow manual snapshot edits
+    // locked stays locked: allow manual snapshot edits
     if (wasLocked && willBeLocked) {
       payload.opex = toNum(b.opex);
       payload.capex = toNum(b.capex);
       payload.cash_end = toNum(b.cash_end);
     }
 
-    // If transition to locked now: create snapshot (opex/capex from purchases + computed cash_end)
+    // transition to locked: snapshot it (purchases + computed cash_end)
     if (!wasLocked && willBeLocked) {
       const all = await pool.query(
         `
@@ -475,7 +485,6 @@ router.put("/donas/finance/months/:month", authenticateToken, requireAdmin, asyn
         };
       });
 
-      // inject current edited month row into list with locked=true
       const monthIso = normalizeMonthISO(month);
       const ym = ymFromDateLike(monthIso);
 
@@ -497,7 +506,6 @@ router.put("/donas/finance/months/:month", authenticateToken, requireAdmin, asyn
       if (idx >= 0) list[idx] = { ...list[idx], ...injected };
       else list.push(injected);
 
-      // compute chain with purchases + existing snapshots
       const s = await pool.query(
         `select cash_start from donas_finance_settings where slug=$1 limit 1`,
         [SLUG]
@@ -510,7 +518,6 @@ router.put("/donas/finance/months/:month", authenticateToken, requireAdmin, asyn
 
       const purchasesByYm = await getPurchasesSumsByMonth(sorted.map((r) => r._ym));
       const computed = computeChainWithSnapshots({ cashStart, monthRows: sorted, purchasesByYm });
-
       const snap = computed.find((r) => normalizeMonthISO(r.month) === monthIso);
 
       payload.opex = toNum(snap?.opex);
