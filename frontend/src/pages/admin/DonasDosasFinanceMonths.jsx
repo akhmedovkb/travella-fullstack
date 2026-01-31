@@ -108,14 +108,24 @@ export default function DonasDosasFinanceMonths() {
     setErr("");
     setOk("");
     try {
+      const locked = isLocked(draft.notes);
+
+      // Non-locked months:
+      // - OPEX/CAPEX are derived from donas_purchases on the server.
+      // - cash_end is computed by the server as a chain.
+      // Locked months are snapshots, so server allows manual patch for opex/capex/cash_end.
       const payload = {
         revenue: toNum(draft.revenue),
         cogs: toNum(draft.cogs),
-        opex: toNum(draft.opex),
-        capex: toNum(draft.capex),
         loan_paid: toNum(draft.loan_paid),
-        cash_end: toNum(draft.cash_end),
         notes: String(draft.notes || ""),
+        ...(locked
+          ? {
+              opex: toNum(draft.opex),
+              capex: toNum(draft.capex),
+              cash_end: toNum(draft.cash_end),
+            }
+          : {}),
       };
 
       await apiPut(`/api/admin/donas/finance/months/${editYm}`, payload);
@@ -174,6 +184,7 @@ export default function DonasDosasFinanceMonths() {
         ...r,
         _ym: ymFromDateLike(r.month),
         _locked: isLocked(r.notes),
+        _source: r._source || null,
         _calc: { gp, netOp, cf },
       };
     });
@@ -268,6 +279,14 @@ export default function DonasDosasFinanceMonths() {
                           locked
                         </span>
                       )}
+                      {!r._locked && (
+                        <span
+                          className="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200"
+                          title="OPEX/CAPEX подтягиваются из Purchases"
+                        >
+                          auto
+                        </span>
+                      )}
                     </div>
                   </td>
 
@@ -320,8 +339,8 @@ export default function DonasDosasFinanceMonths() {
                 <div className="text-sm font-semibold">Редактирование: {editYm}</div>
                 <div className="text-xs text-gray-500">
                   {isLocked(draft.notes)
-                    ? "locked: cash_end можно править (снапшот)."
-                    : "cash_end считается цепочкой на сервере (после сохранения обнови список)."}
+                    ? "locked: это снепшот. Можно править cash_end (и при необходимости OPEX/CAPEX)."
+                    : "OPEX/CAPEX подтягиваются из Purchases, cash_end считается цепочкой на сервере."}
                 </div>
               </div>
               <button
@@ -338,8 +357,8 @@ export default function DonasDosasFinanceMonths() {
               {[
                 ["revenue", "Revenue"],
                 ["cogs", "COGS"],
-                ["opex", "OPEX"],
-                ["capex", "CAPEX"],
+                ["opex", "OPEX (auto from Purchases)"],
+                ["capex", "CAPEX (auto from Purchases)"],
                 ["loan_paid", "Loan paid"],
               ].map(([k, label]) => (
                 <label key={k} className="text-xs text-gray-600">
@@ -353,7 +372,12 @@ export default function DonasDosasFinanceMonths() {
                         [k]: e.target.value,
                       }))
                     }
-                    disabled={saving || isLocked(draft.notes)}
+                    disabled={
+                      saving ||
+                      (k === "opex" || k === "capex"
+                        ? !isLocked(draft.notes) // non-locked: always read-only
+                        : isLocked(draft.notes))
+                    }
                     inputMode="numeric"
                     placeholder={currency}
                   />
@@ -362,49 +386,4 @@ export default function DonasDosasFinanceMonths() {
 
               <label className="text-xs text-gray-600">
                 <div className="mb-1">Cash end (manual for locked)</div>
-                <input
-                  className="w-full border rounded-lg px-3 py-2 bg-white"
-                  value={draft.cash_end}
-                  onChange={(e) => setDraft((d) => ({ ...d, cash_end: e.target.value }))}
-                  disabled={saving || !isLocked(draft.notes)}
-                  inputMode="numeric"
-                  placeholder={currency}
-                />
-              </label>
-
-              <label className="text-xs text-gray-600 col-span-2 md:col-span-3">
-                <div className="mb-1">Notes</div>
-                <input
-                  className="w-full border rounded-lg px-3 py-2 bg-white"
-                  value={draft.notes}
-                  onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))}
-                  disabled={saving}
-                  placeholder="например: #locked, комментарий..."
-                />
-              </label>
-            </div>
-
-            <div className="flex items-center justify-end gap-2">
-              <button
-                type="button"
-                className="px-4 py-2 rounded-lg border bg-white hover:bg-gray-50"
-                onClick={stopEdit}
-                disabled={saving}
-              >
-                Отмена
-              </button>
-              <button
-                type="button"
-                className="px-4 py-2 rounded-lg bg-black text-white hover:bg-gray-900 disabled:opacity-50"
-                onClick={saveDraft}
-                disabled={saving}
-              >
-                {saving ? "Сохраняю…" : "Сохранить"}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
+                <in
