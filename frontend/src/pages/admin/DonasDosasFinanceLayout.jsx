@@ -1,16 +1,18 @@
 // frontend/src/pages/admin/DonasDosasFinanceLayout.jsx
-import React from "react";
+
 import { NavLink, Outlet } from "react-router-dom";
 
-function Tab({ to, label }) {
+function Tab({ to, label, end }) {
   return (
     <NavLink
       to={to}
-      end
+      end={end}
       className={({ isActive }) =>
         [
-          "inline-flex items-center justify-center px-3 py-1.5 rounded-full text-sm transition",
-          isActive ? "bg-black text-white" : "bg-white ring-1 ring-black/10 hover:bg-black/5",
+          "px-3 py-2 rounded-xl text-sm border transition",
+          isActive
+            ? "bg-black text-white border-black"
+            : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50",
         ].join(" ")
       }
     >
@@ -21,23 +23,25 @@ function Tab({ to, label }) {
 
 export default function DonasDosasFinanceLayout() {
   return (
-    <div className="max-w-6xl mx-auto">
-      <div className="mb-4">
-        <h1 className="text-2xl font-semibold">Dona’s Dosas — Finance</h1>
-
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Tab to="/admin/donas-dosas/finance" label="Overview" />
-          <Tab to="/admin/donas-dosas/finance/opex" label="OPEX" />
-          <Tab to="/admin/donas-dosas/finance/capex" label="CAPEX" />
-          <Tab to="/admin/donas-dosas/finance/cogs" label="COGS" />
-          <Tab to="/admin/donas-dosas/finance/profit" label="Profit" />
-          <Tab to="/admin/donas-dosas/finance/investor" label="Investor" />
+    <div className="max-w-6xl mx-auto px-4 py-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="text-xs text-gray-500">Admin</div>
+          <h1 className="text-2xl font-semibold">Dona’s Dosas — Finance</h1>
         </div>
       </div>
 
-      <div className="rounded-2xl bg-white ring-1 ring-black/10 p-4">
-        <Outlet />
+      <div className="flex flex-wrap gap-2">
+        <Tab to="" end label="Overview" />
+        <Tab to="months" label="Months" />
+        <Tab to="opex" label="OPEX" />
+        <Tab to="capex" label="CAPEX" />
+        <Tab to="cogs" label="COGS" />
+        <Tab to="profit" label="Profit / Margin" />
+        <Tab to="investor" label="Investor" />
       </div>
+
+      <Outlet />
     </div>
   );
 }
