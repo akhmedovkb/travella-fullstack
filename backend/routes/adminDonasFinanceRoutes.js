@@ -312,7 +312,77 @@ async function getPurchasesSumsByMonth(client, ymList) {
   return out;
 }
 
-function computeChainWithSnapshots({ cashStart, monthRows, purchasesByYm }) {
+/**
+ * =========================
+ * Adjustments (one-off cashflow deltas)
+ * =========================
+ * amount: positive adds cash, negative reduces cash
+ * запрещаем создавать/редактировать/удалять для locked месяца
+ */
+
+async function ensureAdjustmentsTable(client = pool) {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS donas_finance_adjustments (
+      id BIGSERIAL PRIMARY KEY,
+      slug TEXT NOT NULL,
+      month DATE NOT NULL,
+      amount NUMERIC NOT NULL DEFAULT 0,
+      title TEXT NOT NULL DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_donas_fin_adj_slug_month
+    ON donas_finance_adjustments(slug, month);
+  `);
+}
+
+async function getAdjustmentsSumsByMonth(client, ymList) {
+  await ensureAdjustmentsTable(client);
+
+  const months = (Array.isArray(ymList) ? ymList : [])
+    .map((x) => ymFromDateLike(x))
+    .filter(Boolean);
+
+  if (!months.length) return {};
+
+  const q = await client.query(
+    `
+    select
+      to_char(month,'YYYY-MM') as ym,
+      coalesce(sum(amount),0) as total
+    from donas_finance_adjustments
+    where slug=$1 and to_char(month,'YYYY-MM') = any($2)
+    group by 1
+    `,
+    [SLUG, months]
+  );
+
+  const out = {};
+  for (const r of q.rows || []) {
+    const ym = ymFromDateLike(r.ym);
+    if (!ym) continue;
+    out[ym] = toNum(r.total);
+  }
+  return out;
+}
+
+async function assertMonthNotLocked(client, monthIso) {
+  const q = await client.query(
+    `select notes from donas_finance_months where slug=$1 and month=$2 limit 1`,
+    [SLUG, monthIso]
+  );
+  const notes = String(q.rows?.[0]?.notes || "");
+  if (isLockedNotes(notes)) {
+    const err = new Error("Locked month is read-only. Adjustments are forbidden in locked months.");
+    err.statusCode = 400;
+    throw err;
+  }
+}
+
+function computeChainWithSnapshots({ cashStart, monthRows, purchasesByYm, adjustmentsByYm }) {
   let cash = toNum(cashStart);
 
   return (monthRows || []).map((r) => {
@@ -328,9 +398,11 @@ function computeChainWithSnapshots({ cashStart, monthRows, purchasesByYm }) {
     const opexEff = locked ? toNum(r.opex) : toNum(purchases.opex);
     const capexEff = locked ? toNum(r.capex) : toNum(purchases.capex);
 
+    const adj = toNum(adjustmentsByYm?.[ym] ?? 0);
+
     const gp = revenue - cogs;
     const netOp = gp - opexEff;
-    const cf = netOp - loan_paid - capexEff;
+    const cf = netOp - loan_paid - capexEff + adj;
 
     const snapshot = {
       opex: toNum(r.opex),
@@ -344,6 +416,8 @@ function computeChainWithSnapshots({ cashStart, monthRows, purchasesByYm }) {
       capex: toNum(purchases.capex),
     };
 
+      const adjustmentsBlock = { total: adj };
+
     if (locked) {
       cash = toNum(r.cash_end);
       return {
@@ -351,10 +425,11 @@ function computeChainWithSnapshots({ cashStart, monthRows, purchasesByYm }) {
         opex: opexEff,
         capex: capexEff,
         cash_end: cash,
-        _calc: { gp, netOp, cf },
+          _calc: { gp, netOp, adj, cf },
         _source: { opex: "snapshot", capex: "snapshot" },
         _snapshot: snapshot,
         _purchases: purchasesBlock,
+          _adjustments: adjustmentsBlock,
       };
     }
 
@@ -364,10 +439,11 @@ function computeChainWithSnapshots({ cashStart, monthRows, purchasesByYm }) {
       opex: opexEff,
       capex: capexEff,
       cash_end: cash,
-      _calc: { gp, netOp, cf },
+        _calc: { gp, netOp, adj, cf },
       _source: { opex: "purchases", capex: "purchases" },
       _snapshot: snapshot,
       _purchases: purchasesBlock,
+        _adjustments: adjustmentsBlock,
     };
   });
 }
@@ -381,6 +457,11 @@ async function snapshotMonthByISO(client, monthIso) {
 
   const cashStart = await getCashStart(client);
   const purchasesByYmAll = await getPurchasesSumsByMonth(
+    client,
+    rows.map((r) => r._ym).filter(Boolean)
+  );
+
+  const adjustmentsByYmAll = await getAdjustmentsSumsByMonth(
     client,
     rows.map((r) => r._ym).filter(Boolean)
   );
@@ -400,6 +481,7 @@ async function snapshotMonthByISO(client, monthIso) {
     cashStart,
     monthRows: rows,
     purchasesByYm: purchasesByYmAll,
+    adjustmentsByYm: adjustmentsByYmAll,
   });
 
   const snap = computed.find((r) => normalizeMonthISO(r.month) === monthIso);
@@ -448,6 +530,11 @@ async function snapshotUpToISO(client, targetMonthIso) {
     rows.map((r) => r._ym).filter(Boolean)
   );
 
+  const adjustmentsByYmAll = await getAdjustmentsSumsByMonth(
+    client,
+    rows.map((r) => r._ym).filter(Boolean)
+  );
+
   const work = rows.map((r) => {
     const ym = r._ym;
     const shouldLock = ym && ym <= targetYm;
@@ -468,6 +555,7 @@ async function snapshotUpToISO(client, targetMonthIso) {
     cashStart,
     monthRows: work,
     purchasesByYm: purchasesByYmAll,
+    adjustmentsByYm: adjustmentsByYmAll,
   });
 
   let lockedCount = 0;
@@ -505,6 +593,8 @@ async function resnapshotLockedUpToISO(client, targetMonthIso) {
   const yms = rows.map((r) => r._ym).filter(Boolean);
   const purchasesByYmAll = await getPurchasesSumsByMonth(client, yms);
 
+  const adjustmentsByYmAll = await getAdjustmentsSumsByMonth(client, yms);
+
   const work = rows.map((r) => {
     const ym = r._ym;
     const shouldResnap = Boolean(r._locked && ym && ym <= targetYm);
@@ -525,6 +615,7 @@ async function resnapshotLockedUpToISO(client, targetMonthIso) {
     cashStart,
     monthRows: work,
     purchasesByYm: purchasesByYmAll,
+    adjustmentsByYm: adjustmentsByYmAll,
   });
 
   let updatedCount = 0;
@@ -695,14 +786,23 @@ router.get("/donas/finance/months", authenticateToken, requireAdmin, async (req,
     const yms = rows.map((r) => r._ym).filter(Boolean);
     const purchasesByYm = await getPurchasesSumsByMonth(pool, yms);
 
-    const computed = computeChainWithSnapshots({ cashStart, monthRows: rows, purchasesByYm });
+    const adjustmentsByYm = await getAdjustmentsSumsByMonth(pool, yms);
+
+    const computed = computeChainWithSnapshots({
+      cashStart,
+      monthRows: rows,
+      purchasesByYm,
+      adjustmentsByYm,
+    });
 
     const out = computed.map((r) => {
       const ym = ymFromDateLike(r.month);
       const pur = purchasesByYm?.[ym] || { opex: 0, capex: 0 };
       const snap = { opex: toNum(r._snapshot?.opex), capex: toNum(r._snapshot?.capex) };
+      const adj = toNum(adjustmentsByYm?.[ym] ?? 0);
       return {
         ...r,
+        _adj_total: adj,
         _diff: {
           opex: toNum(pur.opex) - toNum(snap.opex),
           capex: toNum(pur.capex) - toNum(snap.capex),
@@ -1134,10 +1234,13 @@ router.get("/donas/finance/months/:month/lock-preview", authenticateToken, requi
     const yms = baseRows.map((r) => r._ym).filter(Boolean);
     const purchasesByYm = await getPurchasesSumsByMonth(pool, yms);
 
+    const adjustmentsByYm = await getAdjustmentsSumsByMonth(pool, yms);
+
     const currentComputed = computeChainWithSnapshots({
       cashStart,
       monthRows: baseRows,
       purchasesByYm,
+      adjustmentsByYm,
     });
 
     const plannedRows = baseRows.map((r) => {
@@ -1170,6 +1273,7 @@ router.get("/donas/finance/months/:month/lock-preview", authenticateToken, requi
       cashStart,
       monthRows: plannedRows,
       purchasesByYm,
+      adjustmentsByYm,
     });
 
     const byYmCurrent = {};
@@ -1192,6 +1296,7 @@ router.get("/donas/finance/months/:month/lock-preview", authenticateToken, requi
       const cur = byYmCurrent[ym];
       const plan = byYmPlanned[ym];
       const pur = purchasesByYm?.[ym] || { opex: 0, capex: 0 };
+      const adj = toNum(adjustmentsByYm?.[ym] ?? 0);
 
       const snapOpex = toNum(cur?._snapshot?.opex);
       const snapCapex = toNum(cur?._snapshot?.capex);
@@ -1215,6 +1320,9 @@ router.get("/donas/finance/months/:month/lock-preview", authenticateToken, requi
         purchases: {
           opex: toNum(pur.opex),
           capex: toNum(pur.capex),
+        },
+        adjustments: {
+          total: adj,
         },
         snapshot: {
           opex: snapOpex,
@@ -1278,10 +1386,13 @@ router.get(
       const yms = baseRows.map((r) => r._ym).filter(Boolean);
       const purchasesByYm = await getPurchasesSumsByMonth(pool, yms);
 
+      const adjustmentsByYm = await getAdjustmentsSumsByMonth(pool, yms);
+
       const currentComputed = computeChainWithSnapshots({
         cashStart,
         monthRows: baseRows,
         purchasesByYm,
+        adjustmentsByYm,
       });
 
       const plannedRows = baseRows.map((r) => {
@@ -1304,6 +1415,7 @@ router.get(
         cashStart,
         monthRows: plannedRows,
         purchasesByYm,
+        adjustmentsByYm,
       });
 
       const byYmCurrent = {};
@@ -1327,6 +1439,7 @@ router.get(
         const cur = byYmCurrent[ym];
         const plan = byYmPlanned[ym];
         const pur = purchasesByYm?.[ym] || { opex: 0, capex: 0 };
+        const adj = toNum(adjustmentsByYm?.[ym] ?? 0);
 
         const curSnapOpex = toNum(cur?._snapshot?.opex);
         const curSnapCapex = toNum(cur?._snapshot?.capex);
@@ -1334,6 +1447,7 @@ router.get(
         return {
           ym,
           purchases: { opex: toNum(pur.opex), capex: toNum(pur.capex) },
+          adjustments: { total: adj },
           snapshot_before: {
             opex: curSnapOpex,
             capex: curSnapCapex,
@@ -1539,6 +1653,201 @@ router.post("/donas/finance/months/:month/unlock", authenticateToken, requireAdm
     res.status(500).json({ error: "Failed to unlock month" });
   }
 });
+
+/**
+ * =========================
+ * ADJUSTMENTS API
+ * =========================
+ */
+
+router.get(
+  "/donas/finance/months/:month/adjustments",
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const monthParam = req.params.month;
+      const monthIso = isoMonthStartFromYM(monthParam) || monthParam;
+
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(monthIso))) {
+        return res.status(400).json({ error: "Bad month format (expected YYYY-MM or YYYY-MM-01)" });
+      }
+
+      await ensureAdjustmentsTable(pool);
+
+      const q = await pool.query(
+        `
+        select id, to_char(month,'YYYY-MM') as ym, amount, title, created_at, updated_at
+        from donas_finance_adjustments
+        where slug=$1 and month=$2
+        order by id desc
+        `,
+        [SLUG, monthIso]
+      );
+
+      return res.json({ ok: true, items: q.rows || [] });
+    } catch (e) {
+      console.error("finance/adjustments list error:", e);
+      return res.status(500).json({ error: "Failed to load adjustments" });
+    }
+  }
+);
+
+router.post(
+  "/donas/finance/months/:month/adjustments",
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    const client = await pool.connect();
+    try {
+      const monthParam = req.params.month;
+      const monthIso = isoMonthStartFromYM(monthParam) || monthParam;
+
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(monthIso))) {
+        return res.status(400).json({ error: "Bad month format (expected YYYY-MM or YYYY-MM-01)" });
+      }
+
+      const b = req.body || {};
+      const amount = toNum(b.amount);
+      const title = String(b.title || "").trim();
+
+      await client.query("begin");
+      await ensureMonthExists(client, monthIso);
+      await assertMonthNotLocked(client, monthIso);
+      await ensureAdjustmentsTable(client);
+
+      const q = await client.query(
+        `
+        insert into donas_finance_adjustments (slug, month, amount, title)
+        values ($1,$2,$3,$4)
+        returning id, to_char(month,'YYYY-MM') as ym, amount, title, created_at, updated_at
+        `,
+        [SLUG, monthIso, amount, title]
+      );
+
+      await writeAudit(client, req, {
+        action: "adjustment_create",
+        monthIso,
+        meta: { amount, title },
+      });
+
+      await client.query("commit");
+      return res.json({ ok: true, item: q.rows?.[0] || null });
+    } catch (e) {
+      try {
+        await client.query("rollback");
+      } catch {}
+      console.error("finance/adjustments create error:", e);
+      return res.status(e.statusCode || 500).json({ error: e.message || "Failed to create adjustment" });
+    } finally {
+      client.release();
+    }
+  }
+);
+
+router.put(
+  "/donas/finance/adjustments/:id",
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    const client = await pool.connect();
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: "Bad id" });
+
+      const b = req.body || {};
+      const amount = toNum(b.amount);
+      const title = String(b.title || "").trim();
+
+      await client.query("begin");
+      await ensureAdjustmentsTable(client);
+
+      const cur = await client.query(
+        `select id, month, amount, title from donas_finance_adjustments where slug=$1 and id=$2 limit 1`,
+        [SLUG, id]
+      );
+      if (!cur.rows.length) return res.status(404).json({ error: "Not found" });
+
+      const monthIso = normalizeMonthISO(cur.rows[0].month);
+      await assertMonthNotLocked(client, monthIso);
+
+      const q = await client.query(
+        `
+        update donas_finance_adjustments
+        set amount=$3, title=$4, updated_at=now()
+        where slug=$1 and id=$2
+        returning id, to_char(month,'YYYY-MM') as ym, amount, title, created_at, updated_at
+        `,
+        [SLUG, id, amount, title]
+      );
+
+      await writeAudit(client, req, {
+        action: "adjustment_update",
+        monthIso,
+        meta: {
+          id,
+          from: { amount: toNum(cur.rows[0].amount), title: String(cur.rows[0].title || "") },
+          to: { amount, title },
+        },
+      });
+
+      await client.query("commit");
+      return res.json({ ok: true, item: q.rows?.[0] || null });
+    } catch (e) {
+      try {
+        await client.query("rollback");
+      } catch {}
+      console.error("finance/adjustments update error:", e);
+      return res.status(e.statusCode || 500).json({ error: e.message || "Failed to update adjustment" });
+    } finally {
+      client.release();
+    }
+  }
+);
+
+router.delete(
+  "/donas/finance/adjustments/:id",
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    const client = await pool.connect();
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: "Bad id" });
+
+      await client.query("begin");
+      await ensureAdjustmentsTable(client);
+
+      const cur = await client.query(
+        `select id, month, amount, title from donas_finance_adjustments where slug=$1 and id=$2 limit 1`,
+        [SLUG, id]
+      );
+      if (!cur.rows.length) return res.status(404).json({ error: "Not found" });
+
+      const monthIso = normalizeMonthISO(cur.rows[0].month);
+      await assertMonthNotLocked(client, monthIso);
+
+      await client.query(`delete from donas_finance_adjustments where slug=$1 and id=$2`, [SLUG, id]);
+
+      await writeAudit(client, req, {
+        action: "adjustment_delete",
+        monthIso,
+        meta: { id, amount: toNum(cur.rows[0].amount), title: String(cur.rows[0].title || "") },
+      });
+
+      await client.query("commit");
+      return res.json({ ok: true });
+    } catch (e) {
+      try {
+        await client.query("rollback");
+      } catch {}
+      console.error("finance/adjustments delete error:", e);
+      return res.status(e.statusCode || 500).json({ error: e.message || "Failed to delete adjustment" });
+    } finally {
+      client.release();
+    }
+  }
+);
 
 router.post("/donas/finance/months/:month/resnapshot", authenticateToken, requireAdmin, async (req, res) => {
   const client = await pool.connect();
