@@ -7,7 +7,7 @@ const requireAdmin = require("../middleware/requireAdmin");
 
 const router = express.Router();
 
-const SLUG = "donas-dosas"; // один фудтрак: фиксируем slug (в ops/months/expenses он используется)
+const SLUG = "donas-dosas"; // один фудтрак: фиксируем slug
 
 function isLockedNotes(notes) {
   return String(notes || "").toLowerCase().includes("#locked");
@@ -34,16 +34,18 @@ function toNum(v) {
   return Number.isFinite(n) ? n : 0;
 }
 
-function monthStartISOFromYM(ym) {
-  const m = ymFromDateLike(ym);
-  if (!m) return null;
-  return `${m}-01`;
+function normalizeMonthISO(d) {
+  // DB date -> "YYYY-MM-01"
+  const s = String(d || "");
+  if (!s) return "";
+  return s.slice(0, 10);
 }
 
 async function getPurchasesSumsByMonth(ymList) {
   const months = (Array.isArray(ymList) ? ymList : [])
     .map((x) => ymFromDateLike(x))
     .filter(Boolean);
+
   if (!months.length) return {};
 
   const q = await pool.query(
@@ -72,7 +74,6 @@ async function getPurchasesSumsByMonth(ymList) {
 }
 
 function computeChainWithSnapshots({ cashStart, monthRows, purchasesByYm }) {
-  // monthRows: sorted asc, each item already normalized and contains _locked
   let cash = toNum(cashStart);
 
   return (monthRows || []).map((r) => {
@@ -84,6 +85,9 @@ function computeChainWithSnapshots({ cashStart, monthRows, purchasesByYm }) {
     const loan_paid = toNum(r.loan_paid);
 
     const purchases = purchasesByYm?.[ym] || { opex: 0, capex: 0 };
+
+    // Для unlocked: берём из purchases
+    // Для locked: берём snapshot из donas_finance_months
     const opex = locked ? toNum(r.opex) : toNum(purchases.opex);
     const capex = locked ? toNum(r.capex) : toNum(purchases.capex);
 
@@ -99,7 +103,7 @@ function computeChainWithSnapshots({ cashStart, monthRows, purchasesByYm }) {
         capex,
         cash_end: cash,
         _calc: { gp, netOp, cf },
-        _source: { opex_source: "snapshot", capex_source: "snapshot", mixed: false },
+        _source: { opex: "snapshot", capex: "snapshot" },
       };
     }
 
@@ -110,7 +114,7 @@ function computeChainWithSnapshots({ cashStart, monthRows, purchasesByYm }) {
       capex,
       cash_end: cash,
       _calc: { gp, netOp, cf },
-      _source: { opex_source: "purchases", capex_source: "purchases", mixed: false },
+      _source: { opex: "purchases", capex: "purchases" },
     };
   });
 }
@@ -119,10 +123,6 @@ function computeChainWithSnapshots({ cashStart, monthRows, purchasesByYm }) {
  * SETTINGS
  * GET  /api/admin/donas/finance/settings
  * PUT  /api/admin/donas/finance/settings
- *
- * Важно: этот роут подключён в backend/index.js как:
- *   app.use('/api/admin', adminDonasFinanceRoutes)
- * поэтому здесь держим полный префикс /donas/finance/*
  */
 router.get("/donas/finance/settings", authenticateToken, requireAdmin, async (req, res) => {
   try {
@@ -236,7 +236,10 @@ router.put("/donas/finance/settings", authenticateToken, requireAdmin, async (re
  * MONTHS
  * GET  /api/admin/donas/finance/months
  * PUT  /api/admin/donas/finance/months/:month
+ * POST /api/admin/donas/finance/months/sync
+ * POST /api/admin/donas/finance/months/:month/unlock
  */
+
 router.get("/donas/finance/months", authenticateToken, requireAdmin, async (req, res) => {
   try {
     const s = await pool.query(
@@ -264,36 +267,138 @@ router.get("/donas/finance/months", authenticateToken, requireAdmin, async (req,
       [SLUG]
     );
 
-    const rows = q.rows || [];
+    const rows = (q.rows || []).map((r) => {
+      const monthIso = normalizeMonthISO(r.month);
+      const ym = ymFromDateLike(monthIso);
+      const notes = String(r.notes || "");
+      return {
+        ...r,
+        month: monthIso,
+        revenue: toNum(r.revenue),
+        cogs: toNum(r.cogs),
+        opex: toNum(r.opex),
+        capex: toNum(r.capex),
+        loan_paid: toNum(r.loan_paid),
+        cash_end: toNum(r.cash_end),
+        notes,
+        _locked: isLockedNotes(notes),
+        _ym: ym,
+      };
+    });
 
-    const normalized = rows
-      .map((r) => {
-        const ym = ymFromDateLike(r.month);
-        const month = monthStartISOFromYM(ym) || r.month;
-        const notes = r.notes || "";
-        return {
-          ...r,
-          month,
-          revenue: toNum(r.revenue),
-          cogs: toNum(r.cogs),
-          opex: toNum(r.opex),
-          capex: toNum(r.capex),
-          loan_paid: toNum(r.loan_paid),
-          cash_end: toNum(r.cash_end),
-          notes,
-          _locked: isLockedNotes(notes),
-          _ym: ym,
-        };
-      })
-      .filter((r) => r._ym)
-      .sort((a, b) => String(a.month || "").localeCompare(String(b.month || "")));
+    const yms = rows.map((r) => r._ym).filter(Boolean);
+    const purchasesByYm = await getPurchasesSumsByMonth(yms);
 
-    const purchasesByYm = await getPurchasesSumsByMonth(normalized.map((r) => r._ym));
-    const out = computeChainWithSnapshots({ cashStart, monthRows: normalized, purchasesByYm });
-    res.json(out);
+    const computed = computeChainWithSnapshots({ cashStart, monthRows: rows, purchasesByYm });
+
+    res.json(computed);
   } catch (e) {
     console.error("finance/months GET error:", e);
     res.status(500).json({ error: "Failed to load months" });
+  }
+});
+
+// ✅ Sync months from donas_purchases (auto-create missing months)
+router.post("/donas/finance/months/sync", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const r = await pool.query(`
+      select
+        min(to_char(date,'YYYY-MM')) as min_ym,
+        max(to_char(date,'YYYY-MM')) as max_ym
+      from donas_purchases
+      where type in ('opex','capex')
+    `);
+
+    const minYm = r.rows?.[0]?.min_ym;
+    const maxYm = r.rows?.[0]?.max_ym;
+
+    if (!minYm || !maxYm) {
+      return res.json({ ok: true, inserted: 0, message: "No purchases found" });
+    }
+
+    const months = [];
+    const [minY, minM] = minYm.split("-").map((x) => Number(x));
+    const [maxY, maxM] = maxYm.split("-").map((x) => Number(x));
+
+    let y = minY;
+    let m = minM;
+
+    while (y < maxY || (y === maxY && m <= maxM)) {
+      const mm = String(m).padStart(2, "0");
+      months.push(`${y}-${mm}-01`);
+      m += 1;
+      if (m === 13) {
+        m = 1;
+        y += 1;
+      }
+    }
+
+    const ins = await pool.query(
+      `
+      insert into donas_finance_months (slug, month, revenue, cogs, opex, capex, loan_paid, cash_end, notes)
+      select $1 as slug, x.month::date, 0,0,0,0,0,0,''
+      from unnest($2::text[]) as x(month)
+      on conflict (slug, month) do nothing
+      returning month
+      `,
+      [SLUG, months]
+    );
+
+    return res.json({
+      ok: true,
+      inserted: ins.rows?.length || 0,
+      range: { minYm, maxYm },
+    });
+  } catch (e) {
+    console.error("finance/months sync error:", e);
+    res.status(500).json({ error: "Failed to sync months" });
+  }
+});
+
+// ✅ Proper unlock: remove #locked and clear snapshot fields (so month becomes auto again)
+router.post("/donas/finance/months/:month/unlock", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const monthParam = req.params.month;
+    const month = isoMonthStartFromYM(monthParam) || monthParam;
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(month))) {
+      return res.status(400).json({ error: "Bad month format (expected YYYY-MM or YYYY-MM-01)" });
+    }
+
+    const prev = await pool.query(
+      `select notes from donas_finance_months where slug=$1 and month=$2 limit 1`,
+      [SLUG, month]
+    );
+
+    if (!prev.rows.length) {
+      return res.status(404).json({ error: "Month not found" });
+    }
+
+    const prevNotes = String(prev.rows?.[0]?.notes || "");
+    const cleaned = prevNotes
+      .split(/\s+/)
+      .filter((t) => t.toLowerCase() !== "#locked")
+      .join(" ")
+      .trim();
+
+    const q = await pool.query(
+      `
+      update donas_finance_months
+      set
+        notes = $3,
+        opex = 0,
+        capex = 0,
+        cash_end = 0
+      where slug=$1 and month=$2
+      returning *
+      `,
+      [SLUG, month, cleaned]
+    );
+
+    return res.json({ ok: true, month: q.rows[0] });
+  } catch (e) {
+    console.error("finance/month unlock error:", e);
+    res.status(500).json({ error: "Failed to unlock month" });
   }
 });
 
@@ -307,15 +412,15 @@ router.put("/donas/finance/months/:month", authenticateToken, requireAdmin, asyn
     }
 
     const b = req.body || {};
+    const nextNotes = String(b.notes || "");
 
-    // Detect lock transition so we can persist a snapshot for this month.
+    // determine lock transition
     const prev = await pool.query(
       `select notes from donas_finance_months where slug=$1 and month=$2 limit 1`,
       [SLUG, month]
     );
     const prevNotes = String(prev.rows?.[0]?.notes || "");
     const wasLocked = isLockedNotes(prevNotes);
-    const nextNotes = String(b.notes || "");
     const willBeLocked = isLockedNotes(nextNotes);
 
     const payload = {
@@ -324,15 +429,21 @@ router.put("/donas/finance/months/:month", authenticateToken, requireAdmin, asyn
       revenue: toNum(b.revenue),
       cogs: toNum(b.cogs),
       loan_paid: toNum(b.loan_paid),
-      // opex/capex are derived from donas_purchases for non-locked months.
-      // For locked months we store a snapshot.
+      // default for unlocked: do not store derived fields
       opex: 0,
       capex: 0,
       cash_end: 0,
       notes: nextNotes,
     };
 
-    // If we are locking this month now, store a snapshot (opex/capex from purchases + computed cash_end).
+    // If month is locked and stays locked: allow manual snapshot edits
+    if (wasLocked && willBeLocked) {
+      payload.opex = toNum(b.opex);
+      payload.capex = toNum(b.capex);
+      payload.cash_end = toNum(b.cash_end);
+    }
+
+    // If transition to locked now: create snapshot (opex/capex from purchases + computed cash_end)
     if (!wasLocked && willBeLocked) {
       const all = await pool.query(
         `
@@ -345,27 +456,32 @@ router.put("/donas/finance/months/:month", authenticateToken, requireAdmin, asyn
         [SLUG]
       );
 
-      // Ensure this month exists in the in-memory list using the incoming payload values.
-      const ym = ymFromDateLike(month);
-      const monthISO = monthStartISOFromYM(ym) || month;
-      const list = (all.rows || []).map((r) => ({
-        ...r,
-        month: String(r.month).slice(0, 10),
-        revenue: toNum(r.revenue),
-        cogs: toNum(r.cogs),
-        opex: toNum(r.opex),
-        capex: toNum(r.capex),
-        loan_paid: toNum(r.loan_paid),
-        cash_end: toNum(r.cash_end),
-        notes: String(r.notes || ""),
-        _locked: isLockedNotes(r.notes),
-        _ym: ymFromDateLike(r.month),
-      }));
+      const list = (all.rows || []).map((r) => {
+        const mIso = normalizeMonthISO(r.month);
+        const ym = ymFromDateLike(mIso);
+        const notes = String(r.notes || "");
+        return {
+          ...r,
+          month: mIso,
+          revenue: toNum(r.revenue),
+          cogs: toNum(r.cogs),
+          opex: toNum(r.opex),
+          capex: toNum(r.capex),
+          loan_paid: toNum(r.loan_paid),
+          cash_end: toNum(r.cash_end),
+          notes,
+          _locked: isLockedNotes(notes),
+          _ym: ym,
+        };
+      });
 
-      const idx = list.findIndex((r) => monthStartISOFromYM(r._ym) === monthISO);
-      const row = {
+      // inject current edited month row into list with locked=true
+      const monthIso = normalizeMonthISO(month);
+      const ym = ymFromDateLike(monthIso);
+
+      const injected = {
         slug: SLUG,
-        month: monthISO,
+        month: monthIso,
         revenue: payload.revenue,
         cogs: payload.cogs,
         opex: 0,
@@ -376,10 +492,12 @@ router.put("/donas/finance/months/:month", authenticateToken, requireAdmin, asyn
         _locked: true,
         _ym: ym,
       };
-      if (idx >= 0) list[idx] = { ...list[idx], ...row };
-      else list.push(row);
 
-      // Recompute chain using purchases and existing snapshots, then snapshot this month.
+      const idx = list.findIndex((r) => normalizeMonthISO(r.month) === monthIso);
+      if (idx >= 0) list[idx] = { ...list[idx], ...injected };
+      else list.push(injected);
+
+      // compute chain with purchases + existing snapshots
       const s = await pool.query(
         `select cash_start from donas_finance_settings where slug=$1 limit 1`,
         [SLUG]
@@ -387,23 +505,17 @@ router.put("/donas/finance/months/:month", authenticateToken, requireAdmin, asyn
       const cashStart = toNum(s.rows?.[0]?.cash_start);
 
       const sorted = list
-        .filter((r) => r._ym)
+        .filter((r) => ymFromDateLike(r.month))
         .sort((a, b) => String(a.month || "").localeCompare(String(b.month || "")));
 
       const purchasesByYm = await getPurchasesSumsByMonth(sorted.map((r) => r._ym));
       const computed = computeChainWithSnapshots({ cashStart, monthRows: sorted, purchasesByYm });
-      const snap = computed.find((r) => String(r.month).slice(0, 10) === monthISO);
+
+      const snap = computed.find((r) => normalizeMonthISO(r.month) === monthIso);
 
       payload.opex = toNum(snap?.opex);
       payload.capex = toNum(snap?.capex);
       payload.cash_end = toNum(snap?.cash_end);
-    }
-
-    // If month stays locked, allow manual edits incl cash_end/opex/capex.
-    if (wasLocked && willBeLocked) {
-      payload.opex = toNum(b.opex);
-      payload.capex = toNum(b.capex);
-      payload.cash_end = toNum(b.cash_end);
     }
 
     const q = await pool.query(
