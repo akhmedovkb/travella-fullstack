@@ -9,6 +9,123 @@ const router = express.Router();
 
 const SLUG = "donas-dosas";
 
+/**
+ * =========================
+ * AUDIT (DB + helpers)
+ * =========================
+ */
+
+function getActor(req) {
+  const u = req.user || {};
+  return {
+    id: u.id ?? null,
+    role: String(u.role || "").toLowerCase() || null,
+    email: u.email || u.mail || null,
+    name: u.name || u.full_name || null,
+  };
+}
+
+async function ensureAuditTable(client = pool) {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS donas_finance_months_audit (
+      id BIGSERIAL PRIMARY KEY,
+      slug TEXT NOT NULL,
+      month DATE,
+      action TEXT NOT NULL,
+      actor_id BIGINT,
+      actor_role TEXT,
+      actor_email TEXT,
+      actor_name TEXT,
+      meta JSONB,
+      prev JSONB,
+      next JSONB,
+      diff JSONB,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_donas_fin_audit_slug_month_time
+    ON donas_finance_months_audit(slug, month, created_at DESC);
+  `);
+
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_donas_fin_audit_slug_time
+    ON donas_finance_months_audit(slug, created_at DESC);
+  `);
+}
+
+function pickMonthRowForAudit(row) {
+  if (!row) return null;
+  const monthIso = normalizeMonthISO(row.month);
+  return {
+    slug: row.slug,
+    month: monthIso,
+    revenue: toNum(row.revenue),
+    cogs: toNum(row.cogs),
+    opex: toNum(row.opex),
+    capex: toNum(row.capex),
+    loan_paid: toNum(row.loan_paid),
+    cash_end: toNum(row.cash_end),
+    notes: String(row.notes || ""),
+  };
+}
+
+function diffMonth(prev, next) {
+  const p = prev || {};
+  const n = next || {};
+  const keys = ["revenue", "cogs", "opex", "capex", "loan_paid", "cash_end", "notes"];
+  const d = {};
+  for (const k of keys) {
+    const pv = p[k];
+    const nv = n[k];
+    const same =
+      typeof pv === "number" && typeof nv === "number"
+        ? toNum(pv) === toNum(nv)
+        : String(pv ?? "") === String(nv ?? "");
+    if (!same) d[k] = { from: pv ?? null, to: nv ?? null };
+  }
+  return d;
+}
+
+async function writeAudit(
+  client,
+  req,
+  { action, monthIso = null, meta = null, prev = null, next = null }
+) {
+  await ensureAuditTable(client);
+  const actor = getActor(req);
+  const diff = diffMonth(prev, next);
+
+  await client.query(
+    `
+    INSERT INTO donas_finance_months_audit
+      (slug, month, action, actor_id, actor_role, actor_email, actor_name, meta, prev, next, diff)
+    VALUES
+      ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10::jsonb, $11::jsonb)
+    `,
+    [
+      SLUG,
+      monthIso ? normalizeMonthISO(monthIso) : null,
+      String(action),
+      actor.id,
+      actor.role,
+      actor.email,
+      actor.name,
+      meta ? JSON.stringify(meta) : null,
+      prev ? JSON.stringify(prev) : null,
+      next ? JSON.stringify(next) : null,
+      JSON.stringify(diff || {}),
+    ]
+  );
+}
+
+/**
+ * =========================
+ * CORE helpers
+ * =========================
+ */
+
 function isLockedNotes(notes) {
   return String(notes || "").toLowerCase().includes("#locked");
 }
@@ -388,7 +505,6 @@ async function snapshotUpToISO(client, targetMonthIso) {
   return { lockedCount };
 }
 
-// (Шаг 11) BULK RESNAPSHOT: обновляем ВСЕ locked месяцы <= target
 async function resnapshotLockedUpToISO(client, targetMonthIso) {
   const targetYm = ymFromDateLike(targetMonthIso);
   if (!targetYm) throw new Error("Bad month");
@@ -399,7 +515,6 @@ async function resnapshotLockedUpToISO(client, targetMonthIso) {
   const yms = rows.map((r) => r._ym).filter(Boolean);
   const purchasesByYmAll = await getPurchasesSumsByMonth(client, yms);
 
-  // Обновляем snapshot-поля только у locked месяцев <= target
   const work = rows.map((r) => {
     const ym = r._ym;
     const shouldResnap = Boolean(r._locked && ym && ym <= targetYm);
@@ -412,11 +527,10 @@ async function resnapshotLockedUpToISO(client, targetMonthIso) {
       notes: ensureLockedTag(r.notes),
       opex: toNum(pur.opex),
       capex: toNum(pur.capex),
-      cash_end: 0, // пересчитаем ниже
+      cash_end: 0,
     };
   });
 
-  // Пересчитываем cash_end цепочкой (locked месяцы используют snapshot cash_end)
   const computed = computeChainWithSnapshots({
     cashStart,
     monthRows: work,
@@ -450,8 +564,11 @@ async function resnapshotLockedUpToISO(client, targetMonthIso) {
 }
 
 /**
+ * =========================
  * SETTINGS
+ * =========================
  */
+
 router.get("/donas/finance/settings", authenticateToken, requireAdmin, async (req, res) => {
   try {
     const q = await pool.query(
@@ -518,13 +635,11 @@ router.put("/donas/finance/settings", authenticateToken, requireAdmin, async (re
 
     const q = await pool.query(
       `
-      insert into donas_finance_settings (
-        slug, currency, avg_check, cogs_per_unit, units_per_day, days_per_month,
-        fixed_opex_month, variable_opex_month, loan_payment_month,
-        cash_start, reserve_target_months
-      ) values (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11
-      )
+      insert into donas_finance_settings
+        (slug, currency, avg_check, cogs_per_unit, units_per_day, days_per_month,
+         fixed_opex_month, variable_opex_month, loan_payment_month, cash_start, reserve_target_months)
+      values
+        ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
       on conflict (slug) do update set
         currency = excluded.currency,
         avg_check = excluded.avg_check,
@@ -561,8 +676,11 @@ router.put("/donas/finance/settings", authenticateToken, requireAdmin, async (re
 });
 
 /**
+ * =========================
  * MONTHS (server cashflow + snapshot/auto)
+ * =========================
  */
+
 router.get("/donas/finance/months", authenticateToken, requireAdmin, async (req, res) => {
   try {
     const cashStart = await getCashStart(pool);
@@ -593,7 +711,113 @@ router.get("/donas/finance/months", authenticateToken, requireAdmin, async (req,
   }
 });
 
-// (Шаг 10) PREVIEW: что будет если зафиксировать месяц / все <= месяц
+/**
+ * =========================
+ * AUDIT API
+ * =========================
+ */
+
+router.get("/donas/finance/audit", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    await ensureAuditTable(pool);
+
+    const fromYm = ymFromDateLike(req.query.from || "");
+    const toYm = ymFromDateLike(req.query.to || "");
+    const limit = Math.min(500, Math.max(1, Number(req.query.limit || 200)));
+
+    let where = `where slug = $1`;
+    const params = [SLUG];
+
+    if (fromYm) {
+      params.push(`${fromYm}-01`);
+      where += ` and month >= $${params.length}`;
+    }
+    if (toYm) {
+      params.push(`${toYm}-01`);
+      where += ` and month <= $${params.length}`;
+    }
+
+    params.push(limit);
+
+    const q = await pool.query(
+      `
+      select
+        id,
+        to_char(month,'YYYY-MM') as ym,
+        action,
+        actor_id,
+        actor_role,
+        actor_email,
+        actor_name,
+        meta,
+        diff,
+        prev,
+        next,
+        created_at
+      from donas_finance_months_audit
+      ${where}
+      order by created_at desc
+      limit $${params.length}
+      `,
+      params
+    );
+
+    return res.json({ ok: true, items: q.rows || [] });
+  } catch (e) {
+    console.error("finance/audit GET error:", e);
+    return res.status(500).json({ error: "Failed to load audit" });
+  }
+});
+
+router.get("/donas/finance/months/:month/audit", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    await ensureAuditTable(pool);
+
+    const monthParam = req.params.month;
+    const monthIso = isoMonthStartFromYM(monthParam) || monthParam;
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(monthIso))) {
+      return res.status(400).json({ error: "Bad month format (expected YYYY-MM or YYYY-MM-01)" });
+    }
+
+    const limit = Math.min(500, Math.max(1, Number(req.query.limit || 200)));
+
+    const q = await pool.query(
+      `
+      select
+        id,
+        to_char(month,'YYYY-MM') as ym,
+        action,
+        actor_id,
+        actor_role,
+        actor_email,
+        actor_name,
+        meta,
+        diff,
+        prev,
+        next,
+        created_at
+      from donas_finance_months_audit
+      where slug=$1 and month=$2
+      order by created_at desc
+      limit $3
+      `,
+      [SLUG, monthIso, limit]
+    );
+
+    return res.json({ ok: true, items: q.rows || [] });
+  } catch (e) {
+    console.error("finance/month audit GET error:", e);
+    return res.status(500).json({ error: "Failed to load month audit" });
+  }
+});
+
+/**
+ * =========================
+ * PREVIEW: Lock / Lock ≤
+ * =========================
+ */
+
 router.get("/donas/finance/months/:month/lock-preview", authenticateToken, requireAdmin, async (req, res) => {
   try {
     const monthParam = req.params.month;
@@ -614,14 +838,12 @@ router.get("/donas/finance/months/:month/lock-preview", authenticateToken, requi
     const yms = baseRows.map((r) => r._ym).filter(Boolean);
     const purchasesByYm = await getPurchasesSumsByMonth(pool, yms);
 
-    // current
     const currentComputed = computeChainWithSnapshots({
       cashStart,
       monthRows: baseRows,
       purchasesByYm,
     });
 
-    // planned (как будет после lock: только если month не locked)
     const plannedRows = baseRows.map((r) => {
       const ym = r._ym;
       const alreadyLocked = Boolean(r._locked);
@@ -732,7 +954,126 @@ router.get("/donas/finance/months/:month/lock-preview", authenticateToken, requi
   }
 });
 
-// Create missing months based on purchases min/max
+/**
+ * =========================
+ * PREVIEW: Bulk Re-snapshot ≤ (locked only)
+ * =========================
+ */
+
+router.get(
+  "/donas/finance/months/:month/resnapshot-up-to-preview",
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const monthParam = req.params.month;
+      const monthIso = isoMonthStartFromYM(monthParam) || monthParam;
+
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(monthIso))) {
+        return res.status(400).json({ error: "Bad month format (expected YYYY-MM or YYYY-MM-01)" });
+      }
+
+      const targetYm = ymFromDateLike(monthIso);
+      await ensureMonthExists(pool, monthIso);
+
+      const cashStart = await getCashStart(pool);
+      const baseRows = await loadMonthsRaw(pool);
+
+      const yms = baseRows.map((r) => r._ym).filter(Boolean);
+      const purchasesByYm = await getPurchasesSumsByMonth(pool, yms);
+
+      const currentComputed = computeChainWithSnapshots({
+        cashStart,
+        monthRows: baseRows,
+        purchasesByYm,
+      });
+
+      // planned: only locked months <= target get refreshed (opex/capex) then chain recomputed
+      const plannedRows = baseRows.map((r) => {
+        const ym = r._ym;
+        const shouldResnap = Boolean(r._locked && ym && ym <= targetYm);
+        if (!shouldResnap) return r;
+
+        const pur = purchasesByYm?.[ym] || { opex: 0, capex: 0 };
+        return {
+          ...r,
+          _locked: true,
+          notes: ensureLockedTag(r.notes),
+          opex: toNum(pur.opex),
+          capex: toNum(pur.capex),
+          cash_end: 0, // recompute
+        };
+      });
+
+      const plannedComputed = computeChainWithSnapshots({
+        cashStart,
+        monthRows: plannedRows,
+        purchasesByYm,
+      });
+
+      const byYmCurrent = {};
+      const byYmPlanned = {};
+      for (const r of currentComputed) {
+        const ym = ymFromDateLike(r.month);
+        if (ym) byYmCurrent[ym] = r;
+      }
+      for (const r of plannedComputed) {
+        const ym = ymFromDateLike(r.month);
+        if (ym) byYmPlanned[ym] = r;
+      }
+
+      const affectedLockedYms = currentComputed
+        .map((r) => ymFromDateLike(r.month))
+        .filter(Boolean)
+        .filter((ym) => ym <= targetYm)
+        .filter((ym) => Boolean(byYmCurrent[ym]?._locked));
+
+      const items = affectedLockedYms.map((ym) => {
+        const cur = byYmCurrent[ym];
+        const plan = byYmPlanned[ym];
+        const pur = purchasesByYm?.[ym] || { opex: 0, capex: 0 };
+
+        const curSnapOpex = toNum(cur?._snapshot?.opex);
+        const curSnapCapex = toNum(cur?._snapshot?.capex);
+
+        return {
+          ym,
+          purchases: { opex: toNum(pur.opex), capex: toNum(pur.capex) },
+          snapshot_before: { opex: curSnapOpex, capex: curSnapCapex, cash_end: toNum(cur?.cash_end) },
+          snapshot_after: { opex: toNum(plan?.opex), capex: toNum(plan?.capex), cash_end: toNum(plan?.cash_end) },
+          diff_before: { opex: toNum(pur.opex) - toNum(curSnapOpex), capex: toNum(pur.capex) - toNum(curSnapCapex) },
+          diff_after: { opex: toNum(pur.opex) - toNum(plan?.opex), capex: toNum(pur.capex) - toNum(plan?.capex) },
+          delta_cash_end: toNum(plan?.cash_end) - toNum(cur?.cash_end),
+        };
+      });
+
+      const curTarget = byYmCurrent[targetYm] || null;
+      const planTarget = byYmPlanned[targetYm] || null;
+
+      return res.json({
+        ok: true,
+        targetYm,
+        summary: {
+          affectedLockedCount: affectedLockedYms.length,
+          currentCashEndAtTarget: toNum(curTarget?.cash_end),
+          plannedCashEndAtTarget: toNum(planTarget?.cash_end),
+          deltaCashEndAtTarget: toNum(planTarget?.cash_end) - toNum(curTarget?.cash_end),
+        },
+        items,
+      });
+    } catch (e) {
+      console.error("finance/resnapshot-up-to-preview error:", e);
+      return res.status(500).json({ error: "Failed to build resnapshot preview" });
+    }
+  }
+);
+
+/**
+ * =========================
+ * sync / lock / unlock / resnapshot / bulk
+ * =========================
+ */
+
 router.post("/donas/finance/months/sync", authenticateToken, requireAdmin, async (req, res) => {
   try {
     const r = await pool.query(`
@@ -752,21 +1093,15 @@ router.post("/donas/finance/months/sync", authenticateToken, requireAdmin, async
 
     await ensureMonthsRange(pool, minYm, maxYm);
 
-    const q = await pool.query(
-      `
-      select count(*)::int as cnt
-      from donas_finance_months
-      where slug=$1
-        and to_char(month,'YYYY-MM') between $2 and $3
-      `,
-      [SLUG, minYm, maxYm]
-    );
+    await writeAudit(pool, req, {
+      action: "months_sync",
+      meta: { range: { minYm, maxYm } },
+    });
 
     return res.json({
       ok: true,
       inserted: 0,
       range: { minYm, maxYm },
-      countInRange: q.rows?.[0]?.cnt ?? 0,
     });
   } catch (e) {
     console.error("finance/months sync error:", e);
@@ -774,7 +1109,6 @@ router.post("/donas/finance/months/sync", authenticateToken, requireAdmin, async
   }
 });
 
-// Lock one month (snapshot)
 router.post("/donas/finance/months/:month/lock", authenticateToken, requireAdmin, async (req, res) => {
   const client = await pool.connect();
   try {
@@ -787,12 +1121,31 @@ router.post("/donas/finance/months/:month/lock", authenticateToken, requireAdmin
 
     await client.query("begin");
     await ensureMonthExists(client, monthIso);
+
+    const prevQ = await client.query(
+      `select * from donas_finance_months where slug=$1 and month=$2 limit 1`,
+      [SLUG, monthIso]
+    );
+    const prevRow = pickMonthRowForAudit(prevQ.rows?.[0]);
+
     const saved = await snapshotMonthByISO(client, monthIso);
+    const nextRow = pickMonthRowForAudit(saved);
+
+    await writeAudit(client, req, {
+      action: "lock",
+      monthIso,
+      meta: { scope: "single" },
+      prev: prevRow,
+      next: nextRow,
+    });
+
     await client.query("commit");
 
     return res.json({ ok: true, month: saved });
   } catch (e) {
-    try { await client.query("rollback"); } catch {}
+    try {
+      await client.query("rollback");
+    } catch {}
     console.error("finance/month lock error:", e);
     res.status(500).json({ error: "Failed to lock month" });
   } finally {
@@ -800,7 +1153,6 @@ router.post("/donas/finance/months/:month/lock", authenticateToken, requireAdmin
   }
 });
 
-// Lock all months <= selected (snapshot + cash_end chain)
 router.post("/donas/finance/months/:month/lock-up-to", authenticateToken, requireAdmin, async (req, res) => {
   const client = await pool.connect();
   try {
@@ -813,11 +1165,20 @@ router.post("/donas/finance/months/:month/lock-up-to", authenticateToken, requir
 
     await client.query("begin");
     const { lockedCount } = await snapshotUpToISO(client, monthIso);
+
+    await writeAudit(client, req, {
+      action: "lock_up_to",
+      monthIso,
+      meta: { target: ymFromDateLike(monthIso), lockedCount },
+    });
+
     await client.query("commit");
 
     return res.json({ ok: true, lockedCount });
   } catch (e) {
-    try { await client.query("rollback"); } catch {}
+    try {
+      await client.query("rollback");
+    } catch {}
     console.error("finance/month lock-up-to error:", e);
     res.status(500).json({ error: "Failed to lock months up to selected" });
   } finally {
@@ -825,7 +1186,6 @@ router.post("/donas/finance/months/:month/lock-up-to", authenticateToken, requir
   }
 });
 
-// Unlock month (back to auto)
 router.post("/donas/finance/months/:month/unlock", authenticateToken, requireAdmin, async (req, res) => {
   try {
     const monthParam = req.params.month;
@@ -836,7 +1196,7 @@ router.post("/donas/finance/months/:month/unlock", authenticateToken, requireAdm
     }
 
     const prev = await pool.query(
-      `select notes from donas_finance_months where slug=$1 and month=$2 limit 1`,
+      `select * from donas_finance_months where slug=$1 and month=$2 limit 1`,
       [SLUG, monthIso]
     );
     if (!prev.rows.length) return res.status(404).json({ error: "Month not found" });
@@ -857,6 +1217,13 @@ router.post("/donas/finance/months/:month/unlock", authenticateToken, requireAdm
       [SLUG, monthIso, cleaned]
     );
 
+    await writeAudit(pool, req, {
+      action: "unlock",
+      monthIso,
+      prev: pickMonthRowForAudit(prev.rows?.[0]),
+      next: pickMonthRowForAudit(q.rows?.[0]),
+    });
+
     return res.json({ ok: true, month: q.rows[0] });
   } catch (e) {
     console.error("finance/month unlock error:", e);
@@ -864,7 +1231,6 @@ router.post("/donas/finance/months/:month/unlock", authenticateToken, requireAdm
   }
 });
 
-// Re-snapshot locked month
 router.post("/donas/finance/months/:month/resnapshot", authenticateToken, requireAdmin, async (req, res) => {
   const client = await pool.connect();
   try {
@@ -876,7 +1242,7 @@ router.post("/donas/finance/months/:month/resnapshot", authenticateToken, requir
     }
 
     const cur = await client.query(
-      `select notes from donas_finance_months where slug=$1 and month=$2 limit 1`,
+      `select * from donas_finance_months where slug=$1 and month=$2 limit 1`,
       [SLUG, monthIso]
     );
     if (!cur.rows.length) return res.status(404).json({ error: "Month not found" });
@@ -885,12 +1251,27 @@ router.post("/donas/finance/months/:month/resnapshot", authenticateToken, requir
     }
 
     await client.query("begin");
+
+    const prevRow = pickMonthRowForAudit(cur.rows?.[0]);
+
     const saved = await snapshotMonthByISO(client, monthIso);
+    const nextRow = pickMonthRowForAudit(saved);
+
+    await writeAudit(client, req, {
+      action: "resnapshot",
+      monthIso,
+      meta: { scope: "single" },
+      prev: prevRow,
+      next: nextRow,
+    });
+
     await client.query("commit");
 
     return res.json({ ok: true, month: saved });
   } catch (e) {
-    try { await client.query("rollback"); } catch {}
+    try {
+      await client.query("rollback");
+    } catch {}
     console.error("finance/month resnapshot error:", e);
     res.status(500).json({ error: "Failed to resnapshot month" });
   } finally {
@@ -898,7 +1279,6 @@ router.post("/donas/finance/months/:month/resnapshot", authenticateToken, requir
   }
 });
 
-// (Шаг 11) Bulk re-snapshot ALL locked months <= selected
 router.post("/donas/finance/months/:month/resnapshot-up-to", authenticateToken, requireAdmin, async (req, res) => {
   const client = await pool.connect();
   try {
@@ -911,11 +1291,20 @@ router.post("/donas/finance/months/:month/resnapshot-up-to", authenticateToken, 
 
     await client.query("begin");
     const { updatedCount } = await resnapshotLockedUpToISO(client, monthIso);
+
+    await writeAudit(client, req, {
+      action: "resnapshot_up_to",
+      monthIso,
+      meta: { target: ymFromDateLike(monthIso), updatedCount },
+    });
+
     await client.query("commit");
 
     return res.json({ ok: true, updatedCount });
   } catch (e) {
-    try { await client.query("rollback"); } catch {}
+    try {
+      await client.query("rollback");
+    } catch {}
     console.error("finance/month resnapshot-up-to error:", e);
     res.status(500).json({ error: "Failed to bulk resnapshot" });
   } finally {
@@ -924,12 +1313,7 @@ router.post("/donas/finance/months/:month/resnapshot-up-to", authenticateToken, 
 });
 
 /**
- * PUT month
- * ШАГ 9 (guardrails):
- * - если месяц locked -> запрещаем любые изменения через PUT (read-only).
- * - lock/unlock/resnapshot выполняются отдельными роутами.
- * - нельзя "залочить" через notes.
- * - для auto месяцев opex/capex/cash_end не сохраняем (сервер считает).
+ * PUT month (manual fields only)
  */
 router.put("/donas/finance/months/:month", authenticateToken, requireAdmin, async (req, res) => {
   try {
@@ -944,7 +1328,7 @@ router.put("/donas/finance/months/:month", authenticateToken, requireAdmin, asyn
     const incomingNotes = String(b.notes || "");
 
     const prev = await pool.query(
-      `select notes from donas_finance_months where slug=$1 and month=$2 limit 1`,
+      `select * from donas_finance_months where slug=$1 and month=$2 limit 1`,
       [SLUG, monthIso]
     );
 
@@ -966,6 +1350,8 @@ router.put("/donas/finance/months/:month", authenticateToken, requireAdmin, asyn
 
     await ensureMonthExists(pool, monthIso);
 
+    const prevRow = pickMonthRowForAudit(prev.rows?.[0]);
+
     const payload = {
       slug: SLUG,
       month: monthIso,
@@ -979,6 +1365,14 @@ router.put("/donas/finance/months/:month", authenticateToken, requireAdmin, asyn
     };
 
     const saved = await upsertMonthRow(pool, payload);
+
+    await writeAudit(pool, req, {
+      action: "update_manual",
+      monthIso,
+      prev: prevRow,
+      next: pickMonthRowForAudit(saved),
+    });
+
     res.json(saved);
   } catch (e) {
     console.error("finance/month PUT error:", e);
