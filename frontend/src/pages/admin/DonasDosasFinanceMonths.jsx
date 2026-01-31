@@ -203,6 +203,26 @@ export default function DonasDosasFinanceMonths() {
     }
   }
 
+  // (Шаг 11) bulk re-snapshot locked months <= editYm
+  async function resnapshotUpTo() {
+    if (!editYm) return;
+    setSaving(true);
+    setErr("");
+    setOk("");
+    try {
+      const r = await apiPost(`/api/admin/donas/finance/months/${editYm}/resnapshot-up-to`, {});
+      const cnt = r?.updatedCount ?? 0;
+      setOk(`Re-snapshot ≤ ✅ обновлено locked месяцев: ${cnt}`);
+      setTimeout(() => setOk(""), 2800);
+      await load();
+      stopEdit();
+    } catch (e) {
+      setErr(e?.data?.error || e?.message || "Failed to bulk resnapshot");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   // (Шаг 10) load preview
   async function loadPreview(scope) {
     if (!editYm) return;
@@ -225,13 +245,13 @@ export default function DonasDosasFinanceMonths() {
   async function saveDraft() {
     if (!editYm) return;
 
-    // ШАГ 9: locked — read-only
+    // locked — read-only
     if (isLocked(draft.notes)) {
       setErr("Locked месяц read-only. Сначала Unlock, либо используй Re-snapshot.");
       return;
     }
 
-    // ШАГ 9: нельзя залочить через notes+save
+    // нельзя залочить через notes
     if (String(draft.notes || "").toLowerCase().includes("#locked")) {
       setErr("Лочить через notes нельзя. Используй кнопку Lock month / Lock all ≤ this month.");
       return;
@@ -585,6 +605,16 @@ export default function DonasDosasFinanceMonths() {
                     <button
                       type="button"
                       className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
+                      onClick={resnapshotUpTo}
+                      disabled={saving}
+                      title="Обновит ВСЕ locked месяцы <= выбранного по Purchases (и cash_end цепочкой)"
+                    >
+                      Re-snapshot ≤
+                    </button>
+
+                    <button
+                      type="button"
+                      className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
                       onClick={unlockMonth}
                       disabled={saving}
                     >
@@ -604,7 +634,7 @@ export default function DonasDosasFinanceMonths() {
               </div>
             </div>
 
-            {/* Preview panel (Шаг 10) */}
+            {/* Preview panel */}
             {preview?.ok && (
               <div className="rounded-xl border border-gray-200 bg-white p-3 space-y-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -622,7 +652,7 @@ export default function DonasDosasFinanceMonths() {
 
                 {preview.summary?.targetWasLocked && (
                   <div className="text-xs p-2 rounded-lg bg-yellow-50 border border-yellow-200 text-yellow-800">
-                    Target месяц уже #locked → Lock не нужен. Если хочешь обновить снепшот по Purchases — жми Re-snapshot.
+                    Target месяц уже #locked → Lock не нужен. Если хочешь обновить снепшот по Purchases — жми Re-snapshot (или Re-snapshot ≤).
                   </div>
                 )}
 
