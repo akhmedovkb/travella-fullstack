@@ -1,7 +1,7 @@
 // frontend/src/pages/admin/DonasDosasFinance.jsx
 
 import { useEffect, useMemo, useState } from "react";
-import { apiGet, apiPut } from "../../api";
+import { apiDelete, apiGet, apiPost, apiPut } from "../../api";
 import DonasExpensesPanel from "../../components/admin/DonasExpensesPanel";
 
 function toNum(x) {
@@ -265,6 +265,15 @@ export default function DonasDosasFinance() {
   // cash_end preview
   const [cashPreview, setCashPreview] = useState(null);
 
+  // Adjustments modal
+  const [adjMonth, setAdjMonth] = useState(null);
+  const [adjOpen, setAdjOpen] = useState(false);
+  const [adjItems, setAdjItems] = useState([]);
+  const [adjLoading, setAdjLoading] = useState(false);
+  const [adjSaving, setAdjSaving] = useState(false);
+  const [adjError, setAdjError] = useState("");
+  const [adjDraft, setAdjDraft] = useState({ amount: "", memo: "" });
+
   const currency = settings?.currency || "UZS";
 
   const load = async () => {
@@ -279,6 +288,110 @@ export default function DonasDosasFinance() {
       setErr(e?.message || "Failed to load");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const lockMonth = async (monthIso) => {
+    if (!settings?.slug) return;
+    try {
+      setSavingAll(true);
+      await apiPost(`/api/admin/donas/finance/months/${monthIso}/lock`, { slug: settings.slug }, "provider");
+      await load();
+    } catch (e) {
+      setErr(e?.message || "Failed to lock month");
+    } finally {
+      setSavingAll(false);
+    }
+  };
+
+  const unlockMonth = async (monthIso) => {
+    if (!settings?.slug) return;
+    try {
+      setSavingAll(true);
+      await apiPost(`/api/admin/donas/finance/months/${monthIso}/unlock`, { slug: settings.slug }, "provider");
+      await load();
+    } catch (e) {
+      setErr(e?.message || "Failed to unlock month");
+    } finally {
+      setSavingAll(false);
+    }
+  };
+
+  const openAdjustments = async (monthIso) => {
+    if (!settings?.slug) return;
+    setAdjError("");
+    setAdjMonth(monthIso);
+    setAdjOpen(true);
+    setAdjDraft({ amount: "", memo: "" });
+    setAdjLoading(true);
+    try {
+      const list = await apiGet(
+        `/api/admin/donas/finance/months/${monthIso}/adjustments?slug=${encodeURIComponent(settings.slug)}`,
+        "provider"
+      );
+      setAdjItems(Array.isArray(list) ? list : []);
+    } catch (e) {
+      setAdjError(e?.message || "Failed to load adjustments");
+    } finally {
+      setAdjLoading(false);
+    }
+  };
+
+  const closeAdjustments = () => {
+    setAdjOpen(false);
+    setAdjMonth(null);
+    setAdjItems([]);
+    setAdjError("");
+    setAdjDraft({ amount: "", memo: "" });
+  };
+
+  const refreshAdjustments = async () => {
+    if (!settings?.slug || !adjMonth) return;
+    const list = await apiGet(
+      `/api/admin/donas/finance/months/${adjMonth}/adjustments?slug=${encodeURIComponent(settings.slug)}`,
+      "provider"
+    );
+    setAdjItems(Array.isArray(list) ? list : []);
+  };
+
+  const addAdjustment = async () => {
+    if (!settings?.slug || !adjMonth) return;
+    const amount = toNum(adjDraft.amount);
+    if (!amount) return;
+    setAdjSaving(true);
+    setAdjError("");
+    try {
+      await apiPost(
+        `/api/admin/donas/finance/months/${adjMonth}/adjustments`,
+        { slug: settings.slug, amount, memo: String(adjDraft.memo || "").trim() },
+        "provider"
+      );
+      await refreshAdjustments();
+      await load();
+      setAdjDraft({ amount: "", memo: "" });
+    } catch (e) {
+      setAdjError(e?.message || "Failed to add adjustment");
+    } finally {
+      setAdjSaving(false);
+    }
+  };
+
+  const deleteAdjustment = async (id) => {
+    if (!settings?.slug) return;
+    setAdjSaving(true);
+    setAdjError("");
+    try {
+      await apiDelete(
+        `/api/admin/donas/finance/adjustments/${id}`,
+        { slug: settings.slug },
+        "provider"
+      );
+      await refreshAdjustments();
+      await load();
+    } catch (e) {
+      setAdjError(e?.message || "Failed to delete adjustment");
+    } finally {
+      setAdjSaving(false);
     }
   };
 
@@ -302,11 +415,8 @@ export default function DonasDosasFinance() {
     return [...months].sort((a, b) => String(a.month).localeCompare(String(b.month)));
   }, [months]);
 
-  // LIVE monthsWithCash derived from months + cash_start
-  const monthsWithCash = useMemo(() => {
-    if (!settings) return sortedMonths;
-    return recalcCashChain(sortedMonths, settings.cash_start);
-  }, [sortedMonths, settings]);
+  // cash_end is now calculated on backend (with purchases + adjustments + locks)
+  const monthsWithCash = useMemo(() => sortedMonths, [sortedMonths]);
 
   // default lock selector
   useEffect(() => {
@@ -1116,6 +1226,9 @@ export default function DonasDosasFinance() {
                   plan={planBase}
                   currency={currency}
                   reserveMonths={reserveMonths}
+                  onOpenAdjustments={openAdjustments}
+                  onLockMonth={lockMonth}
+                  onUnlockMonth={unlockMonth}
                   onChangeRow={onChangeRow}
                   onSave={upsertMonth}
                   highlight={highlightMonths.has(String(m.month))}
@@ -1131,6 +1244,110 @@ export default function DonasDosasFinance() {
             </tbody>
           </table>
         </div>
+
+        {/* Adjustments modal */}
+        {adjOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div
+              className="absolute inset-0 bg-black/30"
+              onClick={() => {
+                if (!adjSaving) setAdjOpen(false);
+              }}
+            />
+            <div className="relative w-full max-w-2xl rounded-2xl bg-white shadow-xl border">
+              <div className="p-4 border-b flex items-start justify-between gap-3">
+                <div>
+                  <div className="font-semibold">Adjustments</div>
+                  <div className="text-xs text-gray-500">
+                    Month: <span className="font-mono">{adjMonth || ""}</span>
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    Positive adds cash, negative reduces cash. Locked month = read-only.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="px-3 py-1.5 text-sm rounded-lg border hover:bg-gray-50 disabled:opacity-50"
+                  disabled={adjSaving}
+                  onClick={() => setAdjOpen(false)}
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="p-4">
+                {adjError && (
+                  <div className="mb-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                    {adjError}
+                  </div>
+                )}
+
+                <div className="rounded-xl border overflow-hidden">
+                  <div className="grid grid-cols-12 gap-2 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+                    <div className="col-span-3">Amount</div>
+                    <div className="col-span-7">Memo</div>
+                    <div className="col-span-2 text-right">Actions</div>
+                  </div>
+                  <div className="divide-y">
+                    {adjLoading ? (
+                      <div className="p-3 text-sm text-gray-600">Loading…</div>
+                    ) : adjItems.length === 0 ? (
+                      <div className="p-3 text-sm text-gray-600">No adjustments yet.</div>
+                    ) : (
+                      adjItems.map((it) => (
+                        <div key={it.id} className="grid grid-cols-12 gap-2 px-3 py-2 items-center">
+                          <div className="col-span-3 font-mono text-sm">{fmt(it.amount)}</div>
+                          <div className="col-span-7 text-sm text-gray-800">{it.memo || ""}</div>
+                          <div className="col-span-2 flex justify-end">
+                            <button
+                              type="button"
+                              className="text-xs px-2 py-1 rounded border hover:bg-gray-50 disabled:opacity-50"
+                              disabled={adjSaving}
+                              onClick={() => deleteAdjustment(it.id)}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-4 rounded-xl border p-3">
+                  <div className="font-semibold text-sm">Add adjustment</div>
+                  <div className="mt-2 grid grid-cols-12 gap-2">
+                    <input
+                      className="col-span-3 border rounded-lg px-3 py-2 text-sm"
+                      placeholder="Amount"
+                      value={adjDraft.amount}
+                      onChange={(e) => setAdjDraft((p) => ({ ...p, amount: e.target.value }))}
+                      disabled={adjSaving}
+                    />
+                    <input
+                      className="col-span-7 border rounded-lg px-3 py-2 text-sm"
+                      placeholder="Memo"
+                      value={adjDraft.memo}
+                      onChange={(e) => setAdjDraft((p) => ({ ...p, memo: e.target.value }))}
+                      disabled={adjSaving}
+                    />
+                    <button
+                      type="button"
+                      className="col-span-2 px-3 py-2 text-sm rounded-lg border bg-black text-white hover:opacity-90 disabled:opacity-50"
+                      disabled={adjSaving}
+                      onClick={createAdjustment}
+                    >
+                      Add
+                    </button>
+                  </div>
+                  <div className="mt-2 text-xs text-gray-500">
+                    Tip: use negative amount for extra expense (e.g. unexpected repair), positive for one-time income.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="mt-2 text-xs text-gray-500">
           Формулы: GP = revenue−cogs · NetOp = GP−opex · CF = NetOp−loan_paid−capex · DSCR = NetOp/loan_paid
@@ -1171,6 +1388,9 @@ function MonthRow({
   plan,
   currency,
   reserveMonths,
+  onOpenAdjustments,
+  onLockMonth,
+  onUnlockMonth,
   onChangeRow,
   onSave,
   highlight,
@@ -1187,6 +1407,8 @@ function MonthRow({
   }, [row]);
 
   const locked = isLockedNotes(r.notes);
+  const adjTotal = toNum(r?._adjustments?.total ?? 0);
+  const adjTotal = toNum(row?._adjustments?.total ?? 0);
 
   // backend may send _source for UI badges
   const src = r?._source || {};
@@ -1198,9 +1420,9 @@ function MonthRow({
       ? "bg-amber-50 text-amber-800 border-amber-200"
       : "bg-gray-50 text-gray-800 border-gray-200";
 
-  // ✅ manual edits allowed ONLY when month is locked
-  const numDisabled = savingAll || !locked;
-  const notesDisabled = savingAll;
+  // ✅ locked month = read-only (manual edits + adjustments запрещены)
+  const numDisabled = savingAll || locked;
+  const notesDisabled = savingAll || locked;
 
   const inputCls = (disabled, extra = "") =>
     `w-full px-2 py-1 rounded border ${disabled ? "bg-gray-100 text-gray-400 cursor-not-allowed" : ""} ${extra}`;
@@ -1446,98 +1668,60 @@ function MonthRow({
               type="checkbox"
               checked={!!planFillOnlyEmpty}
               onChange={(e) => setPlanFillOnlyEmpty?.(e.target.checked)}
-              disabled={savingAll || locked}
+              disabled={savingAll}
             />
             only empty
           </label>
 
+          {/* Adjustments (only for unlocked months) */}
+          <button
+            type="button"
+            onClick={() => onOpenAdjustments?.(r.month)}
+            className={`px-3 py-1.5 rounded-lg border ${
+              savingAll || locked ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-white"
+            }`}
+            disabled={savingAll || locked}
+            title={locked ? "Locked month: adjustments запрещены" : "Открыть корректировки (adjustments)"}
+          >
+            Adjustments{adjTotal ? `: ${fmt(adjTotal)}` : ""}
+          </button>
+
           <button
             onClick={applyPlanToThis}
             className={`px-3 py-1.5 rounded-lg border ${
-              savingAll || !locked ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-white"
+              savingAll || locked ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-white"
             }`}
-            disabled={savingAll || !locked}
+            disabled={savingAll || locked}
             title="Скопировать Plan (Assumptions) в этот месяц"
           >
             Plan → This
           </button>
 
+          {/* Lock (snapshot) / Unlock */}
           <button
-            onClick={() => {
-              // Close month: add #locked + closed_at: YYYY-MM-DD (once)
-              if (savingAll || locked) return;
-              const dateISO = todayISO();
-              let nextNotes = addLockedTag(r.notes);
-              nextNotes = addClosedAt(nextNotes, dateISO);
-              const next = { ...r, notes: nextNotes };
-              setR(next);
-              onChangeRow?.({
-                month: next.month,
-                slug: next.slug ?? "donas-dosas",
-                revenue: next.revenue,
-                cogs: next.cogs,
-                opex: next.opex,
-                capex: next.capex,
-                loan_paid: next.loan_paid,
-                cash_end: next.cash_end,
-                notes: nextNotes ?? "",
-              });
-            }}
+            type="button"
+            onClick={() => onLockMonth?.(r.month)}
             className={`px-3 py-1.5 rounded-lg border ${
-              locked ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-gray-900 text-white border-gray-900"
+              savingAll || locked
+                ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                : "bg-gray-900 text-white border-gray-900"
             }`}
             disabled={savingAll || locked}
-            title="Закрыть месяц: добавит #locked и closed_at. Потом сохрани (Save/Save all)."
+            title="Закрыть месяц (lock) и сохранить снапшот cash_end"
           >
-            Close month
+            Lock + Snapshot
           </button>
 
           <button
-            onClick={async () => {
-              // Close month: add #locked + closed_at and IMMEDIATELY save snapshot
-              if (savingAll || locked) return;
-
-              const dateISO = todayISO();
-              let nextNotes = addLockedTag(r.notes);
-              nextNotes = addClosedAt(nextNotes, dateISO);
-
-              const next = { ...r, notes: nextNotes };
-              setR(next);
-
-              // синхроним в таблицу (локально)
-              onChangeRow?.({
-                month: next.month,
-                slug: next.slug ?? "donas-dosas",
-                revenue: next.revenue,
-                cogs: next.cogs,
-                opex: next.opex,
-                capex: next.capex,
-                loan_paid: next.loan_paid,
-                cash_end: next.cash_end,
-                notes: nextNotes ?? "",
-              });
-
-              // ✅ и сразу сохраняем на backend
-              await onSave?.({
-                ...row,
-                month: next.month,
-                slug: next.slug ?? "donas-dosas",
-                revenue: toNum(next.revenue),
-                cogs: toNum(next.cogs),
-                opex: toNum(next.opex),
-                capex: toNum(next.capex),
-                loan_paid: toNum(next.loan_paid),
-                cash_end: toNum(next.cash_end),
-                notes: nextNotes ?? "",
-              });
-            }}
+            type="button"
+            onClick={() => onUnlockMonth?.(r.month)}
             className={`px-3 py-1.5 rounded-lg border ${
-              !locked ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-white"
+              savingAll || !locked ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-white"
             }`}
             disabled={savingAll || !locked}
-            title="Сделать снапшот сразу: закрыть месяц и сразу сохранить"
+            title="Разблокировать месяц"
           >
-            Close + Save snapshot
+            Unlock
           </button>
 
           <button
@@ -1556,11 +1740,11 @@ function MonthRow({
               })
             }
             className={`px-3 py-1.5 rounded-lg ${
-              savingAll || !locked
+              savingAll || locked
                 ? "bg-gray-200 text-gray-500 cursor-not-allowed"
                 : "bg-gray-900 text-white"
             }`}
-            disabled={savingAll || !locked}
+            disabled={savingAll || locked}
           >
             Save
           </button>
