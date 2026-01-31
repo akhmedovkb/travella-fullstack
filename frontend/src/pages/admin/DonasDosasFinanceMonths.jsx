@@ -7,11 +7,9 @@ function toNum(x) {
   const n = Number(x);
   return Number.isFinite(n) ? n : 0;
 }
-
 function money(n) {
   return Math.round(toNum(n)).toLocaleString("ru-RU");
 }
-
 function ymFromDateLike(x) {
   const s = String(x || "");
   if (!s) return "";
@@ -19,11 +17,9 @@ function ymFromDateLike(x) {
   if (/^\d{4}-\d{2}$/.test(s)) return s;
   return "";
 }
-
 function isLocked(notes) {
   return String(notes || "").toLowerCase().includes("#locked");
 }
-
 function emptyDraft(ym) {
   return {
     month: ym,
@@ -37,7 +33,6 @@ function emptyDraft(ym) {
     _diff: null,
   };
 }
-
 function diffBadgeClass(v) {
   const n = toNum(v);
   if (n > 0) return "bg-red-50 text-red-700 border-red-200";
@@ -57,6 +52,11 @@ export default function DonasDosasFinanceMonths() {
   const [editYm, setEditYm] = useState("");
   const [draft, setDraft] = useState(emptyDraft(""));
 
+  // (Шаг 10) preview state
+  const [previewScope, setPreviewScope] = useState("single"); // single | upto
+  const [preview, setPreview] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
   async function load() {
     setLoading(true);
     setErr("");
@@ -67,7 +67,7 @@ export default function DonasDosasFinanceMonths() {
       const m = await apiGet("/api/admin/donas/finance/months");
       setRows(Array.isArray(m) ? m : []);
     } catch (e) {
-      setErr(e?.response?.data?.error || e?.message || "Failed to load months");
+      setErr(e?.data?.error || e?.message || "Failed to load months");
     } finally {
       setLoading(false);
     }
@@ -101,6 +101,8 @@ export default function DonasDosasFinanceMonths() {
       _diff: r?._diff || null,
     });
 
+    setPreview(null);
+    setPreviewScope("single");
     setErr("");
     setOk("");
   }
@@ -108,6 +110,8 @@ export default function DonasDosasFinanceMonths() {
   function stopEdit() {
     setEditYm("");
     setDraft(emptyDraft(""));
+    setPreview(null);
+    setPreviewScope("single");
   }
 
   async function syncFromPurchases() {
@@ -115,13 +119,12 @@ export default function DonasDosasFinanceMonths() {
     setErr("");
     setOk("");
     try {
-      const r = await apiPost("/api/admin/donas/finance/months/sync", {});
-      const inserted = r?.inserted ?? 0;
-      setOk(`Синхронизировано ✅ Добавлено месяцев: ${inserted}`);
+      await apiPost("/api/admin/donas/finance/months/sync", {});
+      setOk("Sync ✅ диапазон месяцев обновлён.");
       setTimeout(() => setOk(""), 2500);
       await load();
     } catch (e) {
-      setErr(e?.response?.data?.error || e?.message || "Failed to sync months");
+      setErr(e?.data?.error || e?.message || "Failed to sync months");
     } finally {
       setSaving(false);
     }
@@ -139,7 +142,7 @@ export default function DonasDosasFinanceMonths() {
       await load();
       stopEdit();
     } catch (e) {
-      setErr(e?.response?.data?.error || e?.message || "Failed to lock month");
+      setErr(e?.data?.error || e?.message || "Failed to lock month");
     } finally {
       setSaving(false);
     }
@@ -158,7 +161,7 @@ export default function DonasDosasFinanceMonths() {
       await load();
       stopEdit();
     } catch (e) {
-      setErr(e?.response?.data?.error || e?.message || "Failed to lock months up to selected");
+      setErr(e?.data?.error || e?.message || "Failed to lock months up to selected");
     } finally {
       setSaving(false);
     }
@@ -176,7 +179,7 @@ export default function DonasDosasFinanceMonths() {
       await load();
       stopEdit();
     } catch (e) {
-      setErr(e?.response?.data?.error || e?.message || "Failed to unlock month");
+      setErr(e?.data?.error || e?.message || "Failed to unlock month");
     } finally {
       setSaving(false);
     }
@@ -194,9 +197,28 @@ export default function DonasDosasFinanceMonths() {
       await load();
       stopEdit();
     } catch (e) {
-      setErr(e?.response?.data?.error || e?.message || "Failed to resnapshot month");
+      setErr(e?.data?.error || e?.message || "Failed to resnapshot month");
     } finally {
       setSaving(false);
+    }
+  }
+
+  // (Шаг 10) load preview
+  async function loadPreview(scope) {
+    if (!editYm) return;
+    setPreviewLoading(true);
+    setErr("");
+    setOk("");
+    try {
+      const r = await apiGet(
+        `/api/admin/donas/finance/months/${editYm}/lock-preview?scope=${encodeURIComponent(scope)}`
+      );
+      setPreview(r || null);
+    } catch (e) {
+      setErr(e?.data?.error || e?.message || "Failed to load preview");
+      setPreview(null);
+    } finally {
+      setPreviewLoading(false);
     }
   }
 
@@ -234,7 +256,7 @@ export default function DonasDosasFinanceMonths() {
       await load();
       stopEdit();
     } catch (e) {
-      setErr(e?.response?.data?.error || e?.message || "Failed to save month");
+      setErr(e?.data?.error || e?.message || "Failed to save month");
     } finally {
       setSaving(false);
     }
@@ -260,7 +282,7 @@ export default function DonasDosasFinanceMonths() {
       setTimeout(() => setOk(""), 2000);
       await load();
     } catch (e) {
-      setErr(e?.response?.data?.error || e?.message || "Failed to add month");
+      setErr(e?.data?.error || e?.message || "Failed to add month");
     } finally {
       setSaving(false);
     }
@@ -307,7 +329,7 @@ export default function DonasDosasFinanceMonths() {
             disabled={loading || saving}
             title="Создаёт недостающие месяцы по диапазону donas_purchases"
           >
-            Sync Purchases → Months
+            Sync
           </button>
 
           <button
@@ -482,19 +504,46 @@ export default function DonasDosasFinanceMonths() {
 
                 <div className="text-xs text-gray-500">
                   {draftLocked
-                    ? "Шаг 9: locked месяц нельзя менять через Save. Сначала Unlock или Re-snapshot."
+                    ? "Locked месяц нельзя менять через Save. Unlock или Re-snapshot."
                     : "Auto: OPEX/CAPEX берутся из Purchases, cash_end считается на сервере."}
                 </div>
               </div>
 
               <div className="flex items-center gap-2">
-                {!draftLocked && (
+                {!draftLocked ? (
                   <>
+                    <button
+                      type="button"
+                      className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50"
+                      onClick={() => {
+                        setPreviewScope("single");
+                        loadPreview("single");
+                      }}
+                      disabled={saving || previewLoading}
+                      title="Покажет что будет при Lock month"
+                    >
+                      {previewLoading && previewScope === "single" ? "Preview…" : "Preview Lock"}
+                    </button>
+
+                    <button
+                      type="button"
+                      className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50"
+                      onClick={() => {
+                        setPreviewScope("upto");
+                        loadPreview("upto");
+                      }}
+                      disabled={saving || previewLoading}
+                      title="Покажет что будет при Lock all ≤ this month"
+                    >
+                      {previewLoading && previewScope === "upto" ? "Preview…" : "Preview Lock ≤"}
+                    </button>
+
                     <button
                       type="button"
                       className="px-3 py-2 rounded-lg bg-black text-white hover:bg-gray-900 disabled:opacity-50"
                       onClick={lockMonth}
                       disabled={saving}
+                      title="Сразу фиксирует месяц (без preview)"
                     >
                       Lock month
                     </button>
@@ -504,14 +553,26 @@ export default function DonasDosasFinanceMonths() {
                       className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50"
                       onClick={lockUpTo}
                       disabled={saving}
+                      title="Сразу фиксирует все месяцы <= выбранного (без preview)"
                     >
                       Lock all ≤ this month
                     </button>
                   </>
-                )}
-
-                {draftLocked && (
+                ) : (
                   <>
+                    <button
+                      type="button"
+                      className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
+                      onClick={() => {
+                        setPreviewScope("single");
+                        loadPreview("single");
+                      }}
+                      disabled={saving || previewLoading}
+                      title="Покажет diff purchases vs snapshot"
+                    >
+                      {previewLoading ? "Preview…" : "Preview"}
+                    </button>
+
                     <button
                       type="button"
                       className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
@@ -536,12 +597,125 @@ export default function DonasDosasFinanceMonths() {
                   type="button"
                   className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
                   onClick={stopEdit}
-                  disabled={saving}
+                  disabled={saving || previewLoading}
                 >
                   Закрыть
                 </button>
               </div>
             </div>
+
+            {/* Preview panel (Шаг 10) */}
+            {preview?.ok && (
+              <div className="rounded-xl border border-gray-200 bg-white p-3 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-sm font-semibold">
+                    Preview: {preview.scope === "upto" ? "Lock all ≤ this month" : "Lock month"} ({preview.targetYm})
+                  </div>
+
+                  <div className="text-xs text-gray-600">
+                    Δ cash_end@target:{" "}
+                    <span className={`px-2 py-0.5 rounded-full border ${diffBadgeClass(preview.summary?.deltaCashEndAtTarget)}`}>
+                      {money(preview.summary?.deltaCashEndAtTarget)}
+                    </span>
+                  </div>
+                </div>
+
+                {preview.summary?.targetWasLocked && (
+                  <div className="text-xs p-2 rounded-lg bg-yellow-50 border border-yellow-200 text-yellow-800">
+                    Target месяц уже #locked → Lock не нужен. Если хочешь обновить снепшот по Purchases — жми Re-snapshot.
+                  </div>
+                )}
+
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-xs">
+                    <thead>
+                      <tr className="text-gray-600 border-b">
+                        <th className="py-2 pr-3 text-left">YM</th>
+                        <th className="py-2 pr-3 text-right">Purch OPEX</th>
+                        <th className="py-2 pr-3 text-right">Purch CAPEX</th>
+                        <th className="py-2 pr-3 text-right">Snap OPEX</th>
+                        <th className="py-2 pr-3 text-right">Snap CAPEX</th>
+                        <th className="py-2 pr-3 text-right">Diff O</th>
+                        <th className="py-2 pr-3 text-right">Diff C</th>
+                        <th className="py-2 pr-3 text-right">Cash (cur)</th>
+                        <th className="py-2 pr-3 text-right">Cash (plan)</th>
+                        <th className="py-2 pr-2 text-left">State</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(preview.items || []).map((it) => (
+                        <tr key={it.ym} className="border-b last:border-b-0">
+                          <td className="py-2 pr-3 font-medium">{it.ym}</td>
+                          <td className="py-2 pr-3 text-right">{money(it.purchases?.opex)}</td>
+                          <td className="py-2 pr-3 text-right">{money(it.purchases?.capex)}</td>
+                          <td className="py-2 pr-3 text-right">{money(it.snapshot?.opex)}</td>
+                          <td className="py-2 pr-3 text-right">{money(it.snapshot?.capex)}</td>
+                          <td className="py-2 pr-3 text-right">
+                            <span className={`px-2 py-0.5 rounded-full border ${diffBadgeClass(it.diff?.opex)}`}>
+                              {money(it.diff?.opex)}
+                            </span>
+                          </td>
+                          <td className="py-2 pr-3 text-right">
+                            <span className={`px-2 py-0.5 rounded-full border ${diffBadgeClass(it.diff?.capex)}`}>
+                              {money(it.diff?.capex)}
+                            </span>
+                          </td>
+                          <td className="py-2 pr-3 text-right">{money(it.current?.cash_end)}</td>
+                          <td className="py-2 pr-3 text-right">{money(it.planned?.cash_end)}</td>
+                          <td className="py-2 pr-2">
+                            <span className="text-[11px] px-2 py-0.5 rounded-full border bg-gray-50">
+                              {it.current?.locked ? "locked" : "auto"} → {it.planned?.locked ? "locked" : "auto"}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                      {!preview.items?.length && (
+                        <tr>
+                          <td colSpan={10} className="py-3 text-center text-gray-500">
+                            Нет строк preview.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {!draftLocked && (
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
+                      onClick={() => setPreview(null)}
+                      disabled={saving}
+                    >
+                      Закрыть preview
+                    </button>
+
+                    {preview.scope === "upto" ? (
+                      <button
+                        type="button"
+                        className="px-3 py-2 rounded-lg bg-black text-white hover:bg-gray-900 disabled:opacity-50"
+                        onClick={lockUpTo}
+                        disabled={saving}
+                        title="Подтвердить фиксацию (Lock all ≤)"
+                      >
+                        Confirm Lock ≤
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="px-3 py-2 rounded-lg bg-black text-white hover:bg-gray-900 disabled:opacity-50"
+                        onClick={lockMonth}
+                        disabled={saving}
+                        title="Подтвердить фиксацию (Lock month)"
+                      >
+                        Confirm Lock
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {[
@@ -564,35 +738,17 @@ export default function DonasDosasFinanceMonths() {
 
               <label className="text-xs text-gray-600">
                 <div className="mb-1">OPEX (computed)</div>
-                <input
-                  className="w-full border rounded-lg px-3 py-2 bg-white"
-                  value={draft.opex}
-                  disabled
-                  inputMode="numeric"
-                  placeholder={currency}
-                />
+                <input className="w-full border rounded-lg px-3 py-2 bg-white" value={draft.opex} disabled />
               </label>
 
               <label className="text-xs text-gray-600">
                 <div className="mb-1">CAPEX (computed)</div>
-                <input
-                  className="w-full border rounded-lg px-3 py-2 bg-white"
-                  value={draft.capex}
-                  disabled
-                  inputMode="numeric"
-                  placeholder={currency}
-                />
+                <input className="w-full border rounded-lg px-3 py-2 bg-white" value={draft.capex} disabled />
               </label>
 
               <label className="text-xs text-gray-600">
                 <div className="mb-1">Cash end (computed / snapshot)</div>
-                <input
-                  className="w-full border rounded-lg px-3 py-2 bg-white"
-                  value={draft.cash_end}
-                  disabled
-                  inputMode="numeric"
-                  placeholder={currency}
-                />
+                <input className="w-full border rounded-lg px-3 py-2 bg-white" value={draft.cash_end} disabled />
               </label>
 
               <label className="text-xs text-gray-600 col-span-2 md:col-span-3">
@@ -612,7 +768,7 @@ export default function DonasDosasFinanceMonths() {
                 type="button"
                 className="px-4 py-2 rounded-lg border bg-white hover:bg-gray-50"
                 onClick={stopEdit}
-                disabled={saving}
+                disabled={saving || previewLoading}
               >
                 Отмена
               </button>
