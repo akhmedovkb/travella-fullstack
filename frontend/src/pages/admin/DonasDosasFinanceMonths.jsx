@@ -17,6 +17,10 @@ function ymFromDateLike(x) {
   if (/^\d{4}-\d{2}$/.test(s)) return s;
   return "";
 }
+function isoFromYm(ym) {
+  const m = ymFromDateLike(ym);
+  return m ? `${m}-01` : "";
+}
 function isLocked(notes) {
   return String(notes || "").toLowerCase().includes("#locked");
 }
@@ -39,6 +43,84 @@ function diffBadgeClass(v) {
   if (n < 0) return "bg-green-50 text-green-700 border-green-200";
   return "bg-gray-50 text-gray-700 border-gray-200";
 }
+function cls(...a) {
+  return a.filter(Boolean).join(" ");
+}
+function safeJson(x) {
+  try {
+    return JSON.stringify(x, null, 2);
+  } catch {
+    return String(x ?? "");
+  }
+}
+function fmtTime(ts) {
+  const s = String(ts || "");
+  if (!s) return "—";
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return s;
+  return d.toLocaleString("ru-RU");
+}
+function compactActor(it) {
+  const a = it || {};
+  const role = a.actor_role ? String(a.actor_role) : "";
+  const email = a.actor_email ? String(a.actor_email) : "";
+  const name = a.actor_name ? String(a.actor_name) : "";
+  const id = a.actor_id != null ? String(a.actor_id) : "";
+  const parts = [];
+  if (name) parts.push(name);
+  if (email) parts.push(email);
+  if (role) parts.push(role);
+  if (id) parts.push(`#${id}`);
+  return parts.join(" • ") || "—";
+}
+function diffSummary(diff) {
+  const d = diff && typeof diff === "object" ? diff : {};
+  const keys = Object.keys(d || {});
+  if (!keys.length) return "—";
+  const order = ["revenue", "cogs", "opex", "capex", "loan_paid", "cash_end", "notes"];
+  keys.sort((a, b) => {
+    const ia = order.indexOf(a);
+    const ib = order.indexOf(b);
+    if (ia === -1 && ib === -1) return String(a).localeCompare(String(b));
+    if (ia === -1) return 1;
+    if (ib === -1) return -1;
+    return ia - ib;
+  });
+  return keys.join(", ");
+}
+
+function Modal({ open, title, onClose, children, footer }) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+      <div
+        className="absolute inset-0 bg-black/40"
+        onClick={onClose}
+        role="button"
+        tabIndex={0}
+        aria-label="Close modal backdrop"
+      />
+      <div className="relative w-full sm:max-w-3xl mx-auto bg-white rounded-t-2xl sm:rounded-2xl shadow-xl border border-gray-200 max-h-[85vh] overflow-hidden">
+        <div className="p-4 border-b border-gray-200 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-sm font-semibold truncate">{title}</div>
+          </div>
+          <button
+            type="button"
+            className="px-3 py-1.5 rounded-lg border bg-white hover:bg-gray-50"
+            onClick={onClose}
+          >
+            Закрыть
+          </button>
+        </div>
+
+        <div className="p-4 overflow-auto max-h-[60vh]">{children}</div>
+
+        {footer ? <div className="p-4 border-t border-gray-200 bg-gray-50">{footer}</div> : null}
+      </div>
+    </div>
+  );
+}
 
 export default function DonasDosasFinanceMonths() {
   const [settings, setSettings] = useState(null);
@@ -52,19 +134,30 @@ export default function DonasDosasFinanceMonths() {
   const [editYm, setEditYm] = useState("");
   const [draft, setDraft] = useState(emptyDraft(""));
 
-  // preview lock
+  // preview state: lock / lock≤
   const [previewScope, setPreviewScope] = useState("single"); // single | upto
   const [preview, setPreview] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
-  // preview bulk resnapshot ≤ (locked only)
+  // preview state: resnapshot ≤ (locked only)
   const [resnapPreview, setResnapPreview] = useState(null);
   const [resnapPreviewLoading, setResnapPreviewLoading] = useState(false);
 
-  // audit modal
-  const [auditOpen, setAuditOpen] = useState(false);
+  // audit
+  const [auditFrom, setAuditFrom] = useState(""); // YYYY-MM
+  const [auditTo, setAuditTo] = useState(""); // YYYY-MM
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditItems, setAuditItems] = useState([]);
+  const [auditLimit, setAuditLimit] = useState(200);
+
+  const [auditModalOpen, setAuditModalOpen] = useState(false);
+  const [auditModalTitle, setAuditModalTitle] = useState("Audit");
+  const [auditModalItem, setAuditModalItem] = useState(null);
+
+  const [monthAuditOpen, setMonthAuditOpen] = useState(false);
+  const [monthAuditItems, setMonthAuditItems] = useState([]);
+  const [monthAuditLoading, setMonthAuditLoading] = useState(false);
+  const [monthAuditSelected, setMonthAuditSelected] = useState(null);
 
   async function load() {
     setLoading(true);
@@ -82,8 +175,48 @@ export default function DonasDosasFinanceMonths() {
     }
   }
 
+  async function loadAudit() {
+    setAuditLoading(true);
+    setErr("");
+    try {
+      const params = new URLSearchParams();
+      if (ymFromDateLike(auditFrom)) params.set("from", ymFromDateLike(auditFrom));
+      if (ymFromDateLike(auditTo)) params.set("to", ymFromDateLike(auditTo));
+      params.set("limit", String(Math.min(500, Math.max(1, Number(auditLimit || 200)))));
+
+      const r = await apiGet(`/api/admin/donas/finance/audit?${params.toString()}`);
+      setAuditItems(Array.isArray(r?.items) ? r.items : []);
+    } catch (e) {
+      setErr(e?.data?.error || e?.message || "Failed to load audit");
+      setAuditItems([]);
+    } finally {
+      setAuditLoading(false);
+    }
+  }
+
+  async function loadMonthAudit(ym) {
+    const y = ymFromDateLike(ym);
+    if (!y) return;
+
+    setMonthAuditOpen(true);
+    setMonthAuditSelected(y);
+    setMonthAuditLoading(true);
+    setErr("");
+    try {
+      const r = await apiGet(`/api/admin/donas/finance/months/${y}/audit?limit=200`);
+      setMonthAuditItems(Array.isArray(r?.items) ? r.items : []);
+    } catch (e) {
+      setErr(e?.data?.error || e?.message || "Failed to load month audit");
+      setMonthAuditItems([]);
+    } finally {
+      setMonthAuditLoading(false);
+    }
+  }
+
   useEffect(() => {
     load();
+    loadAudit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const currency = settings?.currency || "UZS";
@@ -111,23 +244,19 @@ export default function DonasDosasFinanceMonths() {
     });
 
     setPreview(null);
-    setResnapPreview(null);
     setPreviewScope("single");
+    setResnapPreview(null);
+
     setErr("");
     setOk("");
-    setAuditOpen(false);
-    setAuditItems([]);
   }
 
   function stopEdit() {
     setEditYm("");
     setDraft(emptyDraft(""));
     setPreview(null);
-    setResnapPreview(null);
     setPreviewScope("single");
-    setAuditOpen(false);
-    setAuditItems([]);
-    setAuditLoading(false);
+    setResnapPreview(null);
   }
 
   async function syncFromPurchases() {
@@ -139,6 +268,7 @@ export default function DonasDosasFinanceMonths() {
       setOk("Sync ✅ диапазон месяцев обновлён.");
       setTimeout(() => setOk(""), 2500);
       await load();
+      await loadAudit();
     } catch (e) {
       setErr(e?.data?.error || e?.message || "Failed to sync months");
     } finally {
@@ -156,6 +286,7 @@ export default function DonasDosasFinanceMonths() {
       setOk("Locked ✅ Месяц зафиксирован (snapshot).");
       setTimeout(() => setOk(""), 2500);
       await load();
+      await loadAudit();
       stopEdit();
     } catch (e) {
       setErr(e?.data?.error || e?.message || "Failed to lock month");
@@ -175,6 +306,7 @@ export default function DonasDosasFinanceMonths() {
       setOk(`Locked ✅ Закрыто месяцев: ${cnt}`);
       setTimeout(() => setOk(""), 2600);
       await load();
+      await loadAudit();
       stopEdit();
     } catch (e) {
       setErr(e?.data?.error || e?.message || "Failed to lock months up to selected");
@@ -193,6 +325,7 @@ export default function DonasDosasFinanceMonths() {
       setOk("Unlocked ✅ Теперь месяц снова auto.");
       setTimeout(() => setOk(""), 2500);
       await load();
+      await loadAudit();
       stopEdit();
     } catch (e) {
       setErr(e?.data?.error || e?.message || "Failed to unlock month");
@@ -211,6 +344,7 @@ export default function DonasDosasFinanceMonths() {
       setOk("Re-snapshot ✅ Снапшот обновлён.");
       setTimeout(() => setOk(""), 2600);
       await load();
+      await loadAudit();
       stopEdit();
     } catch (e) {
       setErr(e?.data?.error || e?.message || "Failed to resnapshot month");
@@ -219,6 +353,7 @@ export default function DonasDosasFinanceMonths() {
     }
   }
 
+  // bulk re-snapshot locked months <= editYm
   async function resnapshotUpTo() {
     if (!editYm) return;
     setSaving(true);
@@ -230,6 +365,7 @@ export default function DonasDosasFinanceMonths() {
       setOk(`Re-snapshot ≤ ✅ обновлено locked месяцев: ${cnt}`);
       setTimeout(() => setOk(""), 2800);
       await load();
+      await loadAudit();
       stopEdit();
     } catch (e) {
       setErr(e?.data?.error || e?.message || "Failed to bulk resnapshot");
@@ -238,6 +374,7 @@ export default function DonasDosasFinanceMonths() {
     }
   }
 
+  // lock preview
   async function loadPreview(scope) {
     if (!editYm) return;
     setPreviewLoading(true);
@@ -257,13 +394,16 @@ export default function DonasDosasFinanceMonths() {
     }
   }
 
-  async function loadResnapPreview() {
+  // bulk resnapshot preview
+  async function loadResnapshotUpToPreview() {
     if (!editYm) return;
     setResnapPreviewLoading(true);
     setErr("");
     setOk("");
     try {
-      const r = await apiGet(`/api/admin/donas/finance/months/${editYm}/resnapshot-up-to-preview`);
+      const r = await apiGet(
+        `/api/admin/donas/finance/months/${editYm}/resnapshot-up-to-preview`
+      );
       setResnapPreview(r || null);
       setPreview(null);
     } catch (e) {
@@ -272,28 +412,6 @@ export default function DonasDosasFinanceMonths() {
     } finally {
       setResnapPreviewLoading(false);
     }
-  }
-
-  async function openAudit() {
-    if (!editYm) return;
-    setAuditOpen(true);
-    setAuditLoading(true);
-    setErr("");
-    try {
-      const r = await apiGet(`/api/admin/donas/finance/months/${editYm}/audit?limit=200`);
-      setAuditItems(Array.isArray(r?.items) ? r.items : []);
-    } catch (e) {
-      setErr(e?.data?.error || e?.message || "Failed to load audit");
-      setAuditItems([]);
-    } finally {
-      setAuditLoading(false);
-    }
-  }
-
-  function closeAudit() {
-    setAuditOpen(false);
-    setAuditItems([]);
-    setAuditLoading(false);
   }
 
   async function saveDraft() {
@@ -326,6 +444,7 @@ export default function DonasDosasFinanceMonths() {
       setTimeout(() => setOk(""), 2000);
 
       await load();
+      await loadAudit();
       stopEdit();
     } catch (e) {
       setErr(e?.data?.error || e?.message || "Failed to save month");
@@ -353,6 +472,7 @@ export default function DonasDosasFinanceMonths() {
       setOk("Месяц добавлен ✅");
       setTimeout(() => setOk(""), 2000);
       await load();
+      await loadAudit();
     } catch (e) {
       setErr(e?.data?.error || e?.message || "Failed to add month");
     } finally {
@@ -383,6 +503,11 @@ export default function DonasDosasFinanceMonths() {
 
   const draftLocked = isLocked(draft.notes);
 
+  const selectedRow = useMemo(() => {
+    if (!editYm) return null;
+    return (rows || []).find((r) => ymFromDateLike(r.month) === editYm) || null;
+  }, [editYm, rows]);
+
   return (
     <div className="max-w-6xl mx-auto space-y-4">
       <div className="flex items-start justify-between gap-3">
@@ -412,6 +537,16 @@ export default function DonasDosasFinanceMonths() {
           >
             Обновить
           </button>
+
+          <button
+            type="button"
+            className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
+            onClick={loadAudit}
+            disabled={auditLoading || saving}
+            title="Обновить Audit"
+          >
+            Audit
+          </button>
         </div>
       </div>
 
@@ -430,6 +565,122 @@ export default function DonasDosasFinanceMonths() {
         </div>
       )}
 
+      {/* Audit */}
+      <div className="rounded-2xl bg-white border border-gray-200 p-4 space-y-3">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <div className="text-sm font-semibold">Audit log</div>
+            <div className="text-xs text-gray-500">
+              Lock / Unlock / Re-snapshot / Bulk / Sync / Manual updates
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="text-xs text-gray-600">
+              <div className="mb-1">From</div>
+              <input
+                type="month"
+                className="border rounded-lg px-3 py-2 bg-white"
+                value={auditFrom}
+                onChange={(e) => setAuditFrom(e.target.value)}
+              />
+            </label>
+
+            <label className="text-xs text-gray-600">
+              <div className="mb-1">To</div>
+              <input
+                type="month"
+                className="border rounded-lg px-3 py-2 bg-white"
+                value={auditTo}
+                onChange={(e) => setAuditTo(e.target.value)}
+              />
+            </label>
+
+            <label className="text-xs text-gray-600">
+              <div className="mb-1">Limit</div>
+              <input
+                className="border rounded-lg px-3 py-2 bg-white w-[110px]"
+                value={auditLimit}
+                onChange={(e) => setAuditLimit(e.target.value)}
+                inputMode="numeric"
+              />
+            </label>
+
+            <button
+              type="button"
+              className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50"
+              onClick={loadAudit}
+              disabled={auditLoading || saving}
+            >
+              {auditLoading ? "Loading…" : "Apply"}
+            </button>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-xs">
+            <thead>
+              <tr className="text-left text-gray-600 border-b">
+                <th className="py-2 pr-3">Time</th>
+                <th className="py-2 pr-3">YM</th>
+                <th className="py-2 pr-3">Action</th>
+                <th className="py-2 pr-3">Actor</th>
+                <th className="py-2 pr-3">Diff keys</th>
+                <th className="py-2 pr-2 text-right"> </th>
+              </tr>
+            </thead>
+            <tbody>
+              {(auditItems || []).map((it) => {
+                const ym = ymFromDateLike(it.ym);
+                return (
+                  <tr key={`${it.id}`} className="border-b last:border-b-0">
+                    <td className="py-2 pr-3 whitespace-nowrap">{fmtTime(it.created_at)}</td>
+                    <td className="py-2 pr-3 whitespace-nowrap font-medium">{ym || "—"}</td>
+                    <td className="py-2 pr-3 whitespace-nowrap">
+                      <span className="px-2 py-0.5 rounded-full border bg-gray-50 text-gray-800">
+                        {String(it.action || "—")}
+                      </span>
+                    </td>
+                    <td className="py-2 pr-3 max-w-[420px]">
+                      <div className="truncate" title={compactActor(it)}>
+                        {compactActor(it)}
+                      </div>
+                    </td>
+                    <td className="py-2 pr-3 max-w-[340px]">
+                      <div className="truncate" title={diffSummary(it.diff)}>
+                        {diffSummary(it.diff)}
+                      </div>
+                    </td>
+                    <td className="py-2 pr-2 text-right whitespace-nowrap">
+                      <button
+                        type="button"
+                        className="px-3 py-1.5 rounded-lg border bg-white hover:bg-gray-50"
+                        onClick={() => {
+                          setAuditModalItem(it);
+                          setAuditModalTitle(`Audit #${it.id} — ${ym || "all"} — ${String(it.action || "")}`);
+                          setAuditModalOpen(true);
+                        }}
+                      >
+                        View
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+
+              {!auditLoading && !auditItems?.length && (
+                <tr>
+                  <td colSpan={6} className="py-6 text-center text-gray-500">
+                    Нет audit событий по фильтру.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Months table */}
       <div className="rounded-2xl bg-white border border-gray-200 p-4 space-y-3">
         <div className="flex flex-wrap items-end gap-3">
           <div className="min-w-[220px]">
@@ -452,7 +703,7 @@ export default function DonasDosasFinanceMonths() {
           </button>
 
           <div className="text-xs text-gray-500">
-            Auto: OPEX/CAPEX из Purchases. Snapshot: #locked (read-only).
+            Auto: OPEX/CAPEX из Purchases. Snapshot: #locked (read-only). Cashflow — server.
           </div>
         </div>
 
@@ -519,12 +770,16 @@ export default function DonasDosasFinanceMonths() {
                       {locked ? (
                         <div className="inline-flex flex-col items-end gap-1">
                           <span
-                            className={`text-[11px] px-2 py-0.5 rounded-full border ${diffBadgeClass(diffO)}`}
+                            className={`text-[11px] px-2 py-0.5 rounded-full border ${diffBadgeClass(
+                              diffO
+                            )}`}
                           >
                             O: {money(diffO)}
                           </span>
                           <span
-                            className={`text-[11px] px-2 py-0.5 rounded-full border ${diffBadgeClass(diffC)}`}
+                            className={`text-[11px] px-2 py-0.5 rounded-full border ${diffBadgeClass(
+                              diffC
+                            )}`}
                           >
                             C: {money(diffC)}
                           </span>
@@ -567,8 +822,8 @@ export default function DonasDosasFinanceMonths() {
         {editYm && (
           <div className="mt-4 rounded-2xl border border-gray-200 p-4 bg-gray-50 space-y-3">
             <div className="flex items-center justify-between gap-2">
-              <div>
-                <div className="flex items-center gap-2">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
                   <div className="text-sm font-semibold">Редактирование: {editYm}</div>
                   {draftLocked ? (
                     <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 border border-gray-200">
@@ -579,6 +834,22 @@ export default function DonasDosasFinanceMonths() {
                       auto
                     </span>
                   )}
+
+                  <button
+                    type="button"
+                    className="px-3 py-1.5 rounded-lg border bg-white hover:bg-gray-50"
+                    onClick={() => loadMonthAudit(editYm)}
+                    disabled={saving || monthAuditLoading}
+                    title="Показать audit для этого месяца"
+                  >
+                    Month audit
+                  </button>
+
+                  {selectedRow?.month ? (
+                    <span className="text-[11px] px-2 py-0.5 rounded-full border bg-white text-gray-700">
+                      {isoFromYm(editYm)}
+                    </span>
+                  ) : null}
                 </div>
 
                 <div className="text-xs text-gray-500">
@@ -589,16 +860,6 @@ export default function DonasDosasFinanceMonths() {
               </div>
 
               <div className="flex items-center gap-2 flex-wrap justify-end">
-                <button
-                  type="button"
-                  className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50"
-                  onClick={openAudit}
-                  disabled={saving || auditLoading}
-                  title="История действий"
-                >
-                  {auditLoading && auditOpen ? "Audit…" : "Audit"}
-                </button>
-
                 {!draftLocked ? (
                   <>
                     <button
@@ -629,10 +890,10 @@ export default function DonasDosasFinanceMonths() {
 
                     <button
                       type="button"
-                      className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50"
+                      className="px-3 py-2 rounded-lg bg-black text-white hover:bg-gray-900 disabled:opacity-50"
                       onClick={lockMonth}
                       disabled={saving}
-                      title="Зафиксировать (snapshot) этот месяц"
+                      title="Сразу фиксирует месяц (без preview)"
                     >
                       Lock month
                     </button>
@@ -642,35 +903,29 @@ export default function DonasDosasFinanceMonths() {
                       className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50"
                       onClick={lockUpTo}
                       disabled={saving}
-                      title="Зафиксировать (snapshot) все месяцы ≤ этого"
+                      title="Сразу фиксирует все месяцы <= выбранного (без preview)"
                     >
-                      Lock all ≤
-                    </button>
-
-                    <button
-                      type="button"
-                      className="px-3 py-2 rounded-lg bg-black text-white hover:bg-gray-900 disabled:opacity-50"
-                      onClick={saveDraft}
-                      disabled={saving}
-                    >
-                      Save
+                      Lock all ≤ this month
                     </button>
                   </>
                 ) : (
                   <>
                     <button
                       type="button"
-                      className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50"
-                      onClick={loadResnapPreview}
-                      disabled={saving || resnapPreviewLoading}
-                      title="Preview bulk re-snapshot ≤"
+                      className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
+                      onClick={() => {
+                        setPreviewScope("single");
+                        loadPreview("single");
+                      }}
+                      disabled={saving || previewLoading}
+                      title="Покажет diff purchases vs snapshot"
                     >
-                      {resnapPreviewLoading ? "Preview…" : "Preview Re-snapshot ≤"}
+                      {previewLoading ? "Preview…" : "Preview (lock)"}
                     </button>
 
                     <button
                       type="button"
-                      className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50"
+                      className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
                       onClick={resnapshotMonth}
                       disabled={saving}
                     >
@@ -680,117 +935,87 @@ export default function DonasDosasFinanceMonths() {
                     <button
                       type="button"
                       className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50"
+                      onClick={loadResnapshotUpToPreview}
+                      disabled={saving || resnapPreviewLoading}
+                      title="Preview bulk resnapshot locked months ≤ this month"
+                    >
+                      {resnapPreviewLoading ? "Preview…" : "Preview Re-snapshot ≤"}
+                    </button>
+
+                    <button
+                      type="button"
+                      className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
                       onClick={resnapshotUpTo}
                       disabled={saving}
-                      title="Обновить snapshot-значения у locked месяцев ≤ этого"
+                      title="Обновит ВСЕ locked месяцы <= выбранного по Purchases (и cash_end цепочкой)"
                     >
                       Re-snapshot ≤
                     </button>
 
                     <button
                       type="button"
-                      className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50"
+                      className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
                       onClick={unlockMonth}
                       disabled={saving}
                     >
-                      Unlock
+                      Unlock month
                     </button>
                   </>
                 )}
 
                 <button
                   type="button"
-                  className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50"
+                  className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
                   onClick={stopEdit}
-                  disabled={saving || previewLoading || resnapPreviewLoading || auditLoading}
+                  disabled={saving || previewLoading || resnapPreviewLoading}
                 >
-                  Close
+                  Закрыть
                 </button>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <div className="text-xs text-gray-600 mb-1">Revenue</div>
-                <input
-                  type="number"
-                  className="w-full border rounded-lg px-3 py-2"
-                  value={draft.revenue}
-                  onChange={(e) => setDraft((p) => ({ ...p, revenue: e.target.value }))}
-                  disabled={draftLocked || saving}
-                />
-              </div>
-
-              <div>
-                <div className="text-xs text-gray-600 mb-1">COGS</div>
-                <input
-                  type="number"
-                  className="w-full border rounded-lg px-3 py-2"
-                  value={draft.cogs}
-                  onChange={(e) => setDraft((p) => ({ ...p, cogs: e.target.value }))}
-                  disabled={draftLocked || saving}
-                />
-              </div>
-
-              <div>
-                <div className="text-xs text-gray-600 mb-1">Loan paid</div>
-                <input
-                  type="number"
-                  className="w-full border rounded-lg px-3 py-2"
-                  value={draft.loan_paid}
-                  onChange={(e) => setDraft((p) => ({ ...p, loan_paid: e.target.value }))}
-                  disabled={draftLocked || saving}
-                />
-              </div>
-
-              <div>
-                <div className="text-xs text-gray-600 mb-1">Notes</div>
-                <input
-                  type="text"
-                  className="w-full border rounded-lg px-3 py-2"
-                  value={draft.notes}
-                  onChange={(e) => setDraft((p) => ({ ...p, notes: e.target.value }))}
-                  disabled={draftLocked || saving}
-                />
-              </div>
-            </div>
-
-            {preview && (
-              <div className="rounded-2xl border border-gray-200 bg-white p-3">
-                <div className="flex items-center justify-between gap-2">
+            {/* Preview panel: Lock */}
+            {preview?.ok && (
+              <div className="rounded-xl border border-gray-200 bg-white p-3 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="text-sm font-semibold">
-                    Preview ({preview.scope}) → target: {preview.targetYm}
+                    Preview: {preview.scope === "upto" ? "Lock all ≤ this month" : "Lock month"} (
+                    {preview.targetYm})
                   </div>
-                  <button
-                    type="button"
-                    className="px-3 py-1.5 rounded-lg border bg-white hover:bg-gray-50"
-                    onClick={() => setPreview(null)}
-                  >
-                    Hide
-                  </button>
+
+                  <div className="text-xs text-gray-600">
+                    Δ cash_end@target:{" "}
+                    <span
+                      className={`px-2 py-0.5 rounded-full border ${diffBadgeClass(
+                        preview.summary?.deltaCashEndAtTarget
+                      )}`}
+                    >
+                      {money(preview.summary?.deltaCashEndAtTarget)}
+                    </span>
+                  </div>
                 </div>
 
-                <div className="mt-2 text-xs text-gray-600">
-                  Δ cash_end at target:{" "}
-                  <span className="font-semibold">
-                    {money(preview?.summary?.deltaCashEndAtTarget)}
-                  </span>{" "}
-                  (current {money(preview?.summary?.currentCashEndAtTarget)} → planned{" "}
-                  {money(preview?.summary?.plannedCashEndAtTarget)})
-                </div>
+                {preview.summary?.targetWasLocked && (
+                  <div className="text-xs p-2 rounded-lg bg-yellow-50 border border-yellow-200 text-yellow-800">
+                    Target месяц уже #locked → Lock не нужен. Если хочешь обновить снепшот по Purchases — жми
+                    Re-snapshot (или Re-snapshot ≤).
+                  </div>
+                )}
 
-                <div className="mt-3 overflow-x-auto">
-                  <table className="min-w-full text-sm">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-xs">
                     <thead>
-                      <tr className="text-left text-gray-600 border-b">
-                        <th className="py-2 pr-3">YM</th>
+                      <tr className="text-gray-600 border-b">
+                        <th className="py-2 pr-3 text-left">YM</th>
                         <th className="py-2 pr-3 text-right">Purch OPEX</th>
-                        <th className="py-2 pr-3 text-right">Snap OPEX</th>
-                        <th className="py-2 pr-3 text-right">Δ OPEX</th>
                         <th className="py-2 pr-3 text-right">Purch CAPEX</th>
+                        <th className="py-2 pr-3 text-right">Snap OPEX</th>
                         <th className="py-2 pr-3 text-right">Snap CAPEX</th>
-                        <th className="py-2 pr-3 text-right">Δ CAPEX</th>
-                        <th className="py-2 pr-3 text-right">Cash end (planned)</th>
+                        <th className="py-2 pr-3 text-right">Diff O</th>
+                        <th className="py-2 pr-3 text-right">Diff C</th>
+                        <th className="py-2 pr-3 text-right">Cash (cur)</th>
+                        <th className="py-2 pr-3 text-right">Cash (plan)</th>
+                        <th className="py-2 pr-2 text-left">State</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -798,70 +1023,123 @@ export default function DonasDosasFinanceMonths() {
                         <tr key={it.ym} className="border-b last:border-b-0">
                           <td className="py-2 pr-3 font-medium">{it.ym}</td>
                           <td className="py-2 pr-3 text-right">{money(it.purchases?.opex)}</td>
-                          <td className="py-2 pr-3 text-right">{money(it.snapshot?.opex)}</td>
-                          <td className="py-2 pr-3 text-right">{money(it.diff?.opex)}</td>
                           <td className="py-2 pr-3 text-right">{money(it.purchases?.capex)}</td>
+                          <td className="py-2 pr-3 text-right">{money(it.snapshot?.opex)}</td>
                           <td className="py-2 pr-3 text-right">{money(it.snapshot?.capex)}</td>
-                          <td className="py-2 pr-3 text-right">{money(it.diff?.capex)}</td>
+                          <td className="py-2 pr-3 text-right">
+                            <span
+                              className={`px-2 py-0.5 rounded-full border ${diffBadgeClass(
+                                it.diff?.opex
+                              )}`}
+                            >
+                              {money(it.diff?.opex)}
+                            </span>
+                          </td>
+                          <td className="py-2 pr-3 text-right">
+                            <span
+                              className={`px-2 py-0.5 rounded-full border ${diffBadgeClass(
+                                it.diff?.capex
+                              )}`}
+                            >
+                              {money(it.diff?.capex)}
+                            </span>
+                          </td>
+                          <td className="py-2 pr-3 text-right">{money(it.current?.cash_end)}</td>
                           <td className="py-2 pr-3 text-right">{money(it.planned?.cash_end)}</td>
+                          <td className="py-2 pr-2">
+                            <span className="text-[11px] px-2 py-0.5 rounded-full border bg-gray-50">
+                              {it.current?.locked ? "locked" : "auto"} →{" "}
+                              {it.planned?.locked ? "locked" : "auto"}
+                            </span>
+                          </td>
                         </tr>
                       ))}
-                      {(preview.items || []).length === 0 && (
+                      {!preview.items?.length && (
                         <tr>
-                          <td colSpan={8} className="py-4 text-center text-gray-500">
-                            Нет строк.
+                          <td colSpan={10} className="py-3 text-center text-gray-500">
+                            Нет строк preview.
                           </td>
                         </tr>
                       )}
                     </tbody>
                   </table>
                 </div>
+
+                {!draftLocked && (
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
+                      onClick={() => setPreview(null)}
+                      disabled={saving}
+                    >
+                      Закрыть preview
+                    </button>
+
+                    {preview.scope === "upto" ? (
+                      <button
+                        type="button"
+                        className="px-3 py-2 rounded-lg bg-black text-white hover:bg-gray-900 disabled:opacity-50"
+                        onClick={lockUpTo}
+                        disabled={saving}
+                        title="Подтвердить фиксацию (Lock all ≤)"
+                      >
+                        Confirm Lock ≤
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="px-3 py-2 rounded-lg bg-black text-white hover:bg-gray-900 disabled:opacity-50"
+                        onClick={lockMonth}
+                        disabled={saving}
+                        title="Подтвердить фиксацию (Lock month)"
+                      >
+                        Confirm Lock
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
-            {resnapPreview && (
-              <div className="rounded-2xl border border-gray-200 bg-white p-3">
-                <div className="flex items-center justify-between gap-2">
+            {/* Preview panel: Bulk Re-snapshot ≤ */}
+            {resnapPreview?.ok && (
+              <div className="rounded-xl border border-gray-200 bg-white p-3 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="text-sm font-semibold">
-                    Preview Re-snapshot ≤ → target: {resnapPreview.targetYm}
+                    Preview: Re-snapshot ≤ (locked only) ({resnapPreview.targetYm})
                   </div>
-                  <button
-                    type="button"
-                    className="px-3 py-1.5 rounded-lg border bg-white hover:bg-gray-50"
-                    onClick={() => setResnapPreview(null)}
-                  >
-                    Hide
-                  </button>
+
+                  <div className="text-xs text-gray-600">
+                    Δ cash_end@target:{" "}
+                    <span
+                      className={`px-2 py-0.5 rounded-full border ${diffBadgeClass(
+                        resnapPreview.summary?.deltaCashEndAtTarget
+                      )}`}
+                    >
+                      {money(resnapPreview.summary?.deltaCashEndAtTarget)}
+                    </span>
+                  </div>
                 </div>
 
-                <div className="mt-2 text-xs text-gray-600">
-                  affected locked months:{" "}
-                  <span className="font-semibold">
-                    {resnapPreview?.summary?.affectedLockedCount ?? 0}
+                <div className="text-xs text-gray-600">
+                  affected locked:{" "}
+                  <span className="px-2 py-0.5 rounded-full border bg-gray-50">
+                    {toNum(resnapPreview.summary?.affectedLockedCount)}
                   </span>
-                  {" · "}
-                  Δ cash_end at target:{" "}
-                  <span className="font-semibold">
-                    {money(resnapPreview?.summary?.deltaCashEndAtTarget)}
-                  </span>
-                  {" (current "}
-                  {money(resnapPreview?.summary?.currentCashEndAtTarget)}
-                  {" → planned "}
-                  {money(resnapPreview?.summary?.plannedCashEndAtTarget)}
-                  {")"}
                 </div>
 
-                <div className="mt-3 overflow-x-auto">
-                  <table className="min-w-full text-sm">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-xs">
                     <thead>
-                      <tr className="text-left text-gray-600 border-b">
-                        <th className="py-2 pr-3">YM</th>
-                        <th className="py-2 pr-3 text-right">Purch O</th>
-                        <th className="py-2 pr-3 text-right">Snap O (before)</th>
-                        <th className="py-2 pr-3 text-right">Snap O (after)</th>
-                        <th className="py-2 pr-3 text-right">Purch C</th>
-                        <th className="py-2 pr-3 text-right">Snap C (before)</th>
-                        <th className="py-2 pr-3 text-right">Snap C (after)</th>
+                      <tr className="text-gray-600 border-b">
+                        <th className="py-2 pr-3 text-left">YM</th>
+                        <th className="py-2 pr-3 text-right">Purch OPEX</th>
+                        <th className="py-2 pr-3 text-right">Purch CAPEX</th>
+                        <th className="py-2 pr-3 text-right">Snap before O</th>
+                        <th className="py-2 pr-3 text-right">Snap before C</th>
+                        <th className="py-2 pr-3 text-right">Snap after O</th>
+                        <th className="py-2 pr-3 text-right">Snap after C</th>
                         <th className="py-2 pr-3 text-right">Δ cash_end</th>
                       </tr>
                     </thead>
@@ -870,91 +1148,289 @@ export default function DonasDosasFinanceMonths() {
                         <tr key={it.ym} className="border-b last:border-b-0">
                           <td className="py-2 pr-3 font-medium">{it.ym}</td>
                           <td className="py-2 pr-3 text-right">{money(it.purchases?.opex)}</td>
-                          <td className="py-2 pr-3 text-right">{money(it.snapshot_before?.opex)}</td>
-                          <td className="py-2 pr-3 text-right">{money(it.snapshot_after?.opex)}</td>
                           <td className="py-2 pr-3 text-right">{money(it.purchases?.capex)}</td>
+                          <td className="py-2 pr-3 text-right">{money(it.snapshot_before?.opex)}</td>
                           <td className="py-2 pr-3 text-right">{money(it.snapshot_before?.capex)}</td>
+                          <td className="py-2 pr-3 text-right">{money(it.snapshot_after?.opex)}</td>
                           <td className="py-2 pr-3 text-right">{money(it.snapshot_after?.capex)}</td>
-                          <td className="py-2 pr-3 text-right">{money(it.delta_cash_end)}</td>
+                          <td className="py-2 pr-3 text-right">
+                            <span
+                              className={`px-2 py-0.5 rounded-full border ${diffBadgeClass(
+                                it.delta_cash_end
+                              )}`}
+                            >
+                              {money(it.delta_cash_end)}
+                            </span>
+                          </td>
                         </tr>
                       ))}
-                      {(resnapPreview.items || []).length === 0 && (
+                      {!resnapPreview.items?.length && (
                         <tr>
-                          <td colSpan={8} className="py-4 text-center text-gray-500">
-                            Нет locked месяцев ≤ target.
+                          <td colSpan={8} className="py-3 text-center text-gray-500">
+                            Нет строк preview.
                           </td>
                         </tr>
                       )}
                     </tbody>
                   </table>
                 </div>
+
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
+                    onClick={() => setResnapPreview(null)}
+                    disabled={saving}
+                  >
+                    Закрыть preview
+                  </button>
+
+                  <button
+                    type="button"
+                    className="px-3 py-2 rounded-lg bg-black text-white hover:bg-gray-900 disabled:opacity-50"
+                    onClick={resnapshotUpTo}
+                    disabled={saving}
+                    title="Подтвердить bulk resnapshot"
+                  >
+                    Confirm Re-snapshot ≤
+                  </button>
+                </div>
               </div>
             )}
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[
+                ["revenue", "Revenue"],
+                ["cogs", "COGS"],
+                ["loan_paid", "Loan paid"],
+              ].map(([k, label]) => (
+                <label key={k} className="text-xs text-gray-600">
+                  <div className="mb-1">{label}</div>
+                  <input
+                    className="w-full border rounded-lg px-3 py-2 bg-white"
+                    value={draft[k]}
+                    onChange={(e) => setDraft((d) => ({ ...d, [k]: e.target.value }))}
+                    disabled={saving || draftLocked}
+                    inputMode="numeric"
+                    placeholder={currency}
+                  />
+                </label>
+              ))}
+
+              <label className="text-xs text-gray-600">
+                <div className="mb-1">OPEX (computed)</div>
+                <input
+                  className="w-full border rounded-lg px-3 py-2 bg-white"
+                  value={toNum(selectedRow?.opex)}
+                  disabled
+                />
+              </label>
+
+              <label className="text-xs text-gray-600">
+                <div className="mb-1">CAPEX (computed)</div>
+                <input
+                  className="w-full border rounded-lg px-3 py-2 bg-white"
+                  value={toNum(selectedRow?.capex)}
+                  disabled
+                />
+              </label>
+
+              <label className="text-xs text-gray-600">
+                <div className="mb-1">Cash end (computed / snapshot)</div>
+                <input
+                  className="w-full border rounded-lg px-3 py-2 bg-white"
+                  value={toNum(selectedRow?.cash_end)}
+                  disabled
+                />
+              </label>
+
+              <label className="text-xs text-gray-600 col-span-2 md:col-span-3">
+                <div className="mb-1">Notes</div>
+                <input
+                  className="w-full border rounded-lg px-3 py-2 bg-white"
+                  value={draft.notes}
+                  onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))}
+                  disabled={saving || draftLocked}
+                  placeholder="комментарий (без #locked)"
+                />
+              </label>
+            </div>
+
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                className="px-4 py-2 rounded-lg border bg-white hover:bg-gray-50"
+                onClick={stopEdit}
+                disabled={saving || previewLoading || resnapPreviewLoading}
+              >
+                Отмена
+              </button>
+
+              <button
+                type="button"
+                className="px-4 py-2 rounded-lg bg-black text-white hover:bg-gray-900 disabled:opacity-50"
+                onClick={saveDraft}
+                disabled={saving || draftLocked}
+                title={draftLocked ? "Locked месяц read-only. Unlock или Re-snapshot." : ""}
+              >
+                {saving ? "Сохраняю…" : "Сохранить"}
+              </button>
+            </div>
           </div>
         )}
       </div>
 
-      {auditOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40" onClick={closeAudit} />
-          <div className="relative w-full max-w-4xl rounded-2xl bg-white border border-gray-200 shadow-xl">
-            <div className="flex items-start justify-between gap-3 p-4 border-b">
-              <div>
-                <div className="text-sm font-semibold">Audit: {editYm}</div>
-                <div className="text-xs text-gray-500">Последние 200 событий</div>
+      {/* Modal: Audit item */}
+      <Modal
+        open={auditModalOpen}
+        title={auditModalTitle}
+        onClose={() => {
+          setAuditModalOpen(false);
+          setAuditModalItem(null);
+        }}
+        footer={
+          auditModalItem?.ym ? (
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-xs text-gray-600">
+                Month: <span className="font-medium">{ymFromDateLike(auditModalItem.ym)}</span>
               </div>
               <button
                 type="button"
                 className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
-                onClick={closeAudit}
+                onClick={() => loadMonthAudit(ymFromDateLike(auditModalItem.ym))}
               >
-                Закрыть
+                Open month audit
               </button>
             </div>
-
-            <div className="p-4 max-h-[70vh] overflow-auto">
-              {auditItems.length === 0 ? (
-                <div className="text-sm text-gray-500">Пусто.</div>
-              ) : (
-                <div className="space-y-3">
-                  {auditItems.map((it) => (
-                    <div key={it.id} className="rounded-xl border border-gray-200 p-3">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 border border-gray-200">
-                            {it.action}
-                          </span>
-                          <span className="text-xs text-gray-500">
-                            {new Date(it.created_at).toLocaleString("ru-RU")}
-                          </span>
-                        </div>
-
-                        <div className="text-xs text-gray-600">
-                          {it.actor_name ||
-                            it.actor_email ||
-                            (it.actor_role ? `(${it.actor_role})` : "")}
-                        </div>
-                      </div>
-
-                      {it.meta && (
-                        <pre className="mt-2 text-[11px] bg-gray-50 border border-gray-200 rounded-lg p-2 overflow-auto">
-{JSON.stringify(it.meta, null, 2)}
-                        </pre>
-                      )}
-
-                      {it.diff && Object.keys(it.diff || {}).length > 0 && (
-                        <pre className="mt-2 text-[11px] bg-white border border-gray-200 rounded-lg p-2 overflow-auto">
-{JSON.stringify(it.diff, null, 2)}
-                        </pre>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
+          ) : (
+            <div className="text-xs text-gray-600"> </div>
+          )
+        }
+      >
+        <div className="space-y-3 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="p-3 rounded-xl border bg-gray-50">
+              <div className="text-[11px] text-gray-500 mb-1">When</div>
+              <div className="font-medium">{fmtTime(auditModalItem?.created_at)}</div>
+            </div>
+            <div className="p-3 rounded-xl border bg-gray-50">
+              <div className="text-[11px] text-gray-500 mb-1">Actor</div>
+              <div className="font-medium">{compactActor(auditModalItem)}</div>
             </div>
           </div>
+
+          <div className="p-3 rounded-xl border">
+            <div className="text-[11px] text-gray-500 mb-1">Diff</div>
+            <pre className="text-[11px] whitespace-pre-wrap break-words">{safeJson(auditModalItem?.diff || {})}</pre>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="p-3 rounded-xl border">
+              <div className="text-[11px] text-gray-500 mb-1">Prev</div>
+              <pre className="text-[11px] whitespace-pre-wrap break-words">{safeJson(auditModalItem?.prev || null)}</pre>
+            </div>
+            <div className="p-3 rounded-xl border">
+              <div className="text-[11px] text-gray-500 mb-1">Next</div>
+              <pre className="text-[11px] whitespace-pre-wrap break-words">{safeJson(auditModalItem?.next || null)}</pre>
+            </div>
+          </div>
+
+          <div className="p-3 rounded-xl border">
+            <div className="text-[11px] text-gray-500 mb-1">Meta</div>
+            <pre className="text-[11px] whitespace-pre-wrap break-words">{safeJson(auditModalItem?.meta || null)}</pre>
+          </div>
         </div>
-      )}
+      </Modal>
+
+      {/* Modal: Month audit */}
+      <Modal
+        open={monthAuditOpen}
+        title={`Month audit — ${monthAuditSelected || ""}`}
+        onClose={() => {
+          setMonthAuditOpen(false);
+          setMonthAuditItems([]);
+          setMonthAuditSelected(null);
+        }}
+      >
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-xs text-gray-600">
+              Month: <span className="font-medium">{monthAuditSelected || "—"}</span>
+            </div>
+
+            <button
+              type="button"
+              className={cls(
+                "px-3 py-2 rounded-lg border bg-white hover:bg-gray-50",
+                monthAuditLoading ? "opacity-50" : ""
+              )}
+              onClick={() => loadMonthAudit(monthAuditSelected)}
+              disabled={monthAuditLoading}
+            >
+              {monthAuditLoading ? "Loading…" : "Refresh"}
+            </button>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-xs">
+              <thead>
+                <tr className="text-left text-gray-600 border-b">
+                  <th className="py-2 pr-3">Time</th>
+                  <th className="py-2 pr-3">Action</th>
+                  <th className="py-2 pr-3">Actor</th>
+                  <th className="py-2 pr-3">Diff keys</th>
+                  <th className="py-2 pr-2 text-right"> </th>
+                </tr>
+              </thead>
+              <tbody>
+                {(monthAuditItems || []).map((it) => (
+                  <tr key={`${it.id}`} className="border-b last:border-b-0">
+                    <td className="py-2 pr-3 whitespace-nowrap">{fmtTime(it.created_at)}</td>
+                    <td className="py-2 pr-3 whitespace-nowrap">
+                      <span className="px-2 py-0.5 rounded-full border bg-gray-50 text-gray-800">
+                        {String(it.action || "—")}
+                      </span>
+                    </td>
+                    <td className="py-2 pr-3 max-w-[420px]">
+                      <div className="truncate" title={compactActor(it)}>
+                        {compactActor(it)}
+                      </div>
+                    </td>
+                    <td className="py-2 pr-3 max-w-[340px]">
+                      <div className="truncate" title={diffSummary(it.diff)}>
+                        {diffSummary(it.diff)}
+                      </div>
+                    </td>
+                    <td className="py-2 pr-2 text-right whitespace-nowrap">
+                      <button
+                        type="button"
+                        className="px-3 py-1.5 rounded-lg border bg-white hover:bg-gray-50"
+                        onClick={() => {
+                          setAuditModalItem(it);
+                          setAuditModalTitle(
+                            `Audit #${it.id} — ${monthAuditSelected || ""} — ${String(it.action || "")}`
+                          );
+                          setAuditModalOpen(true);
+                        }}
+                      >
+                        View
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+
+                {!monthAuditLoading && !monthAuditItems?.length && (
+                  <tr>
+                    <td colSpan={5} className="py-6 text-center text-gray-500">
+                      Нет audit событий для месяца.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
