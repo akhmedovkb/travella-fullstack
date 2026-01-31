@@ -1,7 +1,7 @@
 // frontend/src/pages/admin/DonasDosasFinanceMonths.jsx
 
 import { useEffect, useMemo, useState } from "react";
-import { apiGet, apiPut } from "../../api";
+import { apiGet, apiPost, apiPut } from "../../api";
 
 function toNum(x) {
   const n = Number(x);
@@ -101,6 +101,41 @@ export default function DonasDosasFinanceMonths() {
     setDraft(emptyDraft(""));
   }
 
+  async function syncFromPurchases() {
+    setSaving(true);
+    setErr("");
+    setOk("");
+    try {
+      const r = await apiPost("/api/admin/donas/finance/months/sync", {});
+      const inserted = r?.inserted ?? 0;
+      setOk(`Синхронизировано ✅ Добавлено месяцев: ${inserted}`);
+      setTimeout(() => setOk(""), 2500);
+      await load();
+    } catch (e) {
+      setErr(e?.response?.data?.error || e?.message || "Failed to sync months");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function unlockMonth() {
+    if (!editYm) return;
+    setSaving(true);
+    setErr("");
+    setOk("");
+    try {
+      await apiPost(`/api/admin/donas/finance/months/${editYm}/unlock`, {});
+      setOk("Unlocked ✅ Теперь месяц снова auto (purchases + server cashflow).");
+      setTimeout(() => setOk(""), 2500);
+      await load();
+      stopEdit();
+    } catch (e) {
+      setErr(e?.response?.data?.error || e?.message || "Failed to unlock month");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function saveDraft() {
     if (!editYm) return;
 
@@ -110,10 +145,10 @@ export default function DonasDosasFinanceMonths() {
     try {
       const locked = isLocked(draft.notes);
 
-      // Non-locked months:
-      // - OPEX/CAPEX are derived from donas_purchases on the server.
-      // - cash_end is computed by the server as a chain.
-      // Locked months are snapshots, so server allows manual patch for opex/capex/cash_end.
+      // IMPORTANT:
+      // unlocked -> opex/capex берутся из purchases, cash_end считается на сервере,
+      // поэтому их НЕ отправляем.
+      // locked -> snapshot, можно править opex/capex/cash_end вручную.
       const payload = {
         revenue: toNum(draft.revenue),
         cogs: toNum(draft.cogs),
@@ -184,7 +219,6 @@ export default function DonasDosasFinanceMonths() {
         ...r,
         _ym: ymFromDateLike(r.month),
         _locked: isLocked(r.notes),
-        _source: r._source || null,
         _calc: { gp, netOp, cf },
       };
     });
@@ -200,14 +234,26 @@ export default function DonasDosasFinanceMonths() {
           </p>
         </div>
 
-        <button
-          type="button"
-          className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
-          onClick={load}
-          disabled={loading || saving}
-        >
-          Обновить
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
+            onClick={syncFromPurchases}
+            disabled={loading || saving}
+            title="Создаёт недостающие месяцы на основе donas_purchases"
+          >
+            Sync Purchases → Months
+          </button>
+
+          <button
+            type="button"
+            className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
+            onClick={load}
+            disabled={loading || saving}
+          >
+            Обновить
+          </button>
+        </div>
       </div>
 
       {(err || ok) && (
@@ -248,6 +294,7 @@ export default function DonasDosasFinanceMonths() {
 
           <div className="text-xs text-gray-500">
             Чтобы “зафиксировать” месяц: добавь <b>#locked</b> в notes.
+            <span className="ml-2">Unlocked месяцы берут OPEX/CAPEX из Purchases.</span>
           </div>
         </div>
 
@@ -274,12 +321,12 @@ export default function DonasDosasFinanceMonths() {
                   <td className="py-2 pr-4 whitespace-nowrap">
                     <div className="flex items-center gap-2">
                       <span className="font-medium">{r._ym || "—"}</span>
-                      {r._locked && (
+
+                      {r._locked ? (
                         <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 border border-gray-200">
                           locked
                         </span>
-                      )}
-                      {!r._locked && (
+                      ) : (
                         <span
                           className="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200"
                           title="OPEX/CAPEX подтягиваются из Purchases"
@@ -324,7 +371,7 @@ export default function DonasDosasFinanceMonths() {
               {!loading && viewRows.length === 0 && (
                 <tr>
                   <td colSpan={10} className="py-6 text-center text-gray-500">
-                    Нет месяцев. Добавь первый месяц сверху.
+                    Нет месяцев. Добавь первый месяц сверху или нажми Sync.
                   </td>
                 </tr>
               )}
@@ -343,14 +390,29 @@ export default function DonasDosasFinanceMonths() {
                     : "OPEX/CAPEX подтягиваются из Purchases, cash_end считается цепочкой на сервере."}
                 </div>
               </div>
-              <button
-                type="button"
-                className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
-                onClick={stopEdit}
-                disabled={saving}
-              >
-                Закрыть
-              </button>
+
+              <div className="flex items-center gap-2">
+                {isLocked(draft.notes) && (
+                  <button
+                    type="button"
+                    className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
+                    onClick={unlockMonth}
+                    disabled={saving}
+                    title="Снимает #locked и возвращает месяц в auto-режим"
+                  >
+                    Unlock month
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
+                  onClick={stopEdit}
+                  disabled={saving}
+                >
+                  Закрыть
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -374,9 +436,8 @@ export default function DonasDosasFinanceMonths() {
                     }
                     disabled={
                       saving ||
-                      (k === "opex" || k === "capex"
-                        ? !isLocked(draft.notes) // non-locked: always read-only
-                        : isLocked(draft.notes))
+                      // В unlocked режиме OPEX/CAPEX read-only (тянутся из purchases)
+                      ((k === "opex" || k === "capex") && !isLocked(draft.notes))
                     }
                     inputMode="numeric"
                     placeholder={currency}
@@ -386,4 +447,49 @@ export default function DonasDosasFinanceMonths() {
 
               <label className="text-xs text-gray-600">
                 <div className="mb-1">Cash end (manual for locked)</div>
-                <in
+                <input
+                  className="w-full border rounded-lg px-3 py-2 bg-white"
+                  value={draft.cash_end}
+                  onChange={(e) => setDraft((d) => ({ ...d, cash_end: e.target.value }))}
+                  disabled={saving || !isLocked(draft.notes)}
+                  inputMode="numeric"
+                  placeholder={currency}
+                />
+              </label>
+
+              <label className="text-xs text-gray-600 col-span-2 md:col-span-3">
+                <div className="mb-1">Notes</div>
+                <input
+                  className="w-full border rounded-lg px-3 py-2 bg-white"
+                  value={draft.notes}
+                  onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))}
+                  disabled={saving}
+                  placeholder="например: #locked, комментарий..."
+                />
+              </label>
+            </div>
+
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                className="px-4 py-2 rounded-lg border bg-white hover:bg-gray-50"
+                onClick={stopEdit}
+                disabled={saving}
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                className="px-4 py-2 rounded-lg bg-black text-white hover:bg-gray-900 disabled:opacity-50"
+                onClick={saveDraft}
+                disabled={saving}
+              >
+                {saving ? "Сохраняю…" : "Сохранить"}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
