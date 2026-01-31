@@ -14,10 +14,10 @@ function isLockedNotes(notes) {
 }
 
 function ensureLockedTag(notes) {
-  const prev = String(notes || "").trim();
-  if (!prev) return "#locked";
-  if (isLockedNotes(prev)) return prev;
-  return `${prev} #locked`.trim();
+  const s = String(notes || "").trim();
+  if (!s) return "#locked";
+  if (isLockedNotes(s)) return s;
+  return `${s} #locked`.trim();
 }
 
 function removeLockedTag(notes) {
@@ -54,8 +54,8 @@ function toNum(v) {
   return Number.isFinite(n) ? n : 0;
 }
 
-async function getCashStart() {
-  const s = await pool.query(
+async function getCashStart(client = pool) {
+  const s = await client.query(
     `select cash_start from donas_finance_settings where slug=$1 limit 1`,
     [SLUG]
   );
@@ -147,7 +147,6 @@ async function ensureMonthExists(client, monthIso) {
 }
 
 async function ensureMonthsRange(client, fromYm, toYm) {
-  // создаём месяцы YYYY-MM-01 в диапазоне [fromYm..toYm]
   const f = ymFromDateLike(fromYm);
   const t = ymFromDateLike(toYm);
   if (!f || !t) return;
@@ -265,14 +264,13 @@ function computeChainWithSnapshots({ cashStart, monthRows, purchasesByYm }) {
 }
 
 async function snapshotMonthByISO(client, monthIso) {
-  // monthIso: YYYY-MM-01
   const rows = await loadMonthsRaw(client);
   const targetYm = ymFromDateLike(monthIso);
 
   const idx = rows.findIndex((r) => normalizeMonthISO(r.month) === monthIso);
   if (idx < 0) throw new Error("Month not found");
 
-  const cashStart = await getCashStart();
+  const cashStart = await getCashStart(client);
   const purchasesByYmAll = await getPurchasesSumsByMonth(
     client,
     rows.map((r) => r._ym).filter(Boolean)
@@ -280,7 +278,6 @@ async function snapshotMonthByISO(client, monthIso) {
 
   const pur = purchasesByYmAll?.[targetYm] || { opex: 0, capex: 0 };
 
-  // делаем month locked, snapshot opex/capex, cash_end пока 0 — потом пересчитаем цепочкой
   rows[idx] = {
     ...rows[idx],
     _locked: true,
@@ -315,12 +312,9 @@ async function snapshotMonthByISO(client, monthIso) {
 }
 
 async function snapshotUpToISO(client, targetMonthIso) {
-  // lock + snapshot всех месяцев <= targetMonthIso
   const targetYm = ymFromDateLike(targetMonthIso);
   if (!targetYm) throw new Error("Bad month");
 
-  // гарантируем, что все месяцы в диапазоне существуют
-  // старт: либо самый ранний месяц из months, либо самый ранний месяц из purchases
   const minMonthDb = await client.query(
     `select min(to_char(month,'YYYY-MM')) as min_ym from donas_finance_months where slug=$1`,
     [SLUG]
@@ -339,11 +333,9 @@ async function snapshotUpToISO(client, targetMonthIso) {
   const fromYm = ymFromDateLike(minYmDb || minYmPurch || targetYm) || targetYm;
   await ensureMonthsRange(client, fromYm, targetYm);
 
-  // загрузили заново после ensure
   const rows = await loadMonthsRaw(client);
 
-  // помечаем как locked все <= target
-  const cashStart = await getCashStart();
+  const cashStart = await getCashStart(client);
   const purchasesByYmAll = await getPurchasesSumsByMonth(
     client,
     rows.map((r) => r._ym).filter(Boolean)
@@ -361,7 +353,7 @@ async function snapshotUpToISO(client, targetMonthIso) {
       notes: ensureLockedTag(r.notes),
       opex: toNum(pur.opex),
       capex: toNum(pur.capex),
-      cash_end: 0, // пересчитаем ниже
+      cash_end: 0,
     };
   });
 
@@ -371,7 +363,6 @@ async function snapshotUpToISO(client, targetMonthIso) {
     purchasesByYm: purchasesByYmAll,
   });
 
-  // сохраняем только locked <= target
   let lockedCount = 0;
   for (const r of computed) {
     const ym = ymFromDateLike(r.month);
@@ -509,11 +500,11 @@ router.put("/donas/finance/settings", authenticateToken, requireAdmin, async (re
 });
 
 /**
- * MONTHS
+ * MONTHS (server cashflow + snapshot/auto sources)
  */
 router.get("/donas/finance/months", authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const cashStart = await getCashStart();
+    const cashStart = await getCashStart(pool);
     const rows = await loadMonthsRaw(pool);
 
     const yms = rows.map((r) => r._ym).filter(Boolean);
@@ -521,14 +512,16 @@ router.get("/donas/finance/months", authenticateToken, requireAdmin, async (req,
 
     const computed = computeChainWithSnapshots({ cashStart, monthRows: rows, purchasesByYm });
 
-    // diff purchases - snapshot (полезно для контроля)
     const out = computed.map((r) => {
       const ym = ymFromDateLike(r.month);
       const pur = purchasesByYm?.[ym] || { opex: 0, capex: 0 };
       const snap = { opex: toNum(r._snapshot?.opex), capex: toNum(r._snapshot?.capex) };
       return {
         ...r,
-        _diff: { opex: toNum(pur.opex) - toNum(snap.opex), capex: toNum(pur.capex) - toNum(snap.capex) },
+        _diff: {
+          opex: toNum(pur.opex) - toNum(snap.opex),
+          capex: toNum(pur.capex) - toNum(snap.capex),
+        },
       };
     });
 
@@ -539,7 +532,7 @@ router.get("/donas/finance/months", authenticateToken, requireAdmin, async (req,
   }
 });
 
-// Sync months based on purchases min/max (opex/capex)
+// Create missing months based on purchases min/max
 router.post("/donas/finance/months/sync", authenticateToken, requireAdmin, async (req, res) => {
   try {
     const r = await pool.query(`
@@ -557,7 +550,6 @@ router.post("/donas/finance/months/sync", authenticateToken, requireAdmin, async
       return res.json({ ok: true, inserted: 0, message: "No purchases found" });
     }
 
-    // создаём полный диапазон
     const months = [];
     const [minY, minM] = minYm.split("-").map((x) => Number(x));
     const [maxY, maxM] = maxYm.split("-").map((x) => Number(x));
@@ -623,7 +615,7 @@ router.post("/donas/finance/months/:month/lock", authenticateToken, requireAdmin
   }
 });
 
-// ✅ NEW: Lock all months <= selected (snapshot + cash_end chain)
+// Lock all months <= selected (snapshot + cash_end chain)
 router.post("/donas/finance/months/:month/lock-up-to", authenticateToken, requireAdmin, async (req, res) => {
   const client = await pool.connect();
   try {
@@ -635,10 +627,9 @@ router.post("/donas/finance/months/:month/lock-up-to", authenticateToken, requir
     }
 
     await client.query("begin");
-
     const { lockedCount } = await snapshotUpToISO(client, monthIso);
-
     await client.query("commit");
+
     return res.json({ ok: true, lockedCount });
   } catch (e) {
     try { await client.query("rollback"); } catch {}
@@ -649,7 +640,7 @@ router.post("/donas/finance/months/:month/lock-up-to", authenticateToken, requir
   }
 });
 
-// Unlock month: remove #locked + clear snapshot opex/capex/cash_end
+// Unlock month (back to auto)
 router.post("/donas/finance/months/:month/unlock", authenticateToken, requireAdmin, async (req, res) => {
   try {
     const monthParam = req.params.month;
@@ -688,7 +679,7 @@ router.post("/donas/finance/months/:month/unlock", authenticateToken, requireAdm
   }
 });
 
-// Re-snapshot locked month: opex/capex from purchases + recompute cash_end chain
+// Re-snapshot locked month
 router.post("/donas/finance/months/:month/resnapshot", authenticateToken, requireAdmin, async (req, res) => {
   const client = await pool.connect();
   try {
@@ -722,8 +713,13 @@ router.post("/donas/finance/months/:month/resnapshot", authenticateToken, requir
   }
 });
 
+/**
+ * PUT month
+ * ШАГ 9 (guardrails):
+ * - если месяц locked -> запрещаем любые изменения через PUT (read-only).
+ * - lock/unlock/resnapshot выполняются отдельными роутами.
+ */
 router.put("/donas/finance/months/:month", authenticateToken, requireAdmin, async (req, res) => {
-  const client = await pool.connect();
   try {
     const monthParam = req.params.month;
     const monthIso = isoMonthStartFromYM(monthParam) || monthParam;
@@ -733,67 +729,49 @@ router.put("/donas/finance/months/:month", authenticateToken, requireAdmin, asyn
     }
 
     const b = req.body || {};
-    const nextNotes = String(b.notes || "");
+    const incomingNotes = String(b.notes || "");
 
-    const prev = await client.query(
-      `select notes, revenue, cogs, loan_paid from donas_finance_months where slug=$1 and month=$2 limit 1`,
+    const prev = await pool.query(
+      `select notes from donas_finance_months where slug=$1 and month=$2 limit 1`,
       [SLUG, monthIso]
     );
+
     const prevNotes = String(prev.rows?.[0]?.notes || "");
     const wasLocked = isLockedNotes(prevNotes);
-    const willBeLocked = isLockedNotes(nextNotes);
+    const willBeLocked = isLockedNotes(incomingNotes);
 
-    const basePayload = {
+    // ✅ Guardrail: locked month is read-only via PUT
+    if (wasLocked) {
+      return res.status(400).json({
+        error: "Locked month is read-only. Unlock first (or use Re-snapshot).",
+      });
+    }
+
+    // ✅ Guardrail: нельзя “залочить” через notes в PUT — только через POST /lock /lock-up-to
+    if (!wasLocked && willBeLocked) {
+      return res.status(400).json({
+        error: "To lock a month use the Lock button (POST /lock). Notes cannot lock via Save.",
+      });
+    }
+
+    const payload = {
       slug: SLUG,
       month: monthIso,
       revenue: toNum(b.revenue),
       cogs: toNum(b.cogs),
-      loan_paid: toNum(b.loan_paid),
-      notes: nextNotes,
+      // auto months: opex/capex/cash_end НЕ сохраняем (сервер считает)
       opex: 0,
       capex: 0,
+      loan_paid: toNum(b.loan_paid),
       cash_end: 0,
+      notes: incomingNotes,
     };
 
-    await client.query("begin");
-
-    // locked stays locked -> allow manual edits if you want (opex/capex/cash_end can be sent)
-    if (wasLocked && willBeLocked) {
-      const saved = await upsertMonthRow(client, {
-        ...basePayload,
-        opex: toNum(b.opex),
-        capex: toNum(b.capex),
-        cash_end: toNum(b.cash_end),
-      });
-      await client.query("commit");
-      return res.json(saved);
-    }
-
-    // transition to locked -> snapshot automatically
-    if (!wasLocked && willBeLocked) {
-      // сначала сохраняем revenue/cogs/loan_paid + notes
-      await upsertMonthRow(client, basePayload);
-      const saved = await snapshotMonthByISO(client, monthIso);
-      await client.query("commit");
-      return res.json(saved);
-    }
-
-    // auto month: keep opex/capex/cash_end in DB as 0 (server computes)
-    const saved = await upsertMonthRow(client, {
-      ...basePayload,
-      opex: 0,
-      capex: 0,
-      cash_end: 0,
-    });
-
-    await client.query("commit");
-    return res.json(saved);
+    const saved = await upsertMonthRow(pool, payload);
+    res.json(saved);
   } catch (e) {
-    try { await client.query("rollback"); } catch {}
     console.error("finance/month PUT error:", e);
     res.status(500).json({ error: "Failed to save month" });
-  } finally {
-    client.release();
   }
 });
 
