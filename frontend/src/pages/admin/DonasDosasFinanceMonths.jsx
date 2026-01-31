@@ -37,18 +37,8 @@ function emptyDraft(ym) {
     _source: null,
     _snapshot: null,
     _purchases: null,
+    _diff: null,
   };
-}
-
-function sourceLabel(src) {
-  if (!src) return "";
-  const o = src?.opex || "";
-  const c = src?.capex || "";
-  if (o && c && o === c) return o; // purchases | snapshot
-  if (!o && c) return c;
-  if (o && !c) return o;
-  if (o || c) return `opex:${o || "?"}, capex:${c || "?"}`;
-  return "";
 }
 
 function diffBadgeClass(v) {
@@ -114,6 +104,7 @@ export default function DonasDosasFinanceMonths() {
       _source: r?._source || null,
       _snapshot: r?._snapshot || null,
       _purchases: r?._purchases || null,
+      _diff: r?._diff || null,
     });
 
     setErr("");
@@ -142,6 +133,44 @@ export default function DonasDosasFinanceMonths() {
     }
   }
 
+  async function lockMonth() {
+    if (!editYm) return;
+    setSaving(true);
+    setErr("");
+    setOk("");
+    try {
+      await apiPost(`/api/admin/donas/finance/months/${editYm}/lock`, {});
+      setOk("Locked ✅ Месяц зафиксирован (snapshot).");
+      setTimeout(() => setOk(""), 2500);
+      await load();
+      stopEdit();
+    } catch (e) {
+      setErr(e?.response?.data?.error || e?.message || "Failed to lock month");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // ✅ NEW: lock all months up to selected
+  async function lockUpTo() {
+    if (!editYm) return;
+    setSaving(true);
+    setErr("");
+    setOk("");
+    try {
+      const r = await apiPost(`/api/admin/donas/finance/months/${editYm}/lock-up-to`, {});
+      const cnt = r?.lockedCount ?? 0;
+      setOk(`Locked ✅ Закрыто месяцев: ${cnt}`);
+      setTimeout(() => setOk(""), 2600);
+      await load();
+      stopEdit();
+    } catch (e) {
+      setErr(e?.response?.data?.error || e?.message || "Failed to lock months up to selected");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function unlockMonth() {
     if (!editYm) return;
     setSaving(true);
@@ -149,7 +178,7 @@ export default function DonasDosasFinanceMonths() {
     setOk("");
     try {
       await apiPost(`/api/admin/donas/finance/months/${editYm}/unlock`, {});
-      setOk("Unlocked ✅ Теперь месяц снова auto (purchases + server cashflow).");
+      setOk("Unlocked ✅ Теперь месяц снова auto.");
       setTimeout(() => setOk(""), 2500);
       await load();
       stopEdit();
@@ -167,31 +196,12 @@ export default function DonasDosasFinanceMonths() {
     setOk("");
     try {
       await apiPost(`/api/admin/donas/finance/months/${editYm}/resnapshot`, {});
-      setOk("Re-snapshot ✅ Снапшот обновлён по текущим Purchases + chain cash_end.");
+      setOk("Re-snapshot ✅ Снапшот обновлён.");
       setTimeout(() => setOk(""), 2600);
       await load();
       stopEdit();
     } catch (e) {
       setErr(e?.response?.data?.error || e?.message || "Failed to resnapshot month");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  // ✅ NEW: Lock button
-  async function lockMonth() {
-    if (!editYm) return;
-    setSaving(true);
-    setErr("");
-    setOk("");
-    try {
-      await apiPost(`/api/admin/donas/finance/months/${editYm}/lock`, {});
-      setOk("Locked ✅ Месяц зафиксирован (snapshot: purchases + cash_end chain).");
-      setTimeout(() => setOk(""), 2600);
-      await load();
-      stopEdit();
-    } catch (e) {
-      setErr(e?.response?.data?.error || e?.message || "Failed to lock month");
     } finally {
       setSaving(false);
     }
@@ -272,31 +282,16 @@ export default function DonasDosasFinanceMonths() {
       const netOp = gp - opex;
       const cf = netOp - loan_paid - capex;
 
-      const locked = isLocked(r.notes);
-
-      const snapO = toNum(r?._snapshot?.opex);
-      const snapC = toNum(r?._snapshot?.capex);
-      const purO = toNum(r?._purchases?.opex);
-      const purC = toNum(r?._purchases?.capex);
-
-      const diffO = purO - snapO;
-      const diffC = purC - snapC;
-
       return {
         ...r,
         _ym: ymFromDateLike(r.month),
-        _locked: locked,
+        _locked: isLocked(r.notes),
         _calc: { gp, netOp, cf },
-        _source: r?._source || null,
-        _snapshot: r?._snapshot || null,
-        _purchases: r?._purchases || null,
-        _diff: { opex: diffO, capex: diffC },
       };
     });
   }, [sorted]);
 
   const draftLocked = isLocked(draft.notes);
-  const draftSourceText = sourceLabel(draft._source);
 
   return (
     <div className="max-w-6xl mx-auto space-y-4">
@@ -314,7 +309,7 @@ export default function DonasDosasFinanceMonths() {
             className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
             onClick={syncFromPurchases}
             disabled={loading || saving}
-            title="Создаёт недостающие месяцы на основе donas_purchases"
+            title="Создаёт недостающие месяцы по диапазону donas_purchases"
           >
             Sync Purchases → Months
           </button>
@@ -394,20 +389,13 @@ export default function DonasDosasFinanceMonths() {
 
             <tbody>
               {viewRows.map((r) => {
-                const srcTxt = sourceLabel(r._source);
                 const locked = r._locked;
-
-                const snapO = toNum(r?._snapshot?.opex);
-                const snapC = toNum(r?._snapshot?.capex);
-                const purO = toNum(r?._purchases?.opex);
-                const purC = toNum(r?._purchases?.capex);
 
                 const diffO = toNum(r?._diff?.opex);
                 const diffC = toNum(r?._diff?.capex);
 
                 const diffTitle = locked
-                  ? `OPEX: purchases ${money(purO)} − snapshot ${money(snapO)} = ${money(diffO)}\n` +
-                    `CAPEX: purchases ${money(purC)} − snapshot ${money(snapC)} = ${money(diffC)}`
+                  ? `OPEX diff: ${money(diffO)}\nCAPEX diff: ${money(diffC)}`
                   : "Diff показывается только для locked месяцев";
 
                 return (
@@ -425,15 +413,6 @@ export default function DonasDosasFinanceMonths() {
                             auto
                           </span>
                         )}
-
-                        {srcTxt ? (
-                          <span
-                            className="text-[11px] px-2 py-0.5 rounded-full bg-white border border-gray-200 text-gray-600"
-                            title={`OPEX/CAPEX source: ${srcTxt}`}
-                          >
-                            {srcTxt}
-                          </span>
-                        ) : null}
                       </div>
                     </td>
 
@@ -519,15 +498,6 @@ export default function DonasDosasFinanceMonths() {
                       auto
                     </span>
                   )}
-
-                  {draftSourceText ? (
-                    <span
-                      className="text-[11px] px-2 py-0.5 rounded-full bg-white border border-gray-200 text-gray-600"
-                      title={`OPEX/CAPEX source: ${draftSourceText}`}
-                    >
-                      {draftSourceText}
-                    </span>
-                  ) : null}
                 </div>
 
                 <div className="text-xs text-gray-500">
@@ -539,15 +509,27 @@ export default function DonasDosasFinanceMonths() {
 
               <div className="flex items-center gap-2">
                 {!draftLocked && (
-                  <button
-                    type="button"
-                    className="px-3 py-2 rounded-lg bg-black text-white hover:bg-gray-900 disabled:opacity-50"
-                    onClick={lockMonth}
-                    disabled={saving}
-                    title="Зафиксировать месяц: snapshot purchases + cash_end chain"
-                  >
-                    Lock month
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      className="px-3 py-2 rounded-lg bg-black text-white hover:bg-gray-900 disabled:opacity-50"
+                      onClick={lockMonth}
+                      disabled={saving}
+                      title="Зафиксировать месяц: snapshot purchases + cash_end chain"
+                    >
+                      Lock month
+                    </button>
+
+                    <button
+                      type="button"
+                      className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50"
+                      onClick={lockUpTo}
+                      disabled={saving}
+                      title="Закрыть все месяцы до выбранного включительно (snapshot + правильная цепочка cash_end)"
+                    >
+                      Lock all ≤ this month
+                    </button>
+                  </>
                 )}
 
                 {draftLocked && (
@@ -557,7 +539,7 @@ export default function DonasDosasFinanceMonths() {
                       className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
                       onClick={resnapshotMonth}
                       disabled={saving}
-                      title="Переснять снапшот: opex/capex из Purchases + новый cash_end по цепочке"
+                      title="Переснять снапшот по текущим Purchases + новый cash_end по цепочке"
                     >
                       Re-snapshot
                     </button>
@@ -630,7 +612,7 @@ export default function DonasDosasFinanceMonths() {
                   value={draft.notes}
                   onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))}
                   disabled={saving}
-                  placeholder="например: комментарий... (#locked не обязательно — есть кнопка Lock)"
+                  placeholder="например: комментарий... (#locked не обязательно — есть кнопки Lock)"
                 />
               </label>
             </div>
