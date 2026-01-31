@@ -178,6 +178,25 @@ export default function DonasDosasFinanceMonths() {
     }
   }
 
+  // ✅ NEW: Lock button
+  async function lockMonth() {
+    if (!editYm) return;
+    setSaving(true);
+    setErr("");
+    setOk("");
+    try {
+      await apiPost(`/api/admin/donas/finance/months/${editYm}/lock`, {});
+      setOk("Locked ✅ Месяц зафиксирован (snapshot: purchases + cash_end chain).");
+      setTimeout(() => setOk(""), 2600);
+      await load();
+      stopEdit();
+    } catch (e) {
+      setErr(e?.response?.data?.error || e?.message || "Failed to lock month");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function saveDraft() {
     if (!editYm) return;
 
@@ -348,8 +367,7 @@ export default function DonasDosasFinanceMonths() {
           </button>
 
           <div className="text-xs text-gray-500">
-            Чтобы “зафиксировать” месяц: добавь <b>#locked</b> в notes.
-            <span className="ml-2">Locked = snapshot. Auto = purchases + server cashflow.</span>
+            Auto: OPEX/CAPEX из Purchases и cash_end считает сервер. Snapshot: #locked.
           </div>
         </div>
 
@@ -515,11 +533,23 @@ export default function DonasDosasFinanceMonths() {
                 <div className="text-xs text-gray-500">
                   {draftLocked
                     ? "locked: это снепшот. Можно править cash_end (и при необходимости OPEX/CAPEX)."
-                    : "OPEX/CAPEX подтягиваются из Purchases, cash_end считается цепочкой на сервере."}
+                    : "auto: OPEX/CAPEX из Purchases, cash_end считается цепочкой на сервере."}
                 </div>
               </div>
 
               <div className="flex items-center gap-2">
+                {!draftLocked && (
+                  <button
+                    type="button"
+                    className="px-3 py-2 rounded-lg bg-black text-white hover:bg-gray-900 disabled:opacity-50"
+                    onClick={lockMonth}
+                    disabled={saving}
+                    title="Зафиксировать месяц: snapshot purchases + cash_end chain"
+                  >
+                    Lock month
+                  </button>
+                )}
+
                 {draftLocked && (
                   <>
                     <button
@@ -537,7 +567,7 @@ export default function DonasDosasFinanceMonths() {
                       className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
                       onClick={unlockMonth}
                       disabled={saving}
-                      title="Снимает #locked и возвращает месяц в auto-режим"
+                      title="Снимает #locked и возвращает месяц в auto"
                     >
                       Unlock month
                     </button>
@@ -600,7 +630,7 @@ export default function DonasDosasFinanceMonths() {
                   value={draft.notes}
                   onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))}
                   disabled={saving}
-                  placeholder="например: #locked, комментарий..."
+                  placeholder="например: комментарий... (#locked не обязательно — есть кнопка Lock)"
                 />
               </label>
             </div>
