@@ -52,12 +52,12 @@ export default function DonasDosasFinanceMonths() {
   const [editYm, setEditYm] = useState("");
   const [draft, setDraft] = useState(emptyDraft(""));
 
-  // lock preview
+  // preview lock
   const [previewScope, setPreviewScope] = useState("single"); // single | upto
   const [preview, setPreview] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
-  // resnapshot ≤ preview (locked only)
+  // preview bulk resnapshot ≤ (locked only)
   const [resnapPreview, setResnapPreview] = useState(null);
   const [resnapPreviewLoading, setResnapPreviewLoading] = useState(false);
 
@@ -127,6 +127,7 @@ export default function DonasDosasFinanceMonths() {
     setPreviewScope("single");
     setAuditOpen(false);
     setAuditItems([]);
+    setAuditLoading(false);
   }
 
   async function syncFromPurchases() {
@@ -304,7 +305,7 @@ export default function DonasDosasFinanceMonths() {
     }
 
     if (String(draft.notes || "").toLowerCase().includes("#locked")) {
-      setErr("Лочить через notes нельзя. Используй кнопки Lock / Lock ≤.");
+      setErr("Лочить через notes нельзя. Используй кнопку Lock month / Lock all ≤ this month.");
       return;
     }
 
@@ -517,10 +518,14 @@ export default function DonasDosasFinanceMonths() {
                     <td className="py-2 pr-4 text-right whitespace-nowrap">
                       {locked ? (
                         <div className="inline-flex flex-col items-end gap-1">
-                          <span className={`text-[11px] px-2 py-0.5 rounded-full border ${diffBadgeClass(diffO)}`}>
+                          <span
+                            className={`text-[11px] px-2 py-0.5 rounded-full border ${diffBadgeClass(diffO)}`}
+                          >
                             O: {money(diffO)}
                           </span>
-                          <span className={`text-[11px] px-2 py-0.5 rounded-full border ${diffBadgeClass(diffC)}`}>
+                          <span
+                            className={`text-[11px] px-2 py-0.5 rounded-full border ${diffBadgeClass(diffC)}`}
+                          >
                             C: {money(diffC)}
                           </span>
                         </div>
@@ -583,7 +588,7 @@ export default function DonasDosasFinanceMonths() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap justify-end">
                 <button
                   type="button"
                   className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50"
@@ -767,7 +772,9 @@ export default function DonasDosasFinanceMonths() {
 
                 <div className="mt-2 text-xs text-gray-600">
                   Δ cash_end at target:{" "}
-                  <span className="font-semibold">{money(preview?.summary?.deltaCashEndAtTarget)}</span>{" "}
+                  <span className="font-semibold">
+                    {money(preview?.summary?.deltaCashEndAtTarget)}
+                  </span>{" "}
                   (current {money(preview?.summary?.currentCashEndAtTarget)} → planned{" "}
                   {money(preview?.summary?.plannedCashEndAtTarget)})
                 </div>
@@ -829,10 +836,14 @@ export default function DonasDosasFinanceMonths() {
 
                 <div className="mt-2 text-xs text-gray-600">
                   affected locked months:{" "}
-                  <span className="font-semibold">{resnapPreview?.summary?.affectedLockedCount ?? 0}</span>
+                  <span className="font-semibold">
+                    {resnapPreview?.summary?.affectedLockedCount ?? 0}
+                  </span>
                   {" · "}
                   Δ cash_end at target:{" "}
-                  <span className="font-semibold">{money(resnapPreview?.summary?.deltaCashEndAtTarget)}</span>
+                  <span className="font-semibold">
+                    {money(resnapPreview?.summary?.deltaCashEndAtTarget)}
+                  </span>
                   {" (current "}
                   {money(resnapPreview?.summary?.currentCashEndAtTarget)}
                   {" → planned "}
@@ -919,7 +930,9 @@ export default function DonasDosasFinanceMonths() {
                         </div>
 
                         <div className="text-xs text-gray-600">
-                          {it.actor_name || it.actor_email || (it.actor_role ? `(${it.actor_role})` : "")}
+                          {it.actor_name ||
+                            it.actor_email ||
+                            (it.actor_role ? `(${it.actor_role})` : "")}
                         </div>
                       </div>
 
