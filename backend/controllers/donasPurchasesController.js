@@ -8,29 +8,35 @@ function toNum(x) {
 }
 
 exports.addPurchase = async (req, res) => {
-  const { date, ingredient, qty, price, type, category, notes } = req.body;
+  try {
+    const { date, ingredient, qty, price, type, category, notes } = req.body;
 
-  const q = toNum(qty);
-  const p = toNum(price);
-  const total = q * p;
+    const q = toNum(qty);
+    const p = toNum(price);
 
-  const { rows } = await db.query(
-    `INSERT INTO donas_purchases (date, ingredient, qty, price, total, type, category, notes)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-     RETURNING *`,
-    [
-      date,
-      ingredient,
-      q,
-      p,
-      total,
-      type,
-      category || null,
-      notes || null,
-    ]
-  );
+    // IMPORTANT:
+    // Column "total" is a GENERATED column in Postgres.
+    // Do NOT insert it manually; DB will compute it automatically.
+    const { rows } = await db.query(
+      `INSERT INTO donas_purchases (date, ingredient, qty, price, type, category, notes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
+       RETURNING *`,
+      [
+        date,
+        ingredient,
+        q,
+        p,
+        type,
+        category || null,
+        notes || null,
+      ]
+    );
 
-  res.json(rows[0]);
+    res.json(rows[0]);
+  } catch (e) {
+    console.error("addPurchase error:", e);
+    return res.status(500).json({ error: "Failed to add purchase" });
+  }
 };
 
 exports.deletePurchase = async (req, res) => {
