@@ -54,6 +54,53 @@ async function ensureAuditTable(client = pool) {
   `);
 }
 
+async function ensureCoreTables(client = pool) {
+  // Settings (Months relies on cash_start and slug row existence)
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS donas_finance_settings (
+      slug TEXT PRIMARY KEY,
+      currency TEXT NOT NULL DEFAULT 'UZS',
+      avg_check NUMERIC NOT NULL DEFAULT 0,
+      cogs_per_unit NUMERIC NOT NULL DEFAULT 0,
+      units_per_day NUMERIC NOT NULL DEFAULT 0,
+      days_per_month INTEGER NOT NULL DEFAULT 26,
+      fixed_opex_month NUMERIC NOT NULL DEFAULT 0,
+      variable_opex_month NUMERIC NOT NULL DEFAULT 0,
+      loan_payment_month NUMERIC NOT NULL DEFAULT 0,
+      cash_start NUMERIC NOT NULL DEFAULT 0,
+      reserve_target_months INTEGER NOT NULL DEFAULT 6
+    );
+  `);
+
+  // Months table (snapshots stored here: opex/capex/cash_end + #locked in notes)
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS donas_finance_months (
+      slug TEXT NOT NULL,
+      month DATE NOT NULL,
+      revenue NUMERIC NOT NULL DEFAULT 0,
+      cogs NUMERIC NOT NULL DEFAULT 0,
+      opex NUMERIC NOT NULL DEFAULT 0,
+      capex NUMERIC NOT NULL DEFAULT 0,
+      loan_paid NUMERIC NOT NULL DEFAULT 0,
+      cash_end NUMERIC NOT NULL DEFAULT 0,
+      notes TEXT NOT NULL DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (slug, month)
+    );
+  `);
+
+  await client.query(
+    `CREATE INDEX IF NOT EXISTS idx_donas_fin_months_slug_month ON donas_finance_months (slug, month);`
+  );
+
+  // Ensure at least one settings row exists for our slug
+  await client.query(
+    `INSERT INTO donas_finance_settings (slug) VALUES ($1) ON CONFLICT (slug) DO NOTHING`,
+    [SLUG]
+  );
+}
+
 function toNum(v) {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
@@ -167,11 +214,17 @@ function removeLockedTag(notes) {
 }
 
 async function getCashStart(client = pool) {
-  const s = await client.query(`select cash_start from donas_finance_settings where slug=$1 limit 1`, [SLUG]);
+  await ensureCoreTables(client);
+  const s = await client.query(
+    `select cash_start from donas_finance_settings where slug=$1 limit 1`,
+    [SLUG]
+  );
   return toNum(s.rows?.[0]?.cash_start);
 }
 
+
 async function loadMonthsRaw(client = pool) {
+  await ensureCoreTables(client);
   const q = await client.query(
     `
     select
@@ -863,8 +916,14 @@ router.get("/donas/finance/months/export.csv", authenticateToken, requireAdmin, 
 
     const yms = rows.map((r) => r._ym).filter(Boolean);
     const purchasesByYm = await getPurchasesSumsByMonth(pool, yms);
-
-    const computed = computeChainWithSnapshots({ cashStart, monthRows: rows, purchasesByYm });
+    const adjustmentsByYm = await getAdjustmentsSumsByMonth(pool, yms);
+    
+    const computed = computeChainWithSnapshots({
+      cashStart,
+      monthRows: rows,
+      purchasesByYm,
+      adjustmentsByYm,
+    });
 
     const filtered = computed.filter((r) => {
       const ym = ymFromDateLike(r.month);
@@ -917,7 +976,8 @@ router.get("/donas/finance/months/export.csv", authenticateToken, requireAdmin, 
 
       const gp = revenue - cogs;
       const netOp = gp - opex;
-      const cf = netOp - loan_paid - capex;
+      const adj = toNum(adjustmentsByYm?.[ym] ?? 0);
+      const cf = netOp - loan_paid - capex + adj;
 
       const diffOpex = toNum(pur.opex) - toNum(snapOpex);
       const diffCapex = toNum(pur.capex) - toNum(snapCapex);
