@@ -321,22 +321,52 @@ async function getPurchasesSumsByMonth(client, ymList) {
  */
 
 async function ensureAdjustmentsTable(client = pool) {
+  // Adjustments are manual cashflow corrections (in/out) that are applied on top of Months.
+  // IMPORTANT: amount is always non-negative; direction is controlled by `kind` = 'in' | 'out'.
   await client.query(`
     CREATE TABLE IF NOT EXISTS donas_finance_adjustments (
       id BIGSERIAL PRIMARY KEY,
       slug TEXT NOT NULL,
       month DATE NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'in',
       amount NUMERIC NOT NULL DEFAULT 0,
       title TEXT NOT NULL DEFAULT '',
+      notes TEXT NOT NULL DEFAULT '',
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
 
+  // Backward-compatible migrations (if table existed in older shape)
+  await client.query(`ALTER TABLE donas_finance_adjustments ADD COLUMN IF NOT EXISTS kind TEXT;`);
+  await client.query(`ALTER TABLE donas_finance_adjustments ADD COLUMN IF NOT EXISTS notes TEXT;`);
+
+  // Fill missing values (for old rows)
+  await client.query(`UPDATE donas_finance_adjustments SET kind = COALESCE(kind, 'in');`);
+  await client.query(`UPDATE donas_finance_adjustments SET notes = COALESCE(notes, '');`);
+
+  // Add constraints in an idempotent way (Postgres doesn't support IF NOT EXISTS for ADD CONSTRAINT)
   await client.query(`
-    CREATE INDEX IF NOT EXISTS idx_donas_fin_adj_slug_month
-    ON donas_finance_adjustments(slug, month);
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_donas_fin_adj_kind') THEN
+        ALTER TABLE donas_finance_adjustments
+          ADD CONSTRAINT chk_donas_fin_adj_kind CHECK (kind IN ('in','out'));
+      END IF;
+    END $$;
   `);
+
+  await client.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_donas_fin_adj_amount_nonneg') THEN
+        ALTER TABLE donas_finance_adjustments
+          ADD CONSTRAINT chk_donas_fin_adj_amount_nonneg CHECK (amount >= 0);
+      END IF;
+    END $$;
+  `);
+
+  await client.query(`CREATE INDEX IF NOT EXISTS idx_donas_fin_adj_slug_month ON donas_finance_adjustments (slug, month);`);
 }
 
 async function getAdjustmentsSumsByMonth(client, ymList) {
@@ -352,7 +382,7 @@ async function getAdjustmentsSumsByMonth(client, ymList) {
     `
     select
       to_char(month,'YYYY-MM') as ym,
-      coalesce(sum(amount),0) as total
+      coalesce(sum(case when kind='in' then amount else -amount end),0) as total
     from donas_finance_adjustments
     where slug=$1 and to_char(month,'YYYY-MM') = any($2)
     group by 1
@@ -369,7 +399,7 @@ async function getAdjustmentsSumsByMonth(client, ymList) {
   return out;
 }
 
-async function assertMonthNotLocked(client, monthIso) {
+async function assertMonthNotLocked(client, slug, monthIso) {
   const q = await client.query(
     `select notes from donas_finance_months where slug=$1 and month=$2 limit 1`,
     [SLUG, monthIso]
@@ -377,7 +407,7 @@ async function assertMonthNotLocked(client, monthIso) {
   const notes = String(q.rows?.[0]?.notes || "");
   if (isLockedNotes(notes)) {
     const err = new Error("Locked month is read-only. Adjustments are forbidden in locked months.");
-    err.statusCode = 400;
+    err.statusCode = 409;
     throw err;
   }
 }
@@ -1677,7 +1707,7 @@ router.get(
 
       const q = await pool.query(
         `
-        select id, to_char(month,'YYYY-MM') as ym, amount, title, created_at, updated_at
+        select id, to_char(month,'YYYY-MM') as ym, kind, amount, title, notes, created_at, updated_at
         from donas_finance_adjustments
         where slug=$1 and month=$2
         order by id desc
@@ -1708,27 +1738,32 @@ router.post(
       }
 
       const b = req.body || {};
+      const kind = String(b.kind || 'in').trim() || 'in';
       const amount = toNum(b.amount);
-      const title = String(b.title || "").trim();
+      const title = String(b.title || '').trim();
+      const notes = String(b.notes || '').trim();
+
+      if (!['in','out'].includes(kind)) return res.status(400).json({ error: 'Bad kind (expected in|out)' });
+      if (amount < 0) return res.status(400).json({ error: 'Amount must be >= 0' });
 
       await client.query("begin");
       await ensureMonthExists(client, monthIso);
-      await assertMonthNotLocked(client, monthIso);
+      await assertMonthNotLocked(client, SLUG, monthIso);
       await ensureAdjustmentsTable(client);
 
       const q = await client.query(
         `
-        insert into donas_finance_adjustments (slug, month, amount, title)
-        values ($1,$2,$3,$4)
-        returning id, to_char(month,'YYYY-MM') as ym, amount, title, created_at, updated_at
+        insert into donas_finance_adjustments (slug, month, kind, amount, title, notes)
+        values ($1,$2,$3,$4,$5,$6)
+        returning id, to_char(month,'YYYY-MM') as ym, kind, amount, title, notes, created_at, updated_at
         `,
-        [SLUG, monthIso, amount, title]
+        [SLUG, monthIso, kind, amount, title, notes]
       );
 
       await writeAudit(client, req, {
         action: "adjustment_create",
         monthIso,
-        meta: { amount, title },
+        meta: { kind, amount, title, notes },
       });
 
       await client.query("commit");
@@ -1756,29 +1791,34 @@ router.put(
       if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: "Bad id" });
 
       const b = req.body || {};
+      const kind = String(b.kind || '').trim();
       const amount = toNum(b.amount);
-      const title = String(b.title || "").trim();
+      const title = String(b.title || '').trim();
+      const notes = String(b.notes || '').trim();
+
+      if (kind && !['in','out'].includes(kind)) return res.status(400).json({ error: 'Bad kind (expected in|out)' });
+      if (amount < 0) return res.status(400).json({ error: 'Amount must be >= 0' });
 
       await client.query("begin");
       await ensureAdjustmentsTable(client);
 
       const cur = await client.query(
-        `select id, month, amount, title from donas_finance_adjustments where slug=$1 and id=$2 limit 1`,
+        `select id, month, kind, amount, title, notes from donas_finance_adjustments where slug=$1 and id=$2 limit 1`,
         [SLUG, id]
       );
       if (!cur.rows.length) return res.status(404).json({ error: "Not found" });
 
       const monthIso = normalizeMonthISO(cur.rows[0].month);
-      await assertMonthNotLocked(client, monthIso);
+      await assertMonthNotLocked(client, SLUG, monthIso);
 
       const q = await client.query(
         `
         update donas_finance_adjustments
-        set amount=$3, title=$4, updated_at=now()
+        set kind=COALESCE(NULLIF($3,''), kind), amount=$4, title=$5, notes=$6, updated_at=now()
         where slug=$1 and id=$2
-        returning id, to_char(month,'YYYY-MM') as ym, amount, title, created_at, updated_at
+        returning id, to_char(month,'YYYY-MM') as ym, kind, amount, title, notes, created_at, updated_at
         `,
-        [SLUG, id, amount, title]
+        [SLUG, id, kind, amount, title, notes]
       );
 
       await writeAudit(client, req, {
@@ -1787,7 +1827,7 @@ router.put(
         meta: {
           id,
           from: { amount: toNum(cur.rows[0].amount), title: String(cur.rows[0].title || "") },
-          to: { amount, title },
+          to: { kind: kind || String(cur.rows[0].kind || 'in'), amount, title, notes },
         },
       });
 
@@ -1819,13 +1859,13 @@ router.delete(
       await ensureAdjustmentsTable(client);
 
       const cur = await client.query(
-        `select id, month, amount, title from donas_finance_adjustments where slug=$1 and id=$2 limit 1`,
+        `select id, month, kind, amount, title, notes from donas_finance_adjustments where slug=$1 and id=$2 limit 1`,
         [SLUG, id]
       );
       if (!cur.rows.length) return res.status(404).json({ error: "Not found" });
 
       const monthIso = normalizeMonthISO(cur.rows[0].month);
-      await assertMonthNotLocked(client, monthIso);
+      await assertMonthNotLocked(client, SLUG, monthIso);
 
       await client.query(`delete from donas_finance_adjustments where slug=$1 and id=$2`, [SLUG, id]);
 
