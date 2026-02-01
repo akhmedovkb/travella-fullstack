@@ -60,7 +60,9 @@ export default function DonasOpex() {
     // OPEX — месячный расход: дата = первое число выбранного месяца
     const date = `${month}-01`;
 
-    await apiPost("/api/admin/donas/purchases", {
+  await apiPost(
+    "/api/admin/donas/purchases",
+    {
       date,
       ingredient: title.trim(),
       qty: 1,
@@ -68,7 +70,9 @@ export default function DonasOpex() {
       type: "opex",
       category,
       notes: notes.trim() || null,
-    });
+    },
+    "admin"
+  );
 
     setTitle("");
     setCategory("Rent");
