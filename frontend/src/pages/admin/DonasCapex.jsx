@@ -83,7 +83,7 @@ export default function DonasCapex() {
     };
     try {
       setLoading(true);
-      await apiPost("/api/admin/donas/purchases", payload);
+      await apiPost("/api/admin/donas/purchases", payload, "admin");
       resetForm();
       await load();
     } catch (e) {
