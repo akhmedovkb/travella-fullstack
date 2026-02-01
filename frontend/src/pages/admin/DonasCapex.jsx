@@ -1,13 +1,7 @@
 // frontend/src/pages/admin/DonasCapex.jsx
 
 import { useEffect, useMemo, useState } from "react";
-import { apiGet, apiPost, apiPut } from "../../api";
-
-function ym(d = new Date()) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  return `${y}-${m}`;
-}
+import { apiGet, apiPost, apiDelete } from "../../api";
 
 function toNum(x) {
   const n = Number(x);
@@ -15,297 +9,220 @@ function toNum(x) {
 }
 
 function money(n) {
-  const v = Math.round(toNum(n));
-  return v.toLocaleString("ru-RU");
+  return Math.round(toNum(n)).toLocaleString("ru-RU");
 }
 
+const CATS = [
+  "Equipment",
+  "Truck/Vehicle",
+  "Renovation",
+  "Tools",
+  "Furniture",
+  "Electronics",
+  "Branding/Signage",
+  "License/Legal",
+  "Other",
+];
+
 export default function DonasCapex() {
-  const [month, setMonth] = useState(ym());
+  const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState("");
 
-  const [rows, setRows] = useState([]);
+  // form
+  const [title, setTitle] = useState("");
+  const [category, setCategory] = useState("Equipment");
+  const [amount, setAmount] = useState("");
+  const [notes, setNotes] = useState("");
 
-  const [desc, setDesc] = useState("");
-  const [qty, setQty] = useState("1");
-  const [price, setPrice] = useState("");
-  const [date, setDate] = useState("");
-
-  const [editId, setEditId] = useState(null);
-  const [edit, setEdit] = useState({ date: "", ingredient: "", qty: "", price: "" });
-
-  const load = async () => {
+  async function load() {
     setLoading(true);
-    setErr("");
     try {
-      const list = await apiGet(`/api/admin/donas/purchases?month=${encodeURIComponent(month)}`);
-      const only = (Array.isArray(list) ? list : []).filter((x) => String(x.type || "").toLowerCase() === "capex");
-      setRows(only);
-    } catch (e) {
-      setErr(e?.response?.data?.error || e?.message || "Ошибка загрузки");
-      setRows([]);
+      const r = await apiGet(`/api/admin/donas/purchases?month=${month}&type=capex`);
+      setItems(Array.isArray(r) ? r : []);
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   useEffect(() => {
-    let alive = true;
-    (async () => {
-      if (!alive) return;
-      await load();
-    })();
-    return () => {
-      alive = false;
-    };
+    load().catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [month]);
 
   const total = useMemo(() => {
-    return rows.reduce((acc, r) => acc + toNum(r.qty) * toNum(r.price), 0);
-  }, [rows]);
+    return items.reduce((s, x) => s + toNum(x.total), 0);
+  }, [items]);
 
-  const resetForm = () => {
-    setDesc("");
-    setQty("1");
-    setPrice("");
-    setDate("");
-  };
+  async function add() {
+    const a = toNum(amount);
+    if (!title.trim() || !a) return;
 
-  const add = async () => {
-    if (!desc.trim()) return;
-    const payload = {
-      type: "capex",
-      date: date || null,
-      ingredient: desc.trim(), // используем это поле как описание CAPEX
-      qty: toNum(qty) || 1,
-      price: toNum(price) || 0,
-    };
-    try {
-      setLoading(true);
-      await apiPost("/api/admin/donas/purchases", payload, "admin");
-      resetForm();
-      await load();
-    } catch (e) {
-      setErr(e?.response?.data?.error || e?.message || "Ошибка сохранения");
-    } finally {
-      setLoading(false);
-    }
-  };
+    // CAPEX — инвестиция: дата = первое число выбранного месяца
+    const date = `${month}-01`;
 
-  const startEdit = (r) => {
-    setEditId(r.id);
-    setEdit({
-      date: r.date ? String(r.date).slice(0, 10) : "",
-      ingredient: r.ingredient || "",
-      qty: String(r.qty ?? ""),
-      price: String(r.price ?? ""),
-    });
-  };
-
-  const cancelEdit = () => {
-    setEditId(null);
-    setEdit({ date: "", ingredient: "", qty: "", price: "" });
-  };
-
-  const saveEdit = async () => {
-    if (!editId) return;
-    try {
-      setLoading(true);
-      await apiPut(`/api/admin/donas/purchases/${editId}`, {
+    await apiPost(
+      "/api/admin/donas/purchases",
+      {
+        date,
+        ingredient: title.trim(),
+        qty: 1,
+        price: a,
         type: "capex",
-        date: edit.date || null,
-        ingredient: String(edit.ingredient || "").trim(),
-        qty: toNum(edit.qty) || 1,
-        price: toNum(edit.price) || 0,
-      });
-      cancelEdit();
-      await load();
-    } catch (e) {
-      setErr(e?.response?.data?.error || e?.message || "Ошибка обновления");
-    } finally {
-      setLoading(false);
-    }
-  };
+        category,
+        notes: notes.trim() || null,
+      },
+      "admin"
+    );
+
+    setTitle("");
+    setCategory("Equipment");
+    setAmount("");
+    setNotes("");
+
+    await load();
+  }
+
+  async function del(id) {
+    await apiDelete(`/api/admin/donas/purchases/${id}`, "admin");
+    await load();
+  }
 
   return (
-    <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-200">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div className="max-w-5xl mx-auto px-4 py-6 space-y-5">
+      <div className="flex items-center justify-between">
         <div>
-          <div className="text-lg font-semibold">Donas — CAPEX</div>
-          <div className="text-sm text-gray-500">Вложения / оборудование (через purchases type=capex)</div>
+          <h1 className="text-xl font-semibold">Donas — CAPEX</h1>
+          <div className="text-sm text-gray-500">Капитальные расходы (оборудование/активы)</div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-600">Month</label>
-          <input
-            type="month"
-            value={month}
-            onChange={(e) => setMonth(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
-          />
+        <div className="text-sm">
+          Итого за месяц: <b>{money(total)}</b>
         </div>
       </div>
 
-      {err && (
-        <div className="mt-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{err}</div>
-      )}
+      <div className="bg-white rounded-2xl shadow p-4 space-y-4">
+        <div className="flex gap-3 items-end">
+          <div>
+            <div className="text-xs text-gray-600 mb-1">Месяц</div>
+            <input
+              type="month"
+              value={month}
+              onChange={(e) => setMonth(e.target.value)}
+              className="border rounded-xl px-3 py-2"
+            />
+          </div>
 
-      {/* Add form */}
-      <div className="mt-4 rounded-xl border border-gray-200 p-4">
-        <div className="text-sm font-semibold mb-3">Добавить CAPEX</div>
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-2">
-          <input
-            value={desc}
-            onChange={(e) => setDesc(e.target.value)}
-            placeholder="Описание (например: Gas griddle / Freezer / Generator)"
-            className="md:col-span-6 border border-gray-300 rounded-lg px-3 py-2 text-sm"
-          />
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="md:col-span-2 border border-gray-300 rounded-lg px-3 py-2 text-sm"
-          />
-          <input
-            value={qty}
-            onChange={(e) => setQty(e.target.value)}
-            placeholder="Qty"
-            className="md:col-span-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
-          />
-          <input
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
-            placeholder="Price (UZS)"
-            className="md:col-span-2 border border-gray-300 rounded-lg px-3 py-2 text-sm"
-          />
-          <button
-            onClick={add}
-            disabled={loading}
-            className="md:col-span-1 bg-black text-white rounded-lg px-4 py-2 text-sm hover:bg-black/90 disabled:opacity-50"
-          >
-            Добавить
-          </button>
+          {loading && <div className="text-sm text-gray-500">Загрузка…</div>}
         </div>
-      </div>
 
-      {/* List */}
-      <div className="mt-4 rounded-xl border border-gray-200 overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 bg-gray-50">
-          <div className="text-sm font-semibold">CAPEX список</div>
-          <div className="text-sm text-gray-600">
-            Total: <span className="font-semibold">{money(total)}</span>
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
+          <div className="md:col-span-2">
+            <div className="text-xs text-gray-600 mb-1">Название</div>
+            <input
+              className="w-full border rounded-xl px-3 py-2"
+              placeholder="Например: Гриль / Холодильник / Генератор"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <div className="text-xs text-gray-600 mb-1">Категория</div>
+            <select
+              className="w-full border rounded-xl px-3 py-2"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+            >
+              {CATS.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <div className="text-xs text-gray-600 mb-1">Сумма</div>
+            <input
+              className="w-full border rounded-xl px-3 py-2"
+              placeholder="UZS"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+            />
+          </div>
+
+          <div className="flex items-end">
+            <button
+              className="w-full rounded-xl bg-black text-white px-4 py-2 hover:opacity-90"
+              onClick={add}
+              disabled={!title.trim() || !toNum(amount)}
+            >
+              Добавить
+            </button>
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead className="bg-white border-b">
-              <tr className="text-left">
-                <th className="px-4 py-2">Дата</th>
-                <th className="px-4 py-2">Описание</th>
-                <th className="px-4 py-2">Qty</th>
-                <th className="px-4 py-2">Price</th>
-                <th className="px-4 py-2">Total</th>
-                <th className="px-4 py-2 text-right">Действия</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => {
-                const rowTotal = toNum(r.qty) * toNum(r.price);
-                const isEdit = editId === r.id;
-                return (
-                  <tr key={r.id} className="border-t">
-                    <td className="px-4 py-2 whitespace-nowrap">
-                      {isEdit ? (
-                        <input
-                          type="date"
-                          value={edit.date}
-                          onChange={(e) => setEdit((s) => ({ ...s, date: e.target.value }))}
-                          className="border border-gray-300 rounded-lg px-2 py-1 text-sm"
-                        />
-                      ) : (
-                        (r.date ? String(r.date).slice(0, 10) : "—")
-                      )}
-                    </td>
-                    <td className="px-4 py-2">
-                      {isEdit ? (
-                        <input
-                          value={edit.ingredient}
-                          onChange={(e) => setEdit((s) => ({ ...s, ingredient: e.target.value }))}
-                          className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm"
-                        />
-                      ) : (
-                        r.ingredient
-                      )}
-                    </td>
-                    <td className="px-4 py-2">
-                      {isEdit ? (
-                        <input
-                          value={edit.qty}
-                          onChange={(e) => setEdit((s) => ({ ...s, qty: e.target.value }))}
-                          className="w-20 border border-gray-300 rounded-lg px-2 py-1 text-sm"
-                        />
-                      ) : (
-                        r.qty
-                      )}
-                    </td>
-                    <td className="px-4 py-2">
-                      {isEdit ? (
-                        <input
-                          value={edit.price}
-                          onChange={(e) => setEdit((s) => ({ ...s, price: e.target.value }))}
-                          className="w-28 border border-gray-300 rounded-lg px-2 py-1 text-sm"
-                        />
-                      ) : (
-                        money(r.price)
-                      )}
-                    </td>
-                    <td className="px-4 py-2">{money(rowTotal)}</td>
-                    <td className="px-4 py-2 text-right">
-                      {!isEdit ? (
-                        <button
-                          onClick={() => startEdit(r)}
-                          className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
-                        >
-                          Edit
-                        </button>
-                      ) : (
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={saveEdit}
-                            disabled={loading}
-                            className="px-3 py-1.5 rounded-lg bg-black text-white hover:bg-black/90 disabled:opacity-50"
-                          >
-                            Save
-                          </button>
-                          <button
-                            onClick={cancelEdit}
-                            className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      )}
+        <div className="grid grid-cols-1">
+          <div className="text-xs text-gray-600 mb-1">Заметки (опционально)</div>
+          <input
+            className="w-full border rounded-xl px-3 py-2"
+            placeholder="Например: аванс / рассрочка / поставщик"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+          />
+        </div>
+
+        <div className="border rounded-2xl overflow-hidden">
+          <div className="px-4 py-3 bg-gray-50 text-sm font-medium flex items-center justify-between">
+            <span>Список CAPEX</span>
+            <span className="text-gray-600">Total: {money(total)}</span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="text-gray-600 border-b">
+                <tr>
+                  <th className="text-left py-2 px-4">Название</th>
+                  <th className="text-left py-2 px-4">Категория</th>
+                  <th className="text-left py-2 px-4">Заметки</th>
+                  <th className="text-right py-2 px-4">Сумма</th>
+                  <th className="py-2 px-4"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((x) => (
+                  <tr key={x.id} className="border-b">
+                    <td className="py-2 px-4">{x.ingredient || "—"}</td>
+                    <td className="py-2 px-4">{x.category || "—"}</td>
+                    <td className="py-2 px-4 text-gray-600">{x.notes || "—"}</td>
+                    <td className="py-2 px-4 text-right">{money(x.total)}</td>
+                    <td className="py-2 px-4 text-right">
+                      <button
+                        className="text-red-600 hover:underline"
+                        onClick={() => del(x.id)}
+                      >
+                        Удалить
+                      </button>
                     </td>
                   </tr>
-                );
-              })}
+                ))}
 
-              {!rows.length && (
-                <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-gray-500">
-                    {loading ? "Загрузка…" : "Пока пусто"}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                {items.length === 0 && !loading && (
+                  <tr>
+                    <td colSpan={5} className="py-6 px-4 text-gray-500">
+                      Пока пусто
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="px-4 py-3 text-xs text-gray-500">
+            Примечание: CAPEX хранится в <code>donas_purchases</code> с <code>type='capex'</code>, сумма считается как <code>qty × price</code> (здесь qty=1).
+          </div>
         </div>
-      </div>
-
-      <div className="mt-3 text-xs text-gray-500">
-        Примечание: CAPEX хранится в purchases с <code>type=capex</code>. Total считается как qty × price.
       </div>
     </div>
   );
