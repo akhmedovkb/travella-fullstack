@@ -9,6 +9,15 @@ const ctrl = require("../controllers/donasFinanceMonthsController");
 const router = express.Router();
 
 // базовый префикс: /api/admin/donas/finance
+
+// ✅ SETTINGS (то, что фронт ждёт)
+router.get("/settings", authenticateToken, requireAdmin, ctrl.getSettings);
+router.put("/settings", authenticateToken, requireAdmin, ctrl.updateSettings);
+
+// ✅ MONTHS LIST (то, что фронт ждёт)
+router.get("/months", authenticateToken, requireAdmin, ctrl.listMonths);
+
+// SINGLE MONTH
 router.get("/months/:month", authenticateToken, requireAdmin, ctrl.getMonth);
 router.put("/months/:month", authenticateToken, requireAdmin, ctrl.updateMonth);
 
