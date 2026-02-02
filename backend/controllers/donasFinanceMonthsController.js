@@ -15,49 +15,66 @@ function hasLockedTag(notes) {
   return String(notes || "").toLowerCase().includes("#locked");
 }
 
+// slug фиксируем под donas
 const SLUG = "donas-dosas";
 
 function monthToDate(ym) {
-  // YYYY-MM -> YYYY-MM-01
+  // ym: YYYY-MM -> YYYY-MM-01
   return `${ym}-01`;
 }
 
-// ✅ Гарантируем строку месяца без ON CONFLICT (у тебя нет UNIQUE)
+/**
+ * Гарантируем строку месяца (под текущую схему таблицы).
+ * ВАЖНО: в БД нет UNIQUE на (month) => нельзя ON CONFLICT(month).
+ * Делаем безопасно через WHERE NOT EXISTS.
+ */
 async function ensureMonthRow(monthYm) {
   const d = monthToDate(monthYm);
 
-  // 1) проверяем наличие
-  const { rows } = await db.query(
-    `SELECT id FROM donas_finance_months WHERE slug=$1 AND month=$2::date LIMIT 1`,
-    [SLUG, d]
-  );
-
-  if (rows?.[0]?.id) return;
-
-  // 2) если нет — вставляем
   await db.query(
     `
     INSERT INTO donas_finance_months
       (slug, month, revenue, cogs, opex, capex, loan_paid, cash_end, notes)
-    VALUES
-      ($1, $2::date, 0, 0, 0, 0, 0, 0, '')
+    SELECT
+      $2, $1::date, 0, 0, 0, 0, 0, 0, ''
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM donas_finance_months
+      WHERE slug = $2 AND month = $1::date
+    )
     `,
-    [SLUG, d]
+    [d, SLUG]
   );
+
+  const { rows } = await db.query(
+    `
+    SELECT
+      id,
+      slug,
+      to_char(month,'YYYY-MM') as month,
+      revenue, cogs, opex, capex, loan_paid, cash_end,
+      notes,
+      updated_at
+    FROM donas_finance_months
+    WHERE slug=$2 AND month=$1::date
+    LIMIT 1
+    `,
+    [d, SLUG]
+  );
+
+  return rows?.[0] || null;
 }
 
 /** ===================== SETTINGS ===================== */
 /**
  * Фронт ждёт:
- * GET /api/admin/donas/finance/settings
- * PUT /api/admin/donas/finance/settings
+ * GET  /api/admin/donas/finance/settings
+ * PUT  /api/admin/donas/finance/settings
  */
 exports.getSettings = async (_req, res) => {
   try {
     const { rows } = await db.query(
-      `SELECT * FROM donas_finance_settings
-       ORDER BY updated_at DESC NULLS LAST, id DESC
-       LIMIT 1`
+      `SELECT * FROM donas_finance_settings ORDER BY updated_at DESC NULLS LAST, id DESC LIMIT 1`
     );
     return res.json({ ok: true, settings: rows?.[0] || null });
   } catch (e) {
@@ -70,16 +87,12 @@ exports.updateSettings = async (req, res) => {
   try {
     const body = req.body || {};
 
-    // найдём последнюю запись
     const { rows: curRows } = await db.query(
-      `SELECT id FROM donas_finance_settings
-       ORDER BY updated_at DESC NULLS LAST, id DESC
-       LIMIT 1`
+      `SELECT id FROM donas_finance_settings ORDER BY updated_at DESC NULLS LAST, id DESC LIMIT 1`
     );
 
     let id = curRows?.[0]?.id;
 
-    // если нет — создаём
     if (!id) {
       const ins = await db.query(
         `INSERT INTO donas_finance_settings DEFAULT VALUES RETURNING id`
@@ -89,19 +102,15 @@ exports.updateSettings = async (req, res) => {
 
     const keys = Object.keys(body || {}).filter((k) => k !== "id");
     if (!keys.length) {
-      const { rows } = await db.query(
-        `SELECT * FROM donas_finance_settings WHERE id=$1`,
-        [id]
-      );
+      const { rows } = await db.query(`SELECT * FROM donas_finance_settings WHERE id=$1`, [id]);
       return res.json({ ok: true, settings: rows?.[0] || null });
     }
 
     const sets = [];
     const vals = [];
-    let p = 2;
-
+    let i = 2;
     for (const k of keys) {
-      sets.push(`${k}=$${p++}`);
+      sets.push(`${k}=$${i++}`);
       vals.push(body[k]);
     }
 
@@ -137,7 +146,7 @@ exports.listMonths = async (_req, res) => {
         notes,
         updated_at
       FROM donas_finance_months
-      WHERE slug=$1
+      WHERE slug = $1
       ORDER BY month ASC
       `,
       [SLUG]
@@ -145,8 +154,6 @@ exports.listMonths = async (_req, res) => {
 
     const out = (rows || []).map((r) => ({
       ...r,
-      // ✅ для фронта (который ждёт Loan)
-      loan: toNum(r.loan_paid),
       locked: hasLockedTag(r.notes),
     }));
 
@@ -154,6 +161,93 @@ exports.listMonths = async (_req, res) => {
   } catch (e) {
     console.error("listMonths error:", e);
     return res.status(500).json({ error: "Failed to load months" });
+  }
+};
+
+/** ===================== ADD MONTH ===================== */
+/**
+ * На кнопке Add обычно дергают POST /months с body { month: "YYYY-MM" }
+ */
+exports.addMonth = async (req, res) => {
+  try {
+    const ym = String(req.body?.month || "").trim();
+    if (!isYm(ym)) {
+      return res.status(400).json({ error: "Bad month format (expected YYYY-MM)" });
+    }
+
+    const row = await ensureMonthRow(ym);
+    return res.json({ ok: true, month: row, locked: hasLockedTag(row?.notes) });
+  } catch (e) {
+    console.error("addMonth error:", e);
+    return res.status(500).json({ error: "Failed to add month" });
+  }
+};
+
+/** ===================== SYNC MONTHS ===================== */
+/**
+ * Фронт ждёт:
+ * POST /api/admin/donas/finance/months/sync
+ *
+ * Делает "добивку" месяцев из данных:
+ * - donas_shifts.date
+ * - donas_purchases.date
+ * - donas_expenses.date
+ */
+exports.syncMonths = async (_req, res) => {
+  try {
+    const { rows } = await db.query(
+      `
+      SELECT DISTINCT ym FROM (
+        SELECT to_char(date,'YYYY-MM') AS ym FROM donas_shifts
+        UNION
+        SELECT to_char(date,'YYYY-MM') AS ym FROM donas_purchases
+        UNION
+        SELECT to_char(date,'YYYY-MM') AS ym FROM donas_expenses
+      ) t
+      WHERE ym IS NOT NULL AND ym <> ''
+      ORDER BY ym ASC
+      `
+    );
+
+    const yms = (rows || []).map((r) => String(r.ym)).filter(isYm);
+
+    let created = 0;
+    for (const ym of yms) {
+      const before = await db.query(
+        `SELECT 1 FROM donas_finance_months WHERE slug=$2 AND month=$1::date LIMIT 1`,
+        [monthToDate(ym), SLUG]
+      );
+      const exists = (before.rows || []).length > 0;
+      await ensureMonthRow(ym);
+      if (!exists) created += 1;
+    }
+
+    // отдадим сразу свежий список
+    const { rows: list } = await db.query(
+      `
+      SELECT
+        id,
+        slug,
+        to_char(month,'YYYY-MM') as month,
+        revenue, cogs, opex, capex, loan_paid, cash_end,
+        notes,
+        updated_at
+      FROM donas_finance_months
+      WHERE slug = $1
+      ORDER BY month ASC
+      `,
+      [SLUG]
+    );
+
+    const out = (list || []).map((r) => ({
+      ...r,
+      locked: hasLockedTag(r.notes),
+    }));
+
+    return res.json({ ok: true, created, months: out });
+  } catch (e) {
+    console.error("syncMonths error:", e);
+    return res.status(500).json({ error: "Failed to sync months" });
   }
 };
 
@@ -166,34 +260,11 @@ exports.getMonth = async (req, res) => {
       return res.status(400).json({ error: "Bad month format (expected YYYY-MM)" });
     }
 
-    await ensureMonthRow(month);
-
-    const { rows } = await db.query(
-      `
-      SELECT
-        id, slug, to_char(month,'YYYY-MM') as month,
-        revenue, cogs, opex, capex, loan_paid, cash_end,
-        notes, updated_at
-      FROM donas_finance_months
-      WHERE slug=$2 AND month=$1::date
-      LIMIT 1
-      `,
-      [monthToDate(month), SLUG]
-    );
-
-    const row = rows?.[0] || null;
+    const row = await ensureMonthRow(month);
     if (!row) return res.status(404).json({ error: "Month not found" });
 
     const locked = hasLockedTag(row.notes);
-
-    return res.json({
-      ok: true,
-      locked,
-      month: {
-        ...row,
-        loan: toNum(row.loan_paid),
-      },
-    });
+    return res.json({ ok: true, locked, month: row });
   } catch (e) {
     console.error("getMonth error:", e);
     return res.status(500).json({ error: "Failed to load month" });
@@ -208,15 +279,8 @@ exports.updateMonth = async (req, res) => {
       return res.status(400).json({ error: "Bad month format (expected YYYY-MM)" });
     }
 
-    await ensureMonthRow(month);
-
-    const { rows: curRows } = await db.query(
-      `SELECT notes FROM donas_finance_months WHERE slug=$2 AND month=$1::date LIMIT 1`,
-      [monthToDate(month), SLUG]
-    );
-
-    const curNotes = String(curRows?.[0]?.notes || "");
-    if (hasLockedTag(curNotes)) {
+    const cur = await ensureMonthRow(month);
+    if (hasLockedTag(cur?.notes)) {
       return res.status(409).json({
         error: "Month is locked (#locked). Remove tag to edit.",
       });
@@ -228,9 +292,7 @@ exports.updateMonth = async (req, res) => {
     const cogs = toNum(b.cogs);
     const opex = toNum(b.opex);
     const capex = toNum(b.capex);
-
-    // поддержка: фронт может прислать loan или loan_paid
-    const loanPaid = toNum(b.loan_paid ?? b.loan);
+    const loanPaid = toNum(b.loan_paid);
     const cashEnd = toNum(b.cash_end);
     const notes = String(b.notes ?? "");
 
@@ -252,20 +314,23 @@ exports.updateMonth = async (req, res) => {
         revenue, cogs, opex, capex, loan_paid, cash_end,
         notes, updated_at
       `,
-      [monthToDate(month), SLUG, revenue, cogs, opex, capex, loanPaid, cashEnd, notes]
+      [
+        monthToDate(month),
+        SLUG,
+        revenue,
+        cogs,
+        opex,
+        capex,
+        loanPaid,
+        cashEnd,
+        notes,
+      ]
     );
 
     const saved = rows?.[0] || null;
     const locked = hasLockedTag(saved?.notes);
 
-    return res.json({
-      ok: true,
-      locked,
-      month: {
-        ...saved,
-        loan: toNum(saved?.loan_paid),
-      },
-    });
+    return res.json({ ok: true, locked, month: saved });
   } catch (e) {
     console.error("updateMonth error:", e);
     return res.status(500).json({ error: "Failed to update month" });
@@ -280,14 +345,9 @@ exports.lockMonth = async (req, res) => {
       return res.status(400).json({ error: "Bad month format (expected YYYY-MM)" });
     }
 
-    await ensureMonthRow(month);
+    const cur = await ensureMonthRow(month);
 
-    const { rows } = await db.query(
-      `SELECT notes FROM donas_finance_months WHERE slug=$2 AND month=$1::date LIMIT 1`,
-      [monthToDate(month), SLUG]
-    );
-
-    const notes = String(rows?.[0]?.notes || "");
+    const notes = String(cur?.notes || "");
     const newNotes = hasLockedTag(notes)
       ? notes
       : (notes ? `${notes}\n#locked` : "#locked");
@@ -312,14 +372,9 @@ exports.unlockMonth = async (req, res) => {
       return res.status(400).json({ error: "Bad month format (expected YYYY-MM)" });
     }
 
-    await ensureMonthRow(month);
+    const cur = await ensureMonthRow(month);
 
-    const { rows } = await db.query(
-      `SELECT notes FROM donas_finance_months WHERE slug=$2 AND month=$1::date LIMIT 1`,
-      [monthToDate(month), SLUG]
-    );
-
-    const notes = String(rows?.[0]?.notes || "");
+    const notes = String(cur?.notes || "");
     const newNotes = notes
       .split("\n")
       .filter((line) => line.trim().toLowerCase() !== "#locked")
