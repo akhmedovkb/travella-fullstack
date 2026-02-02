@@ -9,10 +9,10 @@ const ctrl = require("../controllers/donasFinanceMonthsController");
 const router = express.Router();
 
 // базовый префикс: /api/admin/donas/finance
-router.get("/:month", authenticateToken, requireAdmin, ctrl.getMonth);
-router.put("/:month", authenticateToken, requireAdmin, ctrl.updateMonth);
+router.get("/months/:month", authenticateToken, requireAdmin, ctrl.getMonth);
+router.put("/months/:month", authenticateToken, requireAdmin, ctrl.updateMonth);
 
-router.post("/:month/lock", authenticateToken, requireAdmin, ctrl.lockMonth);
-router.post("/:month/unlock", authenticateToken, requireAdmin, ctrl.unlockMonth);
+router.post("/months/:month/lock", authenticateToken, requireAdmin, ctrl.lockMonth);
+router.post("/months/:month/unlock", authenticateToken, requireAdmin, ctrl.unlockMonth);
 
 module.exports = router;
