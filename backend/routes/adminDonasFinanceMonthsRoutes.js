@@ -1,12 +1,18 @@
-//backend/routes/adminDonasFinanceMonthsRoutes.js
+// backend/routes/adminDonasFinanceMonthsRoutes.js
 
 const express = require("express");
-const router = express.Router();
+const authenticateToken = require("../middleware/authenticateToken");
+const requireAdmin = require("../middleware/requireAdmin");
 
 const ctrl = require("../controllers/donasFinanceMonthsController");
 
-router.get("/months/:month", ctrl.getMonth);
-router.post("/months/:month/lock", ctrl.lockMonth);
-router.post("/months/:month/unlock", ctrl.unlockMonth);
+const router = express.Router();
+
+// базовый префикс: /api/admin/donas/finance
+router.get("/months/:month", authenticateToken, requireAdmin, ctrl.getMonth);
+router.put("/months/:month", authenticateToken, requireAdmin, ctrl.updateMonth);
+
+router.post("/months/:month/lock", authenticateToken, requireAdmin, ctrl.lockMonth);
+router.post("/months/:month/unlock", authenticateToken, requireAdmin, ctrl.unlockMonth);
 
 module.exports = router;
