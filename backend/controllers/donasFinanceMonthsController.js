@@ -392,3 +392,26 @@ exports.unlockMonth = async (req, res) => {
     return res.status(500).json({ error: "Failed to unlock month" });
   }
 };
+
+// POST /api/admin/donas/finance/months/sync
+// просто гарантирует, что месяцы из purchases существуют
+exports.syncMonths = async (_req, res) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT DISTINCT to_char(date, 'YYYY-MM') AS ym
+      FROM donas_purchases
+      ORDER BY ym
+    `);
+
+    for (const r of rows) {
+      if (r.ym) {
+        await ensureMonthRow(r.ym);
+      }
+    }
+
+    return res.json({ ok: true, synced: rows.map(r => r.ym) });
+  } catch (e) {
+    console.error("syncMonths error:", e);
+    return res.status(500).json({ error: "Failed to sync months" });
+  }
+};
