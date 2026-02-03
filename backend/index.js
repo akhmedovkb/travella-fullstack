@@ -19,7 +19,6 @@ const adminDonasFinanceMonthsRoutes = require("./routes/adminDonasFinanceMonthsR
 const adminDonasSalesRoutes = require("./routes/adminDonasSalesRoutes");
 
 dotenv.config();
-
 const app = express();
 
 // Telegram health (passive) on boot — no network calls
