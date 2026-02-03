@@ -34,6 +34,7 @@ import DonasCapex from "./pages/admin/DonasCapex";
 import DonasDosasCogsTab from "./pages/admin/DonasDosasCogsTab";
 import DonasDosasProfitTab from "./pages/admin/DonasDosasProfitTab";
 import DonasDosasMenuLayout from "./pages/admin/DonasDosasMenuLayout";
+import DonasDosasFinanceSales from "./pages/admin/DonasDosasFinanceSales";
 
 // Клиентские
 import ClientRegister from "./pages/ClientRegister";
@@ -407,6 +408,7 @@ export default function App() {
             >
               <Route index element={<DonasDosasFinanceOverview />} />
               <Route path="months" element={<DonasDosasFinanceMonths />} />
+              <Route path="sales" element={<DonasDosasFinanceSales />} />
               <Route path="opex" element={<DonasOpex />} />
               <Route path="capex" element={<DonasCapex />} />
               <Route path="cogs" element={<DonasDosasCogsTab />} />
