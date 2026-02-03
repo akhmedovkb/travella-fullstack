@@ -34,6 +34,7 @@ export default function DonasDosasFinanceLayout() {
       <div className="flex flex-wrap gap-2">
         <Tab to="" end label="Overview" />
         <Tab to="months" label="Months" />
+        <Tab to="sales" label="Sales" />
         <Tab to="opex" label="OPEX" />
         <Tab to="capex" label="CAPEX" />
         <Tab to="cogs" label="COGS" />
