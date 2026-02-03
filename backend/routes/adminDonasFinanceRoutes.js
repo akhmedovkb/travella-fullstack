@@ -1,34 +1,33 @@
-// backend/routes/adminDonasFinanceRoutes.js
 const express = require("express");
-const router = express.Router();
+const authenticateToken = require("../middleware/authenticateToken");
+const requireAdmin = require("../middleware/requireAdmin");
 
 const ctrl = require("../controllers/donasFinanceMonthsController");
 
+const router = express.Router();
+
+// базовый префикс в index.js: /api/admin/donas/finance
+
 // settings
-router.get("/settings", ctrl.getSettings);
-router.put("/settings", ctrl.updateSettings);
+router.get("/settings", authenticateToken, requireAdmin, ctrl.getSettings);
+router.put("/settings", authenticateToken, requireAdmin, ctrl.updateSettings);
 
-// months
-router.get("/months", ctrl.listMonths);
-router.post("/months/sync", ctrl.syncMonths);
-router.get("/months/export.csv", ctrl.exportCsv);
+// months list
+router.get("/months", authenticateToken, requireAdmin, ctrl.listMonths);
+router.post("/months/sync", authenticateToken, requireAdmin, ctrl.syncMonths);
 
-router.put("/months/:month", ctrl.updateMonth);
+// month update + lock
+router.put("/months/:month", authenticateToken, requireAdmin, ctrl.updateMonth);
 
-router.get("/months/:month/lock-preview", ctrl.lockPreview);
-router.post("/months/:month/lock", ctrl.lockMonth);
-router.post("/months/:month/unlock", ctrl.unlockMonth);
-router.post("/months/:month/resnapshot", ctrl.resnapshotMonth);
-router.post("/months/:month/lock-up-to", ctrl.lockUpTo);
+router.post("/months/:month/lock", authenticateToken, requireAdmin, ctrl.lockMonth);
+router.post("/months/:month/unlock", authenticateToken, requireAdmin, ctrl.unlockMonth);
 
-// bulk resnapshot locked only <= month
-router.get("/months/:month/resnapshot-up-to-preview", ctrl.resnapshotUpToPreview);
-router.post("/months/:month/resnapshot-up-to", ctrl.resnapshotUpTo);
+router.post("/months/:month/resnapshot", authenticateToken, requireAdmin, ctrl.resnapshotMonth);
+router.post("/months/:month/lock-up-to", authenticateToken, requireAdmin, ctrl.lockUpTo);
+router.post("/months/:month/bulk-resnapshot", authenticateToken, requireAdmin, ctrl.bulkResnapshot);
 
-// audit
-router.get("/audit", ctrl.audit);
-router.get("/audit/export.csv", ctrl.exportAuditCsv);
-router.get("/months/:month/audit", ctrl.auditForMonth);
-router.get("/months/:month/audit/export.csv", ctrl.exportMonthAuditCsv);
+// extras used by UI buttons
+router.get("/months/export.csv", authenticateToken, requireAdmin, ctrl.exportCsv);
+router.get("/audit", authenticateToken, requireAdmin, ctrl.audit);
 
 module.exports = router;
