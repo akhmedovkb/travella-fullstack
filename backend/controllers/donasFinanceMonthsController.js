@@ -15,14 +15,6 @@ function monthToDate(ym) {
   return `${ym}-01`;
 }
 
-function dateToYm(d) {
-  // DATE -> YYYY-MM
-  if (!d) return "";
-  const s = String(d);
-  // could be '2026-02-01T...' or '2026-02-01'
-  return s.slice(0, 7);
-}
-
 function hasLockedTag(notes) {
   return String(notes || "").toLowerCase().includes("#locked");
 }
@@ -48,8 +40,7 @@ const SLUG = "donas-dosas";
 
 /**
  * ВАЖНО:
- * В твоей прод-таблице donas_finance_months, судя по ошибке,
- * НЕТ unique constraint на (month) или (slug, month),
+ * В прод-таблице donas_finance_months может не быть unique constraint на (slug, month),
  * поэтому ON CONFLICT нельзя.
  *
  * Делаем idempotent insert через WHERE NOT EXISTS.
@@ -75,12 +66,11 @@ async function ensureMonthRow(ym) {
 }
 
 /**
- * Авто-суммы по месяцу:
+ * Авто-суммы по месяцу (FACT):
  * - OPEX/CAPEX: из donas_purchases
- * - COGS: из donas_sales (ВАЖНО: COGS = Σ(qty * себестоимость на момент продажи))
+ * - REVENUE/COGS: из donas_sales
  *
- * donas_sales уже хранит cogs_total (и cogs_unit) — это идеально для "Months".
- * Для locked-месяцев по-прежнему используется snapshot в donas_finance_months.
+ * donas_sales уже хранит revenue_total и cogs_total — идеально для "Months".
  */
 async function getAutoSumsByMonth() {
   const { rows } = await db.query(
@@ -126,12 +116,10 @@ async function getAutoSumsByMonth() {
 }
 
 /**
- * Вытаскиваем список месяцев, которые "должны быть" в finance:
+ * Месяцы, которые должны быть в finance:
  * - из purchases (opex/capex)
- * - из sales (cogs по продажам)
+ * - из sales (revenue/cogs)
  * - из существующих donas_finance_months
- *
- * Можно расширить на shifts/revenue источники позже.
  */
 async function getAllRelevantMonthsYms() {
   const { rows } = await db.query(
@@ -165,8 +153,8 @@ async function getAllRelevantMonthsYms() {
 }
 
 /**
- * Получаем settings (берём последнюю строку).
- * Фронт сейчас использует только currency, но для cash chain полезно opening_cash.
+ * Settings: берём последнюю строку.
+ * (opening_cash нужен для cash chain)
  */
 async function getSettingsRow() {
   try {
@@ -175,24 +163,22 @@ async function getSettingsRow() {
     );
     return rows?.[0] || null;
   } catch {
-    // если таблицы settings нет или схема иная — не валим months
     return null;
   }
 }
 
 /**
  * Строим months view:
- * - подтягиваем базовые строки из donas_finance_months
- * - для unlocked месяцев подставляем авто cogs/opex/capex (cogs из sales!)
+ * - base rows из donas_finance_months
+ * - UNLOCKED: revenue/cogs/opex/capex берём авто (sales + purchases)
+ * - LOCKED: берём snapshot из таблицы
  * - считаем cf, cash_end, diff по цепочке
  *
  * Snapshot/locked:
  * - locked месяц = notes содержит #locked
- * - для locked месяцев НЕ меняем stored opex/capex/cogs/cash_end
- * - cf считаем как cash_end - opening (чтобы соответствовало снапшоту)
+ * - для locked месяцев cash_end хранится и cf = cash_end - opening
  */
 async function computeMonthsView() {
-  // ensure rows for all relevant months
   const allMonths = await getAllRelevantMonthsYms();
   for (const ym of allMonths) {
     if (isYm(ym)) await ensureMonthRow(ym);
@@ -219,7 +205,6 @@ async function computeMonthsView() {
     [SLUG]
   );
 
-  // normalize and compute
   const out = [];
   let prevCashEnd = openingCash;
 
@@ -229,15 +214,14 @@ async function computeMonthsView() {
 
     const storedRevenue = toNum(r.revenue);
     const loanPaid = toNum(r.loan_paid);
-    
-    // auto (only for unlocked)
+
     const auto = autoMap.get(ym) || { opex: 0, capex: 0, cogs: 0, revenue: 0 };
-    
-    // revenue:
-    // - locked: используем stored
-    // - unlocked: если storedRevenue > 0, считаем это ручным override, иначе берём auto revenue из sales
-    const revenue = locked ? storedRevenue : (storedRevenue > 0 ? storedRevenue : toNum(auto.revenue));
-    
+
+    // ✅ CLEAN:
+    // - locked: используем stored snapshot
+    // - unlocked: всегда FACT из sales
+    const revenue = locked ? storedRevenue : toNum(auto.revenue);
+
     const cogs = locked ? toNum(r.cogs) : toNum(auto.cogs);
     const opex = locked ? toNum(r.opex) : toNum(auto.opex);
     const capex = locked ? toNum(r.capex) : toNum(auto.capex);
@@ -248,7 +232,6 @@ async function computeMonthsView() {
     let cashEnd = 0;
 
     if (locked) {
-      // snapshot mode
       cashEnd = toNum(r.cash_end);
       cf = cashEnd - opening;
     } else {
@@ -281,11 +264,7 @@ async function computeMonthsView() {
   return { settings, months: out };
 }
 
-/**
- * Фронт ждёт:
- * GET  /api/admin/donas/finance/settings   -> raw row (или null)
- * PUT  /api/admin/donas/finance/settings   -> raw row
- */
+/** ===================== Settings ===================== */
 exports.getSettings = async (_req, res) => {
   try {
     const row = await getSettingsRow();
@@ -346,10 +325,7 @@ exports.updateSettings = async (req, res) => {
   }
 };
 
-/**
- * Фронт ждёт:
- * GET /api/admin/donas/finance/months  -> array
- */
+/** ===================== Months list / sync ===================== */
 exports.listMonths = async (_req, res) => {
   try {
     const view = await computeMonthsView();
@@ -360,11 +336,6 @@ exports.listMonths = async (_req, res) => {
   }
 };
 
-/**
- * POST /api/admin/donas/finance/months/sync
- * - создаём строки месяцев для всех релевантных месяцев
- * - возвращаем обновлённый список
- */
 exports.syncMonths = async (_req, res) => {
   try {
     const allMonths = await getAllRelevantMonthsYms();
@@ -401,7 +372,8 @@ exports.syncMonths = async (_req, res) => {
 
 /**
  * PUT /api/admin/donas/finance/months/:month
- * сохраняем РУЧНЫЕ поля: revenue, loan_paid, notes
+ * ✅ CLEAN: вручную можно менять только loan_paid и notes.
+ * Revenue берём из Sales (unlock), snapshot — через lock.
  */
 exports.updateMonth = async (req, res) => {
   try {
@@ -412,7 +384,6 @@ exports.updateMonth = async (req, res) => {
 
     await ensureMonthRow(month);
 
-    // если locked — запрещаем менять
     const { rows: curRows } = await db.query(
       `SELECT notes FROM donas_finance_months WHERE slug=$2 AND month=$1::date LIMIT 1`,
       [monthToDate(month), SLUG]
@@ -423,17 +394,16 @@ exports.updateMonth = async (req, res) => {
     }
 
     const b = req.body || {};
-    const revenue = toNum(b.revenue);
     const loanPaid = toNum(b.loan_paid);
     const notes = String(b.notes ?? "");
 
     await db.query(
       `
       UPDATE donas_finance_months
-      SET revenue=$3, loan_paid=$4, notes=$5, updated_at=NOW()
+      SET loan_paid=$3, notes=$4, updated_at=NOW()
       WHERE slug=$2 AND month=$1::date
       `,
-      [monthToDate(month), SLUG, revenue, loanPaid, notes]
+      [monthToDate(month), SLUG, loanPaid, notes]
     );
 
     const view = await computeMonthsView();
@@ -445,9 +415,7 @@ exports.updateMonth = async (req, res) => {
   }
 };
 
-/**
- * POST /api/admin/donas/finance/months/:month/lock
- */
+/** ===================== Lock / Unlock / Snapshot ===================== */
 exports.lockMonth = async (req, res) => {
   try {
     const { month } = req.params;
@@ -463,21 +431,24 @@ exports.lockMonth = async (req, res) => {
 
     const newNotes = addLockedTag(row.notes);
 
+    // ✅ сохраняем snapshot включая revenue
     await db.query(
       `
       UPDATE donas_finance_months
       SET
-        cogs=$3,
-        opex=$4,
-        capex=$5,
-        cash_end=$6,
-        notes=$7,
+        revenue=$3,
+        cogs=$4,
+        opex=$5,
+        capex=$6,
+        cash_end=$7,
+        notes=$8,
         updated_at=NOW()
       WHERE slug=$2 AND month=$1::date
       `,
       [
         monthToDate(month),
         SLUG,
+        toNum(row.revenue),
         toNum(row.cogs),
         toNum(row.opex),
         toNum(row.capex),
@@ -493,9 +464,6 @@ exports.lockMonth = async (req, res) => {
   }
 };
 
-/**
- * POST /api/admin/donas/finance/months/:month/unlock
- */
 exports.unlockMonth = async (req, res) => {
   try {
     const { month } = req.params;
@@ -525,9 +493,6 @@ exports.unlockMonth = async (req, res) => {
   }
 };
 
-/**
- * POST /api/admin/donas/finance/months/:month/resnapshot
- */
 exports.resnapshotMonth = async (req, res) => {
   try {
     const { month } = req.params;
@@ -548,17 +513,19 @@ exports.resnapshotMonth = async (req, res) => {
       `
       UPDATE donas_finance_months
       SET
-        cogs=$3,
-        opex=$4,
-        capex=$5,
-        cash_end=$6,
-        notes=$7,
+        revenue=$3,
+        cogs=$4,
+        opex=$5,
+        capex=$6,
+        cash_end=$7,
+        notes=$8,
         updated_at=NOW()
       WHERE slug=$2 AND month=$1::date
       `,
       [
         monthToDate(month),
         SLUG,
+        toNum(row.revenue),
         toNum(row.cogs),
         toNum(row.opex),
         toNum(row.capex),
@@ -574,9 +541,6 @@ exports.resnapshotMonth = async (req, res) => {
   }
 };
 
-/**
- * POST /api/admin/donas/finance/months/:month/lock-up-to
- */
 exports.lockUpTo = async (req, res) => {
   try {
     const { month } = req.params;
@@ -597,12 +561,13 @@ exports.lockUpTo = async (req, res) => {
       await db.query(
         `
         UPDATE donas_finance_months
-        SET cogs=$3, opex=$4, capex=$5, cash_end=$6, notes=$7, updated_at=NOW()
+        SET revenue=$3, cogs=$4, opex=$5, capex=$6, cash_end=$7, notes=$8, updated_at=NOW()
         WHERE slug=$2 AND month=$1::date
         `,
         [
           monthToDate(r.month),
           SLUG,
+          toNum(r.revenue),
           toNum(r.cogs),
           toNum(r.opex),
           toNum(r.capex),
@@ -621,9 +586,6 @@ exports.lockUpTo = async (req, res) => {
   }
 };
 
-/**
- * POST /api/admin/donas/finance/months/:month/bulk-resnapshot
- */
 exports.bulkResnapshot = async (req, res) => {
   try {
     const { month } = req.params;
@@ -645,12 +607,13 @@ exports.bulkResnapshot = async (req, res) => {
       await db.query(
         `
         UPDATE donas_finance_months
-        SET cogs=$3, opex=$4, capex=$5, cash_end=$6, notes=$7, updated_at=NOW()
+        SET revenue=$3, cogs=$4, opex=$5, capex=$6, cash_end=$7, notes=$8, updated_at=NOW()
         WHERE slug=$2 AND month=$1::date
         `,
         [
           monthToDate(r.month),
           SLUG,
+          toNum(r.revenue),
           toNum(r.cogs),
           toNum(r.opex),
           toNum(r.capex),
@@ -669,9 +632,7 @@ exports.bulkResnapshot = async (req, res) => {
   }
 };
 
-/**
- * GET /api/admin/donas/finance/months/export.csv
- */
+/** ===================== Export / Audit ===================== */
 exports.exportCsv = async (_req, res) => {
   try {
     const view = await computeMonthsView();
@@ -716,7 +677,7 @@ exports.exportCsv = async (_req, res) => {
     const csv = lines.join("\n");
 
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
-    res.setHeader("Content-Disposition", `attachment; filename=\"donas_months.csv\"`);
+    res.setHeader("Content-Disposition", `attachment; filename="donas_months.csv"`);
     return res.send(csv);
   } catch (e) {
     console.error("exportCsv error:", e);
@@ -724,9 +685,6 @@ exports.exportCsv = async (_req, res) => {
   }
 };
 
-/**
- * GET /api/admin/donas/finance/audit?limit=50
- */
 exports.audit = async (req, res) => {
   try {
     const limit = Math.min(Math.max(toNum(req.query.limit) || 50, 1), 200);
