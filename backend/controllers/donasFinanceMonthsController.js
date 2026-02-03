@@ -76,22 +76,38 @@ async function ensureMonthRow(ym) {
 }
 
 /**
- * Авто-суммы по Purchases:
- * donas_purchases: date, qty, price, total, type
- * - opex  => sum(total) where type='opex'
- * - capex => sum(total) where type='capex'
- * - cogs  => sum(total) where type='cogs'
+ * Авто-суммы по месяцу:
+ * - OPEX/CAPEX: из donas_purchases
+ * - COGS: из donas_sales (ВАЖНО: COGS = Σ(qty * себестоимость на момент продажи))
+ *
+ * donas_sales уже хранит cogs_total (и cogs_unit) — это идеально для "Months".
+ * Для locked-месяцев по-прежнему используется snapshot в donas_finance_months.
  */
 async function getAutoSumsByMonth() {
   const { rows } = await db.query(
     `
+    WITH p AS (
+      SELECT
+        to_char(date_trunc('month', date)::date, 'YYYY-MM') as month,
+        SUM(CASE WHEN type='opex'  THEN COALESCE(total, qty*price, 0) ELSE 0 END) as opex,
+        SUM(CASE WHEN type='capex' THEN COALESCE(total, qty*price, 0) ELSE 0 END) as capex
+      FROM donas_purchases
+      GROUP BY 1
+    ),
+    s AS (
+      SELECT
+        to_char(date_trunc('month', sold_at)::date, 'YYYY-MM') as month,
+        COALESCE(SUM(COALESCE(cogs_total, 0)), 0) as cogs
+      FROM donas_sales
+      GROUP BY 1
+    )
     SELECT
-      to_char(date_trunc('month', date)::date, 'YYYY-MM') as month,
-      SUM(CASE WHEN type='opex' THEN COALESCE(total, qty*price, 0) ELSE 0 END) as opex,
-      SUM(CASE WHEN type='capex' THEN COALESCE(total, qty*price, 0) ELSE 0 END) as capex,
-      SUM(CASE WHEN type='cogs' THEN COALESCE(total, qty*price, 0) ELSE 0 END) as cogs
-    FROM donas_purchases
-    GROUP BY 1
+      COALESCE(p.month, s.month) as month,
+      COALESCE(p.opex, 0) as opex,
+      COALESCE(p.capex, 0) as capex,
+      COALESCE(s.cogs, 0) as cogs
+    FROM p
+    FULL JOIN s ON s.month = p.month
     ORDER BY 1 ASC
     `
   );
@@ -109,7 +125,8 @@ async function getAutoSumsByMonth() {
 
 /**
  * Вытаскиваем список месяцев, которые "должны быть" в finance:
- * - из purchases (opex/capex/cogs)
+ * - из purchases (opex/capex)
+ * - из sales (cogs по продажам)
  * - из существующих donas_finance_months
  *
  * Можно расширить на shifts/revenue источники позже.
@@ -121,7 +138,15 @@ async function getAllRelevantMonthsYms() {
       SELECT to_char(date_trunc('month', date)::date, 'YYYY-MM') as month
       FROM donas_purchases
       GROUP BY 1
+
       UNION
+
+      SELECT to_char(date_trunc('month', sold_at)::date, 'YYYY-MM') as month
+      FROM donas_sales
+      GROUP BY 1
+
+      UNION
+
       SELECT to_char(month::date, 'YYYY-MM') as month
       FROM donas_finance_months
       WHERE slug=$1
@@ -156,7 +181,7 @@ async function getSettingsRow() {
 /**
  * Строим months view:
  * - подтягиваем базовые строки из donas_finance_months
- * - для unlocked месяцев подставляем авто cogs/opex/capex из purchases
+ * - для unlocked месяцев подставляем авто cogs/opex/capex (cogs из sales!)
  * - считаем cf, cash_end, diff по цепочке
  *
  * Snapshot/locked:
@@ -330,8 +355,8 @@ exports.listMonths = async (_req, res) => {
 
 /**
  * POST /api/admin/donas/finance/months/sync
- * - создаём строки месяцев для всех релевантных месяцев (из purchases)
- * - возвращаем обновлённый список (фронту не обязателен, но полезно)
+ * - создаём строки месяцев для всех релевантных месяцев
+ * - возвращаем обновлённый список
  */
 exports.syncMonths = async (_req, res) => {
   try {
@@ -340,7 +365,6 @@ exports.syncMonths = async (_req, res) => {
 
     for (const ym of allMonths) {
       if (!isYm(ym)) continue;
-      // пробуем вставить, считаем inserted через rowCount
       const d = monthToDate(ym);
       const r = await db.query(
         `
@@ -371,7 +395,6 @@ exports.syncMonths = async (_req, res) => {
 /**
  * PUT /api/admin/donas/finance/months/:month
  * сохраняем РУЧНЫЕ поля: revenue, loan_paid, notes
- * (cogs/opex/capex/cash_end — авто/цепочка)
  */
 exports.updateMonth = async (req, res) => {
   try {
@@ -406,7 +429,6 @@ exports.updateMonth = async (req, res) => {
       [monthToDate(month), SLUG, revenue, loanPaid, notes]
     );
 
-    // возвращаем пересчитанный ряд из months view (чтобы CF/cash_end были актуальны)
     const view = await computeMonthsView();
     const row = view.months.find((x) => x.month === month) || null;
     return res.json({ ok: true, month: row });
@@ -418,8 +440,6 @@ exports.updateMonth = async (req, res) => {
 
 /**
  * POST /api/admin/donas/finance/months/:month/lock
- * - вычисляем текущие авто суммы + cash_end цепочки
- * - записываем в donas_finance_months: cogs/opex/capex/cash_end и добавляем #locked
  */
 exports.lockMonth = async (req, res) => {
   try {
@@ -468,7 +488,6 @@ exports.lockMonth = async (req, res) => {
 
 /**
  * POST /api/admin/donas/finance/months/:month/unlock
- * - убираем #locked (снимок перестаёт быть read-only)
  */
 exports.unlockMonth = async (req, res) => {
   try {
@@ -501,7 +520,6 @@ exports.unlockMonth = async (req, res) => {
 
 /**
  * POST /api/admin/donas/finance/months/:month/resnapshot
- * - пересчитать и перезаписать снапшот (даже если locked)
  */
 exports.resnapshotMonth = async (req, res) => {
   try {
@@ -516,7 +534,6 @@ exports.resnapshotMonth = async (req, res) => {
     const row = view.months.find((x) => x.month === month);
     if (!row) return res.status(404).json({ error: "Month not found" });
 
-    // если locked — оставляем тег, если unlocked — не добавляем
     const keepLocked = row.locked || hasLockedTag(row.notes);
     const notes = keepLocked ? addLockedTag(row.notes) : row.notes;
 
@@ -552,7 +569,6 @@ exports.resnapshotMonth = async (req, res) => {
 
 /**
  * POST /api/admin/donas/finance/months/:month/lock-up-to
- * - залочить все месяцы <= month
  */
 exports.lockUpTo = async (req, res) => {
   try {
@@ -569,7 +585,6 @@ exports.lockUpTo = async (req, res) => {
     for (const r of view.months) {
       if (String(r.month) > target) continue;
 
-      // lock row
       const newNotes = addLockedTag(r.notes);
 
       await db.query(
@@ -601,7 +616,6 @@ exports.lockUpTo = async (req, res) => {
 
 /**
  * POST /api/admin/donas/finance/months/:month/bulk-resnapshot
- * - пересчитать и перезаписать снапшоты для всех locked месяцев <= month
  */
 exports.bulkResnapshot = async (req, res) => {
   try {
@@ -650,7 +664,6 @@ exports.bulkResnapshot = async (req, res) => {
 
 /**
  * GET /api/admin/donas/finance/months/export.csv
- * - отдаём CSV по вычисленному view
  */
 exports.exportCsv = async (_req, res) => {
   try {
@@ -673,7 +686,6 @@ exports.exportCsv = async (_req, res) => {
     const lines = [header];
 
     for (const r of view.months) {
-      // простая CSV-экранизация notes
       const notes = String(r.notes || "").replace(/\"/g, "\"\"");
       const notesCell = `"${notes}"`;
 
@@ -707,7 +719,6 @@ exports.exportCsv = async (_req, res) => {
 
 /**
  * GET /api/admin/donas/finance/audit?limit=50
- * Пока у нас нет отдельной таблицы аудита — отдаём просто последние updated_at по months.
  */
 exports.audit = async (req, res) => {
   try {
