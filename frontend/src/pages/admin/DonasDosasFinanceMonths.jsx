@@ -66,8 +66,10 @@ function isLocked(notes) {
 function emptyDraft(ym) {
   return {
     month: ym,
+    // ⚠️ revenue/cogs в Months теперь read-only (из Sales)
     revenue: 0,
     cogs: 0,
+
     opex: 0,
     capex: 0,
     loan_paid: 0,
@@ -95,12 +97,12 @@ export default function DonasDosasFinanceMonths() {
   const [editYm, setEditYm] = useState("");
   const [draft, setDraft] = useState(emptyDraft(""));
 
-  // (Шаг 10) preview state
+  // preview state (оставляем как есть; backend может быть не реализован)
   const [previewScope, setPreviewScope] = useState("single"); // single | upto
   const [preview, setPreview] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
-  // Audit state
+  // Audit state (оставляем как есть)
   const [auditOpen, setAuditOpen] = useState(false);
   const [auditMode, setAuditMode] = useState("all"); // all | month
   const [auditItems, setAuditItems] = useState([]);
@@ -108,18 +110,15 @@ export default function DonasDosasFinanceMonths() {
   const [auditErr, setAuditErr] = useState("");
   const [auditLimit, setAuditLimit] = useState(200);
 
-  // Export state
   const [exporting, setExporting] = useState(false);
 
   async function load() {
     setLoading(true);
     setErr("");
     try {
-      // settings: backend может вернуть либо raw row, либо { ok, settings }
       const s = await apiGet("/api/admin/donas/finance/settings");
       setSettings((s && (s.settings || s)) || null);
 
-      // months: backend может вернуть либо массив, либо { ok, months }
       const m = await apiGet("/api/admin/donas/finance/months");
       const arr = Array.isArray(m) ? m : Array.isArray(m?.months) ? m.months : [];
       setRows(arr);
@@ -200,7 +199,8 @@ export default function DonasDosasFinanceMonths() {
       const r = await apiGet(
         `/api/admin/donas/finance/audit?limit=${encodeURIComponent(auditLimit)}`
       );
-      setAuditItems(Array.isArray(r?.items) ? r.items : []);
+      // бэк в текущем контроллере возвращает array, не {items}
+      setAuditItems(Array.isArray(r) ? r : Array.isArray(r?.items) ? r.items : []);
     } catch (e) {
       setAuditErr(e?.data?.error || e?.message || "Failed to load audit");
     } finally {
@@ -217,7 +217,7 @@ export default function DonasDosasFinanceMonths() {
           ym
         )}/audit?limit=${encodeURIComponent(auditLimit)}`
       );
-      setAuditItems(Array.isArray(r?.items) ? r.items : []);
+      setAuditItems(Array.isArray(r) ? r : Array.isArray(r?.items) ? r.items : []);
     } catch (e) {
       setAuditErr(e?.data?.error || e?.message || "Failed to load month audit");
     } finally {
@@ -240,7 +240,13 @@ export default function DonasDosasFinanceMonths() {
     try {
       setSaving(true);
       setErr("");
-      await apiPut(`/api/admin/donas/finance/months/${newMonth}`, emptyDraft(`${newMonth}-01`));
+
+      // ✅ чисто: создаём месяц пустым; revenue/cogs будут auto из Sales
+      await apiPut(`/api/admin/donas/finance/months/${newMonth}`, {
+        loan_paid: 0,
+        notes: "",
+      });
+
       setNewMonth("");
       setOk("Месяц добавлен ✅");
       setTimeout(() => setOk(""), 2000);
@@ -255,10 +261,14 @@ export default function DonasDosasFinanceMonths() {
   function startEdit(r) {
     const ym = ymFromDateLike(r.month);
     setEditYm(ym);
+
     setDraft({
       month: r.month,
+
+      // ✅ показываем в форме, но не даём редактировать
       revenue: toNum(r.revenue),
       cogs: toNum(r.cogs),
+
       opex: toNum(r.opex),
       capex: toNum(r.capex),
       loan_paid: toNum(r.loan_paid),
@@ -266,6 +276,7 @@ export default function DonasDosasFinanceMonths() {
       notes: String(r.notes || ""),
       _diff: r._diff || null,
     });
+
     setPreview(null);
     setErr("");
     setOk("");
@@ -295,12 +306,13 @@ export default function DonasDosasFinanceMonths() {
     try {
       setSaving(true);
       setErr("");
+
+      // ✅ CLEAN: сохраняем только loan_paid + notes
       await apiPut(`/api/admin/donas/finance/months/${editYm}`, {
-        revenue: toNum(draft.revenue),
-        cogs: toNum(draft.cogs),
         loan_paid: toNum(draft.loan_paid),
         notes: String(draft.notes || ""),
       });
+
       setOk("Сохранено ✅");
       setTimeout(() => setOk(""), 1500);
       await load();
@@ -334,7 +346,8 @@ export default function DonasDosasFinanceMonths() {
       setSaving(true);
       setErr("");
       const r = await apiPost(`/api/admin/donas/finance/months/${editYm}/lock-up-to`, {});
-      const cnt = r?.lockedCount ?? 0;
+      // ✅ бэк возвращает { locked: N }
+      const cnt = r?.locked ?? r?.lockedCount ?? 0;
       setOk(`Lock ≤ ✅ locked месяцев: ${cnt}`);
       setTimeout(() => setOk(""), 1500);
       await load();
@@ -369,7 +382,7 @@ export default function DonasDosasFinanceMonths() {
       setSaving(true);
       setErr("");
       await apiPost(`/api/admin/donas/finance/months/${editYm}/resnapshot`, {});
-      setOk("Re-snapshot ✅ обновлено по Purchases.");
+      setOk("Re-snapshot ✅ обновлено по Purchases/Sales.");
       setTimeout(() => setOk(""), 1500);
       await load();
       stopEdit();
@@ -380,14 +393,14 @@ export default function DonasDosasFinanceMonths() {
     }
   }
 
-  // (Шаг 11) bulk re-snapshot locked months <= editYm
+  // bulk re-snapshot (в UI оставляем; если backend нет — будет 404)
   async function resnapshotUpTo() {
     if (!editYm) return;
     try {
       setSaving(true);
       setErr("");
       const r = await apiPost(`/api/admin/donas/finance/months/${editYm}/resnapshot-up-to`, {});
-      const cnt = r?.updatedCount ?? 0;
+      const cnt = r?.updatedCount ?? r?.updated ?? 0;
       setOk(`Re-snapshot ≤ ✅ обновлено locked месяцев: ${cnt}`);
       setTimeout(() => setOk(""), 1500);
       await load();
@@ -470,7 +483,7 @@ export default function DonasDosasFinanceMonths() {
             className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
             onClick={syncFromPurchases}
             disabled={loading || saving}
-            title="Создаёт недостающие месяцы по диапазону donas_purchases"
+            title="Создаёт недостающие месяцы по диапазону purchases/sales"
           >
             Sync
           </button>
@@ -480,7 +493,7 @@ export default function DonasDosasFinanceMonths() {
             className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50"
             onClick={exportMonthsCsv}
             disabled={loading || saving || exporting}
-            title="CSV: months + computed cashflow + snapshot/purchases diff"
+            title="CSV: months + computed cashflow"
           >
             {exporting ? "Export…" : "Export CSV"}
           </button>
@@ -493,7 +506,7 @@ export default function DonasDosasFinanceMonths() {
             ].join(" ")}
             onClick={() => setAuditOpen((v) => !v)}
             disabled={loading || saving}
-            title="Audit log (lock/unlock/resnapshot/bulk)"
+            title="Audit log"
           >
             Audit
           </button>
@@ -527,7 +540,7 @@ export default function DonasDosasFinanceMonths() {
       <div className="border rounded-2xl bg-white p-4 space-y-3">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="text-sm text-gray-600">
-            Auto: OPEX/CAPEX из Purchases. Snapshot: #locked (read-only).
+            Auto: <b>Revenue/COGS</b> из Sales, <b>OPEX/CAPEX</b> из Purchases. Snapshot: #locked.
           </div>
 
           <div className="flex items-center gap-2">
@@ -731,12 +744,14 @@ export default function DonasDosasFinanceMonths() {
                     const actor = [it.actor_name, it.actor_email].filter(Boolean).join(" / ");
                     const diffKeys = Object.keys(it.diff || {});
                     return (
-                      <tr key={it.id} className="border-t">
+                      <tr key={it.id || `${it.month}-${it.updated_at}`} className="border-t">
                         <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500">
-                          {String(it.created_at || "").replace("T", " ").slice(0, 19)}
+                          {String(it.created_at || it.updated_at || "")
+                            .replace("T", " ")
+                            .slice(0, 19)}
                         </td>
-                        <td className="px-3 py-2 font-medium">{it.action}</td>
-                        <td className="px-3 py-2">{it.ym || ""}</td>
+                        <td className="px-3 py-2 font-medium">{it.action || "-"}</td>
+                        <td className="px-3 py-2">{it.ym || it.month || ""}</td>
                         <td className="px-3 py-2 text-xs text-gray-600">{actor || "-"}</td>
                         <td className="px-3 py-2 text-xs">
                           {diffKeys.length ? diffKeys.join(", ") : "-"}
@@ -765,7 +780,7 @@ export default function DonasDosasFinanceMonths() {
                 <div className="text-xs text-gray-500">
                   {draftLocked
                     ? "Locked месяц нельзя менять через Save. Unlock или Re-snapshot."
-                    : "Editable: revenue, cogs, loan_paid, notes. OPEX/CAPEX/Cash_end считаются на сервере."}
+                    : "Editable: loan_paid, notes. Revenue/COGS auto из Sales. OPEX/CAPEX auto из Purchases."}
                 </div>
               </div>
 
@@ -791,7 +806,7 @@ export default function DonasDosasFinanceMonths() {
                     loadLockPreview("upto");
                   }}
                   disabled={saving || previewLoading}
-                  title="Preview Lock all ≤ (снепшот по Purchases + cash_end chain)"
+                  title="Preview Lock all ≤"
                 >
                   {previewLoading && previewScope === "upto" ? "Preview…" : "Preview Lock ≤"}
                 </button>
@@ -815,7 +830,7 @@ export default function DonasDosasFinanceMonths() {
                       className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
                       onClick={resnapshotMonth}
                       disabled={saving}
-                      title="Переснять снепшот месяца по текущим Purchases"
+                      title="Переснять снепшот месяца"
                     >
                       Re-snapshot
                     </button>
@@ -825,7 +840,7 @@ export default function DonasDosasFinanceMonths() {
                       className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
                       onClick={resnapshotUpTo}
                       disabled={saving}
-                      title="Обновит ВСЕ locked месяцы <= выбранного по Purchases (и cash_end цепочкой)"
+                      title="Обновит locked месяцы <= выбранного"
                     >
                       Re-snapshot ≤
                       <div className="text-[11px] text-gray-400">locked only</div>
@@ -836,7 +851,7 @@ export default function DonasDosasFinanceMonths() {
                       className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
                       onClick={unlockMonth}
                       disabled={saving}
-                      title="Снимет #locked и вернёт auto OPEX/CAPEX"
+                      title="Снимет #locked и вернёт auto"
                     >
                       Unlock month
                     </button>
@@ -848,7 +863,7 @@ export default function DonasDosasFinanceMonths() {
                       className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
                       onClick={lockMonth}
                       disabled={saving}
-                      title="Зафиксирует месяц (#locked): snapshot OPEX/CAPEX из Purchases + cash_end"
+                      title="Зафиксирует месяц (#locked)"
                     >
                       Lock month
                     </button>
@@ -890,8 +905,8 @@ export default function DonasDosasFinanceMonths() {
                   <div className="text-xs text-gray-500">
                     {preview.summary?.targetWasLocked ? (
                       <div>
-                        Target месяц уже #locked → Lock не нужен. Если хочешь обновить снепшот по
-                        Purchases — жми Re-snapshot (или Re-snapshot ≤).
+                        Target месяц уже #locked → Lock не нужен. Если хочешь обновить снепшот — жми
+                        Re-snapshot.
                       </div>
                     ) : null}
                   </div>
@@ -994,37 +1009,58 @@ export default function DonasDosasFinanceMonths() {
             )}
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {[
-                ["revenue", "Revenue"],
-                ["cogs", "COGS"],
-                ["loan_paid", "Loan paid"],
-              ].map(([k, label]) => (
-                <label key={k} className="text-xs text-gray-600">
-                  <div className="mb-1">{label}</div>
-                  <input
-                    className="w-full border rounded-lg px-3 py-2 bg-white"
-                    value={draft[k]}
-                    onChange={(e) => setDraft((d) => ({ ...d, [k]: e.target.value }))}
-                    disabled={saving || draftLocked}
-                    inputMode="numeric"
-                    placeholder={currency}
-                  />
-                </label>
-              ))}
+              {/* ✅ Revenue/COGS read-only */}
+              <label className="text-xs text-gray-600">
+                <div className="mb-1">Revenue (auto from Sales)</div>
+                <input
+                  className="w-full border rounded-lg px-3 py-2 bg-white"
+                  value={draft.revenue}
+                  disabled
+                />
+              </label>
+
+              <label className="text-xs text-gray-600">
+                <div className="mb-1">COGS (auto from Sales)</div>
+                <input className="w-full border rounded-lg px-3 py-2 bg-white" value={draft.cogs} disabled />
+              </label>
+
+              <label className="text-xs text-gray-600">
+                <div className="mb-1">Loan paid</div>
+                <input
+                  className="w-full border rounded-lg px-3 py-2 bg-white"
+                  value={draft.loan_paid}
+                  onChange={(e) => setDraft((d) => ({ ...d, loan_paid: e.target.value }))}
+                  disabled={saving || draftLocked}
+                  inputMode="numeric"
+                  placeholder={currency}
+                />
+              </label>
 
               <label className="text-xs text-gray-600">
                 <div className="mb-1">OPEX (computed)</div>
-                <input className="w-full border rounded-lg px-3 py-2 bg-white" value={draft.opex} disabled />
+                <input
+                  className="w-full border rounded-lg px-3 py-2 bg-white"
+                  value={draft.opex}
+                  disabled
+                />
               </label>
 
               <label className="text-xs text-gray-600">
                 <div className="mb-1">CAPEX (computed)</div>
-                <input className="w-full border rounded-lg px-3 py-2 bg-white" value={draft.capex} disabled />
+                <input
+                  className="w-full border rounded-lg px-3 py-2 bg-white"
+                  value={draft.capex}
+                  disabled
+                />
               </label>
 
               <label className="text-xs text-gray-600">
                 <div className="mb-1">Cash end (computed / snapshot)</div>
-                <input className="w-full border rounded-lg px-3 py-2 bg-white" value={draft.cash_end} disabled />
+                <input
+                  className="w-full border rounded-lg px-3 py-2 bg-white"
+                  value={draft.cash_end}
+                  disabled
+                />
               </label>
 
               <label className="text-xs text-gray-600 col-span-2 md:col-span-3">
