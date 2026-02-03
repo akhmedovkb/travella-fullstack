@@ -96,7 +96,8 @@ async function getAutoSumsByMonth() {
     s AS (
       SELECT
         to_char(date_trunc('month', sold_at)::date, 'YYYY-MM') as month,
-        COALESCE(SUM(COALESCE(cogs_total, 0)), 0) as cogs
+        COALESCE(SUM(COALESCE(cogs_total, 0)), 0) as cogs,
+        COALESCE(SUM(COALESCE(revenue_total, 0)), 0) as revenue
       FROM donas_sales
       GROUP BY 1
     )
@@ -104,7 +105,8 @@ async function getAutoSumsByMonth() {
       COALESCE(p.month, s.month) as month,
       COALESCE(p.opex, 0) as opex,
       COALESCE(p.capex, 0) as capex,
-      COALESCE(s.cogs, 0) as cogs
+      COALESCE(s.cogs, 0) as cogs,
+      COALESCE(s.revenue, 0) as revenue
     FROM p
     FULL JOIN s ON s.month = p.month
     ORDER BY 1 ASC
@@ -117,6 +119,7 @@ async function getAutoSumsByMonth() {
       opex: toNum(r.opex),
       capex: toNum(r.capex),
       cogs: toNum(r.cogs),
+      revenue: toNum(r.revenue),
     });
   }
   return map;
@@ -224,12 +227,17 @@ async function computeMonthsView() {
     const ym = String(r.month);
     const locked = hasLockedTag(r.notes);
 
-    const revenue = toNum(r.revenue);
+    const storedRevenue = toNum(r.revenue);
     const loanPaid = toNum(r.loan_paid);
-
+    
     // auto (only for unlocked)
-    const auto = autoMap.get(ym) || { opex: 0, capex: 0, cogs: 0 };
-
+    const auto = autoMap.get(ym) || { opex: 0, capex: 0, cogs: 0, revenue: 0 };
+    
+    // revenue:
+    // - locked: используем stored
+    // - unlocked: если storedRevenue > 0, считаем это ручным override, иначе берём auto revenue из sales
+    const revenue = locked ? storedRevenue : (storedRevenue > 0 ? storedRevenue : toNum(auto.revenue));
+    
     const cogs = locked ? toNum(r.cogs) : toNum(auto.cogs);
     const opex = locked ? toNum(r.opex) : toNum(auto.opex);
     const capex = locked ? toNum(r.capex) : toNum(auto.capex);
