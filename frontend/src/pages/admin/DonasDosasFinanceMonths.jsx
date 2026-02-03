@@ -115,11 +115,14 @@ export default function DonasDosasFinanceMonths() {
     setLoading(true);
     setErr("");
     try {
+      // settings: backend может вернуть либо raw row, либо { ok, settings }
       const s = await apiGet("/api/admin/donas/finance/settings");
-      setSettings(s || null);
+      setSettings((s && (s.settings || s)) || null);
 
+      // months: backend может вернуть либо массив, либо { ok, months }
       const m = await apiGet("/api/admin/donas/finance/months");
-      setRows(Array.isArray(m) ? m : []);
+      const arr = Array.isArray(m) ? m : Array.isArray(m?.months) ? m.months : [];
+      setRows(arr);
     } catch (e) {
       setErr(e?.data?.error || e?.message || "Failed to load months");
     } finally {
