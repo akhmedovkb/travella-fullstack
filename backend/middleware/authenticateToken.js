@@ -5,7 +5,18 @@ const pool = require("../db");
 const JWT_SECRET = process.env.JWT_SECRET || "changeme_in_env";
 
 // мини-кэш на процесс (опционально)
-const cache = new Map(); // key: provider:<id> -> {is_admin,is_moderator,permissions,ts}
+// key: provider:<id> -> {is_admin,is_moderator,permissions,email,name,ts}
+const cache = new Map();
+
+function pickEmail(obj) {
+  if (!obj) return null;
+  return obj.email || obj.mail || obj.login || null;
+}
+
+function pickName(obj) {
+  if (!obj) return null;
+  return obj.name || obj.full_name || obj.fullname || obj.company_name || null;
+}
 
 async function readProviderFlags(id) {
   const key = `provider:${id}`;
@@ -25,6 +36,43 @@ async function readProviderFlags(id) {
         is_admin: !!(p.is_admin || p.admin === true),
         is_moderator: !!(p.is_moderator || p.moderator === true),
         permissions: Array.isArray(p.permissions) ? p.permissions : [],
+        email: pickEmail(p),
+        name: pickName(p),
+        ts: now,
+      }
+    : null;
+
+  cache.set(key, val ? val : { ts: now });
+  return val;
+}
+
+async function readClientIdentity(id) {
+  // используем отдельный ключ, чтобы не конфликтовать с provider:<id>
+  const key = `client:${id}`;
+  const now = Date.now();
+  const hit = cache.get(key);
+  if (hit && now - hit.ts < 60_000) return hit;
+
+  // Подстрой под свои реальные поля в clients (часто: email/full_name/name/phone)
+  const { rows } = await pool.query(
+    `
+    SELECT
+      id,
+      email,
+      full_name,
+      name
+    FROM clients
+    WHERE id = $1
+    LIMIT 1
+    `,
+    [id]
+  );
+
+  const c = rows[0] || null;
+  const val = c
+    ? {
+        email: pickEmail(c),
+        name: pickName(c),
         ts: now,
       }
     : null;
@@ -64,14 +112,14 @@ module.exports = async function authenticateToken(req, res, next) {
     // роль из токена (если есть)
     let role = payload.role ?? payload.type ?? null;
 
-    // roles[] из токена (приведём к нижнему регистру)
+    // roles[] из токена
     const roles = []
       .concat(payload.roles || [])
       .flatMap((r) => String(r).split(","))
       .map((s) => s.trim().toLowerCase())
       .filter(Boolean);
 
-    // пробуем понять провайдера по БД (и флаги)
+    // пробуем понять провайдера по БД (и флаги + email/name)
     let pFlags = null;
     if (id != null) {
       try {
@@ -85,12 +133,19 @@ module.exports = async function authenticateToken(req, res, next) {
     if (pFlags && !role) role = "provider";
 
     // если провайдера не нашли — мягко проверим клиента
+    let cIdentity = null;
     if (!pFlags && !role && id != null) {
       try {
-        const c = await pool.query("SELECT 1 FROM clients WHERE id=$1 LIMIT 1", [
-          id,
-        ]);
-        if (c.rowCount > 0) role = "client";
+        const c = await pool.query("SELECT 1 FROM clients WHERE id=$1 LIMIT 1", [id]);
+        if (c.rowCount > 0) {
+          role = "client";
+          // и сразу подтянем identity (email/name) чтобы аудит не был null
+          try {
+            cIdentity = await readClientIdentity(id);
+          } catch (e) {
+            console.error("auth client identity error:", e);
+          }
+        }
       } catch {
         // ignore
       }
@@ -115,6 +170,23 @@ module.exports = async function authenticateToken(req, res, next) {
     const is_admin = !!((pFlags && pFlags.is_admin) || tokenSaysAdmin);
     const is_moderator = !!((pFlags && pFlags.is_moderator) || tokenSaysModerator);
 
+    // ======= ВАЖНО ДЛЯ АУДИТА: email/name =======
+    // Приоритет:
+    // 1) то что уже есть в токене (payload.email/mail/full_name)
+    // 2) из providers (pFlags.email/name)
+    // 3) из clients (cIdentity.email/name)
+    const email =
+      pickEmail(payload) ||
+      (pFlags && pFlags.email) ||
+      (cIdentity && cIdentity.email) ||
+      null;
+
+    const name =
+      pickName(payload) ||
+      (pFlags && pFlags.name) ||
+      (cIdentity && cIdentity.name) ||
+      null;
+
     req.user = {
       ...payload,
       id,
@@ -123,6 +195,14 @@ module.exports = async function authenticateToken(req, res, next) {
       is_admin,
       is_moderator,
       permissions: (pFlags && pFlags.permissions) || payload.permissions || [],
+
+      // нормализованные поля (их используй в audit)
+      email,
+      name,
+
+      // для совместимости (если где-то в коде ждут эти ключи)
+      mail: payload.mail || email || null,
+      full_name: payload.full_name || payload.fullname || name || null,
     };
 
     return next();
