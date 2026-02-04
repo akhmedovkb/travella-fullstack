@@ -28,8 +28,32 @@ router.post("/months/:month/resnapshot", authenticateToken, requireAdmin, ctrl.r
 router.post("/months/:month/lock-up-to", authenticateToken, requireAdmin, ctrl.lockUpTo);
 router.post("/months/:month/bulk-resnapshot", authenticateToken, requireAdmin, ctrl.bulkResnapshot);
 
+// UI helpers (preview + audit)
+router.get("/months/:month/lock-preview", authenticateToken, requireAdmin, ctrl.lockPreview);
+router.get(
+  "/months/:month/resnapshot-up-to-preview",
+  authenticateToken,
+  requireAdmin,
+  ctrl.resnapshotUpToPreview
+);
+router.post(
+  "/months/:month/resnapshot-up-to",
+  authenticateToken,
+  requireAdmin,
+  ctrl.resnapshotUpTo
+);
+
+router.get("/months/:month/audit", authenticateToken, requireAdmin, ctrl.auditMonth);
+router.get(
+  "/months/:month/audit/export.csv",
+  authenticateToken,
+  requireAdmin,
+  ctrl.exportAuditMonthCsv
+);
+
 // extras used by UI buttons
 router.get("/months/export.csv", authenticateToken, requireAdmin, ctrl.exportCsv);
 router.get("/audit", authenticateToken, requireAdmin, ctrl.audit);
+router.get("/audit/export.csv", authenticateToken, requireAdmin, ctrl.exportAuditCsv);
 
 module.exports = router;
