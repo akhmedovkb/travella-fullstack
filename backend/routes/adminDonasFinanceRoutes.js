@@ -1021,7 +1021,7 @@ router.get("/donas/finance/months/export.csv", authenticateToken, requireAdmin, 
  * =========================
  */
 
-router.get("/audit", authenticateToken, requireAdmin, async (req, res) => {
+router.get("/donas/finance/audit", authenticateToken, requireAdmin, async (req, res) => {
   try {
     await ensureAuditTable(pool);
 
@@ -1071,6 +1071,11 @@ router.get("/audit", authenticateToken, requireAdmin, async (req, res) => {
     console.error("finance/audit GET error:", e);
     return res.status(500).json({ error: "Failed to load audit" });
   }
+});
+
+router.get("/audit", authenticateToken, requireAdmin, async (req, res) => {
+  req.url = "/donas/finance/audit";
+  return router.handle(req, res);
 });
 
 router.get("/donas/finance/months/:month/audit", authenticateToken, requireAdmin, async (req, res) => {
@@ -1587,7 +1592,7 @@ router.get(
  * =========================
  */
 
-router.post("/months/sync", authenticateToken, requireAdmin, async (req, res) => {
+router.post("/donas/finance/months/sync", authenticateToken, requireAdmin, async (req, res) => {
   try {
     const r = await pool.query(`
       select
@@ -1620,6 +1625,12 @@ router.post("/months/sync", authenticateToken, requireAdmin, async (req, res) =>
     console.error("finance/months sync error:", e);
     res.status(500).json({ error: "Failed to sync months" });
   }
+});
+
+router.post("/months/sync", authenticateToken, requireAdmin, async (req, res) => {
+  // alias -> same handler
+  req.url = "/donas/finance/months/sync";
+  return router.handle(req, res);
 });
 
 router.post("/donas/finance/months/:month/lock", authenticateToken, requireAdmin, async (req, res) => {
