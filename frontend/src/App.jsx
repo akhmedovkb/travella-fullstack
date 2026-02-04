@@ -389,23 +389,6 @@ export default function App() {
                 </PrivateRoute>
               }
             >
-            <Route index element={<DonasDosasFinanceOverview />} />
-            <Route path="opex" element={<DonasOpex />} />
-            <Route path="capex" element={<DonasCapex />} />
-            <Route path="cogs" element={<DonasDosasCogsTab />} />
-            <Route path="profit" element={<DonasDosasProfitTab />} />
-            <Route path="investor" element={<DonasInvestor />} />
-          </Route>
-            <Route
-              path="/admin/donas-dosas/finance"
-              element={
-                <PrivateRoute>
-                  <AdminRoute>
-                    <DonasDosasFinanceLayout />
-                  </AdminRoute>
-                </PrivateRoute>
-              }
-            >
               <Route index element={<DonasDosasFinanceOverview />} />
               <Route path="months" element={<DonasDosasFinanceMonths />} />
               <Route path="sales" element={<DonasDosasFinanceSales />} />
