@@ -10,32 +10,6 @@ const router = express.Router();
 
 // базовый префикс в index.js: /api/admin/donas/finance
 
-// === URL COMPAT LAYER ===
-// Фронт ходит на: /api/admin/donas/finance/months/...
-// А этот роутер исторически ожидает: /donas/finance/months/...
-router.use((req, _res, next) => {
-  try {
-    const u = req.url || "";
-    const path = u.split("?")[0] || "";
-
-    // если уже с /donas/finance - ничего не делаем
-    if (path.startsWith("/donas/finance")) return next();
-
-    // если пришло без префикса - добавим его
-    const known =
-      path === "/settings" || path.startsWith("/settings/") ||
-      path === "/months" || path.startsWith("/months/") ||
-      path === "/audit" || path.startsWith("/audit/") ||
-      path === "/adjustments" || path.startsWith("/adjustments/") ||
-      path.endsWith("/export.csv");
-
-    if (known) {
-      req.url = "/donas/finance" + u;
-    }
-  } catch {}
-  next();
-});
-
 // settings
 router.get("/settings", authenticateToken, requireAdmin, ctrl.getSettings);
 router.put("/settings", authenticateToken, requireAdmin, ctrl.updateSettings);
