@@ -1021,7 +1021,7 @@ router.get("/donas/finance/months/export.csv", authenticateToken, requireAdmin, 
  * =========================
  */
 
-router.get("/donas/finance/audit", authenticateToken, requireAdmin, async (req, res) => {
+router.get("/audit", authenticateToken, requireAdmin, async (req, res) => {
   try {
     await ensureAuditTable(pool);
 
@@ -1587,7 +1587,7 @@ router.get(
  * =========================
  */
 
-router.post("/donas/finance/months/sync", authenticateToken, requireAdmin, async (req, res) => {
+router.post("/months/sync", authenticateToken, requireAdmin, async (req, res) => {
   try {
     const r = await pool.query(`
       select
