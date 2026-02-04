@@ -1039,9 +1039,10 @@ app.use("/api/admin/donas", adminDonasMenuItemsRoutes);
 app.use("/api/admin/donas", adminDonasIngredientsRoutes);
 app.use(donasPublicMenuRoutes);
 app.use("/api/admin/donas/opex", adminDonasOpexRoutes);
+app.use("/api/admin/donas/finance", adminDonasFinanceRoutes);
 app.use("/api/admin/donas/finance", adminDonasFinanceMonthsRoutes);
 app.use("/api/admin/donas", adminDonasSalesRoutes);
-app.use("/api/admin/donas/finance", adminDonasFinanceRoutes);
+
 
 /** ===================== Start (в самом конце) ===================== */
 const PORT = process.env.PORT || 5000;
