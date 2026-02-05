@@ -25,7 +25,7 @@ const SLUG = "donas-dosas";
 
 /**
  * =========================
- * Finance audit helpers (AUTO-TOUCH)
+ * Finance audit helpers (AUTO actions sales.*)
  * =========================
  */
 
@@ -57,7 +57,7 @@ async function ensureFinanceAudit() {
     );
   `);
 
-  // ВАЖНО: порядок колонок у VIEW должен совпадать с тем, что у тебя уже в БД
+  // Порядок колонок у VIEW должен совпадать с уже существующим в БД
   // id, slug, ym, action, diff, actor_name, actor_email, created_at, actor_role, actor_id, meta
   await db.query(`
     CREATE OR REPLACE VIEW donas_finance_audit AS
@@ -104,15 +104,15 @@ async function auditInsert({ ym, action, diff, actor, meta }) {
   }
 }
 
-async function touchMonthAudit(req, ym, meta = {}) {
+async function auditSales(req, ym, action, meta = {}, diff = {}) {
   if (!isYm(ym)) return;
   const actor = getActor(req);
   await auditInsert({
     ym,
-    action: "month.touch",
-    diff: { source: "sales" },
+    action: action || "sales.update",
+    diff: diff || {},
     actor,
-    meta,
+    meta: meta || {},
   });
 }
 
@@ -255,8 +255,14 @@ exports.addSale = async (req, res) => {
       ]
     );
 
-    // ✅ AUTO-TOUCH Months audit
-    await touchMonthAudit(req, ym, { op: "sale.add", sale_id: rows?.[0]?.id || null });
+    // ✅ Audit: sales.add
+    await auditSales(
+      req,
+      ym,
+      "sales.add",
+      { sale_id: rows?.[0]?.id || null, channel },
+      { revenue_total: revenueTotal, cogs_total: cogsTotal }
+    );
 
     return res.json(rows[0]);
   } catch (e) {
@@ -294,7 +300,7 @@ exports.updateSale = async (req, res) => {
     const qty = b.qty == null ? toNum(cur.qty) : toNum(b.qty);
     const unitPrice = b.unit_price == null ? toNum(cur.unit_price) : toNum(b.unit_price);
     const channel = b.channel == null ? String(cur.channel || "cash") : String(b.channel || "cash");
-    const notes = b.notes === undefined ? cur.notes : (b.notes == null ? null : String(b.notes));
+    const notes = b.notes === undefined ? cur.notes : b.notes == null ? null : String(b.notes);
 
     const newYm = toYmFromDate(soldAt);
     // если переносим продажу в другой месяц — проверяем и новый месяц тоже
@@ -358,13 +364,25 @@ exports.updateSale = async (req, res) => {
       ]
     );
 
-    // ✅ AUTO-TOUCH Months audit:
-    // 1) всегда touch исходный месяц
-    await touchMonthAudit(req, curYm, { op: "sale.update", sale_id: id });
+    // ✅ Audit:
+    // 1) sales.update всегда в исходный месяц
+    await auditSales(
+      req,
+      curYm,
+      "sales.update",
+      { sale_id: id, channel },
+      { revenue_total: revenueTotal, cogs_total: cogsTotal }
+    );
 
-    // 2) если месяц поменяли — touch новый тоже
+    // 2) если перенос в другой месяц — отдельная запись sales.move в новый месяц
     if (newYm && newYm !== curYm) {
-      await touchMonthAudit(req, newYm, { op: "sale.move", sale_id: id, from: curYm, to: newYm });
+      await auditSales(
+        req,
+        newYm,
+        "sales.move",
+        { sale_id: id, from: curYm, to: newYm, channel },
+        { revenue_total: revenueTotal, cogs_total: cogsTotal }
+      );
     }
 
     return res.json(rows[0]);
@@ -393,8 +411,8 @@ exports.deleteSale = async (req, res) => {
 
     await db.query(`DELETE FROM donas_sales WHERE id=$1`, [id]);
 
-    // ✅ AUTO-TOUCH Months audit
-    await touchMonthAudit(req, ym, { op: "sale.delete", sale_id: id });
+    // ✅ Audit: sales.delete
+    await auditSales(req, ym, "sales.delete", { sale_id: id }, { deleted: true });
 
     return res.json({ ok: true });
   } catch (e) {
