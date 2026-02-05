@@ -1,15 +1,7 @@
 // backend/controllers/donasFinanceMonthsController.js
 const db = require("../db");
 
-function getActor(req) {
-  const u = req.user || {};
-  return {
-    id: u.id ?? null,
-    role: String(u.role || "").toLowerCase() || null,
-    email: u.email || u.mail || null,
-    name: u.name || u.full_name || u.fullName || null,
-  };
-}
+const SLUG = "donas-dosas";
 
 function toNum(x) {
   const n = Number(x);
@@ -20,9 +12,13 @@ function isYm(s) {
   return /^\d{4}-\d{2}$/.test(String(s || ""));
 }
 
-function monthToDate(ym) {
-  // YYYY-MM -> YYYY-MM-01
+function ymToDate(ym) {
   return `${ym}-01`;
+}
+
+function dateToYm(d) {
+  if (!d) return "";
+  return String(d).slice(0, 7);
 }
 
 function hasLockedTag(notes) {
@@ -33,263 +29,312 @@ function addLockedTag(notes) {
   const s = String(notes || "").trim();
   if (!s) return "#locked";
   if (hasLockedTag(s)) return s;
-  return `${s}\n#locked`;
+  return `${s} #locked`;
 }
 
 function removeLockedTag(notes) {
-  const s = String(notes || "");
-  return s
-    .split("\n")
-    .filter((line) => line.trim().toLowerCase() !== "#locked")
-    .join("\n")
+  return String(notes || "")
+    .replace(/#locked/gi, "")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
-// фиксируем slug для Dona's Dosas
-const SLUG = "donas-dosas";
+function getActor(req) {
+  const u = req.user || {};
+  return {
+    id: u.id ?? null,
+    role: String(u.role || "").toLowerCase() || null,
+    email: u.email || u.mail || null,
+    name: u.name || u.full_name || null,
+  };
+}
 
 /**
  * =========================
- * Audit helpers
+ * Ensure tables/views exist
  * =========================
  */
+async function ensureFinanceTables() {
+  // settings
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS donas_finance_settings (
+      id BIGSERIAL PRIMARY KEY,
+      slug TEXT NOT NULL UNIQUE,
+      currency TEXT NOT NULL DEFAULT 'UZS',
+      opening_cash NUMERIC NOT NULL DEFAULT 0,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
 
-async function logAudit(req, { action, ym = null, diff = {}, meta = {} }) {
-  // Audit table может отсутствовать в старых БД — не ломаем сервер.
+  // months storage (loan_paid + notes обязательны, остальное для snapshot)
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS donas_finance_months (
+      id BIGSERIAL PRIMARY KEY,
+      slug TEXT NOT NULL,
+      month DATE NOT NULL,
+      revenue NUMERIC NOT NULL DEFAULT 0,
+      cogs NUMERIC NOT NULL DEFAULT 0,
+      opex NUMERIC NOT NULL DEFAULT 0,
+      capex NUMERIC NOT NULL DEFAULT 0,
+      loan_paid NUMERIC NOT NULL DEFAULT 0,
+      cash_end NUMERIC NOT NULL DEFAULT 0,
+      notes TEXT NOT NULL DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (slug, month)
+    );
+  `);
+
+  // audit base table
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS donas_finance_audit_log (
+      id BIGSERIAL PRIMARY KEY,
+      slug TEXT NOT NULL,
+      ym TEXT NOT NULL,
+      action TEXT NOT NULL,
+      diff JSONB NOT NULL DEFAULT '{}'::jsonb,
+      actor_name TEXT,
+      actor_email TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      actor_role TEXT,
+      actor_id BIGINT,
+      meta JSONB NOT NULL DEFAULT '{}'::jsonb
+    );
+  `);
+
+  // view (важно: порядок колонок совпадает с тем, что ты сейчас видишь в БД)
+  // id, slug, ym, action, diff, actor_name, actor_email, created_at, actor_role, actor_id, meta
+  await db.query(`
+    CREATE OR REPLACE VIEW donas_finance_audit AS
+    SELECT
+      id,
+      slug,
+      ym,
+      action,
+      diff,
+      actor_name,
+      actor_email,
+      created_at,
+      actor_role,
+      actor_id,
+      meta
+    FROM donas_finance_audit_log;
+  `);
+
+  // seed settings row
+  await db.query(
+    `
+    INSERT INTO donas_finance_settings (slug)
+    VALUES ($1)
+    ON CONFLICT (slug) DO NOTHING
+    `,
+    [SLUG]
+  );
+}
+
+async function auditInsert({ ym, action, diff, actor, meta }) {
   try {
-    const actor = getActor(req);
     await db.query(
       `
       INSERT INTO donas_finance_audit_log
-        (slug, ym, action, actor_id, actor_role, actor_email, actor_name, diff, meta)
+        (slug, ym, action, diff, actor_name, actor_email, actor_role, actor_id, meta)
       VALUES
-        ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb)
+        ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       `,
       [
         SLUG,
-        ym,
-        action,
-        actor.id,
-        actor.role,
-        actor.email,
-        actor.name,
-        JSON.stringify(diff || {}),
-        JSON.stringify(meta || {}),
+        String(ym || ""),
+        String(action || ""),
+        diff ? diff : {},
+        actor?.name || null,
+        actor?.email || null,
+        actor?.role || null,
+        actor?.id != null ? Number(actor.id) : null,
+        meta ? meta : {},
       ]
     );
   } catch (e) {
-    // silently ignore
+    console.error("auditInsert error:", e);
   }
 }
 
 /**
- * ВАЖНО:
- * В прод-таблице donas_finance_months может не быть unique constraint на (slug, month),
- * поэтому ON CONFLICT нельзя.
- *
- * Делаем idempotent insert через WHERE NOT EXISTS.
+ * =========================
+ * Aggregates
+ * =========================
  */
-async function ensureMonthRow(ym) {
-  const d = monthToDate(ym);
 
-  await db.query(
-    `
-    INSERT INTO donas_finance_months
-      (slug, month, revenue, cogs, opex, capex, loan_paid, cash_end, notes)
+// sales -> revenue/cogs
+async function loadSalesAggByYm() {
+  const { rows } = await db.query(`
     SELECT
-      $2, $1::date, 0, 0, 0, 0, 0, 0, ''
-    WHERE NOT EXISTS (
-      SELECT 1
-      FROM donas_finance_months
-      WHERE slug=$2 AND month=$1::date
-      LIMIT 1
-    )
-    `,
-    [d, SLUG]
-  );
-}
-
-/**
- * Авто-суммы по месяцу (FACT):
- * - OPEX/CAPEX: из donas_purchases
- * - REVENUE/COGS: из donas_sales
- *
- * donas_sales уже хранит revenue_total и cogs_total — идеально для "Months".
- */
-async function getAutoSumsByMonth() {
-  const { rows } = await db.query(
-    `
-    WITH p AS (
-      SELECT
-        to_char(date_trunc('month', date)::date, 'YYYY-MM') as month,
-        SUM(CASE WHEN type='opex'  THEN COALESCE(total, qty*price, 0) ELSE 0 END) as opex,
-        SUM(CASE WHEN type='capex' THEN COALESCE(total, qty*price, 0) ELSE 0 END) as capex
-      FROM donas_purchases
-      GROUP BY 1
-    ),
-    s AS (
-      SELECT
-        to_char(date_trunc('month', sold_at)::date, 'YYYY-MM') as month,
-        COALESCE(SUM(COALESCE(cogs_total, 0)), 0) as cogs,
-        COALESCE(SUM(COALESCE(revenue_total, 0)), 0) as revenue
-      FROM donas_sales
-      GROUP BY 1
-    )
-    SELECT
-      COALESCE(p.month, s.month) as month,
-      COALESCE(p.opex, 0) as opex,
-      COALESCE(p.capex, 0) as capex,
-      COALESCE(s.cogs, 0) as cogs,
-      COALESCE(s.revenue, 0) as revenue
-    FROM p
-    FULL JOIN s ON s.month = p.month
-    ORDER BY 1 ASC
-    `
-  );
+      to_char(sold_at, 'YYYY-MM') AS ym,
+      COALESCE(SUM(revenue_total), 0)::numeric AS revenue,
+      COALESCE(SUM(cogs_total), 0)::numeric AS cogs
+    FROM donas_sales
+    GROUP BY 1
+  `);
 
   const map = new Map();
   for (const r of rows || []) {
-    map.set(String(r.month), {
-      opex: toNum(r.opex),
-      capex: toNum(r.capex),
-      cogs: toNum(r.cogs),
+    map.set(String(r.ym), {
       revenue: toNum(r.revenue),
+      cogs: toNum(r.cogs),
     });
   }
   return map;
 }
 
-async function getSettingsRow() {
-  const { rows } = await db.query(
-    `SELECT * FROM donas_finance_settings ORDER BY updated_at DESC NULLS LAST, id DESC LIMIT 1`
-  );
-  return rows?.[0] || null;
+// purchases -> opex/capex (type = 'OPEX'/'CAPEX' or lower)
+async function loadPurchasesAggByYm() {
+  const { rows } = await db.query(`
+    SELECT
+      to_char(date, 'YYYY-MM') AS ym,
+      COALESCE(SUM(CASE WHEN lower(type)='opex' THEN total ELSE 0 END), 0)::numeric AS opex,
+      COALESCE(SUM(CASE WHEN lower(type)='capex' THEN total ELSE 0 END), 0)::numeric AS capex
+    FROM donas_purchases
+    GROUP BY 1
+  `);
+
+  const map = new Map();
+  for (const r of rows || []) {
+    map.set(String(r.ym), {
+      opex: toNum(r.opex),
+      capex: toNum(r.capex),
+    });
+  }
+  return map;
 }
 
-async function getAllRelevantMonthsYms() {
-  // months from purchases + sales + existing months rows
+// months rows in DB (loan_paid, notes, snapshots)
+async function loadMonthsDbRows() {
   const { rows } = await db.query(
     `
-    WITH a AS (
-      SELECT to_char(date_trunc('month', date)::date, 'YYYY-MM') as ym
-      FROM donas_purchases
-      UNION
-      SELECT to_char(date_trunc('month', sold_at)::date, 'YYYY-MM') as ym
-      FROM donas_sales
-      UNION
-      SELECT to_char(date_trunc('month', month)::date, 'YYYY-MM') as ym
-      FROM donas_finance_months
-      WHERE slug=$1
-    )
-    SELECT ym FROM a ORDER BY ym ASC
+    SELECT *
+    FROM donas_finance_months
+    WHERE slug=$1
+    ORDER BY month ASC
     `,
     [SLUG]
   );
 
-  return (rows || []).map((r) => r.ym).filter(Boolean);
+  const map = new Map();
+  for (const r of rows || []) {
+    const ym = dateToYm(r.month);
+    map.set(ym, r);
+  }
+  return map;
+}
+
+// build ym list from sales+purchases+months db
+async function buildAllYmSorted() {
+  const { rows } = await db.query(`
+    WITH s AS (
+      SELECT DISTINCT to_char(sold_at,'YYYY-MM') AS ym FROM donas_sales
+    ),
+    p AS (
+      SELECT DISTINCT to_char(date,'YYYY-MM') AS ym FROM donas_purchases
+    ),
+    m AS (
+      SELECT DISTINCT to_char(month,'YYYY-MM') AS ym FROM donas_finance_months WHERE slug='${SLUG}'
+    )
+    SELECT ym FROM (SELECT ym FROM s UNION SELECT ym FROM p UNION SELECT ym FROM m) x
+    WHERE ym IS NOT NULL AND ym <> ''
+    ORDER BY ym ASC
+  `);
+
+  return (rows || []).map((r) => String(r.ym));
 }
 
 /**
  * =========================
- * Months view (READ)
+ * Compute Months response
  * =========================
- *
- * Главная витрина месяцев:
- * - unlock: revenue/cogs/opex/capex = auto (sales/purchases)
- * - locked: берём snapshot из таблицы (включая cash_end)
- * - loan_paid и notes всегда из таблицы
- *
- * Плюс:
- * - _diff = purchases - snapshot (для locked месяцев)
- *
- * IMPORTANT:
- * Таблица может содержать дубликаты month (нет unique). Поэтому берём только последнюю запись.
  */
 async function computeMonthsView() {
-  const allMonths = await getAllRelevantMonthsYms();
-  for (const ym of allMonths) {
-    if (isYm(ym)) await ensureMonthRow(ym);
-  }
+  await ensureFinanceTables();
 
-  const settings = await getSettingsRow();
-  const openingCash = toNum(settings?.opening_cash);
-
-  const autoMap = await getAutoSumsByMonth();
-
-  const { rows } = await db.query(
-    `
-    SELECT DISTINCT ON (month)
-      id,
-      slug,
-      to_char(month,'YYYY-MM') as month,
-      revenue, cogs, opex, capex, loan_paid, cash_end,
-      notes,
-      updated_at
-    FROM donas_finance_months
-    WHERE slug=$1
-    ORDER BY month ASC, updated_at DESC NULLS LAST, id DESC
-    `,
+  const s = await db.query(
+    `SELECT currency, opening_cash FROM donas_finance_settings WHERE slug=$1 LIMIT 1`,
     [SLUG]
   );
+  const settings = s.rows?.[0] || { currency: "UZS", opening_cash: 0 };
+
+  const ymList = await buildAllYmSorted();
+
+  const salesAgg = await loadSalesAggByYm();
+  const purchAgg = await loadPurchasesAggByYm();
+  const monthsDb = await loadMonthsDbRows();
+
+  // compute cash_end chain
+  let prevCash = toNum(settings.opening_cash);
 
   const out = [];
-  let prevCashEnd = openingCash;
+  for (const ym of ymList) {
+    const dbRow = monthsDb.get(ym) || null;
+    const locked = dbRow ? hasLockedTag(dbRow.notes) : false;
 
-  for (const r of rows || []) {
-    const ym = String(r.month);
-    const locked = hasLockedTag(r.notes);
+    // loan_paid + notes всегда берём из DB (чтобы сохранялись)
+    const loan_paid = toNum(dbRow?.loan_paid);
+    const notes = String(dbRow?.notes || "");
 
-    const storedRevenue = toNum(r.revenue);
-    const loanPaid = toNum(r.loan_paid);
+    let revenue = 0;
+    let cogs = 0;
+    let opex = 0;
+    let capex = 0;
+    let cash_end = 0;
 
-    const auto = autoMap.get(ym) || { opex: 0, capex: 0, cogs: 0, revenue: 0 };
-
-    // ✅ Sales-first:
-    // - locked: используем stored snapshot
-    // - unlocked: всегда FACT из sales
-    const revenue = locked ? storedRevenue : toNum(auto.revenue);
-    const cogs = locked ? toNum(r.cogs) : toNum(auto.cogs);
-    const opex = locked ? toNum(r.opex) : toNum(auto.opex);
-    const capex = locked ? toNum(r.capex) : toNum(auto.capex);
-
-    // purchases - snapshot (только для locked; для auto = 0)
-    const diffOpex = locked ? toNum(auto.opex) - toNum(r.opex) : 0;
-    const diffCapex = locked ? toNum(auto.capex) - toNum(r.capex) : 0;
-
-    const opening = prevCashEnd;
-
-    let cf = 0;
-    let cashEnd = 0;
-
-    if (locked) {
-      cashEnd = toNum(r.cash_end);
-      cf = cashEnd - opening;
+    if (locked && dbRow) {
+      // snapshot values
+      revenue = toNum(dbRow.revenue);
+      cogs = toNum(dbRow.cogs);
+      opex = toNum(dbRow.opex);
+      capex = toNum(dbRow.capex);
+      cash_end = toNum(dbRow.cash_end);
     } else {
-      cf = revenue - cogs - opex - capex - loanPaid;
-      cashEnd = opening + cf;
+      // auto values
+      const sa = salesAgg.get(ym) || { revenue: 0, cogs: 0 };
+      const pa = purchAgg.get(ym) || { opex: 0, capex: 0 };
+      revenue = toNum(sa.revenue);
+      cogs = toNum(sa.cogs);
+      opex = toNum(pa.opex);
+      capex = toNum(pa.capex);
+
+      const gp = revenue - cogs;
+      const netOp = gp - opex;
+      const cf = netOp - loan_paid - capex;
+      cash_end = prevCash + cf;
     }
 
-    const diff = cashEnd - opening;
+    // diff badges: purchases - snapshot (if locked)
+    let diff = null;
+    if (locked) {
+      const pa = purchAgg.get(ym) || { opex: 0, capex: 0 };
+      diff = {
+        opex: toNum(pa.opex) - toNum(dbRow?.opex),
+        capex: toNum(pa.capex) - toNum(dbRow?.capex),
+      };
+    } else {
+      // unlocked -> no diff (or could show 0)
+      diff = { opex: 0, capex: 0 };
+    }
+
+    // update prevCash for chain
+    prevCash = cash_end;
 
     out.push({
-      id: r.id,
-      slug: r.slug,
-      month: ym,
+      id: dbRow?.id || null,
+      slug: SLUG,
+      month: ymToDate(ym),
       revenue,
       cogs,
       opex,
       capex,
-      loan_paid: loanPaid,
-      cf,
-      cash_end: cashEnd,
-      diff,
-      notes: r.notes || "",
-      updated_at: r.updated_at,
-      locked,
-      _diff: { opex: diffOpex, capex: diffCapex },
+      loan_paid,
+      cash_end,
+      notes,
+      _diff: diff,
     });
-
-    prevCashEnd = cashEnd;
   }
 
   return { settings, months: out };
@@ -297,277 +342,19 @@ async function computeMonthsView() {
 
 /**
  * =========================
- * Preview / planning helpers
+ * Controllers
  * =========================
  */
 
-function calcCashEndFromParts(opening, { revenue, cogs, opex, capex, loan_paid }) {
-  const cf = toNum(revenue) - toNum(cogs) - toNum(opex) - toNum(capex) - toNum(loan_paid);
-  return { cf, cash_end: toNum(opening) + cf };
-}
-
-/**
- * IMPORTANT:
- * Таблица может содержать дубликаты month (нет unique). Поэтому берём только последнюю запись.
- */
-async function loadMonthsBaseRows() {
-  const settings = await getSettingsRow();
-  const openingCash = toNum(settings?.opening_cash);
-  const autoMap = await getAutoSumsByMonth();
-
-  const { rows } = await db.query(
-    `
-    SELECT DISTINCT ON (month)
-      id,
-      to_char(month,'YYYY-MM') as ym,
-      revenue, cogs, opex, capex, loan_paid, cash_end, notes,
-      updated_at
-    FROM donas_finance_months
-    WHERE slug=$1
-    ORDER BY month ASC, updated_at DESC NULLS LAST, id DESC
-    `,
-    [SLUG]
-  );
-
-  const list = (rows || []).map((r) => {
-    const ym = String(r.ym);
-    const locked = hasLockedTag(r.notes);
-    const auto = autoMap.get(ym) || { opex: 0, capex: 0, cogs: 0, revenue: 0 };
-    return {
-      ym,
-      locked,
-      stored: {
-        revenue: toNum(r.revenue),
-        cogs: toNum(r.cogs),
-        opex: toNum(r.opex),
-        capex: toNum(r.capex),
-        loan_paid: toNum(r.loan_paid),
-        cash_end: toNum(r.cash_end),
-        notes: String(r.notes || ""),
-      },
-      auto: {
-        revenue: toNum(auto.revenue),
-        cogs: toNum(auto.cogs),
-        opex: toNum(auto.opex),
-        capex: toNum(auto.capex),
-      },
-    };
-  });
-
-  return { settings, openingCash, months: list };
-}
-
-/**
- * Собираем план (preview):
- * - текущая модель: locked месяцы используют stored cash_end
- * - planned: для затронутых месяцев пересчитываем snapshot (включая cash_end)
- */
-function buildPlannedChain({ openingCash, baseMonths, affect }) {
-  const items = [];
-
-  // current chain
-  let curOpening = openingCash;
-  const currentByYm = new Map();
-  for (const m of baseMonths) {
-    const ym = m.ym;
-    const curLocked = m.locked;
-
-    let revenue = curLocked ? m.stored.revenue : m.auto.revenue;
-    let cogs = curLocked ? m.stored.cogs : m.auto.cogs;
-    let opex = curLocked ? m.stored.opex : m.auto.opex;
-    let capex = curLocked ? m.stored.capex : m.auto.capex;
-    const loan_paid = m.stored.loan_paid;
-
-    let cash_end;
-    let cf;
-    if (curLocked) {
-      cash_end = m.stored.cash_end;
-      cf = cash_end - curOpening;
-    } else {
-      const r = calcCashEndFromParts(curOpening, { revenue, cogs, opex, capex, loan_paid });
-      cash_end = r.cash_end;
-      cf = r.cf;
-    }
-
-    const row = {
-      ym,
-      locked: curLocked,
-      revenue,
-      cogs,
-      opex,
-      capex,
-      loan_paid,
-      cf,
-      cash_end,
-      notes: m.stored.notes,
-    };
-    currentByYm.set(ym, row);
-    curOpening = cash_end;
-  }
-
-  // planned chain
-  let planOpening = openingCash;
-  const plannedByYm = new Map();
-  for (const m of baseMonths) {
-    const ym = m.ym;
-    const a = affect(ym);
-
-    let planLocked = m.locked;
-    let revenue;
-    let cogs;
-    let opex;
-    let capex;
-    const loan_paid = m.stored.loan_paid;
-    let notes = m.stored.notes;
-
-    if (a?.type === "lock") {
-      planLocked = true;
-      notes = addLockedTag(notes);
-      revenue = m.auto.revenue;
-      cogs = m.auto.cogs;
-      opex = m.auto.opex;
-      capex = m.auto.capex;
-      const r = calcCashEndFromParts(planOpening, { revenue, cogs, opex, capex, loan_paid });
-      plannedByYm.set(ym, {
-        ym,
-        locked: true,
-        revenue,
-        cogs,
-        opex,
-        capex,
-        loan_paid,
-        cf: r.cf,
-        cash_end: r.cash_end,
-        notes,
-      });
-      planOpening = r.cash_end;
-      continue;
-    }
-
-    if (a?.type === "resnapshot") {
-      planLocked = true;
-      notes = addLockedTag(notes);
-      revenue = m.auto.revenue;
-      cogs = m.auto.cogs;
-      opex = m.auto.opex;
-      capex = m.auto.capex;
-      const r = calcCashEndFromParts(planOpening, { revenue, cogs, opex, capex, loan_paid });
-      plannedByYm.set(ym, {
-        ym,
-        locked: true,
-        revenue,
-        cogs,
-        opex,
-        capex,
-        loan_paid,
-        cf: r.cf,
-        cash_end: r.cash_end,
-        notes,
-      });
-      planOpening = r.cash_end;
-      continue;
-    }
-
-    // not affected
-    if (planLocked) {
-      revenue = m.stored.revenue;
-      cogs = m.stored.cogs;
-      opex = m.stored.opex;
-      capex = m.stored.capex;
-      const cash_end = m.stored.cash_end;
-      plannedByYm.set(ym, {
-        ym,
-        locked: true,
-        revenue,
-        cogs,
-        opex,
-        capex,
-        loan_paid,
-        cf: cash_end - planOpening,
-        cash_end,
-        notes,
-      });
-      planOpening = cash_end;
-    } else {
-      revenue = m.auto.revenue;
-      cogs = m.auto.cogs;
-      opex = m.auto.opex;
-      capex = m.auto.capex;
-      const r = calcCashEndFromParts(planOpening, { revenue, cogs, opex, capex, loan_paid });
-      plannedByYm.set(ym, {
-        ym,
-        locked: false,
-        revenue,
-        cogs,
-        opex,
-        capex,
-        loan_paid,
-        cf: r.cf,
-        cash_end: r.cash_end,
-        notes,
-      });
-      planOpening = r.cash_end;
-    }
-  }
-
-  for (const m of baseMonths) {
-    const ym = m.ym;
-    const cur = currentByYm.get(ym);
-    const plan = plannedByYm.get(ym);
-
-    const purchases = m.auto;
-    const snapO = cur?.locked ? toNum(m.stored.opex) : toNum(purchases.opex);
-    const snapC = cur?.locked ? toNum(m.stored.capex) : toNum(purchases.capex);
-
-    items.push({
-      ym,
-      purchases: { opex: toNum(purchases.opex), capex: toNum(purchases.capex) },
-      current: cur,
-      planned: plan,
-      diff: {
-        opex: toNum(purchases.opex) - toNum(snapO),
-        capex: toNum(purchases.capex) - toNum(snapC),
-      },
-    });
-  }
-
-  return { items, currentByYm, plannedByYm };
-}
-
-/**
- * =========================
- * Chain guards (production)
- * =========================
- */
-
-function lastLockedYm(baseMonths) {
-  const locked = (baseMonths || []).filter((m) => !!m.locked).map((m) => m.ym);
-  if (!locked.length) return null;
-  locked.sort();
-  return locked[locked.length - 1];
-}
-
-function isLastLocked(baseMonths, targetYm) {
-  const last = lastLockedYm(baseMonths);
-  return last && String(last) === String(targetYm);
-}
-
-function hasLockedAfter(baseMonths, targetYm) {
-  return (baseMonths || []).some((m) => m.locked && String(m.ym) > String(targetYm));
-}
-
-function hasUnlockedBeforeWithLockedAfter(baseMonths, targetYm) {
-  // если есть locked после target и при этом target сейчас unlocked — lock single "в середине" не разрешаем
-  const target = baseMonths.find((m) => String(m.ym) === String(targetYm));
-  if (!target) return false;
-  return !target.locked && hasLockedAfter(baseMonths, targetYm);
-}
-
-/** ===================== Settings ===================== */
-exports.getSettings = async (_req, res) => {
+exports.getSettings = async (req, res) => {
   try {
-    const row = await getSettingsRow();
-    return res.json(row);
+    await ensureFinanceTables();
+    const { rows } = await db.query(
+      `SELECT currency, opening_cash FROM donas_finance_settings WHERE slug=$1 LIMIT 1`,
+      [SLUG]
+    );
+    const settings = rows?.[0] || { currency: "UZS", opening_cash: 0 };
+    return res.json({ settings });
   } catch (e) {
     console.error("getSettings error:", e);
     return res.status(500).json({ error: "Failed to load settings" });
@@ -576,104 +363,79 @@ exports.getSettings = async (_req, res) => {
 
 exports.updateSettings = async (req, res) => {
   try {
-    const body = req.body || {};
+    await ensureFinanceTables();
+    const b = req.body || {};
+    const currency = String(b.currency || "UZS").trim() || "UZS";
+    const opening_cash = toNum(b.opening_cash);
 
-    const { rows: curRows } = await db.query(
-      `SELECT id FROM donas_finance_settings ORDER BY updated_at DESC NULLS LAST, id DESC LIMIT 1`
+    await db.query(
+      `
+      UPDATE donas_finance_settings
+      SET currency=$2, opening_cash=$3, updated_at=NOW()
+      WHERE slug=$1
+      `,
+      [SLUG, currency, opening_cash]
     );
 
-    let id = curRows?.[0]?.id;
-
-    if (!id) {
-      const ins = await db.query(`INSERT INTO donas_finance_settings DEFAULT VALUES RETURNING id`);
-      id = ins.rows?.[0]?.id;
-    }
-
-    const keys = Object.keys(body || {}).filter((k) => k !== "id");
-    if (!keys.length) {
-      const { rows } = await db.query(`SELECT * FROM donas_finance_settings WHERE id=$1`, [id]);
-      return res.json(rows?.[0] || null);
-    }
-
-    const sets = [];
-    const vals = [];
-    let k = 2;
-
-    for (const key of keys) {
-      sets.push(`${key}=$${k++}`);
-      vals.push(body[key]);
-    }
-
-    const q = `
-      UPDATE donas_finance_settings
-      SET ${sets.join(", ")}, updated_at=NOW()
-      WHERE id=$1
-      RETURNING *
-    `;
-
-    const { rows } = await db.query(q, [id, ...vals]);
-
-    await logAudit(req, {
+    await auditInsert({
+      ym: "settings",
       action: "settings.update",
-      ym: null,
-      diff: keys.reduce((acc, k2) => {
-        acc[k2] = body[k2];
-        return acc;
-      }, {}),
+      diff: { currency, opening_cash },
+      actor: getActor(req),
+      meta: {},
     });
 
-    return res.json(rows?.[0] || null);
+    return res.json({ ok: true });
   } catch (e) {
     console.error("updateSettings error:", e);
     return res.status(500).json({ error: "Failed to update settings" });
   }
 };
 
-/** ===================== Months list / sync ===================== */
-exports.listMonths = async (_req, res) => {
+exports.listMonths = async (req, res) => {
   try {
-    const view = await computeMonthsView();
-    return res.json(view.months);
+    const r = await computeMonthsView();
+    return res.json({ months: r.months, settings: r.settings });
   } catch (e) {
     console.error("listMonths error:", e);
     return res.status(500).json({ error: "Failed to load months" });
   }
 };
 
+/**
+ * Sync: создаёт недостающие строки в donas_finance_months
+ * для всех месяцев, которые есть в sales/purchases.
+ */
 exports.syncMonths = async (req, res) => {
   try {
-    const allMonths = await getAllRelevantMonthsYms();
-    let created = 0;
+    await ensureFinanceTables();
+    const actor = getActor(req);
 
-    for (const ym of allMonths) {
-      if (!isYm(ym)) continue;
-      const d = monthToDate(ym);
-      const r = await db.query(
+    const ymList = await buildAllYmSorted();
+
+    let created = 0;
+    for (const ym of ymList) {
+      const monthDate = ymToDate(ym);
+      const ins = await db.query(
         `
-        INSERT INTO donas_finance_months
-          (slug, month, revenue, cogs, opex, capex, loan_paid, cash_end, notes)
-        SELECT
-          $2, $1::date, 0, 0, 0, 0, 0, 0, ''
-        WHERE NOT EXISTS (
-          SELECT 1
-          FROM donas_finance_months
-          WHERE slug=$2 AND month=$1::date
-          LIMIT 1
-        )
+        INSERT INTO donas_finance_months (slug, month, loan_paid, notes)
+        VALUES ($1, $2::date, 0, '')
+        ON CONFLICT (slug, month) DO NOTHING
         `,
-        [d, SLUG]
+        [SLUG, monthDate]
       );
-      if (r.rowCount > 0) created += 1;
+      if (ins.rowCount > 0) created += 1;
     }
 
-    await logAudit(req, {
+    await auditInsert({
+      ym: "months",
       action: "months.sync",
-      ym: null,
       diff: { created },
+      actor,
+      meta: { count: created },
     });
 
-    const view = await computeMonthsView();
-    return res.json({ ok: true, created, months: view.months });
+    return res.json({ ok: true, created });
   } catch (e) {
     console.error("syncMonths error:", e);
     return res.status(500).json({ error: "Failed to sync months" });
@@ -681,149 +443,134 @@ exports.syncMonths = async (req, res) => {
 };
 
 /**
- * PUT /api/admin/donas/finance/months/:month
- * ✅ вручную можно менять только loan_paid и notes.
+ * PUT /months/:month (YYYY-MM)
+ * UI сохраняет только loan_paid + notes (без #locked руками)
  */
 exports.updateMonth = async (req, res) => {
   try {
-    const { month } = req.params;
-    if (!isYm(month)) {
-      return res.status(400).json({ error: "Bad month format (expected YYYY-MM)" });
-    }
-
-    await ensureMonthRow(month);
-
-    const { rows: curRows } = await db.query(
-      `
-      SELECT notes
-      FROM donas_finance_months
-      WHERE slug=$2 AND month=$1::date
-      ORDER BY updated_at DESC NULLS LAST, id DESC
-      LIMIT 1
-      `,
-      [monthToDate(month), SLUG]
-    );
-    const curNotes = String(curRows?.[0]?.notes || "");
-    if (hasLockedTag(curNotes)) {
-      return res.status(409).json({ error: "Month is locked (#locked). Remove tag to edit." });
-    }
+    await ensureFinanceTables();
+    const ym = String(req.params.month || "").trim();
+    if (!isYm(ym)) return res.status(400).json({ error: "Bad month (YYYY-MM)" });
 
     const b = req.body || {};
-    const loanPaid = toNum(b.loan_paid);
-    const notes = String(b.notes ?? "");
+    const loan_paid = b.loan_paid == null ? 0 : toNum(b.loan_paid);
+    const notes = b.notes == null ? "" : String(b.notes);
 
-    const before = await db.query(
+    // нельзя руками добавлять #locked
+    if (String(notes).toLowerCase().includes("#locked")) {
+      return res.status(400).json({ error: "Do not add #locked manually. Use Lock button." });
+    }
+
+    const monthDate = ymToDate(ym);
+
+    // ensure row
+    await db.query(
       `
-      SELECT loan_paid, notes
-      FROM donas_finance_months
-      WHERE slug=$2 AND month=$1::date
-      ORDER BY updated_at DESC NULLS LAST, id DESC
-      LIMIT 1
+      INSERT INTO donas_finance_months (slug, month, loan_paid, notes)
+      VALUES ($1, $2::date, $3, $4)
+      ON CONFLICT (slug, month) DO NOTHING
       `,
-      [monthToDate(month), SLUG]
+      [SLUG, monthDate, loan_paid, notes]
     );
-    const beforeRow = before.rows?.[0] || {};
+
+    // update only editable fields
+    const { rows: beforeRows } = await db.query(
+      `SELECT loan_paid, notes FROM donas_finance_months WHERE slug=$1 AND month=$2::date LIMIT 1`,
+      [SLUG, monthDate]
+    );
+    const before = beforeRows?.[0] || { loan_paid: 0, notes: "" };
 
     await db.query(
       `
       UPDATE donas_finance_months
       SET loan_paid=$3, notes=$4, updated_at=NOW()
-      WHERE slug=$2 AND month=$1::date
+      WHERE slug=$1 AND month=$2::date
       `,
-      [monthToDate(month), SLUG, loanPaid, notes]
+      [SLUG, monthDate, loan_paid, notes]
     );
 
-    await logAudit(req, {
+    const diff = {};
+    if (toNum(before.loan_paid) !== loan_paid) diff.loan_paid = { from: toNum(before.loan_paid), to: loan_paid };
+    if (String(before.notes || "") !== String(notes || "")) diff.notes = { from: String(before.notes || ""), to: String(notes || "") };
+
+    await auditInsert({
+      ym,
       action: "month.update",
-      ym: month,
-      diff: {
-        loan_paid: { from: toNum(beforeRow.loan_paid), to: loanPaid },
-        notes: { from: String(beforeRow.notes || ""), to: notes },
-      },
+      diff,
+      actor: getActor(req),
+      meta: {},
     });
 
-    const view = await computeMonthsView();
-    const row = view.months.find((x) => x.month === month) || null;
-    return res.json({ ok: true, month: row });
+    return res.json({ ok: true });
   } catch (e) {
     console.error("updateMonth error:", e);
     return res.status(500).json({ error: "Failed to update month" });
   }
 };
 
-/** ===================== Lock / Unlock / Snapshot ===================== */
+/**
+ * Lock month: сохраняем snapshot значений (revenue/cogs/opex/capex/cash_end) + добавляем #locked.
+ */
 exports.lockMonth = async (req, res) => {
   try {
-    const { month } = req.params;
-    if (!isYm(month)) {
-      return res.status(400).json({ error: "Bad month format (expected YYYY-MM)" });
-    }
+    await ensureFinanceTables();
+    const ym = String(req.params.month || "").trim();
+    if (!isYm(ym)) return res.status(400).json({ error: "Bad month (YYYY-MM)" });
 
-    await ensureMonthRow(month);
+    const actor = getActor(req);
 
-    const base = await loadMonthsBaseRows();
-
-    // Guard: нельзя lock single "в середине", если после есть locked (иначе цепочка будет странной)
-    if (hasUnlockedBeforeWithLockedAfter(base.months, month)) {
-      return res.status(409).json({
-        error: `Cannot lock ${month} because there are locked months after it. Use lock-up-to.`,
-      });
-    }
-
-    const target = month;
-
-    const planned = buildPlannedChain({
-      openingCash: base.openingCash,
-      baseMonths: base.months,
-      affect: (ym) => (ym === target ? { type: "lock" } : null),
-    });
-
-    const row = planned.plannedByYm.get(target);
+    // считаем текущий view (auto)
+    const { months } = await computeMonthsView();
+    const row = months.find((x) => dateToYm(x.month) === ym);
     if (!row) return res.status(404).json({ error: "Month not found" });
 
-    const before = await db.query(
-      `
-      SELECT revenue,cogs,opex,capex,cash_end,notes
-      FROM donas_finance_months
-      WHERE slug=$2 AND month=$1::date
-      ORDER BY updated_at DESC NULLS LAST, id DESC
-      LIMIT 1
-      `,
-      [monthToDate(month), SLUG]
-    );
-    const b = before.rows?.[0] || {};
+    const monthDate = ymToDate(ym);
 
-    const nextNotes = addLockedTag(row.notes);
+    // load current db row
+    const curQ = await db.query(
+      `SELECT notes, loan_paid FROM donas_finance_months WHERE slug=$1 AND month=$2::date LIMIT 1`,
+      [SLUG, monthDate]
+    );
+    const cur = curQ.rows?.[0] || { notes: "", loan_paid: 0 };
+
+    const newNotes = addLockedTag(cur.notes);
 
     await db.query(
       `
-      UPDATE donas_finance_months
-      SET revenue=$3, cogs=$4, opex=$5, capex=$6, cash_end=$7, notes=$8, updated_at=NOW()
-      WHERE slug=$2 AND month=$1::date
+      INSERT INTO donas_finance_months
+        (slug, month, revenue, cogs, opex, capex, loan_paid, cash_end, notes)
+      VALUES
+        ($1, $2::date, $3, $4, $5, $6, $7, $8, $9)
+      ON CONFLICT (slug, month)
+      DO UPDATE SET
+        revenue=EXCLUDED.revenue,
+        cogs=EXCLUDED.cogs,
+        opex=EXCLUDED.opex,
+        capex=EXCLUDED.capex,
+        loan_paid=EXCLUDED.loan_paid,
+        cash_end=EXCLUDED.cash_end,
+        notes=EXCLUDED.notes,
+        updated_at=NOW()
       `,
       [
-        monthToDate(month),
         SLUG,
+        monthDate,
         toNum(row.revenue),
         toNum(row.cogs),
         toNum(row.opex),
         toNum(row.capex),
+        toNum(cur.loan_paid), // loan_paid берём из DB
         toNum(row.cash_end),
-        nextNotes,
+        newNotes,
       ]
     );
 
-    await logAudit(req, {
+    await auditInsert({
+      ym,
       action: "month.lock",
-      ym: month,
-      diff: {
-        revenue: { from: toNum(b.revenue), to: toNum(row.revenue) },
-        cogs: { from: toNum(b.cogs), to: toNum(row.cogs) },
-        opex: { from: toNum(b.opex), to: toNum(row.opex) },
-        capex: { from: toNum(b.capex), to: toNum(row.capex) },
-        cash_end: { from: toNum(b.cash_end), to: toNum(row.cash_end) },
-        notes: { from: String(b.notes || ""), to: nextNotes },
-      },
+      diff: { locked: true },
+      actor,
+      meta: {},
     });
 
     return res.json({ ok: true });
@@ -835,51 +582,34 @@ exports.lockMonth = async (req, res) => {
 
 exports.unlockMonth = async (req, res) => {
   try {
-    const { month } = req.params;
-    if (!isYm(month)) {
-      return res.status(400).json({ error: "Bad month format (expected YYYY-MM)" });
-    }
+    await ensureFinanceTables();
+    const ym = String(req.params.month || "").trim();
+    if (!isYm(ym)) return res.status(400).json({ error: "Bad month (YYYY-MM)" });
 
-    await ensureMonthRow(month);
+    const monthDate = ymToDate(ym);
 
-    const base = await loadMonthsBaseRows();
-
-    // Guard: unlock только последнего locked (иначе цепочка cash_end ломается)
-    if (!isLastLocked(base.months, month)) {
-      const last = lastLockedYm(base.months);
-      return res.status(409).json({
-        error: `Only the last locked month can be unlocked. Last locked is ${last || "none"}.`,
-      });
-    }
-
-    const { rows } = await db.query(
-      `
-      SELECT notes
-      FROM donas_finance_months
-      WHERE slug=$2 AND month=$1::date
-      ORDER BY updated_at DESC NULLS LAST, id DESC
-      LIMIT 1
-      `,
-      [monthToDate(month), SLUG]
+    const curQ = await db.query(
+      `SELECT notes FROM donas_finance_months WHERE slug=$1 AND month=$2::date LIMIT 1`,
+      [SLUG, monthDate]
     );
-
-    const notes = String(rows?.[0]?.notes || "");
-    const newNotes = removeLockedTag(notes);
-    const beforeNotes = notes;
+    const cur = curQ.rows?.[0];
+    if (!cur) return res.status(404).json({ error: "Month not found" });
 
     await db.query(
       `
       UPDATE donas_finance_months
       SET notes=$3, updated_at=NOW()
-      WHERE slug=$2 AND month=$1::date
+      WHERE slug=$1 AND month=$2::date
       `,
-      [monthToDate(month), SLUG, newNotes]
+      [SLUG, monthDate, removeLockedTag(cur.notes)]
     );
 
-    await logAudit(req, {
+    await auditInsert({
+      ym,
       action: "month.unlock",
-      ym: month,
-      diff: { notes: { from: beforeNotes, to: newNotes } },
+      diff: { locked: false },
+      actor: getActor(req),
+      meta: {},
     });
 
     return res.json({ ok: true });
@@ -889,126 +619,63 @@ exports.unlockMonth = async (req, res) => {
   }
 };
 
+/**
+ * Re-snapshot locked month: переснимаем snapshot по текущим Sales/Purchases + chain cash_end.
+ * (UI использует когда #locked)
+ */
 exports.resnapshotMonth = async (req, res) => {
   try {
-    const { month } = req.params;
-    if (!isYm(month)) {
-      return res.status(400).json({ error: "Bad month format (expected YYYY-MM)" });
-    }
+    await ensureFinanceTables();
+    const ym = String(req.params.month || "").trim();
+    if (!isYm(ym)) return res.status(400).json({ error: "Bad month (YYYY-MM)" });
 
-    await ensureMonthRow(month);
+    const actor = getActor(req);
 
-    const base = await loadMonthsBaseRows();
-    const target = month;
-
-    // Если после target есть locked — делаем chain resnapshot target..lastLocked, чтобы cash_end совпал
-    const last = lastLockedYm(base.months);
-    const doChain = last && String(last) > String(target);
-
-    if (doChain) {
-      // обновим все locked в диапазоне [target..last]
-      let updated = 0;
-
-      const planned = buildPlannedChain({
-        openingCash: base.openingCash,
-        baseMonths: base.months,
-        affect: (ym) => {
-          if (String(ym) < String(target)) return null;
-          if (String(ym) > String(last)) return null;
-          const m = base.months.find((x) => x.ym === ym);
-          if (!m?.locked) return null;
-          return { type: "resnapshot" };
-        },
-      });
-
-      for (const m of base.months) {
-        const ym = m.ym;
-        if (String(ym) < String(target) || String(ym) > String(last)) continue;
-        if (!m.locked) continue;
-
-        const row = planned.plannedByYm.get(ym);
-        if (!row) continue;
-
-        await db.query(
-          `
-          UPDATE donas_finance_months
-          SET revenue=$3, cogs=$4, opex=$5, capex=$6, cash_end=$7, notes=$8, updated_at=NOW()
-          WHERE slug=$2 AND month=$1::date
-          `,
-          [
-            monthToDate(ym),
-            SLUG,
-            toNum(row.revenue),
-            toNum(row.cogs),
-            toNum(row.opex),
-            toNum(row.capex),
-            toNum(row.cash_end),
-            addLockedTag(row.notes),
-          ]
-        );
-
-        updated += 1;
-      }
-
-      await logAudit(req, {
-        action: "month.resnapshot_chain",
-        ym: month,
-        diff: { from: target, to: last, updated },
-      });
-
-      return res.json({ ok: true, updated, chain: { from: target, to: last } });
-    }
-
-    // обычный single resnapshot
-    const planned = buildPlannedChain({
-      openingCash: base.openingCash,
-      baseMonths: base.months,
-      affect: (ym) => (ym === target ? { type: "resnapshot" } : null),
-    });
-
-    const row = planned.plannedByYm.get(target);
+    const { months } = await computeMonthsView();
+    const row = months.find((x) => dateToYm(x.month) === ym);
     if (!row) return res.status(404).json({ error: "Month not found" });
 
-    const before = await db.query(
-      `
-      SELECT revenue,cogs,opex,capex,cash_end,notes
-      FROM donas_finance_months
-      WHERE slug=$2 AND month=$1::date
-      ORDER BY updated_at DESC NULLS LAST, id DESC
-      LIMIT 1
-      `,
-      [monthToDate(month), SLUG]
+    const monthDate = ymToDate(ym);
+
+    const curQ = await db.query(
+      `SELECT notes, loan_paid FROM donas_finance_months WHERE slug=$1 AND month=$2::date LIMIT 1`,
+      [SLUG, monthDate]
     );
-    const b = before.rows?.[0] || {};
+    const cur = curQ.rows?.[0] || { notes: "", loan_paid: 0 };
+
+    if (!hasLockedTag(cur.notes)) {
+      return res.status(409).json({ error: "Month is not locked. Lock it first." });
+    }
 
     await db.query(
       `
       UPDATE donas_finance_months
-      SET revenue=$3, cogs=$4, opex=$5, capex=$6, cash_end=$7, notes=$8, updated_at=NOW()
-      WHERE slug=$2 AND month=$1::date
+      SET
+        revenue=$3,
+        cogs=$4,
+        opex=$5,
+        capex=$6,
+        cash_end=$7,
+        updated_at=NOW()
+      WHERE slug=$1 AND month=$2::date
       `,
       [
-        monthToDate(month),
         SLUG,
+        monthDate,
         toNum(row.revenue),
         toNum(row.cogs),
         toNum(row.opex),
         toNum(row.capex),
         toNum(row.cash_end),
-        addLockedTag(row.notes),
       ]
     );
 
-    await logAudit(req, {
+    await auditInsert({
+      ym,
       action: "month.resnapshot",
-      ym: month,
-      diff: {
-        revenue: { from: toNum(b.revenue), to: toNum(row.revenue) },
-        cogs: { from: toNum(b.cogs), to: toNum(row.cogs) },
-        opex: { from: toNum(b.opex), to: toNum(row.opex) },
-        capex: { from: toNum(b.capex), to: toNum(row.capex) },
-        cash_end: { from: toNum(b.cash_end), to: toNum(row.cash_end) },
-      },
+      diff: { resnapshot: true },
+      actor,
+      meta: {},
     });
 
     return res.json({ ok: true });
@@ -1018,348 +685,254 @@ exports.resnapshotMonth = async (req, res) => {
   }
 };
 
+/**
+ * Lock all ≤ selected month
+ */
 exports.lockUpTo = async (req, res) => {
   try {
-    const { month } = req.params;
-    if (!isYm(month)) {
-      return res.status(400).json({ error: "Bad month format (expected YYYY-MM)" });
-    }
+    await ensureFinanceTables();
+    const targetYm = String(req.params.month || "").trim();
+    if (!isYm(targetYm)) return res.status(400).json({ error: "Bad month (YYYY-MM)" });
 
-    const base = await loadMonthsBaseRows();
-    const target = month;
+    const actor = getActor(req);
 
-    const planned = buildPlannedChain({
-      openingCash: base.openingCash,
-      baseMonths: base.months,
-      affect: (ym) => (String(ym) <= String(target) ? { type: "lock" } : null),
-    });
+    const { months } = await computeMonthsView();
+    const yms = months.map((m) => dateToYm(m.month)).filter(Boolean);
 
-    let lockedCount = 0;
-    for (const m of base.months) {
-      const ym = m.ym;
-      if (String(ym) > String(target)) continue;
-      const row = planned.plannedByYm.get(ym);
+    let locked = 0;
+    for (const ym of yms) {
+      if (ym > targetYm) break;
+
+      const monthDate = ymToDate(ym);
+      const curQ = await db.query(
+        `SELECT notes FROM donas_finance_months WHERE slug=$1 AND month=$2::date LIMIT 1`,
+        [SLUG, monthDate]
+      );
+      const cur = curQ.rows?.[0] || { notes: "" };
+
+      if (hasLockedTag(cur.notes)) continue;
+
+      // lock one by one using same snapshot logic
+      const row = months.find((x) => dateToYm(x.month) === ym);
       if (!row) continue;
+
+      // ensure row exists
+      await db.query(
+        `
+        INSERT INTO donas_finance_months (slug, month, loan_paid, notes)
+        VALUES ($1, $2::date, 0, '')
+        ON CONFLICT (slug, month) DO NOTHING
+        `,
+        [SLUG, monthDate]
+      );
+
+      const lpQ = await db.query(
+        `SELECT loan_paid, notes FROM donas_finance_months WHERE slug=$1 AND month=$2::date LIMIT 1`,
+        [SLUG, monthDate]
+      );
+      const lp = lpQ.rows?.[0] || { loan_paid: 0, notes: "" };
 
       await db.query(
         `
         UPDATE donas_finance_months
-        SET revenue=$3, cogs=$4, opex=$5, capex=$6, cash_end=$7, notes=$8, updated_at=NOW()
-        WHERE slug=$2 AND month=$1::date
+        SET
+          revenue=$3,
+          cogs=$4,
+          opex=$5,
+          capex=$6,
+          cash_end=$7,
+          notes=$8,
+          updated_at=NOW()
+        WHERE slug=$1 AND month=$2::date
         `,
         [
-          monthToDate(ym),
           SLUG,
+          monthDate,
           toNum(row.revenue),
           toNum(row.cogs),
           toNum(row.opex),
           toNum(row.capex),
           toNum(row.cash_end),
-          addLockedTag(row.notes),
+          addLockedTag(lp.notes),
         ]
       );
-      lockedCount += 1;
+
+      locked += 1;
     }
 
-    await logAudit(req, {
-      action: "month.lock_upto",
-      ym: month,
-      diff: { lockedCount },
+    await auditInsert({
+      ym: targetYm,
+      action: "months.lock_up_to",
+      diff: { locked },
+      actor,
+      meta: { locked },
     });
 
-    return res.json({ ok: true, locked: lockedCount });
+    return res.json({ ok: true, locked });
   } catch (e) {
     console.error("lockUpTo error:", e);
-    return res.status(500).json({ error: "Failed to lock up to month" });
+    return res.status(500).json({ error: "Failed to lock up to" });
   }
 };
 
-exports.bulkResnapshot = async (req, res) => {
+/**
+ * PREVIEW для UI (может быть не использован — но оставляем рабочим)
+ */
+exports.lockPreview = async (req, res) => {
   try {
-    const { month } = req.params;
-    if (!isYm(month)) {
-      return res.status(400).json({ error: "Bad month format (expected YYYY-MM)" });
+    await ensureFinanceTables();
+    const targetYm = String(req.params.month || "").trim();
+    if (!isYm(targetYm)) return res.status(400).json({ error: "Bad month (YYYY-MM)" });
+
+    const scope = String(req.query.scope || "single");
+    const { months } = await computeMonthsView();
+
+    const items = [];
+    for (const r of months) {
+      const ym = dateToYm(r.month);
+      if (!ym) continue;
+      if (scope === "single" && ym !== targetYm) continue;
+      if (scope === "upto" && ym > targetYm) break;
+
+      // current state from DB (locked?)
+      const monthDate = ymToDate(ym);
+      const q = await db.query(
+        `SELECT notes, cash_end, opex, capex FROM donas_finance_months WHERE slug=$1 AND month=$2::date LIMIT 1`,
+        [SLUG, monthDate]
+      );
+      const cur = q.rows?.[0] || null;
+      const currentLocked = cur ? hasLockedTag(cur.notes) : false;
+
+      // planned: lock -> snapshot values
+      items.push({
+        ym,
+        current: {
+          locked: currentLocked,
+          cash_end: cur ? toNum(cur.cash_end) : null,
+          opex: cur ? toNum(cur.opex) : null,
+          capex: cur ? toNum(cur.capex) : null,
+        },
+        planned: {
+          locked: true,
+          cash_end: toNum(r.cash_end),
+          opex: toNum(r.opex),
+          capex: toNum(r.capex),
+          notes: addLockedTag(cur?.notes || ""),
+        },
+        purchases: r._diff
+          ? {
+              opex: toNum(r.opex) + toNum(r._diff.opex),
+              capex: toNum(r.capex) + toNum(r._diff.capex),
+            }
+          : { opex: toNum(r.opex), capex: toNum(r.capex) },
+        diff: r._diff || { opex: 0, capex: 0 },
+      });
     }
 
-    const base = await loadMonthsBaseRows();
-    const target = month;
+    const target = months.find((x) => dateToYm(x.month) === targetYm);
+    const summary = {
+      targetWasLocked: false,
+      deltaCashEndAtTarget: 0,
+      affectedLockedCount: 0,
+    };
 
-    const planned = buildPlannedChain({
-      openingCash: base.openingCash,
-      baseMonths: base.months,
-      affect: (ym) => {
-        if (String(ym) > String(target)) return null;
-        const baseRow = base.months.find((x) => x.ym === ym);
-        if (!baseRow?.locked) return null;
-        return { type: "resnapshot" };
-      },
-    });
+    return res.json({ scope, items, summary });
+  } catch (e) {
+    console.error("lockPreview error:", e);
+    return res.status(500).json({ error: "Failed to load lock preview" });
+  }
+};
 
-    let updated = 0;
-    for (const m of base.months) {
-      const ym = m.ym;
-      if (String(ym) > String(target)) continue;
-      if (!m.locked) continue;
-      const row = planned.plannedByYm.get(ym);
-      if (!row) continue;
+// bulk previews: оставляем заглушки (UI их умеет пережить)
+exports.resnapshotUpToPreview = async (req, res) => {
+  return res.json({ scope: "upto", items: [], summary: { affectedLockedCount: 0 } });
+};
+
+exports.resnapshotUpTo = async (req, res) => {
+  try {
+    await ensureFinanceTables();
+    const targetYm = String(req.params.month || "").trim();
+    if (!isYm(targetYm)) return res.status(400).json({ error: "Bad month (YYYY-MM)" });
+
+    const actor = getActor(req);
+
+    const { months } = await computeMonthsView();
+
+    let updatedCount = 0;
+    for (const r of months) {
+      const ym = dateToYm(r.month);
+      if (!ym) continue;
+      if (ym > targetYm) break;
+
+      const monthDate = ymToDate(ym);
+      const curQ = await db.query(
+        `SELECT notes FROM donas_finance_months WHERE slug=$1 AND month=$2::date LIMIT 1`,
+        [SLUG, monthDate]
+      );
+      const cur = curQ.rows?.[0];
+      if (!cur || !hasLockedTag(cur.notes)) continue;
 
       await db.query(
         `
         UPDATE donas_finance_months
-        SET revenue=$3, cogs=$4, opex=$5, capex=$6, cash_end=$7, notes=$8, updated_at=NOW()
-        WHERE slug=$2 AND month=$1::date
+        SET
+          revenue=$3,
+          cogs=$4,
+          opex=$5,
+          capex=$6,
+          cash_end=$7,
+          updated_at=NOW()
+        WHERE slug=$1 AND month=$2::date
         `,
         [
-          monthToDate(ym),
           SLUG,
-          toNum(row.revenue),
-          toNum(row.cogs),
-          toNum(row.opex),
-          toNum(row.capex),
-          toNum(row.cash_end),
-          addLockedTag(row.notes),
-        ]
-      );
-      updated += 1;
-    }
-
-    await logAudit(req, {
-      action: "month.resnapshot_upto",
-      ym: month,
-      diff: { updated },
-    });
-
-    return res.json({ ok: true, updated });
-  } catch (e) {
-    console.error("bulkResnapshot error:", e);
-    return res.status(500).json({ error: "Failed to bulk resnapshot" });
-  }
-};
-
-// alias for UI: POST .../resnapshot-up-to
-exports.resnapshotUpTo = exports.bulkResnapshot;
-
-/** ===================== Previews (UI) ===================== */
-
-exports.lockPreview = async (req, res) => {
-  try {
-    const { month } = req.params;
-    const scope = String(req.query.scope || "single").toLowerCase();
-    if (!isYm(month)) {
-      return res.status(400).json({ error: "Bad month format (expected YYYY-MM)" });
-    }
-
-    const base = await loadMonthsBaseRows();
-    const target = month;
-
-    const affect = (ym) => {
-      if (scope === "upto") return String(ym) <= String(target) ? { type: "lock" } : null;
-      return ym === target ? { type: "lock" } : null;
-    };
-
-    const chain = buildPlannedChain({
-      openingCash: base.openingCash,
-      baseMonths: base.months,
-      affect,
-    });
-
-    const curTarget = chain.currentByYm.get(target);
-    const planTarget = chain.plannedByYm.get(target);
-    const deltaCashEndAtTarget = toNum(planTarget?.cash_end) - toNum(curTarget?.cash_end);
-
-    const affectedLockedCount = base.months.filter((m) => affect(m.ym) && !m.locked).length;
-
-    return res.json({
-      scope,
-      target,
-      summary: {
-        targetWasLocked: !!curTarget?.locked,
-        affectedLockedCount,
-        deltaCashEndAtTarget,
-      },
-      items: chain.items.filter((it) => (scope === "upto" ? it.ym <= target : it.ym === target)),
-    });
-  } catch (e) {
-    console.error("lockPreview error:", e);
-    return res.status(500).json({ error: "Failed to build lock preview" });
-  }
-};
-
-exports.resnapshotUpToPreview = async (req, res) => {
-  try {
-    const { month } = req.params;
-    if (!isYm(month)) {
-      return res.status(400).json({ error: "Bad month format (expected YYYY-MM)" });
-    }
-    const base = await loadMonthsBaseRows();
-    const target = month;
-
-    const affect = (ym) => {
-      if (String(ym) > String(target)) return null;
-      const m = base.months.find((x) => x.ym === ym);
-      if (!m?.locked) return null;
-      return { type: "resnapshot" };
-    };
-
-    const chain = buildPlannedChain({
-      openingCash: base.openingCash,
-      baseMonths: base.months,
-      affect,
-    });
-
-    const curTarget = chain.currentByYm.get(target);
-    const planTarget = chain.plannedByYm.get(target);
-    const deltaCashEndAtTarget = toNum(planTarget?.cash_end) - toNum(curTarget?.cash_end);
-
-    const affectedLockedCount = base.months.filter((m) => !!affect(m.ym)).length;
-
-    return res.json({
-      scope: "upto",
-      target,
-      summary: {
-        affectedLockedCount,
-        deltaCashEndAtTarget,
-      },
-      items: chain.items.filter((it) => it.ym <= target && it.current?.locked),
-    });
-  } catch (e) {
-    console.error("resnapshotUpToPreview error:", e);
-    return res.status(500).json({ error: "Failed to build resnapshot preview" });
-  }
-};
-
-/** ===================== Export / Audit ===================== */
-exports.exportCsv = async (_req, res) => {
-  try {
-    const view = await computeMonthsView();
-
-    const header = [
-      "month",
-      "revenue",
-      "cogs",
-      "opex",
-      "capex",
-      "loan_paid",
-      "cf",
-      "cash_end",
-      "diff",
-      "locked",
-      "notes",
-    ].join(",");
-
-    const lines = [header];
-
-    for (const r of view.months) {
-      const notes = String(r.notes || "").replace(/\"/g, "\"\"");
-      const notesCell = `"${notes}"`;
-
-      lines.push(
-        [
-          r.month,
+          monthDate,
           toNum(r.revenue),
           toNum(r.cogs),
           toNum(r.opex),
           toNum(r.capex),
-          toNum(r.loan_paid),
-          toNum(r.cf),
           toNum(r.cash_end),
-          toNum(r.diff),
-          r.locked ? "1" : "0",
-          notesCell,
-        ].join(",")
+        ]
       );
+
+      updatedCount += 1;
     }
 
-    const csv = lines.join("\n");
+    await auditInsert({
+      ym: targetYm,
+      action: "months.resnapshot_up_to",
+      diff: { updatedCount },
+      actor,
+      meta: { updatedCount },
+    });
 
-    res.setHeader("Content-Type", "text/csv; charset=utf-8");
-    res.setHeader("Content-Disposition", `attachment; filename="donas_months.csv"`);
-    return res.send(csv);
+    return res.json({ ok: true, updatedCount });
   } catch (e) {
-    console.error("exportCsv error:", e);
-    return res.status(500).json({ error: "Failed to export CSV" });
+    console.error("resnapshotUpTo error:", e);
+    return res.status(500).json({ error: "Failed to bulk resnapshot" });
   }
 };
 
-async function queryAudit({ ym = null, limit = 200 }) {
-  const lim = Math.min(Math.max(toNum(limit) || 200, 1), 500);
-  const args = [SLUG];
-  let where = "slug=$1";
-  if (ym) {
-    args.push(ym);
-    where += ` AND ym=$${args.length}`;
-  }
-  args.push(lim);
-
-  const { rows } = await db.query(
-    `
-    SELECT
-      id,
-      slug,
-      ym,
-      action,
-      actor_id,
-      actor_role,
-      actor_email,
-      actor_name,
-      diff,
-      meta,
-      created_at
-    FROM donas_finance_audit
-    WHERE ${where}
-    ORDER BY created_at DESC, id DESC
-    LIMIT $${args.length}
-    `,
-    args
-  );
-  return rows || [];
-}
-
-function auditRowToUi(r) {
-  return {
-    id: r.id,
-    ym: r.ym,
-    action: r.action,
-    actor_id: r.actor_id,
-    actor_role: r.actor_role,
-    actor_email: r.actor_email,
-    actor_name: r.actor_name,
-    diff: r.diff || {},
-    meta: r.meta || {},
-    created_at: r.created_at,
-  };
-}
-
+/**
+ * Audit endpoints
+ */
 exports.audit = async (req, res) => {
   try {
-    const limit = Math.min(Math.max(toNum(req.query.limit) || 200, 1), 500);
-    try {
-      const rows = await queryAudit({ ym: null, limit });
-      return res.json(rows.map(auditRowToUi));
-    } catch (e) {
-      // fallback for старых БД
-      const { rows } = await db.query(
-        `
-        SELECT to_char(month,'YYYY-MM') as month, updated_at, notes
-        FROM donas_finance_months
-        WHERE slug=$1
-        ORDER BY updated_at DESC NULLS LAST, month DESC
-        LIMIT $2
-        `,
-        [SLUG, Math.min(limit, 200)]
-      );
-      return res.json(
-        (rows || []).map((r, idx) => ({
-          id: `fallback-${idx}`,
-          ym: r.month,
-          action: "month.touch",
-          actor_name: null,
-          actor_email: null,
-          diff: {},
-          created_at: r.updated_at,
-        }))
-      );
-    }
+    await ensureFinanceTables();
+    const limit = Math.min(500, Math.max(1, Number(req.query.limit || 200)));
+
+    const { rows } = await db.query(
+      `
+      SELECT *
+      FROM donas_finance_audit
+      WHERE slug=$1
+      ORDER BY created_at DESC, id DESC
+      LIMIT $2
+      `,
+      [SLUG, limit]
+    );
+
+    return res.json(rows || []);
   } catch (e) {
     console.error("audit error:", e);
     return res.status(500).json({ error: "Failed to load audit" });
@@ -1368,79 +941,192 @@ exports.audit = async (req, res) => {
 
 exports.auditMonth = async (req, res) => {
   try {
-    const { month } = req.params;
-    if (!isYm(month)) {
-      return res.status(400).json({ error: "Bad month format (expected YYYY-MM)" });
-    }
-    const limit = Math.min(Math.max(toNum(req.query.limit) || 200, 1), 500);
-    const rows = await queryAudit({ ym: month, limit });
-    return res.json(rows.map(auditRowToUi));
+    await ensureFinanceTables();
+    const ym = String(req.params.month || "").trim();
+    if (!isYm(ym)) return res.status(400).json({ error: "Bad month (YYYY-MM)" });
+
+    const limit = Math.min(500, Math.max(1, Number(req.query.limit || 200)));
+
+    const { rows } = await db.query(
+      `
+      SELECT *
+      FROM donas_finance_audit
+      WHERE slug=$1 AND ym=$2
+      ORDER BY created_at DESC, id DESC
+      LIMIT $3
+      `,
+      [SLUG, ym, limit]
+    );
+
+    return res.json(rows || []);
   } catch (e) {
     console.error("auditMonth error:", e);
     return res.status(500).json({ error: "Failed to load month audit" });
   }
 };
 
+/**
+ * CSV exports
+ */
+function csvEscape(v) {
+  const s = String(v == null ? "" : v);
+  if (s.includes('"') || s.includes(",") || s.includes("\n")) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+exports.exportCsv = async (req, res) => {
+  try {
+    const { settings, months } = await computeMonthsView();
+
+    // computed cashflow columns for UI
+    const header = [
+      "ym",
+      "revenue",
+      "cogs",
+      "opex",
+      "capex",
+      "loan_paid",
+      "gp",
+      "netOp",
+      "cf",
+      "cash_end",
+      "notes",
+    ];
+
+    const lines = [header.join(",")];
+
+    for (const r of months) {
+      const ym = dateToYm(r.month);
+      const revenue = toNum(r.revenue);
+      const cogs = toNum(r.cogs);
+      const opex = toNum(r.opex);
+      const capex = toNum(r.capex);
+      const loan = toNum(r.loan_paid);
+
+      const gp = revenue - cogs;
+      const netOp = gp - opex;
+      const cf = netOp - loan - capex;
+
+      const row = [
+        ym,
+        revenue,
+        cogs,
+        opex,
+        capex,
+        loan,
+        gp,
+        netOp,
+        cf,
+        toNum(r.cash_end),
+        String(r.notes || ""),
+      ];
+
+      lines.push(row.map(csvEscape).join(","));
+    }
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="donas_finance_months_${settings.currency || "UZS"}.csv"`
+    );
+    return res.send(lines.join("\n"));
+  } catch (e) {
+    console.error("exportCsv error:", e);
+    return res.status(500).json({ error: "Failed to export csv" });
+  }
+};
+
 exports.exportAuditCsv = async (req, res) => {
   try {
-    const limit = Math.min(Math.max(toNum(req.query.limit) || 200, 1), 500);
-    const rows = await queryAudit({ ym: null, limit });
+    await ensureFinanceTables();
+    const limit = Math.min(500, Math.max(1, Number(req.query.limit || 200)));
 
-    const header = ["created_at", "action", "ym", "actor_name", "actor_email", "diff"].join(",");
-    const lines = [header];
-    for (const r of rows) {
-      const diff = JSON.stringify(r.diff || {}).replace(/"/g, '""');
+    const { rows } = await db.query(
+      `
+      SELECT *
+      FROM donas_finance_audit
+      WHERE slug=$1
+      ORDER BY created_at DESC, id DESC
+      LIMIT $2
+      `,
+      [SLUG, limit]
+    );
+
+    const header = ["created_at", "action", "ym", "actor_name", "actor_email", "diff"];
+    const lines = [header.join(",")];
+
+    for (const r of rows || []) {
       lines.push(
         [
-          String(r.created_at || "").replace("T", " ").slice(0, 19),
+          String(r.created_at || ""),
           String(r.action || ""),
           String(r.ym || ""),
           String(r.actor_name || ""),
           String(r.actor_email || ""),
-          `"${diff}"`,
-        ].join(",")
+          JSON.stringify(r.diff || {}),
+        ]
+          .map(csvEscape)
+          .join(",")
       );
     }
-    const csv = lines.join("\n");
+
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
-    res.setHeader("Content-Disposition", `attachment; filename="donas_audit.csv"`);
-    return res.send(csv);
+    res.setHeader("Content-Disposition", `attachment; filename="donas_finance_audit.csv"`);
+    return res.send(lines.join("\n"));
   } catch (e) {
     console.error("exportAuditCsv error:", e);
-    return res.status(500).json({ error: "Failed to export audit CSV" });
+    return res.status(500).json({ error: "Failed to export audit csv" });
   }
 };
 
 exports.exportAuditMonthCsv = async (req, res) => {
   try {
-    const { month } = req.params;
-    if (!isYm(month)) {
-      return res.status(400).json({ error: "Bad month format (expected YYYY-MM)" });
-    }
-    const limit = Math.min(Math.max(toNum(req.query.limit) || 200, 1), 500);
-    const rows = await queryAudit({ ym: month, limit });
+    await ensureFinanceTables();
+    const ym = String(req.params.month || "").trim();
+    if (!isYm(ym)) return res.status(400).json({ error: "Bad month (YYYY-MM)" });
 
-    const header = ["created_at", "action", "ym", "actor_name", "actor_email", "diff"].join(",");
-    const lines = [header];
-    for (const r of rows) {
-      const diff = JSON.stringify(r.diff || {}).replace(/"/g, '""');
+    const limit = Math.min(500, Math.max(1, Number(req.query.limit || 200)));
+
+    const { rows } = await db.query(
+      `
+      SELECT *
+      FROM donas_finance_audit
+      WHERE slug=$1 AND ym=$2
+      ORDER BY created_at DESC, id DESC
+      LIMIT $3
+      `,
+      [SLUG, ym, limit]
+    );
+
+    const header = ["created_at", "action", "ym", "actor_name", "actor_email", "diff"];
+    const lines = [header.join(",")];
+
+    for (const r of rows || []) {
       lines.push(
         [
-          String(r.created_at || "").replace("T", " ").slice(0, 19),
+          String(r.created_at || ""),
           String(r.action || ""),
           String(r.ym || ""),
           String(r.actor_name || ""),
           String(r.actor_email || ""),
-          `"${diff}"`,
-        ].join(",")
+          JSON.stringify(r.diff || {}),
+        ]
+          .map(csvEscape)
+          .join(",")
       );
     }
-    const csv = lines.join("\n");
+
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
-    res.setHeader("Content-Disposition", `attachment; filename="donas_audit_${month}.csv"`);
-    return res.send(csv);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="donas_finance_audit_${ym}.csv"`
+    );
+    return res.send(lines.join("\n"));
   } catch (e) {
     console.error("exportAuditMonthCsv error:", e);
-    return res.status(500).json({ error: "Failed to export month audit CSV" });
+    return res.status(500).json({ error: "Failed to export month audit csv" });
   }
 };
+
+// legacy / not used by your UI right now:
+exports.bulkResnapshot = async (req, res) => res.status(404).json({ error: "Use resnapshot-up-to" });
