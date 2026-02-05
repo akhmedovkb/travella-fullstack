@@ -60,7 +60,7 @@ async function logAudit(req, { action, ym = null, diff = {}, meta = {} }) {
     const actor = getActor(req);
     await db.query(
       `
-      INSERT INTO donas_finance_audit
+      INSERT INTO donas_finance_audit_log
         (slug, ym, action, actor_id, actor_role, actor_email, actor_name, diff, meta)
       VALUES
         ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb)
