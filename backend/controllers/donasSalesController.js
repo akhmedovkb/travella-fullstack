@@ -12,6 +12,7 @@ function isYm(s) {
 
 function toYmFromDate(d) {
   if (!d) return "";
+  // works for '2026-02-01' and '2026-02-01T...'
   return String(d).slice(0, 7);
 }
 
@@ -19,8 +20,112 @@ function hasLockedTag(notes) {
   return String(notes || "").toLowerCase().includes("#locked");
 }
 
+// фиксируем slug
 const SLUG = "donas-dosas";
 
+/**
+ * =========================
+ * Finance audit helpers (AUTO-TOUCH)
+ * =========================
+ */
+
+function getActor(req) {
+  const u = req.user || {};
+  return {
+    id: u.id ?? null,
+    role: String(u.role || "").toLowerCase() || null,
+    email: u.email || u.mail || null,
+    name: u.name || u.full_name || null,
+  };
+}
+
+async function ensureFinanceAudit() {
+  // Таблица аудита
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS donas_finance_audit_log (
+      id BIGSERIAL PRIMARY KEY,
+      slug TEXT NOT NULL,
+      ym TEXT NOT NULL,
+      action TEXT NOT NULL,
+      diff JSONB NOT NULL DEFAULT '{}'::jsonb,
+      actor_name TEXT,
+      actor_email TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      actor_role TEXT,
+      actor_id BIGINT,
+      meta JSONB NOT NULL DEFAULT '{}'::jsonb
+    );
+  `);
+
+  // ВАЖНО: порядок колонок у VIEW должен совпадать с тем, что у тебя уже в БД
+  // id, slug, ym, action, diff, actor_name, actor_email, created_at, actor_role, actor_id, meta
+  await db.query(`
+    CREATE OR REPLACE VIEW donas_finance_audit AS
+    SELECT
+      id,
+      slug,
+      ym,
+      action,
+      diff,
+      actor_name,
+      actor_email,
+      created_at,
+      actor_role,
+      actor_id,
+      meta
+    FROM donas_finance_audit_log;
+  `);
+}
+
+async function auditInsert({ ym, action, diff, actor, meta }) {
+  try {
+    await ensureFinanceAudit();
+    await db.query(
+      `
+      INSERT INTO donas_finance_audit_log
+        (slug, ym, action, diff, actor_name, actor_email, actor_role, actor_id, meta)
+      VALUES
+        ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+      `,
+      [
+        SLUG,
+        String(ym || ""),
+        String(action || ""),
+        diff ? diff : {},
+        actor?.name || null,
+        actor?.email || null,
+        actor?.role || null,
+        actor?.id != null ? Number(actor.id) : null,
+        meta ? meta : {},
+      ]
+    );
+  } catch (e) {
+    console.error("auditInsert error:", e);
+  }
+}
+
+async function touchMonthAudit(req, ym, meta = {}) {
+  if (!isYm(ym)) return;
+  const actor = getActor(req);
+  await auditInsert({
+    ym,
+    action: "month.touch",
+    diff: { source: "sales" },
+    actor,
+    meta,
+  });
+}
+
+/**
+ * =========================
+ * Existing logic
+ * =========================
+ */
+
+/**
+ * Проверяем, locked ли месяц в donas_finance_months (notes содержит #locked)
+ * ym = 'YYYY-MM'
+ */
 async function isMonthLocked(ym) {
   if (!isYm(ym)) return false;
 
@@ -39,6 +144,10 @@ async function isMonthLocked(ym) {
   return hasLockedTag(notes);
 }
 
+/**
+ * Находим актуальную себестоимость блюда (total_cost) из donas_cogs
+ * Берём последнюю запись по времени/ид.
+ */
 async function getLatestCogsForMenuItem(menuItemId) {
   const { rows } = await db.query(
     `
@@ -108,6 +217,7 @@ exports.addSale = async (req, res) => {
       return res.status(400).json({ error: "menu_item_id required" });
     }
 
+    // 🔒 month lock guard
     const ym = toYmFromDate(soldAt);
     if (await isMonthLocked(ym)) {
       return res.status(409).json({ error: `Month ${ym} is locked (#locked)` });
@@ -115,26 +225,20 @@ exports.addSale = async (req, res) => {
 
     const revenueTotal = qty * unitPrice;
 
+    // cogs snapshot
     const snap = await getLatestCogsForMenuItem(menuItemId);
     const cogsUnit = toNum(snap?.total_cost);
     const cogsTotal = qty * cogsUnit;
     const cogsSnapshotId = snap?.id || null;
 
-    const profitTotal = revenueTotal - cogsTotal;
-    const marginPct = revenueTotal === 0 ? 0 : (profitTotal / revenueTotal) * 100;
-
     const { rows } = await db.query(
       `
       INSERT INTO donas_sales
         (sold_at, menu_item_id, qty, unit_price, revenue_total,
-         cogs_snapshot_id, cogs_unit, cogs_total,
-         profit_total, margin_pct,
-         channel, notes)
+         cogs_snapshot_id, cogs_unit, cogs_total, channel, notes)
       VALUES
         ($1, $2, $3, $4, $5,
-         $6, $7, $8,
-         $9, $10,
-         $11, $12)
+         $6, $7, $8, $9, $10)
       RETURNING *
       `,
       [
@@ -146,12 +250,13 @@ exports.addSale = async (req, res) => {
         cogsSnapshotId,
         cogsUnit,
         cogsTotal,
-        profitTotal,
-        marginPct,
         channel,
         notes,
       ]
     );
+
+    // ✅ AUTO-TOUCH Months audit
+    await touchMonthAudit(req, ym, { op: "sale.add", sale_id: rows?.[0]?.id || null });
 
     return res.json(rows[0]);
   } catch (e) {
@@ -162,12 +267,18 @@ exports.addSale = async (req, res) => {
 
 /**
  * PUT /api/admin/donas/sales/:id
+ * body: { sold_at?, menu_item_id?, qty?, unit_price?, channel?, notes? }
+ *
+ * ✅ PATCH:
+ * Если у текущей продажи COGS пустой (snapshot_id null / cogs_unit 0),
+ * то при сохранении подтягиваем latest COGS даже без смены menu_item_id.
  */
 exports.updateSale = async (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: "Bad id" });
 
+    // current row
     const curQ = await db.query(`SELECT * FROM donas_sales WHERE id=$1 LIMIT 1`, [id]);
     const cur = curQ.rows?.[0];
     if (!cur) return res.status(404).json({ error: "Sale not found" });
@@ -186,12 +297,15 @@ exports.updateSale = async (req, res) => {
     const notes = b.notes === undefined ? cur.notes : (b.notes == null ? null : String(b.notes));
 
     const newYm = toYmFromDate(soldAt);
+    // если переносим продажу в другой месяц — проверяем и новый месяц тоже
     if (newYm !== curYm && (await isMonthLocked(newYm))) {
       return res.status(409).json({ error: `Month ${newYm} is locked (#locked)` });
     }
 
+    // пересчитываем revenue
     const revenueTotal = qty * unitPrice;
 
+    // cogs
     let cogsSnapshotId = cur.cogs_snapshot_id;
     let cogsUnit = toNum(cur.cogs_unit);
     let cogsTotal = toNum(cur.cogs_total);
@@ -199,6 +313,7 @@ exports.updateSale = async (req, res) => {
     const menuItemChanged = Number(menuItemId) !== Number(cur.menu_item_id);
     const qtyChanged = qty !== toNum(cur.qty);
 
+    // ✅ если текущий COGS пустой — лечим при любом сохранении
     const cogsIsEmpty = !cogsSnapshotId || toNum(cur.cogs_unit) <= 0;
 
     if (menuItemChanged || qtyChanged || cogsIsEmpty) {
@@ -209,9 +324,6 @@ exports.updateSale = async (req, res) => {
     } else {
       cogsTotal = qty * cogsUnit;
     }
-
-    const profitTotal = revenueTotal - cogsTotal;
-    const marginPct = revenueTotal === 0 ? 0 : (profitTotal / revenueTotal) * 100;
 
     const { rows } = await db.query(
       `
@@ -225,10 +337,8 @@ exports.updateSale = async (req, res) => {
         cogs_snapshot_id=$7,
         cogs_unit=$8,
         cogs_total=$9,
-        profit_total=$10,
-        margin_pct=$11,
-        channel=$12,
-        notes=$13,
+        channel=$10,
+        notes=$11,
         updated_at=NOW()
       WHERE id=$1
       RETURNING *
@@ -243,12 +353,19 @@ exports.updateSale = async (req, res) => {
         cogsSnapshotId,
         cogsUnit,
         cogsTotal,
-        profitTotal,
-        marginPct,
         channel,
         notes,
       ]
     );
+
+    // ✅ AUTO-TOUCH Months audit:
+    // 1) всегда touch исходный месяц
+    await touchMonthAudit(req, curYm, { op: "sale.update", sale_id: id });
+
+    // 2) если месяц поменяли — touch новый тоже
+    if (newYm && newYm !== curYm) {
+      await touchMonthAudit(req, newYm, { op: "sale.move", sale_id: id, from: curYm, to: newYm });
+    }
 
     return res.json(rows[0]);
   } catch (e) {
@@ -275,85 +392,13 @@ exports.deleteSale = async (req, res) => {
     }
 
     await db.query(`DELETE FROM donas_sales WHERE id=$1`, [id]);
+
+    // ✅ AUTO-TOUCH Months audit
+    await touchMonthAudit(req, ym, { op: "sale.delete", sale_id: id });
+
     return res.json({ ok: true });
   } catch (e) {
     console.error("deleteSale error:", e);
     return res.status(500).json({ error: "Failed to delete sale" });
-  }
-};
-
-/**
- * POST /api/admin/donas/sales/recalc-cogs?month=YYYY-MM
- * Пересчитывает COGS/Profit/Margin для всех продаж месяца по последнему donas_cogs.
- */
-exports.recalcCogsMonth = async (req, res) => {
-  try {
-    const month = String(req.query.month || "").trim();
-    if (!isYm(month)) return res.status(400).json({ error: "Bad month (YYYY-MM)" });
-
-    if (await isMonthLocked(month)) {
-      return res.status(409).json({ error: `Month ${month} is locked (#locked)` });
-    }
-
-    // 1) build latest cogs per menu_item_id
-    // 2) update sales rows having cogs
-    const q1 = await db.query(
-      `
-      WITH latest AS (
-        SELECT DISTINCT ON (menu_item_id)
-          menu_item_id,
-          id AS cogs_id,
-          total_cost
-        FROM donas_cogs
-        ORDER BY menu_item_id, created_at DESC NULLS LAST, id DESC
-      ),
-      upd AS (
-        UPDATE donas_sales s
-        SET
-          cogs_snapshot_id = l.cogs_id,
-          cogs_unit        = COALESCE(l.total_cost, 0),
-          cogs_total       = s.qty * COALESCE(l.total_cost, 0),
-          profit_total     = s.revenue_total - (s.qty * COALESCE(l.total_cost, 0)),
-          margin_pct       = CASE
-                               WHEN s.revenue_total = 0 THEN 0
-                               ELSE ((s.revenue_total - (s.qty * COALESCE(l.total_cost,0))) / s.revenue_total) * 100
-                             END,
-          updated_at       = NOW()
-        FROM latest l
-        WHERE to_char(s.sold_at,'YYYY-MM') = $1
-          AND s.menu_item_id = l.menu_item_id
-        RETURNING s.id
-      )
-      SELECT COUNT(*)::int AS updated
-      FROM upd
-      `,
-      [month]
-    );
-
-    // для строк, где нет COGS вообще — приводим к нулю (чтобы было явно)
-    await db.query(
-      `
-      UPDATE donas_sales s
-      SET
-        cogs_snapshot_id = NULL,
-        cogs_unit        = 0,
-        cogs_total       = 0,
-        profit_total     = s.revenue_total,
-        margin_pct       = CASE WHEN s.revenue_total = 0 THEN 0 ELSE 100 END,
-        updated_at       = NOW()
-      WHERE to_char(s.sold_at,'YYYY-MM') = $1
-        AND (s.cogs_snapshot_id IS NULL OR s.cogs_unit IS NULL OR s.cogs_unit = 0)
-        AND NOT EXISTS (
-          SELECT 1 FROM donas_cogs c WHERE c.menu_item_id = s.menu_item_id
-        )
-      `,
-      [month]
-    );
-
-    const updated = q1.rows?.[0]?.updated ?? 0;
-    return res.json({ ok: true, month, updated });
-  } catch (e) {
-    console.error("recalcCogsMonth error:", e);
-    return res.status(500).json({ error: "Failed to recalc cogs" });
   }
 };
