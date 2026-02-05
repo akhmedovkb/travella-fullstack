@@ -13,4 +13,7 @@ router.post("/sales", authenticateToken, requireAdmin, ctrl.addSale);
 router.put("/sales/:id", authenticateToken, requireAdmin, ctrl.updateSale);
 router.delete("/sales/:id", authenticateToken, requireAdmin, ctrl.deleteSale);
 
+// ✅ NEW: recalc COGS for month (uses latest donas_cogs)
+router.post("/sales/recalc-cogs", authenticateToken, requireAdmin, ctrl.recalcCogs);
+
 module.exports = router;
