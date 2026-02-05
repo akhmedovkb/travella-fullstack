@@ -405,9 +405,79 @@ async function deleteSale(req, res) {
   }
 }
 
+/**
+ * POST /api/admin/donas/sales/recalc-cogs?month=YYYY-MM
+ * Пересчитывает COGS для продаж месяца по актуальным donas_cogs
+ */
+async function recalcCogsMonth(req, res) {
+  try {
+    const { month } = req.query;
+    if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+      return res.status(400).json({ error: "month=YYYY-MM required" });
+    }
+
+    // 🔒 lock guard
+    if (await isMonthLocked(month)) {
+      return res.status(409).json({ error: `Month ${month} is locked (#locked)` });
+    }
+
+    const sales = await db.query(
+      `
+      SELECT id, menu_item_id, qty
+      FROM donas_sales
+      WHERE to_char(sold_at,'YYYY-MM') = $1
+      `,
+      [month]
+    );
+
+    let updated = 0;
+
+    for (const s of sales.rows) {
+      const snap = await getLatestCogsForMenuItem(s.menu_item_id);
+      if (!snap) continue;
+
+      const cogsUnit = toNum(snap.total_cost);
+      const cogsTotal = cogsUnit * toNum(s.qty);
+
+      await db.query(
+        `
+        UPDATE donas_sales
+        SET
+          cogs_snapshot_id = $2,
+          cogs_unit = $3,
+          cogs_total = $4,
+          updated_at = NOW()
+        WHERE id = $1
+        `,
+        [s.id, snap.id, cogsUnit, cogsTotal]
+      );
+
+      updated++;
+    }
+
+    // audit
+    await auditSales(
+      req,
+      month,
+      "sales.recalc_cogs",
+      { updated },
+      {}
+    );
+
+    // auto-touch months
+    await touchMonthFromSales(month);
+
+    return res.json({ ok: true, updated });
+  } catch (e) {
+    console.error("recalcCogsMonth error:", e);
+    return res.status(500).json({ error: "Failed to recalc COGS" });
+  }
+}
+
 module.exports = {
   getSales,
   addSale,
   updateSale,
   deleteSale,
+  recalcCogsMonth,
 };
