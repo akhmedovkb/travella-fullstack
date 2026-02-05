@@ -2,6 +2,8 @@
 const db = require("../db");
 const { touchMonthFromSales } = require("../utils/donasSalesMonthAggregator");
 
+const SLUG = "donas-dosas";
+
 function toNum(x) {
   const n = Number(x);
   return Number.isFinite(n) ? n : 0;
@@ -20,11 +22,9 @@ function hasLockedTag(notes) {
   return String(notes || "").toLowerCase().includes("#locked");
 }
 
-const SLUG = "donas-dosas";
-
 /**
  * =========================
- * Finance audit helpers (actions sales.*)
+ * Finance audit helpers (sales.* actions)
  * =========================
  */
 
@@ -39,84 +39,77 @@ function getActor(req) {
 }
 
 async function ensureFinanceAudit() {
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS donas_finance_audit_log (
-      id BIGSERIAL PRIMARY KEY,
-      slug TEXT NOT NULL,
-      ym TEXT NOT NULL,
-      action TEXT NOT NULL,
-      diff JSONB NOT NULL DEFAULT '{}'::jsonb,
-      actor_name TEXT,
-      actor_email TEXT,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      actor_role TEXT,
-      actor_id BIGINT,
-      meta JSONB NOT NULL DEFAULT '{}'::jsonb
-    );
-  `);
-
-  // ВАЖНО: порядок колонок view совпадает с тем, что у тебя уже в БД:
-  // id, slug, ym, action, diff, actor_name, actor_email, created_at, actor_role, actor_id, meta
-  await db.query(`
-    CREATE OR REPLACE VIEW donas_finance_audit AS
-    SELECT
-      id,
-      slug,
-      ym,
-      action,
-      diff,
-      actor_name,
-      actor_email,
-      created_at,
-      actor_role,
-      actor_id,
-      meta
-    FROM donas_finance_audit_log;
-  `);
-}
-
-async function auditInsert({ ym, action, diff, actor, meta }) {
+  // не ломаем сервер, если нет прав/таблицы
   try {
-    await ensureFinanceAudit();
-    await db.query(
-      `
-      INSERT INTO donas_finance_audit_log
-        (slug, ym, action, diff, actor_name, actor_email, actor_role, actor_id, meta)
-      VALUES
-        ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-      `,
-      [
-        SLUG,
-        String(ym || ""),
-        String(action || ""),
-        diff ? diff : {},
-        actor?.name || null,
-        actor?.email || null,
-        actor?.role || null,
-        actor?.id != null ? Number(actor.id) : null,
-        meta ? meta : {},
-      ]
-    );
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS donas_finance_audit_log (
+        id BIGSERIAL PRIMARY KEY,
+        slug TEXT NOT NULL,
+        ym TEXT NOT NULL,
+        action TEXT NOT NULL,
+        diff JSONB NOT NULL DEFAULT '{}'::jsonb,
+        actor_name TEXT,
+        actor_email TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        actor_role TEXT,
+        actor_id BIGINT,
+        meta JSONB NOT NULL DEFAULT '{}'::jsonb
+      );
+    `);
+
+    await db.query(`
+      CREATE OR REPLACE VIEW donas_finance_audit AS
+      SELECT
+        id,
+        slug,
+        ym,
+        action,
+        actor_id,
+        actor_role,
+        actor_email,
+        actor_name,
+        diff,
+        meta,
+        created_at
+      FROM donas_finance_audit_log;
+    `);
   } catch (e) {
-    console.error("auditInsert error:", e);
+    console.error("ensureFinanceAudit error:", e);
   }
 }
 
 async function auditSales(req, ym, action, meta = {}, diff = {}) {
-  if (!isYm(ym)) return;
-  const actor = getActor(req);
-  await auditInsert({
-    ym,
-    action: action || "sales.update",
-    diff: diff || {},
-    actor,
-    meta: meta || {},
-  });
+  try {
+    if (!isYm(ym)) return;
+    await ensureFinanceAudit();
+    const actor = getActor(req);
+    await db.query(
+      `
+      INSERT INTO donas_finance_audit_log
+        (slug, ym, action, actor_id, actor_role, actor_email, actor_name, diff, meta)
+      VALUES
+        ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb)
+      `,
+      [
+        SLUG,
+        ym,
+        String(action || "sales.update"),
+        actor.id,
+        actor.role,
+        actor.email,
+        actor.name,
+        JSON.stringify(diff || {}),
+        JSON.stringify(meta || {}),
+      ]
+    );
+  } catch (e) {
+    console.error("auditSales error:", e);
+  }
 }
 
 /**
  * =========================
- * Existing logic
+ * Month lock guard
  * =========================
  */
 
@@ -138,6 +131,9 @@ async function isMonthLocked(ym) {
   return hasLockedTag(notes);
 }
 
+/**
+ * Latest COGS snapshot
+ */
 async function getLatestCogsForMenuItem(menuItemId) {
   const { rows } = await db.query(
     `
@@ -153,14 +149,20 @@ async function getLatestCogsForMenuItem(menuItemId) {
 }
 
 /**
+ * =========================
+ * Controllers
+ * =========================
+ */
+
+/**
  * GET /api/admin/donas/sales?month=YYYY-MM
  */
-exports.getSales = async (req, res) => {
+async function getSales(req, res) {
   try {
     const { month } = req.query;
 
     let where = "";
-    let params = [];
+    const params = [];
 
     if (month) {
       if (!isYm(month)) return res.status(400).json({ error: "Bad month (YYYY-MM)" });
@@ -185,12 +187,13 @@ exports.getSales = async (req, res) => {
     console.error("getSales error:", e);
     return res.status(500).json({ error: "Failed to load sales" });
   }
-};
+}
 
 /**
  * POST /api/admin/donas/sales
+ * body: { sold_at, menu_item_id, qty, unit_price, channel, notes? }
  */
-exports.addSale = async (req, res) => {
+async function addSale(req, res) {
   try {
     const b = req.body || {};
 
@@ -242,7 +245,6 @@ exports.addSale = async (req, res) => {
       ]
     );
 
-    // ✅ Audit: sales.add
     await auditSales(
       req,
       ym,
@@ -251,7 +253,7 @@ exports.addSale = async (req, res) => {
       { revenue_total: revenueTotal, cogs_total: cogsTotal }
     );
 
-    // ✅ AUTO-TOUCH MONTHS (revenue/cogs from sales)
+    // ✅ auto-touch months (revenue/cogs from sales)
     await touchMonthFromSales(ym);
 
     return res.json(rows[0]);
@@ -259,12 +261,12 @@ exports.addSale = async (req, res) => {
     console.error("addSale error:", e);
     return res.status(500).json({ error: "Failed to add sale" });
   }
-};
+}
 
 /**
  * PUT /api/admin/donas/sales/:id
  */
-exports.updateSale = async (req, res) => {
+async function updateSale(req, res) {
   try {
     const id = Number(req.params.id);
     if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: "Bad id" });
@@ -343,7 +345,6 @@ exports.updateSale = async (req, res) => {
       ]
     );
 
-    // ✅ Audit:
     await auditSales(
       req,
       curYm,
@@ -362,25 +363,21 @@ exports.updateSale = async (req, res) => {
       );
     }
 
-    // ✅ AUTO-TOUCH MONTHS:
-    // всегда трогаем исходный месяц
+    // ✅ auto-touch months
     await touchMonthFromSales(curYm);
-    // если переехали — трогаем и новый
-    if (newYm && newYm !== curYm) {
-      await touchMonthFromSales(newYm);
-    }
+    if (newYm && newYm !== curYm) await touchMonthFromSales(newYm);
 
     return res.json(rows[0]);
   } catch (e) {
     console.error("updateSale error:", e);
     return res.status(500).json({ error: "Failed to update sale" });
   }
-};
+}
 
 /**
  * DELETE /api/admin/donas/sales/:id
  */
-exports.deleteSale = async (req, res) => {
+async function deleteSale(req, res) {
   try {
     const id = Number(req.params.id);
     if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: "Bad id" });
@@ -396,10 +393,9 @@ exports.deleteSale = async (req, res) => {
 
     await db.query(`DELETE FROM donas_sales WHERE id=$1`, [id]);
 
-    // ✅ Audit: sales.delete
     await auditSales(req, ym, "sales.delete", { sale_id: id }, { deleted: true });
 
-    // ✅ AUTO-TOUCH MONTHS
+    // ✅ auto-touch months
     await touchMonthFromSales(ym);
 
     return res.json({ ok: true });
@@ -407,4 +403,11 @@ exports.deleteSale = async (req, res) => {
     console.error("deleteSale error:", e);
     return res.status(500).json({ error: "Failed to delete sale" });
   }
+}
+
+module.exports = {
+  getSales,
+  addSale,
+  updateSale,
+  deleteSale,
 };
