@@ -24,6 +24,49 @@ function hasLockedTag(notes) {
 const SLUG = "donas-dosas";
 
 /**
+ * ==============
+ * Audit helpers
+ * ==============
+ */
+function getActor(req) {
+  const u = req.user || {};
+  return {
+    id: u.id ?? null,
+    role: String(u.role || "").toLowerCase() || null,
+    email: u.email || u.mail || null,
+    name: u.name || u.full_name || u.fullName || null,
+  };
+}
+
+async function logAudit(req, { action, ym = null, diff = {}, meta = {} }) {
+  // Таблица/вью могут отличаться на старых БД — не ломаем сервер.
+  try {
+    const actor = getActor(req);
+    await db.query(
+      `
+      INSERT INTO donas_finance_audit
+        (slug, ym, action, actor_id, actor_role, actor_email, actor_name, diff, meta)
+      VALUES
+        ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb)
+      `,
+      [
+        SLUG,
+        ym,
+        action,
+        actor.id,
+        actor.role,
+        actor.email,
+        actor.name,
+        JSON.stringify(diff || {}),
+        JSON.stringify(meta || {}),
+      ]
+    );
+  } catch (e) {
+    // silently ignore
+  }
+}
+
+/**
  * Проверяем, locked ли месяц в donas_finance_months (notes содержит #locked)
  * ym = 'YYYY-MM'
  */
@@ -63,6 +106,14 @@ async function getLatestCogsForMenuItem(menuItemId) {
   return rows?.[0] || null;
 }
 
+function calcProfitAndMargin(revenueTotal, cogsTotal) {
+  const rev = toNum(revenueTotal);
+  const cgs = toNum(cogsTotal);
+  const profit = rev - cgs;
+  const margin = rev === 0 ? 0 : (profit / rev) * 100;
+  return { profit_total: profit, margin_pct: margin };
+}
+
 /**
  * GET /api/admin/donas/sales?month=YYYY-MM
  */
@@ -75,7 +126,7 @@ exports.getSales = async (req, res) => {
 
     if (month) {
       if (!isYm(month)) return res.status(400).json({ error: "Bad month (YYYY-MM)" });
-      where = "WHERE to_char(sold_at, 'YYYY-MM') = $1";
+      where = "WHERE to_char(s.sold_at, 'YYYY-MM') = $1";
       params.push(month);
     }
 
@@ -86,7 +137,7 @@ exports.getSales = async (req, res) => {
       FROM donas_sales s
       LEFT JOIN donas_menu_items mi ON mi.id = s.menu_item_id
       ${where}
-      ORDER BY sold_at DESC, id DESC
+      ORDER BY s.sold_at DESC, s.id DESC
       `,
       params
     );
@@ -132,14 +183,20 @@ exports.addSale = async (req, res) => {
     const cogsTotal = qty * cogsUnit;
     const cogsSnapshotId = snap?.id || null;
 
+    const { profit_total, margin_pct } = calcProfitAndMargin(revenueTotal, cogsTotal);
+
     const { rows } = await db.query(
       `
       INSERT INTO donas_sales
         (sold_at, menu_item_id, qty, unit_price, revenue_total,
-         cogs_snapshot_id, cogs_unit, cogs_total, channel, notes)
+         cogs_snapshot_id, cogs_unit, cogs_total,
+         profit_total, margin_pct,
+         channel, notes)
       VALUES
         ($1, $2, $3, $4, $5,
-         $6, $7, $8, $9, $10)
+         $6, $7, $8,
+         $9, $10,
+         $11, $12)
       RETURNING *
       `,
       [
@@ -151,12 +208,33 @@ exports.addSale = async (req, res) => {
         cogsSnapshotId,
         cogsUnit,
         cogsTotal,
+        profit_total,
+        margin_pct,
         channel,
         notes,
       ]
     );
 
-    return res.json(rows[0]);
+    const row = rows[0];
+
+    await logAudit(req, {
+      action: "sales.create",
+      ym,
+      diff: {
+        sale_id: row?.id,
+        menu_item_id: menuItemId,
+        qty,
+        unit_price: unitPrice,
+        revenue_total: revenueTotal,
+        cogs_total: cogsTotal,
+        profit_total,
+        margin_pct,
+        channel,
+      },
+      meta: { sale_id: row?.id },
+    });
+
+    return res.json(row);
   } catch (e) {
     console.error("addSale error:", e);
     return res.status(500).json({ error: "Failed to add sale" });
@@ -192,7 +270,7 @@ exports.updateSale = async (req, res) => {
     const qty = b.qty == null ? toNum(cur.qty) : toNum(b.qty);
     const unitPrice = b.unit_price == null ? toNum(cur.unit_price) : toNum(b.unit_price);
     const channel = b.channel == null ? String(cur.channel || "cash") : String(b.channel || "cash");
-    const notes = b.notes === undefined ? cur.notes : (b.notes == null ? null : String(b.notes));
+    const notes = b.notes === undefined ? cur.notes : b.notes == null ? null : String(b.notes);
 
     const newYm = toYmFromDate(soldAt);
     // если переносим продажу в другой месяц — проверяем и новый месяц тоже
@@ -220,9 +298,25 @@ exports.updateSale = async (req, res) => {
       cogsTotal = qty * cogsUnit;
       cogsSnapshotId = snap?.id || null;
     } else {
-      // qty мог не измениться, но unit_price мог — cogs не трогаем
       cogsTotal = qty * cogsUnit;
     }
+
+    const { profit_total, margin_pct } = calcProfitAndMargin(revenueTotal, cogsTotal);
+
+    const before = {
+      sold_at: cur.sold_at,
+      menu_item_id: cur.menu_item_id,
+      qty: toNum(cur.qty),
+      unit_price: toNum(cur.unit_price),
+      revenue_total: toNum(cur.revenue_total),
+      cogs_snapshot_id: cur.cogs_snapshot_id,
+      cogs_unit: toNum(cur.cogs_unit),
+      cogs_total: toNum(cur.cogs_total),
+      profit_total: toNum(cur.profit_total),
+      margin_pct: toNum(cur.margin_pct),
+      channel: cur.channel,
+      notes: cur.notes,
+    };
 
     const { rows } = await db.query(
       `
@@ -236,8 +330,10 @@ exports.updateSale = async (req, res) => {
         cogs_snapshot_id=$7,
         cogs_unit=$8,
         cogs_total=$9,
-        channel=$10,
-        notes=$11,
+        profit_total=$10,
+        margin_pct=$11,
+        channel=$12,
+        notes=$13,
         updated_at=NOW()
       WHERE id=$1
       RETURNING *
@@ -252,12 +348,40 @@ exports.updateSale = async (req, res) => {
         cogsSnapshotId,
         cogsUnit,
         cogsTotal,
+        profit_total,
+        margin_pct,
         channel,
         notes,
       ]
     );
 
-    return res.json(rows[0]);
+    const row = rows[0];
+
+    await logAudit(req, {
+      action: "sales.update",
+      ym: newYm,
+      diff: {
+        sale_id: id,
+        from: before,
+        to: {
+          sold_at: soldAt,
+          menu_item_id: menuItemId,
+          qty,
+          unit_price: unitPrice,
+          revenue_total: revenueTotal,
+          cogs_snapshot_id: cogsSnapshotId,
+          cogs_unit: cogsUnit,
+          cogs_total: cogsTotal,
+          profit_total,
+          margin_pct,
+          channel,
+          notes,
+        },
+      },
+      meta: { sale_id: id },
+    });
+
+    return res.json(row);
   } catch (e) {
     console.error("updateSale error:", e);
     return res.status(500).json({ error: "Failed to update sale" });
@@ -272,7 +396,7 @@ exports.deleteSale = async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: "Bad id" });
 
-    const curQ = await db.query(`SELECT sold_at FROM donas_sales WHERE id=$1 LIMIT 1`, [id]);
+    const curQ = await db.query(`SELECT * FROM donas_sales WHERE id=$1 LIMIT 1`, [id]);
     const cur = curQ.rows?.[0];
     if (!cur) return res.status(404).json({ error: "Sale not found" });
 
@@ -282,9 +406,88 @@ exports.deleteSale = async (req, res) => {
     }
 
     await db.query(`DELETE FROM donas_sales WHERE id=$1`, [id]);
+
+    await logAudit(req, {
+      action: "sales.delete",
+      ym,
+      diff: { sale_id: id, deleted: true },
+      meta: { sale_id: id },
+    });
+
     return res.json({ ok: true });
   } catch (e) {
     console.error("deleteSale error:", e);
     return res.status(500).json({ error: "Failed to delete sale" });
+  }
+};
+
+/**
+ * POST /api/admin/donas/sales/recalc-cogs?month=YYYY-MM
+ * Пересчитывает COGS + Profit/Margin по последнему donas_cogs для каждого menu_item_id.
+ *
+ * 🔒 Если месяц #locked — 409.
+ */
+exports.recalcCogs = async (req, res) => {
+  try {
+    const month = String(req.query.month || "").trim();
+    if (!month || !isYm(month)) {
+      return res.status(400).json({ error: "month query param required (YYYY-MM)" });
+    }
+
+    if (await isMonthLocked(month)) {
+      return res.status(409).json({ error: `Month ${month} is locked (#locked)` });
+    }
+
+    // Один SQL, быстро и атомарно.
+    // latest cogs per menu_item_id
+    const q = `
+      WITH latest AS (
+        SELECT DISTINCT ON (menu_item_id)
+          menu_item_id,
+          id AS cogs_snapshot_id,
+          COALESCE(total_cost, 0) AS cogs_unit
+        FROM donas_cogs
+        ORDER BY menu_item_id, created_at DESC NULLS LAST, id DESC
+      ),
+      upd AS (
+        UPDATE donas_sales s
+        SET
+          revenue_total = COALESCE(s.qty,0) * COALESCE(s.unit_price,0),
+          cogs_snapshot_id = l.cogs_snapshot_id,
+          cogs_unit = COALESCE(l.cogs_unit,0),
+          cogs_total = COALESCE(s.qty,0) * COALESCE(l.cogs_unit,0),
+          profit_total = (COALESCE(s.qty,0) * COALESCE(s.unit_price,0)) - (COALESCE(s.qty,0) * COALESCE(l.cogs_unit,0)),
+          margin_pct = CASE
+            WHEN (COALESCE(s.qty,0) * COALESCE(s.unit_price,0)) = 0 THEN 0
+            ELSE (
+              ((COALESCE(s.qty,0) * COALESCE(s.unit_price,0)) - (COALESCE(s.qty,0) * COALESCE(l.cogs_unit,0)))
+              / (COALESCE(s.qty,0) * COALESCE(s.unit_price,0))
+            ) * 100
+          END,
+          updated_at = NOW()
+        FROM latest l
+        WHERE
+          l.menu_item_id = s.menu_item_id
+          AND to_char(s.sold_at, 'YYYY-MM') = $1
+        RETURNING s.id
+      )
+      SELECT COUNT(*)::int AS updated
+      FROM upd
+    `;
+
+    const { rows } = await db.query(q, [month]);
+    const updated = rows?.[0]?.updated || 0;
+
+    await logAudit(req, {
+      action: "sales.recalc_cogs",
+      ym: month,
+      diff: { month, updated },
+      meta: { month },
+    });
+
+    return res.json({ ok: true, month, updated });
+  } catch (e) {
+    console.error("recalcCogs error:", e);
+    return res.status(500).json({ error: "Failed to recalc cogs" });
   }
 };
