@@ -24,51 +24,6 @@ function hasLockedTag(notes) {
 const SLUG = "donas-dosas";
 
 /**
- * =========================
- * Audit (best-effort)
- * =========================
- */
-
-function getActor(req) {
-  const u = req.user || {};
-  return {
-    id: u.id ?? null,
-    role: String(u.role || "").toLowerCase() || null,
-    email: u.email || u.mail || null,
-    name: u.name || u.full_name || u.fullName || null,
-  };
-}
-
-async function logAudit(req, { action, ym = null, diff = {}, meta = {} }) {
-  try {
-    const actor = getActor(req);
-
-    // Best-effort insert. If table/columns differ in some envs — ignore.
-    await db.query(
-      `
-      INSERT INTO donas_finance_audit
-        (slug, ym, action, actor_id, actor_role, actor_email, actor_name, diff, meta)
-      VALUES
-        ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb)
-      `,
-      [
-        SLUG,
-        ym,
-        action,
-        actor.id,
-        actor.role,
-        actor.email,
-        actor.name,
-        JSON.stringify(diff || {}),
-        JSON.stringify(meta || {}),
-      ]
-    );
-  } catch {
-    // ignore (older db / schema differences)
-  }
-}
-
-/**
  * Проверяем, locked ли месяц в donas_finance_months (notes содержит #locked)
  * ym = 'YYYY-MM'
  */
@@ -171,7 +126,7 @@ exports.addSale = async (req, res) => {
 
     const revenueTotal = qty * unitPrice;
 
-    // ✅ cogs snapshot фиксируем при создании
+    // cogs snapshot
     const snap = await getLatestCogsForMenuItem(menuItemId);
     const cogsUnit = toNum(snap?.total_cost);
     const cogsTotal = qty * cogsUnit;
@@ -201,29 +156,7 @@ exports.addSale = async (req, res) => {
       ]
     );
 
-    const created = rows?.[0] || null;
-
-    await logAudit(req, {
-      action: "sale.add",
-      ym,
-      diff: created
-        ? {
-            id: created.id,
-            sold_at: created.sold_at,
-            menu_item_id: created.menu_item_id,
-            qty: created.qty,
-            unit_price: created.unit_price,
-            revenue_total: created.revenue_total,
-            cogs_snapshot_id: created.cogs_snapshot_id,
-            cogs_unit: created.cogs_unit,
-            cogs_total: created.cogs_total,
-            channel: created.channel,
-            notes: created.notes,
-          }
-        : { sold_at: soldAt, menu_item_id: menuItemId, qty, unit_price: unitPrice, channel, notes },
-    });
-
-    return res.json(created);
+    return res.json(rows[0]);
   } catch (e) {
     console.error("addSale error:", e);
     return res.status(500).json({ error: "Failed to add sale" });
@@ -233,6 +166,10 @@ exports.addSale = async (req, res) => {
 /**
  * PUT /api/admin/donas/sales/:id
  * body: { sold_at?, menu_item_id?, qty?, unit_price?, channel?, notes? }
+ *
+ * ✅ PATCH:
+ * Если у текущей продажи COGS пустой (snapshot_id null / cogs_unit 0),
+ * то при сохранении подтягиваем latest COGS даже без смены menu_item_id.
  */
 exports.updateSale = async (req, res) => {
   try {
@@ -254,9 +191,8 @@ exports.updateSale = async (req, res) => {
     const menuItemId = Number(b.menu_item_id ?? cur.menu_item_id);
     const qty = b.qty == null ? toNum(cur.qty) : toNum(b.qty);
     const unitPrice = b.unit_price == null ? toNum(cur.unit_price) : toNum(b.unit_price);
-    const channel =
-      b.channel == null ? String(cur.channel || "cash") : String(b.channel || "cash");
-    const notes = b.notes === undefined ? cur.notes : b.notes == null ? null : String(b.notes);
+    const channel = b.channel == null ? String(cur.channel || "cash") : String(b.channel || "cash");
+    const notes = b.notes === undefined ? cur.notes : (b.notes == null ? null : String(b.notes));
 
     const newYm = toYmFromDate(soldAt);
     // если переносим продажу в другой месяц — проверяем и новый месяц тоже
@@ -267,24 +203,24 @@ exports.updateSale = async (req, res) => {
     // пересчитываем revenue
     const revenueTotal = qty * unitPrice;
 
-    /**
-     * ✅ ВАЖНО (Sales-first):
-     * - snapshot COGS НЕ переснимаем при изменении qty/price/channel/notes/sold_at
-     * - snapshot переснимаем ТОЛЬКО если поменяли menu_item_id
-     */
+    // cogs
     let cogsSnapshotId = cur.cogs_snapshot_id;
     let cogsUnit = toNum(cur.cogs_unit);
-    let cogsTotal = qty * cogsUnit;
+    let cogsTotal = toNum(cur.cogs_total);
 
     const menuItemChanged = Number(menuItemId) !== Number(cur.menu_item_id);
+    const qtyChanged = qty !== toNum(cur.qty);
 
-    if (menuItemChanged) {
+    // ✅ если текущий COGS пустой — лечим при любом сохранении
+    const cogsIsEmpty = !cogsSnapshotId || toNum(cur.cogs_unit) <= 0;
+
+    if (menuItemChanged || qtyChanged || cogsIsEmpty) {
       const snap = await getLatestCogsForMenuItem(menuItemId);
       cogsUnit = toNum(snap?.total_cost);
       cogsTotal = qty * cogsUnit;
       cogsSnapshotId = snap?.id || null;
     } else {
-      // menu item same: unit remains snapshot; total follows qty
+      // qty мог не измениться, но unit_price мог — cogs не трогаем
       cogsTotal = qty * cogsUnit;
     }
 
@@ -321,44 +257,7 @@ exports.updateSale = async (req, res) => {
       ]
     );
 
-    const updated = rows?.[0] || null;
-
-    await logAudit(req, {
-      action: "sale.update",
-      ym: newYm,
-      diff: {
-        id,
-        from: {
-          sold_at: cur.sold_at,
-          menu_item_id: cur.menu_item_id,
-          qty: cur.qty,
-          unit_price: cur.unit_price,
-          revenue_total: cur.revenue_total,
-          cogs_snapshot_id: cur.cogs_snapshot_id,
-          cogs_unit: cur.cogs_unit,
-          cogs_total: cur.cogs_total,
-          channel: cur.channel,
-          notes: cur.notes,
-        },
-        to: updated
-          ? {
-              sold_at: updated.sold_at,
-              menu_item_id: updated.menu_item_id,
-              qty: updated.qty,
-              unit_price: updated.unit_price,
-              revenue_total: updated.revenue_total,
-              cogs_snapshot_id: updated.cogs_snapshot_id,
-              cogs_unit: updated.cogs_unit,
-              cogs_total: updated.cogs_total,
-              channel: updated.channel,
-              notes: updated.notes,
-            }
-          : { sold_at: soldAt, menu_item_id: menuItemId, qty, unit_price: unitPrice, channel, notes },
-      },
-      meta: { moved_month: curYm !== newYm, menu_item_changed: menuItemChanged },
-    });
-
-    return res.json(updated);
+    return res.json(rows[0]);
   } catch (e) {
     console.error("updateSale error:", e);
     return res.status(500).json({ error: "Failed to update sale" });
@@ -373,7 +272,7 @@ exports.deleteSale = async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: "Bad id" });
 
-    const curQ = await db.query(`SELECT * FROM donas_sales WHERE id=$1 LIMIT 1`, [id]);
+    const curQ = await db.query(`SELECT sold_at FROM donas_sales WHERE id=$1 LIMIT 1`, [id]);
     const cur = curQ.rows?.[0];
     if (!cur) return res.status(404).json({ error: "Sale not found" });
 
@@ -383,25 +282,6 @@ exports.deleteSale = async (req, res) => {
     }
 
     await db.query(`DELETE FROM donas_sales WHERE id=$1`, [id]);
-
-    await logAudit(req, {
-      action: "sale.delete",
-      ym,
-      diff: {
-        id,
-        sold_at: cur.sold_at,
-        menu_item_id: cur.menu_item_id,
-        qty: cur.qty,
-        unit_price: cur.unit_price,
-        revenue_total: cur.revenue_total,
-        cogs_snapshot_id: cur.cogs_snapshot_id,
-        cogs_unit: cur.cogs_unit,
-        cogs_total: cur.cogs_total,
-        channel: cur.channel,
-        notes: cur.notes,
-      },
-    });
-
     return res.json({ ok: true });
   } catch (e) {
     console.error("deleteSale error:", e);
