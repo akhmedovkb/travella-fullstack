@@ -1,5 +1,6 @@
 // backend/controllers/donasSalesController.js
 const db = require("../db");
+const { touchMonthFromSales } = require("../utils/donasSalesMonthAggregator");
 
 function toNum(x) {
   const n = Number(x);
@@ -12,7 +13,6 @@ function isYm(s) {
 
 function toYmFromDate(d) {
   if (!d) return "";
-  // works for '2026-02-01' and '2026-02-01T...'
   return String(d).slice(0, 7);
 }
 
@@ -20,12 +20,11 @@ function hasLockedTag(notes) {
   return String(notes || "").toLowerCase().includes("#locked");
 }
 
-// фиксируем slug
 const SLUG = "donas-dosas";
 
 /**
  * =========================
- * Finance audit helpers (AUTO actions sales.*)
+ * Finance audit helpers (actions sales.*)
  * =========================
  */
 
@@ -40,7 +39,6 @@ function getActor(req) {
 }
 
 async function ensureFinanceAudit() {
-  // Таблица аудита
   await db.query(`
     CREATE TABLE IF NOT EXISTS donas_finance_audit_log (
       id BIGSERIAL PRIMARY KEY,
@@ -57,7 +55,7 @@ async function ensureFinanceAudit() {
     );
   `);
 
-  // Порядок колонок у VIEW должен совпадать с уже существующим в БД
+  // ВАЖНО: порядок колонок view совпадает с тем, что у тебя уже в БД:
   // id, slug, ym, action, diff, actor_name, actor_email, created_at, actor_role, actor_id, meta
   await db.query(`
     CREATE OR REPLACE VIEW donas_finance_audit AS
@@ -122,10 +120,6 @@ async function auditSales(req, ym, action, meta = {}, diff = {}) {
  * =========================
  */
 
-/**
- * Проверяем, locked ли месяц в donas_finance_months (notes содержит #locked)
- * ym = 'YYYY-MM'
- */
 async function isMonthLocked(ym) {
   if (!isYm(ym)) return false;
 
@@ -144,10 +138,6 @@ async function isMonthLocked(ym) {
   return hasLockedTag(notes);
 }
 
-/**
- * Находим актуальную себестоимость блюда (total_cost) из donas_cogs
- * Берём последнюю запись по времени/ид.
- */
 async function getLatestCogsForMenuItem(menuItemId) {
   const { rows } = await db.query(
     `
@@ -199,7 +189,6 @@ exports.getSales = async (req, res) => {
 
 /**
  * POST /api/admin/donas/sales
- * body: { sold_at, menu_item_id, qty, unit_price, channel, notes? }
  */
 exports.addSale = async (req, res) => {
   try {
@@ -217,7 +206,6 @@ exports.addSale = async (req, res) => {
       return res.status(400).json({ error: "menu_item_id required" });
     }
 
-    // 🔒 month lock guard
     const ym = toYmFromDate(soldAt);
     if (await isMonthLocked(ym)) {
       return res.status(409).json({ error: `Month ${ym} is locked (#locked)` });
@@ -225,7 +213,6 @@ exports.addSale = async (req, res) => {
 
     const revenueTotal = qty * unitPrice;
 
-    // cogs snapshot
     const snap = await getLatestCogsForMenuItem(menuItemId);
     const cogsUnit = toNum(snap?.total_cost);
     const cogsTotal = qty * cogsUnit;
@@ -264,6 +251,9 @@ exports.addSale = async (req, res) => {
       { revenue_total: revenueTotal, cogs_total: cogsTotal }
     );
 
+    // ✅ AUTO-TOUCH MONTHS (revenue/cogs from sales)
+    await touchMonthFromSales(ym);
+
     return res.json(rows[0]);
   } catch (e) {
     console.error("addSale error:", e);
@@ -273,18 +263,12 @@ exports.addSale = async (req, res) => {
 
 /**
  * PUT /api/admin/donas/sales/:id
- * body: { sold_at?, menu_item_id?, qty?, unit_price?, channel?, notes? }
- *
- * ✅ PATCH:
- * Если у текущей продажи COGS пустой (snapshot_id null / cogs_unit 0),
- * то при сохранении подтягиваем latest COGS даже без смены menu_item_id.
  */
 exports.updateSale = async (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: "Bad id" });
 
-    // current row
     const curQ = await db.query(`SELECT * FROM donas_sales WHERE id=$1 LIMIT 1`, [id]);
     const cur = curQ.rows?.[0];
     if (!cur) return res.status(404).json({ error: "Sale not found" });
@@ -303,23 +287,18 @@ exports.updateSale = async (req, res) => {
     const notes = b.notes === undefined ? cur.notes : b.notes == null ? null : String(b.notes);
 
     const newYm = toYmFromDate(soldAt);
-    // если переносим продажу в другой месяц — проверяем и новый месяц тоже
     if (newYm !== curYm && (await isMonthLocked(newYm))) {
       return res.status(409).json({ error: `Month ${newYm} is locked (#locked)` });
     }
 
-    // пересчитываем revenue
     const revenueTotal = qty * unitPrice;
 
-    // cogs
     let cogsSnapshotId = cur.cogs_snapshot_id;
     let cogsUnit = toNum(cur.cogs_unit);
     let cogsTotal = toNum(cur.cogs_total);
 
     const menuItemChanged = Number(menuItemId) !== Number(cur.menu_item_id);
     const qtyChanged = qty !== toNum(cur.qty);
-
-    // ✅ если текущий COGS пустой — лечим при любом сохранении
     const cogsIsEmpty = !cogsSnapshotId || toNum(cur.cogs_unit) <= 0;
 
     if (menuItemChanged || qtyChanged || cogsIsEmpty) {
@@ -365,7 +344,6 @@ exports.updateSale = async (req, res) => {
     );
 
     // ✅ Audit:
-    // 1) sales.update всегда в исходный месяц
     await auditSales(
       req,
       curYm,
@@ -374,7 +352,6 @@ exports.updateSale = async (req, res) => {
       { revenue_total: revenueTotal, cogs_total: cogsTotal }
     );
 
-    // 2) если перенос в другой месяц — отдельная запись sales.move в новый месяц
     if (newYm && newYm !== curYm) {
       await auditSales(
         req,
@@ -383,6 +360,14 @@ exports.updateSale = async (req, res) => {
         { sale_id: id, from: curYm, to: newYm, channel },
         { revenue_total: revenueTotal, cogs_total: cogsTotal }
       );
+    }
+
+    // ✅ AUTO-TOUCH MONTHS:
+    // всегда трогаем исходный месяц
+    await touchMonthFromSales(curYm);
+    // если переехали — трогаем и новый
+    if (newYm && newYm !== curYm) {
+      await touchMonthFromSales(newYm);
     }
 
     return res.json(rows[0]);
@@ -413,6 +398,9 @@ exports.deleteSale = async (req, res) => {
 
     // ✅ Audit: sales.delete
     await auditSales(req, ym, "sales.delete", { sale_id: id }, { deleted: true });
+
+    // ✅ AUTO-TOUCH MONTHS
+    await touchMonthFromSales(ym);
 
     return res.json({ ok: true });
   } catch (e) {
