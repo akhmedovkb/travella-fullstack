@@ -10,10 +10,11 @@ const router = express.Router();
 // base in index.js: /api/admin/donas
 router.get("/sales", authenticateToken, requireAdmin, ctrl.getSales);
 router.post("/sales", authenticateToken, requireAdmin, ctrl.addSale);
+
+// ✅ NEW: bulk repair / recompute cogs for month
+router.post("/sales/recalc-cogs", authenticateToken, requireAdmin, ctrl.recalcCogsMonth);
+
 router.put("/sales/:id", authenticateToken, requireAdmin, ctrl.updateSale);
 router.delete("/sales/:id", authenticateToken, requireAdmin, ctrl.deleteSale);
-
-// ✅ NEW: recalc COGS for month (uses latest donas_cogs)
-router.post("/sales/recalc-cogs", authenticateToken, requireAdmin, ctrl.recalcCogs);
 
 module.exports = router;
