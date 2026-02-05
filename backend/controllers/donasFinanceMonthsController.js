@@ -190,6 +190,10 @@ async function getAllRelevantMonthsYms() {
 }
 
 /**
+ * =========================
+ * Months view (READ)
+ * =========================
+ *
  * Главная витрина месяцев:
  * - unlock: revenue/cogs/opex/capex = auto (sales/purchases)
  * - locked: берём snapshot из таблицы (включая cash_end)
@@ -197,6 +201,9 @@ async function getAllRelevantMonthsYms() {
  *
  * Плюс:
  * - _diff = purchases - snapshot (для locked месяцев)
+ *
+ * IMPORTANT:
+ * Таблица может содержать дубликаты month (нет unique). Поэтому берём только последнюю запись.
  */
 async function computeMonthsView() {
   const allMonths = await getAllRelevantMonthsYms();
@@ -211,7 +218,7 @@ async function computeMonthsView() {
 
   const { rows } = await db.query(
     `
-    SELECT
+    SELECT DISTINCT ON (month)
       id,
       slug,
       to_char(month,'YYYY-MM') as month,
@@ -220,7 +227,7 @@ async function computeMonthsView() {
       updated_at
     FROM donas_finance_months
     WHERE slug=$1
-    ORDER BY month ASC
+    ORDER BY month ASC, updated_at DESC NULLS LAST, id DESC
     `,
     [SLUG]
   );
@@ -237,11 +244,10 @@ async function computeMonthsView() {
 
     const auto = autoMap.get(ym) || { opex: 0, capex: 0, cogs: 0, revenue: 0 };
 
-    // ✅ CLEAN:
+    // ✅ Sales-first:
     // - locked: используем stored snapshot
     // - unlocked: всегда FACT из sales
     const revenue = locked ? storedRevenue : toNum(auto.revenue);
-
     const cogs = locked ? toNum(r.cogs) : toNum(auto.cogs);
     const opex = locked ? toNum(r.opex) : toNum(auto.opex);
     const capex = locked ? toNum(r.capex) : toNum(auto.capex);
@@ -300,6 +306,10 @@ function calcCashEndFromParts(opening, { revenue, cogs, opex, capex, loan_paid }
   return { cf, cash_end: toNum(opening) + cf };
 }
 
+/**
+ * IMPORTANT:
+ * Таблица может содержать дубликаты month (нет unique). Поэтому берём только последнюю запись.
+ */
 async function loadMonthsBaseRows() {
   const settings = await getSettingsRow();
   const openingCash = toNum(settings?.opening_cash);
@@ -307,13 +317,14 @@ async function loadMonthsBaseRows() {
 
   const { rows } = await db.query(
     `
-    SELECT
+    SELECT DISTINCT ON (month)
       id,
       to_char(month,'YYYY-MM') as ym,
-      revenue, cogs, opex, capex, loan_paid, cash_end, notes
+      revenue, cogs, opex, capex, loan_paid, cash_end, notes,
+      updated_at
     FROM donas_finance_months
     WHERE slug=$1
-    ORDER BY month ASC
+    ORDER BY month ASC, updated_at DESC NULLS LAST, id DESC
     `,
     [SLUG]
   );
@@ -352,7 +363,6 @@ async function loadMonthsBaseRows() {
  * - planned: для затронутых месяцев пересчитываем snapshot (включая cash_end)
  */
 function buildPlannedChain({ openingCash, baseMonths, affect }) {
-  // affect(ym) => { type: 'lock'|'resnapshot', scope: 'single'|'upto' } or null
   const items = [];
 
   // current chain
@@ -435,7 +445,6 @@ function buildPlannedChain({ openingCash, baseMonths, affect }) {
     }
 
     if (a?.type === "resnapshot") {
-      // resnapshot только для locked
       planLocked = true;
       notes = addLockedTag(notes);
       revenue = m.auto.revenue;
@@ -523,6 +532,35 @@ function buildPlannedChain({ openingCash, baseMonths, affect }) {
   }
 
   return { items, currentByYm, plannedByYm };
+}
+
+/**
+ * =========================
+ * Chain guards (production)
+ * =========================
+ */
+
+function lastLockedYm(baseMonths) {
+  const locked = (baseMonths || []).filter((m) => !!m.locked).map((m) => m.ym);
+  if (!locked.length) return null;
+  locked.sort();
+  return locked[locked.length - 1];
+}
+
+function isLastLocked(baseMonths, targetYm) {
+  const last = lastLockedYm(baseMonths);
+  return last && String(last) === String(targetYm);
+}
+
+function hasLockedAfter(baseMonths, targetYm) {
+  return (baseMonths || []).some((m) => m.locked && String(m.ym) > String(targetYm));
+}
+
+function hasUnlockedBeforeWithLockedAfter(baseMonths, targetYm) {
+  // если есть locked после target и при этом target сейчас unlocked — lock single "в середине" не разрешаем
+  const target = baseMonths.find((m) => String(m.ym) === String(targetYm));
+  if (!target) return false;
+  return !target.locked && hasLockedAfter(baseMonths, targetYm);
 }
 
 /** ===================== Settings ===================== */
@@ -644,8 +682,7 @@ exports.syncMonths = async (req, res) => {
 
 /**
  * PUT /api/admin/donas/finance/months/:month
- * ✅ CLEAN: вручную можно менять только loan_paid и notes.
- * Revenue берём из Sales (unlock), snapshot — через lock.
+ * ✅ вручную можно менять только loan_paid и notes.
  */
 exports.updateMonth = async (req, res) => {
   try {
@@ -657,7 +694,13 @@ exports.updateMonth = async (req, res) => {
     await ensureMonthRow(month);
 
     const { rows: curRows } = await db.query(
-      `SELECT notes FROM donas_finance_months WHERE slug=$2 AND month=$1::date LIMIT 1`,
+      `
+      SELECT notes
+      FROM donas_finance_months
+      WHERE slug=$2 AND month=$1::date
+      ORDER BY updated_at DESC NULLS LAST, id DESC
+      LIMIT 1
+      `,
       [monthToDate(month), SLUG]
     );
     const curNotes = String(curRows?.[0]?.notes || "");
@@ -670,7 +713,13 @@ exports.updateMonth = async (req, res) => {
     const notes = String(b.notes ?? "");
 
     const before = await db.query(
-      `SELECT loan_paid, notes FROM donas_finance_months WHERE slug=$2 AND month=$1::date LIMIT 1`,
+      `
+      SELECT loan_paid, notes
+      FROM donas_finance_months
+      WHERE slug=$2 AND month=$1::date
+      ORDER BY updated_at DESC NULLS LAST, id DESC
+      LIMIT 1
+      `,
       [monthToDate(month), SLUG]
     );
     const beforeRow = before.rows?.[0] || {};
@@ -713,6 +762,14 @@ exports.lockMonth = async (req, res) => {
     await ensureMonthRow(month);
 
     const base = await loadMonthsBaseRows();
+
+    // Guard: нельзя lock single "в середине", если после есть locked (иначе цепочка будет странной)
+    if (hasUnlockedBeforeWithLockedAfter(base.months, month)) {
+      return res.status(409).json({
+        error: `Cannot lock ${month} because there are locked months after it. Use lock-up-to.`,
+      });
+    }
+
     const target = month;
 
     const planned = buildPlannedChain({
@@ -725,10 +782,18 @@ exports.lockMonth = async (req, res) => {
     if (!row) return res.status(404).json({ error: "Month not found" });
 
     const before = await db.query(
-      `SELECT revenue,cogs,opex,capex,cash_end,notes FROM donas_finance_months WHERE slug=$2 AND month=$1::date LIMIT 1`,
+      `
+      SELECT revenue,cogs,opex,capex,cash_end,notes
+      FROM donas_finance_months
+      WHERE slug=$2 AND month=$1::date
+      ORDER BY updated_at DESC NULLS LAST, id DESC
+      LIMIT 1
+      `,
       [monthToDate(month), SLUG]
     );
     const b = before.rows?.[0] || {};
+
+    const nextNotes = addLockedTag(row.notes);
 
     await db.query(
       `
@@ -744,7 +809,7 @@ exports.lockMonth = async (req, res) => {
         toNum(row.opex),
         toNum(row.capex),
         toNum(row.cash_end),
-        addLockedTag(row.notes),
+        nextNotes,
       ]
     );
 
@@ -757,7 +822,7 @@ exports.lockMonth = async (req, res) => {
         opex: { from: toNum(b.opex), to: toNum(row.opex) },
         capex: { from: toNum(b.capex), to: toNum(row.capex) },
         cash_end: { from: toNum(b.cash_end), to: toNum(row.cash_end) },
-        notes: { from: String(b.notes || ""), to: addLockedTag(row.notes) },
+        notes: { from: String(b.notes || ""), to: nextNotes },
       },
     });
 
@@ -777,18 +842,37 @@ exports.unlockMonth = async (req, res) => {
 
     await ensureMonthRow(month);
 
+    const base = await loadMonthsBaseRows();
+
+    // Guard: unlock только последнего locked (иначе цепочка cash_end ломается)
+    if (!isLastLocked(base.months, month)) {
+      const last = lastLockedYm(base.months);
+      return res.status(409).json({
+        error: `Only the last locked month can be unlocked. Last locked is ${last || "none"}.`,
+      });
+    }
+
     const { rows } = await db.query(
-      `SELECT notes FROM donas_finance_months WHERE slug=$2 AND month=$1::date LIMIT 1`,
+      `
+      SELECT notes
+      FROM donas_finance_months
+      WHERE slug=$2 AND month=$1::date
+      ORDER BY updated_at DESC NULLS LAST, id DESC
+      LIMIT 1
+      `,
       [monthToDate(month), SLUG]
     );
 
     const notes = String(rows?.[0]?.notes || "");
     const newNotes = removeLockedTag(notes);
-
     const beforeNotes = notes;
 
     await db.query(
-      `UPDATE donas_finance_months SET notes=$3, updated_at=NOW() WHERE slug=$2 AND month=$1::date`,
+      `
+      UPDATE donas_finance_months
+      SET notes=$3, updated_at=NOW()
+      WHERE slug=$2 AND month=$1::date
+      `,
       [monthToDate(month), SLUG, newNotes]
     );
 
@@ -817,6 +901,65 @@ exports.resnapshotMonth = async (req, res) => {
     const base = await loadMonthsBaseRows();
     const target = month;
 
+    // Если после target есть locked — делаем chain resnapshot target..lastLocked, чтобы cash_end совпал
+    const last = lastLockedYm(base.months);
+    const doChain = last && String(last) > String(target);
+
+    if (doChain) {
+      // обновим все locked в диапазоне [target..last]
+      let updated = 0;
+
+      const planned = buildPlannedChain({
+        openingCash: base.openingCash,
+        baseMonths: base.months,
+        affect: (ym) => {
+          if (String(ym) < String(target)) return null;
+          if (String(ym) > String(last)) return null;
+          const m = base.months.find((x) => x.ym === ym);
+          if (!m?.locked) return null;
+          return { type: "resnapshot" };
+        },
+      });
+
+      for (const m of base.months) {
+        const ym = m.ym;
+        if (String(ym) < String(target) || String(ym) > String(last)) continue;
+        if (!m.locked) continue;
+
+        const row = planned.plannedByYm.get(ym);
+        if (!row) continue;
+
+        await db.query(
+          `
+          UPDATE donas_finance_months
+          SET revenue=$3, cogs=$4, opex=$5, capex=$6, cash_end=$7, notes=$8, updated_at=NOW()
+          WHERE slug=$2 AND month=$1::date
+          `,
+          [
+            monthToDate(ym),
+            SLUG,
+            toNum(row.revenue),
+            toNum(row.cogs),
+            toNum(row.opex),
+            toNum(row.capex),
+            toNum(row.cash_end),
+            addLockedTag(row.notes),
+          ]
+        );
+
+        updated += 1;
+      }
+
+      await logAudit(req, {
+        action: "month.resnapshot_chain",
+        ym: month,
+        diff: { from: target, to: last, updated },
+      });
+
+      return res.json({ ok: true, updated, chain: { from: target, to: last } });
+    }
+
+    // обычный single resnapshot
     const planned = buildPlannedChain({
       openingCash: base.openingCash,
       baseMonths: base.months,
@@ -827,7 +970,13 @@ exports.resnapshotMonth = async (req, res) => {
     if (!row) return res.status(404).json({ error: "Month not found" });
 
     const before = await db.query(
-      `SELECT revenue,cogs,opex,capex,cash_end,notes FROM donas_finance_months WHERE slug=$2 AND month=$1::date LIMIT 1`,
+      `
+      SELECT revenue,cogs,opex,capex,cash_end,notes
+      FROM donas_finance_months
+      WHERE slug=$2 AND month=$1::date
+      ORDER BY updated_at DESC NULLS LAST, id DESC
+      LIMIT 1
+      `,
       [monthToDate(month), SLUG]
     );
     const b = before.rows?.[0] || {};
