@@ -1,7 +1,7 @@
 // frontend/src/pages/admin/DonasDosasFinanceOverview.jsx
 
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { apiGet, apiPut } from "../../api";
 
 function toNum(x) {
@@ -14,7 +14,48 @@ function fmt(n) {
   return v.toLocaleString("ru-RU");
 }
 
+function ymFromDateLike(x) {
+  const s = String(x || "");
+  if (!s) return "";
+  if (/^\d{4}-\d{2}/.test(s)) return s.slice(0, 7);
+  if (/^\d{4}-\d{2}$/.test(s)) return s;
+  return "";
+}
+
+function isLockedNotes(notes) {
+  return String(notes || "").toLowerCase().includes("#locked");
+}
+
+function money(n) {
+  return Math.round(toNum(n)).toLocaleString("ru-RU");
+}
+
+function Kpi({ title, value }) {
+  return (
+    <div className="rounded-2xl bg-white ring-1 ring-black/10 p-3">
+      <div className="text-xs text-black/50">{title}</div>
+      <div className="text-lg font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function Field({ label, value, onChange, numeric }) {
+  return (
+    <label className="block">
+      <div className="text-xs text-black/60 mb-1">{label}</div>
+      <input
+        className="w-full rounded-xl border border-black/10 px-3 py-2 text-sm"
+        value={value ?? ""}
+        inputMode={numeric ? "numeric" : undefined}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </label>
+  );
+}
+
 export default function DonasDosasFinanceOverview() {
+  const nav = useNavigate();
+
   const [loading, setLoading] = useState(true);
 
   const [settings, setSettings] = useState(null);
@@ -22,23 +63,25 @@ export default function DonasDosasFinanceOverview() {
   const [savingSettings, setSavingSettings] = useState(false);
 
   const [months, setMonths] = useState([]);
+  const [err, setErr] = useState("");
 
   const loadAll = async () => {
     setLoading(true);
+    setErr("");
     try {
       const [s, ms] = await Promise.all([
         apiGet("/api/admin/donas/finance/settings", "provider"),
         apiGet("/api/admin/donas/finance/months", "provider"),
       ]);
 
-      // settings: поддерживаем оба формата (settings или плоский объект)
-      const st = (s && (s.settings || s)) || null;
-      setSettings(st);
-      setSettingsDraft(st ? { ...st } : null);
+      const settingsObj = (s && (s.settings || s)) || null;
+      setSettings(settingsObj);
+      setSettingsDraft(settingsObj ? { ...settingsObj } : null);
 
-      // months: поддерживаем оба формата (array или {months:[]})
       const arr = Array.isArray(ms) ? ms : Array.isArray(ms?.months) ? ms.months : [];
       setMonths(arr);
+    } catch (e) {
+      setErr(e?.data?.error || e?.message || "Failed to load finance overview");
     } finally {
       setLoading(false);
     }
@@ -49,12 +92,18 @@ export default function DonasDosasFinanceOverview() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const last = useMemo(() => {
-    if (!months?.length) return null;
-    return months[months.length - 1];
+  const currency = settingsDraft?.currency || settings?.currency || "UZS";
+
+  const sorted = useMemo(() => {
+    const a = Array.isArray(months) ? months.slice() : [];
+    a.sort((x, y) => String(x.month || "").localeCompare(String(y.month || "")));
+    return a;
   }, [months]);
 
-  const currency = (settings?.currency || "UZS").toString();
+  const last = useMemo(() => {
+    if (!sorted.length) return null;
+    return sorted[sorted.length - 1];
+  }, [sorted]);
 
   const kpis = useMemo(() => {
     if (!last) return null;
@@ -63,15 +112,28 @@ export default function DonasDosasFinanceOverview() {
     const opex = toNum(last.opex);
     const capex = toNum(last.capex);
     const loan = toNum(last.loan_paid);
-    const gross = revenue - cogs;
-    const netOp = gross - opex;
-    const cf = netOp - capex - loan;
-    return { revenue, cogs, opex, capex, loan, gross, netOp, cf, cashEnd: toNum(last.cash_end) };
+
+    const gp = revenue - cogs;
+    const netOp = gp - opex;
+    const cf = netOp - loan - capex;
+
+    return {
+      revenue,
+      cogs,
+      opex,
+      capex,
+      loan,
+      gp,
+      netOp,
+      cf,
+      cashEnd: toNum(last.cash_end),
+    };
   }, [last]);
 
   const saveSettings = async () => {
     if (!settingsDraft) return;
     setSavingSettings(true);
+    setErr("");
     try {
       const payload = {
         currency: settingsDraft.currency ?? "UZS",
@@ -81,10 +143,14 @@ export default function DonasDosasFinanceOverview() {
         loan_payment_month: toNum(settingsDraft.loan_payment_month),
         reserve_target_months: toNum(settingsDraft.reserve_target_months),
       };
+
       const r = await apiPut("/api/admin/donas/finance/settings", payload, "provider");
-      const merged = (r && (r.settings || r)) || payload;
-      setSettings(merged);
-      setSettingsDraft((d) => ({ ...(d || {}), ...merged }));
+      const next = r || payload;
+
+      setSettings(next);
+      setSettingsDraft((d) => ({ ...(d || {}), ...next }));
+    } catch (e) {
+      setErr(e?.data?.error || e?.message || "Failed to save settings");
     } finally {
       setSavingSettings(false);
     }
@@ -96,48 +162,19 @@ export default function DonasDosasFinanceOverview() {
 
   return (
     <div className="space-y-4">
-      {/* Top actions */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <div className="text-sm font-semibold">Dona’s Dosas — Finance</div>
-          <div className="text-xs text-black/50">
-            Overview (KPI + Settings). Управление месяцами и выручкой/COGS — в соответствующих вкладках.
-          </div>
+      {err && (
+        <div className="p-3 rounded-xl bg-red-50 text-red-700 border border-red-200">
+          {err}
         </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Link
-            to="/admin/donas-dosas/finance/months"
-            className="px-3 py-1.5 rounded-full text-sm bg-black text-white hover:bg-black/90"
-          >
-            Open Months
-          </Link>
-
-          <Link
-            to="/admin/donas-dosas/finance/sales"
-            className="px-3 py-1.5 rounded-full text-sm bg-white ring-1 ring-black/10 hover:bg-black/5"
-          >
-            Open Sales
-          </Link>
-
-          <button
-            type="button"
-            onClick={loadAll}
-            className="px-3 py-1.5 rounded-full text-sm bg-white ring-1 ring-black/10 hover:bg-black/5"
-          >
-            Refresh
-          </button>
-        </div>
-      </div>
+      )}
 
       {/* KPI row */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-        <Kpi title="Revenue (last)" value={kpis ? fmt(kpis.revenue) : "—"} hint={currency} />
-        <Kpi title="COGS (last)" value={kpis ? fmt(kpis.cogs) : "—"} hint={currency} />
-        <Kpi title="Gross Profit" value={kpis ? fmt(kpis.gross) : "—"} hint={currency} />
-        <Kpi title="OPEX (last)" value={kpis ? fmt(kpis.opex) : "—"} hint={currency} />
-        <Kpi title="Net Op" value={kpis ? fmt(kpis.netOp) : "—"} hint={currency} />
-        <Kpi title="Cash end (last)" value={kpis ? fmt(kpis.cashEnd) : "—"} hint={currency} />
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <Kpi title="Revenue (last)" value={kpis ? fmt(kpis.revenue) : "—"} />
+        <Kpi title="Gross Profit" value={kpis ? fmt(kpis.gp) : "—"} />
+        <Kpi title="OPEX" value={kpis ? fmt(kpis.opex) : "—"} />
+        <Kpi title="Net Op" value={kpis ? fmt(kpis.netOp) : "—"} />
+        <Kpi title="Cash end" value={kpis ? fmt(kpis.cashEnd) : "—"} />
       </div>
 
       {/* Settings */}
@@ -146,8 +183,8 @@ export default function DonasDosasFinanceOverview() {
           <div>
             <div className="text-sm font-semibold">Settings</div>
             <div className="text-xs text-black/50">
-              Эти значения используются для подсказок/план-фрейма. История по месяцам считается и
-              фиксируется в Months (#locked).
+              Эти значения используются для подсказок/план-фрейма. Месяцы (revenue/cogs/opex/capex)
+              считаются автоматически из Sales + Purchases. Ручное редактирование месяцев — во вкладке Months.
             </div>
           </div>
           <button
@@ -175,71 +212,136 @@ export default function DonasDosasFinanceOverview() {
           <Field
             label="Reserve target (months)"
             value={settingsDraft?.reserve_target_months ?? 0}
-            onChange={(v) => setSettingsDraft((s) => ({ ...(s || {}), reserve_target_months: v }))}
+            onChange={(v) =>
+              setSettingsDraft((s) => ({ ...(s || {}), reserve_target_months: v }))
+            }
             numeric
           />
           <Field
             label="Fixed OPEX / month"
             value={settingsDraft?.fixed_opex_month ?? 0}
-            onChange={(v) => setSettingsDraft((s) => ({ ...(s || {}), fixed_opex_month: v }))}
+            onChange={(v) =>
+              setSettingsDraft((s) => ({ ...(s || {}), fixed_opex_month: v }))
+            }
             numeric
           />
           <Field
             label="Variable OPEX / month"
             value={settingsDraft?.variable_opex_month ?? 0}
-            onChange={(v) => setSettingsDraft((s) => ({ ...(s || {}), variable_opex_month: v }))}
+            onChange={(v) =>
+              setSettingsDraft((s) => ({ ...(s || {}), variable_opex_month: v }))
+            }
             numeric
           />
           <Field
             label="Loan payment / month"
             value={settingsDraft?.loan_payment_month ?? 0}
-            onChange={(v) => setSettingsDraft((s) => ({ ...(s || {}), loan_payment_month: v }))}
+            onChange={(v) =>
+              setSettingsDraft((s) => ({ ...(s || {}), loan_payment_month: v }))
+            }
             numeric
           />
         </div>
       </div>
 
-      {/* Small info card */}
-      <div className="rounded-2xl bg-white ring-1 ring-black/10 p-4">
-        <div className="text-sm font-semibold">How it works now</div>
-        <ul className="mt-2 text-sm text-black/60 space-y-1 list-disc pl-5">
-          <li>
-            <b>Sales</b> → считает <b>Revenue</b> и <b>COGS</b>
-          </li>
-          <li>
-            <b>Purchases</b> → считает <b>OPEX</b> и <b>CAPEX</b>
-          </li>
-          <li>
-            <b>Months</b> → строит цепочку <b>cash_end</b>, и умеет делать снепшоты через <b>#locked</b>
-          </li>
-        </ul>
-      </div>
-    </div>
-  );
-}
+      {/* Months (read-only preview) */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm font-semibold">Months</div>
+            <div className="text-xs text-black/50">
+              Валюта: {currency}. Для Lock/Unlock/Preview/Audit и редактирования loan_paid/notes — открой Months.
+            </div>
+          </div>
 
-function Field({ label, value, onChange, numeric }) {
-  return (
-    <label className="block">
-      <div className="text-xs text-black/60 mb-1">{label}</div>
-      <input
-        className="w-full rounded-xl border border-black/10 px-3 py-2 text-sm"
-        value={value ?? ""}
-        inputMode={numeric ? "numeric" : undefined}
-        onChange={(e) => onChange(e.target.value)}
-      />
-    </label>
-  );
-}
+          <button
+            type="button"
+            onClick={() => nav("/admin/donas-dosas/finance/months")}
+            className="px-3 py-1.5 rounded-full text-sm bg-white ring-1 ring-black/10 hover:bg-black/5"
+          >
+            Open Months →
+          </button>
+        </div>
 
-function Kpi({ title, value, hint }) {
-  return (
-    <div className="rounded-2xl bg-white ring-1 ring-black/10 p-3">
-      <div className="flex items-center justify-between gap-2">
-        <div className="text-xs text-black/50">{title}</div>
-        {hint ? <div className="text-[11px] text-black/40">{hint}</div> : null}
+        <div className="overflow-auto rounded-2xl ring-1 ring-black/10 bg-white">
+          <table className="min-w-[1100px] w-full text-left">
+            <thead className="bg-black/5 text-xs text-black/60">
+              <tr>
+                <th className="py-2 px-3">Month</th>
+                <th className="py-2 px-3 text-right">Revenue</th>
+                <th className="py-2 px-3 text-right">COGS</th>
+                <th className="py-2 px-3 text-right">OPEX</th>
+                <th className="py-2 px-3 text-right">CAPEX</th>
+                <th className="py-2 px-3 text-right">Loan</th>
+                <th className="py-2 px-3 text-right">CF</th>
+                <th className="py-2 px-3 text-right">Cash end</th>
+                <th className="py-2 px-3">Notes</th>
+              </tr>
+            </thead>
+
+            <tbody className="text-sm">
+              {sorted.map((m) => {
+                const ym = ymFromDateLike(m.month);
+                const locked = isLockedNotes(m.notes);
+
+                const revenue = toNum(m.revenue);
+                const cogs = toNum(m.cogs);
+                const opex = toNum(m.opex);
+                const capex = toNum(m.capex);
+                const loan = toNum(m.loan_paid);
+
+                const gp = revenue - cogs;
+                const netOp = gp - opex;
+                const cf = netOp - loan - capex;
+
+                return (
+                  <tr
+                    key={ym}
+                    className={[
+                      "border-t border-black/5",
+                      locked ? "bg-black/[0.02]" : "",
+                    ].join(" ")}
+                  >
+                    <td className="py-2 px-3 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <div className="font-medium">{ym}</div>
+                        {locked && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full border bg-white">
+                            locked
+                          </span>
+                        )}
+                      </div>
+                    </td>
+
+                    <td className="py-2 px-3 text-right">{money(revenue)}</td>
+                    <td className="py-2 px-3 text-right">{money(cogs)}</td>
+                    <td className="py-2 px-3 text-right">{money(opex)}</td>
+                    <td className="py-2 px-3 text-right">{money(capex)}</td>
+                    <td className="py-2 px-3 text-right">{money(loan)}</td>
+                    <td className="py-2 px-3 text-right">{money(cf)}</td>
+                    <td className="py-2 px-3 text-right font-semibold">{money(m.cash_end)}</td>
+                    <td className="py-2 px-3 text-xs text-black/60 max-w-[320px] truncate">
+                      {String(m.notes || "")}
+                    </td>
+                  </tr>
+                );
+              })}
+
+              {!sorted.length && (
+                <tr>
+                  <td colSpan={9} className="py-6 px-3 text-center text-black/50">
+                    Нет месяцев. Открой Months и нажми Sync или Add month.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="text-xs text-black/50">
+          Подсказка: фиксация месяца делается кнопкой Lock во вкладке Months (а не ручным вводом #locked).
+        </div>
       </div>
-      <div className="text-lg font-semibold">{value}</div>
     </div>
   );
 }
