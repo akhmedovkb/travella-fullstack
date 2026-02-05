@@ -1,5 +1,5 @@
 // frontend/src/api.js
-function getApiBase() {
+export function getApiBase() {
   const env =
     (import.meta?.env?.VITE_API_BASE_URL || import.meta?.env?.VITE_API_URL || "").trim();
   const runtime =
@@ -8,7 +8,7 @@ function getApiBase() {
   return (env || runtime).replace(/\/+$/, "");
 }
 
-const buildUrl = (path) => {
+export const buildUrl = (path) => {
   const base = getApiBase();
   if (!base) {
     console.warn("[API] Empty API base, request will go to same-origin:", path);
@@ -26,8 +26,9 @@ const buildUrl = (path) => {
 };
 
 function getTokenByRole(role) {
-  if (role === "client")   return localStorage.getItem("clientToken");
-  if (role === "provider") return localStorage.getItem("providerToken") || localStorage.getItem("token");
+  if (role === "client") return localStorage.getItem("clientToken");
+  if (role === "provider")
+    return localStorage.getItem("providerToken") || localStorage.getItem("token");
   // по умолчанию: предпочитаем провайдера/админа
   return (
     localStorage.getItem("token") ||
@@ -35,6 +36,7 @@ function getTokenByRole(role) {
     localStorage.getItem("clientToken")
   );
 }
+
 export function getAuthHeaders(role = null) {
   const token = getTokenByRole(role);
   return token ? { Authorization: `Bearer ${token}` } : {};
@@ -43,9 +45,15 @@ export function getAuthHeaders(role = null) {
 async function handle(res) {
   const text = await res.text();
   let data = null;
-  try { data = text ? JSON.parse(text) : null; } catch { data = null; }
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = null;
+  }
   if (!res.ok) {
-    const err = new Error((data && (data.error || data.message)) || res.statusText || `HTTP ${res.status}`);
+    const err = new Error(
+      (data && (data.error || data.message)) || res.statusText || `HTTP ${res.status}`
+    );
     err.status = res.status;
     err.data = data || {};
     if (data && (data.error || data.code)) err.code = data.error || data.code;
@@ -62,25 +70,39 @@ function buildHeaders(withAuthOrRole) {
 }
 
 export async function apiGet(path, withAuthOrRole = true) {
-  const res = await fetch(buildUrl(path), { headers: buildHeaders(withAuthOrRole), credentials: "include" });
+  const res = await fetch(buildUrl(path), {
+    headers: buildHeaders(withAuthOrRole),
+    credentials: "include",
+  });
   return handle(res);
 }
+
 export async function apiPost(path, body, withAuthOrRole = true) {
   const res = await fetch(buildUrl(path), {
-    method: "POST", headers: buildHeaders(withAuthOrRole), body: JSON.stringify(body ?? {}), credentials: "include",
+    method: "POST",
+    headers: buildHeaders(withAuthOrRole),
+    body: JSON.stringify(body ?? {}),
+    credentials: "include",
   });
   return handle(res);
 }
+
 export async function apiPut(path, body, withAuthOrRole = true) {
   const res = await fetch(buildUrl(path), {
-    method: "PUT", headers: buildHeaders(withAuthOrRole), body: JSON.stringify(body ?? {}), credentials: "include",
+    method: "PUT",
+    headers: buildHeaders(withAuthOrRole),
+    body: JSON.stringify(body ?? {}),
+    credentials: "include",
   });
   return handle(res);
 }
+
 export async function apiDelete(path, body, withAuthOrRole = true) {
   const res = await fetch(buildUrl(path), {
-    method: "DELETE", headers: buildHeaders(withAuthOrRole),
-    body: body ? JSON.stringify(body) : undefined, credentials: "include",
+    method: "DELETE",
+    headers: buildHeaders(withAuthOrRole),
+    body: body ? JSON.stringify(body) : undefined,
+    credentials: "include",
   });
   return handle(res);
 }
