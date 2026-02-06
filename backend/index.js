@@ -18,6 +18,7 @@ const adminDonasOpexRoutes = require("./routes/adminDonasOpexRoutes");
 const adminDonasFinanceMonthsRoutes = require("./routes/adminDonasFinanceMonthsRoutes");
 const adminDonasSalesRoutes = require("./routes/adminDonasSalesRoutes");
 const adminDonasFinanceRoutes = require("./routes/adminDonasFinanceRoutes");
+const donasShareRoutes = require("./routes/donasShareRoutes");
 
 dotenv.config();
 const app = express();
@@ -1042,7 +1043,7 @@ app.use("/api/admin/donas/opex", adminDonasOpexRoutes);
 app.use("/api/admin/donas/finance", adminDonasFinanceRoutes);
 app.use("/api/admin/donas/finance", adminDonasFinanceMonthsRoutes);
 app.use("/api/admin/donas", adminDonasSalesRoutes);
-
+app.use("/", donasShareRoutes);
 
 /** ===================== Start (в самом конце) ===================== */
 const PORT = process.env.PORT || 5000;
