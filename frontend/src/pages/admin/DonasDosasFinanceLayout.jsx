@@ -35,6 +35,7 @@ export default function DonasDosasFinanceLayout() {
         <Tab to="" end label="Overview" />
         <Tab to="months" label="Months" />
         <Tab to="sales" label="Sales" />
+        <Tab to="sales-margin" label="Monthly Sales Margin" />
         <Tab to="opex" label="OPEX" />
         <Tab to="capex" label="CAPEX" />
         <Tab to="cogs" label="COGS" />
