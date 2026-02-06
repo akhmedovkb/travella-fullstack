@@ -28,14 +28,6 @@ function nextYm(ym) {
   return `${yy}-${mm}`;
 }
 
-function prevYm(ym) {
-  const [y, m] = String(ym).split("-").map((v) => Number(v));
-  const d = new Date(Date.UTC(y, (m - 1) - 1, 1)); // prev month
-  const yy = d.getUTCFullYear();
-  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
-  return `${yy}-${mm}`;
-}
-
 async function listMonthsRange(startYm, endYm) {
   const { rows } = await db.query(
     `
@@ -96,31 +88,7 @@ async function isLockedMonth(ym) {
   return hasLockedTag(r?.notes || "");
 }
 
-/**
- * Возвращает последний существующий YM в donas_finance_months (по max(month)).
- * Если таблица пустая — вернём endYm (чтобы не уходить в бесконечность).
- */
-async function getLastExistingYmFallback(endYm) {
-  try {
-    const q = await db.query(
-      `
-      SELECT to_char(MAX(month), 'YYYY-MM') AS ym
-      FROM donas_finance_months
-      WHERE slug=$1
-      `,
-      [SLUG]
-    );
-    const ym = q.rows?.[0]?.ym || "";
-    if (isYm(ym)) return ym;
-  } catch (e) {
-    console.error("getLastExistingYmFallback error:", e);
-  }
-  return endYm;
-}
-
-/**
- * Sales → revenue/cogs
- */
+// Sales → revenue/cogs
 async function getSalesAggForMonth(ym) {
   const { rows } = await db.query(
     `
@@ -136,9 +104,7 @@ async function getSalesAggForMonth(ym) {
   return { revenue: toNum(r.revenue), cogs: toNum(r.cogs) };
 }
 
-/**
- * Purchases → opex/capex
- */
+// Purchases → opex/capex
 async function getPurchasesAggForMonth(ym) {
   const { rows } = await db.query(
     `
@@ -154,20 +120,12 @@ async function getPurchasesAggForMonth(ym) {
   return { opex: toNum(r.opex), capex: toNum(r.capex) };
 }
 
-/**
- * Обновляем агрегаты в "последней" строке месяца (latest id),
- * НЕ трогаем loan_paid, notes.
- * Если месяц locked — ничего не обновляем.
- */
 async function updateMonthAgg(ym) {
-  if (!isYm(ym)) return { ym, ok: false, reason: "bad_ym" };
-
-  const row = await ensureMonthRow(ym);
-  const locked = hasLockedTag(row?.notes || "");
-
-  if (locked) {
+  if (await isLockedMonth(ym)) {
     return { ym, ok: true, locked: true, updated: false };
   }
+
+  await ensureMonthRow(ym);
 
   const [sales, pur] = await Promise.all([getSalesAggForMonth(ym), getPurchasesAggForMonth(ym)]);
 
@@ -178,26 +136,17 @@ async function updateMonthAgg(ym) {
         cogs=$2,
         opex=$3,
         capex=$4
-    WHERE id=$5
+    WHERE slug=$5 AND month=($6)::date
     `,
-    [sales.revenue, sales.cogs, pur.opex, pur.capex, row.id]
+    [sales.revenue, sales.cogs, pur.opex, pur.capex, SLUG, ymToMonthDate(ym)]
   );
 
-  return { ym, ok: true, locked: false, updated: true, ...sales, ...pur, id: row.id };
+  return { ym, ok: true, locked: false, updated: true, ...sales, ...pur };
 }
 
-/**
- * cash_end chain:
- * - стартуем с startYm
- * - cash_end(startYm) = cash_end(prevYm) + CF(startYm)
- * - CF = revenue - cogs - opex - capex - loan_paid
- * - loan_paid НЕ пересчитываем (используем то, что уже в строке месяца)
- * - стоп на первом #locked (и locked месяц не обновляем, и дальше не идём)
- */
+// cash_end chain: stop on #locked month
 async function recomputeCashChainFrom(startYm, endYm) {
-  if (!isYm(startYm) || !isYm(endYm)) return [];
-
-  // ensure every month row exists in range
+  // ensure every month row exists
   let cur = startYm;
   while (true) {
     await ensureMonthRow(cur);
@@ -205,12 +154,17 @@ async function recomputeCashChainFrom(startYm, endYm) {
     cur = nextYm(cur);
   }
 
-  // читаем все строки в диапазоне и берём latest по месяцу
   const rows = await listMonthsRange(startYm, endYm);
   const byMonth = pickLastByMonth(rows);
 
-  // prev cash_end
-  const pYm = prevYm(startYm);
+  // prevYm
+  const [sy, sm] = startYm.split("-").map(Number);
+  const prevDate = new Date(Date.UTC(sy, sm - 2, 1));
+  const prevYm = `${prevDate.getUTCFullYear()}-${String(prevDate.getUTCMonth() + 1).padStart(
+    2,
+    "0"
+  )}`;
+
   let prevCash = 0;
   try {
     const prevRowQ = await db.query(
@@ -221,7 +175,7 @@ async function recomputeCashChainFrom(startYm, endYm) {
       ORDER BY id DESC
       LIMIT 1
       `,
-      [SLUG, ymToMonthDate(pYm)]
+      [SLUG, ymToMonthDate(prevYm)]
     );
     if (prevRowQ.rows?.[0]) prevCash = toNum(prevRowQ.rows[0].cash_end);
   } catch {
@@ -236,21 +190,15 @@ async function recomputeCashChainFrom(startYm, endYm) {
     const locked = hasLockedTag(row?.notes || "");
 
     if (locked) {
-      results.push({
-        ym: cur,
-        locked: true,
-        cash_end: toNum(row.cash_end),
-        updated: false,
-        id: row.id,
-      });
-      break; // стоп цепочки
+      results.push({ ym: cur, locked: true, cash_end: toNum(row.cash_end), updated: false });
+      break;
     }
 
     const revenue = toNum(row.revenue);
     const cogs = toNum(row.cogs);
     const opex = toNum(row.opex);
     const capex = toNum(row.capex);
-    const loan = toNum(row.loan_paid); // ✅ ручное поле, НЕ трогаем
+    const loan = toNum(row.loan_paid);
 
     const cf = revenue - cogs - opex - capex - loan;
     const cashEnd = prevCash + cf;
@@ -259,19 +207,12 @@ async function recomputeCashChainFrom(startYm, endYm) {
       `
       UPDATE donas_finance_months
       SET cash_end=$1
-      WHERE id=$2
+      WHERE slug=$2 AND month=($3)::date
       `,
-      [cashEnd, row.id]
+      [cashEnd, SLUG, ymToMonthDate(cur)]
     );
 
-    results.push({
-      ym: cur,
-      locked: false,
-      cash_end: cashEnd,
-      updated: true,
-      id: row.id,
-      cf,
-    });
+    results.push({ ym: cur, locked: false, cash_end: cashEnd, updated: true });
 
     prevCash = cashEnd;
 
@@ -283,10 +224,7 @@ async function recomputeCashChainFrom(startYm, endYm) {
 }
 
 /**
- * PUBLIC: full auto-touch
- * - обновляет аггрегаты sales+purchases для uniq ym
- * - cash_end пересчитывает от minYm до последнего существующего месяца (чтобы протянуть цепочку)
- * - стоп на #locked
+ * PUBLIC: full auto-touch for months (sales+purchases + cash_end chain + locked stop)
  */
 async function touchMonthsFromYms(yms = []) {
   const list = (yms || []).filter(Boolean).filter(isYm);
@@ -294,21 +232,12 @@ async function touchMonthsFromYms(yms = []) {
   if (!uniq.length) return { ok: true, touched: [], cash: [] };
 
   const startYm = uniq[0];
+  const endYm = uniq[uniq.length - 1];
 
-  // агрегаты обновляем только на затронутых месяцах
   const touched = [];
   for (const ym of uniq) {
     touched.push(await updateMonthAgg(ym));
   }
-
-  // cash_end надо протянуть дальше — до последнего существующего месяца
-  const lastExistingYm = await getLastExistingYmFallback(uniq[uniq.length - 1]);
-
-  // endYm для цепочки: максимум(lastExisting, lastTouched)
-  const lastTouchedYm = uniq[uniq.length - 1];
-  const endYm = String(lastExistingYm).localeCompare(String(lastTouchedYm)) >= 0
-    ? lastExistingYm
-    : lastTouchedYm;
 
   const cash = await recomputeCashChainFrom(startYm, endYm);
 
