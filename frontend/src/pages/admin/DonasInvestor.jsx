@@ -96,7 +96,10 @@ function SparkLine({ points, height = 44 }) {
   const w = 220;
   const h = height;
 
-  const safe = Array.isArray(points) ? points.map((p) => toNum(p)).filter((x) => Number.isFinite(x)) : [];
+  const safe = Array.isArray(points)
+    ? points.map((p) => toNum(p)).filter((x) => Number.isFinite(x))
+    : [];
+
   if (!safe.length) {
     return (
       <div className="h-[44px] w-[220px] rounded-lg border bg-gray-50 flex items-center justify-center text-xs text-gray-500">
@@ -120,9 +123,7 @@ function SparkLine({ points, height = 44 }) {
     return h - pad - t * (h - pad * 2);
   };
 
-  const d = safe
-    .map((v, i) => `${scaleX(i)},${scaleY(v)}`)
-    .join(" ");
+  const d = safe.map((v, i) => `${scaleX(i)},${scaleY(v)}`).join(" ");
 
   return (
     <svg width={w} height={h} className="rounded-lg border bg-white">
@@ -141,6 +142,17 @@ function SparkLine({ points, height = 44 }) {
       />
     </svg>
   );
+}
+
+function normalizeMonths(resp) {
+  if (Array.isArray(resp)) return resp;
+  if (Array.isArray(resp?.months)) return resp.months;
+  return [];
+}
+
+function normalizeSettings(resp) {
+  // иногда apiGet может вернуть {settings:{...}} или просто {...}
+  return (resp && (resp.settings || resp)) || null;
 }
 
 export default function DonasInvestor() {
@@ -163,12 +175,7 @@ export default function DonasInvestor() {
   const [shareToken, setShareToken] = useState("");
 
   const currency = settings?.currency || "UZS";
-  const reserveTargetMonths = toNum(settings?.reserve_target_months || settings?.reserve_target_months || settings?.reserve_target_months || settings?.reserve_target_months); // noop safe
-  const reserveTarget = toNum(settings?.reserve_target_months ?? settings?.reserve_target_months ?? settings?.reserve_target_months);
-  const reserveMonths = toNum(settings?.reserve_target_months ?? settings?.reserve_target_months ?? settings?.reserve_target_months);
-  // ✅ правильное поле у тебя в settings: reserve_target_months (как на скрине внизу таблицы)
-  const reserve_target_months = toNum(settings?.reserve_target_months || settings?.reserve_target_months || settings?.reserve_target_months);
-  const targetMonths = toNum(settings?.reserve_target_months ?? settings?.reserve_target_months ?? settings?.reserve_target_months) || toNum(settings?.reserve_target_months || 0);
+  const targetMonths = toNum(settings?.reserve_target_months || 0);
 
   const loadAdmin = async () => {
     setErr("");
@@ -176,8 +183,8 @@ export default function DonasInvestor() {
     try {
       const s = await apiGet("/api/admin/donas/finance/settings", "provider");
       const m = await apiGet("/api/admin/donas/finance/months", "provider");
-      setSettings(s || null);
-      setMonths(Array.isArray(m) ? m : []);
+      setSettings(normalizeSettings(s));
+      setMonths(normalizeMonths(m));
       setMeta({ mode: "admin" });
     } catch (e) {
       setErr(e?.message || "Failed to load");
@@ -194,10 +201,9 @@ export default function DonasInvestor() {
         `/api/public/donas/summary-range-token?t=${encodeURIComponent(token)}`,
         false
       );
-      // ожидаем { meta, settings, months, totals }
       setMeta(r?.meta || null);
-      setSettings(r?.settings || null);
-      setMonths(Array.isArray(r?.months) ? r.months : []);
+      setSettings(normalizeSettings(r?.settings || r?.settings));
+      setMonths(normalizeMonths(r));
     } catch (e) {
       setErr(e?.message || "Failed to load public investor view");
     } finally {
@@ -216,7 +222,6 @@ export default function DonasInvestor() {
       return;
     }
 
-    // admin mode
     loadAdmin();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPublicPath, t]);
@@ -260,7 +265,6 @@ export default function DonasInvestor() {
     };
   }, [last3Tail]);
 
-  // ✅ Alerts
   const alerts = useMemo(() => {
     const out = [];
     if (!last) return out;
@@ -309,11 +313,12 @@ export default function DonasInvestor() {
     return out;
   }, [last, targetMonths]);
 
-  // ✅ Charts series
   const cashSeries = useMemo(() => rows.map((x) => x._calc.cashEnd), [rows]);
-  const runwaySeries = useMemo(() => rows.map((x) => (x._calc.runway == null ? NaN : x._calc.runway)), [rows]);
+  const runwaySeries = useMemo(
+    () => rows.map((x) => (x._calc.runway == null ? NaN : x._calc.runway)),
+    [rows]
+  );
 
-  // ✅ Forecast runway: если NetOp = avg 3 мес (точнее — avg cashflow)
   const forecast = useMemo(() => {
     if (!last) return null;
     const avgCF = last3.cashFlow_avg;
@@ -328,14 +333,12 @@ export default function DonasInvestor() {
       months: 6,
     });
 
-    // сколько месяцев до cash<=0 (грубо)
     let monthsToZero = null;
     if (avgCF < 0) {
       const m = last._calc.cashEnd / Math.abs(avgCF);
       monthsToZero = Number.isFinite(m) ? m : null;
     }
 
-    // сколько месяцев до target (reserve)
     let monthsToTarget = null;
     if (targetMonths > 0) {
       const targetCash = avgDenom * targetMonths;
@@ -392,8 +395,10 @@ export default function DonasInvestor() {
         <div>
           <h1 className="text-2xl font-semibold">Dona’s Dosas — Investor</h1>
           <p className="text-sm text-gray-600">
-            {isPublicPath ? "Public view (tokenized)" : "Admin view"} · DSCR / runway / cash_end · plan/fact на базе actuals
+            {isPublicPath ? "Public view (tokenized)" : "Admin view"} · DSCR / runway / cash_end ·
+            plan/fact на базе actuals
           </p>
+
           {meta?.slug && (
             <div className="mt-1 text-xs text-gray-500">
               slug: <span className="font-mono">{meta.slug}</span>
@@ -424,9 +429,7 @@ export default function DonasInvestor() {
       <div className="mt-4 rounded-2xl bg-white border p-4">
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <h2 className="font-semibold">Alerts</h2>
-          <div className="text-xs text-gray-500">
-            Правила: DSCR&lt;1 · runway&lt;target · cash_end≤0
-          </div>
+          <div className="text-xs text-gray-500">Правила: DSCR&lt;1 · runway&lt;target · cash_end≤0</div>
         </div>
 
         <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -483,7 +486,9 @@ export default function DonasInvestor() {
         </div>
 
         {!forecast ? (
-          <div className="mt-3 text-sm text-gray-500">Недостаточно данных для прогноза (нужны последние 3 месяца).</div>
+          <div className="mt-3 text-sm text-gray-500">
+            Недостаточно данных для прогноза (нужны последние 3 месяца).
+          </div>
         ) : (
           <>
             <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -497,8 +502,7 @@ export default function DonasInvestor() {
 
             {targetMonths > 0 && (
               <div className="mt-3 text-sm text-gray-700">
-                Target runway: <b>{targetMonths} mo</b>{" "}
-                · est. months to drop below target:{" "}
+                Target runway: <b>{targetMonths} mo</b> · est. months to drop below target:{" "}
                 <b>{forecast.monthsToTarget == null ? "—" : `${forecast.monthsToTarget.toFixed(1)} mo`}</b>
               </div>
             )}
@@ -516,7 +520,9 @@ export default function DonasInvestor() {
                   {forecast.proj.map((p) => (
                     <tr key={p.step} className="border-t">
                       <td className="py-2 pr-2">+{p.step}</td>
-                      <td className="py-2 pr-2">{fmt(p.cashEnd)} {currency}</td>
+                      <td className="py-2 pr-2">
+                        {fmt(p.cashEnd)} {currency}
+                      </td>
                       <td className="py-2 pr-2">{p.runway == null ? "—" : `${p.runway.toFixed(1)} mo`}</td>
                     </tr>
                   ))}
@@ -540,7 +546,10 @@ export default function DonasInvestor() {
             <Field label="To (YYYY-MM)" value={shareTo} onChange={setShareTo} />
             <Field label="TTL hours" value={ttlHours} onChange={setTtlHours} />
             <div className="flex items-end">
-              <button onClick={makeShare} className="w-full px-3 py-2 rounded-lg bg-gray-900 text-white">
+              <button
+                onClick={makeShare}
+                className="w-full px-3 py-2 rounded-lg bg-gray-900 text-white"
+              >
                 Generate link
               </button>
             </div>
@@ -572,7 +581,8 @@ export default function DonasInvestor() {
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <h2 className="font-semibold">Months</h2>
           <div className="text-xs text-gray-500">
-            Формулы: GP=revenue−cogs · NetOp=GP−opex · CF=NetOp−loan−capex · DSCR=NetOp/loan · Runway=cash_end/(opex+loan)
+            Формулы: GP=revenue−cogs · NetOp=GP−opex · CF=NetOp−loan−capex · DSCR=NetOp/loan ·
+            Runway=cash_end/(opex+loan)
           </div>
         </div>
 
@@ -616,6 +626,7 @@ export default function DonasInvestor() {
                   </tr>
                 );
               })}
+
               {!rows.length && (
                 <tr>
                   <td className="py-4 text-gray-500" colSpan={11}>
