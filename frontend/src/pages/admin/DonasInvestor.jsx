@@ -9,6 +9,12 @@ function toNum(x) {
   return Number.isFinite(n) ? n : 0;
 }
 
+// ВАЖНО: для KPI/median/avg нам иногда нужно "null", а не 0
+function numOrNull(x) {
+  const n = Number(x);
+  return Number.isFinite(n) ? n : null;
+}
+
 function fmt(n) {
   const v = Math.round(toNum(n));
   return v.toLocaleString("ru-RU");
@@ -35,6 +41,8 @@ function calcRow(m) {
   const gross = revenue - cogs;
   const netOp = gross - opex;
   const cashFlow = netOp - loan - capex;
+
+  // dscr должен быть null, если loan=0
   const dscr = loan > 0 ? netOp / loan : null;
 
   const denom = opex + loan;
@@ -58,16 +66,16 @@ function calcRow(m) {
 
 function avg(list, pick) {
   const arr = (list || [])
-    .map((x) => toNum(pick(x)))
-    .filter((x) => Number.isFinite(x));
+    .map((x) => numOrNull(pick(x)))
+    .filter((x) => x != null);
   if (!arr.length) return null;
   return arr.reduce((a, b) => a + b, 0) / arr.length;
 }
 
 function median(list, pick) {
   const arr = (list || [])
-    .map((x) => toNum(pick(x)))
-    .filter((x) => Number.isFinite(x))
+    .map((x) => numOrNull(pick(x)))
+    .filter((x) => x != null)
     .sort((a, b) => a - b);
   if (!arr.length) return null;
   const mid = Math.floor(arr.length / 2);
@@ -96,9 +104,8 @@ function SparkLine({ points, height = 44 }) {
   const w = 220;
   const h = height;
 
-  const safe = Array.isArray(points)
-    ? points.map((p) => toNum(p)).filter((x) => Number.isFinite(x))
-    : [];
+  // ВАЖНО: игнорируем null/NaN, не превращаем в 0
+  const safe = Array.isArray(points) ? points.map((p) => numOrNull(p)).filter((x) => x != null) : [];
 
   if (!safe.length) {
     return (
@@ -202,7 +209,7 @@ export default function DonasInvestor() {
         false
       );
       setMeta(r?.meta || null);
-      setSettings(normalizeSettings(r?.settings || r?.settings));
+      setSettings(normalizeSettings(r?.settings));
       setMonths(normalizeMonths(r));
     } catch (e) {
       setErr(e?.message || "Failed to load public investor view");
@@ -261,7 +268,7 @@ export default function DonasInvestor() {
       netOp_avg: avg(tail, (x) => x.netOp),
       cashFlow_avg: avg(tail, (x) => x.cashFlow),
       denom_avg: avg(tail, (x) => x.denom), // opex + loan
-      dscr_med: median(tail, (x) => (x.dscr == null ? NaN : x.dscr)),
+      dscr_med: median(tail, (x) => x.dscr),
     };
   }, [last3Tail]);
 
@@ -313,11 +320,9 @@ export default function DonasInvestor() {
     return out;
   }, [last, targetMonths]);
 
-  const cashSeries = useMemo(() => rows.map((x) => x._calc.cashEnd), [rows]);
-  const runwaySeries = useMemo(
-    () => rows.map((x) => (x._calc.runway == null ? NaN : x._calc.runway)),
-    [rows]
-  );
+  // ВАЖНО: series не должны превращать null в 0
+  const cashSeries = useMemo(() => rows.map((x) => numOrNull(x._calc.cashEnd)), [rows]);
+  const runwaySeries = useMemo(() => rows.map((x) => numOrNull(x._calc.runway)), [rows]);
 
   const forecast = useMemo(() => {
     if (!last) return null;
@@ -469,7 +474,9 @@ export default function DonasInvestor() {
           value={
             last3.cashFlow_avg == null
               ? "—"
-              : `${fmt(last3.cashFlow_avg)} ${currency} · DSCR ${last3.dscr_med == null ? "—" : last3.dscr_med.toFixed(2)}`
+              : `${fmt(last3.cashFlow_avg)} ${currency} · DSCR ${
+                  last3.dscr_med == null ? "—" : last3.dscr_med.toFixed(2)
+                }`
           }
           sub={last3.denom_avg == null ? "" : `avg(opex+loan): ${fmt(last3.denom_avg)} ${currency}`}
           right={<SparkLine points={runwaySeries} />}
@@ -546,10 +553,7 @@ export default function DonasInvestor() {
             <Field label="To (YYYY-MM)" value={shareTo} onChange={setShareTo} />
             <Field label="TTL hours" value={ttlHours} onChange={setTtlHours} />
             <div className="flex items-end">
-              <button
-                onClick={makeShare}
-                className="w-full px-3 py-2 rounded-lg bg-gray-900 text-white"
-              >
+              <button onClick={makeShare} className="w-full px-3 py-2 rounded-lg bg-gray-900 text-white">
                 Generate link
               </button>
             </div>
@@ -581,8 +585,7 @@ export default function DonasInvestor() {
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <h2 className="font-semibold">Months</h2>
           <div className="text-xs text-gray-500">
-            Формулы: GP=revenue−cogs · NetOp=GP−opex · CF=NetOp−loan−capex · DSCR=NetOp/loan ·
-            Runway=cash_end/(opex+loan)
+            Формулы: GP=revenue−cogs · NetOp=GP−opex · CF=NetOp−loan−capex · DSCR=NetOp/loan · Runway=cash_end/(opex+loan)
           </div>
         </div>
 
