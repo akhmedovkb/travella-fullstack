@@ -28,9 +28,6 @@ function nextYm(ym) {
   return `${yy}-${mm}`;
 }
 
-/**
- * Берём существующие months по диапазону (от startYm до endYm включительно)
- */
 async function listMonthsRange(startYm, endYm) {
   const { rows } = await db.query(
     `
@@ -46,9 +43,6 @@ async function listMonthsRange(startYm, endYm) {
   return rows || [];
 }
 
-/**
- * Находим “последнюю” строку месяца (если есть дубликаты id)
- */
 function pickLastByMonth(rows) {
   const map = new Map();
   for (const r of rows) {
@@ -62,7 +56,6 @@ function pickLastByMonth(rows) {
 async function ensureMonthRow(ym) {
   const monthDate = ymToMonthDate(ym);
 
-  // пробуем найти последнюю запись месяца
   const q = await db.query(
     `
     SELECT *
@@ -76,7 +69,6 @@ async function ensureMonthRow(ym) {
 
   if (q.rows?.[0]) return q.rows[0];
 
-  // создаём, если нет
   const ins = await db.query(
     `
     INSERT INTO donas_finance_months
@@ -96,9 +88,7 @@ async function isLockedMonth(ym) {
   return hasLockedTag(r?.notes || "");
 }
 
-/**
- * Агрегируем Sales → revenue/cogs
- */
+// Sales → revenue/cogs
 async function getSalesAggForMonth(ym) {
   const { rows } = await db.query(
     `
@@ -114,10 +104,7 @@ async function getSalesAggForMonth(ym) {
   return { revenue: toNum(r.revenue), cogs: toNum(r.cogs) };
 }
 
-/**
- * Агрегируем Purchases → opex/capex
- * (считаем из donas_purchases по type='OPEX'/'CAPEX')
- */
+// Purchases → opex/capex
 async function getPurchasesAggForMonth(ym) {
   const { rows } = await db.query(
     `
@@ -133,12 +120,7 @@ async function getPurchasesAggForMonth(ym) {
   return { opex: toNum(r.opex), capex: toNum(r.capex) };
 }
 
-/**
- * Обновляем month: revenue/cogs/opex/capex, не трогаем loan_paid/notes вручную.
- * cash_end пересчитывается отдельно цепочкой.
- */
 async function updateMonthAgg(ym) {
-  // если locked — не трогаем и выходим
   if (await isLockedMonth(ym)) {
     return { ym, ok: true, locked: true, updated: false };
   }
@@ -162,14 +144,9 @@ async function updateMonthAgg(ym) {
   return { ym, ok: true, locked: false, updated: true, ...sales, ...pur };
 }
 
-/**
- * cash_end chain:
- * cash_end(ym) = cash_end(prevYm) + (revenue - cogs - opex - capex - loan_paid)
- * Стопаемся если встретили #locked (снепшот)
- */
+// cash_end chain: stop on #locked month
 async function recomputeCashChainFrom(startYm, endYm) {
-  // убедимся что все месяцы существуют
-  // (если где-то дырка — создадим)
+  // ensure every month row exists
   let cur = startYm;
   while (true) {
     await ensureMonthRow(cur);
@@ -177,18 +154,17 @@ async function recomputeCashChainFrom(startYm, endYm) {
     cur = nextYm(cur);
   }
 
-  // берём диапазон
   const rows = await listMonthsRange(startYm, endYm);
   const byMonth = pickLastByMonth(rows);
 
-  // чтобы посчитать startYm, нужен prevYm cash_end
-  // prevYm = startYm - 1 месяц
+  // prevYm
   const [sy, sm] = startYm.split("-").map(Number);
   const prevDate = new Date(Date.UTC(sy, sm - 2, 1));
-  const prevYm =
-    `${prevDate.getUTCFullYear()}-${String(prevDate.getUTCMonth() + 1).padStart(2, "0")}`;
+  const prevYm = `${prevDate.getUTCFullYear()}-${String(prevDate.getUTCMonth() + 1).padStart(
+    2,
+    "0"
+  )}`;
 
-  // prev cash_end: берём из months если есть, иначе 0
   let prevCash = 0;
   try {
     const prevRowQ = await db.query(
@@ -213,7 +189,6 @@ async function recomputeCashChainFrom(startYm, endYm) {
     const row = byMonth.get(cur) || (await ensureMonthRow(cur));
     const locked = hasLockedTag(row?.notes || "");
 
-    // если locked — стоп: это снепшот, дальше не пересчитываем
     if (locked) {
       results.push({ ym: cur, locked: true, cash_end: toNum(row.cash_end), updated: false });
       break;
@@ -249,8 +224,7 @@ async function recomputeCashChainFrom(startYm, endYm) {
 }
 
 /**
- * PUBLIC: full auto-touch для списка месяцев.
- * Важно: чтобы cash цепочка была корректной, пересчитываем с MIN(ym) до MAX(ym)
+ * PUBLIC: full auto-touch for months (sales+purchases + cash_end chain + locked stop)
  */
 async function touchMonthsFromYms(yms = []) {
   const list = (yms || []).filter(Boolean).filter(isYm);
@@ -260,13 +234,11 @@ async function touchMonthsFromYms(yms = []) {
   const startYm = uniq[0];
   const endYm = uniq[uniq.length - 1];
 
-  // 1) обновляем агрегаты по каждому ym из списка
   const touched = [];
   for (const ym of uniq) {
     touched.push(await updateMonthAgg(ym));
   }
 
-  // 2) пересчитываем cash chain на диапазон (start..end), stop on #locked
   const cash = await recomputeCashChainFrom(startYm, endYm);
 
   return { ok: true, touched, cash, range: { startYm, endYm } };
@@ -274,5 +246,5 @@ async function touchMonthsFromYms(yms = []) {
 
 module.exports = {
   touchMonthsFromYms,
-  getSalesAggForMonth, // если где-то нужно
+  getSalesAggForMonth,
 };
