@@ -1,6 +1,7 @@
 // backend/controllers/donasSalesController.js
+
 const db = require("../db");
-const { touchMonthFromSales } = require("../utils/donasSalesMonthAggregator");
+const { touchMonthsFromYms } = require("../utils/donasSalesMonthAggregator");
 
 const SLUG = "donas-dosas";
 
@@ -39,7 +40,6 @@ function getActor(req) {
 }
 
 async function ensureFinanceAudit() {
-  // не ломаем сервер, если нет прав/таблицы
   try {
     await db.query(`
       CREATE TABLE IF NOT EXISTS donas_finance_audit_log (
@@ -253,8 +253,8 @@ async function addSale(req, res) {
       { revenue_total: revenueTotal, cogs_total: cogsTotal }
     );
 
-    // ✅ auto-touch months (revenue/cogs from sales)
-    await touchMonthFromSales(ym);
+    // ✅ FULL auto-touch: sales+purchases+cash_end chain + locked stop
+    await touchMonthsFromYms([ym]);
 
     return res.json(rows[0]);
   } catch (e) {
@@ -363,9 +363,8 @@ async function updateSale(req, res) {
       );
     }
 
-    // ✅ auto-touch months
-    await touchMonthFromSales(curYm);
-    if (newYm && newYm !== curYm) await touchMonthFromSales(newYm);
+    // ✅ FULL auto-touch с min(curYm,newYm) чтобы cash_end цепочка была корректной
+    await touchMonthsFromYms([curYm, newYm]);
 
     return res.json(rows[0]);
   } catch (e) {
@@ -395,8 +394,8 @@ async function deleteSale(req, res) {
 
     await auditSales(req, ym, "sales.delete", { sale_id: id }, { deleted: true });
 
-    // ✅ auto-touch months
-    await touchMonthFromSales(ym);
+    // ✅ FULL auto-touch
+    await touchMonthsFromYms([ym]);
 
     return res.json({ ok: true });
   } catch (e) {
@@ -416,7 +415,6 @@ async function recalcCogsMonth(req, res) {
       return res.status(400).json({ error: "month=YYYY-MM required" });
     }
 
-    // 🔒 lock guard
     if (await isMonthLocked(month)) {
       return res.status(409).json({ error: `Month ${month} is locked (#locked)` });
     }
@@ -455,17 +453,10 @@ async function recalcCogsMonth(req, res) {
       updated++;
     }
 
-    // audit
-    await auditSales(
-      req,
-      month,
-      "sales.recalc_cogs",
-      { updated },
-      {}
-    );
+    await auditSales(req, month, "sales.recalc_cogs", { updated }, {});
 
-    // auto-touch months
-    await touchMonthFromSales(month);
+    // ✅ FULL auto-touch (после пересчёта cogs_total поменялись)
+    await touchMonthsFromYms([month]);
 
     return res.json({ ok: true, updated });
   } catch (e) {
