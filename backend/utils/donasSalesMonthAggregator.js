@@ -1,5 +1,4 @@
-// backend/utils/donasSalesMonthAggregator.js
-
+// backend/utils/donasMonthAutoAggregator.js
 const db = require("../db");
 
 const SLUG = "donas-dosas";
@@ -7,13 +6,16 @@ const SLUG = "donas-dosas";
 function isYm(s) {
   return /^\d{4}-\d{2}$/.test(String(s || ""));
 }
+
 function toNum(x) {
   const n = Number(x);
   return Number.isFinite(n) ? n : 0;
 }
+
 function ymToDate(ym) {
   return `${ym}-01`;
 }
+
 function hasLockedTag(notes) {
   return String(notes || "").toLowerCase().includes("#locked");
 }
@@ -36,18 +38,12 @@ async function getCashStart() {
   }
 }
 
-/**
- * Sales agg: revenue/cogs за ym
- */
 async function getSalesAggForMonth(ym) {
-  if (!isYm(ym)) return { revenue: 0, cogs: 0, cnt: 0 };
-
   const { rows } = await db.query(
     `
     SELECT
       COALESCE(SUM(revenue_total), 0) AS revenue,
-      COALESCE(SUM(cogs_total), 0)    AS cogs,
-      COUNT(*)::int                  AS cnt
+      COALESCE(SUM(cogs_total), 0)    AS cogs
     FROM donas_sales
     WHERE to_char(sold_at, 'YYYY-MM') = $1
     `,
@@ -55,25 +51,17 @@ async function getSalesAggForMonth(ym) {
   );
 
   const r = rows?.[0] || {};
-  return {
-    revenue: toNum(r.revenue),
-    cogs: toNum(r.cogs),
-    cnt: Number(r.cnt || 0) || 0,
-  };
+  return { revenue: toNum(r.revenue), cogs: toNum(r.cogs) };
 }
 
-/**
- * Purchases agg: opex/capex за ym
- * ожидаем donas_purchases(date, total, type)
- */
 async function getPurchasesAggForMonth(ym) {
-  if (!isYm(ym)) return { opex: 0, capex: 0 };
-
+  // предполагаем: donas_purchases(date, type, total)
+  // type: 'OPEX' / 'CAPEX' (или в любом регистре)
   const { rows } = await db.query(
     `
     SELECT
-      COALESCE(SUM(CASE WHEN LOWER(type)='opex'  THEN COALESCE(total,0) ELSE 0 END), 0) AS opex,
-      COALESCE(SUM(CASE WHEN LOWER(type)='capex' THEN COALESCE(total,0) ELSE 0 END), 0) AS capex
+      COALESCE(SUM(CASE WHEN UPPER(type)='OPEX'  THEN total ELSE 0 END), 0) AS opex,
+      COALESCE(SUM(CASE WHEN UPPER(type)='CAPEX' THEN total ELSE 0 END), 0) AS capex
     FROM donas_purchases
     WHERE to_char(date, 'YYYY-MM') = $1
     `,
@@ -84,8 +72,33 @@ async function getPurchasesAggForMonth(ym) {
   return { opex: toNum(r.opex), capex: toNum(r.capex) };
 }
 
+async function ensureMonthRowExists(ym) {
+  const monthDate = ymToDate(ym);
+
+  const upd = await db.query(
+    `
+    UPDATE donas_finance_months
+    SET month = month
+    WHERE slug=$1 AND month = ($2)::date
+    `,
+    [SLUG, monthDate]
+  );
+
+  if ((upd.rowCount || 0) > 0) return;
+
+  // создаём пустую строку, loan_paid не трогаем (0), cash_end пока 0 — дальше пересчитаем
+  await db.query(
+    `
+    INSERT INTO donas_finance_months
+      (slug, month, revenue, cogs, opex, capex, loan_paid, cash_end, notes)
+    VALUES
+      ($1, ($2)::date, 0, 0, 0, 0, 0, 0, '')
+    `,
+    [SLUG, monthDate]
+  );
+}
+
 async function getMonthRow(ym) {
-  if (!isYm(ym)) return null;
   const { rows } = await db.query(
     `
     SELECT *
@@ -99,194 +112,143 @@ async function getMonthRow(ym) {
   return rows?.[0] || null;
 }
 
-async function ensureMonthRowExists(ym) {
-  const cur = await getMonthRow(ym);
-  if (cur) return cur;
-
-  const { rows } = await db.query(
-    `
-    INSERT INTO donas_finance_months
-      (slug, month, revenue, cogs, opex, capex, loan_paid, cash_end, notes)
-    VALUES
-      ($1, ($2)::date, 0, 0, 0, 0, 0, 0, '')
-    RETURNING *
-    `,
-    [SLUG, ymToDate(ym)]
-  );
-  return rows?.[0] || null;
-}
-
-async function listMonthsFrom(fromYm) {
-  const { rows } = await db.query(
-    `
-    SELECT to_char(month,'YYYY-MM') AS ym, notes
-    FROM donas_finance_months
-    WHERE slug=$1 AND month >= ($2)::date
-    ORDER BY month ASC
-    `,
-    [SLUG, ymToDate(fromYm)]
-  );
-  return (rows || []).map((r) => ({ ym: r.ym, notes: r.notes || "" }));
-}
-
-async function getPrevExistingMonthYm(ym) {
-  const { rows } = await db.query(
-    `
-    SELECT to_char(month,'YYYY-MM') AS ym
-    FROM donas_finance_months
-    WHERE slug=$1 AND month < ($2)::date
-    ORDER BY month DESC
-    LIMIT 1
-    `,
-    [SLUG, ymToDate(ym)]
-  );
-  return rows?.[0]?.ym || null;
-}
-
 /**
- * Пересчитать 1 месяц (если не locked):
- * revenue/cogs (Sales) + opex/capex (Purchases) + cash_end chain
- *
- * cash_end = prevCashEnd + ( (revenue - cogs - opex) - loan_paid - capex )
+ * Пересчитать только агрегаты месяца (без cash_end chain):
+ * - revenue/cogs из Sales (если включено)
+ * - opex/capex из Purchases (если включено)
+ * LOCKED: если notes содержит #locked — ничего не обновляем.
  */
-async function recomputeOneMonth(ym, prevCashEnd) {
-  const row = await ensureMonthRowExists(ym);
-  if (!row) return { ok: false, ym, reason: "no_row" };
+async function recomputeMonthAgg(ym, { fromSales, fromPurchases } = {}) {
+  if (!isYm(ym)) return { ok: false, reason: "bad_ym" };
 
-  if (hasLockedTag(row.notes)) {
-    return { ok: true, ym, locked: true, cash_end: toNum(row.cash_end) };
+  await ensureMonthRowExists(ym);
+
+  const row = await getMonthRow(ym);
+  if (!row) return { ok: false, reason: "month_missing" };
+
+  const locked = hasLockedTag(row.notes);
+  if (locked) {
+    return { ok: true, ym, locked: true, updated: false };
   }
 
-  const sales = await getSalesAggForMonth(ym);
-  const purch = await getPurchasesAggForMonth(ym);
+  const salesAgg = fromSales ? await getSalesAggForMonth(ym) : null;
+  const purAgg = fromPurchases ? await getPurchasesAggForMonth(ym) : null;
 
-  const loan = toNum(row.loan_paid);
-
-  const gp = sales.revenue - sales.cogs;
-  const netOp = gp - purch.opex;
-  const cf = netOp - loan - purch.capex;
-
-  const cash_end = toNum(prevCashEnd) + cf;
+  const nextRevenue = fromSales ? toNum(salesAgg.revenue) : toNum(row.revenue);
+  const nextCogs = fromSales ? toNum(salesAgg.cogs) : toNum(row.cogs);
+  const nextOpex = fromPurchases ? toNum(purAgg.opex) : toNum(row.opex);
+  const nextCapex = fromPurchases ? toNum(purAgg.capex) : toNum(row.capex);
 
   await db.query(
     `
     UPDATE donas_finance_months
-    SET revenue=$1,
-        cogs=$2,
-        opex=$3,
-        capex=$4,
-        cash_end=$5
-    WHERE slug=$6 AND month=($7)::date
+    SET revenue=$1, cogs=$2, opex=$3, capex=$4, updated_at=NOW()
+    WHERE slug=$5 AND month=($6)::date
     `,
-    [sales.revenue, sales.cogs, purch.opex, purch.capex, cash_end, SLUG, ymToDate(ym)]
+    [nextRevenue, nextCogs, nextOpex, nextCapex, SLUG, ymToDate(ym)]
   );
 
   return {
     ok: true,
     ym,
     locked: false,
-    revenue: sales.revenue,
-    cogs: sales.cogs,
-    opex: purch.opex,
-    capex: purch.capex,
-    loan_paid: loan,
-    cash_end,
-    cf,
-    sales_cnt: sales.cnt,
+    updated: true,
+    revenue: nextRevenue,
+    cogs: nextCogs,
+    opex: nextOpex,
+    capex: nextCapex,
   };
 }
 
 /**
- * FULL auto-touch:
- * - стартуем с fromYm
- * - пересчитываем цепочку cash_end вперед по существующим months
- * - если встречаем locked месяц -> STOP (его не трогаем и дальше не идём)
+ * Пересчитать cash_end цепочку начиная с ym и дальше по всем месяцам, которые есть в таблице.
+ * LOCKED: месяц не трогаем, но используем его cash_end как базу для следующего месяца.
  */
-async function touchMonthsFrom(fromYm) {
-  if (!isYm(fromYm)) return { ok: false, reason: "bad_ym", fromYm };
+async function recomputeCashChainFrom(ym) {
+  if (!isYm(ym)) return { ok: false, reason: "bad_ym" };
 
-  await ensureMonthRowExists(fromYm);
+  await ensureMonthRowExists(ym);
 
-  const months = await listMonthsFrom(fromYm);
-  if (!months.length) return { ok: true, fromYm, touched: 0, stoppedOnLocked: false, items: [] };
+  // prev cash_end: либо из предыдущего месяца в таблице, либо cash_start из settings
+  const prevQ = await db.query(
+    `
+    SELECT *
+    FROM donas_finance_months
+    WHERE slug=$1 AND month < ($2)::date
+    ORDER BY month DESC, id DESC
+    LIMIT 1
+    `,
+    [SLUG, ymToDate(ym)]
+  );
 
-  const prevYm = await getPrevExistingMonthYm(fromYm);
-  let prevCashEnd;
-  if (prevYm) {
-    const prevRow = await getMonthRow(prevYm);
-    prevCashEnd = toNum(prevRow?.cash_end);
-  } else {
-    prevCashEnd = await getCashStart();
-  }
+  const cashStart = await getCashStart();
+  let prevCashEnd =
+    prevQ.rows?.[0]?.cash_end != null ? toNum(prevQ.rows[0].cash_end) : cashStart;
 
-  const items = [];
-  let stoppedOnLocked = false;
+  // берём все месяцы >= ym (уже создан), по порядку
+  const chainQ = await db.query(
+    `
+    SELECT *
+    FROM donas_finance_months
+    WHERE slug=$1 AND month >= ($2)::date
+    ORDER BY month ASC, id ASC
+    `,
+    [SLUG, ymToDate(ym)]
+  );
 
-  for (const m of months) {
-    const curRow = await getMonthRow(m.ym);
-    if (curRow && hasLockedTag(curRow.notes)) {
-      items.push({
-        ym: m.ym,
-        locked: true,
-        skipped: true,
-        cash_end: toNum(curRow.cash_end),
-      });
-      stoppedOnLocked = true;
-      break;
+  const updated = [];
+  for (const m of chainQ.rows || []) {
+    const mYm = String(m.month).slice(0, 7);
+    const locked = hasLockedTag(m.notes);
+
+    if (locked) {
+      // снепшот: не меняем, но продолжаем от его cash_end
+      const snapCash = m.cash_end != null ? toNum(m.cash_end) : prevCashEnd;
+      prevCashEnd = snapCash;
+      updated.push({ ym: mYm, locked: true, cash_end: snapCash, updated: false });
+      continue;
     }
 
-    const r = await recomputeOneMonth(m.ym, prevCashEnd);
-    items.push(r);
+    const revenue = toNum(m.revenue);
+    const cogs = toNum(m.cogs);
+    const opex = toNum(m.opex);
+    const capex = toNum(m.capex);
+    const loan = toNum(m.loan_paid);
 
-    if (r && r.ok && !r.locked) {
-      prevCashEnd = toNum(r.cash_end);
-    } else {
-      // если ошибка — лучше стоп
-      break;
-    }
+    const cashEnd = prevCashEnd + revenue - cogs - opex - capex - loan;
+
+    await db.query(
+      `
+      UPDATE donas_finance_months
+      SET cash_end=$1, updated_at=NOW()
+      WHERE slug=$2 AND month=($3)::date
+      `,
+      [cashEnd, SLUG, m.month]
+    );
+
+    prevCashEnd = cashEnd;
+    updated.push({ ym: mYm, locked: false, cash_end: cashEnd, updated: true });
   }
 
-  return {
-    ok: true,
-    fromYm,
-    touched: items.filter((x) => x && x.ok && !x.locked).length,
-    stoppedOnLocked,
-    items,
-  };
+  return { ok: true, start: ym, updated };
 }
 
 /**
- * Когда затронуто несколько ym (например move sale),
- * нужно пересчитывать с минимального ym (чтобы цепочка cash_end была корректной).
+ * Главная функция: “FULL auto-touch”
+ * - пересчитать агрегаты месяца (sales/purchases)
+ * - пересчитать cash_end chain
+ * LOCKED: агрегаты месяца не трогаем, chain всё равно пересчитывается от снепшотов.
  */
-async function touchMonthsFromYms(yms) {
-  const list = []
-    .concat(yms || [])
-    .map((s) => String(s || "").slice(0, 7))
-    .filter((s) => isYm(s));
-
-  if (!list.length) return { ok: false, reason: "no_valid_yms" };
-
-  list.sort(); // YYYY-MM сортируется лексикографически корректно
-  return await touchMonthsFrom(list[0]);
-}
-
-/**
- * BACKWARD COMPAT:
- * старый контракт "touch month from sales"
- * теперь это full touch с этого ym
- */
-async function touchMonthFromSales(ym) {
-  return await touchMonthsFrom(ym);
+async function touchMonthFull(ym, { fromSales = false, fromPurchases = false } = {}) {
+  const agg = await recomputeMonthAgg(ym, { fromSales, fromPurchases });
+  const chain = await recomputeCashChainFrom(ym);
+  return { ok: true, ym, agg, chain };
 }
 
 module.exports = {
+  touchMonthFull,
+  recomputeMonthAgg,
+  recomputeCashChainFrom,
   getSalesAggForMonth,
   getPurchasesAggForMonth,
-
-  touchMonthsFrom,
-  touchMonthsFromYms,
-
-  // legacy
-  touchMonthFromSales,
 };
