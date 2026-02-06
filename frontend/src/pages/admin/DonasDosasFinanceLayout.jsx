@@ -38,7 +38,7 @@ export default function DonasDosasFinanceLayout() {
         <Tab to="opex" label="OPEX" />
         <Tab to="capex" label="CAPEX" />
         <Tab to="cogs" label="COGS" />
-        <Tab to="profit" label="Profit / Margin" />
+        <Tab to="profit" label="Profit / Margin by menu item" />
         <Tab to="investor" label="Investor" />
       </div>
 
