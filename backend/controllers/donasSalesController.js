@@ -5,6 +5,55 @@ const { touchMonthsFromYms } = require("../utils/donasSalesMonthAggregator");
 
 const SLUG = "donas-dosas";
 
+async function ensureSalesTable() {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS donas_sales (
+      id BIGSERIAL PRIMARY KEY,
+      sold_at DATE NOT NULL,
+      menu_item_id BIGINT NOT NULL,
+      qty NUMERIC NOT NULL DEFAULT 1,
+      unit_price NUMERIC NOT NULL DEFAULT 0,
+      revenue_total NUMERIC NOT NULL DEFAULT 0,
+      cogs_snapshot_id BIGINT,
+      cogs_unit NUMERIC NOT NULL DEFAULT 0,
+      cogs_total NUMERIC NOT NULL DEFAULT 0,
+      channel TEXT NOT NULL DEFAULT 'cash',
+      notes TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  // Helpful indexes
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_donas_sales_sold_at ON donas_sales (sold_at);`);
+  await db.query(
+    `CREATE INDEX IF NOT EXISTS idx_donas_sales_menu_item_id ON donas_sales (menu_item_id);`
+  );
+
+  // Attempt to add foreign keys softly (ignore if referenced tables missing)
+  try {
+    await db.query(
+      `ALTER TABLE donas_sales
+       ADD CONSTRAINT fk_donas_sales_menu_item
+       FOREIGN KEY (menu_item_id) REFERENCES donas_menu_items(id)
+       ON DELETE RESTRICT;`
+    );
+  } catch {
+    // ignore (constraint may already exist, or table donas_menu_items not present yet)
+  }
+
+  try {
+    await db.query(
+      `ALTER TABLE donas_sales
+       ADD CONSTRAINT fk_donas_sales_cogs_snapshot
+       FOREIGN KEY (cogs_snapshot_id) REFERENCES donas_cogs(id)
+       ON DELETE SET NULL;`
+    );
+  } catch {
+    // ignore
+  }
+}
+
 function toNum(x) {
   const n = Number(x);
   return Number.isFinite(n) ? n : 0;
@@ -159,6 +208,7 @@ async function getLatestCogsForMenuItem(menuItemId) {
  */
 async function getSales(req, res) {
   try {
+    await ensureSalesTable();
     const { month } = req.query;
 
     let where = "";
@@ -172,8 +222,14 @@ async function getSales(req, res) {
 
     const { rows } = await db.query(
       `
-      SELECT s.*,
-             mi.name AS menu_item_name
+      SELECT
+        s.*,
+        (COALESCE(s.revenue_total,0) - COALESCE(s.cogs_total,0)) AS profit_total,
+        CASE
+          WHEN COALESCE(s.revenue_total,0) = 0 THEN 0
+          ELSE ((COALESCE(s.revenue_total,0) - COALESCE(s.cogs_total,0)) / COALESCE(s.revenue_total,0)) * 100
+        END AS margin_pct,
+        mi.name AS menu_item_name
       FROM donas_sales s
       LEFT JOIN donas_menu_items mi ON mi.id = s.menu_item_id
       ${where}
@@ -195,6 +251,7 @@ async function getSales(req, res) {
  */
 async function addSale(req, res) {
   try {
+    await ensureSalesTable();
     const b = req.body || {};
 
     const soldAt = String(b.sold_at || "").trim();
@@ -208,8 +265,11 @@ async function addSale(req, res) {
     if (!Number.isFinite(menuItemId) || menuItemId <= 0) {
       return res.status(400).json({ error: "menu_item_id required" });
     }
+    if (!qty || qty <= 0) return res.status(400).json({ error: "qty must be > 0" });
 
     const ym = toYmFromDate(soldAt);
+    if (!isYm(ym)) return res.status(400).json({ error: "sold_at invalid" });
+
     if (await isMonthLocked(ym)) {
       return res.status(409).json({ error: `Month ${ym} is locked (#locked)` });
     }
@@ -268,6 +328,7 @@ async function addSale(req, res) {
  */
 async function updateSale(req, res) {
   try {
+    await ensureSalesTable();
     const id = Number(req.params.id);
     if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: "Bad id" });
 
@@ -281,57 +342,70 @@ async function updateSale(req, res) {
     }
 
     const b = req.body || {};
-    const soldAt = String(b.sold_at || cur.sold_at);
-    const menuItemId = Number(b.menu_item_id ?? cur.menu_item_id);
+
+    const soldAt = b.sold_at == null ? String(cur.sold_at).slice(0, 10) : String(b.sold_at).trim();
+    const menuItemId =
+      b.menu_item_id == null ? Number(cur.menu_item_id) : Number(b.menu_item_id);
     const qty = b.qty == null ? toNum(cur.qty) : toNum(b.qty);
     const unitPrice = b.unit_price == null ? toNum(cur.unit_price) : toNum(b.unit_price);
     const channel = b.channel == null ? String(cur.channel || "cash") : String(b.channel || "cash");
-    const notes = b.notes === undefined ? cur.notes : b.notes == null ? null : String(b.notes);
+    const notes = b.notes === undefined ? cur.notes : (b.notes == null ? null : String(b.notes));
 
-    const newYm = toYmFromDate(soldAt);
-    if (newYm !== curYm && (await isMonthLocked(newYm))) {
-      return res.status(409).json({ error: `Month ${newYm} is locked (#locked)` });
+    if (!soldAt) return res.status(400).json({ error: "sold_at required" });
+    if (!Number.isFinite(menuItemId) || menuItemId <= 0) {
+      return res.status(400).json({ error: "menu_item_id required" });
+    }
+    if (!qty || qty <= 0) return res.status(400).json({ error: "qty must be > 0" });
+
+    const nextYm = toYmFromDate(soldAt);
+    if (!isYm(nextYm)) return res.status(400).json({ error: "sold_at invalid" });
+
+    // If moving to another month: guard lock for target month too
+    if (nextYm !== curYm && (await isMonthLocked(nextYm))) {
+      return res.status(409).json({ error: `Month ${nextYm} is locked (#locked)` });
     }
 
     const revenueTotal = qty * unitPrice;
 
-    let cogsSnapshotId = cur.cogs_snapshot_id;
-    let cogsUnit = toNum(cur.cogs_unit);
-    let cogsTotal = toNum(cur.cogs_total);
+    const snap = await getLatestCogsForMenuItem(menuItemId);
+    const cogsUnit = toNum(snap?.total_cost);
+    const cogsTotal = qty * cogsUnit;
+    const cogsSnapshotId = snap?.id || null;
 
-    const menuItemChanged = Number(menuItemId) !== Number(cur.menu_item_id);
-    const qtyChanged = qty !== toNum(cur.qty);
-    const cogsIsEmpty = !cogsSnapshotId || toNum(cur.cogs_unit) <= 0;
+    const diff = {};
+    const setDiff = (k, vOld, vNew) => {
+      if (String(vOld ?? "") !== String(vNew ?? "")) diff[k] = { from: vOld, to: vNew };
+    };
 
-    if (menuItemChanged || qtyChanged || cogsIsEmpty) {
-      const snap = await getLatestCogsForMenuItem(menuItemId);
-      cogsUnit = toNum(snap?.total_cost);
-      cogsTotal = qty * cogsUnit;
-      cogsSnapshotId = snap?.id || null;
-    } else {
-      cogsTotal = qty * cogsUnit;
-    }
+    setDiff("sold_at", cur.sold_at, soldAt);
+    setDiff("menu_item_id", cur.menu_item_id, menuItemId);
+    setDiff("qty", cur.qty, qty);
+    setDiff("unit_price", cur.unit_price, unitPrice);
+    setDiff("revenue_total", cur.revenue_total, revenueTotal);
+    setDiff("cogs_snapshot_id", cur.cogs_snapshot_id, cogsSnapshotId);
+    setDiff("cogs_unit", cur.cogs_unit, cogsUnit);
+    setDiff("cogs_total", cur.cogs_total, cogsTotal);
+    setDiff("channel", cur.channel, channel);
+    setDiff("notes", cur.notes, notes);
 
     const { rows } = await db.query(
       `
       UPDATE donas_sales
-      SET
-        sold_at=$2,
-        menu_item_id=$3,
-        qty=$4,
-        unit_price=$5,
-        revenue_total=$6,
-        cogs_snapshot_id=$7,
-        cogs_unit=$8,
-        cogs_total=$9,
-        channel=$10,
-        notes=$11,
-        updated_at=NOW()
-      WHERE id=$1
+      SET sold_at=$1,
+          menu_item_id=$2,
+          qty=$3,
+          unit_price=$4,
+          revenue_total=$5,
+          cogs_snapshot_id=$6,
+          cogs_unit=$7,
+          cogs_total=$8,
+          channel=$9,
+          notes=$10,
+          updated_at=NOW()
+      WHERE id=$11
       RETURNING *
       `,
       [
-        id,
         soldAt,
         menuItemId,
         qty,
@@ -342,29 +416,15 @@ async function updateSale(req, res) {
         cogsTotal,
         channel,
         notes,
+        id,
       ]
     );
 
-    await auditSales(
-      req,
-      curYm,
-      "sales.update",
-      { sale_id: id, channel },
-      { revenue_total: revenueTotal, cogs_total: cogsTotal }
-    );
+    await auditSales(req, nextYm, "sales.update", { sale_id: id }, diff);
 
-    if (newYm && newYm !== curYm) {
-      await auditSales(
-        req,
-        newYm,
-        "sales.move",
-        { sale_id: id, from: curYm, to: newYm, channel },
-        { revenue_total: revenueTotal, cogs_total: cogsTotal }
-      );
-    }
-
-    // ✅ FULL auto-touch с min(curYm,newYm) чтобы cash_end цепочка была корректной
-    await touchMonthsFromYms([curYm, newYm]);
+    // touch both months if moved
+    const yms = nextYm === curYm ? [nextYm] : [curYm, nextYm];
+    await touchMonthsFromYms(yms);
 
     return res.json(rows[0]);
   } catch (e) {
@@ -378,10 +438,11 @@ async function updateSale(req, res) {
  */
 async function deleteSale(req, res) {
   try {
+    await ensureSalesTable();
     const id = Number(req.params.id);
     if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: "Bad id" });
 
-    const curQ = await db.query(`SELECT sold_at FROM donas_sales WHERE id=$1 LIMIT 1`, [id]);
+    const curQ = await db.query(`SELECT * FROM donas_sales WHERE id=$1 LIMIT 1`, [id]);
     const cur = curQ.rows?.[0];
     if (!cur) return res.status(404).json({ error: "Sale not found" });
 
@@ -394,7 +455,6 @@ async function deleteSale(req, res) {
 
     await auditSales(req, ym, "sales.delete", { sale_id: id }, { deleted: true });
 
-    // ✅ FULL auto-touch
     await touchMonthsFromYms([ym]);
 
     return res.json({ ok: true });
@@ -410,6 +470,7 @@ async function deleteSale(req, res) {
  */
 async function recalcCogsMonth(req, res) {
   try {
+    await ensureSalesTable();
     const { month } = req.query;
     if (!month || !/^\d{4}-\d{2}$/.test(month)) {
       return res.status(400).json({ error: "month=YYYY-MM required" });
@@ -419,35 +480,41 @@ async function recalcCogsMonth(req, res) {
       return res.status(409).json({ error: `Month ${month} is locked (#locked)` });
     }
 
-    const sales = await db.query(
+    const salesQ = await db.query(
       `
-      SELECT id, menu_item_id, qty
+      SELECT *
       FROM donas_sales
-      WHERE to_char(sold_at,'YYYY-MM') = $1
+      WHERE to_char(sold_at,'YYYY-MM')=$1
+      ORDER BY sold_at ASC, id ASC
       `,
       [month]
     );
 
     let updated = 0;
-
-    for (const s of sales.rows) {
+    for (const s of salesQ.rows || []) {
       const snap = await getLatestCogsForMenuItem(s.menu_item_id);
-      if (!snap) continue;
+      const cogsUnit = toNum(snap?.total_cost);
+      const cogsTotal = toNum(s.qty) * cogsUnit;
+      const cogsSnapshotId = snap?.id || null;
 
-      const cogsUnit = toNum(snap.total_cost);
-      const cogsTotal = cogsUnit * toNum(s.qty);
+      if (
+        Number(toNum(s.cogs_unit)) === Number(cogsUnit) &&
+        Number(toNum(s.cogs_total)) === Number(cogsTotal) &&
+        Number(s.cogs_snapshot_id || 0) === Number(cogsSnapshotId || 0)
+      ) {
+        continue;
+      }
 
       await db.query(
         `
         UPDATE donas_sales
-        SET
-          cogs_snapshot_id = $2,
-          cogs_unit = $3,
-          cogs_total = $4,
-          updated_at = NOW()
-        WHERE id = $1
+        SET cogs_snapshot_id=$1,
+            cogs_unit=$2,
+            cogs_total=$3,
+            updated_at=NOW()
+        WHERE id=$4
         `,
-        [s.id, snap.id, cogsUnit, cogsTotal]
+        [cogsSnapshotId, cogsUnit, cogsTotal, s.id]
       );
 
       updated++;
@@ -455,13 +522,13 @@ async function recalcCogsMonth(req, res) {
 
     await auditSales(req, month, "sales.recalc_cogs", { updated }, {});
 
-    // ✅ FULL auto-touch (после пересчёта cogs_total поменялись)
+    // Re-touch months chain after batch
     await touchMonthsFromYms([month]);
 
-    return res.json({ ok: true, updated });
+    return res.json({ ok: true, month, updated });
   } catch (e) {
     console.error("recalcCogsMonth error:", e);
-    return res.status(500).json({ error: "Failed to recalc COGS" });
+    return res.status(500).json({ error: "Failed to recalc cogs" });
   }
 }
 
