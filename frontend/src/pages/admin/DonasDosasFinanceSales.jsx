@@ -31,7 +31,7 @@ function todayIso() {
   return `${y}-${m}-${day}`;
 }
 
-// ✅ normalize anything to YYYY-MM-DD
+// ✅ normalize anything to YYYY-MM-DD (NO timezone)
 function normalizeDateToIso(x) {
   const s = String(x || "").trim();
   if (!s) return "";
@@ -54,13 +54,16 @@ function normalizeDateToIso(x) {
     return `${yyyy}-${mm}-${dd}`;
   }
 
-  // fallback: try Date parse
-  const d = new Date(s);
-  if (!Number.isNaN(d.getTime())) {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
+  // yyyy/mm/dd
+  if (/^\d{4}\/\d{2}\/\d{2}$/.test(s)) {
+    const [yyyy, mm, dd] = s.split("/");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  // yyyy.mm.dd
+  if (/^\d{4}\.\d{2}\.\d{2}$/.test(s)) {
+    const [yyyy, mm, dd] = s.split(".");
+    return `${yyyy}-${mm}-${dd}`;
   }
 
   return "";
@@ -84,7 +87,7 @@ export default function DonasDosasFinanceSales() {
   const [editingId, setEditingId] = useState(null);
 
   const [draft, setDraft] = useState({
-    sold_at: todayIso(), // ISO always
+    sold_at: todayIso(), // string YYYY-MM-DD
     menu_item_id: "",
     qty: 1,
     unit_price: 0,
@@ -197,7 +200,7 @@ export default function DonasDosasFinanceSales() {
     setEditingId(r.id);
 
     setDraft({
-      sold_at: normalizeDateToIso(r.sold_at) || todayIso(),
+      sold_at: normalizeDateToIso(r.sold_at) || String(r.sold_at || "").slice(0, 10) || todayIso(),
       menu_item_id: r.menu_item_id ?? "",
       qty: r.qty ?? 1,
       unit_price: r.unit_price ?? 0,
@@ -214,6 +217,7 @@ export default function DonasDosasFinanceSales() {
 
       const autoPrice = toNum(it.sell_price) || toNum(it.price) || 0;
 
+      // если добавление или unit_price=0 — подставим автоматически
       if (toNum(d.unit_price) <= 0 || !editingId) {
         next.unit_price = autoPrice;
       }
@@ -228,8 +232,9 @@ export default function DonasDosasFinanceSales() {
   }
 
   async function save() {
-    // ✅ железобетон: sold_at всегда ISO
-    const sold_at = normalizeDateToIso(draft.sold_at) || todayIso();
+    // ✅ sold_at сохраняем ТОЛЬКО ISO строкой
+    const sold_at = normalizeDateToIso(draft.sold_at);
+    if (!sold_at) return setErr("Sold at должен быть в формате YYYY-MM-DD (например 2026-02-08)");
 
     const menu_item_id = Number(draft.menu_item_id);
     const qty = toNum(draft.qty);
@@ -305,7 +310,10 @@ export default function DonasDosasFinanceSales() {
     try {
       setSaving(true);
       setErr("");
-      const r = await apiPost(`/api/admin/donas/sales/recalc-cogs?month=${encodeURIComponent(month)}`, {});
+      const r = await apiPost(
+        `/api/admin/donas/sales/recalc-cogs?month=${encodeURIComponent(month)}`,
+        {}
+      );
       const updated = r?.updated ?? r?.data?.updated ?? 0;
       setOk(`Recalc COGS ✅ updated: ${updated}`);
       setTimeout(() => setOk(""), 2000);
@@ -400,7 +408,7 @@ export default function DonasDosasFinanceSales() {
             <div>
               <div className="text-sm font-semibold">{editingId ? `Edit sale #${editingId}` : "Add sale"}</div>
               <div className="text-xs text-gray-500">
-                Важно: sold_at всегда хранится и отправляется как YYYY-MM-DD (ISO). Баг dd.mm.yyyy устранён.
+                Важно: sold_at хранится как строка YYYY-MM-DD. Мы НЕ используем input type=date (из-за timezone-bug).
               </div>
             </div>
 
@@ -420,10 +428,17 @@ export default function DonasDosasFinanceSales() {
             <label className="text-xs text-gray-600 md:col-span-1">
               <div className="mb-1">Sold at</div>
               <input
-                type="date"
+                type="text"
                 className="w-full border rounded-lg px-3 py-2 bg-white"
-                value={normalizeDateToIso(draft.sold_at) || todayIso()}
-                onChange={(e) => setDraft((d) => ({ ...d, sold_at: normalizeDateToIso(e.target.value) }))}
+                value={draft.sold_at || ""}
+                placeholder="YYYY-MM-DD"
+                onChange={(e) => setDraft((d) => ({ ...d, sold_at: e.target.value }))}
+                onBlur={() =>
+                  setDraft((d) => ({
+                    ...d,
+                    sold_at: normalizeDateToIso(d.sold_at) || d.sold_at,
+                  }))
+                }
                 disabled={saving}
               />
             </label>
