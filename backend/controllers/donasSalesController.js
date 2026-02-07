@@ -25,9 +25,7 @@ async function ensureSalesTable() {
   `);
 
   await db.query(`CREATE INDEX IF NOT EXISTS idx_donas_sales_sold_at ON donas_sales (sold_at);`);
-  await db.query(
-    `CREATE INDEX IF NOT EXISTS idx_donas_sales_menu_item_id ON donas_sales (menu_item_id);`
-  );
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_donas_sales_menu_item_id ON donas_sales (menu_item_id);`);
 
   try {
     await db.query(
@@ -64,6 +62,30 @@ function toYmFromDate(d) {
 
 function hasLockedTag(notes) {
   return String(notes || "").toLowerCase().includes("#locked");
+}
+
+/**
+ * ✅ Normalize sold_at to YYYY-MM-DD (no timezone).
+ * Accepts: YYYY-MM-DD, YYYY-MM-DDTHH..., DD.MM.YYYY, DD/MM/YYYY
+ */
+function normalizeSoldAt(x) {
+  const s = String(x || "").trim();
+  if (!s) return "";
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.slice(0, 10);
+
+  if (/^\d{2}\.\d{2}\.\d{4}$/.test(s)) {
+    const [dd, mm, yyyy] = s.split(".");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) {
+    const [dd, mm, yyyy] = s.split("/");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  return s;
 }
 
 /**
@@ -268,7 +290,7 @@ async function addSale(req, res) {
     await ensureSalesTable();
     const b = req.body || {};
 
-    const soldAt = String(b.sold_at || "").trim();
+    const soldAt = normalizeSoldAt(b.sold_at);
     const menuItemId = Number(b.menu_item_id);
     const qty = toNum(b.qty);
     let unitPrice = toNum(b.unit_price);
@@ -288,7 +310,6 @@ async function addSale(req, res) {
       return res.status(409).json({ error: `Month ${ym} is locked (#locked)` });
     }
 
-    // ✅ if unit_price not provided or 0 -> take from menu item
     if (unitPrice <= 0) {
       unitPrice = await getMenuItemUnitPrice(menuItemId);
     }
@@ -300,13 +321,14 @@ async function addSale(req, res) {
     const cogsTotal = qty * cogsUnit;
     const cogsSnapshotId = snap?.id || null;
 
+    // ✅ IMPORTANT: cast sold_at to DATE explicitly
     const { rows } = await db.query(
       `
       INSERT INTO donas_sales
         (sold_at, menu_item_id, qty, unit_price, revenue_total,
          cogs_snapshot_id, cogs_unit, cogs_total, channel, notes)
       VALUES
-        ($1, $2, $3, $4, $5,
+        ($1::date, $2, $3, $4, $5,
          $6, $7, $8, $9, $10)
       RETURNING *
       `,
@@ -361,15 +383,15 @@ async function updateSale(req, res) {
 
     const b = req.body || {};
 
-    const soldAt = b.sold_at == null ? String(cur.sold_at).slice(0, 10) : String(b.sold_at).trim();
+    const soldAt =
+      b.sold_at == null ? String(cur.sold_at).slice(0, 10) : normalizeSoldAt(b.sold_at);
     const menuItemId = b.menu_item_id == null ? Number(cur.menu_item_id) : Number(b.menu_item_id);
     const qty = b.qty == null ? toNum(cur.qty) : toNum(b.qty);
 
-    // unit_price может быть не передан или 0 -> подставим с menu item
     let unitPrice = b.unit_price == null ? toNum(cur.unit_price) : toNum(b.unit_price);
 
     const channel = b.channel == null ? String(cur.channel || "cash") : String(b.channel || "cash");
-    const notes = b.notes === undefined ? cur.notes : (b.notes == null ? null : String(b.notes));
+    const notes = b.notes === undefined ? cur.notes : b.notes == null ? null : String(b.notes);
 
     if (!soldAt) return res.status(400).json({ error: "sold_at required" });
     if (!Number.isFinite(menuItemId) || menuItemId <= 0) {
@@ -384,7 +406,6 @@ async function updateSale(req, res) {
       return res.status(409).json({ error: `Month ${nextYm} is locked (#locked)` });
     }
 
-    // ✅ if unit_price is 0 -> take from menu item (supports changing menu item too)
     if (unitPrice <= 0) {
       unitPrice = await getMenuItemUnitPrice(menuItemId);
     }
@@ -412,10 +433,11 @@ async function updateSale(req, res) {
     setDiff("channel", cur.channel, channel);
     setDiff("notes", cur.notes, notes);
 
+    // ✅ IMPORTANT: cast sold_at to DATE explicitly
     const { rows } = await db.query(
       `
       UPDATE donas_sales
-      SET sold_at=$1,
+      SET sold_at=$1::date,
           menu_item_id=$2,
           qty=$3,
           unit_price=$4,
