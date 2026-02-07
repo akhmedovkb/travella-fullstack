@@ -11,7 +11,6 @@ function money(n) {
 }
 function pct(n) {
   const v = toNum(n);
-  // 2 знака, но без лишнего мусора
   return (Math.round(v * 100) / 100).toLocaleString("ru-RU");
 }
 function isYm(s) {
@@ -35,14 +34,14 @@ function todayIso() {
 export default function DonasDosasFinanceSales() {
   const [rows, setRows] = useState([]);
   const [month, setMonth] = useState(() => {
-    // default: текущий месяц
     const d = new Date();
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, "0");
     return `${y}-${m}`;
   });
 
-  const [menuItems, setMenuItems] = useState([]); // id, name
+  // ✅ теперь храню и цену (sell_price/price) чтобы автоподставлять Unit price
+  const [menuItems, setMenuItems] = useState([]); // {id,name, sell_price, price}
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
@@ -60,13 +59,19 @@ export default function DonasDosasFinanceSales() {
   });
 
   async function loadMenuItems() {
-    // если у тебя другой endpoint — поменяй здесь (я оставил максимально мягко)
-    // 1) пробуем /api/admin/donas/menu-items
-    // 2) если 404 — просто оставим пусто (можно вводить id руками, но UI скрывает)
     try {
       const r = await apiGet("/api/admin/donas/menu-items");
       const arr = Array.isArray(r) ? r : Array.isArray(r?.items) ? r.items : [];
-      setMenuItems(arr.map((x) => ({ id: x.id, name: x.name })));
+
+      // ✅ забираем sell_price/price (на странице menu items у тебя "Цена" обычно sell_price)
+      setMenuItems(
+        arr.map((x) => ({
+          id: x.id,
+          name: x.name,
+          sell_price: x.sell_price ?? x.sellPrice ?? x.price ?? 0,
+          price: x.price ?? 0,
+        }))
+      );
     } catch {
       setMenuItems([]);
     }
@@ -117,6 +122,12 @@ export default function DonasDosasFinanceSales() {
     return { ...t, margin };
   }, [rows]);
 
+  const menuById = useMemo(() => {
+    const m = new Map();
+    for (const it of menuItems || []) m.set(Number(it.id), it);
+    return m;
+  }, [menuItems]);
+
   function resetDraft() {
     setEditingId(null);
     setDraft({
@@ -144,8 +155,26 @@ export default function DonasDosasFinanceSales() {
     });
   }
 
+  // ✅ автоподстановка цены при выборе блюда
+  function onChangeMenuItem(val) {
+    setDraft((d) => {
+      const next = { ...d, menu_item_id: val };
+      const it = menuById.get(Number(val));
+      if (!it) return next;
+
+      const autoPrice = toNum(it.sell_price) || toNum(it.price) || 0;
+
+      // Подставляем, если:
+      // - unit_price сейчас 0 (пусто)
+      // - или мы не редактируем (новая продажа) и хотим всегда ставить текущую цену блюда
+      if (toNum(d.unit_price) <= 0 || !editingId) {
+        next.unit_price = autoPrice;
+      }
+      return next;
+    });
+  }
+
   async function save() {
-    // validations
     const sold_at = String(draft.sold_at || "").trim();
     const menu_item_id = Number(draft.menu_item_id);
     const qty = toNum(draft.qty);
@@ -166,7 +195,7 @@ export default function DonasDosasFinanceSales() {
           sold_at,
           menu_item_id,
           qty,
-          unit_price,
+          unit_price, // можно оставить 0 — сервер сам подставит цену блюда (см. backend fix)
           channel,
           notes,
         });
@@ -176,7 +205,7 @@ export default function DonasDosasFinanceSales() {
           sold_at,
           menu_item_id,
           qty,
-          unit_price,
+          unit_price, // можно оставить 0 — сервер сам подставит цену блюда
           channel,
           notes,
         });
@@ -274,20 +303,11 @@ export default function DonasDosasFinanceSales() {
 
       {(err || ok) && (
         <div className="space-y-2">
-          {err && (
-            <div className="p-3 rounded-xl bg-red-50 text-red-700 border border-red-200">
-              {err}
-            </div>
-          )}
-          {ok && (
-            <div className="p-3 rounded-xl bg-green-50 text-green-700 border border-green-200">
-              {ok}
-            </div>
-          )}
+          {err && <div className="p-3 rounded-xl bg-red-50 text-red-700 border border-red-200">{err}</div>}
+          {ok && <div className="p-3 rounded-xl bg-green-50 text-green-700 border border-green-200">{ok}</div>}
         </div>
       )}
 
-      {/* Filter + totals */}
       <div className="border rounded-2xl bg-white p-4 space-y-3">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="flex items-end gap-3">
@@ -329,15 +349,12 @@ export default function DonasDosasFinanceSales() {
           </div>
         </div>
 
-        {/* Add/Edit form */}
         <div className="border rounded-2xl p-4 bg-white space-y-3">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="text-sm font-semibold">
-                {editingId ? `Edit sale #${editingId}` : "Add sale"}
-              </div>
+              <div className="text-sm font-semibold">{editingId ? `Edit sale #${editingId}` : "Add sale"}</div>
               <div className="text-xs text-gray-500">
-                При сохранении сервер возьмёт COGS из последнего donas_cogs и посчитает Profit/Margin.
+                Unit price авто-подставляется из Menu item (sell_price/price), но можно изменить вручную.
               </div>
             </div>
 
@@ -370,7 +387,7 @@ export default function DonasDosasFinanceSales() {
               <select
                 className="w-full border rounded-lg px-3 py-2 bg-white"
                 value={draft.menu_item_id}
-                onChange={(e) => setDraft((d) => ({ ...d, menu_item_id: e.target.value }))}
+                onChange={(e) => onChangeMenuItem(e.target.value)}
                 disabled={saving}
               >
                 <option value="">— select —</option>
@@ -447,7 +464,6 @@ export default function DonasDosasFinanceSales() {
           </div>
         </div>
 
-        {/* Table */}
         <div className="overflow-auto border rounded-xl">
           <table className="min-w-[1200px] w-full text-sm">
             <thead className="bg-gray-50 text-gray-600">
@@ -468,7 +484,8 @@ export default function DonasDosasFinanceSales() {
             <tbody>
               {sorted.map((r) => {
                 const sold = String(r.sold_at || "").replace("T", " ").slice(0, 19);
-                const name = r.menu_item_name || menuNameById.get(Number(r.menu_item_id)) || `#${r.menu_item_id}`;
+                const name =
+                  r.menu_item_name || menuNameById.get(Number(r.menu_item_id)) || `#${r.menu_item_id}`;
                 const ym = ymFromDateLike(r.sold_at);
 
                 return (
@@ -476,7 +493,9 @@ export default function DonasDosasFinanceSales() {
                     <td className="px-3 py-2 whitespace-nowrap">
                       <div className="flex items-center gap-2">
                         <span>{sold.slice(0, 10)}</span>
-                        {ym && <span className="text-[10px] px-2 py-0.5 rounded-full border bg-white">{ym}</span>}
+                        {ym && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full border bg-white">{ym}</span>
+                        )}
                       </div>
                     </td>
 
@@ -488,9 +507,7 @@ export default function DonasDosasFinanceSales() {
                     <td className="px-3 py-2 text-right font-semibold">{money(r.profit_total)}</td>
                     <td className="px-3 py-2 text-right">{pct(r.margin_pct)}%</td>
                     <td className="px-3 py-2">{r.channel || "-"}</td>
-                    <td className="px-3 py-2 text-xs text-gray-600 max-w-[260px] truncate">
-                      {String(r.notes || "")}
-                    </td>
+                    <td className="px-3 py-2 text-xs text-gray-600 max-w-[260px] truncate">{String(r.notes || "")}</td>
 
                     <td className="px-3 py-2 text-right">
                       <div className="inline-flex items-center gap-2">
@@ -526,8 +543,8 @@ export default function DonasDosasFinanceSales() {
 
               {!loading && !sorted.length && (
                 <tr>
-                  <td colSpan={11} className="px-3 py-6 text-center text-gray-500">
-                    Нет продаж за выбранный период.
+                  <td colSpan={11} className="px-3 py-6 text-center text-gray-400">
+                    Нет продаж
                   </td>
                 </tr>
               )}
@@ -535,9 +552,9 @@ export default function DonasDosasFinanceSales() {
           </table>
         </div>
 
-        <div className="text-xs text-gray-500">
-          Подсказка: если у тебя менялись рецепты/COGS, нажми <b>Recalc COGS (month)</b> для месяца —
-          тогда Profit/Margin в Sales и агрегаты в Months станут консистентными.
+        <div className="text-[11px] text-gray-400">
+          Подсказка: если изменился рецепт/COGS — нажми Recalc COGS (month), тогда Profit/Margin в Sales и агрегации в
+          Months станут консистентными.
         </div>
       </div>
     </div>
