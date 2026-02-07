@@ -18,7 +18,26 @@ function ymToMonthDate(ym) {
 }
 
 function monthToYm(m) {
-  return String(m || "").slice(0, 7);
+  // ✅ robust: accepts Date, ISO string, "YYYY-MM-DD", "YYYY-MM"
+  if (!m && m !== 0) return "";
+  if (m instanceof Date && !Number.isNaN(m.getTime())) {
+    const y = m.getFullYear();
+    const mm = String(m.getMonth() + 1).padStart(2, "0");
+    return `${y}-${mm}`;
+  }
+  const s = String(m || "").trim();
+  if (!s) return "";
+  if (/^\d{4}-\d{2}$/.test(s)) return s;
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 7);
+  if (/^\d{4}-\d{2}/.test(s)) return s.slice(0, 7);
+
+  const d = new Date(s);
+  if (!Number.isNaN(d.getTime())) {
+    const y = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    return `${y}-${mm}`;
+  }
+  return "";
 }
 
 function hasLockedTag(notes) {
@@ -39,6 +58,12 @@ function removeLockedTag(notes) {
     .filter((l) => !String(l).toLowerCase().includes("#locked"))
     .join("\n")
     .trim();
+}
+
+// ✅ FIX: always return month as "YYYY-MM" string (no Date/ISO in API)
+function normalizeMonthRow(r) {
+  if (!r) return r;
+  return { ...r, month: monthToYm(r.month) };
 }
 
 /**
@@ -74,7 +99,6 @@ async function ensureAuditTable(client = db) {
     );
   `);
 
-  // view
   await client.query(`
     CREATE OR REPLACE VIEW donas_finance_months_audit_view AS
     SELECT
@@ -181,7 +205,6 @@ async function ensureMonthsTable() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
-  // индекс для чтения
   await db.query(`
     CREATE INDEX IF NOT EXISTS idx_donas_finance_months_slug_month ON donas_finance_months (slug, month);
   `);
@@ -264,7 +287,7 @@ async function isMonthLocked(ym) {
 
 function nextYm(ym) {
   const [y, m] = String(ym).split("-").map((v) => Number(v));
-  const d = new Date(Date.UTC(y, (m - 1) + 1, 1)); // next month
+  const d = new Date(Date.UTC(y, (m - 1) + 1, 1));
   const yy = d.getUTCFullYear();
   const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
   return `${yy}-${mm}`;
@@ -304,7 +327,6 @@ async function updateMonthAgg(ym) {
 
 // cash_end chain: stop on #locked month
 async function recomputeCashChainFrom(startYm, endYm) {
-  // ensure every month row exists in range
   let cur = startYm;
   while (true) {
     await ensureMonthRow(cur);
@@ -312,7 +334,6 @@ async function recomputeCashChainFrom(startYm, endYm) {
     cur = nextYm(cur);
   }
 
-  // load rows for range, but take latest by month
   const { rows } = await db.query(
     `
     SELECT *
@@ -332,7 +353,6 @@ async function recomputeCashChainFrom(startYm, endYm) {
     if (!prev || Number(r.id) > Number(prev.id)) byMonth.set(ym, r);
   }
 
-  // prev cash_end from previous month
   const pYm = prevYm(startYm);
   let prevCash = 0;
   try {
@@ -347,9 +367,7 @@ async function recomputeCashChainFrom(startYm, endYm) {
       [SLUG, ymToMonthDate(pYm)]
     );
     if (q.rows?.[0]) prevCash = toNum(q.rows[0].cash_end);
-  } catch {
-    // ignore
-  }
+  } catch {}
 
   const results = [];
   cur = startYm;
@@ -475,7 +493,12 @@ exports.listMonths = async (req, res) => {
       if (!prev || Number(r.id) > Number(prev.id)) byMonth.set(ym, r);
     }
 
-    return res.json(Array.from(byMonth.values()).sort((a, b) => String(a.month).localeCompare(String(b.month))));
+    // ✅ FIX: normalize month to "YYYY-MM" in API response
+    const out = Array.from(byMonth.values())
+      .map(normalizeMonthRow)
+      .sort((a, b) => String(a.month).localeCompare(String(b.month)));
+
+    return res.json(out);
   } catch (e) {
     console.error("listMonths error:", e);
     return res.status(500).json({ error: "Failed to load months" });
@@ -495,12 +518,10 @@ exports.syncMonths = async (req, res) => {
     const from = isYm(b.from) ? b.from : null;
     const to = isYm(b.to) ? b.to : null;
 
-    // determine range
     let startYm = from;
     let endYm = to;
 
     if (!startYm || !endYm) {
-      // infer from existing sales/purchases if possible
       const q = await db.query(
         `
         SELECT
@@ -529,7 +550,6 @@ exports.syncMonths = async (req, res) => {
       endYm = tmp;
     }
 
-    // touch every month in range
     const touched = [];
     let cur = startYm;
     while (true) {
@@ -553,8 +573,6 @@ exports.syncMonths = async (req, res) => {
  * PUT /api/admin/donas/finance/months/:month
  * month = YYYY-MM
  * body: { loan_paid?, notes? }
- *
- * revenue/cogs/opex/capex — авто, тут руками не меняем.
  */
 exports.updateMonth = async (req, res) => {
   try {
@@ -567,7 +585,6 @@ exports.updateMonth = async (req, res) => {
     const loan_paid = b.loan_paid == null ? toNum(cur.loan_paid) : toNum(b.loan_paid);
     const notes = b.notes === undefined ? String(cur.notes || "") : String(b.notes || "");
 
-    // lock guard: если #locked — запрещаем менять loan_paid/notes
     if (hasLockedTag(cur.notes)) {
       return res.status(409).json({ error: `Month ${ym} is locked (#locked)` });
     }
@@ -584,12 +601,10 @@ exports.updateMonth = async (req, res) => {
 
     await auditMonthAction(req, ym, "months.update", { loan_paid, notes }, {});
 
-    // пересчёт cash_end цепочки для текущего месяца (и далее — до lock стопа, но здесь только в рамках месяца)
-    // чтобы UI сразу видел cash_end, делаем recompute на ym..ym
     const cash = await recomputeCashChainFrom(ym, ym);
 
     const out = await getLatestMonthRow(ym);
-    return res.json({ ok: true, month: out, cash });
+    return res.json({ ok: true, month: normalizeMonthRow(out), cash });
   } catch (e) {
     console.error("updateMonth error:", e);
     return res.status(500).json({ error: "Failed to update month" });
@@ -615,7 +630,8 @@ exports.lockMonth = async (req, res) => {
 
     await auditMonthAction(req, ym, "months.lock", { notes: nextNotes }, {});
 
-    return res.json({ ok: true });
+    const out = await getLatestMonthRow(ym);
+    return res.json({ ok: true, month: normalizeMonthRow(out) });
   } catch (e) {
     console.error("lockMonth error:", e);
     return res.status(500).json({ error: "Failed to lock month" });
@@ -641,7 +657,8 @@ exports.unlockMonth = async (req, res) => {
 
     await auditMonthAction(req, ym, "months.unlock", { notes: nextNotes }, {});
 
-    return res.json({ ok: true });
+    const out = await getLatestMonthRow(ym);
+    return res.json({ ok: true, month: normalizeMonthRow(out) });
   } catch (e) {
     console.error("unlockMonth error:", e);
     return res.status(500).json({ error: "Failed to unlock month" });
@@ -652,7 +669,6 @@ exports.unlockMonth = async (req, res) => {
  * =========================
  * Extra endpoints used by UI (previews, resnapshot, export, audit)
  * =========================
- * Ниже — “как есть” под твой UI DonasDosasFinanceMonths.jsx
  */
 
 exports.lockPreview = async (req, res) => {
@@ -675,8 +691,9 @@ exports.resnapshotMonth = async (req, res) => {
     const ym = String(req.params.month || "").trim();
     if (!isYm(ym)) return res.status(400).json({ error: "Bad month (YYYY-MM)" });
 
-    // lock guard
-    if (await isMonthLocked(ym)) return res.status(409).json({ error: `Month ${ym} is locked (#locked)` });
+    if (await isMonthLocked(ym)) {
+      return res.status(409).json({ error: `Month ${ym} is locked (#locked)` });
+    }
 
     const agg = await updateMonthAgg(ym);
     const cash = await recomputeCashChainFrom(ym, ym);
@@ -684,7 +701,7 @@ exports.resnapshotMonth = async (req, res) => {
     await auditMonthAction(req, ym, "months.resnapshot", agg, {});
 
     const out = await getLatestMonthRow(ym);
-    return res.json({ ok: true, month: out, agg, cash });
+    return res.json({ ok: true, month: normalizeMonthRow(out), agg, cash });
   } catch (e) {
     console.error("resnapshotMonth error:", e);
     return res.status(500).json({ error: "Failed to resnapshot month" });
@@ -696,7 +713,6 @@ exports.lockUpTo = async (req, res) => {
     const ym = String(req.params.month || "").trim();
     if (!isYm(ym)) return res.status(400).json({ error: "Bad month (YYYY-MM)" });
 
-    // lock all months <= ym
     await ensureMonthsTable();
 
     const { rows } = await db.query(
@@ -796,7 +812,6 @@ exports.resnapshotUpTo = async (req, res) => {
     const ym = String(req.params.month || "").trim();
     if (!isYm(ym)) return res.status(400).json({ error: "Bad month (YYYY-MM)" });
 
-    // figure out min month from data
     const q = await db.query(
       `
       SELECT MIN(to_char(d,'YYYY-MM')) AS min_ym
@@ -818,7 +833,6 @@ exports.resnapshotUpTo = async (req, res) => {
     while (true) {
       if (await isMonthLocked(cur)) {
         agg.push({ ym: cur, locked: true, updated: false });
-        // stop on locked month for agg chain? (оставим как есть — просто не трогаем)
       } else {
         agg.push(await updateMonthAgg(cur));
       }
