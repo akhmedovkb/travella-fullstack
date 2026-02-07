@@ -12,13 +12,39 @@ function money(n) {
   return Math.round(toNum(n)).toLocaleString("ru-RU");
 }
 
-// month = "YYYY-MM" -> { from:"YYYY-MM-01", to:"YYYY-MM-DD(last)" }
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
+
 function monthRange(month) {
-  const [y, m] = String(month || "").split("-").map(Number);
-  const from = `${month}-01`;
-  const lastDay = new Date(y, m, 0).getDate(); // last day of month
-  const to = `${month}-${String(lastDay).padStart(2, "0")}`;
+  const [y, m] = String(month || "").split("-").map((v) => Number(v));
+  if (!y || !m) return { from: null, to: null };
+
+  const from = `${y}-${pad2(m)}-01`;
+  const last = new Date(Date.UTC(y, m, 0));
+  const to = `${last.getUTCFullYear()}-${pad2(last.getUTCMonth() + 1)}-${pad2(last.getUTCDate())}`;
   return { from, to };
+}
+
+function parseNotes(notes) {
+  try {
+    const obj = JSON.parse(notes);
+    if (obj && typeof obj === "object") return obj;
+  } catch (_) {}
+  return null;
+}
+
+function getCategoryFromRow(x) {
+  if (x?.category) return x.category;
+  const meta = parseNotes(x?.notes);
+  if (meta?.category) return meta.category;
+  return "—";
+}
+
+function getNoteFromRow(x) {
+  const meta = parseNotes(x?.notes);
+  if (meta && "note" in meta) return meta.note || "—";
+  return x?.notes || "—";
 }
 
 const CATS = [
@@ -45,19 +71,19 @@ export default function DonasCapex() {
   const [notes, setNotes] = useState("");
 
   async function load() {
+    const { from, to } = monthRange(month);
+    if (!from || !to) {
+      setItems([]);
+      return;
+    }
+
     setLoading(true);
     try {
-      const { from, to } = monthRange(month);
+      const qs = new URLSearchParams({ from, to, type: "capex" }).toString();
+      const r = await apiGet(`/api/admin/donas/purchases?${qs}`, "admin");
 
-      // IMPORTANT:
-      // - backend listPurchases supports from/to/type
-      // - response is { rows: [...] }
-      const r = await apiGet(
-        `/api/admin/donas/purchases?from=${from}&to=${to}&type=capex`,
-        "admin"
-      );
-
-      setItems(Array.isArray(r?.rows) ? r.rows : []);
+      const rows = Array.isArray(r?.rows) ? r.rows : Array.isArray(r) ? r : [];
+      setItems(rows);
     } finally {
       setLoading(false);
     }
@@ -76,8 +102,12 @@ export default function DonasCapex() {
     const a = toNum(amount);
     if (!title.trim() || !a) return;
 
-    // CAPEX — инвестиция: дата = первое число выбранного месяца
     const date = `${month}-01`;
+
+    const payloadNotes = JSON.stringify({
+      category,
+      note: notes.trim() || "",
+    });
 
     await apiPost(
       "/api/admin/donas/purchases",
@@ -87,8 +117,7 @@ export default function DonasCapex() {
         qty: 1,
         price: a,
         type: "capex",
-        category,
-        notes: notes.trim() || null,
+        notes: payloadNotes,
       },
       "admin"
     );
@@ -111,9 +140,7 @@ export default function DonasCapex() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold">Donas — CAPEX</h1>
-          <div className="text-sm text-gray-500">
-            Капитальные расходы (оборудование/активы)
-          </div>
+          <div className="text-sm text-gray-500">Капитальные расходы (оборудование/активы)</div>
         </div>
 
         <div className="text-sm">
@@ -214,14 +241,11 @@ export default function DonasCapex() {
                 {items.map((x) => (
                   <tr key={x.id} className="border-b">
                     <td className="py-2 px-4">{x.ingredient || "—"}</td>
-                    <td className="py-2 px-4">{x.category || "—"}</td>
-                    <td className="py-2 px-4 text-gray-600">{x.notes || "—"}</td>
+                    <td className="py-2 px-4">{getCategoryFromRow(x)}</td>
+                    <td className="py-2 px-4 text-gray-600">{getNoteFromRow(x)}</td>
                     <td className="py-2 px-4 text-right">{money(x.total)}</td>
                     <td className="py-2 px-4 text-right">
-                      <button
-                        className="text-red-600 hover:underline"
-                        onClick={() => del(x.id)}
-                      >
+                      <button className="text-red-600 hover:underline" onClick={() => del(x.id)}>
                         Удалить
                       </button>
                     </td>
@@ -240,9 +264,8 @@ export default function DonasCapex() {
           </div>
 
           <div className="px-4 py-3 text-xs text-gray-500">
-            Примечание: CAPEX хранится в <code>donas_purchases</code> с{" "}
-            <code>type='capex'</code>, сумма считается как <code>qty × price</code>{" "}
-            (здесь qty=1).
+            Примечание: CAPEX хранится в <code>donas_purchases</code> с <code>type='capex'</code>, сумма считается как{" "}
+            <code>qty × price</code> (здесь qty=1).
           </div>
         </div>
       </div>
