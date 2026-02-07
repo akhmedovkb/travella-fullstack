@@ -24,13 +24,11 @@ async function ensureSalesTable() {
     );
   `);
 
-  // Helpful indexes
   await db.query(`CREATE INDEX IF NOT EXISTS idx_donas_sales_sold_at ON donas_sales (sold_at);`);
   await db.query(
     `CREATE INDEX IF NOT EXISTS idx_donas_sales_menu_item_id ON donas_sales (menu_item_id);`
   );
 
-  // Attempt to add foreign keys softly (ignore if referenced tables missing)
   try {
     await db.query(
       `ALTER TABLE donas_sales
@@ -38,9 +36,7 @@ async function ensureSalesTable() {
        FOREIGN KEY (menu_item_id) REFERENCES donas_menu_items(id)
        ON DELETE RESTRICT;`
     );
-  } catch {
-    // ignore (constraint may already exist, or table donas_menu_items not present yet)
-  }
+  } catch {}
 
   try {
     await db.query(
@@ -49,9 +45,7 @@ async function ensureSalesTable() {
        FOREIGN KEY (cogs_snapshot_id) REFERENCES donas_cogs(id)
        ON DELETE SET NULL;`
     );
-  } catch {
-    // ignore
-  }
+  } catch {}
 }
 
 function toNum(x) {
@@ -181,6 +175,26 @@ async function isMonthLocked(ym) {
 }
 
 /**
+ * ✅ Price source of truth from Menu Items
+ * We prefer sell_price, fallback to price, else 0
+ */
+async function getMenuItemUnitPrice(menuItemId) {
+  const { rows } = await db.query(
+    `
+    SELECT sell_price, price
+    FROM donas_menu_items
+    WHERE id=$1
+    LIMIT 1
+    `,
+    [menuItemId]
+  );
+  const r = rows?.[0] || {};
+  const sp = toNum(r.sell_price);
+  const p = toNum(r.price);
+  return sp > 0 ? sp : p > 0 ? p : 0;
+}
+
+/**
  * Latest COGS snapshot
  */
 async function getLatestCogsForMenuItem(menuItemId) {
@@ -247,7 +261,7 @@ async function getSales(req, res) {
 
 /**
  * POST /api/admin/donas/sales
- * body: { sold_at, menu_item_id, qty, unit_price, channel, notes? }
+ * body: { sold_at, menu_item_id, qty, unit_price?, channel, notes? }
  */
 async function addSale(req, res) {
   try {
@@ -257,7 +271,7 @@ async function addSale(req, res) {
     const soldAt = String(b.sold_at || "").trim();
     const menuItemId = Number(b.menu_item_id);
     const qty = toNum(b.qty);
-    const unitPrice = toNum(b.unit_price);
+    let unitPrice = toNum(b.unit_price);
     const channel = String(b.channel || "cash").trim() || "cash";
     const notes = b.notes == null ? null : String(b.notes);
 
@@ -272,6 +286,11 @@ async function addSale(req, res) {
 
     if (await isMonthLocked(ym)) {
       return res.status(409).json({ error: `Month ${ym} is locked (#locked)` });
+    }
+
+    // ✅ if unit_price not provided or 0 -> take from menu item
+    if (unitPrice <= 0) {
+      unitPrice = await getMenuItemUnitPrice(menuItemId);
     }
 
     const revenueTotal = qty * unitPrice;
@@ -310,10 +329,9 @@ async function addSale(req, res) {
       ym,
       "sales.add",
       { sale_id: rows?.[0]?.id || null, channel },
-      { revenue_total: revenueTotal, cogs_total: cogsTotal }
+      { revenue_total: revenueTotal, cogs_total: cogsTotal, unit_price: unitPrice }
     );
 
-    // ✅ FULL auto-touch: sales+purchases+cash_end chain + locked stop
     await touchMonthsFromYms([ym]);
 
     return res.json(rows[0]);
@@ -344,10 +362,12 @@ async function updateSale(req, res) {
     const b = req.body || {};
 
     const soldAt = b.sold_at == null ? String(cur.sold_at).slice(0, 10) : String(b.sold_at).trim();
-    const menuItemId =
-      b.menu_item_id == null ? Number(cur.menu_item_id) : Number(b.menu_item_id);
+    const menuItemId = b.menu_item_id == null ? Number(cur.menu_item_id) : Number(b.menu_item_id);
     const qty = b.qty == null ? toNum(cur.qty) : toNum(b.qty);
-    const unitPrice = b.unit_price == null ? toNum(cur.unit_price) : toNum(b.unit_price);
+
+    // unit_price может быть не передан или 0 -> подставим с menu item
+    let unitPrice = b.unit_price == null ? toNum(cur.unit_price) : toNum(b.unit_price);
+
     const channel = b.channel == null ? String(cur.channel || "cash") : String(b.channel || "cash");
     const notes = b.notes === undefined ? cur.notes : (b.notes == null ? null : String(b.notes));
 
@@ -360,9 +380,13 @@ async function updateSale(req, res) {
     const nextYm = toYmFromDate(soldAt);
     if (!isYm(nextYm)) return res.status(400).json({ error: "sold_at invalid" });
 
-    // If moving to another month: guard lock for target month too
     if (nextYm !== curYm && (await isMonthLocked(nextYm))) {
       return res.status(409).json({ error: `Month ${nextYm} is locked (#locked)` });
+    }
+
+    // ✅ if unit_price is 0 -> take from menu item (supports changing menu item too)
+    if (unitPrice <= 0) {
+      unitPrice = await getMenuItemUnitPrice(menuItemId);
     }
 
     const revenueTotal = qty * unitPrice;
@@ -405,24 +429,11 @@ async function updateSale(req, res) {
       WHERE id=$11
       RETURNING *
       `,
-      [
-        soldAt,
-        menuItemId,
-        qty,
-        unitPrice,
-        revenueTotal,
-        cogsSnapshotId,
-        cogsUnit,
-        cogsTotal,
-        channel,
-        notes,
-        id,
-      ]
+      [soldAt, menuItemId, qty, unitPrice, revenueTotal, cogsSnapshotId, cogsUnit, cogsTotal, channel, notes, id]
     );
 
     await auditSales(req, nextYm, "sales.update", { sale_id: id }, diff);
 
-    // touch both months if moved
     const yms = nextYm === curYm ? [nextYm] : [curYm, nextYm];
     await touchMonthsFromYms(yms);
 
@@ -466,7 +477,6 @@ async function deleteSale(req, res) {
 
 /**
  * POST /api/admin/donas/sales/recalc-cogs?month=YYYY-MM
- * Пересчитывает COGS для продаж месяца по актуальным donas_cogs
  */
 async function recalcCogsMonth(req, res) {
   try {
@@ -521,8 +531,6 @@ async function recalcCogsMonth(req, res) {
     }
 
     await auditSales(req, month, "sales.recalc_cogs", { updated }, {});
-
-    // Re-touch months chain after batch
     await touchMonthsFromYms([month]);
 
     return res.json({ ok: true, month, updated });
