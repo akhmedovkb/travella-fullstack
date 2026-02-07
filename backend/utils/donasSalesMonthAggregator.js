@@ -28,6 +28,24 @@ function nextYm(ym) {
   return `${yy}-${mm}`;
 }
 
+async function getCashStart() {
+  // settings.cash_start = opening balance (seed) for cash_end chain
+  try {
+    const q = await db.query(
+      `
+      SELECT cash_start
+      FROM donas_finance_settings
+      WHERE slug=$1
+      LIMIT 1
+      `,
+      [SLUG]
+    );
+    return toNum(q.rows?.[0]?.cash_start);
+  } catch {
+    return 0;
+  }
+}
+
 async function listMonthsRange(startYm, endYm) {
   const { rows } = await db.query(
     `
@@ -166,6 +184,7 @@ async function recomputeCashChainFrom(startYm, endYm) {
   )}`;
 
   let prevCash = 0;
+  let prevFound = false;
   try {
     const prevRowQ = await db.query(
       `
@@ -177,9 +196,17 @@ async function recomputeCashChainFrom(startYm, endYm) {
       `,
       [SLUG, ymToMonthDate(prevYm)]
     );
-    if (prevRowQ.rows?.[0]) prevCash = toNum(prevRowQ.rows[0].cash_end);
+    if (prevRowQ.rows?.[0]) {
+      prevCash = toNum(prevRowQ.rows[0].cash_end);
+      prevFound = true;
+    }
   } catch {
     // ignore
+  }
+
+  // If there is no previous month row at all, seed from settings.cash_start.
+  if (!prevFound) {
+    prevCash = await getCashStart();
   }
 
   const results = [];
@@ -231,11 +258,24 @@ async function touchMonthsFromYms(yms = []) {
   const uniq = [...new Set(list)].sort();
   if (!uniq.length) return { ok: true, touched: [], cash: [] };
 
-  const startYm = uniq[0];
+  // cash_end is a chain, so when a month changes we must recompute from the previous month.
+  // Otherwise cash_end can stay stale (e.g. touching only endYm won't update startYm-1).
+  const startYm = (() => {
+    const [y, m] = String(uniq[0]).split("-").map((v) => Number(v));
+    const d = new Date(Date.UTC(y, (m - 1) - 1, 1));
+    const yy = d.getUTCFullYear();
+    const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+    return `${yy}-${mm}`;
+  })();
   const endYm = uniq[uniq.length - 1];
 
+  // Ensure aggregates for the previous month too, because cash_end for the first touched
+  // month depends on it (and it may contain sales/purchases).
+  const ymSet = new Set([startYm, ...uniq]);
+  const ymsToUpdate = [...ymSet].filter(isYm).sort();
+
   const touched = [];
-  for (const ym of uniq) {
+  for (const ym of ymsToUpdate) {
     touched.push(await updateMonthAgg(ym));
   }
 
