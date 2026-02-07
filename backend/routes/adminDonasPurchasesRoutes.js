@@ -1,3 +1,5 @@
+//backend/routes/adminDonasPurchasesRoutes.js
+
 const express = require("express");
 const authenticateToken = require("../middleware/authenticateToken");
 const requireAdmin = require("../middleware/requireAdmin");
