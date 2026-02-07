@@ -9,7 +9,7 @@ function toNum(x) {
 
 function normType(t) {
   const v = String(t || "").trim().toLowerCase();
-  // В БД constraint: type IN ('opex','capex','cogs')
+  // constraint в БД: type IN ('opex','capex','cogs')
   if (v === "opex" || v === "capex" || v === "cogs") return v;
   return null;
 }
@@ -19,54 +19,31 @@ function cleanText(x) {
   return s ? s : null;
 }
 
-function monthStart(ym) {
-  // ym: "YYYY-MM" or "YYYY-MM-DD"
-  if (!ym) return null;
-  const s = String(ym).trim();
-  if (/^\d{4}-\d{2}$/.test(s)) return `${s}-01`;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-  return null;
-}
-
 /**
- * GET /api/admin/donas/purchases
- * поддерживает:
- *   ?month=YYYY-MM&type=opex|capex|cogs
- *   ?from=YYYY-MM-DD&to=YYYY-MM-DD&type=...
+ * GET /api/admin/donas/purchases?from=YYYY-MM-DD&to=YYYY-MM-DD&type=opex|capex|cogs
  */
 exports.listPurchases = async (req, res) => {
   try {
-    const typeRaw = cleanText(req.query.type);
-    const type = typeRaw ? normType(typeRaw) : null;
-    if (typeRaw && !type) {
-      return res.status(400).json({ error: "Invalid type. Use: opex | capex | cogs" });
-    }
-
-    // 1) month имеет приоритет
-    const m = monthStart(cleanText(req.query.month));
-    const from = m || cleanText(req.query.from);
-    const to = m ? null : cleanText(req.query.to); // если month задан — to не нужен
+    const from = cleanText(req.query.from);
+    const to = cleanText(req.query.to);
+    const type = req.query.type ? normType(req.query.type) : null;
 
     const where = [];
     const params = [];
     let i = 1;
 
     if (from) {
-      where.push(`date >= $${i++}::date`);
+      where.push(`date >= $${i++}`);
       params.push(from);
     }
-
-    if (m) {
-      // диапазон месяца: [start, start + 1 month)
-      where.push(`date < ($${i++}::date + INTERVAL '1 month')`);
-      params.push(m);
-    } else if (to) {
-      // from/to: включительно (date <= to)
-      where.push(`date <= $${i++}::date`);
+    if (to) {
+      where.push(`date <= $${i++}`);
       params.push(to);
     }
-
-    if (type) {
+    if (req.query.type) {
+      if (!type) {
+        return res.status(400).json({ error: "Invalid type. Use: opex | capex | cogs" });
+      }
       where.push(`type = $${i++}`);
       params.push(type);
     }
@@ -81,19 +58,14 @@ exports.listPurchases = async (req, res) => {
         total,   -- generated column
         type,
         notes,
-        created_at,
-        updated_at
+        created_at
       FROM donas_purchases
       ${where.length ? "WHERE " + where.join(" AND ") : ""}
       ORDER BY date DESC, id DESC
     `;
 
     const { rows } = await db.query(sql, params);
-
-    // небольшая помощь фронту: total_sum
-    const total_sum = rows.reduce((acc, r) => acc + toNum(r.total), 0);
-
-    res.json({ rows, total_sum });
+    res.json({ rows });
   } catch (e) {
     console.error("listPurchases error:", e);
     res.status(500).json({ error: "Failed to list purchases" });
@@ -103,6 +75,9 @@ exports.listPurchases = async (req, res) => {
 /**
  * POST /api/admin/donas/purchases
  * body: { date, ingredient, qty, price, type, notes }
+ *
+ * total НЕ передаем — он generated column.
+ * type должен быть 'opex'|'capex'|'cogs' (lowercase).
  */
 exports.addPurchase = async (req, res) => {
   try {
@@ -122,7 +97,7 @@ exports.addPurchase = async (req, res) => {
       INSERT INTO donas_purchases (date, ingredient, qty, price, type, notes)
       VALUES ($1,$2,$3,$4,$5,$6)
       RETURNING
-        id, date, ingredient, qty, price, total, type, notes, created_at, updated_at
+        id, date, ingredient, qty, price, total, type, notes, created_at
       `,
       [date, ingredient, qty, price, type, notes]
     );
@@ -136,6 +111,9 @@ exports.addPurchase = async (req, res) => {
 
 /**
  * PUT /api/admin/donas/purchases/:id
+ * body: { date, ingredient, qty, price, type, notes }
+ *
+ * total НЕ трогаем.
  */
 exports.updatePurchase = async (req, res) => {
   try {
@@ -159,7 +137,7 @@ exports.updatePurchase = async (req, res) => {
       SET date=$2, ingredient=$3, qty=$4, price=$5, type=$6, notes=$7
       WHERE id=$1
       RETURNING
-        id, date, ingredient, qty, price, total, type, notes, created_at, updated_at
+        id, date, ingredient, qty, price, total, type, notes, created_at
       `,
       [id, date, ingredient, qty, price, type, notes]
     );
@@ -187,6 +165,3 @@ exports.deletePurchase = async (req, res) => {
     res.status(500).json({ error: "Failed to delete purchase" });
   }
 };
-
-// ✅ Алиасы под старые импорты/роуты, чтобы ничего не падало:
-exports.getPurchases = exports.listPurchases;
