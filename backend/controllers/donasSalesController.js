@@ -397,6 +397,11 @@ async function updateSale(req, res) {
 
     const soldAt =
       b.sold_at == null ? String(cur.sold_at).slice(0, 10) : normalizeSoldAt(b.sold_at);
+        // 🔎 DEBUG: update payload
+    console.log("UPDATE SALE id:", id);
+    console.log("UPDATE SALE RAW sold_at:", b.sold_at);
+    console.log("UPDATE SALE NORM soldAt:", soldAt);
+
     const menuItemId = b.menu_item_id == null ? Number(cur.menu_item_id) : Number(b.menu_item_id);
     const qty = b.qty == null ? toNum(cur.qty) : toNum(b.qty);
 
