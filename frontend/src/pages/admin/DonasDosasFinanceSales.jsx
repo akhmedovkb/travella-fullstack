@@ -31,6 +31,41 @@ function todayIso() {
   return `${y}-${m}-${day}`;
 }
 
+// ✅ normalize anything to YYYY-MM-DD
+function normalizeDateToIso(x) {
+  const s = String(x || "").trim();
+  if (!s) return "";
+
+  // already ISO
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+
+  // timestamp -> take first 10
+  if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.slice(0, 10);
+
+  // dd.mm.yyyy -> yyyy-mm-dd
+  if (/^\d{2}\.\d{2}\.\d{4}$/.test(s)) {
+    const [dd, mm, yyyy] = s.split(".");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  // dd/mm/yyyy
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) {
+    const [dd, mm, yyyy] = s.split("/");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  // fallback: try Date parse
+  const d = new Date(s);
+  if (!Number.isNaN(d.getTime())) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+
+  return "";
+}
+
 export default function DonasDosasFinanceSales() {
   const [rows, setRows] = useState([]);
   const [month, setMonth] = useState(() => {
@@ -40,7 +75,7 @@ export default function DonasDosasFinanceSales() {
     return `${y}-${m}`;
   });
 
-  const [menuItems, setMenuItems] = useState([]); // {id,name,sell_price,price}
+  const [menuItems, setMenuItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
@@ -49,7 +84,7 @@ export default function DonasDosasFinanceSales() {
   const [editingId, setEditingId] = useState(null);
 
   const [draft, setDraft] = useState({
-    sold_at: todayIso(),
+    sold_at: todayIso(), // ISO always
     menu_item_id: "",
     qty: 1,
     unit_price: 0,
@@ -162,7 +197,7 @@ export default function DonasDosasFinanceSales() {
     setEditingId(r.id);
 
     setDraft({
-      sold_at: String(r.sold_at || "").slice(0, 10) || todayIso(),
+      sold_at: normalizeDateToIso(r.sold_at) || todayIso(),
       menu_item_id: r.menu_item_id ?? "",
       qty: r.qty ?? 1,
       unit_price: r.unit_price ?? 0,
@@ -171,7 +206,6 @@ export default function DonasDosasFinanceSales() {
     });
   }
 
-  // ✅ автоподстановка цены при выборе блюда
   function onChangeMenuItem(val) {
     setDraft((d) => {
       const next = { ...d, menu_item_id: val };
@@ -180,7 +214,6 @@ export default function DonasDosasFinanceSales() {
 
       const autoPrice = toNum(it.sell_price) || toNum(it.price) || 0;
 
-      // Подставляем, если unit_price пустой/0 или это создание (не edit)
       if (toNum(d.unit_price) <= 0 || !editingId) {
         next.unit_price = autoPrice;
       }
@@ -188,7 +221,6 @@ export default function DonasDosasFinanceSales() {
     });
   }
 
-  // ✅ кнопка Reset → всегда ставит цену блюда
   function resetToMenuPrice() {
     if (!selectedMenuItem) return;
     const autoPrice = selectedMenuPrice;
@@ -196,14 +228,15 @@ export default function DonasDosasFinanceSales() {
   }
 
   async function save() {
-    const sold_at = String(draft.sold_at || "").trim();
+    // ✅ железобетон: sold_at всегда ISO
+    const sold_at = normalizeDateToIso(draft.sold_at) || todayIso();
+
     const menu_item_id = Number(draft.menu_item_id);
     const qty = toNum(draft.qty);
     const unit_price = toNum(draft.unit_price);
     const channel = String(draft.channel || "cash").trim() || "cash";
     const notes = draft.notes == null ? null : String(draft.notes);
 
-    if (!sold_at) return setErr("sold_at обязателен");
     if (!Number.isFinite(menu_item_id) || menu_item_id <= 0) return setErr("Выбери блюдо (menu_item)");
     if (qty <= 0) return setErr("qty должно быть > 0");
 
@@ -300,7 +333,6 @@ export default function DonasDosasFinanceSales() {
             className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50"
             onClick={recalcCogsMonth}
             disabled={loading || saving}
-            title="Пересчитать COGS/Profit/Margin у продаж месяца по последнему donas_cogs"
           >
             Recalc COGS (month)
           </button>
@@ -342,7 +374,6 @@ export default function DonasDosasFinanceSales() {
               className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
               onClick={() => setMonth("")}
               disabled={saving}
-              title="Показать все месяцы"
             >
               All
             </button>
@@ -369,7 +400,7 @@ export default function DonasDosasFinanceSales() {
             <div>
               <div className="text-sm font-semibold">{editingId ? `Edit sale #${editingId}` : "Add sale"}</div>
               <div className="text-xs text-gray-500">
-                Unit price можно менять вручную. Цена блюда показана справа от выбора (и можно сбросить ↺).
+                Важно: sold_at всегда хранится и отправляется как YYYY-MM-DD (ISO). Баг dd.mm.yyyy устранён.
               </div>
             </div>
 
@@ -391,8 +422,8 @@ export default function DonasDosasFinanceSales() {
               <input
                 type="date"
                 className="w-full border rounded-lg px-3 py-2 bg-white"
-                value={draft.sold_at}
-                onChange={(e) => setDraft((d) => ({ ...d, sold_at: e.target.value }))}
+                value={normalizeDateToIso(draft.sold_at) || todayIso()}
+                onChange={(e) => setDraft((d) => ({ ...d, sold_at: normalizeDateToIso(e.target.value) }))}
                 disabled={saving}
               />
             </label>
@@ -415,7 +446,6 @@ export default function DonasDosasFinanceSales() {
                 </select>
               </label>
 
-              {/* ✅ price hint + reset */}
               <div className="mt-1 flex items-center justify-between gap-2">
                 <div className="text-[11px] text-gray-500">
                   Menu price:{" "}
@@ -429,17 +459,10 @@ export default function DonasDosasFinanceSales() {
                   className="text-[11px] px-2 py-1 rounded-md border bg-white hover:bg-gray-50 disabled:opacity-50"
                   onClick={resetToMenuPrice}
                   disabled={saving || !selectedMenuItem || selectedMenuPrice <= 0}
-                  title="Сбросить unit_price на текущую цену блюда из Menu items"
                 >
                   ↺ Reset to menu price
                 </button>
               </div>
-
-              {!menuItems.length && (
-                <div className="mt-1 text-[11px] text-gray-400">
-                  menu-items endpoint не найден → скажи мне точный путь (или я подстрою под твой backend).
-                </div>
-              )}
             </div>
 
             <label className="text-xs text-gray-600">
@@ -494,14 +517,7 @@ export default function DonasDosasFinanceSales() {
             <button
               type="button"
               className="px-4 py-2 rounded-lg bg-black text-white hover:bg-gray-900 disabled:opacity-50"
-              onClick={async () => {
-                // маленькая защита: если выбрано блюдо и unit_price пусто → подставим меню-цену
-                if (selectedMenuItem && toNum(draft.unit_price) <= 0 && selectedMenuPrice > 0) {
-                  setDraft((d) => ({ ...d, unit_price: selectedMenuPrice }));
-                  // не делаем await — пользователь всё равно нажал Save/Add, цена уже выставлена
-                }
-                await save();
-              }}
+              onClick={save}
               disabled={saving}
             >
               {saving ? "Saving…" : editingId ? "Save" : "Add"}
@@ -528,7 +544,7 @@ export default function DonasDosasFinanceSales() {
             </thead>
             <tbody>
               {sorted.map((r) => {
-                const sold = String(r.sold_at || "").replace("T", " ").slice(0, 19);
+                const sold = normalizeDateToIso(r.sold_at) || String(r.sold_at || "").slice(0, 10);
                 const name =
                   r.menu_item_name || menuNameById.get(Number(r.menu_item_id)) || `#${r.menu_item_id}`;
                 const ym = ymFromDateLike(r.sold_at);
@@ -537,7 +553,7 @@ export default function DonasDosasFinanceSales() {
                   <tr key={r.id} className="border-t hover:bg-gray-50">
                     <td className="px-3 py-2 whitespace-nowrap">
                       <div className="flex items-center gap-2">
-                        <span>{sold.slice(0, 10)}</span>
+                        <span>{sold}</span>
                         {ym && (
                           <span className="text-[10px] px-2 py-0.5 rounded-full border bg-white">{ym}</span>
                         )}
