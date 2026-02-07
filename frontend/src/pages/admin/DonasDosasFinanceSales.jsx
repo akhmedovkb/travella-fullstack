@@ -40,8 +40,7 @@ export default function DonasDosasFinanceSales() {
     return `${y}-${m}`;
   });
 
-  // ✅ теперь храню и цену (sell_price/price) чтобы автоподставлять Unit price
-  const [menuItems, setMenuItems] = useState([]); // {id,name, sell_price, price}
+  const [menuItems, setMenuItems] = useState([]); // {id,name,sell_price,price}
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
@@ -62,8 +61,6 @@ export default function DonasDosasFinanceSales() {
     try {
       const r = await apiGet("/api/admin/donas/menu-items");
       const arr = Array.isArray(r) ? r : Array.isArray(r?.items) ? r.items : [];
-
-      // ✅ забираем sell_price/price (на странице menu items у тебя "Цена" обычно sell_price)
       setMenuItems(
         arr.map((x) => ({
           id: x.id,
@@ -128,6 +125,25 @@ export default function DonasDosasFinanceSales() {
     return m;
   }, [menuItems]);
 
+  const menuNameById = useMemo(() => {
+    const m = new Map();
+    for (const it of menuItems || []) m.set(Number(it.id), it.name);
+    return m;
+  }, [menuItems]);
+
+  const selectedMenuItem = useMemo(() => {
+    const id = Number(draft.menu_item_id);
+    if (!id) return null;
+    return menuById.get(id) || null;
+  }, [draft.menu_item_id, menuById]);
+
+  const selectedMenuPrice = useMemo(() => {
+    if (!selectedMenuItem) return 0;
+    const sp = toNum(selectedMenuItem.sell_price);
+    const p = toNum(selectedMenuItem.price);
+    return sp > 0 ? sp : p > 0 ? p : 0;
+  }, [selectedMenuItem]);
+
   function resetDraft() {
     setEditingId(null);
     setDraft({
@@ -164,14 +180,19 @@ export default function DonasDosasFinanceSales() {
 
       const autoPrice = toNum(it.sell_price) || toNum(it.price) || 0;
 
-      // Подставляем, если:
-      // - unit_price сейчас 0 (пусто)
-      // - или мы не редактируем (новая продажа) и хотим всегда ставить текущую цену блюда
+      // Подставляем, если unit_price пустой/0 или это создание (не edit)
       if (toNum(d.unit_price) <= 0 || !editingId) {
         next.unit_price = autoPrice;
       }
       return next;
     });
+  }
+
+  // ✅ кнопка Reset → всегда ставит цену блюда
+  function resetToMenuPrice() {
+    if (!selectedMenuItem) return;
+    const autoPrice = selectedMenuPrice;
+    setDraft((d) => ({ ...d, unit_price: autoPrice }));
   }
 
   async function save() {
@@ -195,7 +216,7 @@ export default function DonasDosasFinanceSales() {
           sold_at,
           menu_item_id,
           qty,
-          unit_price, // можно оставить 0 — сервер сам подставит цену блюда (см. backend fix)
+          unit_price,
           channel,
           notes,
         });
@@ -205,7 +226,7 @@ export default function DonasDosasFinanceSales() {
           sold_at,
           menu_item_id,
           qty,
-          unit_price, // можно оставить 0 — сервер сам подставит цену блюда
+          unit_price,
           channel,
           notes,
         });
@@ -262,12 +283,6 @@ export default function DonasDosasFinanceSales() {
       setSaving(false);
     }
   }
-
-  const menuNameById = useMemo(() => {
-    const m = new Map();
-    for (const it of menuItems || []) m.set(Number(it.id), it.name);
-    return m;
-  }, [menuItems]);
 
   return (
     <div className="max-w-6xl mx-auto space-y-4">
@@ -354,7 +369,7 @@ export default function DonasDosasFinanceSales() {
             <div>
               <div className="text-sm font-semibold">{editingId ? `Edit sale #${editingId}` : "Add sale"}</div>
               <div className="text-xs text-gray-500">
-                Unit price авто-подставляется из Menu item (sell_price/price), но можно изменить вручную.
+                Unit price можно менять вручную. Цена блюда показана справа от выбора (и можно сбросить ↺).
               </div>
             </div>
 
@@ -382,27 +397,50 @@ export default function DonasDosasFinanceSales() {
               />
             </label>
 
-            <label className="text-xs text-gray-600 md:col-span-2">
-              <div className="mb-1">Menu item</div>
-              <select
-                className="w-full border rounded-lg px-3 py-2 bg-white"
-                value={draft.menu_item_id}
-                onChange={(e) => onChangeMenuItem(e.target.value)}
-                disabled={saving}
-              >
-                <option value="">— select —</option>
-                {(menuItems || []).map((it) => (
-                  <option key={it.id} value={it.id}>
-                    {it.name}
-                  </option>
-                ))}
-              </select>
+            <div className="md:col-span-2">
+              <label className="text-xs text-gray-600 block">
+                <div className="mb-1">Menu item</div>
+                <select
+                  className="w-full border rounded-lg px-3 py-2 bg-white"
+                  value={draft.menu_item_id}
+                  onChange={(e) => onChangeMenuItem(e.target.value)}
+                  disabled={saving}
+                >
+                  <option value="">— select —</option>
+                  {(menuItems || []).map((it) => (
+                    <option key={it.id} value={it.id}>
+                      {it.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {/* ✅ price hint + reset */}
+              <div className="mt-1 flex items-center justify-between gap-2">
+                <div className="text-[11px] text-gray-500">
+                  Menu price:{" "}
+                  <span className="font-semibold text-gray-700">
+                    {selectedMenuItem ? (selectedMenuPrice > 0 ? money(selectedMenuPrice) : "—") : "—"}
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  className="text-[11px] px-2 py-1 rounded-md border bg-white hover:bg-gray-50 disabled:opacity-50"
+                  onClick={resetToMenuPrice}
+                  disabled={saving || !selectedMenuItem || selectedMenuPrice <= 0}
+                  title="Сбросить unit_price на текущую цену блюда из Menu items"
+                >
+                  ↺ Reset to menu price
+                </button>
+              </div>
+
               {!menuItems.length && (
                 <div className="mt-1 text-[11px] text-gray-400">
-                  menu-items endpoint не найден → добавь его или скажи мне какой у тебя путь.
+                  menu-items endpoint не найден → скажи мне точный путь (или я подстрою под твой backend).
                 </div>
               )}
-            </label>
+            </div>
 
             <label className="text-xs text-gray-600">
               <div className="mb-1">Qty</div>
@@ -456,7 +494,14 @@ export default function DonasDosasFinanceSales() {
             <button
               type="button"
               className="px-4 py-2 rounded-lg bg-black text-white hover:bg-gray-900 disabled:opacity-50"
-              onClick={save}
+              onClick={async () => {
+                // маленькая защита: если выбрано блюдо и unit_price пусто → подставим меню-цену
+                if (selectedMenuItem && toNum(draft.unit_price) <= 0 && selectedMenuPrice > 0) {
+                  setDraft((d) => ({ ...d, unit_price: selectedMenuPrice }));
+                  // не делаем await — пользователь всё равно нажал Save/Add, цена уже выставлена
+                }
+                await save();
+              }}
               disabled={saving}
             >
               {saving ? "Saving…" : editingId ? "Save" : "Add"}
