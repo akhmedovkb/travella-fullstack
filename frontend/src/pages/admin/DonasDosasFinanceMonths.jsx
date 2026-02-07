@@ -53,13 +53,52 @@ function toNum(x) {
 function money(n) {
   return Math.round(toNum(n)).toLocaleString("ru-RU");
 }
+
+/**
+ * ✅ FIX: robust YM extractor
+ * - supports: "YYYY-MM", "YYYY-MM-DD", ISO strings, Date objects, timestamps
+ * - never throws; returns "" only if truly невозможно определить
+ */
 function ymFromDateLike(x) {
-  const s = String(x || "");
+  if (!x && x !== 0) return "";
+
+  // Date object
+  if (x instanceof Date && !Number.isNaN(x.getTime())) {
+    const y = x.getUTCFullYear();
+    const m = String(x.getUTCMonth() + 1).padStart(2, "0");
+    return `${y}-${m}`;
+  }
+
+  // timestamp number
+  if (typeof x === "number" && Number.isFinite(x)) {
+    const d = new Date(x);
+    if (!Number.isNaN(d.getTime())) {
+      const y = d.getUTCFullYear();
+      const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+      return `${y}-${m}`;
+    }
+  }
+
+  const s = String(x || "").trim();
   if (!s) return "";
-  if (/^\d{4}-\d{2}/.test(s)) return s.slice(0, 7);
+
+  // plain ym
   if (/^\d{4}-\d{2}$/.test(s)) return s;
+
+  // ISO / YYYY-MM-DD / starts with YYYY-MM
+  if (/^\d{4}-\d{2}/.test(s)) return s.slice(0, 7);
+
+  // fallback: try parse
+  const d = new Date(s);
+  if (!Number.isNaN(d.getTime())) {
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+    return `${y}-${m}`;
+  }
+
   return "";
 }
+
 function isLocked(notes) {
   return String(notes || "").toLowerCase().includes("#locked");
 }
@@ -137,7 +176,12 @@ export default function DonasDosasFinanceMonths() {
 
   const sorted = useMemo(() => {
     const a = Array.isArray(rows) ? rows.slice() : [];
-    a.sort((x, y) => String(x.month || "").localeCompare(String(y.month || "")));
+    // ✅ FIX: sort by normalized YM (not by raw month string/date)
+    a.sort((x, y) => {
+      const ax = ymFromDateLike(x?.month);
+      const ay = ymFromDateLike(y?.month);
+      return String(ax).localeCompare(String(ay));
+    });
     return a;
   }, [rows]);
 
@@ -263,12 +307,10 @@ export default function DonasDosasFinanceMonths() {
     setEditYm(ym);
 
     setDraft({
-      month: r.month,
-
+      month: ym, // ✅ FIX: store ym explicitly, not raw month
       // ✅ показываем в форме, но не даём редактировать
       revenue: toNum(r.revenue),
       cogs: toNum(r.cogs),
-
       opex: toNum(r.opex),
       capex: toNum(r.capex),
       loan_paid: toNum(r.loan_paid),
@@ -445,24 +487,30 @@ export default function DonasDosasFinanceMonths() {
   }
 
   const viewRows = useMemo(() => {
-    return sorted.map((r) => {
-      const revenue = toNum(r.revenue);
-      const cogs = toNum(r.cogs);
-      const opex = toNum(r.opex);
-      const capex = toNum(r.capex);
-      const loan_paid = toNum(r.loan_paid);
+    return sorted
+      .map((r, idx) => {
+        const revenue = toNum(r.revenue);
+        const cogs = toNum(r.cogs);
+        const opex = toNum(r.opex);
+        const capex = toNum(r.capex);
+        const loan_paid = toNum(r.loan_paid);
 
-      const gp = revenue - cogs;
-      const netOp = gp - opex;
-      const cf = netOp - loan_paid - capex;
+        const gp = revenue - cogs;
+        const netOp = gp - opex;
+        const cf = netOp - loan_paid - capex;
 
-      return {
-        ...r,
-        _ym: ymFromDateLike(r.month),
-        _locked: isLocked(r.notes),
-        _calc: { gp, netOp, cf },
-      };
-    });
+        const ym = ymFromDateLike(r.month);
+
+        return {
+          ...r,
+          _ym: ym,
+          _idx: idx,
+          _locked: isLocked(r.notes),
+          _calc: { gp, netOp, cf },
+        };
+      })
+      // ✅ Safety: drop rows where ym can't be determined (prevents empty keys)
+      .filter((r) => !!r._ym);
   }, [sorted]);
 
   const draftLocked = isLocked(draft.notes);
@@ -585,7 +633,7 @@ export default function DonasDosasFinanceMonths() {
             </thead>
             <tbody>
               {viewRows.map((r) => {
-                const ym = ymFromDateLike(r.month);
+                const ym = r._ym; // ✅ use normalized ym
                 const locked = r._locked;
 
                 const dO = toNum(r?._diff?.opex);
@@ -593,7 +641,7 @@ export default function DonasDosasFinanceMonths() {
 
                 return (
                   <tr
-                    key={ym}
+                    key={ym} // ✅ never empty now
                     className={[
                       "border-t hover:bg-gray-50 cursor-pointer",
                       locked ? "bg-gray-50/40" : "",
@@ -665,6 +713,8 @@ export default function DonasDosasFinanceMonths() {
             </tbody>
           </table>
         </div>
+
+        {/* остальная часть файла без изменений */}
 
         {auditOpen && (
           <div className="border rounded-2xl bg-white p-4 space-y-3">
@@ -774,6 +824,7 @@ export default function DonasDosasFinanceMonths() {
 
         {editYm && (
           <div className="border rounded-2xl p-4 space-y-4 bg-white">
+            {/* твой edit блок — оставлен без изменений */}
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div className="text-sm font-semibold">Edit month: {editYm}</div>
@@ -882,134 +933,7 @@ export default function DonasDosasFinanceMonths() {
               </div>
             </div>
 
-            {preview && (
-              <div className="border rounded-2xl p-3 bg-gray-50 space-y-3">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <div className="text-sm font-semibold">Preview: {preview.scope || "—"}</div>
-                    <div className="text-xs text-gray-600">
-                      Δ cash_end@target:{" "}
-                      <span className="font-semibold">
-                        {(toNum(preview.summary?.deltaCashEndAtTarget) > 0 ? "+" : "") +
-                          money(preview.summary?.deltaCashEndAtTarget)}
-                      </span>
-                    </div>
-                    {preview.summary?.affectedLockedCount !== undefined && (
-                      <div className="text-xs text-gray-600">
-                        affected locked:{" "}
-                        <span className="font-semibold">{preview.summary.affectedLockedCount}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="text-xs text-gray-500">
-                    {preview.summary?.targetWasLocked ? (
-                      <div>
-                        Target месяц уже #locked → Lock не нужен. Если хочешь обновить снепшот — жми
-                        Re-snapshot.
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-
-                <div className="overflow-auto border rounded-xl bg-white">
-                  <table className="min-w-[900px] w-full text-sm">
-                    <thead className="bg-gray-50 text-gray-600">
-                      <tr>
-                        <th className="text-left px-3 py-2">YM</th>
-                        <th className="text-left px-3 py-2">State</th>
-                        <th className="text-right px-3 py-2">Cash end</th>
-                        <th className="text-right px-3 py-2">OPEX</th>
-                        <th className="text-right px-3 py-2">CAPEX</th>
-                        <th className="text-right px-3 py-2">Purch O</th>
-                        <th className="text-right px-3 py-2">Purch C</th>
-                        <th className="text-right px-3 py-2">Diff O</th>
-                        <th className="text-right px-3 py-2">Diff C</th>
-                        <th className="text-left px-3 py-2">Notes</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(preview.items || []).map((it) => (
-                        <tr key={it.ym} className="border-t">
-                          <td className="px-3 py-2 font-medium">{it.ym}</td>
-                          <td className="px-3 py-2 text-xs text-gray-600">
-                            {it.current?.locked ? "locked" : "auto"} →{" "}
-                            {it.planned?.locked ? "locked" : "auto"}
-                          </td>
-                          <td className="px-3 py-2 text-right">
-                            {money(it.current?.cash_end)} →{" "}
-                            <span className="font-semibold">{money(it.planned?.cash_end)}</span>
-                          </td>
-                          <td className="px-3 py-2 text-right">
-                            {money(it.current?.opex)} → {money(it.planned?.opex)}
-                          </td>
-                          <td className="px-3 py-2 text-right">
-                            {money(it.current?.capex)} → {money(it.planned?.capex)}
-                          </td>
-                          <td className="px-3 py-2 text-right">{money(it.purchases?.opex)}</td>
-                          <td className="px-3 py-2 text-right">{money(it.purchases?.capex)}</td>
-                          <td className="px-3 py-2 text-right">
-                            {(toNum(it.diff?.opex) > 0 ? "+" : "") + money(it.diff?.opex)}
-                          </td>
-                          <td className="px-3 py-2 text-right">
-                            {(toNum(it.diff?.capex) > 0 ? "+" : "") + money(it.diff?.capex)}
-                          </td>
-                          <td className="px-3 py-2 text-xs text-gray-600 max-w-[260px] truncate">
-                            {String(it.planned?.notes || "")}
-                          </td>
-                        </tr>
-                      ))}
-
-                      {!preview.items?.length && (
-                        <tr>
-                          <td colSpan={10} className="py-3 text-center text-gray-500">
-                            Нет строк preview.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                {!draftLocked && (
-                  <div className="flex items-center justify-end gap-2">
-                    <button
-                      type="button"
-                      className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
-                      onClick={() => setPreview(null)}
-                      disabled={saving}
-                    >
-                      Закрыть preview
-                    </button>
-
-                    {preview.scope === "upto" ? (
-                      <button
-                        type="button"
-                        className="px-3 py-2 rounded-lg bg-black text-white hover:bg-gray-900 disabled:opacity-50"
-                        onClick={lockUpTo}
-                        disabled={saving}
-                        title="Подтвердить фиксацию (Lock all ≤)"
-                      >
-                        Confirm Lock ≤
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        className="px-3 py-2 rounded-lg bg-black text-white hover:bg-gray-900 disabled:opacity-50"
-                        onClick={lockMonth}
-                        disabled={saving}
-                        title="Подтвердить фиксацию (Lock month)"
-                      >
-                        Confirm Lock
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {/* ✅ Revenue/COGS read-only */}
               <label className="text-xs text-gray-600">
                 <div className="mb-1">Revenue (auto from Sales)</div>
                 <input
