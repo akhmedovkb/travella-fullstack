@@ -5,6 +5,11 @@ const { touchMonthsFromYms } = require("../utils/donasSalesMonthAggregator");
 
 const SLUG = "donas-dosas";
 
+/**
+ * =========================
+ * Table ensure
+ * =========================
+ */
 async function ensureSalesTable() {
   await db.query(`
     CREATE TABLE IF NOT EXISTS donas_sales (
@@ -25,8 +30,11 @@ async function ensureSalesTable() {
   `);
 
   await db.query(`CREATE INDEX IF NOT EXISTS idx_donas_sales_sold_at ON donas_sales (sold_at);`);
-  await db.query(`CREATE INDEX IF NOT EXISTS idx_donas_sales_menu_item_id ON donas_sales (menu_item_id);`);
+  await db.query(
+    `CREATE INDEX IF NOT EXISTS idx_donas_sales_menu_item_id ON donas_sales (menu_item_id);`
+  );
 
+  // FK -> menu items
   try {
     await db.query(
       `ALTER TABLE donas_sales
@@ -36,6 +44,7 @@ async function ensureSalesTable() {
     );
   } catch {}
 
+  // FK -> cogs snapshot
   try {
     await db.query(
       `ALTER TABLE donas_sales
@@ -65,8 +74,9 @@ function hasLockedTag(notes) {
 }
 
 /**
- * ✅ Normalize sold_at to YYYY-MM-DD (no timezone).
+ * ✅ Normalize sold_at to YYYY-MM-DD (no timezone math).
  * Accepts: YYYY-MM-DD, YYYY-MM-DDTHH..., DD.MM.YYYY, DD/MM/YYYY
+ * Returns ISO date string or "".
  */
 function normalizeSoldAt(x) {
   const s = String(x || "").trim();
@@ -85,6 +95,7 @@ function normalizeSoldAt(x) {
     return `${yyyy}-${mm}-${dd}`;
   }
 
+  // keep as-is; DB cast may reject, we validate later
   return s;
 }
 
@@ -122,11 +133,13 @@ async function ensureFinanceAudit() {
       );
     `);
 
-    // ✅ IMPORTANT: drop and recreate view to avoid "cannot change name of view column"
-    await db.query(`DROP VIEW IF EXISTS donas_finance_audit;`);
-
+    /**
+     * ✅ IMPORTANT:
+     * We MUST NOT change view column order/names once created, иначе Postgres ругается.
+     * Поэтому держим один стабильный список колонок и используем CREATE OR REPLACE VIEW.
+     */
     await db.query(`
-      CREATE VIEW donas_finance_audit AS
+      CREATE OR REPLACE VIEW donas_finance_audit AS
       SELECT
         id,
         slug,
@@ -150,6 +163,7 @@ async function auditSales(req, ym, action, meta = {}, diff = {}) {
   try {
     if (!isYm(ym)) return;
     await ensureFinanceAudit();
+
     const actor = getActor(req);
     await db.query(
       `
@@ -201,7 +215,7 @@ async function isMonthLocked(ym) {
 
 /**
  * ✅ Price source of truth from Menu Items
- * We prefer sell_price, fallback to price, else 0
+ * prefer sell_price, fallback to price, else 0
  */
 async function getMenuItemUnitPrice(menuItemId) {
   const { rows } = await db.query(
@@ -299,20 +313,10 @@ async function addSale(req, res) {
     let unitPrice = toNum(b.unit_price);
     const channel = String(b.channel || "cash").trim() || "cash";
     const notes = b.notes == null ? null : String(b.notes);
-    
-    // 🔎 DEBUG: what we REALLY receive
-    console.log("ADD SALE RAW sold_at:", b.sold_at);
-    console.log("ADD SALE NORM soldAt:", soldAt);
-    console.log("ADD SALE BODY:", {
-      sold_at: b.sold_at,
-      menu_item_id: b.menu_item_id,
-      qty: b.qty,
-      unit_price: b.unit_price,
-      channel: b.channel,
-      notes: b.notes,
-    });
 
     if (!soldAt) return res.status(400).json({ error: "sold_at required" });
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(soldAt)) return res.status(400).json({ error: "sold_at invalid" });
+
     if (!Number.isFinite(menuItemId) || menuItemId <= 0) {
       return res.status(400).json({ error: "menu_item_id required" });
     }
@@ -325,6 +329,7 @@ async function addSale(req, res) {
       return res.status(409).json({ error: `Month ${ym} is locked (#locked)` });
     }
 
+    // if unit_price not provided or 0 -> take from menu item
     if (unitPrice <= 0) {
       unitPrice = await getMenuItemUnitPrice(menuItemId);
     }
@@ -336,7 +341,6 @@ async function addSale(req, res) {
     const cogsTotal = qty * cogsUnit;
     const cogsSnapshotId = snap?.id || null;
 
-    // ✅ IMPORTANT: cast sold_at to DATE explicitly
     const { rows } = await db.query(
       `
       INSERT INTO donas_sales
@@ -398,12 +402,9 @@ async function updateSale(req, res) {
 
     const b = req.body || {};
 
-    const soldAt =
-      b.sold_at == null ? String(cur.sold_at).slice(0, 10) : normalizeSoldAt(b.sold_at);
-        // 🔎 DEBUG: update payload
-    console.log("UPDATE SALE id:", id);
-    console.log("UPDATE SALE RAW sold_at:", b.sold_at);
-    console.log("UPDATE SALE NORM soldAt:", soldAt);
+    const soldAt = b.sold_at == null ? String(cur.sold_at).slice(0, 10) : normalizeSoldAt(b.sold_at);
+    if (!soldAt) return res.status(400).json({ error: "sold_at required" });
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(soldAt)) return res.status(400).json({ error: "sold_at invalid" });
 
     const menuItemId = b.menu_item_id == null ? Number(cur.menu_item_id) : Number(b.menu_item_id);
     const qty = b.qty == null ? toNum(cur.qty) : toNum(b.qty);
@@ -413,7 +414,6 @@ async function updateSale(req, res) {
     const channel = b.channel == null ? String(cur.channel || "cash") : String(b.channel || "cash");
     const notes = b.notes === undefined ? cur.notes : b.notes == null ? null : String(b.notes);
 
-    if (!soldAt) return res.status(400).json({ error: "sold_at required" });
     if (!Number.isFinite(menuItemId) || menuItemId <= 0) {
       return res.status(400).json({ error: "menu_item_id required" });
     }
@@ -426,6 +426,7 @@ async function updateSale(req, res) {
       return res.status(409).json({ error: `Month ${nextYm} is locked (#locked)` });
     }
 
+    // if unit_price is 0 -> take from menu item (supports changing menu item too)
     if (unitPrice <= 0) {
       unitPrice = await getMenuItemUnitPrice(menuItemId);
     }
@@ -442,7 +443,7 @@ async function updateSale(req, res) {
       if (String(vOld ?? "") !== String(vNew ?? "")) diff[k] = { from: vOld, to: vNew };
     };
 
-    setDiff("sold_at", cur.sold_at, soldAt);
+    setDiff("sold_at", String(cur.sold_at).slice(0, 10), soldAt);
     setDiff("menu_item_id", cur.menu_item_id, menuItemId);
     setDiff("qty", cur.qty, qty);
     setDiff("unit_price", cur.unit_price, unitPrice);
@@ -453,7 +454,6 @@ async function updateSale(req, res) {
     setDiff("channel", cur.channel, channel);
     setDiff("notes", cur.notes, notes);
 
-    // ✅ IMPORTANT: cast sold_at to DATE explicitly
     const { rows } = await db.query(
       `
       UPDATE donas_sales
@@ -471,7 +471,19 @@ async function updateSale(req, res) {
       WHERE id=$11
       RETURNING *
       `,
-      [soldAt, menuItemId, qty, unitPrice, revenueTotal, cogsSnapshotId, cogsUnit, cogsTotal, channel, notes, id]
+      [
+        soldAt,
+        menuItemId,
+        qty,
+        unitPrice,
+        revenueTotal,
+        cogsSnapshotId,
+        cogsUnit,
+        cogsTotal,
+        channel,
+        notes,
+        id,
+      ]
     );
 
     await auditSales(req, nextYm, "sales.update", { sale_id: id }, diff);
@@ -549,13 +561,12 @@ async function recalcCogsMonth(req, res) {
       const cogsTotal = toNum(s.qty) * cogsUnit;
       const cogsSnapshotId = snap?.id || null;
 
-      if (
+      const same =
         Number(toNum(s.cogs_unit)) === Number(cogsUnit) &&
         Number(toNum(s.cogs_total)) === Number(cogsTotal) &&
-        Number(s.cogs_snapshot_id || 0) === Number(cogsSnapshotId || 0)
-      ) {
-        continue;
-      }
+        Number(s.cogs_snapshot_id || 0) === Number(cogsSnapshotId || 0);
+
+      if (same) continue;
 
       await db.query(
         `
