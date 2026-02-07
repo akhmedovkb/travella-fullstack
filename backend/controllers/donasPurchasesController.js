@@ -1,5 +1,4 @@
 // backend/controllers/donasPurchasesController.js
-
 const db = require("../db");
 
 function toNum(x) {
@@ -9,7 +8,7 @@ function toNum(x) {
 
 function normType(t) {
   const v = String(t || "").trim().toLowerCase();
-  // constraint в БД: type IN ('opex','capex','cogs')
+  // В БД constraint: type IN ('opex','capex','cogs')
   if (v === "opex" || v === "capex" || v === "cogs") return v;
   return null;
 }
@@ -19,11 +18,28 @@ function cleanText(x) {
   return s ? s : null;
 }
 
+function isYm(s) {
+  return /^\d{4}-\d{2}$/.test(String(s || ""));
+}
+
+function nextYm(ym) {
+  const [y, m] = String(ym).split("-").map((v) => Number(v));
+  const d = new Date(Date.UTC(y, (m - 1) + 1, 1));
+  const yy = d.getUTCFullYear();
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  return `${yy}-${mm}`;
+}
+
 /**
- * GET /api/admin/donas/purchases?from=YYYY-MM-DD&to=YYYY-MM-DD&type=opex|capex|cogs
+ * GET /api/admin/donas/purchases?month=YYYY-MM&from=YYYY-MM-DD&to=YYYY-MM-DD&type=opex|capex|cogs
+ *
+ * Приоритет:
+ * - если передан month=YYYY-MM → фильтруем по этому месяцу (date >= month-01 AND date < nextMonth-01)
+ * - иначе используем from/to
  */
 exports.listPurchases = async (req, res) => {
   try {
+    const month = cleanText(req.query.month);
     const from = cleanText(req.query.from);
     const to = cleanText(req.query.to);
     const type = req.query.type ? normType(req.query.type) : null;
@@ -32,14 +48,25 @@ exports.listPurchases = async (req, res) => {
     const params = [];
     let i = 1;
 
-    if (from) {
-      where.push(`date >= $${i++}`);
-      params.push(from);
+    if (month) {
+      if (!isYm(month)) {
+        return res.status(400).json({ error: "Invalid month. Use YYYY-MM" });
+      }
+      const start = `${month}-01`;
+      const end = `${nextYm(month)}-01`;
+      where.push(`date >= $${i++} AND date < $${i++}`);
+      params.push(start, end);
+    } else {
+      if (from) {
+        where.push(`date >= $${i++}`);
+        params.push(from);
+      }
+      if (to) {
+        where.push(`date <= $${i++}`);
+        params.push(to);
+      }
     }
-    if (to) {
-      where.push(`date <= $${i++}`);
-      params.push(to);
-    }
+
     if (req.query.type) {
       if (!type) {
         return res.status(400).json({ error: "Invalid type. Use: opex | capex | cogs" });
@@ -75,9 +102,6 @@ exports.listPurchases = async (req, res) => {
 /**
  * POST /api/admin/donas/purchases
  * body: { date, ingredient, qty, price, type, notes }
- *
- * total НЕ передаем — он generated column.
- * type должен быть 'opex'|'capex'|'cogs' (lowercase).
  */
 exports.addPurchase = async (req, res) => {
   try {
@@ -96,8 +120,7 @@ exports.addPurchase = async (req, res) => {
       `
       INSERT INTO donas_purchases (date, ingredient, qty, price, type, notes)
       VALUES ($1,$2,$3,$4,$5,$6)
-      RETURNING
-        id, date, ingredient, qty, price, total, type, notes, created_at
+      RETURNING id, date, ingredient, qty, price, total, type, notes, created_at
       `,
       [date, ingredient, qty, price, type, notes]
     );
@@ -109,12 +132,6 @@ exports.addPurchase = async (req, res) => {
   }
 };
 
-/**
- * PUT /api/admin/donas/purchases/:id
- * body: { date, ingredient, qty, price, type, notes }
- *
- * total НЕ трогаем.
- */
 exports.updatePurchase = async (req, res) => {
   try {
     const id = Number(req.params.id);
@@ -136,8 +153,7 @@ exports.updatePurchase = async (req, res) => {
       UPDATE donas_purchases
       SET date=$2, ingredient=$3, qty=$4, price=$5, type=$6, notes=$7
       WHERE id=$1
-      RETURNING
-        id, date, ingredient, qty, price, total, type, notes, created_at
+      RETURNING id, date, ingredient, qty, price, total, type, notes, created_at
       `,
       [id, date, ingredient, qty, price, type, notes]
     );
@@ -150,9 +166,6 @@ exports.updatePurchase = async (req, res) => {
   }
 };
 
-/**
- * DELETE /api/admin/donas/purchases/:id
- */
 exports.deletePurchase = async (req, res) => {
   try {
     const id = Number(req.params.id);
