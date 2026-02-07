@@ -296,6 +296,18 @@ async function addSale(req, res) {
     let unitPrice = toNum(b.unit_price);
     const channel = String(b.channel || "cash").trim() || "cash";
     const notes = b.notes == null ? null : String(b.notes);
+    
+    // 🔎 DEBUG: what we REALLY receive
+    console.log("ADD SALE RAW sold_at:", b.sold_at);
+    console.log("ADD SALE NORM soldAt:", soldAt);
+    console.log("ADD SALE BODY:", {
+      sold_at: b.sold_at,
+      menu_item_id: b.menu_item_id,
+      qty: b.qty,
+      unit_price: b.unit_price,
+      channel: b.channel,
+      notes: b.notes,
+    });
 
     if (!soldAt) return res.status(400).json({ error: "sold_at required" });
     if (!Number.isFinite(menuItemId) || menuItemId <= 0) {
