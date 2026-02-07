@@ -12,6 +12,15 @@ function money(n) {
   return Math.round(toNum(n)).toLocaleString("ru-RU");
 }
 
+// month = "YYYY-MM" -> { from:"YYYY-MM-01", to:"YYYY-MM-DD(last)" }
+function monthRange(month) {
+  const [y, m] = String(month || "").split("-").map(Number);
+  const from = `${month}-01`;
+  const lastDay = new Date(y, m, 0).getDate(); // last day of month
+  const to = `${month}-${String(lastDay).padStart(2, "0")}`;
+  return { from, to };
+}
+
 const CATS = [
   "Equipment",
   "Truck/Vehicle",
@@ -38,8 +47,17 @@ export default function DonasCapex() {
   async function load() {
     setLoading(true);
     try {
-      const r = await apiGet(`/api/admin/donas/purchases?month=${month}&type=capex`);
-      setItems(Array.isArray(r) ? r : []);
+      const { from, to } = monthRange(month);
+
+      // IMPORTANT:
+      // - backend listPurchases supports from/to/type
+      // - response is { rows: [...] }
+      const r = await apiGet(
+        `/api/admin/donas/purchases?from=${from}&to=${to}&type=capex`,
+        "admin"
+      );
+
+      setItems(Array.isArray(r?.rows) ? r.rows : []);
     } finally {
       setLoading(false);
     }
@@ -93,7 +111,9 @@ export default function DonasCapex() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold">Donas — CAPEX</h1>
-          <div className="text-sm text-gray-500">Капитальные расходы (оборудование/активы)</div>
+          <div className="text-sm text-gray-500">
+            Капитальные расходы (оборудование/активы)
+          </div>
         </div>
 
         <div className="text-sm">
@@ -220,7 +240,9 @@ export default function DonasCapex() {
           </div>
 
           <div className="px-4 py-3 text-xs text-gray-500">
-            Примечание: CAPEX хранится в <code>donas_purchases</code> с <code>type='capex'</code>, сумма считается как <code>qty × price</code> (здесь qty=1).
+            Примечание: CAPEX хранится в <code>donas_purchases</code> с{" "}
+            <code>type='capex'</code>, сумма считается как <code>qty × price</code>{" "}
+            (здесь qty=1).
           </div>
         </div>
       </div>
