@@ -122,8 +122,11 @@ async function ensureFinanceAudit() {
       );
     `);
 
+    // ✅ IMPORTANT: drop and recreate view to avoid "cannot change name of view column"
+    await db.query(`DROP VIEW IF EXISTS donas_finance_audit;`);
+
     await db.query(`
-      CREATE OR REPLACE VIEW donas_finance_audit AS
+      CREATE VIEW donas_finance_audit AS
       SELECT
         id,
         slug,
