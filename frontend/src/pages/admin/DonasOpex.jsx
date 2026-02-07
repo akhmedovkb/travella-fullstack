@@ -12,46 +12,15 @@ function money(n) {
   return Math.round(toNum(n)).toLocaleString("ru-RU");
 }
 
-function pad2(n) {
-  return String(n).padStart(2, "0");
-}
-
-// month: "YYYY-MM" -> { from: "YYYY-MM-01", to: "YYYY-MM-DD" (last day) }
-function monthRange(month) {
-  const [y, m] = String(month || "").split("-").map((v) => Number(v));
-  if (!y || !m) return { from: null, to: null };
-
-  const from = `${y}-${pad2(m)}-01`;
+function monthRange(ym) {
+  // ym: "YYYY-MM"
+  const y = Number(String(ym).slice(0, 4));
+  const m = Number(String(ym).slice(5, 7)); // 1..12
+  const from = `${ym}-01`;
   // last day of month: day 0 of next month
-  const last = new Date(Date.UTC(y, m, 0));
-  const to = `${last.getUTCFullYear()}-${pad2(last.getUTCMonth() + 1)}-${pad2(last.getUTCDate())}`;
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const to = `${ym}-${String(last).padStart(2, "0")}`;
   return { from, to };
-}
-
-function parseNotes(notes) {
-  // если notes = JSON строка: {"category":"Rent","note":"..."}
-  try {
-    const obj = JSON.parse(notes);
-    if (obj && typeof obj === "object") return obj;
-  } catch (_) {}
-  return null;
-}
-
-function getCategoryFromRow(x) {
-  // 1) если появится поле category в БД — покажем его
-  if (x?.category) return x.category;
-
-  // 2) иначе пробуем достать из notes JSON
-  const meta = parseNotes(x?.notes);
-  if (meta?.category) return meta.category;
-
-  return "—";
-}
-
-function getNoteFromRow(x) {
-  const meta = parseNotes(x?.notes);
-  if (meta && "note" in meta) return meta.note || "—";
-  return x?.notes || "—";
 }
 
 const CATS = [
@@ -77,20 +46,19 @@ export default function DonasOpex() {
   const [notes, setNotes] = useState("");
 
   async function load() {
-    const { from, to } = monthRange(month);
-    if (!from || !to) {
-      setItems([]);
-      return;
-    }
-
     setLoading(true);
     try {
-      const qs = new URLSearchParams({ from, to, type: "opex" }).toString();
-      const r = await apiGet(`/api/admin/donas/purchases?${qs}`, "admin");
+      const { from, to } = monthRange(month);
 
-      // backend возвращает { rows: [...] }
-      const rows = Array.isArray(r?.rows) ? r.rows : Array.isArray(r) ? r : [];
-      setItems(rows);
+      // ВАЖНО: backend понимает from/to/type (month=... игнорируется)
+      const r = await apiGet(
+        `/api/admin/donas/purchases?from=${encodeURIComponent(from)}&to=${encodeURIComponent(
+          to
+        )}&type=opex`
+      );
+
+      // backend отвечает { rows: [...] }
+      setItems(Array.isArray(r?.rows) ? r.rows : []);
     } finally {
       setLoading(false);
     }
@@ -109,14 +77,8 @@ export default function DonasOpex() {
     const a = toNum(amount);
     if (!title.trim() || !a) return;
 
-    // дата = первое число выбранного месяца
+    // OPEX — месячный расход: ставим дату = 1 число выбранного месяца
     const date = `${month}-01`;
-
-    // category кладём в notes JSON (без миграции БД)
-    const payloadNotes = JSON.stringify({
-      category,
-      note: notes.trim() || "",
-    });
 
     await apiPost(
       "/api/admin/donas/purchases",
@@ -126,7 +88,8 @@ export default function DonasOpex() {
         qty: 1,
         price: a,
         type: "opex",
-        notes: payloadNotes,
+        category,
+        notes: notes.trim() || null,
       },
       "admin"
     );
@@ -250,8 +213,8 @@ export default function DonasOpex() {
                 {items.map((x) => (
                   <tr key={x.id} className="border-b">
                     <td className="py-2 px-4">{x.ingredient || "—"}</td>
-                    <td className="py-2 px-4">{getCategoryFromRow(x)}</td>
-                    <td className="py-2 px-4 text-gray-600">{getNoteFromRow(x)}</td>
+                    <td className="py-2 px-4">{x.category || "—"}</td>
+                    <td className="py-2 px-4 text-gray-600">{x.notes || "—"}</td>
                     <td className="py-2 px-4 text-right">{money(x.total)}</td>
                     <td className="py-2 px-4 text-right">
                       <button className="text-red-600 hover:underline" onClick={() => del(x.id)}>
@@ -273,8 +236,8 @@ export default function DonasOpex() {
           </div>
 
           <div className="px-4 py-3 text-xs text-gray-500">
-            Примечание: OPEX хранится в <code>donas_purchases</code> с <code>type='opex'</code>, сумма считается как{" "}
-            <code>qty × price</code> (здесь qty=1).
+            Примечание: OPEX хранится в <code>donas_purchases</code> с <code>type='opex'</code>,
+            сумма считается как <code>qty × price</code> (здесь qty=1).
           </div>
         </div>
       </div>
