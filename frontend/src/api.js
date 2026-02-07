@@ -1,10 +1,10 @@
 // frontend/src/api.js
+
 export function getApiBase() {
   const env =
     (import.meta?.env?.VITE_API_BASE_URL || import.meta?.env?.VITE_API_URL || "").trim();
   const runtime =
     (typeof window !== "undefined" && window.frontend && window.frontend.API_BASE) || "";
-  // env приоритетнее, но если его нет — берём runtime-переменную из index.html
   return (env || runtime).replace(/\/+$/, "");
 }
 
@@ -14,8 +14,6 @@ export const buildUrl = (path) => {
     console.warn("[API] Empty API base, request will go to same-origin:", path);
   }
 
-  // Нормализуем путь и избегаем частой ошибки ".../api" + "/api/..." => ".../api/api/...".
-  // Это особенно важно для прод-окружений, где VITE_API_BASE_URL иногда задают как "https://host.tld/api".
   const p = path.startsWith("/") ? path : `/${path}`;
   const baseNoSlash = String(base || "").replace(/\/+$/, "");
   if (baseNoSlash.endsWith("/api") && p.startsWith("/api/")) {
@@ -29,7 +27,6 @@ function getTokenByRole(role) {
   if (role === "client") return localStorage.getItem("clientToken");
   if (role === "provider")
     return localStorage.getItem("providerToken") || localStorage.getItem("token");
-  // по умолчанию: предпочитаем провайдера/админа
   return (
     localStorage.getItem("token") ||
     localStorage.getItem("providerToken") ||
@@ -69,6 +66,24 @@ function buildHeaders(withAuthOrRole) {
   return { ...base, ...getAuthHeaders(role) };
 }
 
+/**
+ * ✅ Safe JSON stringify:
+ * - DO NOT touch normal strings (like "2026-02-08")
+ * - If a Date object is present anywhere in body -> serialize as local YYYY-MM-DD
+ *   (prevents timezone shift / -1 day bugs)
+ */
+function safeJsonStringify(obj) {
+  return JSON.stringify(obj ?? {}, (key, value) => {
+    if (value instanceof Date) {
+      const y = value.getFullYear();
+      const m = String(value.getMonth() + 1).padStart(2, "0");
+      const d = String(value.getDate()).padStart(2, "0");
+      return `${y}-${m}-${d}`;
+    }
+    return value;
+  });
+}
+
 export async function apiGet(path, withAuthOrRole = true) {
   const res = await fetch(buildUrl(path), {
     headers: buildHeaders(withAuthOrRole),
@@ -81,7 +96,7 @@ export async function apiPost(path, body, withAuthOrRole = true) {
   const res = await fetch(buildUrl(path), {
     method: "POST",
     headers: buildHeaders(withAuthOrRole),
-    body: JSON.stringify(body ?? {}),
+    body: safeJsonStringify(body),
     credentials: "include",
   });
   return handle(res);
@@ -91,7 +106,7 @@ export async function apiPut(path, body, withAuthOrRole = true) {
   const res = await fetch(buildUrl(path), {
     method: "PUT",
     headers: buildHeaders(withAuthOrRole),
-    body: JSON.stringify(body ?? {}),
+    body: safeJsonStringify(body),
     credentials: "include",
   });
   return handle(res);
@@ -101,7 +116,7 @@ export async function apiDelete(path, body, withAuthOrRole = true) {
   const res = await fetch(buildUrl(path), {
     method: "DELETE",
     headers: buildHeaders(withAuthOrRole),
-    body: body ? JSON.stringify(body) : undefined,
+    body: body ? safeJsonStringify(body) : undefined,
     credentials: "include",
   });
   return handle(res);
