@@ -62,14 +62,14 @@ function money(n) {
 function ymFromDateLike(x) {
   if (!x && x !== 0) return "";
 
-  // Date object (⚠️ local getters to avoid TZ shift)
+  // Date object (local getters)
   if (x instanceof Date && !Number.isNaN(x.getTime())) {
     const y = x.getFullYear();
     const m = String(x.getMonth() + 1).padStart(2, "0");
     return `${y}-${m}`;
   }
 
-  // timestamp number (⚠️ local getters)
+  // timestamp number (local getters)
   if (typeof x === "number" && Number.isFinite(x)) {
     const d = new Date(x);
     if (!Number.isNaN(d.getTime())) {
@@ -85,10 +85,20 @@ function ymFromDateLike(x) {
   // already YM
   if (/^\d{4}-\d{2}$/.test(s)) return s;
 
-  // ISO / YYYY-MM-DD / starts with YYYY-MM
-  if (/^\d{4}-\d{2}/.test(s)) return s.slice(0, 7);
+  // ✅ if it contains time (ISO datetime) → parse, don't slice
+  if (s.includes("T")) {
+    const d = new Date(s);
+    if (!Number.isNaN(d.getTime())) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      return `${y}-${m}`;
+    }
+  }
 
-  // fallback parse (⚠️ local getters)
+  // date-only YYYY-MM-DD → safe slice
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s.slice(0, 7);
+
+  // fallback parse
   const d = new Date(s);
   if (!Number.isNaN(d.getTime())) {
     const y = d.getFullYear();
