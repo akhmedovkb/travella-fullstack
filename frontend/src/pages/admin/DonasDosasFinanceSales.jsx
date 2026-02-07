@@ -23,7 +23,9 @@ function ymFromDateLike(x) {
   if (/^\d{4}-\d{2}$/.test(s)) return s;
   return "";
 }
-function todayIso() {
+
+// ✅ local "today" as YYYY-MM-DD (no ISO/UTC)
+function todayIsoLocal() {
   const d = new Date();
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -31,36 +33,29 @@ function todayIso() {
   return `${y}-${m}-${day}`;
 }
 
-// ✅ normalize anything to YYYY-MM-DD (NO timezone)
+// ✅ Accept many inputs but always return YYYY-MM-DD string (or "")
 function normalizeDateToIso(x) {
   const s = String(x || "").trim();
   if (!s) return "";
 
-  // already ISO
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-
-  // timestamp -> take first 10
   if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.slice(0, 10);
 
-  // dd.mm.yyyy -> yyyy-mm-dd
   if (/^\d{2}\.\d{2}\.\d{4}$/.test(s)) {
     const [dd, mm, yyyy] = s.split(".");
     return `${yyyy}-${mm}-${dd}`;
   }
 
-  // dd/mm/yyyy
   if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) {
     const [dd, mm, yyyy] = s.split("/");
     return `${yyyy}-${mm}-${dd}`;
   }
 
-  // yyyy/mm/dd
   if (/^\d{4}\/\d{2}\/\d{2}$/.test(s)) {
     const [yyyy, mm, dd] = s.split("/");
     return `${yyyy}-${mm}-${dd}`;
   }
 
-  // yyyy.mm.dd
   if (/^\d{4}\.\d{2}\.\d{2}$/.test(s)) {
     const [yyyy, mm, dd] = s.split(".");
     return `${yyyy}-${mm}-${dd}`;
@@ -87,7 +82,7 @@ export default function DonasDosasFinanceSales() {
   const [editingId, setEditingId] = useState(null);
 
   const [draft, setDraft] = useState({
-    sold_at: todayIso(), // string YYYY-MM-DD
+    sold_at: todayIsoLocal(), // ✅ always "YYYY-MM-DD"
     menu_item_id: "",
     qty: 1,
     unit_price: 0,
@@ -185,7 +180,7 @@ export default function DonasDosasFinanceSales() {
   function resetDraft() {
     setEditingId(null);
     setDraft({
-      sold_at: todayIso(),
+      sold_at: todayIsoLocal(),
       menu_item_id: "",
       qty: 1,
       unit_price: 0,
@@ -199,8 +194,11 @@ export default function DonasDosasFinanceSales() {
     setOk("");
     setEditingId(r.id);
 
+    // ✅ we expect backend to send "YYYY-MM-DD" string. Still normalize defensively.
+    const sold = normalizeDateToIso(r.sold_at) || String(r.sold_at || "").slice(0, 10) || todayIsoLocal();
+
     setDraft({
-      sold_at: normalizeDateToIso(r.sold_at) || String(r.sold_at || "").slice(0, 10) || todayIso(),
+      sold_at: sold,
       menu_item_id: r.menu_item_id ?? "",
       qty: r.qty ?? 1,
       unit_price: r.unit_price ?? 0,
@@ -216,8 +214,6 @@ export default function DonasDosasFinanceSales() {
       if (!it) return next;
 
       const autoPrice = toNum(it.sell_price) || toNum(it.price) || 0;
-
-      // если добавление или unit_price=0 — подставим автоматически
       if (toNum(d.unit_price) <= 0 || !editingId) {
         next.unit_price = autoPrice;
       }
@@ -232,9 +228,11 @@ export default function DonasDosasFinanceSales() {
   }
 
   async function save() {
-    // ✅ sold_at сохраняем ТОЛЬКО ISO строкой
-    const sold_at = normalizeDateToIso(draft.sold_at);
-    if (!sold_at) return setErr("Sold at должен быть в формате YYYY-MM-DD (например 2026-02-08)");
+    // ✅ sold_at must be "YYYY-MM-DD" ONLY (string)
+    const sold_at = String(draft.sold_at || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(sold_at)) {
+      return setErr("Sold at должен быть YYYY-MM-DD (например 2026-02-08)");
+    }
 
     const menu_item_id = Number(draft.menu_item_id);
     const qty = toNum(draft.qty);
@@ -249,25 +247,16 @@ export default function DonasDosasFinanceSales() {
       setSaving(true);
       setErr("");
 
+      const payload = { sold_at, menu_item_id, qty, unit_price, channel, notes };
+
+      // 🔎 client-side debug (exact payload)
+      // console.log("SAVE SALE payload:", payload);
+
       if (editingId) {
-        await apiPut(`/api/admin/donas/sales/${editingId}`, {
-          sold_at,
-          menu_item_id,
-          qty,
-          unit_price,
-          channel,
-          notes,
-        });
+        await apiPut(`/api/admin/donas/sales/${editingId}`, payload);
         setOk("Сохранено ✅");
       } else {
-        await apiPost(`/api/admin/donas/sales`, {
-          sold_at,
-          menu_item_id,
-          qty,
-          unit_price,
-          channel,
-          notes,
-        });
+        await apiPost(`/api/admin/donas/sales`, payload);
         setOk("Добавлено ✅");
       }
 
@@ -310,10 +299,7 @@ export default function DonasDosasFinanceSales() {
     try {
       setSaving(true);
       setErr("");
-      const r = await apiPost(
-        `/api/admin/donas/sales/recalc-cogs?month=${encodeURIComponent(month)}`,
-        {}
-      );
+      const r = await apiPost(`/api/admin/donas/sales/recalc-cogs?month=${encodeURIComponent(month)}`, {});
       const updated = r?.updated ?? r?.data?.updated ?? 0;
       setOk(`Recalc COGS ✅ updated: ${updated}`);
       setTimeout(() => setOk(""), 2000);
@@ -408,7 +394,7 @@ export default function DonasDosasFinanceSales() {
             <div>
               <div className="text-sm font-semibold">{editingId ? `Edit sale #${editingId}` : "Add sale"}</div>
               <div className="text-xs text-gray-500">
-                Важно: sold_at хранится как строка YYYY-MM-DD. Мы НЕ используем input type=date (из-за timezone-bug).
+                Sold at выбирается календарём и хранится как строка YYYY-MM-DD (без Date/toISOString).
               </div>
             </div>
 
@@ -425,20 +411,17 @@ export default function DonasDosasFinanceSales() {
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+            {/* ✅ CALENDAR INPUT */}
             <label className="text-xs text-gray-600 md:col-span-1">
               <div className="mb-1">Sold at</div>
               <input
-                type="text"
+                type="date"
                 className="w-full border rounded-lg px-3 py-2 bg-white"
-                value={draft.sold_at || ""}
-                placeholder="YYYY-MM-DD"
-                onChange={(e) => setDraft((d) => ({ ...d, sold_at: e.target.value }))}
-                onBlur={() =>
-                  setDraft((d) => ({
-                    ...d,
-                    sold_at: normalizeDateToIso(d.sold_at) || d.sold_at,
-                  }))
-                }
+                value={String(draft.sold_at || "").slice(0, 10)}
+                onChange={(e) => {
+                  const v = String(e.target.value || "").trim(); // "YYYY-MM-DD"
+                  setDraft((d) => ({ ...d, sold_at: v }));
+                }}
                 disabled={saving}
               />
             </label>
@@ -583,7 +566,9 @@ export default function DonasDosasFinanceSales() {
                     <td className="px-3 py-2 text-right font-semibold">{money(r.profit_total)}</td>
                     <td className="px-3 py-2 text-right">{pct(r.margin_pct)}%</td>
                     <td className="px-3 py-2">{r.channel || "-"}</td>
-                    <td className="px-3 py-2 text-xs text-gray-600 max-w-[260px] truncate">{String(r.notes || "")}</td>
+                    <td className="px-3 py-2 text-xs text-gray-600 max-w-[260px] truncate">
+                      {String(r.notes || "")}
+                    </td>
 
                     <td className="px-3 py-2 text-right">
                       <div className="inline-flex items-center gap-2">
