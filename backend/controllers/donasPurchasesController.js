@@ -1,192 +1,154 @@
 // backend/controllers/donasPurchasesController.js
-const db = require("../db");
-const { touchMonthsFromYms } = require("../utils/donasSalesMonthAggregator");
 
-const SLUG = "donas-dosas";
+const db = require("../db");
 
 function toNum(x) {
   const n = Number(x);
   return Number.isFinite(n) ? n : 0;
 }
 
-function isYm(s) {
-  return /^\d{4}-\d{2}$/.test(String(s || ""));
+function normType(t) {
+  const v = String(t || "").trim().toLowerCase();
+  // В БД constraint: type IN ('opex','capex','cogs')
+  if (v === "opex" || v === "capex" || v === "cogs") return v;
+  return null;
 }
 
-function toYmFromDate(d) {
-  if (!d) return "";
-  return String(d).slice(0, 7);
-}
-
-function hasLockedTag(notes) {
-  return String(notes || "").toLowerCase().includes("#locked");
-}
-
-async function isMonthLocked(ym) {
-  if (!isYm(ym)) return false;
-
-  const { rows } = await db.query(
-    `
-    SELECT notes
-    FROM donas_finance_months
-    WHERE slug=$1 AND month = ($2 || '-01')::date
-    ORDER BY id DESC
-    LIMIT 1
-    `,
-    [SLUG, ym]
-  );
-
-  const notes = rows?.[0]?.notes || "";
-  return hasLockedTag(notes);
+function cleanText(x) {
+  const s = String(x ?? "").trim();
+  return s ? s : null;
 }
 
 /**
- * GET /api/admin/donas/purchases?month=YYYY-MM&type=OPEX|CAPEX
+ * GET /api/admin/donas/purchases?from=YYYY-MM-DD&to=YYYY-MM-DD&type=opex|capex|cogs
  */
-exports.getPurchases = async (req, res) => {
+exports.listPurchases = async (req, res) => {
   try {
-    const { month, type } = req.query;
+    const from = cleanText(req.query.from);
+    const to = cleanText(req.query.to);
+    const type = req.query.type ? normType(req.query.type) : null;
 
-    const wh = [];
+    const where = [];
     const params = [];
+    let i = 1;
 
-    if (month) {
-      if (!isYm(month)) return res.status(400).json({ error: "Bad month (YYYY-MM)" });
-      params.push(month);
-      wh.push(`to_char(date,'YYYY-MM') = $${params.length}`);
+    if (from) {
+      where.push(`date >= $${i++}`);
+      params.push(from);
+    }
+    if (to) {
+      where.push(`date <= $${i++}`);
+      params.push(to);
+    }
+    if (req.query.type) {
+      if (!type) {
+        return res.status(400).json({ error: "Invalid type. Use: opex | capex | cogs" });
+      }
+      where.push(`type = $${i++}`);
+      params.push(type);
     }
 
-    if (type) {
-      params.push(String(type).toUpperCase());
-      wh.push(`upper(type) = $${params.length}`);
-    }
-
-    const where = wh.length ? `WHERE ${wh.join(" AND ")}` : "";
-
-    const { rows } = await db.query(
-      `
-      SELECT *
+    const sql = `
+      SELECT
+        id,
+        date,
+        ingredient,
+        qty,
+        price,
+        total,   -- generated column
+        type,
+        notes,
+        created_at,
+        updated_at
       FROM donas_purchases
-      ${where}
+      ${where.length ? "WHERE " + where.join(" AND ") : ""}
       ORDER BY date DESC, id DESC
-      `,
-      params
-    );
+    `;
 
-    return res.json(rows || []);
+    const { rows } = await db.query(sql, params);
+    res.json({ rows });
   } catch (e) {
-    console.error("getPurchases error:", e);
-    return res.status(500).json({ error: "Failed to load purchases" });
+    console.error("listPurchases error:", e);
+    res.status(500).json({ error: "Failed to list purchases" });
   }
 };
 
 /**
  * POST /api/admin/donas/purchases
- * body: { date, ingredient, qty, price, type, notes? }
+ * body: { date, ingredient, qty, price, type, notes }
+ *
+ * ВАЖНО: total НЕ передаем — он generated column.
+ * ВАЖНО: type должен быть 'opex'|'capex'|'cogs' (lowercase).
  */
 exports.addPurchase = async (req, res) => {
   try {
-    const b = req.body || {};
-    const date = String(b.date || "").trim();
-    const ingredient = b.ingredient == null ? null : String(b.ingredient);
-    const qty = toNum(b.qty);
-    const price = toNum(b.price);
-    const type = String(b.type || "").toUpperCase();
-    const notes = b.notes == null ? null : String(b.notes);
+    const date = cleanText(req.body.date);
+    const ingredient = cleanText(req.body.ingredient);
+    const qty = toNum(req.body.qty);
+    const price = toNum(req.body.price);
+    const type = normType(req.body.type);
+    const notes = cleanText(req.body.notes);
 
-    if (!date) return res.status(400).json({ error: "date required" });
-    if (!type || (type !== "OPEX" && type !== "CAPEX")) {
-      return res.status(400).json({ error: "type must be OPEX or CAPEX" });
-    }
-
-    const ym = toYmFromDate(date);
-    if (await isMonthLocked(ym)) {
-      return res.status(409).json({ error: `Month ${ym} is locked (#locked)` });
-    }
-
-    const total = qty * price;
+    if (!date) return res.status(400).json({ error: "date is required" });
+    if (!ingredient) return res.status(400).json({ error: "ingredient is required" });
+    if (!type) return res.status(400).json({ error: "type must be: opex | capex | cogs" });
 
     const { rows } = await db.query(
       `
-      INSERT INTO donas_purchases (date, ingredient, qty, price, total, type, notes)
-      VALUES ($1,$2,$3,$4,$5,$6,$7)
-      RETURNING *
+      INSERT INTO donas_purchases (date, ingredient, qty, price, type, notes)
+      VALUES ($1,$2,$3,$4,$5,$6)
+      RETURNING
+        id, date, ingredient, qty, price, total, type, notes, created_at, updated_at
       `,
-      [date, ingredient, qty, price, total, type, notes]
+      [date, ingredient, qty, price, type, notes]
     );
 
-    // ✅ FULL auto-touch: purchases affect opex/capex + cash_end chain
-    await touchMonthsFromYms([ym]);
-
-    return res.json(rows[0]);
+    res.json(rows[0]);
   } catch (e) {
     console.error("addPurchase error:", e);
-    return res.status(500).json({ error: "Failed to add purchase" });
+    // Частые причины: type_check, total generated (если где-то еще пытаются вставить)
+    res.status(500).json({ error: "Failed to add purchase" });
   }
 };
 
 /**
  * PUT /api/admin/donas/purchases/:id
- * body: { date?, ingredient?, qty?, price?, type?, notes? }
+ * body: { date, ingredient, qty, price, type, notes }
+ *
+ * total НЕ трогаем.
  */
 exports.updatePurchase = async (req, res) => {
   try {
     const id = Number(req.params.id);
-    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: "Bad id" });
+    if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid id" });
 
-    const curQ = await db.query(`SELECT * FROM donas_purchases WHERE id=$1 LIMIT 1`, [id]);
-    const cur = curQ.rows?.[0];
-    if (!cur) return res.status(404).json({ error: "Purchase not found" });
+    const date = cleanText(req.body.date);
+    const ingredient = cleanText(req.body.ingredient);
+    const qty = toNum(req.body.qty);
+    const price = toNum(req.body.price);
+    const type = normType(req.body.type);
+    const notes = cleanText(req.body.notes);
 
-    const curYm = toYmFromDate(cur.date);
-    if (await isMonthLocked(curYm)) {
-      return res.status(409).json({ error: `Month ${curYm} is locked (#locked)` });
-    }
-
-    const b = req.body || {};
-    const date = String(b.date || cur.date);
-    const ingredient = b.ingredient === undefined ? cur.ingredient : b.ingredient;
-    const qty = b.qty == null ? toNum(cur.qty) : toNum(b.qty);
-    const price = b.price == null ? toNum(cur.price) : toNum(b.price);
-    const type = b.type == null ? String(cur.type || "").toUpperCase() : String(b.type).toUpperCase();
-    const notes = b.notes === undefined ? cur.notes : (b.notes == null ? null : String(b.notes));
-
-    if (!date) return res.status(400).json({ error: "date required" });
-    if (!type || (type !== "OPEX" && type !== "CAPEX")) {
-      return res.status(400).json({ error: "type must be OPEX or CAPEX" });
-    }
-
-    const newYm = toYmFromDate(date);
-    if (newYm !== curYm && (await isMonthLocked(newYm))) {
-      return res.status(409).json({ error: `Month ${newYm} is locked (#locked)` });
-    }
-
-    const total = qty * price;
+    if (!date) return res.status(400).json({ error: "date is required" });
+    if (!ingredient) return res.status(400).json({ error: "ingredient is required" });
+    if (!type) return res.status(400).json({ error: "type must be: opex | capex | cogs" });
 
     const { rows } = await db.query(
       `
       UPDATE donas_purchases
-      SET
-        date=$2,
-        ingredient=$3,
-        qty=$4,
-        price=$5,
-        total=$6,
-        type=$7,
-        notes=$8
+      SET date=$2, ingredient=$3, qty=$4, price=$5, type=$6, notes=$7
       WHERE id=$1
-      RETURNING *
+      RETURNING
+        id, date, ingredient, qty, price, total, type, notes, created_at, updated_at
       `,
-      [id, date, ingredient, qty, price, total, type, notes]
+      [id, date, ingredient, qty, price, type, notes]
     );
 
-    // ✅ FULL auto-touch: touch both months if moved
-    await touchMonthsFromYms([curYm, newYm]);
-
-    return res.json(rows[0]);
+    if (!rows.length) return res.status(404).json({ error: "Not found" });
+    res.json(rows[0]);
   } catch (e) {
     console.error("updatePurchase error:", e);
-    return res.status(500).json({ error: "Failed to update purchase" });
+    res.status(500).json({ error: "Failed to update purchase" });
   }
 };
 
@@ -196,25 +158,12 @@ exports.updatePurchase = async (req, res) => {
 exports.deletePurchase = async (req, res) => {
   try {
     const id = Number(req.params.id);
-    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: "Bad id" });
+    if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid id" });
 
-    const curQ = await db.query(`SELECT date FROM donas_purchases WHERE id=$1 LIMIT 1`, [id]);
-    const cur = curQ.rows?.[0];
-    if (!cur) return res.status(404).json({ error: "Purchase not found" });
-
-    const ym = toYmFromDate(cur.date);
-    if (await isMonthLocked(ym)) {
-      return res.status(409).json({ error: `Month ${ym} is locked (#locked)` });
-    }
-
-    await db.query(`DELETE FROM donas_purchases WHERE id=$1`, [id]);
-
-    // ✅ FULL auto-touch
-    await touchMonthsFromYms([ym]);
-
-    return res.json({ ok: true });
+    const { rowCount } = await db.query(`DELETE FROM donas_purchases WHERE id=$1`, [id]);
+    res.json({ ok: true, deleted: rowCount });
   } catch (e) {
     console.error("deletePurchase error:", e);
-    return res.status(500).json({ error: "Failed to delete purchase" });
+    res.status(500).json({ error: "Failed to delete purchase" });
   }
 };
