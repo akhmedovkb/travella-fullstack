@@ -23,17 +23,21 @@ function ymFromDateLike(x) {
   if (/^\d{4}-\d{2}$/.test(s)) return s;
   return "";
 }
-
-// ✅ local "today" as YYYY-MM-DD (no ISO/UTC)
-function todayIsoLocal() {
+function todayIso() {
   const d = new Date();
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
+function currentYm() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  return `${y}-${m}`;
+}
 
-// ✅ Accept many inputs but always return YYYY-MM-DD string (or "")
+// ✅ normalize anything to YYYY-MM-DD (NO timezone)
 function normalizeDateToIso(x) {
   const s = String(x || "").trim();
   if (!s) return "";
@@ -66,12 +70,13 @@ function normalizeDateToIso(x) {
 
 export default function DonasDosasFinanceSales() {
   const [rows, setRows] = useState([]);
-  const [month, setMonth] = useState(() => {
-    const d = new Date();
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    return `${y}-${m}`;
-  });
+
+  // month = то, что реально идёт в API (?month=YYYY-MM) или "" для All
+  const [month, setMonth] = useState(() => currentYm());
+
+  // monthInput = значение для input type="month" (НЕ может быть пустым корректно),
+  // поэтому держим отдельно, чтобы "All" не ломал контрол.
+  const [monthInput, setMonthInput] = useState(() => currentYm());
 
   const [menuItems, setMenuItems] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -82,7 +87,7 @@ export default function DonasDosasFinanceSales() {
   const [editingId, setEditingId] = useState(null);
 
   const [draft, setDraft] = useState({
-    sold_at: todayIsoLocal(), // ✅ always "YYYY-MM-DD"
+    sold_at: todayIso(), // string YYYY-MM-DD
     menu_item_id: "",
     qty: 1,
     unit_price: 0,
@@ -180,7 +185,7 @@ export default function DonasDosasFinanceSales() {
   function resetDraft() {
     setEditingId(null);
     setDraft({
-      sold_at: todayIsoLocal(),
+      sold_at: todayIso(),
       menu_item_id: "",
       qty: 1,
       unit_price: 0,
@@ -194,11 +199,8 @@ export default function DonasDosasFinanceSales() {
     setOk("");
     setEditingId(r.id);
 
-    // ✅ we expect backend to send "YYYY-MM-DD" string. Still normalize defensively.
-    const sold = normalizeDateToIso(r.sold_at) || String(r.sold_at || "").slice(0, 10) || todayIsoLocal();
-
     setDraft({
-      sold_at: sold,
+      sold_at: normalizeDateToIso(r.sold_at) || String(r.sold_at || "").slice(0, 10) || todayIso(),
       menu_item_id: r.menu_item_id ?? "",
       qty: r.qty ?? 1,
       unit_price: r.unit_price ?? 0,
@@ -214,6 +216,7 @@ export default function DonasDosasFinanceSales() {
       if (!it) return next;
 
       const autoPrice = toNum(it.sell_price) || toNum(it.price) || 0;
+
       if (toNum(d.unit_price) <= 0 || !editingId) {
         next.unit_price = autoPrice;
       }
@@ -228,11 +231,8 @@ export default function DonasDosasFinanceSales() {
   }
 
   async function save() {
-    // ✅ sold_at must be "YYYY-MM-DD" ONLY (string)
-    const sold_at = String(draft.sold_at || "").trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(sold_at)) {
-      return setErr("Sold at должен быть YYYY-MM-DD (например 2026-02-08)");
-    }
+    const sold_at = normalizeDateToIso(draft.sold_at);
+    if (!sold_at) return setErr("Sold at должен быть в формате YYYY-MM-DD (например 2026-02-08)");
 
     const menu_item_id = Number(draft.menu_item_id);
     const qty = toNum(draft.qty);
@@ -247,16 +247,25 @@ export default function DonasDosasFinanceSales() {
       setSaving(true);
       setErr("");
 
-      const payload = { sold_at, menu_item_id, qty, unit_price, channel, notes };
-
-      // 🔎 client-side debug (exact payload)
-      // console.log("SAVE SALE payload:", payload);
-
       if (editingId) {
-        await apiPut(`/api/admin/donas/sales/${editingId}`, payload);
+        await apiPut(`/api/admin/donas/sales/${editingId}`, {
+          sold_at,
+          menu_item_id,
+          qty,
+          unit_price,
+          channel,
+          notes,
+        });
         setOk("Сохранено ✅");
       } else {
-        await apiPost(`/api/admin/donas/sales`, payload);
+        await apiPost(`/api/admin/donas/sales`, {
+          sold_at,
+          menu_item_id,
+          qty,
+          unit_price,
+          channel,
+          notes,
+        });
         setOk("Добавлено ✅");
       }
 
@@ -299,7 +308,10 @@ export default function DonasDosasFinanceSales() {
     try {
       setSaving(true);
       setErr("");
-      const r = await apiPost(`/api/admin/donas/sales/recalc-cogs?month=${encodeURIComponent(month)}`, {});
+      const r = await apiPost(
+        `/api/admin/donas/sales/recalc-cogs?month=${encodeURIComponent(month)}`,
+        {}
+      );
       const updated = r?.updated ?? r?.data?.updated ?? 0;
       setOk(`Recalc COGS ✅ updated: ${updated}`);
       setTimeout(() => setOk(""), 2000);
@@ -353,12 +365,16 @@ export default function DonasDosasFinanceSales() {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="flex items-end gap-3">
             <label className="text-xs text-gray-600">
-              <div className="mb-1">Month (YYYY-MM)</div>
+              <div className="mb-1">Month</div>
               <input
+                type="month"
                 className="border rounded-lg px-3 py-2 bg-white"
-                value={month}
-                onChange={(e) => setMonth(e.target.value)}
-                placeholder="2026-02"
+                value={monthInput}
+                onChange={(e) => {
+                  const v = e.target.value; // YYYY-MM
+                  setMonthInput(v);
+                  setMonth(v);
+                }}
                 disabled={saving}
               />
             </label>
@@ -411,17 +427,13 @@ export default function DonasDosasFinanceSales() {
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-            {/* ✅ CALENDAR INPUT */}
             <label className="text-xs text-gray-600 md:col-span-1">
               <div className="mb-1">Sold at</div>
               <input
                 type="date"
                 className="w-full border rounded-lg px-3 py-2 bg-white"
-                value={String(draft.sold_at || "").slice(0, 10)}
-                onChange={(e) => {
-                  const v = String(e.target.value || "").trim(); // "YYYY-MM-DD"
-                  setDraft((d) => ({ ...d, sold_at: v }));
-                }}
+                value={normalizeDateToIso(draft.sold_at) || todayIso()}
+                onChange={(e) => setDraft((d) => ({ ...d, sold_at: e.target.value }))}
                 disabled={saving}
               />
             </label>
@@ -566,9 +578,7 @@ export default function DonasDosasFinanceSales() {
                     <td className="px-3 py-2 text-right font-semibold">{money(r.profit_total)}</td>
                     <td className="px-3 py-2 text-right">{pct(r.margin_pct)}%</td>
                     <td className="px-3 py-2">{r.channel || "-"}</td>
-                    <td className="px-3 py-2 text-xs text-gray-600 max-w-[260px] truncate">
-                      {String(r.notes || "")}
-                    </td>
+                    <td className="px-3 py-2 text-xs text-gray-600 max-w-[260px] truncate">{String(r.notes || "")}</td>
 
                     <td className="px-3 py-2 text-right">
                       <div className="inline-flex items-center gap-2">
