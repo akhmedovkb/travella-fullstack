@@ -1,9 +1,10 @@
-// backend/routes/adminDonasFinanceMonthsRoutes.js
+// backend/routes/adminDonasFinanceRoutes.js
 
 const express = require("express");
 const authenticateToken = require("../middleware/authenticateToken");
 const requireAdmin = require("../middleware/requireAdmin");
-const months = require("../controllers/donasFinanceMonthsController");
+
+const ctrl = require("../controllers/donasFinanceMonthsController");
 
 const router = express.Router();
 
@@ -13,48 +14,61 @@ router.use(authenticateToken, requireAdmin);
 /**
  * Settings
  */
-router.get("/settings", months.getSettings);
-router.put("/settings", months.updateSettings);
+router.get("/settings", ctrl.getSettings);
+router.put("/settings", ctrl.updateSettings);
 
 /**
  * Months list / sync
  */
-router.get("/months", months.listMonths);
-router.post("/months/sync", months.syncMonths);
+router.get("/months", ctrl.listMonths);
+router.post("/months/sync", ctrl.syncMonths);
 
 /**
- * Update month (only loan_paid + notes when unlocked)
+ * Update month (loan_paid + notes when unlocked)
  */
-router.put("/months/:month", months.updateMonth);
+router.put("/months/:month", ctrl.updateMonth);
 
 /**
  * Lock / Unlock / Snapshot
  */
-router.post("/months/:month/lock", months.lockMonth);
-router.post("/months/:month/unlock", months.unlockMonth);
-router.post("/months/:month/resnapshot", months.resnapshotMonth);
+router.post("/months/:month/lock", ctrl.lockMonth);
+router.post("/months/:month/unlock", ctrl.unlockMonth);
 
-router.post("/months/:month/lock-up-to", months.lockUpTo);
-// alias (UI sometimes uses this name)
-router.post("/months/:month/resnapshot-up-to", months.resnapshotUpTo);
+router.post("/months/:month/resnapshot", ctrl.resnapshotMonth);
+
+// lock all ≤ current
+router.post("/months/:month/lock-up-to", ctrl.lockUpTo);
+
+// bulk resnapshot in range (UI)
+router.post("/months/:month/bulk-resnapshot", ctrl.bulkResnapshot);
+
+// resnapshot up to month (UI)
+router.get("/months/:month/resnapshot-up-to-preview", ctrl.resnapshotUpToPreview);
+router.post("/months/:month/resnapshot-up-to", ctrl.resnapshotUpTo);
 
 /**
  * Previews (UI)
  */
-router.get("/months/:month/lock-preview", months.lockPreview); // ?scope=single|upto
-router.get("/months/:month/resnapshot-up-to-preview", months.resnapshotUpToPreview);
+router.get("/months/:month/lock-preview", ctrl.lockPreview);
 
 /**
- * Export
+ * Audit (new paths used by UI)
  */
-router.get("/months/export.csv", months.exportCsv);
+router.get("/months/:month/audit", ctrl.auditMonth);
+router.get("/months/:month/audit/export.csv", ctrl.exportAuditMonthCsv);
 
 /**
- * Audit
+ * Exports
  */
-router.get("/audit", months.audit);
-router.get("/audit/export.csv", months.exportAuditCsv);
-router.get("/audit/:month", months.auditMonth);
-router.get("/audit/:month/export.csv", months.exportAuditMonthCsv);
+router.get("/months/export.csv", ctrl.exportCsv);
+router.get("/audit", ctrl.audit);
+router.get("/audit/export.csv", ctrl.exportAuditCsv);
+
+/**
+ * Legacy aliases (на случай старого UI)
+ * /audit/:month вместо /months/:month/audit
+ */
+router.get("/audit/:month", ctrl.auditMonth);
+router.get("/audit/:month/export.csv", ctrl.exportAuditMonthCsv);
 
 module.exports = router;
