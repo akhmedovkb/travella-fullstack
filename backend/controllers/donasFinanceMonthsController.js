@@ -1271,3 +1271,20 @@ exports.exportAuditMonthCsv = async (req, res) => {
     return res.status(500).json({ error: "Failed to export month audit csv" });
   }
 };
+
+// =========================
+// Internal exports (for auto-sync from Sales/Purchases)
+// =========================
+// ⚠️ used by backend/utils/donasFinanceAutoSync.js
+exports._internal = {
+  isYm,
+  monthToYm,
+  ymToMonthDate,
+  nextYm,
+  prevYm,
+  getMaxYmFromMonthsOrData,
+  updateMonthAgg,
+  recomputeCashChainFrom,
+  auditMonthAction,
+};
+
