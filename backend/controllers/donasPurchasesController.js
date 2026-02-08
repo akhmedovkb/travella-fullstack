@@ -2,6 +2,7 @@
 
 const db = require("../db");
 const { touchMonthsFromYms } = require("../utils/donasSalesMonthAggregator");
+const { autoSyncMonthsForDate } = require("../utils/donasFinanceAutoSync");
 
 const SLUG = "donas-dosas";
 
@@ -41,7 +42,7 @@ function normType(t) {
 
 function nextYm(ym) {
   const [y, m] = String(ym).split("-").map((v) => Number(v));
-  const d = new Date(Date.UTC(y, (m - 1) + 1, 1));
+  const d = new Date(Date.UTC(y, m - 1 + 1, 1));
   const yy = d.getUTCFullYear();
   const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
   return `${yy}-${mm}`;
@@ -210,8 +211,11 @@ exports.addPurchase = async (req, res) => {
       [date, ingredient, qty, price, type, notes]
     );
 
-    // ✅ touch months (recompute)
+    // ✅ legacy recompute hook (keeps current behavior)
     await touchMonthsFromYms([ym]);
+
+    // ✅ NEW: auto-sync chain (cash_end) immediately
+    await autoSyncMonthsForDate(req, date, "purchases.add");
 
     res.json(rows[0]);
   } catch (e) {
@@ -271,7 +275,15 @@ exports.updatePurchase = async (req, res) => {
     const touch = new Set();
     if (isYm(oldYm)) touch.add(oldYm);
     if (isYm(ym)) touch.add(ym);
+
+    // ✅ legacy recompute hook (keeps current behavior)
     await touchMonthsFromYms([...touch]);
+
+    // ✅ NEW: auto-sync chain for affected months (old + new dates)
+    const dates = new Set([String(oldDate).slice(0, 10), date]);
+    for (const d of dates) {
+      await autoSyncMonthsForDate(req, d, "purchases.update");
+    }
 
     res.json(rows[0]);
   } catch (e) {
@@ -290,7 +302,8 @@ exports.deletePurchase = async (req, res) => {
     const oldQ = await db.query(`SELECT id, date FROM donas_purchases WHERE id=$1 LIMIT 1`, [id]);
     if (!oldQ.rows?.length) return res.status(404).json({ error: "Not found" });
 
-    const ym = ymFromDate(oldQ.rows[0].date);
+    const oldDate = oldQ.rows[0].date;
+    const ym = ymFromDate(oldDate);
 
     if (isYm(ym) && (await isMonthLocked(ym))) {
       return res.status(409).json({ error: `Month ${ym} is locked (#locked)` });
@@ -299,7 +312,11 @@ exports.deletePurchase = async (req, res) => {
     const { rowCount } = await db.query(`DELETE FROM donas_purchases WHERE id=$1`, [id]);
 
     if (isYm(ym)) {
+      // ✅ legacy recompute hook (keeps current behavior)
       await touchMonthsFromYms([ym]);
+
+      // ✅ NEW: auto-sync chain immediately
+      await autoSyncMonthsForDate(req, String(oldDate).slice(0, 10), "purchases.delete");
     }
 
     res.json({ ok: true, deleted: rowCount });
