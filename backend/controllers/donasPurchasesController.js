@@ -1,17 +1,13 @@
 // backend/controllers/donasPurchasesController.js
+
 const db = require("../db");
 const { touchMonthsFromYms } = require("../utils/donasSalesMonthAggregator");
+
+const SLUG = "donas-dosas";
 
 function toNum(x) {
   const n = Number(x);
   return Number.isFinite(n) ? n : 0;
-}
-
-function normType(t) {
-  const v = String(t || "").trim().toLowerCase();
-  // В БД constraint: type IN ('opex','capex','cogs')
-  if (v === "opex" || v === "capex" || v === "cogs") return v;
-  return null;
 }
 
 function cleanText(x) {
@@ -26,11 +22,8 @@ function isYm(s) {
 function ymFromDate(dateStr) {
   const s = String(dateStr || "").trim();
   if (!s) return "";
-  // ожидаем YYYY-MM-DD
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s.slice(0, 7);
-  // если вдруг пришёл ISO
   if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.slice(0, 7);
-  // fallback
   if (/^\d{4}-\d{2}/.test(s)) return s.slice(0, 7);
   return "";
 }
@@ -39,40 +32,11 @@ function hasLockedTag(notes) {
   return String(notes || "").toLowerCase().includes("#locked");
 }
 
-async function isMonthLocked(ym) {
-  if (!isYm(ym)) return false;
-  try {
-    // таблица может ещё не существовать на “чистом” окружении
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS donas_finance_months (
-        id BIGSERIAL PRIMARY KEY,
-        slug TEXT NOT NULL,
-        month DATE NOT NULL,
-        revenue NUMERIC NOT NULL DEFAULT 0,
-        cogs NUMERIC NOT NULL DEFAULT 0,
-        opex NUMERIC NOT NULL DEFAULT 0,
-        capex NUMERIC NOT NULL DEFAULT 0,
-        loan_paid NUMERIC NOT NULL DEFAULT 0,
-        cash_end NUMERIC NOT NULL DEFAULT 0,
-        notes TEXT NOT NULL DEFAULT '',
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-    `);
-
-    const { rows } = await db.query(
-      `
-      SELECT notes
-      FROM donas_finance_months
-      WHERE slug=$1 AND month = ($2 || '-01')::date
-      ORDER BY id DESC
-      LIMIT 1
-      `,
-      ["donas-dosas", ym]
-    );
-    return hasLockedTag(rows?.[0]?.notes || "");
-  } catch {
-    return false;
-  }
+function normType(t) {
+  const v = String(t || "").trim().toLowerCase();
+  // allow only
+  if (v === "opex" || v === "capex" || v === "cogs") return v;
+  return null;
 }
 
 function nextYm(ym) {
@@ -83,15 +47,78 @@ function nextYm(ym) {
   return `${yy}-${mm}`;
 }
 
+async function ensureMonthsTable() {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS donas_finance_months (
+      id BIGSERIAL PRIMARY KEY,
+      slug TEXT NOT NULL,
+      month DATE NOT NULL,
+      revenue NUMERIC NOT NULL DEFAULT 0,
+      cogs NUMERIC NOT NULL DEFAULT 0,
+      opex NUMERIC NOT NULL DEFAULT 0,
+      capex NUMERIC NOT NULL DEFAULT 0,
+      loan_paid NUMERIC NOT NULL DEFAULT 0,
+      cash_end NUMERIC NOT NULL DEFAULT 0,
+      notes TEXT NOT NULL DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS idx_donas_finance_months_slug_month ON donas_finance_months (slug, month);
+  `);
+}
+
+async function ensurePurchasesTable() {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS donas_purchases (
+      id BIGSERIAL PRIMARY KEY,
+      date DATE NOT NULL,
+      ingredient TEXT NOT NULL,
+      qty NUMERIC NOT NULL DEFAULT 0,
+      price NUMERIC NOT NULL DEFAULT 0,
+      total NUMERIC GENERATED ALWAYS AS (qty * price) STORED,
+      type TEXT NOT NULL,
+      notes TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_donas_purchases_date ON donas_purchases (date);`);
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_donas_purchases_type ON donas_purchases (type);`);
+}
+
+async function getLatestMonthRow(ym) {
+  await ensureMonthsTable();
+  const q = await db.query(
+    `
+    SELECT *
+    FROM donas_finance_months
+    WHERE slug=$1 AND month=($2 || '-01')::date
+    ORDER BY id DESC
+    LIMIT 1
+    `,
+    [SLUG, ym]
+  );
+  return q.rows?.[0] || null;
+}
+
+async function isMonthLocked(ym) {
+  if (!isYm(ym)) return false;
+  const row = await getLatestMonthRow(ym);
+  if (!row) return false;
+  return hasLockedTag(row.notes);
+}
+
 /**
- * GET /api/admin/donas/purchases?month=YYYY-MM&from=YYYY-MM-DD&to=YYYY-MM-DD&type=opex|capex|cogs
- *
- * Приоритет:
- * - если передан month=YYYY-MM → фильтруем по этому месяцу (date >= month-01 AND date < nextMonth-01)
- * - иначе используем from/to
+ * =========================
+ * Controllers
+ * =========================
  */
+
 exports.listPurchases = async (req, res) => {
   try {
+    await ensurePurchasesTable();
+
     const month = cleanText(req.query.month);
     const from = cleanText(req.query.from);
     const to = cleanText(req.query.to);
@@ -124,7 +151,7 @@ exports.listPurchases = async (req, res) => {
       if (!type) {
         return res.status(400).json({ error: "Invalid type. Use: opex | capex | cogs" });
       }
-      where.push(`type = $${i++}`);
+      where.push(`lower(type) = $${i++}`);
       params.push(type);
     }
 
@@ -135,7 +162,7 @@ exports.listPurchases = async (req, res) => {
         ingredient,
         qty,
         price,
-        total,   -- generated column
+        total,
         type,
         notes,
         created_at
@@ -152,12 +179,10 @@ exports.listPurchases = async (req, res) => {
   }
 };
 
-/**
- * POST /api/admin/donas/purchases
- * body: { date, ingredient, qty, price, type, notes }
- */
 exports.addPurchase = async (req, res) => {
   try {
+    await ensurePurchasesTable();
+
     const date = cleanText(req.body.date);
     const ingredient = cleanText(req.body.ingredient);
     const qty = toNum(req.body.qty);
@@ -185,7 +210,7 @@ exports.addPurchase = async (req, res) => {
       [date, ingredient, qty, price, type, notes]
     );
 
-    // ✅ auto-update Months (revenue/cogs/opex/capex + cash_end chain)
+    // ✅ touch months (recompute)
     await touchMonthsFromYms([ym]);
 
     res.json(rows[0]);
@@ -197,10 +222,11 @@ exports.addPurchase = async (req, res) => {
 
 exports.updatePurchase = async (req, res) => {
   try {
+    await ensurePurchasesTable();
+
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid id" });
 
-    // read old (to detect month change)
     const oldQ = await db.query(`SELECT id, date FROM donas_purchases WHERE id=$1 LIMIT 1`, [id]);
     if (!oldQ.rows?.length) return res.status(404).json({ error: "Not found" });
 
@@ -221,7 +247,7 @@ exports.updatePurchase = async (req, res) => {
     const ym = ymFromDate(date);
     if (!isYm(ym)) return res.status(400).json({ error: "date invalid (expected YYYY-MM-DD)" });
 
-    // lock guard: both old and new months should be protected
+    // lock guard: old and new months
     if (isYm(oldYm) && (await isMonthLocked(oldYm))) {
       return res.status(409).json({ error: `Month ${oldYm} is locked (#locked)` });
     }
@@ -241,7 +267,7 @@ exports.updatePurchase = async (req, res) => {
 
     if (!rows.length) return res.status(404).json({ error: "Not found" });
 
-    // ✅ touch both months if it moved
+    // touch both months if moved
     const touch = new Set();
     if (isYm(oldYm)) touch.add(oldYm);
     if (isYm(ym)) touch.add(ym);
@@ -256,10 +282,11 @@ exports.updatePurchase = async (req, res) => {
 
 exports.deletePurchase = async (req, res) => {
   try {
+    await ensurePurchasesTable();
+
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid id" });
 
-    // read old date before delete
     const oldQ = await db.query(`SELECT id, date FROM donas_purchases WHERE id=$1 LIMIT 1`, [id]);
     if (!oldQ.rows?.length) return res.status(404).json({ error: "Not found" });
 
@@ -272,7 +299,6 @@ exports.deletePurchase = async (req, res) => {
     const { rowCount } = await db.query(`DELETE FROM donas_purchases WHERE id=$1`, [id]);
 
     if (isYm(ym)) {
-      // ✅ auto-update Months after deletion
       await touchMonthsFromYms([ym]);
     }
 
