@@ -525,6 +525,22 @@ export default function DonasDosasFinanceMonths() {
 
   const draftLocked = isLocked(draft.notes);
 
+  // ✅ tooltips for table headers (red rectangle #1)
+  const TT = {
+    revenue: "Revenue — выручка за месяц. Автоматически считается из Sales (sum revenue_total).",
+    cogs: "COGS — себестоимость проданного. Автоматически считается из Sales (sum cogs_total).",
+    opex: "OPEX — операционные расходы. Автоматически считается из Purchases (type=OPEX).",
+    capex: "CAPEX — капитальные расходы. Автоматически считается из Purchases (type=CAPEX).",
+    loan: "Loan — выплаты по займу/кредиту за месяц. Вводится вручную (loan_paid).",
+    cf: "CF (Cash Flow) = Revenue − COGS − OPEX − CAPEX − Loan.",
+    cashEnd:
+      "Cash end — остаток на конец месяца. Считается цепочкой: cash_end(prev_month) + CF.",
+    diff:
+      "Diff (O/C) — индикатор расхождений/контроля. O: diff по OPEX, C: diff по CAPEX (если backend отдаёт _diff).",
+    notes:
+      "Notes — комментарий к месяцу. Если содержит #locked — месяц закрыт (snapshot) и редактирование/пересчёт ограничены.",
+  };
+
   return (
     <div className="max-w-6xl mx-auto space-y-4">
       <div className="flex items-start justify-between gap-3">
@@ -541,7 +557,7 @@ export default function DonasDosasFinanceMonths() {
             className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
             onClick={syncFromPurchases}
             disabled={loading || saving}
-            title="Создаёт недостающие месяцы по диапазону purchases/sales"
+            title="Sync: создаёт/обновляет месяцы по данным Sales + Purchases и пересчитывает цепочку cash_end."
           >
             Sync
           </button>
@@ -551,7 +567,7 @@ export default function DonasDosasFinanceMonths() {
             className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50"
             onClick={exportMonthsCsv}
             disabled={loading || saving || exporting}
-            title="CSV: months + computed cashflow"
+            title="Экспорт CSV по месяцам (revenue/cogs/opex/capex/loan/cash_end + notes)."
           >
             {exporting ? "Export…" : "Export CSV"}
           </button>
@@ -564,7 +580,7 @@ export default function DonasDosasFinanceMonths() {
             ].join(" ")}
             onClick={() => setAuditOpen((v) => !v)}
             disabled={loading || saving}
-            title="Audit log"
+            title="Audit: журнал изменений (lock/unlock/update/resnapshot/sync)."
           >
             Audit
           </button>
@@ -574,6 +590,7 @@ export default function DonasDosasFinanceMonths() {
             className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
             onClick={load}
             disabled={loading || saving}
+            title="Перезагрузить данные месяцев."
           >
             Обновить
           </button>
@@ -611,12 +628,14 @@ export default function DonasDosasFinanceMonths() {
                   onChange={(e) => setNewMonth(e.target.value)}
                   placeholder="2026-01"
                   disabled={saving}
+                  title="Добавляет месяц в справочник (без ручного ввода revenue/cogs/opex/capex — они подтянутся автоматически)."
                 />
                 <button
                   type="button"
                   className="px-3 py-2 rounded-lg bg-black text-white hover:bg-gray-900 disabled:opacity-50"
                   onClick={addMonth}
                   disabled={saving}
+                  title="Создать пустой месяц. Затем Sync/Resnapshot подтянет суммы и пересчитает cash_end."
                 >
                   Add
                 </button>
@@ -629,16 +648,37 @@ export default function DonasDosasFinanceMonths() {
           <table className="min-w-[1100px] w-full text-sm">
             <thead className="bg-gray-50 text-gray-600">
               <tr>
-                <th className="text-left px-3 py-2">Month</th>
-                <th className="text-right px-3 py-2">Revenue</th>
-                <th className="text-right px-3 py-2">COGS</th>
-                <th className="text-right px-3 py-2">OPEX</th>
-                <th className="text-right px-3 py-2">CAPEX</th>
-                <th className="text-right px-3 py-2">Loan</th>
-                <th className="text-right px-3 py-2">CF</th>
-                <th className="text-right px-3 py-2">Cash end</th>
-                <th className="text-left px-3 py-2">Diff (O/C)</th>
-                <th className="text-left px-3 py-2">Notes</th>
+                <th className="text-left px-3 py-2" title="Месяц в формате YYYY-MM">
+                  Month
+                </th>
+
+                <th className="text-right px-3 py-2" title={TT.revenue}>
+                  Revenue
+                </th>
+                <th className="text-right px-3 py-2" title={TT.cogs}>
+                  COGS
+                </th>
+                <th className="text-right px-3 py-2" title={TT.opex}>
+                  OPEX
+                </th>
+                <th className="text-right px-3 py-2" title={TT.capex}>
+                  CAPEX
+                </th>
+                <th className="text-right px-3 py-2" title={TT.loan}>
+                  Loan
+                </th>
+                <th className="text-right px-3 py-2" title={TT.cf}>
+                  CF
+                </th>
+                <th className="text-right px-3 py-2" title={TT.cashEnd}>
+                  Cash end
+                </th>
+                <th className="text-left px-3 py-2" title={TT.diff}>
+                  Diff (O/C)
+                </th>
+                <th className="text-left px-3 py-2" title={TT.notes}>
+                  Notes
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -657,13 +697,16 @@ export default function DonasDosasFinanceMonths() {
                       locked ? "bg-gray-50/40" : "",
                     ].join(" ")}
                     onClick={() => startEdit(r)}
-                    title="Click to edit / actions"
+                    title="Клик: открыть редактирование и действия (lock/unlock/resnapshot)."
                   >
                     <td className="px-3 py-2 font-medium">
                       <div className="flex items-center gap-2">
                         <span>{ym}</span>
                         {locked && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full border bg-white">
+                          <span
+                            className="text-[10px] px-2 py-0.5 rounded-full border bg-white"
+                            title="Месяц закрыт (notes содержит #locked)."
+                          >
                             locked
                           </span>
                         )}
@@ -683,7 +726,7 @@ export default function DonasDosasFinanceMonths() {
                             "text-[11px] px-2 py-0.5 rounded-full border",
                             diffBadgeClass(dO),
                           ].join(" ")}
-                          title="purchases - snapshot (OPEX)"
+                          title="Diff O: разница/контроль по OPEX (если backend отдаёт _diff.opex)."
                         >
                           O {dO === 0 ? "0" : (dO > 0 ? "+" : "") + money(dO)}
                         </span>
@@ -692,7 +735,7 @@ export default function DonasDosasFinanceMonths() {
                             "text-[11px] px-2 py-0.5 rounded-full border",
                             diffBadgeClass(dC),
                           ].join(" ")}
-                          title="purchases - snapshot (CAPEX)"
+                          title="Diff C: разница/контроль по CAPEX (если backend отдаёт _diff.capex)."
                         >
                           C {dC === 0 ? "0" : (dC > 0 ? "+" : "") + money(dC)}
                         </span>
@@ -741,6 +784,7 @@ export default function DonasDosasFinanceMonths() {
                   className="border rounded-lg px-2 py-2 text-sm bg-white"
                   value={auditMode}
                   onChange={(e) => setAuditMode(e.target.value)}
+                  title="Показывать audit по всем месяцам или только по выбранному."
                 >
                   <option value="all">All</option>
                   <option value="month" disabled={!editYm}>
@@ -756,7 +800,7 @@ export default function DonasDosasFinanceMonths() {
                   }
                   inputMode="numeric"
                   placeholder="limit"
-                  title="Max 500"
+                  title="Сколько строк audit загружать (макс 500)."
                 />
 
                 <button
@@ -766,6 +810,7 @@ export default function DonasDosasFinanceMonths() {
                     auditMode === "month" && editYm ? loadAuditForMonth(editYm) : loadAuditAll()
                   }
                   disabled={auditLoading}
+                  title="Обновить audit."
                 >
                   {auditLoading ? "Loading…" : "Refresh"}
                 </button>
@@ -775,7 +820,7 @@ export default function DonasDosasFinanceMonths() {
                   className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50"
                   onClick={exportAuditCsv}
                   disabled={exporting}
-                  title="CSV export of audit rows"
+                  title="Экспорт audit в CSV."
                 >
                   Export audit CSV
                 </button>
@@ -834,7 +879,6 @@ export default function DonasDosasFinanceMonths() {
 
         {editYm && (
           <div className="border rounded-2xl p-4 space-y-4 bg-white">
-            {/* твой edit блок — оставлен без изменений */}
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div className="text-sm font-semibold">Edit month: {editYm}</div>
@@ -845,6 +889,7 @@ export default function DonasDosasFinanceMonths() {
                 </div>
               </div>
 
+              {/* ✅ tooltips for action buttons (red rectangle #2) */}
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
@@ -854,7 +899,7 @@ export default function DonasDosasFinanceMonths() {
                     loadLockPreview("single");
                   }}
                   disabled={saving || previewLoading}
-                  title="Preview Lock month (snapshot) перед фиксацией"
+                  title="Preview Lock: покажет, что произойдёт при Lock month (обычно добавится #locked). Ничего не меняет в базе."
                 >
                   {previewLoading && previewScope === "single" ? "Preview…" : "Preview Lock"}
                 </button>
@@ -867,7 +912,7 @@ export default function DonasDosasFinanceMonths() {
                     loadLockPreview("upto");
                   }}
                   disabled={saving || previewLoading}
-                  title="Preview Lock all ≤"
+                  title="Preview Lock ≤: покажет список месяцев, которые будут закрыты при Lock all ≤ (все месяцы до выбранного включительно). Без изменений в базе."
                 >
                   {previewLoading && previewScope === "upto" ? "Preview…" : "Preview Lock ≤"}
                 </button>
@@ -877,7 +922,7 @@ export default function DonasDosasFinanceMonths() {
                   className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
                   onClick={loadResnapshotPreview}
                   disabled={saving || previewLoading}
-                  title="Preview bulk Re-snapshot ≤ (locked only)"
+                  title="Preview Re-snapshot ≤: покажет, какие месяцы попадут в пересчёт из Sales+Purchases при Re-snapshot ≤. Без изменений в базе."
                 >
                   {previewLoading ? "Preview…" : "Preview Re-snapshot ≤"}
                 </button>
@@ -891,7 +936,7 @@ export default function DonasDosasFinanceMonths() {
                       className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
                       onClick={resnapshotMonth}
                       disabled={saving}
-                      title="Переснять снепшот месяца"
+                      title="Re-snapshot: пересчитать агрегаты месяца из Sales+Purchases и пересчитать цепочку cash_end дальше (если месяц не locked)."
                     >
                       Re-snapshot
                     </button>
@@ -901,7 +946,7 @@ export default function DonasDosasFinanceMonths() {
                       className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
                       onClick={resnapshotUpTo}
                       disabled={saving}
-                      title="Обновит locked месяцы <= выбранного"
+                      title="Re-snapshot ≤: пересчитать месяцы ≤ выбранного (обычно используется для закрытых периодов/пакетного пересчёта)."
                     >
                       Re-snapshot ≤
                       <div className="text-[11px] text-gray-400">locked only</div>
@@ -912,7 +957,7 @@ export default function DonasDosasFinanceMonths() {
                       className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
                       onClick={unlockMonth}
                       disabled={saving}
-                      title="Снимет #locked и вернёт auto"
+                      title="Unlock month: снять #locked и вернуть авто-режим (после этого можно сохранить loan_paid/notes и делать resnapshot)."
                     >
                       Unlock month
                     </button>
@@ -924,7 +969,7 @@ export default function DonasDosasFinanceMonths() {
                       className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
                       onClick={lockMonth}
                       disabled={saving}
-                      title="Зафиксирует месяц (#locked)"
+                      title="Lock month: закрыть месяц (добавить #locked). Месяц становится снепшотом и не должен меняться автоматически."
                     >
                       Lock month
                     </button>
@@ -934,7 +979,7 @@ export default function DonasDosasFinanceMonths() {
                       className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
                       onClick={lockUpTo}
                       disabled={saving}
-                      title="Зафиксирует ВСЕ месяцы ≤ выбранного (#locked)"
+                      title="Lock all ≤: закрыть все месяцы до выбранного включительно (массовое закрытие периода)."
                     >
                       Lock all ≤
                     </button>
@@ -944,7 +989,7 @@ export default function DonasDosasFinanceMonths() {
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <label className="text-xs text-gray-600">
+              <label className="text-xs text-gray-600" title={TT.revenue}>
                 <div className="mb-1">Revenue (auto from Sales)</div>
                 <input
                   className="w-full border rounded-lg px-3 py-2 bg-white"
@@ -953,12 +998,12 @@ export default function DonasDosasFinanceMonths() {
                 />
               </label>
 
-              <label className="text-xs text-gray-600">
+              <label className="text-xs text-gray-600" title={TT.cogs}>
                 <div className="mb-1">COGS (auto from Sales)</div>
                 <input className="w-full border rounded-lg px-3 py-2 bg-white" value={draft.cogs} disabled />
               </label>
 
-              <label className="text-xs text-gray-600">
+              <label className="text-xs text-gray-600" title={TT.loan}>
                 <div className="mb-1">Loan paid</div>
                 <input
                   className="w-full border rounded-lg px-3 py-2 bg-white"
@@ -970,7 +1015,7 @@ export default function DonasDosasFinanceMonths() {
                 />
               </label>
 
-              <label className="text-xs text-gray-600">
+              <label className="text-xs text-gray-600" title={TT.opex}>
                 <div className="mb-1">OPEX (computed)</div>
                 <input
                   className="w-full border rounded-lg px-3 py-2 bg-white"
@@ -979,7 +1024,7 @@ export default function DonasDosasFinanceMonths() {
                 />
               </label>
 
-              <label className="text-xs text-gray-600">
+              <label className="text-xs text-gray-600" title={TT.capex}>
                 <div className="mb-1">CAPEX (computed)</div>
                 <input
                   className="w-full border rounded-lg px-3 py-2 bg-white"
@@ -988,7 +1033,7 @@ export default function DonasDosasFinanceMonths() {
                 />
               </label>
 
-              <label className="text-xs text-gray-600">
+              <label className="text-xs text-gray-600" title={TT.cashEnd}>
                 <div className="mb-1">Cash end (computed / snapshot)</div>
                 <input
                   className="w-full border rounded-lg px-3 py-2 bg-white"
@@ -997,7 +1042,7 @@ export default function DonasDosasFinanceMonths() {
                 />
               </label>
 
-              <label className="text-xs text-gray-600 col-span-2 md:col-span-3">
+              <label className="text-xs text-gray-600 col-span-2 md:col-span-3" title={TT.notes}>
                 <div className="mb-1">Notes</div>
                 <input
                   className="w-full border rounded-lg px-3 py-2 bg-white"
@@ -1015,6 +1060,7 @@ export default function DonasDosasFinanceMonths() {
                 className="px-4 py-2 rounded-lg border bg-white hover:bg-gray-50"
                 onClick={stopEdit}
                 disabled={saving || previewLoading}
+                title="Закрыть форму редактирования."
               >
                 Отмена
               </button>
@@ -1024,11 +1070,23 @@ export default function DonasDosasFinanceMonths() {
                 className="px-4 py-2 rounded-lg bg-black text-white hover:bg-gray-900 disabled:opacity-50"
                 onClick={saveDraft}
                 disabled={saving || draftLocked}
-                title={draftLocked ? "Locked месяц read-only. Unlock или Re-snapshot." : ""}
+                title={
+                  draftLocked
+                    ? "Месяц закрыт (#locked) — сохранять нельзя. Сначала Unlock или Re-snapshot."
+                    : "Сохранить loan_paid и notes (Revenue/COGS/OPEX/CAPEX не редактируются вручную)."
+                }
               >
                 {saving ? "Сохраняю…" : "Сохранить"}
               </button>
             </div>
+          </div>
+        )}
+
+        {/* preview вывод (если есть) оставляем как есть — у тебя ниже по файлу */}
+        {preview && (
+          <div className="mt-3 p-3 rounded-xl border bg-gray-50 text-sm text-gray-700">
+            <div className="font-semibold mb-1">Preview</div>
+            <pre className="text-xs whitespace-pre-wrap">{JSON.stringify(preview, null, 2)}</pre>
           </div>
         )}
       </div>
