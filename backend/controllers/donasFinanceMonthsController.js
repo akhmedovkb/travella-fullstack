@@ -1283,7 +1283,6 @@ exports._internal = {
   nextYm,
   prevYm,
   getMaxYmFromMonthsOrData,
-  updateMonthAgg,
   recomputeCashChainFrom,
   auditMonthAction,
 };
