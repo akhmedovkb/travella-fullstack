@@ -2,6 +2,7 @@
 
 const db = require("../db");
 const { touchMonthsFromYms } = require("../utils/donasSalesMonthAggregator");
+const { autoSyncMonthsForDate } = require("../utils/donasFinanceAutoSync");
 
 const SLUG = "donas-dosas";
 
@@ -412,7 +413,11 @@ async function addSale(req, res) {
       { revenue_total: revenueTotal, cogs_total: cogsTotal, unit_price: unitPrice }
     );
 
+    // ✅ legacy recompute hook (keeps current behavior)
     await touchMonthsFromYms([ym]);
+
+    // ✅ NEW: auto-sync chain (cash_end) immediately
+    await autoSyncMonthsForDate(req, soldAt, "sales.add");
 
     const out = await getSaleByIdFormatted(rows?.[0]?.id);
     return res.json(out || rows[0]);
@@ -529,7 +534,15 @@ async function updateSale(req, res) {
     await auditSales(req, nextYm, "sales.update", { sale_id: id }, diff);
 
     const yms = nextYm === curYm ? [nextYm] : [curYm, nextYm];
+
+    // ✅ legacy recompute hook (keeps current behavior)
     await touchMonthsFromYms(yms);
+
+    // ✅ NEW: auto-sync chain for affected months (old + new dates)
+    const dates = new Set([String(cur.sold_at).slice(0, 10), soldAt]);
+    for (const d of dates) {
+      await autoSyncMonthsForDate(req, d, "sales.update");
+    }
 
     const out = await getSaleByIdFormatted(id);
     return res.json(out || rows[0]);
@@ -561,7 +574,11 @@ async function deleteSale(req, res) {
 
     await auditSales(req, ym, "sales.delete", { sale_id: id }, { deleted: true });
 
+    // ✅ legacy recompute hook (keeps current behavior)
     await touchMonthsFromYms([ym]);
+
+    // ✅ NEW: auto-sync chain immediately
+    await autoSyncMonthsForDate(req, String(cur.sold_at).slice(0, 10), "sales.delete");
 
     return res.json({ ok: true });
   } catch (e) {
@@ -626,7 +643,12 @@ async function recalcCogsMonth(req, res) {
     }
 
     await auditSales(req, month, "sales.recalc_cogs", { updated }, {});
+
+    // ✅ legacy recompute hook (keeps current behavior)
     await touchMonthsFromYms([month]);
+
+    // ✅ NEW: auto-sync chain (use month start as dateLike)
+    await autoSyncMonthsForDate(req, `${month}-01`, "sales.recalc_cogs");
 
     return res.json({ ok: true, month, updated });
   } catch (e) {
