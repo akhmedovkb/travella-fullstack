@@ -226,20 +226,72 @@ async function ensureMonthsTable() {
  */
 
 // Sales → revenue/cogs
-async function getSalesAggForMonth(ym) {
-  // Be robust: months sync should not crash if Sales module not initialized yet.
+async function ensureSalesTable() {
+  // 1) Create full table schema if table does not exist
   await db.query(`
     CREATE TABLE IF NOT EXISTS donas_sales (
       id BIGSERIAL PRIMARY KEY,
       sold_at DATE NOT NULL,
-      menu_item_id BIGINT,
+      menu_item_id BIGINT NOT NULL,
       qty NUMERIC NOT NULL DEFAULT 1,
       unit_price NUMERIC NOT NULL DEFAULT 0,
       revenue_total NUMERIC NOT NULL DEFAULT 0,
+      cogs_snapshot_id BIGINT,
+      cogs_unit NUMERIC NOT NULL DEFAULT 0,
       cogs_total NUMERIC NOT NULL DEFAULT 0,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      channel TEXT NOT NULL DEFAULT 'cash',
+      notes TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
+
+  // 2) If table existed раньше (в урезанном виде) — безопасно догоняем колонки
+  //    (не трогаем NOT NULL / constraints, чтобы не упасть на старых данных)
+  await db.query(`
+    ALTER TABLE donas_sales
+      ADD COLUMN IF NOT EXISTS menu_item_id BIGINT,
+      ADD COLUMN IF NOT EXISTS qty NUMERIC NOT NULL DEFAULT 1,
+      ADD COLUMN IF NOT EXISTS unit_price NUMERIC NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS revenue_total NUMERIC NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS cogs_snapshot_id BIGINT,
+      ADD COLUMN IF NOT EXISTS cogs_unit NUMERIC NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS cogs_total NUMERIC NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS channel TEXT NOT NULL DEFAULT 'cash',
+      ADD COLUMN IF NOT EXISTS notes TEXT,
+      ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+  `);
+
+  // индексы
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_donas_sales_sold_at ON donas_sales (sold_at);`);
+  await db.query(
+    `CREATE INDEX IF NOT EXISTS idx_donas_sales_menu_item_id ON donas_sales (menu_item_id);`
+  );
+
+  // FK (не критично, если не поставится — не роняем sync)
+  try {
+    await db.query(
+      `ALTER TABLE donas_sales
+       ADD CONSTRAINT fk_donas_sales_menu_item
+       FOREIGN KEY (menu_item_id) REFERENCES donas_menu_items(id)
+       ON DELETE RESTRICT;`
+    );
+  } catch {}
+
+  try {
+    await db.query(
+      `ALTER TABLE donas_sales
+       ADD CONSTRAINT fk_donas_sales_cogs_snapshot
+       FOREIGN KEY (cogs_snapshot_id) REFERENCES donas_cogs(id)
+       ON DELETE SET NULL;`
+    );
+  } catch {}
+}
+
+async function getSalesAggForMonth(ym) {
+  // ✅ months sync should never create a "mini" schema — ensure proper schema instead
+  await ensureSalesTable();
 
   const { rows } = await db.query(
     `
@@ -254,6 +306,7 @@ async function getSalesAggForMonth(ym) {
   const r = rows?.[0] || {};
   return { revenue: toNum(r.revenue), cogs: toNum(r.cogs) };
 }
+
 
 // Purchases → opex/capex (single ledger: type=OPEX|CAPEX)
 async function getPurchasesAggForMonth(ym) {
