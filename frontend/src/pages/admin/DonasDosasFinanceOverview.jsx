@@ -14,11 +14,54 @@ function fmt(n) {
   return v.toLocaleString("ru-RU");
 }
 
+/**
+ * ✅ FIX: robust YM extractor
+ * supports: "YYYY-MM", "YYYY-MM-DD", ISO strings, Date objects, timestamps
+ * never throws; returns "" only if truly cannot determine
+ */
 function ymFromDateLike(x) {
-  const s = String(x || "");
+  if (!x && x !== 0) return "";
+
+  if (x instanceof Date && !Number.isNaN(x.getTime())) {
+    const y = x.getFullYear();
+    const m = String(x.getMonth() + 1).padStart(2, "0");
+    return `${y}-${m}`;
+  }
+
+  if (typeof x === "number" && Number.isFinite(x)) {
+    const d = new Date(x);
+    if (!Number.isNaN(d.getTime())) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      return `${y}-${m}`;
+    }
+  }
+
+  const s = String(x || "").trim();
   if (!s) return "";
-  if (/^\d{4}-\d{2}/.test(s)) return s.slice(0, 7);
+
   if (/^\d{4}-\d{2}$/.test(s)) return s;
+
+  if (s.includes("T")) {
+    const d = new Date(s);
+    if (!Number.isNaN(d.getTime())) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      return `${y}-${m}`;
+    }
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s.slice(0, 7);
+
+  if (/^\d{4}-\d{2}/.test(s)) return s.slice(0, 7);
+
+  const d = new Date(s);
+  if (!Number.isNaN(d.getTime())) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    return `${y}-${m}`;
+  }
+
   return "";
 }
 
@@ -96,8 +139,14 @@ export default function DonasDosasFinanceOverview() {
 
   const sorted = useMemo(() => {
     const a = Array.isArray(months) ? months.slice() : [];
-    a.sort((x, y) => String(x.month || "").localeCompare(String(y.month || "")));
-    return a;
+    // ✅ FIX: sort by normalized YM (not by raw month)
+    a.sort((x, y) => {
+      const ax = ymFromDateLike(x?.month);
+      const ay = ymFromDateLike(y?.month);
+      return String(ax).localeCompare(String(ay));
+    });
+    // ✅ Safety: drop rows where ym can't be determined
+    return a.filter((m) => !!ymFromDateLike(m?.month));
   }, [months]);
 
   const last = useMemo(() => {
@@ -296,11 +345,8 @@ export default function DonasDosasFinanceOverview() {
 
                 return (
                   <tr
-                    key={ym}
-                    className={[
-                      "border-t border-black/5",
-                      locked ? "bg-black/[0.02]" : "",
-                    ].join(" ")}
+                    key={ym} // ✅ robust key
+                    className={["border-t border-black/5", locked ? "bg-black/[0.02]" : ""].join(" ")}
                   >
                     <td className="py-2 px-3 whitespace-nowrap">
                       <div className="flex items-center gap-2">
