@@ -1062,3 +1062,174 @@ exports.audit = async (req, res) => {
     return res.status(500).json({ error: "Failed to load audit" });
   }
 };
+
+// =========================
+// CSV exports (required by routes)
+// =========================
+
+function csvEscape(v) {
+  if (v === null || v === undefined) return "";
+  const s = String(v);
+  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+function rowsToCsv(headers, rows) {
+  const head = headers.map(csvEscape).join(",");
+  const body = (rows || [])
+    .map((r) => headers.map((h) => csvEscape(r[h])).join(","))
+    .join("\n");
+  // BOM чтобы Excel нормально открыл UTF-8
+  return "\uFEFF" + head + "\n" + body + "\n";
+}
+
+// GET /api/admin/donas/finance/months/export.csv
+exports.exportCsv = async (req, res) => {
+  try {
+    await ensureMonthsTable();
+
+    const { rows } = await db.query(
+      `
+      SELECT DISTINCT ON (month)
+        to_char(month,'YYYY-MM') AS ym,
+        revenue, cogs, opex, capex, loan_paid, cash_end,
+        notes,
+        created_at
+      FROM donas_finance_months
+      WHERE slug=$1
+      ORDER BY month ASC, id DESC
+      `,
+      [SLUG]
+    );
+
+    const headers = ["ym", "revenue", "cogs", "opex", "capex", "loan_paid", "cash_end", "notes", "created_at"];
+    const csv = rowsToCsv(headers, rows);
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="months_${SLUG}.csv"`);
+    return res.send(csv);
+  } catch (e) {
+    console.error("exportCsv error:", e);
+    return res.status(500).json({ error: "Failed to export months csv" });
+  }
+};
+
+// GET /api/admin/donas/finance/audit/export.csv
+exports.exportAuditCsv = async (req, res) => {
+  try {
+    await ensureAuditTable();
+
+    const { rows } = await db.query(
+      `
+      SELECT
+        id,
+        slug,
+        to_char(month,'YYYY-MM') AS ym,
+        action,
+        actor_id,
+        actor_role,
+        actor_email,
+        actor_name,
+        diff,
+        meta,
+        created_at
+      FROM donas_finance_months_audit
+      WHERE slug=$1
+      ORDER BY id DESC
+      LIMIT 5000
+      `,
+      [SLUG]
+    );
+
+    // stringify json columns
+    const mapped = (rows || []).map((r) => ({
+      ...r,
+      diff: r.diff ? JSON.stringify(r.diff) : "",
+      meta: r.meta ? JSON.stringify(r.meta) : "",
+    }));
+
+    const headers = [
+      "id",
+      "slug",
+      "ym",
+      "action",
+      "actor_id",
+      "actor_role",
+      "actor_email",
+      "actor_name",
+      "diff",
+      "meta",
+      "created_at",
+    ];
+
+    const csv = rowsToCsv(headers, mapped);
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="audit_${SLUG}.csv"`);
+    return res.send(csv);
+  } catch (e) {
+    console.error("exportAuditCsv error:", e);
+    return res.status(500).json({ error: "Failed to export audit csv" });
+  }
+};
+
+// GET /api/admin/donas/finance/months/:month/audit/export.csv
+exports.exportAuditMonthCsv = async (req, res) => {
+  try {
+    const ym = String(req.params.month || "").trim();
+    if (!isYm(ym)) return res.status(400).json({ error: "Bad month (YYYY-MM)" });
+
+    await ensureAuditTable();
+
+    const { rows } = await db.query(
+      `
+      SELECT
+        id,
+        slug,
+        to_char(month,'YYYY-MM') AS ym,
+        action,
+        actor_id,
+        actor_role,
+        actor_email,
+        actor_name,
+        diff,
+        meta,
+        created_at
+      FROM donas_finance_months_audit
+      WHERE slug=$1 AND month=($2)::date
+      ORDER BY id DESC
+      LIMIT 5000
+      `,
+      [SLUG, ymToMonthDate(ym)]
+    );
+
+    const mapped = (rows || []).map((r) => ({
+      ...r,
+      diff: r.diff ? JSON.stringify(r.diff) : "",
+      meta: r.meta ? JSON.stringify(r.meta) : "",
+    }));
+
+    const headers = [
+      "id",
+      "slug",
+      "ym",
+      "action",
+      "actor_id",
+      "actor_role",
+      "actor_email",
+      "actor_name",
+      "diff",
+      "meta",
+      "created_at",
+    ];
+
+    const csv = rowsToCsv(headers, mapped);
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="audit_${SLUG}_${ym}.csv"`);
+    return res.send(csv);
+  } catch (e) {
+    console.error("exportAuditMonthCsv error:", e);
+    return res.status(500).json({ error: "Failed to export month audit csv" });
+  }
+};
