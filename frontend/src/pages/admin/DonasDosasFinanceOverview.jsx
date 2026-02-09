@@ -44,7 +44,9 @@ export default function DonasDosasFinanceOverview() {
       setSettings(s || null);
 
       const ms = await apiGet("/api/admin/donas/finance/months");
-      setMonths(Array.isArray(ms) ? ms : []);
+      // backend returns { months: [...] }
+      const arr = Array.isArray(ms) ? ms : Array.isArray(ms?.months) ? ms.months : [];
+      setMonths(arr);
     } finally {
       setLoading(false);
     }
