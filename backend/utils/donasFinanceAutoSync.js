@@ -58,16 +58,14 @@ async function autoSyncMonthsForDate(req, dateLike, action = "auto") {
   if (!i.isYm(ym)) return;
 
   const endYm = (await i.getMaxYmFromMonthsOrData(ym)) || ym;
-  const chainStart = i.prevYm(ym);
+  const chainStart = ym;
 
-  // 1) пересчёт агрегатов для chainStart и для ym (если не locked)
-  //    chainStart нужен, чтобы корректно пересчитать cash_end цепочкой.
-  try {
-    await i.updateMonthAgg(chainStart);
-  } catch {}
+  // 1) пересчёт агрегатов месяца (если не locked)
   await i.updateMonthAgg(ym);
 
   // 2) пересчёт цепочки cash_end до endYm
+  //    Внутри recomputeCashChainFrom база берётся из prevYm(chainStart)
+  //    (или settings.cash_start, если prev отсутствует).
   await i.recomputeCashChainFrom(chainStart, endYm);
 
   // 3) audit
