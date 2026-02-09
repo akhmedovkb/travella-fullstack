@@ -279,24 +279,33 @@ export default function DonasDosasFinanceSales() {
     }
   }
 
-  async function remove(id) {
-    if (!id) return;
-    if (!confirm("Удалить продажу?")) return;
+async function remove(id) {
+  if (!id) return;
+  if (!confirm("Удалить продажу?")) return;
 
-    try {
-      setSaving(true);
-      setErr("");
-      await apiDelete(`/api/admin/donas/sales/${id}`);
-      setOk("Удалено ✅");
-      setTimeout(() => setOk(""), 1500);
-      if (editingId === id) resetDraft();
-      await loadSales();
-    } catch (e) {
-      setErr(e?.data?.error || e?.message || "Failed to delete sale");
-    } finally {
-      setSaving(false);
-    }
+  try {
+    setSaving(true);
+    setErr("");
+
+    await apiDelete(`/api/admin/donas/sales/${id}`);
+
+    // ✅ сразу убираем из таблицы (оптимистично)
+    setRows((prev) => (Array.isArray(prev) ? prev.filter((x) => x.id !== id) : prev));
+
+    setOk("Удалено ✅");
+    setTimeout(() => setOk(""), 1500);
+
+    if (editingId === id) resetDraft();
+
+    // ✅ обновить с сервера можно, но НЕ блокировать UI
+    loadSales(); // без await
+  } catch (e) {
+    setErr(e?.data?.error || e?.message || "Failed to delete sale");
+  } finally {
+    setSaving(false);
   }
+}
+
 
   async function recalcCogsMonth() {
     if (!month || !isYm(month)) {
