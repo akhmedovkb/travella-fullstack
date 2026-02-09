@@ -103,10 +103,21 @@ export default function DonasCapex() {
     await load();
   }
 
-  async function del(id) {
-    await apiDelete(`/api/admin/donas/purchases/${id}`, "admin");
-    await load();
+async function del(id) {
+  // оптимистично убираем из списка сразу
+  setItems((prev) => (Array.isArray(prev) ? prev.filter((x) => x.id !== id) : prev));
+
+  try {
+    await apiDelete(`/api/admin/donas/purchases/${id}`);
+  } catch (e) {
+    // если ошибка — вернём актуальный список
+    load();
+    alert(e?.data?.error || e?.message || "Не удалось удалить");
   }
+
+  // можно обновить с сервера, но не блокировать UI
+  load(); // без await
+}
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6 space-y-5">
