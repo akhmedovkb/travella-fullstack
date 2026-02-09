@@ -390,12 +390,25 @@ async function remove(id) {
 
             <button
               type="button"
-              className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
-              onClick={() => setMonth("")}
+              className={`px-3 py-2 rounded-lg border transition
+                ${month === ""
+                  ? "bg-black text-white border-black"
+                  : "bg-white hover:bg-gray-50"
+                }`}
+              onClick={() => {
+                if (month === "") {
+                  // выключаем All → возвращаемся к выбранному monthInput
+                  setMonth(monthInput || currentYm());
+                } else {
+                  // включаем All
+                  setMonth("");
+                }
+              }}
               disabled={saving}
             >
               All
             </button>
+
           </div>
 
           <div className="text-sm text-gray-700 flex flex-wrap gap-4">
