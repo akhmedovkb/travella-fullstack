@@ -111,7 +111,8 @@ export default function DonasOpex() {
     setItems((p) => (Array.isArray(p) ? p.filter((x) => x.id !== id) : p));
 
     try {
-      await apiDelete(`/api/admin/donas/purchases/${id}`, "admin");
+      // ✅ FIX: "admin" must be 3rd arg (role), body must be null
+      await apiDelete(`/api/admin/donas/purchases/${id}`, null, "admin");
       // ✅ optionally refresh without blocking UI
       load();
     } catch (e) {
