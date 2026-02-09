@@ -1,4 +1,4 @@
-// backend/routes/adminDonasFinanceRoutes.js
+// backend/routes/adminDonasFinanceMonthsRoutes.js
 
 const express = require("express");
 const authenticateToken = require("../middleware/authenticateToken");
@@ -8,67 +8,93 @@ const ctrl = require("../controllers/donasFinanceMonthsController");
 
 const router = express.Router();
 
-// Все эти маршруты — админские
-router.use(authenticateToken, requireAdmin);
+// базовый префикс в index.js: /api/admin/donas/finance
 
-/**
- * Settings
- */
-router.get("/settings", ctrl.getSettings);
-router.put("/settings", ctrl.updateSettings);
+function safe(fn, name) {
+  if (typeof fn === "function") return fn;
 
-/**
- * Months list / sync
- */
-router.get("/months", ctrl.listMonths);
-router.post("/months/sync", ctrl.syncMonths);
+  // НЕ роняем контейнер на старте — вместо этого даём понятный 500.
+  console.error(`[donas-finance-months] MISSING handler: ctrl.${name} is not a function`);
+  return (req, res) =>
+    res.status(500).json({
+      error: `Backend misconfigured: handler ctrl.${name} is missing`,
+    });
+}
 
-/**
- * Update month (loan_paid + notes when unlocked)
- */
-router.put("/months/:month", ctrl.updateMonth);
+// settings
+router.get("/settings", authenticateToken, requireAdmin, safe(ctrl.getSettings, "getSettings"));
+router.put("/settings", authenticateToken, requireAdmin, safe(ctrl.updateSettings, "updateSettings"));
 
-/**
- * Lock / Unlock / Snapshot
- */
-router.post("/months/:month/lock", ctrl.lockMonth);
-router.post("/months/:month/unlock", ctrl.unlockMonth);
+// months list
+router.get("/months", authenticateToken, requireAdmin, safe(ctrl.listMonths, "listMonths"));
+router.post("/months/sync", authenticateToken, requireAdmin, safe(ctrl.syncMonths, "syncMonths"));
 
-router.post("/months/:month/resnapshot", ctrl.resnapshotMonth);
+// month update + lock
+router.put("/months/:month", authenticateToken, requireAdmin, safe(ctrl.updateMonth, "updateMonth"));
 
-// lock all ≤ current
-router.post("/months/:month/lock-up-to", ctrl.lockUpTo);
+router.post("/months/:month/lock", authenticateToken, requireAdmin, safe(ctrl.lockMonth, "lockMonth"));
+router.post(
+  "/months/:month/unlock",
+  authenticateToken,
+  requireAdmin,
+  safe(ctrl.unlockMonth, "unlockMonth")
+);
 
-// bulk resnapshot in range (UI)
-router.post("/months/:month/bulk-resnapshot", ctrl.bulkResnapshot);
+router.post(
+  "/months/:month/resnapshot",
+  authenticateToken,
+  requireAdmin,
+  safe(ctrl.resnapshotMonth, "resnapshotMonth")
+);
+router.post("/months/:month/lock-up-to", authenticateToken, requireAdmin, safe(ctrl.lockUpTo, "lockUpTo"));
+router.post(
+  "/months/:month/bulk-resnapshot",
+  authenticateToken,
+  requireAdmin,
+  safe(ctrl.bulkResnapshot, "bulkResnapshot")
+);
 
-// resnapshot up to month (UI)
-router.get("/months/:month/resnapshot-up-to-preview", ctrl.resnapshotUpToPreview);
-router.post("/months/:month/resnapshot-up-to", ctrl.resnapshotUpTo);
+// UI helpers (preview + audit)
+router.get(
+  "/months/:month/lock-preview",
+  authenticateToken,
+  requireAdmin,
+  safe(ctrl.lockPreview, "lockPreview")
+);
+router.get(
+  "/months/:month/resnapshot-up-to-preview",
+  authenticateToken,
+  requireAdmin,
+  safe(ctrl.resnapshotUpToPreview, "resnapshotUpToPreview")
+);
+router.post(
+  "/months/:month/resnapshot-up-to",
+  authenticateToken,
+  requireAdmin,
+  safe(ctrl.resnapshotUpTo, "resnapshotUpTo")
+);
 
-/**
- * Previews (UI)
- */
-router.get("/months/:month/lock-preview", ctrl.lockPreview);
+router.get(
+  "/months/:month/audit",
+  authenticateToken,
+  requireAdmin,
+  safe(ctrl.auditMonth, "auditMonth")
+);
+router.get(
+  "/months/:month/audit/export.csv",
+  authenticateToken,
+  requireAdmin,
+  safe(ctrl.exportAuditMonthCsv, "exportAuditMonthCsv")
+);
 
-/**
- * Audit (new paths used by UI)
- */
-router.get("/months/:month/audit", ctrl.auditMonth);
-router.get("/months/:month/audit/export.csv", ctrl.exportAuditMonthCsv);
-
-/**
- * Exports
- */
-router.get("/months/export.csv", ctrl.exportCsv);
-router.get("/audit", ctrl.audit);
-router.get("/audit/export.csv", ctrl.exportAuditCsv);
-
-/**
- * Legacy aliases (на случай старого UI)
- * /audit/:month вместо /months/:month/audit
- */
-router.get("/audit/:month", ctrl.auditMonth);
-router.get("/audit/:month/export.csv", ctrl.exportAuditMonthCsv);
+// extras used by UI buttons
+router.get("/months/export.csv", authenticateToken, requireAdmin, safe(ctrl.exportCsv, "exportCsv"));
+router.get("/audit", authenticateToken, requireAdmin, safe(ctrl.audit, "audit"));
+router.get(
+  "/audit/export.csv",
+  authenticateToken,
+  requireAdmin,
+  safe(ctrl.exportAuditCsv, "exportAuditCsv")
+);
 
 module.exports = router;
