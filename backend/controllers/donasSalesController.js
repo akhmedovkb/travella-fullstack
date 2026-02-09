@@ -574,13 +574,18 @@ async function deleteSale(req, res) {
 
     await auditSales(req, ym, "sales.delete", { sale_id: id }, { deleted: true });
 
-    // ✅ legacy recompute hook (keeps current behavior)
-    await touchMonthsFromYms([ym]);
+    // ✅ legacy recompute hook — НЕ блокируем ответ
+    touchMonthsFromYms([ym]).catch((e) =>
+      console.error("touchMonthsFromYms async error:", e)
+    );
 
-    // ✅ NEW: auto-sync chain immediately
-    await autoSyncMonthsForDate(req, String(cur.sold_at).slice(0, 10), "sales.delete");
+    // ✅ auto-sync chain — НЕ блокируем ответ
+    autoSyncMonthsForDate(req, String(cur.sold_at).slice(0, 10), "sales.delete").catch((e) =>
+      console.error("autoSyncMonthsForDate async error:", e)
+    );
 
     return res.json({ ok: true });
+
   } catch (e) {
     console.error("deleteSale error:", e);
     return res.status(500).json({ error: "Failed to delete sale" });
