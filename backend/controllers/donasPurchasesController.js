@@ -65,7 +65,8 @@ async function ensureMonthsTable() {
     );
   `);
   await db.query(`
-    CREATE INDEX IF NOT EXISTS idx_donas_finance_months_slug_month ON donas_finance_months (slug, month);
+    CREATE INDEX IF NOT EXISTS idx_donas_finance_months_slug_month
+    ON donas_finance_months (slug, month);
   `);
 }
 
@@ -211,11 +212,15 @@ exports.addPurchase = async (req, res) => {
       [date, ingredient, qty, price, type, notes]
     );
 
-    // ✅ legacy recompute hook (keeps current behavior)
-    await touchMonthsFromYms([ym]);
+    // ✅ legacy recompute hook (keeps current behavior) — don't block response
+    touchMonthsFromYms([ym]).catch((e) =>
+      console.error("touchMonthsFromYms async error:", e)
+    );
 
-    // ✅ NEW: auto-sync chain (cash_end) immediately
-    await autoSyncMonthsForDate(req, date, "purchases.add");
+    // ✅ auto-sync chain (cash_end) — don't block response
+    autoSyncMonthsForDate(req, date, "purchases.add").catch((e) =>
+      console.error("autoSyncMonthsForDate async error:", e)
+    );
 
     res.json(rows[0]);
   } catch (e) {
@@ -276,13 +281,17 @@ exports.updatePurchase = async (req, res) => {
     if (isYm(oldYm)) touch.add(oldYm);
     if (isYm(ym)) touch.add(ym);
 
-    // ✅ legacy recompute hook (keeps current behavior)
-    await touchMonthsFromYms([...touch]);
+    // ✅ legacy recompute hook (keeps current behavior) — don't block response
+    touchMonthsFromYms([...touch]).catch((e) =>
+      console.error("touchMonthsFromYms async error:", e)
+    );
 
-    // ✅ NEW: auto-sync chain for affected months (old + new dates)
+    // ✅ auto-sync chain for affected months (old + new dates) — don't block response
     const dates = new Set([String(oldDate).slice(0, 10), date]);
     for (const d of dates) {
-      await autoSyncMonthsForDate(req, d, "purchases.update");
+      autoSyncMonthsForDate(req, d, "purchases.update").catch((e) =>
+        console.error("autoSyncMonthsForDate async error:", e)
+      );
     }
 
     res.json(rows[0]);
@@ -312,11 +321,15 @@ exports.deletePurchase = async (req, res) => {
     const { rowCount } = await db.query(`DELETE FROM donas_purchases WHERE id=$1`, [id]);
 
     if (isYm(ym)) {
-      // ✅ legacy recompute hook (keeps current behavior)
-      await touchMonthsFromYms([ym]);
+      // ✅ legacy recompute hook (keeps current behavior) — don't block response
+      touchMonthsFromYms([ym]).catch((e) =>
+        console.error("touchMonthsFromYms async error:", e)
+      );
 
-      // ✅ NEW: auto-sync chain immediately
-      await autoSyncMonthsForDate(req, String(oldDate).slice(0, 10), "purchases.delete");
+      // ✅ auto-sync chain — don't block response
+      autoSyncMonthsForDate(req, String(oldDate).slice(0, 10), "purchases.delete").catch((e) =>
+        console.error("autoSyncMonthsForDate async error:", e)
+      );
     }
 
     res.json({ ok: true, deleted: rowCount });
