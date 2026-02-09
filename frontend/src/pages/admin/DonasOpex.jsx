@@ -50,14 +50,14 @@ export default function DonasOpex() {
     try {
       const { from, to } = monthRange(month);
 
-      // ВАЖНО: backend понимает from/to/type (month=... игнорируется)
+      // backend: from/to/type
       const r = await apiGet(
         `/api/admin/donas/purchases?from=${encodeURIComponent(from)}&to=${encodeURIComponent(
           to
         )}&type=opex`
       );
 
-      // backend отвечает { rows: [...] }
+      // backend returns { rows: [...] }
       setItems(Array.isArray(r?.rows) ? r.rows : []);
     } finally {
       setLoading(false);
@@ -77,7 +77,7 @@ export default function DonasOpex() {
     const a = toNum(amount);
     if (!title.trim() || !a) return;
 
-    // OPEX — месячный расход: ставим дату = 1 число выбранного месяца
+    // OPEX: monthly expense → date = 1st day of selected month
     const date = `${month}-01`;
 
     await apiPost(
@@ -102,21 +102,25 @@ export default function DonasOpex() {
     await load();
   }
 
-async function del(id) {
-  // оптимистично убираем из списка сразу
-  setItems((prev) => (Array.isArray(prev) ? prev.filter((x) => x.id !== id) : prev));
+  async function del(id) {
+    if (!id) return;
+    if (!confirm("Удалить расход (OPEX)?")) return;
 
-  try {
-    await apiDelete(`/api/admin/donas/purchases/${id}`);
-  } catch (e) {
-    // если ошибка — вернём актуальный список
-    load();
-    alert(e?.data?.error || e?.message || "Не удалось удалить");
+    // ✅ optimistic UI: remove row immediately
+    const prev = items;
+    setItems((p) => (Array.isArray(p) ? p.filter((x) => x.id !== id) : p));
+
+    try {
+      await apiDelete(`/api/admin/donas/purchases/${id}`, "admin");
+      // ✅ optionally refresh without blocking UI
+      load();
+    } catch (e) {
+      // rollback by reloading actual list
+      setItems(prev);
+      await load().catch(() => {});
+      alert(e?.data?.error || e?.message || "Не удалось удалить");
+    }
   }
-
-  // можно обновить с сервера, но не блокировать UI
-  load(); // без await
-}
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6 space-y-5">
