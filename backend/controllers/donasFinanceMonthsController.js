@@ -79,6 +79,17 @@ async function ensureSettingsTable() {
   `);
 }
 
+async function getCashStartFromSettings() {
+  // Used as the very first cash base when there is no previous month row.
+  // (Otherwise cash chain would incorrectly start from 0.)
+  await ensureSettingsTable();
+  const q = await db.query(
+    `SELECT cash_start FROM donas_finance_settings WHERE slug=$1 LIMIT 1`,
+    [SLUG]
+  );
+  return toNum(q.rows?.[0]?.cash_start);
+}
+
 async function ensureMonthsTable() {
   await db.query(`
     CREATE TABLE IF NOT EXISTS donas_finance_months (
@@ -466,7 +477,7 @@ async function updateMonthAggSnapshot(ym) {
  */
 async function recomputeCashChainFrom(startYm, endYm) {
   if (!isYm(endYm)) return;
-  if (!isYm(startYm)) startYm = prevYm(endYm);
+  if (!isYm(startYm)) startYm = endYm;
 
   // Ensure range exists
   const maxYm = endYm;
@@ -479,12 +490,12 @@ async function recomputeCashChainFrom(startYm, endYm) {
     curYm = nextYm(curYm);
   }
 
-  // Start cash base
-  const startPrev = await getLatestMonthRow(minYm);
+  // Start cash base: prev month cash_end OR settings.cash_start (for the first month)
   const prevRow = await getLatestMonthRow(prevYm(minYm));
-
   const prevCashEnd =
-    prevRow && prevRow.cash_end != null ? toNum(prevRow.cash_end) : 0;
+    prevRow && prevRow.cash_end != null
+      ? toNum(prevRow.cash_end)
+      : await getCashStartFromSettings();
 
   let runningCash = prevCashEnd;
 
@@ -591,7 +602,15 @@ async function updateSettings(req, res) {
         reserve_target_months=EXCLUDED.reserve_target_months
       RETURNING *
       `,
-      [SLUG, currency, payload.cash_start, payload.fixed_opex_month, payload.variable_opex_month, payload.loan_payment_month, payload.reserve_target_months]
+      [
+        SLUG,
+        currency,
+        payload.cash_start,
+        payload.fixed_opex_month,
+        payload.variable_opex_month,
+        payload.loan_payment_month,
+        payload.reserve_target_months,
+      ]
     );
 
     return res.json(q.rows[0]);
@@ -666,8 +685,8 @@ async function syncMonths(req, res) {
       ym = nextYm(ym);
     }
 
-    // recompute cash chain from prev(minYm) -> maxYm
-    await recomputeCashChainFrom(prevYm(minYm), maxYm);
+    // recompute cash chain from minYm -> maxYm
+    await recomputeCashChainFrom(minYm, maxYm);
 
     await auditMonthAction(req, minYm, "months.sync", { minYm, maxYm, touched }, {});
     return res.json({ ok: true, synced: touched, range: { minYm, maxYm } });
@@ -707,11 +726,17 @@ async function updateMonth(req, res) {
       notes: nextNotes,
     });
 
-    // chain recompute from prev(ym) -> max
+    // chain recompute from ym -> endYm
     const endYm = (await getMaxYmFromMonthsOrData(ym)) || ym;
-    await recomputeCashChainFrom(prevYm(ym), endYm);
+    await recomputeCashChainFrom(ym, endYm);
 
-    await auditMonthAction(req, ym, "months.update", { ym }, { loan_paid: { from: cur.loan_paid, to: nextLoan }, notes: { from: cur.notes, to: nextNotes } });
+    await auditMonthAction(
+      req,
+      ym,
+      "months.update",
+      { ym },
+      { loan_paid: { from: cur.loan_paid, to: nextLoan }, notes: { from: cur.notes, to: nextNotes } }
+    );
 
     return res.json(out);
   } catch (e) {
@@ -776,7 +801,7 @@ async function unlockMonth(req, res) {
     // after unlock we should recompute aggregates from data
     await updateMonthAggSnapshot(ym);
     const endYm = (await getMaxYmFromMonthsOrData(ym)) || ym;
-    await recomputeCashChainFrom(prevYm(ym), endYm);
+    await recomputeCashChainFrom(ym, endYm);
 
     await auditMonthAction(req, ym, "months.unlock", { ym }, { locked: false });
 
@@ -811,7 +836,7 @@ async function resnapshotMonth(req, res) {
     });
 
     const endYm = (await getMaxYmFromMonthsOrData(ym)) || ym;
-    await recomputeCashChainFrom(prevYm(ym), endYm);
+    await recomputeCashChainFrom(ym, endYm);
 
     await auditMonthAction(req, ym, "months.resnapshot", { ym }, { locked });
 
@@ -911,7 +936,7 @@ async function bulkResnapshot(req, res) {
 
     // recompute chain
     const endYm = (await getMaxYmFromMonthsOrData(ym)) || ym;
-    await recomputeCashChainFrom(prevYm(minYm), endYm);
+    await recomputeCashChainFrom(minYm, endYm);
 
     await auditMonthAction(req, ym, "months.bulk_resnapshot", { ym }, { updated });
 
@@ -1020,7 +1045,7 @@ async function resnapshotUpTo(req, res) {
     }
 
     const endYm = (await getMaxYmFromMonthsOrData(ym)) || ym;
-    await recomputeCashChainFrom(prevYm(minYm), endYm);
+    await recomputeCashChainFrom(minYm, endYm);
 
     await auditMonthAction(req, ym, "months.resnapshot_upto", { ym }, { updated });
 
@@ -1128,10 +1153,11 @@ async function exportAuditCsv(req, res) {
       [SLUG, limit]
     );
 
-    const header = ["id", "ym", "action", "actor_role", "actor_id", "actor_email", "actor_name", "diff", "meta", "created_at"];
+    const rows = q.rows || [];
+    const header = ["id", "slug", "ym", "action", "actor_id", "actor_role", "actor_email", "actor_name", "diff", "meta", "created_at"];
     const lines = [header.join(",")];
 
-    for (const r of q.rows || []) {
+    for (const r of rows) {
       const vals = header.map((k) => {
         const v = r[k];
         const s = v == null ? "" : typeof v === "object" ? JSON.stringify(v) : String(v);
@@ -1167,10 +1193,11 @@ async function exportAuditMonthCsv(req, res) {
       [SLUG, ym, limit]
     );
 
-    const header = ["id", "ym", "action", "actor_role", "actor_id", "actor_email", "actor_name", "diff", "meta", "created_at"];
+    const rows = q.rows || [];
+    const header = ["id", "slug", "ym", "action", "actor_id", "actor_role", "actor_email", "actor_name", "diff", "meta", "created_at"];
     const lines = [header.join(",")];
 
-    for (const r of q.rows || []) {
+    for (const r of rows) {
       const vals = header.map((k) => {
         const v = r[k];
         const s = v == null ? "" : typeof v === "object" ? JSON.stringify(v) : String(v);
