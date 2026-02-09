@@ -491,6 +491,12 @@ async function updateMonthAggSnapshot(ym) {
   return { ym, ok: true, locked: false, updated: true, ...sales, ...pur };
 }
 
+// ✅ Helper: recompute month aggregates (if NOT locked)
+async function updateMonthAgg(ym) {
+  return updateMonthAggSnapshot(ym);
+}
+
+
 // cash_end chain (append-only):
 // - locked: не трогаем, но используем cash_end locked как seed дальше
 // - unlocked: вставляем новый snapshot с пересчитанным cash_end
@@ -1283,6 +1289,7 @@ exports._internal = {
   nextYm,
   prevYm,
   getMaxYmFromMonthsOrData,
+  updateMonthAgg,
   recomputeCashChainFrom,
   auditMonthAction,
 };
