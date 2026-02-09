@@ -368,6 +368,7 @@ async function sumSalesForMonth(ym) {
   await ensureSalesTable();
   if (!isYm(ym)) return { revenue: 0, cogs: 0 };
 
+  // Use date range (index-friendly) instead of to_char().
   const start = `${ym}-01`;
   const end = `${nextYm(ym)}-01`;
 
