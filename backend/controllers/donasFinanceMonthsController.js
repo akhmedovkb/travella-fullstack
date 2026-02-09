@@ -1,7 +1,6 @@
 // backend/controllers/donasFinanceMonthsController.js
 
 const db = require("../db");
-
 const SLUG = "donas-dosas";
 
 function toNum(x) {
