@@ -1,18 +1,17 @@
 // frontend/src/pages/admin/DonasInvestor.jsx
-
 import { useEffect, useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
 import { apiGet, apiPost } from "../../api";
+
+/**
+ * Investor view:
+ * - reads settings + months snapshot (already calculated on server)
+ * - computes derived metrics: GP, EBITDA/NetOp, cashFlow, DSCR, runway
+ * - supports public share token generation
+ */
 
 function toNum(x) {
   const n = Number(x);
   return Number.isFinite(n) ? n : 0;
-}
-
-// ВАЖНО: для KPI/median/avg нам иногда нужно "null", а не 0
-function numOrNull(x) {
-  const n = Number(x);
-  return Number.isFinite(n) ? n : null;
 }
 
 function fmt(n) {
@@ -20,14 +19,16 @@ function fmt(n) {
   return v.toLocaleString("ru-RU");
 }
 
-function monthKey(iso) {
-  return String(iso || "").slice(0, 7);
+function ymStr(x) {
+  const s = String(x || "");
+  if (!s) return "";
+  if (/^\d{4}-\d{2}/.test(s)) return s.slice(0, 7);
+  return s;
 }
 
-function ymToIso(ym) {
-  const s = String(ym || "").trim();
-  if (!/^\d{4}-\d{2}$/.test(s)) return null;
-  return `${s}-01`;
+function clamp(n, a, b) {
+  const x = toNum(n);
+  return Math.min(b, Math.max(a, x));
 }
 
 function calcRow(m) {
@@ -39,14 +40,11 @@ function calcRow(m) {
   const cashEnd = toNum(m.cash_end);
 
   const gross = revenue - cogs;
-  const netOp = gross - opex;
+  // EBITDA (упрощённо для Dona’s Dosas): Revenue - COGS - OPEX
+  // (в этой модели это то же самое, что NetOp)
+  const ebitda = gross - opex;
+  const netOp = ebitda;
   const cashFlow = netOp - loan - capex;
-
-  // dscr должен быть null, если loan=0
-  const dscr = loan > 0 ? netOp / loan : null;
-
-  const denom = opex + loan;
-  const runway = denom > 0 ? cashEnd / denom : null;
 
   return {
     revenue,
@@ -56,584 +54,429 @@ function calcRow(m) {
     loan,
     cashEnd,
     gross,
+    ebitda,
     netOp,
     cashFlow,
-    dscr,
-    runway,
-    denom,
   };
 }
 
-function avg(list, pick) {
-  const arr = (list || [])
-    .map((x) => numOrNull(pick(x)))
-    .filter((x) => x != null);
-  if (!arr.length) return null;
-  return arr.reduce((a, b) => a + b, 0) / arr.length;
-}
+function computeDerived(months, settings) {
+  const currency = String(settings?.currency || "UZS").toUpperCase();
+  const cashStart = toNum(settings?.cash_start);
+  const reserveTarget = Math.max(0, toNum(settings?.reserve_target_months));
+  const loanPaymentDefault = toNum(settings?.loan_payment_month);
 
-function median(list, pick) {
-  const arr = (list || [])
-    .map((x) => numOrNull(pick(x)))
-    .filter((x) => x != null)
-    .sort((a, b) => a - b);
-  if (!arr.length) return null;
-  const mid = Math.floor(arr.length / 2);
-  return arr.length % 2 ? arr[mid] : (arr[mid - 1] + arr[mid]) / 2;
-}
+  const rows = (Array.isArray(months) ? months : []).map((m) => ({ ...m }));
 
-function buildForecast({ lastCashEnd, avgCashFlow, avgDenom, months = 6 }) {
-  const out = [];
-  let cash = toNum(lastCashEnd);
-  for (let i = 1; i <= months; i++) {
-    cash = cash + toNum(avgCashFlow);
-    const runway = avgDenom > 0 ? cash / avgDenom : null;
-    out.push({ step: i, cashEnd: cash, runway });
-  }
-  return out;
-}
+  // Attach calculations (DSCR, runway, etc.)
+  for (const r of rows) {
+    const c = calcRow(r);
 
-function badgeCls(kind) {
-  if (kind === "red") return "bg-red-50 text-red-800 border-red-200";
-  if (kind === "amber") return "bg-amber-50 text-amber-800 border-amber-200";
-  if (kind === "green") return "bg-green-50 text-green-800 border-green-200";
-  return "bg-gray-50 text-gray-800 border-gray-200";
-}
+    // DSCR: EBITDA / LoanPayment (if loan_paid==0, fallback to settings.loan_payment_month)
+    const denom = c.loan > 0 ? c.loan : loanPaymentDefault > 0 ? loanPaymentDefault : 0;
+    const dscr = denom > 0 ? c.netOp / denom : null;
 
-function SparkLine({ points, height = 44 }) {
-  const w = 220;
-  const h = height;
+    // Runway: how many months you can survive at avg burn rate (opex+loan or cashFlow)
+    // In your UI: runway uses (opex+loan) average as burn basis
+    const burn = Math.max(0, c.opex + (c.loan > 0 ? c.loan : loanPaymentDefault));
+    const runway = burn > 0 ? c.cashEnd / burn : null;
 
-  // ВАЖНО: игнорируем null/NaN, не превращаем в 0
-  const safe = Array.isArray(points) ? points.map((p) => numOrNull(p)).filter((x) => x != null) : [];
-
-  if (!safe.length) {
-    return (
-      <div className="h-[44px] w-[220px] rounded-lg border bg-gray-50 flex items-center justify-center text-xs text-gray-500">
-        —
-      </div>
-    );
-  }
-
-  const min = Math.min(...safe);
-  const max = Math.max(...safe);
-  const pad = 6;
-
-  const scaleX = (i) => {
-    if (safe.length === 1) return w / 2;
-    return pad + (i * (w - pad * 2)) / (safe.length - 1);
-  };
-
-  const scaleY = (v) => {
-    if (max === min) return h / 2;
-    const t = (v - min) / (max - min);
-    return h - pad - t * (h - pad * 2);
-  };
-
-  const d = safe.map((v, i) => `${scaleX(i)},${scaleY(v)}`).join(" ");
-
-  return (
-    <svg width={w} height={h} className="rounded-lg border bg-white">
-      <polyline
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        points={d}
-        className="text-gray-900"
-      />
-      <circle
-        cx={scaleX(safe.length - 1)}
-        cy={scaleY(safe[safe.length - 1])}
-        r="3"
-        className="fill-gray-900"
-      />
-    </svg>
-  );
-}
-
-function normalizeMonths(resp) {
-  if (Array.isArray(resp)) return resp;
-  if (Array.isArray(resp?.months)) return resp.months;
-  return [];
-}
-
-function normalizeSettings(resp) {
-  // иногда apiGet может вернуть {settings:{...}} или просто {...}
-  return (resp && (resp.settings || resp)) || null;
-}
-
-export default function DonasInvestor() {
-  const loc = useLocation();
-  const isPublicPath = String(loc?.pathname || "").startsWith("/public/");
-  const params = useMemo(() => new URLSearchParams(loc.search || ""), [loc.search]);
-  const t = params.get("t") || "";
-
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState("");
-
-  const [settings, setSettings] = useState(null);
-  const [months, setMonths] = useState([]);
-  const [meta, setMeta] = useState(null);
-
-  // share UI (admin only)
-  const [shareFrom, setShareFrom] = useState("");
-  const [shareTo, setShareTo] = useState("");
-  const [ttlHours, setTtlHours] = useState("168"); // 7 days
-  const [shareToken, setShareToken] = useState("");
-
-  const currency = settings?.currency || "UZS";
-  const targetMonths = toNum(settings?.reserve_target_months || 0);
-
-  const loadAdmin = async () => {
-    setErr("");
-    setLoading(true);
-    try {
-      const s = await apiGet("/api/admin/donas/finance/settings", "provider");
-      const m = await apiGet("/api/admin/donas/finance/months", "provider");
-      setSettings(normalizeSettings(s));
-      setMonths(normalizeMonths(m));
-      setMeta({ mode: "admin" });
-    } catch (e) {
-      setErr(e?.message || "Failed to load");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadPublicByToken = async (token) => {
-    setErr("");
-    setLoading(true);
-    try {
-      const r = await apiGet(
-        `/api/public/donas/summary-range-token?t=${encodeURIComponent(token)}`,
-        false
-      );
-      setMeta(r?.meta || null);
-      setSettings(normalizeSettings(r?.settings));
-      setMonths(normalizeMonths(r));
-    } catch (e) {
-      setErr(e?.message || "Failed to load public investor view");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (isPublicPath) {
-      if (!t) {
-        setLoading(false);
-        setErr("Нет токена. Открой ссылку вида /public/donas/investor?t=TOKEN");
-        return;
-      }
-      loadPublicByToken(t);
-      return;
-    }
-
-    loadAdmin();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPublicPath, t]);
-
-  const sortedMonths = useMemo(() => {
-    return [...(months || [])].sort((a, b) => String(a.month).localeCompare(String(b.month)));
-  }, [months]);
-
-  // defaults for share range from months
-  useEffect(() => {
-    if (isPublicPath) return;
-    if (!sortedMonths.length) return;
-
-    const last = sortedMonths[sortedMonths.length - 1];
-    const firstIdx = Math.max(0, sortedMonths.length - 6);
-    const first = sortedMonths[firstIdx];
-
-    if (!shareTo) setShareTo(monthKey(last.month));
-    if (!shareFrom) setShareFrom(monthKey(first.month));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sortedMonths.length, isPublicPath]);
-
-  const rows = useMemo(() => {
-    return sortedMonths.map((m) => {
-      const c = calcRow(m);
-      return { ...m, _calc: c };
-    });
-  }, [sortedMonths]);
-
-  const last = rows.length ? rows[rows.length - 1] : null;
-
-  const last3Tail = useMemo(() => rows.slice(Math.max(0, rows.length - 3)), [rows]);
-
-  const last3 = useMemo(() => {
-    const tail = last3Tail.map((x) => x._calc);
-    return {
-      netOp_avg: avg(tail, (x) => x.netOp),
-      cashFlow_avg: avg(tail, (x) => x.cashFlow),
-      denom_avg: avg(tail, (x) => x.denom), // opex + loan
-      dscr_med: median(tail, (x) => x.dscr),
+    r._calc = {
+      ...c,
+      dscr,
+      runway,
+      denom,
+      currency,
+      cashStart,
+      reserveTarget,
+      loanPaymentDefault,
     };
-  }, [last3Tail]);
+  }
 
-  const alerts = useMemo(() => {
-    const out = [];
-    if (!last) return out;
+  // Alerts (simple)
+  const alerts = [];
+  const last = rows[rows.length - 1];
 
-    const dscr = last._calc.dscr;
-    const runway = last._calc.runway;
+  if (last) {
+    const { cashEnd, dscr, runway } = last._calc || {};
 
-    if (dscr != null && dscr < 1) {
-      out.push({
-        kind: "red",
-        title: "DSCR ниже 1",
-        text: `DSCR=${dscr.toFixed(2)}. Это значит NetOp не покрывает платёж по займу.`,
-      });
-    } else if (dscr != null && dscr < 1.2) {
-      out.push({
-        kind: "amber",
-        title: "DSCR на грани",
-        text: `DSCR=${dscr.toFixed(2)}. Лучше держать запас.`,
-      });
-    }
-
-    if (targetMonths > 0 && runway != null && runway < targetMonths) {
-      out.push({
-        kind: "red",
-        title: "Runway ниже цели",
-        text: `Runway=${runway.toFixed(1)}м, target=${targetMonths}м.`,
-      });
-    }
-
-    if (last._calc.cashEnd <= 0) {
-      out.push({
-        kind: "red",
+    if (toNum(cashEnd) <= 0) {
+      alerts.push({
         title: "cash_end ≤ 0",
         text: "Денежный остаток не положительный — нужен план действий.",
       });
     }
 
-    if (!out.length) {
-      out.push({
-        kind: "green",
-        title: "ОК",
-        text: "Критических алертов нет (DSCR и runway в норме по текущим данным).",
+    if (runway != null && reserveTarget > 0 && runway < reserveTarget) {
+      alerts.push({
+        title: "Runway ниже цели",
+        text: `Runway=${(runway * 100).toFixed(1)}%, target=${reserveTarget}м.`,
       });
     }
 
-    return out;
-  }, [last, targetMonths]);
-
-  // ВАЖНО: series не должны превращать null в 0
-  const cashSeries = useMemo(() => rows.map((x) => numOrNull(x._calc.cashEnd)), [rows]);
-  const runwaySeries = useMemo(() => rows.map((x) => numOrNull(x._calc.runway)), [rows]);
-
-  const forecast = useMemo(() => {
-    if (!last) return null;
-    const avgCF = last3.cashFlow_avg;
-    const avgDenom = last3.denom_avg;
-
-    if (avgCF == null || avgDenom == null || avgDenom <= 0) return null;
-
-    const proj = buildForecast({
-      lastCashEnd: last._calc.cashEnd,
-      avgCashFlow: avgCF,
-      avgDenom,
-      months: 6,
-    });
-
-    let monthsToZero = null;
-    if (avgCF < 0) {
-      const m = last._calc.cashEnd / Math.abs(avgCF);
-      monthsToZero = Number.isFinite(m) ? m : null;
+    if (dscr != null && dscr < 1) {
+      alerts.push({
+        title: "DSCR < 1",
+        text: `DSCR=${dscr.toFixed(2)}. Это значит EBITDA (операционная прибыль) не покрывает платёж по займу.`,
+      });
     }
+  }
 
-    let monthsToTarget = null;
-    if (targetMonths > 0) {
-      const targetCash = avgDenom * targetMonths;
-      if (avgCF < 0) {
-        const m = (last._calc.cashEnd - targetCash) / Math.abs(avgCF);
-        monthsToTarget = Number.isFinite(m) ? m : null;
-      }
+  return { rows, alerts, currency };
+}
+
+function Kpi({ title, value, sub, right }) {
+  return (
+    <div className="rounded-2xl border bg-white px-4 py-3 shadow-sm flex items-center justify-between gap-4">
+      <div>
+        <div className="text-xs text-gray-500">{title}</div>
+        <div className="text-xl font-semibold">{value}</div>
+        {sub ? <div className="mt-1 text-xs text-gray-500">{sub}</div> : null}
+      </div>
+      {right ? <div className="shrink-0">{right}</div> : null}
+    </div>
+  );
+}
+
+export default function DonasInvestor() {
+  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const [settings, setSettings] = useState(null);
+  const [months, setMonths] = useState([]);
+
+  const [fromYm, setFromYm] = useState("2025-12");
+  const [toYm, setToYm] = useState("2026-03");
+  const [ttlHours, setTtlHours] = useState(168);
+  const [publicLink, setPublicLink] = useState("");
+
+  async function load() {
+    setLoading(true);
+    try {
+      const s = await apiGet("/api/admin/donas/finance/settings");
+      setSettings(s || null);
+
+      const ms = await apiGet("/api/admin/donas/finance/months");
+      setMonths(Array.isArray(ms) ? ms : []);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const { rows, alerts, currency } = useMemo(() => computeDerived(months, settings), [months, settings]);
+
+  const last = rows?.length ? rows[rows.length - 1] : null;
+
+  // Auto-forecast runway (simple): based on avg cashFlow (last 3 months) or avg burn (opex+loan)
+  const forecast = useMemo(() => {
+    if (!rows?.length) return null;
+
+    const last3 = rows.slice(Math.max(0, rows.length - 3));
+    const avgCf =
+      last3.reduce((acc, r) => acc + toNum(r._calc?.cashFlow), 0) / Math.max(1, last3.length);
+
+    const avgBurn =
+      last3.reduce((acc, r) => {
+        const c = r._calc || {};
+        const loan = toNum(c.loan) > 0 ? toNum(c.loan) : toNum(c.loanPaymentDefault);
+        return acc + Math.max(0, toNum(c.opex) + loan);
+      }, 0) / Math.max(1, last3.length);
+
+    const cashEnd = toNum(last?._calc?.cashEnd);
+
+    const monthsToZero = avgCf < 0 ? cashEnd / Math.abs(avgCf) : null;
+
+    const target = Math.max(0, toNum(settings?.reserve_target_months));
+    const targetDrop = avgBurn > 0 ? (cashEnd - target * avgBurn) / avgBurn : null;
+
+    // Build projection next 6 months: cash_end + avgCf
+    const proj = [];
+    let cur = cashEnd;
+    for (let i = 1; i <= 6; i++) {
+      cur = cur + avgCf;
+      proj.push({ i, cash: cur, runway: avgBurn > 0 ? cur / avgBurn : null });
     }
 
     return {
-      avgCF,
-      avgDenom,
-      proj,
+      avgCf,
+      avgBurn,
       monthsToZero,
-      monthsToTarget,
+      target,
+      targetDrop,
+      proj,
     };
-  }, [last, last3, targetMonths]);
+  }, [rows, settings, last]);
 
-  const makeShare = async () => {
-    setErr("");
-    setShareToken("");
+  async function generatePublicLink() {
+    setBusy(true);
     try {
-      const fromIso = ymToIso(shareFrom);
-      const toIso = ymToIso(shareTo);
-      if (!fromIso || !toIso) throw new Error("Неверный формат месяца. Нужно YYYY-MM");
-
-      const ttl = Math.max(1, Math.floor(toNum(ttlHours || 0)));
-      const body = {
-        slug: "donas-dosas",
-        from: fromIso,
-        to: toIso,
-        ttl_hours: ttl,
+      const payload = {
+        from: ymStr(fromYm),
+        to: ymStr(toYm),
+        ttl_hours: clamp(ttlHours, 1, 24 * 365),
       };
-
-      const r = await apiPost("/api/admin/donas/share-token", body, "provider");
-      const token = r?.token || r?.t || "";
-      if (!token) throw new Error("Не вернулся token от сервера");
-      setShareToken(token);
-    } catch (e) {
-      setErr(e?.message || "Failed to create share token");
+      const r = await apiPost("/api/admin/donas/finance/investor/public-token", payload);
+      const token = r?.token || r?.public_token || r?.id || "";
+      const base =
+        (typeof window !== "undefined" && window.location ? window.location.origin : "") ||
+        "";
+      const link = token ? `${base}/admin/donas-dosas/finance/investor/public/${token}` : "";
+      setPublicLink(link);
+    } finally {
+      setBusy(false);
     }
-  };
-
-  const shareUrl = useMemo(() => {
-    if (!shareToken) return "";
-    return `${window.location.origin}/public/donas/investor?t=${encodeURIComponent(shareToken)}`;
-  }, [shareToken]);
-
-  if (loading) return <div className="p-4">Loading…</div>;
+  }
 
   return (
-    <div className="mx-auto max-w-6xl">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Dona’s Dosas — Investor</h1>
-          <p className="text-sm text-gray-600">
-            {isPublicPath ? "Public view (tokenized)" : "Admin view"} · DSCR / runway / cash_end ·
-            plan/fact на базе actuals
-          </p>
-
-          {meta?.slug && (
-            <div className="mt-1 text-xs text-gray-500">
-              slug: <span className="font-mono">{meta.slug}</span>
-              {meta?.from && meta?.to ? (
-                <span className="ml-2">
-                  · range: <span className="font-mono">{meta.from}</span> →{" "}
-                  <span className="font-mono">{meta.to}</span>
-                </span>
-              ) : null}
-            </div>
-          )}
+    <div className="space-y-6">
+      <div>
+        <div className="text-sm text-gray-500">Admin</div>
+        <div className="text-2xl font-bold">Dona’s Dosas — Investor</div>
+        <div className="text-sm text-gray-500">
+          Admin view: DSCR / runway / cash_end · plan/fact на базе actuals
         </div>
-
-        {!isPublicPath && (
-          <button onClick={loadAdmin} className="px-3 py-2 rounded-lg bg-white border">
-            Refresh
-          </button>
-        )}
       </div>
 
-      {err && (
-        <div className="mt-3 p-3 rounded-lg bg-red-50 text-red-700 border border-red-200">
-          {err}
-        </div>
-      )}
-
-      {/* ALERTS */}
-      <div className="mt-4 rounded-2xl bg-white border p-4">
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <h2 className="font-semibold">Alerts</h2>
-          <div className="text-xs text-gray-500">Правила: DSCR&lt;1 · runway&lt;target · cash_end≤0</div>
-        </div>
-
-        <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+      {/* Alerts */}
+      {alerts?.length ? (
+        <div className="grid gap-3 md:grid-cols-2">
           {alerts.map((a, idx) => (
-            <div key={idx} className={`rounded-xl border p-3 ${badgeCls(a.kind)}`}>
-              <div className="font-semibold">{a.title}</div>
-              <div className="text-sm mt-1">{a.text}</div>
+            <div key={idx} className="rounded-2xl border bg-red-50 px-4 py-3">
+              <div className="font-semibold text-red-700">{a.title}</div>
+              <div className="text-sm text-red-700">{a.text}</div>
             </div>
           ))}
         </div>
-      </div>
+      ) : null}
 
-      {/* TOP KPI + CHARTS */}
-      <div className="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-3">
+      {/* KPIs */}
+      <div className="grid gap-3 md:grid-cols-3">
         <Kpi
-          title={`Last month cash_end (${last ? monthKey(last.month) : "—"})`}
+          title="Last month cash_end"
           value={last ? `${fmt(last._calc.cashEnd)} ${currency}` : "—"}
           sub={
-            last
-              ? `Runway: ${last._calc.runway == null ? "—" : `${last._calc.runway.toFixed(1)} mo`}`
+            last && last._calc.runway != null
+              ? `Runway: ${(last._calc.runway).toFixed(1)} mo`
+              : last
+              ? "Runway: —"
               : ""
           }
-          right={<SparkLine points={cashSeries} />}
-        />
-        <Kpi
-          title="Last month Net Operating"
-          value={last ? `${fmt(last._calc.netOp)} ${currency}` : "—"}
-          sub={last ? `DSCR: ${last._calc.dscr == null ? "—" : last._calc.dscr.toFixed(2)}` : ""}
           right={
-            <div className="h-[44px] w-[220px] rounded-lg border bg-gray-50 flex items-center justify-center text-xs text-gray-500">
-              NetOp
+            <div className="h-[44px] w-[220px] rounded-lg border bg-white px-2 py-1 text-[11px] text-gray-500 flex items-center">
+              runway ~ cash_end / (opex + loan)
             </div>
           }
         />
+
+        <Kpi
+          title="Last month EBITDA"
+          value={last ? `${fmt(last._calc.ebitda)} ${currency}` : "—"}
+          sub={last ? `DSCR: ${last._calc.dscr == null ? "—" : last._calc.dscr.toFixed(2)}` : ""}
+          right={
+            <div className="h-[44px] w-[220px] rounded-lg border bg-white px-2 py-1 text-[11px] text-gray-500 flex items-center">
+              EBITDA = revenue − cogs − opex
+            </div>
+          }
+        />
+
         <Kpi
           title="3-mo avg (cashflow / DSCR median)"
           value={
-            last3.cashFlow_avg == null
-              ? "—"
-              : `${fmt(last3.cashFlow_avg)} ${currency} · DSCR ${
-                  last3.dscr_med == null ? "—" : last3.dscr_med.toFixed(2)
-                }`
+            forecast
+              ? `${fmt(forecast.avgCf)} ${currency} · DSCR ${(() => {
+                  const ds = rows
+                    .slice(Math.max(0, rows.length - 3))
+                    .map((r) => r._calc?.dscr)
+                    .filter((x) => x != null)
+                    .sort((a, b) => a - b);
+                  if (!ds.length) return "—";
+                  const mid = Math.floor(ds.length / 2);
+                  return ds.length % 2 ? ds[mid].toFixed(2) : ((ds[mid - 1] + ds[mid]) / 2).toFixed(2);
+                })()}`
+              : "—"
           }
-          sub={last3.denom_avg == null ? "" : `avg(opex+loan): ${fmt(last3.denom_avg)} ${currency}`}
-          right={<SparkLine points={runwaySeries} />}
+          sub={
+            forecast && forecast.monthsToZero != null
+              ? `months to zero (если CF<0): ${forecast.monthsToZero.toFixed(1)} mo`
+              : "months to zero (если CF<0): —"
+          }
+          right={
+            <div className="h-[44px] w-[220px] rounded-lg border bg-white px-2 py-1 text-[11px] text-gray-500 flex items-center">
+              avg(opex+loan): {forecast ? `${fmt(forecast.avgBurn)} ${currency}` : "—"}
+            </div>
+          }
         />
       </div>
 
-      {/* FORECAST */}
-      <div className="mt-4 rounded-2xl bg-white border p-4">
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <h2 className="font-semibold">Auto-forecast runway</h2>
-          <div className="text-xs text-gray-500">
+      {/* Forecast table */}
+      {forecast ? (
+        <div className="rounded-2xl border bg-white p-5 shadow-sm">
+          <div className="text-lg font-semibold">Auto-forecast runway</div>
+          <div className="text-sm text-gray-500">
             Если CF = avg(последние 3 месяца) · прогноз на 6 месяцев вперёд
           </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <div className="rounded-2xl border bg-white px-4 py-3">
+              <div className="text-xs text-gray-500">avg cashflow / month</div>
+              <div className="text-xl font-semibold">{fmt(forecast.avgCf)} {currency}</div>
+            </div>
+            <div className="rounded-2xl border bg-white px-4 py-3">
+              <div className="text-xs text-gray-500">avg (opex+loan) / month</div>
+              <div className="text-xl font-semibold">{fmt(forecast.avgBurn)} {currency}</div>
+            </div>
+            <div className="rounded-2xl border bg-white px-4 py-3">
+              <div className="text-xs text-gray-500">months to zero (если CF&lt;0)</div>
+              <div className="text-xl font-semibold">{forecast.monthsToZero == null ? "—" : `${forecast.monthsToZero.toFixed(1)} mo`}</div>
+            </div>
+          </div>
+
+          <div className="mt-4 text-sm text-gray-500">
+            Target runway: {forecast.target} mo · est. months to drop below target:{" "}
+            {forecast.targetDrop == null ? "—" : `${forecast.targetDrop.toFixed(1)} mo`}
+          </div>
+
+          <div className="mt-3 overflow-auto">
+            <table className="min-w-[720px] w-full text-sm">
+              <thead>
+                <tr className="text-left text-gray-500">
+                  <th className="py-2 pr-4">+month</th>
+                  <th className="py-2 pr-4">Cash end</th>
+                  <th className="py-2 pr-4">Runway</th>
+                </tr>
+              </thead>
+              <tbody>
+                {forecast.proj.map((p) => (
+                  <tr key={p.i} className="border-t">
+                    <td className="py-2 pr-4">+{p.i}</td>
+                    <td className="py-2 pr-4">{fmt(p.cash)} {currency}</td>
+                    <td className="py-2 pr-4">{p.runway == null ? "—" : `${p.runway.toFixed(1)} mo`}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Public link */}
+      <div className="rounded-2xl border bg-white p-5 shadow-sm">
+        <div className="text-lg font-semibold">Public share link (token)</div>
+        <div className="text-sm text-gray-500">
+          Сгенерируй токен на диапазон месяцев. Ссылка будет работать без логина.
         </div>
 
-        {!forecast ? (
-          <div className="mt-3 text-sm text-gray-500">
-            Недостаточно данных для прогноза (нужны последние 3 месяца).
+        <div className="mt-4 grid gap-3 md:grid-cols-4">
+          <div>
+            <div className="text-xs text-gray-500">From (YYYY-MM)</div>
+            <input
+              className="mt-1 w-full rounded-xl border px-3 py-2"
+              value={fromYm}
+              onChange={(e) => setFromYm(e.target.value)}
+            />
           </div>
-        ) : (
-          <>
-            <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
-              <MiniKpi title="avg cashflow / month" value={`${fmt(forecast.avgCF)} ${currency}`} />
-              <MiniKpi title="avg (opex+loan) / month" value={`${fmt(forecast.avgDenom)} ${currency}`} />
-              <MiniKpi
-                title="months to zero (если CF<0)"
-                value={forecast.monthsToZero == null ? "—" : `${forecast.monthsToZero.toFixed(1)} mo`}
-              />
-            </div>
+          <div>
+            <div className="text-xs text-gray-500">To (YYYY-MM)</div>
+            <input
+              className="mt-1 w-full rounded-xl border px-3 py-2"
+              value={toYm}
+              onChange={(e) => setToYm(e.target.value)}
+            />
+          </div>
+          <div>
+            <div className="text-xs text-gray-500">TTL_hours</div>
+            <input
+              className="mt-1 w-full rounded-xl border px-3 py-2"
+              value={ttlHours}
+              onChange={(e) => setTtlHours(e.target.value)}
+            />
+          </div>
+          <div className="flex items-end">
+            <button
+              className="w-full rounded-xl bg-black px-4 py-2 text-white disabled:opacity-50"
+              onClick={generatePublicLink}
+              disabled={busy || loading}
+            >
+              {busy ? "Generating..." : "Generate link"}
+            </button>
+          </div>
+        </div>
 
-            {targetMonths > 0 && (
-              <div className="mt-3 text-sm text-gray-700">
-                Target runway: <b>{targetMonths} mo</b> · est. months to drop below target:{" "}
-                <b>{forecast.monthsToTarget == null ? "—" : `${forecast.monthsToTarget.toFixed(1)} mo`}</b>
-              </div>
-            )}
-
-            <div className="mt-3 overflow-auto">
-              <table className="min-w-[700px] w-full text-sm">
-                <thead>
-                  <tr className="text-left text-gray-600">
-                    <th className="py-2 pr-2">+month</th>
-                    <th className="py-2 pr-2">Cash end</th>
-                    <th className="py-2 pr-2">Runway</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {forecast.proj.map((p) => (
-                    <tr key={p.step} className="border-t">
-                      <td className="py-2 pr-2">+{p.step}</td>
-                      <td className="py-2 pr-2">
-                        {fmt(p.cashEnd)} {currency}
-                      </td>
-                      <td className="py-2 pr-2">{p.runway == null ? "—" : `${p.runway.toFixed(1)} mo`}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
+        {publicLink ? (
+          <div className="mt-4 rounded-xl border bg-gray-50 p-3">
+            <div className="text-xs text-gray-500">Link</div>
+            <div className="break-all text-sm">{publicLink}</div>
+          </div>
+        ) : null}
       </div>
 
-      {/* SHARE TOKEN (admin only) */}
-      {!isPublicPath && (
-        <div className="mt-4 rounded-2xl bg-white border p-4">
-          <h2 className="font-semibold">Public share link (token)</h2>
-          <div className="text-xs text-gray-500 mt-1">
-            Сгенерируй токен на диапазон месяцев. Ссылка будет работать без логина.
-          </div>
-
-          <div className="mt-3 grid grid-cols-1 md:grid-cols-4 gap-3">
-            <Field label="From (YYYY-MM)" value={shareFrom} onChange={setShareFrom} />
-            <Field label="To (YYYY-MM)" value={shareTo} onChange={setShareTo} />
-            <Field label="TTL hours" value={ttlHours} onChange={setTtlHours} />
-            <div className="flex items-end">
-              <button onClick={makeShare} className="w-full px-3 py-2 rounded-lg bg-gray-900 text-white">
-                Generate link
-              </button>
-            </div>
-          </div>
-
-          {shareUrl && (
-            <div className="mt-3 rounded-xl border bg-gray-50 p-3">
-              <div className="text-xs text-gray-600">Share URL</div>
-              <div className="mt-1 flex items-center gap-2 flex-wrap">
-                <input
-                  readOnly
-                  value={shareUrl}
-                  className="flex-1 min-w-[260px] px-3 py-2 rounded-lg border bg-white font-mono text-xs"
-                />
-                <button
-                  onClick={() => navigator.clipboard.writeText(shareUrl)}
-                  className="px-3 py-2 rounded-lg bg-white border"
-                >
-                  Copy
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* TABLE */}
-      <div className="mt-4 rounded-2xl bg-white border p-4">
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <h2 className="font-semibold">Months</h2>
-          <div className="text-xs text-gray-500">
-            Формулы: GP=revenue−cogs · NetOp=GP−opex · CF=NetOp−loan−capex · DSCR=NetOp/loan · Runway=cash_end/(opex+loan)
-          </div>
+      {/* Months */}
+      <div className="rounded-2xl border bg-white p-5 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div className="text-lg font-semibold">Months</div>
+          <button
+            className="rounded-xl border px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+            onClick={load}
+            disabled={loading}
+          >
+            Refresh
+          </button>
         </div>
 
-        <div className="mt-3 overflow-auto">
-          <table className="min-w-[1200px] w-full text-sm">
+        <div className="mt-2 text-xs text-gray-500">
+          Формулы: GP=revenue−cogs · EBITDA=GP−opex · CF=EBITDA−loan−capex · DSCR=EBITDA/loan · Runway=cash_end/(opex+loan)
+        </div>
+
+        <div className="mt-4 overflow-auto">
+          <table className="min-w-[1100px] w-full text-sm">
             <thead>
-              <tr className="text-left text-gray-600">
-                <th className="py-2 pr-2">Month</th>
-                <th className="py-2 pr-2">Revenue</th>
-                <th className="py-2 pr-2">COGS</th>
-                <th className="py-2 pr-2">OPEX</th>
-                <th className="py-2 pr-2">CAPEX</th>
-                <th className="py-2 pr-2">Loan</th>
-                <th className="py-2 pr-2">NetOp</th>
-                <th className="py-2 pr-2">CF</th>
-                <th className="py-2 pr-2">DSCR</th>
-                <th className="py-2 pr-2">Cash end</th>
-                <th className="py-2 pr-2">Runway</th>
+              <tr className="text-left text-gray-500">
+                <th className="py-2 pr-4">Month</th>
+                <th className="py-2 pr-4">Revenue</th>
+                <th className="py-2 pr-4">COGS</th>
+                <th className="py-2 pr-4">OPEX</th>
+                <th className="py-2 pr-4">CAPEX</th>
+                <th className="py-2 pr-4">Loan</th>
+                <th className="py-2 pr-4">EBITDA</th>
+                <th className="py-2 pr-4">CF</th>
+                <th className="py-2 pr-4">DSCR</th>
+                <th className="py-2 pr-4">Cash end</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((m) => {
-                const c = m._calc;
+                const month = ymStr(m.month);
+                const c = m._calc || {};
                 return (
-                  <tr key={String(m.month)} className="border-t">
-                    <td className="py-2 pr-2 font-mono text-xs">{monthKey(m.month)}</td>
-                    <td className="py-2 pr-2">{fmt(c.revenue)} {currency}</td>
-                    <td className="py-2 pr-2">{fmt(c.cogs)} {currency}</td>
-                    <td className="py-2 pr-2">{fmt(c.opex)} {currency}</td>
-                    <td className="py-2 pr-2">{fmt(c.capex)} {currency}</td>
-                    <td className="py-2 pr-2">{fmt(c.loan)} {currency}</td>
-                    <td className={`py-2 pr-2 ${c.netOp >= 0 ? "text-green-700" : "text-red-700"}`}>
-                      {fmt(c.netOp)} {currency}
+                  <tr key={month} className="border-t">
+                    <td className="py-2 pr-4">{month}</td>
+                    <td className="py-2 pr-4">{fmt(c.revenue)} {currency}</td>
+                    <td className="py-2 pr-4">{fmt(c.cogs)} {currency}</td>
+                    <td className="py-2 pr-4">{fmt(c.opex)} {currency}</td>
+                    <td className="py-2 pr-4">{fmt(c.capex)} {currency}</td>
+                    <td className="py-2 pr-4">{fmt(c.loan)} {currency}</td>
+                    <td className={`py-2 pr-4 ${toNum(c.ebitda) >= 0 ? "text-green-700" : "text-red-700"}`}>
+                      {fmt(c.ebitda)} {currency}
                     </td>
-                    <td className={`py-2 pr-2 ${c.cashFlow >= 0 ? "text-green-700" : "text-red-700"}`}>
+                    <td className={`py-2 pr-4 ${toNum(c.cashFlow) >= 0 ? "text-green-700" : "text-red-700"}`}>
                       {fmt(c.cashFlow)} {currency}
                     </td>
-                    <td className="py-2 pr-2">{c.dscr == null ? "—" : c.dscr.toFixed(2)}</td>
-                    <td className="py-2 pr-2">{fmt(c.cashEnd)} {currency}</td>
-                    <td className="py-2 pr-2">{c.runway == null ? "—" : `${c.runway.toFixed(1)} mo`}</td>
+                    <td className="py-2 pr-4">
+                      {c.dscr == null ? "—" : c.dscr.toFixed(2)}
+                    </td>
+                    <td className="py-2 pr-4 font-semibold">{fmt(c.cashEnd)} {currency}</td>
                   </tr>
                 );
               })}
-
               {!rows.length && (
                 <tr>
-                  <td className="py-4 text-gray-500" colSpan={11}>
-                    Нет данных
+                  <td className="py-4 text-gray-500" colSpan={10}>
+                    {loading ? "Loading..." : "No months"}
                   </td>
                 </tr>
               )}
@@ -641,54 +484,11 @@ export default function DonasInvestor() {
           </table>
         </div>
 
-        {settings && (
-          <div className="mt-3 text-xs text-gray-500">
-            cash_start: <b>{fmt(settings.cash_start)} {currency}</b>
-            {settings?.reserve_target_months ? (
-              <span className="ml-2">
-                · reserve_target_months: <b>{settings.reserve_target_months}</b>
-              </span>
-            ) : null}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function Field({ label, value, onChange }) {
-  return (
-    <label className="text-sm">
-      <div className="text-gray-600 mb-1">{label}</div>
-      <input
-        value={value ?? ""}
-        onChange={(e) => onChange?.(e.target.value)}
-        className="w-full px-3 py-2 rounded-lg border"
-      />
-    </label>
-  );
-}
-
-function Kpi({ title, value, sub, right }) {
-  return (
-    <div className="rounded-2xl bg-white border p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="text-xs text-gray-600">{title}</div>
-          <div className="text-2xl font-semibold mt-1">{value}</div>
-          {sub ? <div className="text-xs text-gray-500 mt-1">{sub}</div> : null}
+        <div className="mt-3 text-xs text-gray-400">
+          cash_start: {fmt(settings?.cash_start)} {currency} · reserve_target_months:{" "}
+          {toNum(settings?.reserve_target_months)}
         </div>
-        {right ? <div className="shrink-0">{right}</div> : null}
       </div>
-    </div>
-  );
-}
-
-function MiniKpi({ title, value }) {
-  return (
-    <div className="rounded-xl border bg-gray-50 p-3">
-      <div className="text-xs text-gray-600">{title}</div>
-      <div className="text-lg font-semibold mt-1">{value}</div>
     </div>
   );
 }
