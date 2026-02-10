@@ -64,7 +64,6 @@ function computeDerived(months, settings) {
   const currency = String(settings?.currency || "UZS").toUpperCase();
   const cashStart = toNum(settings?.cash_start);
   const reserveTarget = Math.max(0, toNum(settings?.reserve_target_months));
-  const loanPaymentDefault = toNum(settings?.loan_payment_month);
 
   const rows = (Array.isArray(months) ? months : []).map((m) => ({ ...m }));
 
@@ -73,14 +72,13 @@ function computeDerived(months, settings) {
     const c = calcRow(r);
 
     // DSCR: EBITDA / LoanPayment (if loan_paid==0, fallback to settings.loan_payment_month)
-    const denom = c.loan > 0 ? c.loan : loanPaymentDefault > 0 ? loanPaymentDefault : 0;
+    const denom = c.loan > 0 ? c.loan : 0;
     const dscr = denom > 0 ? c.netOp / denom : null;
-
-    // Runway: how many months you can survive at avg burn rate (opex+loan or cashFlow)
-    // In your UI: runway uses (opex+loan) average as burn basis
-    const burn = Math.max(0, c.opex + (c.loan > 0 ? c.loan : loanPaymentDefault));
-    const runway = burn > 0 ? Math.max(0, c.cashEnd / burn) : null;
-
+    
+    // burn = opex + loan (только реальный loan из Months)
+    const burn = Math.max(0, c.opex + c.loan);
+    const runway = burn > 0 ? c.cashEnd / burn : null;
+    
     r._calc = {
       ...c,
       dscr,
@@ -89,7 +87,6 @@ function computeDerived(months, settings) {
       currency,
       cashStart,
       reserveTarget,
-      loanPaymentDefault,
     };
   }
 
@@ -213,8 +210,7 @@ export default function DonasInvestor() {
     const avgBurn =
       last3.reduce((acc, r) => {
         const c = r._calc || {};
-        const loan = toNum(c.loan) > 0 ? toNum(c.loan) : toNum(c.loanPaymentDefault);
-        return acc + Math.max(0, toNum(c.opex) + loan);
+        return acc + Math.max(0, toNum(c.opex) + toNum(c.loan));
       }, 0) / Math.max(1, last3.length);
 
     const cashEnd = toNum(last?._calc?.cashEnd);
