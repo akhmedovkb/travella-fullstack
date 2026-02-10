@@ -3,7 +3,7 @@
 const db = require("../db");
 
 const SLUG = "donas-dosas";
-const MIN_YM_FLOOR = "2025-12";
+const MIN_YM_FLOOR = "2025-01";
 
 function toNum(x) {
   const n = Number(x);
