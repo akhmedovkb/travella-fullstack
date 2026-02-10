@@ -1,7 +1,7 @@
 // frontend/src/pages/admin/DonasInvestor.jsx
 import { useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost } from "../../api";
-import { tSuccess, tError } from "../../shared/toast";
+import { tSuccess, tError, tInfo } from "../../shared/toast";
 
 function toNum(x) {
   const n = Number(x);
@@ -10,9 +10,12 @@ function toNum(x) {
 function money(n) {
   return Math.round(toNum(n)).toLocaleString("ru-RU");
 }
-function ymStr(s) {
-  const v = String(s || "").trim();
-  return /^\d{4}-\d{2}$/.test(v) ? v : "";
+function isYm(s) {
+  return /^\d{4}-\d{2}$/.test(String(s || "").trim());
+}
+function ymToIsoMonthStart(ym) {
+  const v = String(ym || "").trim();
+  return isYm(v) ? `${v}-01` : "";
 }
 function clamp(n, a, b) {
   const v = toNum(n);
@@ -33,16 +36,64 @@ export default function DonasInvestor() {
   const [publicToken, setPublicToken] = useState("");
   const [publicLink, setPublicLink] = useState("");
 
+  const tokenFromUrl = useMemo(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      return String(sp.get("t") || "").trim();
+    } catch {
+      return "";
+    }
+  }, []);
+
+  const isPublicView = useMemo(() => {
+    const p = String(window.location.pathname || "");
+    return Boolean(tokenFromUrl) || p.startsWith("/public/");
+  }, [tokenFromUrl]);
+
   async function load() {
     setLoading(true);
+    setError("");
+
     try {
+      if (isPublicView) {
+        if (!tokenFromUrl) {
+          setMonths([]);
+          setSettings(null);
+          setError("Нет токена доступа (t)");
+          return;
+        }
+
+        const r = await apiGet(
+          `/api/public/donas/summary-range-token?t=${encodeURIComponent(tokenFromUrl)}`
+        );
+
+        const s = r?.settings || r?.data?.settings || null;
+        const m = r?.months || r?.data?.months || [];
+        setSettings(s);
+        setMonths(Array.isArray(m) ? m : []);
+        return;
+      }
+
+      // admin view
       const r = await apiGet("/api/admin/donas/finance/investor");
-      const s = r?.settings || r?.data?.settings || r?.settings_row || r?.data?.settings_row || null;
+      const s =
+        r?.settings ||
+        r?.data?.settings ||
+        r?.settings_row ||
+        r?.data?.settings_row ||
+        null;
       const m = r?.months || r?.data?.months || [];
       setSettings(s);
       setMonths(Array.isArray(m) ? m : []);
     } catch (e) {
       console.error("Investor load error:", e);
+      setMonths([]);
+      setSettings(null);
+      const msg = isPublicView
+        ? "Не удалось загрузить данные по публичной ссылке"
+        : "Не удалось загрузить данные Investor";
+      setError(msg);
+      tError(msg);
     } finally {
       setLoading(false);
     }
@@ -56,14 +107,25 @@ export default function DonasInvestor() {
   async function generatePublicLink() {
     setBusy(true);
     setError("");
+
     try {
+      const fromIso = ymToIsoMonthStart(fromYm);
+      const toIso = ymToIsoMonthStart(toYm);
+
+      if (!fromIso || !toIso) {
+        setError("Неверный формат месяца. Используй YYYY-MM (например 2026-02)");
+        tInfo("Проверь From/To: формат должен быть YYYY-MM");
+        return;
+      }
+
       const payload = {
-        from: ymStr(fromYm),
-        to: ymStr(toYm),
+        from: fromIso,
+        to: toIso,
         ttl_hours: clamp(ttlHours, 1, 24 * 365),
       };
 
-      // ✅ Route: POST /api/admin/donas/share-token  (backend/routes/donasShareRoutes.js)
+      // backend/routes/donasShareRoutes.js
+      // POST /api/admin/donas/share-token
       const r = await apiPost("/api/admin/donas/share-token", payload);
 
       const token = r?.token || r?.data?.token || "";
@@ -98,8 +160,7 @@ export default function DonasInvestor() {
     const a = Array.isArray(months) ? months : [];
     if (!a.length) return { avg_cf: 0, avg_opex_loan: 0 };
     const last3 = a.slice(-3);
-    const avg_cf =
-      last3.reduce((s, x) => s + toNum(x.cf), 0) / Math.max(1, last3.length);
+    const avg_cf = last3.reduce((s, x) => s + toNum(x.cf), 0) / Math.max(1, last3.length);
     const avg_opex_loan =
       last3.reduce((s, x) => s + (toNum(x.opex) + toNum(x.loan)), 0) / Math.max(1, last3.length);
     return { avg_cf, avg_opex_loan };
@@ -137,7 +198,9 @@ export default function DonasInvestor() {
         <div>
           <h1 className="text-xl font-semibold">Dona’s Dosas — Investor</h1>
           <p className="text-sm text-gray-600">
-            Admin view: DSCR / runway / cash_end · plan/fact на базе actuals
+            {isPublicView
+              ? "Public read-only view (по токену)"
+              : "Admin view: DSCR / runway / cash_end · plan/fact на базе actuals"}
           </p>
         </div>
 
@@ -152,7 +215,7 @@ export default function DonasInvestor() {
       </div>
 
       {/* Alerts */}
-      {toNum(last?.cash_end) <= 0 ? (
+      {toNum(last?.cash_end) <= 0 && last ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div className="rounded-xl border bg-red-50 p-4 text-sm text-red-700">
             <div className="font-semibold">cash_end ≤ 0</div>
@@ -170,16 +233,12 @@ export default function DonasInvestor() {
         <div className="rounded-2xl border bg-white p-4">
           <div className="text-xs text-gray-500">Last month cash_end</div>
           <div className="text-lg font-semibold">{fmt0(last?.cash_end)} UZS</div>
-          <div className="text-xs text-gray-500 mt-1">
-            Runway: {runwayLabel}
-          </div>
+          <div className="text-xs text-gray-500 mt-1">Runway: {runwayLabel}</div>
         </div>
         <div className="rounded-2xl border bg-white p-4">
           <div className="text-xs text-gray-500">Last month EBITDA</div>
           <div className="text-lg font-semibold">{fmt0(last?.ebitda)} UZS</div>
-          <div className="text-xs text-gray-500 mt-1">
-            DSCR: {dscrLabel}
-          </div>
+          <div className="text-xs text-gray-500 mt-1">DSCR: {dscrLabel}</div>
         </div>
         <div className="rounded-2xl border bg-white p-4">
           <div className="text-xs text-gray-500">3-mo avg (cashflow / DSCR median)</div>
@@ -211,7 +270,10 @@ export default function DonasInvestor() {
           <div className="rounded-xl border p-3">
             <div className="text-xs text-gray-500">months to zero (если CF&lt;0)</div>
             <div className="text-base font-semibold">
-              {avg3.avg_cf < 0 ? (toNum(last?.cash_end) / Math.abs(toNum(avg3.avg_cf))).toFixed(1) : "—"} mo
+              {avg3.avg_cf < 0
+                ? (toNum(last?.cash_end) / Math.abs(toNum(avg3.avg_cf))).toFixed(1)
+                : "—"}{" "}
+              mo
             </div>
           </div>
         </div>
@@ -219,7 +281,10 @@ export default function DonasInvestor() {
         <div className="text-xs text-gray-500">
           Target runway: {targetMonths} mo · est. months to drop below target:{" "}
           {avg3.avg_cf < 0
-            ? ((toNum(last?.cash_end) - toNum(avg3.avg_opex_loan) * targetMonths) / Math.abs(toNum(avg3.avg_cf))).toFixed(1)
+            ? (
+                (toNum(last?.cash_end) - toNum(avg3.avg_opex_loan) * targetMonths) /
+                Math.abs(toNum(avg3.avg_cf))
+              ).toFixed(1)
             : "—"}{" "}
           mo
         </div>
@@ -239,7 +304,10 @@ export default function DonasInvestor() {
                   <td className="px-3 py-2">+{r.m}</td>
                   <td className="px-3 py-2 text-right">{fmt0(r.cash_end)} UZS</td>
                   <td className="px-3 py-2 text-right">
-                    {toNum(avg3.avg_opex_loan) > 0 ? (r.cash_end / toNum(avg3.avg_opex_loan)).toFixed(1) : "—"} mo
+                    {toNum(avg3.avg_opex_loan) > 0
+                      ? (r.cash_end / toNum(avg3.avg_opex_loan)).toFixed(1)
+                      : "—"}{" "}
+                    mo
                   </td>
                 </tr>
               ))}
@@ -248,71 +316,78 @@ export default function DonasInvestor() {
         </div>
       </div>
 
-      {/* Public link */}
-      <div className="rounded-2xl border bg-white p-4">
-        <div className="text-sm font-semibold">Public share link (token)</div>
-        <div className="text-xs text-gray-500">
-          Сгенерируй токен на диапазон месяцев. Ссылка будет работать без логина.
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mt-3">
-          <label className="text-xs text-gray-600">
-            <div className="mb-1">From (YYYY-MM)</div>
-            <input
-              className="w-full border rounded-lg px-3 py-2"
-              value={fromYm}
-              onChange={(e) => setFromYm(e.target.value)}
-              placeholder="2025-12"
-              disabled={busy}
-            />
-          </label>
-
-          <label className="text-xs text-gray-600">
-            <div className="mb-1">To (YYYY-MM)</div>
-            <input
-              className="w-full border rounded-lg px-3 py-2"
-              value={toYm}
-              onChange={(e) => setToYm(e.target.value)}
-              placeholder="2026-03"
-              disabled={busy}
-            />
-          </label>
-
-          <label className="text-xs text-gray-600">
-            <div className="mb-1">TTL_hours</div>
-            <input
-              className="w-full border rounded-lg px-3 py-2"
-              value={ttlHours}
-              onChange={(e) => setTtlHours(e.target.value)}
-              inputMode="numeric"
-              disabled={busy}
-            />
-          </label>
-
-          <div className="flex items-end">
-            <button
-              type="button"
-              className="w-full px-4 py-2 rounded-lg bg-black text-white hover:bg-gray-900 disabled:opacity-50"
-              onClick={generatePublicLink}
-              disabled={busy}
-            >
-              {busy ? "..." : "Generate link"}
-            </button>
+      {/* Public link generator (ADMIN ONLY) */}
+      {!isPublicView && (
+        <div className="rounded-2xl border bg-white p-4">
+          <div className="text-sm font-semibold">Public share link (token)</div>
+          <div className="text-xs text-gray-500">
+            Сгенерируй токен на диапазон месяцев. Ссылка будет работать без логина.
           </div>
-        </div>
 
-        {error ? <div className="mt-3 text-sm text-red-600">{error}</div> : null}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mt-3">
+            <label className="text-xs text-gray-600">
+              <div className="mb-1">From (YYYY-MM)</div>
+              <input
+                className="w-full border rounded-lg px-3 py-2"
+                value={fromYm}
+                onChange={(e) => setFromYm(e.target.value)}
+                placeholder="2025-12"
+                disabled={busy}
+              />
+            </label>
 
-        {publicLink ? (
-          <div className="mt-4 rounded-xl border bg-gray-50 p-3">
-            <div className="text-xs text-gray-500">Link</div>
-            <div className="break-all text-sm">{publicLink}</div>
-            {publicToken ? (
-              <div className="mt-2 text-[11px] text-gray-500">token: {publicToken}</div>
-            ) : null}
+            <label className="text-xs text-gray-600">
+              <div className="mb-1">To (YYYY-MM)</div>
+              <input
+                className="w-full border rounded-lg px-3 py-2"
+                value={toYm}
+                onChange={(e) => setToYm(e.target.value)}
+                placeholder="2026-03"
+                disabled={busy}
+              />
+            </label>
+
+            <label className="text-xs text-gray-600">
+              <div className="mb-1">TTL_hours</div>
+              <input
+                className="w-full border rounded-lg px-3 py-2"
+                value={ttlHours}
+                onChange={(e) => setTtlHours(e.target.value)}
+                inputMode="numeric"
+                disabled={busy}
+              />
+            </label>
+
+            <div className="flex items-end">
+              <button
+                type="button"
+                className="w-full px-4 py-2 rounded-lg bg-black text-white hover:bg-gray-900 disabled:opacity-50"
+                onClick={generatePublicLink}
+                disabled={busy}
+              >
+                {busy ? "..." : "Generate link"}
+              </button>
+            </div>
           </div>
-        ) : null}
-      </div>
+
+          {error ? <div className="mt-3 text-sm text-red-600">{error}</div> : null}
+
+          {publicLink ? (
+            <div className="mt-4 rounded-xl border bg-gray-50 p-3">
+              <div className="text-xs text-gray-500">Link</div>
+              <div className="break-all text-sm">{publicLink}</div>
+              {publicToken ? (
+                <div className="mt-2 text-[11px] text-gray-500">token: {publicToken}</div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      )}
+
+      {/* Errors (public/admin) */}
+      {isPublicView && error ? (
+        <div className="rounded-xl border bg-red-50 p-3 text-sm text-red-700">{error}</div>
+      ) : null}
 
       {/* Months table */}
       <div className="rounded-2xl border bg-white p-4">
@@ -350,14 +425,26 @@ export default function DonasInvestor() {
                   <td className="px-3 py-2 text-right">{fmt0(m.opex)} UZS</td>
                   <td className="px-3 py-2 text-right">{fmt0(m.capex)} UZS</td>
                   <td className="px-3 py-2 text-right">{fmt0(m.loan)} UZS</td>
-                  <td className={`px-3 py-2 text-right ${toNum(m.ebitda) < 0 ? "text-red-600" : "text-green-700"}`}>
+                  <td
+                    className={`px-3 py-2 text-right ${
+                      toNum(m.ebitda) < 0 ? "text-red-600" : "text-green-700"
+                    }`}
+                  >
                     {fmt0(m.ebitda)} UZS
                   </td>
-                  <td className={`px-3 py-2 text-right ${toNum(m.cf) < 0 ? "text-red-600" : "text-green-700"}`}>
+                  <td
+                    className={`px-3 py-2 text-right ${
+                      toNum(m.cf) < 0 ? "text-red-600" : "text-green-700"
+                    }`}
+                  >
                     {fmt0(m.cf)} UZS
                   </td>
                   <td className="px-3 py-2 text-right">{m.dscr == null ? "—" : m.dscr}</td>
-                  <td className={`px-3 py-2 text-right font-semibold ${toNum(m.cash_end) < 0 ? "text-red-700" : ""}`}>
+                  <td
+                    className={`px-3 py-2 text-right font-semibold ${
+                      toNum(m.cash_end) < 0 ? "text-red-700" : ""
+                    }`}
+                  >
                     {fmt0(m.cash_end)} UZS
                   </td>
                 </tr>
