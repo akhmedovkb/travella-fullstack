@@ -1,99 +1,173 @@
 // frontend/src/pages/admin/DonasInvestor.jsx
 import { useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost } from "../../api";
-import { tSuccess, tError, tInfo } from "../../shared/toast";
+
+/**
+ * Investor view:
+ * - reads settings + months snapshot (already calculated on server)
+ * - computes derived metrics: GP, EBITDA/NetOp, cashFlow, DSCR, runway
+ * - supports public share token generation
+ */
 
 function toNum(x) {
   const n = Number(x);
   return Number.isFinite(n) ? n : 0;
 }
-function money(n) {
-  return Math.round(toNum(n)).toLocaleString("ru-RU");
+
+function fmt(n) {
+  const v = Math.round(toNum(n));
+  return v.toLocaleString("ru-RU");
 }
-function isYm(s) {
-  return /^\d{4}-\d{2}$/.test(String(s || "").trim());
+
+function ymStr(x) {
+  const s = String(x || "");
+  if (!s) return "";
+  if (/^\d{4}-\d{2}/.test(s)) return s.slice(0, 7);
+  return s;
 }
-function ymToIsoMonthStart(ym) {
-  const v = String(ym || "").trim();
-  return isYm(v) ? `${v}-01` : "";
-}
+
 function clamp(n, a, b) {
-  const v = toNum(n);
-  return Math.min(b, Math.max(a, v));
+  const x = toNum(n);
+  return Math.min(b, Math.max(a, x));
+}
+
+function calcRow(m) {
+  const revenue = toNum(m.revenue);
+  const cogs = toNum(m.cogs);
+  const opex = toNum(m.opex);
+  const capex = toNum(m.capex);
+  const loan = toNum(m.loan_paid);
+  const cashEnd = toNum(m.cash_end);
+
+  const gross = revenue - cogs;
+  // EBITDA (упрощённо для Dona’s Dosas): Revenue - COGS - OPEX
+  // (в этой модели это то же самое, что NetOp)
+  const ebitda = gross - opex;
+  const netOp = ebitda;
+  const cashFlow = netOp - loan - capex;
+
+  return {
+    revenue,
+    cogs,
+    opex,
+    capex,
+    loan,
+    cashEnd,
+    gross,
+    ebitda,
+    netOp,
+    cashFlow,
+  };
+}
+
+function computeDerived(months, settings) {
+  const currency = String(settings?.currency || "UZS").toUpperCase();
+  const cashStart = toNum(settings?.cash_start);
+  const reserveTarget = Math.max(0, toNum(settings?.reserve_target_months));
+  const loanPaymentDefault = toNum(settings?.loan_payment_month);
+
+  const rows = (Array.isArray(months) ? months : []).map((m) => ({ ...m }));
+
+  // Attach calculations (DSCR, runway, etc.)
+  for (const r of rows) {
+    const c = calcRow(r);
+
+    // DSCR: EBITDA / LoanPayment (if loan_paid==0, fallback to settings.loan_payment_month)
+    const denom = c.loan > 0 ? c.loan : loanPaymentDefault > 0 ? loanPaymentDefault : 0;
+    const dscr = denom > 0 ? c.netOp / denom : null;
+
+    // Runway: how many months you can survive at avg burn rate (opex+loan or cashFlow)
+    // In your UI: runway uses (opex+loan) average as burn basis
+    const burn = Math.max(0, c.opex + (c.loan > 0 ? c.loan : loanPaymentDefault));
+    const runway = burn > 0 ? c.cashEnd / burn : null;
+
+    r._calc = {
+      ...c,
+      dscr,
+      runway,
+      denom,
+      currency,
+      cashStart,
+      reserveTarget,
+      loanPaymentDefault,
+    };
+  }
+
+  // Alerts (simple)
+  const alerts = [];
+  const last = rows[rows.length - 1];
+
+  if (last) {
+    const { cashEnd, dscr, runway } = last._calc || {};
+
+    if (toNum(cashEnd) <= 0) {
+      alerts.push({
+        title: "cash_end ≤ 0",
+        text: "Денежный остаток не положительный — нужен план действий.",
+      });
+    }
+
+    if (runway != null && reserveTarget > 0 && runway < reserveTarget) {
+      alerts.push({
+        title: "Runway ниже цели",
+        text: `Runway=${(runway * 100).toFixed(1)}%, target=${reserveTarget}м.`,
+      });
+    }
+
+    if (dscr != null && dscr < 1) {
+      alerts.push({
+        title: "DSCR < 1",
+        text: `DSCR=${dscr.toFixed(2)}. Это значит EBITDA (операционная прибыль) не покрывает платёж по займу.`,
+      });
+    }
+  }
+
+  return { rows, alerts, currency };
+}
+
+function Kpi({ title, value, sub, right }) {
+  return (
+    <div className="rounded-2xl border bg-white px-4 py-3 shadow-sm flex items-center justify-between gap-4">
+      <div>
+        <div className="text-xs text-gray-500">{title}</div>
+        <div className="text-xl font-semibold">{value}</div>
+        {sub ? <div className="mt-1 text-xs text-gray-500">{sub}</div> : null}
+      </div>
+      {right ? <div className="shrink-0">{right}</div> : null}
+    </div>
+  );
 }
 
 export default function DonasInvestor() {
-  const [months, setMonths] = useState([]);
-  const [settings, setSettings] = useState(null);
-
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  const [error, setError] = useState("");
+
+  const [settings, setSettings] = useState(null);
+  const [months, setMonths] = useState([]);
 
   const [fromYm, setFromYm] = useState("2025-12");
   const [toYm, setToYm] = useState("2026-03");
   const [ttlHours, setTtlHours] = useState(168);
-  const [error, setError] = useState("");
-  const [publicToken, setPublicToken] = useState("");
   const [publicLink, setPublicLink] = useState("");
-
-  const tokenFromUrl = useMemo(() => {
-    try {
-      const sp = new URLSearchParams(window.location.search);
-      return String(sp.get("t") || "").trim();
-    } catch {
-      return "";
-    }
-  }, []);
-
-  const isPublicView = useMemo(() => {
-    const p = String(window.location.pathname || "");
-    return Boolean(tokenFromUrl) || p.startsWith("/public/");
-  }, [tokenFromUrl]);
 
   async function load() {
     setLoading(true);
     setError("");
-
     try {
-      if (isPublicView) {
-        if (!tokenFromUrl) {
-          setMonths([]);
-          setSettings(null);
-          setError("Нет токена доступа (t)");
-          return;
-        }
+      // admin pages may store auth token under different keys (token/adminToken/etc)
+      // and apiGet supports explicit role to pick correct token.
+      const s = await apiGet("/api/admin/donas/finance/settings", "admin");
+      setSettings(s || null);
 
-        const r = await apiGet(
-          `/api/public/donas/summary-range-token?t=${encodeURIComponent(tokenFromUrl)}`
-        );
-
-        const s = r?.settings || r?.data?.settings || null;
-        const m = r?.months || r?.data?.months || [];
-        setSettings(s);
-        setMonths(Array.isArray(m) ? m : []);
-        return;
-      }
-
-      // admin view
-      const r = await apiGet("/api/admin/donas/finance/investor");
-      const s =
-        r?.settings ||
-        r?.data?.settings ||
-        r?.settings_row ||
-        r?.data?.settings_row ||
-        null;
-      const m = r?.months || r?.data?.months || [];
-      setSettings(s);
-      setMonths(Array.isArray(m) ? m : []);
+      const ms = await apiGet("/api/admin/donas/finance/months", "admin");
+      // backend returns { months: [...] }
+      const arr = Array.isArray(ms) ? ms : Array.isArray(ms?.months) ? ms.months : [];
+      setMonths(arr);
     } catch (e) {
-      console.error("Investor load error:", e);
-      setMonths([]);
-      setSettings(null);
-      const msg = isPublicView
-        ? "Не удалось загрузить данные по публичной ссылке"
-        : "Не удалось загрузить данные Investor";
-      setError(msg);
-      tError(msg);
+      console.error("[DonasInvestor] load error:", e);
+      setError(e?.message || "Не удалось загрузить данные Investor");
     } finally {
       setLoading(false);
     }
@@ -104,369 +178,345 @@ export default function DonasInvestor() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const { rows, alerts, currency } = useMemo(
+    () => computeDerived(months, settings),
+    [months, settings]
+  );
+
+  const last = rows?.length ? rows[rows.length - 1] : null;
+
+  // Auto-forecast runway (simple): based on avg cashFlow (last 3 months) or avg burn (opex+loan)
+  const forecast = useMemo(() => {
+    if (!rows?.length) return null;
+
+    const last3 = rows.slice(Math.max(0, rows.length - 3));
+    const avgCf =
+      last3.reduce((acc, r) => acc + toNum(r._calc?.cashFlow), 0) /
+      Math.max(1, last3.length);
+
+    const avgBurn =
+      last3.reduce((acc, r) => {
+        const c = r._calc || {};
+        const loan = toNum(c.loan) > 0 ? toNum(c.loan) : toNum(c.loanPaymentDefault);
+        return acc + Math.max(0, toNum(c.opex) + loan);
+      }, 0) / Math.max(1, last3.length);
+
+    const cashEnd = toNum(last?._calc?.cashEnd);
+
+    const monthsToZero = avgCf < 0 ? cashEnd / Math.abs(avgCf) : null;
+
+    const target = Math.max(0, toNum(settings?.reserve_target_months));
+    const targetDrop = avgBurn > 0 ? (cashEnd - target * avgBurn) / avgBurn : null;
+
+    // Build projection next 6 months: cash_end + avgCf
+    const proj = [];
+    let cur = cashEnd;
+    for (let i = 1; i <= 6; i++) {
+      cur = cur + avgCf;
+      proj.push({ i, cash: cur, runway: avgBurn > 0 ? cur / avgBurn : null });
+    }
+
+    return {
+      avgCf,
+      avgBurn,
+      monthsToZero,
+      target,
+      targetDrop,
+      proj,
+    };
+  }, [rows, settings, last]);
+
   async function generatePublicLink() {
     setBusy(true);
-    setError("");
-
     try {
-      const fromIso = ymToIsoMonthStart(fromYm);
-      const toIso = ymToIsoMonthStart(toYm);
-
-      if (!fromIso || !toIso) {
-        setError("Неверный формат месяца. Используй YYYY-MM (например 2026-02)");
-        tInfo("Проверь From/To: формат должен быть YYYY-MM");
-        return;
-      }
-
       const payload = {
-        from: fromIso,
-        to: toIso,
+        from: ymStr(fromYm),
+        to: ymStr(toYm),
         ttl_hours: clamp(ttlHours, 1, 24 * 365),
       };
-
-      // backend/routes/donasShareRoutes.js
-      // POST /api/admin/donas/share-token
-      const r = await apiPost("/api/admin/donas/share-token", payload);
-
-      const token = r?.token || r?.data?.token || "";
-      const url = r?.url || r?.data?.url || "";
-
-      if (!token) throw new Error("token not returned");
-
-      setPublicToken(token);
-      setPublicLink(
-        url || `${window.location.origin}/public/donas/investor?t=${encodeURIComponent(token)}`
-      );
-
-      tSuccess("Ссылка сгенерирована");
-    } catch (e) {
-      console.error("generatePublicLink error:", e);
-      setError("Не удалось сгенерировать ссылку");
-      tError("Не удалось сгенерировать ссылку");
+      const r = await apiPost("/api/admin/donas/finance/investor/public-token", payload, "admin");
+      const token = r?.token || r?.public_token || r?.id || "";
+      const base =
+        (typeof window !== "undefined" && window.location ? window.location.origin : "") ||
+        "";
+      const link = token ? `${base}/admin/donas-dosas/finance/investor/public/${token}` : "";
+      setPublicLink(link);
     } finally {
       setBusy(false);
     }
   }
 
-  const fmt0 = (n) => money(n);
-
-  const last = useMemo(() => {
-    const a = Array.isArray(months) ? months : [];
-    if (!a.length) return null;
-    return a[a.length - 1];
-  }, [months]);
-
-  const avg3 = useMemo(() => {
-    const a = Array.isArray(months) ? months : [];
-    if (!a.length) return { avg_cf: 0, avg_opex_loan: 0 };
-    const last3 = a.slice(-3);
-    const avg_cf = last3.reduce((s, x) => s + toNum(x.cf), 0) / Math.max(1, last3.length);
-    const avg_opex_loan =
-      last3.reduce((s, x) => s + (toNum(x.opex) + toNum(x.loan)), 0) / Math.max(1, last3.length);
-    return { avg_cf, avg_opex_loan };
-  }, [months]);
-
-  const targetMonths = toNum(settings?.reserve_target_months) || 6;
-
-  const runwayLabel = useMemo(() => {
-    const cashEnd = toNum(last?.cash_end);
-    const denom = toNum(avg3.avg_opex_loan);
-    if (denom <= 0) return "—";
-    return `${(cashEnd / denom).toFixed(1)} mo`;
-  }, [last, avg3]);
-
-  const dscrLabel = useMemo(() => {
-    const ebitda = toNum(last?.ebitda);
-    const loan = toNum(last?.loan);
-    if (loan <= 0) return "—";
-    return `${(ebitda / loan).toFixed(2)}`;
-  }, [last]);
-
-  const forecast = useMemo(() => {
-    const cashEnd0 = toNum(last?.cash_end);
-    const avgCf = toNum(avg3.avg_cf);
-    const arr = [];
-    for (let i = 1; i <= targetMonths; i++) {
-      arr.push({ m: i, cash_end: cashEnd0 + avgCf * i });
-    }
-    return arr;
-  }, [last, avg3, targetMonths]);
-
   return (
-    <div className="max-w-6xl mx-auto space-y-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">Dona’s Dosas — Investor</h1>
-          <p className="text-sm text-gray-600">
-            {isPublicView
-              ? "Public read-only view (по токену)"
-              : "Admin view: DSCR / runway / cash_end · plan/fact на базе actuals"}
-          </p>
+    <div className="space-y-6">
+      {error ? (
+        <div className="rounded-2xl border bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
         </div>
+      ) : null}
 
-        <button
-          type="button"
-          className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50"
-          onClick={load}
-          disabled={loading || busy}
-        >
-          Refresh
-        </button>
+      <div>
+        <div className="text-sm text-gray-500">Admin</div>
+        <div className="text-2xl font-bold">Dona’s Dosas — Investor</div>
+        <div className="text-sm text-gray-500">
+          Admin view: DSCR / runway / cash_end · plan/fact на базе actuals
+        </div>
       </div>
 
       {/* Alerts */}
-      {toNum(last?.cash_end) <= 0 && last ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div className="rounded-xl border bg-red-50 p-4 text-sm text-red-700">
-            <div className="font-semibold">cash_end ≤ 0</div>
-            Денежный остаток не положительный — нужен план действий.
-          </div>
-          <div className="rounded-xl border bg-red-50 p-4 text-sm text-red-700">
-            <div className="font-semibold">Runway ниже цели</div>
-            Runway={runwayLabel}, target={targetMonths}m.
-          </div>
+      {alerts?.length ? (
+        <div className="grid gap-3 md:grid-cols-2">
+          {alerts.map((a, idx) => (
+            <div key={idx} className="rounded-2xl border bg-red-50 px-4 py-3">
+              <div className="font-semibold text-red-700">{a.title}</div>
+              <div className="text-sm text-red-700">{a.text}</div>
+            </div>
+          ))}
         </div>
       ) : null}
 
       {/* KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <div className="rounded-2xl border bg-white p-4">
-          <div className="text-xs text-gray-500">Last month cash_end</div>
-          <div className="text-lg font-semibold">{fmt0(last?.cash_end)} UZS</div>
-          <div className="text-xs text-gray-500 mt-1">Runway: {runwayLabel}</div>
-        </div>
-        <div className="rounded-2xl border bg-white p-4">
-          <div className="text-xs text-gray-500">Last month EBITDA</div>
-          <div className="text-lg font-semibold">{fmt0(last?.ebitda)} UZS</div>
-          <div className="text-xs text-gray-500 mt-1">DSCR: {dscrLabel}</div>
-        </div>
-        <div className="rounded-2xl border bg-white p-4">
-          <div className="text-xs text-gray-500">3-mo avg (cashflow / DSCR median)</div>
-          <div className="text-lg font-semibold">{fmt0(avg3.avg_cf)} UZS</div>
-          <div className="text-xs text-gray-500 mt-1">
-            avg(opex+loan): {fmt0(avg3.avg_opex_loan)} UZS
-          </div>
-        </div>
+      <div className="grid gap-3 md:grid-cols-3">
+        <Kpi
+          title="Last month cash_end"
+          value={last ? `${fmt(last._calc.cashEnd)} ${currency}` : "—"}
+          sub={
+            last && last._calc.runway != null
+              ? `Runway: ${last._calc.runway.toFixed(1)} mo`
+              : last
+              ? "Runway: —"
+              : ""
+          }
+          right={
+            <div className="h-[44px] w-[220px] rounded-lg border bg-white px-2 py-1 text-[11px] text-gray-500 flex items-center">
+              runway ~ cash_end / (opex + loan)
+            </div>
+          }
+        />
+
+        <Kpi
+          title="Last month EBITDA"
+          value={last ? `${fmt(last._calc.ebitda)} ${currency}` : "—"}
+          sub={last ? `DSCR: ${last._calc.dscr == null ? "—" : last._calc.dscr.toFixed(2)}` : ""}
+          right={
+            <div className="h-[44px] w-[220px] rounded-lg border bg-white px-2 py-1 text-[11px] text-gray-500 flex items-center">
+              EBITDA = revenue − cogs − opex
+            </div>
+          }
+        />
+
+        <Kpi
+          title="3-mo avg (cashflow / DSCR median)"
+          value={
+            forecast
+              ? `${fmt(forecast.avgCf)} ${currency} · DSCR ${(() => {
+                  const ds = rows
+                    .slice(Math.max(0, rows.length - 3))
+                    .map((r) => r._calc?.dscr)
+                    .filter((x) => x != null)
+                    .sort((a, b) => a - b);
+                  if (!ds.length) return "—";
+                  const mid = Math.floor(ds.length / 2);
+                  return ds.length % 2
+                    ? ds[mid].toFixed(2)
+                    : ((ds[mid - 1] + ds[mid]) / 2).toFixed(2);
+                })()}`
+              : "—"
+          }
+          sub={
+            forecast && forecast.monthsToZero != null
+              ? `months to zero (если CF<0): ${forecast.monthsToZero.toFixed(1)} mo`
+              : "months to zero (если CF<0): —"
+          }
+          right={
+            <div className="h-[44px] w-[220px] rounded-lg border bg-white px-2 py-1 text-[11px] text-gray-500 flex items-center">
+              avg(opex+loan): {forecast ? `${fmt(forecast.avgBurn)} ${currency}` : "—"}
+            </div>
+          }
+        />
       </div>
 
-      {/* Forecast */}
-      <div className="rounded-2xl border bg-white p-4 space-y-3">
-        <div>
-          <div className="text-sm font-semibold">Auto-forecast runway</div>
-          <div className="text-xs text-gray-500">
-            Если CF = avg(последние 3 месяца) · прогноз на {targetMonths} месяцев вперед
+      {/* Forecast table */}
+      {forecast ? (
+        <div className="rounded-2xl border bg-white p-5 shadow-sm">
+          <div className="text-lg font-semibold">Auto-forecast runway</div>
+          <div className="text-sm text-gray-500">
+            Если CF = avg(последние 3 месяца) · прогноз на 6 месяцев вперёд
           </div>
-        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="rounded-xl border p-3">
-            <div className="text-xs text-gray-500">avg cashflow / month</div>
-            <div className="text-base font-semibold">{fmt0(avg3.avg_cf)} UZS</div>
-          </div>
-          <div className="rounded-xl border p-3">
-            <div className="text-xs text-gray-500">avg (opex+loan) / month</div>
-            <div className="text-base font-semibold">{fmt0(avg3.avg_opex_loan)} UZS</div>
-          </div>
-          <div className="rounded-xl border p-3">
-            <div className="text-xs text-gray-500">months to zero (если CF&lt;0)</div>
-            <div className="text-base font-semibold">
-              {avg3.avg_cf < 0
-                ? (toNum(last?.cash_end) / Math.abs(toNum(avg3.avg_cf))).toFixed(1)
-                : "—"}{" "}
-              mo
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <div className="rounded-2xl border bg-white px-4 py-3">
+              <div className="text-xs text-gray-500">avg cashflow / month</div>
+              <div className="text-xl font-semibold">
+                {fmt(forecast.avgCf)} {currency}
+              </div>
+            </div>
+            <div className="rounded-2xl border bg-white px-4 py-3">
+              <div className="text-xs text-gray-500">avg (opex+loan) / month</div>
+              <div className="text-xl font-semibold">
+                {fmt(forecast.avgBurn)} {currency}
+              </div>
+            </div>
+            <div className="rounded-2xl border bg-white px-4 py-3">
+              <div className="text-xs text-gray-500">months to zero (если CF&lt;0)</div>
+              <div className="text-xl font-semibold">
+                {forecast.monthsToZero == null ? "—" : `${forecast.monthsToZero.toFixed(1)} mo`}
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="text-xs text-gray-500">
-          Target runway: {targetMonths} mo · est. months to drop below target:{" "}
-          {avg3.avg_cf < 0
-            ? (
-                (toNum(last?.cash_end) - toNum(avg3.avg_opex_loan) * targetMonths) /
-                Math.abs(toNum(avg3.avg_cf))
-              ).toFixed(1)
-            : "—"}{" "}
-          mo
-        </div>
+          <div className="mt-4 text-sm text-gray-500">
+            Target runway: {forecast.target} mo · est. months to drop below target:{" "}
+            {forecast.targetDrop == null ? "—" : `${forecast.targetDrop.toFixed(1)} mo`}
+          </div>
 
-        <div className="overflow-auto border rounded-xl">
-          <table className="min-w-[700px] w-full text-sm">
-            <thead className="bg-gray-50 text-gray-600">
-              <tr>
-                <th className="text-left px-3 py-2">+month</th>
-                <th className="text-right px-3 py-2">Cash end</th>
-                <th className="text-right px-3 py-2">Runway</th>
-              </tr>
-            </thead>
-            <tbody>
-              {forecast.map((r) => (
-                <tr key={r.m} className="border-t">
-                  <td className="px-3 py-2">+{r.m}</td>
-                  <td className="px-3 py-2 text-right">{fmt0(r.cash_end)} UZS</td>
-                  <td className="px-3 py-2 text-right">
-                    {toNum(avg3.avg_opex_loan) > 0
-                      ? (r.cash_end / toNum(avg3.avg_opex_loan)).toFixed(1)
-                      : "—"}{" "}
-                    mo
-                  </td>
+          <div className="mt-3 overflow-auto">
+            <table className="min-w-[720px] w-full text-sm">
+              <thead>
+                <tr className="text-left text-gray-500">
+                  <th className="py-2 pr-4">+month</th>
+                  <th className="py-2 pr-4">Cash end</th>
+                  <th className="py-2 pr-4">Runway</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Public link generator (ADMIN ONLY) */}
-      {!isPublicView && (
-        <div className="rounded-2xl border bg-white p-4">
-          <div className="text-sm font-semibold">Public share link (token)</div>
-          <div className="text-xs text-gray-500">
-            Сгенерируй токен на диапазон месяцев. Ссылка будет работать без логина.
+              </thead>
+              <tbody>
+                {forecast.proj.map((p) => (
+                  <tr key={p.i} className="border-t">
+                    <td className="py-2 pr-4">+{p.i}</td>
+                    <td className="py-2 pr-4">
+                      {fmt(p.cash)} {currency}
+                    </td>
+                    <td className="py-2 pr-4">
+                      {p.runway == null ? "—" : `${p.runway.toFixed(1)} mo`}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mt-3">
-            <label className="text-xs text-gray-600">
-              <div className="mb-1">From (YYYY-MM)</div>
-              <input
-                className="w-full border rounded-lg px-3 py-2"
-                value={fromYm}
-                onChange={(e) => setFromYm(e.target.value)}
-                placeholder="2025-12"
-                disabled={busy}
-              />
-            </label>
-
-            <label className="text-xs text-gray-600">
-              <div className="mb-1">To (YYYY-MM)</div>
-              <input
-                className="w-full border rounded-lg px-3 py-2"
-                value={toYm}
-                onChange={(e) => setToYm(e.target.value)}
-                placeholder="2026-03"
-                disabled={busy}
-              />
-            </label>
-
-            <label className="text-xs text-gray-600">
-              <div className="mb-1">TTL_hours</div>
-              <input
-                className="w-full border rounded-lg px-3 py-2"
-                value={ttlHours}
-                onChange={(e) => setTtlHours(e.target.value)}
-                inputMode="numeric"
-                disabled={busy}
-              />
-            </label>
-
-            <div className="flex items-end">
-              <button
-                type="button"
-                className="w-full px-4 py-2 rounded-lg bg-black text-white hover:bg-gray-900 disabled:opacity-50"
-                onClick={generatePublicLink}
-                disabled={busy}
-              >
-                {busy ? "..." : "Generate link"}
-              </button>
-            </div>
-          </div>
-
-          {error ? <div className="mt-3 text-sm text-red-600">{error}</div> : null}
-
-          {publicLink ? (
-            <div className="mt-4 rounded-xl border bg-gray-50 p-3">
-              <div className="text-xs text-gray-500">Link</div>
-              <div className="break-all text-sm">{publicLink}</div>
-              {publicToken ? (
-                <div className="mt-2 text-[11px] text-gray-500">token: {publicToken}</div>
-              ) : null}
-            </div>
-          ) : null}
         </div>
-      )}
-
-      {/* Errors (public/admin) */}
-      {isPublicView && error ? (
-        <div className="rounded-xl border bg-red-50 p-3 text-sm text-red-700">{error}</div>
       ) : null}
 
-      {/* Months table */}
-      <div className="rounded-2xl border bg-white p-4">
-        <div className="flex items-center justify-between gap-3">
+      {/* Public link */}
+      <div className="rounded-2xl border bg-white p-5 shadow-sm">
+        <div className="text-lg font-semibold">Public share link (token)</div>
+        <div className="text-sm text-gray-500">
+          Сгенерируй токен на диапазон месяцев. Ссылка будет работать без логина.
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-4">
           <div>
-            <div className="text-sm font-semibold">Months</div>
-            <div className="text-xs text-gray-500">
-              формулы: GP=revenue-cogs · EBITDA=GP-opex · CF=EBITDA-loan-capex · DSCR=EBITDA/loan · Runway=cash_end/(opex+loan)
-            </div>
+            <div className="text-xs text-gray-500">From (YYYY-MM)</div>
+            <input
+              className="mt-1 w-full rounded-xl border px-3 py-2"
+              value={fromYm}
+              onChange={(e) => setFromYm(e.target.value)}
+            />
+          </div>
+          <div>
+            <div className="text-xs text-gray-500">To (YYYY-MM)</div>
+            <input
+              className="mt-1 w-full rounded-xl border px-3 py-2"
+              value={toYm}
+              onChange={(e) => setToYm(e.target.value)}
+            />
+          </div>
+          <div>
+            <div className="text-xs text-gray-500">TTL_hours</div>
+            <input
+              className="mt-1 w-full rounded-xl border px-3 py-2"
+              value={ttlHours}
+              onChange={(e) => setTtlHours(e.target.value)}
+            />
+          </div>
+          <div className="flex items-end">
+            <button
+              className="w-full rounded-xl bg-black px-4 py-2 text-white disabled:opacity-50"
+              onClick={generatePublicLink}
+              disabled={busy || loading}
+            >
+              {busy ? "Generating..." : "Generate link"}
+            </button>
           </div>
         </div>
 
-        <div className="overflow-auto mt-3 border rounded-xl">
+        {publicLink ? (
+          <div className="mt-4 rounded-xl border bg-gray-50 p-3">
+            <div className="text-xs text-gray-500">Link</div>
+            <div className="break-all text-sm">{publicLink}</div>
+          </div>
+        ) : null}
+      </div>
+
+      {/* Months */}
+      <div className="rounded-2xl border bg-white p-5 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div className="text-lg font-semibold">Months</div>
+          <button
+            className="rounded-xl border px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+            onClick={load}
+            disabled={loading}
+          >
+            Refresh
+          </button>
+        </div>
+
+        <div className="mt-2 text-xs text-gray-500">
+          Формулы: GP=revenue−cogs · EBITDA=GP−opex · CF=EBITDA−loan−capex · DSCR=EBITDA/loan · Runway=cash_end/(opex+loan)
+        </div>
+
+        <div className="mt-4 overflow-auto">
           <table className="min-w-[1100px] w-full text-sm">
-            <thead className="bg-gray-50 text-gray-600">
-              <tr>
-                <th className="text-left px-3 py-2">Month</th>
-                <th className="text-right px-3 py-2">Revenue</th>
-                <th className="text-right px-3 py-2">COGS</th>
-                <th className="text-right px-3 py-2">OPEX</th>
-                <th className="text-right px-3 py-2">CAPEX</th>
-                <th className="text-right px-3 py-2">Loan</th>
-                <th className="text-right px-3 py-2">EBITDA</th>
-                <th className="text-right px-3 py-2">CF</th>
-                <th className="text-right px-3 py-2">DSCR</th>
-                <th className="text-right px-3 py-2">Cash end</th>
+            <thead>
+              <tr className="text-left text-gray-500">
+                <th className="py-2 pr-4">Month</th>
+                <th className="py-2 pr-4">Revenue</th>
+                <th className="py-2 pr-4">COGS</th>
+                <th className="py-2 pr-4">OPEX</th>
+                <th className="py-2 pr-4">CAPEX</th>
+                <th className="py-2 pr-4">Loan</th>
+                <th className="py-2 pr-4">EBITDA</th>
+                <th className="py-2 pr-4">CF</th>
+                <th className="py-2 pr-4">DSCR</th>
+                <th className="py-2 pr-4">Cash end</th>
               </tr>
             </thead>
             <tbody>
-              {(months || []).map((m) => (
-                <tr key={m.month} className="border-t">
-                  <td className="px-3 py-2">{m.month}</td>
-                  <td className="px-3 py-2 text-right">{fmt0(m.revenue)} UZS</td>
-                  <td className="px-3 py-2 text-right">{fmt0(m.cogs)} UZS</td>
-                  <td className="px-3 py-2 text-right">{fmt0(m.opex)} UZS</td>
-                  <td className="px-3 py-2 text-right">{fmt0(m.capex)} UZS</td>
-                  <td className="px-3 py-2 text-right">{fmt0(m.loan)} UZS</td>
-                  <td
-                    className={`px-3 py-2 text-right ${
-                      toNum(m.ebitda) < 0 ? "text-red-600" : "text-green-700"
-                    }`}
-                  >
-                    {fmt0(m.ebitda)} UZS
-                  </td>
-                  <td
-                    className={`px-3 py-2 text-right ${
-                      toNum(m.cf) < 0 ? "text-red-600" : "text-green-700"
-                    }`}
-                  >
-                    {fmt0(m.cf)} UZS
-                  </td>
-                  <td className="px-3 py-2 text-right">{m.dscr == null ? "—" : m.dscr}</td>
-                  <td
-                    className={`px-3 py-2 text-right font-semibold ${
-                      toNum(m.cash_end) < 0 ? "text-red-700" : ""
-                    }`}
-                  >
-                    {fmt0(m.cash_end)} UZS
-                  </td>
-                </tr>
-              ))}
-
-              {loading && (
+              {rows.map((m) => {
+                const month = ymStr(m.month);
+                const c = m._calc || {};
+                return (
+                  <tr key={month} className="border-t">
+                    <td className="py-2 pr-4">{month}</td>
+                    <td className="py-2 pr-4">{fmt(c.revenue)} {currency}</td>
+                    <td className="py-2 pr-4">{fmt(c.cogs)} {currency}</td>
+                    <td className="py-2 pr-4">{fmt(c.opex)} {currency}</td>
+                    <td className="py-2 pr-4">{fmt(c.capex)} {currency}</td>
+                    <td className="py-2 pr-4">{fmt(c.loan)} {currency}</td>
+                    <td className={`py-2 pr-4 ${toNum(c.ebitda) >= 0 ? "text-green-700" : "text-red-700"}`}>
+                      {fmt(c.ebitda)} {currency}
+                    </td>
+                    <td className={`py-2 pr-4 ${toNum(c.cashFlow) >= 0 ? "text-green-700" : "text-red-700"}`}>
+                      {fmt(c.cashFlow)} {currency}
+                    </td>
+                    <td className="py-2 pr-4">{c.dscr == null ? "—" : c.dscr.toFixed(2)}</td>
+                    <td className="py-2 pr-4 font-semibold">{fmt(c.cashEnd)} {currency}</td>
+                  </tr>
+                );
+              })}
+              {!rows.length && (
                 <tr>
-                  <td colSpan={10} className="px-3 py-6 text-center text-gray-500">
-                    Loading…
-                  </td>
-                </tr>
-              )}
-
-              {!loading && (!months || !months.length) && (
-                <tr>
-                  <td colSpan={10} className="px-3 py-6 text-center text-gray-400">
-                    Нет данных
+                  <td className="py-4 text-gray-500" colSpan={10}>
+                    {loading ? "Loading..." : "No months"}
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
+        </div>
+
+        <div className="mt-3 text-xs text-gray-400">
+          cash_start: {fmt(settings?.cash_start)} {currency} · reserve_target_months:{" "}
+          {toNum(settings?.reserve_target_months)}
         </div>
       </div>
     </div>
