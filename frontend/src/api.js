@@ -122,9 +122,17 @@ async function handle(res) {
 function buildHeaders(withAuthOrRole) {
   const base = { "Content-Type": "application/json" };
   if (withAuthOrRole === false) return base;
-  const role = withAuthOrRole === "client" || withAuthOrRole === "provider" ? withAuthOrRole : null;
+
+  const role =
+    withAuthOrRole === "client" ||
+    withAuthOrRole === "provider" ||
+    withAuthOrRole === "admin"
+      ? withAuthOrRole
+      : null;
+
   return { ...base, ...getAuthHeaders(role) };
 }
+
 
 /**
  * ✅ Safe JSON stringify:
