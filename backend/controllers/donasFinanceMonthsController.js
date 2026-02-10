@@ -62,26 +62,53 @@ async function ensureSettingsTable() {
       id BIGSERIAL PRIMARY KEY,
       slug TEXT NOT NULL UNIQUE,
       currency TEXT NOT NULL DEFAULT 'UZS',
-      cash_start NUMERIC NOT NULL DEFAULT 0,
+
+      -- Source of truth:
       owner_capital NUMERIC NOT NULL DEFAULT 0,
       bank_loan NUMERIC NOT NULL DEFAULT 0,
+      cash_start NUMERIC NOT NULL DEFAULT 0,
+
+      -- legacy (keep for compatibility, not used)
       fixed_opex_month NUMERIC NOT NULL DEFAULT 0,
       variable_opex_month NUMERIC NOT NULL DEFAULT 0,
       loan_payment_month NUMERIC NOT NULL DEFAULT 0,
+
       reserve_target_months NUMERIC NOT NULL DEFAULT 0,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
 
-  // Safe schema upgrades (in case table exists already)
-  await db.query(`ALTER TABLE donas_finance_settings ADD COLUMN IF NOT EXISTS owner_capital NUMERIC NOT NULL DEFAULT 0;`);
-  await db.query(`ALTER TABLE donas_finance_settings ADD COLUMN IF NOT EXISTS bank_loan NUMERIC NOT NULL DEFAULT 0;`);
-  await db.query(`ALTER TABLE donas_finance_settings ADD COLUMN IF NOT EXISTS cash_start NUMERIC NOT NULL DEFAULT 0;`);
-  await db.query(`ALTER TABLE donas_finance_settings ADD COLUMN IF NOT EXISTS fixed_opex_month NUMERIC NOT NULL DEFAULT 0;`);
-  await db.query(`ALTER TABLE donas_finance_settings ADD COLUMN IF NOT EXISTS variable_opex_month NUMERIC NOT NULL DEFAULT 0;`);
-  await db.query(`ALTER TABLE donas_finance_settings ADD COLUMN IF NOT EXISTS loan_payment_month NUMERIC NOT NULL DEFAULT 0;`);
-  await db.query(`ALTER TABLE donas_finance_settings ADD COLUMN IF NOT EXISTS reserve_target_months NUMERIC NOT NULL DEFAULT 0;`);
+  // Safe schema upgrades (for existing DB)
+  await db.query(
+    `ALTER TABLE donas_finance_settings ADD COLUMN IF NOT EXISTS owner_capital NUMERIC NOT NULL DEFAULT 0;`
+  );
+  await db.query(
+    `ALTER TABLE donas_finance_settings ADD COLUMN IF NOT EXISTS bank_loan NUMERIC NOT NULL DEFAULT 0;`
+  );
+  await db.query(
+    `ALTER TABLE donas_finance_settings ADD COLUMN IF NOT EXISTS cash_start NUMERIC NOT NULL DEFAULT 0;`
+  );
+  await db.query(
+    `ALTER TABLE donas_finance_settings ADD COLUMN IF NOT EXISTS reserve_target_months NUMERIC NOT NULL DEFAULT 0;`
+  );
+  await db.query(
+    `ALTER TABLE donas_finance_settings ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();`
+  );
+
+  // legacy columns (keep)
+  await db.query(
+    `ALTER TABLE donas_finance_settings ADD COLUMN IF NOT EXISTS fixed_opex_month NUMERIC NOT NULL DEFAULT 0;`
+  );
+  await db.query(
+    `ALTER TABLE donas_finance_settings ADD COLUMN IF NOT EXISTS variable_opex_month NUMERIC NOT NULL DEFAULT 0;`
+  );
+  await db.query(
+    `ALTER TABLE donas_finance_settings ADD COLUMN IF NOT EXISTS loan_payment_month NUMERIC NOT NULL DEFAULT 0;`
+  );
 }
+
 
 async function getCashStartFromSettings() {
   await ensureSettingsTable();
@@ -517,19 +544,24 @@ async function recomputeCashChainFrom(startYm, endYm) {
 async function getSettings(req, res) {
   try {
     await ensureSettingsTable();
-    const q = await db.query(`SELECT * FROM donas_finance_settings WHERE slug=$1 LIMIT 1`, [SLUG]);
+
+    const q = await db.query(
+      `SELECT * FROM donas_finance_settings WHERE slug=$1 LIMIT 1`,
+      [SLUG]
+    );
     if (q.rows?.length) return res.json(q.rows[0]);
 
     const ins = await db.query(
       `
       INSERT INTO donas_finance_settings
-        (slug, currency, cash_start, owner_capital, bank_loan, fixed_opex_month, variable_opex_month, loan_payment_month, reserve_target_months)
+        (slug, currency, owner_capital, bank_loan, cash_start, reserve_target_months, created_at, updated_at)
       VALUES
-        ($1,'UZS',0,0,0,0,0,0,0)
+        ($1,'UZS',0,0,0,0, NOW(), NOW())
       RETURNING *
       `,
       [SLUG]
     );
+
     return res.json(ins.rows[0]);
   } catch (e) {
     console.error("[donasFinance] getSettings error:", e);
@@ -545,40 +577,44 @@ async function updateSettings(req, res) {
     const b = req.body || {};
     const currency = String(b.currency || "UZS").trim() || "UZS";
 
-    // ⚠️ Loan payment из Settings больше не используем для расчётов months,
-    // но колонку в БД не трогаем (чтобы ничего не ломать).
+    const ownerCapital = toNum(b.owner_capital);
+    const bankLoan = toNum(b.bank_loan);
+    const cashStart = ownerCapital + bankLoan;
+
+    const reserveTargetMonths = toNum(b.reserve_target_months);
+
+    // сохраняем settings (legacy поля оставляем, но ставим 0)
     const q = await db.query(
       `
       INSERT INTO donas_finance_settings
-        (slug, currency, cash_start, fixed_opex_month, variable_opex_month, loan_payment_month, reserve_target_months)
+        (slug, currency, owner_capital, bank_loan, cash_start,
+         fixed_opex_month, variable_opex_month, loan_payment_month,
+         reserve_target_months, updated_at)
       VALUES
-        ($1,$2,$3,$4,$5,$6,$7)
+        ($1,$2,$3,$4,$5, 0,0,0, $6, NOW())
       ON CONFLICT (slug)
       DO UPDATE SET
         currency=EXCLUDED.currency,
+        owner_capital=EXCLUDED.owner_capital,
+        bank_loan=EXCLUDED.bank_loan,
         cash_start=EXCLUDED.cash_start,
-        fixed_opex_month=EXCLUDED.fixed_opex_month,
-        variable_opex_month=EXCLUDED.variable_opex_month,
-        loan_payment_month=EXCLUDED.loan_payment_month,
-        reserve_target_months=EXCLUDED.reserve_target_months
+        fixed_opex_month=0,
+        variable_opex_month=0,
+        loan_payment_month=0,
+        reserve_target_months=EXCLUDED.reserve_target_months,
+        updated_at=NOW()
       RETURNING *
       `,
-      [
-        SLUG,
-        currency,
-        toNum(b.cash_start),
-        toNum(b.fixed_opex_month),
-        toNum(b.variable_opex_month),
-        toNum(b.loan_payment_month), // оставляем в БД, но UI уберём
-        toNum(b.reserve_target_months),
-      ]
+      [SLUG, currency, ownerCapital, bankLoan, cashStart, reserveTargetMonths]
     );
 
-    // ✅ ВАЖНО: сразу пересчитываем cash_end по цепочке месяцев
+    // ✅ пересчёт cash_end цепочки: cash_start -> первый месяц -> далее
     const mm = await db.query(
-      `SELECT MIN(month) AS minm, MAX(month) AS maxm
-       FROM donas_finance_months
-       WHERE slug=$1`,
+      `
+      SELECT MIN(month) AS minm, MAX(month) AS maxm
+      FROM donas_finance_months
+      WHERE slug=$1
+      `,
       [SLUG]
     );
 
