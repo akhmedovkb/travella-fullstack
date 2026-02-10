@@ -577,52 +577,48 @@ async function updateSettings(req, res) {
     const b = req.body || {};
     const currency = String(b.currency || "UZS").trim() || "UZS";
 
-    // ✅ сохраняем owner_capital + bank_loan
-    const owner_capital = toNum(b.owner_capital);
-    const bank_loan = toNum(b.bank_loan);
+    const owner = toNum(b.owner_capital);
+    const bank = toNum(b.bank_loan);
 
-    // ✅ cash_start = owner + bank (если оба 0 — оставим текущий cash_start как legacy)
-    const currentQ = await db.query(
-      `SELECT cash_start FROM donas_finance_settings WHERE slug=$1 LIMIT 1`,
-      [SLUG]
-    );
-    const legacyCashStart = toNum(currentQ.rows?.[0]?.cash_start);
+    // ✅ cash_start = owner + bank (если они заданы), иначе fallback на b.cash_start / текущий cash_start
+    let nextCashStart = 0;
 
-    const computedCashStart =
-      owner_capital || bank_loan ? owner_capital + bank_loan : legacyCashStart;
+    if (owner || bank) {
+      nextCashStart = owner + bank;
+    } else if (b.cash_start != null) {
+      nextCashStart = toNum(b.cash_start);
+    } else {
+      // если вообще ничего не прислали — не затираем
+      const cur = await db.query(
+        `SELECT cash_start FROM donas_finance_settings WHERE slug=$1 LIMIT 1`,
+        [SLUG]
+      );
+      nextCashStart = toNum(cur.rows?.[0]?.cash_start);
+    }
 
     const q = await db.query(
       `
       INSERT INTO donas_finance_settings
         (slug, currency, cash_start, owner_capital, bank_loan, fixed_opex_month, variable_opex_month, loan_payment_month, reserve_target_months)
       VALUES
-        ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+        ($1,$2,$3,$4,$5,
+         COALESCE((SELECT fixed_opex_month FROM donas_finance_settings WHERE slug=$1),0),
+         COALESCE((SELECT variable_opex_month FROM donas_finance_settings WHERE slug=$1),0),
+         COALESCE((SELECT loan_payment_month FROM donas_finance_settings WHERE slug=$1),0),
+         COALESCE((SELECT reserve_target_months FROM donas_finance_settings WHERE slug=$1),0)
+        )
       ON CONFLICT (slug)
       DO UPDATE SET
         currency=EXCLUDED.currency,
         cash_start=EXCLUDED.cash_start,
         owner_capital=EXCLUDED.owner_capital,
-        bank_loan=EXCLUDED.bank_loan,
-        fixed_opex_month=EXCLUDED.fixed_opex_month,
-        variable_opex_month=EXCLUDED.variable_opex_month,
-        loan_payment_month=EXCLUDED.loan_payment_month,
-        reserve_target_months=EXCLUDED.reserve_target_months
+        bank_loan=EXCLUDED.bank_loan
       RETURNING *
       `,
-      [
-        SLUG,
-        currency,
-        computedCashStart,
-        owner_capital,
-        bank_loan,
-        toNum(b.fixed_opex_month),
-        toNum(b.variable_opex_month),
-        toNum(b.loan_payment_month), // колонку оставляем, но в UI скрываем
-        toNum(b.reserve_target_months),
-      ]
+      [SLUG, currency, nextCashStart, owner, bank]
     );
 
-    // ✅ пересчёт cash_end цепочки сразу после обновления cash_start
+    // ✅ пересчёт cash_end по всей цепочке
     const mm = await db.query(
       `SELECT MIN(month) AS minm, MAX(month) AS maxm
        FROM donas_finance_months
