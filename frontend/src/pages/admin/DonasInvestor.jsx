@@ -285,7 +285,7 @@ async function generatePublicLink() {
       ) : null}
 
       <div>
-        <div className="text-sm text-gray-500">Admin</div>
+        <div className="text-sm text-gray-500">{isPublic ? "Investor" : "Admin"}</div>
         <div className="text-2xl font-bold">Dona’s Dosas — Investor</div>
         <div className="text-sm text-gray-500">
           Admin view: DSCR / runway / cash_end · plan/fact на базе actuals
@@ -532,7 +532,7 @@ async function generatePublicLink() {
                       {fmt(c.capex)} {currency}
                     </td>
                     <td className="py-2 pr-4">
-                      {fmt(c.loan)} {currency}
+                      {fmt(c.loan > 0 ? c.loan : c.loanPaymentDefault)} {currency}
                     </td>
                     <td
                       className={`py-2 pr-4 ${
