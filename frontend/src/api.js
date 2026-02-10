@@ -180,12 +180,31 @@ export async function apiPut(path, body, withAuthOrRole = true) {
   return handle(res);
 }
 
-export async function apiDelete(path, body, withAuthOrRole = true) {
+export async function apiDelete(path, bodyOrRole, withAuthOrRole = true) {
+  // Поддержка:
+  // apiDelete(url, {..})
+  // apiDelete(url, null)
+  // apiDelete(url, "admin")  ✅ (роль без body)
+  // apiDelete(url, {..}, "admin")
+
+  let body = bodyOrRole;
+  let auth = withAuthOrRole;
+
+  if (
+    typeof bodyOrRole === "string" &&
+    (bodyOrRole === "client" || bodyOrRole === "provider" || bodyOrRole === "admin") &&
+    withAuthOrRole === true
+  ) {
+    auth = bodyOrRole;
+    body = undefined;
+  }
+
   const res = await fetch(buildUrl(path), {
     method: "DELETE",
-    headers: buildHeaders(withAuthOrRole),
+    headers: buildHeaders(auth),
     body: body ? safeJsonStringify(body) : undefined,
     credentials: "include",
   });
   return handle(res);
 }
+
