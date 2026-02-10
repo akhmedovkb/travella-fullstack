@@ -32,7 +32,7 @@ export default function DonasDosasFinanceOverview() {
       const s = await apiGet("/api/admin/donas/finance/settings", "admin");
       setSettings(s || null);
 
-      const m = await apiGet("/api/admin/donas/finance/months", "admin");
+      const m = await apiGet(`/api/admin/donas/finance/months?ts=${Date.now()}`, "admin");
       const arr = Array.isArray(m) ? m : Array.isArray(m?.months) ? m.months : [];
       setMonths(arr);
     } catch (e) {
@@ -77,7 +77,8 @@ export default function DonasDosasFinanceOverview() {
   
       const r = await apiPut("/api/admin/donas/finance/settings", payload, "admin");
       setSettings(r || null);
-  
+      await load();
+      
       // ✅ важно: backend пересчитал cash_end — обновим months сразу
       const m = await apiGet("/api/admin/donas/finance/months", "admin");
       const arr = Array.isArray(m) ? m : Array.isArray(m?.months) ? m.months : [];
