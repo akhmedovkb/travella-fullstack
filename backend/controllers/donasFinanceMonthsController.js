@@ -63,6 +63,8 @@ async function ensureSettingsTable() {
       slug TEXT NOT NULL UNIQUE,
       currency TEXT NOT NULL DEFAULT 'UZS',
       cash_start NUMERIC NOT NULL DEFAULT 0,
+      owner_capital NUMERIC NOT NULL DEFAULT 0,
+      bank_loan NUMERIC NOT NULL DEFAULT 0,
       fixed_opex_month NUMERIC NOT NULL DEFAULT 0,
       variable_opex_month NUMERIC NOT NULL DEFAULT 0,
       loan_payment_month NUMERIC NOT NULL DEFAULT 0,
@@ -70,6 +72,15 @@ async function ensureSettingsTable() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
+
+  // Safe schema upgrades (in case table exists already)
+  await db.query(`ALTER TABLE donas_finance_settings ADD COLUMN IF NOT EXISTS owner_capital NUMERIC NOT NULL DEFAULT 0;`);
+  await db.query(`ALTER TABLE donas_finance_settings ADD COLUMN IF NOT EXISTS bank_loan NUMERIC NOT NULL DEFAULT 0;`);
+  await db.query(`ALTER TABLE donas_finance_settings ADD COLUMN IF NOT EXISTS cash_start NUMERIC NOT NULL DEFAULT 0;`);
+  await db.query(`ALTER TABLE donas_finance_settings ADD COLUMN IF NOT EXISTS fixed_opex_month NUMERIC NOT NULL DEFAULT 0;`);
+  await db.query(`ALTER TABLE donas_finance_settings ADD COLUMN IF NOT EXISTS variable_opex_month NUMERIC NOT NULL DEFAULT 0;`);
+  await db.query(`ALTER TABLE donas_finance_settings ADD COLUMN IF NOT EXISTS loan_payment_month NUMERIC NOT NULL DEFAULT 0;`);
+  await db.query(`ALTER TABLE donas_finance_settings ADD COLUMN IF NOT EXISTS reserve_target_months NUMERIC NOT NULL DEFAULT 0;`);
 }
 
 async function getCashStartFromSettings() {
@@ -512,18 +523,17 @@ async function getSettings(req, res) {
     const ins = await db.query(
       `
       INSERT INTO donas_finance_settings
-        (slug, currency, cash_start, fixed_opex_month, variable_opex_month, loan_payment_month, reserve_target_months)
+        (slug, currency, cash_start, owner_capital, bank_loan, fixed_opex_month, variable_opex_month, loan_payment_month, reserve_target_months)
       VALUES
-        ($1,'UZS',0,0,0,0,0)
+        ($1,'UZS',0,0,0,0,0,0,0)
       RETURNING *
       `,
       [SLUG]
     );
-
     return res.json(ins.rows[0]);
   } catch (e) {
-    console.error("getSettings error:", e);
-    return res.status(500).json({ error: "Failed to load settings" });
+    console.error("[donasFinance] getSettings error:", e);
+    return res.status(500).json({ error: "Failed" });
   }
 }
 
@@ -531,39 +541,68 @@ async function updateSettings(req, res) {
   try {
     await ensureSettingsTable();
     const b = req.body || {};
-    const currency = String(b.currency || "UZS").trim() || "UZS";
 
-    const q = await db.query(
+    const prevQ = await db.query(`SELECT * FROM donas_finance_settings WHERE slug=$1 LIMIT 1`, [SLUG]);
+    const prev = prevQ.rows?.[0] || null;
+
+    const has = (k) => Object.prototype.hasOwnProperty.call(b, k);
+
+    const currency = has("currency")
+      ? (String(b.currency || "UZS").trim() || "UZS")
+      : (String(prev?.currency || "UZS").trim() || "UZS");
+
+    // split parts
+    const owner_capital = has("owner_capital") ? toNum(b.owner_capital) : toNum(prev?.owner_capital);
+    const bank_loan = has("bank_loan") ? toNum(b.bank_loan) : toNum(prev?.bank_loan);
+
+    // cash_start:
+    // - if owner_capital/bank_loan provided (at least one) -> recompute sum
+    // - else keep previous cash_start, unless explicit cash_start provided
+    const hasParts = has("owner_capital") || has("bank_loan");
+    const cash_start = hasParts
+      ? owner_capital + bank_loan
+      : (has("cash_start") ? toNum(b.cash_start) : toNum(prev?.cash_start));
+
+    // keep old fields unless explicitly provided
+    const fixed_opex_month = has("fixed_opex_month") ? toNum(b.fixed_opex_month) : toNum(prev?.fixed_opex_month);
+    const variable_opex_month = has("variable_opex_month") ? toNum(b.variable_opex_month) : toNum(prev?.variable_opex_month);
+    const loan_payment_month = has("loan_payment_month") ? toNum(b.loan_payment_month) : toNum(prev?.loan_payment_month);
+    const reserve_target_months = has("reserve_target_months") ? toNum(b.reserve_target_months) : toNum(prev?.reserve_target_months);
+
+    const up = await db.query(
       `
       INSERT INTO donas_finance_settings
-        (slug, currency, cash_start, fixed_opex_month, variable_opex_month, loan_payment_month, reserve_target_months)
+        (slug, currency, cash_start, owner_capital, bank_loan, fixed_opex_month, variable_opex_month, loan_payment_month, reserve_target_months)
       VALUES
-        ($1,$2,$3,$4,$5,$6,$7)
-      ON CONFLICT (slug)
-      DO UPDATE SET
-        currency=EXCLUDED.currency,
-        cash_start=EXCLUDED.cash_start,
-        fixed_opex_month=EXCLUDED.fixed_opex_month,
-        variable_opex_month=EXCLUDED.variable_opex_month,
-        loan_payment_month=EXCLUDED.loan_payment_month,
-        reserve_target_months=EXCLUDED.reserve_target_months
+        ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+      ON CONFLICT (slug) DO UPDATE SET
+        currency = EXCLUDED.currency,
+        cash_start = EXCLUDED.cash_start,
+        owner_capital = EXCLUDED.owner_capital,
+        bank_loan = EXCLUDED.bank_loan,
+        fixed_opex_month = EXCLUDED.fixed_opex_month,
+        variable_opex_month = EXCLUDED.variable_opex_month,
+        loan_payment_month = EXCLUDED.loan_payment_month,
+        reserve_target_months = EXCLUDED.reserve_target_months
       RETURNING *
       `,
       [
         SLUG,
         currency,
-        toNum(b.cash_start),
-        toNum(b.fixed_opex_month),
-        toNum(b.variable_opex_month),
-        toNum(b.loan_payment_month),
-        toNum(b.reserve_target_months),
+        cash_start,
+        owner_capital,
+        bank_loan,
+        fixed_opex_month,
+        variable_opex_month,
+        loan_payment_month,
+        reserve_target_months,
       ]
     );
 
-    return res.json(q.rows[0]);
+    return res.json(up.rows[0]);
   } catch (e) {
-    console.error("updateSettings error:", e);
-    return res.status(500).json({ error: "Failed to save settings" });
+    console.error("[donasFinance] updateSettings error:", e);
+    return res.status(500).json({ error: "Failed" });
   }
 }
 
