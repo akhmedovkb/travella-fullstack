@@ -79,7 +79,7 @@ function computeDerived(months, settings) {
     // Runway: how many months you can survive at avg burn rate (opex+loan or cashFlow)
     // In your UI: runway uses (opex+loan) average as burn basis
     const burn = Math.max(0, c.opex + (c.loan > 0 ? c.loan : loanPaymentDefault));
-    const runway = burn > 0 ? c.cashEnd / burn : null;
+    const runway = burn > 0 ? Math.max(0, c.cashEnd / burn) : null;
 
     r._calc = {
       ...c,
