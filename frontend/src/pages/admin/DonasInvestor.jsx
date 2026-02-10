@@ -152,17 +152,33 @@ export default function DonasInvestor() {
   const [ttlHours, setTtlHours] = useState(168);
   const [publicLink, setPublicLink] = useState("");
 
+  const shareToken =
+    (typeof window !== "undefined" && window.location
+      ? new URLSearchParams(window.location.search).get("t")
+      : null) || null;
+
+  const isPublic = !!shareToken;
+
   async function load() {
     setLoading(true);
     setError("");
     try {
-      // admin pages may store auth token under different keys (token/adminToken/etc)
-      // and apiGet supports explicit role to pick correct token.
+      if (isPublic) {
+        const r = await apiGet(
+          `/api/public/donas/summary-range-token?t=${encodeURIComponent(shareToken)}`,
+          false
+        );
+
+        setSettings(r?.settings || null);
+        setMonths(Array.isArray(r?.months) ? r.months : []);
+        return;
+      }
+
+      // admin mode
       const s = await apiGet("/api/admin/donas/finance/settings", "admin");
       setSettings(s || null);
 
       const ms = await apiGet("/api/admin/donas/finance/months", "admin");
-      // backend returns { months: [...] }
       const arr = Array.isArray(ms) ? ms : Array.isArray(ms?.months) ? ms.months : [];
       setMonths(arr);
     } catch (e) {
@@ -411,55 +427,57 @@ async function generatePublicLink() {
       ) : null}
 
       {/* Public link */}
-      <div className="rounded-2xl border bg-white p-5 shadow-sm">
-        <div className="text-lg font-semibold">Public share link (token)</div>
-        <div className="text-sm text-gray-500">
-          Сгенерируй токен на диапазон месяцев. Ссылка будет работать без логина.
-        </div>
+      {!isPublic ? (
+        <div className="rounded-2xl border bg-white p-5 shadow-sm">
+          <div className="text-lg font-semibold">Public share link (token)</div>
+          <div className="text-sm text-gray-500">
+            Сгенерируй токен на диапазон месяцев. Ссылка будет работать без логина.
+          </div>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-4">
-          <div>
-            <div className="text-xs text-gray-500">From (YYYY-MM)</div>
-            <input
-              className="mt-1 w-full rounded-xl border px-3 py-2"
-              value={fromYm}
-              onChange={(e) => setFromYm(e.target.value)}
-            />
+          <div className="mt-4 grid gap-3 md:grid-cols-4">
+            <div>
+              <div className="text-xs text-gray-500">From (YYYY-MM)</div>
+              <input
+                className="mt-1 w-full rounded-xl border px-3 py-2"
+                value={fromYm}
+                onChange={(e) => setFromYm(e.target.value)}
+              />
+            </div>
+            <div>
+              <div className="text-xs text-gray-500">To (YYYY-MM)</div>
+              <input
+                className="mt-1 w-full rounded-xl border px-3 py-2"
+                value={toYm}
+                onChange={(e) => setToYm(e.target.value)}
+              />
+            </div>
+            <div>
+              <div className="text-xs text-gray-500">TTL_hours</div>
+              <input
+                className="mt-1 w-full rounded-xl border px-3 py-2"
+                value={ttlHours}
+                onChange={(e) => setTtlHours(e.target.value)}
+              />
+            </div>
+            <div className="flex items-end">
+              <button
+                className="w-full rounded-xl bg-black px-4 py-2 text-white disabled:opacity-50"
+                onClick={generatePublicLink}
+                disabled={busy || loading}
+              >
+                {busy ? "Generating..." : "Generate link"}
+              </button>
+            </div>
           </div>
-          <div>
-            <div className="text-xs text-gray-500">To (YYYY-MM)</div>
-            <input
-              className="mt-1 w-full rounded-xl border px-3 py-2"
-              value={toYm}
-              onChange={(e) => setToYm(e.target.value)}
-            />
-          </div>
-          <div>
-            <div className="text-xs text-gray-500">TTL_hours</div>
-            <input
-              className="mt-1 w-full rounded-xl border px-3 py-2"
-              value={ttlHours}
-              onChange={(e) => setTtlHours(e.target.value)}
-            />
-          </div>
-          <div className="flex items-end">
-            <button
-              className="w-full rounded-xl bg-black px-4 py-2 text-white disabled:opacity-50"
-              onClick={generatePublicLink}
-              disabled={busy || loading}
-            >
-              {busy ? "Generating..." : "Generate link"}
-            </button>
-          </div>
-        </div>
 
-        {publicLink ? (
-          <div className="mt-4 rounded-xl border bg-gray-50 p-3">
-            <div className="text-xs text-gray-500">Link</div>
-            <div className="break-all text-sm">{publicLink}</div>
-          </div>
-        ) : null}
-      </div>
+          {publicLink ? (
+            <div className="mt-4 rounded-xl border bg-gray-50 p-3">
+              <div className="text-xs text-gray-500">Link</div>
+              <div className="break-all text-sm">{publicLink}</div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* Months */}
       <div className="rounded-2xl border bg-white p-5 shadow-sm">
@@ -501,19 +519,41 @@ async function generatePublicLink() {
                 return (
                   <tr key={month} className="border-t">
                     <td className="py-2 pr-4">{month}</td>
-                    <td className="py-2 pr-4">{fmt(c.revenue)} {currency}</td>
-                    <td className="py-2 pr-4">{fmt(c.cogs)} {currency}</td>
-                    <td className="py-2 pr-4">{fmt(c.opex)} {currency}</td>
-                    <td className="py-2 pr-4">{fmt(c.capex)} {currency}</td>
-                    <td className="py-2 pr-4">{fmt(c.loan)} {currency}</td>
-                    <td className={`py-2 pr-4 ${toNum(c.ebitda) >= 0 ? "text-green-700" : "text-red-700"}`}>
+                    <td className="py-2 pr-4">
+                      {fmt(c.revenue)} {currency}
+                    </td>
+                    <td className="py-2 pr-4">
+                      {fmt(c.cogs)} {currency}
+                    </td>
+                    <td className="py-2 pr-4">
+                      {fmt(c.opex)} {currency}
+                    </td>
+                    <td className="py-2 pr-4">
+                      {fmt(c.capex)} {currency}
+                    </td>
+                    <td className="py-2 pr-4">
+                      {fmt(c.loan)} {currency}
+                    </td>
+                    <td
+                      className={`py-2 pr-4 ${
+                        toNum(c.ebitda) >= 0 ? "text-green-700" : "text-red-700"
+                      }`}
+                    >
                       {fmt(c.ebitda)} {currency}
                     </td>
-                    <td className={`py-2 pr-4 ${toNum(c.cashFlow) >= 0 ? "text-green-700" : "text-red-700"}`}>
+                    <td
+                      className={`py-2 pr-4 ${
+                        toNum(c.cashFlow) >= 0 ? "text-green-700" : "text-red-700"
+                      }`}
+                    >
                       {fmt(c.cashFlow)} {currency}
                     </td>
-                    <td className="py-2 pr-4">{c.dscr == null ? "—" : c.dscr.toFixed(2)}</td>
-                    <td className="py-2 pr-4 font-semibold">{fmt(c.cashEnd)} {currency}</td>
+                    <td className="py-2 pr-4">
+                      {c.dscr == null ? "—" : c.dscr.toFixed(2)}
+                    </td>
+                    <td className="py-2 pr-4 font-semibold">
+                      {fmt(c.cashEnd)} {currency}
+                    </td>
                   </tr>
                 );
               })}
