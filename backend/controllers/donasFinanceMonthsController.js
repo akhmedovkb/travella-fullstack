@@ -747,7 +747,20 @@ async function syncMonths(req, res) {
       ym = nextYm(ym);
     }
 
-    await recomputeCashChainFrom(minYm, maxYm);
+        // ✅ пересчитать цепочку по фактическим месяцам в таблице
+    const mm = await db.query(
+      `SELECT MIN(month) AS minm, MAX(month) AS maxm
+       FROM donas_finance_months
+       WHERE slug=$1`,
+      [SLUG]
+    );
+    
+    const minm = mm.rows?.[0]?.minm;
+    const maxm = mm.rows?.[0]?.maxm;
+    
+    if (minm && maxm) {
+      await recomputeCashChainFrom(monthToYm(minm), monthToYm(maxm));
+    }
 
     await auditMonthAction(req, minYm, "months.sync", { minYm, maxYm, touched, floorYm: MIN_YM_FLOOR, rawMinYm, rawMaxYm }, {});
     return res.json({ ok: true, synced: touched, range: { minYm, maxYm } });
