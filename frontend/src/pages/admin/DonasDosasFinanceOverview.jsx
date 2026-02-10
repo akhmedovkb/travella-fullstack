@@ -64,32 +64,28 @@ export default function DonasDosasFinanceOverview() {
     return arr.slice(Math.max(0, arr.length - 6));
   }, [months]);
 
-  async function saveSettings() {
-    setSaving(true);
-    setError("");
-    try {
-      const payload = {
-        currency: (settings?.currency || "UZS").toUpperCase(),
-        owner_capital: toNum(settings?.owner_capital),
-        bank_loan: toNum(settings?.bank_loan),
-        reserve_target_months: toNum(settings?.reserve_target_months || 0), // если хочешь оставить в БД
-      };
-  
-      const r = await apiPut("/api/admin/donas/finance/settings", payload, "admin");
-      setSettings(r || null);
-      await load();
-      
-      // ✅ важно: backend пересчитал cash_end — обновим months сразу
-      const m = await apiGet("/api/admin/donas/finance/months", "admin");
-      const arr = Array.isArray(m) ? m : Array.isArray(m?.months) ? m.months : [];
-      setMonths(arr);
-    } catch (e) {
-      console.error("[FinanceOverview] saveSettings error:", e);
-      setError(e?.message || "Failed to save");
-    } finally {
-      setSaving(false);
-    }
+async function saveSettings() {
+  setSaving(true);
+  setError("");
+  try {
+    const payload = {
+      currency: (settings?.currency || "UZS").toUpperCase(),
+      owner_capital: toNum(settings?.owner_capital),
+      bank_loan: toNum(settings?.bank_loan),
+      reserve_target_months: toNum(settings?.reserve_target_months || 0),
+    };
+
+    const r = await apiPut("/api/admin/donas/finance/settings", payload, "admin");
+    setSettings(r || null);
+
+    await load(); // этого достаточно
+  } catch (e) {
+    console.error("[FinanceOverview] saveSettings error:", e);
+    setError(e?.message || "Failed to save");
+  } finally {
+    setSaving(false);
   }
+}
 
   return (
     <div className="space-y-6">
