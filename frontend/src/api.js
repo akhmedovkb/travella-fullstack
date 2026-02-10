@@ -23,16 +23,76 @@ export const buildUrl = (path) => {
   return `${baseNoSlash}${p}`;
 };
 
-function getTokenByRole(role) {
-  if (role === "client") return localStorage.getItem("clientToken");
-  if (role === "provider")
-    return localStorage.getItem("providerToken") || localStorage.getItem("token");
+function safeJsonParse(s) {
+  try {
+    return JSON.parse(s);
+  } catch {
+    return null;
+  }
+}
+
+function pickTokenFromObject(obj) {
+  if (!obj || typeof obj !== "object") return "";
   return (
-    localStorage.getItem("token") ||
-    localStorage.getItem("providerToken") ||
-    localStorage.getItem("clientToken")
+    obj.token ||
+    obj.accessToken ||
+    obj.access_token ||
+    obj.jwt ||
+    obj?.data?.token ||
+    ""
   );
 }
+
+function getTokenByRole(role) {
+  const r = String(role || "").toLowerCase();
+
+  const directKeysByRole = {
+    client: ["clientToken", "token", "adminToken"],
+    provider: ["providerToken", "token", "adminToken"],
+    admin: ["adminToken", "token"],
+  };
+
+  const directKeysAll = [
+    "token",
+    "adminToken",
+    "providerToken",
+    "clientToken",
+    "accessToken",
+    "jwt",
+    "authToken",
+  ];
+
+  const keys = directKeysByRole[r] || directKeysAll;
+
+  const pickFromStorage = (storage) => {
+    for (const k of keys) {
+      const v = storage.getItem(k);
+      if (v && String(v).trim()) return String(v).trim();
+    }
+    return "";
+  };
+
+  // 1) localStorage direct keys
+  let t = pickFromStorage(localStorage);
+  if (t) return t;
+
+  // 2) sessionStorage direct keys (иногда токен там)
+  t = pickFromStorage(sessionStorage);
+  if (t) return t;
+
+  // 3) JSON objects (auth/user/session/admin/profile)
+  const jsonKeys = ["auth", "user", "session", "admin", "profile"];
+  for (const k of jsonKeys) {
+    const raw = localStorage.getItem(k) || sessionStorage.getItem(k);
+    if (!raw) continue;
+    const obj = safeJsonParse(raw);
+    const tt = pickTokenFromObject(obj);
+    if (tt && String(tt).trim()) return String(tt).trim();
+  }
+
+  return "";
+}
+
 
 export function getAuthHeaders(role = null) {
   const token = getTokenByRole(role);
