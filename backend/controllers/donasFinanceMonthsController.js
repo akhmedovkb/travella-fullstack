@@ -3,6 +3,7 @@
 const db = require("../db");
 
 const SLUG = "donas-dosas";
+const MIN_YM_FLOOR = "2025-12";
 
 function toNum(x) {
   const n = Number(x);
@@ -614,11 +615,30 @@ async function syncMonths(req, res) {
       `
     );
 
-    const minYm = String(minQ.rows?.[0]?.ym || "");
-    const maxYm = String(maxQ.rows?.[0]?.ym || "");
+    const rawMinYm = String(minQ.rows?.[0]?.ym || "");
+    const rawMaxYm = String(maxQ.rows?.[0]?.ym || "");
+
+    let minYm = rawMinYm;
+    let maxYm = rawMaxYm;
 
     if (!isYm(minYm) || !isYm(maxYm) || minYm === "9999-12" || maxYm === "0000-01") {
       return res.json({ ok: true, synced: 0, range: null });
+    }
+
+    // ✅ SAFETY FLOOR: never generate months earlier than 2025-01
+    if (String(maxYm).localeCompare(String(MIN_YM_FLOOR)) < 0) {
+      await auditMonthAction(
+        req,
+        MIN_YM_FLOOR,
+        "months.sync",
+        { minYm: null, maxYm: null, touched: 0, floorYm: MIN_YM_FLOOR, rawMinYm, rawMaxYm, skipped: true },
+        {}
+      );
+      return res.json({ ok: true, synced: 0, range: null });
+    }
+
+    if (String(minYm).localeCompare(String(MIN_YM_FLOOR)) < 0) {
+      minYm = MIN_YM_FLOOR;
     }
 
     let ym = minYm;
@@ -632,7 +652,7 @@ async function syncMonths(req, res) {
 
     await recomputeCashChainFrom(minYm, maxYm);
 
-    await auditMonthAction(req, minYm, "months.sync", { minYm, maxYm, touched }, {});
+    await auditMonthAction(req, minYm, "months.sync", { minYm, maxYm, touched, floorYm: MIN_YM_FLOOR, rawMinYm, rawMaxYm }, {});
     return res.json({ ok: true, synced: touched, range: { minYm, maxYm } });
   } catch (e) {
     console.error("syncMonths error:", e);
