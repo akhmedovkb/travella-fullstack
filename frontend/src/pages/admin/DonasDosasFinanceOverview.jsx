@@ -66,18 +66,22 @@ export default function DonasDosasFinanceOverview() {
 
   async function saveSettings() {
     setSaving(true);
+    setError("");
     try {
       const payload = {
         currency: (settings?.currency || "UZS").toUpperCase(),
         owner_capital: toNum(settings?.owner_capital),
         bank_loan: toNum(settings?.bank_loan),
-        // loan_payment_month: toNum(settings?.loan_payment_month), пока убрали это поле
-        // cash_start на backend посчитается сам, но если ты хочешь “legacy” режим —
-        // можно оставить как есть. Мы не отправляем fixed/variable/reserve, чтобы не затирать их.
+        reserve_target_months: toNum(settings?.reserve_target_months || 0), // если хочешь оставить в БД
       };
-
+  
       const r = await apiPut("/api/admin/donas/finance/settings", payload, "admin");
       setSettings(r || null);
+  
+      // ✅ важно: backend пересчитал cash_end — обновим months сразу
+      const m = await apiGet("/api/admin/donas/finance/months", "admin");
+      const arr = Array.isArray(m) ? m : Array.isArray(m?.months) ? m.months : [];
+      setMonths(arr);
     } catch (e) {
       console.error("[FinanceOverview] saveSettings error:", e);
       setError(e?.message || "Failed to save");
@@ -96,7 +100,7 @@ export default function DonasDosasFinanceOverview() {
         <div className="text-sm text-gray-500">Admin</div>
         <div className="text-2xl font-bold">Dona’s Dosas — Finance</div>
         <div className="text-sm text-gray-500">
-          Overview: реальные итоги по Months (snapshots) + демо-сценарии через Cash Start / Loan Payment
+          Overview: реальные итоги по Months (snapshots) + демо-сценарии через Cash Start
         </div>
       </div>
 
@@ -200,7 +204,9 @@ export default function DonasDosasFinanceOverview() {
                     <td className="py-2 pr-4">{fmt(m.opex)}</td>
                     <td className="py-2 pr-4">{fmt(m.capex)}</td>
                     <td className="py-2 pr-4">{fmt(m.loan_paid)}</td>
-                    <td className="py-2 pr-4">{fmt(m.cash_flow)}</td>
+                    <td className="py-2 pr-4">
+                      {fmt(toNum(m.revenue) - toNum(m.cogs) - toNum(m.opex) - toNum(m.capex) - toNum(m.loan_paid))}
+                    </td>
                     <td className="py-2 pr-4 font-semibold">{fmt(m.cash_end)}</td>
                     <td className="py-2 pr-4">{String(m.notes || "")}</td>
                   </tr>
