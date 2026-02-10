@@ -226,25 +226,39 @@ export default function DonasInvestor() {
     };
   }, [rows, settings, last]);
 
-  async function generatePublicLink() {
-    setBusy(true);
-    try {
-      const payload = {
-        from: ymStr(fromYm),
-        to: ymStr(toYm),
-        ttl_hours: clamp(ttlHours, 1, 24 * 365),
-      };
-      const r = await apiPost("/api/admin/donas/finance/investor/public-token", payload, "admin");
-      const token = r?.token || r?.public_token || r?.id || "";
-      const base =
-        (typeof window !== "undefined" && window.location ? window.location.origin : "") ||
-        "";
-      const link = token ? `${base}/admin/donas-dosas/finance/investor/public/${token}` : "";
-      setPublicLink(link);
-    } finally {
-      setBusy(false);
-    }
+async function generatePublicLink() {
+  setBusy(true);
+  try {
+    const payload = {
+      // backend ждёт ISO-даты, поэтому добавляем "-01"
+      from: `${ymStr(fromYm)}-01`,
+      to: `${ymStr(toYm)}-01`,
+      ttl_hours: clamp(ttlHours, 1, 24 * 60), // до 60 дней (как в backend)
+      slug: "donas-dosas",
+    };
+
+    // ✅ правильный endpoint в твоём backend
+    const r = await apiPost("/api/admin/donas/share-token", payload, "admin");
+
+    const token = r?.token || "";
+    const base =
+      (typeof window !== "undefined" && window.location ? window.location.origin : "") || "";
+
+    // backend уже может вернуть готовую ссылку (url)
+    const link = r?.url
+      ? r.url
+      : token
+      ? `${base}/public/donas/investor?t=${encodeURIComponent(token)}`
+      : "";
+
+    setPublicLink(link);
+  } catch (e) {
+    console.error("[DonasInvestor] generate link error:", e);
+    setError(e?.message || "Не удалось сгенерировать ссылку");
+  } finally {
+    setBusy(false);
   }
+}
 
   return (
     <div className="space-y-6">
