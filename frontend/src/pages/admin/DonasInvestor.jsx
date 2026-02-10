@@ -1,7 +1,7 @@
 // frontend/src/pages/admin/DonasInvestor.jsx
 import { useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost } from "../../api";
-import { toast } from "../../shared/toast";
+import { tSuccess, tError } from "../../shared/toast";
 
 function toNum(x) {
   const n = Number(x);
@@ -76,11 +76,11 @@ export default function DonasInvestor() {
         url || `${window.location.origin}/public/donas/investor?t=${encodeURIComponent(token)}`
       );
 
-      toast.success("Ссылка сгенерирована");
+      tSuccess("Ссылка сгенерирована");
     } catch (e) {
       console.error("generatePublicLink error:", e);
       setError("Не удалось сгенерировать ссылку");
-      toast.error("Не удалось сгенерировать ссылку");
+      tError("Не удалось сгенерировать ссылку");
     } finally {
       setBusy(false);
     }
