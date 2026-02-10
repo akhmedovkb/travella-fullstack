@@ -722,6 +722,7 @@ async function syncMonths(req, res) {
     let minYm = rawMinYm;
     let maxYm = rawMaxYm;
 
+    // нет данных
     if (!isYm(minYm) || !isYm(maxYm) || minYm === "9999-12" || maxYm === "0000-01") {
       return res.json({ ok: true, synced: 0, range: null });
     }
@@ -732,7 +733,15 @@ async function syncMonths(req, res) {
         req,
         MIN_YM_FLOOR,
         "months.sync",
-        { minYm: null, maxYm: null, touched: 0, floorYm: MIN_YM_FLOOR, rawMinYm, rawMaxYm, skipped: true },
+        {
+          minYm: null,
+          maxYm: null,
+          touched: 0,
+          floorYm: MIN_YM_FLOOR,
+          rawMinYm,
+          rawMaxYm,
+          skipped: true,
+        },
         {}
       );
       return res.json({ ok: true, synced: 0, range: null });
@@ -742,6 +751,7 @@ async function syncMonths(req, res) {
       minYm = MIN_YM_FLOOR;
     }
 
+    // 1) ensure + agg snapshot по диапазону данных
     let ym = minYm;
     let touched = 0;
     while (String(ym).localeCompare(String(maxYm)) <= 0) {
@@ -751,22 +761,33 @@ async function syncMonths(req, res) {
       ym = nextYm(ym);
     }
 
-        // ✅ пересчитать цепочку по фактическим месяцам в таблице
+    // 2) ✅ пересчитать cash_end цепочку по ФАКТИЧЕСКИМ месяцам в таблице (а не по Date)
     const mm = await db.query(
-      `SELECT MIN(month) AS minm, MAX(month) AS maxm
-       FROM donas_finance_months
-       WHERE slug=$1`,
+      `
+      SELECT
+        to_char(MIN(month),'YYYY-MM') AS minym,
+        to_char(MAX(month),'YYYY-MM') AS maxym
+      FROM donas_finance_months
+      WHERE slug=$1
+      `,
       [SLUG]
     );
-    
-    const minm = mm.rows?.[0]?.minm;
-    const maxm = mm.rows?.[0]?.maxm;
-    
-    if (minm && maxm) {
-      await recomputeCashChainFrom(monthToYm(minm), monthToYm(maxm));
+
+    const startYm = String(mm.rows?.[0]?.minym || "");
+    const endYm = String(mm.rows?.[0]?.maxym || "");
+
+    if (isYm(startYm) && isYm(endYm)) {
+      await recomputeCashChainFrom(startYm, endYm);
     }
 
-    await auditMonthAction(req, minYm, "months.sync", { minYm, maxYm, touched, floorYm: MIN_YM_FLOOR, rawMinYm, rawMaxYm }, {});
+    await auditMonthAction(
+      req,
+      minYm,
+      "months.sync",
+      { minYm, maxYm, touched, floorYm: MIN_YM_FLOOR, rawMinYm, rawMaxYm },
+      {}
+    );
+
     return res.json({ ok: true, synced: touched, range: { minYm, maxYm } });
   } catch (e) {
     console.error("syncMonths error:", e);
