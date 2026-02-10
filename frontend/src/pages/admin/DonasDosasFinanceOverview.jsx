@@ -6,47 +6,38 @@ function toNum(x) {
   const n = Number(x);
   return Number.isFinite(n) ? n : 0;
 }
-
 function fmt(n) {
   const v = Math.round(toNum(n));
   return v.toLocaleString("ru-RU");
 }
-
-function Kpi({ title, value }) {
-  return (
-    <div className="rounded-2xl border bg-white px-4 py-3 shadow-sm">
-      <div className="text-xs text-gray-500">{title}</div>
-      <div className="text-xl font-semibold">{value}</div>
-    </div>
-  );
-}
-
 function ymFromDateLike(x) {
   const s = String(x || "");
   if (!s) return "";
   if (/^\d{4}-\d{2}/.test(s)) return s.slice(0, 7);
-  return "";
+  return s;
 }
 
 export default function DonasDosasFinanceOverview() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   const [settings, setSettings] = useState(null);
   const [months, setMonths] = useState([]);
 
-  const currency = (settings?.currency || "UZS").toUpperCase();
-
   async function load() {
     setLoading(true);
+    setError("");
     try {
-      const s = await apiGet("/api/admin/donas/finance/settings");
+      const s = await apiGet("/api/admin/donas/finance/settings", "admin");
       setSettings(s || null);
 
-      const ms = await apiGet("/api/admin/donas/finance/months");
-      // backend returns { months: [...] }
-      const arr = Array.isArray(ms) ? ms : Array.isArray(ms?.months) ? ms.months : [];
+      const m = await apiGet("/api/admin/donas/finance/months", "admin");
+      const arr = Array.isArray(m) ? m : Array.isArray(m?.months) ? m.months : [];
       setMonths(arr);
+    } catch (e) {
+      console.error("[FinanceOverview] load error:", e);
+      setError(e?.message || "Failed to load");
     } finally {
       setLoading(false);
     }
@@ -57,24 +48,20 @@ export default function DonasDosasFinanceOverview() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const kpis = useMemo(() => {
-    if (!months?.length) return null;
-    const last = months[months.length - 1] || {};
-    const revenue = toNum(last.revenue);
-    const cogs = toNum(last.cogs);
-    const opex = toNum(last.opex);
-    const cash_end = toNum(last.cash_end);
+  const currency = String(settings?.currency || "UZS").toUpperCase();
 
-    const gross = revenue - cogs;
-    const netOp = gross - opex;
+  const cashStartComputed = useMemo(() => {
+    const owner = toNum(settings?.owner_capital);
+    const bank = toNum(settings?.bank_loan);
+    // если оба 0, но в базе уже есть cash_start — показываем его (не ломаем старые данные)
+    const legacy = toNum(settings?.cash_start);
+    return owner || bank ? owner + bank : legacy;
+  }, [settings]);
 
-    return {
-      revenue,
-      gross,
-      opex,
-      netOp,
-      cash_end,
-    };
+  const lastRows = useMemo(() => {
+    const arr = Array.isArray(months) ? [...months] : [];
+    arr.sort((a, b) => String(a.month).localeCompare(String(b.month)));
+    return arr.slice(Math.max(0, arr.length - 6));
   }, [months]);
 
   async function saveSettings() {
@@ -82,60 +69,56 @@ export default function DonasDosasFinanceOverview() {
     try {
       const payload = {
         currency: (settings?.currency || "UZS").toUpperCase(),
-        cash_start: toNum(settings?.cash_start),
-        reserve_target_months: toNum(settings?.reserve_target_months),
-        fixed_opex_month: toNum(settings?.fixed_opex_month),
-        variable_opex_month: toNum(settings?.variable_opex_month),
+        owner_capital: toNum(settings?.owner_capital),
+        bank_loan: toNum(settings?.bank_loan),
         loan_payment_month: toNum(settings?.loan_payment_month),
+        // cash_start на backend посчитается сам, но если ты хочешь “legacy” режим —
+        // можно оставить как есть. Мы не отправляем fixed/variable/reserve, чтобы не затирать их.
       };
-      await apiPut("/api/admin/donas/finance/settings", payload);
-      await load();
+
+      const r = await apiPut("/api/admin/donas/finance/settings", payload, "admin");
+      setSettings(r || null);
+    } catch (e) {
+      console.error("[FinanceOverview] saveSettings error:", e);
+      setError(e?.message || "Failed to save");
     } finally {
       setSaving(false);
     }
   }
 
-  const lastRows = useMemo(() => {
-    const a = Array.isArray(months) ? months : [];
-    return a.slice(Math.max(0, a.length - 4));
-  }, [months]);
-
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="text-sm text-gray-500">Admin</div>
-          <div className="text-2xl font-bold">Dona’s Dosas — Finance</div>
+      {error ? (
+        <div className="rounded-2xl border bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+      ) : null}
+
+      <div>
+        <div className="text-sm text-gray-500">Admin</div>
+        <div className="text-2xl font-bold">Dona’s Dosas — Finance</div>
+        <div className="text-sm text-gray-500">
+          Overview: реальные итоги по Months (snapshots) + демо-сценарии через Cash Start / Loan Payment
         </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-5">
-        <Kpi title="Revenue (last)" value={kpis ? fmt(kpis.revenue) : "—"} />
-        <Kpi title="Gross Profit" value={kpis ? fmt(kpis.gross) : "—"} />
-        <Kpi title="OPEX" value={kpis ? fmt(kpis.opex) : "—"} />
-        <Kpi title="EBITDA (Net Op)" value={kpis ? fmt(kpis.netOp) : "—"} />
-        <Kpi title="Cash end" value={kpis ? fmt(kpis.cash_end) : "—"} />
-      </div>
-
+      {/* Settings */}
       <div className="rounded-2xl border bg-white p-5 shadow-sm">
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex items-center justify-between">
           <div>
             <div className="text-lg font-semibold">Settings</div>
             <div className="text-sm text-gray-500">
-              Эти значения используются для подсказок/план-фрейма. Месяцы (revenue/cogs/opex/capex) считаются автоматически
-              из Sales + Purchases. Ручное редактирование месяцев — во вкладке Months.
+              Cash Start = Owner capital + Bank loan. Это влияет на cash_end, runway и визуализацию для инвестора.
             </div>
           </div>
           <button
+            className="rounded-full bg-black px-4 py-2 text-sm text-white disabled:opacity-50"
             onClick={saveSettings}
             disabled={saving || loading}
-            className="rounded-full bg-black px-5 py-2 text-white disabled:opacity-50"
           >
             {saving ? "Saving..." : "Save"}
           </button>
         </div>
 
-        <div className="mt-4 grid gap-4 md:grid-cols-3">
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
           <div>
             <div className="text-xs text-gray-500">Currency</div>
             <input
@@ -144,50 +127,48 @@ export default function DonasDosasFinanceOverview() {
               onChange={(e) => setSettings((s) => ({ ...(s || {}), currency: e.target.value }))}
             />
           </div>
+
           <div>
-            <div className="text-xs text-gray-500">Cash start</div>
+            <div className="text-xs text-gray-500">Cash Start (Owner + Bank)</div>
             <input
-              className="mt-1 w-full rounded-xl border px-3 py-2"
-              value={settings?.cash_start ?? 0}
-              onChange={(e) => setSettings((s) => ({ ...(s || {}), cash_start: e.target.value }))}
-            />
-          </div>
-          <div>
-            <div className="text-xs text-gray-500">Reserve target (months)</div>
-            <input
-              className="mt-1 w-full rounded-xl border px-3 py-2"
-              value={settings?.reserve_target_months ?? 6}
-              onChange={(e) => setSettings((s) => ({ ...(s || {}), reserve_target_months: e.target.value }))}
+              className="mt-1 w-full rounded-xl border px-3 py-2 bg-gray-50"
+              value={cashStartComputed}
+              disabled
             />
           </div>
 
           <div>
-            <div className="text-xs text-gray-500">Fixed OPEX / month</div>
+            <div className="text-xs text-gray-500">Owner capital (added to Cash Start)</div>
             <input
               className="mt-1 w-full rounded-xl border px-3 py-2"
-              value={settings?.fixed_opex_month ?? 0}
-              onChange={(e) => setSettings((s) => ({ ...(s || {}), fixed_opex_month: e.target.value }))}
+              value={settings?.owner_capital ?? 0}
+              onChange={(e) => setSettings((s) => ({ ...(s || {}), owner_capital: e.target.value }))}
             />
           </div>
+
           <div>
-            <div className="text-xs text-gray-500">Variable OPEX / month</div>
+            <div className="text-xs text-gray-500">Bank loan (added to Cash Start)</div>
             <input
               className="mt-1 w-full rounded-xl border px-3 py-2"
-              value={settings?.variable_opex_month ?? 0}
-              onChange={(e) => setSettings((s) => ({ ...(s || {}), variable_opex_month: e.target.value }))}
+              value={settings?.bank_loan ?? 0}
+              onChange={(e) => setSettings((s) => ({ ...(s || {}), bank_loan: e.target.value }))}
             />
           </div>
+
           <div>
             <div className="text-xs text-gray-500">Loan payment / month</div>
             <input
               className="mt-1 w-full rounded-xl border px-3 py-2"
               value={settings?.loan_payment_month ?? 0}
-              onChange={(e) => setSettings((s) => ({ ...(s || {}), loan_payment_month: e.target.value }))}
+              onChange={(e) =>
+                setSettings((s) => ({ ...(s || {}), loan_payment_month: e.target.value }))
+              }
             />
           </div>
         </div>
       </div>
 
+      {/* Months preview */}
       <div className="rounded-2xl border bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between">
           <div>
