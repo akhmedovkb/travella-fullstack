@@ -29,6 +29,7 @@ export default function DonasDosasFinanceOverview() {
     setLoading(true);
     setError("");
     try {
+      const ts = Date.now();
       const s = await apiGet("/api/admin/donas/finance/settings", "admin");
       setSettings(s || null);
 
