@@ -495,156 +495,88 @@ app.post("/api/admin/donas/share-token", authenticateToken, async (req, res) => 
 });
 
 /**
- * PUBLIC: summary-range по share-token (без key)
+ * PUBLIC: Investor months by share-token (read-only)
  * GET /api/public/donas/summary-range-token?t=TOKEN
- * Возвращает тот же формат, что /api/public/donas/summary-range
+ *
+ * Возвращает формат:
+ * { ok, meta, settings, months }
+ * где months = строки из donas_finance_months (snapshots)
  */
 app.get("/api/public/donas/summary-range-token", async (req, res) => {
   try {
-    const t = String(req.query.t || "");
+    const t = String(req.query.t || "").trim();
     const v = verifyShareToken(t);
     if (!v.ok) return res.status(401).json({ error: "Unauthorized", reason: v.error });
 
-    const months = Math.max(1, Math.min(60, Number(v.payload.months || 12)));
-    const endYM = String(v.payload.end || "").trim();
-    const endDate = ymToFirstDay(endYM);
-    if (!endDate) return res.status(400).json({ error: "Invalid end (use YYYY-MM)" });
+    const monthsCount = Math.max(1, Math.min(60, Number(v.payload.months || 12)));
+    const endYM = String(v.payload.end || "").trim(); // YYYY-MM
+    if (!/^\d{4}-\d{2}$/.test(endYM)) {
+      return res.status(400).json({ error: "Invalid end (use YYYY-MM)" });
+    }
+
     const SLUG = "donas-dosas";
 
-    // settings как в summary-range
+    function ymToFirstDay(ym) {
+      if (!/^\d{4}-\d{2}$/.test(String(ym || ""))) return null;
+      return `${ym}-01`;
+    }
+
+    function addMonths(ym, delta) {
+      const [Y, M] = String(ym).split("-").map((x) => Number(x));
+      if (!Y || !M) return null;
+      const d = new Date(Date.UTC(Y, M - 1, 1));
+      d.setUTCMonth(d.getUTCMonth() + Number(delta || 0));
+      const y = d.getUTCFullYear();
+      const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+      return `${y}-${m}`;
+    }
+
+    const toYM = endYM;
+    const fromYM = addMonths(endYM, -(monthsCount - 1));
+    const fromDate = ymToFirstDay(fromYM);
+    const toDate = ymToFirstDay(toYM);
+    if (!fromDate || !toDate) return res.status(400).json({ error: "Bad range" });
+
+    // settings (slug-specific) — важно: по slug, а не "первую строку"
     const settingsQ = await pool.query(
-      `select * from donas_finance_settings order by id asc limit 1`
-    );
-    const s = settingsQ.rows[0] || {};
-    const currency = String(s.currency || "UZS");
-
-    const fixedOpex = Number(s.fixed_opex_month || 0);
-    const variableOpex = Number(s.variable_opex_month || 0);
-    const loan = Number(s.loan_payment_month || 0);
-
-    // тот же SQL, что в /api/public/donas/summary-range
-    const q = await pool.query(
-      `
-      WITH params AS (
-        SELECT
-          date_trunc('month', $1::date) AS end_month,
-          date_trunc('month', $1::date) - (($2::int - 1) || ' months')::interval AS start_month
-      ),
-      months AS (
-        SELECT generate_series(
-          (SELECT start_month FROM params),
-          (SELECT end_month FROM params),
-          interval '1 month'
-        )::date AS month
-      ),
-      shifts AS (
-        SELECT
-          date_trunc('month', date)::date AS month,
-          coalesce(sum(revenue),0)::numeric AS revenue,
-          coalesce(sum(total_pay),0)::numeric AS payroll
-        FROM donas_shifts
-        WHERE date >= (SELECT start_month FROM params)
-          AND date <  (SELECT end_month FROM params) + interval '1 month'
-        GROUP BY 1
-      ),
-      cogs AS (
-        SELECT
-          date_trunc('month', date)::date AS month,
-          coalesce(sum(total),0)::numeric AS cogs
-        FROM donas_purchases
-        WHERE type='purchase'
-          AND slug=$3
-          AND date >= (SELECT start_month FROM params)
-          AND date <  (SELECT end_month FROM params) + interval '1 month'
-        GROUP BY 1
-      ),
-      expenses AS (
-        SELECT
-          date_trunc('month', date)::date AS month,
-          coalesce(sum(case when kind='opex' then amount else 0 end),0)::numeric AS opex_extra,
-          coalesce(sum(case when kind='capex' then amount else 0 end),0)::numeric AS capex
-        FROM donas_expenses
-        WHERE slug=$3
-          AND date >= (SELECT start_month FROM params)
-          AND date <  (SELECT end_month FROM params) + interval '1 month'
-        GROUP BY 1
-      )
-      SELECT
-        to_char(m.month,'YYYY-MM') AS month,
-        coalesce(s.revenue,0) AS revenue,
-        coalesce(c.cogs,0) AS cogs,
-        coalesce(s.payroll,0) AS payroll,
-        coalesce(e.opex_extra,0) AS opex_extra,
-        coalesce(e.capex,0) AS capex
-      FROM months m
-      LEFT JOIN shifts s ON s.month = m.month
-      LEFT JOIN cogs c ON c.month = m.month
-      LEFT JOIN expenses e ON e.month = m.month
-      ORDER BY m.month;
-      `,
-      [endDate, months, SLUG]
+      `SELECT * FROM donas_finance_settings WHERE slug=$1 LIMIT 1`,
+      [SLUG]
     );
 
-    const monthsRows = q.rows || [];
-
-    let tRevenue = 0, tCogs = 0, tPayroll = 0, tOpex = 0, tOpexExtra = 0, tCapex = 0, tNetOperating = 0, tCashFlow = 0;
-    const dscrValues = [];
-
-    const outMonths = monthsRows.map((r) => {
-      const R = Number(r.revenue || 0);
-      const C = Number(r.cogs || 0);
-      const payroll = Number(r.payroll || 0);
-      const opexExtra = Number(r.opex_extra || 0);
-      const capex = Number(r.capex || 0);
-      const opex = fixedOpex + variableOpex + payroll + opexExtra;
-      const netOperating = R - C - opex;
-      const cashFlow = netOperating - loan - capex;
-
-      const dscr = loan > 0 && netOperating > 0 ? netOperating / loan : null;
-
-      tRevenue += R; tCogs += C; tPayroll += payroll; tOpex += opex;
-      tOpexExtra += opexExtra; tCapex += capex;
-      tNetOperating += netOperating; tCashFlow += cashFlow;
-
-      if (dscr != null && Number.isFinite(dscr)) dscrValues.push(dscr);
-
-      return {
-        month: String(r.month),
-        revenue: Math.round(R),
-        cogs: Math.round(C),
-        payroll: Math.round(payroll),
-        fixedOpex: Math.round(fixedOpex),
-        variableOpex: Math.round(variableOpex),
-        opex: Math.round(opex),
-        opexExtra: Math.round(opexExtra),
-        capex: Math.round(capex),
-        loan: Math.round(loan),
-        netOperating: Math.round(netOperating),
-        cashFlow: Math.round(cashFlow),
-        dscr: dscr == null ? null : Number(dscr.toFixed(2)),
+    const settings =
+      settingsQ.rows?.[0] || {
+        slug: SLUG,
+        currency: "UZS",
+        cash_start: 0,
+        fixed_opex_month: 0,
+        variable_opex_month: 0,
+        loan_payment_month: 0,
+        reserve_target_months: 0,
       };
-    });
 
-    const fromYM = outMonths[0]?.month || null;
-    const toYM = outMonths[outMonths.length - 1]?.month || null;
-
-    const avgDscr = dscrValues.length ? dscrValues.reduce((a, b) => a + b, 0) / dscrValues.length : null;
-    const minDscr = dscrValues.length ? Math.min(...dscrValues) : null;
+    // months snapshots (slug-specific)
+    const mQ = await pool.query(
+      `
+      SELECT month, revenue, cogs, opex, capex, loan_paid, cash_end, notes
+      FROM donas_finance_months
+      WHERE slug=$1
+        AND month >= ($2)::date
+        AND month <= ($3)::date
+      ORDER BY month ASC
+      `,
+      [SLUG, fromDate, toDate]
+    );
 
     return res.json({
-      meta: { from: fromYM, to: toYM, months, currency },
-      months: outMonths,
-      totals: {
-        revenue: Math.round(tRevenue),
-        cogs: Math.round(tCogs),
-        payroll: Math.round(tPayroll),
-        opex: Math.round(tOpex),
-        loan: Math.round(loan * months),
-        netOperating: Math.round(tNetOperating),
-        cashFlow: Math.round(tCashFlow),
-        avgDscr: avgDscr == null ? null : Number(avgDscr.toFixed(2)),
-        minDscr: minDscr == null ? null : Number(minDscr.toFixed(2)),
+      ok: true,
+      meta: {
+        from: fromYM,
+        to: toYM,
+        months: monthsCount,
+        currency: String(settings?.currency || "UZS"),
       },
+      settings,
+      months: mQ.rows || [],
     });
   } catch (e) {
     console.error("GET /api/public/donas/summary-range-token error:", e);
