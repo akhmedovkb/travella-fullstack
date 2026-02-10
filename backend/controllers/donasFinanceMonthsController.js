@@ -16,7 +16,12 @@ function ymToMonthDate(ym) {
   return `${ym}-01`;
 }
 function monthToYm(m) {
-  return String(m || "").slice(0, 7);
+  if (!m) return "";
+  if (m instanceof Date) return m.toISOString().slice(0, 7);
+  const s = String(m);
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 7);
+  if (/^\d{4}-\d{2}$/.test(s)) return s;
+  return "";
 }
 function hasLockedTag(notes) {
   return String(notes || "").toLowerCase().includes("#locked");
