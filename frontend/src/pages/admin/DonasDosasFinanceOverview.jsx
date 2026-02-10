@@ -71,7 +71,7 @@ export default function DonasDosasFinanceOverview() {
         currency: (settings?.currency || "UZS").toUpperCase(),
         owner_capital: toNum(settings?.owner_capital),
         bank_loan: toNum(settings?.bank_loan),
-        loan_payment_month: toNum(settings?.loan_payment_month),
+        // loan_payment_month: toNum(settings?.loan_payment_month), пока убрали это поле
         // cash_start на backend посчитается сам, но если ты хочешь “legacy” режим —
         // можно оставить как есть. Мы не отправляем fixed/variable/reserve, чтобы не затирать их.
       };
@@ -152,17 +152,6 @@ export default function DonasDosasFinanceOverview() {
               className="mt-1 w-full rounded-xl border px-3 py-2"
               value={settings?.bank_loan ?? 0}
               onChange={(e) => setSettings((s) => ({ ...(s || {}), bank_loan: e.target.value }))}
-            />
-          </div>
-
-          <div>
-            <div className="text-xs text-gray-500">Loan payment / month</div>
-            <input
-              className="mt-1 w-full rounded-xl border px-3 py-2"
-              value={settings?.loan_payment_month ?? 0}
-              onChange={(e) =>
-                setSettings((s) => ({ ...(s || {}), loan_payment_month: e.target.value }))
-              }
             />
           </div>
         </div>
