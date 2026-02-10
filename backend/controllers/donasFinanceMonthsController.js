@@ -540,69 +540,61 @@ async function getSettings(req, res) {
 async function updateSettings(req, res) {
   try {
     await ensureSettingsTable();
+    await ensureMonthsTable();
+
     const b = req.body || {};
+    const currency = String(b.currency || "UZS").trim() || "UZS";
 
-    const prevQ = await db.query(`SELECT * FROM donas_finance_settings WHERE slug=$1 LIMIT 1`, [SLUG]);
-    const prev = prevQ.rows?.[0] || null;
-
-    const has = (k) => Object.prototype.hasOwnProperty.call(b, k);
-
-    const currency = has("currency")
-      ? (String(b.currency || "UZS").trim() || "UZS")
-      : (String(prev?.currency || "UZS").trim() || "UZS");
-
-    // split parts
-    const owner_capital = has("owner_capital") ? toNum(b.owner_capital) : toNum(prev?.owner_capital);
-    const bank_loan = has("bank_loan") ? toNum(b.bank_loan) : toNum(prev?.bank_loan);
-
-    // cash_start:
-    // - if owner_capital/bank_loan provided (at least one) -> recompute sum
-    // - else keep previous cash_start, unless explicit cash_start provided
-    const hasParts = has("owner_capital") || has("bank_loan");
-    const cash_start = hasParts
-      ? owner_capital + bank_loan
-      : (has("cash_start") ? toNum(b.cash_start) : toNum(prev?.cash_start));
-
-    // keep old fields unless explicitly provided
-    const fixed_opex_month = has("fixed_opex_month") ? toNum(b.fixed_opex_month) : toNum(prev?.fixed_opex_month);
-    const variable_opex_month = has("variable_opex_month") ? toNum(b.variable_opex_month) : toNum(prev?.variable_opex_month);
-    const loan_payment_month = has("loan_payment_month") ? toNum(b.loan_payment_month) : toNum(prev?.loan_payment_month);
-    const reserve_target_months = has("reserve_target_months") ? toNum(b.reserve_target_months) : toNum(prev?.reserve_target_months);
-
-    const up = await db.query(
+    // ⚠️ Loan payment из Settings больше не используем для расчётов months,
+    // но колонку в БД не трогаем (чтобы ничего не ломать).
+    const q = await db.query(
       `
       INSERT INTO donas_finance_settings
-        (slug, currency, cash_start, owner_capital, bank_loan, fixed_opex_month, variable_opex_month, loan_payment_month, reserve_target_months)
+        (slug, currency, cash_start, fixed_opex_month, variable_opex_month, loan_payment_month, reserve_target_months)
       VALUES
-        ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-      ON CONFLICT (slug) DO UPDATE SET
-        currency = EXCLUDED.currency,
-        cash_start = EXCLUDED.cash_start,
-        owner_capital = EXCLUDED.owner_capital,
-        bank_loan = EXCLUDED.bank_loan,
-        fixed_opex_month = EXCLUDED.fixed_opex_month,
-        variable_opex_month = EXCLUDED.variable_opex_month,
-        loan_payment_month = EXCLUDED.loan_payment_month,
-        reserve_target_months = EXCLUDED.reserve_target_months
+        ($1,$2,$3,$4,$5,$6,$7)
+      ON CONFLICT (slug)
+      DO UPDATE SET
+        currency=EXCLUDED.currency,
+        cash_start=EXCLUDED.cash_start,
+        fixed_opex_month=EXCLUDED.fixed_opex_month,
+        variable_opex_month=EXCLUDED.variable_opex_month,
+        loan_payment_month=EXCLUDED.loan_payment_month,
+        reserve_target_months=EXCLUDED.reserve_target_months
       RETURNING *
       `,
       [
         SLUG,
         currency,
-        cash_start,
-        owner_capital,
-        bank_loan,
-        fixed_opex_month,
-        variable_opex_month,
-        loan_payment_month,
-        reserve_target_months,
+        toNum(b.cash_start),
+        toNum(b.fixed_opex_month),
+        toNum(b.variable_opex_month),
+        toNum(b.loan_payment_month), // оставляем в БД, но UI уберём
+        toNum(b.reserve_target_months),
       ]
     );
 
-    return res.json(up.rows[0]);
+    // ✅ ВАЖНО: сразу пересчитываем cash_end по цепочке месяцев
+    const mm = await db.query(
+      `SELECT MIN(month) AS minm, MAX(month) AS maxm
+       FROM donas_finance_months
+       WHERE slug=$1`,
+      [SLUG]
+    );
+
+    const minm = mm.rows?.[0]?.minm;
+    const maxm = mm.rows?.[0]?.maxm;
+
+    if (minm && maxm) {
+      const startYm = monthToYm(minm);
+      const endYm = monthToYm(maxm);
+      await recomputeCashChainFrom(startYm, endYm);
+    }
+
+    return res.json(q.rows[0]);
   } catch (e) {
-    console.error("[donasFinance] updateSettings error:", e);
-    return res.status(500).json({ error: "Failed" });
+    console.error("updateSettings error:", e);
+    return res.status(500).json({ error: "Failed to save settings" });
   }
 }
 
