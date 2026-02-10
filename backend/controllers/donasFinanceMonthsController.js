@@ -479,6 +479,25 @@ async function updateMonthAggSnapshot(ym) {
  * If no prev month row — start from settings.cash_start
  * Locked month: keep its cash_end and continue from it.
  */
+
+function isDummyPrevMonthRow(row) {
+  if (!row) return false;
+  if (hasLockedTag(row.notes)) return false;
+
+  const notes = String(row.notes || "").trim();
+
+  // "пустышка" = всё ноль + пустые notes + cash_end=0
+  return (
+    toNum(row.revenue) === 0 &&
+    toNum(row.cogs) === 0 &&
+    toNum(row.opex) === 0 &&
+    toNum(row.capex) === 0 &&
+    toNum(row.loan_paid) === 0 &&
+    toNum(row.cash_end) === 0 &&
+    notes === ""
+  );
+}
+
 async function recomputeCashChainFrom(startYm, endYm) {
   if (!isYm(endYm)) return;
   if (!isYm(startYm)) startYm = endYm;
@@ -491,10 +510,14 @@ async function recomputeCashChainFrom(startYm, endYm) {
   }
 
   const prevRow = await getLatestMonthRow(prevYm(startYm));
+  
   const prevCash =
-    prevRow && prevRow.cash_end != null ? toNum(prevRow.cash_end) : await getCashStartFromSettings();
-
+    !prevRow || isDummyPrevMonthRow(prevRow)
+      ? await getCashStartFromSettings()
+      : toNum(prevRow.cash_end);
+  
   let running = prevCash;
+
 
   ym = startYm;
   while (String(ym).localeCompare(String(endYm)) <= 0) {
