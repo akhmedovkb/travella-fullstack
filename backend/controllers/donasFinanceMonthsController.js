@@ -641,22 +641,21 @@ async function updateSettings(req, res) {
     );
 
     // ✅ пересчитываем cash_end по цепочке месяцев (если months есть)
-    const mm = await db.query(
-      `SELECT MIN(month) AS minm, MAX(month) AS maxm
-       FROM donas_finance_months
-       WHERE slug=$1`,
-      [SLUG]
-    );
-
-    const minm = mm.rows?.[0]?.minm;
-    const maxm = mm.rows?.[0]?.maxm;
-
-    if (minm && maxm) {
-      const startYm = monthToYm(minm);
-      const endYm = monthToYm(maxm);
-      await recomputeCashChainFrom(startYm, endYm);
-    }
-
+  const mm = await db.query(
+    `SELECT
+       to_char(MIN(month),'YYYY-MM') AS minym,
+       to_char(MAX(month),'YYYY-MM') AS maxym
+     FROM donas_finance_months
+     WHERE slug=$1`,
+    [SLUG]
+  );
+  
+  const startYm = String(mm.rows?.[0]?.minym || "");
+  const endYm = String(mm.rows?.[0]?.maxym || "");
+  
+  if (isYm(startYm) && isYm(endYm)) {
+    await recomputeCashChainFrom(startYm, endYm);
+  }
     return res.json(q.rows[0]);
   } catch (e) {
     console.error("updateSettings error:", e);
