@@ -81,6 +81,44 @@ export default function DonasDosasInventory() {
   const [pLines, setPLines] = useState([]);
   const [pBusy, setPBusy] = useState(false);
 
+  // Ledger
+  const [lLoading, setLLoading] = useState(false);
+  const [lError, setLError] = useState("");
+  const [ledger, setLedger] = useState([]);
+  const [lItemId, setLItemId] = useState("");
+  const [lOffset, setLOffset] = useState(0);
+  const [lLimit] = useState(50);
+  const [lHasMore, setLHasMore] = useState(true);
+
+  async function loadLedgerPage(offset, { append, itemId } = {}) {
+    setLLoading(true);
+    setLError("");
+  
+    try {
+      const qs = new URLSearchParams({
+        limit: String(lLimit),
+        offset: String(offset),
+      });
+  
+      const effectiveItemId = itemId ?? lItemId;
+      if (effectiveItemId) qs.append("item_id", effectiveItemId);
+  
+      const r = await apiGet(`/api/admin/donas/inventory/ledger?${qs.toString()}`, "admin");
+      const arr = Array.isArray(r?.ledger) ? r.ledger : [];
+  
+      setLedger((prev) => (append ? prev.concat(arr) : arr));
+      setLOffset(offset);
+      setLHasMore(arr.length >= lLimit);
+    } catch (e) {
+      console.error(e);
+      setLError("Не удалось загрузить ledger");
+      if (!append) setLedger([]);
+      setLHasMore(false);
+    } finally {
+      setLLoading(false);
+    }
+  }
+
   async function loadStock() {
     setLoading(true);
     setError("");
@@ -124,6 +162,7 @@ export default function DonasDosasInventory() {
   async function refreshTab(nextTab = tab) {
     if (nextTab === "stock") return loadStock();
     if (nextTab === "purchases") return loadPurchasesPage(0, { append: false });
+    if (nextTab === "ledger") return loadLedgerPage(0, { append: false });
   }
 
   useEffect(() => {
@@ -280,6 +319,7 @@ export default function DonasDosasInventory() {
     const qty = toNum(mQty);
     if (!(qty > 0)) return tError("Укажи количество > 0");
     if (!isISODate(mDate)) return tError("Дата должна быть YYYY-MM-DD");
+    if (tab === "ledger") await loadLedgerPage(0, { append: false });
 
     setBusyId(item.id);
     try {
@@ -377,13 +417,20 @@ export default function DonasDosasInventory() {
         <div className="flex items-center gap-2">
           <TabBtn id="stock" label="Stock" />
           <TabBtn id="purchases" label="Purchases" />
+          <TabBtn id="ledger" label="Ledger" />
           <button
             type="button"
             onClick={() => refreshTab(tab)}
             className="px-3 py-2 rounded-xl border bg-white text-gray-800 hover:bg-gray-50"
-            disabled={tab === "stock" ? loading : pLoading}
+            disabled={tab === "stock" ? loading : tab === "purchases" ? pLoading : lLoading}
           >
-            {tab === "stock" ? (loading ? "Обновляю…" : "Обновить") : pLoading ? "Обновляю…" : "Обновить"}
+            {tab === "stock"
+              ? (loading ? "Обновляю…" : "Обновить")
+              : tab === "purchases"
+              ? (pLoading ? "Обновляю…" : "Обновить")
+              : (lLoading ? "Обновляю…" : "Обновить")
+            }
+
           </button>
         </div>
       </div>
@@ -833,6 +880,119 @@ export default function DonasDosasInventory() {
           )}
         </>
       )}
+      {tab === "ledger" && (
+  <>
+    <div className="flex items-center gap-3 mb-3">
+      <select
+        value={lItemId}
+        onChange={(e) => {
+          const v = e.target.value;
+          setLItemId(v);
+          loadLedgerPage(0, { append: false, itemId: v });
+        }}
+        className="px-3 py-2 rounded-xl border bg-white"
+      >
+        <option value="">Все позиции</option>
+        {items.map(it => (
+          <option key={it.id} value={it.id}>
+            {it.name}
+          </option>
+        ))}
+      </select>
+    </div>
+
+    {lError && (
+      <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700">
+        {lError}
+      </div>
+    )}
+
+    <div className="bg-white border rounded-2xl overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-sm">
+          <thead className="bg-gray-50 text-gray-700">
+            <tr>
+              <th className="p-3 text-left">Дата</th>
+              <th className="p-3 text-left">Item</th>
+              <th className="p-3 text-left">Type</th>
+              <th className="p-3 text-right">Qty</th>
+              <th className="p-3 text-left">Reason</th>
+              <th className="p-3 text-left">Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lLoading && ledger.length === 0 && (
+              <tr>
+                <td colSpan={6} className="p-4 text-gray-500">
+                  Загрузка…
+                </td>
+              </tr>
+            )}
+
+            {!lLoading && ledger.length === 0 && (
+              <tr>
+                <td colSpan={6} className="p-4 text-gray-500">
+                  Нет операций
+                </td>
+              </tr>
+            )}
+
+            {ledger.map(row => {
+              const isIn = row.direction === "in";
+
+              return (
+                <tr key={row.id} className="border-t">
+                  <td className="p-3">
+                    {String(row.created_at || "").slice(0, 10)}
+                  </td>
+
+                  <td className="p-3">
+                    {row.item_name || row.item_id}
+                  </td>
+
+                  <td className="p-3">
+                    <span className={`px-2 py-1 rounded-lg text-xs border ${
+                      isIn
+                        ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                        : "bg-rose-50 border-rose-200 text-rose-700"
+                    }`}>
+                      {isIn ? "IN" : "OUT"}
+                    </span>
+                  </td>
+
+                  <td className="p-3 text-right font-semibold">
+                    {isIn ? "+" : "-"}{fmtQty(row.qty)}
+                  </td>
+
+                  <td className="p-3">
+                    {row.reason || "—"}
+                  </td>
+
+                  <td className="p-3 max-w-[300px]">
+                    <div className="truncate">
+                      {row.notes || "—"}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="p-3 border-t flex justify-end gap-2">
+        <button
+          disabled={!lHasMore || lLoading}
+          onClick={() => loadLedgerPage(lOffset + lLimit, { append: true })}
+          className="px-3 py-2 rounded-xl border bg-white hover:bg-gray-50 disabled:opacity-60"
+        >
+          Показать ещё
+        </button>
+      </div>
+    </div>
+  </>
+)}
+
     </div>
   );
 }
