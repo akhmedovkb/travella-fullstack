@@ -438,6 +438,9 @@ export default function Header() {
                     {donasOpen && (
                       <div className="bg-black/20">
                         <DropdownItem to="/admin/donas-dosas/finance" label="Finance" icon={<IconDoc />} />
+                        <DropdownItem to="/admin/donas-dosas/inventory" label="Inventory" icon={<IconDoc />} />
+                        {/* позже включим */}
+                        {/* <DropdownItem to="/admin/donas-dosas/hr" label="HR" icon={<IconDoc />} /> */}
                         <DropdownItem to="/admin/donas-dosas/menu" label="Menu" icon={<IconDoc />} />
                       </div>
                     )}
