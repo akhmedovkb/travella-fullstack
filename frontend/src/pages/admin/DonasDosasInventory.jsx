@@ -19,10 +19,9 @@ function todayISO() {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-const REASONS = [
-  { value: "purchase", label: "Поступление (закупка)" },
+const REASONS_OUT = [
+  { value: "consume", label: "Списание (использовано/производство)" },
   { value: "waste", label: "Списание (порча/утиль)" },
-  { value: "production", label: "Производство (использовано)" },
   { value: "correction", label: "Корректировка" },
   { value: "other", label: "Другое" },
 ];
@@ -42,22 +41,25 @@ export default function DonasDosasInventory() {
   const [activeItem, setActiveItem] = useState(null);
 
   const [mQty, setMQty] = useState("");
-  const [mReason, setMReason] = useState("purchase");
+  const [mReasonOut, setMReasonOut] = useState("consume");
   const [mNote, setMNote] = useState("");
   const [mDate, setMDate] = useState(todayISO());
+
+  // для IN (закупка -> finance)
+  const [mFinanceType, setMFinanceType] = useState("opex"); // opex|capex
+  const [mVendor, setMVendor] = useState("");
+  const [mUnitPrice, setMUnitPrice] = useState("");
 
   async function load() {
     setLoading(true);
     setError("");
     try {
-      // ожидаем, что ингредиенты уже существуют (и inventory "живёт" на них)
-      // желательно, чтобы бэк отдавал stock_qty, stock_unit, stock_min
-      const list = await apiGet("/api/admin/donas/ingredients", "admin");
-      const arr = Array.isArray(list) ? list : list?.items || [];
+      const r = await apiGet("/api/admin/donas/inventory/stock", "admin");
+      const arr = Array.isArray(r?.stock) ? r.stock : [];
       setItems(arr);
     } catch (e) {
       console.error(e);
-      setError("Не удалось загрузить ингредиенты");
+      setError("Не удалось загрузить остатки");
       setItems([]);
     } finally {
       setLoading(false);
@@ -73,24 +75,19 @@ export default function DonasDosasInventory() {
     let arr = items.slice();
 
     if (s) {
-      arr = arr.filter((x) => {
-        const name = String(x.name || x.title || x.ingredient || "").toLowerCase();
-        const cat = String(x.category || "").toLowerCase();
-        return name.includes(s) || cat.includes(s);
-      });
+      arr = arr.filter((x) => String(x.name || "").toLowerCase().includes(s));
     }
 
     if (onlyLow) {
-      arr = arr.filter((x) => toNum(x.stock_qty) <= toNum(x.stock_min));
+      arr = arr.filter((x) => toNum(x.on_hand) <= toNum(x.min_qty));
     }
 
     // low first, then by name
     arr.sort((a, b) => {
-      const al = toNum(a.stock_qty) <= toNum(a.stock_min) ? 0 : 1;
-      const bl = toNum(b.stock_qty) <= toNum(b.stock_min) ? 0 : 1;
+      const al = toNum(a.on_hand) <= toNum(a.min_qty) ? 0 : 1;
+      const bl = toNum(b.on_hand) <= toNum(b.min_qty) ? 0 : 1;
       if (al !== bl) return al - bl;
-      const an = String(a.name || a.title || "").localeCompare(String(b.name || b.title || ""));
-      return an;
+      return String(a.name || "").localeCompare(String(b.name || ""));
     });
 
     return arr;
@@ -100,9 +97,12 @@ export default function DonasDosasInventory() {
     setActiveItem(item);
     setMode(nextMode);
     setMQty("");
-    setMReason(nextMode === "in" ? "purchase" : "production");
+    setMReasonOut("consume");
     setMNote("");
     setMDate(todayISO());
+    setMFinanceType("opex");
+    setMVendor("");
+    setMUnitPrice("");
     setModalOpen(true);
   }
 
@@ -111,52 +111,16 @@ export default function DonasDosasInventory() {
     setActiveItem(null);
   }
 
-  async function tryInventoryAdjust({ ingredient_id, delta, reason, note, date }) {
-    // 1) предпочитаем специализированный endpoint (если у тебя он уже есть/будет)
-    try {
-      return await apiPost("/api/admin/donas/inventory/adjust", { ingredient_id, delta, reason, note, date }, "admin");
-    } catch (e) {
-      // 2) fallback: просто правим stock_qty на ингредиенте
-      const item = items.find((x) => String(x.id) === String(ingredient_id));
-      if (!item) throw e;
-
-      const nextQty = toNum(item.stock_qty) + toNum(delta);
-      const patch = {
-        ...item,
-        stock_qty: nextQty,
-      };
-
-      // отправляем только то, что обычно есть у ингредиента, чтобы не сломать валидацию на бэке
-      const payload = {
-        name: item.name,
-        category: item.category ?? "",
-        unit: item.unit ?? item.stock_unit ?? "",
-        stock_qty: nextQty,
-        stock_min: item.stock_min ?? 0,
-        // если у тебя другие поля — бэк их просто проигнорит (если сделано аккуратно)
-      };
-
-      const updated = await apiPut(`/api/admin/donas/ingredients/${ingredient_id}`, payload, "admin");
-      return updated;
-    }
-  }
-
-  async function saveMinAndUnit(item, { stock_min, stock_unit }) {
+  async function saveMinAndUnit(item, { min_qty, unit }) {
     setBusyId(item.id);
     try {
       const payload = {
-        name: item.name,
-        category: item.category ?? "",
-        unit: item.unit ?? stock_unit ?? "",
-        stock_qty: toNum(item.stock_qty),
-        stock_min: toNum(stock_min),
-        stock_unit: stock_unit ?? item.stock_unit ?? item.unit ?? "",
+        min_qty: toNum(min_qty),
+        unit: String(unit || "").trim() || item.unit || "pcs",
       };
-      const updated = await apiPut(`/api/admin/donas/ingredients/${item.id}`, payload, "admin");
-
-      setItems((prev) =>
-        prev.map((x) => (String(x.id) === String(item.id) ? { ...x, ...(updated || payload) } : x))
-      );
+      const updated = await apiPut(`/api/admin/donas/inventory/items/${item.id}`, payload, "admin");
+      const next = updated?.item || payload;
+      setItems((prev) => prev.map((x) => (String(x.id) === String(item.id) ? { ...x, ...next } : x)));
       tSuccess("Сохранено");
     } catch (e) {
       console.error(e);
@@ -176,32 +140,52 @@ export default function DonasDosasInventory() {
       return;
     }
 
-    const delta = mode === "in" ? qty : -qty;
     setBusyId(item.id);
-
     try {
-      await tryInventoryAdjust({
-        ingredient_id: item.id,
-        delta,
-        reason: mReason,
-        note: mNote,
-        date: mDate,
-      });
+      if (mode === "in") {
+        // Приход оформляем как закупку (пишет в ledger + в donas_purchases для Months)
+        await apiPost(
+          "/api/admin/donas/inventory/purchases",
+          {
+            purchased_at: mDate,
+            finance_type: mFinanceType,
+            vendor: mVendor,
+            notes: mNote,
+            items: [
+              {
+                item_id: item.id,
+                qty,
+                unit_price: toNum(mUnitPrice),
+              },
+            ],
+          },
+          "admin"
+        );
+        tSuccess("Поступление учтено");
+      } else {
+        // Расход (не пишет в finance; это будет считаться через COGS/recipes)
+        await apiPost(
+          "/api/admin/donas/inventory/consume",
+          {
+            date: mDate,
+            reason: mReasonOut,
+            notes: mNote,
+            items: [{ item_id: item.id, qty }],
+          },
+          "admin"
+        );
+        tSuccess("Списание учтено");
+      }
 
-      // локально обновим (если endpoint вернул не список — всё равно актуализируем просто пересчётом)
-      setItems((prev) =>
-        prev.map((x) =>
-          String(x.id) === String(item.id)
-            ? { ...x, stock_qty: toNum(x.stock_qty) + delta }
-            : x
-        )
-      );
-
-      tSuccess(mode === "in" ? "Поступление учтено" : "Списание учтено");
       closeModal();
+      await load();
     } catch (e) {
       console.error(e);
-      tError("Не удалось выполнить операцию");
+      const msg =
+        e?.response?.data?.error ||
+        e?.message ||
+        (mode === "out" ? "Не удалось списать" : "Не удалось учесть поступление");
+      tError(msg);
     } finally {
       setBusyId(null);
     }
@@ -214,7 +198,7 @@ export default function DonasDosasInventory() {
           <div className="text-xs text-gray-500">Admin • Dona’s Dosas</div>
           <h1 className="text-2xl font-semibold">Inventory</h1>
           <div className="text-sm text-gray-600">
-            Остатки по ингредиентам (привязано к <span className="font-mono">donas_ingredients</span>)
+            Остатки (ledger) • <span className="font-mono">/api/admin/donas/inventory</span>
           </div>
         </div>
 
@@ -234,15 +218,11 @@ export default function DonasDosasInventory() {
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Поиск: ингредиент / категория…"
+          placeholder="Поиск: ингредиент…"
           className="w-full md:w-[420px] px-3 py-2 rounded-xl border bg-white"
         />
         <label className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border bg-white text-sm">
-          <input
-            type="checkbox"
-            checked={onlyLow}
-            onChange={(e) => setOnlyLow(e.target.checked)}
-          />
+          <input type="checkbox" checked={onlyLow} onChange={(e) => setOnlyLow(e.target.checked)} />
           Только ниже минимума
         </label>
 
@@ -252,9 +232,7 @@ export default function DonasDosasInventory() {
       </div>
 
       {error && (
-        <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700">
-          {error}
-        </div>
+        <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700">{error}</div>
       )}
 
       <div className="bg-white border rounded-2xl overflow-hidden">
@@ -263,7 +241,6 @@ export default function DonasDosasInventory() {
             <thead className="bg-gray-50 text-gray-700">
               <tr>
                 <th className="text-left p-3">Ингредиент</th>
-                <th className="text-left p-3">Категория</th>
                 <th className="text-left p-3">Ед.</th>
                 <th className="text-right p-3">Остаток</th>
                 <th className="text-right p-3">Мин.</th>
@@ -273,7 +250,7 @@ export default function DonasDosasInventory() {
             <tbody>
               {loading && (
                 <tr>
-                  <td className="p-4 text-gray-500" colSpan={6}>
+                  <td className="p-4 text-gray-500" colSpan={5}>
                     Загрузка…
                   </td>
                 </tr>
@@ -281,7 +258,7 @@ export default function DonasDosasInventory() {
 
               {!loading && filtered.length === 0 && (
                 <tr>
-                  <td className="p-4 text-gray-500" colSpan={6}>
+                  <td className="p-4 text-gray-500" colSpan={5}>
                     Ничего не найдено
                   </td>
                 </tr>
@@ -289,11 +266,10 @@ export default function DonasDosasInventory() {
 
               {!loading &&
                 filtered.map((it) => {
-                  const name = it.name || it.title || it.ingredient || `#${it.id}`;
-                  const cat = it.category || "—";
-                  const unit = it.stock_unit || it.unit || "—";
-                  const qty = toNum(it.stock_qty);
-                  const min = toNum(it.stock_min);
+                  const name = it.name || `#${it.id}`;
+                  const unit = it.unit || "pcs";
+                  const qty = toNum(it.on_hand);
+                  const min = toNum(it.min_qty);
                   const low = qty <= min;
 
                   return (
@@ -301,7 +277,6 @@ export default function DonasDosasInventory() {
                       key={it.id}
                       item={it}
                       name={name}
-                      cat={cat}
                       unit={unit}
                       qty={qty}
                       min={min}
@@ -327,11 +302,10 @@ export default function DonasDosasInventory() {
               <div className="text-xs text-gray-500">Inventory</div>
               <div className="text-lg font-semibold">
                 {mode === "in" ? "Поступление" : "Списание"} —{" "}
-                <span className="text-gray-800">{activeItem.name || activeItem.title}</span>
+                <span className="text-gray-800">{activeItem.name}</span>
               </div>
               <div className="text-sm text-gray-600">
-                Текущий остаток: <span className="font-semibold">{fmt(activeItem.stock_qty)}</span>{" "}
-                {activeItem.stock_unit || activeItem.unit || ""}
+                Текущий остаток: <span className="font-semibold">{fmt(activeItem.on_hand)}</span> {activeItem.unit}
               </div>
             </div>
 
@@ -358,26 +332,61 @@ export default function DonasDosasInventory() {
                       placeholder="Напр. 2.5"
                     />
                     <div className="px-3 py-2 rounded-xl border bg-gray-50 text-gray-700 whitespace-nowrap">
-                      {activeItem.stock_unit || activeItem.unit || "unit"}
+                      {activeItem.unit || "unit"}
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div>
-                <div className="text-xs text-gray-500 mb-1">Причина</div>
-                <select
-                  value={mReason}
-                  onChange={(e) => setMReason(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border bg-white"
-                >
-                  {REASONS.map((r) => (
-                    <option key={r.value} value={r.value}>
-                      {r.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {mode === "out" ? (
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">Причина</div>
+                  <select
+                    value={mReasonOut}
+                    onChange={(e) => setMReasonOut(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border bg-white"
+                  >
+                    {REASONS_OUT.map((r) => (
+                      <option key={r.value} value={r.value}>
+                        {r.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <div className="text-xs text-gray-500 mb-1">Тип (Finance)</div>
+                    <select
+                      value={mFinanceType}
+                      onChange={(e) => setMFinanceType(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border bg-white"
+                    >
+                      <option value="opex">OPEX</option>
+                      <option value="capex">CAPEX</option>
+                    </select>
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-500 mb-1">Цена за ед. (опц.)</div>
+                    <input
+                      inputMode="decimal"
+                      value={mUnitPrice}
+                      onChange={(e) => setMUnitPrice(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border"
+                      placeholder="0"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <div className="text-xs text-gray-500 mb-1">Поставщик (опц.)</div>
+                    <input
+                      value={mVendor}
+                      onChange={(e) => setMVendor(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border"
+                      placeholder="Напр: Makro / поставщик X"
+                    />
+                  </div>
+                </div>
+              )}
 
               <div>
                 <div className="text-xs text-gray-500 mb-1">Комментарий (опционально)</div>
@@ -386,7 +395,7 @@ export default function DonasDosasInventory() {
                   onChange={(e) => setMNote(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl border"
                   rows={3}
-                  placeholder="Напр: закупка у поставщика X, чек №…"
+                  placeholder={mode === "in" ? "Напр: чек №…" : "Напр: списание по смене…"}
                 />
               </div>
             </div>
@@ -416,36 +425,33 @@ export default function DonasDosasInventory() {
   );
 }
 
-function Row({ item, name, cat, unit, qty, min, low, busy, onIn, onOut, onSaveMeta }) {
-  const [editMin, setEditMin] = useState(String(item.stock_min ?? ""));
-  const [editUnit, setEditUnit] = useState(String(item.stock_unit ?? item.unit ?? ""));
+function Row({ item, name, unit, qty, min, low, busy, onIn, onOut, onSaveMeta }) {
+  const [editMin, setEditMin] = useState(String(item.min_qty ?? ""));
+  const [editUnit, setEditUnit] = useState(String(item.unit ?? "pcs"));
 
   useEffect(() => {
-    setEditMin(String(item.stock_min ?? ""));
-    setEditUnit(String(item.stock_unit ?? item.unit ?? ""));
-  }, [item?.id]);
+    setEditMin(String(item.min_qty ?? ""));
+    setEditUnit(String(item.unit ?? "pcs"));
+  }, [item?.id, item?.min_qty, item?.unit]);
 
   return (
     <tr className={low ? "bg-rose-50/50" : ""}>
       <td className="p-3">
         <div className="font-semibold text-gray-900">{name}</div>
+        {!item.is_active && <div className="text-xs text-gray-500">inactive</div>}
       </td>
-
-      <td className="p-3 text-gray-700">{cat}</td>
 
       <td className="p-3">
         <input
           value={editUnit}
           onChange={(e) => setEditUnit(e.target.value)}
           className="w-24 px-2 py-1 rounded-lg border bg-white text-gray-800"
-          placeholder="шт/кг/л…"
+          placeholder="pcs/kg/l…"
         />
       </td>
 
       <td className="p-3 text-right">
-        <span className={low ? "font-bold text-rose-700" : "font-semibold text-gray-900"}>
-          {fmt(qty)}
-        </span>{" "}
+        <span className={low ? "font-bold text-rose-700" : "font-semibold text-gray-900"}>{fmt(qty)}</span>{" "}
         <span className="text-gray-500">{unit}</span>
       </td>
 
@@ -480,7 +486,7 @@ function Row({ item, name, cat, unit, qty, min, low, busy, onIn, onOut, onSaveMe
           <button
             type="button"
             disabled={busy}
-            onClick={() => onSaveMeta(item, { stock_min: editMin, stock_unit: editUnit })}
+            onClick={() => onSaveMeta(item, { min_qty: editMin, unit: editUnit })}
             className="px-3 py-1.5 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-60"
           >
             Save
