@@ -639,6 +639,7 @@ export default function Header() {
                 {donasMobileOpen && (
                   <div className="bg-black/20">
                     <NavItemMobileDark to="/admin/donas-dosas/finance" label="Finance" icon={<IconDoc />} />
+                    <NavItemMobileDark to="/admin/donas-dosas/inventory" label="Inventory" icon={<IconDoc />} />
                     <NavItemMobileDark to="/admin/donas-dosas/menu" label="Menu" icon={<IconDoc />} />
                   </div>
                 )}
