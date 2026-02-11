@@ -21,6 +21,7 @@ const adminDonasFinanceRoutes = require("./routes/adminDonasFinanceRoutes");
 const donasShareRoutes = require("./routes/donasShareRoutes");
 const adminDonasShareTokenRoutes = require("./routes/adminDonasShareTokenRoutes");
 const publicDonasRoutes = require("./routes/publicDonasRoutes");
+const adminDonasInventoryRoutes = require("./routes/adminDonasInventoryRoutes");
 
 dotenv.config();
 const app = express();
@@ -978,6 +979,7 @@ app.use("/api/admin/donas/finance", adminDonasFinanceRoutes);
 app.use("/api/admin/donas", adminDonasSalesRoutes);
 app.use("/api/admin/donas", adminDonasShareTokenRoutes);
 app.use("/api/public/donas", publicDonasRoutes);
+app.use("/api/admin/donas/inventory", adminDonasInventoryRoutes);
 app.use("/", donasShareRoutes);
 
 /** ===================== Start (в самом конце) ===================== */
