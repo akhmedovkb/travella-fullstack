@@ -18,7 +18,6 @@ function isISODate(d) {
 }
 function normUnit(u) {
   const v = s(u).toLowerCase();
-  // можно расширять: kg, g, l, ml, pcs и т.д.
   return v || "pcs";
 }
 function normFinanceType(t) {
@@ -111,6 +110,11 @@ async function ensureInventoryTables() {
   await db.query(`
     CREATE INDEX IF NOT EXISTS idx_donas_inventory_ledger_slug_date
     ON donas_inventory_ledger (slug, move_date);
+  `);
+
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS idx_donas_inventory_ledger_slug_created_at
+    ON donas_inventory_ledger (slug, created_at);
   `);
 
   // Таблица Finance purchases (если вдруг ещё нет)
@@ -337,18 +341,82 @@ async function getLowStock(req, res) {
 
 /**
  * =========================
+ * Ledger (движения склада)
+ * GET /ledger?limit=&offset=&item_id=
+ * Возвращаем формат ПОД ФРОНТ:
+ * [
+ *   { id, created_at, item_id, item_name, direction:"in|out", qty, reason, notes, purchase_id }
+ * ]
+ * purchase_id = ref_id, если ref_type === 'purchase'
+ * =========================
+ */
+
+async function listLedger(req, res) {
+  try {
+    await ensureInventoryTables();
+
+    const limit = Math.min(200, Math.max(1, Number(req.query.limit || 50)));
+    const offset = Math.max(0, Number(req.query.offset || 0));
+
+    const itemIdRaw = s(req.query.item_id);
+    const item_id = itemIdRaw ? Number(itemIdRaw) : null;
+    const hasItem = item_id != null && Number.isFinite(item_id) && item_id > 0;
+
+    const q = await db.query(
+      `
+      SELECT
+        l.id,
+        l.created_at,
+        l.move_date,
+        l.item_id,
+        i.name AS item_name,
+        l.qty_in,
+        l.qty_out,
+        l.reason,
+        l.notes,
+        l.ref_type,
+        l.ref_id
+      FROM donas_inventory_ledger l
+      LEFT JOIN donas_inventory_items i ON i.id=l.item_id
+      WHERE l.slug=$1
+        AND ($2::bigint IS NULL OR l.item_id=$2::bigint)
+      ORDER BY l.created_at DESC, l.id DESC
+      LIMIT $3 OFFSET $4
+      `,
+      [SLUG, hasItem ? item_id : null, limit, offset]
+    );
+
+    const rows = (q.rows || []).map((r) => {
+      const qtyIn = toNum(r.qty_in);
+      const qtyOut = toNum(r.qty_out);
+      const direction = qtyIn > 0 ? "in" : "out";
+      const qty = qtyIn > 0 ? qtyIn : qtyOut;
+
+      return {
+        id: r.id,
+        created_at: r.created_at,
+        move_date: r.move_date,
+        item_id: r.item_id,
+        item_name: r.item_name,
+        direction,
+        qty,
+        reason: r.reason || "",
+        notes: r.notes || "",
+        purchase_id: String(r.ref_type || "").toLowerCase() === "purchase" ? r.ref_id : null,
+      };
+    });
+
+    return res.json({ ok: true, ledger: rows, limit, offset });
+  } catch (e) {
+    console.error("listLedger error:", e);
+    return res.status(500).json({ error: "Failed to list ledger" });
+  }
+}
+
+/**
+ * =========================
  * Purchases (закупки) + интеграция с Finance
  * =========================
- *
- * POST /purchases
- * body:
- * {
- *   purchased_at: "YYYY-MM-DD",
- *   finance_type: "opex" | "capex",
- *   vendor: "",
- *   notes: "",
- *   items: [{ item_id, qty, unit_price }]
- * }
  */
 
 async function createPurchase(req, res) {
@@ -369,7 +437,6 @@ async function createPurchase(req, res) {
     const items = Array.isArray(b.items) ? b.items : [];
     if (!items.length) return res.status(400).json({ error: "items[] is required" });
 
-    // validate items
     const normalized = [];
     for (const it of items) {
       const item_id = Number(it?.item_id);
@@ -394,7 +461,6 @@ async function createPurchase(req, res) {
 
     const purchase = pIns.rows[0];
 
-    // fetch item names for Finance donas_purchases
     const ids = normalized.map((x) => x.item_id);
     const itemsQ = await client.query(
       `
@@ -413,7 +479,6 @@ async function createPurchase(req, res) {
       return res.status(400).json({ error: "One or more items not found" });
     }
 
-    // insert purchase lines + ledger + donas_purchases
     for (const line of normalized) {
       await client.query(
         `
@@ -423,7 +488,7 @@ async function createPurchase(req, res) {
         [purchase.id, line.item_id, line.qty, line.unit_price]
       );
 
-      // ledger IN
+      // ledger IN (ref_type/ref_id уже = purchase)
       await client.query(
         `
         INSERT INTO donas_inventory_ledger
@@ -446,7 +511,7 @@ async function createPurchase(req, res) {
           ingredientName,
           line.qty,
           line.unit_price,
-          finance_type,          // важно: Months суммирует opex/capex
+          finance_type,
           `[inventory#${purchase.id}] ${vendor || ""} ${notes || ""}`.trim(),
         ]
       );
@@ -455,7 +520,9 @@ async function createPurchase(req, res) {
     await client.query("COMMIT");
     return res.json({ ok: true, purchase });
   } catch (e) {
-    try { await client.query("ROLLBACK"); } catch {}
+    try {
+      await client.query("ROLLBACK");
+    } catch {}
     console.error("createPurchase error:", e);
     return res.status(500).json({ error: "Failed to create purchase" });
   } finally {
@@ -539,10 +606,7 @@ async function getPurchase(req, res) {
 
 /**
  * =========================
- * Consume (расход со склада) - минимальный эндпоинт на будущее
- * POST /consume
- * body: { date:"YYYY-MM-DD", items:[{item_id, qty}], reason?, notes? }
- * (не пишет в finance; это уже будет через COGS/recipes)
+ * Consume (расход со склада)
  * =========================
  */
 
@@ -572,7 +636,6 @@ async function consumeStock(req, res) {
 
     await client.query("BEGIN");
 
-    // простой контроль: не уходим в минус (по текущему on_hand)
     for (const line of normalized) {
       const st = await client.query(
         `
@@ -602,7 +665,9 @@ async function consumeStock(req, res) {
     await client.query("COMMIT");
     return res.json({ ok: true });
   } catch (e) {
-    try { await client.query("ROLLBACK"); } catch {}
+    try {
+      await client.query("ROLLBACK");
+    } catch {}
     console.error("consumeStock error:", e);
     return res.status(500).json({ error: "Failed to consume stock" });
   } finally {
@@ -620,6 +685,9 @@ module.exports = {
   // stock
   getStock,
   getLowStock,
+
+  // ledger
+  listLedger,
 
   // purchases
   createPurchase,
