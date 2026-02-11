@@ -380,17 +380,7 @@ export default function App() {
                   </AdminRoute>
                 </PrivateRoute>
               }
-            />
-            <Route
-              path="/admin/donas-dosas/finance"
-              element={
-                <PrivateRoute>
-                  <AdminRoute>
-                    <DonasDosasFinanceLayout />
-                  </AdminRoute>
-                </PrivateRoute>
-              }
-            >
+            />            
             <Route
                 path="/admin/donas-dosas/inventory"
                 element={
@@ -401,7 +391,16 @@ export default function App() {
                   </PrivateRoute>
                 }
               />
-
+            <Route
+              path="/admin/donas-dosas/finance"
+              element={
+                <PrivateRoute>
+                  <AdminRoute>
+                    <DonasDosasFinanceLayout />
+                  </AdminRoute>
+                </PrivateRoute>
+              }
+            >
               <Route index element={<DonasDosasFinanceOverview />} />
               <Route path="months" element={<DonasDosasFinanceMonths />} />
               <Route path="sales" element={<DonasDosasFinanceSales />} />
