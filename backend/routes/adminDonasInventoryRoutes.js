@@ -19,6 +19,9 @@ router.delete("/items/:id", authenticateToken, requireAdmin, ctrl.deleteItem);
 router.get("/stock", authenticateToken, requireAdmin, ctrl.getStock);
 router.get("/stock/low", authenticateToken, requireAdmin, ctrl.getLowStock);
 
+// Ledger (движения склада)
+router.get("/ledger", authenticateToken, requireAdmin, ctrl.listLedger);
+
 // Purchases
 router.get("/purchases", authenticateToken, requireAdmin, ctrl.listPurchases);
 router.get("/purchases/:id", authenticateToken, requireAdmin, ctrl.getPurchase);
