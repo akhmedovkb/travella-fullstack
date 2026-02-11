@@ -36,6 +36,7 @@ import DonasDosasProfitTab from "./pages/admin/DonasDosasProfitTab";
 import DonasDosasMenuLayout from "./pages/admin/DonasDosasMenuLayout";
 import DonasDosasFinanceSales from "./pages/admin/DonasDosasFinanceSales";
 import DonasDosasMonthlySalesMargin from "./pages/admin/DonasDosasMonthlySalesMargin";
+import DonasDosasInventory from "./pages/admin/DonasDosasInventory";
 
 // Клиентские
 import ClientRegister from "./pages/ClientRegister";
@@ -390,6 +391,17 @@ export default function App() {
                 </PrivateRoute>
               }
             >
+            <Route
+                path="/admin/donas-dosas/inventory"
+                element={
+                  <PrivateRoute>
+                    <AdminRoute>
+                      <DonasDosasInventory />
+                    </AdminRoute>
+                  </PrivateRoute>
+                }
+              />
+
               <Route index element={<DonasDosasFinanceOverview />} />
               <Route path="months" element={<DonasDosasFinanceMonths />} />
               <Route path="sales" element={<DonasDosasFinanceSales />} />
