@@ -717,7 +717,7 @@ export default function ServiceCard({
       >
         {/* IMAGES */}
         <div
-          className="h-56 sm:h-60 bg-gray-100 relative select-none overflow-hidden"
+          className="h-48 sm:h-60 bg-gray-100 relative select-none overflow-hidden"
           onTouchStart={onTouchStart}
           onTouchEnd={onTouchEnd}
         >
