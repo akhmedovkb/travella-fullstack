@@ -8,6 +8,28 @@ import { tSuccess, tError, tInfo } from "../shared/toast";
 const fmt = (n) => new Intl.NumberFormat().format(Number(n || 0));
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
+function isRefusedCategory(cat) {
+  return String(cat || "").toLowerCase().startsWith("refused_");
+}
+
+function formatDt(val) {
+  if (!val) return "";
+  const d = val instanceof Date ? val : new Date(val);
+  if (Number.isNaN(d.getTime())) return "";
+  try {
+    // dd.mm.yyyy, hh:mm
+    return new Intl.DateTimeFormat("ru-RU", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(d);
+  } catch {
+    return d.toISOString();
+  }
+}
+
 function providerFrom(svc) {
   const p = svc?.provider || {};
   return {
@@ -22,6 +44,10 @@ function Card({ item, tab, onApprove, onReject, onUnpublish, t }) {
   const d = typeof s.details === "object" && s.details !== null ? s.details : {};
   const cover = Array.isArray(s.images) && s.images.length ? s.images[0] : null;
   const prov = providerFrom(s);
+  const isRefused = isRefusedCategory(s.category);
+  const createdAtLabel = formatDt(
+    s.created_at || s.createdAt || s.submitted_at || s.submittedAt || s.updated_at || s.updatedAt
+  );
 
   // Локализация типа поставщика по уже существующим ключам provider.types.*
   const providerTypeLabel = (() => {
@@ -100,10 +126,16 @@ function Card({ item, tab, onApprove, onReject, onUnpublish, t }) {
         </div>
         <div className="flex-1 min-w-0">
           <div className="font-semibold truncate">
+            {isRefused ? `#${s.id} — ` : ""}
             {s.title ||
               t("moderation.no_title", { defaultValue: "(без названия)" })}
           </div>
           <div className="text-xs text-gray-600">{categoryLabel}</div>
+          {isRefused && createdAtLabel && (
+            <div className="text-xs text-gray-500 mt-0.5">
+              {t("moderation.created_at", { defaultValue: "Создан" })}: {createdAtLabel}
+            </div>
+          )}
           <div className="text-xs text-gray-600 mt-1">
             {t("moderation.supplier", { defaultValue: "Поставщик" })}:{" "}
             {prov.id ? (
