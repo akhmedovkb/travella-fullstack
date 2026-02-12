@@ -564,6 +564,7 @@
     "title": "Service moderation",
     "no_title": "(no title)",
     "supplier": "Supplier",
+    "created_at": "Created",
     "direction": "Direction",
     "start": "Start",
     "end": "End",
