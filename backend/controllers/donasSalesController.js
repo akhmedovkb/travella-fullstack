@@ -1,431 +1,671 @@
 // backend/controllers/donasSalesController.js
+
 const db = require("../db");
+const { touchMonthsFromYms } = require("../utils/donasSalesMonthAggregator");
+const { autoSyncMonthsForDate } = require("../utils/donasFinanceAutoSync");
 
 const SLUG = "donas-dosas";
 
-/* =========================
- * small utils
- * ========================= */
-function toNum(x) {
-  const n = Number(x);
-  return Number.isFinite(n) ? n : 0;
-}
-function s(x) {
-  return String(x == null ? "" : x).trim();
-}
-function isISODate(d) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(String(d || "").trim());
-}
-function isHHMM(t) {
-  const v = s(t);
-  return !v || /^\d{2}:\d{2}$/.test(v);
-}
-
-/* =========================
- * Ensure tables
- * ========================= */
-async function ensureSalesTables() {
-  // sales header
+async function ensureSalesTable() {
   await db.query(`
     CREATE TABLE IF NOT EXISTS donas_sales (
       id BIGSERIAL PRIMARY KEY,
-      slug TEXT NOT NULL,
-      sale_date DATE NOT NULL,
-      time_hhmm TEXT,                       -- "HH:MM" optional
-      channel TEXT NOT NULL DEFAULT 'unknown',
-      payment_method TEXT NOT NULL DEFAULT 'unknown',
-      total_sum NUMERIC NOT NULL DEFAULT 0,
-      discount_sum NUMERIC NOT NULL DEFAULT 0,
-      cash_in NUMERIC NOT NULL DEFAULT 0,
-      comment TEXT NOT NULL DEFAULT '',
+      sold_at DATE NOT NULL,
+      menu_item_id BIGINT NOT NULL,
+      qty NUMERIC NOT NULL DEFAULT 1,
+      unit_price NUMERIC NOT NULL DEFAULT 0,
+      revenue_total NUMERIC NOT NULL DEFAULT 0,
+      cogs_snapshot_id BIGINT,
+      cogs_unit NUMERIC NOT NULL DEFAULT 0,
+      cogs_total NUMERIC NOT NULL DEFAULT 0,
+      channel TEXT NOT NULL DEFAULT 'cash',
+      notes TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
 
-  await db.query(`
-    CREATE INDEX IF NOT EXISTS idx_donas_sales_slug_date
-    ON donas_sales (slug, sale_date);
-  `);
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_donas_sales_sold_at ON donas_sales (sold_at);`);
+  await db.query(
+    `CREATE INDEX IF NOT EXISTS idx_donas_sales_menu_item_id ON donas_sales (menu_item_id);`
+  );
 
-  await db.query(`
-    CREATE INDEX IF NOT EXISTS idx_donas_sales_slug_id
-    ON donas_sales (slug, id);
-  `);
-
-  // optional lines (if you later want itemized sales)
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS donas_sale_items (
-      id BIGSERIAL PRIMARY KEY,
-      slug TEXT NOT NULL,
-      sale_id BIGINT NOT NULL REFERENCES donas_sales(id) ON DELETE CASCADE,
-      name TEXT NOT NULL,
-      qty NUMERIC NOT NULL DEFAULT 1,
-      price NUMERIC NOT NULL DEFAULT 0,
-      total NUMERIC GENERATED ALWAYS AS (qty * price) STORED
+  try {
+    await db.query(
+      `ALTER TABLE donas_sales
+       ADD CONSTRAINT fk_donas_sales_menu_item
+       FOREIGN KEY (menu_item_id) REFERENCES donas_menu_items(id)
+       ON DELETE RESTRICT;`
     );
-  `);
+  } catch {}
 
-  await db.query(`
-    CREATE INDEX IF NOT EXISTS idx_donas_sale_items_sale
-    ON donas_sale_items (sale_id);
-  `);
+  try {
+    await db.query(
+      `ALTER TABLE donas_sales
+       ADD CONSTRAINT fk_donas_sales_cogs_snapshot
+       FOREIGN KEY (cogs_snapshot_id) REFERENCES donas_cogs(id)
+       ON DELETE SET NULL;`
+    );
+  } catch {}
 }
 
-/* =========================
- * List sales
- * GET /api/admin/donas/sales?from=YYYY-MM-DD&to=YYYY-MM-DD&limit=50&offset=0
- * ========================= */
-async function listSales(req, res) {
+function toNum(x) {
+  const n = Number(x);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function isYm(s) {
+  return /^\d{4}-\d{2}$/.test(String(s || ""));
+}
+
+function toYmFromDate(d) {
+  if (!d) return "";
+  return String(d).slice(0, 7);
+}
+
+function hasLockedTag(notes) {
+  return String(notes || "").toLowerCase().includes("#locked");
+}
+
+/**
+ * ✅ Normalize sold_at to YYYY-MM-DD (no timezone).
+ * Accepts: YYYY-MM-DD, YYYY-MM-DDTHH..., DD.MM.YYYY, DD/MM/YYYY
+ */
+function normalizeSoldAt(x) {
+  const s = String(x || "").trim();
+  if (!s) return "";
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.slice(0, 10);
+
+  if (/^\d{2}\.\d{2}\.\d{4}$/.test(s)) {
+    const [dd, mm, yyyy] = s.split(".");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) {
+    const [dd, mm, yyyy] = s.split("/");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  return s;
+}
+
+/**
+ * =========================
+ * Finance audit helpers
+ * =========================
+ */
+
+function getActor(req) {
+  const u = req.user || {};
+  return {
+    id: u.id ?? null,
+    role: String(u.role || "").toLowerCase() || null,
+    email: u.email || u.mail || null,
+    name: u.name || u.full_name || null,
+  };
+}
+
+async function ensureFinanceAudit() {
   try {
-    await ensureSalesTables();
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS donas_finance_audit_log (
+        id BIGSERIAL PRIMARY KEY,
+        slug TEXT NOT NULL,
+        ym TEXT NOT NULL,
+        action TEXT NOT NULL,
+        diff JSONB NOT NULL DEFAULT '{}'::jsonb,
+        actor_name TEXT,
+        actor_email TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        actor_role TEXT,
+        actor_id BIGINT,
+        meta JSONB NOT NULL DEFAULT '{}'::jsonb
+      );
+    `);
 
-    const limit = Math.min(200, Math.max(1, Number(req.query.limit || 50)));
-    const offset = Math.max(0, Number(req.query.offset || 0));
+    // ✅ FIX: если view раньше был с другим набором колонок — Postgres не даст "CREATE OR REPLACE"
+    // Поэтому всегда дропаем и создаём заново.
+    await db.query(`DROP VIEW IF EXISTS donas_finance_audit;`);
 
-    const from = s(req.query.from);
-    const to = s(req.query.to);
-
-    const where = ["slug=$1"];
-    const vals = [SLUG];
-    let i = 2;
-
-    if (from) {
-      if (!isISODate(from)) return res.status(400).json({ error: "from must be YYYY-MM-DD" });
-      where.push(`sale_date >= $${i++}::date`);
-      vals.push(from);
-    }
-    if (to) {
-      if (!isISODate(to)) return res.status(400).json({ error: "to must be YYYY-MM-DD" });
-      where.push(`sale_date <= $${i++}::date`);
-      vals.push(to);
-    }
-
-    vals.push(limit);
-    vals.push(offset);
-
-    const q = await db.query(
-      `
+    await db.query(`
+      CREATE VIEW donas_finance_audit AS
       SELECT
         id,
-        sale_date,
-        time_hhmm,
-        channel,
-        payment_method,
-        total_sum,
-        discount_sum,
-        cash_in,
-        comment,
-        created_at,
-        updated_at
-      FROM donas_sales
-      WHERE ${where.join(" AND ")}
-      ORDER BY sale_date DESC, id DESC
-      LIMIT $${i++} OFFSET $${i++}
-      `,
-      vals
-    );
-
-    return res.json({ sales: q.rows || [], limit, offset });
+        slug,
+        ym,
+        action,
+        actor_id,
+        actor_role,
+        actor_email,
+        actor_name,
+        diff,
+        meta,
+        created_at
+      FROM donas_finance_audit_log;
+    `);
   } catch (e) {
-    console.error("listSales error:", e);
-    return res.status(500).json({ error: "Failed to list sales" });
+    console.error("ensureFinanceAudit error:", e);
   }
 }
 
-/* =========================
- * Get sale
- * GET /api/admin/donas/sales/:id
- * ========================= */
-async function getSale(req, res) {
+async function auditSales(req, ym, action, meta = {}, diff = {}) {
   try {
-    await ensureSalesTables();
-
-    const id = Number(req.params.id);
-    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: "Bad id" });
-
-    const q = await db.query(
+    if (!isYm(ym)) return;
+    await ensureFinanceAudit();
+    const actor = getActor(req);
+    await db.query(
       `
-      SELECT
-        id,
-        sale_date,
-        time_hhmm,
-        channel,
-        payment_method,
-        total_sum,
-        discount_sum,
-        cash_in,
-        comment,
-        created_at,
-        updated_at
-      FROM donas_sales
-      WHERE slug=$1 AND id=$2
-      LIMIT 1
+      INSERT INTO donas_finance_audit_log
+        (slug, ym, action, actor_id, actor_role, actor_email, actor_name, diff, meta)
+      VALUES
+        ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb)
       `,
-      [SLUG, id]
+      [
+        SLUG,
+        ym,
+        String(action || "sales.update"),
+        actor.id,
+        actor.role,
+        actor.email,
+        actor.name,
+        JSON.stringify(diff || {}),
+        JSON.stringify(meta || {}),
+      ]
     );
-
-    if (!q.rows?.length) return res.status(404).json({ error: "Sale not found" });
-
-    // include lines if any
-    const linesQ = await db.query(
-      `
-      SELECT id, name, qty, price, total
-      FROM donas_sale_items
-      WHERE slug=$1 AND sale_id=$2
-      ORDER BY id ASC
-      `,
-      [SLUG, id]
-    );
-
-    return res.json({ sale: q.rows[0], items: linesQ.rows || [] });
   } catch (e) {
-    console.error("getSale error:", e);
-    return res.status(500).json({ error: "Failed to get sale" });
+    console.error("auditSales error:", e);
   }
 }
 
-/* =========================
- * Create sale
+/**
+ * =========================
+ * Month lock guard
+ * =========================
+ */
+
+async function isMonthLocked(ym) {
+  if (!isYm(ym)) return false;
+
+  const { rows } = await db.query(
+    `
+    SELECT notes
+    FROM donas_finance_months
+    WHERE slug=$1 AND month = ($2 || '-01')::date
+    ORDER BY id DESC
+    LIMIT 1
+    `,
+    [SLUG, ym]
+  );
+
+  const notes = rows?.[0]?.notes || "";
+  return hasLockedTag(notes);
+}
+
+/**
+ * ✅ Price source of truth from Menu Items
+ * We prefer sell_price, fallback to price, else 0
+ */
+async function getMenuItemUnitPrice(menuItemId) {
+  const { rows } = await db.query(
+    `
+    SELECT sell_price, price
+    FROM donas_menu_items
+    WHERE id=$1
+    LIMIT 1
+    `,
+    [menuItemId]
+  );
+  const r = rows?.[0] || {};
+  const sp = toNum(r.sell_price);
+  const p = toNum(r.price);
+  return sp > 0 ? sp : p > 0 ? p : 0;
+}
+
+/**
+ * Latest COGS snapshot
+ */
+async function getLatestCogsForMenuItem(menuItemId) {
+  const { rows } = await db.query(
+    `
+    SELECT id, menu_item_id, total_cost, created_at
+    FROM donas_cogs
+    WHERE menu_item_id = $1
+    ORDER BY created_at DESC NULLS LAST, id DESC
+    LIMIT 1
+    `,
+    [menuItemId]
+  );
+  return rows?.[0] || null;
+}
+
+/**
+ * ✅ Always return sold_at as "YYYY-MM-DD" string
+ */
+async function getSaleByIdFormatted(id) {
+  if (!id) return null;
+
+  const { rows } = await db.query(
+    `
+    SELECT
+      s.id,
+      to_char(s.sold_at, 'YYYY-MM-DD') AS sold_at,
+      s.menu_item_id,
+      s.qty,
+      s.unit_price,
+      s.revenue_total,
+      s.cogs_snapshot_id,
+      s.cogs_unit,
+      s.cogs_total,
+      s.channel,
+      s.notes,
+      s.created_at,
+      s.updated_at,
+      (COALESCE(s.revenue_total,0) - COALESCE(s.cogs_total,0)) AS profit_total,
+      CASE
+        WHEN COALESCE(s.revenue_total,0) = 0 THEN 0
+        ELSE ((COALESCE(s.revenue_total,0) - COALESCE(s.cogs_total,0)) / COALESCE(s.revenue_total,0)) * 100
+      END AS margin_pct,
+      mi.name AS menu_item_name
+    FROM donas_sales s
+    LEFT JOIN donas_menu_items mi ON mi.id = s.menu_item_id
+    WHERE s.id = $1
+    LIMIT 1
+    `,
+    [id]
+  );
+
+  return rows?.[0] || null;
+}
+
+/**
+ * =========================
+ * Controllers
+ * =========================
+ */
+
+/**
+ * GET /api/admin/donas/sales?month=YYYY-MM
+ */
+async function getSales(req, res) {
+  try {
+    await ensureSalesTable();
+    const { month } = req.query;
+
+    let where = "";
+    const params = [];
+
+    if (month) {
+      if (!isYm(month)) return res.status(400).json({ error: "Bad month (YYYY-MM)" });
+      where = "WHERE to_char(s.sold_at, 'YYYY-MM') = $1";
+      params.push(month);
+    }
+
+    // ✅ IMPORTANT: sold_at is returned as plain "YYYY-MM-DD" string (no timezone shifts)
+    const { rows } = await db.query(
+      `
+      SELECT
+        s.id,
+        to_char(s.sold_at, 'YYYY-MM-DD') AS sold_at,
+        s.menu_item_id,
+        s.qty,
+        s.unit_price,
+        s.revenue_total,
+        s.cogs_snapshot_id,
+        s.cogs_unit,
+        s.cogs_total,
+        s.channel,
+        s.notes,
+        s.created_at,
+        s.updated_at,
+        (COALESCE(s.revenue_total,0) - COALESCE(s.cogs_total,0)) AS profit_total,
+        CASE
+          WHEN COALESCE(s.revenue_total,0) = 0 THEN 0
+          ELSE ((COALESCE(s.revenue_total,0) - COALESCE(s.cogs_total,0)) / COALESCE(s.revenue_total,0)) * 100
+        END AS margin_pct,
+        mi.name AS menu_item_name
+      FROM donas_sales s
+      LEFT JOIN donas_menu_items mi ON mi.id = s.menu_item_id
+      ${where}
+      ORDER BY s.sold_at DESC, s.id DESC
+      `,
+      params
+    );
+
+    return res.json(rows || []);
+  } catch (e) {
+    console.error("getSales error:", e);
+    return res.status(500).json({ error: "Failed to load sales" });
+  }
+}
+
+/**
  * POST /api/admin/donas/sales
- * body:
- * {
- *   sale_date: "YYYY-MM-DD",
- *   time_hhmm?: "HH:MM",
- *   channel?: "",
- *   payment_method?: "",
- *   total_sum?: number,
- *   discount_sum?: number,
- *   cash_in?: number,
- *   comment?: "",
- *   items?: [{ name, qty, price }]
- * }
- * ========================= */
-async function createSale(req, res) {
-  const client = await db.connect();
+ * body: { sold_at, menu_item_id, qty, unit_price?, channel, notes? }
+ */
+async function addSale(req, res) {
   try {
-    await ensureSalesTables();
-
+    await ensureSalesTable();
     const b = req.body || {};
-    const sale_date = String(b.sale_date || "").slice(0, 10);
-    if (!isISODate(sale_date)) return res.status(400).json({ error: "sale_date must be YYYY-MM-DD" });
 
-    const time_hhmm = s(b.time_hhmm);
-    if (!isHHMM(time_hhmm)) return res.status(400).json({ error: "time_hhmm must be HH:MM" });
+    const soldAt = normalizeSoldAt(b.sold_at);
+    const menuItemId = Number(b.menu_item_id);
+    const qty = toNum(b.qty);
+    let unitPrice = toNum(b.unit_price);
+    const channel = String(b.channel || "cash").trim() || "cash";
+    const notes = b.notes == null ? null : String(b.notes);
 
-    const channel = s(b.channel) || "unknown";
-    const payment_method = s(b.payment_method) || "unknown";
+    if (!soldAt) return res.status(400).json({ error: "sold_at required" });
+    if (!Number.isFinite(menuItemId) || menuItemId <= 0) {
+      return res.status(400).json({ error: "menu_item_id required" });
+    }
+    if (!qty || qty <= 0) return res.status(400).json({ error: "qty must be > 0" });
 
-    const total_sum = toNum(b.total_sum);
-    const discount_sum = toNum(b.discount_sum);
-    const cash_in = toNum(b.cash_in);
-    const comment = s(b.comment);
+    const ym = toYmFromDate(soldAt);
+    if (!isYm(ym)) return res.status(400).json({ error: "sold_at invalid" });
 
-    const items = Array.isArray(b.items) ? b.items : [];
+    if (await isMonthLocked(ym)) {
+      return res.status(409).json({ error: `Month ${ym} is locked (#locked)` });
+    }
 
-    await client.query("BEGIN");
+    // ✅ if unit_price not provided or 0 -> take from menu item
+    if (unitPrice <= 0) {
+      unitPrice = await getMenuItemUnitPrice(menuItemId);
+    }
 
-    const ins = await client.query(
+    const revenueTotal = qty * unitPrice;
+
+    const snap = await getLatestCogsForMenuItem(menuItemId);
+    const cogsUnit = toNum(snap?.total_cost);
+    const cogsTotal = qty * cogsUnit;
+    const cogsSnapshotId = snap?.id || null;
+
+    const { rows } = await db.query(
       `
       INSERT INTO donas_sales
-        (slug, sale_date, time_hhmm, channel, payment_method, total_sum, discount_sum, cash_in, comment)
+        (sold_at, menu_item_id, qty, unit_price, revenue_total,
+         cogs_snapshot_id, cogs_unit, cogs_total, channel, notes)
       VALUES
-        ($1,$2::date,$3,$4,$5,$6,$7,$8,$9)
-      RETURNING
-        id, slug, sale_date, time_hhmm, channel, payment_method, total_sum, discount_sum, cash_in, comment, created_at, updated_at
+        ($1::date, $2, $3, $4, $5,
+         $6, $7, $8, $9, $10)
+      RETURNING *
       `,
-      [SLUG, sale_date, time_hhmm || null, channel, payment_method, total_sum, discount_sum, cash_in, comment]
+      [
+        soldAt,
+        menuItemId,
+        qty,
+        unitPrice,
+        revenueTotal,
+        cogsSnapshotId,
+        cogsUnit,
+        cogsTotal,
+        channel,
+        notes,
+      ]
     );
 
-    const sale = ins.rows[0];
+    await auditSales(
+      req,
+      ym,
+      "sales.add",
+      { sale_id: rows?.[0]?.id || null, channel },
+      { revenue_total: revenueTotal, cogs_total: cogsTotal, unit_price: unitPrice }
+    );
 
-    // optional lines
-    for (const it of items) {
-      const nm = s(it?.name);
-      const qty = toNum(it?.qty);
-      const price = toNum(it?.price);
-      if (!nm) continue;
-      await client.query(
-        `
-        INSERT INTO donas_sale_items (slug, sale_id, name, qty, price)
-        VALUES ($1,$2,$3,$4,$5)
-        `,
-        [SLUG, sale.id, nm, qty || 1, price]
-      );
-    }
+    // ✅ legacy recompute hook (keeps current behavior)
+    await touchMonthsFromYms([ym]);
 
-    await client.query("COMMIT");
-    return res.json({ ok: true, sale });
+    // ✅ NEW: auto-sync chain (cash_end) immediately
+    await autoSyncMonthsForDate(req, soldAt, "sales.add");
+
+    const out = await getSaleByIdFormatted(rows?.[0]?.id);
+    return res.json(out || rows[0]);
   } catch (e) {
-    try {
-      await client.query("ROLLBACK");
-    } catch {}
-    console.error("createSale error:", e);
-    return res.status(500).json({ error: "Failed to create sale" });
-  } finally {
-    client.release();
+    console.error("addSale error:", e);
+    return res.status(500).json({ error: "Failed to add sale" });
   }
 }
 
-/* =========================
- * Update sale
+/**
  * PUT /api/admin/donas/sales/:id
- * body can contain any fields from createSale
- * ========================= */
+ */
 async function updateSale(req, res) {
-  const client = await db.connect();
   try {
-    await ensureSalesTables();
-
+    await ensureSalesTable();
     const id = Number(req.params.id);
     if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: "Bad id" });
+
+    const curQ = await db.query(`SELECT * FROM donas_sales WHERE id=$1 LIMIT 1`, [id]);
+    const cur = curQ.rows?.[0];
+    if (!cur) return res.status(404).json({ error: "Sale not found" });
+
+    const curYm = toYmFromDate(cur.sold_at);
+    if (await isMonthLocked(curYm)) {
+      return res.status(409).json({ error: `Month ${curYm} is locked (#locked)` });
+    }
 
     const b = req.body || {};
-    const fields = [];
-    const vals = [];
-    let i = 1;
 
-    function add(col, v) {
-      fields.push(`${col}=$${i++}`);
-      vals.push(v);
+    const soldAt =
+      b.sold_at == null ? String(cur.sold_at).slice(0, 10) : normalizeSoldAt(b.sold_at);
+
+    const menuItemId = b.menu_item_id == null ? Number(cur.menu_item_id) : Number(b.menu_item_id);
+    const qty = b.qty == null ? toNum(cur.qty) : toNum(b.qty);
+
+    let unitPrice = b.unit_price == null ? toNum(cur.unit_price) : toNum(b.unit_price);
+
+    const channel = b.channel == null ? String(cur.channel || "cash") : String(b.channel || "cash");
+    const notes = b.notes === undefined ? cur.notes : b.notes == null ? null : String(b.notes);
+
+    if (!soldAt) return res.status(400).json({ error: "sold_at required" });
+    if (!Number.isFinite(menuItemId) || menuItemId <= 0) {
+      return res.status(400).json({ error: "menu_item_id required" });
+    }
+    if (!qty || qty <= 0) return res.status(400).json({ error: "qty must be > 0" });
+
+    const nextYm = toYmFromDate(soldAt);
+    if (!isYm(nextYm)) return res.status(400).json({ error: "sold_at invalid" });
+
+    if (nextYm !== curYm && (await isMonthLocked(nextYm))) {
+      return res.status(409).json({ error: `Month ${nextYm} is locked (#locked)` });
     }
 
-    if (b.sale_date != null) {
-      const sale_date = String(b.sale_date || "").slice(0, 10);
-      if (!isISODate(sale_date)) return res.status(400).json({ error: "sale_date must be YYYY-MM-DD" });
-      add("sale_date", sale_date);
+    // ✅ if unit_price is 0 -> take from menu item (supports changing menu item too)
+    if (unitPrice <= 0) {
+      unitPrice = await getMenuItemUnitPrice(menuItemId);
     }
 
-    if (b.time_hhmm != null) {
-      const time_hhmm = s(b.time_hhmm);
-      if (!isHHMM(time_hhmm)) return res.status(400).json({ error: "time_hhmm must be HH:MM" });
-      add("time_hhmm", time_hhmm || null);
+    const revenueTotal = qty * unitPrice;
+
+    const snap = await getLatestCogsForMenuItem(menuItemId);
+    const cogsUnit = toNum(snap?.total_cost);
+    const cogsTotal = qty * cogsUnit;
+    const cogsSnapshotId = snap?.id || null;
+
+    const diff = {};
+    const setDiff = (k, vOld, vNew) => {
+      if (String(vOld ?? "") !== String(vNew ?? "")) diff[k] = { from: vOld, to: vNew };
+    };
+
+    setDiff("sold_at", cur.sold_at, soldAt);
+    setDiff("menu_item_id", cur.menu_item_id, menuItemId);
+    setDiff("qty", cur.qty, qty);
+    setDiff("unit_price", cur.unit_price, unitPrice);
+    setDiff("revenue_total", cur.revenue_total, revenueTotal);
+    setDiff("cogs_snapshot_id", cur.cogs_snapshot_id, cogsSnapshotId);
+    setDiff("cogs_unit", cur.cogs_unit, cogsUnit);
+    setDiff("cogs_total", cur.cogs_total, cogsTotal);
+    setDiff("channel", cur.channel, channel);
+    setDiff("notes", cur.notes, notes);
+
+    const { rows } = await db.query(
+      `
+      UPDATE donas_sales
+      SET sold_at=$1::date,
+          menu_item_id=$2,
+          qty=$3,
+          unit_price=$4,
+          revenue_total=$5,
+          cogs_snapshot_id=$6,
+          cogs_unit=$7,
+          cogs_total=$8,
+          channel=$9,
+          notes=$10,
+          updated_at=NOW()
+      WHERE id=$11
+      RETURNING *
+      `,
+      [
+        soldAt,
+        menuItemId,
+        qty,
+        unitPrice,
+        revenueTotal,
+        cogsSnapshotId,
+        cogsUnit,
+        cogsTotal,
+        channel,
+        notes,
+        id,
+      ]
+    );
+
+    await auditSales(req, nextYm, "sales.update", { sale_id: id }, diff);
+
+    const yms = nextYm === curYm ? [nextYm] : [curYm, nextYm];
+
+    // ✅ legacy recompute hook (keeps current behavior)
+    await touchMonthsFromYms(yms);
+
+    // ✅ NEW: auto-sync chain for affected months (old + new dates)
+    const dates = new Set([String(cur.sold_at).slice(0, 10), soldAt]);
+    for (const d of dates) {
+      await autoSyncMonthsForDate(req, d, "sales.update");
     }
 
-    if (b.channel != null) add("channel", s(b.channel) || "unknown");
-    if (b.payment_method != null) add("payment_method", s(b.payment_method) || "unknown");
-    if (b.total_sum != null) add("total_sum", toNum(b.total_sum));
-    if (b.discount_sum != null) add("discount_sum", toNum(b.discount_sum));
-    if (b.cash_in != null) add("cash_in", toNum(b.cash_in));
-    if (b.comment != null) add("comment", s(b.comment));
-
-    await client.query("BEGIN");
-
-    let saleRow = null;
-
-    if (fields.length) {
-      vals.push(SLUG);
-      vals.push(id);
-
-      const q = await client.query(
-        `
-        UPDATE donas_sales
-        SET ${fields.join(", ")}, updated_at=NOW()
-        WHERE slug=$${i++} AND id=$${i++}
-        RETURNING
-          id, slug, sale_date, time_hhmm, channel, payment_method, total_sum, discount_sum, cash_in, comment, created_at, updated_at
-        `,
-        vals
-      );
-
-      if (!q.rows?.length) {
-        await client.query("ROLLBACK");
-        return res.status(404).json({ error: "Sale not found" });
-      }
-      saleRow = q.rows[0];
-    } else {
-      // just fetch current
-      const q = await client.query(
-        `
-        SELECT
-          id, slug, sale_date, time_hhmm, channel, payment_method, total_sum, discount_sum, cash_in, comment, created_at, updated_at
-        FROM donas_sales
-        WHERE slug=$1 AND id=$2
-        LIMIT 1
-        `,
-        [SLUG, id]
-      );
-      if (!q.rows?.length) {
-        await client.query("ROLLBACK");
-        return res.status(404).json({ error: "Sale not found" });
-      }
-      saleRow = q.rows[0];
-    }
-
-    // if items provided -> replace lines
-    if (Array.isArray(b.items)) {
-      await client.query(`DELETE FROM donas_sale_items WHERE slug=$1 AND sale_id=$2`, [SLUG, id]);
-
-      for (const it of b.items) {
-        const nm = s(it?.name);
-        const qty = toNum(it?.qty);
-        const price = toNum(it?.price);
-        if (!nm) continue;
-        await client.query(
-          `
-          INSERT INTO donas_sale_items (slug, sale_id, name, qty, price)
-          VALUES ($1,$2,$3,$4,$5)
-          `,
-          [SLUG, id, nm, qty || 1, price]
-        );
-      }
-    }
-
-    await client.query("COMMIT");
-    return res.json({ ok: true, sale: saleRow });
+    const out = await getSaleByIdFormatted(id);
+    return res.json(out || rows[0]);
   } catch (e) {
-    try {
-      await client.query("ROLLBACK");
-    } catch {}
     console.error("updateSale error:", e);
     return res.status(500).json({ error: "Failed to update sale" });
-  } finally {
-    client.release();
   }
 }
 
-/* =========================
- * Delete sale
+/**
  * DELETE /api/admin/donas/sales/:id
- * ========================= */
+ */
 async function deleteSale(req, res) {
-  const client = await db.connect();
   try {
-    await ensureSalesTables();
-
+    await ensureSalesTable();
     const id = Number(req.params.id);
     if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: "Bad id" });
 
-    await client.query("BEGIN");
+    const curQ = await db.query(`SELECT * FROM donas_sales WHERE id=$1 LIMIT 1`, [id]);
+    const cur = curQ.rows?.[0];
+    if (!cur) return res.status(404).json({ error: "Sale not found" });
 
-    // delete lines (safe even if none)
-    await client.query(`DELETE FROM donas_sale_items WHERE slug=$1 AND sale_id=$2`, [SLUG, id]);
-
-    const q = await client.query(`DELETE FROM donas_sales WHERE slug=$1 AND id=$2 RETURNING id`, [SLUG, id]);
-    if (!q.rows?.length) {
-      await client.query("ROLLBACK");
-      return res.status(404).json({ error: "Sale not found" });
+    const ym = toYmFromDate(cur.sold_at);
+    if (await isMonthLocked(ym)) {
+      return res.status(409).json({ error: `Month ${ym} is locked (#locked)` });
     }
 
-    await client.query("COMMIT");
+    await db.query(`DELETE FROM donas_sales WHERE id=$1`, [id]);
+
+    await auditSales(req, ym, "sales.delete", { sale_id: id }, { deleted: true });
+
+    // ✅ legacy recompute hook — НЕ блокируем ответ
+    touchMonthsFromYms([ym]).catch((e) =>
+      console.error("touchMonthsFromYms async error:", e)
+    );
+
+    // ✅ auto-sync chain — НЕ блокируем ответ
+    autoSyncMonthsForDate(req, String(cur.sold_at).slice(0, 10), "sales.delete").catch((e) =>
+      console.error("autoSyncMonthsForDate async error:", e)
+    );
+
     return res.json({ ok: true });
+
   } catch (e) {
-    try {
-      await client.query("ROLLBACK");
-    } catch {}
     console.error("deleteSale error:", e);
     return res.status(500).json({ error: "Failed to delete sale" });
-  } finally {
-    client.release();
+  }
+}
+
+/**
+ * POST /api/admin/donas/sales/recalc-cogs?month=YYYY-MM
+ */
+async function recalcCogsMonth(req, res) {
+  try {
+    await ensureSalesTable();
+    const { month } = req.query;
+    if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+      return res.status(400).json({ error: "month=YYYY-MM required" });
+    }
+
+    if (await isMonthLocked(month)) {
+      return res.status(409).json({ error: `Month ${month} is locked (#locked)` });
+    }
+
+    const salesQ = await db.query(
+      `
+      SELECT *
+      FROM donas_sales
+      WHERE to_char(sold_at,'YYYY-MM')=$1
+      ORDER BY sold_at ASC, id ASC
+      `,
+      [month]
+    );
+
+    let updated = 0;
+    for (const s of salesQ.rows || []) {
+      const snap = await getLatestCogsForMenuItem(s.menu_item_id);
+      const cogsUnit = toNum(snap?.total_cost);
+      const cogsTotal = toNum(s.qty) * cogsUnit;
+      const cogsSnapshotId = snap?.id || null;
+
+      if (
+        Number(toNum(s.cogs_unit)) === Number(cogsUnit) &&
+        Number(toNum(s.cogs_total)) === Number(cogsTotal) &&
+        Number(s.cogs_snapshot_id || 0) === Number(cogsSnapshotId || 0)
+      ) {
+        continue;
+      }
+
+      await db.query(
+        `
+        UPDATE donas_sales
+        SET cogs_snapshot_id=$1,
+            cogs_unit=$2,
+            cogs_total=$3,
+            updated_at=NOW()
+        WHERE id=$4
+        `,
+        [cogsSnapshotId, cogsUnit, cogsTotal, s.id]
+      );
+
+      updated++;
+    }
+
+    await auditSales(req, month, "sales.recalc_cogs", { updated }, {});
+
+    // ✅ legacy recompute hook (keeps current behavior)
+    await touchMonthsFromYms([month]);
+
+    // ✅ NEW: auto-sync chain (use month start as dateLike)
+    await autoSyncMonthsForDate(req, `${month}-01`, "sales.recalc_cogs");
+
+    return res.json({ ok: true, month, updated });
+  } catch (e) {
+    console.error("recalcCogsMonth error:", e);
+    return res.status(500).json({ error: "Failed to recalc cogs" });
   }
 }
 
 module.exports = {
-  listSales,
-  getSale,
-  createSale,
+  getSales,
+  addSale,
   updateSale,
   deleteSale,
-
-  _internal: { ensureSalesTables },
+  recalcCogsMonth,
 };
