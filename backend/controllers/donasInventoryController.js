@@ -18,6 +18,7 @@ function isISODate(d) {
 }
 function normUnit(u) {
   const v = s(u).toLowerCase();
+  // можно расширять: kg, g, l, ml, pcs и т.д.
   return v || "pcs";
 }
 function normFinanceType(t) {
@@ -31,8 +32,8 @@ function normFinanceType(t) {
  * =========================
  */
 
-async function ensureInventoryTables() {
-  await db.query(`
+async function ensureInventoryTables(client = db) {
+  await client.query(`
     CREATE TABLE IF NOT EXISTS donas_inventory_items (
       id BIGSERIAL PRIMARY KEY,
       slug TEXT NOT NULL,
@@ -40,18 +41,32 @@ async function ensureInventoryTables() {
       unit TEXT NOT NULL DEFAULT 'pcs',
       min_qty NUMERIC NOT NULL DEFAULT 0,
       is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      ingredient_id BIGINT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       UNIQUE (slug, name)
     );
   `);
 
-  await db.query(`
+  // soft link to ingredients (safe, nullable)
+  await client.query(`
+    ALTER TABLE donas_inventory_items
+    ADD COLUMN IF NOT EXISTS ingredient_id BIGINT;
+  `);
+
+  // unique mapping for ingredient_id (only when set)
+  await client.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_donas_inventory_items_slug_ingredient
+    ON donas_inventory_items (slug, ingredient_id)
+    WHERE ingredient_id IS NOT NULL;
+  `);
+
+  await client.query(`
     CREATE INDEX IF NOT EXISTS idx_donas_inventory_items_slug
     ON donas_inventory_items (slug);
   `);
 
-  await db.query(`
+  await client.query(`
     CREATE TABLE IF NOT EXISTS donas_inventory_purchases (
       id BIGSERIAL PRIMARY KEY,
       slug TEXT NOT NULL,
@@ -64,12 +79,12 @@ async function ensureInventoryTables() {
     );
   `);
 
-  await db.query(`
+  await client.query(`
     CREATE INDEX IF NOT EXISTS idx_donas_inventory_purchases_slug_date
     ON donas_inventory_purchases (slug, purchased_at);
   `);
 
-  await db.query(`
+  await client.query(`
     CREATE TABLE IF NOT EXISTS donas_inventory_purchase_items (
       id BIGSERIAL PRIMARY KEY,
       purchase_id BIGINT NOT NULL REFERENCES donas_inventory_purchases(id) ON DELETE CASCADE,
@@ -80,13 +95,13 @@ async function ensureInventoryTables() {
     );
   `);
 
-  await db.query(`
+  await client.query(`
     CREATE INDEX IF NOT EXISTS idx_donas_inventory_purchase_items_purchase
     ON donas_inventory_purchase_items (purchase_id);
   `);
 
   // Ledger (движение склада): приход/расход
-  await db.query(`
+  await client.query(`
     CREATE TABLE IF NOT EXISTS donas_inventory_ledger (
       id BIGSERIAL PRIMARY KEY,
       slug TEXT NOT NULL,
@@ -94,31 +109,26 @@ async function ensureInventoryTables() {
       move_date DATE NOT NULL,
       qty_in NUMERIC NOT NULL DEFAULT 0,
       qty_out NUMERIC NOT NULL DEFAULT 0,
-      reason TEXT NOT NULL DEFAULT '',        -- "purchase" / "consume" / "adjust"
-      ref_type TEXT NOT NULL DEFAULT '',      -- "purchase"
-      ref_id BIGINT,                          -- id закупки
+      reason TEXT NOT NULL DEFAULT '',        -- "purchase" / "consume" / "adjust" / "sale"
+      ref_type TEXT NOT NULL DEFAULT '',      -- "purchase" / "sale"
+      ref_id BIGINT,                          -- id закупки/продажи
       notes TEXT NOT NULL DEFAULT '',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
 
-  await db.query(`
+  await client.query(`
     CREATE INDEX IF NOT EXISTS idx_donas_inventory_ledger_slug_item
     ON donas_inventory_ledger (slug, item_id);
   `);
 
-  await db.query(`
+  await client.query(`
     CREATE INDEX IF NOT EXISTS idx_donas_inventory_ledger_slug_date
     ON donas_inventory_ledger (slug, move_date);
   `);
 
-  await db.query(`
-    CREATE INDEX IF NOT EXISTS idx_donas_inventory_ledger_slug_created_at
-    ON donas_inventory_ledger (slug, created_at);
-  `);
-
   // Таблица Finance purchases (если вдруг ещё нет)
-  await db.query(`
+  await client.query(`
     CREATE TABLE IF NOT EXISTS donas_purchases (
       id BIGSERIAL PRIMARY KEY,
       date DATE NOT NULL,
@@ -132,23 +142,71 @@ async function ensureInventoryTables() {
     );
   `);
 
-  await db.query(`CREATE INDEX IF NOT EXISTS idx_donas_purchases_date ON donas_purchases (date);`);
-  await db.query(`CREATE INDEX IF NOT EXISTS idx_donas_purchases_type ON donas_purchases (type);`);
+  await client.query(`CREATE INDEX IF NOT EXISTS idx_donas_purchases_date ON donas_purchases (date);`);
+  await client.query(`CREATE INDEX IF NOT EXISTS idx_donas_purchases_type ON donas_purchases (type);`);
 }
 
 /**
  * =========================
- * Items CRUD
+ * Ingredients → Inventory mirror
+ * =========================
+ * Stock/Ledger должны показывать ингредиенты из donas_ingredients.
+ * Inventory хранит мету (min_qty, is_active) и привязку ingredient_id.
+ */
+async function ensureInventoryItemsFromIngredients(client = db) {
+  // если вдруг нет таблицы ингредиентов — просто молча пропускаем
+  try {
+    await client.query(`
+      INSERT INTO donas_inventory_items (slug, name, unit, min_qty, is_active, ingredient_id)
+      SELECT
+        $1,
+        i.name,
+        COALESCE(NULLIF(LOWER(TRIM(i.unit)), ''), 'pcs') AS unit,
+        0,
+        TRUE,
+        i.id
+      FROM donas_ingredients i
+      WHERE i.slug = $1
+        AND COALESCE(i.is_archived, FALSE) = FALSE
+        AND NOT EXISTS (
+          SELECT 1
+          FROM donas_inventory_items di
+          WHERE di.slug = $1 AND di.ingredient_id = i.id
+        );
+    `, [SLUG]);
+
+    // синхронизируем имя/юнит на случай переименований
+    await client.query(`
+      UPDATE donas_inventory_items di
+      SET
+        name = i.name,
+        unit = COALESCE(NULLIF(LOWER(TRIM(i.unit)), ''), di.unit, 'pcs'),
+        updated_at = NOW()
+      FROM donas_ingredients i
+      WHERE di.slug = $1
+        AND di.ingredient_id = i.id
+        AND i.slug = $1
+        AND COALESCE(i.is_archived, FALSE) = FALSE;
+    `, [SLUG]);
+  } catch (e) {
+    // table missing or other issue — skip
+  }
+}
+
+/**
+ * =========================
+ * Items CRUD (meta)
  * =========================
  */
 
 async function listItems(req, res) {
   try {
     await ensureInventoryTables();
+    await ensureInventoryItemsFromIngredients();
 
     const q = await db.query(
       `
-      SELECT id, name, unit, min_qty, is_active, created_at, updated_at
+      SELECT id, name, unit, min_qty, is_active, ingredient_id, created_at, updated_at
       FROM donas_inventory_items
       WHERE slug=$1
       ORDER BY is_active DESC, name ASC
@@ -166,6 +224,7 @@ async function listItems(req, res) {
 async function createItem(req, res) {
   try {
     await ensureInventoryTables();
+    await ensureInventoryItemsFromIngredients();
 
     const b = req.body || {};
     const name = s(b.name);
@@ -175,19 +234,22 @@ async function createItem(req, res) {
     const min_qty = toNum(b.min_qty);
     const is_active = b.is_active == null ? true : !!b.is_active;
 
+    const ingredient_id = b.ingredient_id == null ? null : Number(b.ingredient_id) || null;
+
     const ins = await db.query(
       `
-      INSERT INTO donas_inventory_items (slug, name, unit, min_qty, is_active)
-      VALUES ($1,$2,$3,$4,$5)
+      INSERT INTO donas_inventory_items (slug, name, unit, min_qty, is_active, ingredient_id)
+      VALUES ($1,$2,$3,$4,$5,$6)
       ON CONFLICT (slug, name)
       DO UPDATE SET
         unit=EXCLUDED.unit,
         min_qty=EXCLUDED.min_qty,
         is_active=EXCLUDED.is_active,
+        ingredient_id=COALESCE(EXCLUDED.ingredient_id, donas_inventory_items.ingredient_id),
         updated_at=NOW()
-      RETURNING id, name, unit, min_qty, is_active, created_at, updated_at
+      RETURNING id, name, unit, min_qty, is_active, ingredient_id, created_at, updated_at
       `,
-      [SLUG, name, unit, min_qty, is_active]
+      [SLUG, name, unit, min_qty, is_active, ingredient_id]
     );
 
     return res.json({ ok: true, item: ins.rows?.[0] });
@@ -200,6 +262,7 @@ async function createItem(req, res) {
 async function updateItem(req, res) {
   try {
     await ensureInventoryTables();
+    await ensureInventoryItemsFromIngredients();
 
     const id = Number(req.params.id);
     if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: "Bad id" });
@@ -234,7 +297,7 @@ async function updateItem(req, res) {
       UPDATE donas_inventory_items
       SET ${fields.join(", ")}, updated_at=NOW()
       WHERE slug=$${i++} AND id=$${i++}
-      RETURNING id, name, unit, min_qty, is_active, created_at, updated_at
+      RETURNING id, name, unit, min_qty, is_active, ingredient_id, created_at, updated_at
       `,
       vals
     );
@@ -250,6 +313,7 @@ async function updateItem(req, res) {
 async function deleteItem(req, res) {
   try {
     await ensureInventoryTables();
+    await ensureInventoryItemsFromIngredients();
 
     const id = Number(req.params.id);
     if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: "Bad id" });
@@ -282,7 +346,9 @@ async function deleteItem(req, res) {
 async function getStock(req, res) {
   try {
     await ensureInventoryTables();
+    await ensureInventoryItemsFromIngredients();
 
+    // Stock = ингредиенты (через inventory_items.ingredient_id)
     const q = await db.query(
       `
       SELECT
@@ -291,11 +357,13 @@ async function getStock(req, res) {
         i.unit,
         i.min_qty,
         i.is_active,
+        i.ingredient_id,
         COALESCE(SUM(l.qty_in - l.qty_out), 0) AS on_hand
       FROM donas_inventory_items i
       LEFT JOIN donas_inventory_ledger l
         ON l.slug=i.slug AND l.item_id=i.id
       WHERE i.slug=$1
+        AND i.ingredient_id IS NOT NULL
       GROUP BY i.id
       ORDER BY i.is_active DESC, i.name ASC
       `,
@@ -312,6 +380,7 @@ async function getStock(req, res) {
 async function getLowStock(req, res) {
   try {
     await ensureInventoryTables();
+    await ensureInventoryItemsFromIngredients();
 
     const q = await db.query(
       `
@@ -320,11 +389,14 @@ async function getLowStock(req, res) {
         i.name,
         i.unit,
         i.min_qty,
+        i.ingredient_id,
         COALESCE(SUM(l.qty_in - l.qty_out), 0) AS on_hand
       FROM donas_inventory_items i
       LEFT JOIN donas_inventory_ledger l
         ON l.slug=i.slug AND l.item_id=i.id
-      WHERE i.slug=$1 AND i.is_active=TRUE
+      WHERE i.slug=$1
+        AND i.is_active=TRUE
+        AND i.ingredient_id IS NOT NULL
       GROUP BY i.id
       HAVING COALESCE(SUM(l.qty_in - l.qty_out), 0) <= i.min_qty
       ORDER BY (COALESCE(SUM(l.qty_in - l.qty_out), 0) - i.min_qty) ASC, i.name ASC
@@ -341,88 +413,25 @@ async function getLowStock(req, res) {
 
 /**
  * =========================
- * Ledger (движения склада)
- * GET /ledger?limit=&offset=&item_id=
- * Возвращаем формат ПОД ФРОНТ:
- * [
- *   { id, created_at, item_id, item_name, direction:"in|out", qty, reason, notes, purchase_id }
- * ]
- * purchase_id = ref_id, если ref_type === 'purchase'
- * =========================
- */
-
-async function listLedger(req, res) {
-  try {
-    await ensureInventoryTables();
-
-    const limit = Math.min(200, Math.max(1, Number(req.query.limit || 50)));
-    const offset = Math.max(0, Number(req.query.offset || 0));
-
-    const itemIdRaw = s(req.query.item_id);
-    const item_id = itemIdRaw ? Number(itemIdRaw) : null;
-    const hasItem = item_id != null && Number.isFinite(item_id) && item_id > 0;
-
-    const q = await db.query(
-      `
-      SELECT
-        l.id,
-        l.created_at,
-        l.move_date,
-        l.item_id,
-        i.name AS item_name,
-        l.qty_in,
-        l.qty_out,
-        l.reason,
-        l.notes,
-        l.ref_type,
-        l.ref_id
-      FROM donas_inventory_ledger l
-      LEFT JOIN donas_inventory_items i ON i.id=l.item_id
-      WHERE l.slug=$1
-        AND ($2::bigint IS NULL OR l.item_id=$2::bigint)
-      ORDER BY l.created_at DESC, l.id DESC
-      LIMIT $3 OFFSET $4
-      `,
-      [SLUG, hasItem ? item_id : null, limit, offset]
-    );
-
-    const rows = (q.rows || []).map((r) => {
-      const qtyIn = toNum(r.qty_in);
-      const qtyOut = toNum(r.qty_out);
-      const direction = qtyIn > 0 ? "in" : "out";
-      const qty = qtyIn > 0 ? qtyIn : qtyOut;
-
-      return {
-        id: r.id,
-        created_at: r.created_at,
-        move_date: r.move_date,
-        item_id: r.item_id,
-        item_name: r.item_name,
-        direction,
-        qty,
-        reason: r.reason || "",
-        notes: r.notes || "",
-        purchase_id: String(r.ref_type || "").toLowerCase() === "purchase" ? r.ref_id : null,
-      };
-    });
-
-    return res.json({ ok: true, ledger: rows, limit, offset });
-  } catch (e) {
-    console.error("listLedger error:", e);
-    return res.status(500).json({ error: "Failed to list ledger" });
-  }
-}
-
-/**
- * =========================
  * Purchases (закупки) + интеграция с Finance
  * =========================
+ *
+ * POST /purchases
+ * body:
+ * {
+ *   purchased_at: "YYYY-MM-DD",
+ *   finance_type: "opex" | "capex",
+ *   vendor: "",
+ *   notes: "",
+ *   items: [{ item_id, qty, unit_price }]
+ * }
  */
 
 async function createPurchase(req, res) {
   const client = await db.connect();
   try {
-    await ensureInventoryTables();
+    await ensureInventoryTables(client);
+    await ensureInventoryItemsFromIngredients(client);
 
     const b = req.body || {};
     const purchased_at = s(b.purchased_at);
@@ -437,12 +446,14 @@ async function createPurchase(req, res) {
     const items = Array.isArray(b.items) ? b.items : [];
     if (!items.length) return res.status(400).json({ error: "items[] is required" });
 
+    // validate items
     const normalized = [];
     for (const it of items) {
       const item_id = Number(it?.item_id);
       const qty = toNum(it?.qty);
       const unit_price = toNum(it?.unit_price);
-      if (!Number.isFinite(item_id) || item_id <= 0) return res.status(400).json({ error: "Bad item_id" });
+      if (!Number.isFinite(item_id) || item_id <= 0)
+        return res.status(400).json({ error: "Bad item_id" });
       if (!(qty > 0)) return res.status(400).json({ error: "qty must be > 0" });
       if (unit_price < 0) return res.status(400).json({ error: "unit_price must be >= 0" });
       normalized.push({ item_id, qty, unit_price });
@@ -461,6 +472,7 @@ async function createPurchase(req, res) {
 
     const purchase = pIns.rows[0];
 
+    // fetch item names for Finance donas_purchases
     const ids = normalized.map((x) => x.item_id);
     const itemsQ = await client.query(
       `
@@ -479,6 +491,7 @@ async function createPurchase(req, res) {
       return res.status(400).json({ error: "One or more items not found" });
     }
 
+    // insert purchase lines + ledger + donas_purchases
     for (const line of normalized) {
       await client.query(
         `
@@ -488,7 +501,7 @@ async function createPurchase(req, res) {
         [purchase.id, line.item_id, line.qty, line.unit_price]
       );
 
-      // ledger IN (ref_type/ref_id уже = purchase)
+      // ledger IN
       await client.query(
         `
         INSERT INTO donas_inventory_ledger
@@ -511,7 +524,7 @@ async function createPurchase(req, res) {
           ingredientName,
           line.qty,
           line.unit_price,
-          finance_type,
+          finance_type, // важно: Months суммирует opex/capex
           `[inventory#${purchase.id}] ${vendor || ""} ${notes || ""}`.trim(),
         ]
       );
@@ -533,6 +546,7 @@ async function createPurchase(req, res) {
 async function listPurchases(req, res) {
   try {
     await ensureInventoryTables();
+    await ensureInventoryItemsFromIngredients();
 
     const limit = Math.min(200, Math.max(1, Number(req.query.limit || 50)));
     const offset = Math.max(0, Number(req.query.offset || 0));
@@ -563,6 +577,7 @@ async function listPurchases(req, res) {
 async function getPurchase(req, res) {
   try {
     await ensureInventoryTables();
+    await ensureInventoryItemsFromIngredients();
 
     const id = Number(req.params.id);
     if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: "Bad id" });
@@ -606,14 +621,18 @@ async function getPurchase(req, res) {
 
 /**
  * =========================
- * Consume (расход со склада)
+ * Consume (расход со склада) - минимальный эндпоинт на будущее
+ * POST /consume
+ * body: { date:"YYYY-MM-DD", items:[{item_id, qty}], reason?, notes? }
+ * (не пишет в finance; это уже будет через COGS/recipes)
  * =========================
  */
 
 async function consumeStock(req, res) {
   const client = await db.connect();
   try {
-    await ensureInventoryTables();
+    await ensureInventoryTables(client);
+    await ensureInventoryItemsFromIngredients(client);
 
     const b = req.body || {};
     const move_date = s(b.date);
@@ -629,13 +648,15 @@ async function consumeStock(req, res) {
     for (const it of items) {
       const item_id = Number(it?.item_id);
       const qty = toNum(it?.qty);
-      if (!Number.isFinite(item_id) || item_id <= 0) return res.status(400).json({ error: "Bad item_id" });
+      if (!Number.isFinite(item_id) || item_id <= 0)
+        return res.status(400).json({ error: "Bad item_id" });
       if (!(qty > 0)) return res.status(400).json({ error: "qty must be > 0" });
       normalized.push({ item_id, qty });
     }
 
     await client.query("BEGIN");
 
+    // простой контроль: не уходим в минус (по текущему on_hand)
     for (const line of normalized) {
       const st = await client.query(
         `
@@ -648,7 +669,9 @@ async function consumeStock(req, res) {
       const onHand = toNum(st.rows?.[0]?.on_hand);
       if (onHand < line.qty) {
         await client.query("ROLLBACK");
-        return res.status(409).json({ error: `Not enough stock for item_id=${line.item_id}`, onHand });
+        return res
+          .status(409)
+          .json({ error: `Not enough stock for item_id=${line.item_id}`, onHand });
       }
 
       await client.query(
@@ -675,6 +698,61 @@ async function consumeStock(req, res) {
   }
 }
 
+/**
+ * =========================
+ * Ledger list
+ * GET /ledger?limit=&offset=&item_id=
+ * =========================
+ */
+async function listLedger(req, res) {
+  try {
+    await ensureInventoryTables();
+    await ensureInventoryItemsFromIngredients();
+
+    const limit = Math.min(200, Math.max(1, Number(req.query.limit || 50)));
+    const offset = Math.max(0, Number(req.query.offset || 0));
+    const item_id = req.query.item_id ? Number(req.query.item_id) : null;
+
+    const where = ["l.slug=$1"];
+    const vals = [SLUG];
+    let i = 2;
+
+    if (Number.isFinite(item_id) && item_id > 0) {
+      where.push(`l.item_id=$${i++}`);
+      vals.push(item_id);
+    }
+
+    const q = await db.query(
+      `
+      SELECT
+        l.id,
+        l.move_date,
+        l.item_id,
+        it.name AS item_name,
+        it.unit AS item_unit,
+        l.qty_in,
+        l.qty_out,
+        l.reason,
+        l.ref_type,
+        l.ref_id,
+        l.notes,
+        l.created_at
+      FROM donas_inventory_ledger l
+      JOIN donas_inventory_items it ON it.id=l.item_id
+      WHERE ${where.join(" AND ")}
+      ORDER BY l.move_date DESC, l.id DESC
+      LIMIT $${i++} OFFSET $${i++}
+      `,
+      [...vals, limit, offset]
+    );
+
+    return res.json({ ledger: q.rows || [], limit, offset });
+  } catch (e) {
+    console.error("listLedger error:", e);
+    return res.status(500).json({ error: "Failed to list ledger" });
+  }
+}
+
 module.exports = {
   // items
   listItems,
@@ -686,9 +764,6 @@ module.exports = {
   getStock,
   getLowStock,
 
-  // ledger
-  listLedger,
-
   // purchases
   createPurchase,
   listPurchases,
@@ -697,6 +772,9 @@ module.exports = {
   // consume
   consumeStock,
 
+  // ledger
+  listLedger,
+
   // internal
-  _internal: { ensureInventoryTables },
+  _internal: { ensureInventoryTables, ensureInventoryItemsFromIngredients },
 };
