@@ -337,6 +337,24 @@ async function getSalesRowsForMonth(monthYm) {
   return q.rows || [];
 }
 
+// GET /api/admin/donas/sales/:id
+async function getSale(req, res) {
+  try {
+    await ensureSalesTable();
+
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: "Bad id" });
+
+    const sale = await getSaleByIdFormatted(id);
+    if (!sale) return res.status(404).json({ error: "Not found" });
+
+    return res.json({ ok: true, sale });
+  } catch (e) {
+    console.error("getSale error:", e);
+    return res.status(500).json({ error: "Failed to get sale" });
+  }
+}
+
 async function getSaleByIdFormatted(id) {
   const q = await db.query(
     `
@@ -608,6 +626,7 @@ async function recalcCogsMonth(req, res) {
 }
 module.exports = {
   getSales,
+  getSale,
   addSale,
   updateSale,
   deleteSale,
