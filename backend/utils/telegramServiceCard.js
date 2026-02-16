@@ -370,8 +370,53 @@ function getPriceDropMeta(detailsRaw, svc, role) {
 
 /* ===================== MAIN CARD BUILDER ===================== */
 
+function normalizeCategory(cat) {
+  const c = String(cat || "").trim().toLowerCase();
+
+  // алиасы/частые варианты
+  if (c === "refused_event_ticket") return "refused_event_ticket";
+  if (c === "refused_ticket") return "refused_ticket";
+
+  // иногда могут прилетать “кривые” названия — нормализуем
+  if (c.includes("event") && c.includes("ticket")) return "refused_event_ticket";
+  if (c.includes("flight") || c.includes("air")) return "refused_flight";
+  if (c.includes("hotel")) return "refused_hotel";
+  if (c.startsWith("refused_")) return c;
+
+  return c; // как есть
+}
+
+function guessRefusedCategory(details) {
+  const d = details || {};
+  // эвристика: по полям details
+  if (d.eventCategory || d.ticketDetails || d.ticketType) return "refused_event_ticket";
+  if (d.airline || d.flightDetails || d.departureFlightDate || d.returnFlightDate) return "refused_flight";
+  if (d.hotel || d.hotelName || d.checkIn || d.checkOut || d.checkInDate || d.checkOutDate) return "refused_hotel";
+  return "refused_tour";
+}
+
 function buildServiceMessage(svc, category, role = "client") {
   const d = parseDetailsAny(svc.details);
+    // ✅ normalize category + страховка
+  let catNorm = normalizeCategory(category);
+
+  // если category не передали или он пустой — попробуем взять из svc.category
+  if (!catNorm) catNorm = normalizeCategory(svc?.category);
+
+  // если это вообще “refused_*”, но не один из ожидаемых — угадаем по details
+  if (role !== "provider" && String(catNorm || "").startsWith("refused_")) {
+    const known = new Set([
+      "refused_tour",
+      "refused_hotel",
+      "refused_flight",
+      "refused_ticket",
+      "refused_event_ticket",
+    ]);
+    if (!known.has(catNorm)) catNorm = guessRefusedCategory(d);
+  }
+
+  // дальше в функции используй catNorm вместо category
+  category = catNorm;
 
   const serviceId = svc.id;
   const serviceUrl = buildServiceUrl(serviceId);
