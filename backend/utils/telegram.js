@@ -109,7 +109,9 @@ async function tgSend(chatId, text, extra = {}, tokenOverride = "", throwOnError
       const code = Number(data?.error_code || 0);
       const isLikelyBotMismatch =
         code === 400 ||
+        code === 401 ||                 // ✅ важно
         code === 403 ||
+        /unauthorized/i.test(desc) ||   // ✅ важно
         /chat not found/i.test(desc) ||
         /bot was blocked/i.test(desc) ||
         /forbidden/i.test(desc);
