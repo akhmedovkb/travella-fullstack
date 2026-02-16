@@ -180,6 +180,18 @@ function extractStars(details) {
   return `⭐️ ${stars}*`;
 }
 
+function stripStarsFromRoomCat(raw) {
+  const s = String(raw || "").trim();
+  if (!s) return "";
+  // убираем "5*", "⭐ 5", "5 stars", "5зв" и т.п., чтобы не дублировать со строкой ⭐️ 5*
+  return s
+    .replace(/⭐\s*[1-7]\s*\*?/gi, "")
+    .replace(/\b[1-7]\s*\*/gi, "")
+    .replace(/\b[1-7]\s*(star|stars|зв|зв\.|звезд|звёзд|звезда|звёзда)\b/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 function pickPrice(details, svc, role) {
   const d = details || {};
   if (role === "provider") {
@@ -493,9 +505,18 @@ function buildServiceMessage(svc, category, role = "client") {
     if (dates) parts.push(`🗓 <b>${escapeHtml(dates)}${nights ? ` (${nights} ноч.)` : ""}</b>`);
 
     if (hotel) parts.push(`🏨 <b>${escapeHtml(hotel)}</b>`);
-    const roomCat = norm(d.accommodationCategory || d.roomCategory);
-    if (roomCat) parts.push(`⭐️ ${escapeHtml(roomCat)}`);
-    if (accommodation) parts.push(`🛏 ${escapeHtml(accommodation)}`);
+    // ⭐️ звезды отдельной строкой (красиво и без дубля)
+    const starsPretty = extractStars(d); // например "⭐️ 5*"
+    if (starsPretty) parts.push(`${escapeHtml(starsPretty)}`);
+    
+    // 🛏 Категория номера отдельно (без "5*" внутри)
+    const roomCatRaw = d.accommodationCategory || d.roomCategory || "";
+    const roomCatClean = stripStarsFromRoomCat(roomCatRaw);
+    const roomCat = norm(roomCatClean);
+    if (roomCat) parts.push(`🛏 <b>Категория номера:</b> ${escapeHtml(roomCat)}`);
+    
+    // Размещение (ADT/CHD/INF или DBL/TRPL и т.п.)
+    if (accommodation) parts.push(`👥 <b>Размещение:</b> ${escapeHtml(accommodation)}`);
 
     const foodPretty = foodLabel(d.food);
     if (foodPretty) {
