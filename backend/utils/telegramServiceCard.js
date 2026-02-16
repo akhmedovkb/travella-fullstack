@@ -48,6 +48,67 @@ const CATEGORY_EMOJI = {
   refused_ticket: "🎫",
 };
 
+/* ===================== pretty labels (NEW) ===================== */
+
+function foodLabel(x) {
+  const s = String(x || "").trim().toUpperCase();
+  const map = {
+    RO: "Без питания (RO)",
+    BB: "Завтраки (BB)",
+    HB: "Завтрак+ужин (HB)",
+    FB: "Полный пансион (FB)",
+    AI: "Все включено (AI)",
+    UAI: "Ультра все включено (UAI)",
+    HALAL: "Халяль (HALAL)",
+  };
+  return map[s] || (s ? `${s}` : "");
+}
+
+function transferLabel(x) {
+  const s = String(x || "").trim().toLowerCase();
+  const map = {
+    individual: "Индивидуальный",
+    private: "Индивидуальный",
+    group: "Групповой",
+    shared: "Групповой",
+    none: "Без трансфера",
+    no: "Без трансфера",
+    absent: "Без трансфера",
+    "отсутствует": "Без трансфера",
+    "индивидуальный": "Индивидуальный",
+    "групповой": "Групповой",
+  };
+  return map[s] || (String(x || "").trim() ? String(x).trim() : "");
+}
+
+function ticketEmoji(categoryOrType) {
+  const s = String(categoryOrType || "").toLowerCase();
+  if (s.includes("concert") || s.includes("конц")) return "🎤";
+  if (
+    s.includes("sport") ||
+    s.includes("матч") ||
+    s.includes("football") ||
+    s.includes("футбол")
+  )
+    return "🏟";
+  if (s.includes("theatre") || s.includes("театр")) return "🎭";
+  if (s.includes("cinema") || s.includes("кино")) return "🎬";
+  if (s.includes("expo") || s.includes("выстав")) return "🧩";
+  if (s.includes("festival") || s.includes("фестив")) return "🎪";
+  return "🎫";
+}
+
+function flightTripType(details) {
+  const d = details || {};
+  const hasReturn =
+    !!(d.returnFlightDate || d.returnDate || d.endDate || d.endFlightDate) ||
+    String(d.tripType || "").toLowerCase().includes("round") ||
+    String(d.tripType || "").toLowerCase().includes("return") ||
+    String(d.tripType || "").toLowerCase().includes("туда") ||
+    String(d.tripType || "").toLowerCase().includes("обратно");
+  return hasReturn ? "Туда-обратно" : "В одну сторону";
+}
+
 /* ===================== helpers (скопировано из bot.js) ===================== */
 
 function normalizeTitleSoft(str) {
@@ -371,6 +432,7 @@ function buildServiceMessage(svc, category, role = "client") {
 
     return { text: parts.join("\n"), photoUrl: getFirstImageUrl(svc), serviceUrl };
   }
+
   if (role !== "provider" && String(category) === "refused_hotel") {
     const parts = [];
     if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
@@ -384,21 +446,22 @@ function buildServiceMessage(svc, category, role = "client") {
     }
 
     if (route) parts.push(`📍 <b>${escapeHtml(route)}</b>`);
-    if (dates) parts.push(`🗓 <b>${escapeHtml(dates)}${nights ? ` (${nights} ноч.)` : ""}</b>`);
+    if (dates)
+      parts.push(`🗓 <b>${escapeHtml(dates)}${nights ? ` (${nights} ноч.)` : ""}</b>`);
 
     if (hotel) parts.push(`🏨 <b>${escapeHtml(hotel)}</b>`);
     const roomCat = norm(d.accommodationCategory || d.roomCategory);
     if (roomCat) parts.push(`⭐️ ${escapeHtml(roomCat)}`);
     if (accommodation) parts.push(`🛏 ${escapeHtml(accommodation)}`);
 
-    const food = norm(d.food);
-    if (food) {
-      const halal = d.halal ? " (Halal)" : "";
-      parts.push(`🍽 ${escapeHtml(food)}${escapeHtml(halal)}`);
+    const foodPretty = foodLabel(d.food);
+    if (foodPretty) {
+      const halalTag = d.halal ? " • Halal" : "";
+      parts.push(`🍽 ${escapeHtml(foodPretty)}${escapeHtml(halalTag)}`);
     }
 
-    const transfer = norm(d.transfer);
-    if (transfer) parts.push(`🚗 ${escapeHtml(transfer)}`);
+    const transferPretty = transferLabel(d.transfer);
+    if (transferPretty) parts.push(`🚗 ${escapeHtml(transferPretty)}`);
 
     if (d.changeable === true) parts.push(`🔁 <b>Можно вносить изменения</b>`);
     if (d.changeable === false) parts.push(`⛔ <b>Без изменений</b>`);
@@ -435,6 +498,9 @@ function buildServiceMessage(svc, category, role = "client") {
     if (route) parts.push(`✈️ <b>${escapeHtml(route)}</b>`);
     if (dates) parts.push(`🗓 <b>${escapeHtml(dates)}</b>`);
 
+    // NEW: one-way / round trip
+    parts.push(`🔁 ${escapeHtml(flightTripType(d))}`);
+
     const airline = norm(d.airline);
     if (airline) parts.push(`🛫 ${escapeHtml(airline)}`);
 
@@ -466,7 +532,10 @@ function buildServiceMessage(svc, category, role = "client") {
     const parts = [];
     if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
 
-    parts.push(`🆕 <b>НОВЫЙ ОТКАЗНОЙ БИЛЕТ НА МЕРОПРИЯТИЕ</b> <code>#R${serviceId}</code>`);
+    const evEmoji = ticketEmoji(d.eventCategory || d.ticketType || d.type);
+    parts.push(
+      `🆕 <b>НОВЫЙ ОТКАЗНОЙ БИЛЕТ НА МЕРОПРИЯТИЕ</b> ${evEmoji} <code>#R${serviceId}</code>`
+    );
 
     const priceDrop = getPriceDropMeta(svc.details, svc, role);
     if (priceDrop) {
@@ -475,7 +544,7 @@ function buildServiceMessage(svc, category, role = "client") {
     }
 
     const eventCat = norm(d.eventCategory);
-    if (eventCat) parts.push(`🏷 <b>${escapeHtml(eventCat)}</b>`);
+    if (eventCat) parts.push(`${ticketEmoji(eventCat)} <b>${escapeHtml(eventCat)}</b>`);
 
     const location = norm(d.location);
     if (location) parts.push(`📍 <b>${escapeHtml(location)}</b>`);
@@ -501,6 +570,7 @@ function buildServiceMessage(svc, category, role = "client") {
 
     return { text: parts.join("\n"), photoUrl: getFirstImageUrl(svc), serviceUrl };
   }
+
   // default template for all other cases
   const parts = [];
   if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
