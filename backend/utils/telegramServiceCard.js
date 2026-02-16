@@ -39,6 +39,7 @@ const CATEGORY_LABELS = {
   refused_hotel: "Отказной отель",
   refused_flight: "Отказной авиабилет",
   refused_ticket: "Отказной билет",
+  refused_event_ticket: "Отказной билет",
 };
 
 const CATEGORY_EMOJI = {
@@ -46,9 +47,10 @@ const CATEGORY_EMOJI = {
   refused_hotel: "🏨",
   refused_flight: "✈️",
   refused_ticket: "🎫",
+  refused_event_ticket: "🎫",
 };
 
-/* ===================== pretty labels (NEW) ===================== */
+/* ===================== pretty labels ===================== */
 
 function foodLabel(x) {
   const s = String(x || "").trim().toUpperCase();
@@ -331,8 +333,6 @@ function getPriceDropMeta(detailsRaw, svc, role) {
   if (current >= prev) return null;
 
   const diff = prev - current;
-
-  // currency: reuse PRICE_CURRENCY (USD by default)
   const cur = PRICE_CURRENCY || "USD";
 
   return {
@@ -341,7 +341,7 @@ function getPriceDropMeta(detailsRaw, svc, role) {
   };
 }
 
-/* ===================== MAIN CARD BUILDER (1:1 из bot.js) ===================== */
+/* ===================== MAIN CARD BUILDER ===================== */
 
 function buildServiceMessage(svc, category, role = "client") {
   const d = parseDetailsAny(svc.details);
@@ -380,11 +380,7 @@ function buildServiceMessage(svc, category, role = "client") {
   const route = joinClean([from && to ? `${from} → ${to}` : to || from, country]);
 
   /**
-   * 🗓 dates (UPGRADED FALLBACKS):
-   * - tours: startDate/endDate
-   * - flights: departureFlightDate/returnDate/returnFlightDate
-   * - hotels: checkIn/checkOut, checkInDate/checkOutDate, arrival/departure
-   * - events: eventDate (single date)
+   * 🗓 dates (UPGRADED FALLBACKS)
    */
   const startRaw =
     d.departureFlightDate ||
@@ -413,7 +409,6 @@ function buildServiceMessage(svc, category, role = "client") {
   const start = norm(startRaw);
   const end = norm(endRaw);
 
-  // if only one date (event), keep it as single
   const dates = start && end && start !== end ? `${start} → ${end}` : start || end || "";
 
   let nights = null;
@@ -451,12 +446,203 @@ function buildServiceMessage(svc, category, role = "client") {
     if (u) telegramLine = `Telegram: ${a(`https://t.me/${encodeURIComponent(u)}`, u)}`;
   }
 
-  // special templates for refused_* to match your group card format
+  /* ===================== PREMIUM helpers ===================== */
+
+  const labelLine = (icon, label, value, boldValue = true) => {
+    const v = String(value || "").trim();
+    if (!v) return "";
+    if (boldValue) return `${icon} <b>${escapeHtml(label)}:</b> <b>${escapeHtml(v)}</b>`;
+    return `${icon} <b>${escapeHtml(label)}:</b> ${escapeHtml(v)}`;
+  };
+
+  const titleLine = (mode = "generic") => {
+    const raw = String(svc.title || "").trim();
+
+    const isGeneric =
+      raw &&
+      ["отказной тур", "отказной отель", "отказной авиабилет", "отказной билет"].includes(
+        raw.toLowerCase()
+      );
+
+    if (raw && !isGeneric) {
+      return `📝 <b>${escapeHtml(normalizeTitleSoft(raw))}</b>`;
+    }
+
+    if (mode === "hotel") {
+      const h = norm(d.hotel || d.hotelName);
+      const city = norm(d.directionTo) || norm(d.city) || norm(d.locationCity);
+      const country2 = norm(d.directionCountry);
+      if (h) {
+        const place = [city, country2].filter(Boolean).join(", ");
+        return place
+          ? `📝 <b>${escapeHtml(h)} (${escapeHtml(place)})</b>`
+          : `📝 <b>${escapeHtml(h)}</b>`;
+      }
+      const loc = route || [city, country2].filter(Boolean).join(", ");
+      if (loc) return `📝 <b>${escapeHtml(loc)}</b>`;
+      return "";
+    }
+
+    if (mode === "flight") {
+      const f = norm(d.directionFrom);
+      const t = norm(d.directionTo);
+      const c = norm(d.directionCountry);
+      const rt = f && t ? `${f} → ${t}` : route;
+      const base = [rt, c].filter(Boolean).join(" • ");
+      if (base) return `📝 <b>${escapeHtml(base)}</b>`;
+      return "";
+    }
+
+    if (mode === "ticket") {
+      const cat = norm(d.eventCategory) || norm(d.ticketType) || norm(d.type);
+      const loc = norm(d.location) || norm(d.city) || norm(d.directionTo);
+      const dt =
+        norm(d.eventDate) ||
+        norm(d.startDate) ||
+        norm(d.departureDate) ||
+        norm(d.date) ||
+        "";
+      const pieces = [cat, loc].filter(Boolean).join(" • ");
+      if (pieces && dt) return `📝 <b>${escapeHtml(pieces)} — ${escapeHtml(dt)}</b>`;
+      if (pieces) return `📝 <b>${escapeHtml(pieces)}</b>`;
+      if (loc && dt) return `📝 <b>${escapeHtml(loc)} — ${escapeHtml(dt)}</b>`;
+      if (loc) return `📝 <b>${escapeHtml(loc)}</b>`;
+      return "";
+    }
+
+    return "";
+  };
+
+  const hasReturnFlight = () => {
+    const rr =
+      d.returnFlightDate ||
+      d.returnDate ||
+      d.endFlightDate ||
+      d.endDate ||
+      d.checkOut ||
+      d.checkOutDate ||
+      d.departureDate ||
+      d.departure ||
+      "";
+    return String(rr || "").trim().length > 0;
+  };
+
+  const flightDateLabel = () => {
+    const s = String(start || "").trim();
+    const e = String(end || "").trim();
+    if (s && e && s !== e) return { label: "Даты", value: `${s} → ${e}` };
+    if (s) return { label: "Дата", value: s };
+    if (e) return { label: "Дата", value: e };
+    return null;
+  };
+
+  const eventDateLabel = () => {
+    const s = String(start || "").trim();
+    const e = String(end || "").trim();
+    if (s && e && s !== e) return { label: "Даты", value: `${s} → ${e}` };
+    if (s) return { label: "Дата", value: s };
+    if (e) return { label: "Дата", value: e };
+    return null;
+  };
+
+  const hotelDatesLines = () => {
+    const ci =
+      norm(d.checkIn || d.checkInDate || d.arrivalDate || d.arrival || d.startDate || "");
+    const co =
+      norm(d.checkOut || d.checkOutDate || d.departureDate || d.departure || d.endDate || "");
+
+    const lines = [];
+    if (ci) lines.push(labelLine("🟢", "Заезд", ci, true));
+    if (co) lines.push(labelLine("🔴", "Выезд", co, true));
+
+    let n = nights;
+    try {
+      if (ci && co) {
+        const sdt = parseDateFlexible(ci);
+        const edt = parseDateFlexible(co);
+        if (sdt && edt) {
+          const diff = Math.round((edt.getTime() - sdt.getTime()) / 86400000);
+          if (diff > 0 && diff < 60) n = diff;
+        }
+      }
+    } catch {}
+    if (n) lines.push(`🌙 <b>Ночей:</b> <b>${escapeHtml(String(n))}</b>`);
+    return lines;
+  };
+
+  const hotelLocationLines = () => {
+    const city =
+      norm(d.directionTo) ||
+      norm(d.city) ||
+      norm(d.locationCity) ||
+      norm(d.toCity) ||
+      "";
+    const country2 =
+      norm(d.directionCountry) ||
+      norm(d.country) ||
+      norm(d.locationCountry) ||
+      "";
+    const lines = [];
+    if (city) lines.push(labelLine("🏙", "Город", city, true));
+    if (country2) lines.push(labelLine("🌍", "Страна", country2, true));
+    if (!lines.length && route) lines.push(labelLine("📍", "Локация", route, true));
+    return lines;
+  };
+
+  const tourLocationLines = () => {
+    const fromCity = norm(d.directionFrom || d.fromCity || d.cityFrom || "");
+    const toCity = norm(d.directionTo || d.toCity || d.cityTo || "");
+    const country2 = norm(d.directionCountry || d.country || "");
+    const lines = [];
+    if (fromCity) lines.push(labelLine("🛫", "Город вылета", fromCity, true));
+    if (toCity) lines.push(labelLine("🛬", "Город прибытия", toCity, true));
+    if (country2) lines.push(labelLine("🌍", "Страна направления", country2, true));
+    if (!lines.length && route) lines.push(labelLine("📍", "Маршрут", route, true));
+    return lines;
+  };
+
+  const flightLocationLines = () => {
+    const fromCity = norm(d.directionFrom || d.fromCity || d.cityFrom || "");
+    const toCity = norm(d.directionTo || d.toCity || d.cityTo || "");
+    const country2 = norm(d.directionCountry || d.country || "");
+    const lines = [];
+    if (fromCity) lines.push(labelLine("🛫", "Вылет", fromCity, true));
+    if (toCity) lines.push(labelLine("🛬", "Прилёт", toCity, true));
+    if (country2) lines.push(labelLine("🌍", "Страна", country2, true));
+    if (!lines.length && route) lines.push(labelLine("📍", "Маршрут", route, true));
+    return lines;
+  };
+
+  const ticketLocationLines = () => {
+    const city =
+      norm(d.city) ||
+      norm(d.locationCity) ||
+      norm(d.directionTo) ||
+      norm(d.toCity) ||
+      "";
+    const country2 =
+      norm(d.country) ||
+      norm(d.locationCountry) ||
+      norm(d.directionCountry) ||
+      "";
+    const lines = [];
+    if (city) lines.push(labelLine("🏙", "Город", city, true));
+    if (country2) lines.push(labelLine("🌍", "Страна", country2, true));
+    const location = norm(d.location);
+    if (!lines.length && location) lines.push(labelLine("📍", "Локация", location, true));
+    return lines;
+  };
+
+  /* ===================== SPECIAL TEMPLATES ===================== */
+
   if (role !== "provider" && String(category) === "refused_tour") {
     const parts = [];
 
     if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
     parts.push(`🆕 <b>НОВЫЙ ОТКАЗНОЙ ТУР</b> <code>#R${serviceId}</code>`);
+
+    const tl = titleLine("generic");
+    if (tl) parts.push(tl);
 
     const priceDrop = getPriceDropMeta(svc.details, svc, role);
     if (priceDrop) {
@@ -464,29 +650,31 @@ function buildServiceMessage(svc, category, role = "client") {
       parts.push(priceDrop.diffLine);
     }
 
-    if (route) parts.push(`✈️ <b>${escapeHtml(route)}</b>`);
-    if (dates) parts.push(`🗓 <b>${escapeHtml(dates)}${nights ? ` (${nights} ноч.)` : ""}</b>`);
+    const locLines = tourLocationLines();
+    for (const line of locLines) parts.push(line);
 
-    if (hotel) parts.push(`🏨 <b>${escapeHtml(hotel)}</b>`);
-    
-    // ⭐️ звезды отдельной строкой (если есть в roomCategory/accommodationCategory)
+    if (dates) {
+      const dv = `${dates}${nights ? ` (${nights} ноч.)` : ""}`;
+      parts.push(labelLine("🗓", "Даты", dv, true));
+    }
+
+    if (hotel) parts.push(labelLine("🏨", "Отель", hotel, true));
+
     const starsPretty = extractStars(d);
     if (starsPretty) parts.push(`${escapeHtml(starsPretty)}`);
-    
-    // 🛏 Категория номера отдельно (без "5*" внутри)
+
     const roomCatRaw = d.accommodationCategory || d.roomCategory || "";
     const roomCatClean = stripStarsFromRoomCat(roomCatRaw);
     const roomCat = norm(roomCatClean);
-    if (roomCat) parts.push(`🛏 <b>Категория номера:</b> ${escapeHtml(roomCat)}`);
-    
-    // 👥 Размещение отдельно (DBL/TRPL или ADT/CHD/INF)
-    if (accommodation) parts.push(`👥 <b>Размещение:</b> ${escapeHtml(accommodation)}`);
+    if (roomCat) parts.push(labelLine("🛏", "Категория номера", roomCat, false));
+
+    if (accommodation) parts.push(labelLine("👥", "Размещение", accommodation, false));
 
     if (priceWithCur != null && String(priceWithCur).trim()) {
-      parts.push(`💸 <b>${escapeHtml(String(priceWithCur))}</b> <i>(брутто)</i>`);
+      parts.push(`💸 <b>Цена:</b> <b>${escapeHtml(String(priceWithCur))}</b> <i>(брутто)</i>`);
     }
 
-    if (badgeClean) parts.push(`⏳ <b>Срок:</b> ${escapeHtml(badgeClean)}`);
+    if (badgeClean) parts.push(labelLine("⏳", "Срок", badgeClean, false));
 
     if (d.changeable === true) parts.push(`🔁 <b>Можно вносить изменения</b>`);
     else parts.push(`✅ <b>Фикс-пакет</b>: без замен (отель/даты/размещение)`);
@@ -509,45 +697,49 @@ function buildServiceMessage(svc, category, role = "client") {
 
     parts.push(`🆕 <b>НОВЫЙ ОТКАЗНОЙ ОТЕЛЬ</b> <code>#R${serviceId}</code>`);
 
+    const tl = titleLine("hotel");
+    if (tl) parts.push(tl);
+
     const priceDrop = getPriceDropMeta(svc.details, svc, role);
     if (priceDrop) {
       parts.push(priceDrop.header);
       parts.push(priceDrop.diffLine);
     }
 
-    if (route) parts.push(`📍 <b>${escapeHtml(route)}</b>`);
-    if (dates) parts.push(`🗓 <b>${escapeHtml(dates)}${nights ? ` (${nights} ноч.)` : ""}</b>`);
+    const hl = hotelLocationLines();
+    for (const line of hl) parts.push(line);
 
-    if (hotel) parts.push(`🏨 <b>${escapeHtml(hotel)}</b>`);
-    // ⭐️ звезды отдельной строкой (красиво и без дубля)
-    const starsPretty = extractStars(d); // например "⭐️ 5*"
+    const hd = hotelDatesLines();
+    for (const line of hd) parts.push(line);
+
+    if (hotel) parts.push(labelLine("🏨", "Отель", hotel, true));
+
+    const starsPretty = extractStars(d);
     if (starsPretty) parts.push(`${escapeHtml(starsPretty)}`);
-    
-    // 🛏 Категория номера отдельно (без "5*" внутри)
+
     const roomCatRaw = d.accommodationCategory || d.roomCategory || "";
     const roomCatClean = stripStarsFromRoomCat(roomCatRaw);
     const roomCat = norm(roomCatClean);
-    if (roomCat) parts.push(`🛏 <b>Категория номера:</b> ${escapeHtml(roomCat)}`);
-    
-    // Размещение (ADT/CHD/INF или DBL/TRPL и т.п.)
-    if (accommodation) parts.push(`👥 <b>Размещение:</b> ${escapeHtml(accommodation)}`);
+    if (roomCat) parts.push(labelLine("🛏", "Категория номера", roomCat, false));
+
+    if (accommodation) parts.push(labelLine("👥", "Размещение", accommodation, false));
 
     const foodPretty = foodLabel(d.food);
     if (foodPretty) {
       const halalTag = d.halal ? " • Halal" : "";
-      parts.push(`🍽 ${escapeHtml(foodPretty)}${escapeHtml(halalTag)}`);
+      parts.push(labelLine("🍽", "Питание", `${foodPretty}${halalTag}`, false));
     }
 
     const transferPretty = transferLabel(d.transfer);
-    if (transferPretty) parts.push(`🚗 ${escapeHtml(transferPretty)}`);
+    if (transferPretty) parts.push(labelLine("🚗", "Трансфер", transferPretty, false));
 
     if (d.changeable === true) parts.push(`🔁 <b>Можно вносить изменения</b>`);
     if (d.changeable === false) parts.push(`⛔ <b>Без изменений</b>`);
 
     if (priceWithCur != null && String(priceWithCur).trim()) {
-      parts.push(`💸 <b>${escapeHtml(String(priceWithCur))}</b> <i>(брутто)</i>`);
+      parts.push(`💸 <b>Цена:</b> <b>${escapeHtml(String(priceWithCur))}</b> <i>(брутто)</i>`);
     }
-    if (badgeClean) parts.push(`⏳ <b>Срок:</b> ${escapeHtml(badgeClean)}`);
+    if (badgeClean) parts.push(labelLine("⏳", "Срок", badgeClean, false));
 
     parts.push(`⚡ <b>Горящее</b>: такие варианты уходят быстро`);
 
@@ -567,27 +759,35 @@ function buildServiceMessage(svc, category, role = "client") {
 
     parts.push(`🆕 <b>НОВЫЙ ОТКАЗНОЙ АВИАБИЛЕТ</b> <code>#R${serviceId}</code>`);
 
+    const tl = titleLine("flight");
+    if (tl) parts.push(tl);
+
     const priceDrop = getPriceDropMeta(svc.details, svc, role);
     if (priceDrop) {
       parts.push(priceDrop.header);
       parts.push(priceDrop.diffLine);
     }
 
-    if (route) parts.push(`✈️ <b>${escapeHtml(route)}</b>`);
-    if (dates) parts.push(`🗓 <b>${escapeHtml(dates)}</b>`);
+    const fl = flightLocationLines();
+    for (const line of fl) parts.push(line);
 
-    parts.push(`🔁 ${escapeHtml(flightTripType(d))}`);
+    const fd = flightDateLabel();
+    if (fd) parts.push(labelLine("🗓", fd.label, fd.value, true));
+
+    if (hasReturnFlight()) {
+      parts.push(labelLine("🔁", "Тип", "Туда-обратно", false));
+    }
 
     const airline = norm(d.airline);
-    if (airline) parts.push(`🛫 ${escapeHtml(airline)}`);
+    if (airline) parts.push(labelLine("🛫", "Авиакомпания", airline, false));
 
     const flightDetails = norm(d.flightDetails);
-    if (flightDetails) parts.push(`📝 ${escapeHtml(flightDetails)}`);
+    if (flightDetails) parts.push(labelLine("📝", "Детали", flightDetails, false));
 
     if (priceWithCur != null && String(priceWithCur).trim()) {
-      parts.push(`💸 <b>${escapeHtml(String(priceWithCur))}</b> <i>(брутто)</i>`);
+      parts.push(`💸 <b>Цена:</b> <b>${escapeHtml(String(priceWithCur))}</b> <i>(брутто)</i>`);
     }
-    if (badgeClean) parts.push(`⏳ <b>Срок:</b> ${escapeHtml(badgeClean)}`);
+    if (badgeClean) parts.push(labelLine("⏳", "Срок", badgeClean, false));
 
     parts.push(`⚡ <b>Горящее</b>: такие варианты уходят быстро`);
 
@@ -613,6 +813,9 @@ function buildServiceMessage(svc, category, role = "client") {
       `🆕 <b>НОВЫЙ ОТКАЗНОЙ БИЛЕТ НА МЕРОПРИЯТИЕ</b> ${evEmoji} <code>#R${serviceId}</code>`
     );
 
+    const tl = titleLine("ticket");
+    if (tl) parts.push(tl);
+
     const priceDrop = getPriceDropMeta(svc.details, svc, role);
     if (priceDrop) {
       parts.push(priceDrop.header);
@@ -620,20 +823,21 @@ function buildServiceMessage(svc, category, role = "client") {
     }
 
     const eventCat = norm(d.eventCategory);
-    if (eventCat) parts.push(`${ticketEmoji(eventCat)} <b>${escapeHtml(eventCat)}</b>`);
+    if (eventCat) parts.push(labelLine(evEmoji, "Категория", eventCat, true));
 
-    const location = norm(d.location);
-    if (location) parts.push(`📍 <b>${escapeHtml(location)}</b>`);
+    const tlc = ticketLocationLines();
+    for (const line of tlc) parts.push(line);
 
-    if (dates) parts.push(`🗓 <b>${escapeHtml(dates)}</b>`);
+    const ed = eventDateLabel();
+    if (ed) parts.push(labelLine("🗓", ed.label, ed.value, true));
 
     const ticketDetails = norm(d.ticketDetails);
-    if (ticketDetails) parts.push(`📝 ${escapeHtml(ticketDetails)}`);
+    if (ticketDetails) parts.push(labelLine("📝", "Детали", ticketDetails, false));
 
     if (priceWithCur != null && String(priceWithCur).trim()) {
-      parts.push(`💸 <b>${escapeHtml(String(priceWithCur))}</b> <i>(брутто)</i>`);
+      parts.push(`💸 <b>Цена:</b> <b>${escapeHtml(String(priceWithCur))}</b> <i>(брутто)</i>`);
     }
-    if (badgeClean) parts.push(`⏳ <b>Срок:</b> ${escapeHtml(badgeClean)}`);
+    if (badgeClean) parts.push(labelLine("⏳", "Срок", badgeClean, false));
 
     parts.push(`⚡ <b>Горящее</b>: такие варианты уходят быстро`);
 
@@ -647,7 +851,8 @@ function buildServiceMessage(svc, category, role = "client") {
     return { text: parts.join("\n"), photoUrl: getFirstImageUrl(svc), serviceUrl };
   }
 
-  // default template for all other cases
+  /* ===================== DEFAULT ===================== */
+
   const parts = [];
   if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
   parts.push(`<b>${escapeHtml(titleDecor)}</b>`);
