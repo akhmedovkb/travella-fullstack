@@ -468,7 +468,19 @@ function buildServiceMessage(svc, category, role = "client") {
     if (dates) parts.push(`🗓 <b>${escapeHtml(dates)}${nights ? ` (${nights} ноч.)` : ""}</b>`);
 
     if (hotel) parts.push(`🏨 <b>${escapeHtml(hotel)}</b>`);
-    if (accommodation) parts.push(`🛏 ${escapeHtml(accommodation)}`);
+    
+    // ⭐️ звезды отдельной строкой (если есть в roomCategory/accommodationCategory)
+    const starsPretty = extractStars(d);
+    if (starsPretty) parts.push(`${escapeHtml(starsPretty)}`);
+    
+    // 🛏 Категория номера отдельно (без "5*" внутри)
+    const roomCatRaw = d.accommodationCategory || d.roomCategory || "";
+    const roomCatClean = stripStarsFromRoomCat(roomCatRaw);
+    const roomCat = norm(roomCatClean);
+    if (roomCat) parts.push(`🛏 <b>Категория номера:</b> ${escapeHtml(roomCat)}`);
+    
+    // 👥 Размещение отдельно (DBL/TRPL или ADT/CHD/INF)
+    if (accommodation) parts.push(`👥 <b>Размещение:</b> ${escapeHtml(accommodation)}`);
 
     if (priceWithCur != null && String(priceWithCur).trim()) {
       parts.push(`💸 <b>${escapeHtml(String(priceWithCur))}</b> <i>(брутто)</i>`);
@@ -476,7 +488,9 @@ function buildServiceMessage(svc, category, role = "client") {
 
     if (badgeClean) parts.push(`⏳ <b>Срок:</b> ${escapeHtml(badgeClean)}`);
 
-    parts.push(`✅ <b>Фикс-пакет</b>: без замен (отель/даты/размещение)`);
+    if (d.changeable === true) parts.push(`🔁 <b>Можно вносить изменения</b>`);
+    else parts.push(`✅ <b>Фикс-пакет</b>: без замен (отель/даты/размещение)`);
+
     parts.push(`⚡ <b>Горящее</b>: такие варианты уходят быстро`);
 
     parts.push("");
