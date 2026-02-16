@@ -1,5 +1,4 @@
 // backend/utils/telegramServiceCard.js
-const { parseDateFlexible } = require("../telegram/helpers/serviceActual");
 
 /* ===================== CONFIG (как в bot.js) ===================== */
 
@@ -100,15 +99,51 @@ function ticketEmoji(categoryOrType) {
   return "🎫";
 }
 
-function flightTripType(details) {
-  const d = details || {};
-  const hasReturn =
-    !!(d.returnFlightDate || d.returnDate || d.endDate || d.endFlightDate) ||
-    String(d.tripType || "").toLowerCase().includes("round") ||
-    String(d.tripType || "").toLowerCase().includes("return") ||
-    String(d.tripType || "").toLowerCase().includes("туда") ||
-    String(d.tripType || "").toLowerCase().includes("обратно");
-  return hasReturn ? "Туда-обратно" : "В одну сторону";
+/* ===================== local date parser (SELF-CONTAINED) ===================== */
+/**
+ * parseDateFlexible:
+ * - supports Date
+ * - supports ISO: 2026-02-16 / 2026-02-16T10:00:00Z
+ * - supports D.M.YYYY / DD.MM.YYYY / D/MM/YYYY
+ * - supports "YYYY.MM.DD"
+ * returns Date or null
+ */
+function parseDateFlexible(x) {
+  if (!x) return null;
+  if (x instanceof Date && !isNaN(x.getTime())) return x;
+
+  const s0 = String(x).trim();
+  if (!s0) return null;
+
+  // ISO / native
+  const dNative = new Date(s0);
+  if (!isNaN(dNative.getTime())) return dNative;
+
+  // dd.mm.yyyy or dd/mm/yyyy
+  let m = s0.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})(?:\s.*)?$/);
+  if (m) {
+    const dd = Number(m[1]);
+    const mm = Number(m[2]);
+    const yyyy = Number(m[3]);
+    if (yyyy >= 1900 && mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
+      const d = new Date(yyyy, mm - 1, dd);
+      if (!isNaN(d.getTime())) return d;
+    }
+  }
+
+  // yyyy.mm.dd
+  m = s0.match(/^(\d{4})[./-](\d{1,2})[./-](\d{1,2})(?:\s.*)?$/);
+  if (m) {
+    const yyyy = Number(m[1]);
+    const mm = Number(m[2]);
+    const dd = Number(m[3]);
+    if (yyyy >= 1900 && mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
+      const d = new Date(yyyy, mm - 1, dd);
+      if (!isNaN(d.getTime())) return d;
+    }
+  }
+
+  return null;
 }
 
 /* ===================== helpers (скопировано из bot.js) ===================== */
@@ -151,9 +186,7 @@ function parseDetailsAny(details) {
 }
 
 /**
- * ⭐️ stars extractor (UPGRADED):
- * - understands: "5*", "⭐ 5", "5 star", "5 stars", "5зв", "5 звёзд"
- * - also accepts plain digit 1..7 inside the string
+ * ⭐️ stars extractor (UPGRADED)
  */
 function extractStars(details) {
   const d = details || {};
@@ -162,17 +195,14 @@ function extractStars(details) {
 
   const s = raw.toLowerCase();
 
-  // common explicit patterns
   let m = raw.match(/([1-7])\s*\*|⭐\s*([1-7])/);
   let stars = m ? Number(m[1] || m[2]) : null;
 
-  // word-based patterns
   if (!stars) {
     m = s.match(/([1-7])\s*(star|stars|зв|зв\.|звезд|звёзд|звезда|звёзда)/i);
     stars = m ? Number(m[1]) : null;
   }
 
-  // fallback: any digit 1..7 (but avoid picking from years like 2026)
   if (!stars) {
     m = s.match(/(^|[^\d])([1-7])([^\d]|$)/);
     stars = m ? Number(m[2]) : null;
@@ -185,7 +215,6 @@ function extractStars(details) {
 function stripStarsFromRoomCat(raw) {
   const s = String(raw || "").trim();
   if (!s) return "";
-  // убираем "5*", "⭐ 5", "5 stars", "5зв" и т.п., чтобы не дублировать со строкой ⭐️ 5*
   return s
     .replace(/⭐\s*[1-7]\s*\*?/gi, "")
     .replace(/\b[1-7]\s*\*/gi, "")
@@ -321,11 +350,9 @@ function toNumberPrice(v) {
 function getPriceDropMeta(detailsRaw, svc, role) {
   const d = parseDetailsAny(detailsRaw);
 
-  // current price exactly as card uses
   const currentRaw = pickPrice(d, svc, role);
   const current = toNumberPrice(currentRaw);
 
-  // previous price stored in details
   const prevRaw = d.previousPrice ?? d.prevPrice ?? d.oldPrice ?? null;
   const prev = toNumberPrice(prevRaw);
 
@@ -379,9 +406,8 @@ function buildServiceMessage(svc, category, role = "client") {
   const country = norm(d.directionCountry);
   const route = joinClean([from && to ? `${from} → ${to}` : to || from, country]);
 
-  /**
-   * 🗓 dates (UPGRADED FALLBACKS)
-   */
+  /* ===================== dates (UPGRADED FALLBACKS) ===================== */
+
   const startRaw =
     d.departureFlightDate ||
     d.startDate ||
@@ -633,6 +659,13 @@ function buildServiceMessage(svc, category, role = "client") {
     return lines;
   };
 
+  const pushPriceDrop = (parts) => {
+    const priceDrop = getPriceDropMeta(svc.details, svc, role);
+    if (!priceDrop) return;
+    parts.push(priceDrop.header);
+    parts.push(priceDrop.diffLine);
+  };
+
   /* ===================== SPECIAL TEMPLATES ===================== */
 
   if (role !== "provider" && String(category) === "refused_tour") {
@@ -644,11 +677,7 @@ function buildServiceMessage(svc, category, role = "client") {
     const tl = titleLine("generic");
     if (tl) parts.push(tl);
 
-    const priceDrop = getPriceDropMeta(svc.details, svc, role);
-    if (priceDrop) {
-      parts.push(priceDrop.header);
-      parts.push(priceDrop.diffLine);
-    }
+    pushPriceDrop(parts);
 
     const locLines = tourLocationLines();
     for (const line of locLines) parts.push(line);
@@ -700,11 +729,7 @@ function buildServiceMessage(svc, category, role = "client") {
     const tl = titleLine("hotel");
     if (tl) parts.push(tl);
 
-    const priceDrop = getPriceDropMeta(svc.details, svc, role);
-    if (priceDrop) {
-      parts.push(priceDrop.header);
-      parts.push(priceDrop.diffLine);
-    }
+    pushPriceDrop(parts);
 
     const hl = hotelLocationLines();
     for (const line of hl) parts.push(line);
@@ -762,11 +787,7 @@ function buildServiceMessage(svc, category, role = "client") {
     const tl = titleLine("flight");
     if (tl) parts.push(tl);
 
-    const priceDrop = getPriceDropMeta(svc.details, svc, role);
-    if (priceDrop) {
-      parts.push(priceDrop.header);
-      parts.push(priceDrop.diffLine);
-    }
+    pushPriceDrop(parts);
 
     const fl = flightLocationLines();
     for (const line of fl) parts.push(line);
@@ -816,11 +837,7 @@ function buildServiceMessage(svc, category, role = "client") {
     const tl = titleLine("ticket");
     if (tl) parts.push(tl);
 
-    const priceDrop = getPriceDropMeta(svc.details, svc, role);
-    if (priceDrop) {
-      parts.push(priceDrop.header);
-      parts.push(priceDrop.diffLine);
-    }
+    pushPriceDrop(parts);
 
     const eventCat = norm(d.eventCategory);
     if (eventCat) parts.push(labelLine(evEmoji, "Категория", eventCat, true));
