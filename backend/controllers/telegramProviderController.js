@@ -9,6 +9,7 @@ const REFUSED_CATEGORIES = [
   "refused_hotel",
   "refused_flight",
   "refused_ticket",
+  "refused_event_ticket",
 ];
 
 const TG_TOKEN =
