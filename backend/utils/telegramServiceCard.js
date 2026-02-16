@@ -148,15 +148,35 @@ function parseDetailsAny(details) {
   return {};
 }
 
+/**
+ * ⭐️ stars extractor (UPGRADED):
+ * - understands: "5*", "⭐ 5", "5 star", "5 stars", "5зв", "5 звёзд"
+ * - also accepts plain digit 1..7 inside the string
+ */
 function extractStars(details) {
   const d = details || {};
   const raw = String(d.accommodationCategory || d.roomCategory || "").trim();
   if (!raw) return null;
 
-  const m = raw.match(/([1-7])\s*\*|⭐\s*([1-7])/);
-  const stars = m ? Number(m[1] || m[2]) : null;
-  if (!stars) return null;
+  const s = raw.toLowerCase();
 
+  // common explicit patterns
+  let m = raw.match(/([1-7])\s*\*|⭐\s*([1-7])/);
+  let stars = m ? Number(m[1] || m[2]) : null;
+
+  // word-based patterns
+  if (!stars) {
+    m = s.match(/([1-7])\s*(star|stars|зв|зв\.|звезд|звёзд|звезда|звёзда)/i);
+    stars = m ? Number(m[1]) : null;
+  }
+
+  // fallback: any digit 1..7 (but avoid picking from years like 2026)
+  if (!stars) {
+    m = s.match(/(^|[^\d])([1-7])([^\d]|$)/);
+    stars = m ? Number(m[2]) : null;
+  }
+
+  if (!stars) return null;
   return `⭐️ ${stars}*`;
 }
 
@@ -347,12 +367,41 @@ function buildServiceMessage(svc, category, role = "client") {
   const country = norm(d.directionCountry);
   const route = joinClean([from && to ? `${from} → ${to}` : to || from, country]);
 
-  const startRaw = d.departureFlightDate || d.startDate || d.startFlightDate || "";
-  // для refused_flight на фронте используется details.returnDate
-  const endRaw = d.returnFlightDate || d.returnDate || d.endDate || d.endFlightDate || "";
+  /**
+   * 🗓 dates (UPGRADED FALLBACKS):
+   * - tours: startDate/endDate
+   * - flights: departureFlightDate/returnDate/returnFlightDate
+   * - hotels: checkIn/checkOut, checkInDate/checkOutDate, arrival/departure
+   * - events: eventDate (single date)
+   */
+  const startRaw =
+    d.departureFlightDate ||
+    d.startDate ||
+    d.startFlightDate ||
+    d.checkIn ||
+    d.checkInDate ||
+    d.arrivalDate ||
+    d.arrival ||
+    d.dateFrom ||
+    d.eventDate ||
+    "";
+
+  const endRaw =
+    d.returnFlightDate ||
+    d.returnDate ||
+    d.endDate ||
+    d.endFlightDate ||
+    d.checkOut ||
+    d.checkOutDate ||
+    d.departureDate ||
+    d.departure ||
+    d.dateTo ||
+    "";
+
   const start = norm(startRaw);
   const end = norm(endRaw);
 
+  // if only one date (event), keep it as single
   const dates = start && end && start !== end ? `${start} → ${end}` : start || end || "";
 
   let nights = null;
@@ -395,10 +444,8 @@ function buildServiceMessage(svc, category, role = "client") {
     const parts = [];
 
     if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
-
     parts.push(`🆕 <b>НОВЫЙ ОТКАЗНОЙ ТУР</b> <code>#R${serviceId}</code>`);
 
-    // ✅ price drop header + diff (only when previousPrice exists and current < previous)
     const priceDrop = getPriceDropMeta(svc.details, svc, role);
     if (priceDrop) {
       parts.push(priceDrop.header);
@@ -406,10 +453,7 @@ function buildServiceMessage(svc, category, role = "client") {
     }
 
     if (route) parts.push(`✈️ <b>${escapeHtml(route)}</b>`);
-
-    if (dates) {
-      parts.push(`🗓 <b>${escapeHtml(dates)}${nights ? ` (${nights} ноч.)` : ""}</b>`);
-    }
+    if (dates) parts.push(`🗓 <b>${escapeHtml(dates)}${nights ? ` (${nights} ноч.)` : ""}</b>`);
 
     if (hotel) parts.push(`🏨 <b>${escapeHtml(hotel)}</b>`);
     if (accommodation) parts.push(`🛏 ${escapeHtml(accommodation)}`);
@@ -446,8 +490,7 @@ function buildServiceMessage(svc, category, role = "client") {
     }
 
     if (route) parts.push(`📍 <b>${escapeHtml(route)}</b>`);
-    if (dates)
-      parts.push(`🗓 <b>${escapeHtml(dates)}${nights ? ` (${nights} ноч.)` : ""}</b>`);
+    if (dates) parts.push(`🗓 <b>${escapeHtml(dates)}${nights ? ` (${nights} ноч.)` : ""}</b>`);
 
     if (hotel) parts.push(`🏨 <b>${escapeHtml(hotel)}</b>`);
     const roomCat = norm(d.accommodationCategory || d.roomCategory);
@@ -498,7 +541,6 @@ function buildServiceMessage(svc, category, role = "client") {
     if (route) parts.push(`✈️ <b>${escapeHtml(route)}</b>`);
     if (dates) parts.push(`🗓 <b>${escapeHtml(dates)}</b>`);
 
-    // NEW: one-way / round trip
     parts.push(`🔁 ${escapeHtml(flightTripType(d))}`);
 
     const airline = norm(d.airline);
@@ -524,7 +566,6 @@ function buildServiceMessage(svc, category, role = "client") {
     return { text: parts.join("\n"), photoUrl: getFirstImageUrl(svc), serviceUrl };
   }
 
-  // в БД категория может быть refused_ticket, а на фронте — refused_event_ticket
   if (
     role !== "provider" &&
     (String(category) === "refused_ticket" || String(category) === "refused_event_ticket")
