@@ -212,8 +212,14 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
     const svc = info2.rows[0] || null;
     const cat = String(svc?.category || "").toLowerCase();
 
-    const isRefused = ["refused_tour", "refused_hotel", "refused_flight", "refused_ticket"].includes(cat);
-
+    const isRefused = [
+                        "refused_tour",
+                        "refused_hotel",
+                        "refused_flight",
+                        "refused_ticket",
+                        "refused_event_ticket",
+                      ].includes(cat);
+    
     if (svc && isRefused) {
       // ВАЖНО: users/provs жмут /start именно в новом боте
       const botUsername = String(
