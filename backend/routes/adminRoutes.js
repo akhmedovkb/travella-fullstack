@@ -151,7 +151,7 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
             rejected_by       = NULL,
             rejected_reason   = NULL,
             updated_at        = NOW()
-      WHERE id = $1 AND moderation_status = 'pending'
+      WHERE id = $1 AND moderation_status IN ('pending','approved')
       RETURNING id, status, moderation_status, published_at`,
     [req.params.id, adminId]
   );
