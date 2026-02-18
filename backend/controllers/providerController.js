@@ -4,6 +4,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const pool = require("../db");
 const { resolveCitySlugs } = require("../utils/cities");
+const { notifyModerationNew } = require("../utils/telegram");
 
 // ---------- Helpers ----------
 
@@ -656,9 +657,11 @@ const addService = async (req, res) => {
 
     const ins = await pool.query(
       `INSERT INTO services
-         (provider_id, title, description, price, category, images, availability, details, vehicle_model)
+         (provider_id, title, description, price, category, images, availability, details, vehicle_model,
+          status, submitted_at, updated_at)
        VALUES
-         ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8::jsonb,$9)
+         ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8::jsonb,$9,
+          'pending', NOW(), NOW())
        RETURNING *`,
       [
         providerId,
@@ -672,6 +675,13 @@ const addService = async (req, res) => {
         vehicleModelStr,
       ]
     );
+    
+    // ✅ уведомление админу (не ломаем создание, если телега упала)
+    try {
+      await notifyModerationNew({ service: ins.rows[0].id });
+    } catch (e) {
+      console.error("[tg] notifyModerationNew failed:", e?.message || e);
+    }
 
     res.status(201).json(ins.rows[0]);
   } catch (err) {
