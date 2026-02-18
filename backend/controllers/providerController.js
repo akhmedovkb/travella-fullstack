@@ -655,26 +655,26 @@ const addService = async (req, res) => {
       });
     }
 
-    const ins = await pool.query(
-      `INSERT INTO services
-         (provider_id, title, description, price, category, images, availability, details, vehicle_model,
-          status, submitted_at, updated_at)
-       VALUES
-         ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8::jsonb,$9,
-          'pending', NOW(), NOW())
-       RETURNING *`,
-      [
-        providerId,
-        title,
-        extended ? null : descriptionStr,
-        extended ? null : priceNum,
-        category,
-        JSON.stringify(imagesArr),
-        JSON.stringify(extended ? [] : availabilityArr),
-        JSON.stringify(detailsObj ?? {}),
-        vehicleModelStr,
-      ]
-    );
+  const ins = await pool.query(
+    `INSERT INTO services
+       (provider_id, title, description, price, category, images, availability, details, vehicle_model,
+        status, moderation_status, submitted_at, updated_at)
+     VALUES
+       ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8::jsonb,$9,
+        'pending','pending', NOW(), NOW())
+     RETURNING *`,
+    [
+      providerId,
+      title,
+      extended ? null : descriptionStr,
+      extended ? null : priceNum,
+      category,
+      JSON.stringify(imagesArr),
+      JSON.stringify(extended ? [] : availabilityArr),
+      JSON.stringify(detailsObj ?? {}),
+      vehicleModelStr,
+    ]
+  );
     
     // ✅ уведомление админу (не ломаем создание, если телега упала)
     try {
