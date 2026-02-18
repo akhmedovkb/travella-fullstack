@@ -210,17 +210,19 @@ router.post(
         `
           UPDATE services
              SET status='pending',
+                 moderation_status='pending',
                  submitted_at = NOW(),
                  updated_at   = NOW()
            WHERE id=$1
              AND provider_id=$2
-             AND status IN ('draft','rejected')
-           RETURNING id, status, submitted_at
+             AND (status IN ('draft','rejected') OR status IS NULL)
+           RETURNING id, status, moderation_status, submitted_at
         `,
         [id, req.user.id]
       );
+
       if (!rows.length) {
-        return res.status(409).json({ message: "Service must be in draft/rejected to submit" });
+        return res.status(409).json({ message: "Service must be in draft/rejected (or empty status) to submit" });
       }
       try {
         await notifyModerationNew({ service: rows[0].id });
