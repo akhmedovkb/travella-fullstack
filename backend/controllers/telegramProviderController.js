@@ -1,7 +1,7 @@
 // backend/controllers/telegramProviderController.js
 const pool = require("../db");
 const axiosBase = require("axios");
-const { tgSend } = require("../utils/telegram");
+const { tgSend, notifyModerationNew } = require("../utils/telegram");
 const MAX_TITLE_LEN = 100;
 
 const REFUSED_CATEGORIES = [
@@ -763,6 +763,13 @@ async function createServiceFromBot(req, res) {
       `,
       [providerId, safeTitle, category, priceNum, safeDetailsJson, safeImagesJson]
     );
+    // ✅ ВАЖНО: уведомить админов о новой услуге на модерации
+    // (веб-кабинет делает это через notifyModerationNew, а бот раньше не делал)
+    try {
+      await notifyModerationNew({ service: insertRes.rows[0].id });
+    } catch (e) {
+      console.error("[telegram] notifyModerationNew failed:", e?.message || e);
+    }
 
     return res.json({
       success: true,
@@ -1061,7 +1068,12 @@ async function updateServiceFromBot(req, res) {
         JSON.stringify(nextImages),
       ]
     );
-
+    // ✅ Если услуга снова ушла на модерацию — уведомим админов
+    try {
+      await notifyModerationNew({ service: updRes.rows[0].id });
+    } catch (e) {
+      console.error("[telegram] notifyModerationNew (update) failed:", e?.message || e);
+    }
     return res.json({ success: true, service: updRes.rows[0] });
   } catch (err) {
     console.error("[telegram] updateServiceFromBot error:", err);
