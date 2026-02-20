@@ -42,21 +42,80 @@ async function copyFile(client, table, cols, filePath) {
   console.log("COPY →", table);
   await client.query(`TRUNCATE ${table}`);
 
-  const stream = client.query(
-    copyFrom(
-      `COPY ${table} (${cols.join(",")})
-       FROM STDIN WITH (
-         FORMAT csv,
-         DELIMITER E'\t',
-         NULL '',
-         QUOTE E'\\b',
-         ESCAPE E'\\b'
-       )`
-    )
-  );
+  const copySql = `COPY ${table} (${cols.join(",")})
+    FROM STDIN WITH (
+      FORMAT csv,
+      DELIMITER E'\\t',
+      NULL '',
+      QUOTE E'\\b',
+      ESCAPE E'\\b'
+    )`;
 
-  await pipeline(fs.createReadStream(filePath), stream);
-  console.log("✓ COPY done:", table);
+  const stream = client.query(copyFrom(copySql));
+
+  // ✅ фильтр: если внутри строки есть лишние табы, пытаемся “починить”
+  // Правило: в GeoNames должно быть (cols.length - 1) табов.
+  const expectedTabs = cols.length - 1;
+
+  const { Transform } = require("stream");
+  let buf = "";
+  let fixed = 0;
+  let skipped = 0;
+
+  const fixer = new Transform({
+    transform(chunk, enc, cb) {
+      buf += chunk.toString("utf8");
+      let idx;
+      while ((idx = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, idx + 1);
+        buf = buf.slice(idx + 1);
+
+        const tabCount = (line.match(/\t/g) || []).length;
+        if (tabCount === expectedTabs) {
+          this.push(line);
+          continue;
+        }
+
+        // если табов больше — заменяем лишние табы на пробел, пока не станет ровно
+        if (tabCount > expectedTabs) {
+          let parts = line.replace(/\r?\n$/, "").split("\t");
+          // склеиваем хвост лишних колонок обратно в последнюю колонку
+          while (parts.length > cols.length) {
+            parts[cols.length - 1] =
+              parts[cols.length - 1] + " " + parts.pop();
+          }
+          const repaired = parts.join("\t") + "\n";
+          const repairedTabs = (repaired.match(/\t/g) || []).length;
+
+          if (repairedTabs === expectedTabs) {
+            fixed++;
+            this.push(repaired);
+          } else {
+            skipped++;
+            // пропускаем совсем битую строку
+          }
+          continue;
+        }
+
+        // если табов меньше — пропускаем (крайне редко)
+        skipped++;
+      }
+      cb();
+    },
+    flush(cb) {
+      if (buf) {
+        // последняя строка без \n
+        const line = buf + "\n";
+        const tabCount = (line.match(/\t/g) || []).length;
+        if (tabCount === expectedTabs) this.push(line);
+      }
+      cb();
+    },
+  });
+
+  await pipeline(fs.createReadStream(filePath), fixer, stream);
+
+  console.log(`✓ COPY done: ${table} (fixed=${fixed}, skipped=${skipped})`);
 }
 
 async function ensureSchema(db) {
