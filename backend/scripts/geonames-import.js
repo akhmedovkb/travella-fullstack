@@ -123,31 +123,8 @@ async function ensureSchema(db) {
   await db.query(`CREATE EXTENSION IF NOT EXISTS unaccent`);
 
   await db.query(`
-    CREATE TABLE IF NOT EXISTS geo_allcountries_raw (
-      geonameid BIGINT,
-      name TEXT,
-      asciiname TEXT,
-      alternatenames TEXT,
-      latitude DOUBLE PRECISION,
-      longitude DOUBLE PRECISION,
-      feature_class TEXT,
-      feature_code TEXT,
-      country_code TEXT,
-      cc2 TEXT,
-      admin1_code TEXT,
-      admin2_code TEXT,
-      admin3_code TEXT,
-      admin4_code TEXT,
-      population BIGINT,
-      elevation TEXT,
-      dem TEXT,
-      timezone TEXT,
-      modification_dt DATE
-    );
-  `);
-
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS geo_altnames_raw (
+    DROP TABLE IF EXISTS geo_altnames_raw;
+    CREATE TABLE geo_altnames_raw (
       alt_id BIGINT,
       geoname_id BIGINT,
       iso_language TEXT,
@@ -155,9 +132,20 @@ async function ensureSchema(db) {
       is_preferred SMALLINT,
       is_short SMALLINT,
       is_colloquial SMALLINT,
-      is_historic SMALLINT,
-      "from" TEXT,
-      "to" TEXT
+      is_historic SMALLINT
+    );
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS geo_altnames_raw (
+  "alt_id",
+  "geoname_id",
+  "iso_language",
+  "alt_name",
+  "is_preferred",
+  "is_short",
+  "is_colloquial",
+  "is_historic",
     );
   `);
 
