@@ -44,7 +44,14 @@ async function copyFile(client, table, cols, filePath) {
 
   const stream = client.query(
     copyFrom(
-      `COPY ${table} (${cols.join(",")}) FROM STDIN WITH (FORMAT csv, DELIMITER E'\\t', NULL '')`
+      `COPY ${table} (${cols.join(",")})
+       FROM STDIN WITH (
+         FORMAT csv,
+         DELIMITER E'\t',
+         NULL '',
+         QUOTE E'\\b',
+         ESCAPE E'\\b'
+       )`
     )
   );
 
