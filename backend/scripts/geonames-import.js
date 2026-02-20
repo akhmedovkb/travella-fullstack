@@ -52,6 +52,10 @@ async function copyFile(client, table, cols, filePath) {
     )`;
 
   const stream = client.query(copyFrom(copySql));
+    stream.on("error", (err) => {
+    // чтобы не было Unhandled 'error' event
+    console.error("COPY stream error:", err?.message || err);
+  });
 
   // ✅ фильтр: если внутри строки есть лишние табы, пытаемся “починить”
   // Правило: в GeoNames должно быть (cols.length - 1) табов.
@@ -113,7 +117,12 @@ async function copyFile(client, table, cols, filePath) {
     },
   });
 
-  await pipeline(fs.createReadStream(filePath), fixer, stream);
+    try {
+    await pipeline(fs.createReadStream(filePath), fixer, stream);
+  } catch (e) {
+    console.error(`COPY FAILED: ${table}`, e?.message || e);
+    throw e;
+  }
 
   console.log(`✓ COPY done: ${table} (fixed=${fixed}, skipped=${skipped})`);
 }
@@ -197,7 +206,13 @@ async function ensureSchema(db) {
 }
 
 async function main() {
-  const db = new Client({ connectionString: process.env.DATABASE_URL });
+  const db = new Client({
+    connectionString: process.env.DATABASE_URL,
+    keepAlive: true,
+    statement_timeout: 0,
+    query_timeout: 0,
+    connectionTimeoutMillis: 30000,
+  });
   await db.connect();
 
   await fs.promises.mkdir(TMP, { recursive: true });
