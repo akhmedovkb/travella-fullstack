@@ -222,7 +222,7 @@ async function main() {
 
   // 🔥 скачиваем напрямую с GeoNames
   await download(
-    "https://download.geonames.org/export/dump/allCountries.zip",
+    "https://download.geonames.org/export/dump/cities15000.zip", allZip",
     allZip
   );
 
