@@ -982,6 +982,10 @@ app.use("/api/public/donas", publicDonasRoutes);
 app.use("/api/admin/donas/inventory", adminDonasInventoryRoutes);
 app.use("/", donasShareRoutes);
 
+/** ===================== города ===================== */
+const geoRoutes = require("./routes/geoRoutes");
+app.use("/api/geo", geoRoutes);
+
 /** ===================== Start (в самом конце) ===================== */
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
