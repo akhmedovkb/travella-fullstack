@@ -164,10 +164,10 @@ async function ensureSchema(db) {
       geoname_id BIGINT,
       iso_language TEXT,
       alt_name TEXT,
-      is_preferred SMALLINT,
-      is_short SMALLINT,
-      is_colloquial SMALLINT,
-      is_historic SMALLINT
+      is_preferred TEXT,
+      is_short TEXT,
+      is_colloquial TEXT,
+      is_historic TEXT
     );
   `);
 
