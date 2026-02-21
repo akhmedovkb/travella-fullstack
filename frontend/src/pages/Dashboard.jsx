@@ -865,35 +865,49 @@ const ASYNC_MENU_PORTAL = {
   styles: { menuPortal: (base) => ({ ...base, zIndex: 9999 }) },
 };
 
+// raw-функция (принимает AbortSignal) — PRO: ищем по нашей таблице airport_cities
+const loadCitiesRaw = useCallback(
+  async (inputValue, signal) => {
+    const q = String(inputValue || "").trim();
+    if (!q || q.length < 2) return [];
 
+    try {
+      const { data } = await api.get("/api/geo/airports", {
+        params: { q },
+        signal,
+      });
 
-  // raw-функция (принимает AbortSignal)
-const loadCitiesRaw = useCallback(async (inputValue, signal) => {
-  if (!inputValue) return [];
-  try {
-    const { data } = await axios.get("https://secure.geonames.org/searchJSON", {
-      params: {
-        name_startsWith: inputValue,      // прямой префиксный поиск
-        q: inputValue,                    // дополнительный полнотекстовый
-        featureClass: "P",
-        maxRows: 10,
-        fuzzy: 0.9,                       // чуть мягче сопоставление
-        style: "FULL",                    // чтобы были альтернативные названия
-        username: import.meta.env.VITE_GEONAMES_USERNAME,
-        lang: pickGeoLang(),              // ru/uz/en – как и было
-      },
-      signal,
-    });
-    return (data.geonames || []).map((city) => ({
-      value: city.name,
-      label: city.name,
-    }));
-  } catch (error) {
-    if (error?.code === "ERR_CANCELED") return [];
-    console.error("Ошибка загрузки городов:", error);
-    return [];
-  }
-}, [pickGeoLang]);
+      // geoController может возвращать либо {data:[...]}, либо сразу [...]
+      const rows = data?.data || data || [];
+
+      return (rows || []).map((row) => {
+        const lang = String(i18n.language || "ru").toLowerCase();
+        const name =
+          (lang.startsWith("ru") ? row?.name_ru : null) ||
+          (lang.startsWith("uz") ? row?.name_uz : null) ||
+          row?.name_en ||
+          row?.name_ru ||
+          row?.name_uz ||
+          "";
+
+        const iata = (row?.iata_codes && row.iata_codes[0]) || "";
+        const cc = row?.country_code || "";
+        const extra = [iata && `(${iata})`, cc].filter(Boolean).join(" ").trim();
+
+        return {
+          value: name,                     // сохраняем город в details как текст
+          label: extra ? `${name} ${extra}` : name,  // в UI показываем IATA
+          raw: row,
+        };
+      });
+    } catch (error) {
+      if (error?.code === "ERR_CANCELED") return [];
+      console.error("Ошибка загрузки airport_cities:", error);
+      return [];
+    }
+  },
+  [api, i18n.language]
+);
 
 
 // обёртка с дебаунсом + отменой
