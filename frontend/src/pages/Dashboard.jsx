@@ -2229,7 +2229,7 @@ useEffect(() => {
                           cacheOptions
                           defaultOptions
                           {...ASYNC_MENU_PORTAL}
-                          loadOptions={loadCitiesTo}
+                          loadOptions={loadCities}
                           noOptionsMessage={ASYNC_I18N.noOptionsMessage}
                           loadingMessage={ASYNC_I18N.loadingMessage}
                           value={
