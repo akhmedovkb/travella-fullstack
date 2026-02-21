@@ -4,6 +4,7 @@ import React, { useEffect, useState, useRef, useMemo, useCallback } from "react"
 import { NavLink } from "react-router-dom";
 import Select from "react-select";
 import AsyncSelect from "react-select/async";
+import { apiGet } from "../api";
 import AsyncCreatableSelect from "react-select/async-creatable";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
@@ -46,6 +47,24 @@ const statusBadgeClass = (status) => {
   }
 };
 
+const loadCities = async (inputValue) => {
+  if (!inputValue || inputValue.length < 2) return [];
+
+  try {
+    const res = await apiGet(
+      `/api/geo/cities?q=${encodeURIComponent(inputValue)}`
+    );
+
+    return (res || []).map((c) => ({
+      value: c.id,
+      label: `${c.name_en} (${c.iata_codes?.[0] || ""})`,
+      raw: c,
+    }));
+  } catch (e) {
+    console.error("cities load error", e);
+    return [];
+  }
+};
 
 const EVENT_CATEGORY_OPTIONS = (t) => ([
   { value: "concert",      label: t("event_category_concert") },
@@ -2647,12 +2666,22 @@ useEffect(() => {
                         />
 
 
-                        <Select
-                          options={cityOptionsTo}
-                          value={cityOptionsTo.find((opt) => opt.value === details.directionTo) || null}
-                          onChange={(value) => setDetails((prev) => ({ ...prev, directionTo: value?.value || "" }))}
+                        <AsyncSelect
+                          cacheOptions
+                          defaultOptions
+                          {...ASYNC_MENU_PORTAL}
+                          loadOptions={loadCities}
+                          noOptionsMessage={ASYNC_I18N.noOptionsMessage}
+                          loadingMessage={ASYNC_I18N.loadingMessage}
+                          value={
+                            details.directionTo
+                              ? { value: details.directionTo, label: details.directionTo }
+                              : null
+                          }
+                          onChange={(selected) => {
+                            setDetails((prev) => ({ ...prev, directionTo: selected?.value || "" }));
+                          }}
                           placeholder={tr(["direction_to","direction.to"], "Город прибытия")}
-                          noOptionsMessage={() => tr("direction_to_not_chosen", "Город прибытия не выбран")}
                           className="min-w-0"
                         />
                         </div>
