@@ -765,7 +765,6 @@ const scrollToProfilePart = useCallback((key) => {
   }, [countryOptions, rcEnMap]);
 
   const [departureCity, setDepartureCity] = useState(null);
-  const [cityOptionsTo, setCityOptionsTo] = useState([]);
 
   // Details for agent categories
   const DEFAULT_DETAILS = {
@@ -866,53 +865,67 @@ const ASYNC_MENU_PORTAL = {
 };
 
 // raw-функция (принимает AbortSignal) — PRO: ищем по нашей таблице airport_cities
-const loadCitiesRaw = useCallback(
-  async (inputValue, signal) => {
-    const q = String(inputValue || "").trim();
-    if (!q || q.length < 2) return [];
+  const loadCitiesRaw = useCallback(
+    async (inputValue, signal, cc) => {
+      const q = String(inputValue || "").trim();
+      if (!q || q.length < 2) return [];
+  
+      try {
+        const { data } = await api.get("/api/geo/airports", {
+          params: { q, ...(cc ? { cc } : {}) },   // ✅ cc опционально
+          signal,
+        });
+  
+        // ✅ geoController возвращает { items: [...] }
+        const rows = Array.isArray(data?.items) ? data.items : [];
+  
+        return rows.map((row) => {
+          const lang = String(i18n.language || "ru").toLowerCase();
+          const name =
+            (lang.startsWith("ru") ? row?.name_ru : null) ||
+            (lang.startsWith("uz") ? row?.name_uz : null) ||
+            row?.name_en ||
+            row?.name ||
+            row?.name_ru ||
+            row?.name_uz ||
+            "";
+  
+          const iata = row?.iata || (Array.isArray(row?.iata_codes) ? row.iata_codes[0] : "") || "";
+          const ccode = row?.country_code || "";
+          const extra = [iata && `(${iata})`, ccode].filter(Boolean).join(" ").trim();
+  
+          return {
+            value: name,                              // ✅ в details сохраняем строку города
+            label: extra ? `${name} ${extra}` : name,  // ✅ в UI показываем IATA
+            raw: row,
+          };
+        });
+      } catch (error) {
+        if (error?.code === "ERR_CANCELED") return [];
+        console.error("Ошибка загрузки airport_cities:", error);
+        return [];
+      }
+    },
+    [api, i18n.language]
+  );
 
-    try {
-      const { data } = await api.get("/api/geo/airports", {
-        params: { q },
+  // ✅ город вылета: без фильтра страны
+  const loadCities = useDebouncedLoader(
+    (inputValue, signal) => loadCitiesRaw(inputValue, signal, null),
+    400
+  );
+  
+  // ✅ город прилёта / город отеля: фильтр по стране (если выбрана)
+  const loadCitiesTo = useDebouncedLoader(
+    (inputValue, signal) =>
+      loadCitiesRaw(
+        inputValue,
         signal,
-      });
-
-      // geoController может возвращать либо {data:[...]}, либо сразу [...]
-      const rows = data?.data || data || [];
-
-      return (rows || []).map((row) => {
-        const lang = String(i18n.language || "ru").toLowerCase();
-        const name =
-          (lang.startsWith("ru") ? row?.name_ru : null) ||
-          (lang.startsWith("uz") ? row?.name_uz : null) ||
-          row?.name_en ||
-          row?.name_ru ||
-          row?.name_uz ||
-          "";
-
-        const iata = (row?.iata_codes && row.iata_codes[0]) || "";
-        const cc = row?.country_code || "";
-        const extra = [iata && `(${iata})`, cc].filter(Boolean).join(" ").trim();
-
-        return {
-          value: name,                     // сохраняем город в details как текст
-          label: extra ? `${name} ${extra}` : name,  // в UI показываем IATA
-          raw: row,
-        };
-      });
-    } catch (error) {
-      if (error?.code === "ERR_CANCELED") return [];
-      console.error("Ошибка загрузки airport_cities:", error);
-      return [];
-    }
-  },
-  [api, i18n.language]
-);
-
-
-// обёртка с дебаунсом + отменой
-const loadCities = useDebouncedLoader(loadCitiesRaw, 400);
-
+        // берём код страны в приоритете из selectedCountry, иначе из details
+        selectedCountry?.code || selectedCountry?.value || details?.directionCountry || null
+      ),
+    400
+  );
 
   /** ===== Images handlers ===== */
   const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3 MB
@@ -1072,44 +1085,6 @@ useEffect(() => {
   };
 }, [pickGeoLang]);
 
-
-
-   // Arrival cities based on selected country
-  useEffect(() => {
-    if (!selectedCountry?.code) return;
-    const controller = new AbortController();
-    const fetchCities = async () => {
-      try {
-        const response = await axios.get("https://secure.geonames.org/searchJSON", {
-          params: {
-            country: selectedCountry.code,
-            featureClass: "P",
-            maxRows: 100,
-            orderby: "population",
-            username: import.meta.env.VITE_GEONAMES_USERNAME,
-            lang: pickGeoLang(), // локализация городов прибытия
-          },
-          signal: controller.signal,
-        });
-        let cities = response.data.geonames.map((city) => ({
-          value: city.name,
-          label: city.name,
-        }));
-                // гарантируем, что сохранённый город виден как value
-        if (details?.directionTo &&
-            !cities.some(o => o.value === details.directionTo)) {
-          cities = [{ value: details.directionTo, label: details.directionTo }, ...cities];
-        }
-        setCityOptionsTo(cities);
-      } catch (error) {
-              if (error?.code !== "ERR_CANCELED") {
-        console.error("Ошибка загрузки городов прибытия:", error);
-      }
-      }
-    };
-    fetchCities();
-    return () => controller.abort();
-  }, [selectedCountry, pickGeoLang, details?.directionTo]);
 
       /** ===== Load profile + services + stats ===== */
 useEffect(() => {
@@ -1859,24 +1834,32 @@ useEffect(() => {
                         className="min-w-0"
                       />
 
-                    <Select
-                      options={cityOptionsTo}
-                      value={cityOptionsTo.find((opt) => opt.value === details.directionTo) || null}
-                      onChange={(value) =>
-                         setDetails((d) => ({
-                           ...d,
-                           directionTo: value?.value || "",
-                           direction: buildDirection(
-                             selectedCountry?.label || d.directionCountry,
-                             departureCity?.label || d.directionFrom,
-                             value?.label
-                           ),
-                         }))
-                      }
-                      placeholder={tr(["direction_to","direction.to"], "Город прибытия")}
-                      noOptionsMessage={() => tr("direction_to_not_chosen", "Город прибытия не выбран")}
-                      className="min-w-0"
-                    />
+                      <AsyncSelect
+                        cacheOptions
+                        defaultOptions
+                        {...ASYNC_MENU_PORTAL}
+                        loadOptions={loadCitiesTo}
+                        noOptionsMessage={ASYNC_I18N.noOptionsMessage}
+                        loadingMessage={ASYNC_I18N.loadingMessage}
+                        value={
+                          details.directionTo
+                            ? { value: details.directionTo, label: details.directionTo }
+                            : null
+                        }
+                        onChange={(selected) =>
+                          setDetails((d) => ({
+                            ...d,
+                            directionTo: selected?.value || "",
+                            direction: buildDirection(
+                              selectedCountry?.label || d.directionCountry,
+                              departureCity?.label || d.directionFrom,
+                              selected?.label || d.directionTo
+                            ),
+                          }))
+                        }
+                        placeholder={tr(["direction_to","direction.to"], "Город прибытия")}
+                        className="min-w-0"
+                      />
                   
                     </div>
                     
@@ -2060,7 +2043,7 @@ useEffect(() => {
                     <label className="block font-medium mb-1">{t("refused_hotel_city")}</label>
                     <AsyncSelect
                       cacheOptions
-                      loadOptions={loadCities}
+                      loadOptions={loadCitiesTo}
                       defaultOptions
                       {...ASYNC_MENU_PORTAL}
                       value={details.directionTo ? { label: details.directionTo, value: details.directionTo } : null}
@@ -2253,18 +2236,26 @@ useEffect(() => {
                           className="min-w-0"
                         />
 
-                        <Select
-                          options={cityOptionsTo}
-                          value={cityOptionsTo.find((opt) => opt.value === details.directionTo) || null}
-                          onChange={(value) => {
+                        <AsyncSelect
+                          cacheOptions
+                          defaultOptions
+                          {...ASYNC_MENU_PORTAL}
+                          loadOptions={loadCitiesTo}
+                          noOptionsMessage={ASYNC_I18N.noOptionsMessage}
+                          loadingMessage={ASYNC_I18N.loadingMessage}
+                          value={
+                            details.directionTo
+                              ? { value: details.directionTo, label: details.directionTo }
+                              : null
+                          }
+                          onChange={(selected) => {
                             setDetails((prev) => ({
                               ...prev,
-                              directionTo: value?.value || "",
-                              direction: `${selectedCountry?.label || ""} — ${departureCity?.label || ""} → ${value?.label || ""}`,
+                              directionTo: selected?.value || "",
+                              direction: `${selectedCountry?.label || ""} — ${departureCity?.label || ""} → ${selected?.label || ""}`,
                             }));
                           }}
                           placeholder={tr(["direction_to","direction.to"], "Город прибытия")}
-                          noOptionsMessage={() => tr("direction_to_not_found", "Город прибытия не найден")}
                           className="min-w-0"
                         />
                       </div>
