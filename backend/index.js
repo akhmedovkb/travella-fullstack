@@ -986,6 +986,9 @@ app.use("/", donasShareRoutes);
 const geoRoutes = require("./routes/geoRoutes");
 app.use("/api/geo", geoRoutes);
 
+const airportRoutes = require("./routes/airportRoutes");
+app.use("/api/airports", airportRoutes);
+
 /** ===================== Start (в самом конце) ===================== */
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
