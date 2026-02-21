@@ -1809,7 +1809,7 @@ useEffect(() => {
                         cacheOptions
                         defaultOptions
                         {...ASYNC_MENU_PORTAL}
-                        loadOptions={loadCities}
+                        loadOptions={loadCitiesTo}
                         noOptionsMessage={ASYNC_I18N.noOptionsMessage}
                         loadingMessage={ASYNC_I18N.loadingMessage}
                         value={
@@ -2219,7 +2219,7 @@ useEffect(() => {
                           cacheOptions
                           defaultOptions
                           {...ASYNC_MENU_PORTAL}
-                          loadOptions={loadCities}
+                          loadOptions={loadCitiesTo}
                           noOptionsMessage={ASYNC_I18N.noOptionsMessage}
                           loadingMessage={ASYNC_I18N.loadingMessage}
                           value={
@@ -2874,7 +2874,7 @@ useEffect(() => {
                         <label className="block font-medium mb-1">{t("refused_hotel_city")}</label>
                         <AsyncSelect
                           cacheOptions
-                          loadOptions={loadCities}
+                          loadOptions={loadCitiesTo}
                           defaultOptions
                           {...ASYNC_MENU_PORTAL}
                           value={details.directionTo ? { label: details.directionTo, value: details.directionTo } : null}
