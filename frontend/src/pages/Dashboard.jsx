@@ -47,25 +47,6 @@ const statusBadgeClass = (status) => {
   }
 };
 
-const loadCities = async (inputValue) => {
-  if (!inputValue || inputValue.length < 2) return [];
-
-  try {
-    const res = await apiGet(
-      `/api/geo/cities?q=${encodeURIComponent(inputValue)}`
-    );
-
-    return (res || []).map((c) => ({
-      value: c.id,
-      label: `${c.name_en} (${c.iata_codes?.[0] || ""})`,
-      raw: c,
-    }));
-  } catch (e) {
-    console.error("cities load error", e);
-    return [];
-  }
-};
-
 const EVENT_CATEGORY_OPTIONS = (t) => ([
   { value: "concert",      label: t("event_category_concert") },
   { value: "exhibition",   label: t("event_category_exhibition") },
@@ -1138,7 +1119,7 @@ useEffect(() => {
   // обновлять флаг при изменениях localStorage (логин/логаут/смена роли в другой вкладке)
 useEffect(() => {
   if (typeof window === "undefined") return;
-  const onStorage = () => setIsAdmin(detectAdmin(profile));
+  const onStorage = () => setIsAdmin(detectAdmin(profile) || detectAdminFromJwt());
   window.addEventListener("storage", onStorage);
   return () => window.removeEventListener("storage", onStorage);
 }, [profile]);
@@ -1586,6 +1567,35 @@ useEffect(() => {
                 onEdit={openEditHotel}        // ⬅️ клик «Править» откроет форму
                 onNew={openNewHotel}          // ⬅️ (если в таблице есть своя кнопка)
               />
+              {profile?.type === "hotel" && (
+                    <div className="mb-6">
+                      <AdminHotelsTable
+                        scope="provider"
+                        providerId={profile?.id}
+                        onEdit={openEditHotel}
+                        onNew={openNewHotel}
+                      />
+                  
+                      {/* ✅ модалка/форма создания-редактирования */}
+                      {hotelFormOpen && (
+                        <div className="fixed inset-0 z-50 grid place-items-center bg-black/40">
+                          <div className="w-full max-w-3xl rounded-xl bg-white p-4 shadow-lg">
+                            <AdminHotelForm
+                              scope="provider"
+                              providerId={profile?.id}
+                              initial={hotelToEdit}
+                              onClose={closeHotelForm}
+                              onSaved={() => {
+                                // если таблица сама умеет перезагружаться — ок
+                                // иначе можно дать ей key или вызвать ее reload (если есть)
+                                closeHotelForm();
+                              }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
             </div>
           )}
 
@@ -1809,7 +1819,7 @@ useEffect(() => {
                         cacheOptions
                         defaultOptions
                         {...ASYNC_MENU_PORTAL}
-                        loadOptions={loadCitiesTo}
+                        loadOptions={loadCities}
                         noOptionsMessage={ASYNC_I18N.noOptionsMessage}
                         loadingMessage={ASYNC_I18N.loadingMessage}
                         value={
@@ -2857,14 +2867,13 @@ useEffect(() => {
                           options={countryOptions}
                           value={selectedCountry}
                           onChange={(selected) => {
-                            setSelectedCountry(selected);                     // храним объект страны (с code)
-                            setDetails((d) => ({                             // пишем код страны в details
-                              ...d,
-                              directionCountry: selected?.value || ""
-                            }));
-                            // полезно очистить выбранный город при смене страны:
+                            setSelectedCountry(selected);
                             setDepartureCity(null);
-                            setDetails((d) => ({ ...d, directionTo: "" }));
+                            setDetails((d) => ({
+                              ...d,
+                              directionCountry: selected?.value || "",
+                              directionTo: "",
+                            }));
                           }}
                           placeholder={t("direction_country")}
                         />
