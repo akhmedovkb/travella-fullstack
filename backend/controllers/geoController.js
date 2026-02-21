@@ -1,135 +1,75 @@
 // backend/controllers/geoController.js
 const pool = require("../db");
 
-function normLang(x) {
-  const s = String(x || "").toLowerCase();
-  if (s === "ru" || s === "uz" || s === "en") return s;
-  return "en";
-}
-
-function clampInt(n, a, b) {
-  const v = Number(n);
-  if (!Number.isFinite(v)) return a;
-  return Math.min(b, Math.max(a, Math.trunc(v)));
+function normLang(lang) {
+  const l = String(lang || "").toLowerCase();
+  if (l === "ru" || l === "uz" || l === "en") return l;
+  return "ru";
 }
 
 exports.searchAirports = async (req, res) => {
   try {
-    const qRaw = String(req.query.q || req.query.query || "").trim();
-    const q = qRaw.toLowerCase();
+    const q = String(req.query.q || "").trim();
     const lang = normLang(req.query.lang);
-    const limit = clampInt(req.query.limit, 1, 30);
+    const cc = String(req.query.cc || "").trim().toUpperCase(); // ✅ фильтр по стране
+    const limit = Math.min(parseInt(req.query.limit || "20", 10) || 20, 50);
 
-    if (q.length < 2) {
+    if (!q || q.length < 2) {
       return res.json({ items: [] });
     }
 
     const nameCol =
-      lang === "ru" ? "name_ru" : lang === "uz" ? "name_uz" : "name_en";
+      lang === "uz"
+        ? "city_name_uz"
+        : lang === "en"
+        ? "city_name_en"
+        : "city_name_ru";
 
-    // если ввели IATA (3 буквы) — отдаём сначала точные совпадения
-    const iata = qRaw.trim().toUpperCase();
-    const isIata = /^[A-Z]{3}$/.test(iata);
-
-    const sql = `
-      WITH base AS (
-        SELECT
-          geoname_id,
-          country_code,
-          name_en, name_ru, name_uz,
-          iata_codes,
-          population,
-          COALESCE(NULLIF(${nameCol}, ''), name_en) AS name_local,
-          search_text
-        FROM airport_cities
-        WHERE
-          (
-            $3::boolean = true AND iata_codes @> ARRAY[$4]::text[]
-          )
-          OR
-          (
-            search_text % $1
-            OR search_text ILIKE '%' || $1 || '%'
-          )
+    const params = [];
+    let where = `
+      (
+        city_name_ru ILIKE $1 OR
+        city_name_en ILIKE $1 OR
+        city_name_uz ILIKE $1 OR
+        iata ILIKE $1
       )
-      SELECT
-        geoname_id,
-        country_code,
-        name_en, name_ru, name_uz,
-        name_local,
-        iata_codes,
-        population
-      FROM base
-      ORDER BY
-        CASE WHEN $3::boolean = true AND iata_codes @> ARRAY[$4]::text[] THEN 0 ELSE 1 END,
-        similarity(search_text, $1) DESC,
-        population DESC NULLS LAST,
-        geoname_id DESC
-      LIMIT $2;
     `;
+    params.push(`%${q}%`);
 
-    const { rows } = await pool.query(sql, [q, limit, isIata, iata]);
-
-    // нормализуем под фронт
-    const items = rows.map((r) => {
-      const codes = Array.isArray(r.iata_codes) ? r.iata_codes : [];
-      const primaryIata = codes[0] || null;
-
-      return {
-        geoname_id: r.geoname_id,
-        country_code: r.country_code,
-        name: r.name_local || r.name_en,
-        name_en: r.name_en,
-        name_ru: r.name_ru,
-        name_uz: r.name_uz,
-        iata: primaryIata,
-        iata_codes: codes,
-        population: r.population,
-      };
-    });
-
-    return res.json({ items });
-  } catch (e) {
-    console.error("searchAirports error:", e?.message || e);
-    return res.status(500).json({ error: "search_failed" });
-  }
-};
-
-exports.getAirportByIata = async (req, res) => {
-  try {
-    const code = String(req.params.code || "").trim().toUpperCase();
-    if (!/^[A-Z]{3}$/.test(code)) {
-      return res.status(400).json({ error: "bad_iata" });
+    // ✅ если передана страна — фильтруем
+    if (cc) {
+      params.push(cc);
+      where += ` AND country_code = $${params.length}`;
     }
 
+    params.push(limit);
+
     const sql = `
       SELECT
-        geoname_id,
+        iata,
         country_code,
-        name_en, name_ru, name_uz,
-        iata_codes,
-        population
+        ${nameCol} AS city_name
       FROM airport_cities
-      WHERE iata_codes @> ARRAY[$1]::text[]
-      ORDER BY population DESC NULLS LAST, geoname_id DESC
-      LIMIT 1;
+      WHERE ${where}
+      ORDER BY
+        CASE WHEN iata ILIKE $1 THEN 0 ELSE 1 END,
+        ${nameCol} ASC
+      LIMIT $${params.length}
     `;
 
-    const { rows } = await pool.query(sql, [code]);
-    if (!rows.length) return res.status(404).json({ error: "not_found" });
+    const { rows } = await pool.query(sql, params);
 
-    const r = rows[0];
-    return res.json({
-      geoname_id: r.geoname_id,
-      country_code: r.country_code,
-      name_en: r.name_en,
-      name_ru: r.name_ru,
-      name_uz: r.name_uz,
-      iata_codes: r.iata_codes || [],
-      population: r.population,
-    });
+    const items = rows.map((r) => ({
+      value: r.city_name, // ✅ сохраняем строку города
+      label: `${r.city_name} (${r.iata})`,
+      city: r.city_name,
+      iata: r.iata,
+      countryCode: r.country_code,
+    }));
+
+    res.json({ items });
   } catch (e) {
-    console.error("getAirportByIata error:", e?.message || e);
-    return res.status(500).json({ error: "lookup_failed" });
+    console.error("searchAirports error:", e);
+    res.status(500).json({ items: [] });
   }
 };
