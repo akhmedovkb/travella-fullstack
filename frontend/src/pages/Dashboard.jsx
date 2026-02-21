@@ -2669,26 +2669,24 @@ useEffect(() => {
                           placeholder={tr(["direction_from","direction.from"], "Город вылета")}
                           className="min-w-0"
                         />
-
-
-                        <AsyncSelect
-                          cacheOptions
-                          defaultOptions
-                          {...ASYNC_MENU_PORTAL}
-                          loadOptions={loadCities}
-                          noOptionsMessage={ASYNC_I18N.noOptionsMessage}
-                          loadingMessage={ASYNC_I18N.loadingMessage}
-                          value={
-                            details.directionTo
-                              ? { value: details.directionTo, label: details.directionTo }
-                              : null
-                          }
-                          onChange={(selected) => {
-                            setDetails((prev) => ({ ...prev, directionTo: selected?.value || "" }));
-                          }}
-                          placeholder={tr(["direction_to","direction.to"], "Город прибытия")}
-                          className="min-w-0"
-                        />
+                          <AsyncSelect
+                            cacheOptions
+                            defaultOptions
+                            {...ASYNC_MENU_PORTAL}
+                            loadOptions={loadCitiesTo}
+                            noOptionsMessage={ASYNC_I18N.noOptionsMessage}
+                            loadingMessage={ASYNC_I18N.loadingMessage}
+                            value={
+                              details.directionTo
+                                ? { value: details.directionTo, label: details.directionTo }
+                                : null
+                            }
+                            onChange={(selected) => {
+                              setDetails((prev) => ({ ...prev, directionTo: selected?.value || "" }));
+                            }}
+                            placeholder={tr(["direction_to","direction.to"], "Город прибытия")}
+                            className="min-w-0"
+                          />
                         </div>
 
 
@@ -3083,18 +3081,26 @@ useEffect(() => {
                           placeholder={t("direction_from")}
                           className="min-w-0"
                         />
-                        <Select
-                          options={cityOptionsTo}
-                          value={cityOptionsTo.find((opt) => opt.value === details.directionTo) || null}
-                          onChange={(value) => {
+                        <AsyncSelect
+                          cacheOptions
+                          defaultOptions
+                          {...ASYNC_MENU_PORTAL}
+                          loadOptions={loadCitiesTo}
+                          noOptionsMessage={ASYNC_I18N.noOptionsMessage}
+                          loadingMessage={ASYNC_I18N.loadingMessage}
+                          value={
+                            details.directionTo
+                              ? { value: details.directionTo, label: details.directionTo }
+                              : null
+                          }
+                          onChange={(selected) => {
                             setDetails((prev) => ({
                               ...prev,
-                              directionTo: value?.value || "",
-                              direction: `${selectedCountry?.label || ""} — ${departureCity?.label || ""} → ${value?.label || ""}`,
+                              directionTo: selected?.value || "",
+                              direction: `${selectedCountry?.label || ""} — ${departureCity?.label || ""} → ${selected?.label || ""}`,
                             }));
                           }}
                           placeholder={t("direction_to")}
-                          noOptionsMessage={() => t("direction_to_not_found")}
                           className="min-w-0"
                         />
                       </div>
