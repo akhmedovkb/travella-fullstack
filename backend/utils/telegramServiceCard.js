@@ -300,7 +300,7 @@ function getFirstImageUrl(svc) {
   if (!arr.length) {
     const d = parseDetailsAny(svc.details);
     const fid = (d.telegramPhotoFileId || "").trim();
-    if (fid) return `tgfile:${fid}`;
+    if (fid) return fid;
     return null;
   }
 
@@ -323,18 +323,18 @@ function getFirstImageUrl(svc) {
 
   if (v.startsWith("tg:")) {
     const fileId = v.slice(3).trim();
-    return fileId ? `tgfile:${fileId}` : null;
+    return fileId || null;
   }
 
   if (v.startsWith("data:image")) {
     return `${TG_IMAGE_BASE}/api/telegram/service-image/${svc.id}`;
   }
 
-  if (v.startsWith("http://") || v.startsWith("https://")) return v;
+  if (v.startsWith("http://") || v.startsWith("https://")) return encodeURI(v);
 
-  if (v.startsWith("/")) return TG_IMAGE_BASE + v;
+  if (v.startsWith("/")) return encodeURI(TG_IMAGE_BASE + v);
 
-  return `${TG_IMAGE_BASE}/${v.replace(/^\/+/, "")}`;
+  return encodeURI(`${TG_IMAGE_BASE}/${v.replace(/^\/+/, "")}`);
 }
 
 /* ===================== PRICE DROP (header + diff) ===================== */
