@@ -1107,11 +1107,13 @@ async function renderTrash(ctx, opts = {}) {
 
 async function safeReply(ctx, text, extra) {
   const uid = ctx.from?.id;
+  const chatId = ctx.chat?.id || uid;
 
   async function sendViaReply() {
-    // reply работает только когда есть ctx.chat.id
-    if (ctx.chat?.id) return ctx.reply(text, extra);
-    throw new Error("NO_CHAT_ID_FOR_REPLY");
+    // ВАЖНО: не используем ctx.reply, потому что он обёрнут middleware-обёрткой
+    // и «глотает» ошибки (возвращает null), ломая fallback-логику.
+    if (!chatId) throw new Error("NO_CHAT_ID_FOR_REPLY");
+    return bot.telegram.sendMessage(chatId, text, extra);
   }
 
   async function sendViaDM() {
@@ -1119,15 +1121,12 @@ async function safeReply(ctx, text, extra) {
     return bot.telegram.sendMessage(uid, text, extra);
   }
 
-  // 1) пробуем обычный reply (если можно)
   try {
     return await sendViaReply();
   } catch (e1) {
-    // 2) если reply не прошёл — пробуем ЛС
     try {
       return await sendViaDM();
     } catch (e2) {
-      // 3) если упали из-за ECONNRESET/сетевых проблем — сделаем 1 ретрай
       const msg = String(e2?.message || e1?.message || "");
       const code = e2?.code || e1?.code;
 
@@ -1137,41 +1136,27 @@ async function safeReply(ctx, text, extra) {
         msg.includes("network") ||
         msg.includes("FetchError");
 
-      if (!isConnReset) throw e2; // это не сеть — пусть логируется выше
+      if (!isConnReset) throw e2;
 
-      // маленькая пауза и повтор
       await new Promise((r) => setTimeout(r, 600));
 
-      // повторяем через DM (самый стабильный вариант)
-      if (uid) {
-        try {
-          return await bot.telegram.sendMessage(uid, text, extra);
-        } catch (e3) {
-          // если и второй раз не вышло — просто пробросим
-          throw e3;
-        }
-      }
-
+      if (uid) return bot.telegram.sendMessage(uid, text, extra);
       throw e2;
     }
   }
 }
 
-// Безопасная отправка фото: БЕЗ parse_mode, чтобы не ловить Telegram 400 "can't parse entities".
-// Если фото не отправилось — падаем в текст (и не маскируем это под "ошибка сохранения").
+// Если фото не отправилось — падаем в текст.
 async function safeReplyWithPhoto(ctx, photo, caption, extra = {}) {
-  const cap = String(caption || "").slice(0, 1024); // Telegram caption limit
+  const cap = String(caption || "").slice(0, 1024);
 
   const send = async (opts) => {
-    if (ctx.chat?.id) {
-      return await ctx.replyWithPhoto(photo, opts);
-    }
-    const uid = ctx.from?.id || ctx.chat?.id;
-    if (!uid) throw new Error("NO_USER_ID");
-    return await bot.telegram.sendPhoto(uid, photo, opts);
+    // ВАЖНО: не используем ctx.replyWithPhoto (middleware глотает ошибки).
+    const chatId = ctx.chat?.id || ctx.from?.id;
+    if (!chatId) throw new Error("NO_USER_ID");
+    return bot.telegram.sendPhoto(chatId, photo, opts);
   };
 
-  // 1) пробуем HTML (по умолчанию)
   try {
     const opts = { caption: cap, parse_mode: "HTML", ...extra };
     return await send(opts);
@@ -1181,36 +1166,30 @@ async function safeReplyWithPhoto(ctx, photo, caption, extra = {}) {
       e1?.response?.data?.description ||
       e1?.message ||
       "";
+
     const isEntities = String(desc).toLowerCase().includes("can't parse entities");
 
     if (isEntities) {
-      // 2) если HTML где-то сломался — ретрай без parse_mode
       try {
         const opts2 = { caption: cap, ...extra };
-        // на всякий: если extra содержит parse_mode, уберём
         delete opts2.parse_mode;
         return await send(opts2);
       } catch (e2) {
-        console.error(
-          "[tg-bot] safeReplyWithPhoto failed (fallback also failed):",
+        console.error("[tg-bot] safeReplyWithPhoto failed (fallback also failed):",
           e2?.response?.data || e2?.message || e2
         );
       }
     } else {
-      console.error(
-        "[tg-bot] safeReplyWithPhoto failed:",
+      console.error("[tg-bot] safeReplyWithPhoto failed:",
         e1?.response?.data || e1?.message || e1
       );
     }
 
-    // 3) последний fallback — текстом
     const textExtra = { ...extra };
     delete textExtra.parse_mode;
     return await safeReply(ctx, cap || "(фото)", textExtra);
   }
 }
-
-
 function statusLabelForManager(status) {
   return status === "accepted"
     ? "✅ Принято"
