@@ -4926,31 +4926,31 @@ bot.action(/^quick:(\d+)$/, async (ctx) => {
 
 /* ===================== UNLOCK CONTACTS (client pays 10 000 сум) ===================== */
 
+/* ===================== UNLOCK CONTACTS (client pays 10 000 сум) ===================== */
+
 bot.action(/^unlock:(\d+)$/, async (ctx) => {
   try {
     const serviceId = Number(ctx.match[1]);
 
-    // всегда завершаем "крутилку" на кнопке
+    // ✅ всегда отвечаем на callback, чтобы Telegram не "крутил"
     try { await ctx.answerCbQuery(); } catch {}
 
     if (!Number.isFinite(serviceId) || serviceId <= 0) {
-      await safeReply(ctx, "⚠️ Некорректный ID услуги.");
+      // лучше alert, потому что в inline/группах reply может не пройти
+      try { await ctx.answerCbQuery("⚠️ Некорректный ID услуги", { show_alert: true }); } catch {}
       return;
     }
 
     const chatId = ctx.from?.id;
 
-    // 1) найти клиента по chatId
     const clientRow = await getClientRowByChatId(pool, chatId);
     if (!clientRow?.id) {
-      await safeReply(
-        ctx,
-        "👋 Чтобы открыть контакты, сначала привяжите аккаунт по номеру телефона: /start"
-      );
+      try {
+        await ctx.answerCbQuery("Сначала привяжите аккаунт: /start", { show_alert: true });
+      } catch {}
       return;
     }
 
-    // 2) списать баланс + записать unlock
     const result = await unlockContactsForService(pool, {
       clientId: clientRow.id,
       serviceId,
@@ -4959,32 +4959,28 @@ bot.action(/^unlock:(\d+)$/, async (ctx) => {
     if (!result.ok) {
       if (result.reason === "no_balance") {
         const bal = Number(result.balance || 0).toLocaleString("ru-RU");
-        const need = Number(result.need || 10000).toLocaleString("ru-RU");
-
-        // ✅ показываем алерт (без спама в чат)
+        const need = Number(result.need || CONTACT_UNLOCK_PRICE || 10000).toLocaleString("ru-RU");
+        // ✅ только alert (без спама в чат)
         try {
           await ctx.answerCbQuery(
             `Недостаточно средств.\nБаланс: ${bal} сум\nНужно: ${need} сум`,
             { show_alert: true }
           );
-        } catch {
-          await safeReply(ctx, `💳 Недостаточно средств.\nБаланс: ${bal} сум\nНужно: ${need} сум`);
-        }
+        } catch {}
         return;
       }
 
       try { await ctx.answerCbQuery("⚠️ Не удалось открыть контакты", { show_alert: true }); } catch {}
-      await safeReply(ctx, "⚠️ Не удалось открыть контакты. Попробуйте позже.");
       return;
     }
 
-    // 3) заново получаем услугу и редактируем карточку (роль client_unlocked)
+    // берём услугу снова — уже для карточки с открытыми контактами
     const { data } = await axios.get(`/api/telegram/service/${serviceId}`, {
       params: { role: "client" },
     });
 
     if (!data?.success || !data?.service) {
-      await safeReply(ctx, "❗️Услуга не найдена или уже снята с публикации.");
+      try { await ctx.answerCbQuery("❗️Услуга не найдена или снята", { show_alert: true }); } catch {}
       return;
     }
 
@@ -5008,18 +5004,19 @@ bot.action(/^unlock:(\d+)$/, async (ctx) => {
       ? "Контакты уже были открыты ✅"
       : `Контакты открыты ✅ Списано: ${Number(CONTACT_UNLOCK_PRICE || 10000).toLocaleString("ru-RU")} сум`;
 
-    // ✅ алерт вместо отдельного сообщения
+    // ✅ показываем фидбек пользователю (видно всегда)
     try { await ctx.answerCbQuery(note, { show_alert: true }); } catch {}
 
-    // ✅ почти всегда фото → редактируем caption
+    // ✅ ключевое: пытаемся ОБНОВИТЬ ЭТУ ЖЕ карточку (inline/группа-safe)
     let edited = false;
 
+    // если карточка была фото — правим caption
     try {
       await ctx.editMessageCaption(text, { parse_mode: "HTML", reply_markup: kb });
       edited = true;
-    } catch {}
+    } catch (_) {}
 
-    // fallback: если карточка была текстовой
+    // если карточка была текст — правим текст
     if (!edited) {
       try {
         await ctx.editMessageText(text, {
@@ -5028,18 +5025,18 @@ bot.action(/^unlock:(\d+)$/, async (ctx) => {
           disable_web_page_preview: true,
         });
         edited = true;
-      } catch {}
+      } catch (_) {}
     }
 
-    // fallback: хотя бы кнопки
+    // хотя бы кнопки заменить
     if (!edited) {
       try {
         await ctx.editMessageReplyMarkup(kb);
         edited = true;
-      } catch {}
+      } catch (_) {}
     }
 
-    // крайний fallback: отправить новую карточку
+    // крайний fallback: отправить новую карточку (сработает только если бот может писать в чат)
     if (!edited) {
       if (photoUrl) {
         await safeReplyWithPhoto(ctx, photoUrl, text, { parse_mode: "HTML", reply_markup: kb });
@@ -5053,7 +5050,7 @@ bot.action(/^unlock:(\d+)$/, async (ctx) => {
     }
   } catch (e) {
     console.error("[tg-bot] unlock action error:", e?.response?.data || e?.message || e);
-    try { await safeReply(ctx, "⚠️ Ошибка. Попробуйте позже."); } catch {}
+    try { await ctx.answerCbQuery("⚠️ Ошибка. Попробуйте позже.", { show_alert: true }); } catch {}
   }
 });
 
