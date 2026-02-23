@@ -103,6 +103,140 @@ const axios = axiosBase.create({
   timeout: 10000,
 });
 
+/* ===================== CONTACT UNLOCK (per service) ===================== */
+
+// Цена открытия контактов
+const CONTACT_UNLOCK_PRICE = Number(process.env.CONTACT_UNLOCK_PRICE || "10000");
+
+// Создаём таблицы (на всякий случай), но SQL миграцию всё равно лучше прогнать отдельно
+let _unlockTablesReady = false;
+async function ensureUnlockTables(pool) {
+  if (!pool || _unlockTablesReady) return;
+  try {
+    await pool.query(`
+      ALTER TABLE clients
+        ADD COLUMN IF NOT EXISTS contact_balance INTEGER NOT NULL DEFAULT 0;
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS client_service_contact_unlocks (
+        id BIGSERIAL PRIMARY KEY,
+        client_id BIGINT NOT NULL,
+        service_id BIGINT NOT NULL,
+        price_charged INTEGER DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (client_id, service_id)
+      );
+    `);
+
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_cs_unlocks_client ON client_service_contact_unlocks(client_id);`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_cs_unlocks_service ON client_service_contact_unlocks(service_id);`);
+
+    _unlockTablesReady = true;
+  } catch (e) {
+    console.error("[tg-bot] ensureUnlockTables error:", e?.message || e);
+    _unlockTablesReady = false;
+  }
+}
+
+// найти client по telegram_chat_id
+async function getClientRowByChatId(pool, chatId) {
+  if (!pool) return null;
+  try {
+    const r = await pool.query(
+      `SELECT id, COALESCE(contact_balance, 0) AS contact_balance
+         FROM clients
+        WHERE telegram_chat_id = $1
+        LIMIT 1`,
+      [Number(chatId)]
+    );
+    return r.rows?.[0] || null;
+  } catch (e) {
+    console.error("[tg-bot] getClientRowByChatId error:", e?.message || e);
+    return null;
+  }
+}
+
+// транзакция: если уже unlocked — не списываем повторно
+async function unlockContactsForService(pool, { clientId, serviceId }) {
+  if (!pool) return { ok: false, reason: "db_unavailable" };
+  await ensureUnlockTables(pool);
+
+  const cid = Number(clientId);
+  const sid = Number(serviceId);
+  if (!Number.isFinite(cid) || cid <= 0 || !Number.isFinite(sid) || sid <= 0) {
+    return { ok: false, reason: "bad_args" };
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    // уже открывали?
+    const ex = await client.query(
+      `SELECT id FROM client_service_contact_unlocks
+        WHERE client_id=$1 AND service_id=$2
+        LIMIT 1`,
+      [cid, sid]
+    );
+    if (ex.rowCount) {
+      await client.query("COMMIT");
+      return { ok: true, already: true, charged: 0 };
+    }
+
+    // блокируем баланс
+    const bal = await client.query(
+      `SELECT COALESCE(contact_balance, 0) AS contact_balance
+         FROM clients
+        WHERE id=$1
+        FOR UPDATE`,
+      [cid]
+    );
+    const balance = Number(bal.rows?.[0]?.contact_balance || 0);
+
+    if (balance < CONTACT_UNLOCK_PRICE) {
+      await client.query("ROLLBACK");
+      return {
+        ok: false,
+        reason: "no_balance",
+        balance,
+        need: CONTACT_UNLOCK_PRICE,
+      };
+    }
+
+    // списываем
+    await client.query(
+      `UPDATE clients
+          SET contact_balance = COALESCE(contact_balance,0) - $2
+        WHERE id=$1`,
+      [cid, CONTACT_UNLOCK_PRICE]
+    );
+
+    // пишем unlock
+    await client.query(
+      `INSERT INTO client_service_contact_unlocks (client_id, service_id, price_charged)
+       VALUES ($1,$2,$3)`,
+      [cid, sid, CONTACT_UNLOCK_PRICE]
+    );
+
+    await client.query("COMMIT");
+    return { ok: true, already: false, charged: CONTACT_UNLOCK_PRICE };
+  } catch (e) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {}
+
+    // если параллельно уже вставили — считаем как already
+    if (String(e?.code || "") === "23505") {
+      return { ok: true, already: true, charged: 0 };
+    }
+
+    console.error("[tg-bot] unlockContactsForService error:", e?.message || e);
+    return { ok: false, reason: "server_error" };
+  } finally {
+    client.release();
+  }
+}
 
 /* ===================== OPTIONAL DB (requests MVP: id + status) ===================== */
 // ⚠️ Мягко: если db.js недоступен/не настроен — бот продолжит работать как раньше (без request_id/статусов)
@@ -4784,6 +4918,78 @@ bot.action(/^quick:(\d+)$/, async (ctx) => {
   } catch (e) {
     console.error("[tg-bot] quick action error:", e);
     try { await ctx.answerCbQuery("Ошибка. Попробуйте ещё раз", { show_alert: true }); } catch {}
+  }
+});
+
+bot.action(/^unlock:(\d+)$/, async (ctx) => {
+  try {
+    const serviceId = Number(ctx.match[1]);
+    await ctx.answerCbQuery();
+
+    if (!Number.isFinite(serviceId) || serviceId <= 0) {
+      await safeReply(ctx, "⚠️ Некорректный ID услуги.");
+      return;
+    }
+
+    const chatId = ctx.from?.id;
+
+    const clientRow = await getClientRowByChatId(pool, chatId);
+    if (!clientRow?.id) {
+      await safeReply(ctx, "👋 Чтобы открыть контакты, сначала привяжите аккаунт по номеру телефона: /start");
+      return;
+    }
+
+    const result = await unlockContactsForService(pool, {
+      clientId: clientRow.id,
+      serviceId,
+    });
+
+    if (!result.ok) {
+      if (result.reason === "no_balance") {
+        const bal = Number(result.balance || 0).toLocaleString("ru-RU");
+        const need = Number(result.need || 10000).toLocaleString("ru-RU");
+        await safeReply(ctx, `💳 Недостаточно средств.\nБаланс: ${bal} сум\nНужно: ${need} сум`);
+        return;
+      }
+      await safeReply(ctx, "⚠️ Не удалось открыть контакты. Попробуйте позже.");
+      return;
+    }
+
+    const { data } = await axios.get(`/api/telegram/service/${serviceId}`, {
+      params: { role: "client" },
+    });
+
+    if (!data?.success || !data?.service) {
+      await safeReply(ctx, "❗️Услуга не найдена или уже снята с публикации.");
+      return;
+    }
+
+    const svc = data.service;
+    const category = String(svc.category || "").toLowerCase();
+
+    const { text, photoUrl, serviceUrl } = buildServiceMessage(svc, category, "client_unlocked");
+
+    const kb = {
+      inline_keyboard: [
+        [{ text: "Подробнее на сайте", url: serviceUrl }],
+        [{ text: "📩 Быстрый запрос", callback_data: `quick:${serviceId}` }],
+      ],
+    };
+
+    const note = result.already
+      ? "✅ Контакты уже были открыты для этой услуги."
+      : `✅ Контакты открыты. Списано: ${CONTACT_UNLOCK_PRICE.toLocaleString("ru-RU")} сум`;
+
+    await safeReply(ctx, note);
+
+    if (photoUrl) {
+      await safeReplyWithPhoto(ctx, photoUrl, text, { parse_mode: "HTML", reply_markup: kb });
+    } else {
+      await ctx.reply(text, { parse_mode: "HTML", reply_markup: kb, disable_web_page_preview: true });
+    }
+  } catch (e) {
+    console.error("[tg-bot] unlock action error:", e?.response?.data || e?.message || e);
+    try { await safeReply(ctx, "⚠️ Ошибка. Попробуйте позже."); } catch {}
   }
 });
 
