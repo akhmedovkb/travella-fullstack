@@ -6633,12 +6633,20 @@ bot.on("inline_query", async (ctx) => {
 
       const manageUrl = `${SITE_URL}/dashboard?from=tg&service=${svc.id}`;
 
+      const canSeeContacts =
+        roleForInline === "admin" ||
+        roleForInline === "provider" ||
+        roleForInline === "client_unlocked";
+      
       const keyboardForClient = {
         inline_keyboard: [
           [
             { text: "Подробнее на сайте", url: serviceUrl },
             { text: "📩 Быстрый запрос", callback_data: `request:${svc.id}` },
           ],
+          ...(!canSeeContacts
+            ? [[{ text: "🔓 Открыть контакты (10 000 сум)", callback_data: `unlock:${svc.id}` }]]
+            : []),
         ],
       };
 
