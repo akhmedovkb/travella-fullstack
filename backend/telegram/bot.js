@@ -3560,13 +3560,16 @@ bot.start(async (ctx) => {
           // buildServiceMessage у тебя уже есть в bot.js (ты его используешь для карточек)
           const cardRole = role === "client" ? "client_public" : role;
           const { text, photoUrl, serviceUrl } = buildServiceMessage(svc, category, cardRole);
-
+          
+          // показываем кнопку "Открыть контакты" ТОЛЬКО если контакты реально скрыты
+          const needUnlock = !shouldShowProviderContacts(cardRole);
+          
           const kb = {
             inline_keyboard: [
               [{ text: "Подробнее на сайте", url: serviceUrl }],
               [
                 { text: "📩 Быстрый запрос", callback_data: `quick:${serviceId}` },
-                ...(role === "client"
+                ...(needUnlock
                   ? [{ text: "🔓 Открыть контакты (10 000 сум)", callback_data: `unlock:${serviceId}` }]
                   : []),
               ],
