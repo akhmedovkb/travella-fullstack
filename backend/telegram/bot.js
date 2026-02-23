@@ -4927,7 +4927,11 @@ bot.action(/^quick:(\d+)$/, async (ctx) => {
 bot.action(/^unlock:(\d+)$/, async (ctx) => {
   try {
     const serviceId = Number(ctx.match[1]);
-    await ctx.answerCbQuery();
+
+    // отвечаем на callback сразу (чтобы не крутилось)
+    try {
+      await ctx.answerCbQuery();
+    } catch {}
 
     if (!Number.isFinite(serviceId) || serviceId <= 0) {
       await safeReply(ctx, "⚠️ Некорректный ID услуги.");
@@ -4938,7 +4942,10 @@ bot.action(/^unlock:(\d+)$/, async (ctx) => {
 
     const clientRow = await getClientRowByChatId(pool, chatId);
     if (!clientRow?.id) {
-      await safeReply(ctx, "👋 Чтобы открыть контакты, сначала привяжите аккаунт по номеру телефона: /start");
+      await safeReply(
+        ctx,
+        "👋 Чтобы открыть контакты, сначала привяжите аккаунт по номеру телефона: /start"
+      );
       return;
     }
 
@@ -4947,17 +4954,29 @@ bot.action(/^unlock:(\d+)$/, async (ctx) => {
       serviceId,
     });
 
+    // ❌ нет денег — показываем ALERT (а не сообщение в чат)
     if (!result.ok) {
       if (result.reason === "no_balance") {
         const bal = Number(result.balance || 0).toLocaleString("ru-RU");
         const need = Number(result.need || 10000).toLocaleString("ru-RU");
-        await safeReply(ctx, `💳 Недостаточно средств.\nБаланс: ${bal} сум\nНужно: ${need} сум`);
+        try {
+          await ctx.answerCbQuery(`Недостаточно средств.\nБаланс: ${bal} сум\nНужно: ${need} сум`, {
+            show_alert: true,
+          });
+        } catch {
+          await safeReply(ctx, `💳 Недостаточно средств.\nБаланс: ${bal} сум\nНужно: ${need} сум`);
+        }
         return;
       }
+
+      try {
+        await ctx.answerCbQuery("⚠️ Не удалось открыть контакты", { show_alert: true });
+      } catch {}
       await safeReply(ctx, "⚠️ Не удалось открыть контакты. Попробуйте позже.");
       return;
     }
 
+    // ✅ успешно — получаем карточку с открытыми контактами
     const { data } = await axios.get(`/api/telegram/service/${serviceId}`, {
       params: { role: "client" },
     });
@@ -4980,19 +4999,62 @@ bot.action(/^unlock:(\d+)$/, async (ctx) => {
     };
 
     const note = result.already
-      ? "✅ Контакты уже были открыты для этой услуги."
-      : `✅ Контакты открыты. Списано: ${CONTACT_UNLOCK_PRICE.toLocaleString("ru-RU")} сум`;
+      ? "Контакты уже были открыты ✅"
+      : `Контакты открыты ✅ Списано: ${Number(CONTACT_UNLOCK_PRICE || 10000).toLocaleString("ru-RU")} сум`;
 
-    await safeReply(ctx, note);
+    // ✅ пробуем аккуратно ОБНОВИТЬ ТЕКУЩУЮ карточку (без новой)
+    // 1) обновить caption/текст
+    // 2) обновить кнопки
+    // 3) если не выйдет — fallback: отправить новую карточку
+    let edited = false;
 
-    if (photoUrl) {
-      await safeReplyWithPhoto(ctx, photoUrl, text, { parse_mode: "HTML", reply_markup: kb });
-    } else {
-      await ctx.reply(text, { parse_mode: "HTML", reply_markup: kb, disable_web_page_preview: true });
+    // покажем алерт вместо сообщения в чат (чистый UX)
+    try {
+      await ctx.answerCbQuery(note, { show_alert: true });
+    } catch {}
+
+    // если карточка была с фото — это caption; если без фото — text
+    try {
+      if (photoUrl) {
+        // если текущая карточка была "photo message", то меняем caption
+        await ctx.editMessageCaption(text, { parse_mode: "HTML", reply_markup: kb });
+      } else {
+        // если текущая карточка была "text message"
+        await ctx.editMessageText(text, {
+          parse_mode: "HTML",
+          reply_markup: kb,
+          disable_web_page_preview: true,
+        });
+      }
+      edited = true;
+    } catch (e) {
+      // часто падает если тип сообщения другой (фото/текст), или сообщение старое
+      edited = false;
+    }
+
+    // если текст/капшн не удалось обновить — хотя бы кнопки поменяем
+    if (!edited) {
+      try {
+        await ctx.editMessageReplyMarkup(kb);
+        edited = true;
+      } catch {
+        edited = false;
+      }
+    }
+
+    // fallback: если вообще ничего нельзя отредактировать — шлём новую карточку
+    if (!edited) {
+      if (photoUrl) {
+        await safeReplyWithPhoto(ctx, photoUrl, text, { parse_mode: "HTML", reply_markup: kb });
+      } else {
+        await ctx.reply(text, { parse_mode: "HTML", reply_markup: kb, disable_web_page_preview: true });
+      }
     }
   } catch (e) {
     console.error("[tg-bot] unlock action error:", e?.response?.data || e?.message || e);
-    try { await safeReply(ctx, "⚠️ Ошибка. Попробуйте позже."); } catch {}
+    try {
+      await safeReply(ctx, "⚠️ Ошибка. Попробуйте позже.");
+    } catch {}
   }
 });
 
