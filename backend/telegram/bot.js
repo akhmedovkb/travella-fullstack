@@ -4930,6 +4930,7 @@ bot.action(/^unlock:(\d+)$/, async (ctx) => {
   try {
     const serviceId = Number(ctx.match[1]);
 
+    // всегда завершаем "крутилку" на кнопке
     try { await ctx.answerCbQuery(); } catch {}
 
     if (!Number.isFinite(serviceId) || serviceId <= 0) {
@@ -4939,6 +4940,7 @@ bot.action(/^unlock:(\d+)$/, async (ctx) => {
 
     const chatId = ctx.from?.id;
 
+    // 1) найти клиента по chatId
     const clientRow = await getClientRowByChatId(pool, chatId);
     if (!clientRow?.id) {
       await safeReply(
@@ -4948,6 +4950,7 @@ bot.action(/^unlock:(\d+)$/, async (ctx) => {
       return;
     }
 
+    // 2) списать баланс + записать unlock
     const result = await unlockContactsForService(pool, {
       clientId: clientRow.id,
       serviceId,
@@ -4957,11 +4960,13 @@ bot.action(/^unlock:(\d+)$/, async (ctx) => {
       if (result.reason === "no_balance") {
         const bal = Number(result.balance || 0).toLocaleString("ru-RU");
         const need = Number(result.need || 10000).toLocaleString("ru-RU");
-        // ✅ только alert, без спама в чат
+
+        // ✅ показываем алерт (без спама в чат)
         try {
-          await ctx.answerCbQuery(`Недостаточно средств.\nБаланс: ${bal} сум\nНужно: ${need} сум`, {
-            show_alert: true,
-          });
+          await ctx.answerCbQuery(
+            `Недостаточно средств.\nБаланс: ${bal} сум\nНужно: ${need} сум`,
+            { show_alert: true }
+          );
         } catch {
           await safeReply(ctx, `💳 Недостаточно средств.\nБаланс: ${bal} сум\nНужно: ${need} сум`);
         }
@@ -4973,7 +4978,7 @@ bot.action(/^unlock:(\d+)$/, async (ctx) => {
       return;
     }
 
-    // берём услугу снова — уже для карточки с открытыми контактами
+    // 3) заново получаем услугу и редактируем карточку (роль client_unlocked)
     const { data } = await axios.get(`/api/telegram/service/${serviceId}`, {
       params: { role: "client" },
     });
@@ -4986,7 +4991,11 @@ bot.action(/^unlock:(\d+)$/, async (ctx) => {
     const svc = data.service;
     const category = String(svc.category || "").toLowerCase();
 
-    const { text, photoUrl, serviceUrl } = buildServiceMessage(svc, category, "client_unlocked");
+    const { text, photoUrl, serviceUrl } = buildServiceMessage(
+      svc,
+      category,
+      "client_unlocked"
+    );
 
     const kb = {
       inline_keyboard: [
@@ -5002,17 +5011,15 @@ bot.action(/^unlock:(\d+)$/, async (ctx) => {
     // ✅ алерт вместо отдельного сообщения
     try { await ctx.answerCbQuery(note, { show_alert: true }); } catch {}
 
-    // ✅ ПРИОРИТЕТ: почти всегда фото → редактируем caption
+    // ✅ почти всегда фото → редактируем caption
     let edited = false;
 
     try {
       await ctx.editMessageCaption(text, { parse_mode: "HTML", reply_markup: kb });
       edited = true;
-    } catch (_) {
-      edited = false;
-    }
+    } catch {}
 
-    // fallback если вдруг карточка была текстовая
+    // fallback: если карточка была текстовой
     if (!edited) {
       try {
         await ctx.editMessageText(text, {
@@ -5021,9 +5028,7 @@ bot.action(/^unlock:(\d+)$/, async (ctx) => {
           disable_web_page_preview: true,
         });
         edited = true;
-      } catch (_) {
-        edited = false;
-      }
+      } catch {}
     }
 
     // fallback: хотя бы кнопки
@@ -5031,9 +5036,7 @@ bot.action(/^unlock:(\d+)$/, async (ctx) => {
       try {
         await ctx.editMessageReplyMarkup(kb);
         edited = true;
-      } catch (_) {
-        edited = false;
-      }
+      } catch {}
     }
 
     // крайний fallback: отправить новую карточку
