@@ -6493,6 +6493,14 @@ bot.on("photo", async (ctx, next) => {
   }
 });
 
+bot.on("callback_query", async (ctx, next) => {
+  try {
+    const data = ctx.callbackQuery?.data;
+    console.log("[tg] callback_query data =", data);
+  } catch {}
+  return next(); // ✅ ВАЖНО: не блокируем остальные actions
+});
+
 bot.on("inline_query", async (ctx) => {
   try {
     logUpdate(ctx, "inline_query");
