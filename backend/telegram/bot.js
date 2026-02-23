@@ -5030,7 +5030,10 @@ bot.action(/^unlock:(\d+)$/, async (ctx) => {
       if (result.reason === "no_balance") {
         const bal = Number(result.balance || 0).toLocaleString("ru-RU");
         const need = Number(result.need || 10000).toLocaleString("ru-RU");
-        await safeReply(ctx, `💳 Недостаточно средств.\nБаланс: ${bal} сум\nНужно: ${need} сум`);
+        await ctx.answerCbQuery(
+          `Недостаточно средств. Баланс: ${bal} сум. Нужно: ${need} сум`,
+          { show_alert: true }
+        );
         return;
       }
       await safeReply(ctx, "⚠️ Не удалось открыть контакты. Попробуйте позже.");
