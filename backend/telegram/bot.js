@@ -3424,12 +3424,18 @@ bot.start(async (ctx) => {
           const category = String(svc.category || "").toLowerCase();
 
           // buildServiceMessage у тебя уже есть в bot.js (ты его используешь для карточек)
-          const { text, photoUrl, serviceUrl } = buildServiceMessage(svc, category, role);
+          const cardRole = role === "client" ? "client_public" : role;
+          const { text, photoUrl, serviceUrl } = buildServiceMessage(svc, category, cardRole);
 
           const kb = {
             inline_keyboard: [
               [{ text: "Подробнее на сайте", url: serviceUrl }],
-              [{ text: "📩 Быстрый запрос", callback_data: `quick:${serviceId}` }],
+              [
+                { text: "📩 Быстрый запрос", callback_data: `quick:${serviceId}` },
+                ...(role === "client"
+                  ? [{ text: "🔓 Открыть контакты (10 000 сум)", callback_data: `unlock:${serviceId}` }]
+                  : []),
+              ],
             ],
           };
 
@@ -4781,6 +4787,98 @@ bot.action(/^quick:(\d+)$/, async (ctx) => {
   }
 });
 
+/* ===================== UNLOCK CONTACTS (client pays 10 000 сум) ===================== */
+
+bot.action(/^unlock:(\d+)$/, async (ctx) => {
+  try {
+    const serviceId = Number(ctx.match[1]);
+    await ctx.answerCbQuery();
+
+    if (!Number.isFinite(serviceId) || serviceId <= 0) {
+      await safeReply(ctx, "⚠️ Некорректный ID услуги.");
+      return;
+    }
+
+    const chatId = ctx.from?.id;
+
+    // 1) найти клиента по chatId
+    const clientRow = await getClientRowByChatId(chatId);
+    if (!clientRow?.id) {
+      await safeReply(
+        ctx,
+        "👋 Чтобы открыть контакты, сначала привяжите аккаунт по номеру телефона: /start"
+      );
+      return;
+    }
+
+    // 2) списать баланс + записать unlock (UNIQUE client_id+service_id)
+    const result = await unlockContactsForService({
+      clientId: clientRow.id,
+      serviceId,
+    });
+
+    if (!result.ok) {
+      if (result.reason === "no_balance") {
+        const bal = Number(result.balance || 0).toLocaleString("ru-RU");
+        const need = Number(result.need || 10000).toLocaleString("ru-RU");
+        await safeReply(ctx, `💳 Недостаточно средств.\nБаланс: ${bal} сум\nНужно: ${need} сум`);
+        return;
+      }
+      await safeReply(ctx, "⚠️ Не удалось открыть контакты. Попробуйте позже.");
+      return;
+    }
+
+    // 3) заново получаем услугу и шлём карточку с контактами (роль client_unlocked)
+    const { data } = await axios.get(`/api/telegram/service/${serviceId}`, {
+      params: { role: "client" },
+    });
+
+    if (!data?.success || !data?.service) {
+      await safeReply(ctx, "❗️Услуга не найдена или уже снята с публикации.");
+      return;
+    }
+
+    const svc = data.service;
+    const category = String(svc.category || "").toLowerCase();
+
+    const { text, photoUrl, serviceUrl } = buildServiceMessage(
+      svc,
+      category,
+      "client_unlocked"
+    );
+
+    const kb = {
+      inline_keyboard: [
+        [{ text: "Подробнее на сайте", url: serviceUrl }],
+        [{ text: "📩 Быстрый запрос", callback_data: `quick:${serviceId}` }],
+      ],
+    };
+
+    const note = result.already
+      ? "✅ Контакты уже были открыты для этой услуги."
+      : `✅ Контакты открыты. Списано: ${CONTACT_UNLOCK_PRICE.toLocaleString("ru-RU")} сум`;
+
+    await safeReply(ctx, note);
+
+    if (photoUrl) {
+      await safeReplyWithPhoto(ctx, photoUrl, text, {
+        parse_mode: "HTML",
+        reply_markup: kb,
+      });
+    } else {
+      await ctx.reply(text, {
+        parse_mode: "HTML",
+        reply_markup: kb,
+        disable_web_page_preview: true,
+      });
+    }
+  } catch (e) {
+    console.error("[tg-bot] unlock action error:", e?.response?.data || e?.message || e);
+    try {
+      await safeReply(ctx, "⚠️ Ошибка. Попробуйте позже.");
+    } catch {}
+  }
+});
 
 /* ===================== TEXT HANDLER (wizard + quick request) ===================== */
 
