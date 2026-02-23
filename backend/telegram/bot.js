@@ -1736,6 +1736,15 @@ async function promptEditState(ctx, state) {
   }
 }
 
+// ===================== Логгер callback_query =====================
+bot.use(async (ctx, next) => {
+  try {
+    if (ctx.callbackQuery?.data) {
+      console.log("[tg] callback_query data =", ctx.callbackQuery.data);
+    }
+  } catch {}
+  return next();
+});
 
 // ===================== ACTUAL REMINDER CALLBACK (svc_actual:...) =====================
 // Эти кнопки приходят из напоминаний об актуальности. Обрабатывать должен тот же бот, который отправил кнопки.
@@ -6396,14 +6405,6 @@ bot.on("photo", async (ctx, next) => {
     console.error("photo handler error:", e);
     await safeReply(ctx, "⚠️ Ошибка при обработке фото. Попробуйте ещё раз.");
   }
-});
-
-bot.on("callback_query", async (ctx, next) => {
-  try {
-    const data = ctx.callbackQuery?.data;
-    console.log("[tg] callback_query data =", data);
-  } catch {}
-  return next(); // ✅ ВАЖНО: не блокируем остальные actions
 });
 
 bot.on("inline_query", async (ctx) => {
