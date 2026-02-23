@@ -265,6 +265,11 @@ function getExpiryBadge(detailsRaw, svc) {
   return null;
 }
 
+function shouldShowProviderContacts(role) {
+  const r = String(role || "").toLowerCase();
+  return r === "admin" || r === "provider" || r === "client_unlocked";
+}
+
 /**
  * В services.images могут быть:
  * - base64 data:image...
@@ -756,8 +761,13 @@ function buildServiceMessage(svc, category, role = "client") {
     parts.push(`⚡ <b>Горящее</b>: такие варианты уходят быстро`);
 
     parts.push("");
-    parts.push(providerLine);
-    if (telegramLine) parts.push(telegramLine);
+    if (shouldShowProviderContacts(role)) {
+      parts.push(providerLine);
+      if (telegramLine) parts.push(telegramLine);
+    } else {
+      parts.push("🏢 Поставщик: 🔒 скрыт");
+      parts.push("🔓 Откройте контакты для связи");
+    }
 
     parts.push("");
     parts.push(`👉 Подробнее и бронирование: ${a(serviceUrl, "открыть")}`);
@@ -814,8 +824,13 @@ function buildServiceMessage(svc, category, role = "client") {
     parts.push(`⚡ <b>Горящее</b>: такие варианты уходят быстро`);
 
     parts.push("");
-    parts.push(providerLine);
-    if (telegramLine) parts.push(telegramLine);
+    if (shouldShowProviderContacts(role)) {
+      parts.push(providerLine);
+      if (telegramLine) parts.push(telegramLine);
+    } else {
+      parts.push("🏢 Поставщик: 🔒 скрыт");
+      parts.push("🔓 Откройте контакты для связи");
+    }
 
     parts.push("");
     parts.push(`👉 Подробнее и бронирование: ${a(serviceUrl, "открыть")}`);
@@ -858,8 +873,13 @@ function buildServiceMessage(svc, category, role = "client") {
     parts.push(`⚡ <b>Горящее</b>: такие варианты уходят быстро`);
 
     parts.push("");
-    parts.push(providerLine);
-    if (telegramLine) parts.push(telegramLine);
+    if (shouldShowProviderContacts(role)) {
+      parts.push(providerLine);
+      if (telegramLine) parts.push(telegramLine);
+    } else {
+      parts.push("🏢 Поставщик: 🔒 скрыт");
+      parts.push("🔓 Откройте контакты для связи");
+    }
 
     parts.push("");
     parts.push(`👉 Подробнее и бронирование: ${a(serviceUrl, "открыть")}`);
@@ -904,8 +924,13 @@ function buildServiceMessage(svc, category, role = "client") {
     parts.push(`⚡ <b>Горящее</b>: такие варианты уходят быстро`);
 
     parts.push("");
-    parts.push(providerLine);
-    if (telegramLine) parts.push(telegramLine);
+    if (shouldShowProviderContacts(role)) {
+      parts.push(providerLine);
+      if (telegramLine) parts.push(telegramLine);
+    } else {
+      parts.push("🏢 Поставщик: 🔒 скрыт");
+      parts.push("🔓 Откройте контакты для связи");
+    }
 
     parts.push("");
     parts.push(`👉 Подробнее и бронирование: ${a(serviceUrl, "открыть")}`);
@@ -931,8 +956,13 @@ function buildServiceMessage(svc, category, role = "client") {
   if (badgeClean) parts.push(`⏳ ${escapeHtml(badgeClean)}`);
 
   parts.push("");
-  parts.push(providerLine);
-  if (telegramLine) parts.push(telegramLine);
+  if (shouldShowProviderContacts(role)) {
+    parts.push(providerLine);
+    if (telegramLine) parts.push(telegramLine);
+  } else {
+    parts.push("🏢 Поставщик: 🔒 скрыт");
+    parts.push("🔓 Откройте контакты для связи");
+  }
 
   parts.push("");
   parts.push(`👉 Подробнее и бронирование: ${a(serviceUrl, "открыть")}`);
