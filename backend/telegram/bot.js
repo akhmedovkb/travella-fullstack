@@ -3721,7 +3721,8 @@ bot.start(async (ctx) => {
           }
 
           // buildServiceMessage у тебя уже есть в bot.js (ты его используешь для карточек)
-          const cardRole = role === "client" ? "client_public" : role;
+          const cardRole =
+            role === "client" ? (unlocked ? "client_unlocked" : "client_public") : role;
           
           const { text, photoUrl, serviceUrl } =
             buildServiceMessage(svc, category, cardRole, {
