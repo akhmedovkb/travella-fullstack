@@ -265,8 +265,11 @@ function getExpiryBadge(detailsRaw, svc) {
   return null;
 }
 
-function shouldShowProviderContacts(role) {
+function shouldShowProviderContacts(role, unlocked) {
   const r = String(role || "").toLowerCase();
+
+  if (unlocked) return true;
+
   return r === "admin" || r === "provider" || r === "client_unlocked";
 }
 
@@ -400,8 +403,12 @@ function guessRefusedCategory(details) {
   return "refused_tour";
 }
 
-function buildServiceMessage(svc, category, role = "client") {
+function buildServiceMessage(svc, category, role = "client", options = {}) {
   const d = parseDetailsAny(svc.details);
+  const unlocked =
+  options?.unlocked === true ||
+  String(role || "").toLowerCase() === "client_unlocked";
+  
     // ✅ normalize category + страховка
   let catNorm = normalizeCategory(category);
 
@@ -761,7 +768,7 @@ function buildServiceMessage(svc, category, role = "client") {
     parts.push(`⚡ <b>Горящее</b>: такие варианты уходят быстро`);
 
     parts.push("");
-    if (shouldShowProviderContacts(role)) {
+    if (shouldShowProviderContacts(role, unlocked)) {
       parts.push(providerLine);
       if (telegramLine) parts.push(telegramLine);
     } else {
@@ -824,7 +831,7 @@ function buildServiceMessage(svc, category, role = "client") {
     parts.push(`⚡ <b>Горящее</b>: такие варианты уходят быстро`);
 
     parts.push("");
-    if (shouldShowProviderContacts(role)) {
+    if (shouldShowProviderContacts(role, unlocked)) {
       parts.push(providerLine);
       if (telegramLine) parts.push(telegramLine);
     } else {
@@ -873,7 +880,7 @@ function buildServiceMessage(svc, category, role = "client") {
     parts.push(`⚡ <b>Горящее</b>: такие варианты уходят быстро`);
 
     parts.push("");
-    if (shouldShowProviderContacts(role)) {
+    if (shouldShowProviderContacts(role, unlocked)) {
       parts.push(providerLine);
       if (telegramLine) parts.push(telegramLine);
     } else {
@@ -924,7 +931,7 @@ function buildServiceMessage(svc, category, role = "client") {
     parts.push(`⚡ <b>Горящее</b>: такие варианты уходят быстро`);
 
     parts.push("");
-    if (shouldShowProviderContacts(role)) {
+    if (shouldShowProviderContacts(role, unlocked)) {
       parts.push(providerLine);
       if (telegramLine) parts.push(telegramLine);
     } else {
@@ -956,7 +963,7 @@ function buildServiceMessage(svc, category, role = "client") {
   if (badgeClean) parts.push(`⏳ ${escapeHtml(badgeClean)}`);
 
   parts.push("");
-  if (shouldShowProviderContacts(role)) {
+  if (shouldShowProviderContacts(role, unlocked)) {
     parts.push(providerLine);
     if (telegramLine) parts.push(telegramLine);
   } else {
