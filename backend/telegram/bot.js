@@ -3707,21 +3707,34 @@ bot.start(async (ctx) => {
 
           const svc = data.service;
           const category = String(svc.category || "").toLowerCase();
+          // 🔐 вычисляем unlock заранее
+          let unlocked = true;
+          
+          if (role === "client") {
+            const clientRow = await getClientRowByChatId(pool, actorId);
+            unlocked = clientRow?.id
+              ? await isContactsUnlocked(pool, {
+                  clientId: clientRow.id,
+                  serviceId,
+                })
+              : false;
+          }
 
           // buildServiceMessage у тебя уже есть в bot.js (ты его используешь для карточек)
           const cardRole = role === "client" ? "client_public" : role;
-          const { text, photoUrl, serviceUrl } = buildServiceMessage(svc, category, cardRole);
+          
+          const { text, photoUrl, serviceUrl } =
+            buildServiceMessage(svc, category, cardRole, {
+              unlocked,
+              isInline: false,
+            });
           
           let textFinal = text;
           let kb = { inline_keyboard: [] };
           
           if (role === "client") {
             // 🔒 До оплаты скрываем "Подробнее/Быстрый запрос" и ссылку в тексте
-            const clientRow = await getClientRowByChatId(pool, actorId);
-            const unlocked = clientRow?.id
-              ? await isContactsUnlocked(pool, { clientId: clientRow.id, serviceId })
-              : false;
-          
+         
             if (!unlocked) {
               textFinal = stripLockedLinks(text);
               kb = {
@@ -6624,7 +6637,12 @@ bot.on("inline_query", async (ctx) => {
     }
 
     // === INLINE CACHE KEYS ===
-    const baseKey = `inline:${isMy ? "my" : "search"}:${roleForInline}:${userId}:${category || "all"}`;
+    const baseKey =
+    `inline:${isMy ? "my" : "search"}:` +
+    `${roleForInline}:` +
+    `${userId}:` +
+    `${category || "all"}:` +
+    `v5`;
 
     // отдельно кэшируем:
     // 1) сырой ответ API (короткий TTL)
