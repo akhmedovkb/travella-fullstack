@@ -238,6 +238,76 @@ async function unlockContactsForService(pool, { clientId, serviceId }) {
   }
 }
 
+/* ===================== UNLOCK HELPERS (UI gating) ===================== */
+
+// true если клиент уже открывал контакты по этой услуге
+async function isContactsUnlocked(pool, { clientId, serviceId }) {
+  if (!pool) return false;
+  await ensureUnlockTables(pool);
+  try {
+    const r = await pool.query(
+      `SELECT 1
+         FROM client_service_contact_unlocks
+        WHERE client_id = $1 AND service_id = $2
+        LIMIT 1`,
+      [Number(clientId), Number(serviceId)]
+    );
+    return !!r.rowCount;
+  } catch (e) {
+    console.error("[tg-bot] isContactsUnlocked error:", e?.message || e);
+    return false;
+  }
+}
+
+// выбрать set открытых service_id одним запросом (для inline выдачи)
+async function getUnlockedServiceIdSet(pool, { clientId, serviceIds }) {
+  const set = new Set();
+  if (!pool) return set;
+  await ensureUnlockTables(pool);
+
+  const ids = (Array.isArray(serviceIds) ? serviceIds : [])
+    .map((x) => Number(x))
+    .filter((n) => Number.isFinite(n) && n > 0);
+
+  if (!ids.length) return set;
+
+  try {
+    const r = await pool.query(
+      `SELECT service_id
+         FROM client_service_contact_unlocks
+        WHERE client_id = $1
+          AND service_id = ANY($2::bigint[])`,
+      [Number(clientId), ids]
+    );
+    for (const row of r.rows || []) set.add(Number(row.service_id));
+  } catch (e) {
+    console.error("[tg-bot] getUnlockedServiceIdSet error:", e?.message || e);
+  }
+  return set;
+}
+
+// Убираем из текста любые "Подробнее ... открыть(ссылка)" до оплаты
+function stripLockedLinks(text) {
+  let s = String(text || "");
+
+  // 1) HTML вариант: 👉 Подробнее ...: <a href="...">открыть</a>
+  s = s.replace(/\n?\s*👉\s*Подробнее[^\n]*?:\s*<a[^>]*>[^<]*<\/a>\s*/gi, "\n");
+
+  // 2) plain вариант: 👉 Подробнее ...: открыть (https://... )
+  s = s.replace(/\n?\s*👉\s*Подробнее[^\n]*?:\s*открыть\s*\([^)]+\)\s*/gi, "\n");
+
+  // 3) на всякий случай — любая строка где есть ?service=123
+  s = s.replace(/\n?[^\n]*\?service=\d+[^\n]*\n?/gi, "\n");
+
+  s = s.replace(/\n{3,}/g, "\n\n").trim();
+
+  // добавим понятное пояснение
+  if (s) s += "\n\n🔒 Подробнее на сайте и быстрый запрос будут доступны после оплаты открытия контактов.";
+  else s = "🔒 Подробнее на сайте и быстрый запрос будут доступны после оплаты открытия контактов.";
+
+  return s;
+}
+
 /* ===================== OPTIONAL DB (requests MVP: id + status) ===================== */
 // ⚠️ Мягко: если db.js недоступен/не настроен — бот продолжит работать как раньше (без request_id/статусов)
 let pool = null;
@@ -3570,28 +3640,48 @@ bot.start(async (ctx) => {
           const cardRole = role === "client" ? "client_public" : role;
           const { text, photoUrl, serviceUrl } = buildServiceMessage(svc, category, cardRole);
           
-          // показываем кнопку "Открыть контакты" ТОЛЬКО если контакты реально скрыты
-          const needUnlock = !shouldShowProviderContacts(cardRole);
+          let textFinal = text;
+          let kb = { inline_keyboard: [] };
           
-          const kb = {
-            inline_keyboard: [
-              [{ text: "Подробнее на сайте", url: serviceUrl }],
-              [
-                { text: "📩 Быстрый запрос", callback_data: `quick:${serviceId}` },
-                ...(needUnlock
-                  ? [{ text: "🔓 Открыть контакты (10 000 сум)", callback_data: `unlock:${serviceId}` }]
-                  : []),
+          if (role === "client") {
+            // 🔒 До оплаты скрываем "Подробнее/Быстрый запрос" и ссылку в тексте
+            const clientRow = await getClientRowByChatId(pool, actorId);
+            const unlocked = clientRow?.id
+              ? await isContactsUnlocked(pool, { clientId: clientRow.id, serviceId })
+              : false;
+          
+            if (!unlocked) {
+              textFinal = stripLockedLinks(text);
+              kb = {
+                inline_keyboard: [
+                  [{ text: "🔓 Открыть контакты (10 000 сум)", callback_data: `unlock:${serviceId}` }],
+                ],
+              };
+            } else {
+              kb = {
+                inline_keyboard: [
+                  [{ text: "Подробнее на сайте", url: serviceUrl }],
+                  [{ text: "📩 Быстрый запрос", callback_data: `quick:${serviceId}` }],
+                ],
+              };
+            }
+          } else {
+            // provider/admin
+            kb = {
+              inline_keyboard: [
+                [{ text: "Подробнее на сайте", url: serviceUrl }],
+                [{ text: "📩 Быстрый запрос", callback_data: `quick:${serviceId}` }],
               ],
-            ],
-          };
+            };
+          }
 
           if (photoUrl) {
-            await safeReplyWithPhoto(ctx, photoUrl, text, {
+            await safeReplyWithPhoto(ctx, photoUrl, textFinal, {
               parse_mode: "HTML",
               reply_markup: kb,
             });
           } else {
-            await ctx.reply(text, {
+            await ctx.reply(textFinal, {
               parse_mode: "HTML",
               reply_markup: kb,
               disable_web_page_preview: true,
@@ -6578,7 +6668,23 @@ bot.on("inline_query", async (ctx) => {
       if (!db) return -1;
       return da.getTime() - db.getTime();
     });
-
+    
+    // === UNLOCK GATING (client) ===
+    // До оплаты: показываем только кнопку "🔓 Открыть контакты"
+    // После оплаты: показываем "Подробнее" + "📩 Быстрый запрос" и ссылки в тексте
+    let unlockedSet = new Set();
+    
+    if (!isMy && roleForInline === "client") {
+      const clientRowInline = await getClientRowByChatId(pool, userId);
+      const topIds = itemsSorted.slice(0, 50).map((x) => x?.id).filter(Boolean);
+      if (clientRowInline?.id && topIds.length) {
+        unlockedSet = await getUnlockedServiceIdSet(pool, {
+          clientId: clientRowInline.id,
+          serviceIds: topIds,
+        });
+      }
+    }
+    
     function placeholderKindByCategory(category) {
       const c = String(category || "").toLowerCase();
       if (c === "refused_tour") return "tour";
@@ -6600,32 +6706,38 @@ bot.on("inline_query", async (ctx) => {
         svcCategory,
         roleForInline
       );
+      
+      let textFinal = text;
+      if (roleForInline === "client" && !unlockedSet.has(Number(svc.id))) {
+        textFinal = stripLockedLinks(text);
+      }
+      
       const description = buildInlineDescription(svc, svcCategory, roleForInline);
 
       const manageUrl = `${SITE_URL}/dashboard?from=tg&service=${svc.id}`;
 
       const canSeeContacts =
-        roleForInline === "admin" ||
-        roleForInline === "provider" ||
-        roleForInline === "client_unlocked";
+        roleForInline === "admin" || roleForInline === "provider"
+          ? true
+          : roleForInline === "client"
+          ? unlockedSet.has(Number(svc.id))
+          : false;
       
-      const keyboardForClient = {
-        inline_keyboard: !canSeeContacts
-          ? [
-              [
-                {
-                  text: `🔓 Открыть контакты (${Number(CONTACT_UNLOCK_PRICE || 10000).toLocaleString("ru-RU")} сум)`,
-                  callback_data: `unlock:${svc.id}`,
-                },
-              ],
-            ]
-          : [
+      // 🔒 До оплаты — только unlock. После оплаты — "Подробнее" + "Быстрый запрос".
+      const keyboardForClient = canSeeContacts
+        ? {
+            inline_keyboard: [
               [
                 { text: "Подробнее на сайте", url: serviceUrl },
                 { text: "📩 Быстрый запрос", callback_data: `request:${svc.id}` },
               ],
             ],
-      };
+          }
+        : {
+            inline_keyboard: [
+              [{ text: "🔓 Открыть контакты (10 000 сум)", callback_data: `unlock:${svc.id}` }],
+            ],
+          };
 
       const keyboardForMy = {
         inline_keyboard: [
