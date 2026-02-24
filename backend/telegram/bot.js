@@ -6617,7 +6617,7 @@ bot.on("inline_query", async (ctx) => {
     // Требуем привязку аккаунта
     if (!roleForInline) {
       await ctx.answerInlineQuery([], {
-        cache_time: 3,
+        cache_time: 0,
         is_personal: true,
         switch_pm_text: "🔐 Сначала привяжите аккаунт (номер телефона)",
         switch_pm_parameter: "start",
@@ -6636,29 +6636,26 @@ bot.on("inline_query", async (ctx) => {
       return;
     }
 
+    // === INLINE CACHE KEYS ===
+    const baseKey =
+    `inline:${isMy ? "my" : "search"}:` +
+    `${roleForInline}:` +
+    `${userId}:` +
+    `${category || "all"}:` +
+    `v5`;
+
+    // отдельно кэшируем:
+    // 1) сырой ответ API (короткий TTL)
+    // 2) уже собранные inline-results (чуть длиннее, потому что там дорого: thumbs + message build)
+    const apiKey = `${baseKey}:api`;
+    const resKey = `${baseKey}:res:v4`;
+
     // === PAGINATION (Telegram offset) ===
     const offset = Number(String(ctx.inlineQuery?.offset || "0").trim() || 0) || 0;
-    const pageSize = 10;
-    const maxBuild = 50;
+    const pageSize = 10;        // можно 10/20, 10 обычно ок
+    const maxBuild = 50;        // Telegram лимит, и у тебя уже slice(0, 50)
 
-    // === UNLOCK STAMP (важно для resKey) ===
-    let clientRowInline = null;
-    let unlockStamp = 0;
-
-    if (!isMy && roleForInline === "client") {
-      clientRowInline = await getClientRowByChatId(pool, userId);
-      if (clientRowInline?.id) {
-        unlockStamp = await getClientUnlockStamp(pool, clientRowInline.id);
-      }
-    }
-
-    // === INLINE CACHE KEYS ===
-    const baseKey = `inline:${isMy ? "my" : "search"}:${roleForInline}:${userId}:${category || "all"}`;
-    const apiKey = `${baseKey}:api`;
-    // ✅ ВАЖНО: resKey включает unlockStamp — после оплаты key меняется => нет "липкого" кеша
-    const resKey = `${baseKey}:res:v5:u${unlockStamp}`;
-
-    // 1) пробуем отдать results из кэша
+    // 1) пробуем отдать results из кэша (самый быстрый путь)
     const cachedRes = cacheGet(resKey);
     if (cachedRes && Array.isArray(cachedRes.resultsAll)) {
       const resultsAll = cachedRes.resultsAll;
@@ -6666,8 +6663,7 @@ bot.on("inline_query", async (ctx) => {
       const nextOffset = offset + pageSize < resultsAll.length ? String(offset + pageSize) : "";
 
       await ctx.answerInlineQuery(page, {
-        // ✅ для client лучше минимальный cache_time, чтобы после unlock обновлялось сразу
-        cache_time: roleForInline === "client" && !isMy ? 1 : 11,
+        cache_time: 1,
         is_personal: true,
         next_offset: nextOffset,
       });
@@ -6677,7 +6673,7 @@ bot.on("inline_query", async (ctx) => {
     // 2) иначе — берём API-данные через inflight-dedup
     const data = await getOrFetchCached(
       apiKey,
-      12000,
+      12000, // TTL для API (короткий)
       async () => {
         if (isMy) {
           const resp = await axios.get(`/api/telegram/provider/${userId}/services`);
@@ -6712,6 +6708,7 @@ bot.on("inline_query", async (ctx) => {
 
     let itemsForInline = Array.isArray(data.items) ? data.items : [];
 
+    // если категория указана токеном — фильтруем
     if (category && REFUSED_CATEGORIES.includes(category)) {
       itemsForInline = itemsForInline.filter(
         (svc) => String(svc.category || svc.type || "").trim() === category
@@ -6719,6 +6716,7 @@ bot.on("inline_query", async (ctx) => {
     }
 
     if (isMy) {
+      // ✅ МОИ УСЛУГИ — только актуальные и не archived
       itemsForInline = itemsForInline.filter((svc) => {
         try {
           if (String(svc.status || "").toLowerCase() === "archived") return false;
@@ -6729,6 +6727,7 @@ bot.on("inline_query", async (ctx) => {
         }
       });
     } else {
+      // ✅ КАРТОЧКАМИ — ВСЕ услуги (без фильтра актуальности)
       itemsForInline = itemsForInline.filter((svc) => !!svc);
     }
 
@@ -6759,13 +6758,15 @@ bot.on("inline_query", async (ctx) => {
       if (!db) return -1;
       return da.getTime() - db.getTime();
     });
-
+    
     // === UNLOCK GATING (client) ===
+    // До оплаты: показываем только кнопку "🔓 Открыть контакты"
+    // После оплаты: показываем "Подробнее" + "📩 Быстрый запрос" и ссылки в тексте
     let unlockedSet = new Set();
-
+    
     if (!isMy && roleForInline === "client") {
-      // ✅ используем уже найденный clientRowInline
-      const topIds = itemsSorted.slice(0, maxBuild).map((x) => x?.id).filter(Boolean);
+      const clientRowInline = await getClientRowByChatId(pool, userId);
+      const topIds = itemsSorted.slice(0, 50).map((x) => x?.id).filter(Boolean);
       if (clientRowInline?.id && topIds.length) {
         unlockedSet = await getUnlockedServiceIdSet(pool, {
           clientId: clientRowInline.id,
@@ -6773,7 +6774,7 @@ bot.on("inline_query", async (ctx) => {
         });
       }
     }
-
+    
     function placeholderKindByCategory(category) {
       const c = String(category || "").toLowerCase();
       if (c === "refused_tour") return "tour";
@@ -6785,30 +6786,23 @@ bot.on("inline_query", async (ctx) => {
 
     const TG_PLACEHOLDER = (kind = "default") =>
       `${TG_IMAGE_BASE}/api/telegram/placeholder/${encodeURIComponent(kind)}.png`;
-
     const results = [];
 
-    for (const svc of itemsSorted.slice(0, maxBuild)) {
+    for (const svc of itemsSorted.slice(0, 50)) {
       const svcCategory = svc.category || category || "refused_tour";
-
-      const isUnlocked =
-        roleForInline === "client" && unlockedSet.has(Number(svc.id));
-
-      // ✅ КЛЮЧЕВОЕ: прокидываем client_unlocked в buildServiceMessage
-      const cardRole =
-        roleForInline === "client" ? (isUnlocked ? "client_unlocked" : "client") : roleForInline;
 
       const { text, photoUrl, serviceUrl } = buildServiceMessage(
         svc,
         svcCategory,
-        cardRole
+        roleForInline
       );
-
-      // 🔒 если не unlocked — чистим ссылки из текста
-      const textFinal =
-        roleForInline === "client" && !isUnlocked ? stripLockedLinks(text) : text;
-
-      const description = buildInlineDescription(svc, svcCategory, cardRole);
+      
+      let textFinal = text;
+      if (roleForInline === "client" && !unlockedSet.has(Number(svc.id))) {
+        textFinal = stripLockedLinks(text);
+      }
+      
+      const description = buildInlineDescription(svc, svcCategory, roleForInline);
 
       const manageUrl = `${SITE_URL}/dashboard?from=tg&service=${svc.id}`;
 
@@ -6816,9 +6810,10 @@ bot.on("inline_query", async (ctx) => {
         roleForInline === "admin" || roleForInline === "provider"
           ? true
           : roleForInline === "client"
-          ? isUnlocked
+          ? unlockedSet.has(Number(svc.id))
           : false;
-
+      
+      // 🔒 До оплаты — только unlock. После оплаты — "Подробнее" + "Быстрый запрос".
       const keyboardForClient = canSeeContacts
         ? {
             inline_keyboard: [
@@ -6840,12 +6835,14 @@ bot.on("inline_query", async (ctx) => {
           };
 
       const keyboardForMy = {
-        inline_keyboard: [[{ text: "🌐 Открыть в кабинете", url: manageUrl }]],
+        inline_keyboard: [
+          [{ text: "🌐 Открыть в кабинете", url: manageUrl }],
+        ],
       };
 
-      // ✅ thumb_url
+      // ✅ thumb_url: только реальный публичный https (и НЕ placeholder)
       let thumbUrl = null;
-
+      
       if (photoUrl && photoUrl.startsWith("tgfile:")) {
         const fileId = photoUrl.replace(/^tgfile:/, "").trim();
         try {
@@ -6854,26 +6851,37 @@ bot.on("inline_query", async (ctx) => {
           thumbUrl = null;
         }
       } else if (photoUrl && (photoUrl.startsWith("http://") || photoUrl.startsWith("https://"))) {
+        // ✅ inline thumb должен быть публичным и желательно https
         let u = photoUrl;
+      // ✅ если ссылка пришла через SITE_URL (/api/...), переписываем на прямой TG_IMAGE_BASE
         if (u.startsWith(SITE_URL + "/api/")) {
           u = TG_IMAGE_BASE + u.slice(SITE_URL.length);
         }
+
+        // если это наш сервисный эндпоинт - просим миниатюру
         if (u.includes("/api/telegram/service-image/")) {
           u = u.includes("?") ? `${u}&thumb=1` : `${u}?thumb=1`;
         }
+      
+        // Telegram thumb_url: лучше строго https
         if (u.startsWith("http://")) {
+          // если у тебя в проде реально https — лучше чтобы сюда никогда не попадало
+          // но на всякий случай не отправляем http как thumb
           thumbUrl = null;
         } else {
           thumbUrl = u;
         }
       }
-
+      
       const phKind = placeholderKindByCategory(svcCategory);
       const finalThumbUrl =
         typeof thumbUrl === "string" && thumbUrl.startsWith("https://")
           ? thumbUrl
           : TG_PLACEHOLDER(phKind);
 
+      // ✅ Точечный фикс по задаче:
+      // - убираем "Отказной тур" как заголовок по умолчанию
+      // - если есть hotel/hotelName — используем его как title в inline-карточке
       const det = parseDetailsAny(svc.details);
       const hotelForTitle = (det.hotel || det.hotelName || "").trim();
 
@@ -6883,6 +6891,13 @@ bot.on("inline_query", async (ctx) => {
         "Услуга";
 
       const title = truncate(normalizeTitleSoft(titleSource), 60);
+
+      console.log("[inline]", {
+        svcId: svc.id,
+        photoUrl,
+        thumbUrl,
+        finalThumbUrl,
+      });
 
       results.push({
         id: `${svcCategory}:${svc.id}`,
@@ -6894,34 +6909,39 @@ bot.on("inline_query", async (ctx) => {
           parse_mode: "HTML",
           disable_web_page_preview: true,
         },
+        // ✅ Всегда показываем картинку слева в выдаче (thumb)
         thumb_url: finalThumbUrl,
         reply_markup: isMy ? keyboardForMy : keyboardForClient,
       });
     }
 
-    // ✅ кэшируем results под resKey с учетом unlockStamp
-    cacheSet(resKey, { resultsAll: results }, 30000);
-
-    const page = results.slice(offset, offset + pageSize);
-    const nextOffset = offset + pageSize < results.length ? String(offset + pageSize) : "";
-
-    try {
-      await ctx.answerInlineQuery(page, {
-        cache_time: roleForInline === "client" && !isMy ? 1 : 11,
-        is_personal: true,
-        next_offset: nextOffset,
-      });
-    } catch (e) {
-      console.error("[tg-bot] answerInlineQuery FAILED:", e?.response?.data || e?.message || e);
+          // ✅ Кэшируем уже собранные results (дорого пересобирать thumbs)
+      cacheSet(resKey, { resultsAll: results }, 30000);
+      
+      // ✅ Pagination: Telegram offset
+      const page = results.slice(offset, offset + pageSize);
+      const nextOffset = offset + pageSize < results.length ? String(offset + pageSize) : "";
+      
       try {
-        await ctx.answerInlineQuery([], {
-          cache_time: 1,
+        await ctx.answerInlineQuery(page, {
+          cache_time: 11,
           is_personal: true,
-          switch_pm_text: "⚠️ Ошибка inline (открыть бота)",
-          switch_pm_parameter: "start",
+          next_offset: nextOffset,
         });
-      } catch {}
-    }
+      } catch (e) {
+        console.error(
+          "[tg-bot] answerInlineQuery FAILED:",
+          e?.response?.data || e?.message || e
+        );
+        try {
+          await ctx.answerInlineQuery([], {
+            cache_time: 1,
+            is_personal: true,
+            switch_pm_text: "⚠️ Ошибка inline (открыть бота)",
+            switch_pm_parameter: "start",
+          });
+        } catch {}
+      }
   } catch (e) {
     console.error("[tg-bot] inline_query error:", e?.response?.data || e?.message || e);
     try {
@@ -6935,6 +6955,7 @@ bot.on("inline_query", async (ctx) => {
   }
 });
 
+// ⚠️ здесь НЕТ 
 /* ===================== EDIT IMAGES (ADD/REMOVE/CLEAR) ===================== */
 
 bot.action(/^svc_edit_img_(?:remove|del):(\d+)$/, async (ctx) => {
