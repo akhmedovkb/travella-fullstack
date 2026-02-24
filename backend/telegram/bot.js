@@ -6810,7 +6810,7 @@ bot.on("inline_query", async (ctx) => {
         title,
         description,
         input_message_content: {
-          message_text: text,
+          message_text: textFinal,
           parse_mode: "HTML",
           disable_web_page_preview: true,
         },
