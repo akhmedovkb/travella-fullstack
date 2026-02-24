@@ -238,6 +238,78 @@ async function unlockContactsForService(pool, { clientId, serviceId }) {
   }
 }
 
+// проверить: клиент уже открыл контакты по этой услуге?
+async function isContactsUnlocked(pool, { clientId, serviceId }) {
+  if (!pool) return false;
+  await ensureUnlockTables(pool);
+
+  const cid = Number(clientId);
+  const sid = Number(serviceId);
+  if (!Number.isFinite(cid) || cid <= 0 || !Number.isFinite(sid) || sid <= 0) return false;
+
+  try {
+    const r = await pool.query(
+      `SELECT 1
+         FROM client_service_contact_unlocks
+        WHERE client_id=$1 AND service_id=$2
+        LIMIT 1`,
+      [cid, sid]
+    );
+    return !!r.rowCount;
+  } catch (e) {
+    console.error("[tg-bot] isContactsUnlocked error:", e?.message || e);
+    return false;
+  }
+}
+
+// для inline: получить множество service_id, которые уже unlocked
+async function getUnlockedServiceIdSet(pool, { clientId, serviceIds }) {
+  const out = new Set();
+  if (!pool) return out;
+  await ensureUnlockTables(pool);
+
+  const cid = Number(clientId);
+  const ids = (serviceIds || [])
+    .map((x) => Number(x))
+    .filter((n) => Number.isFinite(n) && n > 0);
+
+  if (!Number.isFinite(cid) || cid <= 0 || !ids.length) return out;
+
+  try {
+    const r = await pool.query(
+      `SELECT service_id
+         FROM client_service_contact_unlocks
+        WHERE client_id=$1 AND service_id = ANY($2::bigint[])`,
+      [cid, ids]
+    );
+    for (const row of r.rows || []) {
+      const sid = Number(row.service_id);
+      if (Number.isFinite(sid)) out.add(sid);
+    }
+  } catch (e) {
+    console.error("[tg-bot] getUnlockedServiceIdSet error:", e?.message || e);
+  }
+  return out;
+}
+
+// 🔒 Убираем кликабельные ссылки/строки "Подробнее" до оплаты.
+function stripLockedLinks(htmlText) {
+  const lines = String(htmlText || "").split("\n");
+  const filtered = lines.filter((ln) => {
+    const s = String(ln || "");
+    const low = s.toLowerCase();
+
+    // Любая строка, где есть "подробнее" + ссылка
+    if (
+      low.includes("подробнее") &&
+      (low.includes("http://") || low.includes("https://") || low.includes("travella"))
+    ) return false;
+
+    return true;
+  });
+  return filtered.join("\n").trim();
+}
+
 /* ===================== UNLOCK HELPERS (UI gating) ===================== */
 
 // true если клиент уже открывал контакты по этой услуге
@@ -6735,7 +6807,12 @@ bot.on("inline_query", async (ctx) => {
           }
         : {
             inline_keyboard: [
-              [{ text: "🔓 Открыть контакты (10 000 сум)", callback_data: `unlock:${svc.id}` }],
+              [
+                {
+                  text: "🔓 Открыть контакты (10 000 сум)",
+                  callback_data: `unlock:${svc.id}`,
+                },
+              ],
             ],
           };
 
