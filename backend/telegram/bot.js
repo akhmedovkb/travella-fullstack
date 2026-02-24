@@ -1466,6 +1466,7 @@ async function safeReplyWithPhoto(ctx, photo, caption, extra = {}) {
     return await safeReply(ctx, cap || "(фото)", textExtra);
   }
 }
+
 function statusLabelForManager(status) {
   return status === "accepted"
     ? "✅ Принято"
@@ -5213,16 +5214,34 @@ bot.action(/^unlock:(\d+)$/, async (ctx) => {
       } catch {}
     }
 
-    // ⚠️ крайний fallback: отправить новую карточку (в inline/группах может не сработать)
+    // ⚠️ крайний fallback: отправить новую карточку + закрепить её
     if (!edited) {
+      let sentMsg = null;
+    
       if (photoUrl) {
-        await safeReplyWithPhoto(ctx, photoUrl, text, { parse_mode: "HTML", reply_markup: kb });
+        sentMsg = await safeReplyWithPhoto(ctx, photoUrl, text, {
+          parse_mode: "HTML",
+          reply_markup: kb,
+        });
       } else {
-        await ctx.reply(text, {
+        sentMsg = await ctx.reply(text, {
           parse_mode: "HTML",
           reply_markup: kb,
           disable_web_page_preview: true,
         });
+      }
+    
+      // ✅ закрепляем новую карточку (если есть права/возможность)
+      try {
+        const chatIdToPin = ctx.chat?.id;
+        const msgIdToPin = sentMsg?.message_id;
+        if (chatIdToPin && msgIdToPin) {
+          await ctx.telegram.pinChatMessage(chatIdToPin, msgIdToPin, {
+            disable_notification: true,
+          });
+        }
+      } catch (e) {
+        console.log("[tg-bot] pinChatMessage failed:", e?.response?.data || e?.message || e);
       }
     }
   } catch (e) {
@@ -5233,115 +5252,6 @@ bot.action(/^unlock:(\d+)$/, async (ctx) => {
   }
 });
 
-bot.on("callback_query", async (ctx) => {
-  try {
-    const data = String(ctx.callbackQuery?.data || "").trim();
-    if (!data) return;
-
-    // ✅ unlock:<serviceId>
-    const m = data.match(/^unlock:(\d+)$/i);
-    if (!m) return;
-
-    const serviceId = Number(m[1]);
-    if (!Number.isFinite(serviceId) || serviceId <= 0) {
-      await ctx.answerCbQuery("Неверный ID услуги");
-      return;
-    }
-
-    const actorId = getActorId(ctx); // chat/user id в Telegram
-    if (!actorId) {
-      await ctx.answerCbQuery("Не удалось определить пользователя");
-      return;
-    }
-
-    // роль
-    const role = await resolveRoleByUserId(actorId, ctx);
-    if (!role || role !== "client") {
-      await ctx.answerCbQuery("Доступно только клиенту");
-      return;
-    }
-
-    const clientRow = await getClientRowByChatId(pool, actorId);
-    if (!clientRow?.id) {
-      await ctx.answerCbQuery("Сначала привяжите аккаунт");
-      return;
-    }
-
-    // если уже unlocked — не списываем повторно
-    const alreadyUnlocked = await isContactsUnlocked(pool, {
-      clientId: clientRow.id,
-      serviceId,
-    });
-
-    if (!alreadyUnlocked) {
-      const resUnlock = await unlockContactsForService(pool, {
-        clientId: clientRow.id,
-        serviceId,
-      });
-
-      if (!resUnlock?.ok) {
-        if (resUnlock?.reason === "no_balance") {
-          await ctx.answerCbQuery(
-            `Недостаточно баланса. Нужно ${CONTACT_UNLOCK_PRICE} сум`,
-            { show_alert: true }
-          );
-          return;
-        }
-
-        await ctx.answerCbQuery("Ошибка открытия контактов", { show_alert: true });
-        return;
-      }
-    }
-
-    // ✅ показываем обновлённую карточку сразу
-    await ctx.answerCbQuery("Контакты открыты ✅");
-
-    const { data: svcResp } = await axios.get(`/api/telegram/service/${serviceId}`, {
-      params: { role: "client" },
-    });
-
-    if (!svcResp?.success || !svcResp?.service) {
-      await ctx.reply("❗️Услуга не найдена или уже снята с публикации.");
-      return;
-    }
-
-    const svc = svcResp.service;
-    const category = String(svc.category || "").toLowerCase();
-
-    // ВАЖНО: строим как client_unlocked, чтобы telegramServiceCard показал контакты
-    const { text, photoUrl, serviceUrl } = buildServiceMessage(
-      svc,
-      category,
-      "client_unlocked"
-    );
-
-    const kb = {
-      inline_keyboard: [
-        [{ text: "Подробнее на сайте", url: serviceUrl }],
-        [{ text: "📩 Быстрый запрос", callback_data: `request:${serviceId}` }],
-      ],
-    };
-
-    // Если есть photoUrl — отправляем фото, иначе текст
-    if (photoUrl) {
-      await safeReplyWithPhoto(ctx, photoUrl, text, {
-        parse_mode: "HTML",
-        reply_markup: kb,
-      });
-    } else {
-      await ctx.reply(text, {
-        parse_mode: "HTML",
-        reply_markup: kb,
-        disable_web_page_preview: true,
-      });
-    }
-  } catch (e) {
-    console.error("[tg-bot] unlock callback error:", e?.response?.data || e?.message || e);
-    try {
-      await ctx.answerCbQuery("Ошибка. Попробуйте позже", { show_alert: true });
-    } catch {}
-  }
-});
 /* ===================== TEXT HANDLER (wizard + quick request) ===================== */
 
 // Делегат для обработки текста в wizard-режиме редактирования услуги.
