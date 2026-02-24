@@ -6610,15 +6610,21 @@ bot.on("inline_query", async (ctx) => {
         roleForInline === "client_unlocked";
       
       const keyboardForClient = {
-        inline_keyboard: [
-          [
-            { text: "Подробнее на сайте", url: serviceUrl },
-            { text: "📩 Быстрый запрос", callback_data: `request:${svc.id}` },
-          ],
-          ...(!canSeeContacts
-            ? [[{ text: "🔓 Открыть контакты (10 000 сум)", callback_data: `unlock:${svc.id}` }]]
-            : []),
-        ],
+        inline_keyboard: !canSeeContacts
+          ? [
+              [
+                {
+                  text: `🔓 Открыть контакты (${Number(CONTACT_UNLOCK_PRICE || 10000).toLocaleString("ru-RU")} сум)`,
+                  callback_data: `unlock:${svc.id}`,
+                },
+              ],
+            ]
+          : [
+              [
+                { text: "Подробнее на сайте", url: serviceUrl },
+                { text: "📩 Быстрый запрос", callback_data: `request:${svc.id}` },
+              ],
+            ],
       };
 
       const keyboardForMy = {
