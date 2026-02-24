@@ -6617,7 +6617,7 @@ bot.on("inline_query", async (ctx) => {
     // Требуем привязку аккаунта
     if (!roleForInline) {
       await ctx.answerInlineQuery([], {
-        cache_time: 3,
+        cache_time: 0,
         is_personal: true,
         switch_pm_text: "🔐 Сначала привяжите аккаунт (номер телефона)",
         switch_pm_parameter: "start",
