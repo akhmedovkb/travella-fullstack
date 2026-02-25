@@ -99,6 +99,40 @@ console.log(
 );
 console.log("[tg-bot] PRICE_CURRENCY =", PRICE_CURRENCY);
 
+// =====================
+// HMAC SIGN / VERIFY
+// =====================
+
+function signUnlockPayload({ serviceId, clientId, ts }) {
+  const payload = `${serviceId}:${clientId}:${ts}`;
+  return crypto
+    .createHmac("sha256", HMAC_SECRET)
+    .update(payload)
+    .digest("hex")
+    .slice(0, 16); // короткая подпись
+}
+
+function verifyUnlockPayload({ serviceId, clientId, ts, sig }) {
+  if (!sig) return false;
+
+  // TTL защита
+  const now = Date.now();
+  if (Math.abs(now - Number(ts)) > HMAC_TTL_MS) {
+    return false;
+  }
+
+  const expected = signUnlockPayload({ serviceId, clientId, ts });
+
+  try {
+    return crypto.timingSafeEqual(
+      Buffer.from(expected),
+      Buffer.from(sig)
+    );
+  } catch {
+    return false;
+  }
+}
+
 /* ===================== PROCESS HARD SHIELD ===================== */
 process.on("unhandledRejection", (reason) => {
   console.error("[tg-bot] UNHANDLED REJECTION:", reason);
