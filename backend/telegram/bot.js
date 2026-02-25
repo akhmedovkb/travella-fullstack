@@ -806,7 +806,7 @@ function hasInFlight(key) {
   return unlockInFlight.has(key);
 }
 
-function setInFlight(key, ttl = 15000) {
+function setInFlight(key, ttl = 20000) {
   unlockInFlight.set(key, Date.now());
   setTimeout(() => unlockInFlight.delete(key), ttl).unref?.();
 }
@@ -5311,7 +5311,7 @@ async function doUnlockFlow(ctx, serviceId) {
   }
 
   // === BLACK-HOLE++ / anti-fraud gates (BANK-GRADE) ===
-  const key = `${chatId}:${serviceId}`;
+  const key = `unlock:${chatId}:${serviceId}`;
   
   if (isHardBlocked(chatId)) {
     try { await ctx.answerCbQuery("⛔️ Доступ временно ограничен", { show_alert: true }); } catch {}
@@ -5336,22 +5336,22 @@ async function doUnlockFlow(ctx, serviceId) {
   
   setInFlight(key, 20000);
   
-  let result;
-  try {
-    // 🔥 BANK-GRADE advisory lock: в той же транзакции, что и списание/insert
-    result = await withServiceLock(pool, clientRow.id, serviceId, async (db) => {
-      return unlockContactsForService(db, {
-        clientId: clientRow.id,
-        serviceId,
-      });
+let result;
+try {
+  // 🔥 BANK-GRADE advisory lock: в той же транзакции, что и списание/insert
+  result = await withServiceLock(pool, clientRow.id, serviceId, async (db) => {
+    return unlockContactsForService(db, {
+      clientId: clientRow.id,
+      serviceId,
     });
-  } catch (e) {
-    console.error("[tg-bot] doUnlockFlow locked unlock error:", e?.message || e);
-    result = { ok: false, reason: "server_error" };
-  } finally {
-    unlockInFlight.delete(key);
-  }
+  });
+} catch (e) {
+  console.error("[tg-bot] doUnlockFlow locked unlock error:", e?.message || e);
+  result = { ok: false, reason: "server_error" };
+} finally {
+  unlockInFlight.delete(key);
   markRecent(key);
+}
 
   if (!result.ok) {
     if (result.reason === "no_balance") {
@@ -5375,9 +5375,11 @@ async function doUnlockFlow(ctx, serviceId) {
     return { ok: false };
   }
 
-  const note = result.already
-    ? "✅ Контакты уже были открыты"
-    : `✅ Контакты открыты. Списано: ${Number(CONTACT_UNLOCK_PRICE || 10000).toLocaleString("ru-RU")} сум`;
+const charged = Number(result.charged || 0);
+
+const note = result.already
+  ? "✅ Контакты уже были открыты"
+  : `✅ Контакты открыты. Списано: ${charged.toLocaleString("ru-RU")} сум`;
 
   try {
     await ctx.answerCbQuery(note, { show_alert: true });
