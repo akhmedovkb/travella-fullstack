@@ -4,6 +4,34 @@ require("dotenv").config();
 const { Telegraf, session, Markup } = require("telegraf");
 const axiosBase = require("axios");
 
+/* ===================== NUCLEAR SHIELD ===================== */
+
+// in-memory lock (быстрый уровень)
+const unlockInFlight = new Map();
+
+// анти-флуд окно
+const unlockRecent = new Map();
+
+function setUnlockLock(key, ttlMs = 15000) {
+  unlockInFlight.set(key, Date.now());
+  setTimeout(() => unlockInFlight.delete(key), ttlMs).unref?.();
+}
+
+function hasUnlockLock(key) {
+  return unlockInFlight.has(key);
+}
+
+// 🛡 anti-spam window (защита от дрочеров кнопки)
+function isRecentlyUnlocked(key, windowMs = 5000) {
+  const ts = unlockRecent.get(key);
+  if (!ts) return false;
+  return Date.now() - ts < windowMs;
+}
+
+function markRecentlyUnlocked(key) {
+  unlockRecent.set(key, Date.now());
+  setTimeout(() => unlockRecent.delete(key), 30000).unref?.();
+}
 const {
   parseDateFlexible,
   isServiceActual,
@@ -5230,7 +5258,7 @@ async function doUnlockFlow(ctx, serviceId) {
   const chatId = ctx.from?.id;
   const lockKey = `${chatId}:${serviceId}`;
 
-  // 🛡 double-click shield
+  // 🛡 double click protection
   if (hasUnlockLock(lockKey)) {
     try {
       await ctx.answerCbQuery("⏳ Обрабатываем предыдущий запрос…");
@@ -5238,10 +5266,18 @@ async function doUnlockFlow(ctx, serviceId) {
     return { ok: false, reason: "in_flight" };
   }
 
+  // 🛡 анти-спам окно
+  if (isRecentlyUnlocked(lockKey)) {
+    try {
+      await ctx.answerCbQuery("✅ Контакты уже открыты");
+    } catch {}
+    return { ok: true, reason: "recent" };
+  }
+
   setUnlockLock(lockKey);
 
   try {
-    // ✅ validate id
+    // ✅ validate
     if (!Number.isFinite(serviceId) || serviceId <= 0) {
       await ctx.answerCbQuery("⚠️ Некорректный ID услуги", { show_alert: true });
       return { ok: false };
@@ -5250,13 +5286,14 @@ async function doUnlockFlow(ctx, serviceId) {
     // ✅ client check
     const clientRow = await getClientRowByChatId(pool, chatId);
     if (!clientRow?.id) {
-      await ctx.answerCbQuery("👋 Сначала привяжите аккаунт через /start", {
-        show_alert: true,
-      });
+      await ctx.answerCbQuery(
+        "👋 Сначала привяжите аккаунт через /start",
+        { show_alert: true }
+      );
       return { ok: false };
     }
 
-    // 🔐 offer check (bank protection)
+    // 🔐 OFFER CHECK (BANK PROTECTION)
     const offerCheck = await pool.query(
       `SELECT 1
          FROM user_offer_accepts
@@ -5269,7 +5306,7 @@ async function doUnlockFlow(ctx, serviceId) {
 
     if (!offerCheck.rowCount) {
       await ctx.answerCbQuery(
-        "⚠️ Для открытия контактов необходимо принять условия",
+        "⚠️ Необходимо принять условия",
         { show_alert: true }
       );
 
@@ -5279,12 +5316,10 @@ async function doUnlockFlow(ctx, serviceId) {
           reply_markup: {
             inline_keyboard: [
               [{ text: "📄 Открыть оферту", url: "https://travella.uz/offer" }],
-              [
-                {
-                  text: "✅ Я принимаю условия",
-                  callback_data: `offer_accept:${serviceId}`,
-                },
-              ],
+              [{
+                text: "✅ Я принимаю условия",
+                callback_data: `offer_accept:${serviceId}`,
+              }],
             ],
           },
         }
@@ -5293,7 +5328,7 @@ async function doUnlockFlow(ctx, serviceId) {
       return { ok: false, reason: "offer_required" };
     }
 
-    // 💰 unlock
+    // 💰 UNLOCK
     const result = await unlockContactsForService(pool, {
       clientId: clientRow.id,
       serviceId,
@@ -5322,7 +5357,10 @@ async function doUnlockFlow(ctx, serviceId) {
       return { ok: false, reason: "server_error" };
     }
 
-    // ✅ success notice
+    // 🛡 помечаем recent (anti-repeat списаний)
+    markRecentlyUnlocked(lockKey);
+
+    // ✅ success message
     const note = result.already
       ? "✅ Контакты уже были открыты"
       : `✅ Контакты открыты. Списано: ${Number(
@@ -5342,11 +5380,9 @@ async function doUnlockFlow(ctx, serviceId) {
 
     const svc = data.service;
     const category = String(svc.category || "").toLowerCase();
-    const { text, photoUrl, serviceUrl } = buildServiceMessage(
-      svc,
-      category,
-      "client_unlocked"
-    );
+
+    const { text, photoUrl, serviceUrl } =
+      buildServiceMessage(svc, category, "client_unlocked");
 
     const kb = {
       inline_keyboard: [
@@ -5407,11 +5443,12 @@ async function doUnlockFlow(ctx, serviceId) {
         show_alert: true,
       });
     } catch {}
-    return { ok: false, reason: "exception" };
+    return { ok: false };
   } finally {
     unlockInFlight.delete(lockKey);
   }
 }
+
 /* ===================== UNLOCK HANDLER ===================== */
 
 bot.action(/^unlock:(\d+)$/, async (ctx) => {
@@ -5450,8 +5487,9 @@ bot.action(/^offer_accept:(\d+)$/, async (ctx) => {
 
     await ctx.answerCbQuery("✅ Условия приняты");
 
-    // 🚀 GOD MODE: auto unlock
+    // 🚀 AUTO UNLOCK (ядерный UX)
     await doUnlockFlow(ctx, serviceId);
+
   } catch (e) {
     console.error("[tg-bot] offer_accept error:", e?.message || e);
     try {
