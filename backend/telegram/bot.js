@@ -5514,6 +5514,7 @@ bot.action(/^offer_accept:(\d+)$/, async (ctx) => {
       return;
     }
 
+    // ✅ фиксируем принятие оферты (идемпотентно)
     await pool.query(
       `INSERT INTO user_offer_accepts
        (user_role, user_id, offer_version, source)
@@ -5522,18 +5523,16 @@ bot.action(/^offer_accept:(\d+)$/, async (ctx) => {
       ["client", chatId, OFFER_VERSION || "v1.0", "telegram_unlock"]
     );
 
-    // ✅ мгновенный UX ответ
+    // ✅ отвечаем на callback
     await ctx.answerCbQuery("✅ Условия приняты");
 
-    // 🚀 AUTO UNLOCK (без повторного клика)
+    // 🔥🔥🔥 GOD-MODE: АВТО-РАЗБЛОКИРОВКА
     await doUnlockFlow(ctx, serviceId);
 
   } catch (e) {
     console.error("[tg-bot] offer_accept error:", e?.message || e);
     try {
-      await ctx.answerCbQuery("Ошибка. Попробуйте позже", {
-        show_alert: true,
-      });
+      await ctx.answerCbQuery("Ошибка. Попробуйте позже", { show_alert: true });
     } catch {}
   }
 });
