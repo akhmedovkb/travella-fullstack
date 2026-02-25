@@ -5268,20 +5268,6 @@ bot.action(/^quick:(\d+)$/, async (ctx) => {
   }
 });
 
-/* ===================== GOD MODE SHIELD ===================== */
-
-// 🔐 in-memory anti-double-click (быстро и эффективно)
-const unlockInFlight = new Map();
-
-// TTL очистка
-function setUnlockLock(key, ttlMs = 15000) {
-  unlockInFlight.set(key, Date.now());
-  setTimeout(() => unlockInFlight.delete(key), ttlMs).unref?.();
-}
-
-function hasUnlockLock(key) {
-  return unlockInFlight.has(key);
-}
 /* ===================== UNLOCK CORE (ENTERPRISE SHIELD) ===================== */
 
 async function doUnlockFlow(ctx, serviceId) {
