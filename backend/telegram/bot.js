@@ -41,36 +41,6 @@ const { buildSvcActualKeyboard } = require("./keyboards/serviceActual");
 const { handleServiceActualCallback } = require("./handlers/serviceActualHandler");
 const { buildServiceMessage } = require("../utils/telegramServiceCard");
 
-/* ===================== BLACK-HOLE ANTI-FRAUD ===================== */
-
-// user velocity (защита от ботов)
-const unlockVelocity = new Map();
-
-// подозрительные попытки
-const unlockSuspicious = new Map();
-
-function checkVelocity(userId, limit = 5, windowMs = 60000) {
-  const now = Date.now();
-  const arr = unlockVelocity.get(userId) || [];
-
-  const fresh = arr.filter((t) => now - t < windowMs);
-  fresh.push(now);
-
-  unlockVelocity.set(userId, fresh);
-
-  return fresh.length <= limit;
-}
-
-function markSuspicious(userId) {
-  const cnt = (unlockSuspicious.get(userId) || 0) + 1;
-  unlockSuspicious.set(userId, cnt);
-  return cnt;
-}
-
-function isHighlySuspicious(userId) {
-  return (unlockSuspicious.get(userId) || 0) >= 5;
-}
-
 /* ===================== CONFIG ===================== */
 const OFFER_VERSION = process.env.OFFER_VERSION || "v1.0";
 
@@ -844,7 +814,57 @@ async function getOrFetchCached(key, ttlMs, fetcher) {
   }
 }
 
+/* ===================== BLACK-HOLE++ GLOBAL SHIELD ===================== */
 
+// in-flight защита (race)
+const unlockInFlight = new Map();
+
+// velocity limiter
+const unlockVelocity = new Map();
+
+// suspicious score
+const unlockSuspicious = new Map();
+
+// recent unlock window
+const unlockRecent = new Map();
+
+function hasInFlight(key) {
+  return unlockInFlight.has(key);
+}
+
+function setInFlight(key, ttl = 15000) {
+  unlockInFlight.set(key, Date.now());
+  setTimeout(() => unlockInFlight.delete(key), ttl).unref?.();
+}
+
+function markRecent(key) {
+  unlockRecent.set(key, Date.now());
+  setTimeout(() => unlockRecent.delete(key), 30000).unref?.();
+}
+
+function isRecent(key, windowMs = 5000) {
+  const ts = unlockRecent.get(key);
+  return ts && Date.now() - ts < windowMs;
+}
+
+function checkVelocity(userId, limit = 6, windowMs = 60000) {
+  const now = Date.now();
+  const arr = unlockVelocity.get(userId) || [];
+  const fresh = arr.filter((t) => now - t < windowMs);
+  fresh.push(now);
+  unlockVelocity.set(userId, fresh);
+  return fresh.length <= limit;
+}
+
+function markSuspicious(userId) {
+  const v = (unlockSuspicious.get(userId) || 0) + 1;
+  unlockSuspicious.set(userId, v);
+  return v;
+}
+
+function isHardBlocked(userId) {
+  return (unlockSuspicious.get(userId) || 0) >= 6;
+}
 // ===================== AUTH REHYDRATE (FIX PENDING STUCK) =====================
 // Если админ одобрил лид через сайт, Telegraf-сессия про это не знает.
 // Поэтому при pending/!linked мы раз в несколько секунд перепроверяем БД через API
