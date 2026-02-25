@@ -14,6 +14,7 @@ const { handleServiceActualCallback } = require("./handlers/serviceActualHandler
 const { buildServiceMessage } = require("../utils/telegramServiceCard");
 
 /* ===================== CONFIG ===================== */
+const OFFER_VERSION = process.env.OFFER_VERSION || "v1.0";
 
 const CLIENT_TOKEN = process.env.TELEGRAM_CLIENT_BOT_TOKEN || "";
 if (!CLIENT_TOKEN) {
@@ -5131,7 +5132,14 @@ bot.action(/^unlock:(\d+)$/, async (ctx) => {
       } catch {}
       return;
     }
-
+    
+    await pool.query(
+      `INSERT INTO user_offer_accepts
+       (user_role, user_id, offer_version, source)
+       VALUES ($1,$2,$3,$4)`,
+      ["client", chatId, OFFER_VERSION || "v1.0", "telegram_unlock"]
+    );
+    
     const result = await unlockContactsForService(pool, {
       clientId: clientRow.id,
       serviceId,
@@ -5231,11 +5239,12 @@ bot.action(/^unlock:(\d+)$/, async (ctx) => {
         });
       }
     
-      // ✅ закрепляем новую карточку (если есть права/возможность)
+      // ✅ закрепляем ТОЛЬКО в личке (private), иначе будет хаос в группах/inline
       try {
         const chatIdToPin = ctx.chat?.id;
         const msgIdToPin = sentMsg?.message_id;
-        if (chatIdToPin && msgIdToPin) {
+        const isPrivate = ctx.chat?.type === "private";
+        if (isPrivate && chatIdToPin && msgIdToPin) {
           await ctx.telegram.pinChatMessage(chatIdToPin, msgIdToPin, {
             disable_notification: true,
           });
