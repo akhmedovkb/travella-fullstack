@@ -5278,221 +5278,99 @@ bot.action(/^quick:(\d+)$/, async (ctx) => {
 
 /* ===================== UNLOCK CORE (ENTERPRISE SHIELD) ===================== */
 
+/* ===================== UNLOCK FLOW (BANK-GRADE) ===================== */
+
 async function doUnlockFlow(ctx, serviceId) {
   const chatId = ctx.from?.id;
-    // ================= FRAUD CHECK =================
-  
-  // velocity limiter
-  if (!checkVelocity(chatId)) {
-    await ctx.answerCbQuery(
-      "⛔ Слишком много запросов. Попробуйте позже.",
-      { show_alert: true }
-    );
-    return { ok: false, reason: "rate_limited" };
-  }
-  
-  // если пользователь уже подозрительный
-  if (isHighlySuspicious(chatId)) {
-    await ctx.answerCbQuery(
-      "🚫 Временная блокировка. Обратитесь в поддержку.",
-      { show_alert: true }
-    );
-    return { ok: false, reason: "blocked_suspicious" };
-  }
-  const lockKey = `${chatId}:${serviceId}`;
 
-  // 🛡 double click protection
-  if (hasUnlockLock(lockKey)) {
+  if (!Number.isFinite(serviceId) || serviceId <= 0) {
     try {
-      await ctx.answerCbQuery("⏳ Обрабатываем предыдущий запрос…");
-    } catch {}
-    return { ok: false, reason: "in_flight" };
-  }
-
-  // 🛡 анти-спам окно
-  if (isRecentlyUnlocked(lockKey)) {
-    try {
-      await ctx.answerCbQuery("✅ Контакты уже открыты");
-    } catch {}
-    return { ok: true, reason: "recent" };
-  }
-
-  setUnlockLock(lockKey);
-
-  try {
-    // ✅ validate
-    if (!Number.isFinite(serviceId) || serviceId <= 0) {
       await ctx.answerCbQuery("⚠️ Некорректный ID услуги", { show_alert: true });
-      return { ok: false };
-    }
+    } catch {}
+    return { ok: false };
+  }
 
-    // ✅ client check
-    const clientRow = await getClientRowByChatId(pool, chatId);
-    if (!clientRow?.id) {
+  const clientRow = await getClientRowByChatId(pool, chatId);
+  if (!clientRow?.id) {
+    try {
+      await ctx.answerCbQuery("👋 Сначала привяжите аккаунт через /start", { show_alert: true });
+    } catch {}
+    return { ok: false };
+  }
+
+  // 🔐 ПРОВЕРКА ОФЕРТЫ (BANK PROTECTION)
+  const offerCheck = await pool.query(
+    `SELECT 1
+       FROM user_offer_accepts
+      WHERE user_role = 'client'
+        AND user_id = $1
+        AND offer_version = $2
+      LIMIT 1`,
+    [chatId, OFFER_VERSION || "v1.0"]
+  );
+
+  if (!offerCheck.rowCount) {
+    try {
       await ctx.answerCbQuery(
-        "👋 Сначала привяжите аккаунт через /start",
+        "⚠️ Для открытия контактов необходимо принять оферту",
         { show_alert: true }
       );
-      return { ok: false };
-    }
+    } catch {}
 
-    // 🔐 OFFER CHECK (BANK PROTECTION)
-    const offerCheck = await pool.query(
-      `SELECT 1
-         FROM user_offer_accepts
-        WHERE user_role = 'client'
-          AND user_id = $1
-          AND offer_version = $2
-        LIMIT 1`,
-      [chatId, OFFER_VERSION]
+    await ctx.reply(
+      "📄 Перед открытием контактов необходимо принять условия Travella.uz",
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "📄 Открыть оферту", url: "https://travella.uz/offer" }],
+            [{ text: "✅ Я принимаю условия", callback_data: `offer_accept:${serviceId}` }],
+          ],
+        },
+      }
     );
 
-    if (!offerCheck.rowCount) {
-      await ctx.answerCbQuery(
-        "⚠️ Необходимо принять условия",
-        { show_alert: true }
-      );
+    return { ok: false, reason: "offer_required" };
+  }
 
-      await ctx.reply(
-        "📄 Перед открытием контактов необходимо принять условия Travella.uz",
-        {
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: "📄 Открыть оферту", url: "https://travella.uz/offer" }],
-              [{
-                text: "✅ Я принимаю условия",
-                callback_data: `offer_accept:${serviceId}`,
-              }],
-            ],
-          },
-        }
-      );
-
-      return { ok: false, reason: "offer_required" };
-    }
-
-    // 💰 UNLOCK
-    const result = await unlockContactsForService(pool, {
+  // 🔥 CRITICAL: advisory lock
+  const result = await withServiceLock(pool, serviceId, async () => {
+    return unlockContactsForService(pool, {
       clientId: clientRow.id,
       serviceId,
     });
+  });
 
-    if (!result.ok) {
-      // mark suspicious on failures
-      markSuspicious(chatId);
-      if (result.reason === "no_balance") {
-        const bal = Number(result.balance || 0).toLocaleString("ru-RU");
-        const need = Number(
-          result.need || CONTACT_UNLOCK_PRICE || 10000
-        ).toLocaleString("ru-RU");
+  if (!result.ok) {
+    if (result.reason === "no_balance") {
+      const bal = Number(result.balance || 0).toLocaleString("ru-RU");
+      const need = Number(result.need || CONTACT_UNLOCK_PRICE || 10000).toLocaleString("ru-RU");
 
+      try {
         await ctx.answerCbQuery(
           `💳 Недостаточно средств.\nБаланс: ${bal} сум\nНужно: ${need} сум`,
           { show_alert: true }
         );
+      } catch {}
 
-        return { ok: false, reason: "no_balance" };
-      }
-
-      await ctx.answerCbQuery(
-        "⚠️ Не удалось открыть контакты. Попробуйте позже.",
-        { show_alert: true }
-      );
-
-      return { ok: false, reason: "server_error" };
+      return { ok: false, reason: "no_balance" };
     }
-
-    // 🛡 помечаем recent (anti-repeat списаний)
-    markRecentlyUnlocked(lockKey);
-
-    // ✅ success message
-    const note = result.already
-      ? "✅ Контакты уже были открыты"
-      : `✅ Контакты открыты. Списано: ${Number(
-          CONTACT_UNLOCK_PRICE || 10000
-        ).toLocaleString("ru-RU")} сум`;
-    
-    markRecent(lockKey);
-    await ctx.answerCbQuery(note, { show_alert: true });
-
-    // 📦 reload service
-    const { data } = await axios.get(`/api/telegram/service/${serviceId}`, {
-      params: { role: "client" },
-    });
-
-    if (!data?.success || !data?.service) {
-      return { ok: true, updated: false };
-    }
-
-    const svc = data.service;
-    const category = String(svc.category || "").toLowerCase();
-
-    const { text, photoUrl, serviceUrl } =
-      buildServiceMessage(svc, category, "client_unlocked");
-
-    const kb = {
-      inline_keyboard: [
-        [{ text: "Подробнее на сайте", url: serviceUrl }],
-        [{ text: "📩 Быстрый запрос", callback_data: `quick:${serviceId}` }],
-      ],
-    };
-
-    // 🔄 safe edit
-    let edited = false;
 
     try {
-      await ctx.editMessageCaption(text, {
-        parse_mode: "HTML",
-        reply_markup: kb,
-      });
-      edited = true;
+      await ctx.answerCbQuery("⚠️ Не удалось открыть контакты", { show_alert: true });
     } catch {}
 
-    if (!edited) {
-      try {
-        await ctx.editMessageText(text, {
-          parse_mode: "HTML",
-          reply_markup: kb,
-          disable_web_page_preview: true,
-        });
-        edited = true;
-      } catch {}
-    }
-
-    if (!edited) {
-      try {
-        await ctx.editMessageReplyMarkup(kb);
-        edited = true;
-      } catch {}
-    }
-
-    if (!edited) {
-      if (photoUrl) {
-        await safeReplyWithPhoto(ctx, photoUrl, text, {
-          parse_mode: "HTML",
-          reply_markup: kb,
-        });
-      } else {
-        await safeReply(ctx, text, {
-          parse_mode: "HTML",
-          reply_markup: kb,
-          disable_web_page_preview: true,
-        });
-      }
-    }
-
-    return { ok: true, updated: true };
-  } catch (e) {
-    console.error("[tg-bot] doUnlockFlow error:", e?.message || e);
-    try {
-      await ctx.answerCbQuery("⚠️ Ошибка. Попробуйте позже.", {
-        show_alert: true,
-      });
-    } catch {}
     return { ok: false };
-  } finally {
-    unlockInFlight.delete(lockKey);
   }
+
+  const note = result.already
+    ? "✅ Контакты уже были открыты"
+    : `✅ Контакты открыты. Списано: ${Number(CONTACT_UNLOCK_PRICE || 10000).toLocaleString("ru-RU")} сум`;
+
+  try {
+    await ctx.answerCbQuery(note, { show_alert: true });
+  } catch {}
+
+  return { ok: true };
 }
 
 /* ===================== UNLOCK HANDLER ===================== */
@@ -5523,7 +5401,6 @@ bot.action(/^offer_accept:(\d+)$/, async (ctx) => {
       return;
     }
 
-    // ✅ фиксируем принятие оферты (идемпотентно)
     await pool.query(
       `INSERT INTO user_offer_accepts
        (user_role, user_id, offer_version, source)
@@ -5532,11 +5409,14 @@ bot.action(/^offer_accept:(\d+)$/, async (ctx) => {
       ["client", chatId, OFFER_VERSION || "v1.0", "telegram_unlock"]
     );
 
-    // ✅ отвечаем на callback
     await ctx.answerCbQuery("✅ Условия приняты");
 
-    // 🔥🔥🔥 GOD-MODE: АВТО-РАЗБЛОКИРОВКА
-    await doUnlockFlow(ctx, serviceId);
+    // 🚀 AUTO-UNLOCK (BLACK-HOLE++)
+    try {
+      await doUnlockFlow(ctx, serviceId);
+    } catch (e) {
+      console.error("[tg-bot] auto unlock after offer failed:", e?.message || e);
+    }
 
   } catch (e) {
     console.error("[tg-bot] offer_accept error:", e?.message || e);
