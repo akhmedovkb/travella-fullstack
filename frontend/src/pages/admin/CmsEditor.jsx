@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import ReactQuill from "react-quill";
 import { apiGet, apiPut } from "../../api";
 
-const SLUGS = ["about", "mission", "project", "partners", "contacts", "privacy", "faq"];
+const SLUGS = ["about", "mission", "project", "partners", "contacts", "oferta", "privacy", "faq"];
 
 const quillModules = {
   toolbar: [
