@@ -95,6 +95,31 @@ const axios = axiosBase.create({
   timeout: 10000,
 });
 
+/* ===================== PG ADVISORY LOCK (ANTI DOUBLE SPEND) ===================== */
+
+async function withServiceLock(pool, serviceId, fn) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    // ключ блокировки (64-бит)
+    await client.query(
+      "SELECT pg_advisory_xact_lock($1)",
+      [Number(serviceId)]
+    );
+
+    const res = await fn(client);
+
+    await client.query("COMMIT");
+    return res;
+  } catch (e) {
+    try { await client.query("ROLLBACK"); } catch {}
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
 /* ===================== CONTACT UNLOCK (per service) ===================== */
 
 // Цена открытия контактов
@@ -780,7 +805,7 @@ async function getOrFetchCached(key, ttlMs, fetcher) {
 /* ===================== BLACK-HOLE++ GLOBAL SHIELD ===================== */
 
 // in-flight защита (race)
-const unlockInFlight = new Map();
+const  = new Map();
 
 // velocity limiter
 const unlockVelocity = new Map();
