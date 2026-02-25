@@ -5423,7 +5423,8 @@ async function doUnlockFlow(ctx, serviceId) {
       : `✅ Контакты открыты. Списано: ${Number(
           CONTACT_UNLOCK_PRICE || 10000
         ).toLocaleString("ru-RU")} сум`;
-
+    
+    markRecent(lockKey);
     await ctx.answerCbQuery(note, { show_alert: true });
 
     // 📦 reload service
