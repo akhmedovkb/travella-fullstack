@@ -96,6 +96,15 @@ console.log(
 );
 console.log("[tg-bot] PRICE_CURRENCY =", PRICE_CURRENCY);
 
+/* ===================== PROCESS HARD SHIELD ===================== */
+process.on("unhandledRejection", (reason) => {
+  console.error("[tg-bot] UNHANDLED REJECTION:", reason);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("[tg-bot] UNCAUGHT EXCEPTION:", err);
+});
+
 /* ===================== AXIOS ===================== */
 
 const axios = axiosBase.create({
