@@ -122,7 +122,7 @@ async function withServiceLock(pool, clientId, serviceId, fn) {
   try {
     await client.query("BEGIN");
 
-    // BANK-GRADE: lock на пару (clientId, serviceId) в этой же транзакции
+    // BANK-GRADE: lock на пару (clientId, serviceId) В ЭТОЙ ЖЕ транзакции
     await client.query(
       "SELECT pg_advisory_xact_lock((($1::bigint) << 32) + $2::bigint)",
       [Number(clientId), Number(serviceId)]
