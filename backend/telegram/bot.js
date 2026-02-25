@@ -11,7 +11,11 @@ const {
 } = require("./helpers/serviceActual");
 const { buildSvcActualKeyboard } = require("./keyboards/serviceActual");
 const { handleServiceActualCallback } = require("./handlers/serviceActualHandler");
-const { buildServiceMessage } = require("../utils/telegramServiceCard");
+const {
+  buildServiceMessage,
+  buildUnlockCbData,
+  verifyUnlockCbData,
+} = require("../utils/telegramServiceCard");
 
 /* ===================== CONFIG ===================== */
 const OFFER_VERSION = process.env.OFFER_VERSION || "v1.0";
@@ -3915,7 +3919,7 @@ bot.start(async (ctx) => {
               textFinal = stripLockedLinks(text);
               kb = {
                 inline_keyboard: [
-                  [{ text: "🔓 Открыть контакты (10 000 сум)", callback_data: buildCbData(ctx, "u", serviceId) }],
+                  [{ text: "🔓 Открыть контакты (10 000 сум)", callback_data: buildUnlockCbData(ctx.from.id, serviceId) }],
                 ],
               };
             } else {
@@ -5424,15 +5428,35 @@ const note = result.already
 
 /* ===================== UNLOCK HANDLER ===================== */
 
-bot.action(/^u:(\d+):(\d+):([a-f0-9]+)$/, async (ctx) => {
+bot.action(/^u:(\d+):(\d+):(\d+):([a-f0-9]+)$/, async (ctx) => {
   try {
     const serviceId = Number(ctx.match?.[1]);
-    const ts = Number(ctx.match?.[2]);
-    const sig = String(ctx.match?.[3] || "");
+    const buttonChatId = Number(ctx.match?.[2]);
+    const ts = Number(ctx.match?.[3]);
+    const sig = String(ctx.match?.[4] || "");
 
-    const v = verifyCbData(ctx, "u", serviceId, ts, sig);
+    // 🔒 защита: кнопку может нажать только тот же пользователь
+    if (buttonChatId !== ctx.from.id) {
+      try {
+        await ctx.answerCbQuery("⛔️ Эта кнопка не для вас", { show_alert: true });
+      } catch {}
+      return;
+    }
+
+    const v = verifyUnlockCbData({
+      chatId: buttonChatId,
+      serviceId,
+      ts,
+      sig,
+    });
+
     if (!v.ok) {
-      try { await ctx.answerCbQuery("⛔️ Кнопка устарела. Откройте карточку заново.", { show_alert: true }); } catch {}
+      try {
+        await ctx.answerCbQuery(
+          "⛔️ Кнопка устарела. Откройте карточку заново.",
+          { show_alert: true }
+        );
+      } catch {}
       return;
     }
 
@@ -7120,7 +7144,7 @@ bot.on("inline_query", async (ctx) => {
               [
                 {
                   text: "🔓 Открыть контакты (10 000 сум)",
-                  callback_data: buildCbData(ctx, "u", svc.id),
+                  callback_data: buildUnlockCbData(ctx.from.id, svc.id),
                 },
               ],
             ],
@@ -7239,7 +7263,6 @@ bot.on("inline_query", async (ctx) => {
   }
 });
 
-// ⚠️ здесь НЕТ 
 /* ===================== EDIT IMAGES (ADD/REMOVE/CLEAR) ===================== */
 
 bot.action(/^svc_edit_img_(?:remove|del):(\d+)$/, async (ctx) => {
