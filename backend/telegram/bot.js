@@ -3,6 +3,7 @@ require("dotenv").config();
 
 const { Telegraf, session, Markup } = require("telegraf");
 const axiosBase = require("axios");
+const crypto = require("crypto");
 const {
   parseDateFlexible,
   isServiceActual,
@@ -14,7 +15,9 @@ const { buildServiceMessage } = require("../utils/telegramServiceCard");
 
 /* ===================== CONFIG ===================== */
 const OFFER_VERSION = process.env.OFFER_VERSION || "v1.0";
-
+const CALLBACK_SECRET = (process.env.TG_CALLBACK_SECRET || "").trim();
+// TTL подписи кнопок (сек)
+const CALLBACK_TTL_SEC = Number(process.env.TG_CALLBACK_TTL_SEC || 900); // 15 минут
 const CLIENT_TOKEN = process.env.TELEGRAM_CLIENT_BOT_TOKEN || "";
 if (!CLIENT_TOKEN) {
   throw new Error(
@@ -119,8 +122,7 @@ async function withServiceLock(pool, clientId, serviceId, fn) {
   try {
     await client.query("BEGIN");
 
-    // BANK-GRADE: lock на пару (clientId, serviceId) в рамках ЭТОЙ транзакции
-    // 64-bit key = (clientId << 32) + serviceId (делаем сдвиг в SQL, безопасно для bigint)
+    // BANK-GRADE: lock на пару (clientId, serviceId) в этой же транзакции
     await client.query(
       "SELECT pg_advisory_xact_lock((($1::bigint) << 32) + $2::bigint)",
       [Number(clientId), Number(serviceId)]
@@ -196,7 +198,7 @@ async function getClientRowByChatId(pool, chatId) {
 async function unlockContactsForService(db, { clientId, serviceId }) {
   if (!db) return { ok: false, reason: "db_unavailable" };
 
-  // таблицы гарантируем через pool (вне транзакции ок)
+  // таблицы можно гарантировать через pool (вне транзакции допустимо)
   await ensureUnlockTables(pool);
 
   const cid = Number(clientId);
@@ -244,7 +246,7 @@ async function unlockContactsForService(db, { clientId, serviceId }) {
       [cid, CONTACT_UNLOCK_PRICE]
     );
 
-    // пишем unlock
+    // пишем unlock (idempotent по unique)
     await db.query(
       `INSERT INTO client_service_contact_unlocks (client_id, service_id, price_charged)
        VALUES ($1,$2,$3)`,
@@ -253,14 +255,11 @@ async function unlockContactsForService(db, { clientId, serviceId }) {
 
     return { ok: true, already: false, charged: CONTACT_UNLOCK_PRICE };
   } catch (e) {
-    // если параллельно уже вставили — считаем как already
     if (String(e?.code || "") === "23505") {
       return { ok: true, already: true, charged: 0 };
     }
-
     console.error("[tg-bot] unlockContactsForService error:", e?.message || e);
-    // ВАЖНО: кидаем ошибку наверх, чтобы withServiceLock сделал ROLLBACK
-    throw e;
+    throw e; // важно: пусть withServiceLock сделает ROLLBACK
   }
 }
 
@@ -344,6 +343,47 @@ async function ensureOfferAccepted(chatId) {
 }
 
 // показать оферту
+function cbNowSec() {
+  return Math.floor(Date.now() / 1000);
+}
+
+function signCb({ action, chatId, serviceId, ts }) {
+  const base = `${action}|${chatId}|${serviceId}|${ts}|${OFFER_VERSION}`;
+  return crypto
+    .createHmac("sha256", CALLBACK_SECRET || "dev-secret")
+    .update(base)
+    .digest("hex")
+    .slice(0, 12); // коротко, но достаточно
+}
+
+function buildCbData(ctx, action, serviceId) {
+  const chatId = ctx.from?.id || 0;
+  const ts = cbNowSec();
+  const sig = signCb({ action, chatId, serviceId, ts });
+  // u:<sid>:<ts>:<sig>  |  o:<sid>:<ts>:<sig>
+  return `${action}:${serviceId}:${ts}:${sig}`;
+}
+
+function verifyCbData(ctx, action, serviceId, ts, sig) {
+  const chatId = ctx.from?.id || 0;
+
+  if (!CALLBACK_SECRET) {
+    // если секрет не задан — не ломаем прод, но для bank-grade лучше задать
+    return { ok: true, soft: true };
+  }
+
+  const now = cbNowSec();
+  if (!Number.isFinite(ts) || Math.abs(now - ts) > CALLBACK_TTL_SEC) {
+    return { ok: false, reason: "expired" };
+  }
+
+  const expected = signCb({ action, chatId, serviceId, ts });
+  if (String(expected) !== String(sig)) {
+    return { ok: false, reason: "bad_sig" };
+  }
+
+  return { ok: true };
+}
 async function showOfferGate(ctx, serviceId) {
   await safeCb(
     ctx,
@@ -366,7 +406,7 @@ async function showOfferGate(ctx, serviceId) {
             [
               {
                 text: "✅ Я принимаю условия",
-                callback_data: `offer_accept:${serviceId}`,
+                callback_data: buildCbData(ctx, "o", serviceId),
               },
             ],
           ],
@@ -3845,7 +3885,7 @@ bot.start(async (ctx) => {
               textFinal = stripLockedLinks(text);
               kb = {
                 inline_keyboard: [
-                  [{ text: "🔓 Открыть контакты (10 000 сум)", callback_data: `unlock:${serviceId}` }],
+                  [{ text: "🔓 Открыть контакты (10 000 сум)", callback_data: buildCbData(ctx, "u", serviceId) }],
                 ],
               };
             } else {
@@ -5261,7 +5301,7 @@ async function doUnlockFlow(ctx, serviceId) {
         reply_markup: {
           inline_keyboard: [
             [{ text: "📄 Открыть оферту", url: "https://travella.uz/offer" }],
-            [{ text: "✅ Я принимаю условия", callback_data: `offer_accept:${serviceId}` }],
+            [{ text: "✅ Я принимаю условия", callback_data: buildCbData(ctx, "o", serviceId) }],
           ],
         },
       }
@@ -5348,9 +5388,18 @@ async function doUnlockFlow(ctx, serviceId) {
 
 /* ===================== UNLOCK HANDLER ===================== */
 
-bot.action(/^unlock:(\d+)$/, async (ctx) => {
+bot.action(/^u:(\d+):(\d+):([a-f0-9]+)$/, async (ctx) => {
   try {
     const serviceId = Number(ctx.match?.[1]);
+    const ts = Number(ctx.match?.[2]);
+    const sig = String(ctx.match?.[3] || "");
+
+    const v = verifyCbData(ctx, "u", serviceId, ts, sig);
+    if (!v.ok) {
+      try { await ctx.answerCbQuery("⛔️ Кнопка устарела. Откройте карточку заново.", { show_alert: true }); } catch {}
+      return;
+    }
+
     await doUnlockFlow(ctx, serviceId);
   } catch (e) {
     console.error("[tg-bot] unlock action error:", e?.message || e);
@@ -5364,13 +5413,21 @@ bot.action(/^unlock:(\d+)$/, async (ctx) => {
 
 /* ===================== OFFER ACCEPT ===================== */
 
-bot.action(/^offer_accept:(\d+)$/, async (ctx) => {
+bot.action(/^o:(\d+):(\d+):([a-f0-9]+)$/, async (ctx) => {
   try {
     const serviceId = Number(ctx.match?.[1]);
+    const ts = Number(ctx.match?.[2]);
+    const sig = String(ctx.match?.[3] || "");
     const chatId = ctx.from?.id;
 
     if (!chatId) {
-      await ctx.answerCbQuery("Ошибка пользователя");
+      try { await ctx.answerCbQuery("Ошибка пользователя", { show_alert: true }); } catch {}
+      return;
+    }
+
+    const v = verifyCbData(ctx, "o", serviceId, ts, sig);
+    if (!v.ok) {
+      try { await ctx.answerCbQuery("⛔️ Кнопка устарела. Откройте карточку заново.", { show_alert: true }); } catch {}
       return;
     }
 
@@ -5384,13 +5441,12 @@ bot.action(/^offer_accept:(\d+)$/, async (ctx) => {
 
     await ctx.answerCbQuery("✅ Условия приняты");
 
-    // 🚀 AUTO-UNLOCK (BLACK-HOLE++)
+    // 🚀 AUTO-UNLOCK (уже защищён offer-check внутри doUnlockFlow)
     try {
       await doUnlockFlow(ctx, serviceId);
     } catch (e) {
       console.error("[tg-bot] auto unlock after offer failed:", e?.message || e);
     }
-
   } catch (e) {
     console.error("[tg-bot] offer_accept error:", e?.message || e);
     try {
@@ -7028,7 +7084,7 @@ bot.on("inline_query", async (ctx) => {
               [
                 {
                   text: "🔓 Открыть контакты (10 000 сум)",
-                  callback_data: `unlock:${svc.id}`,
+                  callback_data: buildCbData(ctx, "u", svc.id),
                 },
               ],
             ],
