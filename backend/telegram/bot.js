@@ -317,24 +317,6 @@ async function getUnlockedServiceIdSet(pool, { clientId, serviceIds }) {
   return out;
 }
 
-// 🔒 Убираем кликабельные ссылки/строки "Подробнее" до оплаты.
-function stripLockedLinks(htmlText) {
-  const lines = String(htmlText || "").split("\n");
-  const filtered = lines.filter((ln) => {
-    const s = String(ln || "");
-    const low = s.toLowerCase();
-
-    // Любая строка, где есть "подробнее" + ссылка
-    if (
-      low.includes("подробнее") &&
-      (low.includes("http://") || low.includes("https://") || low.includes("travella"))
-    ) return false;
-
-    return true;
-  });
-  return filtered.join("\n").trim();
-}
-
 /* ===================== UNLOCK HELPERS (UI gating) ===================== */
 
 /* ===================== ENTERPRISE SAFE HELPERS ===================== */
@@ -435,51 +417,6 @@ async function refreshUnlockedCard(ctx, serviceId) {
   try {
     await ctx.editMessageReplyMarkup(kb);
   } catch {}
-}
-// true если клиент уже открывал контакты по этой услуге
-async function isContactsUnlocked(pool, { clientId, serviceId }) {
-  if (!pool) return false;
-  await ensureUnlockTables(pool);
-  try {
-    const r = await pool.query(
-      `SELECT 1
-         FROM client_service_contact_unlocks
-        WHERE client_id = $1 AND service_id = $2
-        LIMIT 1`,
-      [Number(clientId), Number(serviceId)]
-    );
-    return !!r.rowCount;
-  } catch (e) {
-    console.error("[tg-bot] isContactsUnlocked error:", e?.message || e);
-    return false;
-  }
-}
-
-// выбрать set открытых service_id одним запросом (для inline выдачи)
-async function getUnlockedServiceIdSet(pool, { clientId, serviceIds }) {
-  const set = new Set();
-  if (!pool) return set;
-  await ensureUnlockTables(pool);
-
-  const ids = (Array.isArray(serviceIds) ? serviceIds : [])
-    .map((x) => Number(x))
-    .filter((n) => Number.isFinite(n) && n > 0);
-
-  if (!ids.length) return set;
-
-  try {
-    const r = await pool.query(
-      `SELECT service_id
-         FROM client_service_contact_unlocks
-        WHERE client_id = $1
-          AND service_id = ANY($2::bigint[])`,
-      [Number(clientId), ids]
-    );
-    for (const row of r.rows || []) set.add(Number(row.service_id));
-  } catch (e) {
-    console.error("[tg-bot] getUnlockedServiceIdSet error:", e?.message || e);
-  }
-  return set;
 }
 
 // Убираем из текста любые "Подробнее ... открыть(ссылка)" до оплаты
@@ -1218,14 +1155,6 @@ function resetPendingClientInput(ctx) {
   ctx.session.managerReplyRequestId = null;
 
   ctx.session._state_ts = null;
-}
-
-function formatMoney(v) {
-  if (v === null || v === undefined) return "";
-  const n = Number(String(v).replace(/[^\d.]/g, ""));
-  if (!Number.isFinite(n)) return String(v);
-  // без жёсткой валюты: если хочешь, можно добавить PRICE_CURRENCY
-  return String(v).includes("USD") || String(v).includes("usd") ? String(v) : `${n}`;
 }
 
 function pickServiceTitle(service) {
