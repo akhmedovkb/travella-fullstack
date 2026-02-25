@@ -5132,14 +5132,51 @@ bot.action(/^unlock:(\d+)$/, async (ctx) => {
       } catch {}
       return;
     }
-    
-    await pool.query(
-      `INSERT INTO user_offer_accepts
-       (user_role, user_id, offer_version, source)
-       VALUES ($1,$2,$3,$4)`,
-      ["client", chatId, OFFER_VERSION || "v1.0", "telegram_unlock"]
+
+    // 🔐 Проверка принятия оферты (Bank Protection)
+    const offerCheck = await pool.query(
+      `SELECT 1
+         FROM user_offer_accepts
+        WHERE user_role = 'client'
+          AND user_id = $1
+          AND offer_version = $2
+        LIMIT 1`,
+      [chatId, OFFER_VERSION]
     );
     
+    if (!offerCheck.rowCount) {
+      try {
+        await ctx.answerCbQuery(
+          "⚠️ Для открытия контактов необходимо принять условия оферты",
+          { show_alert: true }
+        );
+      } catch {}
+    
+      await ctx.reply(
+        "📄 Перед открытием контактов необходимо принять условия Travella.uz",
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: "📄 Открыть оферту",
+                  url: "https://travella.uz/offer",
+                },
+              ],
+              [
+                {
+                  text: "✅ Я принимаю условия",
+                  callback_data: `offer_accept:${serviceId}`,
+                },
+              ],
+            ],
+          },
+        }
+      );
+    
+      return;
+    }
+        
     const result = await unlockContactsForService(pool, {
       clientId: clientRow.id,
       serviceId,
@@ -5257,6 +5294,40 @@ bot.action(/^unlock:(\d+)$/, async (ctx) => {
     console.error("[tg-bot] unlock action error:", e?.response?.data || e?.message || e);
     try {
       await ctx.answerCbQuery("⚠️ Ошибка. Попробуйте позже.", { show_alert: true });
+    } catch {}
+  }
+});
+
+/* ===================== OFFER ACCEPT ===================== */
+bot.action(/^offer_accept:(\d+)$/, async (ctx) => {
+  try {
+    const serviceId = Number(ctx.match?.[1]);
+    const chatId = ctx.from?.id;
+
+    if (!chatId) {
+      await ctx.answerCbQuery("Ошибка пользователя");
+      return;
+    }
+
+    await pool.query(
+      `INSERT INTO user_offer_accepts
+       (user_role, user_id, offer_version, source)
+       VALUES ($1,$2,$3,$4)
+       ON CONFLICT DO NOTHING`,
+      ["client", chatId, OFFER_VERSION || "v1.0", "telegram_unlock"]
+    );
+
+    await ctx.answerCbQuery("✅ Условия приняты");
+
+    // мягкая подсказка пользователю
+    try {
+      await ctx.reply("🔓 Теперь нажмите «Открыть контакты» ещё раз");
+    } catch {}
+
+  } catch (e) {
+    console.error("[tg-bot] offer_accept error:", e?.message || e);
+    try {
+      await ctx.answerCbQuery("Ошибка. Попробуйте позже", { show_alert: true });
     } catch {}
   }
 });
