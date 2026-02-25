@@ -198,7 +198,7 @@ async function getClientRowByChatId(pool, chatId) {
 async function unlockContactsForService(db, { clientId, serviceId }) {
   if (!db) return { ok: false, reason: "db_unavailable" };
 
-  // таблицы можно гарантировать через pool (вне транзакции допустимо)
+  // таблицы гарантируем через pool (вне транзакции допустимо)
   await ensureUnlockTables(pool);
 
   const cid = Number(clientId);
@@ -210,7 +210,8 @@ async function unlockContactsForService(db, { clientId, serviceId }) {
   try {
     // уже открывали?
     const ex = await db.query(
-      `SELECT id FROM client_service_contact_unlocks
+      `SELECT id
+         FROM client_service_contact_unlocks
         WHERE client_id=$1 AND service_id=$2
         LIMIT 1`,
       [cid, sid]
@@ -230,12 +231,7 @@ async function unlockContactsForService(db, { clientId, serviceId }) {
     const balance = Number(bal.rows?.[0]?.contact_balance || 0);
 
     if (balance < CONTACT_UNLOCK_PRICE) {
-      return {
-        ok: false,
-        reason: "no_balance",
-        balance,
-        need: CONTACT_UNLOCK_PRICE,
-      };
+      return { ok: false, reason: "no_balance", balance, need: CONTACT_UNLOCK_PRICE };
     }
 
     // списываем
@@ -5372,7 +5368,7 @@ try {
       await ctx.answerCbQuery("⚠️ Не удалось открыть контакты", { show_alert: true });
     } catch {}
 
-    return { ok: false };
+    return { ok: false, reason: result.reason || "failed" };
   }
 
 const charged = Number(result.charged || 0);
@@ -5384,7 +5380,11 @@ const note = result.already
   try {
     await ctx.answerCbQuery(note, { show_alert: true });
   } catch {}
-
+  try {
+    await refreshUnlockedCard(ctx, serviceId);
+  } catch (e) {
+    console.error("[tg-bot] refreshUnlockedCard failed:", e?.message || e);
+  }
   return { ok: true };
 }
 
