@@ -27,6 +27,7 @@ export default function Footer() {
     { slug: "project",  fallback: { ru: "О проекте",     uz: "Loyiha haqida",      en: "About the project" } },
     { slug: "partners", fallback: { ru: "Наши партнёры", uz: "Hamkorlarimiz",      en: "Our partners" } },
     { slug: "contacts", fallback: { ru: "Наши контакты", uz: "Kontaktlarimiz",     en: "Contacts" } },
+    { slug: "oferta", fallback: { ru: "Публичная оферта", uz: "Ommaviy oferta", en: "Public offer" } },
     { slug: "privacy",  fallback: { ru: "Политика конфиденциальности", uz: "Maxfiylik siyosati", en: "Privacy Policy" } },
   ];
 
