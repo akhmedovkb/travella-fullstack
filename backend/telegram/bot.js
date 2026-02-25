@@ -5430,12 +5430,23 @@ const note = result.already
 
 bot.action(/^u:(\d+):(\d+):(\d+):([a-f0-9]+)$/, async (ctx) => {
   try {
+    console.log("[unlock] raw =", ctx.callbackQuery?.data);
+
     const serviceId = Number(ctx.match?.[1]);
     const buttonChatId = Number(ctx.match?.[2]);
     const ts = Number(ctx.match?.[3]);
     const sig = String(ctx.match?.[4] || "");
 
-    // 🔒 защита: кнопку может нажать только тот же пользователь
+    console.log("[unlock] parsed =", {
+      serviceId,
+      buttonChatId,
+      ts,
+      sigLen: sig.length,
+      from: ctx.from?.id,
+      now: Math.floor(Date.now() / 1000),
+      ageSec: Math.floor(Date.now() / 1000) - ts,
+    });
+
     if (buttonChatId !== ctx.from.id) {
       try {
         await ctx.answerCbQuery("⛔️ Эта кнопка не для вас", { show_alert: true });
@@ -5449,6 +5460,8 @@ bot.action(/^u:(\d+):(\d+):(\d+):([a-f0-9]+)$/, async (ctx) => {
       ts,
       sig,
     });
+
+    console.log("[unlock] verify =", v);
 
     if (!v.ok) {
       try {
