@@ -381,43 +381,64 @@ function cbNowSec() {
   return Math.floor(Date.now() / 1000);
 }
 
-function signCb({ action, chatId, serviceId, ts }) {
-  const base = `${action}|${chatId}|${serviceId}|${ts}|${OFFER_VERSION}`;
-  return crypto
-    .createHmac("sha256", CALLBACK_SECRET || "dev-secret")
-    .update(base)
-    .digest("hex")
-    .slice(0, 12); // коротко, но достаточно
+/* ===================== SIGNED CALLBACK DATA (HMAC) ===================== */
+const crypto = require("crypto");
+
+const TG_CALLBACK_SECRET = String(process.env.TG_CALLBACK_SECRET || "").trim();
+const TG_CALLBACK_TTL_SEC = Number(process.env.TG_CALLBACK_TTL_SEC || "900"); // 15 минут
+
+function cbNowSec() {
+  return Math.floor(Date.now() / 1000);
 }
 
-function buildCbData(ctx, action, serviceId) {
-  const chatId = ctx.from?.id || 0;
+function signUnlock({ action, chatId, serviceId, ts }) {
+  const base = `${action}|${chatId}|${serviceId}|${ts}`;
+  // ВАЖНО: без секрета лучше не пускать (иначе любой сможет подделать кнопку).
+  // Но чтобы не сломать окружения — оставляем soft-режим в verify.
+  const secret = TG_CALLBACK_SECRET;
+  return crypto.createHmac("sha256", secret).update(base).digest("hex").slice(0, 12);
+}
+
+/**
+ * u:<serviceId>:<chatId>:<ts>:<sig>
+ */
+function buildUnlockCbData(chatId, serviceId) {
+  const action = "u";
   const ts = cbNowSec();
-  const sig = signCb({ action, chatId, serviceId, ts });
-  // u:<sid>:<ts>:<sig>  |  o:<sid>:<ts>:<sig>
-  return `${action}:${serviceId}:${ts}:${sig}`;
+  const sid = Number(serviceId);
+  const cid = Number(chatId);
+
+  const sig = TG_CALLBACK_SECRET
+    ? signUnlock({ action, chatId: cid, serviceId: sid, ts })
+    : "dev"; // soft если секрета нет
+
+  return `${action}:${sid}:${cid}:${ts}:${sig}`;
 }
 
-function verifyCbData(ctx, action, serviceId, ts, sig) {
-  const chatId = ctx.from?.id || 0;
-
-  if (!CALLBACK_SECRET) {
-    // если секрет не задан — не ломаем прод, но для bank-grade лучше задать
-    return { ok: true, soft: true };
-  }
+/**
+ * verifyUnlockCbData принимает ОБЪЕКТ (как ты уже вызываешь в action)
+ */
+function verifyUnlockCbData({ chatId, serviceId, ts, sig }) {
+  // soft режим (чтобы не ломать прод без секрета)
+  if (!TG_CALLBACK_SECRET) return { ok: true, soft: true };
 
   const now = cbNowSec();
-  if (!Number.isFinite(ts) || Math.abs(now - ts) > CALLBACK_TTL_SEC) {
-    return { ok: false, reason: "expired" };
-  }
+  const t = Number(ts);
+  const sid = Number(serviceId);
+  const cid = Number(chatId);
 
-  const expected = signCb({ action, chatId, serviceId, ts });
-  if (String(expected) !== String(sig)) {
-    return { ok: false, reason: "bad_sig" };
-  }
+  if (!Number.isFinite(t)) return { ok: false, reason: "bad_ts" };
+  if (!Number.isFinite(sid) || sid <= 0) return { ok: false, reason: "bad_sid" };
+  if (!Number.isFinite(cid) || cid <= 0) return { ok: false, reason: "bad_cid" };
 
+  if (Math.abs(now - t) > TG_CALLBACK_TTL_SEC) return { ok: false, reason: "expired" };
+
+  const expected = signUnlock({ action: "u", chatId: cid, serviceId: sid, ts: t });
+
+  if (String(expected) !== String(sig)) return { ok: false, reason: "bad_sig" };
   return { ok: true };
 }
+
 async function showOfferGate(ctx, serviceId) {
   await safeCb(
     ctx,
@@ -3919,9 +3940,14 @@ bot.start(async (ctx) => {
               textFinal = stripLockedLinks(text);
               kb = {
                 inline_keyboard: [
-                  [{ text: "🔓 Открыть контакты (10 000 сум)", callback_data: buildUnlockCbData(ctx.from.id, serviceId) }],
-                ],
-              };
+                                    [
+                                      {
+                                        text: "🔓 Открыть контакты (10 000 сум)",
+                                        callback_data: buildUnlockCbData(ctx.from.id, serviceId),
+                                      },
+                                    ],
+                                  ],
+                    };
             } else {
               kb = {
                 inline_keyboard: [
