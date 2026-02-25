@@ -805,7 +805,7 @@ async function getOrFetchCached(key, ttlMs, fetcher) {
 /* ===================== BLACK-HOLE++ GLOBAL SHIELD ===================== */
 
 // in-flight защита (race)
-const  = new Map();
+const unlockInFlight = new Map();
 
 // velocity limiter
 const unlockVelocity = new Map();
