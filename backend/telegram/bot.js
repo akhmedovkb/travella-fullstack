@@ -114,15 +114,16 @@ const axios = axiosBase.create({
 
 /* ===================== PG ADVISORY LOCK (ANTI DOUBLE SPEND) ===================== */
 
-async function withServiceLock(pool, serviceId, fn) {
+async function withServiceLock(pool, clientId, serviceId, fn) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
 
-    // ключ блокировки (64-бит)
+    // BANK-GRADE: lock на пару (clientId, serviceId) в рамках ЭТОЙ транзакции
+    // 64-bit key = (clientId << 32) + serviceId (делаем сдвиг в SQL, безопасно для bigint)
     await client.query(
-      "SELECT pg_advisory_xact_lock($1)",
-      [Number(serviceId)]
+      "SELECT pg_advisory_xact_lock((($1::bigint) << 32) + $2::bigint)",
+      [Number(clientId), Number(serviceId)]
     );
 
     const res = await fn(client);
@@ -192,8 +193,10 @@ async function getClientRowByChatId(pool, chatId) {
 }
 
 // транзакция: если уже unlocked — не списываем повторно
-async function unlockContactsForService(pool, { clientId, serviceId }) {
-  if (!pool) return { ok: false, reason: "db_unavailable" };
+async function unlockContactsForService(db, { clientId, serviceId }) {
+  if (!db) return { ok: false, reason: "db_unavailable" };
+
+  // таблицы гарантируем через pool (вне транзакции ок)
   await ensureUnlockTables(pool);
 
   const cid = Number(clientId);
@@ -202,24 +205,20 @@ async function unlockContactsForService(pool, { clientId, serviceId }) {
     return { ok: false, reason: "bad_args" };
   }
 
-  const client = await pool.connect();
   try {
-    await client.query("BEGIN");
-
     // уже открывали?
-    const ex = await client.query(
+    const ex = await db.query(
       `SELECT id FROM client_service_contact_unlocks
         WHERE client_id=$1 AND service_id=$2
         LIMIT 1`,
       [cid, sid]
     );
     if (ex.rowCount) {
-      await client.query("COMMIT");
       return { ok: true, already: true, charged: 0 };
     }
 
     // блокируем баланс
-    const bal = await client.query(
+    const bal = await db.query(
       `SELECT COALESCE(contact_balance, 0) AS contact_balance
          FROM clients
         WHERE id=$1
@@ -229,7 +228,6 @@ async function unlockContactsForService(pool, { clientId, serviceId }) {
     const balance = Number(bal.rows?.[0]?.contact_balance || 0);
 
     if (balance < CONTACT_UNLOCK_PRICE) {
-      await client.query("ROLLBACK");
       return {
         ok: false,
         reason: "no_balance",
@@ -239,7 +237,7 @@ async function unlockContactsForService(pool, { clientId, serviceId }) {
     }
 
     // списываем
-    await client.query(
+    await db.query(
       `UPDATE clients
           SET contact_balance = COALESCE(contact_balance,0) - $2
         WHERE id=$1`,
@@ -247,28 +245,22 @@ async function unlockContactsForService(pool, { clientId, serviceId }) {
     );
 
     // пишем unlock
-    await client.query(
+    await db.query(
       `INSERT INTO client_service_contact_unlocks (client_id, service_id, price_charged)
        VALUES ($1,$2,$3)`,
       [cid, sid, CONTACT_UNLOCK_PRICE]
     );
 
-    await client.query("COMMIT");
     return { ok: true, already: false, charged: CONTACT_UNLOCK_PRICE };
   } catch (e) {
-    try {
-      await client.query("ROLLBACK");
-    } catch {}
-
     // если параллельно уже вставили — считаем как already
     if (String(e?.code || "") === "23505") {
       return { ok: true, already: true, charged: 0 };
     }
 
     console.error("[tg-bot] unlockContactsForService error:", e?.message || e);
-    return { ok: false, reason: "server_error" };
-  } finally {
-    client.release();
+    // ВАЖНО: кидаем ошибку наверх, чтобы withServiceLock сделал ROLLBACK
+    throw e;
   }
 }
 
@@ -5278,13 +5270,48 @@ async function doUnlockFlow(ctx, serviceId) {
     return { ok: false, reason: "offer_required" };
   }
 
-  // 🔥 CRITICAL: advisory lock
-  const result = await withServiceLock(pool, serviceId, async () => {
-    return unlockContactsForService(pool, {
-      clientId: clientRow.id,
-      serviceId,
+  // === BLACK-HOLE++ / anti-fraud gates (BANK-GRADE) ===
+  const key = `${chatId}:${serviceId}`;
+  
+  if (isHardBlocked(chatId)) {
+    try { await ctx.answerCbQuery("⛔️ Доступ временно ограничен", { show_alert: true }); } catch {}
+    return { ok: false, reason: "blocked" };
+  }
+  
+  if (hasInFlight(key) || isRecent(key, 2000)) {
+    try { await ctx.answerCbQuery("⏳ Обрабатываю…", { show_alert: false }); } catch {}
+    return { ok: false, reason: "in_flight" };
+  }
+  
+  if (!checkVelocity(chatId)) {
+    const score = markSuspicious(chatId);
+    try {
+      await ctx.answerCbQuery(
+        score >= 6 ? "⛔️ Слишком много попыток" : "⚠️ Слишком часто. Подождите",
+        { show_alert: true }
+      );
+    } catch {}
+    return { ok: false, reason: "velocity" };
+  }
+  
+  setInFlight(key, 20000);
+  
+  let result;
+  try {
+    // 🔥 BANK-GRADE advisory lock: в той же транзакции, что и списание/insert
+    result = await withServiceLock(pool, clientRow.id, serviceId, async (db) => {
+      return unlockContactsForService(db, {
+        clientId: clientRow.id,
+        serviceId,
+      });
     });
-  });
+  } catch (e) {
+    console.error("[tg-bot] doUnlockFlow locked unlock error:", e?.message || e);
+    result = { ok: false, reason: "server_error" };
+  } finally {
+    unlockInFlight.delete(key);
+  }
+  markRecent(key);
 
   if (!result.ok) {
     if (result.reason === "no_balance") {
