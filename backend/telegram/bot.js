@@ -5398,19 +5398,24 @@ bot.action(/^offer_accept:(\d+)$/, async (ctx) => {
       return;
     }
 
-    // ✅ фиксируем оферту (idempotent)
+    // ✅ записываем оферту (idempotent)
     await pool.query(
       `INSERT INTO user_offer_accepts
        (user_role, user_id, offer_version, source)
        VALUES ($1,$2,$3,$4)
        ON CONFLICT DO NOTHING`,
-      ["client", chatId, OFFER_VERSION, "telegram_unlock"]
+      ["client", chatId, OFFER_VERSION || "v1.0", "telegram_unlock"]
     );
 
+    // ✅ закрываем callback
     await ctx.answerCbQuery("✅ Условия приняты");
 
-    // 🚀 AUTO-UNLOCK (ULTIMATE)
-    await doUnlockFlow(ctx, serviceId);
+    // 🚀 ENTERPRISE AUTO-UNLOCK
+    try {
+      await doUnlockFlow(ctx, serviceId);
+    } catch (e) {
+      console.error("[tg-bot] auto unlock after offer failed:", e?.message || e);
+    }
 
   } catch (e) {
     console.error("[tg-bot] offer_accept error:", e?.message || e);
