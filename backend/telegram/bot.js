@@ -41,6 +41,36 @@ const { buildSvcActualKeyboard } = require("./keyboards/serviceActual");
 const { handleServiceActualCallback } = require("./handlers/serviceActualHandler");
 const { buildServiceMessage } = require("../utils/telegramServiceCard");
 
+/* ===================== BLACK-HOLE ANTI-FRAUD ===================== */
+
+// user velocity (защита от ботов)
+const unlockVelocity = new Map();
+
+// подозрительные попытки
+const unlockSuspicious = new Map();
+
+function checkVelocity(userId, limit = 5, windowMs = 60000) {
+  const now = Date.now();
+  const arr = unlockVelocity.get(userId) || [];
+
+  const fresh = arr.filter((t) => now - t < windowMs);
+  fresh.push(now);
+
+  unlockVelocity.set(userId, fresh);
+
+  return fresh.length <= limit;
+}
+
+function markSuspicious(userId) {
+  const cnt = (unlockSuspicious.get(userId) || 0) + 1;
+  unlockSuspicious.set(userId, cnt);
+  return cnt;
+}
+
+function isHighlySuspicious(userId) {
+  return (unlockSuspicious.get(userId) || 0) >= 5;
+}
+
 /* ===================== CONFIG ===================== */
 const OFFER_VERSION = process.env.OFFER_VERSION || "v1.0";
 
@@ -5256,6 +5286,25 @@ function hasUnlockLock(key) {
 
 async function doUnlockFlow(ctx, serviceId) {
   const chatId = ctx.from?.id;
+    // ================= FRAUD CHECK =================
+  
+  // velocity limiter
+  if (!checkVelocity(chatId)) {
+    await ctx.answerCbQuery(
+      "⛔ Слишком много запросов. Попробуйте позже.",
+      { show_alert: true }
+    );
+    return { ok: false, reason: "rate_limited" };
+  }
+  
+  // если пользователь уже подозрительный
+  if (isHighlySuspicious(chatId)) {
+    await ctx.answerCbQuery(
+      "🚫 Временная блокировка. Обратитесь в поддержку.",
+      { show_alert: true }
+    );
+    return { ok: false, reason: "blocked_suspicious" };
+  }
   const lockKey = `${chatId}:${serviceId}`;
 
   // 🛡 double click protection
@@ -5335,6 +5384,8 @@ async function doUnlockFlow(ctx, serviceId) {
     });
 
     if (!result.ok) {
+      // mark suspicious on failures
+      markSuspicious(chatId);
       if (result.reason === "no_balance") {
         const bal = Number(result.balance || 0).toLocaleString("ru-RU");
         const need = Number(
@@ -5485,9 +5536,10 @@ bot.action(/^offer_accept:(\d+)$/, async (ctx) => {
       ["client", chatId, OFFER_VERSION || "v1.0", "telegram_unlock"]
     );
 
+    // ✅ мгновенный UX ответ
     await ctx.answerCbQuery("✅ Условия приняты");
 
-    // 🚀 AUTO UNLOCK (ядерный UX)
+    // 🚀 AUTO UNLOCK (без повторного клика)
     await doUnlockFlow(ctx, serviceId);
 
   } catch (e) {
