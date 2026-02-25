@@ -4,43 +4,6 @@ require("dotenv").config();
 const { Telegraf, session, Markup } = require("telegraf");
 const axiosBase = require("axios");
 
-/* ===================== NUCLEAR SHIELD ===================== */
-
-// in-memory lock (быстрый уровень)
-const unlockInFlight = new Map();
-
-// анти-флуд окно
-const unlockRecent = new Map();
-
-function setUnlockLock(key, ttlMs = 15000) {
-  unlockInFlight.set(key, Date.now());
-  setTimeout(() => unlockInFlight.delete(key), ttlMs).unref?.();
-}
-
-function hasUnlockLock(key) {
-  return unlockInFlight.has(key);
-}
-
-// 🛡 anti-spam window (защита от дрочеров кнопки)
-function isRecentlyUnlocked(key, windowMs = 5000) {
-  const ts = unlockRecent.get(key);
-  if (!ts) return false;
-  return Date.now() - ts < windowMs;
-}
-
-function markRecentlyUnlocked(key) {
-  unlockRecent.set(key, Date.now());
-  setTimeout(() => unlockRecent.delete(key), 30000).unref?.();
-}
-const {
-  parseDateFlexible,
-  isServiceActual,
-  normalizeDateTimeInput: normalizeDateTimeInputHelper,
-} = require("./helpers/serviceActual");
-const { buildSvcActualKeyboard } = require("./keyboards/serviceActual");
-const { handleServiceActualCallback } = require("./handlers/serviceActualHandler");
-const { buildServiceMessage } = require("../utils/telegramServiceCard");
-
 /* ===================== CONFIG ===================== */
 const OFFER_VERSION = process.env.OFFER_VERSION || "v1.0";
 
