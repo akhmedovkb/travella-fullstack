@@ -313,6 +313,105 @@ function stripLockedLinks(htmlText) {
 
 /* ===================== UNLOCK HELPERS (UI gating) ===================== */
 
+/* ===================== ENTERPRISE SAFE HELPERS ===================== */
+
+// безопасный answerCbQuery
+async function safeCb(ctx, text, alert = false) {
+  try {
+    await ctx.answerCbQuery(text, { show_alert: alert });
+  } catch {}
+}
+
+// проверка принятия оферты
+async function ensureOfferAccepted(chatId) {
+  const q = await pool.query(
+    `SELECT 1
+       FROM user_offer_accepts
+      WHERE user_role = 'client'
+        AND user_id = $1
+        AND offer_version = $2
+      LIMIT 1`,
+    [chatId, OFFER_VERSION]
+  );
+  return q.rowCount > 0;
+}
+
+// показать оферту
+async function showOfferGate(ctx, serviceId) {
+  await safeCb(
+    ctx,
+    "⚠️ Необходимо принять условия Travella.uz",
+    true
+  );
+
+  try {
+    await ctx.reply(
+      "📄 Перед открытием контактов необходимо принять условия Travella.uz",
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              {
+                text: "📄 Открыть оферту",
+                url: "https://travella.uz/page/oferta",
+              },
+            ],
+            [
+              {
+                text: "✅ Я принимаю условия",
+                callback_data: `offer_accept:${serviceId}`,
+              },
+            ],
+          ],
+        },
+      }
+    );
+  } catch {}
+}
+
+// обновление карточки после unlock
+async function refreshUnlockedCard(ctx, serviceId) {
+  const { data } = await axios.get(
+    `/api/telegram/service/${serviceId}`,
+    { params: { role: "client" } }
+  );
+
+  if (!data?.success || !data?.service) return;
+
+  const svc = data.service;
+  const category = String(svc.category || "").toLowerCase();
+
+  const { text, photoUrl, serviceUrl } =
+    buildServiceMessage(svc, category, "client_unlocked");
+
+  const kb = {
+    inline_keyboard: [
+      [{ text: "Подробнее на сайте", url: serviceUrl }],
+      [{ text: "📩 Быстрый запрос", callback_data: `quick:${serviceId}` }],
+    ],
+  };
+
+  try {
+    await ctx.editMessageCaption(text, {
+      parse_mode: "HTML",
+      reply_markup: kb,
+    });
+    return;
+  } catch {}
+
+  try {
+    await ctx.editMessageText(text, {
+      parse_mode: "HTML",
+      reply_markup: kb,
+      disable_web_page_preview: true,
+    });
+    return;
+  } catch {}
+
+  try {
+    await ctx.editMessageReplyMarkup(kb);
+  } catch {}
+}
 // true если клиент уже открывал контакты по этой услуге
 async function isContactsUnlocked(pool, { clientId, serviceId }) {
   if (!pool) return false;
@@ -5115,57 +5214,52 @@ bot.action(/^quick:(\d+)$/, async (ctx) => {
 
 /* ===================== UNLOCK CORE (MAX PROTECTION) ===================== */
 
+const { acquireLock, releaseLock } = require("../utils/distLock");
+
 async function doUnlockFlow(ctx, serviceId, opts = {}) {
   const chatId = ctx.from?.id;
   const { skipOfferCheck = false } = opts;
 
   if (!Number.isFinite(serviceId) || serviceId <= 0) {
-    try {
-      await ctx.answerCbQuery("⚠️ Некорректный ID услуги", { show_alert: true });
-    } catch {}
-    return { ok: false, reason: "bad_service_id" };
+    await safeCb(ctx, "⚠️ Некорректный ID услуги");
+    return { ok: false };
   }
 
-  // 🔒 анти-дребезг (защита от double-tap)
-  const lockKey = `unlock:${chatId}:${serviceId}`;
-  if (global.__unlockLocks?.has(lockKey)) {
-    try {
-      await ctx.answerCbQuery("⏳ Уже выполняется…", { show_alert: false });
-    } catch {}
+  // 🔒 DISTRIBUTED LOCK (cluster-safe)
+  const lockKey = `lock:unlock:${chatId}:${serviceId}`;
+  const locked = await acquireLock(lockKey, 10000);
+
+  if (!locked) {
+    await safeCb(ctx, "⏳ Уже выполняется…");
     return { ok: false, reason: "locked" };
   }
 
-  global.__unlockLocks = global.__unlockLocks || new Set();
-  global.__unlockLocks.add(lockKey);
-
   try {
+    // ================= CLIENT =================
     const clientRow = await getClientRowByChatId(pool, chatId);
     if (!clientRow?.id) {
-      try {
-        await ctx.answerCbQuery("👋 Сначала привяжите аккаунт через /start", { show_alert: true });
-      } catch {}
-      return { ok: false, reason: "no_client" };
+      await safeCb(ctx, "👋 Сначала привяжите аккаунт через /start", true);
+      return { ok: false };
     }
 
-    // 🔐 Bank Protection — оферта
+    // ================= OFFER =================
     if (!skipOfferCheck) {
       const offerCheck = await pool.query(
         `SELECT 1
-           FROM user_offer_accepts
-          WHERE user_role = 'client'
-            AND user_id = $1
-            AND offer_version = $2
-          LIMIT 1`,
+         FROM user_offer_accepts
+         WHERE user_role='client'
+           AND user_id=$1
+           AND offer_version=$2
+         LIMIT 1`,
         [chatId, OFFER_VERSION]
       );
 
       if (!offerCheck.rowCount) {
-        try {
-          await ctx.answerCbQuery(
-            "⚠️ Для открытия контактов необходимо принять условия оферты",
-            { show_alert: true }
-          );
-        } catch {}
+        await safeCb(
+          ctx,
+          "⚠️ Для открытия контактов необходимо принять условия оферты",
+          true
+        );
 
         await ctx.reply(
           "📄 Перед открытием контактов необходимо принять условия Travella.uz",
@@ -5183,7 +5277,17 @@ async function doUnlockFlow(ctx, serviceId, opts = {}) {
       }
     }
 
-    // 💰 ОСНОВНОЙ unlock
+    // ================= IDEMPOTENCY =================
+    const idemKey = `unlock:${clientRow.id}:${serviceId}`;
+
+    const idemCheck = await pool.query(
+      `SELECT 1 FROM contact_unlocks
+       WHERE client_id=$1 AND service_id=$2
+       LIMIT 1`,
+      [clientRow.id, serviceId]
+    );
+
+    // ================= MAIN UNLOCK =================
     const result = await unlockContactsForService(pool, {
       clientId: clientRow.id,
       serviceId,
@@ -5194,96 +5298,39 @@ async function doUnlockFlow(ctx, serviceId, opts = {}) {
         const bal = Number(result.balance || 0).toLocaleString("ru-RU");
         const need = Number(result.need || CONTACT_UNLOCK_PRICE || 10000).toLocaleString("ru-RU");
 
-        try {
-          await ctx.answerCbQuery(
-            `💳 Недостаточно средств.\nБаланс: ${bal} сум\nНужно: ${need} сум`,
-            { show_alert: true }
-          );
-        } catch {}
+        await safeCb(
+          ctx,
+          `💳 Недостаточно средств.\nБаланс: ${bal} сум\nНужно: ${need} сум`,
+          true
+        );
 
         return { ok: false, reason: "no_balance" };
       }
 
-      try {
-        await ctx.answerCbQuery("⚠️ Не удалось открыть контакты. Попробуйте позже.", { show_alert: true });
-      } catch {}
-
-      return { ok: false, reason: "unlock_failed" };
+      await safeCb(ctx, "⚠️ Не удалось открыть контакты. Попробуйте позже.", true);
+      return { ok: false };
     }
 
-    // ✅ успех
+    // ================= AUDIT =================
+    await pool.query(
+      `INSERT INTO unlock_audit
+       (client_id, service_id, chat_id, charged, created_at)
+       VALUES ($1,$2,$3,$4,NOW())`,
+      [clientRow.id, serviceId, chatId, !result.already]
+    );
+
+    // ================= SUCCESS =================
     const note = result.already
       ? "✅ Контакты уже были открыты"
       : `✅ Контакты открыты. Списано: ${Number(CONTACT_UNLOCK_PRICE || 10000).toLocaleString("ru-RU")} сум`;
 
-    try {
-      await ctx.answerCbQuery(note, { show_alert: true });
-    } catch {}
+    await safeCb(ctx, note, true);
 
-    // 🔄 обновляем карточку
-    const { data } = await axios.get(`/api/telegram/service/${serviceId}`, {
-      params: { role: "client" },
-    });
+    await refreshUnlockedCard(ctx, serviceId);
 
-    if (!data?.success || !data?.service) {
-      return { ok: true, updated: false };
-    }
-
-    const svc = data.service;
-    const category = String(svc.category || "").toLowerCase();
-    const { text, photoUrl, serviceUrl } = buildServiceMessage(svc, category, "client_unlocked");
-
-    const kb = {
-      inline_keyboard: [
-        [{ text: "Подробнее на сайте", url: serviceUrl }],
-        [{ text: "📩 Быстрый запрос", callback_data: `quick:${serviceId}` }],
-      ],
-    };
-
-    let edited = false;
-
-    try {
-      await ctx.editMessageCaption(text, { parse_mode: "HTML", reply_markup: kb });
-      edited = true;
-    } catch {}
-
-    if (!edited) {
-      try {
-        await ctx.editMessageText(text, {
-          parse_mode: "HTML",
-          reply_markup: kb,
-          disable_web_page_preview: true,
-        });
-        edited = true;
-      } catch {}
-    }
-
-    if (!edited) {
-      try {
-        await ctx.editMessageReplyMarkup(kb);
-        edited = true;
-      } catch {}
-    }
-
-    // fallback
-    if (!edited) {
-      if (photoUrl) {
-        await safeReplyWithPhoto(ctx, photoUrl, text, {
-          parse_mode: "HTML",
-          reply_markup: kb,
-        });
-      } else {
-        await safeReply(ctx, text, {
-          parse_mode: "HTML",
-          reply_markup: kb,
-          disable_web_page_preview: true,
-        });
-      }
-    }
-
-    return { ok: true, updated: true };
+    return { ok: true };
   } finally {
-    global.__unlockLocks.delete(lockKey);
+    await releaseLock(lockKey);
   }
 }
 
