@@ -409,9 +409,6 @@ function buildUnlockCbData(chatId, serviceId) {
  * verifyUnlockCbData принимает ОБЪЕКТ (как ты вызываешь сейчас)
  */
 function verifyUnlockCbData(a, b, c, d) {
-  // поддержка двух форм:
-  // 1) verifyUnlockCbData(chatId, serviceId, ts, sig)
-  // 2) verifyUnlockCbData({ chatId, serviceId, ts, sig })
   let chatId, serviceId, ts, sig;
 
   if (a && typeof a === "object") {
@@ -426,22 +423,55 @@ function verifyUnlockCbData(a, b, c, d) {
     sig = d;
   }
 
-  if (!TG_CALLBACK_SECRET) return { ok: true, soft: true }; // чтобы не сломать прод без секрета
+  if (!TG_CALLBACK_SECRET) {
+    console.error("[tg-bot] TG_CALLBACK_SECRET is empty");
+    return { ok: false, reason: "no_secret" };
+  }
 
-  const now = _cbNowSec();
+  const now = cbNowSec();
   const t = Number(ts);
 
   if (!Number.isFinite(t)) return { ok: false, reason: "bad_ts" };
-  if (Math.abs(now - t) > TG_CALLBACK_TTL_SEC) return { ok: false, reason: "expired" };
 
-  const expected = _cbSignUnlock({
+  // ✅ защита от будущего времени
+  if (t > now + 30) return { ok: false, reason: "future_ts" };
+
+  if (Math.abs(now - t) > TG_CALLBACK_TTL_SEC) {
+    return { ok: false, reason: "expired" };
+  }
+
+  const cid = Number(chatId);
+  const sid = Number(serviceId);
+
+  if (!Number.isFinite(cid) || cid <= 0) {
+    return { ok: false, reason: "bad_chat" };
+  }
+  if (!Number.isFinite(sid) || sid <= 0) {
+    return { ok: false, reason: "bad_service" };
+  }
+
+  const expected = signUnlock({
     action: "u",
-    chatId: Number(chatId),
-    serviceId: Number(serviceId),
+    chatId: cid,
+    serviceId: sid,
     ts: t,
   });
 
-  if (String(expected) !== String(sig)) return { ok: false, reason: "bad_sig" };
+  const exp = Buffer.from(String(expected));
+  const got = Buffer.from(String(sig));
+
+  if (exp.length !== got.length) {
+    return { ok: false, reason: "bad_sig" };
+  }
+
+  try {
+    if (!crypto.timingSafeEqual(exp, got)) {
+      return { ok: false, reason: "bad_sig" };
+    }
+  } catch {
+    return { ok: false, reason: "bad_sig" };
+  }
+
   return { ok: true };
 }
 
