@@ -535,46 +535,56 @@ try {
   return { ok: true };
 }
 
+/**
+ * Универсальный подписанный callback_data для действий типа "o" (offer)
+ * Формат: o:<serviceId>:<ts>:<sig>
+ * ВАЖНО: verifyCbData(...) у тебя уже ждёт именно этот формат.
+ */
 function buildCbData(ctx, action, serviceId) {
-  const chatId = ctx.from?.id;
-  const ts = cbNowSec();
+  const chatId = ctx?.from?.id;
+  const sid = Number(serviceId);
+  if (!chatId || !Number.isFinite(sid) || sid <= 0) {
+    // fallback без падения — но лучше не использовать
+    return `${action}:${sid}:0:0`;
+  }
 
+  const ts = cbNowSec(); // сек
   const sig = signUnlock({
-    action,
-    chatId,
-    serviceId,
-    ts,
+    action: String(action || "").trim(),
+    chatId: Number(chatId),
+    serviceId: sid,
+    ts: Number(ts),
   });
 
-  return `${action}:${serviceId}:${chatId}:${ts}:${sig}`;
+  return `${String(action)}:${sid}:${ts}:${sig}`;
 }
 
+/**
+ * BANK-GRADE Offer Gate:
+ * - безопасно для callback_query / inline (через safeReply)
+ * - подписанная кнопка (buildCbData)
+ * - без ctx.reply напрямую
+ */
 async function showOfferGate(ctx, serviceId) {
-  await safeCb(ctx, "⚠️ Необходимо принять условия Travella.uz", true);
+  // 1) alert (чтобы пользователь понял, почему его "не пустило")
+  await safeCb(ctx, "⚠️ Для открытия контактов нужно принять оферту", true);
 
-  try {
-    await ctx.reply(
-      "📄 Перед открытием контактов необходимо принять условия Travella.uz",
-      {
-        reply_markup: {
-          inline_keyboard: [
-            [
-              {
-                text: "📄 Открыть оферту",
-                url: "https://travella.uz/page/oferta",
-              },
-            ],
-            [
-              {
-                text: "✅ Я принимаю условия",
-                callback_data: `offer_accept:${serviceId}`,
-              },
-            ],
-          ],
-        },
-      }
-    );
-  } catch {}
+  // 2) сообщение с кнопками (важно: safeReply, не ctx.reply)
+  await safeReply(
+    ctx,
+    "📄 *Перед открытием контактов необходимо принять условия Travella.uz*",
+    {
+      parse_mode: "Markdown",
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "📄 Открыть оферту", url: "https://travella.uz/page/oferta" }],
+          [{ text: "✅ Я принимаю условия", callback_data: buildCbData(ctx, "o", serviceId) }],
+        ],
+      },
+    }
+  );
+
+  return { ok: false, reason: "offer_required" };
 }
 
 // обновление карточки после unlock
@@ -5478,28 +5488,9 @@ async function doUnlockFlow(ctx, serviceId) {
     [clientRow.id, OFFER_VERSION || "v1.0"]
   );
 
-  if (!offerCheck.rowCount) {
-    try {
-      await ctx.answerCbQuery(
-        "⚠️ Для открытия контактов необходимо принять оферту",
-        { show_alert: true }
-      );
-    } catch {}
-
-    await ctx.reply(
-      "📄 Перед открытием контактов необходимо принять условия Travella.uz",
-      {
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: "📄 Открыть оферту", url: "https://travella.uz/offer" }],
-            [{ text: "✅ Я принимаю условия", callback_data: buildCbData(ctx, "o", serviceId) }],
-          ],
-        },
-      }
-    );
-
-    return { ok: false, reason: "offer_required" };
-  }
+if (!offerCheck.rowCount) {
+  return await showOfferGate(ctx, serviceId);
+}
 
   // === BLACK-HOLE++ / anti-fraud gates (BANK-GRADE) ===
   const key = `unlock:${chatId}:${serviceId}`;
