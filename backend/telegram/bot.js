@@ -2471,15 +2471,17 @@ bot.action(/^svc_edit_start:(\d+)$/, async (ctx) => {
       return;
     }
 
-    // 3) грузим услугу (используем твой endpoint списка)
-    const { data } = await axios.get(`/api/telegram/provider/${actorId}/services`);
-    if (!data || !data.success || !Array.isArray(data.items)) {
-      await safeReply(ctx, "⚠️ Не удалось загрузить услуги. Попробуйте позже.");
-      return;
-    }
-
-    const svc = data.items.find((s) => Number(s.id) === serviceId);
-    if (!svc) {
+    // 3) грузим КОНКРЕТНУЮ услугу (надёжнее, чем искать в списке)
+    const { data } = await axios.get(`/api/telegram/provider/${actorId}/services/${serviceId}`);
+  
+    const svc =
+      data?.service ||
+      data?.item ||
+      data?.data ||
+      (data?.success && data?.service) ||
+      null;
+  
+    if (!svc || Number(svc.id) !== Number(serviceId)) {
       await safeReply(ctx, "⚠️ Услуга не найдена (возможно удалена/скрыта).");
       return;
     }
