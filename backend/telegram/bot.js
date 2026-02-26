@@ -4422,17 +4422,34 @@ bot.hears(/👤 Профиль/i, async (ctx) => {
   const role = maybeProvider || ctx.session?.role || null;
 
   if (!linked && !role) {
-    await ctx.reply("👤 Похоже, аккаунт ещё не привязан.\n\nДавайте привяжем по номеру телефона 👇");
+    await ctx.reply(
+      "👤 Похоже, аккаунт ещё не привязан.\n\nДавайте привяжем по номеру телефона 👇"
+    );
     await askRole(ctx);
     return;
   }
 
   if (role === "provider") {
-    await ctx.reply(`🏢 Профиль поставщика можно изменить в кабинете:\n\n${SITE_URL}/dashboard/profile`);
+    await ctx.reply(
+      `🏢 Профиль поставщика можно изменить в кабинете:\n\n${SITE_URL}/dashboard/profile`
+    );
     return;
   }
 
-  await ctx.reply(`👤 Профиль клиента можно изменить на сайте:\n\n${SITE_URL}`);
+  // ✅ CLIENT: добавляем кнопку оферты + ссылку на оферту
+  await ctx.reply(
+    `👤 Профиль клиента можно изменить на сайте:\n\n${SITE_URL}`,
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "🌐 Открыть сайт", url: SITE_URL }],
+          [{ text: "📄 Оферта (что я принял)", callback_data: "profile:offer" }],
+          [{ text: "📄 Открыть оферту", url: "https://travella.uz/page/oferta" }],
+        ],
+      },
+      disable_web_page_preview: true,
+    }
+  );
 });
 
 bot.hears(/🏢 Стать поставщиком/i, async (ctx) => {
@@ -4478,6 +4495,81 @@ bot.hears("🧺 Корзина", async (ctx) => {
   } catch (e) {
     console.error("[bot] trash hears error:", e?.message || e);
     return ctx.reply("❌ Не удалось загрузить корзину. Попробуйте позже.");
+  }
+});
+
+bot.action("profile:offer", async (ctx) => {
+  try {
+    await safeCb(ctx);
+
+    const chatId = ctx.from?.id;
+    if (!chatId) {
+      await safeReply(ctx, "⚠️ Не удалось определить пользователя.");
+      return;
+    }
+
+    if (!pool) {
+      await safeReply(ctx, "⚠️ База данных недоступна. Попробуйте позже.");
+      return;
+    }
+
+    // ⚠️ У тебя оферта хранится “на пользователя” (user_id = chatId)
+    const r = await pool.query(
+      `SELECT offer_version, accepted_at, source
+         FROM user_offer_accepts
+        WHERE user_role = 'client'
+          AND user_id = $1
+        ORDER BY accepted_at DESC
+        LIMIT 1`,
+      [Number(chatId)]
+    );
+
+    if (!r.rowCount) {
+      await safeReply(
+        ctx,
+        "📄 Вы ещё не принимали оферту.\n\nОна будет предложена при первом открытии контактов.",
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "📄 Открыть оферту", url: "https://travella.uz/page/oferta" }],
+            ],
+          },
+        }
+      );
+      return;
+    }
+
+    const row = r.rows[0];
+    const acceptedAt = row.accepted_at
+      ? new Date(row.accepted_at).toLocaleString("ru-RU", { timeZone: "Asia/Tashkent" })
+      : "—";
+
+    const acceptedVer = row.offer_version || "—";
+    const nowVer = OFFER_VERSION || "—";
+    const src = row.source ? String(row.source) : "—";
+
+    await safeReply(
+      ctx,
+      "📄 <b>Оферта Travella</b>\n\n" +
+        `✅ Принятая версия: <b>${acceptedVer}</b>\n` +
+        `🕒 Дата принятия: <b>${acceptedAt}</b>\n` +
+        `📌 Источник: <b>${src}</b>\n` +
+        `📎 Текущая версия в боте: <b>${nowVer}</b>\n\n` +
+        "👇 Открыть текст оферты:",
+      {
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "📄 Открыть оферту", url: "https://travella.uz/page/oferta" }],
+          ],
+        },
+      }
+    );
+  } catch (e) {
+    console.error("[tg-bot] profile:offer error:", e?.message || e);
+    try {
+      await safeReply(ctx, "⚠️ Не удалось получить данные оферты. Попробуйте позже.");
+    } catch {}
   }
 });
 
