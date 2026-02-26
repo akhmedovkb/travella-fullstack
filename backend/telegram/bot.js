@@ -514,6 +514,7 @@ function verifyUnlockCbData(a, b, c, d) {
   }
 
   return { ok: true };
+}
 // ===================== OFFER GATE (BANK++) =====================
 
 // использовать тот же секрет, что и для unlock (или отдельный)
