@@ -387,8 +387,6 @@ function cbNowSec() {
 
 function signUnlock({ action, chatId, serviceId, ts }) {
   const base = `${action}|${chatId}|${serviceId}|${ts}`;
-  // ВАЖНО: без секрета лучше не пускать (иначе любой сможет подделать кнопку).
-  // Но чтобы не сломать окружения — оставляем soft-режим в verify.
   const secret = TG_CALLBACK_SECRET;
   return crypto.createHmac("sha256", secret).update(base).digest("hex").slice(0, 12);
 }
@@ -402,18 +400,15 @@ function buildUnlockCbData(chatId, serviceId) {
   const sid = Number(serviceId);
   const cid = Number(chatId);
 
-  const sig = TG_CALLBACK_SECRET
-    ? signUnlock({ action, chatId: cid, serviceId: sid, ts })
-    : "dev"; // soft если секрета нет
-
+  const sig = TG_CALLBACK_SECRET ? signUnlock({ action, chatId: cid, serviceId: sid, ts }) : "dev";
   return `${action}:${sid}:${cid}:${ts}:${sig}`;
 }
 
 /**
- * verifyUnlockCbData принимает ОБЪЕКТ (как ты уже вызываешь в action)
+ * verifyUnlockCbData принимает ОБЪЕКТ (как ты вызываешь сейчас)
  */
 function verifyUnlockCbData({ chatId, serviceId, ts, sig }) {
-  // soft режим (чтобы не ломать прод без секрета)
+  // soft режим (чтобы не ломать окружения без секрета)
   if (!TG_CALLBACK_SECRET) return { ok: true, soft: true };
 
   const now = cbNowSec();
@@ -428,8 +423,8 @@ function verifyUnlockCbData({ chatId, serviceId, ts, sig }) {
   if (Math.abs(now - t) > TG_CALLBACK_TTL_SEC) return { ok: false, reason: "expired" };
 
   const expected = signUnlock({ action: "u", chatId: cid, serviceId: sid, ts: t });
-
   if (String(expected) !== String(sig)) return { ok: false, reason: "bad_sig" };
+
   return { ok: true };
 }
 
@@ -5450,23 +5445,12 @@ const note = result.already
 
 bot.action(/^u:(\d+):(\d+):(\d+):([a-f0-9]+)$/, async (ctx) => {
   try {
-    console.log("[unlock] raw =", ctx.callbackQuery?.data);
-
     const serviceId = Number(ctx.match?.[1]);
     const buttonChatId = Number(ctx.match?.[2]);
     const ts = Number(ctx.match?.[3]);
     const sig = String(ctx.match?.[4] || "");
 
-    console.log("[unlock] parsed =", {
-      serviceId,
-      buttonChatId,
-      ts,
-      sigLen: sig.length,
-      from: ctx.from?.id,
-      now: Math.floor(Date.now() / 1000),
-      ageSec: Math.floor(Date.now() / 1000) - ts,
-    });
-
+    // 🔒 защита: кнопку может нажать только тот же пользователь
     if (buttonChatId !== ctx.from.id) {
       try {
         await ctx.answerCbQuery("⛔️ Эта кнопка не для вас", { show_alert: true });
@@ -5480,8 +5464,6 @@ bot.action(/^u:(\d+):(\d+):(\d+):([a-f0-9]+)$/, async (ctx) => {
       ts,
       sig,
     });
-
-    console.log("[unlock] verify =", v);
 
     if (!v.ok) {
       try {
@@ -5497,9 +5479,7 @@ bot.action(/^u:(\d+):(\d+):(\d+):([a-f0-9]+)$/, async (ctx) => {
   } catch (e) {
     console.error("[tg-bot] unlock action error:", e?.message || e);
     try {
-      await ctx.answerCbQuery("⚠️ Ошибка. Попробуйте позже.", {
-        show_alert: true,
-      });
+      await ctx.answerCbQuery("⚠️ Ошибка. Попробуйте позже.", { show_alert: true });
     } catch {}
   }
 });
