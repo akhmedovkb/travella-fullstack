@@ -5366,12 +5366,38 @@ async function doUnlockFlow(ctx, serviceId) {
   }
 
   const clientRow = await getClientRowByChatId(pool, chatId);
-  if (!clientRow?.id) {
+      // 🔥 FAST-PATH: уже открыт? (снимает лишнюю нагрузку с advisory lock)
     try {
-      await ctx.answerCbQuery("👋 Сначала привяжите аккаунт через /start", { show_alert: true });
-    } catch {}
-    return { ok: false };
-  }
+      const already = await pool.query(
+        `SELECT 1
+           FROM client_service_contact_unlocks
+          WHERE client_id = $1
+            AND service_id = $2
+          LIMIT 1`,
+        [clientRow?.id, serviceId]
+      );
+    
+      if (already.rowCount) {
+        try {
+          await ctx.answerCbQuery("✅ Контакты уже открыты", { show_alert: false });
+        } catch {}
+    
+        try {
+          await refreshUnlockedCard(ctx, serviceId);
+        } catch {}
+    
+        return { ok: true, already: true };
+      }
+    } catch (e) {
+      console.error("[tg-bot] fast unlock check failed:", e?.message || e);
+    }
+    
+    if (!clientRow?.id) {
+        try {
+          await ctx.answerCbQuery("👋 Сначала привяжите аккаунт через /start", { show_alert: true });
+        } catch {}
+        return { ok: false };
+      }
 
   // 🔐 ПРОВЕРКА ОФЕРТЫ (BANK PROTECTION)
   const offerCheck = await pool.query(
@@ -5381,7 +5407,7 @@ async function doUnlockFlow(ctx, serviceId) {
         AND user_id = $1
         AND offer_version = $2
       LIMIT 1`,
-    [chatId, OFFER_VERSION || "v1.0"]
+    [clientRow.id, OFFER_VERSION || "v1.0"]
   );
 
   if (!offerCheck.rowCount) {
