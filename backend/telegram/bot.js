@@ -5705,6 +5705,73 @@ bot.action(/^oa:(\d+):(\d+):([a-f0-9]+)$/, async (ctx) => {
   }
 });
 
+bot.action("balance:check", async (ctx) => {
+  try {
+    await safeCb(ctx);
+
+    const chatId = ctx.from?.id;
+    if (!chatId) {
+      await safeReply(ctx, "⚠️ Не удалось определить пользователя.");
+      return;
+    }
+
+    const clientRow = await getClientRowByChatId(pool, chatId);
+    if (!clientRow?.id) {
+      await safeReply(ctx, "👋 Сначала привяжите аккаунт через /start");
+      return;
+    }
+
+    const balNum = Number(clientRow.contact_balance || 0);
+    const bal = balNum.toLocaleString("ru-RU");
+    const need = Number(CONTACT_UNLOCK_PRICE || 10000).toLocaleString("ru-RU");
+    const topupUrl = `${SITE_URL}/dashboard/balance`;
+
+    const hasLast = !!ctx.session?.lastUnlockServiceId;
+
+    await safeReply(
+      ctx,
+      "💰 <b>Баланс контактов</b>\n\n" +
+        `Баланс: <b>${bal}</b> сум\n` +
+        `Открытие контактов: <b>${need}</b> сум`,
+      {
+        parse_mode: "HTML",
+        disable_web_page_preview: true,
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "💳 Пополнить баланс", url: topupUrl }],
+            ...(hasLast ? [[{ text: "🔓 Повторить открытие", callback_data: "balance:retry" }]] : []),
+          ],
+        },
+      }
+    );
+  } catch (e) {
+    console.error("[tg-bot] balance:check error:", e?.message || e);
+    try {
+      await safeReply(ctx, "⚠️ Не удалось проверить баланс. Попробуйте позже.");
+    } catch {}
+  }
+});
+
+bot.action("balance:retry", async (ctx) => {
+  try {
+    await safeCb(ctx);
+
+    const sid = Number(ctx.session?.lastUnlockServiceId || 0);
+    if (!sid) {
+      await safeReply(ctx, "⚠️ Нет сохранённой попытки открытия. Откройте карточку услуги заново.");
+      return;
+    }
+
+    // ✅ повторяем тот же flow (оферта/антифрод/locks/списание)
+    await doUnlockFlow(ctx, sid);
+  } catch (e) {
+    console.error("[tg-bot] balance:retry error:", e?.message || e);
+    try {
+      await safeReply(ctx, "⚠️ Не удалось повторить открытие. Попробуйте позже.");
+    } catch {}
+  }
+});
+
 /* ===================== UNLOCK FLOW (BANK-GRADE) ===================== */
 
 async function doUnlockFlow(ctx, serviceId) {
@@ -5809,27 +5876,63 @@ try {
   markRecent(key);
 }
 
-  if (!result.ok) {
-    if (result.reason === "no_balance") {
-      const bal = Number(result.balance || 0).toLocaleString("ru-RU");
-      const need = Number(result.need || CONTACT_UNLOCK_PRICE || 10000).toLocaleString("ru-RU");
+if (!result.ok) {
+  if (result.reason === "no_balance") {
+    const balNum = Number(result.balance || 0);
+    const needNum = Number(result.need || CONTACT_UNLOCK_PRICE || 10000);
 
-      try {
-        await ctx.answerCbQuery(
-          `💳 Недостаточно средств.\nБаланс: ${bal} сум\nНужно: ${need} сум`,
-          { show_alert: true }
-        );
-      } catch {}
+    const bal = balNum.toLocaleString("ru-RU");
+    const need = needNum.toLocaleString("ru-RU");
 
-      return { ok: false, reason: "no_balance" };
-    }
-
+    // ✅ запомним последнюю попытку, чтобы дать кнопку "Повторить"
     try {
-      await ctx.answerCbQuery("⚠️ Не удалось открыть контакты", { show_alert: true });
+      ctx.session = ctx.session || {};
+      ctx.session.lastUnlockServiceId = serviceId;
     } catch {}
 
-    return { ok: false, reason: result.reason || "failed" };
+    // 1) как и раньше: alert
+    try {
+      await ctx.answerCbQuery(
+        `💳 Недостаточно средств.\nБаланс: ${bal} сум\nНужно: ${need} сум`,
+        { show_alert: true }
+      );
+    } catch {}
+
+    // 2) "окно" в чат с кнопками
+    try {
+      const topupUrl = `${SITE_URL}/dashboard/balance`;
+
+      await safeReply(
+        ctx,
+        "💳 <b>Недостаточно средств</b>\n\n" +
+          `💰 Баланс: <b>${bal}</b> сум\n` +
+          `🔒 Нужно: <b>${need}</b> сум\n\n` +
+          "Нажмите «Пополнить баланс», затем «Проверить баланс».",
+        {
+          parse_mode: "HTML",
+          disable_web_page_preview: true,
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "💳 Пополнить баланс", url: topupUrl }],
+              [{ text: "🔄 Проверить баланс", callback_data: "balance:check" }],
+              [{ text: "🔓 Повторить открытие", callback_data: "balance:retry" }],
+            ],
+          },
+        }
+      );
+    } catch (e) {
+      console.error("[tg-bot] no_balance UI error:", e?.message || e);
+    }
+
+    return { ok: false, reason: "no_balance" };
   }
+
+  try {
+    await ctx.answerCbQuery("⚠️ Не удалось открыть контакты", { show_alert: true });
+  } catch {}
+
+  return { ok: false, reason: result.reason || "failed" };
+}
 
 const charged = Number(result.charged || 0);
 
