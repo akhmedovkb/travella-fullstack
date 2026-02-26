@@ -268,12 +268,22 @@ async function unlockContactsForService(db, { clientId, serviceId }) {
     }
 
     // списываем
-    await db.query(
+    const upd = await db.query(
       `UPDATE clients
           SET contact_balance = COALESCE(contact_balance,0) - $2
-        WHERE id=$1`,
+        WHERE id=$1
+          AND COALESCE(contact_balance,0) >= $2`,
       [cid, CONTACT_UNLOCK_PRICE]
     );
+    
+    if (!upd.rowCount) {
+      return {
+        ok: false,
+        reason: "no_balance",
+        balance,
+        need: CONTACT_UNLOCK_PRICE,
+      };
+    }
 
     // пишем unlock (idempotent по unique)
     await db.query(
