@@ -4551,6 +4551,7 @@ bot.action("profile:offer", async (ctx) => {
     await safeReply(
       ctx,
       "📄 <b>Оферта Travella</b>\n\n" +
+      "ℹ️ <b>Оферта принимается один раз и действует для всех открытий контактов.</b>\n\n" +
         `✅ Принятая версия: <b>${acceptedVer}</b>\n` +
         `🕒 Дата принятия: <b>${acceptedAt}</b>\n` +
         `📌 Источник: <b>${src}</b>\n` +
