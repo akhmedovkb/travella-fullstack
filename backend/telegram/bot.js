@@ -267,14 +267,58 @@ async function unlockContactsForService(db, { clientId, serviceId }) {
       return { ok: false, reason: "no_balance", balance, need: CONTACT_UNLOCK_PRICE };
     }
 
-    // списываем
-    const upd = await db.query(
-      `UPDATE clients
-          SET contact_balance = COALESCE(contact_balance,0) - $2
-        WHERE id=$1
-          AND COALESCE(contact_balance,0) >= $2`,
-      [cid, CONTACT_UNLOCK_PRICE]
+// 🔐 1. Пытаемся записать ledger (идемпотентно)
+let ledgerInserted = false;
+
+try {
+  await db.query(
+    `INSERT INTO client_balance_ledger
+      (client_id, amount, reason, ref_type, ref_id)
+     VALUES ($1, $2, $3, 'service_unlock', $4)`,
+    [
+      cid,
+      -CONTACT_UNLOCK_PRICE,
+      'unlock_contacts',
+      sid,
+    ]
+  );
+  ledgerInserted = true;
+} catch (e) {
+  if (String(e?.code) === "23505") {
+    // уже списывали ранее
+    return { ok: true, already: true, charged: 0 };
+  }
+  throw e;
+}
+
+// 🔐 2. Списываем баланс атомарно
+const upd = await db.query(
+  `UPDATE clients
+      SET contact_balance = COALESCE(contact_balance,0) - $2
+    WHERE id=$1
+      AND COALESCE(contact_balance,0) >= $2`,
+  [cid, CONTACT_UNLOCK_PRICE]
+);
+
+if (!upd.rowCount) {
+  // 🔁 откатываем ledger, если баланс не прошёл
+  if (ledgerInserted) {
+    await db.query(
+      `DELETE FROM client_balance_ledger
+        WHERE client_id=$1
+          AND ref_type='service_unlock'
+          AND ref_id=$2`,
+      [cid, sid]
     );
+  }
+
+  return {
+    ok: false,
+    reason: "no_balance",
+    balance,
+    need: CONTACT_UNLOCK_PRICE,
+  };
+}
     
     if (!upd.rowCount) {
       return {
