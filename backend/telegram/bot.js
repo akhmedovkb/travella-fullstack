@@ -5508,6 +5508,101 @@ bot.action(/^quick:(\d+)$/, async (ctx) => {
 
 /* ===================== UNLOCK CORE (ENTERPRISE SHIELD) ===================== */
 
+/* ===================== UNLOCK HANDLER ===================== */
+
+bot.action(/^u:(\d+):(\d+):(\d+):([a-f0-9]+)$/, async (ctx) => {
+  try {
+    const serviceId = Number(ctx.match?.[1]);
+    const buttonChatId = Number(ctx.match?.[2]);
+    const ts = Number(ctx.match?.[3]);
+    const sig = String(ctx.match?.[4] || "");
+
+    // 🛡 sanity
+    if (!Number.isFinite(serviceId) || serviceId <= 0) {
+      await ctx.answerCbQuery("⚠️ Некорректная кнопка", { show_alert: true });
+      return;
+    }
+
+    // 🔒 защита: кнопку может нажать только тот же пользователь
+    if (Number(buttonChatId) !== Number(ctx.from?.id)) {
+      await ctx.answerCbQuery("⛔️ Эта кнопка не для вас", { show_alert: true });
+      return;
+    }
+
+    const v = verifyUnlockCbData({
+      chatId: buttonChatId,
+      serviceId,
+      ts,
+      sig,
+    });
+
+    if (!v.ok) {
+      await ctx.answerCbQuery(
+        "⛔️ Кнопка устарела. Откройте карточку заново.",
+        { show_alert: true }
+      );
+      return;
+    }
+
+    await doUnlockFlow(ctx, serviceId);
+  } catch (e) {
+    console.error("[tg-bot] unlock action error:", e?.message || e);
+    try {
+      await ctx.answerCbQuery("⚠️ Ошибка. Попробуйте позже.", { show_alert: true });
+    } catch {}
+  }
+});
+
+/* ===================== OFFER ACCEPT (BANK++) ===================== */
+
+/* ===================== OFFER ACCEPT (oa:<serviceId>:<ts>:<sig12>) ===================== */
+
+bot.action(/^oa:(\d+):(\d+):([a-f0-9]+)$/, async (ctx) => {
+  try {
+    const serviceId = Number(ctx.match?.[1]);
+    const ts = Number(ctx.match?.[2]);
+    const sig = String(ctx.match?.[3] || "");
+    const chatId = ctx.from?.id;
+
+    if (!chatId) {
+      try { await ctx.answerCbQuery("Ошибка пользователя", { show_alert: true }); } catch {}
+      return;
+    }
+
+    const v = verifyOfferAcceptCbData({ chatId, serviceId, ts, sig });
+    if (!v.ok) {
+      try {
+        await ctx.answerCbQuery("⛔️ Кнопка устарела. Откройте карточку заново.", { show_alert: true });
+      } catch {}
+      return;
+    }
+
+    await pool.query(
+      `INSERT INTO user_offer_accepts
+       (user_role, user_id, offer_version, source)
+       VALUES ($1,$2,$3,$4)
+       ON CONFLICT DO NOTHING`,
+      ["client", chatId, OFFER_VERSION || "v1.0", "telegram_unlock"]
+    );
+
+    try {
+      await ctx.answerCbQuery("✅ Условия приняты", { show_alert: false });
+    } catch {}
+
+    // 🚀 AUTO-UNLOCK (offer-check уже пройдён)
+    try {
+      await doUnlockFlow(ctx, serviceId);
+    } catch (e) {
+      console.error("[tg-bot] auto unlock after offer failed:", e?.message || e);
+    }
+  } catch (e) {
+    console.error("[tg-bot] offer_accept error:", e?.message || e);
+    try {
+      await ctx.answerCbQuery("Ошибка. Попробуйте позже", { show_alert: true });
+    } catch {}
+  }
+});
+
 /* ===================== UNLOCK FLOW (BANK-GRADE) ===================== */
 
 async function doUnlockFlow(ctx, serviceId) {
@@ -5650,101 +5745,6 @@ const note = result.already
   }
   return { ok: true };
 }
-
-/* ===================== UNLOCK HANDLER ===================== */
-
-bot.action(/^u:(\d+):(\d+):(\d+):([a-f0-9]+)$/, async (ctx) => {
-  try {
-    const serviceId = Number(ctx.match?.[1]);
-    const buttonChatId = Number(ctx.match?.[2]);
-    const ts = Number(ctx.match?.[3]);
-    const sig = String(ctx.match?.[4] || "");
-
-    // 🛡 sanity
-    if (!Number.isFinite(serviceId) || serviceId <= 0) {
-      await ctx.answerCbQuery("⚠️ Некорректная кнопка", { show_alert: true });
-      return;
-    }
-
-    // 🔒 защита: кнопку может нажать только тот же пользователь
-    if (Number(buttonChatId) !== Number(ctx.from?.id)) {
-      await ctx.answerCbQuery("⛔️ Эта кнопка не для вас", { show_alert: true });
-      return;
-    }
-
-    const v = verifyUnlockCbData({
-      chatId: buttonChatId,
-      serviceId,
-      ts,
-      sig,
-    });
-
-    if (!v.ok) {
-      await ctx.answerCbQuery(
-        "⛔️ Кнопка устарела. Откройте карточку заново.",
-        { show_alert: true }
-      );
-      return;
-    }
-
-    await doUnlockFlow(ctx, serviceId);
-  } catch (e) {
-    console.error("[tg-bot] unlock action error:", e?.message || e);
-    try {
-      await ctx.answerCbQuery("⚠️ Ошибка. Попробуйте позже.", { show_alert: true });
-    } catch {}
-  }
-});
-
-/* ===================== OFFER ACCEPT (BANK++) ===================== */
-
-/* ===================== OFFER ACCEPT (oa:<serviceId>:<ts>:<sig12>) ===================== */
-
-bot.action(/^oa:(\d+):(\d+):([a-f0-9]+)$/, async (ctx) => {
-  try {
-    const serviceId = Number(ctx.match?.[1]);
-    const ts = Number(ctx.match?.[2]);
-    const sig = String(ctx.match?.[3] || "");
-    const chatId = ctx.from?.id;
-
-    if (!chatId) {
-      try { await ctx.answerCbQuery("Ошибка пользователя", { show_alert: true }); } catch {}
-      return;
-    }
-
-    const v = verifyOfferAcceptCbData({ chatId, serviceId, ts, sig });
-    if (!v.ok) {
-      try {
-        await ctx.answerCbQuery("⛔️ Кнопка устарела. Откройте карточку заново.", { show_alert: true });
-      } catch {}
-      return;
-    }
-
-    await pool.query(
-      `INSERT INTO user_offer_accepts
-       (user_role, user_id, offer_version, source)
-       VALUES ($1,$2,$3,$4)
-       ON CONFLICT DO NOTHING`,
-      ["client", chatId, OFFER_VERSION || "v1.0", "telegram_unlock"]
-    );
-
-    try {
-      await ctx.answerCbQuery("✅ Условия приняты", { show_alert: false });
-    } catch {}
-
-    // 🚀 AUTO-UNLOCK (offer-check уже пройдён)
-    try {
-      await doUnlockFlow(ctx, serviceId);
-    } catch (e) {
-      console.error("[tg-bot] auto unlock after offer failed:", e?.message || e);
-    }
-  } catch (e) {
-    console.error("[tg-bot] offer_accept error:", e?.message || e);
-    try {
-      await ctx.answerCbQuery("Ошибка. Попробуйте позже", { show_alert: true });
-    } catch {}
-  }
-});
 
 /* ===================== TEXT HANDLER (wizard + quick request) ===================== */
 
