@@ -576,14 +576,24 @@ function verifyOfferAcceptCbData(a, b, c, d, e) {
   if (!Number.isFinite(cid) || cid <= 0) return { ok: false, reason: "bad_chat" };
   if (!Number.isFinite(sid) || sid <= 0) return { ok: false, reason: "bad_service" };
 
-  const expected = signOfferAccept({ action: "oa", chatId: cid, serviceId: sid, ts: t });
-
+  const expectedFull = signOfferAccept({ action: "oa", chatId: cid, serviceId: sid, ts: t });
+  
+  // мы кладём 24 hex в callback_data → значит и expected режем до 24
+  const expected = String(expectedFull).slice(0, 24);
+  
   const sigStr = String(sig || "").trim().toLowerCase();
-  if (!/^[a-f0-9]+$/.test(sigStr)) return { ok: false, reason: "bad_sig" };
-
-  const exp = Buffer.from(String(expected), "utf8");
+  if (!/^[a-f0-9]{24}$/.test(sigStr)) return { ok: false, reason: "bad_sig" };
+  
+  const exp = Buffer.from(expected, "utf8");
   const got = Buffer.from(sigStr, "utf8");
-  if (exp.length !== got.length) return { ok: false, reason: "bad_sig" };
+  
+  try {
+    if (!crypto.timingSafeEqual(exp, got)) return { ok: false, reason: "bad_sig" };
+  } catch {
+    return { ok: false, reason: "bad_sig" };
+  }
+  
+  return { ok: true };
 
   try {
     if (!crypto.timingSafeEqual(exp, got)) return { ok: false, reason: "bad_sig" };
