@@ -535,6 +535,75 @@ try {
   return { ok: true };
 }
 
+// ===================== OFFER GATE (BANK++) =====================
+
+// использовать тот же секрет, что и для unlock (или отдельный)
+const TG_OFFER_SECRET = TG_CALLBACK_SECRET; // можно вынести отдельным env при желании
+const TG_OFFER_TTL_SEC = TG_CALLBACK_TTL_SEC; // TTL как у unlock
+
+function signOfferAccept({ action, chatId, serviceId, ts }) {
+  // action = "oa"
+  const payload = `${action}:${chatId}:${serviceId}:${ts}`;
+  return crypto.createHmac("sha256", String(TG_OFFER_SECRET)).update(payload).digest("hex");
+}
+
+function buildOfferAcceptCbData(chatId, serviceId) {
+  const ts = cbNowSec();
+  const sig = signOfferAccept({ action: "oa", chatId: Number(chatId), serviceId: Number(serviceId), ts });
+  return `oa:${chatId}:${serviceId}:${ts}:${sig}`;
+}
+
+function verifyOfferAcceptCbData(a, b, c, d, e) {
+  // поддержка: verifyOfferAcceptCbData({chatId, serviceId, ts, sig})
+  // или verifyOfferAcceptCbData(chatId, serviceId, ts, sig)
+  let chatId, serviceId, ts, sig;
+
+  if (a && typeof a === "object") {
+    chatId = a.chatId;
+    serviceId = a.serviceId;
+    ts = a.ts;
+    sig = a.sig;
+  } else {
+    chatId = a;
+    serviceId = b;
+    ts = c;
+    sig = d;
+  }
+
+  if (!TG_OFFER_SECRET) {
+    console.error("[tg-bot] TG_OFFER_SECRET is empty");
+    return { ok: false, reason: "no_secret" };
+  }
+
+  const now = cbNowSec();
+  const t = Number(ts);
+  if (!Number.isFinite(t)) return { ok: false, reason: "bad_ts" };
+  if (t > now + 30) return { ok: false, reason: "future_ts" };
+  if (Math.abs(now - t) > TG_OFFER_TTL_SEC) return { ok: false, reason: "expired" };
+
+  const cid = Number(chatId);
+  const sid = Number(serviceId);
+  if (!Number.isFinite(cid) || cid <= 0) return { ok: false, reason: "bad_chat" };
+  if (!Number.isFinite(sid) || sid <= 0) return { ok: false, reason: "bad_service" };
+
+  const expected = signOfferAccept({ action: "oa", chatId: cid, serviceId: sid, ts: t });
+
+  const sigStr = String(sig || "").trim().toLowerCase();
+  if (!/^[a-f0-9]+$/.test(sigStr)) return { ok: false, reason: "bad_sig" };
+
+  const exp = Buffer.from(String(expected), "utf8");
+  const got = Buffer.from(sigStr, "utf8");
+  if (exp.length !== got.length) return { ok: false, reason: "bad_sig" };
+
+  try {
+    if (!crypto.timingSafeEqual(exp, got)) return { ok: false, reason: "bad_sig" };
+  } catch {
+    return { ok: false, reason: "bad_sig" };
+  }
+
+  return { ok: true };
+}
+
 /**
  * Универсальный подписанный callback_data для действий типа "o" (offer)
  * Формат: o:<serviceId>:<ts>:<sig>
@@ -566,25 +635,32 @@ function buildCbData(ctx, action, serviceId) {
  * - без ctx.reply напрямую
  */
 async function showOfferGate(ctx, serviceId) {
-  // 1) alert (чтобы пользователь понял, почему его "не пустило")
+  // 1) короткий alert на нажатие кнопки unlock
   await safeCb(ctx, "⚠️ Для открытия контактов нужно принять оферту", true);
 
-  // 2) сообщение с кнопками (важно: safeReply, не ctx.reply)
-  await safeReply(
-    ctx,
-    "📄 *Перед открытием контактов необходимо принять условия Travella.uz*",
-    {
-      parse_mode: "Markdown",
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "📄 Открыть оферту", url: "https://travella.uz/page/oferta" }],
-          [{ text: "✅ Я принимаю условия", callback_data: buildCbData(ctx, "o", serviceId) }],
-        ],
-      },
-    }
-  );
+  // 2) ВАЖНО: callback_query из inline часто без "чата", ctx.reply может падать.
+  // Поэтому шлем в личку через bot.telegram.sendMessage(ctx.from.id, ...)
+  const chatId = ctx.from?.id;
+  if (!chatId) return;
 
-  return { ok: false, reason: "offer_required" };
+  const cb = buildOfferAcceptCbData(chatId, serviceId);
+
+  try {
+    await bot.telegram.sendMessage(
+      chatId,
+      "📄 Перед открытием контактов необходимо принять условия Travella.uz",
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "📄 Открыть оферту", url: "https://travella.uz/page/oferta" }],
+            [{ text: "✅ Я принимаю условия", callback_data: cb }],
+          ],
+        },
+      }
+    );
+  } catch (e) {
+    console.error("[tg-bot] showOfferGate sendMessage error:", e?.message || e);
+  }
 }
 
 // обновление карточки после unlock
@@ -5619,13 +5695,14 @@ bot.action(/^u:(\d+):(\d+):(\d+):([a-f0-9]+)$/, async (ctx) => {
   }
 });
 
-/* ===================== OFFER ACCEPT ===================== */
+/* ===================== OFFER ACCEPT (BANK++) ===================== */
 
-bot.action(/^o:(\d+):(\d+):([a-f0-9]+)$/, async (ctx) => {
+bot.action(/^oa:(\d+):(\d+):(\d+):([a-f0-9]+)$/, async (ctx) => {
   try {
-    const serviceId = Number(ctx.match?.[1]);
-    const ts = Number(ctx.match?.[2]);
-    const sig = String(ctx.match?.[3] || "");
+    const buttonChatId = Number(ctx.match?.[1]);
+    const serviceId = Number(ctx.match?.[2]);
+    const ts = Number(ctx.match?.[3]);
+    const sig = String(ctx.match?.[4] || "");
     const chatId = ctx.from?.id;
 
     if (!chatId) {
@@ -5633,9 +5710,23 @@ bot.action(/^o:(\d+):(\d+):([a-f0-9]+)$/, async (ctx) => {
       return;
     }
 
-    const v = verifyCbData(ctx, "o", serviceId, ts, sig);
+    // 🔒 кнопку может нажать только тот же пользователь
+    if (buttonChatId !== chatId) {
+      try { await ctx.answerCbQuery("⛔️ Эта кнопка не для вас", { show_alert: true }); } catch {}
+      return;
+    }
+
+    const v = verifyOfferAcceptCbData({
+      chatId: buttonChatId,
+      serviceId,
+      ts,
+      sig,
+    });
+
     if (!v.ok) {
-      try { await ctx.answerCbQuery("⛔️ Кнопка устарела. Откройте карточку заново.", { show_alert: true }); } catch {}
+      try {
+        await ctx.answerCbQuery("⛔️ Кнопка устарела. Откройте оферту заново.", { show_alert: true });
+      } catch {}
       return;
     }
 
@@ -5644,12 +5735,12 @@ bot.action(/^o:(\d+):(\d+):([a-f0-9]+)$/, async (ctx) => {
        (user_role, user_id, offer_version, source)
        VALUES ($1,$2,$3,$4)
        ON CONFLICT DO NOTHING`,
-      ["client", chatId, OFFER_VERSION || "v1.0", "telegram_unlock"]
+      ["client", buttonChatId, OFFER_VERSION || "v1.0", "telegram_unlock"]
     );
 
-    await ctx.answerCbQuery("✅ Условия приняты");
+    try { await ctx.answerCbQuery("✅ Условия приняты"); } catch {}
 
-    // 🚀 AUTO-UNLOCK (уже защищён offer-check внутри doUnlockFlow)
+    // 🚀 AUTO-UNLOCK
     try {
       await doUnlockFlow(ctx, serviceId);
     } catch (e) {
