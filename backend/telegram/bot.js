@@ -407,33 +407,45 @@ function buildUnlockCbData(chatId, serviceId) {
 /**
  * verifyUnlockCbData принимает ОБЪЕКТ (как ты вызываешь сейчас)
  */
-function verifyUnlockCbData({ chatId, serviceId, ts, sig }) {
-  // soft режим (чтобы не ломать окружения без секрета)
-  if (!TG_CALLBACK_SECRET) return { ok: true, soft: true };
+function verifyUnlockCbData(a, b, c, d) {
+  // поддержка двух форм:
+  // 1) verifyUnlockCbData(chatId, serviceId, ts, sig)
+  // 2) verifyUnlockCbData({ chatId, serviceId, ts, sig })
+  let chatId, serviceId, ts, sig;
 
-  const now = cbNowSec();
+  if (a && typeof a === "object") {
+    chatId = a.chatId;
+    serviceId = a.serviceId;
+    ts = a.ts;
+    sig = a.sig;
+  } else {
+    chatId = a;
+    serviceId = b;
+    ts = c;
+    sig = d;
+  }
+
+  if (!TG_CALLBACK_SECRET) return { ok: true, soft: true }; // чтобы не сломать прод без секрета
+
+  const now = _cbNowSec();
   const t = Number(ts);
-  const sid = Number(serviceId);
-  const cid = Number(chatId);
 
   if (!Number.isFinite(t)) return { ok: false, reason: "bad_ts" };
-  if (!Number.isFinite(sid) || sid <= 0) return { ok: false, reason: "bad_sid" };
-  if (!Number.isFinite(cid) || cid <= 0) return { ok: false, reason: "bad_cid" };
-
   if (Math.abs(now - t) > TG_CALLBACK_TTL_SEC) return { ok: false, reason: "expired" };
 
-  const expected = signUnlock({ action: "u", chatId: cid, serviceId: sid, ts: t });
-  if (String(expected) !== String(sig)) return { ok: false, reason: "bad_sig" };
+  const expected = _cbSignUnlock({
+    action: "u",
+    chatId: Number(chatId),
+    serviceId: Number(serviceId),
+    ts: t,
+  });
 
+  if (String(expected) !== String(sig)) return { ok: false, reason: "bad_sig" };
   return { ok: true };
 }
 
 async function showOfferGate(ctx, serviceId) {
-  await safeCb(
-    ctx,
-    "⚠️ Необходимо принять условия Travella.uz",
-    true
-  );
+  await safeCb(ctx, "⚠️ Необходимо принять условия Travella.uz", true);
 
   try {
     await ctx.reply(
@@ -450,7 +462,7 @@ async function showOfferGate(ctx, serviceId) {
             [
               {
                 text: "✅ Я принимаю условия",
-                callback_data: buildCbData(ctx, "o", serviceId),
+                callback_data: `offer_accept:${serviceId}`,
               },
             ],
           ],
