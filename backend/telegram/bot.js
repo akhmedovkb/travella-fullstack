@@ -3,6 +3,7 @@ require("dotenv").config();
 
 const { Telegraf, session, Markup } = require("telegraf");
 const axiosBase = require("axios");
+
 const {
   parseDateFlexible,
   isServiceActual,
@@ -13,10 +14,7 @@ const { handleServiceActualCallback } = require("./handlers/serviceActualHandler
 const { buildServiceMessage } = require("../utils/telegramServiceCard");
 
 /* ===================== CONFIG ===================== */
-const OFFER_VERSION = process.env.OFFER_VERSION || "v1.0";
-const CALLBACK_SECRET = (process.env.TG_CALLBACK_SECRET || "").trim();
-// TTL подписи кнопок (сек)
-const CALLBACK_TTL_SEC = Number(process.env.TG_CALLBACK_TTL_SEC || 900); // 15 минут
+
 const CLIENT_TOKEN = process.env.TELEGRAM_CLIENT_BOT_TOKEN || "";
 if (!CLIENT_TOKEN) {
   throw new Error(
@@ -98,80 +96,12 @@ console.log(
 );
 console.log("[tg-bot] PRICE_CURRENCY =", PRICE_CURRENCY);
 
-// =====================
-// HMAC SIGN / VERIFY
-// =====================
-
-function signUnlockPayload({ serviceId, clientId, ts }) {
-  const payload = `${serviceId}:${clientId}:${ts}`;
-  return crypto
-    .createHmac("sha256", HMAC_SECRET)
-    .update(payload)
-    .digest("hex")
-    .slice(0, 16); // короткая подпись
-}
-
-function verifyUnlockPayload({ serviceId, clientId, ts, sig }) {
-  if (!sig) return false;
-
-  // TTL защита
-  const now = Date.now();
-  if (Math.abs(now - Number(ts)) > HMAC_TTL_MS) {
-    return false;
-  }
-
-  const expected = signUnlockPayload({ serviceId, clientId, ts });
-
-  try {
-    return crypto.timingSafeEqual(
-      Buffer.from(expected),
-      Buffer.from(sig)
-    );
-  } catch {
-    return false;
-  }
-}
-
-/* ===================== PROCESS HARD SHIELD ===================== */
-process.on("unhandledRejection", (reason) => {
-  console.error("[tg-bot] UNHANDLED REJECTION:", reason);
-});
-
-process.on("uncaughtException", (err) => {
-  console.error("[tg-bot] UNCAUGHT EXCEPTION:", err);
-});
-
 /* ===================== AXIOS ===================== */
 
 const axios = axiosBase.create({
   baseURL: API_BASE,
   timeout: 10000,
 });
-
-/* ===================== PG ADVISORY LOCK (ANTI DOUBLE SPEND) ===================== */
-
-async function withServiceLock(pool, clientId, serviceId, fn) {
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-
-    // BANK-GRADE: lock на пару (clientId, serviceId) В ЭТОЙ ЖЕ транзакции
-    await client.query(
-      "SELECT pg_advisory_xact_lock((($1::bigint) << 32) + $2::bigint)",
-      [Number(clientId), Number(serviceId)]
-    );
-
-    const res = await fn(client);
-
-    await client.query("COMMIT");
-    return res;
-  } catch (e) {
-    try { await client.query("ROLLBACK"); } catch {}
-    throw e;
-  } finally {
-    client.release();
-  }
-}
 
 /* ===================== CONTACT UNLOCK (per service) ===================== */
 
@@ -228,10 +158,8 @@ async function getClientRowByChatId(pool, chatId) {
 }
 
 // транзакция: если уже unlocked — не списываем повторно
-async function unlockContactsForService(db, { clientId, serviceId }) {
-  if (!db) return { ok: false, reason: "db_unavailable" };
-
-  // таблицы гарантируем через pool (вне транзакции допустимо)
+async function unlockContactsForService(pool, { clientId, serviceId }) {
+  if (!pool) return { ok: false, reason: "db_unavailable" };
   await ensureUnlockTables(pool);
 
   const cid = Number(clientId);
@@ -240,21 +168,24 @@ async function unlockContactsForService(db, { clientId, serviceId }) {
     return { ok: false, reason: "bad_args" };
   }
 
+  const client = await pool.connect();
   try {
+    await client.query("BEGIN");
+
     // уже открывали?
-    const ex = await db.query(
-      `SELECT id
-         FROM client_service_contact_unlocks
+    const ex = await client.query(
+      `SELECT id FROM client_service_contact_unlocks
         WHERE client_id=$1 AND service_id=$2
         LIMIT 1`,
       [cid, sid]
     );
     if (ex.rowCount) {
+      await client.query("COMMIT");
       return { ok: true, already: true, charged: 0 };
     }
 
     // блокируем баланс
-    const bal = await db.query(
+    const bal = await client.query(
       `SELECT COALESCE(contact_balance, 0) AS contact_balance
          FROM clients
         WHERE id=$1
@@ -264,63 +195,7 @@ async function unlockContactsForService(db, { clientId, serviceId }) {
     const balance = Number(bal.rows?.[0]?.contact_balance || 0);
 
     if (balance < CONTACT_UNLOCK_PRICE) {
-      return { ok: false, reason: "no_balance", balance, need: CONTACT_UNLOCK_PRICE };
-    }
-
-// 🔐 1. Пытаемся записать ledger (идемпотентно)
-let ledgerInserted = false;
-
-try {
-  await db.query(
-    `INSERT INTO client_balance_ledger
-      (client_id, amount, reason, ref_type, ref_id)
-     VALUES ($1, $2, $3, 'service_unlock', $4)`,
-    [
-      cid,
-      -CONTACT_UNLOCK_PRICE,
-      'unlock_contacts',
-      sid,
-    ]
-  );
-  ledgerInserted = true;
-} catch (e) {
-  if (String(e?.code) === "23505") {
-    // уже списывали ранее
-    return { ok: true, already: true, charged: 0 };
-  }
-  throw e;
-}
-
-// 🔐 2. Списываем баланс атомарно
-const upd = await db.query(
-  `UPDATE clients
-      SET contact_balance = COALESCE(contact_balance,0) - $2
-    WHERE id=$1
-      AND COALESCE(contact_balance,0) >= $2`,
-  [cid, CONTACT_UNLOCK_PRICE]
-);
-
-if (!upd.rowCount) {
-  // 🔁 откатываем ledger, если баланс не прошёл
-  if (ledgerInserted) {
-    await db.query(
-      `DELETE FROM client_balance_ledger
-        WHERE client_id=$1
-          AND ref_type='service_unlock'
-          AND ref_id=$2`,
-      [cid, sid]
-    );
-  }
-
-  return {
-    ok: false,
-    reason: "no_balance",
-    balance,
-    need: CONTACT_UNLOCK_PRICE,
-  };
-}
-    
-    if (!upd.rowCount) {
+      await client.query("ROLLBACK");
       return {
         ok: false,
         reason: "no_balance",
@@ -329,20 +204,37 @@ if (!upd.rowCount) {
       };
     }
 
-    // пишем unlock (idempotent по unique)
-    await db.query(
+    // списываем
+    await client.query(
+      `UPDATE clients
+          SET contact_balance = COALESCE(contact_balance,0) - $2
+        WHERE id=$1`,
+      [cid, CONTACT_UNLOCK_PRICE]
+    );
+
+    // пишем unlock
+    await client.query(
       `INSERT INTO client_service_contact_unlocks (client_id, service_id, price_charged)
        VALUES ($1,$2,$3)`,
       [cid, sid, CONTACT_UNLOCK_PRICE]
     );
 
+    await client.query("COMMIT");
     return { ok: true, already: false, charged: CONTACT_UNLOCK_PRICE };
   } catch (e) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {}
+
+    // если параллельно уже вставили — считаем как already
     if (String(e?.code || "") === "23505") {
       return { ok: true, already: true, charged: 0 };
     }
+
     console.error("[tg-bot] unlockContactsForService error:", e?.message || e);
-    throw e; // важно: пусть withServiceLock сделает ROLLBACK
+    return { ok: false, reason: "server_error" };
+  } finally {
+    client.release();
   }
 }
 
@@ -400,312 +292,70 @@ async function getUnlockedServiceIdSet(pool, { clientId, serviceIds }) {
   return out;
 }
 
+// 🔒 Убираем кликабельные ссылки/строки "Подробнее" до оплаты.
+function stripLockedLinks(htmlText) {
+  const lines = String(htmlText || "").split("\n");
+  const filtered = lines.filter((ln) => {
+    const s = String(ln || "");
+    const low = s.toLowerCase();
+
+    // Любая строка, где есть "подробнее" + ссылка
+    if (
+      low.includes("подробнее") &&
+      (low.includes("http://") || low.includes("https://") || low.includes("travella"))
+    ) return false;
+
+    return true;
+  });
+  return filtered.join("\n").trim();
+}
+
 /* ===================== UNLOCK HELPERS (UI gating) ===================== */
 
-/* ===================== ENTERPRISE SAFE HELPERS ===================== */
-
-// безопасный answerCbQuery
-async function safeCb(ctx, text, alert = false) {
+// true если клиент уже открывал контакты по этой услуге
+async function isContactsUnlocked(pool, { clientId, serviceId }) {
+  if (!pool) return false;
+  await ensureUnlockTables(pool);
   try {
-    await ctx.answerCbQuery(text, { show_alert: alert });
-  } catch {}
-}
-
-// проверка принятия оферты
-async function ensureOfferAccepted(chatId) {
-  const q = await pool.query(
-    `SELECT 1
-       FROM user_offer_accepts
-      WHERE user_role = 'client'
-        AND user_id = $1
-        AND offer_version = $2
-      LIMIT 1`,
-    [chatId, OFFER_VERSION]
-  );
-  return q.rowCount > 0;
-}
-
-// показать оферту
-function cbNowSec() {
-  return Math.floor(Date.now() / 1000);
-}
-
-/* ===================== SIGNED CALLBACK DATA (HMAC) ===================== */
-const crypto = require("crypto");
-
-const TG_CALLBACK_SECRET = String(process.env.TG_CALLBACK_SECRET || "").trim();
-const TG_CALLBACK_TTL_SEC = Number(process.env.TG_CALLBACK_TTL_SEC || "900"); // 15 минут
-
-function cbNowSec() {
-  return Math.floor(Date.now() / 1000);
-}
-
-function signUnlock({ action, chatId, serviceId, ts }) {
-  const base = `${action}|${chatId}|${serviceId}|${ts}`;
-  const secret = TG_CALLBACK_SECRET;
-  return crypto.createHmac("sha256", secret).update(base).digest("hex").slice(0, 12);
-}
-
-/**
- * u:<serviceId>:<chatId>:<ts>:<sig>
- */
-function buildUnlockCbData(chatId, serviceId) {
-  const action = "u";
-  const ts = cbNowSec();
-  const sid = Number(serviceId);
-  const cid = Number(chatId);
-
-  const sig = TG_CALLBACK_SECRET ? signUnlock({ action, chatId: cid, serviceId: sid, ts }) : "dev";
-  return `${action}:${sid}:${cid}:${ts}:${sig}`;
-}
-
-/**
- * verifyUnlockCbData принимает ОБЪЕКТ (как ты вызываешь сейчас)
- */
-function verifyUnlockCbData(a, b, c, d) {
-  let chatId, serviceId, ts, sig;
-
-  if (a && typeof a === "object") {
-    chatId = a.chatId;
-    serviceId = a.serviceId;
-    ts = a.ts;
-    sig = a.sig;
-  } else {
-    chatId = a;
-    serviceId = b;
-    ts = c;
-    sig = d;
-  }
-
-  if (!TG_CALLBACK_SECRET) {
-    console.error("[tg-bot] TG_CALLBACK_SECRET is empty");
-    return { ok: false, reason: "no_secret" };
-  }
-
-  const now = cbNowSec();
-  const t = Number(ts);
-  if (!Number.isFinite(t)) return { ok: false, reason: "bad_ts" };
-
-  // ✅ защита от будущего времени
-  if (t > now + 30) return { ok: false, reason: "future_ts" };
-
-  if (Math.abs(now - t) > TG_CALLBACK_TTL_SEC) return { ok: false, reason: "expired" };
-
-  const cid = Number(chatId);
-  const sid = Number(serviceId);
-  if (!Number.isFinite(cid) || cid <= 0) return { ok: false, reason: "bad_chat" };
-  if (!Number.isFinite(sid) || sid <= 0) return { ok: false, reason: "bad_service" };
-
-  // signUnlock в этом файле уже возвращает первые 12 hex
-  const expected = signUnlock({ action: "u", chatId: cid, serviceId: sid, ts: t });
-
-  const sigStr = String(sig || "").trim().toLowerCase();
-  // допускаем старые форматы (например 24 hex), сравниваем только первые 12
-  if (!/^[a-f0-9]{12,64}$/.test(sigStr)) return { ok: false, reason: "bad_sig" };
-
-  const exp = Buffer.from(String(expected), "utf8");
-  const got = Buffer.from(sigStr.slice(0, 12), "utf8");
-  if (exp.length !== got.length) return { ok: false, reason: "bad_sig" };
-
-  try {
-    if (!crypto.timingSafeEqual(exp, got)) return { ok: false, reason: "bad_sig" };
-  } catch {
-    return { ok: false, reason: "bad_sig" };
-  }
-
-  return { ok: true };
-}
-// ===================== OFFER GATE (BANK++) =====================
-
-// использовать тот же секрет, что и для unlock (или отдельный)
-const TG_OFFER_SECRET = TG_CALLBACK_SECRET; // можно вынести отдельным env при желании
-const TG_OFFER_TTL_SEC = TG_CALLBACK_TTL_SEC; // TTL как у unlock
-
-function signOfferAccept({ action, chatId, serviceId, ts }) {
-  // action = "oa"
-  const payload = `${action}:${chatId}:${serviceId}:${ts}`;
-  return crypto.createHmac("sha256", String(TG_OFFER_SECRET)).update(payload).digest("hex");
-}
-
-function buildOfferAcceptCbData(chatId, serviceId) {
-  const ts = cbNowSec();
-
-  const fullSig = signOfferAccept({
-    action: "oa",
-    chatId: Number(chatId),
-    serviceId: Number(serviceId),
-    ts,
-  });
-
-  // BANK: режем подпись до 12 байт (24 hex символа)
-  const shortSig = String(fullSig).slice(0, 24);
-
-  return `oa:${serviceId}:${ts}:${shortSig}`;
-}
-
-function verifyOfferAcceptCbData(a, b, c, d, e) {
-  // поддержка: verifyOfferAcceptCbData({chatId, serviceId, ts, sig})
-  // или verifyOfferAcceptCbData(chatId, serviceId, ts, sig)
-  let chatId, serviceId, ts, sig;
-
-  if (a && typeof a === "object") {
-    chatId = a.chatId;
-    serviceId = a.serviceId;
-    ts = a.ts;
-    sig = a.sig;
-  } else {
-    chatId = a;
-    serviceId = b;
-    ts = c;
-    sig = d;
-  }
-
-  if (!TG_OFFER_SECRET) {
-    console.error("[tg-bot] TG_OFFER_SECRET is empty");
-    return { ok: false, reason: "no_secret" };
-  }
-
-  const now = cbNowSec();
-  const t = Number(ts);
-  if (!Number.isFinite(t)) return { ok: false, reason: "bad_ts" };
-  if (t > now + 30) return { ok: false, reason: "future_ts" };
-  if (Math.abs(now - t) > TG_OFFER_TTL_SEC) return { ok: false, reason: "expired" };
-
-  const cid = Number(chatId);
-  const sid = Number(serviceId);
-  if (!Number.isFinite(cid) || cid <= 0) return { ok: false, reason: "bad_chat" };
-  if (!Number.isFinite(sid) || sid <= 0) return { ok: false, reason: "bad_service" };
-
-  const expectedFull = signOfferAccept({ action: "oa", chatId: cid, serviceId: sid, ts: t });
-  
-  // мы кладём 24 hex в callback_data → значит и expected режем до 24
-  const expected = String(expectedFull).slice(0, 24);
-  
-  const sigStr = String(sig || "").trim().toLowerCase();
-  if (!/^[a-f0-9]{24}$/.test(sigStr)) return { ok: false, reason: "bad_sig" };
-  
-  const exp = Buffer.from(expected, "utf8");
-  const got = Buffer.from(sigStr, "utf8");
-  
-  try {
-    if (!crypto.timingSafeEqual(exp, got)) return { ok: false, reason: "bad_sig" };
-  } catch {
-    return { ok: false, reason: "bad_sig" };
-  }
-  
-  return { ok: true };
-
-  try {
-    if (!crypto.timingSafeEqual(exp, got)) return { ok: false, reason: "bad_sig" };
-  } catch {
-    return { ok: false, reason: "bad_sig" };
-  }
-
-  return { ok: true };
-}
-
-/**
- * Универсальный подписанный callback_data для действий типа "o" (offer)
- * Формат: o:<serviceId>:<ts>:<sig>
- * ВАЖНО: verifyCbData(...) у тебя уже ждёт именно этот формат.
- */
-function buildCbData(ctx, action, serviceId) {
-  const chatId = ctx?.from?.id;
-  const sid = Number(serviceId);
-  if (!chatId || !Number.isFinite(sid) || sid <= 0) {
-    // fallback без падения — но лучше не использовать
-    return `${action}:${sid}:0:0`;
-  }
-
-  const ts = cbNowSec(); // сек
-  const sig = signUnlock({
-    action: String(action || "").trim(),
-    chatId: Number(chatId),
-    serviceId: sid,
-    ts: Number(ts),
-  });
-
-  return `${String(action)}:${sid}:${ts}:${sig}`;
-}
-
-/**
- * BANK-GRADE Offer Gate:
- * - безопасно для callback_query / inline (через safeReply)
- * - подписанная кнопка (buildCbData)
- * - без ctx.reply напрямую
- */
-async function showOfferGate(ctx, serviceId) {
-  await safeCb(ctx, "⚠️ Для открытия контактов нужно принять оферту", true);
-
-  const chatId = ctx.from?.id;
-  if (!chatId) return { ok: false, reason: "no_chat" };
-
-  // ⚠️ callback_query из inline часто без chat — ctx.reply падает.
-  // Поэтому отправляем в личку через bot.telegram.sendMessage.
-  const cb = buildOfferAcceptCbData(chatId, serviceId);
-
-  try {
-    await bot.telegram.sendMessage(
-      chatId,
-      "📄 Перед открытием контактов необходимо принять условия Travella.uz",
-      {
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: "📄 Открыть оферту", url: "https://travella.uz/page/oferta" }],
-            [{ text: "✅ Я принимаю условия", callback_data: cb }],
-          ],
-        },
-      }
+    const r = await pool.query(
+      `SELECT 1
+         FROM client_service_contact_unlocks
+        WHERE client_id = $1 AND service_id = $2
+        LIMIT 1`,
+      [Number(clientId), Number(serviceId)]
     );
+    return !!r.rowCount;
   } catch (e) {
-    console.error("[tg-bot] showOfferGate sendMessage error:", e?.message || e);
+    console.error("[tg-bot] isContactsUnlocked error:", e?.message || e);
+    return false;
   }
-
-  return { ok: false, reason: "offer_required" };
 }
 
-// обновление карточки после unlock
-async function refreshUnlockedCard(ctx, serviceId) {
-  const { data } = await axios.get(
-    `/api/telegram/service/${serviceId}`,
-    { params: { role: "client" } }
-  );
+// выбрать set открытых service_id одним запросом (для inline выдачи)
+async function getUnlockedServiceIdSet(pool, { clientId, serviceIds }) {
+  const set = new Set();
+  if (!pool) return set;
+  await ensureUnlockTables(pool);
 
-  if (!data?.success || !data?.service) return;
+  const ids = (Array.isArray(serviceIds) ? serviceIds : [])
+    .map((x) => Number(x))
+    .filter((n) => Number.isFinite(n) && n > 0);
 
-  const svc = data.service;
-  const category = String(svc.category || "").toLowerCase();
-
-  const { text, photoUrl, serviceUrl } =
-    buildServiceMessage(svc, category, "client_unlocked");
-
-  const kb = {
-    inline_keyboard: [
-      [{ text: "Подробнее на сайте", url: serviceUrl }],
-      [{ text: "📩 Быстрый запрос", callback_data: `quick:${serviceId}` }],
-    ],
-  };
+  if (!ids.length) return set;
 
   try {
-    await ctx.editMessageCaption(text, {
-      parse_mode: "HTML",
-      reply_markup: kb,
-    });
-    return;
-  } catch {}
-
-  try {
-    await ctx.editMessageText(text, {
-      parse_mode: "HTML",
-      reply_markup: kb,
-      disable_web_page_preview: true,
-    });
-    return;
-  } catch {}
-
-  try {
-    await ctx.editMessageReplyMarkup(kb);
-  } catch {}
+    const r = await pool.query(
+      `SELECT service_id
+         FROM client_service_contact_unlocks
+        WHERE client_id = $1
+          AND service_id = ANY($2::bigint[])`,
+      [Number(clientId), ids]
+    );
+    for (const row of r.rows || []) set.add(Number(row.service_id));
+  } catch (e) {
+    console.error("[tg-bot] getUnlockedServiceIdSet error:", e?.message || e);
+  }
+  return set;
 }
 
 // Убираем из текста любые "Подробнее ... открыть(ссылка)" до оплаты
@@ -1036,57 +686,7 @@ async function getOrFetchCached(key, ttlMs, fetcher) {
   }
 }
 
-/* ===================== BLACK-HOLE++ GLOBAL SHIELD ===================== */
 
-// in-flight защита (race)
-const unlockInFlight = new Map();
-
-// velocity limiter
-const unlockVelocity = new Map();
-
-// suspicious score
-const unlockSuspicious = new Map();
-
-// recent unlock window
-const unlockRecent = new Map();
-
-function hasInFlight(key) {
-  return unlockInFlight.has(key);
-}
-
-function setInFlight(key, ttl = 20000) {
-  unlockInFlight.set(key, Date.now());
-  setTimeout(() => unlockInFlight.delete(key), ttl).unref?.();
-}
-
-function markRecent(key) {
-  unlockRecent.set(key, Date.now());
-  setTimeout(() => unlockRecent.delete(key), 30000).unref?.();
-}
-
-function isRecent(key, windowMs = 5000) {
-  const ts = unlockRecent.get(key);
-  return ts && Date.now() - ts < windowMs;
-}
-
-function checkVelocity(userId, limit = 6, windowMs = 60000) {
-  const now = Date.now();
-  const arr = unlockVelocity.get(userId) || [];
-  const fresh = arr.filter((t) => now - t < windowMs);
-  fresh.push(now);
-  unlockVelocity.set(userId, fresh);
-  return fresh.length <= limit;
-}
-
-function markSuspicious(userId) {
-  const v = (unlockSuspicious.get(userId) || 0) + 1;
-  unlockSuspicious.set(userId, v);
-  return v;
-}
-
-function isHardBlocked(userId) {
-  return (unlockSuspicious.get(userId) || 0) >= 6;
-}
 // ===================== AUTH REHYDRATE (FIX PENDING STUCK) =====================
 // Если админ одобрил лид через сайт, Telegraf-сессия про это не знает.
 // Поэтому при pending/!linked мы раз в несколько секунд перепроверяем БД через API
@@ -1141,6 +741,7 @@ async function rehydrateAuthSessionIfNeeded(ctx) {
     return false;
   }
 }
+
 
 /* ===================== INIT BOT ===================== */
 
@@ -1443,6 +1044,14 @@ function resetPendingClientInput(ctx) {
   ctx.session.managerReplyRequestId = null;
 
   ctx.session._state_ts = null;
+}
+
+function formatMoney(v) {
+  if (v === null || v === undefined) return "";
+  const n = Number(String(v).replace(/[^\d.]/g, ""));
+  if (!Number.isFinite(n)) return String(v);
+  // без жёсткой валюты: если хочешь, можно добавить PRICE_CURRENCY
+  return String(v).includes("USD") || String(v).includes("usd") ? String(v) : `${n}`;
 }
 
 function pickServiceTitle(service) {
@@ -4132,14 +3741,9 @@ bot.start(async (ctx) => {
               textFinal = stripLockedLinks(text);
               kb = {
                 inline_keyboard: [
-                                    [
-                                      {
-                                        text: "🔓 Открыть контакты (10 000 сум)",
-                                        callback_data: buildUnlockCbData(ctx.from.id, serviceId),
-                                      },
-                                    ],
-                                  ],
-                    };
+                  [{ text: "🔓 Открыть контакты (10 000 сум)", callback_data: `unlock:${serviceId}` }],
+                ],
+              };
             } else {
               kb = {
                 inline_keyboard: [
@@ -5506,245 +5110,147 @@ bot.action(/^quick:(\d+)$/, async (ctx) => {
   }
 });
 
-/* ===================== UNLOCK CORE (ENTERPRISE SHIELD) ===================== */
-
-/* ===================== UNLOCK HANDLER ===================== */
-
-bot.action(/^u:(\d+):(\d+):(\d+):([a-f0-9]+)$/, async (ctx) => {
+/* ===================== UNLOCK CONTACTS (client pays 10 000 сум) ===================== */
+bot.action(/^unlock:(\d+)$/, async (ctx) => {
   try {
     const serviceId = Number(ctx.match?.[1]);
-    const buttonChatId = Number(ctx.match?.[2]);
-    const ts = Number(ctx.match?.[3]);
-    const sig = String(ctx.match?.[4] || "");
 
-    // 🛡 sanity
     if (!Number.isFinite(serviceId) || serviceId <= 0) {
-      await ctx.answerCbQuery("⚠️ Некорректная кнопка", { show_alert: true });
+      try {
+        await ctx.answerCbQuery("⚠️ Некорректный ID услуги", { show_alert: true });
+      } catch {}
       return;
     }
 
-    // 🔒 защита: кнопку может нажать только тот же пользователь
-    if (Number(buttonChatId) !== Number(ctx.from?.id)) {
-      await ctx.answerCbQuery("⛔️ Эта кнопка не для вас", { show_alert: true });
+    const chatId = ctx.from?.id;
+
+    const clientRow = await getClientRowByChatId(pool, chatId);
+    if (!clientRow?.id) {
+      try {
+        await ctx.answerCbQuery("👋 Сначала привяжите аккаунт через /start", { show_alert: true });
+      } catch {}
       return;
     }
 
-    const v = verifyUnlockCbData({
-      chatId: buttonChatId,
+    const result = await unlockContactsForService(pool, {
+      clientId: clientRow.id,
       serviceId,
-      ts,
-      sig,
     });
 
-    if (!v.ok) {
-      await ctx.answerCbQuery(
-        "⛔️ Кнопка устарела. Откройте карточку заново.",
-        { show_alert: true }
-      );
+    if (!result.ok) {
+      if (result.reason === "no_balance") {
+        const bal = Number(result.balance || 0).toLocaleString("ru-RU");
+        const need = Number(result.need || CONTACT_UNLOCK_PRICE || 10000).toLocaleString("ru-RU");
+        try {
+          await ctx.answerCbQuery(
+            `💳 Недостаточно средств.\nБаланс: ${bal} сум\nНужно: ${need} сум`,
+            { show_alert: true }
+          );
+        } catch {}
+        return;
+      }
+
+      try {
+        await ctx.answerCbQuery("⚠️ Не удалось открыть контакты. Попробуйте позже.", { show_alert: true });
+      } catch {}
       return;
     }
 
-    await doUnlockFlow(ctx, serviceId);
+    // ✅ единственный ответ на callback_query — здесь
+    const note = result.already
+      ? "✅ Контакты уже были открыты"
+      : `✅ Контакты открыты. Списано: ${Number(CONTACT_UNLOCK_PRICE || 10000).toLocaleString("ru-RU")} сум`;
+
+    try {
+      await ctx.answerCbQuery(note, { show_alert: true });
+    } catch {}
+
+    // берём услугу снова — уже для карточки с открытыми контактами
+    const { data } = await axios.get(`/api/telegram/service/${serviceId}`, {
+      params: { role: "client" },
+    });
+
+    if (!data?.success || !data?.service) {
+      return; // callback уже отвечен, просто выходим
+    }
+
+    const svc = data.service;
+    const category = String(svc.category || "").toLowerCase();
+
+    const { text, photoUrl, serviceUrl } = buildServiceMessage(svc, category, "client_unlocked");
+
+    const kb = {
+      inline_keyboard: [
+        [{ text: "Подробнее на сайте", url: serviceUrl }],
+        [{ text: "📩 Быстрый запрос", callback_data: `quick:${serviceId}` }],
+      ],
+    };
+
+    // ✅ если карточка была фото — правим caption
+    let edited = false;
+
+    try {
+      await ctx.editMessageCaption(text, { parse_mode: "HTML", reply_markup: kb });
+      edited = true;
+    } catch {}
+
+    // ✅ если карточка была текст — правим текст
+    if (!edited) {
+      try {
+        await ctx.editMessageText(text, {
+          parse_mode: "HTML",
+          reply_markup: kb,
+          disable_web_page_preview: true,
+        });
+        edited = true;
+      } catch {}
+    }
+
+    // ✅ хотя бы кнопки заменить
+    if (!edited) {
+      try {
+        await ctx.editMessageReplyMarkup(kb);
+        edited = true;
+      } catch {}
+    }
+
+    // ⚠️ крайний fallback: отправить новую карточку + закрепить её
+    if (!edited) {
+      let sentMsg = null;
+    
+      if (photoUrl) {
+        sentMsg = await safeReplyWithPhoto(ctx, photoUrl, text, {
+          parse_mode: "HTML",
+          reply_markup: kb,
+        });
+      } else {
+        sentMsg = await ctx.reply(text, {
+          parse_mode: "HTML",
+          reply_markup: kb,
+          disable_web_page_preview: true,
+        });
+      }
+    
+      // ✅ закрепляем новую карточку (если есть права/возможность)
+      try {
+        const chatIdToPin = ctx.chat?.id;
+        const msgIdToPin = sentMsg?.message_id;
+        if (chatIdToPin && msgIdToPin) {
+          await ctx.telegram.pinChatMessage(chatIdToPin, msgIdToPin, {
+            disable_notification: true,
+          });
+        }
+      } catch (e) {
+        console.log("[tg-bot] pinChatMessage failed:", e?.response?.data || e?.message || e);
+      }
+    }
   } catch (e) {
-    console.error("[tg-bot] unlock action error:", e?.message || e);
+    console.error("[tg-bot] unlock action error:", e?.response?.data || e?.message || e);
     try {
       await ctx.answerCbQuery("⚠️ Ошибка. Попробуйте позже.", { show_alert: true });
     } catch {}
   }
 });
-
-/* ===================== OFFER ACCEPT (BANK++) ===================== */
-
-/* ===================== OFFER ACCEPT (oa:<serviceId>:<ts>:<sig12>) ===================== */
-
-bot.action(/^oa:(\d+):(\d+):([a-f0-9]+)$/, async (ctx) => {
-  try {
-    const serviceId = Number(ctx.match?.[1]);
-    const ts = Number(ctx.match?.[2]);
-    const sig = String(ctx.match?.[3] || "");
-    const chatId = ctx.from?.id;
-
-    if (!chatId) {
-      try { await ctx.answerCbQuery("Ошибка пользователя", { show_alert: true }); } catch {}
-      return;
-    }
-
-    const v = verifyOfferAcceptCbData({ chatId, serviceId, ts, sig });
-    if (!v.ok) {
-      try {
-        await ctx.answerCbQuery("⛔️ Кнопка устарела. Откройте карточку заново.", { show_alert: true });
-      } catch {}
-      return;
-    }
-
-    await pool.query(
-      `INSERT INTO user_offer_accepts
-       (user_role, user_id, offer_version, source)
-       VALUES ($1,$2,$3,$4)
-       ON CONFLICT DO NOTHING`,
-      ["client", chatId, OFFER_VERSION || "v1.0", "telegram_unlock"]
-    );
-
-    try {
-      await ctx.answerCbQuery("✅ Условия приняты", { show_alert: false });
-    } catch {}
-
-    // 🚀 AUTO-UNLOCK (offer-check уже пройдён)
-    try {
-      await doUnlockFlow(ctx, serviceId);
-    } catch (e) {
-      console.error("[tg-bot] auto unlock after offer failed:", e?.message || e);
-    }
-  } catch (e) {
-    console.error("[tg-bot] offer_accept error:", e?.message || e);
-    try {
-      await ctx.answerCbQuery("Ошибка. Попробуйте позже", { show_alert: true });
-    } catch {}
-  }
-});
-
-/* ===================== UNLOCK FLOW (BANK-GRADE) ===================== */
-
-async function doUnlockFlow(ctx, serviceId) {
-  const chatId = ctx.from?.id;
-
-  if (!Number.isFinite(serviceId) || serviceId <= 0) {
-    try {
-      await ctx.answerCbQuery("⚠️ Некорректный ID услуги", { show_alert: true });
-    } catch {}
-    return { ok: false };
-  }
-
-  const clientRow = await getClientRowByChatId(pool, chatId);
-      // 🔥 FAST-PATH: уже открыт? (снимает лишнюю нагрузку с advisory lock)
-    try {
-      const already = await pool.query(
-        `SELECT 1
-           FROM client_service_contact_unlocks
-          WHERE client_id = $1
-            AND service_id = $2
-          LIMIT 1`,
-        [clientRow?.id, serviceId]
-      );
-    
-      if (already.rowCount) {
-        try {
-          await ctx.answerCbQuery("✅ Контакты уже открыты", { show_alert: false });
-        } catch {}
-    
-        try {
-          await refreshUnlockedCard(ctx, serviceId);
-        } catch {}
-    
-        return { ok: true, already: true };
-      }
-    } catch (e) {
-      console.error("[tg-bot] fast unlock check failed:", e?.message || e);
-    }
-    
-    if (!clientRow?.id) {
-        try {
-          await ctx.answerCbQuery("👋 Сначала привяжите аккаунт через /start", { show_alert: true });
-        } catch {}
-        return { ok: false };
-      }
-
-  // 🔐 ПРОВЕРКА ОФЕРТЫ (BANK PROTECTION)
-  const offerCheck = await pool.query(
-    `SELECT 1
-       FROM user_offer_accepts
-      WHERE user_role = 'client'
-        AND user_id = $1
-        AND offer_version = $2
-      LIMIT 1`,
-    [clientRow.id, OFFER_VERSION || "v1.0"]
-  );
-
-if (!offerCheck.rowCount) {
-  return await showOfferGate(ctx, serviceId);
-}
-
-  // === BLACK-HOLE++ / anti-fraud gates (BANK-GRADE) ===
-  const key = `unlock:${chatId}:${serviceId}`;
-  
-  if (isHardBlocked(chatId)) {
-    try { await ctx.answerCbQuery("⛔️ Доступ временно ограничен", { show_alert: true }); } catch {}
-    return { ok: false, reason: "blocked" };
-  }
-  
-  if (hasInFlight(key) || isRecent(key, 2000)) {
-    try { await ctx.answerCbQuery("⏳ Обрабатываю…", { show_alert: false }); } catch {}
-    return { ok: false, reason: "in_flight" };
-  }
-  
-  if (!checkVelocity(chatId)) {
-    const score = markSuspicious(chatId);
-    try {
-      await ctx.answerCbQuery(
-        score >= 6 ? "⛔️ Слишком много попыток" : "⚠️ Слишком часто. Подождите",
-        { show_alert: true }
-      );
-    } catch {}
-    return { ok: false, reason: "velocity" };
-  }
-  
-  setInFlight(key, 20000);
-  
-let result;
-try {
-  // 🔥 BANK-GRADE advisory lock: в той же транзакции, что и списание/insert
-  result = await withServiceLock(pool, clientRow.id, serviceId, async (db) => {
-    return unlockContactsForService(db, {
-      clientId: clientRow.id,
-      serviceId,
-    });
-  });
-} catch (e) {
-  console.error("[tg-bot] doUnlockFlow locked unlock error:", e?.message || e);
-  result = { ok: false, reason: "server_error" };
-} finally {
-  unlockInFlight.delete(key);
-  markRecent(key);
-}
-
-  if (!result.ok) {
-    if (result.reason === "no_balance") {
-      const bal = Number(result.balance || 0).toLocaleString("ru-RU");
-      const need = Number(result.need || CONTACT_UNLOCK_PRICE || 10000).toLocaleString("ru-RU");
-
-      try {
-        await ctx.answerCbQuery(
-          `💳 Недостаточно средств.\nБаланс: ${bal} сум\nНужно: ${need} сум`,
-          { show_alert: true }
-        );
-      } catch {}
-
-      return { ok: false, reason: "no_balance" };
-    }
-
-    try {
-      await ctx.answerCbQuery("⚠️ Не удалось открыть контакты", { show_alert: true });
-    } catch {}
-
-    return { ok: false, reason: result.reason || "failed" };
-  }
-
-const charged = Number(result.charged || 0);
-
-const note = result.already
-  ? "✅ Контакты уже были открыты"
-  : `✅ Контакты открыты. Списано: ${charged.toLocaleString("ru-RU")} сум`;
-
-  try {
-    await ctx.answerCbQuery(note, { show_alert: true });
-  } catch {}
-  try {
-    await refreshUnlockedCard(ctx, serviceId);
-  } catch (e) {
-    console.error("[tg-bot] refreshUnlockedCard failed:", e?.message || e);
-  }
-  return { ok: true };
-}
 
 /* ===================== TEXT HANDLER (wizard + quick request) ===================== */
 
@@ -7375,7 +6881,7 @@ bot.on("inline_query", async (ctx) => {
               [
                 {
                   text: "🔓 Открыть контакты (10 000 сум)",
-                  callback_data: buildUnlockCbData(ctx.from.id, svc.id),
+                  callback_data: `unlock:${svc.id}`,
                 },
               ],
             ],
@@ -7494,6 +7000,7 @@ bot.on("inline_query", async (ctx) => {
   }
 });
 
+// ⚠️ здесь НЕТ 
 /* ===================== EDIT IMAGES (ADD/REMOVE/CLEAR) ===================== */
 
 bot.action(/^svc_edit_img_(?:remove|del):(\d+)$/, async (ctx) => {
