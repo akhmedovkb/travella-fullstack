@@ -549,8 +549,18 @@ function signOfferAccept({ action, chatId, serviceId, ts }) {
 
 function buildOfferAcceptCbData(chatId, serviceId) {
   const ts = cbNowSec();
-  const sig = signOfferAccept({ action: "oa", chatId: Number(chatId), serviceId: Number(serviceId), ts });
-  return `oa:${chatId}:${serviceId}:${ts}:${sig}`;
+
+  const fullSig = signOfferAccept({
+    action: "oa",
+    chatId: Number(chatId),
+    serviceId: Number(serviceId),
+    ts,
+  });
+
+  // BANK: режем подпись до 12 байт (24 hex символа)
+  const shortSig = String(fullSig).slice(0, 24);
+
+  return `oa:${serviceId}:${ts}:${shortSig}`;
 }
 
 function verifyOfferAcceptCbData(a, b, c, d, e) {
@@ -5697,50 +5707,45 @@ bot.action(/^u:(\d+):(\d+):(\d+):([a-f0-9]+)$/, async (ctx) => {
 
 /* ===================== OFFER ACCEPT (BANK++) ===================== */
 
-bot.action(/^oa:(\d+):(\d+):(\d+):([a-f0-9]+)$/, async (ctx) => {
+/* ===================== OFFER ACCEPT ===================== */
+
+bot.action(/^oa:(\d+):(\d+):([a-f0-9]+)$/, async (ctx) => {
   try {
-    const buttonChatId = Number(ctx.match?.[1]);
-    const serviceId = Number(ctx.match?.[2]);
-    const ts = Number(ctx.match?.[3]);
-    const sig = String(ctx.match?.[4] || "");
+    const serviceId = Number(ctx.match?.[1]);
+    const ts = Number(ctx.match?.[2]);
+    const sig = String(ctx.match?.[3] || "");
     const chatId = ctx.from?.id;
 
     if (!chatId) {
-      try { await ctx.answerCbQuery("Ошибка пользователя", { show_alert: true }); } catch {}
+      await safeCb(ctx, "Ошибка пользователя", true);
       return;
     }
 
-    // 🔒 кнопку может нажать только тот же пользователь
-    if (buttonChatId !== chatId) {
-      try { await ctx.answerCbQuery("⛔️ Эта кнопка не для вас", { show_alert: true }); } catch {}
-      return;
-    }
-
-    const v = verifyOfferAcceptCbData({
-      chatId: buttonChatId,
+    // 🔐 проверка подписи (используем ТВОЮ функцию)
+    const v = verifyUnlockCbData({
+      chatId,
       serviceId,
       ts,
       sig,
     });
 
     if (!v.ok) {
-      try {
-        await ctx.answerCbQuery("⛔️ Кнопка устарела. Откройте оферту заново.", { show_alert: true });
-      } catch {}
+      await safeCb(ctx, "⛔️ Кнопка устарела. Откройте карточку заново.", true);
       return;
     }
 
+    // ✅ фиксируем принятие оферты
     await pool.query(
       `INSERT INTO user_offer_accepts
        (user_role, user_id, offer_version, source)
        VALUES ($1,$2,$3,$4)
        ON CONFLICT DO NOTHING`,
-      ["client", buttonChatId, OFFER_VERSION || "v1.0", "telegram_unlock"]
+      ["client", chatId, OFFER_VERSION || "v1.0", "telegram_unlock"]
     );
 
-    try { await ctx.answerCbQuery("✅ Условия приняты"); } catch {}
+    await safeCb(ctx, "✅ Условия приняты", false);
 
-    // 🚀 AUTO-UNLOCK
+    // 🚀 авто-unlock
     try {
       await doUnlockFlow(ctx, serviceId);
     } catch (e) {
@@ -5748,9 +5753,7 @@ bot.action(/^oa:(\d+):(\d+):(\d+):([a-f0-9]+)$/, async (ctx) => {
     }
   } catch (e) {
     console.error("[tg-bot] offer_accept error:", e?.message || e);
-    try {
-      await ctx.answerCbQuery("Ошибка. Попробуйте позже", { show_alert: true });
-    } catch {}
+    await safeCb(ctx, "Ошибка. Попробуйте позже", true);
   }
 });
 
