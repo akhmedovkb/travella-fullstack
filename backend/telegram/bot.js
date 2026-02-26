@@ -10,6 +10,7 @@ const {
 } = require("./helpers/serviceActual");
 const { buildSvcActualKeyboard } = require("./keyboards/serviceActual");
 const { handleServiceActualCallback } = require("./handlers/serviceActualHandler");
+const { buildServiceMessage } = require("../utils/telegramServiceCard");
 
 /* ===================== CONFIG ===================== */
 const OFFER_VERSION = process.env.OFFER_VERSION || "v1.0";
