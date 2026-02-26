@@ -981,7 +981,6 @@ async function rehydrateAuthSessionIfNeeded(ctx) {
   }
 }
 
-
 /* ===================== INIT BOT ===================== */
 
 const bot = new Telegraf(BOT_TOKEN);
@@ -5493,11 +5492,15 @@ bot.action(/^u:(\d+):(\d+):(\d+):([a-f0-9]+)$/, async (ctx) => {
     const ts = Number(ctx.match?.[3]);
     const sig = String(ctx.match?.[4] || "");
 
+    // 🛡 sanity
+    if (!Number.isFinite(serviceId) || serviceId <= 0) {
+      await ctx.answerCbQuery("⚠️ Некорректная кнопка", { show_alert: true });
+      return;
+    }
+
     // 🔒 защита: кнопку может нажать только тот же пользователь
-    if (buttonChatId !== ctx.from.id) {
-      try {
-        await ctx.answerCbQuery("⛔️ Эта кнопка не для вас", { show_alert: true });
-      } catch {}
+    if (Number(buttonChatId) !== Number(ctx.from?.id)) {
+      await ctx.answerCbQuery("⛔️ Эта кнопка не для вас", { show_alert: true });
       return;
     }
 
@@ -5509,12 +5512,10 @@ bot.action(/^u:(\d+):(\d+):(\d+):([a-f0-9]+)$/, async (ctx) => {
     });
 
     if (!v.ok) {
-      try {
-        await ctx.answerCbQuery(
-          "⛔️ Кнопка устарела. Откройте карточку заново.",
-          { show_alert: true }
-        );
-      } catch {}
+      await ctx.answerCbQuery(
+        "⛔️ Кнопка устарела. Откройте карточку заново.",
+        { show_alert: true }
+      );
       return;
     }
 
