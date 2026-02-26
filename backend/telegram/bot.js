@@ -481,6 +481,20 @@ try {
   return { ok: true };
 }
 
+function buildCbData(ctx, action, serviceId) {
+  const chatId = ctx.from?.id;
+  const ts = cbNowSec();
+
+  const sig = signUnlock({
+    action,
+    chatId,
+    serviceId,
+    ts,
+  });
+
+  return `${action}:${serviceId}:${chatId}:${ts}:${sig}`;
+}
+
 async function showOfferGate(ctx, serviceId) {
   await safeCb(ctx, "⚠️ Необходимо принять условия Travella.uz", true);
 
