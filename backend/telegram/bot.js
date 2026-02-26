@@ -484,57 +484,36 @@ function verifyUnlockCbData(a, b, c, d) {
 
   const now = cbNowSec();
   const t = Number(ts);
-
   if (!Number.isFinite(t)) return { ok: false, reason: "bad_ts" };
 
   // ✅ защита от будущего времени
   if (t > now + 30) return { ok: false, reason: "future_ts" };
 
-  if (Math.abs(now - t) > TG_CALLBACK_TTL_SEC) {
-    return { ok: false, reason: "expired" };
-  }
+  if (Math.abs(now - t) > TG_CALLBACK_TTL_SEC) return { ok: false, reason: "expired" };
 
   const cid = Number(chatId);
   const sid = Number(serviceId);
+  if (!Number.isFinite(cid) || cid <= 0) return { ok: false, reason: "bad_chat" };
+  if (!Number.isFinite(sid) || sid <= 0) return { ok: false, reason: "bad_service" };
 
-  if (!Number.isFinite(cid) || cid <= 0) {
-    return { ok: false, reason: "bad_chat" };
-  }
-  if (!Number.isFinite(sid) || sid <= 0) {
-    return { ok: false, reason: "bad_service" };
-  }
+  // signUnlock в этом файле уже возвращает первые 12 hex
+  const expected = signUnlock({ action: "u", chatId: cid, serviceId: sid, ts: t });
 
-  const expected = signUnlock({
-    action: "u",
-    chatId: cid,
-    serviceId: sid,
-    ts: t,
-  });
+  const sigStr = String(sig || "").trim().toLowerCase();
+  // допускаем старые форматы (например 24 hex), сравниваем только первые 12
+  if (!/^[a-f0-9]{12,64}$/.test(sigStr)) return { ok: false, reason: "bad_sig" };
 
-const sigStr = String(sig || "").trim().toLowerCase();
+  const exp = Buffer.from(String(expected), "utf8");
+  const got = Buffer.from(sigStr.slice(0, 12), "utf8");
+  if (exp.length !== got.length) return { ok: false, reason: "bad_sig" };
 
-if (!/^[a-f0-9]+$/.test(sigStr)) {
-  return { ok: false, reason: "bad_sig" };
-}
-
-const exp = Buffer.from(expected, "utf8");
-const got = Buffer.from(sigStr, "utf8");
-
-if (exp.length !== got.length) {
-  return { ok: false, reason: "bad_sig" };
-}
-
-try {
-  if (!crypto.timingSafeEqual(exp, got)) {
+  try {
+    if (!crypto.timingSafeEqual(exp, got)) return { ok: false, reason: "bad_sig" };
+  } catch {
     return { ok: false, reason: "bad_sig" };
   }
-} catch {
-  return { ok: false, reason: "bad_sig" };
-}
 
   return { ok: true };
-}
-
 // ===================== OFFER GATE (BANK++) =====================
 
 // использовать тот же секрет, что и для unlock (или отдельный)
@@ -645,14 +624,13 @@ function buildCbData(ctx, action, serviceId) {
  * - без ctx.reply напрямую
  */
 async function showOfferGate(ctx, serviceId) {
-  // 1) короткий alert на нажатие кнопки unlock
   await safeCb(ctx, "⚠️ Для открытия контактов нужно принять оферту", true);
 
-  // 2) ВАЖНО: callback_query из inline часто без "чата", ctx.reply может падать.
-  // Поэтому шлем в личку через bot.telegram.sendMessage(ctx.from.id, ...)
   const chatId = ctx.from?.id;
-  if (!chatId) return;
+  if (!chatId) return { ok: false, reason: "no_chat" };
 
+  // ⚠️ callback_query из inline часто без chat — ctx.reply падает.
+  // Поэтому отправляем в личку через bot.telegram.sendMessage.
   const cb = buildOfferAcceptCbData(chatId, serviceId);
 
   try {
@@ -671,6 +649,8 @@ async function showOfferGate(ctx, serviceId) {
   } catch (e) {
     console.error("[tg-bot] showOfferGate sendMessage error:", e?.message || e);
   }
+
+  return { ok: false, reason: "offer_required" };
 }
 
 // обновление карточки после unlock
@@ -5707,7 +5687,7 @@ bot.action(/^u:(\d+):(\d+):(\d+):([a-f0-9]+)$/, async (ctx) => {
 
 /* ===================== OFFER ACCEPT (BANK++) ===================== */
 
-/* ===================== OFFER ACCEPT ===================== */
+/* ===================== OFFER ACCEPT (oa:<serviceId>:<ts>:<sig12>) ===================== */
 
 bot.action(/^oa:(\d+):(\d+):([a-f0-9]+)$/, async (ctx) => {
   try {
@@ -5717,24 +5697,18 @@ bot.action(/^oa:(\d+):(\d+):([a-f0-9]+)$/, async (ctx) => {
     const chatId = ctx.from?.id;
 
     if (!chatId) {
-      await safeCb(ctx, "Ошибка пользователя", true);
+      try { await ctx.answerCbQuery("Ошибка пользователя", { show_alert: true }); } catch {}
       return;
     }
 
-    // 🔐 проверка подписи (используем ТВОЮ функцию)
-    const v = verifyUnlockCbData({
-      chatId,
-      serviceId,
-      ts,
-      sig,
-    });
-
+    const v = verifyOfferAcceptCbData({ chatId, serviceId, ts, sig });
     if (!v.ok) {
-      await safeCb(ctx, "⛔️ Кнопка устарела. Откройте карточку заново.", true);
+      try {
+        await ctx.answerCbQuery("⛔️ Кнопка устарела. Откройте карточку заново.", { show_alert: true });
+      } catch {}
       return;
     }
 
-    // ✅ фиксируем принятие оферты
     await pool.query(
       `INSERT INTO user_offer_accepts
        (user_role, user_id, offer_version, source)
@@ -5743,9 +5717,11 @@ bot.action(/^oa:(\d+):(\d+):([a-f0-9]+)$/, async (ctx) => {
       ["client", chatId, OFFER_VERSION || "v1.0", "telegram_unlock"]
     );
 
-    await safeCb(ctx, "✅ Условия приняты", false);
+    try {
+      await ctx.answerCbQuery("✅ Условия приняты", { show_alert: false });
+    } catch {}
 
-    // 🚀 авто-unlock
+    // 🚀 AUTO-UNLOCK (offer-check уже пройдён)
     try {
       await doUnlockFlow(ctx, serviceId);
     } catch (e) {
@@ -5753,7 +5729,9 @@ bot.action(/^oa:(\d+):(\d+):([a-f0-9]+)$/, async (ctx) => {
     }
   } catch (e) {
     console.error("[tg-bot] offer_accept error:", e?.message || e);
-    await safeCb(ctx, "Ошибка. Попробуйте позже", true);
+    try {
+      await ctx.answerCbQuery("Ошибка. Попробуйте позже", { show_alert: true });
+    } catch {}
   }
 });
 
