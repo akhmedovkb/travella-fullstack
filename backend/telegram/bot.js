@@ -5809,20 +5809,55 @@ try {
   markRecent(key);
 }
 
-  if (!result.ok) {
-    if (result.reason === "no_balance") {
-      const bal = Number(result.balance || 0).toLocaleString("ru-RU");
-      const need = Number(result.need || CONTACT_UNLOCK_PRICE || 10000).toLocaleString("ru-RU");
+if (!result.ok) {
+  if (result.reason === "no_balance") {
+    const balNum = Number(result.balance || 0);
+    const needNum = Number(result.need || CONTACT_UNLOCK_PRICE || 10000);
 
-      try {
-        await ctx.answerCbQuery(
-          `💳 Недостаточно средств.\nБаланс: ${bal} сум\nНужно: ${need} сум`,
-          { show_alert: true }
-        );
-      } catch {}
+    const bal = balNum.toLocaleString("ru-RU");
+    const need = needNum.toLocaleString("ru-RU");
 
-      return { ok: false, reason: "no_balance" };
+    // 1) короткий alert (как сейчас)
+    try {
+      await ctx.answerCbQuery(
+        `💳 Недостаточно средств.\nБаланс: ${bal} сум\nНужно: ${need} сум`,
+        { show_alert: true }
+      );
+    } catch {}
+
+    // 2) нормальное "окно" в чате с кнопками
+    try {
+      const topupUrl = `${SITE_URL}/dashboard/balance`;
+      await safeReply(
+        ctx,
+        "💳 <b>Недостаточно средств</b>\n\n" +
+          `💰 Баланс: <b>${bal}</b> сум\n` +
+          `🔒 Нужно: <b>${need}</b> сум\n\n` +
+          "Нажмите «Пополнить баланс», затем «Проверить баланс».",
+        {
+          parse_mode: "HTML",
+          disable_web_page_preview: true,
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "💳 Пополнить баланс", url: topupUrl }],
+              [{ text: "🔄 Проверить баланс", callback_data: "balance:check" }],
+            ],
+          },
+        }
+      );
+    } catch (e) {
+      console.error("[tg-bot] no_balance UI error:", e?.message || e);
     }
+
+    return { ok: false, reason: "no_balance" };
+  }
+
+  try {
+    await ctx.answerCbQuery("⚠️ Не удалось открыть контакты", { show_alert: true });
+  } catch {}
+
+  return { ok: false, reason: result.reason || "failed" };
+}
 
     try {
       await ctx.answerCbQuery("⚠️ Не удалось открыть контакты", { show_alert: true });
@@ -5848,6 +5883,50 @@ const note = result.already
   return { ok: true };
 }
 
+bot.action("balance:check", async (ctx) => {
+  try {
+    await safeCb(ctx);
+
+    const chatId = ctx.from?.id;
+    if (!chatId) {
+      await safeReply(ctx, "⚠️ Не удалось определить пользователя.");
+      return;
+    }
+
+    const clientRow = await getClientRowByChatId(pool, chatId);
+    if (!clientRow?.id) {
+      await safeReply(ctx, "👋 Сначала привяжите аккаунт через /start");
+      return;
+    }
+
+    const balNum = Number(clientRow.contact_balance || 0);
+    const bal = balNum.toLocaleString("ru-RU");
+    const need = Number(CONTACT_UNLOCK_PRICE || 10000).toLocaleString("ru-RU");
+
+    const topupUrl = `${SITE_URL}/dashboard/balance`;
+
+    await safeReply(
+      ctx,
+      "💰 <b>Ваш баланс</b>\n\n" +
+        `Баланс: <b>${bal}</b> сум\n` +
+        `Открытие контактов: <b>${need}</b> сум`,
+      {
+        parse_mode: "HTML",
+        disable_web_page_preview: true,
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "💳 Пополнить баланс", url: topupUrl }],
+          ],
+        },
+      }
+    );
+  } catch (e) {
+    console.error("[tg-bot] balance:check error:", e?.message || e);
+    try {
+      await safeReply(ctx, "⚠️ Не удалось проверить баланс. Попробуйте позже.");
+    } catch {}
+  }
+});
 /* ===================== TEXT HANDLER (wizard + quick request) ===================== */
 
 // Делегат для обработки текста в wizard-режиме редактирования услуги.
