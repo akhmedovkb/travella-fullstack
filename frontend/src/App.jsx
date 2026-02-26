@@ -83,6 +83,9 @@ import Contacts from "./pages/landing/Contacts";
 
 // IndiaInside
 import AdminInsideRequests from "./pages/admin/AdminInsideRequests";
+// balance клиентов бота отказных туров
+
+import AdminContactBalance from "./pages/admin/AdminContactBalance";
 
 // donasdosas (legacy публичный путь /donas-dosas/finance теперь будет алиасом)
 
@@ -287,6 +290,16 @@ export default function App() {
                 <PrivateRoute>
                   <AdminRoute>
                     <AdminLeads />
+                  </AdminRoute>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/admin/contact-balance"
+              element={
+                <PrivateRoute>
+                  <AdminRoute>
+                    <AdminContactBalance />
                   </AdminRoute>
                 </PrivateRoute>
               }
