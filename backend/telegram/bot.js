@@ -457,20 +457,26 @@ function verifyUnlockCbData(a, b, c, d) {
     ts: t,
   });
 
-  const exp = Buffer.from(String(expected));
-  const got = Buffer.from(String(sig));
+const sigStr = String(sig || "").trim().toLowerCase();
 
-  if (exp.length !== got.length) {
+if (!/^[a-f0-9]+$/.test(sigStr)) {
+  return { ok: false, reason: "bad_sig" };
+}
+
+const exp = Buffer.from(expected, "utf8");
+const got = Buffer.from(sigStr, "utf8");
+
+if (exp.length !== got.length) {
+  return { ok: false, reason: "bad_sig" };
+}
+
+try {
+  if (!crypto.timingSafeEqual(exp, got)) {
     return { ok: false, reason: "bad_sig" };
   }
-
-  try {
-    if (!crypto.timingSafeEqual(exp, got)) {
-      return { ok: false, reason: "bad_sig" };
-    }
-  } catch {
-    return { ok: false, reason: "bad_sig" };
-  }
+} catch {
+  return { ok: false, reason: "bad_sig" };
+}
 
   return { ok: true };
 }
