@@ -602,11 +602,8 @@ export default function Header() {
               <RowGroupDark title={t("nav.admin", "Админ")}>
                 <NavItemMobileDark to="/admin/moderation" label={t("moderation.title", "Модерация")} icon={<IconModeration />} />
                 <NavItemMobileDark to="/admin/leads" label={t("nav.leads", "Leads")} icon={<IconUsers />} />
-                <NavItemMobileDark
-                  to="/admin/refused-actual"
-                  label={t("nav.refused_actual", "Актуальные отказы")}
-                  icon={<IconChecklist />}
-                />
+                <NavItemMobileDark to="/admin/contact-balance" label={t("nav.contact_balance_admin", "Баланс контактов")} icon={<IconTicket />} />
+                <NavItemMobileDark to="/admin/refused-actual" label={t("nav.refused_actual", "Актуальные отказы")} icon={<IconChecklist />} />
                 <NavItemMobileDark to="/admin/inside-requests" label={t("nav.inside_requests", "Inside заявки")} icon={<IconChecklist />} />
                 <NavItemMobileDark to="/admin/providers" label={t("nav.providers_admin", "Провайдеры")} icon={<IconUsers />} />
                 <NavItemMobileDark to="/admin/entry-fees" label={t("nav.entry_fees_admin", "Entry fees")} icon={<IconTicket />} />
