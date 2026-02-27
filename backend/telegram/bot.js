@@ -178,6 +178,19 @@ async function withServiceLock(pool, clientId, serviceId, fn) {
 // Цена открытия контактов
 const CONTACT_UNLOCK_PRICE = Number(process.env.CONTACT_UNLOCK_PRICE || "10000");
 
+// =========================
+// Telegram Payments (top-up inside bot)
+// =========================
+// Set provider token via @BotFather → Payments.
+// Example env: TELEGRAM_PAYMENTS_PROVIDER_TOKEN=12345:TEST:...
+const PAYMENTS_PROVIDER_TOKEN =
+  process.env.TELEGRAM_PAYMENTS_PROVIDER_TOKEN ||
+  process.env.TG_PAYMENTS_TOKEN ||
+  process.env.PAYMENTS_PROVIDER_TOKEN ||
+  "";
+const PAYMENTS_CURRENCY = String(process.env.TELEGRAM_PAYMENTS_CURRENCY || "UZS");
+const TOPUP_AMOUNTS = [10000, 50000, 100000];
+
 // Создаём таблицы (на всякий случай), но SQL миграцию всё равно лучше прогнать отдельно
 let _unlockTablesReady = false;
 async function ensureUnlockTables(pool) {
@@ -344,6 +357,42 @@ if (!upd.rowCount) {
     console.error("[tg-bot] unlockContactsForService error:", e?.message || e);
     throw e; // важно: пусть withServiceLock сделает ROLLBACK
   }
+}
+
+// ===================== CONTACT BALANCE (top-up) =====================
+// Credit/debit contact balance via the canonical ledger table used by admin UI.
+async function addContactBalanceLedgerTx(db, {
+  clientId,
+  amount,
+  reason,
+  serviceId = null,
+  source = "bot",
+  meta = {},
+}) {
+  const cid = Number(clientId);
+  const amt = Number(amount);
+  if (!Number.isFinite(cid) || cid <= 0) throw new Error("bad clientId");
+  if (!Number.isFinite(amt) || amt === 0) throw new Error("bad amount");
+
+  const r1 = await db.query(
+    `INSERT INTO contact_balance_ledger (client_id, amount, reason, service_id, source, meta)
+     VALUES ($1,$2,$3,$4,$5,$6)
+     RETURNING id`,
+    [cid, Math.trunc(amt), String(reason || "bot"), serviceId, String(source || "bot"), meta || {}]
+  );
+
+  const r2 = await db.query(
+    `UPDATE clients
+        SET contact_balance = COALESCE(contact_balance,0) + $2
+      WHERE id=$1
+      RETURNING COALESCE(contact_balance,0) AS contact_balance`,
+    [cid, Math.trunc(amt)]
+  );
+
+  return {
+    ledger_id: r1.rows?.[0]?.id,
+    balance: Number(r2.rows?.[0]?.contact_balance || 0),
+  };
 }
 
 // проверить: клиент уже открыл контакты по этой услуге?
@@ -5738,7 +5787,11 @@ bot.action("balance:check", async (ctx) => {
         disable_web_page_preview: true,
         reply_markup: {
           inline_keyboard: [
-            [{ text: "💳 Пополнить баланс", url: topupUrl }],
+            [
+              PAYMENTS_PROVIDER_TOKEN
+                ? { text: "💳 Пополнить баланс", callback_data: "balance:topup" }
+                : { text: "💳 Пополнить баланс", url: topupUrl },
+            ],
             ...(hasLast ? [[{ text: "🔓 Повторить открытие", callback_data: "balance:retry" }]] : []),
           ],
         },
@@ -5749,6 +5802,174 @@ bot.action("balance:check", async (ctx) => {
     try {
       await safeReply(ctx, "⚠️ Не удалось проверить баланс. Попробуйте позже.");
     } catch {}
+  }
+});
+
+// ===================== TOP-UP INSIDE BOT (Telegram Payments) =====================
+
+bot.action("balance:topup", async (ctx) => {
+  try {
+    await safeCb(ctx);
+
+    if (!PAYMENTS_PROVIDER_TOKEN) {
+      await safeReply(
+        ctx,
+        `💳 Пополнение через сайт:\n${SITE_URL}/dashboard/balance`,
+        {
+          disable_web_page_preview: true,
+          reply_markup: {
+            inline_keyboard: [[{ text: "Открыть страницу пополнения", url: `${SITE_URL}/dashboard/balance` }]],
+          },
+        }
+      );
+      return;
+    }
+
+    const rows = TOPUP_AMOUNTS.map((a) => [{ text: `+${a.toLocaleString("ru-RU")} сум`, callback_data: `balance:topup:${a}` }]);
+    rows.push([{ text: "⬅️ Назад", callback_data: "balance:check" }]);
+
+    await safeReply(ctx, "Выберите сумму пополнения:", {
+      reply_markup: { inline_keyboard: rows },
+    });
+  } catch (e) {
+    console.error("[tg-bot] balance:topup error:", e?.message || e);
+    try { await safeReply(ctx, "⚠️ Не удалось открыть пополнение. Попробуйте позже."); } catch {}
+  }
+});
+
+bot.action(/^balance:topup:(\d+)$/, async (ctx) => {
+  try {
+    await safeCb(ctx);
+
+    if (!PAYMENTS_PROVIDER_TOKEN) {
+      await safeReply(ctx, `💳 Пополнение через сайт:\n${SITE_URL}/dashboard/balance`, {
+        disable_web_page_preview: true,
+      });
+      return;
+    }
+
+    const chatId = ctx.from?.id;
+    if (!chatId) {
+      await safeReply(ctx, "⚠️ Не удалось определить пользователя.");
+      return;
+    }
+
+    const clientRow = await getClientRowByChatId(pool, chatId);
+    if (!clientRow?.id) {
+      await safeReply(ctx, "👋 Сначала привяжите аккаунт через /start");
+      return;
+    }
+
+    const amount = Number(ctx.match?.[1] || 0);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      await safeReply(ctx, "⚠️ Некорректная сумма");
+      return;
+    }
+
+    // Telegram requires unique payload per invoice.
+    const payload = `contact_topup:${clientRow.id}:${amount}:${Date.now()}`;
+    const title = "Пополнение баланса контактов";
+    const description = `Пополнение на ${amount.toLocaleString("ru-RU")} сум`;
+
+    await ctx.replyWithInvoice({
+      title,
+      description,
+      payload,
+      provider_token: PAYMENTS_PROVIDER_TOKEN,
+      currency: PAYMENTS_CURRENCY,
+      prices: [{ label: "Баланс контактов", amount: Math.trunc(amount) }],
+      need_name: false,
+      need_phone_number: false,
+      need_email: false,
+      need_shipping_address: false,
+      is_flexible: false,
+    });
+  } catch (e) {
+    console.error("[tg-bot] balance:topup:amount error:", e?.message || e);
+    try { await safeReply(ctx, "⚠️ Не удалось создать счет. Попробуйте позже."); } catch {}
+  }
+});
+
+// Telegram Payments: acknowledge checkout
+bot.on("pre_checkout_query", async (ctx) => {
+  try {
+    await ctx.answerPreCheckoutQuery(true);
+  } catch (e) {
+    console.error("[tg-bot] pre_checkout_query error:", e?.message || e);
+    try { await ctx.answerPreCheckoutQuery(false, "Ошибка оплаты. Попробуйте позже."); } catch {}
+  }
+});
+
+// Telegram Payments: credit balance on successful payment
+bot.on("successful_payment", async (ctx) => {
+  const sp = ctx.message?.successful_payment;
+  try {
+    if (!sp) return;
+
+    const chatId = ctx.from?.id;
+    if (!chatId) return;
+
+    const clientRow = await getClientRowByChatId(pool, chatId);
+    if (!clientRow?.id) return;
+
+    // payload format: contact_topup:clientId:amount:ts
+    const payload = String(sp.invoice_payload || "");
+    const parts = payload.split(":");
+    if (parts[0] !== "contact_topup") return;
+
+    const payloadClientId = Number(parts[1] || 0);
+    const payloadAmount = Number(parts[2] || 0);
+    if (payloadClientId !== Number(clientRow.id)) {
+      console.warn("[tg-bot] topup payload client mismatch", { payloadClientId, clientId: clientRow.id });
+      return;
+    }
+
+    // Telegram gives total_amount in smallest units (for UZS it is the same integer sum).
+    const paidAmount = Number(sp.total_amount || 0);
+    const creditAmount = Number.isFinite(payloadAmount) && payloadAmount > 0 ? payloadAmount : paidAmount;
+
+    const tx = await pool.connect();
+    try {
+      await tx.query("BEGIN");
+      const res = await addContactBalanceLedgerTx(tx, {
+        clientId: clientRow.id,
+        amount: creditAmount,
+        reason: "topup_telegram",
+        serviceId: null,
+        source: "telegram_payment",
+        meta: {
+          provider_payment_charge_id: sp.provider_payment_charge_id,
+          telegram_payment_charge_id: sp.telegram_payment_charge_id,
+          currency: sp.currency,
+          total_amount: sp.total_amount,
+          invoice_payload: sp.invoice_payload,
+        },
+      });
+      await tx.query("COMMIT");
+
+      const bal = Number(res?.balance || 0).toLocaleString("ru-RU");
+      await safeReply(
+        ctx,
+        `✅ Оплата прошла успешно!\n\nВаш баланс: <b>${bal}</b> сум`,
+        {
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "🔄 Проверить баланс", callback_data: "balance:check" }],
+              ...(ctx.session?.lastUnlockServiceId ? [[{ text: "🔓 Повторить открытие", callback_data: "balance:retry" }]] : []),
+            ],
+          },
+        }
+      );
+    } catch (e) {
+      try { await tx.query("ROLLBACK"); } catch {}
+      throw e;
+    } finally {
+      tx.release();
+    }
+  } catch (e) {
+    console.error("[tg-bot] successful_payment handler error:", e?.message || e);
+    try { await safeReply(ctx, "⚠️ Платеж получен, но произошла ошибка при зачислении. Напишите администратору."); } catch {}
   }
 });
 
@@ -5913,7 +6134,11 @@ if (!result.ok) {
           disable_web_page_preview: true,
           reply_markup: {
             inline_keyboard: [
-              [{ text: "💳 Пополнить баланс", url: topupUrl }],
+              [
+              PAYMENTS_PROVIDER_TOKEN
+                ? { text: "💳 Пополнить баланс", callback_data: "balance:topup" }
+                : { text: "💳 Пополнить баланс", url: topupUrl },
+              ],
               [{ text: "🔄 Проверить баланс", callback_data: "balance:check" }],
               [{ text: "🔓 Повторить открытие", callback_data: "balance:retry" }],
             ],
