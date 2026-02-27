@@ -13,6 +13,70 @@ const crypto = require("crypto");
 
 const TX_TIMEOUT_MS = 12 * 60 * 60 * 1000; // 12h
 
+function logPayme(event, extra = {}) {
+  try {
+    // не логируем секреты, только нужное
+    console.log(
+      JSON.stringify({
+        tag: "payme",
+        ts: new Date().toISOString(),
+        event,
+        ...extra,
+      })
+    );
+  } catch {}
+}
+
+/**
+ * Advisory-lock чтобы 2 параллельных запроса не обработали
+ * один и тот же paymeId / orderId одновременно (race protection).
+ */
+async function lockKeyTx(client, keyStr) {
+  // 1) приводим строку к bigint ключу через hashtext
+  await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [String(keyStr)]);
+}
+
+/**
+ * Refund (опционально): делаем возврат только 1 раз.
+ * Включается env PAYME_ALLOW_REFUND=true
+ */
+async function refundOnceTx(client, { clientId, amountTiyin, orderId, paymeId }) {
+  const meta = {
+    refund_of: String(paymeId),
+    order_id: String(orderId),
+    payme_id: String(paymeId),
+  };
+
+  // вставим отрицательную проводку (идемпотентно, благодаря uq_contact_ledger_payme_refund_of)
+  const { rows } = await client.query(
+    `INSERT INTO contact_balance_ledger
+      (client_id, amount, reason, source, meta, created_at)
+     VALUES ($1, $2, 'topup_refund', 'payme_refund', $3::jsonb, now())
+     ON CONFLICT DO NOTHING
+     RETURNING id`,
+    [clientId, -Math.abs(Number(amountTiyin)), JSON.stringify(meta)]
+  );
+
+  if (!rows?.length) return { refunded: false };
+
+  await client.query(
+    `UPDATE clients
+        SET contact_balance = COALESCE(contact_balance, 0) - $2
+      WHERE id = $1`,
+    [clientId, Math.abs(Number(amountTiyin))]
+  );
+
+  // можно ещё отметить заказ
+  await client.query(
+    `UPDATE topup_orders
+        SET status = 'refunded'
+      WHERE id = $1 AND status = 'paid'`,
+    [orderId]
+  );
+
+  return { refunded: true };
+}
+
 function ok(id, result) {
   return { jsonrpc: "2.0", id, result };
 }
@@ -277,6 +341,12 @@ async function paymeMerchantRpc(req, res) {
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
+        // 🧷 race protection: сериализуем обработку одного paymeId
+        await lockKeyTx(client, `payme:${paymeId}`);
+        // + сериализуем orderId (чтобы 2 paymeId не дрались за один order)
+        await lockKeyTx(client, `order:${orderId}`);
+        
+        logPayme("CreateTransaction.begin", { paymeId, orderId, amount });
 
         const existing = await getTxForUpdate(client, paymeId);
         if (existing) {
@@ -345,178 +415,196 @@ async function paymeMerchantRpc(req, res) {
       }
     }
 
-    // ---------------- PerformTransaction ----------------
-    if (method === "PerformTransaction") {
-      const paymeId = String(params.id || "");
-      if (!paymeId) return res.status(200).json(rpcError(id, -32602, "Missing params.id"));
+// ---------------- PerformTransaction ----------------
+if (method === "PerformTransaction") {
+  const paymeId = String(params.id || "");
+  if (!paymeId) return res.status(200).json(rpcError(id, -32602, "Missing params.id"));
 
-      const client = await pool.connect();
-      try {
-        await client.query("BEGIN");
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    
+    // ✅ 1) lock по paymeId сразу после BEGIN
+    await lockKeyTx(client, `payme:${paymeId}`);
+    logPayme("PerformTransaction.begin", { paymeId });
+    
+    const tx = await getTxForUpdate(client, paymeId);
+    if (!tx) {
+      await client.query("ROLLBACK");
+      return res.status(200).json(rpcError(id, -31003, "Transaction not found"));
+    }
+    
+    // ✅ 2) lock по orderId сразу после чтения tx
+    if (tx?.order_id) {
+      await lockKeyTx(client, `order:${tx.order_id}`);
+    }
 
-        const tx = await getTxForUpdate(client, paymeId);
-        if (!tx) {
-          await client.query("ROLLBACK");
-          return res.status(200).json(rpcError(id, -31003, "Transaction not found"));
-        }
+    if (Number(tx.state) === 2) {
+      await client.query("COMMIT");
+      return res.status(200).json(
+        ok(id, {
+          transaction: paymeId,
+          perform_time: Number(tx.perform_time) || nowMs(),
+          state: 2,
+        })
+      );
+    }
 
-        if (Number(tx.state) === 2) {
-          await client.query("COMMIT");
-          return res.status(200).json(
-            ok(id, {
-              transaction: paymeId,
-              perform_time: Number(tx.perform_time) || nowMs(),
-              state: 2,
-            })
-          );
-        }
+    if (Number(tx.state) === -1 || Number(tx.state) === -2) {
+      await client.query("COMMIT");
+      return res.status(200).json(rpcError(id, -31008, "Transaction cancelled"));
+    }
 
-        if (Number(tx.state) === -1 || Number(tx.state) === -2) {
-          await client.query("COMMIT");
-          return res.status(200).json(rpcError(id, -31008, "Transaction cancelled"));
-        }
+    const ct = Number(tx.create_time) || 0;
+    if (ct && nowMs() - ct > TX_TIMEOUT_MS) {
+      const cancelTime = nowMs();
+      await setTxState(client, paymeId, { state: -1, cancel_time: cancelTime, reason: 4 });
+      await client.query("COMMIT");
+      return res.status(200).json(rpcError(id, -31008, "Transaction expired"));
+    }
 
-        const ct = Number(tx.create_time) || 0;
-        if (ct && nowMs() - ct > TX_TIMEOUT_MS) {
-          const cancelTime = nowMs();
-          await setTxState(client, paymeId, { state: -1, cancel_time: cancelTime, reason: 4 });
-          await client.query("COMMIT");
-          return res.status(200).json(rpcError(id, -31008, "Transaction expired"));
-        }
+    const orderId = Number(tx.order_id);
+    const order = await getOrderTx(client, orderId);
+    if (!order) {
+      await client.query("ROLLBACK");
+      return res.status(200).json(rpcError(id, -31050, "Order not found"));
+    }
 
-        const orderId = Number(tx.order_id);
-        const order = await getOrderTx(client, orderId);
-        if (!order) {
-          await client.query("ROLLBACK");
-          return res.status(200).json(rpcError(id, -31050, "Order not found"));
-        }
+    if (order.status === "paid") {
+      const performTime = order.paid_at ? new Date(order.paid_at).getTime() : nowMs();
+      await setTxState(client, paymeId, { state: 2, perform_time: performTime });
+      await client.query("COMMIT");
+      return res.status(200).json(ok(id, { transaction: paymeId, perform_time: performTime, state: 2 }));
+    }
 
-        if (order.status === "paid") {
-          const performTime = order.paid_at ? new Date(order.paid_at).getTime() : nowMs();
-          await setTxState(client, paymeId, { state: 2, perform_time: performTime });
-          await client.query("COMMIT");
-          return res.status(200).json(ok(id, { transaction: paymeId, perform_time: performTime, state: 2 }));
-        }
+    const performTime = nowMs();
+    await setTxState(client, paymeId, { state: 2, perform_time: performTime });
+    await markOrderStatusTx(client, orderId, "paid", new Date(performTime));
 
-        const performTime = nowMs();
-        await setTxState(client, paymeId, { state: 2, perform_time: performTime });
-        await markOrderStatusTx(client, orderId, "paid", new Date(performTime));
+    // ✅ твоя проверка клиента (чтобы FK не падал)
+    const { rows: cRows } = await client.query(`SELECT id FROM clients WHERE id=$1`, [
+      Number(order.client_id),
+    ]);
+    if (!cRows.length) {
+      await client.query("ROLLBACK");
+      return res.status(200).json(rpcError(id, -31050, "Client not found"));
+    }
 
-        // before creditLedgerOnceTx
-        const { rows: cRows } = await client.query(`SELECT id FROM clients WHERE id=$1`, [
-          Number(order.client_id),
-        ]);
-        if (!cRows.length) {
-          await client.query("ROLLBACK");
-          return res.status(200).json(rpcError(id, -31050, "Client not found"));
-        }
+    await creditLedgerOnceTx(client, {
+      clientId: Number(order.client_id),
+      amountTiyin: Number(order.amount_tiyin),
+      orderId,
+      paymeId,
+    });
 
-        await creditLedgerOnceTx(client, {
+    await client.query("COMMIT");
+
+    return res.status(200).json(
+      ok(id, {
+        transaction: paymeId,
+        perform_time: performTime,
+        state: 2,
+      })
+    );
+  } catch (e) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {}
+
+    console.error("[payme] PerformTransaction error:", e?.message || e);
+    if (e?.code) console.error("[payme] pg code:", e.code);
+
+    return res.status(200).json(rpcError(id, -32400, "Internal error"));
+  } finally {
+    client.release();
+  }
+}
+
+// ---------------- CancelTransaction ----------------
+if (method === "CancelTransaction") {
+  const paymeId = String(params.id || "");
+  const reason = Number(params.reason);
+
+  if (!paymeId) return res.status(200).json(rpcError(id, -32602, "Missing params.id"));
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    // ✅ lock сразу
+    await lockKeyTx(client, `payme:${paymeId}`);
+
+    const tx = await getTxForUpdate(client, paymeId);
+    if (!tx) {
+      await client.query("ROLLBACK");
+      return res.status(200).json(rpcError(id, -31003, "Transaction not found"));
+    }
+
+    // ✅ lock по order тоже
+    if (tx?.order_id) {
+      await lockKeyTx(client, `order:${tx.order_id}`);
+    }
+
+    // уже отменена
+    if (Number(tx.state) === -1 || Number(tx.state) === -2) {
+      await client.query("COMMIT");
+      return res.status(200).json(
+        ok(id, {
+          transaction: paymeId,
+          cancel_time: Number(tx.cancel_time) || nowMs(),
+          state: Number(tx.state),
+          reason: tx.reason ?? null,
+        })
+      );
+    }
+
+    const cancelTime = nowMs();
+    const newState = Number(tx.state) === 2 ? -2 : -1;
+
+    const updated = await setTxState(client, paymeId, {
+      state: newState,
+      cancel_time: cancelTime,
+      reason: Number.isFinite(reason) ? reason : null,
+    });
+
+    // ✅ если отменили уже выполненную транзакцию — делаем реверс баланса (строго 1 раз)
+    if (Number(updated?.state ?? newState) === -2) {
+      const orderId = Number(tx.order_id);
+      const order = await getOrderTx(client, orderId);
+      if (order) {
+        await debitLedgerOnceTx(client, {
           clientId: Number(order.client_id),
           amountTiyin: Number(order.amount_tiyin),
           orderId,
           paymeId,
+          reasonCode: Number.isFinite(reason) ? reason : null,
         });
 
-        await client.query("COMMIT");
-
-        return res.status(200).json(
-          ok(id, {
-            transaction: paymeId,
-            perform_time: performTime,
-            state: 2,
-          })
-        );
-      } catch (e) {
-        try {
-          await client.query("ROLLBACK");
-        } catch {}
-      
-        console.error("[payme] PerformTransaction error:", e?.message || e);
-        if (e?.code) console.error("[payme] pg code:", e.code);
-      
-        return res.status(200).json(rpcError(id, -32400, "Internal error"));
-      } finally {
-        client.release();
+        // опционально: помечаем заказ отменённым
+        await markOrderStatusTx(client, orderId, "cancelled");
       }
     }
 
-    // ---------------- CancelTransaction ----------------
-    if (method === "CancelTransaction") {
-      const paymeId = String(params.id || "");
-      const reason = Number(params.reason);
+    // ✅ ВАЖНО: фиксируем транзакцию БД
+    await client.query("COMMIT");
 
-      if (!paymeId) return res.status(200).json(rpcError(id, -32602, "Missing params.id"));
-
-      const client = await pool.connect();
-      try {
-        await client.query("BEGIN");
-
-        const tx = await getTxForUpdate(client, paymeId);
-        if (!tx) {
-          await client.query("ROLLBACK");
-          return res.status(200).json(rpcError(id, -31003, "Transaction not found"));
-        }
-
-        if (Number(tx.state) === -1 || Number(tx.state) === -2) {
-          await client.query("COMMIT");
-          return res.status(200).json(
-            ok(id, {
-              transaction: paymeId,
-              cancel_time: Number(tx.cancel_time) || nowMs(),
-              state: Number(tx.state),
-              reason: tx.reason ?? null,
-            })
-          );
-        }
-
-        const cancelTime = nowMs();
-        const newState = Number(tx.state) === 2 ? -2 : -1;
-
-        const updated = await setTxState(client, paymeId, {
-          state: newState,
-          cancel_time: cancelTime,
-          reason: Number.isFinite(reason) ? reason : null,
-        });
-
-        // ✅ если отменили уже выполненную транзакцию — делаем реверс баланса (строго 1 раз)
-        if (Number(updated?.state ?? newState) === -2) {
-          const orderId = Number(tx.order_id);
-          const order = await getOrderTx(client, orderId);
-          if (order) {
-            await debitLedgerOnceTx(client, {
-              clientId: Number(order.client_id),
-              amountTiyin: Number(order.amount_tiyin),
-              orderId,
-              paymeId,
-              reasonCode: Number.isFinite(reason) ? reason : null,
-            });
-            // статус заказа можно пометить “cancelled” (не обязательно, но полезно)
-            await markOrderStatusTx(client, orderId, "cancelled");
-          }
-        }
-
-        return res.status(200).json(
-          ok(id, {
-            transaction: paymeId,
-            cancel_time: cancelTime,
-            state: Number(updated?.state ?? newState),
-            reason: updated?.reason ?? (Number.isFinite(reason) ? reason : null),
-          })
-        );
-      } catch (e) {
-        try {
-          await client.query("ROLLBACK");
-        } catch {}
-      
-        console.error("[payme] CancelTransaction error:", e?.message || e);
-        if (e?.code) console.error("[payme] pg code:", e.code);
-      
-        return res.status(200).json(rpcError(id, -32400, "Internal error"));
-      } finally {
-        client.release();
-      }
-    }
+    return res.status(200).json(
+      ok(id, {
+        transaction: paymeId,
+        cancel_time: cancelTime,
+        state: Number(updated?.state ?? newState),
+        reason: updated?.reason ?? (Number.isFinite(reason) ? reason : null),
+      })
+    );
+  } catch (e) {
+    try { await client.query("ROLLBACK"); } catch {}
+    console.error("[payme] CancelTransaction error:", e?.message || e);
+    if (e?.code) console.error("[payme] pg code:", e.code);
+    return res.status(200).json(rpcError(id, -32400, "Internal error"));
+  } finally {
+    client.release();
+  }
+}
 
     // ---------------- CheckTransaction ----------------
     if (method === "CheckTransaction") {
