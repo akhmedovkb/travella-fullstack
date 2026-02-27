@@ -373,6 +373,15 @@ async function paymeMerchantRpc(req, res) {
         await setTxState(client, paymeId, { state: 2, perform_time: performTime });
         await markOrderStatusTx(client, orderId, "paid", new Date(performTime));
 
+        // before creditLedgerOnceTx
+        const { rows: cRows } = await client.query(`SELECT id FROM clients WHERE id=$1`, [
+          Number(order.client_id),
+        ]);
+        if (!cRows.length) {
+          await client.query("ROLLBACK");
+          return res.status(200).json(rpcError(id, -31050, "Client not found"));
+        }
+
         await creditLedgerOnceTx(client, {
           clientId: Number(order.client_id),
           amountTiyin: Number(order.amount_tiyin),
