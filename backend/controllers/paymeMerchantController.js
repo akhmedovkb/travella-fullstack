@@ -82,7 +82,7 @@ function extractOrderId(params) {
 async function getOrderTx(client, orderId) {
   const { rows } = await client.query(
     `SELECT id, client_id, amount_tiyin, status, paid_at
-       FROM payme_topup_orders
+       FROM topup_orders
       WHERE id = $1
       FOR UPDATE`,
     [orderId]
@@ -137,7 +137,7 @@ async function setTxState(client, paymeId, patch) {
 
 async function markOrderStatusTx(client, orderId, status, paidAt = null) {
   await client.query(
-    `UPDATE payme_topup_orders
+    `UPDATE topup_orders
         SET status = $2,
             paid_at = COALESCE($3, paid_at)
       WHERE id = $1`,
@@ -212,7 +212,7 @@ async function paymeMerchantRpc(req, res) {
 
       const { rows } = await pool.query(
         `SELECT id, amount_tiyin, status
-           FROM payme_topup_orders
+           FROM topup_orders
           WHERE id = $1`,
         [orderId]
       );
