@@ -1,10 +1,18 @@
+// backend/controllers/paymeMerchantController.js
 const pool = require("../db");
+const crypto = require("crypto");
 
 /**
- * Payme Merchant API: JSON-RPC 2.0 over HTTP POST.
- * Auth: Authorization: Basic base64(login:password)
- * login + key (password) задаются в env.
+ * Payme Merchant API (Paycom): JSON-RPC 2.0 via HTTP POST
+ * Auth: Basic base64(login:password)
+ *
+ * ENV:
+ *   PAYME_MERCHANT_LOGIN
+ *   PAYME_MERCHANT_KEY
  */
+
+const TX_TIMEOUT_MS = 12 * 60 * 60 * 1000; // 12h
+
 function ok(id, result) {
   return { jsonrpc: "2.0", id, result };
 }
@@ -12,6 +20,10 @@ function rpcError(id, code, message, data) {
   const e = { code, message };
   if (data !== undefined) e.data = data;
   return { jsonrpc: "2.0", id, error: e };
+}
+
+function nowMs() {
+  return Date.now();
 }
 
 function parseBasicAuth(req) {
@@ -28,23 +40,27 @@ function parseBasicAuth(req) {
   }
 }
 
-function nowMs() {
-  return Date.now();
+function safeEq(a, b) {
+  const aa = Buffer.from(String(a || ""));
+  const bb = Buffer.from(String(b || ""));
+  if (aa.length !== bb.length) return false;
+  return crypto.timingSafeEqual(aa, bb);
 }
 
-async function getOrder(orderId) {
-  const { rows } = await pool.query(
-    `SELECT id, client_id, amount_tiyin, status, paid_at
-     FROM payme_topup_orders
-     WHERE id = $1`,
-    [orderId]
-  );
-  return rows[0] || null;
+function requireAuth(req) {
+  const expectedLogin = process.env.PAYME_MERCHANT_LOGIN || "";
+  const expectedKey = process.env.PAYME_MERCHANT_KEY || "";
+  if (!expectedLogin || !expectedKey) return false;
+
+  const parsed = parseBasicAuth(req);
+  if (!parsed) return false;
+
+  return safeEq(parsed.login, expectedLogin) && safeEq(parsed.password, expectedKey);
 }
 
 /**
- * В Payme "account" приходит как объект, где поля зависят от настройки кассы.
- * Мы используем: ac.order_id=<our order id> (как в документации примере).
+ * Payme "account" object depends on cashier settings.
+ * We use: account.order_id (as Payme asked you)
  */
 function extractOrderId(params) {
   const oid = params?.account?.order_id ?? params?.account?.["order_id"];
@@ -52,288 +68,416 @@ function extractOrderId(params) {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-async function upsertPaymeTx({ paymeId, orderId, amount, time, state, perform_time, cancel_time, reason }) {
-  await pool.query(
-    `
-    INSERT INTO payme_transactions (payme_id, order_id, amount_tiyin, state, create_time, perform_time, cancel_time, reason, updated_at)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8, now())
-    ON CONFLICT (payme_id) DO UPDATE SET
-      order_id = EXCLUDED.order_id,
-      amount_tiyin = EXCLUDED.amount_tiyin,
-      state = EXCLUDED.state,
-      create_time = COALESCE(payme_transactions.create_time, EXCLUDED.create_time),
-      perform_time = COALESCE(EXCLUDED.perform_time, payme_transactions.perform_time),
-      cancel_time = COALESCE(EXCLUDED.cancel_time, payme_transactions.cancel_time),
-      reason = COALESCE(EXCLUDED.reason, payme_transactions.reason),
-      updated_at = now()
-    `,
-    [paymeId, orderId, amount, state, time || null, perform_time || null, cancel_time || null, reason || null]
+async function getOrderTx(client, orderId) {
+  const { rows } = await client.query(
+    `SELECT id, client_id, amount_tiyin, status, paid_at
+     FROM payme_topup_orders
+     WHERE id = $1
+     FOR UPDATE`,
+    [orderId]
   );
+  return rows[0] || null;
 }
 
-async function markOrderStatus(orderId, status, paidAt = null) {
-  await pool.query(
+async function getTxForUpdate(client, paymeId) {
+  const { rows } = await client.query(
+    `SELECT payme_id, order_id, amount_tiyin, state, create_time, perform_time, cancel_time, reason
+     FROM payme_transactions
+     WHERE payme_id = $1
+     FOR UPDATE`,
+    [paymeId]
+  );
+  return rows[0] || null;
+}
+
+async function insertTxIfAbsent(client, { paymeId, orderId, amount, createTime }) {
+  // idempotent create (do not overwrite an existing tx)
+  const { rows } = await client.query(
+    `INSERT INTO payme_transactions
+      (payme_id, order_id, amount_tiyin, state, create_time, updated_at)
+     VALUES ($1,$2,$3,1,$4,now())
+     ON CONFLICT (payme_id) DO NOTHING
+     RETURNING payme_id, order_id, amount_tiyin, state, create_time, perform_time, cancel_time, reason`,
+    [paymeId, orderId, amount, createTime]
+  );
+  return rows[0] || null;
+}
+
+async function setTxState(client, paymeId, patch) {
+  const state = Number.isFinite(patch.state) ? patch.state : null;
+  const perform_time = Number.isFinite(patch.perform_time) ? patch.perform_time : null;
+  const cancel_time = Number.isFinite(patch.cancel_time) ? patch.cancel_time : null;
+  const reason = patch.reason === undefined ? null : patch.reason;
+
+  const { rows } = await client.query(
+    `UPDATE payme_transactions
+       SET state = COALESCE($2, state),
+           perform_time = COALESCE($3, perform_time),
+           cancel_time = COALESCE($4, cancel_time),
+           reason = COALESCE($5, reason),
+           updated_at = now()
+     WHERE payme_id = $1
+     RETURNING payme_id, order_id, amount_tiyin, state, create_time, perform_time, cancel_time, reason`,
+    [paymeId, state, perform_time, cancel_time, reason]
+  );
+  return rows[0] || null;
+}
+
+async function markOrderStatusTx(client, orderId, status, paidAt = null) {
+  await client.query(
     `UPDATE payme_topup_orders
-     SET status = $2,
-         paid_at = COALESCE($3, paid_at)
-     WHERE id = $1`,
+        SET status = $2,
+            paid_at = COALESCE($3, paid_at)
+      WHERE id = $1`,
     [orderId, status, paidAt]
   );
 }
 
-/**
- * КРИТИЧЕСКОЕ: начисление в ledger — ТОЛЬКО 1 раз.
- * Идемпотентность держим уникальным индексом uq_contact_ledger_payme (meta->>'payme_id').
- */
-async function creditLedgerOnce({ clientId, amountTiyin, orderId, paymeId }) {
-  const meta = { payme_id: String(paymeId), order_id: String(orderId) };
-
-  await pool.query(
-    `
-    INSERT INTO contact_balance_ledger (client_id, amount, reason, source, meta)
-    VALUES ($1, $2, 'topup', 'payme', $3::jsonb)
-    ON CONFLICT DO NOTHING
-    `,
-    [clientId, amountTiyin, JSON.stringify(meta)]
+async function creditLedgerOnceTx(client, { clientId, amountTiyin, orderId, paymeId }) {
+  // IMPORTANT:
+  // - Insert ledger row ONCE
+  // - Update clients.contact_balance ONLY IF ledger inserted (prevents double-credit on retries)
+  const { rows } = await client.query(
+    `INSERT INTO contact_balance_ledger
+      (client_id, amount_tiyin, reason, ref_type, ref_id, payme_id, created_at)
+     VALUES ($1,$2,'payme_topup','topup_order',$3,$4,now())
+     ON CONFLICT (payme_id) DO NOTHING
+     RETURNING id`,
+    [clientId, amountTiyin, orderId, paymeId]
   );
 
-  // если у тебя ещё есть legacy clients.contact_balance — обновляй ТОЛЬКО если проект так живёт сейчас.
-  // Иначе — убери этот блок.
-  await pool.query(
-    `
-    UPDATE clients
-    SET contact_balance = COALESCE(contact_balance,0) + $2
-    WHERE id = $1
-    `,
+  if (!rows?.length) return { credited: false };
+
+  // keep current architecture: clients.contact_balance exists in your system
+  await client.query(
+    `UPDATE clients
+        SET contact_balance = COALESCE(contact_balance, 0) + $2
+      WHERE id = $1`,
     [clientId, amountTiyin]
   );
+
+  return { credited: true };
 }
 
-exports.paymeMerchantRpc = async (req, res) => {
-  const auth = parseBasicAuth(req);
-  const LOGIN = process.env.PAYME_MERCHANT_LOGIN || "";
-  const KEY = process.env.PAYME_MERCHANT_KEY || "";
+function validateRpc(body) {
+  const jsonrpc = body?.jsonrpc;
+  const id = body?.id;
+  const method = body?.method;
+  const params = body?.params;
 
-  const body = req.body || {};
-  const id = body.id;
-  const method = body.method;
-  const params = body.params || {};
+  if (jsonrpc !== "2.0") return { ok: false, id: id ?? null, err: rpcError(id ?? null, -32600, "Invalid Request") };
+  if (typeof method !== "string" || !method) return { ok: false, id: id ?? null, err: rpcError(id ?? null, -32600, "Invalid Request") };
+  if (params !== undefined && (typeof params !== "object" || params === null)) {
+    return { ok: false, id: id ?? null, err: rpcError(id ?? null, -32602, "Invalid params") };
+  }
+  return { ok: true, id, method, params: params || {} };
+}
 
-  // Payme требует HTTP 200 даже при ошибках протокола :contentReference[oaicite:3]{index=3}
+module.exports = async (req, res) => {
+  // Payme expects HTTP 200 for JSON-RPC responses, even on errors
   try {
-    if (!auth || auth.login !== LOGIN || auth.password !== KEY) {
-      res.status(200).json(rpcError(id, -32504, "Unauthorized"));
-      return;
+    if (!requireAuth(req)) {
+      return res.status(200).json(rpcError(null, -32504, "Unauthorized"));
     }
 
-    if (!method) {
-      res.status(200).json(rpcError(id, -32600, "Invalid Request"));
-      return;
-    }
+    const v = validateRpc(req.body || {});
+    if (!v.ok) return res.status(200).json(v.err);
 
-    // ------------- CheckPerformTransaction -------------
+    const { id, method, params } = v;
+
+    // ---------------- CheckPerformTransaction ----------------
     if (method === "CheckPerformTransaction") {
       const orderId = extractOrderId(params);
       const amount = Number(params.amount);
 
-      if (!orderId) {
-        res.status(200).json(rpcError(id, -31050, "Invalid account"));
-        return;
-      }
-      const order = await getOrder(orderId);
-      if (!order) {
-        res.status(200).json(rpcError(id, -31050, "Order not found"));
-        return;
-      }
-      if (Number(order.amount_tiyin) !== amount) {
-        res.status(200).json(rpcError(id, -31001, "Incorrect amount"));
-        return;
-      }
-      // если уже paid — запрещаем повтор
-      if (order.status === "paid") {
-        res.status(200).json(rpcError(id, -31008, "Already paid"));
-        return;
-      }
+      if (!orderId) return res.status(200).json(rpcError(id, -31050, "Invalid account"));
+      if (!Number.isFinite(amount) || amount <= 0) return res.status(200).json(rpcError(id, -32602, "Invalid params.amount"));
 
-      res.status(200).json(ok(id, { allow: true }));
-      return;
+      const { rows } = await pool.query(
+        `SELECT id, amount_tiyin, status
+           FROM payme_topup_orders
+          WHERE id = $1`,
+        [orderId]
+      );
+      const order = rows[0];
+      if (!order) return res.status(200).json(rpcError(id, -31050, "Order not found"));
+      if (Number(order.amount_tiyin) !== amount) return res.status(200).json(rpcError(id, -31001, "Incorrect amount"));
+      if (order.status === "paid") return res.status(200).json(rpcError(id, -31008, "Already paid"));
+
+      return res.status(200).json(ok(id, { allow: true }));
     }
 
-    // ------------- CreateTransaction -------------
+    // ---------------- CreateTransaction ----------------
     if (method === "CreateTransaction") {
       const orderId = extractOrderId(params);
       const amount = Number(params.amount);
       const paymeId = String(params.id || "");
-      const time = Number(params.time);
+      const time = Number(params.time); // Payme sends ms
 
-      if (!paymeId) {
-        res.status(200).json(rpcError(id, -32602, "Missing params.id"));
-        return;
-      }
-      if (!orderId) {
-        res.status(200).json(rpcError(id, -31050, "Invalid account"));
-        return;
-      }
+      if (!paymeId) return res.status(200).json(rpcError(id, -32602, "Missing params.id"));
+      if (!orderId) return res.status(200).json(rpcError(id, -31050, "Invalid account"));
+      if (!Number.isFinite(amount) || amount <= 0) return res.status(200).json(rpcError(id, -32602, "Invalid params.amount"));
 
-      const order = await getOrder(orderId);
-      if (!order) {
-        res.status(200).json(rpcError(id, -31050, "Order not found"));
-        return;
-      }
-      if (Number(order.amount_tiyin) !== amount) {
-        res.status(200).json(rpcError(id, -31001, "Incorrect amount"));
-        return;
-      }
-      if (order.status === "paid") {
-        res.status(200).json(rpcError(id, -31008, "Already paid"));
-        return;
-      }
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
 
-      await upsertPaymeTx({ paymeId, orderId, amount, time, state: 1 });
-      await markOrderStatus(orderId, "created");
+        // If tx exists => idempotent response, but validate it matches order+amount
+        const existing = await getTxForUpdate(client, paymeId);
+        if (existing) {
+          if (Number(existing.order_id) !== Number(orderId)) {
+            await client.query("ROLLBACK");
+            return res.status(200).json(rpcError(id, -31099, "Transaction conflict (order mismatch)"));
+          }
+          if (Number(existing.amount_tiyin) !== Number(amount)) {
+            await client.query("ROLLBACK");
+            return res.status(200).json(rpcError(id, -31001, "Incorrect amount"));
+          }
 
-      // transaction — наш внутренний номер транзакции (можно orderId)
-      res.status(200).json(
-        ok(id, {
-          create_time: time || nowMs(),
-          transaction: String(orderId),
-          state: 1,
-          receivers: null,
-        })
-      );
-      return;
+          // If created long ago and not performed -> keep state but Payme may retry; we return current state
+          await client.query("COMMIT");
+          return res.status(200).json(
+            ok(id, {
+              create_time: Number(existing.create_time) || time || nowMs(),
+              transaction: paymeId,
+              state: Number(existing.state),
+              receivers: null,
+            })
+          );
+        }
+
+        // lock order + validate
+        const order = await getOrderTx(client, orderId);
+        if (!order) {
+          await client.query("ROLLBACK");
+          return res.status(200).json(rpcError(id, -31050, "Order not found"));
+        }
+        if (Number(order.amount_tiyin) !== amount) {
+          await client.query("ROLLBACK");
+          return res.status(200).json(rpcError(id, -31001, "Incorrect amount"));
+        }
+        if (order.status === "paid") {
+          await client.query("ROLLBACK");
+          return res.status(200).json(rpcError(id, -31008, "Already paid"));
+        }
+
+        const createTime = Number.isFinite(time) && time > 0 ? time : nowMs();
+        await insertTxIfAbsent(client, { paymeId, orderId, amount, createTime });
+
+        // mark order as created (idempotent)
+        if (order.status !== "created") {
+          await markOrderStatusTx(client, orderId, "created");
+        }
+
+        await client.query("COMMIT");
+
+        return res.status(200).json(
+          ok(id, {
+            create_time: createTime,
+            transaction: paymeId,
+            state: 1,
+            receivers: null,
+          })
+        );
+      } catch (e) {
+        try {
+          await client.query("ROLLBACK");
+        } catch {}
+        console.error("[payme] CreateTransaction error:", e?.message || e);
+        return res.status(200).json(rpcError(id, -32400, "Internal error"));
+      } finally {
+        client.release();
+      }
     }
 
-    // ------------- PerformTransaction -------------
+    // ---------------- PerformTransaction ----------------
     if (method === "PerformTransaction") {
       const paymeId = String(params.id || "");
-      if (!paymeId) {
-        res.status(200).json(rpcError(id, -32602, "Missing params.id"));
-        return;
-      }
+      if (!paymeId) return res.status(200).json(rpcError(id, -32602, "Missing params.id"));
 
-      const { rows } = await pool.query(
-        `SELECT payme_id, order_id, amount_tiyin, state
-         FROM payme_transactions
-         WHERE payme_id = $1`,
-        [paymeId]
-      );
-      const tx = rows[0];
-      if (!tx) {
-        res.status(200).json(rpcError(id, -31003, "Transaction not found"));
-        return;
-      }
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
 
-      // если уже performed — просто вернём успешный ответ (идемпотентность)
-      if (Number(tx.state) === 2) {
-        res.status(200).json(
+        const tx = await getTxForUpdate(client, paymeId);
+        if (!tx) {
+          await client.query("ROLLBACK");
+          return res.status(200).json(rpcError(id, -31003, "Transaction not found"));
+        }
+
+        // already performed => idempotent
+        if (Number(tx.state) === 2) {
+          await client.query("COMMIT");
+          return res.status(200).json(
+            ok(id, {
+              transaction: paymeId,
+              perform_time: Number(tx.perform_time) || nowMs(),
+              state: 2,
+            })
+          );
+        }
+
+        // canceled states
+        if (Number(tx.state) === -1 || Number(tx.state) === -2) {
+          await client.query("COMMIT");
+          return res.status(200).json(rpcError(id, -31008, "Transaction cancelled"));
+        }
+
+        // timeout check (for not performed)
+        const ct = Number(tx.create_time) || 0;
+        if (ct && nowMs() - ct > TX_TIMEOUT_MS) {
+          // auto-cancel expired pending transaction
+          const cancelTime = nowMs();
+          await setTxState(client, paymeId, { state: -1, cancel_time: cancelTime, reason: 4 }); // reason=4 (timeout) — safe default
+          await client.query("COMMIT");
+          return res.status(200).json(rpcError(id, -31008, "Transaction expired"));
+        }
+
+        const orderId = Number(tx.order_id);
+        const order = await getOrderTx(client, orderId);
+        if (!order) {
+          await client.query("ROLLBACK");
+          return res.status(200).json(rpcError(id, -31050, "Order not found"));
+        }
+
+        // if order already paid — mark tx as performed (idempotent recovery)
+        if (order.status === "paid") {
+          const performTime = order.paid_at ? new Date(order.paid_at).getTime() : nowMs();
+          await setTxState(client, paymeId, { state: 2, perform_time: performTime });
+          await client.query("COMMIT");
+          return res.status(200).json(
+            ok(id, { transaction: paymeId, perform_time: performTime, state: 2 })
+          );
+        }
+
+        const performTime = nowMs();
+
+        // 1) set tx performed
+        await setTxState(client, paymeId, { state: 2, perform_time: performTime });
+
+        // 2) mark order paid
+        await markOrderStatusTx(client, orderId, "paid", new Date(performTime));
+
+        // 3) credit ledger ONCE
+        await creditLedgerOnceTx(client, {
+          clientId: Number(order.client_id),
+          amountTiyin: Number(order.amount_tiyin),
+          orderId,
+          paymeId,
+        });
+
+        await client.query("COMMIT");
+
+        return res.status(200).json(
           ok(id, {
-            transaction: String(tx.order_id),
-            perform_time: nowMs(),
+            transaction: paymeId,
+            perform_time: performTime,
             state: 2,
           })
         );
-        return;
+      } catch (e) {
+        try {
+          await client.query("ROLLBACK");
+        } catch {}
+        console.error("[payme] PerformTransaction error:", e?.message || e);
+        return res.status(200).json(rpcError(id, -32400, "Internal error"));
+      } finally {
+        client.release();
       }
-
-      const order = await getOrder(Number(tx.order_id));
-      if (!order) {
-        res.status(200).json(rpcError(id, -31050, "Order not found"));
-        return;
-      }
-      if (order.status === "paid") {
-        // уже оплачен — считаем выполненным
-        await upsertPaymeTx({ paymeId, orderId: order.id, amount: Number(tx.amount_tiyin), state: 2, perform_time: nowMs() });
-        res.status(200).json(ok(id, { transaction: String(order.id), perform_time: nowMs(), state: 2 }));
-        return;
-      }
-
-      const performTime = nowMs();
-
-      // 1) помечаем tx performed
-      await upsertPaymeTx({
-        paymeId,
-        orderId: order.id,
-        amount: Number(tx.amount_tiyin),
-        state: 2,
-        perform_time: performTime,
-      });
-
-      // 2) помечаем order paid
-      await markOrderStatus(order.id, "paid", new Date());
-
-      // 3) начисляем в ledger ОДИН РАЗ
-      await creditLedgerOnce({
-        clientId: Number(order.client_id),
-        amountTiyin: Number(order.amount_tiyin),
-        orderId: order.id,
-        paymeId,
-      });
-
-      res.status(200).json(
-        ok(id, {
-          transaction: String(order.id),
-          perform_time: performTime,
-          state: 2,
-        })
-      );
-      return;
     }
 
-    // ------------- CancelTransaction -------------
+    // ---------------- CancelTransaction ----------------
     if (method === "CancelTransaction") {
       const paymeId = String(params.id || "");
       const reason = Number(params.reason);
-      if (!paymeId) {
-        res.status(200).json(rpcError(id, -32602, "Missing params.id"));
-        return;
+
+      if (!paymeId) return res.status(200).json(rpcError(id, -32602, "Missing params.id"));
+
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+
+        const tx = await getTxForUpdate(client, paymeId);
+        if (!tx) {
+          await client.query("ROLLBACK");
+          return res.status(200).json(rpcError(id, -31003, "Transaction not found"));
+        }
+
+        // idempotent: already canceled
+        if (Number(tx.state) === -1 || Number(tx.state) === -2) {
+          await client.query("COMMIT");
+          return res.status(200).json(
+            ok(id, {
+              transaction: paymeId,
+              cancel_time: Number(tx.cancel_time) || nowMs(),
+              state: Number(tx.state),
+              reason: tx.reason ?? null,
+            })
+          );
+        }
+
+        const cancelTime = nowMs();
+
+        // if performed -> state = -2, else -1
+        const newState = Number(tx.state) === 2 ? -2 : -1;
+
+        const updated = await setTxState(client, paymeId, {
+          state: newState,
+          cancel_time: cancelTime,
+          reason: Number.isFinite(reason) ? reason : null,
+        });
+
+        // IMPORTANT: we do NOT auto-refund ledger here (your previous comment is kept).
+        // Refund (if needed) must be a separate explicit operation.
+
+        await client.query("COMMIT");
+
+        return res.status(200).json(
+          ok(id, {
+            transaction: paymeId,
+            cancel_time: cancelTime,
+            state: Number(updated?.state ?? newState),
+            reason: updated?.reason ?? (Number.isFinite(reason) ? reason : null),
+          })
+        );
+      } catch (e) {
+        try {
+          await client.query("ROLLBACK");
+        } catch {}
+        console.error("[payme] CancelTransaction error:", e?.message || e);
+        return res.status(200).json(rpcError(id, -32400, "Internal error"));
+      } finally {
+        client.release();
       }
-
-      const cancelTime = nowMs();
-
-      // Мы не делаем "refund ledger" автоматически здесь.
-      // Если нужен авто-возврат — скажи, добавлю отдельной логикой.
-      await pool.query(
-        `UPDATE payme_transactions
-         SET state = -1, cancel_time = $2, reason = $3, updated_at = now()
-         WHERE payme_id = $1`,
-        [paymeId, cancelTime, Number.isFinite(reason) ? reason : null]
-      );
-
-      res.status(200).json(ok(id, { cancel_time: cancelTime, state: -1, transaction: paymeId }));
-      return;
     }
 
-    // ------------- CheckTransaction -------------
+    // ---------------- CheckTransaction ----------------
     if (method === "CheckTransaction") {
       const paymeId = String(params.id || "");
+      if (!paymeId) return res.status(200).json(rpcError(id, -32602, "Missing params.id"));
+
       const { rows } = await pool.query(
         `SELECT payme_id, order_id, state, create_time, perform_time, cancel_time, reason
-         FROM payme_transactions
-         WHERE payme_id = $1`,
+           FROM payme_transactions
+          WHERE payme_id = $1`,
         [paymeId]
       );
       const tx = rows[0];
-      if (!tx) {
-        res.status(200).json(rpcError(id, -31003, "Transaction not found"));
-        return;
-      }
+      if (!tx) return res.status(200).json(rpcError(id, -31003, "Transaction not found"));
 
-      res.status(200).json(
+      return res.status(200).json(
         ok(id, {
           create_time: Number(tx.create_time) || 0,
           perform_time: Number(tx.perform_time) || 0,
           cancel_time: Number(tx.cancel_time) || 0,
-          transaction: String(tx.order_id),
+          transaction: String(tx.payme_id),
           state: Number(tx.state),
           reason: tx.reason ?? null,
         })
       );
-      return;
     }
 
-    // ------------- GetStatement (обязателен) -------------
-    // Минимальная реализация: отдаём все payme_transactions за диапазон.
+    // ---------------- GetStatement (required) ----------------
     if (method === "GetStatement") {
       const from = Number(params.from);
       const to = Number(params.to);
@@ -341,41 +485,39 @@ exports.paymeMerchantRpc = async (req, res) => {
       const { rows } = await pool.query(
         `
         SELECT payme_id, order_id, amount_tiyin, state, create_time, perform_time, cancel_time, reason
-        FROM payme_transactions
-        WHERE
-          ($1::bigint IS NULL OR create_time >= $1)
-          AND ($2::bigint IS NULL OR create_time <= $2)
-        ORDER BY create_time ASC
-        LIMIT 5000
+          FROM payme_transactions
+         WHERE ($1::bigint IS NULL OR create_time >= $1)
+           AND ($2::bigint IS NULL OR create_time <= $2)
+         ORDER BY create_time ASC
+         LIMIT 5000
         `,
         [Number.isFinite(from) ? from : null, Number.isFinite(to) ? to : null]
       );
 
       const result = rows.map((r) => ({
-        id: r.payme_id,
+        id: String(r.payme_id),
         time: Number(r.create_time) || 0,
         amount: Number(r.amount_tiyin) || 0,
         account: { order_id: String(r.order_id) },
         create_time: Number(r.create_time) || 0,
         perform_time: Number(r.perform_time) || 0,
         cancel_time: Number(r.cancel_time) || 0,
-        transaction: String(r.order_id),
+        transaction: String(r.payme_id),
         state: Number(r.state),
         reason: r.reason ?? null,
       }));
 
-      res.status(200).json(ok(id, { transactions: result }));
-      return;
+      return res.status(200).json(ok(id, { transactions: result }));
     }
 
-    // Если прилетит SetFiscalData — можно принять и залогировать (не обязательно) :contentReference[oaicite:4]{index=4}
+    // ---------------- SetFiscalData (optional) ----------------
     if (method === "SetFiscalData") {
-      res.status(200).json(ok(id, { success: true }));
-      return;
+      return res.status(200).json(ok(id, { success: true }));
     }
 
-    res.status(200).json(rpcError(id, -32601, "Method not found"));
+    return res.status(200).json(rpcError(id, -32601, "Method not found"));
   } catch (e) {
-    res.status(200).json(rpcError(id, -32400, "Internal error"));
+    console.error("[payme] handler fatal:", e?.message || e);
+    return res.status(200).json(rpcError(null, -32400, "Internal error"));
   }
 };
