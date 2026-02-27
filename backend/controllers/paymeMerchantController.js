@@ -175,6 +175,35 @@ async function creditLedgerOnceTx(client, { clientId, amountTiyin, orderId, paym
   return { credited: true };
 }
 
+async function debitLedgerOnceTx(client, { clientId, amountTiyin, orderId, paymeId, reasonCode }) {
+  const meta = {
+    payme_id: String(paymeId),
+    order_id: String(orderId),
+    cancel_reason: reasonCode == null ? null : String(reasonCode),
+  };
+
+  // минусуем через отдельный reason, чтобы был отдельный уникальный индекс
+  const { rows } = await client.query(
+    `INSERT INTO contact_balance_ledger
+      (client_id, amount, reason, source, meta, created_at)
+     VALUES ($1, $2, 'topup_reversal', 'payme', $3::jsonb, now())
+     ON CONFLICT DO NOTHING
+     RETURNING id`,
+    [clientId, -Math.abs(Number(amountTiyin)), JSON.stringify(meta)]
+  );
+
+  if (!rows?.length) return { debited: false };
+
+  await client.query(
+    `UPDATE clients
+        SET contact_balance = GREATEST(COALESCE(contact_balance,0) + $2, 0)
+      WHERE id = $1`,
+    [clientId, -Math.abs(Number(amountTiyin))]
+  );
+
+  return { debited: true };
+}
+
 function validateRpc(body) {
   const jsonrpc = body?.jsonrpc;
   const id = body?.id;
@@ -450,7 +479,22 @@ async function paymeMerchantRpc(req, res) {
           reason: Number.isFinite(reason) ? reason : null,
         });
 
-        await client.query("COMMIT");
+        // ✅ если отменили уже выполненную транзакцию — делаем реверс баланса (строго 1 раз)
+        if (Number(updated?.state ?? newState) === -2) {
+          const orderId = Number(tx.order_id);
+          const order = await getOrderTx(client, orderId);
+          if (order) {
+            await debitLedgerOnceTx(client, {
+              clientId: Number(order.client_id),
+              amountTiyin: Number(order.amount_tiyin),
+              orderId,
+              paymeId,
+              reasonCode: Number.isFinite(reason) ? reason : null,
+            });
+            // статус заказа можно пометить “cancelled” (не обязательно, но полезно)
+            await markOrderStatusTx(client, orderId, "cancelled");
+          }
+        }
 
         return res.status(200).json(
           ok(id, {
