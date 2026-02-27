@@ -16,6 +16,7 @@ const TX_TIMEOUT_MS = 12 * 60 * 60 * 1000; // 12h
 function ok(id, result) {
   return { jsonrpc: "2.0", id, result };
 }
+
 function rpcError(id, code, message, data) {
   const e = { code, message };
   if (data !== undefined) e.data = data;
@@ -71,9 +72,9 @@ function extractOrderId(params) {
 async function getOrderTx(client, orderId) {
   const { rows } = await client.query(
     `SELECT id, client_id, amount_tiyin, status, paid_at
-     FROM payme_topup_orders
-     WHERE id = $1
-     FOR UPDATE`,
+       FROM payme_topup_orders
+      WHERE id = $1
+      FOR UPDATE`,
     [orderId]
   );
   return rows[0] || null;
@@ -82,16 +83,15 @@ async function getOrderTx(client, orderId) {
 async function getTxForUpdate(client, paymeId) {
   const { rows } = await client.query(
     `SELECT payme_id, order_id, amount_tiyin, state, create_time, perform_time, cancel_time, reason
-     FROM payme_transactions
-     WHERE payme_id = $1
-     FOR UPDATE`,
+       FROM payme_transactions
+      WHERE payme_id = $1
+      FOR UPDATE`,
     [paymeId]
   );
   return rows[0] || null;
 }
 
 async function insertTxIfAbsent(client, { paymeId, orderId, amount, createTime }) {
-  // idempotent create (do not overwrite an existing tx)
   const { rows } = await client.query(
     `INSERT INTO payme_transactions
       (payme_id, order_id, amount_tiyin, state, create_time, updated_at)
@@ -104,20 +104,22 @@ async function insertTxIfAbsent(client, { paymeId, orderId, amount, createTime }
 }
 
 async function setTxState(client, paymeId, patch) {
-  const state = Number.isFinite(patch.state) ? patch.state : null;
-  const perform_time = Number.isFinite(patch.perform_time) ? patch.perform_time : null;
-  const cancel_time = Number.isFinite(patch.cancel_time) ? patch.cancel_time : null;
-  const reason = patch.reason === undefined ? null : patch.reason;
+  const state = Number.isFinite(patch?.state) ? patch.state : null;
+  const perform_time = Number.isFinite(patch?.perform_time) ? patch.perform_time : null;
+  const cancel_time = Number.isFinite(patch?.cancel_time) ? patch.cancel_time : null;
+  const reason = patch && Object.prototype.hasOwnProperty.call(patch, "reason")
+    ? patch.reason
+    : null;
 
   const { rows } = await client.query(
     `UPDATE payme_transactions
-       SET state = COALESCE($2, state),
-           perform_time = COALESCE($3, perform_time),
-           cancel_time = COALESCE($4, cancel_time),
-           reason = COALESCE($5, reason),
-           updated_at = now()
-     WHERE payme_id = $1
-     RETURNING payme_id, order_id, amount_tiyin, state, create_time, perform_time, cancel_time, reason`,
+        SET state = COALESCE($2, state),
+            perform_time = COALESCE($3, perform_time),
+            cancel_time = COALESCE($4, cancel_time),
+            reason = COALESCE($5, reason),
+            updated_at = now()
+      WHERE payme_id = $1
+      RETURNING payme_id, order_id, amount_tiyin, state, create_time, perform_time, cancel_time, reason`,
     [paymeId, state, perform_time, cancel_time, reason]
   );
   return rows[0] || null;
@@ -134,9 +136,6 @@ async function markOrderStatusTx(client, orderId, status, paidAt = null) {
 }
 
 async function creditLedgerOnceTx(client, { clientId, amountTiyin, orderId, paymeId }) {
-  // IMPORTANT:
-  // - Insert ledger row ONCE
-  // - Update clients.contact_balance ONLY IF ledger inserted (prevents double-credit on retries)
   const { rows } = await client.query(
     `INSERT INTO contact_balance_ledger
       (client_id, amount_tiyin, reason, ref_type, ref_id, payme_id, created_at)
@@ -148,7 +147,6 @@ async function creditLedgerOnceTx(client, { clientId, amountTiyin, orderId, paym
 
   if (!rows?.length) return { credited: false };
 
-  // keep current architecture: clients.contact_balance exists in your system
   await client.query(
     `UPDATE clients
         SET contact_balance = COALESCE(contact_balance, 0) + $2
@@ -165,15 +163,22 @@ function validateRpc(body) {
   const method = body?.method;
   const params = body?.params;
 
-  if (jsonrpc !== "2.0") return { ok: false, id: id ?? null, err: rpcError(id ?? null, -32600, "Invalid Request") };
-  if (typeof method !== "string" || !method) return { ok: false, id: id ?? null, err: rpcError(id ?? null, -32600, "Invalid Request") };
+  if (jsonrpc !== "2.0") {
+    return { ok: false, id: id ?? null, err: rpcError(id ?? null, -32600, "Invalid Request") };
+  }
+  if (typeof method !== "string" || !method) {
+    return { ok: false, id: id ?? null, err: rpcError(id ?? null, -32600, "Invalid Request") };
+  }
   if (params !== undefined && (typeof params !== "object" || params === null)) {
     return { ok: false, id: id ?? null, err: rpcError(id ?? null, -32602, "Invalid params") };
   }
   return { ok: true, id, method, params: params || {} };
 }
 
-module.exports = async (req, res) => {
+/**
+ * ✅ Сам обработчик, который должен быть callback'ом для router.post(...)
+ */
+async function paymeMerchantRpc(req, res) {
   // Payme expects HTTP 200 for JSON-RPC responses, even on errors
   try {
     if (!requireAuth(req)) {
@@ -191,7 +196,9 @@ module.exports = async (req, res) => {
       const amount = Number(params.amount);
 
       if (!orderId) return res.status(200).json(rpcError(id, -31050, "Invalid account"));
-      if (!Number.isFinite(amount) || amount <= 0) return res.status(200).json(rpcError(id, -32602, "Invalid params.amount"));
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return res.status(200).json(rpcError(id, -32602, "Invalid params.amount"));
+      }
 
       const { rows } = await pool.query(
         `SELECT id, amount_tiyin, status
@@ -216,13 +223,14 @@ module.exports = async (req, res) => {
 
       if (!paymeId) return res.status(200).json(rpcError(id, -32602, "Missing params.id"));
       if (!orderId) return res.status(200).json(rpcError(id, -31050, "Invalid account"));
-      if (!Number.isFinite(amount) || amount <= 0) return res.status(200).json(rpcError(id, -32602, "Invalid params.amount"));
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return res.status(200).json(rpcError(id, -32602, "Invalid params.amount"));
+      }
 
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
 
-        // If tx exists => idempotent response, but validate it matches order+amount
         const existing = await getTxForUpdate(client, paymeId);
         if (existing) {
           if (Number(existing.order_id) !== Number(orderId)) {
@@ -234,11 +242,10 @@ module.exports = async (req, res) => {
             return res.status(200).json(rpcError(id, -31001, "Incorrect amount"));
           }
 
-          // If created long ago and not performed -> keep state but Payme may retry; we return current state
           await client.query("COMMIT");
           return res.status(200).json(
             ok(id, {
-              create_time: Number(existing.create_time) || time || nowMs(),
+              create_time: Number(existing.create_time) || (Number.isFinite(time) ? time : nowMs()),
               transaction: paymeId,
               state: Number(existing.state),
               receivers: null,
@@ -246,7 +253,6 @@ module.exports = async (req, res) => {
           );
         }
 
-        // lock order + validate
         const order = await getOrderTx(client, orderId);
         if (!order) {
           await client.query("ROLLBACK");
@@ -264,7 +270,6 @@ module.exports = async (req, res) => {
         const createTime = Number.isFinite(time) && time > 0 ? time : nowMs();
         await insertTxIfAbsent(client, { paymeId, orderId, amount, createTime });
 
-        // mark order as created (idempotent)
         if (order.status !== "created") {
           await markOrderStatusTx(client, orderId, "created");
         }
@@ -305,7 +310,6 @@ module.exports = async (req, res) => {
           return res.status(200).json(rpcError(id, -31003, "Transaction not found"));
         }
 
-        // already performed => idempotent
         if (Number(tx.state) === 2) {
           await client.query("COMMIT");
           return res.status(200).json(
@@ -317,18 +321,15 @@ module.exports = async (req, res) => {
           );
         }
 
-        // canceled states
         if (Number(tx.state) === -1 || Number(tx.state) === -2) {
           await client.query("COMMIT");
           return res.status(200).json(rpcError(id, -31008, "Transaction cancelled"));
         }
 
-        // timeout check (for not performed)
         const ct = Number(tx.create_time) || 0;
         if (ct && nowMs() - ct > TX_TIMEOUT_MS) {
-          // auto-cancel expired pending transaction
           const cancelTime = nowMs();
-          await setTxState(client, paymeId, { state: -1, cancel_time: cancelTime, reason: 4 }); // reason=4 (timeout) — safe default
+          await setTxState(client, paymeId, { state: -1, cancel_time: cancelTime, reason: 4 });
           await client.query("COMMIT");
           return res.status(200).json(rpcError(id, -31008, "Transaction expired"));
         }
@@ -340,25 +341,17 @@ module.exports = async (req, res) => {
           return res.status(200).json(rpcError(id, -31050, "Order not found"));
         }
 
-        // if order already paid — mark tx as performed (idempotent recovery)
         if (order.status === "paid") {
           const performTime = order.paid_at ? new Date(order.paid_at).getTime() : nowMs();
           await setTxState(client, paymeId, { state: 2, perform_time: performTime });
           await client.query("COMMIT");
-          return res.status(200).json(
-            ok(id, { transaction: paymeId, perform_time: performTime, state: 2 })
-          );
+          return res.status(200).json(ok(id, { transaction: paymeId, perform_time: performTime, state: 2 }));
         }
 
         const performTime = nowMs();
-
-        // 1) set tx performed
         await setTxState(client, paymeId, { state: 2, perform_time: performTime });
-
-        // 2) mark order paid
         await markOrderStatusTx(client, orderId, "paid", new Date(performTime));
 
-        // 3) credit ledger ONCE
         await creditLedgerOnceTx(client, {
           clientId: Number(order.client_id),
           amountTiyin: Number(order.amount_tiyin),
@@ -403,7 +396,6 @@ module.exports = async (req, res) => {
           return res.status(200).json(rpcError(id, -31003, "Transaction not found"));
         }
 
-        // idempotent: already canceled
         if (Number(tx.state) === -1 || Number(tx.state) === -2) {
           await client.query("COMMIT");
           return res.status(200).json(
@@ -417,8 +409,6 @@ module.exports = async (req, res) => {
         }
 
         const cancelTime = nowMs();
-
-        // if performed -> state = -2, else -1
         const newState = Number(tx.state) === 2 ? -2 : -1;
 
         const updated = await setTxState(client, paymeId, {
@@ -426,9 +416,6 @@ module.exports = async (req, res) => {
           cancel_time: cancelTime,
           reason: Number.isFinite(reason) ? reason : null,
         });
-
-        // IMPORTANT: we do NOT auto-refund ledger here (your previous comment is kept).
-        // Refund (if needed) must be a separate explicit operation.
 
         await client.query("COMMIT");
 
@@ -520,4 +507,8 @@ module.exports = async (req, res) => {
     console.error("[payme] handler fatal:", e?.message || e);
     return res.status(200).json(rpcError(null, -32400, "Internal error"));
   }
+}
+
+module.exports = {
+  paymeMerchantRpc,
 };
