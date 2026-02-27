@@ -14,7 +14,7 @@ function money(n) {
 function fmtTs(ts) {
   if (!ts) return "—";
   try {
-    return new Date(ts).toLocaleString("ru-RU");
+    return new Date(ts).toLocaleString("ru-RU", { timeZone: "Asia/Tashkent" });
   } catch {
     return String(ts);
   }
