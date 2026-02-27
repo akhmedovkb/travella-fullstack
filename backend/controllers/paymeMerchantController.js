@@ -146,22 +146,30 @@ async function markOrderStatusTx(client, orderId, status, paidAt = null) {
 }
 
 async function creditLedgerOnceTx(client, { clientId, amountTiyin, orderId, paymeId }) {
+  // ✅ Унифицируем под схему, где ledger хранит amount (а не amount_tiyin)
+  // ✅ Идемпотентность: ON CONFLICT DO NOTHING (без указания constraint) — сработает на любой уникальности
+  const meta = {
+    payme_id: String(paymeId),
+    order_id: String(orderId),
+  };
+
   const { rows } = await client.query(
     `INSERT INTO contact_balance_ledger
-      (client_id, amount_tiyin, reason, ref_type, ref_id, payme_id, created_at)
-     VALUES ($1,$2,'payme_topup','topup_order',$3,$4,now())
-     ON CONFLICT (payme_id) DO NOTHING
+      (client_id, amount, reason, source, meta, created_at)
+     VALUES ($1, $2, 'topup', 'payme', $3::jsonb, now())
+     ON CONFLICT DO NOTHING
      RETURNING id`,
-    [clientId, amountTiyin, orderId, paymeId]
+    [clientId, Number(amountTiyin), JSON.stringify(meta)]
   );
 
   if (!rows?.length) return { credited: false };
 
+  // Если у тебя реально используется clients.contact_balance — оставляем
   await client.query(
     `UPDATE clients
         SET contact_balance = COALESCE(contact_balance, 0) + $2
       WHERE id = $1`,
-    [clientId, amountTiyin]
+    [clientId, Number(amountTiyin)]
   );
 
   return { credited: true };
