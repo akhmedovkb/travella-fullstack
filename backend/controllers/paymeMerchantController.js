@@ -49,8 +49,18 @@ function safeEq(a, b) {
 }
 
 function requireAuth(req) {
-  const expectedLogin = process.env.PAYME_MERCHANT_LOGIN || "";
-  const expectedKey = process.env.PAYME_MERCHANT_KEY || "";
+  const mode = String(process.env.PAYME_MODE || "live").toLowerCase();
+
+  const expectedLogin =
+    mode === "sandbox"
+      ? (process.env.PAYME_MERCHANT_LOGIN_SANDBOX || "")
+      : (process.env.PAYME_MERCHANT_LOGIN || "");
+
+  const expectedKey =
+    mode === "sandbox"
+      ? (process.env.PAYME_MERCHANT_KEY_SANDBOX || "")
+      : (process.env.PAYME_MERCHANT_KEY || "");
+
   if (!expectedLogin || !expectedKey) return false;
 
   const parsed = parseBasicAuth(req);
