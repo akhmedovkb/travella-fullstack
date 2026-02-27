@@ -117,92 +117,119 @@ async function findClientByQuery(qRaw) {
   return rows || [];
 }
 
+async function hasView(viewName, schema = "public") {
+  try {
+    const { rows } = await pool.query(
+      `
+      SELECT 1
+        FROM information_schema.views
+       WHERE table_schema = $1
+         AND table_name = $2
+       LIMIT 1
+    `,
+      [schema, viewName]
+    );
+    return !!rows?.length;
+  } catch {
+    return false;
+  }
+}
+
 async function getClientBalanceAndLedger(clientId) {
-  const colsClients = await getColumns("clients");
-  const colsLedger = await getColumns("contact_balance_ledger").catch(() => new Set());
+  const cid = Number(clientId);
 
-  const hasContactBalance = colsClients.has("contact_balance");
-  const hasLedger = colsLedger.size > 0;
+  const hasUnifiedView = await hasView("v_client_balance_ledger_all");
 
-  // 1) баланс
+  // 1) balance
   let balance = 0;
 
-  if (hasContactBalance) {
-    const r = await pool.query(`SELECT COALESCE(contact_balance,0) AS bal FROM clients WHERE id=$1`, [
-      clientId,
-    ]);
-    balance = toNum(r.rows?.[0]?.bal);
-  } else if (hasLedger) {
-    // считаем суммой amount
+  if (hasUnifiedView) {
     const r = await pool.query(
       `SELECT COALESCE(SUM(amount),0) AS bal
-         FROM contact_balance_ledger
+         FROM v_client_balance_ledger_all
         WHERE client_id = $1`,
-      [clientId]
+      [cid]
     );
     balance = toNum(r.rows?.[0]?.bal);
   } else {
-    balance = 0;
+    const colsClients = await getColumns("clients");
+    const colsLedger = await getColumns("contact_balance_ledger").catch(() => new Set());
+
+    if (colsClients.has("contact_balance")) {
+      const r = await pool.query(
+        `SELECT COALESCE(contact_balance,0) AS bal FROM clients WHERE id=$1`,
+        [cid]
+      );
+      balance = toNum(r.rows?.[0]?.bal);
+    } else if (colsLedger.size) {
+      const r = await pool.query(
+        `SELECT COALESCE(SUM(amount),0) AS bal
+           FROM contact_balance_ledger
+          WHERE client_id = $1`,
+        [cid]
+      );
+      balance = toNum(r.rows?.[0]?.bal);
+    } else {
+      balance = 0;
+    }
   }
 
   // 2) ledger
   let ledger = [];
-  if (hasLedger) {
-    // Выбираем набор колонок "гибко"
-    const c = colsLedger;
-    const sel = [
-      c.has("id") ? "id" : "NULL AS id",
-      c.has("created_at") ? "created_at" : "now() AS created_at",
-      c.has("amount") ? "amount" : "0 AS amount",
-      c.has("reason") ? "reason" : "NULL AS reason",
-      c.has("service_id") ? "service_id" : "NULL AS service_id",
-      c.has("source") ? "source" : "NULL AS source",
-      c.has("note") ? "note" : (c.has("comment") ? "comment AS note" : "NULL AS note"),
-      c.has("meta") ? "meta" : "NULL AS meta",
-    ];
 
-    const limitNum = 100;
-    
+  if (hasUnifiedView) {
+    const cols = await getColumns("v_client_balance_ledger_all").catch(() => new Set());
+
+    const hasId = cols.has("id");
+    const hasCreatedAt = cols.has("created_at");
+    const hasServiceId = cols.has("service_id");
+    const hasReason = cols.has("reason");
+    const hasSource = cols.has("source");
+    const hasMeta = cols.has("meta");
+
+    const sel = [
+      hasId ? "id" : "NULL::bigint AS id",
+      "client_id",
+      "amount",
+      hasReason ? "reason" : "NULL::text AS reason",
+      hasServiceId ? "service_id" : "NULL::bigint AS service_id",
+      hasSource ? "source" : "NULL::text AS source",
+      hasMeta ? "meta" : "NULL::jsonb AS meta",
+      hasCreatedAt ? "created_at" : "now() AS created_at",
+    ].join(", ");
+
+    const order = `${hasCreatedAt ? "created_at" : "1"} DESC, ${hasId ? "id" : "1"} DESC`;
+
     const r = await pool.query(
       `
-      SELECT
-        id,
-        client_id,
-        amount,
-        reason,
-        service_id,
-        source,
-        meta,
-        created_at
-      FROM contact_balance_ledger
-      WHERE client_id = $1
-    
-      UNION ALL
-    
-      SELECT
-        id,
-        client_id,
-        amount,
-        reason,
-        CASE
-          WHEN ref_type = 'service_unlock' THEN ref_id
-          ELSE NULL
-        END AS service_id,
-        'legacy'::text AS source,
-        meta,
-        created_at
-      FROM client_balance_ledger
-      WHERE client_id = $1
-    
-      ORDER BY created_at DESC, id DESC
-      LIMIT $2
+      SELECT ${sel}
+        FROM v_client_balance_ledger_all
+       WHERE client_id = $1
+       ORDER BY ${order}
+       LIMIT 100
       `,
-      [clientId, limitNum]
+      [cid]
     );
-    
+
     ledger = r.rows || [];
   } else {
-    ledger = [];
+    // fallback (если у тебя есть legacy таблица client_balance_ledger)
+    try {
+      const r = await pool.query(
+        `
+        SELECT
+          id, client_id, amount, reason, service_id, source, meta, created_at
+        FROM contact_balance_ledger
+        WHERE client_id = $1
+        ORDER BY created_at DESC, id DESC
+        LIMIT 100
+        `,
+        [cid]
+      );
+      ledger = r.rows || [];
+    } catch {
+      ledger = [];
+    }
   }
 
   return { balance, ledger };
