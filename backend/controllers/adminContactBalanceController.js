@@ -161,14 +161,45 @@ async function getClientBalanceAndLedger(clientId) {
       c.has("meta") ? "meta" : "NULL AS meta",
     ];
 
+    const limitNum = 100;
+    
     const r = await pool.query(
-      `SELECT ${sel.join(", ")}
-         FROM contact_balance_ledger
-        WHERE client_id = $1
-        ORDER BY ${c.has("created_at") ? "created_at" : "id"} DESC
-        LIMIT 100`,
-      [clientId]
+      `
+      SELECT
+        id,
+        client_id,
+        amount,
+        reason,
+        service_id,
+        source,
+        meta,
+        created_at
+      FROM contact_balance_ledger
+      WHERE client_id = $1
+    
+      UNION ALL
+    
+      SELECT
+        id,
+        client_id,
+        amount,
+        reason,
+        CASE
+          WHEN ref_type = 'service_unlock' THEN ref_id
+          ELSE NULL
+        END AS service_id,
+        'legacy'::text AS source,
+        meta,
+        created_at
+      FROM client_balance_ledger
+      WHERE client_id = $1
+    
+      ORDER BY created_at DESC, id DESC
+      LIMIT $2
+      `,
+      [clientId, limitNum]
     );
+    
     ledger = r.rows || [];
   } else {
     ledger = [];
