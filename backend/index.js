@@ -22,6 +22,7 @@ const donasShareRoutes = require("./routes/donasShareRoutes");
 const adminDonasShareTokenRoutes = require("./routes/adminDonasShareTokenRoutes");
 const publicDonasRoutes = require("./routes/publicDonasRoutes");
 const adminDonasInventoryRoutes = require("./routes/adminDonasInventoryRoutes");
+const adminContactBalanceRoutes = require("./routes/adminContactBalanceRoutes");
 
 dotenv.config();
 const app = express();
@@ -988,6 +989,9 @@ app.use("/api/geo", geoRoutes);
 
 const airportRoutes = require("./routes/airportRoutes");
 app.use("/api/airports", airportRoutes);
+
+/** ===================== balance бот ===================== */
+app.use("/api/admin/clients", adminContactBalanceRoutes);
 
 /** ===================== Start (в самом конце) ===================== */
 const PORT = process.env.PORT || 5000;
