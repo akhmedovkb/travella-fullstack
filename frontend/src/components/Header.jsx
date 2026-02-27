@@ -403,17 +403,10 @@ export default function Header() {
                   <div className="absolute left-0 mt-2 w-64 rounded-2xl bg-[#171717] ring-1 ring-white/10 shadow-xl overflow-hidden">
                     <DropdownItem to="/admin/moderation" label={t("moderation.title", "Модерация")} icon={<IconModeration />} />
                     <DropdownItem to="/admin/leads" label={t("nav.leads", "Leads")} icon={<IconUsers />} />
-                    <DropdownItem
-                      to="/admin/refused-actual"
-                      label={t("nav.refused_actual", "Актуальные отказы")}
-                      icon={<IconChecklist />}
-                    />
+                    <DropdownItem to="/admin/contact-balance" label={t("nav.contact_balance_admin", "Баланс контактов")} icon={<IconTicket />} />
+                    <DropdownItem to="/admin/refused-actual" label={t("nav.refused_actual", "Актуальные отказы")} icon={<IconChecklist />} />
                     <DropdownItem to="/admin/broadcast" label={t("nav.broadcast", "Рассылка")} icon={<IconDoc />} />
-                    <DropdownItem
-                      to="/admin/inside-requests"
-                      label={t("nav.inside_requests", "Inside заявки")}
-                      icon={<IconChecklist />}
-                    />
+                    <DropdownItem to="/admin/inside-requests" label={t("nav.inside_requests", "Inside заявки")} icon={<IconChecklist />} />
                     <DropdownItem to="/admin/providers" label={t("nav.providers_admin", "Провайдеры")} icon={<IconUsers />} />
                     <DropdownItem to="/admin/entry-fees" label={t("nav.entry_fees_admin", "Entry fees")} icon={<IconTicket />} />
                     <DropdownItem to="/admin/hotels" label={t("nav.hotels_admin", "Отели (админ)")} icon={<IconHotel />} />
