@@ -190,7 +190,14 @@ const PAYMENTS_PROVIDER_TOKEN =
   "";
 const PAYMENTS_CURRENCY = String(process.env.TELEGRAM_PAYMENTS_CURRENCY || "UZS");
 const TOPUP_AMOUNTS = [10000, 50000, 100000];
-
+function currencyMinorFactor(ccy) {
+  const c = String(ccy || "").toUpperCase().trim();
+  if (c === "UZS") return 100;
+  if (c === "RUB") return 100;
+  if (c === "USD") return 100;
+  if (c === "EUR") return 100;
+  return 1;
+}
 // Создаём таблицы (на всякий случай), но SQL миграцию всё равно лучше прогнать отдельно
 let _unlockTablesReady = false;
 async function ensureUnlockTables(pool) {
@@ -6001,12 +6008,31 @@ bot.action("balance:topup", async (ctx) => {
       return;
     }
 
-    const rows = TOPUP_AMOUNTS.map((a) => [{ text: `+${a.toLocaleString("ru-RU")} сум`, callback_data: `balance:topup:${a}` }]);
+    const chatId = ctx.from?.id;
+    if (!chatId) {
+      await safeReply(ctx, "⚠️ Не удалось определить пользователя.");
+      return;
+    }
+
+    const clientRow = await getClientRowByChatId(pool, chatId);
+    if (!clientRow?.id) {
+      await safeReply(ctx, "👋 Сначала привяжите аккаунт через /start");
+      return;
+    }
+
+    const balNum = await getClientBalanceUnified(pool, clientRow.id);
+    const bal = Number(balNum || 0).toLocaleString("ru-RU");
+
+    const rows = TOPUP_AMOUNTS.map((a) => [
+      { text: `+${a.toLocaleString("ru-RU")} сум`, callback_data: `balance:topup:${a}` },
+    ]);
     rows.push([{ text: "⬅️ Назад", callback_data: "balance:check" }]);
 
-    await safeReply(ctx, "Выберите сумму пополнения:", {
-      reply_markup: { inline_keyboard: rows },
-    });
+    await safeReply(
+      ctx,
+      `💳 <b>Пополнение баланса</b>\n\nТекущий баланс: <b>${bal}</b> сум\n\nВыберите сумму пополнения:`,
+      { parse_mode: "HTML", reply_markup: { inline_keyboard: rows } }
+    );
   } catch (e) {
     console.error("[tg-bot] balance:topup error:", e?.message || e);
     try { await safeReply(ctx, "⚠️ Не удалось открыть пополнение. Попробуйте позже."); } catch {}
@@ -6053,7 +6079,7 @@ bot.action(/^balance:topup:(\d+)$/, async (ctx) => {
       payload,
       provider_token: PAYMENTS_PROVIDER_TOKEN,
       currency: PAYMENTS_CURRENCY,
-      prices: [{ label: "Баланс контактов", amount: Math.trunc(amount) }],
+      prices: [{ label: "Баланс контактов", amount: Math.trunc(amount * currencyMinorFactor(PAYMENTS_CURRENCY)) }],
       need_name: false,
       need_phone_number: false,
       need_email: false,
@@ -6100,13 +6126,63 @@ bot.on("successful_payment", async (ctx) => {
       return;
     }
 
-    // Telegram gives total_amount in smallest units (for UZS it is the same integer sum).
-    const paidAmount = Number(sp.total_amount || 0);
-    const creditAmount = Number.isFinite(payloadAmount) && payloadAmount > 0 ? payloadAmount : paidAmount;
+    const factor = currencyMinorFactor(sp.currency || PAYMENTS_CURRENCY);
+    const paidMinor = Number(sp.total_amount || 0);
+    const paidMajor = factor > 0 ? Math.trunc(paidMinor / factor) : Math.trunc(paidMinor);
+    
+    const creditAmount =
+      Number.isFinite(payloadAmount) && payloadAmount > 0 ? Math.trunc(payloadAmount) : paidMajor;
 
     const tx = await pool.connect();
     try {
       await tx.query("BEGIN");
+      const chargeId = String(sp.telegram_payment_charge_id || "");
+      const providerChargeId = String(sp.provider_payment_charge_id || "");
+      
+      if (chargeId || providerChargeId) {
+        const ex = await tx.query(
+          `
+          SELECT 1
+            FROM contact_balance_ledger
+           WHERE client_id = $1
+             AND reason = 'topup_telegram'
+             AND (
+               (meta->>'telegram_payment_charge_id' = $2 AND $2 <> '')
+               OR
+               (meta->>'provider_payment_charge_id' = $3 AND $3 <> '')
+             )
+           LIMIT 1
+          `,
+          [Number(clientRow.id), chargeId, providerChargeId]
+        );
+        if (ex.rowCount) {
+                    // ✅ EXTRA SAFETY: если ledger уже содержит списание по этой услуге — повторно не списываем
+          try {
+            const ledEx = await db.query(
+              `
+              SELECT 1
+                FROM contact_balance_ledger
+               WHERE client_id = $1
+                 AND service_id = $2
+                 AND reason = 'unlock_contacts'
+               LIMIT 1
+              `,
+              [cid, sid]
+            );
+            if (ledEx.rowCount) {
+              return { ok: true, already: true, charged: 0 };
+            }
+          } catch {}
+          await tx.query("ROLLBACK");
+          const balNow = await getClientBalanceUnified(pool, clientRow.id);
+          await safeReply(
+            ctx,
+            `ℹ️ Этот платеж уже был зачислен.\n\nВаш баланс: <b>${Number(balNow || 0).toLocaleString("ru-RU")}</b> сум`,
+            { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "💰 Проверить баланс", callback_data: "balance:check" }]] } }
+          );
+          return;
+        }
+      }
       const res = await addContactBalanceLedgerTx(tx, {
         clientId: clientRow.id,
         amount: creditAmount,
