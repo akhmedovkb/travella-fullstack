@@ -298,7 +298,10 @@ async function paymeMerchantRpc(req, res) {
         try {
           await client.query("ROLLBACK");
         } catch {}
+      
         console.error("[payme] CreateTransaction error:", e?.message || e);
+        if (e?.code) console.error("[payme] pg code:", e.code);
+      
         return res.status(200).json(rpcError(id, -32400, "Internal error"));
       } finally {
         client.release();
@@ -382,7 +385,10 @@ async function paymeMerchantRpc(req, res) {
         try {
           await client.query("ROLLBACK");
         } catch {}
+      
         console.error("[payme] PerformTransaction error:", e?.message || e);
+        if (e?.code) console.error("[payme] pg code:", e.code);
+      
         return res.status(200).json(rpcError(id, -32400, "Internal error"));
       } finally {
         client.release();
@@ -441,7 +447,10 @@ async function paymeMerchantRpc(req, res) {
         try {
           await client.query("ROLLBACK");
         } catch {}
+      
         console.error("[payme] CancelTransaction error:", e?.message || e);
+        if (e?.code) console.error("[payme] pg code:", e.code);
+      
         return res.status(200).json(rpcError(id, -32400, "Internal error"));
       } finally {
         client.release();
@@ -515,6 +524,8 @@ async function paymeMerchantRpc(req, res) {
     return res.status(200).json(rpcError(id, -32601, "Method not found"));
   } catch (e) {
     console.error("[payme] handler fatal:", e?.message || e);
+    if (e?.code) console.error("[payme] pg code:", e.code);
+  
     return res.status(200).json(rpcError(null, -32400, "Internal error"));
   }
 }
