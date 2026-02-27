@@ -225,19 +225,160 @@ async function ensureUnlockTables(pool) {
 // найти client по telegram_chat_id
 async function getClientRowByChatId(pool, chatId) {
   if (!pool) return null;
+
+  const cid = Number(chatId);
+  if (!Number.isFinite(cid) || cid <= 0) return null;
+
   try {
+    // 1) client id
     const r = await pool.query(
-      `SELECT id, COALESCE(contact_balance, 0) AS contact_balance
+      `SELECT id
          FROM clients
         WHERE telegram_chat_id = $1
         LIMIT 1`,
-      [Number(chatId)]
+      [cid]
     );
-    return r.rows?.[0] || null;
+    const row = r.rows?.[0] || null;
+    if (!row?.id) return null;
+
+    // 2) unified balance (view → fallback)
+    const bal = await getClientBalanceUnified(pool, Number(row.id));
+
+    return { id: Number(row.id), contact_balance: Number(bal || 0) };
   } catch (e) {
     console.error("[tg-bot] getClientRowByChatId error:", e?.message || e);
     return null;
   }
+}
+
+/* ===================== BALANCE (UNIFIED READS) ===================== */
+
+const _tgBalanceCache = { cols: new Map() };
+
+async function getRelationColumns(pool, relName, schema = "public") {
+  const key = `${schema}.${relName}`;
+  if (_tgBalanceCache.cols.has(key)) return _tgBalanceCache.cols.get(key);
+
+  const { rows } = await pool.query(
+    `
+    SELECT column_name
+      FROM information_schema.columns
+     WHERE table_schema = $1
+       AND table_name = $2
+  `,
+    [schema, relName]
+  );
+  const set = new Set((rows || []).map((r) => r.column_name));
+  _tgBalanceCache.cols.set(key, set);
+  return set;
+}
+
+async function hasRelation(pool, relName, schema = "public") {
+  try {
+    // tables
+    const t = await pool.query(
+      `
+      SELECT 1
+        FROM information_schema.tables
+       WHERE table_schema = $1
+         AND table_name = $2
+       LIMIT 1
+    `,
+      [schema, relName]
+    );
+    if (t.rows?.length) return true;
+
+    // views
+    const v = await pool.query(
+      `
+      SELECT 1
+        FROM information_schema.views
+       WHERE table_schema = $1
+         AND table_name = $2
+       LIMIT 1
+    `,
+      [schema, relName]
+    );
+    return !!v.rows?.length;
+  } catch {
+    return false;
+  }
+}
+
+function toNum(x) {
+  const n = Number(x);
+  return Number.isFinite(n) ? n : 0;
+}
+
+async function getClientBalanceUnified(pool, clientId) {
+  const hasView = await hasRelation(pool, "v_client_balance_ledger_all");
+  if (hasView) {
+    const r = await pool.query(
+      `SELECT COALESCE(SUM(amount),0) AS bal
+         FROM v_client_balance_ledger_all
+        WHERE client_id = $1`,
+      [Number(clientId)]
+    );
+    return toNum(r.rows?.[0]?.bal);
+  }
+
+  // fallback legacy cached balance
+  const r = await pool.query(
+    `SELECT COALESCE(contact_balance,0) AS bal
+       FROM clients
+      WHERE id = $1`,
+    [Number(clientId)]
+  );
+  return toNum(r.rows?.[0]?.bal);
+}
+
+async function getLastBalanceOpsUnified(pool, clientId, limit = 5) {
+  const hasView = await hasRelation(pool, "v_client_balance_ledger_all");
+  if (hasView) {
+    const cols = await getRelationColumns(pool, "v_client_balance_ledger_all").catch(() => new Set());
+    const hasServiceId = cols.has("service_id");
+    const hasReason = cols.has("reason");
+    const hasSource = cols.has("source");
+    const hasCreatedAt = cols.has("created_at");
+    const hasId = cols.has("id");
+
+    const sel = [
+      hasId ? "id" : "NULL::bigint AS id",
+      "client_id",
+      "amount",
+      hasReason ? "reason" : "NULL::text AS reason",
+      hasServiceId ? "service_id" : "NULL::bigint AS service_id",
+      hasSource ? "source" : "NULL::text AS source",
+      hasCreatedAt ? "created_at" : "now() AS created_at",
+    ].join(", ");
+
+    const order = `${hasCreatedAt ? "created_at" : "1"} DESC, ${hasId ? "id" : "1"} DESC`;
+
+    const r = await pool.query(
+      `
+      SELECT ${sel}
+        FROM v_client_balance_ledger_all
+       WHERE client_id = $1
+       ORDER BY ${order}
+       LIMIT $2
+      `,
+      [Number(clientId), Math.max(1, Math.min(25, Number(limit) || 5))]
+    );
+    return r.rows || [];
+  }
+
+  // fallback
+  const r = await pool.query(
+    `
+    SELECT id, client_id, amount, reason, service_id, source, created_at
+      FROM contact_balance_ledger
+     WHERE client_id = $1
+     ORDER BY created_at DESC, id DESC
+     LIMIT $2
+    `,
+    [Number(clientId), Math.max(1, Math.min(25, Number(limit) || 5))]
+  );
+  return r.rows || [];
 }
 
 // транзакция: если уже unlocked — не списываем повторно
@@ -5770,18 +5911,53 @@ bot.action("balance:check", async (ctx) => {
       return;
     }
 
-    const balNum = Number(clientRow.contact_balance || 0);
-    const bal = balNum.toLocaleString("ru-RU");
+    // ✅ unified balance
+    const balNum = await getClientBalanceUnified(pool, clientRow.id);
+    const bal = Number(balNum || 0).toLocaleString("ru-RU");
     const need = Number(CONTACT_UNLOCK_PRICE || 10000).toLocaleString("ru-RU");
     const topupUrl = `${SITE_URL}/dashboard/balance`;
 
     const hasLast = !!ctx.session?.lastUnlockServiceId;
 
+    // ✅ last ops
+    const ops = await getLastBalanceOpsUnified(pool, clientRow.id, 5);
+    const lines = [];
+
+    for (const it of ops) {
+      const amt = Number(it?.amount || 0);
+      const sign = amt >= 0 ? "+" : "−";
+      const abs = Math.abs(Math.trunc(amt)).toLocaleString("ru-RU");
+
+      const reason = String(it?.reason || it?.source || "").trim();
+      const sid = Number(it?.service_id || 0);
+      const hint = sid ? ` • #${sid}` : "";
+
+      const dt = it?.created_at ? new Date(it.created_at) : null;
+      const dts =
+        dt && !isNaN(dt.getTime())
+          ? dt.toLocaleString("ru-RU", {
+              timeZone: "Asia/Tashkent",
+              year: "numeric",
+              month: "2-digit",
+              day: "2-digit",
+              hour: "2-digit",
+              minute: "2-digit",
+            })
+          : "";
+
+      lines.push(`• ${dts} — <b>${sign}${abs}</b> сум${hint}${reason ? ` (${escapeHtml(reason)})` : ""}`);
+    }
+
+    const opsBlock = lines.length
+      ? `\n\n<b>Последние операции</b>\n${lines.join("\n")}`
+      : `\n\n<i>Операций пока нет.</i>`;
+
     await safeReply(
       ctx,
       "💰 <b>Баланс контактов</b>\n\n" +
         `Баланс: <b>${bal}</b> сум\n` +
-        `Открытие контактов: <b>${need}</b> сум`,
+        `Открытие контактов: <b>${need}</b> сум` +
+        opsBlock,
       {
         parse_mode: "HTML",
         disable_web_page_preview: true,
