@@ -198,6 +198,20 @@ function currencyMinorFactor(ccy) {
   if (c === "EUR") return 100;
   return 1;
 }
+
+function buildPaymeCheckoutUrl({ merchantId, checkoutBase, orderId, amountTiyin, lang, callbackUrl }) {
+  const parts = [
+    `m=${merchantId}`,
+    `ac.order_id=${orderId}`,
+    `a=${amountTiyin}`, // в тийинах :contentReference[oaicite:5]{index=5}
+    `l=${lang || "ru"}`,
+  ];
+  if (callbackUrl) parts.push(`c=${callbackUrl}`);
+  const params = parts.join(";");
+  const b64 = Buffer.from(params, "utf8").toString("base64");
+  return `${checkoutBase.replace(/\/+$/, "")}/${b64}`;
+}
+
 // Создаём таблицы (на всякий случай), но SQL миграцию всё равно лучше прогнать отдельно
 let _unlockTablesReady = false;
 async function ensureUnlockTables(pool) {
@@ -6041,54 +6055,60 @@ bot.action("balance:topup", async (ctx) => {
 
 bot.action(/^balance:topup:(\d+)$/, async (ctx) => {
   try {
-    await safeCb(ctx);
-
-    if (!PAYMENTS_PROVIDER_TOKEN) {
-      await safeReply(ctx, `💳 Пополнение через сайт:\n${SITE_URL}/dashboard/balance`, {
-        disable_web_page_preview: true,
-      });
+    const amountSum = Number(ctx.match?.[1] || 0);
+    if (!Number.isFinite(amountSum) || amountSum <= 0) {
+      await safeCb(ctx, "⚠️ Некорректная сумма", true);
       return;
     }
 
-    const chatId = ctx.from?.id;
-    if (!chatId) {
-      await safeReply(ctx, "⚠️ Не удалось определить пользователя.");
+    const MERCHANT_ID = process.env.PAYME_MERCHANT_ID || "";
+    const CHECKOUT_URL = process.env.PAYME_CHECKOUT_URL || "https://checkout.paycom.uz";
+    const SITE_PUBLIC = process.env.SITE_PUBLIC_URL || process.env.SITE_PUBLIC_URL || process.env.SITE_URL || "";
+    const lang = "ru";
+
+    if (!MERCHANT_ID || !SITE_PUBLIC) {
+      await safeReply(ctx, "⚠️ Payme не настроен на сервере (нет PAYME_MERCHANT_ID / SITE_PUBLIC_URL).");
       return;
     }
 
-    const clientRow = await getClientRowByChatId(pool, chatId);
-    if (!clientRow?.id) {
-      await safeReply(ctx, "👋 Сначала привяжите аккаунт через /start");
-      return;
-    }
+    // создаём order в БД
+    const amountTiyin = Math.trunc(amountSum * 100); // сум -> тийин (UZS) :contentReference[oaicite:6]{index=6}
+    const clientId = Number(ctx.from?.id);
 
-    const amount = Number(ctx.match?.[1] || 0);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      await safeReply(ctx, "⚠️ Некорректная сумма");
-      return;
-    }
+    const r = await pool.query(
+      `INSERT INTO payme_topup_orders (client_id, amount_tiyin, status)
+       VALUES ($1,$2,'new')
+       RETURNING id`,
+      [clientId, amountTiyin]
+    );
+    const orderId = Number(r.rows?.[0]?.id);
 
-    // Telegram requires unique payload per invoice.
-    const payload = `contact_topup:${clientRow.id}:${amount}:${Date.now()}`;
-    const title = "Пополнение баланса контактов";
-    const description = `Пополнение на ${amount.toLocaleString("ru-RU")} сум`;
-
-    await ctx.replyWithInvoice({
-      title,
-      description,
-      payload,
-      provider_token: PAYMENTS_PROVIDER_TOKEN,
-      currency: PAYMENTS_CURRENCY,
-      prices: [{ label: "Баланс контактов", amount: Math.trunc(amount * currencyMinorFactor(PAYMENTS_CURRENCY)) }],
-      need_name: false,
-      need_phone_number: false,
-      need_email: false,
-      need_shipping_address: false,
-      is_flexible: false,
+    const callbackUrl = `${SITE_PUBLIC.replace(/\/+$/, "")}/payme/return?order_id=${orderId}`;
+    const payUrl = buildPaymeCheckoutUrl({
+      merchantId: MERCHANT_ID,
+      checkoutBase: CHECKOUT_URL,
+      orderId,
+      amountTiyin,
+      lang,
+      callbackUrl,
     });
+
+    await safeReply(
+      ctx,
+      `💳 Оплата через Payme:\nСумма: ${amountSum.toLocaleString("ru-RU")} сум\nЗаказ: #${orderId}\n\nПосле оплаты нажмите «Проверить баланс».`,
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "✅ Оплатить в Payme", url: payUrl }],
+            [{ text: "🔄 Проверить баланс", callback_data: "balance:check" }],
+            [{ text: "⬅️ Назад", callback_data: "balance:topup" }],
+          ],
+        },
+      }
+    );
   } catch (e) {
     console.error("[tg-bot] balance:topup:amount error:", e?.message || e);
-    try { await safeReply(ctx, "⚠️ Не удалось создать счет. Попробуйте позже."); } catch {}
+    await safeReply(ctx, "⚠️ Не удалось создать ссылку. Попробуйте позже.");
   }
 });
 
