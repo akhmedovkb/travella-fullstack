@@ -27,15 +27,18 @@ function shouldUseSSL() {
   return /railway|rlwy|render|neon|supabase|heroku|amazonaws|aws|azure|gcp|digitalocean/i.test(url);
 }
 
+const connectTimeout = Number(process.env.PG_CONNECT_TIMEOUT_MS || 5000);
+const stmtTimeout = Number(process.env.PG_STATEMENT_TIMEOUT_MS || 15000);
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: shouldUseSSL() ? { rejectUnauthorized: false } : false,
 
-  // чтобы не висло на connect
-  connectionTimeoutMillis: Number(process.env.PG_CONNECT_TIMEOUT_MS || 5000),
+  // ✅ чтобы не висло на connect
+  connectionTimeoutMillis: connectTimeout,
 
-  // чтобы не висли запросы
-  options: `-c statement_timeout=${Number(process.env.PG_STATEMENT_TIMEOUT_MS || 15000)}`,
+  // ✅ statement_timeout на уровне сессии (работает через libpq options)
+  options: `-c statement_timeout=${stmtTimeout}`,
 });
 
 module.exports = pool;
