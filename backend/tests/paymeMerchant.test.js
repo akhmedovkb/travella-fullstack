@@ -235,7 +235,7 @@ test.before(async () => {
       PAYME_MERCHANT_LOGIN_SANDBOX: PAYME_LOGIN,
       PAYME_MERCHANT_KEY_SANDBOX: PAYME_KEY,
     },
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: "inherit",
   });
 
   proc.stdout.on("data", (d) => process.stderr.write(String(d)));
