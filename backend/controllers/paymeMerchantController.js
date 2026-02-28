@@ -3,51 +3,16 @@ const pool = require("../db");
 const crypto = require("crypto");
 
 /**
- * ===================== PAYME MERCHANT API (BANK-GRADE MAX) =====================
- *
- * JSON-RPC 2.0 via HTTP POST
+ * Payme Merchant API (Paycom): JSON-RPC 2.0 via HTTP POST
  * Auth: Basic base64(login:password)
  *
- * ENV (required):
+ * ENV:
  *   PAYME_MODE=live|sandbox
  *   PAYME_MERCHANT_LOGIN / PAYME_MERCHANT_KEY
  *   PAYME_MERCHANT_LOGIN_SANDBOX / PAYME_MERCHANT_KEY_SANDBOX
- *
- * ENV (optional):
- *   PAYME_TX_TIMEOUT_MS=43200000  // override (default 12h)
- *   PAYME_REQUIRE_TIME=true|false // strict params.time validation in CreateTransaction (default true)
- *   PAYME_ALLOW_REFUND=true|false // enable RefundTransaction custom method
- *
- * Assumptions (your schema based on prior context):
- *   - topup_orders(id, client_id, amount_tiyin, status, paid_at)
- *   - payme_transactions(payme_id PK/unique, order_id, amount_tiyin, state, create_time, perform_time, cancel_time, reason, updated_at)
- *   - clients(id, contact_balance)
- *   - contact_balance_ledger(client_id, amount, reason, source, meta jsonb, created_at)
- *
- * Idempotency model (self-contained, no indexes required):
- *   - advisory xact locks: payme:<id> and order:<orderId>
- *   - ledger idempotency: SELECT ... FOR UPDATE on ledger existence (meta->>'payme_id')
  */
 
-const TX_TIMEOUT_MS = Number(process.env.PAYME_TX_TIMEOUT_MS || 12 * 60 * 60 * 1000);
-const REQUIRE_TIME = String(process.env.PAYME_REQUIRE_TIME || "true").toLowerCase() !== "false";
-
-const PAYME_ERR = {
-  INVALID_AMOUNT: -31001,
-  NOT_FOUND: -31003,
-  ALREADY_PAID: -31008,
-  UNAUTHORIZED: -32504,
-  INTERNAL: -32400,
-  INVALID_REQUEST: -32600,
-  METHOD_NOT_FOUND: -32601,
-  INVALID_PARAMS: -32602,
-
-  // rarely used, but keep (some integrators like it)
-  INVALID_ACCOUNT: -31050,
-
-  // custom internal conflict
-  CONFLICT: -31099,
-};
+const TX_TIMEOUT_MS = 12 * 60 * 60 * 1000; // 12h
 
 function logPayme(event, extra = {}) {
   try {
@@ -76,7 +41,7 @@ function nowMs() {
   return Date.now();
 }
 
-/* ===================== AUTH ===================== */
+/** ===== auth ===== */
 
 function parseBasicAuth(req) {
   const h = req.headers?.authorization || "";
@@ -104,13 +69,13 @@ function requireAuth(req) {
 
   const expectedLogin =
     mode === "sandbox"
-      ? (process.env.PAYME_MERCHANT_LOGIN_SANDBOX || "")
-      : (process.env.PAYME_MERCHANT_LOGIN || "");
+      ? process.env.PAYME_MERCHANT_LOGIN_SANDBOX || ""
+      : process.env.PAYME_MERCHANT_LOGIN || "";
 
   const expectedKey =
     mode === "sandbox"
-      ? (process.env.PAYME_MERCHANT_KEY_SANDBOX || "")
-      : (process.env.PAYME_MERCHANT_KEY || "");
+      ? process.env.PAYME_MERCHANT_KEY_SANDBOX || ""
+      : process.env.PAYME_MERCHANT_KEY || "";
 
   if (!expectedLogin || !expectedKey) return false;
 
@@ -120,31 +85,21 @@ function requireAuth(req) {
   return safeEq(parsed.login, expectedLogin) && safeEq(parsed.password, expectedKey);
 }
 
-/* ===================== RPC VALIDATION ===================== */
+/** ===== normalization (bank-grade) ===== */
 
-function validateRpc(body) {
-  const jsonrpc = body?.jsonrpc;
-  const id = body?.id;
-  const method = body?.method;
-  const params = body?.params;
+function normalizePaymeId(x) {
+  // Payme id может прилететь с пробелами/невидимыми символами из тестов/инструментов
+  // Нормализуем одинаково везде.
+  const s = String(x ?? "")
+    .replace(/\u0000/g, "") // null bytes
+    .trim();
 
-  if (jsonrpc !== "2.0") {
-    return { ok: false, id: id ?? null, err: rpcError(id ?? null, PAYME_ERR.INVALID_REQUEST, "Invalid Request") };
-  }
-  if (typeof method !== "string" || !method) {
-    return { ok: false, id: id ?? null, err: rpcError(id ?? null, PAYME_ERR.INVALID_REQUEST, "Invalid Request") };
-  }
-  if (params !== undefined && (typeof params !== "object" || params === null)) {
-    return { ok: false, id: id ?? null, err: rpcError(id ?? null, PAYME_ERR.INVALID_PARAMS, "Invalid params") };
-  }
-  return { ok: true, id, method, params: params || {} };
+  // collapse whitespace inside (на случай "pm_tx_123 " / "pm_tx_ 123")
+  return s.replace(/\s+/g, " ");
 }
 
-/* ===================== PAYME PARAMS HELPERS ===================== */
-
-/**
- * Payme "account" object depends on cashier settings.
- * We use: account.order_id (as Payme asked you)
+/** ===== Payme account =====
+ * We use account.order_id
  */
 function extractOrderId(params) {
   const oid = params?.account?.order_id ?? params?.account?.["order_id"];
@@ -152,49 +107,13 @@ function extractOrderId(params) {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-function parseAmount(params) {
-  const amount = Number(params?.amount);
-  return Number.isFinite(amount) && amount > 0 ? amount : null;
-}
-
-function parsePaymeId(params) {
-  const paymeId = String(params?.id || "");
-  return paymeId ? paymeId : null;
-}
-
-function parsePaymeTimeMs(params) {
-  const t = Number(params?.time);
-  return Number.isFinite(t) && t > 0 ? t : null;
-}
-
-/**
- * bank-grade: optional strict "time window"
- * - In many setups Payme sends params.time = ms since epoch.
- * - We accept if it is:
- *    - present (unless REQUIRE_TIME=false)
- *    - within +/- 15 minutes drift (anti-fraud)
- */
-function validateCreateTimeOrThrow(id, timeMs) {
-  if (!timeMs) {
-    if (REQUIRE_TIME) {
-      return { ok: false, err: rpcError(id, PAYME_ERR.INVALID_PARAMS, "Missing params.time") };
-    }
-    return { ok: true };
-  }
-
-  const drift = Math.abs(nowMs() - timeMs);
-  const MAX_DRIFT_MS = 15 * 60 * 1000;
-  if (drift > MAX_DRIFT_MS) {
-    return { ok: false, err: rpcError(id, PAYME_ERR.INVALID_PARAMS, "Invalid params.time (drift)") };
-  }
-  return { ok: true };
-}
-
-/* ===================== DB HELPERS (TX) ===================== */
+/** ===== advisory locks ===== */
 
 async function lockKeyTx(client, keyStr) {
   await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [String(keyStr)]);
 }
+
+/** ===== DB helpers ===== */
 
 async function getOrderTx(client, orderId) {
   const { rows } = await client.query(
@@ -213,6 +132,18 @@ async function getTxForUpdate(client, paymeId) {
        FROM payme_transactions
       WHERE payme_id = $1
       FOR UPDATE`,
+    [paymeId]
+  );
+  return rows[0] || null;
+}
+
+// fallback read (без FOR UPDATE) — чтобы диагностировать “почему не нашли”
+// и чтобы не возвращать -32400, если проблема только в пробелах.
+async function getTxLoose(client, paymeId) {
+  const { rows } = await client.query(
+    `SELECT payme_id, order_id, amount_tiyin, state, create_time, perform_time, cancel_time, reason
+       FROM payme_transactions
+      WHERE payme_id = $1`,
     [paymeId]
   );
   return rows[0] || null;
@@ -261,45 +192,36 @@ async function markOrderStatusTx(client, orderId, status, paidAt = null) {
   );
 }
 
-/* ===================== LEDGER (SELF-CONTAINED IDEMPOTENCY) ===================== */
-
-async function ledgerExistsTx(client, { clientId, source, reason, paymeId }) {
-  const { rows } = await client.query(
-    `
-    SELECT id
-      FROM contact_balance_ledger
-     WHERE client_id = $1
-       AND source = $2
-       AND reason = $3
-       AND (meta->>'payme_id') = $4
-     LIMIT 1
-     FOR UPDATE
-    `,
-    [Number(clientId), String(source), String(reason), String(paymeId)]
-  );
-  return !!rows?.length;
-}
-
+/**
+ * Ledger idempotency (strict):
+ * unique index must exist matching:
+ *   (client_id, source, reason, (meta->>'payme_id'))
+ *
+ * If you already have such unique indexes — ON CONFLICT with same target is perfect.
+ */
 async function creditLedgerOnceTx(client, { clientId, amountTiyin, orderId, paymeId }) {
   const meta = {
     payme_id: String(paymeId),
     order_id: String(orderId),
   };
 
-  const exists = await ledgerExistsTx(client, {
-    clientId,
-    source: "payme",
-    reason: "topup",
-    paymeId,
-  });
-  if (exists) return { credited: false };
-
-  await client.query(
-    `INSERT INTO contact_balance_ledger
+  const { rows } = await client.query(
+    `
+    INSERT INTO contact_balance_ledger
       (client_id, amount, reason, source, meta, created_at)
-     VALUES ($1, $2, 'topup', 'payme', $3::jsonb, now())`,
+    VALUES ($1, $2, 'topup', 'payme', $3::jsonb, now())
+    ON CONFLICT (
+      client_id,
+      source,
+      reason,
+      (meta->>'payme_id')
+    ) DO NOTHING
+    RETURNING id
+    `,
     [Number(clientId), Number(amountTiyin), JSON.stringify(meta)]
   );
+
+  if (!rows?.length) return { credited: false };
 
   await client.query(
     `UPDATE clients
@@ -318,20 +240,23 @@ async function debitLedgerOnceTx(client, { clientId, amountTiyin, orderId, payme
     cancel_reason: reasonCode == null ? null : String(reasonCode),
   };
 
-  const exists = await ledgerExistsTx(client, {
-    clientId,
-    source: "payme",
-    reason: "topup_reversal",
-    paymeId,
-  });
-  if (exists) return { debited: false };
-
-  await client.query(
-    `INSERT INTO contact_balance_ledger
+  const { rows } = await client.query(
+    `
+    INSERT INTO contact_balance_ledger
       (client_id, amount, reason, source, meta, created_at)
-     VALUES ($1, $2, 'topup_reversal', 'payme', $3::jsonb, now())`,
+    VALUES ($1, $2, 'topup_reversal', 'payme', $3::jsonb, now())
+    ON CONFLICT (
+      client_id,
+      source,
+      reason,
+      (meta->>'payme_id')
+    ) DO NOTHING
+    RETURNING id
+    `,
     [Number(clientId), -Math.abs(Number(amountTiyin)), JSON.stringify(meta)]
   );
+
+  if (!rows?.length) return { debited: false };
 
   await client.query(
     `UPDATE clients
@@ -343,72 +268,32 @@ async function debitLedgerOnceTx(client, { clientId, amountTiyin, orderId, payme
   return { debited: true };
 }
 
-/* ===================== OPTIONAL REFUND (CUSTOM) ===================== */
+/** ===== rpc validation ===== */
 
-async function refundOnceTx(client, { clientId, amountTiyin, orderId, paymeId }) {
-  const meta = {
-    refund_of: String(paymeId),
-    order_id: String(orderId),
-    payme_id: String(paymeId),
-  };
+function validateRpc(body) {
+  const jsonrpc = body?.jsonrpc;
+  const id = body?.id;
+  const method = body?.method;
+  const params = body?.params;
 
-  const { rows: ex } = await client.query(
-    `
-    SELECT id
-      FROM contact_balance_ledger
-     WHERE client_id = $1
-       AND source = 'payme_refund'
-       AND reason = 'topup_refund'
-       AND (meta->>'refund_of') = $2
-     LIMIT 1
-     FOR UPDATE
-    `,
-    [Number(clientId), String(paymeId)]
-  );
-  if (ex?.length) return { refunded: false };
-
-  await client.query(
-    `INSERT INTO contact_balance_ledger
-      (client_id, amount, reason, source, meta, created_at)
-     VALUES ($1, $2, 'topup_refund', 'payme_refund', $3::jsonb, now())`,
-    [Number(clientId), -Math.abs(Number(amountTiyin)), JSON.stringify(meta)]
-  );
-
-  await client.query(
-    `UPDATE clients
-        SET contact_balance = COALESCE(contact_balance, 0) - $2
-      WHERE id = $1`,
-    [Number(clientId), Math.abs(Number(amountTiyin))]
-  );
-
-  await client.query(
-    `UPDATE topup_orders
-        SET status = 'refunded'
-      WHERE id = $1 AND status = 'paid'`,
-    [Number(orderId)]
-  );
-
-  return { refunded: true };
+  if (jsonrpc !== "2.0") {
+    return { ok: false, id: id ?? null, err: rpcError(id ?? null, -32600, "Invalid Request") };
+  }
+  if (typeof method !== "string" || !method) {
+    return { ok: false, id: id ?? null, err: rpcError(id ?? null, -32600, "Invalid Request") };
+  }
+  if (params !== undefined && (typeof params !== "object" || params === null)) {
+    return { ok: false, id: id ?? null, err: rpcError(id ?? null, -32602, "Invalid params") };
+  }
+  return { ok: true, id, method, params: params || {} };
 }
 
-/* ===================== BANK-GRADE: CONSISTENT ERROR MAPPING ===================== */
-
-function errNotFound(id, msg) {
-  return rpcError(id, PAYME_ERR.NOT_FOUND, msg || "Not found");
-}
-function errAlreadyPaid(id, msg) {
-  return rpcError(id, PAYME_ERR.ALREADY_PAID, msg || "Already paid");
-}
-function errInvalidAmount(id, msg) {
-  return rpcError(id, PAYME_ERR.INVALID_AMOUNT, msg || "Incorrect amount");
-}
-
-/* ===================== MAIN HANDLER ===================== */
+/** ===== main handler ===== */
 
 async function paymeMerchantRpc(req, res) {
   try {
     if (!requireAuth(req)) {
-      return res.status(200).json(rpcError(null, PAYME_ERR.UNAUTHORIZED, "Unauthorized"));
+      return res.status(200).json(rpcError(null, -32504, "Unauthorized"));
     }
 
     const v = validateRpc(req.body || {});
@@ -416,13 +301,15 @@ async function paymeMerchantRpc(req, res) {
 
     const { id, method, params } = v;
 
-    /* ---------------- CheckPerformTransaction ---------------- */
+    /** ---- CheckPerformTransaction ---- */
     if (method === "CheckPerformTransaction") {
       const orderId = extractOrderId(params);
-      const amount = parseAmount(params);
+      const amount = Number(params.amount);
 
-      if (!orderId) return res.status(200).json(errNotFound(id, "Invalid account"));
-      if (!amount) return res.status(200).json(rpcError(id, PAYME_ERR.INVALID_PARAMS, "Invalid params.amount"));
+      if (!orderId) return res.status(200).json(rpcError(id, -31050, "Invalid account"));
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return res.status(200).json(rpcError(id, -32602, "Invalid params.amount"));
+      }
 
       const { rows } = await pool.query(
         `SELECT id, amount_tiyin, status
@@ -431,29 +318,27 @@ async function paymeMerchantRpc(req, res) {
         [orderId]
       );
       const order = rows[0];
-
-      if (!order) return res.status(200).json(errNotFound(id, "Order not found"));
-      if (Number(order.amount_tiyin) !== amount) return res.status(200).json(errInvalidAmount(id, "Incorrect amount"));
-      if (order.status === "paid") return res.status(200).json(errAlreadyPaid(id, "Already paid"));
+      if (!order) return res.status(200).json(rpcError(id, -31050, "Order not found"));
+      if (Number(order.amount_tiyin) !== amount)
+        return res.status(200).json(rpcError(id, -31001, "Incorrect amount"));
+      if (order.status === "paid") return res.status(200).json(rpcError(id, -31008, "Already paid"));
 
       return res.status(200).json(ok(id, { allow: true }));
     }
 
-    /* ---------------- CreateTransaction ---------------- */
+    /** ---- CreateTransaction ---- */
     if (method === "CreateTransaction") {
-      const paymeId = parsePaymeId(params);
       const orderId = extractOrderId(params);
-      const amount = parseAmount(params);
-      const timeMs = parsePaymeTimeMs(params);
+      const amount = Number(params.amount);
+      const paymeIdRaw = params.id;
+      const paymeId = normalizePaymeId(paymeIdRaw);
+      const time = Number(params.time);
 
-      if (!paymeId) return res.status(200).json(rpcError(id, PAYME_ERR.INVALID_PARAMS, "Missing params.id"));
-      if (!orderId) return res.status(200).json(errNotFound(id, "Invalid account"));
-      if (!amount) return res.status(200).json(rpcError(id, PAYME_ERR.INVALID_PARAMS, "Invalid params.amount"));
-
-      const tv = validateCreateTimeOrThrow(id, timeMs);
-      if (!tv.ok) return res.status(200).json(tv.err);
-
-      const createTime = timeMs || nowMs();
+      if (!paymeId) return res.status(200).json(rpcError(id, -32602, "Missing params.id"));
+      if (!orderId) return res.status(200).json(rpcError(id, -31050, "Invalid account"));
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return res.status(200).json(rpcError(id, -32602, "Invalid params.amount"));
+      }
 
       const client = await pool.connect();
       try {
@@ -462,32 +347,23 @@ async function paymeMerchantRpc(req, res) {
         await lockKeyTx(client, `payme:${paymeId}`);
         await lockKeyTx(client, `order:${orderId}`);
 
-        logPayme("CreateTransaction.begin", { paymeId, orderId, amount, createTime });
+        logPayme("CreateTransaction.begin", { paymeId, orderId, amount });
 
         const existing = await getTxForUpdate(client, paymeId);
         if (existing) {
           if (Number(existing.order_id) !== Number(orderId)) {
             await client.query("ROLLBACK");
-            return res.status(200).json(rpcError(id, PAYME_ERR.CONFLICT, "Transaction conflict (order mismatch)"));
+            return res.status(200).json(rpcError(id, -31099, "Transaction conflict (order mismatch)"));
           }
           if (Number(existing.amount_tiyin) !== Number(amount)) {
             await client.query("ROLLBACK");
-            return res.status(200).json(errInvalidAmount(id, "Incorrect amount"));
-          }
-
-          // bank-grade: если заказ уже paid — приводим tx к state=2
-          const order = await getOrderTx(client, orderId);
-          if (order && order.status === "paid" && Number(existing.state) !== 2) {
-            const performTime = order.paid_at ? new Date(order.paid_at).getTime() : nowMs();
-            await setTxState(client, paymeId, { state: 2, perform_time: performTime });
-            existing.state = 2;
-            existing.perform_time = performTime;
+            return res.status(200).json(rpcError(id, -31001, "Incorrect amount"));
           }
 
           await client.query("COMMIT");
           return res.status(200).json(
             ok(id, {
-              create_time: Number(existing.create_time) || createTime,
+              create_time: Number(existing.create_time) || (Number.isFinite(time) ? time : nowMs()),
               transaction: paymeId,
               state: Number(existing.state),
               receivers: null,
@@ -498,21 +374,18 @@ async function paymeMerchantRpc(req, res) {
         const order = await getOrderTx(client, orderId);
         if (!order) {
           await client.query("ROLLBACK");
-          return res.status(200).json(errNotFound(id, "Order not found"));
+          return res.status(200).json(rpcError(id, -31050, "Order not found"));
         }
-
-        // bank-grade: amount drift protection
-        if (Number(order.amount_tiyin) !== Number(amount)) {
+        if (Number(order.amount_tiyin) !== amount) {
           await client.query("ROLLBACK");
-          return res.status(200).json(errInvalidAmount(id, "Incorrect amount"));
+          return res.status(200).json(rpcError(id, -31001, "Incorrect amount"));
         }
-
-        // already paid
         if (order.status === "paid") {
           await client.query("ROLLBACK");
-          return res.status(200).json(errAlreadyPaid(id, "Already paid"));
+          return res.status(200).json(rpcError(id, -31008, "Already paid"));
         }
 
+        const createTime = Number.isFinite(time) && time > 0 ? time : nowMs();
         await insertTxIfAbsent(client, { paymeId, orderId, amount, createTime });
 
         if (order.status !== "created") {
@@ -530,36 +403,61 @@ async function paymeMerchantRpc(req, res) {
           })
         );
       } catch (e) {
-        try { await client.query("ROLLBACK"); } catch {}
+        try {
+          await client.query("ROLLBACK");
+        } catch {}
         console.error("[payme] CreateTransaction error:", e?.message || e);
-        if (e?.code) console.error("[payme] pg code:", e.code);
-        return res.status(200).json(rpcError(id, PAYME_ERR.INTERNAL, "Internal error"));
+        return res.status(200).json(rpcError(id, -32400, "Internal error"));
       } finally {
         client.release();
       }
     }
 
-    /* ---------------- PerformTransaction ---------------- */
+    /** ---- PerformTransaction ---- */
     if (method === "PerformTransaction") {
-      const paymeId = parsePaymeId(params);
-      if (!paymeId) return res.status(200).json(rpcError(id, PAYME_ERR.INVALID_PARAMS, "Missing params.id"));
+      const paymeId = normalizePaymeId(params.id);
+
+      if (!paymeId) return res.status(200).json(rpcError(id, -32602, "Missing params.id"));
 
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
-
         await lockKeyTx(client, `payme:${paymeId}`);
+
         logPayme("PerformTransaction.begin", { paymeId });
 
-        const tx = await getTxForUpdate(client, paymeId);
+        // 1) строгий FOR UPDATE поиск
+        let tx = await getTxForUpdate(client, paymeId);
+
+        // 2) fallback: если вдруг Payme/клиент прислал id с пробелами/невидимыми символами
         if (!tx) {
-          await client.query("ROLLBACK");
-          return res.status(200).json(errNotFound(id, "Transaction not found"));
+          // диагностируем: что реально лежит в БД поблизости (без раскрытия секретов)
+          const loose = await getTxLoose(client, paymeId);
+          if (loose) {
+            // если такое случится — это значит, что ошибка была в FOR UPDATE?
+            // обычно не бывает, но оставляем на всякий случай
+            tx = loose;
+          }
         }
 
-        if (tx?.order_id) await lockKeyTx(client, `order:${tx.order_id}`);
+        if (!tx) {
+          await client.query("ROLLBACK");
+          // bank-grade: логируем длину/hex чтобы поймать невидимые символы
+          const raw = String(params.id ?? "");
+          const hex = Buffer.from(raw, "utf8").toString("hex").slice(0, 80);
+          logPayme("PerformTransaction.not_found", {
+            paymeId_norm: paymeId,
+            paymeId_raw_len: raw.length,
+            paymeId_raw_hex_prefix: hex,
+          });
+          return res.status(200).json(rpcError(id, -31003, "Transaction not found"));
+        }
 
-        // already performed
+        // order lock
+        if (tx?.order_id) {
+          await lockKeyTx(client, `order:${tx.order_id}`);
+        }
+
         if (Number(tx.state) === 2) {
           await client.query("COMMIT");
           return res.status(200).json(
@@ -571,36 +469,27 @@ async function paymeMerchantRpc(req, res) {
           );
         }
 
-        // cancelled
         if (Number(tx.state) === -1 || Number(tx.state) === -2) {
           await client.query("COMMIT");
-          // Payme обычно ожидает ошибку, а не ok
-          return res.status(200).json(errAlreadyPaid(id, "Transaction cancelled"));
+          return res.status(200).json(rpcError(id, -31008, "Transaction cancelled"));
         }
 
-        // timeout -> expire (state=-1)
         const ct = Number(tx.create_time) || 0;
         if (ct && nowMs() - ct > TX_TIMEOUT_MS) {
           const cancelTime = nowMs();
           await setTxState(client, paymeId, { state: -1, cancel_time: cancelTime, reason: 4 });
           await client.query("COMMIT");
-          return res.status(200).json(errAlreadyPaid(id, "Transaction expired"));
+          return res.status(200).json(rpcError(id, -31008, "Transaction expired"));
         }
 
         const orderId = Number(tx.order_id);
         const order = await getOrderTx(client, orderId);
         if (!order) {
           await client.query("ROLLBACK");
-          return res.status(200).json(errNotFound(id, "Order not found"));
+          return res.status(200).json(rpcError(id, -31050, "Order not found"));
         }
 
-        // bank-grade: amount drift check again
-        if (Number(order.amount_tiyin) !== Number(tx.amount_tiyin)) {
-          await client.query("ROLLBACK");
-          return res.status(200).json(errInvalidAmount(id, "Incorrect amount"));
-        }
-
-        // if order already paid -> finalize tx and return ok
+        // already paid => make tx performed idempotently
         if (order.status === "paid") {
           const performTime = order.paid_at ? new Date(order.paid_at).getTime() : nowMs();
           await setTxState(client, paymeId, { state: 2, perform_time: performTime });
@@ -609,25 +498,17 @@ async function paymeMerchantRpc(req, res) {
         }
 
         const performTime = nowMs();
-
-        // Mark tx performed first (so retries see state=2)
         await setTxState(client, paymeId, { state: 2, perform_time: performTime });
-
-        // Then mark order paid (single source of truth)
         await markOrderStatusTx(client, orderId, "paid", new Date(performTime));
 
-        // FK sanity (avoid crash)
-        const { rows: cRows } = await client.query(`SELECT id FROM clients WHERE id=$1`, [Number(order.client_id)]);
+        // FK safety
+        const { rows: cRows } = await client.query(`SELECT id FROM clients WHERE id=$1`, [
+          Number(order.client_id),
+        ]);
         if (!cRows.length) {
           await client.query("ROLLBACK");
-          return res.status(200).json(errNotFound(id, "Client not found"));
+          return res.status(200).json(rpcError(id, -31050, "Client not found"));
         }
-
-        logPayme("PerformTransaction.credited", {
-          paymeId,
-          orderId,
-          clientId: Number(order.client_id),
-        });
 
         await creditLedgerOnceTx(client, {
           clientId: Number(order.client_id),
@@ -646,21 +527,22 @@ async function paymeMerchantRpc(req, res) {
           })
         );
       } catch (e) {
-        try { await client.query("ROLLBACK"); } catch {}
+        try {
+          await client.query("ROLLBACK");
+        } catch {}
         console.error("[payme] PerformTransaction error:", e?.message || e);
-        if (e?.code) console.error("[payme] pg code:", e.code);
-        return res.status(200).json(rpcError(id, PAYME_ERR.INTERNAL, "Internal error"));
+        return res.status(200).json(rpcError(id, -32400, "Internal error"));
       } finally {
         client.release();
       }
     }
 
-    /* ---------------- CancelTransaction ---------------- */
+    /** ---- CancelTransaction ---- */
     if (method === "CancelTransaction") {
-      const paymeId = parsePaymeId(params);
-      const reason = Number(params?.reason);
+      const paymeId = normalizePaymeId(params.id);
+      const reason = Number(params.reason);
 
-      if (!paymeId) return res.status(200).json(rpcError(id, PAYME_ERR.INVALID_PARAMS, "Missing params.id"));
+      if (!paymeId) return res.status(200).json(rpcError(id, -32602, "Missing params.id"));
 
       const client = await pool.connect();
       try {
@@ -671,10 +553,12 @@ async function paymeMerchantRpc(req, res) {
         const tx = await getTxForUpdate(client, paymeId);
         if (!tx) {
           await client.query("ROLLBACK");
-          return res.status(200).json(errNotFound(id, "Transaction not found"));
+          return res.status(200).json(rpcError(id, -31003, "Transaction not found"));
         }
 
-        if (tx?.order_id) await lockKeyTx(client, `order:${tx.order_id}`);
+        if (tx?.order_id) {
+          await lockKeyTx(client, `order:${tx.order_id}`);
+        }
 
         // already cancelled
         if (Number(tx.state) === -1 || Number(tx.state) === -2) {
@@ -698,7 +582,7 @@ async function paymeMerchantRpc(req, res) {
           reason: Number.isFinite(reason) ? reason : null,
         });
 
-        // if cancelling performed tx -> reversal once
+        // If cancel performed => reversal once
         if (Number(updated?.state ?? newState) === -2) {
           const orderId = Number(tx.order_id);
           const order = await getOrderTx(client, orderId);
@@ -715,7 +599,7 @@ async function paymeMerchantRpc(req, res) {
           }
         }
 
-        // ✅ guaranteed COMMIT before response
+        // ✅ ALWAYS COMMIT before response
         await client.query("COMMIT");
 
         return res.status(200).json(
@@ -727,19 +611,20 @@ async function paymeMerchantRpc(req, res) {
           })
         );
       } catch (e) {
-        try { await client.query("ROLLBACK"); } catch {}
+        try {
+          await client.query("ROLLBACK");
+        } catch {}
         console.error("[payme] CancelTransaction error:", e?.message || e);
-        if (e?.code) console.error("[payme] pg code:", e.code);
-        return res.status(200).json(rpcError(id, PAYME_ERR.INTERNAL, "Internal error"));
+        return res.status(200).json(rpcError(id, -32400, "Internal error"));
       } finally {
         client.release();
       }
     }
 
-    /* ---------------- CheckTransaction ---------------- */
+    /** ---- CheckTransaction ---- */
     if (method === "CheckTransaction") {
-      const paymeId = parsePaymeId(params);
-      if (!paymeId) return res.status(200).json(rpcError(id, PAYME_ERR.INVALID_PARAMS, "Missing params.id"));
+      const paymeId = normalizePaymeId(params.id);
+      if (!paymeId) return res.status(200).json(rpcError(id, -32602, "Missing params.id"));
 
       const { rows } = await pool.query(
         `SELECT payme_id, order_id, state, create_time, perform_time, cancel_time, reason
@@ -748,7 +633,7 @@ async function paymeMerchantRpc(req, res) {
         [paymeId]
       );
       const tx = rows[0];
-      if (!tx) return res.status(200).json(errNotFound(id, "Transaction not found"));
+      if (!tx) return res.status(200).json(rpcError(id, -31003, "Transaction not found"));
 
       return res.status(200).json(
         ok(id, {
@@ -762,25 +647,21 @@ async function paymeMerchantRpc(req, res) {
       );
     }
 
-    /* ---------------- GetStatement ---------------- */
+    /** ---- GetStatement ---- */
     if (method === "GetStatement") {
-      const from = Number(params?.from);
-      const to = Number(params?.to);
-
-      if (!Number.isFinite(from) || !Number.isFinite(to) || from < 0 || to < 0 || to < from) {
-        return res.status(200).json(rpcError(id, PAYME_ERR.INVALID_PARAMS, "Invalid params.from/to"));
-      }
+      const from = Number(params.from);
+      const to = Number(params.to);
 
       const { rows } = await pool.query(
         `
         SELECT payme_id, order_id, amount_tiyin, state, create_time, perform_time, cancel_time, reason
           FROM payme_transactions
-         WHERE create_time >= $1
-           AND create_time <= $2
+         WHERE ($1::bigint IS NULL OR create_time >= $1)
+           AND ($2::bigint IS NULL OR create_time <= $2)
          ORDER BY create_time ASC
          LIMIT 5000
         `,
-        [from, to]
+        [Number.isFinite(from) ? from : null, Number.isFinite(to) ? to : null]
       );
 
       const result = rows.map((r) => ({
@@ -799,62 +680,15 @@ async function paymeMerchantRpc(req, res) {
       return res.status(200).json(ok(id, { transactions: result }));
     }
 
-    /* ---------------- SetFiscalData (optional) ---------------- */
+    /** ---- SetFiscalData (optional) ---- */
     if (method === "SetFiscalData") {
       return res.status(200).json(ok(id, { success: true }));
     }
 
-    /* ---------------- RefundTransaction (custom, optional) ---------------- */
-    if (method === "RefundTransaction") {
-      if (String(process.env.PAYME_ALLOW_REFUND || "").toLowerCase() !== "true") {
-        return res.status(200).json(rpcError(id, PAYME_ERR.METHOD_NOT_FOUND, "Method not allowed"));
-      }
-
-      const paymeId = parsePaymeId(params);
-      if (!paymeId) return res.status(200).json(rpcError(id, PAYME_ERR.INVALID_PARAMS, "Missing params.id"));
-
-      const client = await pool.connect();
-      try {
-        await client.query("BEGIN");
-        await lockKeyTx(client, `payme:${paymeId}`);
-
-        const tx = await getTxForUpdate(client, paymeId);
-        if (!tx || Number(tx.state) !== 2) {
-          await client.query("ROLLBACK");
-          return res.status(200).json(errNotFound(id, "Transaction not refundable"));
-        }
-
-        await lockKeyTx(client, `order:${tx.order_id}`);
-
-        const order = await getOrderTx(client, Number(tx.order_id));
-        if (!order) {
-          await client.query("ROLLBACK");
-          return res.status(200).json(errNotFound(id, "Order not found"));
-        }
-
-        const r = await refundOnceTx(client, {
-          clientId: Number(order.client_id),
-          amountTiyin: Number(order.amount_tiyin),
-          orderId: Number(order.id),
-          paymeId,
-        });
-
-        await client.query("COMMIT");
-        return res.status(200).json(ok(id, { refunded: !!r.refunded }));
-      } catch (e) {
-        try { await client.query("ROLLBACK"); } catch {}
-        console.error("[payme] RefundTransaction error:", e?.message || e);
-        return res.status(200).json(rpcError(id, PAYME_ERR.INTERNAL, "Internal error"));
-      } finally {
-        client.release();
-      }
-    }
-
-    return res.status(200).json(rpcError(id, PAYME_ERR.METHOD_NOT_FOUND, "Method not found"));
+    return res.status(200).json(rpcError(id, -32601, "Method not found"));
   } catch (e) {
     console.error("[payme] handler fatal:", e?.message || e);
-    if (e?.code) console.error("[payme] pg code:", e.code);
-    return res.status(200).json(rpcError(null, PAYME_ERR.INTERNAL, "Internal error"));
+    return res.status(200).json(rpcError(null, -32400, "Internal error"));
   }
 }
 
