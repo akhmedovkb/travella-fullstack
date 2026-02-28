@@ -874,16 +874,22 @@ function startAskActualReminderScheduler() {
 /** ===================== /Ask Actual Reminder Scheduler ===================== */
 
 // ✅ Запускаем планировщик напоминаний (не зависит от polling — отправка идёт через tgSend в job)
+// ✅ Запускаем планировщик напоминаний (не зависит от polling — отправка идёт через tgSend в job)
+if (process.env.DISABLE_REMINDER_SCHEDULER === "1" || process.env.NODE_ENV === "test") {
+  console.log("[askActualReminder] scheduler disabled for tests/flags");
+} else {
   try {
     startAskActualReminderScheduler();
   } catch (e) {
     console.warn("[askActualReminder] scheduler start failed:", e?.message || e);
   }
+}
 
-if (bot) {
+const TG_DISABLED =
+  process.env.DISABLE_TG_BOT === "1" || process.env.NODE_ENV === "test";
+
+if (bot && !TG_DISABLED) {
   console.log("[tg-bot] index.js: starting bot (polling) ...");
-
-
 
   (async () => {
     try {
@@ -918,9 +924,7 @@ if (bot) {
   process.once("SIGINT", () => bot.stop("SIGINT"));
   process.once("SIGTERM", () => bot.stop("SIGTERM"));
 } else {
-  console.log(
-    "⚠️ Telegram bot is disabled — no module or no TELEGRAM_CLIENT_BOT_TOKEN"
-  );
+  console.log("⚠️ Telegram bot is disabled (tests/flags/no token)");
 }
 
 /** ===================== EntryFees ===================== */
