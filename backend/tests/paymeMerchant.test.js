@@ -230,6 +230,27 @@ test.before(async () => {
 
   const backendDir = path.resolve(__dirname, "..");
 
+  async function isPortFree(port) {
+  const net = require("node:net");
+  return await new Promise((resolve) => {
+    const s = net.createServer();
+    s.once("error", () => resolve(false));
+    s.once("listening", () => s.close(() => resolve(true)));
+    s.listen(Number(port), "127.0.0.1");
+  });
+}
+
+  let chosen = null;
+  for (let i = 0; i < 50; i++) {
+    const p = 12000 + Math.floor(Math.random() * 2000);
+    if (await isPortFree(p)) { chosen = p; break; }
+  }
+  if (!chosen) throw new Error("No free port found for tests");
+  
+  const PORT = String(chosen);
+  const BASE = `http://127.0.0.1:${PORT}`;
+  const RPC_URL = `${BASE}/api/merchant/payme`;
+
   proc = spawn(process.execPath, ["index.js"], {
     cwd: backendDir,
     env: {
