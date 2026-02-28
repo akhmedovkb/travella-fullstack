@@ -32,12 +32,12 @@ async function waitServerUp() {
   for (let i = 0; i < 60; i++) {
     try {
       const r = await fetch(`${BASE}/`, { method: "GET" });
-      // ✅ сервер поднялся, если мы вообще получили HTTP-ответ (даже 404)
+      // сервер поднялся, если мы вообще получили HTTP-ответ
       if (r && typeof r.status === "number") return true;
     } catch {}
 
     if (i % 5 === 0) {
-      process.stderr.write(`[payme-test] STDERR: waiting server... ${i}/60\n`);
+      process.stdout.write(`\n[payme-test] waiting server... ${i}/60\n`);
     }
     await sleep(200);
   }
