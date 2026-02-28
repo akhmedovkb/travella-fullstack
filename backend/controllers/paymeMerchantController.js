@@ -112,36 +112,6 @@ function safeEq(a, b) {
   return crypto.timingSafeEqual(aa, bb);
 }
 
-function getPaymeCreds() {
-  const mode = String(process.env.PAYME_MODE || "").toLowerCase();
-  const isSandbox = mode === "sandbox" || mode === "test";
-
-  const login = isSandbox
-    ? process.env.PAYME_MERCHANT_LOGIN_SANDBOX || process.env.PAYME_MERCHANT_LOGIN
-    : process.env.PAYME_MERCHANT_LOGIN;
-
-  const key = isSandbox
-    ? process.env.PAYME_MERCHANT_KEY_SANDBOX || process.env.PAYME_MERCHANT_KEY
-    : process.env.PAYME_MERCHANT_KEY;
-
-  return { login: String(login || ""), key: String(key || "") };
-}
-
-function parseBasicAuth(req) {
-  const h = String(req.headers.authorization || "");
-  const m = h.match(/^Basic\s+(.+)$/i);
-  if (!m) return null;
-
-  try {
-    const raw = Buffer.from(m[1], "base64").toString("utf8");
-    const idx = raw.indexOf(":");
-    if (idx < 0) return null;
-    return { login: raw.slice(0, idx), key: raw.slice(idx + 1) };
-  } catch {
-    return null;
-  }
-}
-
 function requireAuth(req) {
   const { login: expLogin, key: expKey } = getPaymeCreds();
   const got = parseBasicAuth(req);
