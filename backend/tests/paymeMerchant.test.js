@@ -261,7 +261,14 @@ test.after(async () => {
   } catch {}
 
   try {
-    if (proc && !proc.killed) proc.kill("SIGTERM");
+    if (proc && !proc.killed) {
+      proc.kill("SIGTERM");
+      setTimeout(() => {
+        try {
+          if (proc && !proc.killed) proc.kill("SIGKILL");
+        } catch {}
+      }, 1500);
+    }
   } catch {}
 
   try {
