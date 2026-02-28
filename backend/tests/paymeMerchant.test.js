@@ -1,9 +1,13 @@
 // backend/tests/paymeMerchant.test.js
+process.stdout.write("\n[payme-test] file start\n");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { spawn } = require("node:child_process");
 const path = require("node:path");
+process.stdout.write("[payme-test] before require db\n");
+process.stdout.write("[payme-test] requiring ../db ...\n");
 const pool = require("../db");
+process.stdout.write("[payme-test] require ../db OK\n");
 
 const PORT = String(5900 + Math.floor(Math.random() * 200));
 const BASE = `http://127.0.0.1:${PORT}`;
