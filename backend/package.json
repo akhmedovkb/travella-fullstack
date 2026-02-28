@@ -6,7 +6,7 @@
     "debug": "4.3.4"
   },
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
     "test:payme": "node --test tests/paymeMerchant.test.js"
   },
   "dependencies": {
