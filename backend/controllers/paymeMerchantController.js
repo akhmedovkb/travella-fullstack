@@ -294,10 +294,16 @@ async function pickClientsBalanceColumn(client) {
 }
 
 async function bumpClientBalanceIfExists(client, clientId, deltaTiyin) {
-  const col = await pickClientsBalanceColumn(client);
-  if (!col) return; // в этой БД нет "быстрого баланса" — это нормально
+  let col = await pickClientsBalanceColumn(client);
+  if (!col) return;
 
-  // безопасно обновляем найденную колонку
+  // 🔒 защита от устаревшего кэша: перепроверяем, что колонка реально есть
+  const cols = await getColumns(client, "clients");
+  if (!cols.has(col)) {
+    _schemaCache.balanceCol = null; // сброс кэша
+    return;
+  }
+
   await client.query(
     `UPDATE clients
         SET ${col} = COALESCE(${col}, 0) + $1
