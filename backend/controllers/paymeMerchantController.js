@@ -103,25 +103,44 @@ function safeEq(a, b) {
   return crypto.timingSafeEqual(aa, bb);
 }
 
+function getPaymeCreds() {
+  const mode = String(process.env.PAYME_MODE || "").toLowerCase();
+  const isSandbox = mode === "sandbox" || mode === "test";
+
+  const login = isSandbox
+    ? process.env.PAYME_MERCHANT_LOGIN_SANDBOX || process.env.PAYME_MERCHANT_LOGIN
+    : process.env.PAYME_MERCHANT_LOGIN;
+
+  const key = isSandbox
+    ? process.env.PAYME_MERCHANT_KEY_SANDBOX || process.env.PAYME_MERCHANT_KEY
+    : process.env.PAYME_MERCHANT_KEY;
+
+  return { login: String(login || ""), key: String(key || "") };
+}
+
+function parseBasicAuth(req) {
+  const h = String(req.headers.authorization || "");
+  const m = h.match(/^Basic\s+(.+)$/i);
+  if (!m) return null;
+
+  try {
+    const raw = Buffer.from(m[1], "base64").toString("utf8");
+    const idx = raw.indexOf(":");
+    if (idx < 0) return null;
+    return { login: raw.slice(0, idx), key: raw.slice(idx + 1) };
+  } catch {
+    return null;
+  }
+}
+
 function requireAuth(req) {
-  const mode = String(process.env.PAYME_MODE || "live").toLowerCase();
+  const { login: expLogin, key: expKey } = getPaymeCreds();
+  const got = parseBasicAuth(req);
 
-  const expectedLogin =
-    mode === "sandbox"
-      ? process.env.PAYME_MERCHANT_LOGIN_SANDBOX || ""
-      : process.env.PAYME_MERCHANT_LOGIN || "";
+  // если кредов нет — всегда запрещаем (чтобы не открыть дыру)
+  if (!expLogin || !expKey) return false;
 
-  const expectedKey =
-    mode === "sandbox"
-      ? process.env.PAYME_MERCHANT_KEY_SANDBOX || ""
-      : process.env.PAYME_MERCHANT_KEY || "";
-
-  if (!expectedLogin || !expectedKey) return false;
-
-  const parsed = parseBasicAuth(req);
-  if (!parsed) return false;
-
-  return safeEq(parsed.login, expectedLogin) && safeEq(parsed.password, expectedKey);
+  return !!got && got.login === expLogin && got.key === expKey;
 }
 
 /** ===== normalization (bank-grade) ===== */
@@ -338,7 +357,8 @@ function validateRpc(body) {
 async function paymeMerchantRpc(req, res) {
   try {
     if (!requireAuth(req)) {
-      return res.status(200).json(rpcError(null, -32504, "Unauthorized"));
+      const reqId = req?.body?.id ?? null;
+      return res.status(200).json(rpcError(reqId, -32504, "Unauthorized"));
     }
 
     const v = validateRpc(req.body || {});
