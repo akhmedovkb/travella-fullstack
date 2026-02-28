@@ -1,4 +1,10 @@
 // backend/tests/paymeMerchant.test.js
+process.stdout.write("\n[payme-test] TOP\n");
+setTimeout(() => {
+  process.stdout.write("\n[payme-test] FORCE EXIT (debug)\n");
+  process.exit(99);
+}, 3000);
+
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { spawn } = require("node:child_process");
