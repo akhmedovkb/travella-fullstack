@@ -518,11 +518,12 @@ if (method === "PerformTransaction") {
 
     // idempotent: already performed
     if (Number(tx.state) === 2) {
+      const pt = Number(tx.perform_time) || 0;
       await client.query("COMMIT");
       return res.status(200).json(
         ok(id, {
           transaction: paymeId,
-          perform_time: Number(tx.perform_time) || nowMs(),
+          perform_time: pt,
           state: 2,
         })
       );
