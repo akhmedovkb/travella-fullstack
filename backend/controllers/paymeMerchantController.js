@@ -287,6 +287,55 @@ function buildInsert(table, data, conflictCols) {
   return { sql, args };
 }
 
+// ===== schema-aware helpers (no more "column does not exist") =====
+const _schemaCache = {
+  cols: new Map(), // key: "schema.table" -> Set(col)
+  balanceCol: null, // cached chosen column name in clients
+};
+
+async function getColumns(client, table, schema = "public") {
+  const key = `${schema}.${table}`;
+  if (_schemaCache.cols.has(key)) return _schemaCache.cols.get(key);
+
+  const { rows } = await client.query(
+    `
+    SELECT column_name
+    FROM information_schema.columns
+    WHERE table_schema = $1 AND table_name = $2
+  `,
+    [schema, table]
+  );
+
+  const set = new Set(rows.map((r) => r.column_name));
+  _schemaCache.cols.set(key, set);
+  return set;
+}
+
+async function pickClientsBalanceColumn(client) {
+  if (_schemaCache.balanceCol) return _schemaCache.balanceCol;
+
+  const cols = await getColumns(client, "clients");
+  // пробуем самые вероятные варианты
+  const candidates = ["contact_balance", "contact_balance_tiyin", "balance_tiyin", "balance"];
+  const found = candidates.find((c) => cols.has(c)) || null;
+
+  _schemaCache.balanceCol = found;
+  return found;
+}
+
+async function bumpClientBalanceIfExists(client, clientId, deltaTiyin) {
+  const col = await pickClientsBalanceColumn(client);
+  if (!col) return; // в этой БД нет "быстрого баланса" — это нормально
+
+  // безопасно обновляем найденную колонку
+  await client.query(
+    `UPDATE clients
+        SET ${col} = COALESCE(${col}, 0) + $1
+      WHERE id = $2`,
+    [Number(deltaTiyin), Number(clientId)]
+  );
+}
+
 /**
  * Ledger idempotency:
  * We do NOT rely on "ON CONFLICT" with expression keys (it is not supported in PG syntax).
@@ -296,82 +345,50 @@ function buildInsert(table, data, conflictCols) {
  */
 // ===== idempotent credit (write amount_tiyin always) =====
 async function creditLedgerOnceTx(client, { clientId, amountTiyin, orderId, paymeId }) {
-  const cols = await getLedgerCols(client);
-
   const amt = Number(amountTiyin);
-  if (!Number.isFinite(amt) || amt <= 0) {
-    throw new Error(`[payme] creditLedgerOnceTx: bad amountTiyin=${amountTiyin}`);
-  }
+  if (!Number.isFinite(amt) || amt <= 0) throw new Error("creditLedgerOnceTx: bad amountTiyin");
 
-  const base = {
-    client_id: Number(clientId),
-    order_id: Number(orderId),
-    payme_id: String(paymeId),
-  };
-
-  // обязательно amount_tiyin если колонка есть (у тебя она NOT NULL)
-  if (cols.has("amount_tiyin")) base.amount_tiyin = amt;
-
-  // для старых схем/совместимости
-  if (cols.has("amount")) base.amount = amt;
-
-  // необязательные
-  if (cols.has("source")) base.source = "payme";
-  if (cols.has("reason")) base.reason = "payme_topup_credit";
-  if (cols.has("meta")) base.meta = { kind: "credit", order_id: Number(orderId) };
-
-  // если вдруг нет amount_tiyin, но есть amount — тоже ок (для совсем старых схем)
-  // но если amount_tiyin есть и NOT NULL, мы его уже поставили.
-  const data = pick(base, Object.keys(base));
-
-  const { sql, args } = buildInsert(
-    "contact_balance_ledger",
-    data,
-    cols.has("payme_id") && cols.has("order_id") ? ["payme_id", "order_id"] : null
+  // 1) пишем ledger строго идемпотентно (unique payme_id+order_id уже есть)
+  const { rows } = await client.query(
+    `
+    INSERT INTO contact_balance_ledger (client_id, amount_tiyin, order_id, payme_id, source)
+    VALUES ($1, $2, $3, $4, 'payme')
+    ON CONFLICT (payme_id, order_id) DO NOTHING
+    RETURNING id
+  `,
+    [Number(clientId), amt, Number(orderId), String(paymeId)]
   );
 
-  const r = await client.query(sql, args);
-  return r.rowCount > 0;
+  const inserted = rows?.length ? true : false;
+
+  // 2) "быстрый баланс" трогаем только если колонка реально существует
+  if (inserted) {
+    await bumpClientBalanceIfExists(client, clientId, amt);
+  }
 }
 
 // ===== idempotent debit (reversal) =====
 async function debitLedgerOnceTx(client, { clientId, amountTiyin, orderId, paymeId, reasonCode }) {
-  const cols = await getLedgerCols(client);
-
   const amt = Number(amountTiyin);
-  if (!Number.isFinite(amt) || amt <= 0) {
-    throw new Error(`[payme] debitLedgerOnceTx: bad amountTiyin=${amountTiyin}`);
-  }
+  if (!Number.isFinite(amt) || amt <= 0) throw new Error("debitLedgerOnceTx: bad amountTiyin");
 
-  // дебет делаем отрицательным
-  const neg = -Math.abs(amt);
-
-  const base = {
-    client_id: Number(clientId),
-    order_id: Number(orderId),
-    payme_id: String(paymeId),
-  };
-
-  if (cols.has("amount_tiyin")) base.amount_tiyin = neg;
-  if (cols.has("amount")) base.amount = neg;
-
-  if (cols.has("source")) base.source = "payme";
-  if (cols.has("reason_code")) base.reason_code = Number.isFinite(Number(reasonCode)) ? Number(reasonCode) : null;
-  if (cols.has("reason")) base.reason = "payme_topup_reversal";
-  if (cols.has("meta")) base.meta = { kind: "debit", order_id: Number(orderId) };
-
-  const data = pick(base, Object.keys(base));
-
-  const { sql, args } = buildInsert(
-    "contact_balance_ledger",
-    data,
-    cols.has("payme_id") && cols.has("order_id") ? ["payme_id", "order_id"] : null
+  // идемпотентный "минус" (уникальность та же: payme_id+order_id)
+  const { rows } = await client.query(
+    `
+    INSERT INTO contact_balance_ledger (client_id, amount_tiyin, order_id, payme_id, source, reason_code)
+    VALUES ($1, $2, $3, $4, 'payme_refund', $5)
+    ON CONFLICT (payme_id, order_id) DO NOTHING
+    RETURNING id
+  `,
+    [Number(clientId), -amt, Number(orderId), String(paymeId), Number.isFinite(reasonCode) ? reasonCode : null]
   );
 
-  const r = await client.query(sql, args);
-  return r.rowCount > 0;
-}
+  const inserted = rows?.length ? true : false;
 
+  if (inserted) {
+    await bumpClientBalanceIfExists(client, clientId, -amt);
+  }
+}
 /** ===== rpc validation ===== */
 
 function validateRpc(body) {
