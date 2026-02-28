@@ -27,11 +27,16 @@ async function waitServerUp() {
       const r = await fetch(`${BASE}/`, { method: "GET" });
       if (r.ok) return true;
     } catch {}
+
+    // 👇 диагностический вывод каждые 5 попыток
+    if (i % 5 === 0) {
+      process.stdout.write(`\n[payme-test] waiting server... ${i}/60\n`);
+    }
+
     await sleep(200);
   }
   throw new Error("Server did not start in time");
 }
-
 async function rpc(method, params, id = 1) {
   const body = { jsonrpc: "2.0", id, method, params };
   const r = await fetch(RPC_URL, {
