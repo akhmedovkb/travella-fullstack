@@ -250,7 +250,7 @@ test.before(async () => {
     // process.stdout.write(String(d));
   });
   proc.stderr.on("data", (d) => {
-    // process.stderr.write(String(d));
+    process.stderr.write(String(d));
   });
 
   await waitServerUp();
