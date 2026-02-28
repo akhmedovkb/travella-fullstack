@@ -31,11 +31,10 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: shouldUseSSL() ? { rejectUnauthorized: false } : false,
 
-  // ✅ чтобы не висло на connect (особенно в тестах)
+  // чтобы не висло на connect
   connectionTimeoutMillis: Number(process.env.PG_CONNECT_TIMEOUT_MS || 5000),
 
-  // ✅ чтобы не висли запросы: statement_timeout на уровне сессии
-  // node-postgres передает "options" в libpq
+  // чтобы не висли запросы
   options: `-c statement_timeout=${Number(process.env.PG_STATEMENT_TIMEOUT_MS || 15000)}`,
 });
 
