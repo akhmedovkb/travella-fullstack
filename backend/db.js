@@ -40,8 +40,19 @@ const pool = new Pool({
   connectionTimeoutMillis: Number(process.env.PG_CONNECT_TIMEOUT_MS || 5000),
 
   // ✅ чтобы не висли запросы (bank-grade)
-  // node-postgres понимает options для statement_timeout на уровне сессии
   options: `-c statement_timeout=${Number(process.env.PG_STATEMENT_TIMEOUT_MS || 15000)}`,
+});
+
+// ✅ чтобы тесты/CLI не висели из-за открытого пула
+process.on("SIGTERM", () => {
+  try {
+    pool.end();
+  } catch {}
+});
+process.on("SIGINT", () => {
+  try {
+    pool.end();
+  } catch {}
 });
 
 module.exports = pool;
