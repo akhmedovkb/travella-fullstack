@@ -78,6 +78,22 @@ async function ensurePaymeSchema() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
+    CREATE TABLE IF NOT EXISTS contact_balance_ledger (
+      id BIGSERIAL PRIMARY KEY,
+      client_id BIGINT NOT NULL,
+      amount BIGINT NOT NULL,
+      reason TEXT NOT NULL,
+      source TEXT NOT NULL,
+      meta JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE INDEX IF NOT EXISTS contact_balance_ledger_client_id_idx
+      ON contact_balance_ledger (client_id);
+
+    CREATE INDEX IF NOT EXISTS contact_balance_ledger_payme_id_idx
+      ON contact_balance_ledger ((meta->>'payme_id'));
+
     CREATE INDEX IF NOT EXISTS payme_transactions_order_id_idx ON payme_transactions (order_id);
     CREATE INDEX IF NOT EXISTS payme_transactions_create_time_idx ON payme_transactions (create_time);
   `);
