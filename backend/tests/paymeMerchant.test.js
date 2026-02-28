@@ -1,32 +1,16 @@
 // backend/tests/paymeMerchant.test.js
 
-process.stdout.write("\n[payme-test] file start\n");
-
-// 🔥 watchdog: если за 20 секунд тест не двинулся — печатаем активные хендлы и падаем
-setTimeout(() => {
-  try {
-    process.stdout.write("\n[payme-test] WATCHDOG TIMEOUT (20s)\n");
-    const handles = process._getActiveHandles?.() || [];
-    const requests = process._getActiveRequests?.() || [];
-    process.stdout.write(`[payme-test] active handles: ${handles.length}\n`);
-    process.stdout.write(`[payme-test] active requests: ${requests.length}\n`);
-    for (const h of handles) {
-      try {
-        process.stdout.write(` - ${h?.constructor?.name || typeof h}\n`);
-      } catch {}
-    }
-  } catch {}
-  process.exit(1);
-}, 20000).unref();
+process.stderr.write("\n[payme-test] STDERR: file start\n");
+process.stderr.write(`[payme-test] STDERR: node=${process.version} cwd=${process.cwd()}\n`);
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { spawn } = require("node:child_process");
 const path = require("node:path");
 
-process.stdout.write("[payme-test] requiring ../db ...\n");
+process.stderr.write("[payme-test] STDERR: requiring ../db ...\n");
 const pool = require("../db");
-process.stdout.write("[payme-test] require ../db OK\n");
+process.stderr.write("[payme-test] STDERR: require ../db OK\n");
 
 const PORT = String(5900 + Math.floor(Math.random() * 200));
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -53,9 +37,8 @@ async function waitServerUp() {
     } catch {}
 
     if (i % 5 === 0) {
-      process.stdout.write(`\n[payme-test] waiting server... ${i}/60\n`);
+      process.stderr.write(`[payme-test] STDERR: waiting server... ${i}/60\n`);
     }
-
     await sleep(200);
   }
   throw new Error("Server did not start in time");
@@ -78,7 +61,6 @@ async function rpc(method, params, id = 1) {
 function isRpcError(res) {
   return !!res && typeof res === "object" && !!res.error;
 }
-
 function getErrCode(res) {
   return res?.error?.code;
 }
@@ -130,14 +112,12 @@ async function ensurePaymeSchema() {
 async function createClientCompat() {
   const suffix = String(Date.now()) + "_" + String(Math.floor(Math.random() * 1e9));
 
-  const { rows: cols } = await pool.query(
-    `
+  const { rows: cols } = await pool.query(`
     SELECT column_name, data_type, udt_name, is_nullable, column_default
       FROM information_schema.columns
      WHERE table_schema='public' AND table_name='clients'
      ORDER BY ordinal_position ASC
-  `
-  );
+  `);
 
   if (!cols.length) {
     throw new Error("Table public.clients not found. Check DATABASE_URL and migrations.");
@@ -171,7 +151,6 @@ async function createClientCompat() {
   }
 
   const keys = Object.keys(data);
-
   if (keys.length === 0) {
     const r0 = await pool.query(`INSERT INTO public.clients DEFAULT VALUES RETURNING id`);
     return Number(r0.rows[0].id);
@@ -181,12 +160,7 @@ async function createClientCompat() {
   const colsSql = keys.map((k) => `"${k}"`).join(", ");
   const phSql = keys.map((_, i) => `$${i + 1}`).join(", ");
 
-  const q = `
-    INSERT INTO public.clients (${colsSql})
-    VALUES (${phSql})
-    RETURNING id
-  `;
-
+  const q = `INSERT INTO public.clients (${colsSql}) VALUES (${phSql}) RETURNING id`;
   const r = await pool.query(q, vals);
   return Number(r.rows[0].id);
 }
@@ -208,11 +182,7 @@ async function getClientBalance(clientId) {
   }
 
   const { rows } = await pool.query(
-    `
-    SELECT COALESCE(SUM(amount),0) AS v
-      FROM contact_balance_ledger
-     WHERE client_id=$1
-  `,
+    `SELECT COALESCE(SUM(amount),0) AS v FROM contact_balance_ledger WHERE client_id=$1`,
     [Number(clientId)]
   );
   return Number(rows[0]?.v || 0);
@@ -242,8 +212,9 @@ async function cleanupPaymeTestData() {
 let proc = null;
 
 test.before(async () => {
-  process.stdout.write("\n[payme-test] before: ensurePaymeSchema()...\n");
+  process.stderr.write("[payme-test] STDERR: before ensurePaymeSchema...\n");
 
+  // ⏱ защита от зависания на connect/query
   await Promise.race([
     ensurePaymeSchema(),
     (async () => {
@@ -252,7 +223,7 @@ test.before(async () => {
     })(),
   ]);
 
-  process.stdout.write("[payme-test] ensurePaymeSchema OK\n");
+  process.stderr.write("[payme-test] STDERR: ensurePaymeSchema OK\n");
 
   const backendDir = path.resolve(__dirname, "..");
   proc = spawn(process.execPath, ["index.js"], {
@@ -267,11 +238,12 @@ test.before(async () => {
     stdio: ["ignore", "pipe", "pipe"],
   });
 
-  proc.stdout.on("data", (d) => process.stdout.write(String(d)));
+  proc.stdout.on("data", (d) => process.stderr.write(String(d)));
   proc.stderr.on("data", (d) => process.stderr.write(String(d)));
 
-  process.stdout.write("[payme-test] waiting server...\n");
+  process.stderr.write("[payme-test] STDERR: waiting server...\n");
   await waitServerUp();
+  process.stderr.write("[payme-test] STDERR: server is up\n");
 });
 
 test.after(async () => {
