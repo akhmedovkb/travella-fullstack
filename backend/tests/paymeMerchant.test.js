@@ -1,16 +1,9 @@
 // backend/tests/paymeMerchant.test.js
-
-process.stderr.write("\n[payme-test] STDERR: file start\n");
-process.stderr.write(`[payme-test] STDERR: node=${process.version} cwd=${process.cwd()}\n`);
-
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { spawn } = require("node:child_process");
 const path = require("node:path");
-
-process.stderr.write("[payme-test] STDERR: requiring ../db ...\n");
 const pool = require("../db");
-process.stderr.write("[payme-test] STDERR: require ../db OK\n");
 
 const PORT = String(5900 + Math.floor(Math.random() * 200));
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -28,16 +21,25 @@ async function sleep(ms) {
   await new Promise((r) => setTimeout(r, ms));
 }
 
+async function fetchWithTimeout(url, ms = 800) {
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), ms);
+  try {
+    return await fetch(url, { method: "GET", signal: ac.signal });
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 async function waitServerUp() {
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < 80; i++) {
     try {
-      const r = await fetch(`${BASE}/`, { method: "GET" });
-      // сервер поднялся, если мы вообще получили HTTP-ответ
-      if (r && typeof r.status === "number") return true;
+      const r = await fetchWithTimeout(`${BASE}/`, 800);
+      if (r && typeof r.status === "number") return true; // ✅ любой HTTP-ответ = сервер поднялся
     } catch {}
 
-    if (i % 5 === 0) {
-      process.stdout.write(`\n[payme-test] waiting server... ${i}/60\n`);
+    if (i % 10 === 0) {
+      process.stdout.write(`\n[payme-test] waiting server... ${i}/80\n`);
     }
     await sleep(200);
   }
@@ -61,11 +63,13 @@ async function rpc(method, params, id = 1) {
 function isRpcError(res) {
   return !!res && typeof res === "object" && !!res.error;
 }
+
 function getErrCode(res) {
   return res?.error?.code;
 }
 
 async function ensurePaymeSchema() {
+  // Мини-схема, чтобы тесты были самодостаточными
   await pool.query(`
     CREATE TABLE IF NOT EXISTS payme_topup_orders (
       id BIGSERIAL PRIMARY KEY,
@@ -119,9 +123,7 @@ async function createClientCompat() {
      ORDER BY ordinal_position ASC
   `);
 
-  if (!cols.length) {
-    throw new Error("Table public.clients not found. Check DATABASE_URL and migrations.");
-  }
+  if (!cols.length) throw new Error("Table public.clients not found. Check DATABASE_URL and migrations.");
 
   const required = cols.filter(
     (c) =>
@@ -200,21 +202,18 @@ async function createOrder(clientId, amountTiyin) {
 
 async function cleanupPaymeTestData() {
   await pool.query(`DELETE FROM payme_transactions WHERE payme_id LIKE 'tst_%'`);
-  await pool.query(
-    `DELETE FROM payme_topup_orders
-      WHERE created_at > now() - interval '2 hours'
-        AND status IN ('new','created','paid','cancelled')`
-  );
+  await pool.query(`
+    DELETE FROM payme_topup_orders
+     WHERE created_at > now() - interval '2 hours'
+       AND status IN ('new','created','paid','cancelled')
+  `);
 }
 
 /** ===================== server lifecycle ===================== */
-
 let proc = null;
 
 test.before(async () => {
-  process.stderr.write("[payme-test] STDERR: before ensurePaymeSchema...\n");
-
-  // ⏱ защита от зависания на connect/query
+  // ⏱ БД не должна висеть бесконечно
   await Promise.race([
     ensurePaymeSchema(),
     (async () => {
@@ -223,14 +222,19 @@ test.before(async () => {
     })(),
   ]);
 
-  process.stderr.write("[payme-test] STDERR: ensurePaymeSchema OK\n");
-
   const backendDir = path.resolve(__dirname, "..");
+
   proc = spawn(process.execPath, ["index.js"], {
     cwd: backendDir,
     env: {
       ...process.env,
       PORT,
+
+      // ✅ критично для тестов: отключаем tg + scheduler
+      NODE_ENV: "test",
+      DISABLE_TG_BOT: "1",
+      DISABLE_REMINDER_SCHEDULER: "1",
+
       PAYME_MODE: "sandbox",
       PAYME_MERCHANT_LOGIN_SANDBOX: PAYME_LOGIN,
       PAYME_MERCHANT_KEY_SANDBOX: PAYME_KEY,
@@ -238,9 +242,7 @@ test.before(async () => {
     stdio: "inherit",
   });
 
-  process.stderr.write("[payme-test] STDERR: waiting server...\n");
   await waitServerUp();
-  process.stderr.write("[payme-test] STDERR: server is up\n");
 });
 
 test.after(async () => {
