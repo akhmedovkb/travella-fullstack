@@ -238,9 +238,6 @@ test.before(async () => {
     stdio: "inherit",
   });
 
-  proc.stdout.on("data", (d) => process.stderr.write(String(d)));
-  proc.stderr.on("data", (d) => process.stderr.write(String(d)));
-
   process.stderr.write("[payme-test] STDERR: waiting server...\n");
   await waitServerUp();
   process.stderr.write("[payme-test] STDERR: server is up\n");
