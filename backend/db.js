@@ -35,6 +35,13 @@ function shouldUseSSL() {
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: shouldUseSSL() ? { rejectUnauthorized: false } : false,
+
+  // ✅ чтобы не висло на connect (особенно в тестах)
+  connectionTimeoutMillis: Number(process.env.PG_CONNECT_TIMEOUT_MS || 5000),
+
+  // ✅ чтобы не висли запросы (bank-grade)
+  // node-postgres понимает options для statement_timeout на уровне сессии
+  options: `-c statement_timeout=${Number(process.env.PG_STATEMENT_TIMEOUT_MS || 15000)}`,
 });
 
 module.exports = pool;
