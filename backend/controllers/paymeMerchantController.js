@@ -3,18 +3,27 @@ const pool = require("../db");
 const crypto = require("crypto");
 
 function getPaymeCreds() {
-  const mode = String(process.env.PAYME_MODE || "").toLowerCase();
-  const isSandbox = mode === "sandbox" || mode === "test";
+  const mode = String(process.env.PAYME_MODE || "").trim().toLowerCase();
 
-  const login = isSandbox
-    ? process.env.PAYME_MERCHANT_LOGIN_SANDBOX || process.env.PAYME_MERCHANT_LOGIN
-    : process.env.PAYME_MERCHANT_LOGIN;
+  // sandbox/test mode
+  if (mode === "sandbox" || mode === "test" || mode === "dev") {
+    return {
+      login:
+        process.env.PAYME_MERCHANT_LOGIN_SANDBOX ||
+        process.env.PAYME_MERCHANT_LOGIN ||
+        "",
+      key:
+        process.env.PAYME_MERCHANT_KEY_SANDBOX ||
+        process.env.PAYME_MERCHANT_KEY ||
+        "",
+    };
+  }
 
-  const key = isSandbox
-    ? process.env.PAYME_MERCHANT_KEY_SANDBOX || process.env.PAYME_MERCHANT_KEY
-    : process.env.PAYME_MERCHANT_KEY;
-
-  return { login: String(login || ""), key: String(key || ""), isSandbox };
+  // prod/default
+  return {
+    login: process.env.PAYME_MERCHANT_LOGIN || "",
+    key: process.env.PAYME_MERCHANT_KEY || "",
+  };
 }
 
 function parseBasicAuth(req) {
