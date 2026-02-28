@@ -246,8 +246,7 @@ test.before(async () => {
   });
 
   proc.stdout.on("data", (d) => {
-    // можно раскомментировать для дебага
-    // process.stdout.write(String(d));
+    process.stdout.write(String(d));
   });
   proc.stderr.on("data", (d) => {
     process.stderr.write(String(d));
