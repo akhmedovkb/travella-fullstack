@@ -250,6 +250,42 @@ async function markOrderStatusTx(client, orderId, status, paidAt = null) {
     [orderId, status, paidAt]
   );
 }
+// ===== contact_balance_ledger helpers (schema-safe) =====
+const _ledgerColsCache = { cols: null };
+
+async function getLedgerCols(client) {
+  if (_ledgerColsCache.cols) return _ledgerColsCache.cols;
+
+  const { rows } = await client.query(
+    `
+    SELECT column_name
+    FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='contact_balance_ledger'
+  `
+  );
+
+  const set = new Set(rows.map((r) => r.column_name));
+  _ledgerColsCache.cols = set;
+  return set;
+}
+
+function pick(obj, keys) {
+  const out = {};
+  for (const k of keys) if (obj[k] !== undefined) out[k] = obj[k];
+  return out;
+}
+
+function buildInsert(table, data, conflictCols) {
+  const cols = Object.keys(data);
+  const vals = cols.map((_, i) => `$${i + 1}`);
+  const sql =
+    `INSERT INTO ${table} (${cols.join(", ")}) VALUES (${vals.join(", ")}) ` +
+    (conflictCols?.length
+      ? `ON CONFLICT (${conflictCols.join(", ")}) DO NOTHING`
+      : "");
+  const args = cols.map((c) => data[c]);
+  return { sql, args };
+}
 
 /**
  * Ledger idempotency:
@@ -258,87 +294,82 @@ async function markOrderStatusTx(client, orderId, status, paidAt = null) {
  *  - pg_advisory_xact_lock(payme:<id>) around Perform/Cancel
  *  - explicit existence check inside the same DB transaction
  */
+// ===== idempotent credit (write amount_tiyin always) =====
 async function creditLedgerOnceTx(client, { clientId, amountTiyin, orderId, paymeId }) {
-  const meta = {
+  const cols = await getLedgerCols(client);
+
+  const amt = Number(amountTiyin);
+  if (!Number.isFinite(amt) || amt <= 0) {
+    throw new Error(`[payme] creditLedgerOnceTx: bad amountTiyin=${amountTiyin}`);
+  }
+
+  const base = {
+    client_id: Number(clientId),
+    order_id: Number(orderId),
     payme_id: String(paymeId),
-    order_id: String(orderId),
   };
 
-  const { rows: exist } = await client.query(
-    `
-      SELECT 1
-        FROM contact_balance_ledger
-       WHERE client_id = $1
-         AND source = 'payme'
-         AND reason = 'topup'
-         AND (meta->>'payme_id') = $2
-       LIMIT 1
-    `,
-    [Number(clientId), String(paymeId)]
-  );
-  if (exist?.length) return { credited: false };
+  // обязательно amount_tiyin если колонка есть (у тебя она NOT NULL)
+  if (cols.has("amount_tiyin")) base.amount_tiyin = amt;
 
-  const { rows } = await client.query(
-    `
-      INSERT INTO contact_balance_ledger
-        (client_id, amount, reason, source, meta, created_at)
-      VALUES ($1, $2, 'topup', 'payme', $3::jsonb, now())
-      RETURNING id
-    `,
-    [Number(clientId), Number(amountTiyin), JSON.stringify(meta)]
-  );
-  if (!rows?.length) return { credited: false };
+  // для старых схем/совместимости
+  if (cols.has("amount")) base.amount = amt;
 
-  await client.query(
-    `UPDATE clients
-        SET contact_balance = COALESCE(contact_balance, 0) + $2
-      WHERE id = $1`,
-    [Number(clientId), Number(amountTiyin)]
+  // необязательные
+  if (cols.has("source")) base.source = "payme";
+  if (cols.has("reason")) base.reason = "payme_topup_credit";
+  if (cols.has("meta")) base.meta = { kind: "credit", order_id: Number(orderId) };
+
+  // если вдруг нет amount_tiyin, но есть amount — тоже ок (для совсем старых схем)
+  // но если amount_tiyin есть и NOT NULL, мы его уже поставили.
+  const data = pick(base, Object.keys(base));
+
+  const { sql, args } = buildInsert(
+    "contact_balance_ledger",
+    data,
+    cols.has("payme_id") && cols.has("order_id") ? ["payme_id", "order_id"] : null
   );
 
-  return { credited: true };
+  const r = await client.query(sql, args);
+  return r.rowCount > 0;
 }
 
+// ===== idempotent debit (reversal) =====
 async function debitLedgerOnceTx(client, { clientId, amountTiyin, orderId, paymeId, reasonCode }) {
-  const meta = {
+  const cols = await getLedgerCols(client);
+
+  const amt = Number(amountTiyin);
+  if (!Number.isFinite(amt) || amt <= 0) {
+    throw new Error(`[payme] debitLedgerOnceTx: bad amountTiyin=${amountTiyin}`);
+  }
+
+  // дебет делаем отрицательным
+  const neg = -Math.abs(amt);
+
+  const base = {
+    client_id: Number(clientId),
+    order_id: Number(orderId),
     payme_id: String(paymeId),
-    order_id: String(orderId),
-    cancel_reason: reasonCode == null ? null : String(reasonCode),
   };
 
-  const { rows: exist } = await client.query(
-    `
-      SELECT 1
-        FROM contact_balance_ledger
-       WHERE client_id = $1
-         AND source = 'payme'
-         AND reason = 'topup_reversal'
-         AND (meta->>'payme_id') = $2
-       LIMIT 1
-    `,
-    [Number(clientId), String(paymeId)]
-  );
-  if (exist?.length) return { debited: false };
+  if (cols.has("amount_tiyin")) base.amount_tiyin = neg;
+  if (cols.has("amount")) base.amount = neg;
 
-  const { rows } = await client.query(
-    `
-      INSERT INTO contact_balance_ledger
-        (client_id, amount, reason, source, meta, created_at)
-      VALUES ($1, $2, 'topup_reversal', 'payme', $3::jsonb, now())
-      RETURNING id
-    `,
-    [Number(clientId), -Math.abs(Number(amountTiyin)), JSON.stringify(meta)]
-  );
-  if (!rows?.length) return { debited: false };
+  if (cols.has("source")) base.source = "payme";
+  if (cols.has("reason_code")) base.reason_code = Number.isFinite(Number(reasonCode)) ? Number(reasonCode) : null;
+  if (cols.has("reason")) base.reason = "payme_topup_reversal";
+  if (cols.has("meta")) base.meta = { kind: "debit", order_id: Number(orderId) };
 
-  await client.query(
-    `UPDATE clients
-        SET contact_balance = GREATEST(COALESCE(contact_balance,0) + $2, 0)
-      WHERE id = $1`,
-    [Number(clientId), -Math.abs(Number(amountTiyin))]
+  const data = pick(base, Object.keys(base));
+
+  const { sql, args } = buildInsert(
+    "contact_balance_ledger",
+    data,
+    cols.has("payme_id") && cols.has("order_id") ? ["payme_id", "order_id"] : null
   );
 
-  return { debited: true };
+  const r = await client.query(sql, args);
+  return r.rowCount > 0;
 }
 
 /** ===== rpc validation ===== */
