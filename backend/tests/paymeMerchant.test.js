@@ -133,22 +133,29 @@ async function createClientCompat() {
     }
   }
 
-  // Собираем INSERT динамически
-  const keys = Object.keys(data);
-  const vals = keys.map((k) => data[k]);
+// Собираем INSERT динамически
+const keys = Object.keys(data);
 
-  const colsSql = keys.map((k) => `"${k}"`).join(", ");
-  const phSql = keys.map((_, i) => `$${i + 1}`).join(", ");
-
-  const q = `
-    INSERT INTO clients (${colsSql})
-    VALUES (${phSql})
-    RETURNING id
-  `;
-
-  const r = await pool.query(q, vals);
-  return Number(r.rows[0].id);
+// ✅ если не нашлось ни одной колонки для вставки — делаем DEFAULT VALUES
+// (иначе получится INSERT INTO clients () VALUES () и Postgres падает на ")")
+if (keys.length === 0) {
+  const r0 = await pool.query(`INSERT INTO public.clients DEFAULT VALUES RETURNING id`);
+  return Number(r0.rows[0].id);
 }
+
+const vals = keys.map((k) => data[k]);
+
+const colsSql = keys.map((k) => `"${k}"`).join(", ");
+const phSql = keys.map((_, i) => `$${i + 1}`).join(", ");
+
+const q = `
+  INSERT INTO public.clients (${colsSql})
+  VALUES (${phSql})
+  RETURNING id
+`;
+
+const r = await pool.query(q, vals);
+return Number(r.rows[0].id);
 
 async function getClientBalance(clientId) {
   // contact_balance может отсутствовать (редко), поэтому читаем по колонкам
