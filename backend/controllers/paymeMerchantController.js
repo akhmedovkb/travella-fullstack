@@ -515,17 +515,6 @@ async function paymeMerchantRpc(req, res) {
           await lockKeyTx(client, `order:${tx.order_id}`);
         }
 
-        if (Number(tx.state) === 2) {
-          await client.query("COMMIT");
-          return res.status(200).json(
-            ok(id, {
-              transaction: paymeId,
-              perform_time: Number(tx.perform_time) || nowMs(),
-              state: 2,
-            })
-          );
-        }
-
         if (Number(tx.state) === -1 || Number(tx.state) === -2) {
           await client.query("COMMIT");
           return res.status(200).json(rpcError(id, -31008, "Transaction cancelled"));
@@ -553,7 +542,18 @@ async function paymeMerchantRpc(req, res) {
           await client.query("COMMIT");
           return res.status(200).json(rpcError(id, -31008, "Order cancelled"));
         }
-
+        
+        // 🔒 BANK-GRADE: idempotency by transaction state FIRST
+        if (Number(tx.state) === 2) {
+          await client.query("COMMIT");
+          return res.status(200).json(
+            ok(id, {
+              transaction: paymeId,
+              perform_time: Number(tx.perform_time) || nowMs(),
+              state: 2,
+            })
+          );
+        }
         // already paid => make tx performed idempotently
         if (order.status === "paid") {
           const performTime = order.paid_at ? new Date(order.paid_at).getTime() : nowMs();
@@ -575,7 +575,8 @@ async function paymeMerchantRpc(req, res) {
           return res.status(200).json(rpcError(id, -31050, "Client not found"));
         }
 
-        await creditLedgerOnceTx(client, {
+        // 🔒 credit strictly after state change inside same tx
+        const creditRes = await creditLedgerOnceTx(client, {
           clientId: Number(order.client_id),
           amountTiyin: Number(order.amount_tiyin),
           orderId,
@@ -648,7 +649,8 @@ async function paymeMerchantRpc(req, res) {
         });
 
         // If cancel performed => reversal once
-        if (Number(updated?.state ?? newState) === -2) {
+        // 🔒 only if was actually performed before
+        if (Number(tx.state) === 2 && Number(updated?.state ?? newState) === -2) {
           const orderId = Number(tx.order_id);
           const order = await getOrderTx(client, orderId);
           if (order) {
