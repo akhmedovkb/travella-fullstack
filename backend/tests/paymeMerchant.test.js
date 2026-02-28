@@ -1,10 +1,29 @@
 // backend/tests/paymeMerchant.test.js
+
 process.stdout.write("\n[payme-test] file start\n");
+
+// 🔥 watchdog: если за 20 секунд тест не двинулся — печатаем активные хендлы и падаем
+setTimeout(() => {
+  try {
+    process.stdout.write("\n[payme-test] WATCHDOG TIMEOUT (20s)\n");
+    const handles = process._getActiveHandles?.() || [];
+    const requests = process._getActiveRequests?.() || [];
+    process.stdout.write(`[payme-test] active handles: ${handles.length}\n`);
+    process.stdout.write(`[payme-test] active requests: ${requests.length}\n`);
+    for (const h of handles) {
+      try {
+        process.stdout.write(` - ${h?.constructor?.name || typeof h}\n`);
+      } catch {}
+    }
+  } catch {}
+  process.exit(1);
+}, 20000).unref();
+
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { spawn } = require("node:child_process");
 const path = require("node:path");
-process.stdout.write("[payme-test] before require db\n");
+
 process.stdout.write("[payme-test] requiring ../db ...\n");
 const pool = require("../db");
 process.stdout.write("[payme-test] require ../db OK\n");
@@ -29,7 +48,7 @@ async function waitServerUp() {
   for (let i = 0; i < 60; i++) {
     try {
       const r = await fetch(`${BASE}/`, { method: "GET" });
-      // ✅ сервер поднялся, если мы вообще получили HTTP-ответ
+      // ✅ сервер поднялся, если мы вообще получили HTTP-ответ (даже 404)
       if (r && typeof r.status === "number") return true;
     } catch {}
 
@@ -65,7 +84,6 @@ function getErrCode(res) {
 }
 
 async function ensurePaymeSchema() {
-  // Мини-схема, чтобы тесты были самодостаточными (если миграции ещё не прогнаны)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS payme_topup_orders (
       id BIGSERIAL PRIMARY KEY,
@@ -109,12 +127,6 @@ async function ensurePaymeSchema() {
   `);
 }
 
-/**
- * Создаём “минимального клиента” максимально совместимо:
- * - берём NOT NULL колонки без DEFAULT
- * - заполняем типобезопасными значениями
- * Это нужно, чтобы тесты работали в твоей реальной схеме clients.
- */
 async function createClientCompat() {
   const suffix = String(Date.now()) + "_" + String(Math.floor(Math.random() * 1e9));
 
@@ -150,42 +162,36 @@ async function createClientCompat() {
     else if (dt.includes("numeric") || dt.includes("double") || dt.includes("real")) data[name] = 0;
     else if (dt.includes("json")) data[name] = {};
     else {
-      // text/varchar
-      if (name.includes("phone")) data[name] = `99890${suffix.slice(-7)}`; // похож на UZ
+      if (name.includes("phone")) data[name] = `99890${suffix.slice(-7)}`;
       else if (name.includes("email")) data[name] = `payme_test_${suffix}@example.com`;
-      else if (name.includes("password")) data[name] = `hash_${suffix}`; // если ожидается hash — не важно, тестам нужен id
+      else if (name.includes("password")) data[name] = `hash_${suffix}`;
       else if (name.includes("name")) data[name] = `Payme Test ${suffix}`;
       else data[name] = `test_${suffix}`;
     }
   }
 
-// Собираем INSERT динамически
-const keys = Object.keys(data);
+  const keys = Object.keys(data);
 
-// ✅ если не нашлось ни одной колонки для вставки — делаем DEFAULT VALUES
-// (иначе получится INSERT INTO clients () VALUES () и Postgres падает на ")")
-if (keys.length === 0) {
-  const r0 = await pool.query(`INSERT INTO public.clients DEFAULT VALUES RETURNING id`);
-  return Number(r0.rows[0].id);
-}
+  if (keys.length === 0) {
+    const r0 = await pool.query(`INSERT INTO public.clients DEFAULT VALUES RETURNING id`);
+    return Number(r0.rows[0].id);
+  }
 
-const vals = keys.map((k) => data[k]);
+  const vals = keys.map((k) => data[k]);
+  const colsSql = keys.map((k) => `"${k}"`).join(", ");
+  const phSql = keys.map((_, i) => `$${i + 1}`).join(", ");
 
-const colsSql = keys.map((k) => `"${k}"`).join(", ");
-const phSql = keys.map((_, i) => `$${i + 1}`).join(", ");
+  const q = `
+    INSERT INTO public.clients (${colsSql})
+    VALUES (${phSql})
+    RETURNING id
+  `;
 
-const q = `
-  INSERT INTO public.clients (${colsSql})
-  VALUES (${phSql})
-  RETURNING id
-`;
-
-const r = await pool.query(q, vals);
-return Number(r.rows[0].id);
+  const r = await pool.query(q, vals);
+  return Number(r.rows[0].id);
 }
 
 async function getClientBalance(clientId) {
-  // contact_balance может отсутствовать (редко), поэтому читаем по колонкам
   const { rows: cols } = await pool.query(`
     SELECT column_name
       FROM information_schema.columns
@@ -194,13 +200,13 @@ async function getClientBalance(clientId) {
   const has = new Set(cols.map((r) => r.column_name));
 
   if (has.has("contact_balance")) {
-    const { rows } = await pool.query(`SELECT COALESCE(contact_balance,0) AS v FROM clients WHERE id=$1`, [
-      Number(clientId),
-    ]);
+    const { rows } = await pool.query(
+      `SELECT COALESCE(contact_balance,0) AS v FROM clients WHERE id=$1`,
+      [Number(clientId)]
+    );
     return Number(rows[0]?.v || 0);
   }
 
-  // fallback: если баланса в clients нет — считаем по ledger
   const { rows } = await pool.query(
     `
     SELECT COALESCE(SUM(amount),0) AS v
@@ -223,11 +229,7 @@ async function createOrder(clientId, amountTiyin) {
 }
 
 async function cleanupPaymeTestData() {
-  // чистим только “наши” записи, не трогая прод данные
-  // (payme_id префикс "tst_" + order.status created/paid/cancelled остаются)
   await pool.query(`DELETE FROM payme_transactions WHERE payme_id LIKE 'tst_%'`);
-  // orders — только те, где client_id указывался в тестах (в пределах запуска)
-  // мы не знаем их заранее, поэтому удаляем старые created/paid/cancelled "recent"
   await pool.query(
     `DELETE FROM payme_topup_orders
       WHERE created_at > now() - interval '2 hours'
@@ -242,7 +244,6 @@ let proc = null;
 test.before(async () => {
   process.stdout.write("\n[payme-test] before: ensurePaymeSchema()...\n");
 
-  // ⏱ чтобы не висеть бесконечно на коннекте к БД
   await Promise.race([
     ensurePaymeSchema(),
     (async () => {
@@ -362,7 +363,6 @@ test("Payme: PerformTransaction -> credits once, retry does not double credit", 
   const b1 = await getClientBalance(clientId);
   assert.equal(b1, b0 + 5000);
 
-  // retry perform
   const p2 = await rpc("PerformTransaction", { id: paymeId });
   assert.equal(isRpcError(p2), false, JSON.stringify(p2));
   assert.equal(p2.result?.state, 2);
@@ -429,7 +429,6 @@ test("Payme: CancelTransaction after Perform -> state=-2 and balance rollback on
   const b2 = await getClientBalance(clientId);
   assert.equal(b2, b0);
 
-  // повторный cancel не должен списать второй раз
   const c2 = await rpc("CancelTransaction", { id: paymeId, reason: 1 });
   assert.equal(isRpcError(c2), false, JSON.stringify(c2));
   assert.equal(c2.result?.state, -2);
