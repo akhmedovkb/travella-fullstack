@@ -11,7 +11,7 @@ const { spawn } = require("node:child_process");
 const path = require("node:path");
 const pool = require("../db");
 
-const PORT = String(5900 + Math.floor(Math.random() * 200));
+const PORT = String(12000 + Math.floor(Math.random() * 2000));
 const BASE = `http://127.0.0.1:${PORT}`;
 const RPC_URL = `${BASE}/api/merchant/payme`;
 
