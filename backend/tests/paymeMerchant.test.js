@@ -25,10 +25,10 @@ async function waitServerUp() {
   for (let i = 0; i < 60; i++) {
     try {
       const r = await fetch(`${BASE}/`, { method: "GET" });
-      if (r.ok) return true;
+      // ✅ сервер поднялся, если мы вообще получили HTTP-ответ
+      if (r && typeof r.status === "number") return true;
     } catch {}
 
-    // 👇 диагностический вывод каждые 5 попыток
     if (i % 5 === 0) {
       process.stdout.write(`\n[payme-test] waiting server... ${i}/60\n`);
     }
@@ -37,6 +37,7 @@ async function waitServerUp() {
   }
   throw new Error("Server did not start in time");
 }
+
 async function rpc(method, params, id = 1) {
   const body = { jsonrpc: "2.0", id, method, params };
   const r = await fetch(RPC_URL, {
@@ -235,7 +236,18 @@ async function cleanupPaymeTestData() {
 let proc = null;
 
 test.before(async () => {
-  await ensurePaymeSchema();
+  process.stdout.write("\n[payme-test] before: ensurePaymeSchema()...\n");
+
+  // ⏱ чтобы не висеть бесконечно на коннекте к БД
+  await Promise.race([
+    ensurePaymeSchema(),
+    (async () => {
+      await sleep(8000);
+      throw new Error("ensurePaymeSchema timed out (DB connect/query hang)");
+    })(),
+  ]);
+
+  process.stdout.write("[payme-test] ensurePaymeSchema OK\n");
 
   const backendDir = path.resolve(__dirname, "..");
   proc = spawn(process.execPath, ["index.js"], {
@@ -250,13 +262,10 @@ test.before(async () => {
     stdio: ["ignore", "pipe", "pipe"],
   });
 
-  proc.stdout.on("data", (d) => {
-    process.stdout.write(String(d));
-  });
-  proc.stderr.on("data", (d) => {
-    process.stderr.write(String(d));
-  });
+  proc.stdout.on("data", (d) => process.stdout.write(String(d)));
+  proc.stderr.on("data", (d) => process.stderr.write(String(d)));
 
+  process.stdout.write("[payme-test] waiting server...\n");
   await waitServerUp();
 });
 
