@@ -156,6 +156,7 @@ const q = `
 
 const r = await pool.query(q, vals);
 return Number(r.rows[0].id);
+}
 
 async function getClientBalance(clientId) {
   // contact_balance может отсутствовать (редко), поэтому читаем по колонкам
