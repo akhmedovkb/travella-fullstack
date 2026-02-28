@@ -2,3 +2,7 @@ node_modules/
 .env
 dist/
 build/
+# env files (never commit secrets)
+.env
+backend/.env
+frontend/.env

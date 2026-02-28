@@ -20,7 +20,11 @@
     "pdfkit": "^0.17.1",
     "pg": "^8.18.0",
     "pg-copy-streams": "^7.0.0",
-    "sharp": "^0.33.0",
+    "pdfkit": "^0.17.2",
+    "pg": "^8.11.1",
+    "pg-copy-streams": "^7.0.0",
+    "puppeteer": "^23.0.0",
+git add package.json    "sharp": "^0.33.0",
     "telegraf": "^4.16.3",
     "unzipper": "^0.12.3"
   },
