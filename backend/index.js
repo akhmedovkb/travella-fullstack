@@ -24,6 +24,7 @@ const publicDonasRoutes = require("./routes/publicDonasRoutes");
 const adminDonasInventoryRoutes = require("./routes/adminDonasInventoryRoutes");
 const adminContactBalanceRoutes = require("./routes/adminContactBalanceRoutes");
 const paymeMerchantRoutes = require("./routes/paymeMerchantRoutes");
+const adminPaymeHealthRoutes = require("./routes/adminPaymeHealthRoutes");
 
 dotenv.config();
 const app = express();
@@ -1000,6 +1001,7 @@ app.use("/api/admin/clients", adminContactBalanceRoutes);
 
 /** ===================== payment systems ===================== */
 app.use("/api", paymeMerchantRoutes);
+app.use("/api/admin/payme", adminPaymeHealthRoutes);
 
 /** ===================== Start (в самом конце) ===================== */
 const PORT = process.env.PORT || 5000;
