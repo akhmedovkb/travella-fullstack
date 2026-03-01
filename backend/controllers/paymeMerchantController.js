@@ -358,54 +358,40 @@ async function creditLedgerOnceTx(client, { clientId, amountTiyin, orderId, paym
 
   const cols = await getLedgerCols(client);
 
-  // 0) idempotency existence-check (works for both schemas)
-  const already = await ledgerExistsTx(client, cols, { paymeId, orderId, sourceHint: "payme" });
-  if (already) return;
+  // ✅ idempotency for your schema: meta->>'payme_id' + meta->>'order_id'
+  if (cols.has("meta")) {
+    const { rows: ex } = await client.query(
+      `
+      SELECT 1
+      FROM contact_balance_ledger
+      WHERE source = 'payme'
+        AND reason = 'topup'
+        AND meta->>'payme_id' = $1
+        AND meta->>'order_id' = $2
+      LIMIT 1
+      `,
+      [String(paymeId), String(orderId)]
+    );
+    if (ex.length) return;
+  }
 
-  // 1) build insert payload by actual schema
   const row = {};
-
   if (cols.has("client_id")) row.client_id = Number(clientId);
-
-  // amount column variants
-  if (cols.has("amount_tiyin")) row.amount_tiyin = amt;
-  else if (cols.has("amount")) row.amount = amt;
-
-  // source/reason variants
+  if (cols.has("amount")) row.amount = amt; // ✅ your DB uses amount (tiyin)
+  if (cols.has("reason")) row.reason = "topup";
   if (cols.has("source")) row.source = "payme";
-  if (cols.has("reason")) row.reason = "payme_topup";
+  if (cols.has("service_id")) row.service_id = null;
 
-  // direct keys if exist
-  if (cols.has("order_id")) row.order_id = Number(orderId);
-  if (cols.has("payme_id")) row.payme_id = String(paymeId);
-
-  // meta fallback (or supplement)
   if (cols.has("meta")) {
     row.meta = {
-      ...(typeof row.meta === "object" && row.meta ? row.meta : {}),
       payme_id: String(paymeId),
       order_id: String(orderId),
       kind: "topup",
     };
   }
 
-  // 2) Try ON CONFLICT if we actually have explicit columns for conflict
-  const conflictCols =
-    cols.has("payme_id") && cols.has("order_id") ? ["payme_id", "order_id"] : null;
-
-  if (conflictCols) {
-    try {
-      await insertLedgerTx(client, cols, row, conflictCols);
-      return;
-    } catch (e) {
-      // If no unique constraint exists, fallback to plain insert
-      if (!isOnConflictNoConstraintErr(e)) throw e;
-      // continue to fallback insert
-    }
-  }
-
-  // 3) Fallback insert without ON CONFLICT (we already did existence check under payme advisory lock)
-  await insertLedgerTx(client, cols, row, null);
+  const { sql, args } = buildInsert("contact_balance_ledger", row, null);
+  await client.query(sql, args);
 }
 
 
@@ -416,48 +402,41 @@ async function debitLedgerOnceTx(client, { clientId, amountTiyin, orderId, payme
 
   const cols = await getLedgerCols(client);
 
-  // idempotency: treat refund as separate source, but still same payme/order pair (one reversal max)
-  const already = await ledgerExistsTx(client, cols, { paymeId, orderId, sourceHint: "payme_refund" });
-  if (already) return;
+  // ✅ idempotency for refund row
+  if (cols.has("meta")) {
+    const { rows: ex } = await client.query(
+      `
+      SELECT 1
+      FROM contact_balance_ledger
+      WHERE source = 'payme_refund'
+        AND reason = 'refund'
+        AND meta->>'payme_id' = $1
+        AND meta->>'order_id' = $2
+      LIMIT 1
+      `,
+      [String(paymeId), String(orderId)]
+    );
+    if (ex.length) return;
+  }
 
   const row = {};
   if (cols.has("client_id")) row.client_id = Number(clientId);
-
-  // negative amount
-  if (cols.has("amount_tiyin")) row.amount_tiyin = -amt;
-  else if (cols.has("amount")) row.amount = -amt;
-
+  if (cols.has("amount")) row.amount = -amt; // ✅ negative for reversal
+  if (cols.has("reason")) row.reason = "refund";
   if (cols.has("source")) row.source = "payme_refund";
-  if (cols.has("reason")) row.reason = "payme_refund";
-
-  if (cols.has("reason_code")) row.reason_code = Number.isFinite(reasonCode) ? reasonCode : null;
-
-  if (cols.has("order_id")) row.order_id = Number(orderId);
-  if (cols.has("payme_id")) row.payme_id = String(paymeId);
+  if (cols.has("service_id")) row.service_id = null;
 
   if (cols.has("meta")) {
     row.meta = {
-      ...(typeof row.meta === "object" && row.meta ? row.meta : {}),
       payme_id: String(paymeId),
       order_id: String(orderId),
       kind: "refund",
-      reason_code: Number.isFinite(reasonCode) ? reasonCode : null,
+      reason_code: Number.isFinite(Number(reasonCode)) ? Number(reasonCode) : null,
     };
   }
 
-  const conflictCols =
-    cols.has("payme_id") && cols.has("order_id") ? ["payme_id", "order_id"] : null;
-
-  if (conflictCols) {
-    try {
-      await insertLedgerTx(client, cols, row, conflictCols);
-      return;
-    } catch (e) {
-      if (!isOnConflictNoConstraintErr(e)) throw e;
-    }
-  }
-
-  await insertLedgerTx(client, cols, row, null);
+  const { sql, args } = buildInsert("contact_balance_ledger", row, null);
+  await client.query(sql, args);
 }
 
 /** ===== rpc validation ===== */
