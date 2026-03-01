@@ -225,8 +225,126 @@ async function adminPaymeRepairLedger(req, res) {
   }
 }
 
+/**
+ * POST /api/admin/payme/repair-bulk
+ * Body: { paymeIds: string[], dryRun?: boolean }
+ * Bulk repair LOST_PAYMENT (state=2 + ledger missing) – bank-grade:
+ * - advisory lock per paymeId
+ * - SELECT ... FOR UPDATE
+ * - idempotency check by meta(payme_id, order_id)
+ */
+async function adminPaymeRepairBulk(req, res) {
+  const paymeIds = Array.isArray(req.body?.paymeIds) ? req.body.paymeIds : [];
+  const dryRun = !!req.body?.dryRun;
+
+  const ids = paymeIds
+    .map((x) => normPaymeId(x))
+    .filter(Boolean);
+
+  if (!ids.length) return res.status(400).json({ ok: false, message: "paymeIds[] required" });
+  if (ids.length > 200) return res.status(400).json({ ok: false, message: "Too many paymeIds (max 200)" });
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const results = [];
+
+    for (const paymeId of ids) {
+      await lockKeyTx(client, `payme:${paymeId}`);
+
+      const txQ = await client.query(
+        `SELECT * FROM payme_transactions WHERE payme_id=$1 FOR UPDATE`,
+        [paymeId]
+      );
+      if (!txQ.rows.length) {
+        results.push({ paymeId, ok: false, reason: "tx_not_found" });
+        continue;
+      }
+      const tx = txQ.rows[0];
+
+      if (Number(tx.state) !== 2) {
+        results.push({ paymeId, ok: false, reason: `tx_state_${tx.state}` });
+        continue;
+      }
+
+      const orderQ = await client.query(
+        `SELECT * FROM payme_topup_orders WHERE id=$1 FOR UPDATE`,
+        [tx.order_id]
+      );
+      const order = orderQ.rows[0];
+      if (!order) {
+        results.push({ paymeId, ok: false, reason: "order_not_found" });
+        continue;
+      }
+
+      const ex = await client.query(
+        `
+        SELECT id
+          FROM contact_balance_ledger
+         WHERE source='payme'
+           AND reason='topup'
+           AND meta->>'payme_id'=$1
+           AND meta->>'order_id'=$2
+         LIMIT 1
+        `,
+        [String(paymeId), String(order.id)]
+      );
+      if (ex.rows.length) {
+        results.push({ paymeId, ok: true, already: true, ledger_id: ex.rows[0].id });
+        continue;
+      }
+
+      const row = {
+        client_id: Number(order.client_id),
+        amount: Number(order.amount_tiyin),
+        reason: "topup",
+        service_id: null,
+        source: "payme",
+        meta: {
+          payme_id: String(paymeId),
+          order_id: String(order.id),
+          kind: "topup",
+          repaired_by: "admin_bulk",
+        },
+      };
+
+      if (dryRun) {
+        results.push({ paymeId, ok: true, dryRun: true, wouldInsert: row });
+        continue;
+      }
+
+      const ins = await client.query(
+        `
+        INSERT INTO contact_balance_ledger (client_id, amount, reason, service_id, source, meta)
+        VALUES ($1,$2,$3,$4,$5,$6)
+        RETURNING id
+        `,
+        [row.client_id, row.amount, row.reason, row.service_id, row.source, row.meta]
+      );
+
+      results.push({ paymeId, ok: true, inserted: true, ledger_id: ins.rows[0]?.id || null });
+    }
+
+    if (dryRun) {
+      await client.query("ROLLBACK");
+      return res.json({ ok: true, dryRun: true, results });
+    }
+
+    await client.query("COMMIT");
+    return res.json({ ok: true, results });
+  } catch (e) {
+    try { await client.query("ROLLBACK"); } catch {}
+    console.error("adminPaymeRepairBulk error:", e);
+    return res.status(500).json({ ok: false, message: "Internal error" });
+  } finally {
+    client.release();
+  }
+}
+
 module.exports = {
   adminPaymeHealth,
   adminPaymeTxDetails,
   adminPaymeRepairLedger,
+  adminPaymeRepairBulk, 
 };
