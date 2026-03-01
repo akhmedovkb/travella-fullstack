@@ -25,16 +25,11 @@ const adminDonasInventoryRoutes = require("./routes/adminDonasInventoryRoutes");
 const adminContactBalanceRoutes = require("./routes/adminContactBalanceRoutes");
 const paymeMerchantRoutes = require("./routes/paymeMerchantRoutes");
 const adminPaymeHealthRoutes = require("./routes/adminPaymeHealthRoutes");
-const cron = require("node-cron");
 const { runPaymeHealthCheck } = require("./jobs/paymeHealthJob");
 
 dotenv.config();
 const app = express();
 
-// каждые 5 минут
-cron.schedule("*/5 * * * *", async () => {
-  await runPaymeHealthCheck();
-});
 
 // Telegram health (passive) on boot — no network calls
 getTelegramHealth({ probe: false })
