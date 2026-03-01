@@ -279,22 +279,10 @@ async function pickClientsBalanceColumn(client) {
 }
 
 async function bumpClientBalanceIfExists(client, clientId, deltaTiyin) {
-  let col = await pickClientsBalanceColumn(client);
-  if (!col) return;
-
-  // 🔒 защита от устаревшего кэша: перепроверяем, что колонка реально есть
-  const cols = await getColumns(client, "clients");
-  if (!cols.has(col)) {
-    _schemaCache.balanceCol = null; // сброс кэша
-    return;
-  }
-
-  await client.query(
-    `UPDATE clients
-        SET ${col} = COALESCE(${col}, 0) + $1
-      WHERE id = $2`,
-    [Number(deltaTiyin), Number(clientId)]
-  );
+  // ✅ Variant B:
+  // clients.* balance columns are NOT used in this project.
+  // Single source of truth is contact_balance_ledger.
+  return;
 }
 
 /**
@@ -323,9 +311,8 @@ async function creditLedgerOnceTx(client, { clientId, amountTiyin, orderId, paym
   const inserted = rows?.length ? true : false;
 
   // 2) "быстрый баланс" трогаем только если колонка реально существует
-  if (inserted) {
-    await bumpClientBalanceIfExists(client, clientId, amt);
-  }
+  // ✅ Variant B: no clients balance table updates (ledger-only)
+  // if (inserted) { ... }  <-- intentionally removed
 }
 
 // ===== idempotent debit (reversal) =====
@@ -346,10 +333,9 @@ async function debitLedgerOnceTx(client, { clientId, amountTiyin, orderId, payme
 
   const inserted = rows?.length ? true : false;
 
-  if (inserted) {
-    await bumpClientBalanceIfExists(client, clientId, -amt);
+  await bumpClientBalanceIfExists(client, clientId, -amt);
   }
-}
+
 /** ===== rpc validation ===== */
 
 function validateRpc(body) {
