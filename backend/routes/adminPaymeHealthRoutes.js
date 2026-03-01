@@ -7,6 +7,7 @@ const {
   adminPaymeHealth,
   adminPaymeTxDetails,
   adminPaymeRepairLedger,
+  adminPaymeRepairBulk, // ✅ add
 } = require("../controllers/adminPaymeHealthController");
 
 const router = express.Router();
@@ -19,5 +20,13 @@ router.get("/tx/:paymeId", authenticateToken, requireAdmin, adminPaymeTxDetails)
 
 // POST /api/admin/payme/repair/:paymeId
 router.post("/repair/:paymeId", authenticateToken, requireAdmin, adminPaymeRepairLedger);
+
+// POST /api/admin/payme/repair-bulk
+router.post(
+  "/repair-bulk",
+  authenticateToken,
+  requireAdmin,
+  adminPaymeRepairBulk
+);
 
 module.exports = router;
