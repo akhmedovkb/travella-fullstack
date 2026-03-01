@@ -9,15 +9,18 @@ async function notifyPaymeHealthIssues(summary) {
     const lost = Number(summary.lost_payment || 0);
     const bad = Number(summary.bad_amount || 0);
     const refund = Number(summary.refund_mismatch || 0);
-
-    const total = lost + bad + refund;
+    const stuck = Number(summary.stuck || 0);
+    
+    const total = lost + bad + refund + stuck;
     if (total === 0) return;
 
     const text =
       "🚨 PAYME HEALTH ALERT\n\n" +
+      `⏳ STUCK: ${stuck}\n` +
       `❌ LOST_PAYMENT: ${lost}\n` +
       `⚠️ BAD_AMOUNT: ${bad}\n` +
-      `⚠️ REFUND_MISMATCH: ${refund}\n`;
+      `⚠️ REFUND_MISMATCH: ${refund}\n` +
+      `🕒 ${new Date(now).toLocaleString("ru-RU", { timeZone: "Asia/Tashkent" })}`;
 
     await tgSendToAdmins(text);
   } catch (e) {
