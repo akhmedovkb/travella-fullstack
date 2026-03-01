@@ -7,6 +7,7 @@ const {
   adminPaymeHealth,
   adminPaymeTxDetails,
   adminPaymeRepairLedger,
+  repairLostPayment,
 } = require("../controllers/adminPaymeHealthController");
 
 const router = express.Router();
