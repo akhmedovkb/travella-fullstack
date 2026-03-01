@@ -20,4 +20,11 @@ router.get("/tx/:paymeId", authenticateToken, requireAdmin, adminPaymeTxDetails)
 // POST /api/admin/payme/repair/:paymeId
 router.post("/repair/:paymeId", authenticateToken, requireAdmin, adminPaymeRepairLedger);
 
+router.post(
+  "/admin/payme/repair-lost",
+  authenticateToken,
+  requireAdmin,
+  repairLostPayment
+);
+
 module.exports = router;
