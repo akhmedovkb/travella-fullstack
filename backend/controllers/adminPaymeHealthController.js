@@ -72,9 +72,24 @@ async function adminPaymeHealth(req, res) {
       lg.first_ledger_at,
       lg.last_ledger_at,
       CASE
-        WHEN tx.state = 2 AND COALESCE(lg.ledger_rows,0) = 0 THEN 'LOST_PAYMENT'
-        WHEN tx.state = 2 AND COALESCE(lg.ledger_sum,0) <= 0 THEN 'BAD_AMOUNT'
-        WHEN tx.state IN (-1,-2) AND COALESCE(lg.ledger_sum,0) > 0 THEN 'REFUND_MISMATCH'
+        -- 🔴 STUCK (state=1 too long)
+        WHEN tx.state = 1
+             AND tx.create_time IS NOT NULL
+             AND (EXTRACT(EPOCH FROM (now() - to_timestamp(tx.create_time/1000))) > 900)
+          THEN 'STUCK'
+      
+        -- 🔴 LOST PAYMENT
+        WHEN tx.state = 2 AND COALESCE(lg.ledger_rows,0) = 0
+          THEN 'LOST_PAYMENT'
+      
+        -- 🟡 BAD AMOUNT
+        WHEN tx.state = 2 AND COALESCE(lg.ledger_sum,0) <= 0
+          THEN 'BAD_AMOUNT'
+      
+        -- 🟠 REFUND MISMATCH
+        WHEN tx.state IN (-1,-2) AND COALESCE(lg.ledger_sum,0) > 0
+          THEN 'REFUND_MISMATCH'
+      
         ELSE 'OK'
       END AS health_status
     FROM tx
