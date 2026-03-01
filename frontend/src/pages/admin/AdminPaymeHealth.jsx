@@ -41,7 +41,7 @@ export default function AdminPaymeHealth() {
 
   const [selected, setSelected] = useState(null);
   const [details, setDetails] = useState(null);
-  const [repairing, setRepairing] = useState(false);
+  const [repairingId, setRepairingId] = useState(null);
 
   const canLoad = useMemo(() => true, []);
 
@@ -76,22 +76,33 @@ export default function AdminPaymeHealth() {
     }
   }
 
-  async function repair(paymeId) {
-    if (!paymeId) return;
-    setRepairing(true);
-    try {
-      const data = await apiPost(`/api/admin/payme/repair/${encodeURIComponent(paymeId)}`, {}, "admin");
-      if (data?.already) tSuccess("Ledger уже был (idempotent)");
-      else tSuccess("Ledger восстановлен");
-      await load();
-      if (selected?.payme_id === paymeId) await openTx({ payme_id: paymeId });
-    } catch (e) {
-      console.error(e);
-      tError("Не удалось выполнить repair");
-    } finally {
-      setRepairing(false);
+async function repair(paymeId) {
+  if (!paymeId) return;
+
+  setRepairingId(paymeId);
+
+  try {
+    const data = await apiPost(
+      `/api/admin/payme/repair/${encodeURIComponent(paymeId)}`,
+      {},
+      "admin"
+    );
+
+    if (data?.already) tSuccess("Ledger уже был (idempotent)");
+    else tSuccess("Ledger восстановлен");
+
+    await load();
+
+    if (selected?.payme_id === paymeId) {
+      await openTx({ payme_id: paymeId });
     }
+  } catch (e) {
+    console.error(e);
+    tError("Не удалось выполнить repair");
+  } finally {
+    setRepairingId(null);
   }
+}
 
   useEffect(() => {
     load();
@@ -181,10 +192,10 @@ export default function AdminPaymeHealth() {
                       {r.health_status === "LOST_PAYMENT" ? (
                         <button
                           className="px-3 py-1 rounded-lg bg-red-600 text-white disabled:opacity-60"
-                          disabled={repairing}
+                          disabled={repairingId === r.payme_id}
                           onClick={() => repair(r.payme_id)}
                         >
-                          {repairing ? "…" : "Repair"}
+                          {repairingId === r.payme_id ? "…" : "Repair"}
                         </button>
                       ) : (
                         <span className="text-xs text-gray-400">—</span>
