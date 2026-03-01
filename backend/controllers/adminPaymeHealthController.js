@@ -8,6 +8,78 @@ function normPaymeId(x) {
     .replace(/\s+/g, " ");
 }
 
+async function repairLostPayment(req, res) {
+  const { payme_id } = req.body;
+  if (!payme_id) return res.status(400).json({ error: "payme_id required" });
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    // 🔒 advisory lock
+    await client.query(
+      `SELECT pg_advisory_xact_lock(hashtext($1))`,
+      [`payme:${payme_id}`]
+    );
+
+    // tx
+    const tx = await client.query(
+      `SELECT * FROM payme_transactions WHERE payme_id=$1`,
+      [payme_id]
+    );
+    if (!tx.rows[0]) throw new Error("tx not found");
+    if (tx.rows[0].state !== 2)
+      throw new Error("tx not performed");
+
+    const orderId = tx.rows[0].order_id;
+
+    // order
+    const order = await client.query(
+      `SELECT * FROM payme_topup_orders WHERE id=$1`,
+      [orderId]
+    );
+    if (!order.rows[0]) throw new Error("order not found");
+
+    // уже есть ledger?
+    const exists = await client.query(
+      `
+      SELECT 1 FROM contact_balance_ledger
+      WHERE source='payme'
+        AND meta->>'payme_id'=$1
+      LIMIT 1
+      `,
+      [payme_id]
+    );
+
+    if (!exists.rows.length) {
+      await client.query(
+        `
+        INSERT INTO contact_balance_ledger
+          (client_id, amount, reason, source, meta)
+        VALUES ($1,$2,'topup','payme',$3)
+        `,
+        [
+          order.rows[0].client_id,
+          order.rows[0].amount_tiyin,
+          JSON.stringify({
+            payme_id,
+            order_id: orderId,
+            repaired: true,
+          }),
+        ]
+      );
+    }
+
+    await client.query("COMMIT");
+    res.json({ ok: true });
+  } catch (e) {
+    await client.query("ROLLBACK");
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
+}
+
 async function lockKeyTx(client, keyStr) {
   await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [String(keyStr)]);
 }
@@ -229,4 +301,5 @@ module.exports = {
   adminPaymeHealth,
   adminPaymeTxDetails,
   adminPaymeRepairLedger,
+  repairLostPayment,
 };
