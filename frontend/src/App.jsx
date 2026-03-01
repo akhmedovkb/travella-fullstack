@@ -37,6 +37,7 @@ import DonasDosasMenuLayout from "./pages/admin/DonasDosasMenuLayout";
 import DonasDosasFinanceSales from "./pages/admin/DonasDosasFinanceSales";
 import DonasDosasMonthlySalesMargin from "./pages/admin/DonasDosasMonthlySalesMargin";
 import DonasDosasInventory from "./pages/admin/DonasDosasInventory";
+import AdminPaymeHealth from "./pages/admin/AdminPaymeHealth";
 
 // Клиентские
 import ClientRegister from "./pages/ClientRegister";
@@ -300,6 +301,16 @@ export default function App() {
                 <PrivateRoute>
                   <AdminRoute>
                     <AdminContactBalance />
+                  </AdminRoute>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/admin/payme-health"
+              element={
+                <PrivateRoute>
+                  <AdminRoute>
+                    <AdminPaymeHealth />
                   </AdminRoute>
                 </PrivateRoute>
               }
