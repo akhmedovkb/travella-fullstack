@@ -23,6 +23,12 @@ function fmtTs(x) {
 function badge(status) {
   const base = "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium";
   if (status === "OK") return <span className={`${base} bg-green-100 text-green-700`}>✅ OK</span>;
+  if (status === "STUCK")
+  return (
+    <span className={`${base} bg-purple-100 text-purple-800`}>
+      ⏳ STUCK
+    </span>
+  );
   if (status === "LOST_PAYMENT")
     return <span className={`${base} bg-red-100 text-red-700`}>✖ LOST_PAYMENT</span>;
   if (status === "BAD_AMOUNT")
