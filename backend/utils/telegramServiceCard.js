@@ -420,7 +420,9 @@ function buildServiceMessage(svc, category, role = "client", options = {}) {
   const unlocked =
   options?.unlocked === true ||
   String(role || "").toLowerCase() === "client_unlocked";
-  
+
+  const newBadge = options?.newBadge === true;
+
     // ✅ normalize category + страховка
   let catNorm = normalizeCategory(category);
 
@@ -744,7 +746,9 @@ function buildServiceMessage(svc, category, role = "client", options = {}) {
     const parts = [];
 
     if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
-    parts.push(`🆕 <b>НОВЫЙ ОТКАЗНОЙ ТУР</b> <code>#R${serviceId}</code>`);
+    parts.push(
+      `${newBadge ? "🆕 <b>НОВЫЙ</b>" : "📍"} <b>ОТКАЗНОЙ ТУР</b> <code>#R${serviceId}</code>`
+    );
 
     const tl = titleLine("generic");
     if (tl) parts.push(tl);
@@ -804,7 +808,9 @@ function buildServiceMessage(svc, category, role = "client", options = {}) {
     const parts = [];
     if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
 
-    parts.push(`🆕 <b>НОВЫЙ ОТКАЗНОЙ ОТЕЛЬ</b> <code>#R${serviceId}</code>`);
+    parts.push(
+      `${newBadge ? "🆕 <b>НОВЫЙ</b>" : "📍"} <b>ОТКАЗНОЙ ОТЕЛЬ</b> <code>#R${serviceId}</code>`
+    );
 
     const tl = titleLine("hotel");
     if (tl) parts.push(tl);
@@ -867,7 +873,9 @@ function buildServiceMessage(svc, category, role = "client", options = {}) {
     const parts = [];
     if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
 
-    parts.push(`🆕 <b>НОВЫЙ ОТКАЗНОЙ АВИАБИЛЕТ</b> <code>#R${serviceId}</code>`);
+    parts.push(
+      `${newBadge ? "🆕 <b>НОВЫЙ</b>" : "📍"} <b>ОТКАЗНОЙ АВИАБИЛЕТ</b> <code>#R${serviceId}</code>`
+    );
 
     const tl = titleLine("flight");
     if (tl) parts.push(tl);
@@ -921,7 +929,7 @@ function buildServiceMessage(svc, category, role = "client", options = {}) {
 
     const evEmoji = ticketEmoji(d.eventCategory || d.ticketType || d.type);
     parts.push(
-      `🆕 <b>НОВЫЙ ОТКАЗНОЙ БИЛЕТ НА МЕРОПРИЯТИЕ</b> ${evEmoji} <code>#R${serviceId}</code>`
+      `${newBadge ? "🆕 <b>НОВЫЙ</b>" : "📍"} <b>ОТКАЗНОЙ БИЛЕТ НА МЕРОПРИЯТИЕ</b> ${evEmoji} <code>#R${serviceId}</code>`
     );
 
     const tl = titleLine("ticket");
