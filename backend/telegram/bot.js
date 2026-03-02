@@ -8047,10 +8047,16 @@ bot.on("inline_query", async (ctx) => {
           ? (canSeeContacts ? "client_unlocked" : "client")
           : roleForInline;
 
+      const cardOptions =
+        roleForInline === "provider" && !isMy
+          ? { forceRefused: true }
+          : {};
+      
       const { text, photoUrl, serviceUrl } = buildServiceMessage(
         svc,
         svcCategory,
-        cardRole
+        cardRole,
+        cardOptions
       );
 
       let textFinal = text;
