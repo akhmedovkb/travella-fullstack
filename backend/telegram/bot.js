@@ -2334,6 +2334,22 @@ async function promptEditState(ctx, state) {
       );
       return;
 
+    case "svc_edit_tour_roomcat":
+      await safeReply(
+        ctx,
+        `⭐️ Категория номера (текущее: ${draft.roomCategory || "(пусто)"}).\nВведите или нажмите «⏭ Пропустить»:`,
+        editWizNavKeyboard()
+      );
+      return;
+
+    case "svc_edit_tour_food":
+      await safeReply(
+        ctx,
+        `🍽 Питание (текущее: ${draft.food || "(пусто)"}).\nВведите (BB/HB/FB/AI/UAI) или нажмите «⏭ Пропустить»:`,
+        editWizNavKeyboard()
+      );
+      return;
+
     // REFUSED HOTEL
     case "svc_edit_hotel_country":
       await safeReply(
@@ -2551,6 +2567,8 @@ bot.action("svc_edit:skip", async (ctx) => {
       "svc_edit_flight_details",
       "svc_edit_tour_hotel",
       "svc_edit_tour_accommodation",
+      "svc_edit_tour_roomcat",
+      "svc_edit_tour_food",
       "svc_edit_price",
       "svc_edit_grossPrice",
       "svc_edit_expiration",
@@ -2928,7 +2946,12 @@ async function finishEditWizard(ctx) {
         endDate: draft.endDate || "",
         hotel: draft.hotel || "",
         accommodation: draft.accommodation || "",
+
+        // ✅ Категория номера: пишем и в новый ключ (основной), и в legacy
+        accommodationCategory: draft.roomCategory || "",
         roomCategory: draft.roomCategory || "",
+
+        // ✅ Питание
         food: draft.food || "",
         halal: !!draft.halal,
         transfer: draft.transfer || "",
@@ -3699,6 +3722,12 @@ function buildDetailsForRefusedTour(draft, netPriceNum) {
     flightDetails: draft.flightDetails || "",
     hotel: draft.hotel || "",
     accommodation: draft.accommodation || "",
+
+    // ✅ категория номера + питание (чтобы карточки совпадали)
+    accommodationCategory: draft.roomCategory || "",
+    roomCategory: draft.roomCategory || "", // legacy-совместимость
+    food: draft.food || "",
+
     netPrice: netPriceNum,
     grossPrice: typeof draft.grossPriceNum === "number" ? draft.grossPriceNum : null,
     expiration: draft.expiration || null,
@@ -3892,6 +3921,19 @@ async function promptWizardState(ctx, state) {
         { parse_mode: "Markdown", ...wizNavKeyboard() }
       );
       return;
+        case "svc_create_tour_roomcat":
+      await ctx.reply(
+        "⭐️ Укажите *категорию номера* (например: Standard / Deluxe / Suite):\nЕсли не нужно — нажмите «⏭ Пропустить».",
+        { parse_mode: "Markdown", ...wizNavKeyboard() }
+      );
+      return;
+
+    case "svc_create_tour_food":
+      await ctx.reply(
+        "🍽 Укажите *питание* (например: BB / HB / FB / AI / UAI):\nЕсли не нужно — нажмите «⏭ Пропустить».",
+        { parse_mode: "Markdown", ...wizNavKeyboard() }
+      );
+      return;
 
     // ===== REFUSED HOTEL =====
     case "svc_hotel_country":
@@ -3980,7 +4022,14 @@ async function promptWizardState(ctx, state) {
 
     case "svc_create_price": {
       const cat = ctx.session?.serviceDraft?.category;
-      const label = cat === "refused_hotel" ? "за отель" : "за тур";
+            const label =
+        cat === "refused_hotel"
+          ? "за отель"
+          : cat === "refused_flight"
+            ? "за авиабилет"
+            : cat === "refused_ticket" || cat === "refused_event_ticket"
+              ? "за билет"
+              : "за тур";
       await ctx.reply(
         `💰 Укажите *цену НЕТТО* (${label})\nПример: *1130* или *1130 USD*`,
         { parse_mode: "Markdown", ...wizNavKeyboard() }
@@ -3990,7 +4039,14 @@ async function promptWizardState(ctx, state) {
 
     case "svc_create_grossPrice": {
       const cat = ctx.session?.serviceDraft?.category;
-      const label = cat === "refused_hotel" ? "за отель" : "за тур";
+            const label =
+        cat === "refused_hotel"
+          ? "за отель"
+          : cat === "refused_flight"
+            ? "за авиабилет"
+            : cat === "refused_ticket" || cat === "refused_event_ticket"
+              ? "за билет"
+              : "за тур";
       await ctx.reply(
         `💳 Укажите *цену БРУТТО* (${label})\nПример: *1250* или *1250 USD*\n` +
           `Или нажмите «⏭ Пропустить» — посчитаю автоматически (+${
@@ -5455,6 +5511,8 @@ bot.action("svc_wiz:skip", async (ctx) => {
       "svc_create_flight_details",
       "svc_create_tour_hotel",
       "svc_create_tour_accommodation",
+      "svc_create_tour_roomcat",   
+      "svc_create_tour_food",   
       "svc_create_price",
       "svc_create_grossPrice",
       "svc_create_expiration",
@@ -5503,6 +5561,8 @@ bot.action("svc_wiz:skip", async (ctx) => {
       "svc_create_flight_departure",
       "svc_create_flight_return",
       "svc_create_flight_details",
+      "svc_create_tour_roomcat",
+      "svc_create_tour_food",
       "svc_create_grossPrice",
       "svc_create_expiration", // можно поставить "нет" (кнопка = быстрый переход)
       "svc_create_photo",
@@ -6644,7 +6704,28 @@ async function handleSvcEditWizardText(ctx) {
 
       case "svc_edit_tour_accommodation": {
         if (!keep()) draft.accommodation = text;
-        await go("svc_edit_price", `💰 Цена НЕТТО (текущее: ${draft.price || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`);
+        await go(
+          "svc_edit_tour_roomcat",
+          `⭐️ Категория номера (текущее: ${draft.roomCategory || "(пусто)"}).\nВведите или нажмите «⏭ Пропустить»:`
+        );
+        return true;
+      }
+
+      case "svc_edit_tour_roomcat": {
+        if (!keep()) draft.roomCategory = text;
+        await go(
+          "svc_edit_tour_food",
+          `🍽 Питание (текущее: ${draft.food || "(пусто)"}).\nВведите (BB/HB/FB/AI/UAI) или нажмите «⏭ Пропустить»:`
+        );
+        return true;
+      }
+
+      case "svc_edit_tour_food": {
+        if (!keep()) draft.food = text;
+        await go(
+          "svc_edit_price",
+          `💰 Цена НЕТТО (текущее: ${draft.price || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`
+        );
         return true;
       }
 
@@ -7477,12 +7558,56 @@ bot.on("text", async (ctx, next) => {
           await promptWizardState(ctx, "svc_create_tour_accommodation");
           return;
 
-        case "svc_create_tour_accommodation":
-          draft.accommodation = text;
+        case "svc_create_tour_accommodation": {
+          const v = await requireTextField(ctx, text, "Размещение", { min: 1 });
+          if (!v) return;
+          draft.accommodation = v;
+        
           pushWizardState(ctx, "svc_create_tour_accommodation");
+          ctx.session.state = "svc_create_tour_roomcat";
+          await promptWizardState(ctx, "svc_create_tour_roomcat");
+          return;
+        }
+
+        case "svc_create_tour_roomcat": {
+          const low = text.toLowerCase();
+          if (["пропустить", "skip", "-", "нет"].includes(low)) {
+            draft.roomCategory = "";
+            pushWizardState(ctx, "svc_create_tour_roomcat");
+            ctx.session.state = "svc_create_tour_food";
+            await promptWizardState(ctx, "svc_create_tour_food");
+            return;
+          }
+        
+          const v = await requireTextField(ctx, text, "Категория номера", { min: 1 });
+          if (!v) return;
+          draft.roomCategory = v;
+        
+          pushWizardState(ctx, "svc_create_tour_roomcat");
+          ctx.session.state = "svc_create_tour_food";
+          await promptWizardState(ctx, "svc_create_tour_food");
+          return;
+        }
+        
+        case "svc_create_tour_food": {
+          const low = text.toLowerCase();
+          if (["пропустить", "skip", "-", "нет"].includes(low)) {
+            draft.food = "";
+            pushWizardState(ctx, "svc_create_tour_food");
+            ctx.session.state = "svc_create_price";
+            await promptWizardState(ctx, "svc_create_price");
+            return;
+          }
+        
+          const v = await requireTextField(ctx, text, "Питание", { min: 1 });
+          if (!v) return;
+          draft.food = v;
+        
+          pushWizardState(ctx, "svc_create_tour_food");
           ctx.session.state = "svc_create_price";
           await promptWizardState(ctx, "svc_create_price");
           return;
+        }
 
         // ===== HOTEL FLOW =====
         case "svc_hotel_country": {
