@@ -4956,7 +4956,7 @@ bot.action("prov_services:list_cards", async (ctx) => {
         headerHtml += `\n<b>Причина:</b> ${escapeHtml(moderationComment)}`;
       }
       if (expirationRaw) {
-        headerHtml += `\n<b>Актуально до:</b> ${escapeHtml(expirationRaw)}`;
+        headerHtml += `\n<b>Актуально до:</b> ${escapeHtml(prettyDateTime(expirationRaw))}`;
       }
       
       // ⚠️ text уже HTML из buildServiceMessage
