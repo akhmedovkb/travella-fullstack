@@ -3750,6 +3750,11 @@ function buildDetailsForRefusedHotel(draft, netPriceNum) {
     halal: typeof draft.halal === "boolean" ? draft.halal : false,
     transfer: draft.transfer || "",
     changeable: typeof draft.changeable === "boolean" ? draft.changeable : false,
+    adt: typeof draft.adt === "number" ? draft.adt : 0,
+    chd: typeof draft.chd === "number" ? draft.chd : 0,
+    inf: typeof draft.inf === "number" ? draft.inf : 0,
+    
+    // legacy
     accommodationADT: typeof draft.adt === "number" ? draft.adt : 0,
     accommodationCHD: typeof draft.chd === "number" ? draft.chd : 0,
     accommodationINF: typeof draft.inf === "number" ? draft.inf : 0,
@@ -4128,7 +4133,18 @@ async function finishCreateServiceFromWizard(ctx) {
       ctx.session.state = "svc_create_grossPrice";
       return;
     }
-
+    
+    // ✅ мягкая нормализация строк перед сборкой details
+    const clean = (v) => String(v || "").trim();
+    
+    draft.hotel = clean(draft.hotel);
+    draft.accommodation = clean(draft.accommodation);
+    draft.roomCategory = clean(draft.roomCategory);
+    draft.food = clean(draft.food);
+    draft.country = clean(draft.country);
+    draft.fromCity = clean(draft.fromCity);
+    draft.toCity = clean(draft.toCity);
+    
     let details;
     let title;
 
