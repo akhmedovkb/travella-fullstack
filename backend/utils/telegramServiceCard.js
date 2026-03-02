@@ -740,7 +740,7 @@ function buildServiceMessage(svc, category, role = "client", options = {}) {
 
   /* ===================== SPECIAL TEMPLATES ===================== */
 
-  if (role !== "provider" && String(category) === "refused_tour") {
+  if ((role !== "provider" || options?.forceRefused === true) && String(category) === "refused_tour") {
     const parts = [];
 
     if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
@@ -800,7 +800,7 @@ function buildServiceMessage(svc, category, role = "client", options = {}) {
     return { text: parts.join("\n"), photoUrl: getFirstImageUrl(svc), serviceUrl };
   }
 
-  if (role !== "provider" && String(category) === "refused_hotel") {
+  if ((role !== "provider" || options?.forceRefused === true) && String(category) === "refused_hotel") {
     const parts = [];
     if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
 
@@ -863,7 +863,7 @@ function buildServiceMessage(svc, category, role = "client", options = {}) {
     return { text: parts.join("\n"), photoUrl: getFirstImageUrl(svc), serviceUrl };
   }
 
-  if (role !== "provider" && String(category) === "refused_flight") {
+  if ((role !== "provider" || options?.forceRefused === true) && String(category) === "refused_flight") {
     const parts = [];
     if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
 
@@ -912,10 +912,10 @@ function buildServiceMessage(svc, category, role = "client", options = {}) {
     return { text: parts.join("\n"), photoUrl: getFirstImageUrl(svc), serviceUrl };
   }
 
-  if (
-    role !== "provider" &&
-    (String(category) === "refused_ticket" || String(category) === "refused_event_ticket")
-  ) {
+    if (
+      (role !== "provider" || options?.forceRefused === true) &&
+      (String(category) === "refused_ticket" || String(category) === "refused_event_ticket")
+    ) {
     const parts = [];
     if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
 
