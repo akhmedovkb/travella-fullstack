@@ -146,6 +146,18 @@ function parseDateFlexible(x) {
   return null;
 }
 
+function formatDateDMY(x) {
+  const d = parseDateFlexible(x);
+  if (!d) {
+    const s = String(x ?? "").trim();
+    return s || "";
+  }
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yy = String(d.getFullYear());
+  return `${dd}.${mm}.${yy}`;
+}
+
 /* ===================== helpers (скопировано из bot.js) ===================== */
 
 function normalizeTitleSoft(str) {
@@ -489,8 +501,8 @@ function buildServiceMessage(svc, category, role = "client", options = {}) {
     d.dateTo ||
     "";
 
-  const start = norm(startRaw);
-  const end = norm(endRaw);
+  const start = norm(formatDateDMY(startRaw) || startRaw);
+  const end = norm(formatDateDMY(endRaw) || endRaw);
 
   const dates = start && end && start !== end ? `${start} → ${end}` : start || end || "";
 
@@ -629,10 +641,13 @@ function buildServiceMessage(svc, category, role = "client", options = {}) {
   };
 
   const hotelDatesLines = () => {
-    const ci =
-      norm(d.checkIn || d.checkInDate || d.arrivalDate || d.arrival || d.startDate || "");
-    const co =
-      norm(d.checkOut || d.checkOutDate || d.departureDate || d.departure || d.endDate || "");
+    const ciRaw =
+      d.checkIn || d.checkInDate || d.arrivalDate || d.arrival || d.startDate || "";
+    const coRaw =
+      d.checkOut || d.checkOutDate || d.departureDate || d.departure || d.endDate || "";
+
+    const ci = norm(formatDateDMY(ciRaw) || ciRaw);
+    const co = norm(formatDateDMY(coRaw) || coRaw);
 
     const lines = [];
     if (ci) lines.push(labelLine("🟢", "Заезд", ci, true));
@@ -752,9 +767,12 @@ function buildServiceMessage(svc, category, role = "client", options = {}) {
     const roomCatRaw = d.accommodationCategory || d.roomCategory || "";
     const roomCatClean = stripStarsFromRoomCat(roomCatRaw);
     const roomCat = norm(roomCatClean);
-    if (roomCat) parts.push(labelLine("🛏", "Категория номера", roomCat, false));
+    parts.push(labelLine("🛏", "Категория номера", roomCat || "—", false));
 
     if (accommodation) parts.push(labelLine("👥", "Размещение", accommodation, false));
+
+    const foodPretty = foodLabel(d.food);
+    parts.push(labelLine("🍽", "Питание", foodPretty || "—", false));
 
     if (priceWithCur != null && String(priceWithCur).trim()) {
       parts.push(`💸 <b>Цена:</b> <b>${escapeHtml(String(priceWithCur))}</b> <i>(брутто)</i>`);
@@ -807,15 +825,15 @@ function buildServiceMessage(svc, category, role = "client", options = {}) {
     const roomCatRaw = d.accommodationCategory || d.roomCategory || "";
     const roomCatClean = stripStarsFromRoomCat(roomCatRaw);
     const roomCat = norm(roomCatClean);
-    if (roomCat) parts.push(labelLine("🛏", "Категория номера", roomCat, false));
-
+    parts.push(labelLine("🛏", "Категория номера", roomCat || "—", false));
+    
     if (accommodation) parts.push(labelLine("👥", "Размещение", accommodation, false));
-
+    
     const foodPretty = foodLabel(d.food);
-    if (foodPretty) {
-      const halalTag = d.halal ? " • Halal" : "";
-      parts.push(labelLine("🍽", "Питание", `${foodPretty}${halalTag}`, false));
-    }
+    const halalTag = foodPretty && d.halal ? " • Halal" : "";
+    parts.push(
+      labelLine("🍽", "Питание", foodPretty ? `${foodPretty}${halalTag}` : "—", false)
+    );
 
     const transferPretty = transferLabel(d.transfer);
     if (transferPretty) parts.push(labelLine("🚗", "Трансфер", transferPretty, false));
