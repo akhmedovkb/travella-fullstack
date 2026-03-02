@@ -609,28 +609,33 @@ async function serviceActionFromBot(req, res, action) {
         [svcId, providerId]
       );
       updated = updRes.rows[0];
-    } else if (action === "extend7") {
-      const updRes = await pool.query(
-        `
-          UPDATE services
-             SET
-               expiration_at = COALESCE(expiration_at, NOW()) + interval '7 days',
-               details = jsonb_set(
-                 COALESCE(details::jsonb, '{}'::jsonb),
-                 '{expiration}',
-                 to_jsonb(
-                   (COALESCE(expiration_at, NOW()) + interval '7 days')::timestamp
-                 )::jsonb,
-                 true
-               )
-           WHERE id = $1
-             AND provider_id = $2
-           RETURNING id, status, details, expiration_at
-        `,
-        [svcId, providerId]
-      );
-      updated = updRes.rows[0];
-    } else if (action === "archive") {
+} else if (action === "extend7") {
+  const updRes = await pool.query(
+    `
+      UPDATE services
+         SET
+           expiration_at = COALESCE(expiration_at, NOW()) + interval '7 days',
+           details = jsonb_set(
+             jsonb_set(
+               COALESCE(details::jsonb, '{}'::jsonb),
+               '{isActive}',
+               'true'::jsonb,
+               true
+             ),
+             '{expiration}',
+             to_jsonb(
+               (COALESCE(expiration_at, NOW()) + interval '7 days')::timestamp
+             )::jsonb,
+             true
+           )
+       WHERE id = $1
+         AND provider_id = $2
+       RETURNING id, status, details, expiration_at
+    `,
+    [svcId, providerId]
+  );
+  updated = updRes.rows[0];
+} else if (action === "archive") {
       const updRes = await pool.query(
         `
           UPDATE services
