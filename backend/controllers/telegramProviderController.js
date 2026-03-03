@@ -3,6 +3,11 @@ const pool = require("../db");
 const axiosBase = require("axios");
 const { tgSend, notifyModerationNew } = require("../utils/telegram");
 const MAX_TITLE_LEN = 100;
+const {
+  extractPrices,
+  isPriceDrop,
+  broadcastPriceDropCard,
+} = require("../utils/refusedPriceDropBroadcast");
 
 const REFUSED_CATEGORIES = [
   "refused_tour",
@@ -996,6 +1001,7 @@ async function updateServiceFromBot(req, res) {
     }
 
     const existing = svcRes.rows[0];
+    const prevPrices = extractPrices(existing);
 
     if (!REFUSED_CATEGORIES.includes(existing.category)) {
       return res.status(400).json({ success: false, error: "CATEGORY_NOT_EDITABLE" });
@@ -1073,6 +1079,18 @@ async function updateServiceFromBot(req, res) {
         JSON.stringify(nextImages),
       ]
     );
+    // ✅ PRICE DROP BROADCAST (если цена снижена)
+    try {
+      const nextSvcRow = updRes.rows[0];
+      const nextPrices = extractPrices(nextSvcRow);
+      const drop = isPriceDrop(prevPrices, nextPrices);
+    
+      if (drop.any) {
+        await broadcastPriceDropCard(nextSvcRow.id, "🔥 <b>ЦЕНА СНИЖЕНА!</b>");
+      }
+    } catch (e) {
+      console.error("[price drop] broadcast failed (bot):", e?.message || e);
+    }
     // ✅ Если услуга снова ушла на модерацию — уведомим админов
     try {
       await notifyModerationNew({ service: updRes.rows[0].id });
