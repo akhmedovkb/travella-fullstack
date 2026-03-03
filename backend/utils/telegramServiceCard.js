@@ -115,11 +115,13 @@ function parseDateFlexible(x) {
   const s0 = String(x).trim();
   if (!s0) return null;
 
-  // ISO / native
-  const dNative = new Date(s0);
-  if (!isNaN(dNative.getTime())) return dNative;
+  // ✅ 1) ISO (YYYY-MM-DD or YYYY-MM-DDTHH:mm...)
+  if (/^\d{4}-\d{2}-\d{2}/.test(s0)) {
+    const dIso = new Date(s0);
+    if (!isNaN(dIso.getTime())) return dIso;
+  }
 
-  // dd.mm.yyyy or dd/mm/yyyy
+  // ✅ 2) DD.MM.YYYY or DD/MM/YYYY or DD-MM-YYYY
   let m = s0.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})(?:\s.*)?$/);
   if (m) {
     const dd = Number(m[1]);
@@ -127,11 +129,12 @@ function parseDateFlexible(x) {
     const yyyy = Number(m[3]);
     if (yyyy >= 1900 && mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
       const d = new Date(yyyy, mm - 1, dd);
-      if (!isNaN(d.getTime())) return d;
+      // ✅ защита от 31.02
+      if (d.getFullYear() === yyyy && d.getMonth() === mm - 1 && d.getDate() === dd) return d;
     }
   }
 
-  // yyyy.mm.dd
+  // ✅ 3) YYYY.MM.DD or YYYY/MM/DD or YYYY-MM-DD (without time)
   m = s0.match(/^(\d{4})[./-](\d{1,2})[./-](\d{1,2})(?:\s.*)?$/);
   if (m) {
     const yyyy = Number(m[1]);
@@ -139,13 +142,16 @@ function parseDateFlexible(x) {
     const dd = Number(m[3]);
     if (yyyy >= 1900 && mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
       const d = new Date(yyyy, mm - 1, dd);
-      if (!isNaN(d.getTime())) return d;
+      if (d.getFullYear() === yyyy && d.getMonth() === mm - 1 && d.getDate() === dd) return d;
     }
   }
 
+  // ✅ 4) fallback only (если очень нужно)
+  const dNative = new Date(s0);
+  if (!isNaN(dNative.getTime())) return dNative;
+
   return null;
 }
-
 function formatDateDMY(x) {
   const d = parseDateFlexible(x);
   if (!d) {
@@ -513,7 +519,9 @@ function buildServiceMessage(svc, category, role = "client", options = {}) {
     const sdt = start ? parseDateFlexible(start) : null;
     const edt = end ? parseDateFlexible(end) : null;
     if (sdt && edt) {
-      const diff = Math.round((edt.getTime() - sdt.getTime()) / 86400000);
+      const s0 = new Date(sdt.getFullYear(), sdt.getMonth(), sdt.getDate());
+      const e0 = new Date(edt.getFullYear(), edt.getMonth(), edt.getDate());
+      const diff = Math.round((e0.getTime() - s0.getTime()) / 86400000);
       if (diff > 0 && diff < 60) nights = diff;
     }
   } catch {}
@@ -554,10 +562,9 @@ const priceKind =
 
   /* ===================== PREMIUM helpers ===================== */
 
-  const labelLine = (icon, label, value, boldValue = true) => {
+  const labelLine = (icon, label, value) => {
     const v = String(value || "").trim();
     if (!v) return "";
-    if (boldValue) return `${icon} <b>${escapeHtml(label)}:</b> <b>${escapeHtml(v)}</b>`;
     return `${icon} <b>${escapeHtml(label)}:</b> ${escapeHtml(v)}`;
   };
 
@@ -661,8 +668,8 @@ const priceKind =
     const co = norm(formatDateDMY(coRaw) || coRaw);
 
     const lines = [];
-    if (ci) lines.push(labelLine("🟢", "Заезд", ci, true));
-    if (co) lines.push(labelLine("🔴", "Выезд", co, true));
+    if (ci) lines.push(labelLine("🟢", "Заезд", ci));
+    if (co) lines.push(labelLine("🔴", "Выезд", co));
 
     let n = nights;
     try {
@@ -675,7 +682,7 @@ const priceKind =
         }
       }
     } catch {}
-    if (n) lines.push(`🌙 <b>Ночей:</b> <b>${escapeHtml(String(n))}</b>`);
+    if (n) lines.push(`🌙 <b>Ночей:</b> ${escapeHtml(String(n))}`);
     return lines;
   };
 
@@ -692,9 +699,9 @@ const priceKind =
       norm(d.locationCountry) ||
       "";
     const lines = [];
-    if (city) lines.push(labelLine("🏙", "Город", city, true));
-    if (country2) lines.push(labelLine("🌍", "Страна", country2, true));
-    if (!lines.length && route) lines.push(labelLine("📍", "Локация", route, true));
+    if (city) lines.push(labelLine("🏙", "Город", city));
+    if (country2) lines.push(labelLine("🌍", "Страна", country2));
+    if (!lines.length && route) lines.push(labelLine("📍", "Локация", route));
     return lines;
   };
 
@@ -703,22 +710,22 @@ const priceKind =
     const toCity = norm(d.directionTo || d.toCity || d.cityTo || "");
     const country2 = norm(d.directionCountry || d.country || "");
     const lines = [];
-    if (fromCity) lines.push(labelLine("🛫", "Город вылета", fromCity, true));
-    if (toCity) lines.push(labelLine("🛬", "Город прибытия", toCity, true));
-    if (country2) lines.push(labelLine("🌍", "Страна направления", country2, true));
-    if (!lines.length && route) lines.push(labelLine("📍", "Маршрут", route, true));
+    if (fromCity) lines.push(labelLine("🛫", "Город вылета", fromCity));
+    if (toCity) lines.push(labelLine("🛬", "Город прибытия", toCity));
+    if (country2) lines.push(labelLine("🌍", "Страна направления", country2));
+    if (!lines.length && route) lines.push(labelLine("📍", "Маршрут", route));
     return lines;
   };
-
+  
   const flightLocationLines = () => {
     const fromCity = norm(d.directionFrom || d.fromCity || d.cityFrom || "");
     const toCity = norm(d.directionTo || d.toCity || d.cityTo || "");
     const country2 = norm(d.directionCountry || d.country || "");
     const lines = [];
-    if (fromCity) lines.push(labelLine("🛫", "Вылет", fromCity, true));
-    if (toCity) lines.push(labelLine("🛬", "Прилёт", toCity, true));
-    if (country2) lines.push(labelLine("🌍", "Страна", country2, true));
-    if (!lines.length && route) lines.push(labelLine("📍", "Маршрут", route, true));
+    if (fromCity) lines.push(labelLine("🛫", "Вылет", fromCity));
+    if (toCity) lines.push(labelLine("🛬", "Прилёт", toCity));
+    if (country2) lines.push(labelLine("🌍", "Страна", country2));
+    if (!lines.length && route) lines.push(labelLine("📍", "Маршрут", route));
     return lines;
   };
 
@@ -735,10 +742,10 @@ const priceKind =
       norm(d.directionCountry) ||
       "";
     const lines = [];
-    if (city) lines.push(labelLine("🏙", "Город", city, true));
-    if (country2) lines.push(labelLine("🌍", "Страна", country2, true));
+    if (city) lines.push(labelLine("🏙", "Город", city));
+    if (country2) lines.push(labelLine("🌍", "Страна", country2));
     const location = norm(d.location);
-    if (!lines.length && location) lines.push(labelLine("📍", "Локация", location, true));
+    if (!lines.length && location) lines.push(labelLine("📍", "Локация", location));
     return lines;
   };
 
