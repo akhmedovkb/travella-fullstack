@@ -5,6 +5,11 @@ const jwt = require("jsonwebtoken");
 const pool = require("../db");
 const { resolveCitySlugs } = require("../utils/cities");
 const { notifyModerationNew } = require("../utils/telegram");
+const {
+  extractPrices,
+  isPriceDrop,
+  broadcastPriceDropCard,
+} = require("../utils/refusedPriceDropBroadcast");
 
 // ---------- Helpers ----------
 
@@ -726,7 +731,9 @@ const updateService = async (req, res) => {
 
     // 1) Узнаём текущий статус и владение
     const cur = await pool.query(
-      `SELECT status FROM services WHERE id=$1 AND provider_id=$2`,
+      `SELECT id, status, category, price, details
+         FROM services
+        WHERE id=$1 AND provider_id=$2`,
       [serviceId, providerId]
     );
     if (!cur.rowCount) {
@@ -734,6 +741,9 @@ const updateService = async (req, res) => {
     }
 
     const currentStatus = cur.rows[0].status;
+
+    const prevSvcRow = cur.rows[0];
+    const prevPrices = extractPrices(prevSvcRow);
 
     // 2) Правила редактирования по статусу
     if (currentStatus === "pending") {
@@ -813,6 +823,21 @@ const updateService = async (req, res) => {
 
     if (!upd.rowCount) {
       return res.status(404).json({ message: "Услуга не найдена" });
+    }
+
+    // ✅ PRICE DROP BROADCAST (если цена снижена)
+    try {
+      const nextSvcRow = upd.rows[0];
+      const nextPrices = extractPrices(nextSvcRow);
+    
+      const drop = isPriceDrop(prevPrices, nextPrices);
+    
+      // Рассылаем только для refused_* (логика внутри broadcastPriceDropCard)
+      if (drop.any) {
+        await broadcastPriceDropCard(nextSvcRow.id, "🔥 <b>ЦЕНА СНИЖЕНА!</b>");
+      }
+    } catch (e) {
+      console.error("[price drop] broadcast failed (web):", e?.message || e);
     }
 
     return res.json(upd.rows[0]);
