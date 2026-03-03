@@ -4404,10 +4404,14 @@ bot.start(async (ctx) => {
           const cardRole =
             role === "client" ? (unlocked ? "client_unlocked" : "client_public") : role;
           
+          const isRefused = String(category || "").startsWith("refused_");
+          
           const { text, photoUrl, serviceUrl } =
             buildServiceMessage(svc, category, cardRole, {
               unlocked,
               isInline: false,
+              // ✅ заставляем использовать унифицированные refused-шаблоны даже для provider
+              forceRefused: isRefused,
             });
           
           let textFinal = text;
