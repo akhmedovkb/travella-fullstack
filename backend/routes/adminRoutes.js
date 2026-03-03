@@ -230,9 +230,17 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
       const openBotUrl = botUsername
         ? `https://t.me/${botUsername}?start=${startPayload}`
         : process.env.SITE_PUBLIC_URL || "";
-
-      // ✅ ЕДИНЫЙ шаблон карточки
-      const card = buildServiceMessage(svc, cat, "client", { newBadge: true });
+      
+      // ✅ ЕДИНЫЙ шаблон карточки + 🆕 только один раз (первый broadcast после approve)
+      let detailsObj = svc?.details;
+      if (typeof detailsObj === "string") {
+        try { detailsObj = JSON.parse(detailsObj); } catch { detailsObj = {}; }
+      }
+      
+      const alreadyNewBroadcasted = Boolean(detailsObj?.meta?.new_badge_sent_at);
+      const needNewBadgeOnce = !alreadyNewBroadcasted;
+      
+      const card = buildServiceMessage(svc, cat, "client", { newBadge: needNewBadgeOnce });
       const msg = card.text; // HTML
       const photoUrl = card.photoUrl || null;
 
@@ -356,6 +364,26 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
               batchFrom: i,
               batchSize: results.length,
             });
+          }
+        }
+        
+        // ✅🆕 фиксируем, что NEW badge уже был показан (ТОЛЬКО 1 раз)
+        if (needNewBadgeOnce && delivered > 0) {
+          try {
+            await pool.query(
+              `UPDATE services
+                  SET details = jsonb_set(
+                      COALESCE(details, '{}'::jsonb),
+                      '{meta,new_badge_sent_at}',
+                      to_jsonb(NOW()),
+                      true
+                  )
+                WHERE id = $1
+                  AND (details->'meta'->>'new_badge_sent_at') IS NULL`,
+              [svc.id]
+            );
+          } catch (e) {
+            console.error("[admin approve] failed to mark new_badge_sent_at:", e?.message || e);
           }
         }
 
