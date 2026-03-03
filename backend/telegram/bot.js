@@ -3266,11 +3266,21 @@ function normalizeDateInput(raw) {
   const txt = String(raw).trim();
   if (/^(нет|пропустить|skip|-)\s*$/i.test(txt)) return null;
 
-  const m = txt.match(/^(\d{4})[.\-/](\d{2})[.\-/](\d{2})$/);
-  if (!m) return null;
+  // 1️⃣ YYYY-MM-DD / YYYY.MM.DD / YYYY/MM/DD
+  const iso = txt.match(/^(\d{4})[.\-/](\d{2})[.\-/](\d{2})$/);
+  if (iso) {
+    const [, y, mm, dd] = iso;
+    return `${y}-${mm}-${dd}`;
+  }
 
-  const [, y, mm, dd] = m;
-  return `${y}-${mm}-${dd}`;
+  // 2️⃣ DD.MM.YYYY  (КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ)
+  const dmy = txt.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  if (dmy) {
+    const [, dd, mm, y] = dmy;
+    return `${y}-${mm}-${dd}`;
+  }
+
+  return null;
 }
 
 function normalizeDateTimeInput(raw) {
