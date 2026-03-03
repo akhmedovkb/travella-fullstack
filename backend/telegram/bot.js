@@ -4382,10 +4382,13 @@ bot.start(async (ctx) => {
             return;
           }
 
-          const svc = data.service;
-          const category = String(svc.category || "").toLowerCase();
-          // 🔐 вычисляем unlock заранее
-          let unlocked = true;
+        const svc = data.service;
+        
+        // ✅ важно: в некоторых местах категория хранится в s.type, а не в s.category
+        const category = String(svc.category || svc.type || "refused_tour").trim().toLowerCase();
+        
+        // 🔐 вычисляем unlock заранее
+        let unlocked = true;
           
           if (role === "client") {
             const clientRow = await getClientRowByChatId(pool, actorId);
