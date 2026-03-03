@@ -523,6 +523,15 @@ function buildServiceMessage(svc, category, role = "client", options = {}) {
 
   const priceRaw = pickPrice(d, svc, role);
   const priceWithCur = formatPriceWithCurrency(priceRaw);
+  // ✅ определяем тип цены (нетто/брутто)
+const priceKind =
+  role === "provider"
+    ? (d.netPrice ?? null) != null
+      ? "нетто"
+      : (d.grossPrice ?? null) != null
+        ? "брутто"
+        : "нетто"
+    : "брутто";
 
   const badge = getExpiryBadge(d, svc);
   const badgeClean = badge ? String(badge).replace(/^⏳\s*/g, "").trim() : "";
@@ -779,7 +788,7 @@ function buildServiceMessage(svc, category, role = "client", options = {}) {
     parts.push(labelLine("🍽", "Питание", foodPretty || "—", false));
 
     if (priceWithCur != null && String(priceWithCur).trim()) {
-      parts.push(`💸 <b>Цена:</b> <b>${escapeHtml(String(priceWithCur))}</b> <i>(брутто)</i>`);
+      parts.push(`💸 <b>Цена:</b> <b>${escapeHtml(String(priceWithCur))}</b> (${priceKind})`);
     }
 
     if (badgeClean) parts.push(labelLine("⏳", "Срок", badgeClean, false));
@@ -848,7 +857,7 @@ function buildServiceMessage(svc, category, role = "client", options = {}) {
     if (d.changeable === false) parts.push(`⛔ <b>Без изменений</b>`);
 
     if (priceWithCur != null && String(priceWithCur).trim()) {
-      parts.push(`💸 <b>Цена:</b> <b>${escapeHtml(String(priceWithCur))}</b> <i>(брутто)</i>`);
+      parts.push(`💸 <b>Цена:</b> <b>${escapeHtml(String(priceWithCur))}</b> (${priceKind})`);
     }
     if (badgeClean) parts.push(labelLine("⏳", "Срок", badgeClean, false));
 
@@ -899,7 +908,7 @@ function buildServiceMessage(svc, category, role = "client", options = {}) {
     if (flightDetails) parts.push(labelLine("📝", "Детали", flightDetails, false));
 
     if (priceWithCur != null && String(priceWithCur).trim()) {
-      parts.push(`💸 <b>Цена:</b> <b>${escapeHtml(String(priceWithCur))}</b> <i>(брутто)</i>`);
+      parts.push(`💸 <b>Цена:</b> <b>${escapeHtml(String(priceWithCur))}</b> (${priceKind})`);
     }
     if (badgeClean) parts.push(labelLine("⏳", "Срок", badgeClean, false));
 
@@ -950,7 +959,7 @@ function buildServiceMessage(svc, category, role = "client", options = {}) {
     if (ticketDetails) parts.push(labelLine("📝", "Детали", ticketDetails, false));
 
     if (priceWithCur != null && String(priceWithCur).trim()) {
-      parts.push(`💸 <b>Цена:</b> <b>${escapeHtml(String(priceWithCur))}</b> <i>(брутто)</i>`);
+      parts.push(`💸 <b>Цена:</b> <b>${escapeHtml(String(priceWithCur))}</b> (${priceKind})`);
     }
     if (badgeClean) parts.push(labelLine("⏳", "Срок", badgeClean, false));
 
