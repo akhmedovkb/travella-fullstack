@@ -232,7 +232,7 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
         : process.env.SITE_PUBLIC_URL || "";
 
       // ✅ ЕДИНЫЙ шаблон карточки
-      const card = buildServiceMessage(svc, cat, "client");
+      const card = buildServiceMessage(svc, cat, "client", { newBadge: true });
       const msg = card.text; // HTML
       const photoUrl = card.photoUrl || null;
 
