@@ -6540,12 +6540,13 @@ if (ctx.chat?.type !== "private") {
 let result;
 try {
   // 🔥 BANK-GRADE advisory lock: в той же транзакции, что и списание/insert
-  result = await withServiceLock(pool, clientRow.id, serviceId, async (db) => {
-    return unlockContactsForService(db, {
-      clientId: clientRow.id,
-      serviceId,
-    });
+result = await withServiceLock(pool, clientRow.id, serviceId, async (db) => {
+  return unlockContactsForService(db, {
+    clientId: clientRow.id,
+    serviceId,
+    price: Number(CONTACT_UNLOCK_PRICE || 10000),
   });
+});
 } catch (e) {
   console.error("[tg-bot] doUnlockFlow locked unlock error:", e?.message || e);
   result = { ok: false, reason: "server_error" };
