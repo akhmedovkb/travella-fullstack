@@ -795,7 +795,7 @@ const priceKind =
     parts.push(labelLine("🍽", "Питание", foodPretty || "—", false));
 
     if (priceWithCur != null && String(priceWithCur).trim()) {
-      parts.push(`💸 <b>Цена:</b> <b>${escapeHtml(String(priceWithCur))}</b> (${priceKind})`);
+      parts.push(`💸 <b>Цена</b>: ${escapeHtml(String(priceWithCur))} (${priceKind})`);
     }
 
     if (badgeClean) parts.push(labelLine("⏳", "Срок", badgeClean, false));
@@ -864,7 +864,7 @@ const priceKind =
     if (d.changeable === false) parts.push(`⛔ <b>Без изменений</b>`);
 
     if (priceWithCur != null && String(priceWithCur).trim()) {
-      parts.push(`💸 <b>Цена:</b> <b>${escapeHtml(String(priceWithCur))}</b> (${priceKind})`);
+      parts.push(`💸 <b>Цена</b>: ${escapeHtml(String(priceWithCur))} (${priceKind})`);
     }
     if (badgeClean) parts.push(labelLine("⏳", "Срок", badgeClean, false));
 
@@ -915,7 +915,7 @@ const priceKind =
     if (flightDetails) parts.push(labelLine("📝", "Детали", flightDetails, false));
 
     if (priceWithCur != null && String(priceWithCur).trim()) {
-      parts.push(`💸 <b>Цена:</b> <b>${escapeHtml(String(priceWithCur))}</b> (${priceKind})`);
+      parts.push(`💸 <b>Цена</b>: ${escapeHtml(String(priceWithCur))} (${priceKind})`);
     }
     if (badgeClean) parts.push(labelLine("⏳", "Срок", badgeClean, false));
 
@@ -966,7 +966,7 @@ const priceKind =
     if (ticketDetails) parts.push(labelLine("📝", "Детали", ticketDetails, false));
 
     if (priceWithCur != null && String(priceWithCur).trim()) {
-      parts.push(`💸 <b>Цена:</b> <b>${escapeHtml(String(priceWithCur))}</b> (${priceKind})`);
+      parts.push(`💸 <b>Цена</b>: ${escapeHtml(String(priceWithCur))} (${priceKind})`);
     }
     if (badgeClean) parts.push(labelLine("⏳", "Срок", badgeClean, false));
 
@@ -999,7 +999,7 @@ const priceKind =
 
   if (priceWithCur != null && String(priceWithCur).trim()) {
     const kind = role === "provider" ? "нетто" : "брутто";
-    parts.push(`💸 <b>${escapeHtml(String(priceWithCur))}</b> <i>(${escapeHtml(kind)})</i>`);
+    parts.push(`💸 <b>Цена</b>: ${escapeHtml(String(priceWithCur))} <i>(${escapeHtml(kind)})</i>`);
   }
 
   if (badgeClean) parts.push(`⏳ ${escapeHtml(badgeClean)}`);
