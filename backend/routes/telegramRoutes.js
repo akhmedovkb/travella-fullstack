@@ -510,6 +510,9 @@ router.get("/service/:serviceId", async (req, res) => {
       return res.status(400).json({ success: false, error: "bad_id" });
     }
 
+    const roleQ = String(req.query.role || "client").toLowerCase();
+    const chatIdQ = Number(req.query.chatId);
+
     const r = await pool.query(
       `
       SELECT
@@ -529,7 +532,34 @@ router.get("/service/:serviceId", async (req, res) => {
       return res.status(404).json({ success: false, error: "not_found" });
     }
 
-    return res.json({ success: true, service: r.rows[0] });
+    let unlocked = false;
+
+    // provider/admin видят всегда
+    if (roleQ === "provider" || roleQ === "admin") {
+      unlocked = true;
+    } else if (roleQ === "client" && Number.isFinite(chatIdQ) && chatIdQ > 0) {
+      // находим клиента по telegram_chat_id
+      const cli = await pool.query(
+        `SELECT id FROM clients WHERE telegram_chat_id = $1 LIMIT 1`,
+        [chatIdQ]
+      );
+
+      if (cli.rowCount) {
+        const clientId = cli.rows[0].id;
+
+        const ex = await pool.query(
+          `SELECT 1
+             FROM client_service_contact_unlocks
+            WHERE client_id = $1 AND service_id = $2
+            LIMIT 1`,
+          [clientId, serviceId]
+        );
+
+        unlocked = ex.rowCount > 0;
+      }
+    }
+
+    return res.json({ success: true, service: r.rows[0], unlocked });
   } catch (e) {
     console.error("[tg] /service/:id error:", e?.message || e);
     return res.status(500).json({ success: false, error: "server_error" });
