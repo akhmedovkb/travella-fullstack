@@ -6445,39 +6445,52 @@ async function doUnlockFlow(ctx, serviceId) {
     return { ok: false };
   }
 
-  const clientRow = await getClientRowByChatId(pool, chatId);
-      // 🔥 FAST-PATH: уже открыт? (снимает лишнюю нагрузку с advisory lock)
+const clientRow = await getClientRowByChatId(pool, chatId);
+
+if (!clientRow?.id) {
+  try {
+    await ctx.answerCbQuery("👋 Сначала привяжите аккаунт через /start", { show_alert: true });
+  } catch {}
+  return { ok: false };
+}
+
+// 🔥 FAST-PATH: уже открыт? (снимает лишнюю нагрузку с advisory lock)
+try {
+  const already = await pool.query(
+    `SELECT 1
+       FROM client_service_contact_unlocks
+      WHERE client_id = $1
+        AND service_id = $2
+      LIMIT 1`,
+    [clientRow.id, serviceId]
+  );
+
+  if (already.rowCount) {
     try {
-      const already = await pool.query(
-        `SELECT 1
-           FROM client_service_contact_unlocks
-          WHERE client_id = $1
-            AND service_id = $2
-          LIMIT 1`,
-        [clientRow?.id, serviceId]
-      );
-    
-      if (already.rowCount) {
-        try {
-          await ctx.answerCbQuery("✅ Контакты уже открыты", { show_alert: false });
-        } catch {}
-    
-        try {
-          await refreshUnlockedCard(ctx, serviceId);
-        } catch {}
-    
-        return { ok: true, already: true };
-      }
-    } catch (e) {
-      console.error("[tg-bot] fast unlock check failed:", e?.message || e);
+      await ctx.answerCbQuery("✅ Контакты уже открыты", { show_alert: false });
+    } catch {}
+
+    // 🔒 bank-grade: обновлять unlocked-карточку только в личке
+    if (ctx.chat?.type === "private") {
+      try {
+        await refreshUnlockedCard(ctx, serviceId);
+      } catch {}
+    } else {
+      // если нажали в группе — уводим в личку
+      try {
+        await safeReply(
+          ctx,
+          "✅ Контакты уже открыты. Откройте карточку в личке с ботом, чтобы увидеть контакты.",
+          { disable_web_page_preview: true }
+        );
+      } catch {}
     }
-    
-    if (!clientRow?.id) {
-        try {
-          await ctx.answerCbQuery("👋 Сначала привяжите аккаунт через /start", { show_alert: true });
-        } catch {}
-        return { ok: false };
-      }
+
+    return { ok: true, already: true };
+  }
+} catch (e) {
+  console.error("[tg-bot] fast unlock check failed:", e?.message || e);
+}
 
   // 🔐 ПРОВЕРКА ОФЕРТЫ (BANK PROTECTION)
   const offerCheck = await pool.query(
@@ -6492,6 +6505,22 @@ async function doUnlockFlow(ctx, serviceId) {
 
 if (!offerCheck.rowCount) {
   return await showOfferGate(ctx, serviceId);
+}
+  // 🔒 BANK-GRADE: контакты/обновление unlocked карточки — только в личке
+if (ctx.chat?.type !== "private") {
+  try {
+    await ctx.answerCbQuery("🔒 Откройте в личке с ботом", { show_alert: true });
+  } catch {}
+
+  try {
+    await safeReply(
+      ctx,
+      "🔒 <b>Безопасность</b>\n\nОткрытие/показ контактов доступно только в личном чате с ботом.\nОткройте карточку в личке и нажмите «Открыть контакты» ещё раз.",
+      { parse_mode: "HTML", disable_web_page_preview: true }
+    );
+  } catch {}
+
+  return { ok: false, reason: "not_private" };
 }
 
   // === BLACK-HOLE++ / anti-fraud gates (BANK-GRADE) ===
@@ -6608,11 +6637,18 @@ const note = result.already
   try {
     await ctx.answerCbQuery(note, { show_alert: true });
   } catch {}
+if (ctx.chat?.type === "private") {
   try {
     await refreshUnlockedCard(ctx, serviceId);
   } catch (e) {
     console.error("[tg-bot] refreshUnlockedCard failed:", e?.message || e);
   }
+} else {
+  // на всякий — но сюда мы уже не дойдём из-за PATCH B
+  try {
+    await safeReply(ctx, "✅ Готово. Откройте карточку в личке с ботом.", { disable_web_page_preview: true });
+  } catch {}
+}
   return { ok: true };
 }
 
