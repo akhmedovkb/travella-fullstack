@@ -807,23 +807,23 @@ const priceKind =
     const roomCatRaw = d.accommodationCategory || d.roomCategory || "";
     const roomCatClean = stripStarsFromRoomCat(roomCatRaw);
     const roomCat = norm(roomCatClean);
-    parts.push(labelLine("🛏", "Категория номера", roomCat || "—", false));
-
+    parts.push(labelLine("🛏", "Категория номера", roomCat || "—"));
+    
     if (accommodation) parts.push(labelLine("👥", "Размещение", accommodation, false));
 
     const foodPretty = foodLabel(d.food);
-    parts.push(labelLine("🍽", "Питание", foodPretty || "—", false));
+    parts.push(labelLine("🍽", "Питание", foodPretty || "—"));
 
     if (priceWithCur != null && String(priceWithCur).trim()) {
       parts.push(`💸 <b>Цена</b>: ${escapeHtml(String(priceWithCur))} (${priceKind})`);
     }
 
-    if (badgeClean) parts.push(labelLine("⏳", "Срок", badgeClean, false));
+    if (badgeClean) parts.push(labelLine("⏳", "Срок", badgeClean));
 
-    if (d.changeable === true) parts.push(`🔁 <b>Можно вносить изменения</b>`);
-    else parts.push(`✅ <b>Фикс-пакет</b>: без замен (отель/даты/размещение)`);
-
-    parts.push(`⚡ <b>Горящее</b>: такие варианты уходят быстро`);
+    if (d.changeable === true) parts.push(labelLine("🔁", "Изменения", "Можно вносить изменения"));
+    else parts.push(labelLine("✅", "Фикс-пакет", "Без замен (отель/даты/размещение)"));
+    
+    parts.push(labelLine("⚡", "Горящее", "Такие варианты уходят быстро"));
 
     pushDivider(parts);
     if (shouldShowProviderContacts(role, unlocked)) {
@@ -880,15 +880,15 @@ const priceKind =
     const transferPretty = transferLabel(d.transfer);
     if (transferPretty) parts.push(labelLine("🚗", "Трансфер", transferPretty, false));
 
-    if (d.changeable === true) parts.push(`🔁 <b>Можно вносить изменения</b>`);
-    if (d.changeable === false) parts.push(`⛔ <b>Без изменений</b>`);
+    if (d.changeable === true) parts.push(labelLine("🔁", "Изменения", "Можно вносить изменения"));
+    if (d.changeable === false) parts.push(labelLine("⛔", "Изменения", "Без изменений"));
 
     if (priceWithCur != null && String(priceWithCur).trim()) {
       parts.push(`💸 <b>Цена</b>: ${escapeHtml(String(priceWithCur))} (${priceKind})`);
     }
     if (badgeClean) parts.push(labelLine("⏳", "Срок", badgeClean, false));
 
-    parts.push(`⚡ <b>Горящее</b>: такие варианты уходят быстро`);
+    parts.push(labelLine("⚡", "Горящее", "Такие варианты уходят быстро"));
 
     pushDivider(parts);
     if (shouldShowProviderContacts(role, unlocked)) {
@@ -925,7 +925,7 @@ const priceKind =
     if (fd) parts.push(labelLine("🗓", fd.label, fd.value));
     
     if (hasReturnFlight()) {
-      parts.push(labelLine("🔁", "Тип", "Туда-обратно", false));
+      parts.push(labelLine("🔁", "Тип", "Туда-обратно"));
     }
 
     const airline = norm(d.airline);
@@ -939,7 +939,7 @@ const priceKind =
     }
     if (badgeClean) parts.push(labelLine("⏳", "Срок", badgeClean, false));
 
-    parts.push(`⚡ <b>Горящее</b>: такие варианты уходят быстро`);
+    parts.push(labelLine("⚡", "Горящее", "Такие варианты уходят быстро"));
 
     pushDivider(parts);
     if (shouldShowProviderContacts(role, unlocked)) {
@@ -990,7 +990,7 @@ const priceKind =
     }
     if (badgeClean) parts.push(labelLine("⏳", "Срок", badgeClean, false));
 
-    parts.push(`⚡ <b>Горящее</b>: такие варианты уходят быстро`);
+    parts.push(labelLine("⚡", "Горящее", "Такие варианты уходят быстро"));
 
     pushDivider(parts);
     if (shouldShowProviderContacts(role, unlocked)) {
