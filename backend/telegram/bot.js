@@ -887,15 +887,19 @@ async function refreshUnlockedCard(ctx, serviceId) {
   const svc = data.service;
   const category = String(svc.category || "").toLowerCase();
 
-  const { text, photoUrl, serviceUrl } =
+  const { text, photoUrl, serviceUrl, kbExtra } =
     buildServiceMessage(svc, category, "client_unlocked");
-
-  const kb = {
+  
+  let kb = {
     inline_keyboard: [
       [{ text: "Подробнее на сайте", url: serviceUrl }],
       [{ text: "📩 Быстрый запрос", callback_data: `quick:${serviceId}` }],
     ],
   };
+  
+  if (kbExtra?.inline_keyboard?.length) {
+    kb.inline_keyboard = [...kbExtra.inline_keyboard, ...kb.inline_keyboard];
+  }
 
   try {
     await ctx.editMessageCaption(text, {
