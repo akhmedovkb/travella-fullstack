@@ -731,7 +731,7 @@ function verifyUnlockCbData(a, b, c, d) {
 
   const sigStr = String(sig || "").trim().toLowerCase();
   // допускаем старые форматы (например 24 hex), сравниваем только первые 12
-  if (!/^[a-f0-9]{12,64}$/.test(sigStr)) return { ok: false, reason: "bad_sig" };
+  if (!/^[a-f0-9]{12}$/.test(sigStr)) return { ok: false, reason: "bad_sig" };
 
   const exp = Buffer.from(String(expected), "utf8");
   const got = Buffer.from(sigStr.slice(0, 12), "utf8");
@@ -5973,21 +5973,27 @@ bot.action(/^quick:(\d+)$/, async (ctx) => {
 
 /* ===================== UNLOCK HANDLER ===================== */
 
-bot.action(/^u:(\d+):(\d+):(\d+):([a-f0-9]+)$/, async (ctx) => {
+bot.action(/^u:(\d+):(\d+):(\d+):([a-f0-9]{12,64})$/, async (ctx) => {
   try {
     const serviceId = Number(ctx.match?.[1]);
     const buttonChatId = Number(ctx.match?.[2]);
     const ts = Number(ctx.match?.[3]);
     const sig = String(ctx.match?.[4] || "");
 
-    // 🛡 sanity
+    // 🛡 sanity serviceId
     if (!Number.isFinite(serviceId) || serviceId <= 0) {
       await ctx.answerCbQuery("⚠️ Некорректная кнопка", { show_alert: true });
       return;
     }
-
-    // 🔒 защита: кнопку может нажать только тот же пользователь
-    if (Number(buttonChatId) !== Number(ctx.from?.id)) {
+    
+    // 🛡 sanity buttonChatId
+    if (!Number.isFinite(buttonChatId) || buttonChatId <= 0) {
+      await ctx.answerCbQuery("⚠️ Некорректная кнопка", { show_alert: true });
+      return;
+    }
+    
+    // 🔒 кнопку может нажать только тот пользователь
+    if (buttonChatId !== Number(ctx.from?.id)) {
       await ctx.answerCbQuery("⛔️ Эта кнопка не для вас", { show_alert: true });
       return;
     }
