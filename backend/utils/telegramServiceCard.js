@@ -549,23 +549,37 @@ const priceKind =
   const providerProfileUrl = providerId ? `${SITE_URL}/profile/provider/${providerId}` : null;
 
   const providerLine = providerProfileUrl
-    ? `Поставщик: ${a(providerProfileUrl, providerNameRaw)}`
-    : `Поставщик: ${escapeHtml(providerNameRaw)}`;
-
+    ? labelLineHtml("🏢", "Поставщик", a(providerProfileUrl, providerNameRaw))
+    : labelLine("🏢", "Поставщик", providerNameRaw);
+  
   let telegramLine = "";
   if (svc.provider_telegram) {
     let u = String(svc.provider_telegram).trim().replace(/^@/, "");
     u = u.replace(/^https?:\/\/t\.me\//i, "");
     u = u.replace(/^tg:\/\/resolve\?domain=/i, "");
-    if (u) telegramLine = `Telegram: ${a(`https://t.me/${encodeURIComponent(u)}`, u)}`;
+    if (u) {
+      telegramLine = labelLineHtml(
+        "📲",
+        "Telegram",
+        a(`https://t.me/${encodeURIComponent(u)}`, u)
+      );
+    }
   }
 
   /* ===================== PREMIUM helpers ===================== */
 
   const labelLine = (icon, label, value) => {
-    const v = String(value || "").trim();
+    const v = String(value ?? "").trim();
     if (!v) return "";
-    return `${icon} <b>${escapeHtml(label)}:</b> ${escapeHtml(v)}`;
+    return `${icon} <b>${escapeHtml(label)}</b>: ${escapeHtml(v)}`;
+  };
+  
+  // ⚠️ если value уже содержит HTML (например <a href="...">...</a>),
+  // используем эту версию — она НЕ экранирует value, но экранирует label.
+  const labelLineHtml = (icon, label, htmlValue) => {
+    const v = String(htmlValue ?? "").trim();
+    if (!v) return "";
+    return `${icon} <b>${escapeHtml(label)}</b>: ${v}`;
   };
 
   const titleLine = (mode = "generic") => {
@@ -816,7 +830,7 @@ const priceKind =
       parts.push(providerLine);
       if (telegramLine) parts.push(telegramLine);
     } else {
-      parts.push("🏢 Поставщик: 🔒 скрыт");
+      parts.push(labelLine("🏢", "Поставщик", "🔒 скрыт"));
       parts.push("🔓 Откройте контакты для связи");
     }
 
@@ -881,7 +895,7 @@ const priceKind =
       parts.push(providerLine);
       if (telegramLine) parts.push(telegramLine);
     } else {
-      parts.push("🏢 Поставщик: 🔒 скрыт");
+      parts.push(labelLine("🏢", "Поставщик", "🔒 скрыт"));
       parts.push("🔓 Откройте контакты для связи");
     }
 
@@ -932,7 +946,7 @@ const priceKind =
       parts.push(providerLine);
       if (telegramLine) parts.push(telegramLine);
     } else {
-      parts.push("🏢 Поставщик: 🔒 скрыт");
+      parts.push(labelLine("🏢", "Поставщик", "🔒 скрыт"));
       parts.push("🔓 Откройте контакты для связи");
     }
 
@@ -983,7 +997,7 @@ const priceKind =
       parts.push(providerLine);
       if (telegramLine) parts.push(telegramLine);
     } else {
-      parts.push("🏢 Поставщик: 🔒 скрыт");
+      parts.push(labelLine("🏢", "Поставщик", "🔒 скрыт"));
       parts.push("🔓 Откройте контакты для связи");
     }
 
@@ -1015,7 +1029,7 @@ const priceKind =
     parts.push(providerLine);
     if (telegramLine) parts.push(telegramLine);
   } else {
-    parts.push("🏢 Поставщик: 🔒 скрыт");
+    parts.push(labelLine("🏢", "Поставщик", "🔒 скрыт"));
     parts.push("🔓 Откройте контакты для связи");
   }
 
