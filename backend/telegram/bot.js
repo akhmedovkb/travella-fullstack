@@ -4899,7 +4899,7 @@ bot.action("prov_services:back", async (ctx) => {
   try {
     await ctx.answerCbQuery();
     try {
-      await ctx.editMessageReplyMarkup(undefined);
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
     } catch (_) {}
 
     const role = (await ensureProviderRole(ctx)) || ctx.session?.role || "client";
@@ -5786,7 +5786,7 @@ bot.action(/^reqst:(\d+):(new|accepted|booked|rejected)$/, async (ctx) => {
 
     // ❌ Убираем кнопки, чтобы не нажимали повторно
     try {
-      await ctx.editMessageReplyMarkup(undefined);
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
     } catch (_) {}
   } catch (e) {
     console.error("[tg-bot] reqst action error:", e);
