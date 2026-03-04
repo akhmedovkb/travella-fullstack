@@ -755,6 +755,12 @@ const priceKind =
     parts.push(priceDrop.header);
     parts.push(priceDrop.diffLine);
   };
+  const pushPriceDrop = (parts) => {
+    const priceDrop = getPriceDropMeta(svc.details, svc, role);
+    if (!priceDrop) return;
+    parts.push(priceDrop.header);
+    parts.push(priceDrop.diffLine);
+  };
 
   /* ===================== SPECIAL TEMPLATES ===================== */
 
@@ -776,10 +782,10 @@ const priceKind =
 
     if (dates) {
       const dv = `${dates}${nights ? ` (${nights} ноч.)` : ""}`;
-      parts.push(labelLine("🗓", "Даты", dv, true));
+      parts.push(labelLine("🗓", "Даты", dv));
     }
 
-    if (hotel) parts.push(labelLine("🏨", "Отель", hotel, true));
+    if (hotel) parts.push(labelLine("🏨", "Отель", hotel));
 
     const starsPretty = extractStars(d);
     if (starsPretty) parts.push(`${escapeHtml(starsPretty)}`);
@@ -805,7 +811,7 @@ const priceKind =
 
     parts.push(`⚡ <b>Горящее</b>: такие варианты уходят быстро`);
 
-    parts.push("");
+    pushDivider(parts);
     if (shouldShowProviderContacts(role, unlocked)) {
       parts.push(providerLine);
       if (telegramLine) parts.push(telegramLine);
@@ -814,7 +820,7 @@ const priceKind =
       parts.push("🔓 Откройте контакты для связи");
     }
 
-    parts.push("");
+    pushDivider(parts);
     parts.push(`👉 Подробнее и бронирование: ${a(serviceUrl, "открыть")}`);
 
     return { text: parts.join("\n"), photoUrl: getFirstImageUrl(svc), serviceUrl };
@@ -839,7 +845,7 @@ const priceKind =
     const hd = hotelDatesLines();
     for (const line of hd) parts.push(line);
 
-    if (hotel) parts.push(labelLine("🏨", "Отель", hotel, true));
+    if (hotel) parts.push(labelLine("🏨", "Отель", hotel));
 
     const starsPretty = extractStars(d);
     if (starsPretty) parts.push(`${escapeHtml(starsPretty)}`);
@@ -870,7 +876,7 @@ const priceKind =
 
     parts.push(`⚡ <b>Горящее</b>: такие варианты уходят быстро`);
 
-    parts.push("");
+    pushDivider(parts);
     if (shouldShowProviderContacts(role, unlocked)) {
       parts.push(providerLine);
       if (telegramLine) parts.push(telegramLine);
@@ -879,7 +885,7 @@ const priceKind =
       parts.push("🔓 Откройте контакты для связи");
     }
 
-    parts.push("");
+    pushDivider(parts);
     parts.push(`👉 Подробнее и бронирование: ${a(serviceUrl, "открыть")}`);
 
     return { text: parts.join("\n"), photoUrl: getFirstImageUrl(svc), serviceUrl };
@@ -902,8 +908,8 @@ const priceKind =
     for (const line of fl) parts.push(line);
 
     const fd = flightDateLabel();
-    if (fd) parts.push(labelLine("🗓", fd.label, fd.value, true));
-
+    if (fd) parts.push(labelLine("🗓", fd.label, fd.value));
+    
     if (hasReturnFlight()) {
       parts.push(labelLine("🔁", "Тип", "Туда-обратно", false));
     }
@@ -921,7 +927,7 @@ const priceKind =
 
     parts.push(`⚡ <b>Горящее</b>: такие варианты уходят быстро`);
 
-    parts.push("");
+    pushDivider(parts);
     if (shouldShowProviderContacts(role, unlocked)) {
       parts.push(providerLine);
       if (telegramLine) parts.push(telegramLine);
@@ -930,7 +936,7 @@ const priceKind =
       parts.push("🔓 Откройте контакты для связи");
     }
 
-    parts.push("");
+    pushDivider(parts);
     parts.push(`👉 Подробнее и бронирование: ${a(serviceUrl, "открыть")}`);
 
     return { text: parts.join("\n"), photoUrl: getFirstImageUrl(svc), serviceUrl };
@@ -954,13 +960,13 @@ const priceKind =
     pushPriceDrop(parts);
 
     const eventCat = norm(d.eventCategory);
-    if (eventCat) parts.push(labelLine(evEmoji, "Категория", eventCat, true));
+    if (eventCat) parts.push(labelLine(evEmoji, "Категория", eventCat));
 
     const tlc = ticketLocationLines();
     for (const line of tlc) parts.push(line);
 
     const ed = eventDateLabel();
-    if (ed) parts.push(labelLine("🗓", ed.label, ed.value, true));
+    if (ed) parts.push(labelLine("🗓", ed.label, ed.value));
 
     const ticketDetails = norm(d.ticketDetails);
     if (ticketDetails) parts.push(labelLine("📝", "Детали", ticketDetails, false));
@@ -972,7 +978,7 @@ const priceKind =
 
     parts.push(`⚡ <b>Горящее</b>: такие варианты уходят быстро`);
 
-    parts.push("");
+    pushDivider(parts);
     if (shouldShowProviderContacts(role, unlocked)) {
       parts.push(providerLine);
       if (telegramLine) parts.push(telegramLine);
@@ -981,7 +987,7 @@ const priceKind =
       parts.push("🔓 Откройте контакты для связи");
     }
 
-    parts.push("");
+    pushDivider(parts);
     parts.push(`👉 Подробнее и бронирование: ${a(serviceUrl, "открыть")}`);
 
     return { text: parts.join("\n"), photoUrl: getFirstImageUrl(svc), serviceUrl };
@@ -1004,7 +1010,7 @@ const priceKind =
 
   if (badgeClean) parts.push(`⏳ ${escapeHtml(badgeClean)}`);
 
-  parts.push("");
+  pushDivider(parts);
   if (shouldShowProviderContacts(role, unlocked)) {
     parts.push(providerLine);
     if (telegramLine) parts.push(telegramLine);
@@ -1013,7 +1019,7 @@ const priceKind =
     parts.push("🔓 Откройте контакты для связи");
   }
 
-  parts.push("");
+  pushDivider(parts);
   parts.push(`👉 Подробнее и бронирование: ${a(serviceUrl, "открыть")}`);
 
   return { text: parts.join("\n"), photoUrl: getFirstImageUrl(svc), serviceUrl };
