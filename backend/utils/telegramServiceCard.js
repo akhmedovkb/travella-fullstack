@@ -509,15 +509,18 @@ function buildServiceMessage(svc, category, role = "client", options = {}) {
     d.dateTo ||
     "";
 
-  const start = norm(formatDateDMY(startRaw) || startRaw);
-  const end = norm(formatDateDMY(endRaw) || endRaw);
-
+  const startDateObj = parseDateFlexible(startRaw);
+  const endDateObj = parseDateFlexible(endRaw);
+  
+  const start = startDateObj ? formatDateDMY(startDateObj) : norm(startRaw);
+  const end = endDateObj ? formatDateDMY(endDateObj) : norm(endRaw);
+  
   const dates = start && end && start !== end ? `${start} → ${end}` : start || end || "";
 
   let nights = null;
   try {
-    const sdt = start ? parseDateFlexible(start) : null;
-    const edt = end ? parseDateFlexible(end) : null;
+    const sdt = startDateObj;
+    const edt = endDateObj;
     if (sdt && edt) {
       const s0 = new Date(sdt.getFullYear(), sdt.getMonth(), sdt.getDate());
       const e0 = new Date(edt.getFullYear(), edt.getMonth(), edt.getDate());
