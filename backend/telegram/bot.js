@@ -155,10 +155,11 @@ async function withServiceLock(pool, clientId, serviceId, fn) {
   try {
     await client.query("BEGIN");
 
-    // BANK-GRADE: lock на пару (clientId, serviceId) В ЭТОЙ ЖЕ транзакции
+    // BANK-GRADE: advisory lock на пару (clientId, serviceId) в ЭТОЙ же транзакции
+    // Лучше использовать hashtext (меньше риска переполнений)
     await client.query(
-      "SELECT pg_advisory_xact_lock((($1::bigint) << 32) + $2::bigint)",
-      [Number(clientId), Number(serviceId)]
+      `SELECT pg_advisory_xact_lock(hashtext($1))`,
+      [`unlock:${Number(clientId)}:${Number(serviceId)}`]
     );
 
     const res = await fn(client);
@@ -451,95 +452,82 @@ async function getLastBalanceOpsUnified(pool, clientId, limit = 5) {
 }
 
 // транзакция: если уже unlocked — не списываем повторно
-async function unlockContactsForService(pool, clientId, serviceId, price) {
-  const db = await pool.connect();
+async function unlockContactsForService(db, { clientId, serviceId, price }) {
+  const cid = Number(clientId);
+  const sid = Number(serviceId);
+  const p = Number(price);
 
-  try {
-    await db.query("BEGIN");
+  if (!Number.isFinite(cid) || cid <= 0) return { ok: false, reason: "bad_client" };
+  if (!Number.isFinite(sid) || sid <= 0) return { ok: false, reason: "bad_service" };
+  if (!Number.isFinite(p) || p <= 0) return { ok: false, reason: "bad_price" };
 
-    // 🛡 advisory lock — защита от гонок
-    await db.query(
-      `
-      SELECT pg_advisory_xact_lock(
-        hashtext('unlock:' || $1::text || ':' || $2::text)
-      )
-    `,
-      [clientId, serviceId]
-    );
+  // 🔒 блокируем строку клиента
+  const balRes = await db.query(
+    `
+    SELECT contact_balance
+    FROM clients
+    WHERE id = $1
+    FOR UPDATE
+  `,
+    [cid]
+  );
 
-    // 🔒 блокируем строку клиента
-    const balRes = await db.query(
-      `
-      SELECT contact_balance
-      FROM clients
-      WHERE id = $1
-      FOR UPDATE
-    `,
-      [clientId]
-    );
+  if (!balRes.rows.length) return { ok: false, reason: "no_client" };
 
-    if (!balRes.rows.length) {
-      throw new Error("CLIENT_NOT_FOUND");
-    }
-
-    const balance = Number(balRes.rows[0].contact_balance || 0);
-
-    if (balance < price) {
-      throw new Error("INSUFFICIENT_BALANCE");
-    }
-
-    // 🧾 идемпотентный unlock
-    const unlockRes = await db.query(
-      `
-      INSERT INTO client_service_contact_unlocks
-      (client_id, service_id, price_charged)
-      VALUES ($1,$2,$3)
-      ON CONFLICT (client_id, service_id) DO NOTHING
-      RETURNING id
-    `,
-      [clientId, serviceId, price]
-    );
-
-    // если уже unlock был
-    if (!unlockRes.rows.length) {
-      await db.query("ROLLBACK");
-      return { alreadyUnlocked: true };
-    }
-
-    // 💰 списываем баланс
-    await db.query(
-      `
-      UPDATE clients
-      SET contact_balance = contact_balance - $1
-      WHERE id = $2
-    `,
-      [price, clientId]
-    );
-
-    // 📒 ledger
-    await db.query(
-      `
-      INSERT INTO contact_balance_ledger
-      (client_id, amount, reason, service_id, source)
-      VALUES ($1,$2,'unlock_contact',$3,'telegram')
-    `,
-      [clientId, -price, serviceId]
-    );
-
-    await db.query("COMMIT");
-
-    return { success: true };
-
-  } catch (e) {
-
-    await db.query("ROLLBACK");
-    throw e;
-
-  } finally {
-
-    db.release();
-
+  const balance = Number(balRes.rows[0].contact_balance || 0);
+  if (balance < p) {
+    return { ok: false, reason: "no_balance", balance, need: p };
   }
+
+  // 🧾 идемпотентный unlock
+  const unlockRes = await db.query(
+    `
+    INSERT INTO client_service_contact_unlocks
+      (client_id, service_id, price_charged)
+    VALUES ($1, $2, $3)
+    ON CONFLICT (client_id, service_id) DO NOTHING
+    RETURNING id
+  `,
+    [cid, sid, p]
+  );
+
+  // уже был unlock — НИЧЕГО не списываем
+  if (!unlockRes.rows.length) {
+    return { ok: true, already: true, charged: 0 };
+  }
+
+  // 💰 списываем баланс (доп. защита от гонок)
+  const upd = await db.query(
+    `
+    UPDATE clients
+    SET contact_balance = contact_balance - $1
+    WHERE id = $2 AND contact_balance >= $1
+    RETURNING contact_balance
+  `,
+    [p, cid]
+  );
+
+  // если вдруг не списалось — откатываем unlock (но мы в транзакции withServiceLock → откатится и так)
+  if (!upd.rows.length) {
+    return { ok: false, reason: "no_balance", balance, need: p };
+  }
+
+  // 📒 ledger (привязываем к unlock_id, чтобы потом можно было аудитить)
+  await db.query(
+    `
+    INSERT INTO contact_balance_ledger
+      (client_id, amount, reason, service_id, source, meta)
+    VALUES ($1, $2, 'unlock_contact', $3, 'telegram', $4::jsonb)
+  `,
+    [
+      cid,
+      -p,
+      sid,
+      JSON.stringify({ unlock_id: unlockRes.rows[0].id }),
+    ]
+  );
+
+  return { ok: true, charged: p, unlockId: unlockRes.rows[0].id };
 }
 
 // ===================== CONTACT BALANCE (top-up) =====================
