@@ -881,7 +881,7 @@ async function showOfferGate(ctx, serviceId) {
 async function refreshUnlockedCard(ctx, serviceId) {
   const { data } = await axios.get(
     `/api/telegram/service/${serviceId}`,
-    { params: { role: "client" } }
+    { params: { role: "client", chatId: ctx.from?.id } }
   );
 
   if (!data?.success || !data?.service) return;
