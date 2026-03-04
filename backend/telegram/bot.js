@@ -890,7 +890,7 @@ async function refreshUnlockedCard(ctx, serviceId) {
   const category = String(svc.category || "").toLowerCase();
 
   const { text, photoUrl, serviceUrl, kbExtra } =
-    buildServiceMessage(svc, category, "client_unlocked");
+    buildServiceMessage(svc, category, "client", { unlocked: true });
   
   let kb = {
     inline_keyboard: [
