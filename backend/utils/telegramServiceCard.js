@@ -769,12 +769,6 @@ const priceKind =
     parts.push(priceDrop.header);
     parts.push(priceDrop.diffLine);
   };
-  const pushPriceDrop = (parts) => {
-    const priceDrop = getPriceDropMeta(svc.details, svc, role);
-    if (!priceDrop) return;
-    parts.push(priceDrop.header);
-    parts.push(priceDrop.diffLine);
-  };
 
   /* ===================== SPECIAL TEMPLATES ===================== */
 
