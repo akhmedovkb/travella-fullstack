@@ -899,7 +899,12 @@ const priceKind =
     pushDivider(parts);
     parts.push(`👉 Подробнее и бронирование: ${a(serviceUrl, "открыть")}`);
 
-    return { text: parts.join("\n"), photoUrl: getFirstImageUrl(svc), serviceUrl };
+    return {
+      text: parts.join("\n"),
+      photoUrl: getFirstImageUrl(svc),
+      serviceUrl,
+      hasFlightDetails: !!flightDetails
+    };
   }
 
   if ((role !== "provider" || options?.forceRefused === true) && String(category) === "refused_flight") {
@@ -929,7 +934,9 @@ const priceKind =
     if (airline) parts.push(labelLine("🛫", "Авиакомпания", airline, false));
 
     const flightDetails = norm(d.flightDetails);
-    if (flightDetails) parts.push(labelLine("📝", "Детали", flightDetails, false));
+    if (flightDetails) {
+      parts.push(labelLine("📝", "Детали рейса", "скрыты"));
+    }
 
     if (priceWithCur != null && String(priceWithCur).trim()) {
       parts.push(`💸 <b>Цена</b>: ${escapeHtml(String(priceWithCur))} (${priceKind})`);
