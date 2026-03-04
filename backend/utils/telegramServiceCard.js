@@ -423,7 +423,13 @@ function guessRefusedCategory(details) {
 }
 
 function buildServiceMessage(svc, category, role = "client", options = {}) {
+  // 🛡 hardening: запрещаем “магические роли”, роль НЕ должна давать доступ к контактам
+  const r0 = String(role || "client").toLowerCase();
+  if (r0 === "client_unlocked" || r0 === "client_public") role = "client";
+
   const d = parseDetailsAny(svc.details);
+
+  // ✅ единственный источник правды по доступу к контактам — флаг options.unlocked
   const unlocked = options?.unlocked === true;
 
   const newBadge = options?.newBadge === true;
