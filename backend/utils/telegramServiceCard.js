@@ -286,9 +286,10 @@ function getExpiryBadge(detailsRaw, svc) {
 function shouldShowProviderContacts(role, unlocked) {
   const r = String(role || "").toLowerCase();
 
-  if (unlocked) return true;
+  if (r === "admin" || r === "provider") return true;
 
-  return r === "admin" || r === "provider" || r === "client_unlocked";
+  // клиент/гость/прочие — только после unlock
+  return unlocked === true;
 }
 
 /**
