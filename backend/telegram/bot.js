@@ -403,10 +403,10 @@ async function getLastBalanceOpsUnified(pool, clientId, limit = 5) {
 }
 
 // транзакция: если уже unlocked — не списываем повторно
-// транзакция: если уже unlocked — не списываем повторно
 async function unlockContactsForService(db, { clientId, serviceId }) {
   if (!db) return { ok: false, reason: "db_unavailable" };
 
+  // таблицы/индексы (желательно чтобы ensureUnlockTables создавал и UNIQUE)
   await ensureUnlockTables(db);
 
   const cid = Number(clientId);
@@ -417,7 +417,7 @@ async function unlockContactsForService(db, { clientId, serviceId }) {
   }
 
   try {
-    // 🔐 1. Проверяем услугу
+    // 🔐 1) Проверяем услугу
     const svc = await db.query(
       `SELECT id, provider_id, status
          FROM services
@@ -432,31 +432,29 @@ async function unlockContactsForService(db, { clientId, serviceId }) {
 
     const service = svc.rows[0];
 
+    // ⚠️ Если provider_id — это id провайдера, то сравнение с cid (client_id) бессмысленно.
+    // Оставляю как у тебя, но если хочешь — скажи, и я сделаю корректную проверку по telegram_chat_id/таблицам.
     if (service.provider_id === cid) {
       return { ok: false, reason: "own_service_unlock" };
     }
 
-    if (service.status !== "approved") {
+    if (String(service.status || "").toLowerCase() !== "approved") {
       return { ok: false, reason: "service_not_available" };
     }
 
-    // 🔐 2. Пытаемся создать unlock атомарно
-    const unlockInsert = await db.query(
-      `INSERT INTO client_service_contact_unlocks
-         (client_id, service_id, price_charged)
-       VALUES ($1,$2,$3)
-       ON CONFLICT (client_id, service_id)
-       DO NOTHING
-       RETURNING id`,
-      [cid, sid, CONTACT_UNLOCK_PRICE]
+    // ✅ 2) FAST-PATH: уже открыто?
+    const already = await db.query(
+      `SELECT 1
+         FROM client_service_contact_unlocks
+        WHERE client_id=$1 AND service_id=$2
+        LIMIT 1`,
+      [cid, sid]
     );
-
-    // уже открыто
-    if (!unlockInsert.rowCount) {
+    if (already.rowCount) {
       return { ok: true, already: true, charged: 0 };
     }
 
-    // 🔐 3. Блокируем баланс
+    // 🔒 3) Блокируем баланс клиента
     const bal = await db.query(
       `SELECT COALESCE(contact_balance,0) AS contact_balance
          FROM clients
@@ -466,15 +464,7 @@ async function unlockContactsForService(db, { clientId, serviceId }) {
     );
 
     const balance = Number(bal.rows?.[0]?.contact_balance || 0);
-
     if (balance < CONTACT_UNLOCK_PRICE) {
-      // откатываем unlock
-      await db.query(
-        `DELETE FROM client_service_contact_unlocks
-         WHERE client_id=$1 AND service_id=$2`,
-        [cid, sid]
-      );
-
       return {
         ok: false,
         reason: "no_balance",
@@ -483,29 +473,55 @@ async function unlockContactsForService(db, { clientId, serviceId }) {
       };
     }
 
-    // 🔐 4. Списываем баланс
-    await db.query(
+    // 🔐 4) Списываем баланс атомарно с предикатом (защита от гонок)
+    const upd = await db.query(
       `UPDATE clients
           SET contact_balance = COALESCE(contact_balance,0) - $2
-        WHERE id=$1`,
+        WHERE id=$1
+          AND COALESCE(contact_balance,0) >= $2`,
       [cid, CONTACT_UNLOCK_PRICE]
     );
 
-    // 🔐 5. Пишем ledger
+    if (!upd.rowCount) {
+      return {
+        ok: false,
+        reason: "no_balance",
+        balance,
+        need: CONTACT_UNLOCK_PRICE,
+      };
+    }
+
+    // 🧾 5) Пишем ledger (идемпотентно)
+    // ВАЖНО: чтобы ON CONFLICT работал, нужен UNIQUE индекс (см. SQL ниже).
+    try {
+      await db.query(
+        `INSERT INTO contact_balance_ledger
+          (client_id, amount, reason, service_id, source, meta)
+         VALUES
+          ($1,$2,$3,$4,$5,$6)
+         ON CONFLICT DO NOTHING`,
+        [
+          cid,
+          -CONTACT_UNLOCK_PRICE,
+          "unlock_contacts",
+          sid,
+          "bot",
+          { by: "bot", ref_type: "service_unlock", ref_id: sid },
+        ]
+      );
+    } catch (e) {
+      // если конфликтов нет из-за отсутствия индекса — это не 23505 и может выстрелить позже.
+      // тут оставляем проброс ошибок, кроме unique-viol.
+      if (String(e?.code) !== "23505") throw e;
+    }
+
+    // ✅ 6) Создаём unlock ПОСЛЕ списания (idempotent)
     await db.query(
-      `INSERT INTO contact_balance_ledger
-        (client_id, amount, reason, service_id, source, meta)
-       VALUES
-        ($1,$2,$3,$4,$5,$6)
-       ON CONFLICT DO NOTHING`,
-      [
-        cid,
-        -CONTACT_UNLOCK_PRICE,
-        "unlock_contacts",
-        sid,
-        "bot",
-        { by: "bot", ref_type: "service_unlock", ref_id: sid },
-      ]
+      `INSERT INTO client_service_contact_unlocks
+         (client_id, service_id, price_charged)
+       VALUES ($1,$2,$3)
+       ON CONFLICT (client_id, service_id) DO NOTHING`,
+      [cid, sid, CONTACT_UNLOCK_PRICE]
     );
 
     return {
@@ -515,6 +531,7 @@ async function unlockContactsForService(db, { clientId, serviceId }) {
     };
   } catch (e) {
     if (String(e?.code) === "23505") {
+      // на всякий случай (если где-то всё же есть уникальные конфликты)
       return { ok: true, already: true, charged: 0 };
     }
 
