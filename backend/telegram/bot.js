@@ -663,13 +663,16 @@ function signUnlock({ action, chatId, serviceId, ts }) {
  * u:<serviceId>:<chatId>:<ts>:<sig>
  */
 function buildUnlockCbData(chatId, serviceId) {
-  const action = "u";
-  const ts = cbNowSec();
-  const sid = Number(serviceId);
-  const cid = Number(chatId);
+  const ts = Math.floor(Date.now() / 1000);
 
-  const sig = TG_CALLBACK_SECRET ? signUnlock({ action, chatId: cid, serviceId: sid, ts }) : "dev";
-  return `${action}:${sid}:${cid}:${ts}:${sig}`;
+  const sig = signUnlock({
+    action: "u",
+    chatId: Number(chatId),
+    serviceId: Number(serviceId),
+    ts,
+  });
+
+  return `u:${serviceId}:${chatId}:${ts}:${sig}`;
 }
 
 /**
