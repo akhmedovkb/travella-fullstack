@@ -544,10 +544,26 @@ const priceKind =
   const badge = getExpiryBadge(d, svc);
   const badgeClean = badge ? String(badge).replace(/^⏳\s*/g, "").trim() : "";
 
+  /* ===================== PREMIUM helpers ===================== */
+
+  const labelLine = (icon, label, value) => {
+    const v = String(value ?? "").trim();
+    if (!v) return "";
+    return `${icon} <b>${escapeHtml(label)}</b>: ${escapeHtml(v)}`;
+  };
+  
+  // ⚠️ если value уже содержит HTML (например <a href="...">...</a>),
+  // используем эту версию — она НЕ экранирует value, но экранирует label.
+  const labelLineHtml = (icon, label, htmlValue) => {
+    const v = String(htmlValue ?? "").trim();
+    if (!v) return "";
+    return `${icon} <b>${escapeHtml(label)}</b>: ${v}`;
+  };
+
   const providerNameRaw = (svc.provider_name || "Поставщик").trim();
   const providerId = svc.provider_id || svc.providerId || svc.provider?.id || null;
   const providerProfileUrl = providerId ? `${SITE_URL}/profile/provider/${providerId}` : null;
-
+  
   const providerLine = providerProfileUrl
     ? labelLineHtml("🏢", "Поставщик", a(providerProfileUrl, providerNameRaw))
     : labelLine("🏢", "Поставщик", providerNameRaw);
@@ -565,22 +581,6 @@ const priceKind =
       );
     }
   }
-
-  /* ===================== PREMIUM helpers ===================== */
-
-  const labelLine = (icon, label, value) => {
-    const v = String(value ?? "").trim();
-    if (!v) return "";
-    return `${icon} <b>${escapeHtml(label)}</b>: ${escapeHtml(v)}`;
-  };
-  
-  // ⚠️ если value уже содержит HTML (например <a href="...">...</a>),
-  // используем эту версию — она НЕ экранирует value, но экранирует label.
-  const labelLineHtml = (icon, label, htmlValue) => {
-    const v = String(htmlValue ?? "").trim();
-    if (!v) return "";
-    return `${icon} <b>${escapeHtml(label)}</b>: ${v}`;
-  };
 
   const titleLine = (mode = "generic") => {
     const raw = String(svc.title || "").trim();
