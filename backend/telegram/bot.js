@@ -4416,7 +4416,7 @@ bot.start(async (ctx) => {
           
           const isRefused = String(category || "").startsWith("refused_");
           
-          const { text, photoUrl, serviceUrl } =
+          const { text, photoUrl, serviceUrl, kbExtra } =
             buildServiceMessage(svc, category, cardRole, {
               unlocked,
               isInline: false,
@@ -4458,6 +4458,10 @@ bot.start(async (ctx) => {
                 [{ text: "📩 Быстрый запрос", callback_data: `quick:${serviceId}` }],
               ],
             };
+          }
+
+          if (kbExtra?.inline_keyboard?.length) {
+            kb.inline_keyboard = [...kbExtra.inline_keyboard, ...(kb.inline_keyboard || [])];
           }
 
           if (photoUrl) {
@@ -5879,6 +5883,42 @@ bot.action(/^reqhist:(\d+)$/, async (ctx) => {
   } catch (e) {
     console.error("[tg-bot] reqhist action error:", e?.message || e);
     try { await ctx.answerCbQuery("Ошибка", { show_alert: true }); } catch {}
+  }
+});
+
+/* ===================== FLIGHT DETAILS (popup) ===================== */
+bot.action(/^fd:(\d+)$/, async (ctx) => {
+  try {
+    const serviceId = Number(ctx.match?.[1]);
+    if (!Number.isFinite(serviceId) || serviceId <= 0) {
+      await ctx.answerCbQuery("⚠️ Некорректная кнопка", { show_alert: true });
+      return;
+    }
+
+    // ⚠️ используем ту же функцию, которой ты уже получаешь услугу по id в этом файле
+    // (если у тебя она называется иначе — просто подставь существующее имя функции)
+    const svc = await fetchTelegramService(serviceId);
+
+    if (!svc) {
+      await ctx.answerCbQuery("⚠️ Услуга не найдена", { show_alert: true });
+      return;
+    }
+
+    const d = parseDetailsAny(svc.details);
+    const raw = String(d.flightDetails || "").trim();
+
+    if (!raw) {
+      await ctx.answerCbQuery("ℹ️ Детали рейса не указаны", { show_alert: true });
+      return;
+    }
+
+    // лимит alert — страхуемся
+    const msg = raw.length > 3500 ? raw.slice(0, 3500) + "…" : raw;
+    await ctx.answerCbQuery(msg, { show_alert: true });
+  } catch {
+    try {
+      await ctx.answerCbQuery("⚠️ Ошибка", { show_alert: true });
+    } catch {}
   }
 });
 
@@ -8210,7 +8250,7 @@ bot.on("inline_query", async (ctx) => {
           ? { forceRefused: true }
           : {};
       
-      const { text, photoUrl, serviceUrl } = buildServiceMessage(
+      const { text, photoUrl, serviceUrl, kbExtra } = buildServiceMessage(
         svc,
         svcCategory,
         cardRole,
