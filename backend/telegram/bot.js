@@ -454,7 +454,7 @@ async function getLastBalanceOpsUnified(pool, clientId, limit = 5) {
 async function unlockContactsForService(db, { clientId, serviceId }) {
   if (!db) return { ok: false, reason: "db_unavailable" };
 
-  // таблицы/индексы (желательно чтобы ensureUnlockTables создавал и UNIQUE)
+  // важно: ensureUnlockTables должен уметь работать с db (client) и с pool
   await ensureUnlockTables(db);
 
   const cid = Number(clientId);
@@ -464,127 +464,116 @@ async function unlockContactsForService(db, { clientId, serviceId }) {
     return { ok: false, reason: "bad_args" };
   }
 
+  const ALLOWED = new Set(["approved", "published", "active"]);
+
   try {
-    // 🔐 1) Проверяем услугу
-    const svc = await db.query(
+    // 1) проверяем услугу (и что она вообще доступна для клиентов)
+    const svcRes = await db.query(
       `SELECT id, provider_id, status
          FROM services
-        WHERE id=$1
+        WHERE id = $1
         LIMIT 1`,
       [sid]
     );
 
-    if (!svc.rowCount) {
+    if (!svcRes.rowCount) {
       return { ok: false, reason: "service_not_found" };
     }
 
-    const service = svc.rows[0];
+    const service = svcRes.rows[0];
+    const st = String(service.status || "").trim().toLowerCase();
 
-    // ⚠️ Если provider_id — это id провайдера, то сравнение с cid (client_id) бессмысленно.
-    // Оставляю как у тебя, но если хочешь — скажи, и я сделаю корректную проверку по telegram_chat_id/таблицам.
-    if (service.provider_id === cid) {
-      return { ok: false, reason: "own_service_unlock" };
+    // ✅ допускаем старые записи без status
+    if (st && !ALLOWED.has(st)) {
+      return { ok: false, reason: "service_not_available", status: service.status };
     }
 
-    if (String(service.status || "").toLowerCase() !== "approved") {
-      return { ok: false, reason: "service_not_available" };
-    }
-
-    // ✅ 2) FAST-PATH: уже открыто?
+    // 2) уже открыто? (идемпотентность)
     const already = await db.query(
       `SELECT 1
          FROM client_service_contact_unlocks
-        WHERE client_id=$1 AND service_id=$2
+        WHERE client_id = $1 AND service_id = $2
         LIMIT 1`,
       [cid, sid]
     );
+
     if (already.rowCount) {
       return { ok: true, already: true, charged: 0 };
     }
 
-    // 🔒 3) Блокируем баланс клиента
-    const bal = await db.query(
-      `SELECT COALESCE(contact_balance,0) AS contact_balance
+    // 3) лочим баланс клиента
+    const balRes = await db.query(
+      `SELECT COALESCE(contact_balance, 0) AS contact_balance
          FROM clients
-        WHERE id=$1
+        WHERE id = $1
         FOR UPDATE`,
       [cid]
     );
 
-    const balance = Number(bal.rows?.[0]?.contact_balance || 0);
+    const balance = Number(balRes.rows?.[0]?.contact_balance || 0);
+
     if (balance < CONTACT_UNLOCK_PRICE) {
-      return {
-        ok: false,
-        reason: "no_balance",
-        balance,
-        need: CONTACT_UNLOCK_PRICE,
-      };
+      return { ok: false, reason: "no_balance", balance, need: CONTACT_UNLOCK_PRICE };
     }
 
-    // 🔐 4) Списываем баланс атомарно с предикатом (защита от гонок)
+    // 4) создаём unlock (уникально)
+    const ins = await db.query(
+      `INSERT INTO client_service_contact_unlocks (client_id, service_id, price_charged)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (client_id, service_id) DO NOTHING
+       RETURNING id`,
+      [cid, sid, CONTACT_UNLOCK_PRICE]
+    );
+
+    if (!ins.rowCount) {
+      // кто-то уже успел вставить (или повторный клик)
+      return { ok: true, already: true, charged: 0 };
+    }
+
+    // 5) списываем баланс атомарно (страховка)
     const upd = await db.query(
       `UPDATE clients
           SET contact_balance = COALESCE(contact_balance,0) - $2
-        WHERE id=$1
-          AND COALESCE(contact_balance,0) >= $2`,
+        WHERE id = $1
+          AND COALESCE(contact_balance,0) >= $2
+       RETURNING contact_balance`,
       [cid, CONTACT_UNLOCK_PRICE]
     );
 
     if (!upd.rowCount) {
-      return {
-        ok: false,
-        reason: "no_balance",
-        balance,
-        need: CONTACT_UNLOCK_PRICE,
-      };
-    }
-
-    // 🧾 5) Пишем ledger (идемпотентно)
-    // ВАЖНО: чтобы ON CONFLICT работал, нужен UNIQUE индекс (см. SQL ниже).
-    try {
+      // откатываем unlock
       await db.query(
-        `INSERT INTO contact_balance_ledger
-          (client_id, amount, reason, service_id, source, meta)
-         VALUES
-          ($1,$2,$3,$4,$5,$6)
-         ON CONFLICT DO NOTHING`,
-        [
-          cid,
-          -CONTACT_UNLOCK_PRICE,
-          "unlock_contacts",
-          sid,
-          "bot",
-          { by: "bot", ref_type: "service_unlock", ref_id: sid },
-        ]
+        `DELETE FROM client_service_contact_unlocks
+          WHERE client_id = $1 AND service_id = $2`,
+        [cid, sid]
       );
-    } catch (e) {
-      // если конфликтов нет из-за отсутствия индекса — это не 23505 и может выстрелить позже.
-      // тут оставляем проброс ошибок, кроме unique-viol.
-      if (String(e?.code) !== "23505") throw e;
+
+      return { ok: false, reason: "no_balance", balance, need: CONTACT_UNLOCK_PRICE };
     }
 
-    // ✅ 6) Создаём unlock ПОСЛЕ списания (idempotent)
+    // 6) пишем ledger (один раз, потому что unlock уникальный)
     await db.query(
-      `INSERT INTO client_service_contact_unlocks
-         (client_id, service_id, price_charged)
-       VALUES ($1,$2,$3)
-       ON CONFLICT (client_id, service_id) DO NOTHING`,
-      [cid, sid, CONTACT_UNLOCK_PRICE]
+      `INSERT INTO contact_balance_ledger
+         (client_id, amount, reason, service_id, source, meta)
+       VALUES
+         ($1, $2, $3, $4, $5, $6)`,
+      [
+        cid,
+        -CONTACT_UNLOCK_PRICE,
+        "unlock_contacts",
+        sid,
+        "bot",
+        { by: "bot", ref_type: "service_unlock", ref_id: sid },
+      ]
     );
 
-    return {
-      ok: true,
-      already: false,
-      charged: CONTACT_UNLOCK_PRICE,
-    };
+    return { ok: true, already: false, charged: CONTACT_UNLOCK_PRICE };
   } catch (e) {
     if (String(e?.code) === "23505") {
-      // на всякий случай (если где-то всё же есть уникальные конфликты)
       return { ok: true, already: true, charged: 0 };
     }
-
-    console.error("[unlockContactsForService] error:", e?.message || e);
-    throw e;
+    console.error("[tg-bot] unlockContactsForService error:", e?.message || e);
+    throw e; // важно для rollback в withServiceLock
   }
 }
 
