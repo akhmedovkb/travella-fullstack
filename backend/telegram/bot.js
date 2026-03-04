@@ -8282,11 +8282,12 @@ bot.on("inline_query", async (ctx) => {
           ? { forceRefused: true }
           : {};
       
-      const { text, photoUrl, serviceUrl, kbExtra } = buildServiceMessage(
+      buildServiceMessage(
         svc,
         svcCategory,
         cardRole,
-        { ...cardOptions, unlocked: roleForInline === "client" ? !!canSeeContacts : false }
+        // 🔒 В INLINE НИКОГДА не вшиваем контакты в текст (иначе их увидит весь чат)
+        { ...cardOptions, unlocked: false }
       );
 
       let textFinal = text;
@@ -8298,23 +8299,30 @@ bot.on("inline_query", async (ctx) => {
 
       const manageUrl = `${SITE_URL}/dashboard?from=tg&service=${svc.id}`;
 
-      // 🔒 До оплаты — только unlock. После оплаты — "Подробнее" + "Быстрый запрос".
+      // 🔒 INLINE-безопасность: в чатах нельзя делать unlock callback'ом
+      // вместо этого отправляем человека в ЛС боту по deep-link, где уже можно unlock'нуть безопасно
+      const deepLink =
+        BOT_USERNAME
+          ? `https://t.me/${BOT_USERNAME}?start=refused_${svc.id}`
+          : `${SITE_URL}/?service=${svc.id}`;
+      
       let keyboardForClient = canSeeContacts
         ? {
             inline_keyboard: [
               [
+                { text: "👤 Контакты в боте", url: deepLink },          // только в ЛС
                 { text: "Подробнее на сайте", url: serviceUrl },
-                { text: "📩 Быстрый запрос", callback_data: `request:${svc.id}` },
+              ],
+              [
+                { text: "📩 Быстрый запрос", callback_data: `request:${svc.id}` }, // это ок (не раскрывает контакты)
               ],
             ],
           }
         : {
             inline_keyboard: [
               [
-                {
-                  text: "🔓 Открыть контакты (10 000 сум)",
-                  callback_data: buildUnlockCbData(ctx.from.id, svc.id),
-                },
+                { text: "🔓 Открыть в боте", url: deepLink },            // только в ЛС
+                { text: "Подробнее на сайте", url: serviceUrl },
               ],
             ],
           };
