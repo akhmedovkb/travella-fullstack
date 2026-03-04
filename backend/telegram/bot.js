@@ -889,8 +889,10 @@ async function refreshUnlockedCard(ctx, serviceId) {
   const svc = data.service;
   const category = String(svc.category || "").toLowerCase();
 
+  const isUnlocked = data?.unlocked === true;
+  
   const { text, photoUrl, serviceUrl, kbExtra } =
-    buildServiceMessage(svc, category, "client", { unlocked: true });
+    buildServiceMessage(svc, category, "client", { unlocked: isUnlocked });
   
   let kb = {
     inline_keyboard: [
@@ -4417,17 +4419,17 @@ bot.start(async (ctx) => {
           }
 
           // buildServiceMessage у тебя уже есть в bot.js (ты его используешь для карточек)
-          const cardRole =
-            role === "client" ? (unlocked ? "client_unlocked" : "client_public") : role;
+        const cardRole = role === "client" ? "client" : role;
+
           
-          const isRefused = String(category || "").startsWith("refused_");
+        const isRefused = String(category || "").startsWith("refused_");
           
-          const { text, photoUrl, serviceUrl, kbExtra } =
-            buildServiceMessage(svc, category, cardRole, {
-              unlocked,
-              isInline: false,
-              forceRefused: isRefused,
-            });
+        const { text, photoUrl, serviceUrl, kbExtra } =
+          buildServiceMessage(svc, category, cardRole, {
+            unlocked,
+            isInline: false,
+            forceRefused: isRefused,
+          });
           
           let textFinal = text;
           let kb = { inline_keyboard: [] };
@@ -8245,11 +8247,8 @@ bot.on("inline_query", async (ctx) => {
           : false;
 
       // ✅ КЛЮЧЕВОЕ: telegramServiceCard должен получить client_unlocked, иначе в тексте будет "🔒 скрыт"
-      const cardRole =
-        roleForInline === "client"
-          ? (canSeeContacts ? "client_unlocked" : "client")
-          : roleForInline;
-
+      const cardRole = roleForInline === "client" ? "client" : roleForInline;
+      
       const cardOptions =
         roleForInline === "provider" && !isMy
           ? { forceRefused: true }
@@ -8259,7 +8258,7 @@ bot.on("inline_query", async (ctx) => {
         svc,
         svcCategory,
         cardRole,
-        cardOptions
+        { ...cardOptions, unlocked: roleForInline === "client" ? !!canSeeContacts : false }
       );
 
       let textFinal = text;
