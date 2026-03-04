@@ -424,9 +424,7 @@ function guessRefusedCategory(details) {
 
 function buildServiceMessage(svc, category, role = "client", options = {}) {
   const d = parseDetailsAny(svc.details);
-  const unlocked =
-  options?.unlocked === true ||
-  String(role || "").toLowerCase() === "client_unlocked";
+  const unlocked = options?.unlocked === true;
 
   const newBadge = options?.newBadge === true;
 
