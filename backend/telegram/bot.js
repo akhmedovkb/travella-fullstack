@@ -214,14 +214,18 @@ function buildPaymeCheckoutUrl({ merchantId, checkoutBase, orderId, amountTiyin,
 
 // Создаём таблицы (на всякий случай), но SQL миграцию всё равно лучше прогнать отдельно
 let _unlockTablesReady = false;
+
 async function ensureUnlockTables(pool) {
   if (!pool || _unlockTablesReady) return;
+
   try {
+    // 1) баланс клиента
     await pool.query(`
       ALTER TABLE clients
         ADD COLUMN IF NOT EXISTS contact_balance INTEGER NOT NULL DEFAULT 0;
     `);
 
+    // 2) таблица unlock (у тебя уже была)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS client_service_contact_unlocks (
         id BIGSERIAL PRIMARY KEY,
@@ -233,8 +237,52 @@ async function ensureUnlockTables(pool) {
       );
     `);
 
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_cs_unlocks_client ON client_service_contact_unlocks(client_id);`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_cs_unlocks_service ON client_service_contact_unlocks(service_id);`);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_cs_unlocks_client
+      ON client_service_contact_unlocks(client_id);
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_cs_unlocks_service
+      ON client_service_contact_unlocks(service_id);
+    `);
+
+    // 3) ledger таблица (если уже есть — просто ничего не сделает)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS contact_balance_ledger (
+        id BIGSERIAL PRIMARY KEY,
+        client_id BIGINT NOT NULL,
+        amount INTEGER NOT NULL,
+        reason TEXT NOT NULL,
+        service_id BIGINT,
+        source TEXT,
+        meta JSONB,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_contact_ledger_client
+      ON contact_balance_ledger(client_id);
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_contact_ledger_service
+      ON contact_balance_ledger(service_id);
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_contact_ledger_reason
+      ON contact_balance_ledger(reason);
+    `);
+
+    // ✅ ВАЖНО: bank-grade идемпотентность списания unlock
+    // один unlock = одно списание (client_id, service_id, reason='unlock_contacts')
+    await pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS ux_contact_ledger_unlock_once
+      ON contact_balance_ledger (client_id, service_id, reason)
+      WHERE reason = 'unlock_contacts';
+    `);
 
     _unlockTablesReady = true;
   } catch (e) {
