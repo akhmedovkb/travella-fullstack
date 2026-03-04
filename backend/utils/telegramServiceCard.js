@@ -795,6 +795,8 @@ const priceKind =
       const dv = `${dates}${nights ? ` (${nights} ноч.)` : ""}`;
       parts.push(labelLine("🗓", "Даты", dv));
     }
+    const flightDetails = norm(d.flightDetails);
+    if (flightDetails) parts.push(labelLine("ℹ️", "Детали рейса", "нажмите кнопку ниже"));
 
     if (hotel) parts.push(labelLine("🏨", "Отель", hotel));
 
@@ -834,7 +836,11 @@ const priceKind =
     pushDivider(parts);
     parts.push(`👉 Подробнее и бронирование: ${a(serviceUrl, "открыть")}`);
 
-    return { text: parts.join("\n"), photoUrl: getFirstImageUrl(svc), serviceUrl };
+    const kbExtra = flightDetails
+      ? { inline_keyboard: [[{ text: "ℹ️ Детали рейса", callback_data: `fd:${serviceId}` }]] }
+      : null;
+    
+    return { text: parts.join("\n"), photoUrl: getFirstImageUrl(svc), serviceUrl, kbExtra };
   }
 
   if ((role !== "provider" || options?.forceRefused === true) && String(category) === "refused_hotel") {
@@ -934,9 +940,7 @@ const priceKind =
     if (airline) parts.push(labelLine("🛫", "Авиакомпания", airline, false));
 
     const flightDetails = norm(d.flightDetails);
-    if (flightDetails) {
-      parts.push(labelLine("📝", "Детали рейса", "скрыты"));
-    }
+    if (flightDetails) parts.push(labelLine("📝", "Детали рейса", "нажмите кнопку ниже"));
 
     if (priceWithCur != null && String(priceWithCur).trim()) {
       parts.push(`💸 <b>Цена</b>: ${escapeHtml(String(priceWithCur))} (${priceKind})`);
@@ -957,7 +961,11 @@ const priceKind =
     pushDivider(parts);
     parts.push(`👉 Подробнее и бронирование: ${a(serviceUrl, "открыть")}`);
 
-    return { text: parts.join("\n"), photoUrl: getFirstImageUrl(svc), serviceUrl };
+    const kbExtra = flightDetails
+      ? { inline_keyboard: [[{ text: "ℹ️ Детали рейса", callback_data: `fd:${serviceId}` }]] }
+      : null;
+    
+    return { text: parts.join("\n"), photoUrl: getFirstImageUrl(svc), serviceUrl, kbExtra };
   }
 
     if (
