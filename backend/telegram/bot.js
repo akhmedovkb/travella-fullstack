@@ -8307,17 +8307,23 @@ bot.on("inline_query", async (ctx) => {
           ? { forceRefused: true }
           : {};
       
-      buildServiceMessage(
+      const built = buildServiceMessage(
         svc,
         svcCategory,
         cardRole,
         // 🔒 В INLINE НИКОГДА не вшиваем контакты в текст (иначе их увидит весь чат)
         { ...cardOptions, unlocked: false }
       );
-
-      let textFinal = text;
+      
+      // ✅ НИКОГДА не используем голые переменные text/serviceUrl/photoUrl/kbExtra
+      const builtText = String(built?.text || "");
+      const photoUrl = built?.photoUrl || null;
+      const serviceUrl = built?.serviceUrl || `${SITE_URL}/service/${svc.id}`;
+      const kbExtra = built?.kbExtra || null;
+      
+      let textFinal = builtText;
       if (roleForInline === "client" && !canSeeContacts) {
-        textFinal = stripLockedLinks(text);
+        textFinal = stripLockedLinks(builtText);
       }
 
       const description = buildInlineDescription(svc, svcCategory, cardRole);
