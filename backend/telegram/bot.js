@@ -16,7 +16,7 @@ const { buildServiceMessage } = require("../utils/telegramServiceCard");
 const OFFER_VERSION = process.env.OFFER_VERSION || "v1.0";
 const CALLBACK_SECRET = (process.env.TG_CALLBACK_SECRET || "").trim();
 // TTL подписи кнопок (сек)
-const CALLBACK_TTL_SEC = Number(process.env.TG_CALLBACK_TTL_SEC || 900); // 15 минут
+const CALLBACK_TTL_SEC = Number(process.env.TG_CALLBACK_TTL_SEC || 180); // 15 минут
 const CLIENT_TOKEN = process.env.TELEGRAM_CLIENT_BOT_TOKEN || "";
 if (!CLIENT_TOKEN) {
   throw new Error(
