@@ -8271,7 +8271,7 @@ bot.on("inline_query", async (ctx) => {
       const manageUrl = `${SITE_URL}/dashboard?from=tg&service=${svc.id}`;
 
       // 🔒 До оплаты — только unlock. После оплаты — "Подробнее" + "Быстрый запрос".
-      const keyboardForClient = canSeeContacts
+      let keyboardForClient = canSeeContacts
         ? {
             inline_keyboard: [
               [
@@ -8290,6 +8290,14 @@ bot.on("inline_query", async (ctx) => {
               ],
             ],
           };
+      
+      // ➜ добавляем кнопку "Детали рейса"
+      if (kbExtra?.inline_keyboard?.length) {
+        keyboardForClient.inline_keyboard = [
+          ...kbExtra.inline_keyboard,
+          ...keyboardForClient.inline_keyboard,
+        ];
+      }
 
       const keyboardForMy = {
         inline_keyboard: [[{ text: "🌐 Открыть в кабинете", url: manageUrl }]],
