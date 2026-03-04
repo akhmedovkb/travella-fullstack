@@ -769,6 +769,9 @@ const priceKind =
     parts.push(priceDrop.header);
     parts.push(priceDrop.diffLine);
   };
+  const pushDivider = (parts) => {
+    if (parts.length && parts[parts.length - 1] !== "") parts.push("");
+  };
 
   /* ===================== SPECIAL TEMPLATES ===================== */
 
@@ -803,7 +806,7 @@ const priceKind =
     const roomCat = norm(roomCatClean);
     parts.push(labelLine("🛏", "Категория номера", roomCat || "—"));
     
-    if (accommodation) parts.push(labelLine("👥", "Размещение", accommodation, false));
+    if (accommodation) parts.push(labelLine("👥", "Размещение", accommodation));
 
     const foodPretty = foodLabel(d.food);
     parts.push(labelLine("🍽", "Питание", foodPretty || "—"));
@@ -863,7 +866,7 @@ const priceKind =
     const roomCat = norm(roomCatClean);
     parts.push(labelLine("🛏", "Категория номера", roomCat || "—", false));
     
-    if (accommodation) parts.push(labelLine("👥", "Размещение", accommodation, false));
+    if (accommodation) parts.push(labelLine("👥", "Размещение", accommodation));
     
     const foodPretty = foodLabel(d.food);
     const halalTag = foodPretty && d.halal ? " • Halal" : "";
