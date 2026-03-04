@@ -407,94 +407,73 @@ async function getLastBalanceOpsUnified(pool, clientId, limit = 5) {
 async function unlockContactsForService(db, { clientId, serviceId }) {
   if (!db) return { ok: false, reason: "db_unavailable" };
 
-  // таблицы гарантируем через pool (вне транзакции допустимо)
-  await ensureUnlockTables(pool);
+  await ensureUnlockTables(db);
 
   const cid = Number(clientId);
   const sid = Number(serviceId);
+
   if (!Number.isFinite(cid) || cid <= 0 || !Number.isFinite(sid) || sid <= 0) {
     return { ok: false, reason: "bad_args" };
   }
 
   try {
-    // уже открывали?
-    const ex = await db.query(
-      `SELECT id
-         FROM client_service_contact_unlocks
-        WHERE client_id=$1 AND service_id=$2
+    // 🔐 1. Проверяем услугу
+    const svc = await db.query(
+      `SELECT id, provider_id, status
+         FROM services
+        WHERE id=$1
         LIMIT 1`,
-      [cid, sid]
+      [sid]
     );
-    if (ex.rowCount) {
+
+    if (!svc.rowCount) {
+      return { ok: false, reason: "service_not_found" };
+    }
+
+    const service = svc.rows[0];
+
+    if (service.provider_id === cid) {
+      return { ok: false, reason: "own_service_unlock" };
+    }
+
+    if (service.status !== "approved") {
+      return { ok: false, reason: "service_not_available" };
+    }
+
+    // 🔐 2. Пытаемся создать unlock атомарно
+    const unlockInsert = await db.query(
+      `INSERT INTO client_service_contact_unlocks
+         (client_id, service_id, price_charged)
+       VALUES ($1,$2,$3)
+       ON CONFLICT (client_id, service_id)
+       DO NOTHING
+       RETURNING id`,
+      [cid, sid, CONTACT_UNLOCK_PRICE]
+    );
+
+    // уже открыто
+    if (!unlockInsert.rowCount) {
       return { ok: true, already: true, charged: 0 };
     }
 
-    // блокируем баланс
+    // 🔐 3. Блокируем баланс
     const bal = await db.query(
-      `SELECT COALESCE(contact_balance, 0) AS contact_balance
+      `SELECT COALESCE(contact_balance,0) AS contact_balance
          FROM clients
         WHERE id=$1
         FOR UPDATE`,
       [cid]
     );
+
     const balance = Number(bal.rows?.[0]?.contact_balance || 0);
 
     if (balance < CONTACT_UNLOCK_PRICE) {
-      return { ok: false, reason: "no_balance", balance, need: CONTACT_UNLOCK_PRICE };
-    }
-
-    // 🔐 1) Пишем ledger (идемпотентно)
-    let ledgerInserted = false;
-
-    try {
+      // откатываем unlock
       await db.query(
-        `
-        INSERT INTO contact_balance_ledger
-          (client_id, amount, reason, service_id, source, meta)
-        VALUES
-          ($1, $2, $3, $4, $5, $6)
-        `,
-        [
-          cid,
-          -CONTACT_UNLOCK_PRICE,
-          "unlock_contacts",
-          sid,
-          "bot",
-          { by: "bot", ref_type: "service_unlock", ref_id: sid },
-        ]
+        `DELETE FROM client_service_contact_unlocks
+         WHERE client_id=$1 AND service_id=$2`,
+        [cid, sid]
       );
-      ledgerInserted = true;
-    } catch (e) {
-      if (String(e?.code) === "23505") {
-        // уже списывали ранее (повтор не списываем)
-        return { ok: true, already: true, charged: 0 };
-      }
-      throw e;
-    }
-
-    // 🔐 2) Списываем баланс атомарно
-    const upd = await db.query(
-      `UPDATE clients
-          SET contact_balance = COALESCE(contact_balance,0) - $2
-        WHERE id=$1
-          AND COALESCE(contact_balance,0) >= $2`,
-      [cid, CONTACT_UNLOCK_PRICE]
-    );
-
-    if (!upd.rowCount) {
-      // 🔁 откатываем ledger, если баланс не прошёл
-      if (ledgerInserted) {
-        await db.query(
-          `
-          DELETE FROM contact_balance_ledger
-          WHERE client_id = $1
-            AND service_id = $2
-            AND reason = 'unlock_contacts'
-            AND source = 'bot'
-          `,
-          [cid, sid]
-        );
-      }
 
       return {
         ok: false,
@@ -504,20 +483,43 @@ async function unlockContactsForService(db, { clientId, serviceId }) {
       };
     }
 
-    // ✅ 3) пишем unlock (idempotent по unique)
+    // 🔐 4. Списываем баланс
     await db.query(
-      `INSERT INTO client_service_contact_unlocks (client_id, service_id, price_charged)
-       VALUES ($1,$2,$3)`,
-      [cid, sid, CONTACT_UNLOCK_PRICE]
+      `UPDATE clients
+          SET contact_balance = COALESCE(contact_balance,0) - $2
+        WHERE id=$1`,
+      [cid, CONTACT_UNLOCK_PRICE]
     );
 
-    return { ok: true, already: false, charged: CONTACT_UNLOCK_PRICE };
+    // 🔐 5. Пишем ledger
+    await db.query(
+      `INSERT INTO contact_balance_ledger
+        (client_id, amount, reason, service_id, source, meta)
+       VALUES
+        ($1,$2,$3,$4,$5,$6)
+       ON CONFLICT DO NOTHING`,
+      [
+        cid,
+        -CONTACT_UNLOCK_PRICE,
+        "unlock_contacts",
+        sid,
+        "bot",
+        { by: "bot", ref_type: "service_unlock", ref_id: sid },
+      ]
+    );
+
+    return {
+      ok: true,
+      already: false,
+      charged: CONTACT_UNLOCK_PRICE,
+    };
   } catch (e) {
-    if (String(e?.code || "") === "23505") {
+    if (String(e?.code) === "23505") {
       return { ok: true, already: true, charged: 0 };
     }
-    console.error("[tg-bot] unlockContactsForService error:", e?.message || e);
-    throw e; // важно: пусть withServiceLock сделает ROLLBACK
+
+    console.error("[unlockContactsForService] error:", e?.message || e);
+    throw e;
   }
 }
 
