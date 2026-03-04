@@ -452,13 +452,13 @@ async function getLastBalanceOpsUnified(pool, clientId, limit = 5) {
 
 // транзакция: если уже unlocked — не списываем повторно
 async function unlockContactsForService(pool, clientId, serviceId, price) {
-  const client = await pool.connect();
+  const db = await pool.connect();
 
   try {
-    await client.query("BEGIN");
+    await db.query("BEGIN");
 
-    // 🛡 advisory lock (race protection)
-    await client.query(
+    // 🛡 advisory lock — защита от гонок
+    await db.query(
       `
       SELECT pg_advisory_xact_lock(
         hashtext('unlock:' || $1::text || ':' || $2::text)
@@ -467,8 +467,8 @@ async function unlockContactsForService(pool, clientId, serviceId, price) {
       [clientId, serviceId]
     );
 
-    // проверяем баланс
-    const balRes = await client.query(
+    // 🔒 блокируем строку клиента
+    const balRes = await db.query(
       `
       SELECT contact_balance
       FROM clients
@@ -488,26 +488,26 @@ async function unlockContactsForService(pool, clientId, serviceId, price) {
       throw new Error("INSUFFICIENT_BALANCE");
     }
 
-    // идемпотентный unlock
-    const unlockRes = await client.query(
+    // 🧾 идемпотентный unlock
+    const unlockRes = await db.query(
       `
       INSERT INTO client_service_contact_unlocks
       (client_id, service_id, price_charged)
-      VALUES ($1, $2, $3)
+      VALUES ($1,$2,$3)
       ON CONFLICT (client_id, service_id) DO NOTHING
       RETURNING id
     `,
       [clientId, serviceId, price]
     );
 
-    // если уже был unlock — просто возвращаем success
+    // если уже unlock был
     if (!unlockRes.rows.length) {
-      await client.query("ROLLBACK");
+      await db.query("ROLLBACK");
       return { alreadyUnlocked: true };
     }
 
-    // списываем баланс
-    await client.query(
+    // 💰 списываем баланс
+    await db.query(
       `
       UPDATE clients
       SET contact_balance = contact_balance - $1
@@ -516,24 +516,29 @@ async function unlockContactsForService(pool, clientId, serviceId, price) {
       [price, clientId]
     );
 
-    // ledger
-    await client.query(
+    // 📒 ledger
+    await db.query(
       `
       INSERT INTO contact_balance_ledger
       (client_id, amount, reason, service_id, source)
-      VALUES ($1, $2, 'unlock_contact', $3, 'telegram')
+      VALUES ($1,$2,'unlock_contact',$3,'telegram')
     `,
       [clientId, -price, serviceId]
     );
 
-    await client.query("COMMIT");
+    await db.query("COMMIT");
 
     return { success: true };
-  } catch (err) {
-    await client.query("ROLLBACK");
-    throw err;
+
+  } catch (e) {
+
+    await db.query("ROLLBACK");
+    throw e;
+
   } finally {
-    client.release();
+
+    db.release();
+
   }
 }
 
