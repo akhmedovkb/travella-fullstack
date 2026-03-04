@@ -4424,7 +4424,6 @@ bot.start(async (ctx) => {
             buildServiceMessage(svc, category, cardRole, {
               unlocked,
               isInline: false,
-              // ✅ заставляем использовать унифицированные refused-шаблоны даже для provider
               forceRefused: isRefused,
             });
           
@@ -4463,8 +4462,8 @@ bot.start(async (ctx) => {
               ],
             };
           }
-
-          if (kbExtra?.inline_keyboard?.length) {
+          // ✅ добавляем кнопку "✈️ Детали рейса" ТОЛЬКО если контакты доступны (unlocked / provider / admin)
+          if ((role !== "client" || unlocked) && kbExtra?.inline_keyboard?.length) {
             kb.inline_keyboard = [...kbExtra.inline_keyboard, ...(kb.inline_keyboard || [])];
           }
 
