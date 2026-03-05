@@ -377,6 +377,7 @@ async function creditLedgerOnceTx(client, { clientId, amountTiyin, orderId, paym
 }
 
 async function debitLedgerOnceTx(client, { clientId, amountTiyin, orderId, paymeId, reasonCode }) {
+  const refundPaymeId = `${String(paymeId)}_refund`;
   const amt = Number(amountTiyin);
   if (!Number.isFinite(amt) || amt <= 0) throw new Error("debitLedgerOnceTx: bad amountTiyin");
 
@@ -394,7 +395,7 @@ async function debitLedgerOnceTx(client, { clientId, amountTiyin, orderId, payme
         AND meta->>'order_id' = $2
       LIMIT 1
       `,
-      [String(paymeId), String(orderId)]
+      [String(refundPaymeId), String(orderId)]
     );
     if (ex.length) return;
   }
@@ -408,7 +409,8 @@ async function debitLedgerOnceTx(client, { clientId, amountTiyin, orderId, payme
 
   if (cols.has("meta")) {
     row.meta = {
-      payme_id: String(paymeId),
+      payme_id: String(refundPaymeId),
+      original_payme_id: String(paymeId),
       order_id: String(orderId),
       kind: "refund",
       reason_code: Number.isFinite(Number(reasonCode)) ? Number(reasonCode) : null,
