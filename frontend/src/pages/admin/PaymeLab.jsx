@@ -65,7 +65,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
   const [amount, setAmount] = useState("100000"); // tiyins
   const [paymeId, setPaymeId] = useState(makeNewTxId());
 
-  // keep last seed id separately (for "use selected tx_id")
+  // last selected payme id from Health
   const [seedPaymeId, setSeedPaymeId] = useState("");
 
   // tx id mode:
@@ -104,25 +104,24 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
     if (s.paymeId) setSeedPaymeId(String(s.paymeId));
     else setSeedPaymeId("");
 
-    // If mode == seed, follow selected id
-    if (txMode === "seed") {
-      if (s.paymeId) setPaymeId(String(s.paymeId));
+    // If currently in seed-mode, follow selected tx_id
+    if (txMode === "seed" && s.paymeId) {
+      setPaymeId(String(s.paymeId));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seed?.orderId, seed?.amount, seed?.paymeId]);
 
-  // When user switches txMode
+  // If user switches txMode manually
   useEffect(() => {
     if (txMode === "seed") {
-      if (seedPaymeId) {
-        setPaymeId(seedPaymeId);
-      } else {
+      if (seedPaymeId) setPaymeId(seedPaymeId);
+      else {
         tError("Нет выбранного tx_id из Health");
         setTxMode("new");
       }
     }
     if (txMode === "new") {
-      // if current equals seedPaymeId — generate new to prevent accidental Create reuse
+      // if accidentally equals seed -> create a fresh one
       if (seedPaymeId && paymeId === seedPaymeId) {
         setPaymeId(makeNewTxId());
       }
@@ -165,6 +164,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
     return true;
   }
 
+  // ---- RPC runner ----
   async function run(method, params) {
     setBusy(true);
     try {
@@ -199,6 +199,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
     }
   }
 
+  // ---- Builders ----
   function buildCheck() {
     return { amount: parsed.amount, account: { order_id: parsed.orderId } };
   }
@@ -225,26 +226,57 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
     };
   }
 
-  function ensureNewModeForCreate() {
+  // ---- BANK-GRADE GUARD RAILS ----
+  function switchToSeedOrFail() {
+    if (!seedPaymeId) {
+      tError("Нет выбранного tx_id из Health. Открой транзакцию в Health → Open in Lab.");
+      return false;
+    }
+    if (txMode !== "seed") setTxMode("seed");
+    if (paymeId !== seedPaymeId) setPaymeId(seedPaymeId);
+    return true;
+  }
+
+  function switchToNewEnsuringFreshTxId() {
+    if (txMode !== "new") setTxMode("new");
+    // if current equals seed or empty -> generate fresh
+    if (!paymeId || (seedPaymeId && paymeId === seedPaymeId)) {
+      setPaymeId(makeNewTxId());
+      return true;
+    }
+    return true;
+  }
+
+  function ensureCreateSafeOrFix() {
+    // Always run Create only in NEW mode, and never with seed tx id.
+    switchToNewEnsuringFreshTxId();
+    // After setState, paymeId updates async; but guard rail still helps user.
+    // We additionally hard-check current values.
     if (txMode === "seed") {
-      tError("Для Create переключись на Use new tx_id");
+      tError("Create запрещён в режиме selected tx_id (seed). Переключил на new.");
+      return false;
+    }
+    if (!paymeId) {
+      tError("tx_id пуст. Нажми Generate new tx_id.");
+      return false;
+    }
+    if (seedPaymeId && paymeId === seedPaymeId) {
+      tError("tx_id совпал с выбранным (seed). Нажми Generate new tx_id.");
       return false;
     }
     return true;
   }
 
-  // ---- Quick actions (single-step / 2-step) ----
+  // ---- Quick actions ----
   async function runCreateOnly() {
     if (!canRunBasic()) return tError("Заполни order_id и amount");
-    if (!parsed.paymeId) return tError("Нужен tx_id");
-    if (!ensureNewModeForCreate()) return;
+    if (!ensureCreateSafeOrFix()) return;
     await run("CreateTransaction", buildCreate());
   }
 
   async function runCreateAndPerform() {
     if (!canRunBasic()) return tError("Заполни order_id и amount");
-    if (!parsed.paymeId) return tError("Нужен tx_id");
-    if (!ensureNewModeForCreate()) return;
+    if (!ensureCreateSafeOrFix()) return;
 
     const ok2 = await run("CreateTransaction", buildCreate());
     if (!ok2) return;
@@ -257,8 +289,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
     const ok1 = await run("CheckPerformTransaction", buildCheck());
     if (!ok1) return;
 
-    if (!parsed.paymeId) return tError("Нужен tx_id");
-    if (!ensureNewModeForCreate()) return;
+    if (!ensureCreateSafeOrFix()) return;
 
     const ok2 = await run("CreateTransaction", buildCreate());
     if (!ok2) return;
@@ -266,29 +297,28 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
     await run("PerformTransaction", buildPerform());
   }
 
-  // ---- Scenario presets (bank-grade sequences) ----
+  // ---- Scenario presets (bank-grade) ----
   async function scenarioReconcileStatement() {
-    // GetStatement only (safe)
     await run("GetStatement", buildStatement());
   }
 
   async function scenarioCancelSelectedThenStatement() {
-    // cancel existing tx (recommended txMode=seed) -> statement
+    // auto switch to seed and set seed tx_id
+    if (!switchToSeedOrFail()) return;
     if (!canRunIdOnly()) return tError("Нужен tx_id");
-    if (txMode !== "seed") {
-      // not hard block, but warn
-      tError("Рекомендуется Use selected tx_id для отмены существующей транзакции");
-    }
     const ok = await run("CancelTransaction", buildCancel());
     if (!ok) return;
     await run("GetStatement", buildStatement());
+    tSuccess("Scenario: Cancel selected → Statement done");
   }
 
   async function scenarioHappyPathNewPayment() {
-    // Check -> Create -> Perform -> Statement (requires new tx_id)
+    // auto: switch new + ensure fresh tx_id
     if (!canRunBasic()) return tError("Заполни order_id и amount");
-    if (!parsed.paymeId) return tError("Нужен tx_id");
-    if (!ensureNewModeForCreate()) return;
+
+    switchToNewEnsuringFreshTxId();
+    // hard guard
+    if (!ensureCreateSafeOrFix()) return;
 
     const ok1 = await run("CheckPerformTransaction", buildCheck());
     if (!ok1) return;
@@ -300,14 +330,15 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
     if (!ok3) return;
 
     await run("GetStatement", buildStatement());
-    tSuccess("Scenario: Happy path done");
+    tSuccess("Scenario: Happy path (new) done");
   }
 
   async function scenarioCreatePerformThenCancel() {
-    // Check -> Create -> Perform -> Cancel -> Statement (testing cancellation after perform)
+    // auto: switch new + ensure fresh tx_id
     if (!canRunBasic()) return tError("Заполни order_id и amount");
-    if (!parsed.paymeId) return tError("Нужен tx_id");
-    if (!ensureNewModeForCreate()) return;
+
+    switchToNewEnsuringFreshTxId();
+    if (!ensureCreateSafeOrFix()) return;
 
     const ok1 = await run("CheckPerformTransaction", buildCheck());
     if (!ok1) return;
@@ -326,7 +357,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
   }
 
   async function runFullScenario() {
-    // Keep existing button behavior as “Happy path new payment”
+    // keep: happy path new payment
     return scenarioHappyPathNewPayment();
   }
 
@@ -337,7 +368,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
       <div className="p-4 md:p-6">
         <h1 className="text-xl font-semibold mb-1">Payme Lab (Admin)</h1>
         <p className="text-sm text-gray-500 mb-4">
-          Кнопки Merchant API через серверный прокси (Basic Auth хранится на backend).
+          Merchant RPC через серверный прокси (Basic Auth хранится на backend).
         </p>
         {children}
       </div>
@@ -371,7 +402,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
           <div>
             <div className="text-sm font-semibold text-gray-800">Scenario presets</div>
             <div className="text-xs text-gray-500">
-              One-click sequences. Все шаги пишутся в Snapshot/History.
+              One-click sequences. Guard rails: авто txMode + авто tx_id.
             </div>
           </div>
 
@@ -389,7 +420,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
               className="px-3 py-2 rounded-lg border bg-white text-sm disabled:opacity-60"
               onClick={scenarioCancelSelectedThenStatement}
               disabled={busy}
-              title="CancelTransaction → GetStatement (лучше Use selected tx_id)"
+              title="Cancel selected (auto seed) → Statement"
             >
               Cancel selected tx → Statement
             </button>
@@ -398,7 +429,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
               className="px-3 py-2 rounded-lg border bg-white text-sm disabled:opacity-60"
               onClick={scenarioHappyPathNewPayment}
               disabled={busy}
-              title="Check → Create → Perform → Statement (требует Use new tx_id)"
+              title="Happy path new payment (auto new + fresh tx_id)"
             >
               Happy path (new payment)
             </button>
@@ -407,7 +438,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
               className="px-3 py-2 rounded-lg border bg-white text-sm disabled:opacity-60"
               onClick={scenarioCreatePerformThenCancel}
               disabled={busy}
-              title="Check → Create → Perform → Cancel → Statement (тест)"
+              title="Test cancel after perform (auto new + fresh tx_id)"
             >
               Create+Perform → Cancel (test)
             </button>
@@ -480,7 +511,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
           className="px-3 py-2 rounded-lg border bg-white disabled:opacity-60 text-sm"
           onClick={runCreateOnly}
           disabled={busy}
-          title="CreateTransaction (только создать) — требует Use new tx_id"
+          title="CreateTransaction (только создать) — auto new + guard rails"
         >
           Create only
         </button>
@@ -488,7 +519,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
           className="px-3 py-2 rounded-lg border bg-white disabled:opacity-60 text-sm"
           onClick={runCreateAndPerform}
           disabled={busy}
-          title="CreateTransaction → PerformTransaction — требует Use new tx_id"
+          title="Create → Perform — auto new + guard rails"
         >
           Create + Perform
         </button>
@@ -496,7 +527,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
           className="px-3 py-2 rounded-lg border bg-white disabled:opacity-60 text-sm"
           onClick={runCheckCreatePerform}
           disabled={busy}
-          title="CheckPerform → Create → Perform — требует Use new tx_id"
+          title="Check → Create → Perform — auto new + guard rails"
         >
           Check + Create + Perform
         </button>
@@ -652,8 +683,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
                 className="px-4 py-2 rounded-lg border bg-white disabled:opacity-60"
                 onClick={() => {
                   if (!canRunBasic()) return tError("Заполни order_id и amount");
-                  if (!parsed.paymeId) return tError("Нужен tx_id");
-                  if (!ensureNewModeForCreate()) return;
+                  if (!ensureCreateSafeOrFix()) return;
                   run("CreateTransaction", buildCreate());
                 }}
                 disabled={busy}
