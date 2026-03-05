@@ -1,6 +1,6 @@
 // frontend/src/pages/admin/PaymeLab.jsx
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { apiPost } from "../../api";
 import { tError, tSuccess } from "../../shared/toast";
 
@@ -39,12 +39,39 @@ function msToLocalIsoInput(ms) {
   return `${y}-${m}-${day}T${hh}:${mm}`;
 }
 
-export default function PaymeLab({ embedded = false } = {}) {
+function normalizeSeed(seed) {
+  if (!seed) return null;
+  const s = typeof seed === "object" ? seed : null;
+  if (!s) return null;
+  return {
+    orderId: s.orderId != null ? String(s.orderId) : "",
+    amount: s.amount != null ? String(s.amount) : "",
+    paymeId: s.paymeId != null ? String(s.paymeId) : "",
+  };
+}
+
+/**
+ * Props:
+ * - embedded?: boolean
+ * - seed?: { orderId?: string|number, amount?: string|number, paymeId?: string }
+ */
+export default function PaymeLab({ embedded = false, seed = null } = {}) {
   // Core inputs
   const [orderId, setOrderId] = useState("11");
   const [amount, setAmount] = useState("100000"); // tiyins
   const [paymeId, setPaymeId] = useState(`pm_lab_tx_${nowMs()}`);
-  const [cancelReason, setCancelReason] = useState("");
+
+  // Cancel reason presets
+  // Payme/Paycom reason codes: exact semantics may vary; we keep generic preset labels.
+  const CANCEL_PRESETS = [
+    { value: "", label: "— не указывать (null)" },
+    { value: "1", label: "1 — отмена по инициативе клиента" },
+    { value: "2", label: "2 — отмена по инициативе мерчанта" },
+    { value: "3", label: "3 — истёк таймаут / не выполнено" },
+    { value: "custom", label: "Custom…" },
+  ];
+  const [cancelPreset, setCancelPreset] = useState(""); // "", "1","2","3","custom"
+  const [cancelCustom, setCancelCustom] = useState(""); // number as string
 
   // GetStatement range
   const [fromIso, setFromIso] = useState(msToLocalIsoInput(nowMs() - 60 * 60 * 1000));
@@ -55,16 +82,55 @@ export default function PaymeLab({ embedded = false } = {}) {
   const [lastSnap, setLastSnap] = useState(null);
   const [history, setHistory] = useState([]); // newest first
 
+  // Apply seed from parent (AdminPaymeHealth -> Lab tab)
+  useEffect(() => {
+    const s = normalizeSeed(seed);
+    if (!s) return;
+
+    // Подставляем только непустые значения
+    if (s.orderId) setOrderId(String(s.orderId));
+    if (s.amount) setAmount(String(s.amount));
+
+    // paymeId: если пришёл — ставим. Если нет — оставляем текущий.
+    if (s.paymeId) setPaymeId(String(s.paymeId));
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seed?.orderId, seed?.amount, seed?.paymeId]);
+
   const parsed = useMemo(() => {
+    const orderId2 = String(orderId || "").trim();
+    const amount2 = toInt(amount, 0);
+    const paymeId2 = String(paymeId || "").trim();
+
+    let cancelReason = null;
+    if (cancelPreset === "custom") {
+      cancelReason = cancelCustom === "" ? null : toInt(cancelCustom, null);
+    } else if (cancelPreset === "") {
+      cancelReason = null;
+    } else {
+      cancelReason = toInt(cancelPreset, null);
+    }
+
     return {
-      orderId: String(orderId || "").trim(),
-      amount: toInt(amount, 0),
-      paymeId: String(paymeId || "").trim(),
-      cancelReason: cancelReason === "" ? null : toInt(cancelReason, null),
+      orderId: orderId2,
+      amount: amount2,
+      paymeId: paymeId2,
+      cancelReason,
       from: isoToMs(fromIso),
       to: isoToMs(toIso),
     };
-  }, [orderId, amount, paymeId, cancelReason, fromIso, toIso]);
+  }, [orderId, amount, paymeId, cancelPreset, cancelCustom, fromIso, toIso]);
+
+  function canRunBasic() {
+    if (!parsed.orderId) return false;
+    if (!Number.isFinite(parsed.amount) || parsed.amount <= 0) return false;
+    return true;
+  }
+
+  function canRunIdOnly() {
+    if (!parsed.paymeId) return false;
+    return true;
+  }
 
   async function run(method, params) {
     setBusy(true);
@@ -126,11 +192,65 @@ export default function PaymeLab({ embedded = false } = {}) {
     };
   }
 
+  async function runCreateOnly() {
+    if (!canRunBasic()) {
+      tError("Заполни order_id и amount");
+      return;
+    }
+    if (!parsed.paymeId) {
+      tError("Сгенерируй tx_id");
+      return;
+    }
+    await run("CreateTransaction", buildCreate());
+  }
+
+  async function runCreateAndPerform() {
+    if (!canRunBasic()) {
+      tError("Заполни order_id и amount");
+      return;
+    }
+    if (!parsed.paymeId) {
+      tError("Сгенерируй tx_id");
+      return;
+    }
+    const ok2 = await run("CreateTransaction", buildCreate());
+    if (!ok2) return;
+    await run("PerformTransaction", buildPerform());
+  }
+
+  async function runCheckCreatePerform() {
+    if (!canRunBasic()) {
+      tError("Заполни order_id и amount");
+      return;
+    }
+    const ok1 = await run("CheckPerformTransaction", buildCheck());
+    if (!ok1) return;
+
+    if (!parsed.paymeId) {
+      tError("Сгенерируй tx_id");
+      return;
+    }
+    const ok2 = await run("CreateTransaction", buildCreate());
+    if (!ok2) return;
+
+    await run("PerformTransaction", buildPerform());
+  }
+
   async function runFullScenario() {
+    // Check -> Create -> Perform -> GetStatement
     setBusy(true);
     try {
+      if (!canRunBasic()) {
+        tError("Заполни order_id и amount");
+        return;
+      }
       const ok1 = await run("CheckPerformTransaction", buildCheck());
       if (!ok1) return;
+
+      if (!parsed.paymeId) {
+        tError("Сгенерируй tx_id");
+        return;
+      }
 
       const ok2 = await run("CreateTransaction", buildCreate());
       if (!ok2) return;
@@ -168,13 +288,52 @@ export default function PaymeLab({ embedded = false } = {}) {
           </div>
         </div>
 
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            className="px-4 py-2 rounded-lg bg-black text-white disabled:opacity-60"
+            onClick={runFullScenario}
+            disabled={busy}
+            title="Check → Create → Perform → GetStatement"
+          >
+            {busy ? "RUN…" : "RUN FULL SCENARIO"}
+          </button>
+        </div>
+      </div>
+
+      {/* Quick actions row */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
         <button
-          className="px-4 py-2 rounded-lg bg-black text-white disabled:opacity-60"
-          onClick={runFullScenario}
+          className="px-3 py-2 rounded-lg border bg-white disabled:opacity-60 text-sm"
+          onClick={runCreateOnly}
           disabled={busy}
-          title="Check → Create → Perform → GetStatement"
+          title="CreateTransaction (только создать)"
         >
-          {busy ? "RUN…" : "RUN FULL SCENARIO"}
+          Create only
+        </button>
+        <button
+          className="px-3 py-2 rounded-lg border bg-white disabled:opacity-60 text-sm"
+          onClick={runCreateAndPerform}
+          disabled={busy}
+          title="CreateTransaction → PerformTransaction"
+        >
+          Create + Perform
+        </button>
+        <button
+          className="px-3 py-2 rounded-lg border bg-white disabled:opacity-60 text-sm"
+          onClick={runCheckCreatePerform}
+          disabled={busy}
+          title="CheckPerform → Create → Perform"
+        >
+          Check + Create + Perform
+        </button>
+        <button
+          type="button"
+          className="px-3 py-2 rounded-lg border bg-white disabled:opacity-60 text-sm"
+          onClick={() => setPaymeId(`pm_lab_tx_${nowMs()}`)}
+          disabled={busy}
+          title="Сгенерировать новый tx_id"
+        >
+          New tx_id
         </button>
       </div>
 
@@ -235,6 +394,38 @@ export default function PaymeLab({ embedded = false } = {}) {
               </div>
             </div>
 
+            {/* Cancel reason presets */}
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Cancel reason</label>
+              <select
+                className="w-full border rounded-lg px-3 py-2 bg-white"
+                value={cancelPreset}
+                onChange={(e) => setCancelPreset(e.target.value)}
+                disabled={busy}
+              >
+                {CANCEL_PRESETS.map((p) => (
+                  <option key={p.value} value={p.value}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+              {cancelPreset === "custom" && (
+                <div className="mt-2">
+                  <input
+                    className="w-full border rounded-lg px-3 py-2"
+                    value={cancelCustom}
+                    onChange={(e) => setCancelCustom(e.target.value)}
+                    placeholder="введи число, например 1"
+                    disabled={busy}
+                  />
+                </div>
+              )}
+              <div className="text-[11px] text-gray-400 mt-1">
+                Если выбрать “не указывать”, поле reason не отправляется (null).
+              </div>
+            </div>
+
+            {/* GetStatement range */}
             <div className="grid grid-cols-1 gap-2">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">GetStatement from</label>
@@ -243,6 +434,7 @@ export default function PaymeLab({ embedded = false } = {}) {
                   className="w-full border rounded-lg px-3 py-2"
                   value={fromIso}
                   onChange={(e) => setFromIso(e.target.value)}
+                  disabled={busy}
                 />
               </div>
               <div>
@@ -252,49 +444,58 @@ export default function PaymeLab({ embedded = false } = {}) {
                   className="w-full border rounded-lg px-3 py-2"
                   value={toIso}
                   onChange={(e) => setToIso(e.target.value)}
+                  disabled={busy}
                 />
               </div>
             </div>
 
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Cancel reason (optional)</label>
-              <input
-                className="w-full border rounded-lg px-3 py-2"
-                value={cancelReason}
-                onChange={(e) => setCancelReason(e.target.value)}
-                placeholder="например 1"
-              />
-            </div>
-
+            {/* Buttons */}
             <div className="pt-2 grid grid-cols-1 gap-2">
               <button
                 className="px-4 py-2 rounded-lg bg-black text-white disabled:opacity-60"
-                onClick={() => run("CheckPerformTransaction", buildCheck())}
+                onClick={() => {
+                  if (!canRunBasic()) return tError("Заполни order_id и amount");
+                  run("CheckPerformTransaction", buildCheck());
+                }}
                 disabled={busy}
               >
                 CheckPerformTransaction
               </button>
+
               <button
                 className="px-4 py-2 rounded-lg border bg-white disabled:opacity-60"
-                onClick={() => run("CreateTransaction", buildCreate())}
+                onClick={() => {
+                  if (!canRunBasic()) return tError("Заполни order_id и amount");
+                  if (!parsed.paymeId) return tError("Сгенерируй tx_id");
+                  run("CreateTransaction", buildCreate());
+                }}
                 disabled={busy}
               >
                 CreateTransaction
               </button>
+
               <button
                 className="px-4 py-2 rounded-lg border bg-white disabled:opacity-60"
-                onClick={() => run("PerformTransaction", buildPerform())}
+                onClick={() => {
+                  if (!canRunIdOnly()) return tError("Нужен tx_id");
+                  run("PerformTransaction", buildPerform());
+                }}
                 disabled={busy}
               >
                 PerformTransaction
               </button>
+
               <button
                 className="px-4 py-2 rounded-lg border bg-white disabled:opacity-60"
-                onClick={() => run("CancelTransaction", buildCancel())}
+                onClick={() => {
+                  if (!canRunIdOnly()) return tError("Нужен tx_id");
+                  run("CancelTransaction", buildCancel());
+                }}
                 disabled={busy}
               >
                 CancelTransaction
               </button>
+
               <button
                 className="px-4 py-2 rounded-lg border bg-white disabled:opacity-60"
                 onClick={() => run("GetStatement", buildStatement())}
