@@ -136,6 +136,11 @@ async function lockKeyTx(client, keyStr) {
   await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [String(keyStr)]);
 }
 
+async function lockOrderTx(client, orderId) {
+  // ✅ один order_id — один поток выполнения (Create/Perform/Cancel)
+  return lockKeyTx(client, `payme:order:${String(orderId)}`);
+}
+
 /** ===== DB helpers ===== */
 
 async function getOrderTx(client, orderId) {
@@ -550,272 +555,321 @@ async function paymeMerchantRpc(req, res) {
 
     const { id, method, params } = v;
 
-    /** ---- CheckPerformTransaction ---- */
-    if (method === "CheckPerformTransaction") {
-      const orderId = extractOrderId(params);
-      const amount = toIntAmountTiyin(params.amount);
+/** ---- CheckPerformTransaction ---- */
+if (method === "CheckPerformTransaction") {
+  const orderId = extractOrderId(params);
+  const amount = toIntAmountTiyin(params.amount);
 
-      if (!orderId) return res.status(200).json(rpcError(id, -31050, "Invalid account"));
-      if (!Number.isFinite(amount) || amount <= 0) {
-        return res.status(200).json(rpcError(id, -32602, "Invalid params.amount"));
-      }
+  if (!orderId) return res.status(200).json(rpcError(id, -31050, "Invalid account"));
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return res.status(200).json(rpcError(id, -32602, "Invalid params.amount"));
+  }
 
-      const { rows } = await pool.query(
-        `SELECT id, amount_tiyin, status
-           FROM topup_orders
-          WHERE id = $1`,
-        [orderId]
-      );
-      const order = rows[0];
-      if (!order) return res.status(200).json(rpcError(id, -31050, "Order not found"));
-      if (Number(order.amount_tiyin) !== amount)
-        return res.status(200).json(rpcError(id, -31001, "Incorrect amount"));
-      if (order.status === "paid") return res.status(200).json(rpcError(id, -31008, "Already paid"));
-      if (order.status === "cancelled")
-        return res.status(200).json(rpcError(id, -31008, "Order cancelled"));
+  const { rows } = await pool.query(
+    `SELECT id, amount_tiyin, status
+       FROM topup_orders
+      WHERE id = $1`,
+    [orderId]
+  );
 
-      return res.status(200).json(ok(id, { allow: true }));
-    }
+  const order = rows[0];
+  if (!order) return res.status(200).json(rpcError(id, -31050, "Order not found"));
 
-    /** ---- CreateTransaction ---- */
-    if (method === "CreateTransaction") {
-      const orderId = extractOrderId(params);
-      const amount = toIntAmountTiyin(params.amount);
-      const paymeIdRaw = params.id;
-      const paymeId = normalizePaymeId(paymeIdRaw);
-      const time = Number(params.time);
+  if (Number(order.amount_tiyin) !== amount)
+    return res.status(200).json(rpcError(id, -31001, "Incorrect amount"));
 
-      if (!paymeId) return res.status(200).json(rpcError(id, -32602, "Missing params.id"));
-      if (!orderId) return res.status(200).json(rpcError(id, -31050, "Invalid account"));
-      if (!Number.isFinite(amount) || amount <= 0) {
-        return res.status(200).json(rpcError(id, -32602, "Invalid params.amount"));
-      }
+  // ✅ robust "Already paid"
+  if (String(order.status || "").trim().toLowerCase() === "paid")
+    return res.status(200).json(rpcError(id, -31008, "Already paid"));
 
-      const client = await pool.connect();
-      try {
-        await client.query("BEGIN");
+  if (String(order.status || "").trim().toLowerCase() === "cancelled")
+    return res.status(200).json(rpcError(id, -31008, "Order cancelled"));
 
-        await lockKeyTx(client, `payme:${paymeId}`);
-        await lockKeyTx(client, `order:${orderId}`);
+  return res.status(200).json(ok(id, { allow: true }));
+}
 
-        logPayme("CreateTransaction.begin", { paymeId, orderId, amount });
 
-        // Edge-case guard: one order must not have 2 active transactions
-        const { rows: orderTxRows } = await client.query(
-          `SELECT payme_id, state
-             FROM payme_transactions
-            WHERE order_id = $1
-              AND state IN (1,2)
-            LIMIT 1
-            FOR UPDATE`,
-          [orderId]
-        );
-        const activeForOrder = orderTxRows[0] || null;
-
-        const existing = await getTxForUpdate(client, paymeId);
-        if (existing) {
-          if (Number(existing.order_id) !== Number(orderId)) {
-            await client.query("ROLLBACK");
-            return res.status(200).json(rpcError(id, -31099, "Transaction conflict (order mismatch)"));
-          }
-          if (Number(existing.amount_tiyin) !== Number(amount)) {
-            await client.query("ROLLBACK");
-            return res.status(200).json(rpcError(id, -31001, "Incorrect amount"));
-          }
-
-          await client.query("COMMIT");
-          return res.status(200).json(
-            ok(id, {
-              create_time: Number(existing.create_time) || (Number.isFinite(time) ? time : nowMs()),
-              transaction: paymeId,
-              state: Number(existing.state),
-              receivers: null,
-            })
-          );
-        }
-
-        if (activeForOrder && String(activeForOrder.payme_id) !== String(paymeId)) {
-          await client.query("ROLLBACK");
-          return res
-            .status(200)
-            .json(rpcError(id, -31099, "Transaction conflict (another active tx for order)"));
-        }
-
-        const order = await getOrderTx(client, orderId);
-        if (!order) {
-          await client.query("ROLLBACK");
-          return res.status(200).json(rpcError(id, -31050, "Order not found"));
-        }
-        if (Number(order.amount_tiyin) !== amount) {
-          await client.query("ROLLBACK");
-          return res.status(200).json(rpcError(id, -31001, "Incorrect amount"));
-        }
-        if (order.status === "paid") {
-          await client.query("ROLLBACK");
-          return res.status(200).json(rpcError(id, -31008, "Already paid"));
-        }
-        if (order.status === "cancelled") {
-          await client.query("ROLLBACK");
-          return res.status(200).json(rpcError(id, -31008, "Order cancelled"));
-        }
-
-        const createTime = Number.isFinite(time) && time > 0 ? time : nowMs();
-
-        // Payme spec: do not allow creating too-old transactions
-        if (nowMs() - createTime > TX_TIMEOUT_MS) {
-          await client.query("ROLLBACK");
-          return res.status(200).json(rpcError(id, -31008, "Transaction expired"));
-        }
-
-        await insertTxIfAbsent(client, {
-          paymeId,
-          orderId,
-          amount,
-          createTime,
-        });
-
-        // Keep compatibility with older bot statuses: 'new' -> 'created'
-        if (order.status === "new" || order.status === "created" || !order.status) {
-          await markOrderStatusTx(client, orderId, "created");
-        }
-
-        await client.query("COMMIT");
-
-        return res.status(200).json(
-          ok(id, {
-            create_time: createTime,
-            transaction: paymeId,
-            state: 1,
-            receivers: null,
-          })
-        );
-      } catch (e) {
-        try {
-          await client.query("ROLLBACK");
-        } catch {}
-        console.error("[payme] CreateTransaction error:", e?.message || e);
-        return res.status(200).json(rpcError(id, -32400, "Internal error"));
-      } finally {
-        client.release();
-      }
-    }
-
-/** ---- PerformTransaction ---- */
-if (method === "PerformTransaction") {
+/** ---- CreateTransaction ---- */
+if (method === "CreateTransaction") {
+  const orderId = extractOrderId(params);
+  const amount = toIntAmountTiyin(params.amount);
   const paymeId = normalizePaymeId(params.id);
+  const time = Number(params.time);
 
-  if (!paymeId) return res.status(200).json(rpcError(id, -32602, "Missing params.id"));
+  if (!paymeId)
+    return res.status(200).json(rpcError(id, -32602, "Missing params.id"));
+
+  if (!orderId)
+    return res.status(200).json(rpcError(id, -31050, "Invalid account"));
+
+  if (!Number.isFinite(amount) || amount <= 0)
+    return res.status(200).json(rpcError(id, -32602, "Invalid params.amount"));
 
   const client = await pool.connect();
+
   try {
     await client.query("BEGIN");
 
-    // serialize all operations per payme transaction id
+    // 🔒 lock transaction id
     await lockKeyTx(client, `payme:${paymeId}`);
 
-    logPayme("PerformTransaction.begin", { paymeId });
+    // 🔒 lock order
+    await lockKeyTx(client, `order:${orderId}`);
 
-    // Strict row lock ONLY
-    const tx = await getTxForUpdate(client, paymeId);
-    if (!tx) {
-      await client.query("ROLLBACK");
-      const raw = String(params.id ?? "");
-      const hex = Buffer.from(raw, "utf8").toString("hex").slice(0, 80);
-      logPayme("PerformTransaction.not_found", {
-        paymeId_norm: paymeId,
-        paymeId_raw_len: raw.length,
-        paymeId_raw_hex_prefix: hex,
-      });
-      return res.status(200).json(rpcError(id, -31003, "Transaction not found"));
-    }
+    logPayme("CreateTransaction.begin", { paymeId, orderId, amount });
 
-    // lock order too
-    if (tx?.order_id) {
-      await lockKeyTx(client, `order:${tx.order_id}`);
-    }
+    /* ---- existing tx ---- */
 
-    // cancelled => refuse perform
-    if (Number(tx.state) === -1 || Number(tx.state) === -2) {
+    const existingTx = await client.query(
+      `SELECT *
+         FROM payme_transactions
+        WHERE payme_id = $1
+        FOR UPDATE`,
+      [paymeId]
+    );
+
+    if (existingTx.rows.length) {
+      const tx = existingTx.rows[0];
+
+      if (Number(tx.order_id) !== Number(orderId)) {
+        await client.query("ROLLBACK");
+        return res.status(200).json(rpcError(id, -31099, "Transaction conflict"));
+      }
+
+      if (Number(tx.amount_tiyin) !== Number(amount)) {
+        await client.query("ROLLBACK");
+        return res.status(200).json(rpcError(id, -31001, "Incorrect amount"));
+      }
+
       await client.query("COMMIT");
-      return res.status(200).json(rpcError(id, -31008, "Transaction cancelled"));
-    }
 
-    // expired => cancel as -1 and refuse
-    const ct = Number(tx.create_time) || 0;
-    if (ct && nowMs() - ct > TX_TIMEOUT_MS) {
-      const cancelTime = nowMs();
-      await setTxState(client, paymeId, { state: -1, cancel_time: cancelTime, reason: 4 });
-      await client.query("COMMIT");
-      return res.status(200).json(rpcError(id, -31008, "Transaction expired"));
-    }
-
-    // idempotent: already performed
-    if (Number(tx.state) === 2) {
-      const pt = Number(tx.perform_time) || 0;
-      await client.query("COMMIT");
       return res.status(200).json(
         ok(id, {
+          create_time: Number(tx.create_time),
           transaction: paymeId,
-          perform_time: pt,
-          state: 2,
+          state: Number(tx.state),
+          receivers: null,
         })
       );
     }
 
-    const orderId = Number(tx.order_id);
-    const order = await getOrderTx(client, orderId);
+    /* ---- second tx protection ---- */
+
+    const existingByOrder = await client.query(
+      `SELECT payme_id
+         FROM payme_transactions
+        WHERE order_id = $1
+          AND state IN (1,2)
+        LIMIT 1`,
+      [orderId]
+    );
+
+    if (existingByOrder.rows.length) {
+      await client.query("ROLLBACK");
+      return res
+        .status(200)
+        .json(rpcError(id, -31099, "Transaction for order already exists"));
+    }
+
+    /* ---- load order ---- */
+
+    const orderRes = await client.query(
+      `SELECT id, amount_tiyin, status
+         FROM topup_orders
+        WHERE id=$1
+        FOR UPDATE`,
+      [orderId]
+    );
+
+    const order = orderRes.rows[0];
+
     if (!order) {
       await client.query("ROLLBACK");
       return res.status(200).json(rpcError(id, -31050, "Order not found"));
     }
 
-    // if our order is cancelled => cancel tx and refuse
-    if (order.status === "cancelled") {
-      const cancelTime = nowMs();
-      await setTxState(client, paymeId, { state: -1, cancel_time: cancelTime, reason: 4 });
-      await client.query("COMMIT");
+    if (Number(order.amount_tiyin) !== amount) {
+      await client.query("ROLLBACK");
+      return res.status(200).json(rpcError(id, -31001, "Incorrect amount"));
+    }
+
+    if (String(order.status).toLowerCase() === "paid") {
+      await client.query("ROLLBACK");
+      return res.status(200).json(rpcError(id, -31008, "Already paid"));
+    }
+
+    if (String(order.status).toLowerCase() === "cancelled") {
+      await client.query("ROLLBACK");
       return res.status(200).json(rpcError(id, -31008, "Order cancelled"));
     }
 
-    // If order already paid (by some other flow), finalize tx as performed idempotently
-    if (order.status === "paid") {
-      const performTime = order.paid_at ? new Date(order.paid_at).getTime() : nowMs();
-      await setTxState(client, paymeId, { state: 2, perform_time: performTime });
+    /* ---- timeout check ---- */
+
+    const createTime = Number.isFinite(time) ? time : nowMs();
+
+    if (nowMs() - createTime > TX_TIMEOUT_MS) {
+      await client.query("ROLLBACK");
+      return res.status(200).json(rpcError(id, -31008, "Transaction expired"));
+    }
+
+    /* ---- insert tx ---- */
+
+    await client.query(
+      `INSERT INTO payme_transactions
+      (payme_id, order_id, amount_tiyin, create_time, state)
+      VALUES ($1,$2,$3,$4,1)`,
+      [paymeId, orderId, amount, createTime]
+    );
+
+    /* ---- update order status ---- */
+
+    if (order.status === "new" || order.status === "created" || !order.status) {
+      await client.query(
+        `UPDATE topup_orders
+            SET status='created'
+          WHERE id=$1`,
+        [orderId]
+      );
+    }
+
+    await client.query("COMMIT");
+
+    return res.status(200).json(
+      ok(id, {
+        create_time: createTime,
+        transaction: paymeId,
+        state: 1,
+        receivers: null,
+      })
+    );
+  } catch (e) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {}
+
+    console.error("[payme] CreateTransaction error:", e);
+
+    return res.status(200).json(rpcError(id, -32400, "Internal error"));
+  } finally {
+    client.release();
+  }
+}
+
+/** ---- PerformTransaction ---- */
+if (method === "PerformTransaction") {
+  const paymeId = normalizePaymeId(params.id);
+
+  if (!paymeId)
+    return res.status(200).json(rpcError(id, -32602, "Missing params.id"));
+
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    await lockKeyTx(client, `payme:${paymeId}`);
+
+    const txRes = await client.query(
+      `SELECT *
+         FROM payme_transactions
+        WHERE payme_id=$1
+        FOR UPDATE`,
+      [paymeId]
+    );
+
+    const tx = txRes.rows[0];
+
+    if (!tx) {
+      await client.query("ROLLBACK");
+      return res.status(200).json(rpcError(id, -31003, "Transaction not found"));
+    }
+
+    const orderId = Number(tx.order_id);
+
+    await lockKeyTx(client, `order:${orderId}`);
+
+    /* cancelled */
+
+    if (Number(tx.state) < 0) {
       await client.query("COMMIT");
+      return res.status(200).json(rpcError(id, -31008, "Transaction cancelled"));
+    }
+
+    /* expired */
+
+    if (nowMs() - Number(tx.create_time) > TX_TIMEOUT_MS) {
+      const cancelTime = nowMs();
+
+      await client.query(
+        `UPDATE payme_transactions
+            SET state=-1,
+                cancel_time=$2
+          WHERE payme_id=$1`,
+        [paymeId, cancelTime]
+      );
+
+      await client.query("COMMIT");
+
+      return res.status(200).json(rpcError(id, -31008, "Transaction expired"));
+    }
+
+    /* already performed */
+
+    if (Number(tx.state) === 2) {
+      await client.query("COMMIT");
+
       return res.status(200).json(
         ok(id, {
           transaction: paymeId,
-          perform_time: performTime,
+          perform_time: Number(tx.perform_time),
           state: 2,
         })
       );
     }
 
-    // FK safety: client must exist
-    const { rows: cRows } = await client.query(`SELECT id FROM clients WHERE id=$1`, [
-      Number(order.client_id),
-    ]);
-    if (!cRows.length) {
+    /* load order */
+
+    const orderRes = await client.query(
+      `SELECT *
+         FROM topup_orders
+        WHERE id=$1
+        FOR UPDATE`,
+      [orderId]
+    );
+
+    const order = orderRes.rows[0];
+
+    if (!order) {
       await client.query("ROLLBACK");
-      return res.status(200).json(rpcError(id, -31050, "Client not found"));
+      return res.status(200).json(rpcError(id, -31050, "Order not found"));
     }
 
-    // Perform time now
+    if (order.status === "cancelled") {
+      await client.query("ROLLBACK");
+      return res.status(200).json(rpcError(id, -31008, "Order cancelled"));
+    }
+
     const performTime = nowMs();
 
-    // 1) set tx performed
-    await setTxState(client, paymeId, { state: 2, perform_time: performTime });
+    /* mark tx performed */
 
-    // 2) mark order paid
-    await markOrderStatusTx(client, orderId, "paid", new Date(performTime));
+    await client.query(
+      `UPDATE payme_transactions
+          SET state=2,
+              perform_time=$2
+        WHERE payme_id=$1`,
+      [paymeId, performTime]
+    );
 
-    // 3) credit once (idempotent via existence check under same advisory lock)
-    await creditLedgerOnceTx(client, {
-      clientId: Number(order.client_id),
-      amountTiyin: Number(order.amount_tiyin),
-      orderId,
-      paymeId,
-    });
+    /* mark order paid */
+
+    await client.query(
+      `UPDATE topup_orders
+          SET status='paid',
+              paid_at=to_timestamp($2/1000.0)
+        WHERE id=$1`,
+      [orderId, performTime]
+    );
 
     await client.query("COMMIT");
 
@@ -830,7 +884,9 @@ if (method === "PerformTransaction") {
     try {
       await client.query("ROLLBACK");
     } catch {}
-    console.error("[payme] PerformTransaction error:", e?.message || e);
+
+    console.error("[payme] PerformTransaction error:", e);
+
     return res.status(200).json(rpcError(id, -32400, "Internal error"));
   } finally {
     client.release();
