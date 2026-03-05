@@ -50,6 +50,10 @@ function normalizeSeed(seed) {
   };
 }
 
+function makeNewTxId() {
+  return `pm_lab_tx_${nowMs()}`;
+}
+
 /**
  * Props:
  * - embedded?: boolean
@@ -59,10 +63,17 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
   // Core inputs
   const [orderId, setOrderId] = useState("11");
   const [amount, setAmount] = useState("100000"); // tiyins
-  const [paymeId, setPaymeId] = useState(`pm_lab_tx_${nowMs()}`);
+  const [paymeId, setPaymeId] = useState(makeNewTxId());
+
+  // keep last seed id separately (for "use selected tx_id")
+  const [seedPaymeId, setSeedPaymeId] = useState("");
+
+  // tx id mode:
+  // - "seed": use selected tx_id from Health (for Perform/Cancel on existing)
+  // - "new": use custom/new tx_id (for Create new)
+  const [txMode, setTxMode] = useState("new");
 
   // Cancel reason presets
-  // Payme/Paycom reason codes: exact semantics may vary; we keep generic preset labels.
   const CANCEL_PRESETS = [
     { value: "", label: "— не указывать (null)" },
     { value: "1", label: "1 — отмена по инициативе клиента" },
@@ -70,8 +81,8 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
     { value: "3", label: "3 — истёк таймаут / не выполнено" },
     { value: "custom", label: "Custom…" },
   ];
-  const [cancelPreset, setCancelPreset] = useState(""); // "", "1","2","3","custom"
-  const [cancelCustom, setCancelCustom] = useState(""); // number as string
+  const [cancelPreset, setCancelPreset] = useState("");
+  const [cancelCustom, setCancelCustom] = useState("");
 
   // GetStatement range
   const [fromIso, setFromIso] = useState(msToLocalIsoInput(nowMs() - 60 * 60 * 1000));
@@ -87,15 +98,37 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
     const s = normalizeSeed(seed);
     if (!s) return;
 
-    // Подставляем только непустые значения
     if (s.orderId) setOrderId(String(s.orderId));
     if (s.amount) setAmount(String(s.amount));
 
-    // paymeId: если пришёл — ставим. Если нет — оставляем текущий.
-    if (s.paymeId) setPaymeId(String(s.paymeId));
+    if (s.paymeId) setSeedPaymeId(String(s.paymeId));
+    else setSeedPaymeId("");
 
+    // If mode == seed, follow selected id
+    if (txMode === "seed") {
+      if (s.paymeId) setPaymeId(String(s.paymeId));
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seed?.orderId, seed?.amount, seed?.paymeId]);
+
+  // When user switches txMode
+  useEffect(() => {
+    if (txMode === "seed") {
+      if (seedPaymeId) {
+        setPaymeId(seedPaymeId);
+      } else {
+        tError("Нет выбранного tx_id из Health");
+        setTxMode("new");
+      }
+    }
+    if (txMode === "new") {
+      // if current equals seedPaymeId — generate new to prevent accidental Create reuse
+      if (seedPaymeId && paymeId === seedPaymeId) {
+        setPaymeId(makeNewTxId());
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [txMode]);
 
   const parsed = useMemo(() => {
     const orderId2 = String(orderId || "").trim();
@@ -192,77 +225,109 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
     };
   }
 
+  function ensureNewModeForCreate() {
+    if (txMode === "seed") {
+      tError("Для Create переключись на Use new tx_id");
+      return false;
+    }
+    return true;
+  }
+
+  // ---- Quick actions (single-step / 2-step) ----
   async function runCreateOnly() {
-    if (!canRunBasic()) {
-      tError("Заполни order_id и amount");
-      return;
-    }
-    if (!parsed.paymeId) {
-      tError("Сгенерируй tx_id");
-      return;
-    }
+    if (!canRunBasic()) return tError("Заполни order_id и amount");
+    if (!parsed.paymeId) return tError("Нужен tx_id");
+    if (!ensureNewModeForCreate()) return;
     await run("CreateTransaction", buildCreate());
   }
 
   async function runCreateAndPerform() {
-    if (!canRunBasic()) {
-      tError("Заполни order_id и amount");
-      return;
-    }
-    if (!parsed.paymeId) {
-      tError("Сгенерируй tx_id");
-      return;
-    }
+    if (!canRunBasic()) return tError("Заполни order_id и amount");
+    if (!parsed.paymeId) return tError("Нужен tx_id");
+    if (!ensureNewModeForCreate()) return;
+
     const ok2 = await run("CreateTransaction", buildCreate());
     if (!ok2) return;
     await run("PerformTransaction", buildPerform());
   }
 
   async function runCheckCreatePerform() {
-    if (!canRunBasic()) {
-      tError("Заполни order_id и amount");
-      return;
-    }
+    if (!canRunBasic()) return tError("Заполни order_id и amount");
+
     const ok1 = await run("CheckPerformTransaction", buildCheck());
     if (!ok1) return;
 
-    if (!parsed.paymeId) {
-      tError("Сгенерируй tx_id");
-      return;
-    }
+    if (!parsed.paymeId) return tError("Нужен tx_id");
+    if (!ensureNewModeForCreate()) return;
+
     const ok2 = await run("CreateTransaction", buildCreate());
     if (!ok2) return;
 
     await run("PerformTransaction", buildPerform());
   }
 
-  async function runFullScenario() {
-    // Check -> Create -> Perform -> GetStatement
-    setBusy(true);
-    try {
-      if (!canRunBasic()) {
-        tError("Заполни order_id и amount");
-        return;
-      }
-      const ok1 = await run("CheckPerformTransaction", buildCheck());
-      if (!ok1) return;
+  // ---- Scenario presets (bank-grade sequences) ----
+  async function scenarioReconcileStatement() {
+    // GetStatement only (safe)
+    await run("GetStatement", buildStatement());
+  }
 
-      if (!parsed.paymeId) {
-        tError("Сгенерируй tx_id");
-        return;
-      }
-
-      const ok2 = await run("CreateTransaction", buildCreate());
-      if (!ok2) return;
-
-      const ok3 = await run("PerformTransaction", buildPerform());
-      if (!ok3) return;
-
-      await run("GetStatement", buildStatement());
-      tSuccess("RUN FULL SCENARIO: done");
-    } finally {
-      setBusy(false);
+  async function scenarioCancelSelectedThenStatement() {
+    // cancel existing tx (recommended txMode=seed) -> statement
+    if (!canRunIdOnly()) return tError("Нужен tx_id");
+    if (txMode !== "seed") {
+      // not hard block, but warn
+      tError("Рекомендуется Use selected tx_id для отмены существующей транзакции");
     }
+    const ok = await run("CancelTransaction", buildCancel());
+    if (!ok) return;
+    await run("GetStatement", buildStatement());
+  }
+
+  async function scenarioHappyPathNewPayment() {
+    // Check -> Create -> Perform -> Statement (requires new tx_id)
+    if (!canRunBasic()) return tError("Заполни order_id и amount");
+    if (!parsed.paymeId) return tError("Нужен tx_id");
+    if (!ensureNewModeForCreate()) return;
+
+    const ok1 = await run("CheckPerformTransaction", buildCheck());
+    if (!ok1) return;
+
+    const ok2 = await run("CreateTransaction", buildCreate());
+    if (!ok2) return;
+
+    const ok3 = await run("PerformTransaction", buildPerform());
+    if (!ok3) return;
+
+    await run("GetStatement", buildStatement());
+    tSuccess("Scenario: Happy path done");
+  }
+
+  async function scenarioCreatePerformThenCancel() {
+    // Check -> Create -> Perform -> Cancel -> Statement (testing cancellation after perform)
+    if (!canRunBasic()) return tError("Заполни order_id и amount");
+    if (!parsed.paymeId) return tError("Нужен tx_id");
+    if (!ensureNewModeForCreate()) return;
+
+    const ok1 = await run("CheckPerformTransaction", buildCheck());
+    if (!ok1) return;
+
+    const ok2 = await run("CreateTransaction", buildCreate());
+    if (!ok2) return;
+
+    const ok3 = await run("PerformTransaction", buildPerform());
+    if (!ok3) return;
+
+    const ok4 = await run("CancelTransaction", buildCancel());
+    if (!ok4) return;
+
+    await run("GetStatement", buildStatement());
+    tSuccess("Scenario: Create→Perform→Cancel done");
+  }
+
+  async function runFullScenario() {
+    // Keep existing button behavior as “Happy path new payment”
+    return scenarioHappyPathNewPayment();
   }
 
   const Wrapper = ({ children }) =>
@@ -284,7 +349,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
         <div>
           <div className="text-lg font-semibold">Payme Lab</div>
           <div className="text-sm text-gray-500">
-            Check → Create → Perform → Cancel → GetStatement + auto-snapshot
+            Merchant RPC actions + bank-grade presets + auto-snapshot
           </div>
         </div>
 
@@ -293,10 +358,119 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
             className="px-4 py-2 rounded-lg bg-black text-white disabled:opacity-60"
             onClick={runFullScenario}
             disabled={busy}
-            title="Check → Create → Perform → GetStatement"
+            title="Happy path: Check → Create → Perform → GetStatement"
           >
             {busy ? "RUN…" : "RUN FULL SCENARIO"}
           </button>
+        </div>
+      </div>
+
+      {/* Scenario presets */}
+      <div className="mb-4 bg-white rounded-xl shadow p-4">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+          <div>
+            <div className="text-sm font-semibold text-gray-800">Scenario presets</div>
+            <div className="text-xs text-gray-500">
+              One-click sequences. Все шаги пишутся в Snapshot/History.
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              className="px-3 py-2 rounded-lg border bg-white text-sm disabled:opacity-60"
+              onClick={scenarioReconcileStatement}
+              disabled={busy}
+              title="GetStatement по диапазону"
+            >
+              Reconcile (Statement)
+            </button>
+
+            <button
+              className="px-3 py-2 rounded-lg border bg-white text-sm disabled:opacity-60"
+              onClick={scenarioCancelSelectedThenStatement}
+              disabled={busy}
+              title="CancelTransaction → GetStatement (лучше Use selected tx_id)"
+            >
+              Cancel selected tx → Statement
+            </button>
+
+            <button
+              className="px-3 py-2 rounded-lg border bg-white text-sm disabled:opacity-60"
+              onClick={scenarioHappyPathNewPayment}
+              disabled={busy}
+              title="Check → Create → Perform → Statement (требует Use new tx_id)"
+            >
+              Happy path (new payment)
+            </button>
+
+            <button
+              className="px-3 py-2 rounded-lg border bg-white text-sm disabled:opacity-60"
+              onClick={scenarioCreatePerformThenCancel}
+              disabled={busy}
+              title="Check → Create → Perform → Cancel → Statement (тест)"
+            >
+              Create+Perform → Cancel (test)
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* TX MODE SWITCH */}
+      <div className="mb-4 bg-white rounded-xl shadow p-3">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+          <div className="text-sm text-gray-700 font-medium">tx_id mode</div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="txmode"
+                value="seed"
+                checked={txMode === "seed"}
+                onChange={() => setTxMode("seed")}
+                disabled={busy}
+              />
+              Use selected tx_id
+            </label>
+
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="txmode"
+                value="new"
+                checked={txMode === "new"}
+                onChange={() => setTxMode("new")}
+                disabled={busy}
+              />
+              Use new tx_id
+            </label>
+
+            <button
+              type="button"
+              className="px-3 py-1.5 rounded-lg border bg-white text-sm disabled:opacity-60"
+              disabled={busy}
+              onClick={() => {
+                setTxMode("new");
+                setPaymeId(makeNewTxId());
+                tSuccess("Новый tx_id создан");
+              }}
+              title="Переключить на new и сгенерировать новый tx_id"
+            >
+              Generate new tx_id
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-2 text-xs text-gray-500">
+          Selected tx_id:{" "}
+          <span className="font-mono">{seedPaymeId ? seedPaymeId : "—"}</span>
+          <span className="mx-2">•</span>
+          Current tx_id: <span className="font-mono">{parsed.paymeId || "—"}</span>
+          {txMode === "seed" ? (
+            <span className="ml-2 text-gray-400">(для Perform/Cancel по выбранному)</span>
+          ) : (
+            <span className="ml-2 text-gray-400">(для Create нового платежа)</span>
+          )}
         </div>
       </div>
 
@@ -306,7 +480,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
           className="px-3 py-2 rounded-lg border bg-white disabled:opacity-60 text-sm"
           onClick={runCreateOnly}
           disabled={busy}
-          title="CreateTransaction (только создать)"
+          title="CreateTransaction (только создать) — требует Use new tx_id"
         >
           Create only
         </button>
@@ -314,7 +488,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
           className="px-3 py-2 rounded-lg border bg-white disabled:opacity-60 text-sm"
           onClick={runCreateAndPerform}
           disabled={busy}
-          title="CreateTransaction → PerformTransaction"
+          title="CreateTransaction → PerformTransaction — требует Use new tx_id"
         >
           Create + Perform
         </button>
@@ -322,14 +496,17 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
           className="px-3 py-2 rounded-lg border bg-white disabled:opacity-60 text-sm"
           onClick={runCheckCreatePerform}
           disabled={busy}
-          title="CheckPerform → Create → Perform"
+          title="CheckPerform → Create → Perform — требует Use new tx_id"
         >
           Check + Create + Perform
         </button>
         <button
           type="button"
           className="px-3 py-2 rounded-lg border bg-white disabled:opacity-60 text-sm"
-          onClick={() => setPaymeId(`pm_lab_tx_${nowMs()}`)}
+          onClick={() => {
+            setTxMode("new");
+            setPaymeId(makeNewTxId());
+          }}
           disabled={busy}
           title="Сгенерировать новый tx_id"
         >
@@ -348,6 +525,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
                 value={orderId}
                 onChange={(e) => setOrderId(e.target.value)}
                 placeholder="например 11"
+                disabled={busy}
               />
             </div>
 
@@ -358,6 +536,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="100000"
+                disabled={busy}
               />
               <div className="text-[11px] text-gray-400 mt-1">
                 Например 100000 = 1 000.00 UZS (если minor=100)
@@ -365,24 +544,31 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
             </div>
 
             <div>
-              <label className="block text-xs text-gray-500 mb-1">payme tx id (params.id)</label>
+              <label className="block text-xs text-gray-500 mb-1">
+                payme tx id (params.id)
+              </label>
               <input
                 className="w-full border rounded-lg px-3 py-2"
                 value={paymeId}
                 onChange={(e) => setPaymeId(e.target.value)}
+                disabled={busy || txMode === "seed"}
+                title={txMode === "seed" ? "В режиме selected tx_id поле редактировать нельзя" : ""}
               />
               <div className="flex gap-2 mt-2">
                 <button
                   type="button"
-                  className="px-3 py-2 rounded-lg border bg-white text-sm"
-                  onClick={() => setPaymeId(`pm_lab_tx_${nowMs()}`)}
+                  className="px-3 py-2 rounded-lg border bg-white text-sm disabled:opacity-60"
+                  onClick={() => {
+                    setTxMode("new");
+                    setPaymeId(makeNewTxId());
+                  }}
                   disabled={busy}
                 >
                   New tx_id
                 </button>
                 <button
                   type="button"
-                  className="px-3 py-2 rounded-lg border bg-white text-sm"
+                  className="px-3 py-2 rounded-lg border bg-white text-sm disabled:opacity-60"
                   onClick={() => {
                     setFromIso(msToLocalIsoInput(nowMs() - 60 * 60 * 1000));
                     setToIso(msToLocalIsoInput(nowMs() + 5 * 60 * 1000));
@@ -466,7 +652,8 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
                 className="px-4 py-2 rounded-lg border bg-white disabled:opacity-60"
                 onClick={() => {
                   if (!canRunBasic()) return tError("Заполни order_id и amount");
-                  if (!parsed.paymeId) return tError("Сгенерируй tx_id");
+                  if (!parsed.paymeId) return tError("Нужен tx_id");
+                  if (!ensureNewModeForCreate()) return;
                   run("CreateTransaction", buildCreate());
                 }}
                 disabled={busy}
