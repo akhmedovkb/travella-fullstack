@@ -1,7 +1,7 @@
 // frontend/src/pages/admin/PaymeLab.jsx
 
 import { useEffect, useMemo, useState } from "react";
-import { apiPost } from "../../api";
+import { apiGet, apiPost } from "../../api";
 import { tError, tSuccess } from "../../shared/toast";
 
 function nowMs() {
@@ -54,6 +54,62 @@ function makeNewTxId() {
   return `pm_lab_tx_${nowMs()}`;
 }
 
+function fmtTs(x) {
+  if (!x) return "—";
+  try {
+    return new Date(x).toLocaleString("ru-RU", { timeZone: "Asia/Tashkent" });
+  } catch {
+    return String(x);
+  }
+}
+
+function badgePill(kind, text) {
+  const base = "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium";
+  const map = {
+    ok: "bg-green-100 text-green-700",
+    warn: "bg-yellow-100 text-yellow-800",
+    bad: "bg-red-100 text-red-700",
+    info: "bg-gray-100 text-gray-700",
+    purple: "bg-purple-100 text-purple-800",
+    orange: "bg-orange-100 text-orange-800",
+    black: "bg-black text-white",
+  };
+  const cls = map[kind] || map.info;
+  return <span className={`${base} ${cls}`}>{text}</span>;
+}
+
+function healthStatusFromDetails(details) {
+  const tx = details?.tx;
+  if (!tx) return null;
+
+  const state = Number(tx.state);
+  const amount = Number(tx.amount_tiyin || 0);
+
+  const ledger = Array.isArray(details?.ledger) ? details.ledger : [];
+  const ledgerRows = ledger.length;
+  const ledgerSum = ledger.reduce((s, r) => s + Number(r?.amount || 0), 0);
+
+  // STUCK: state=1 and create_time older than 15min
+  if (state === 1 && Number(tx.create_time) > 0) {
+    const ageSec = (Date.now() - Number(tx.create_time)) / 1000;
+    if (ageSec > 900) return "STUCK";
+  }
+
+  // LOST_PAYMENT: performed but no ledger
+  if (state === 2 && ledgerRows === 0) return "LOST_PAYMENT";
+
+  // BAD_AMOUNT: performed but ledger_sum <= 0 (or mismatch will still be visible below)
+  if (state === 2 && ledgerSum <= 0) return "BAD_AMOUNT";
+
+  // REFUND_MISMATCH: canceled but ledger_sum > 0
+  if ((state === -1 || state === -2) && ledgerSum > 0) return "REFUND_MISMATCH";
+
+  // Additional helpful: mismatch amount (not in Health, but useful)
+  if (state === 2 && ledgerRows > 0 && amount > 0 && ledgerSum !== amount) return "AMOUNT_MISMATCH";
+
+  return "OK";
+}
+
 /**
  * Props:
  * - embedded?: boolean
@@ -92,6 +148,12 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
   const [busy, setBusy] = useState(false);
   const [lastSnap, setLastSnap] = useState(null);
   const [history, setHistory] = useState([]); // newest first
+
+  // Status panel
+  const [autoStatus, setAutoStatus] = useState(true);
+  const [statusLoading, setStatusLoading] = useState(false);
+  const [txDetails, setTxDetails] = useState(null);
+  const [txDetailsErr, setTxDetailsErr] = useState("");
 
   // Apply seed from parent (AdminPaymeHealth -> Lab tab)
   useEffect(() => {
@@ -164,6 +226,47 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
     return true;
   }
 
+  async function refreshStatus(idOverride = null, silent = false) {
+    const id = String(idOverride || parsed.paymeId || "").trim();
+    if (!id) {
+      setTxDetails(null);
+      setTxDetailsErr("");
+      return;
+    }
+
+    setStatusLoading(true);
+    setTxDetailsErr("");
+    try {
+      const data = await apiGet(`/api/admin/payme/tx/${encodeURIComponent(id)}`, "admin");
+      setTxDetails(data);
+      if (!silent) tSuccess("Status refreshed");
+    } catch (e) {
+      // 404 is normal for NEW tx_id not created yet
+      const st = Number(e?.status || 0);
+      if (st === 404) {
+        setTxDetails(null);
+        setTxDetailsErr("Tx not found in DB (ещё не создана или другой tx_id)");
+        if (!silent) tError("Tx not found (DB)");
+      } else {
+        console.error(e);
+        setTxDetails(null);
+        setTxDetailsErr(e?.message || "Status fetch error");
+        if (!silent) tError("Status fetch error");
+      }
+    } finally {
+      setStatusLoading(false);
+    }
+  }
+
+  // Auto-refresh status when user opens from Health (seed changes)
+  useEffect(() => {
+    if (!autoStatus) return;
+    if (!seedPaymeId) return;
+    if (txMode !== "seed") return;
+    refreshStatus(seedPaymeId, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seedPaymeId]);
+
   // ---- RPC runner ----
   async function run(method, params) {
     setBusy(true);
@@ -181,6 +284,13 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
       setLastSnap(snap);
       setHistory((prev) => [snap, ...prev].slice(0, 30));
       tSuccess(`${method}: OK`);
+
+      // bank-grade: auto refresh status after each click (if params.id exists)
+      if (autoStatus) {
+        const id = params?.id ? String(params.id) : parsed.paymeId;
+        await refreshStatus(id, true);
+      }
+
       return snap;
     } catch (e) {
       console.error(e);
@@ -193,6 +303,12 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
       };
       setLastSnap(snap);
       setHistory((prev) => [snap, ...prev].slice(0, 30));
+
+      if (autoStatus) {
+        const id = params?.id ? String(params.id) : parsed.paymeId;
+        await refreshStatus(id, true);
+      }
+
       return null;
     } finally {
       setBusy(false);
@@ -239,7 +355,6 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
 
   function switchToNewEnsuringFreshTxId() {
     if (txMode !== "new") setTxMode("new");
-    // if current equals seed or empty -> generate fresh
     if (!paymeId || (seedPaymeId && paymeId === seedPaymeId)) {
       setPaymeId(makeNewTxId());
       return true;
@@ -248,10 +363,9 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
   }
 
   function ensureCreateSafeOrFix() {
-    // Always run Create only in NEW mode, and never with seed tx id.
     switchToNewEnsuringFreshTxId();
-    // After setState, paymeId updates async; but guard rail still helps user.
-    // We additionally hard-check current values.
+
+    // Hard checks for safety
     if (txMode === "seed") {
       tError("Create запрещён в режиме selected tx_id (seed). Переключил на new.");
       return false;
@@ -303,7 +417,6 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
   }
 
   async function scenarioCancelSelectedThenStatement() {
-    // auto switch to seed and set seed tx_id
     if (!switchToSeedOrFail()) return;
     if (!canRunIdOnly()) return tError("Нужен tx_id");
     const ok = await run("CancelTransaction", buildCancel());
@@ -313,11 +426,9 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
   }
 
   async function scenarioHappyPathNewPayment() {
-    // auto: switch new + ensure fresh tx_id
     if (!canRunBasic()) return tError("Заполни order_id и amount");
 
     switchToNewEnsuringFreshTxId();
-    // hard guard
     if (!ensureCreateSafeOrFix()) return;
 
     const ok1 = await run("CheckPerformTransaction", buildCheck());
@@ -334,7 +445,6 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
   }
 
   async function scenarioCreatePerformThenCancel() {
-    // auto: switch new + ensure fresh tx_id
     if (!canRunBasic()) return tError("Заполни order_id и amount");
 
     switchToNewEnsuringFreshTxId();
@@ -357,9 +467,48 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
   }
 
   async function runFullScenario() {
-    // keep: happy path new payment
     return scenarioHappyPathNewPayment();
   }
+
+  const statusComputed = useMemo(() => {
+    const d = txDetails;
+    const tx = d?.tx || null;
+    const order = d?.order || null;
+    const ledger = Array.isArray(d?.ledger) ? d.ledger : [];
+
+    const ledgerRows = ledger.length;
+    const ledgerSum = ledger.reduce((s, r) => s + Number(r?.amount || 0), 0);
+    const amountExpected = Number(tx?.amount_tiyin || 0);
+
+    const hs = d ? healthStatusFromDetails(d) : null;
+
+    // tx state label
+    let stateLabel = "—";
+    const st = Number(tx?.state);
+    if (Number.isFinite(st)) {
+      if (st === 1) stateLabel = "CREATED (1)";
+      else if (st === 2) stateLabel = "PERFORMED (2)";
+      else if (st === -1) stateLabel = "CANCELED (-1)";
+      else if (st === -2) stateLabel = "CANCELED AFTER PERFORM (-2)";
+      else stateLabel = `STATE ${st}`;
+    }
+
+    return {
+      hasTx: !!tx,
+      state: st,
+      stateLabel,
+      health: hs,
+      ledgerRows,
+      ledgerSum,
+      amountExpected,
+      orderId: tx?.order_id ?? order?.id ?? null,
+      clientId: order?.client_id ?? null,
+      createTime: tx?.create_time ?? null,
+      performTime: tx?.perform_time ?? null,
+      cancelTime: tx?.cancel_time ?? null,
+      reason: tx?.reason ?? null,
+    };
+  }, [txDetails]);
 
   const Wrapper = ({ children }) =>
     embedded ? (
@@ -368,7 +517,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
       <div className="p-4 md:p-6">
         <h1 className="text-xl font-semibold mb-1">Payme Lab (Admin)</h1>
         <p className="text-sm text-gray-500 mb-4">
-          Merchant RPC через серверный прокси (Basic Auth хранится на backend).
+          Merchant RPC + bank-grade status (payme_transactions ↔ ledger).
         </p>
         {children}
       </div>
@@ -380,7 +529,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
         <div>
           <div className="text-lg font-semibold">Payme Lab</div>
           <div className="text-sm text-gray-500">
-            Merchant RPC actions + bank-grade presets + auto-snapshot
+            Merchant RPC actions + presets + status panel + auto-snapshot
           </div>
         </div>
 
@@ -394,6 +543,96 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
             {busy ? "RUN…" : "RUN FULL SCENARIO"}
           </button>
         </div>
+      </div>
+
+      {/* STATUS PANEL */}
+      <div className="mb-4 bg-white rounded-xl shadow p-4">
+        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+          <div>
+            <div className="text-sm font-semibold text-gray-800">Status panel</div>
+            <div className="text-xs text-gray-500">
+              DB: payme_transactions + payme_topup_orders + contact_balance_ledger
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={autoStatus}
+                onChange={(e) => setAutoStatus(e.target.checked)}
+                disabled={busy}
+              />
+              Auto refresh after each click
+            </label>
+
+            <button
+              type="button"
+              className="px-3 py-2 rounded-lg border bg-white text-sm disabled:opacity-60"
+              onClick={() => refreshStatus(null, false)}
+              disabled={busy || statusLoading}
+              title="Fetch /api/admin/payme/tx/:paymeId"
+            >
+              {statusLoading ? "Refreshing…" : "Refresh Status"}
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {statusComputed.hasTx
+            ? badgePill("ok", "DB: tx found")
+            : badgePill("warn", "DB: tx not found")}
+          {statusComputed.health &&
+            (statusComputed.health === "OK"
+              ? badgePill("ok", "HEALTH: OK")
+              : statusComputed.health === "STUCK"
+              ? badgePill("purple", "HEALTH: STUCK")
+              : statusComputed.health === "LOST_PAYMENT"
+              ? badgePill("bad", "HEALTH: LOST_PAYMENT")
+              : statusComputed.health === "BAD_AMOUNT"
+              ? badgePill("warn", "HEALTH: BAD_AMOUNT")
+              : statusComputed.health === "REFUND_MISMATCH"
+              ? badgePill("orange", "HEALTH: REFUND_MISMATCH")
+              : statusComputed.health === "AMOUNT_MISMATCH"
+              ? badgePill("warn", "HEALTH: AMOUNT_MISMATCH")
+              : badgePill("info", `HEALTH: ${statusComputed.health}`))}
+          {statusComputed.stateLabel !== "—" && badgePill("black", statusComputed.stateLabel)}
+          {!!txDetailsErr && badgePill("warn", txDetailsErr)}
+        </div>
+
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+          <div className="bg-gray-50 border rounded-lg p-3">
+            <div className="text-xs text-gray-500 mb-1">tx_id</div>
+            <div className="font-mono break-all">{parsed.paymeId || "—"}</div>
+            <div className="mt-2 text-xs text-gray-500">selected tx_id</div>
+            <div className="font-mono break-all">{seedPaymeId || "—"}</div>
+          </div>
+
+          <div className="bg-gray-50 border rounded-lg p-3">
+            <div className="text-xs text-gray-500 mb-1">Order / Amount</div>
+            <div>order_id: <span className="font-mono">{String(statusComputed.orderId ?? parsed.orderId ?? "—")}</span></div>
+            <div>expected amount: <span className="font-mono">{String(statusComputed.amountExpected ?? 0)}</span></div>
+            <div className="mt-2">ledger_rows: <span className="font-mono">{String(statusComputed.ledgerRows)}</span></div>
+            <div>ledger_sum: <span className="font-mono">{String(statusComputed.ledgerSum)}</span></div>
+          </div>
+
+          <div className="bg-gray-50 border rounded-lg p-3">
+            <div className="text-xs text-gray-500 mb-1">Times</div>
+            <div>create_time: <span className="font-mono">{statusComputed.createTime ? fmtTs(Number(statusComputed.createTime)) : "—"}</span></div>
+            <div>perform_time: <span className="font-mono">{statusComputed.performTime ? fmtTs(Number(statusComputed.performTime)) : "—"}</span></div>
+            <div>cancel_time: <span className="font-mono">{statusComputed.cancelTime ? fmtTs(Number(statusComputed.cancelTime)) : "—"}</span></div>
+            <div className="mt-2">reason: <span className="font-mono">{String(statusComputed.reason ?? "—")}</span></div>
+          </div>
+        </div>
+
+        {txDetails?.tx && (
+          <div className="mt-3">
+            <div className="text-xs text-gray-500 mb-1">Raw details (tx/order/ledger)</div>
+            <pre className="text-xs bg-gray-50 border rounded-lg p-3 overflow-auto">
+              {pretty(txDetails)}
+            </pre>
+          </div>
+        )}
       </div>
 
       {/* Scenario presets */}
@@ -493,8 +732,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
         </div>
 
         <div className="mt-2 text-xs text-gray-500">
-          Selected tx_id:{" "}
-          <span className="font-mono">{seedPaymeId ? seedPaymeId : "—"}</span>
+          Selected tx_id: <span className="font-mono">{seedPaymeId || "—"}</span>
           <span className="mx-2">•</span>
           Current tx_id: <span className="font-mono">{parsed.paymeId || "—"}</span>
           {txMode === "seed" ? (
@@ -511,7 +749,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
           className="px-3 py-2 rounded-lg border bg-white disabled:opacity-60 text-sm"
           onClick={runCreateOnly}
           disabled={busy}
-          title="CreateTransaction (только создать) — auto new + guard rails"
+          title="CreateTransaction (auto new + guard rails)"
         >
           Create only
         </button>
@@ -519,7 +757,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
           className="px-3 py-2 rounded-lg border bg-white disabled:opacity-60 text-sm"
           onClick={runCreateAndPerform}
           disabled={busy}
-          title="Create → Perform — auto new + guard rails"
+          title="Create → Perform (auto new + guard rails)"
         >
           Create + Perform
         </button>
@@ -527,7 +765,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
           className="px-3 py-2 rounded-lg border bg-white disabled:opacity-60 text-sm"
           onClick={runCheckCreatePerform}
           disabled={busy}
-          title="Check → Create → Perform — auto new + guard rails"
+          title="Check → Create → Perform (auto new + guard rails)"
         >
           Check + Create + Perform
         </button>
