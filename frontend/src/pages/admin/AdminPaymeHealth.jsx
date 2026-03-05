@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost } from "../../api";
 import { tError, tSuccess } from "../../shared/toast";
 import AdminPaymeEvents from "./AdminPaymeEvents";
+import PaymeLab from "./PaymeLab";
 
 function toNum(x) {
   const n = Number(x);
@@ -25,11 +26,7 @@ function badge(status) {
   const base = "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium";
   if (status === "OK") return <span className={`${base} bg-green-100 text-green-700`}>✅ OK</span>;
   if (status === "STUCK")
-    return (
-      <span className={`${base} bg-purple-100 text-purple-800`}>
-        ⏳ STUCK
-      </span>
-    );
+    return <span className={`${base} bg-purple-100 text-purple-800`}>⏳ STUCK</span>;
   if (status === "LOST_PAYMENT")
     return <span className={`${base} bg-red-100 text-red-700`}>✖ LOST_PAYMENT</span>;
   if (status === "BAD_AMOUNT")
@@ -50,7 +47,7 @@ export default function AdminPaymeHealth() {
   const [details, setDetails] = useState(null);
   const [repairingId, setRepairingId] = useState(null);
 
-  const [tab, setTab] = useState("health"); // "health" | "events"
+  const [tab, setTab] = useState("health"); // "health" | "events" | "lab"
 
   const canLoad = useMemo(() => true, []);
 
@@ -91,11 +88,7 @@ export default function AdminPaymeHealth() {
     setRepairingId(paymeId);
 
     try {
-      const data = await apiPost(
-        `/api/admin/payme/repair/${encodeURIComponent(paymeId)}`,
-        {},
-        "admin"
-      );
+      const data = await apiPost(`/api/admin/payme/repair/${encodeURIComponent(paymeId)}`, {}, "admin");
 
       if (data?.already) tSuccess("Ledger уже был (idempotent)");
       else tSuccess("Ledger восстановлен");
@@ -131,20 +124,22 @@ export default function AdminPaymeHealth() {
 
         <div className="flex items-center gap-2">
           <button
-            className={`px-3 py-2 rounded-lg text-sm ${
-              tab === "health" ? "bg-black text-white" : "border bg-white"
-            }`}
+            className={`px-3 py-2 rounded-lg text-sm ${tab === "health" ? "bg-black text-white" : "border bg-white"}`}
             onClick={() => setTab("health")}
           >
             Health
           </button>
           <button
-            className={`px-3 py-2 rounded-lg text-sm ${
-              tab === "events" ? "bg-black text-white" : "border bg-white"
-            }`}
+            className={`px-3 py-2 rounded-lg text-sm ${tab === "events" ? "bg-black text-white" : "border bg-white"}`}
             onClick={() => setTab("events")}
           >
             Events
+          </button>
+          <button
+            className={`px-3 py-2 rounded-lg text-sm ${tab === "lab" ? "bg-black text-white" : "border bg-white"}`}
+            onClick={() => setTab("lab")}
+          >
+            Lab
           </button>
         </div>
       </div>
@@ -152,7 +147,10 @@ export default function AdminPaymeHealth() {
       {/* Events tab */}
       {tab === "events" && <AdminPaymeEvents />}
 
-      {/* Health tab (your existing UI, unchanged inside) */}
+      {/* Lab tab */}
+      {tab === "lab" && <PaymeLab embedded />}
+
+      {/* Health tab */}
       {tab === "health" && (
         <>
           <div className="bg-white rounded-xl shadow p-4 mb-4">
@@ -231,10 +229,7 @@ export default function AdminPaymeHealth() {
                         <td className="px-3 py-2">{money(r.amount_tiyin)}</td>
                         <td className="px-3 py-2">{money(r.ledger_sum)}</td>
                         <td className="px-3 py-2">{badge(r.health_status)}</td>
-                        <td
-                          className="px-3 py-2 text-right"
-                          onClick={(e) => e.stopPropagation()}
-                        >
+                        <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
                           {r.health_status === "LOST_PAYMENT" ? (
                             <button
                               className="px-3 py-1 rounded-lg bg-red-600 text-white disabled:opacity-60"
