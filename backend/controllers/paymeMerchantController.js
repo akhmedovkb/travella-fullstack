@@ -1,6 +1,7 @@
 // backend/controllers/paymeMerchantController.js
 const pool = require("../db");
 const crypto = require("crypto");
+const { recordPaymeEvent } = require("../utils/paymeEvents");
 
 function getPaymeCreds() {
   const mode = String(process.env.PAYME_MODE || "").trim().toLowerCase();
@@ -462,6 +463,83 @@ function validateRpc(body) {
 /** ===== main handler ===== */
 
 async function paymeMerchantRpc(req, res) {
+    // ===== Payme Events logging (bank-grade, one place) =====
+  const __paymeStart = Date.now();
+  const __paymeIp =
+    req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.ip || null;
+  const __paymeUa = req.headers["user-agent"] || null;
+
+  // body может быть undefined в некоторых случаях (например, если парсер упал)
+  const __paymeBody = req.body || {};
+  const __paymeRpcId = __paymeBody?.id ?? null;
+  const __paymeMethod = __paymeBody?.method ?? null;
+
+  // вытащим order_id / payme_id если есть (чтобы в списке логов было удобно фильтровать)
+  const __paymeOrderId =
+    (__paymeBody?.params?.account?.order_id ??
+      __paymeBody?.params?.account?.["order_id"]) ?? null;
+
+  const __paymePaymeId =
+    __paymeBody?.params?.id ??
+    __paymeBody?.params?.transaction ??
+    __paymeBody?.id ??
+    null;
+
+  // 1) begin (best-effort, не ломает процессинг)
+  try {
+    await recordPaymeEvent({
+      method: __paymeMethod ? String(__paymeMethod) : null,
+      stage: "begin",
+      payme_id: __paymePaymeId ? String(__paymePaymeId) : null,
+      order_id: __paymeOrderId ? Number(__paymeOrderId) : null,
+      rpc_id: __paymeRpcId !== undefined && __paymeRpcId !== null ? String(__paymeRpcId) : null,
+      ip: __paymeIp ? String(__paymeIp) : null,
+      user_agent: __paymeUa ? String(__paymeUa) : null,
+      req_json: __paymeBody,
+    });
+  } catch {}
+
+  // 2) перехватываем res.json, чтобы логировать ВСЕ ответы в одном месте
+  const __origStatus = res.status.bind(res);
+  const __origJson = res.json.bind(res);
+
+  let __httpStatus = 200;
+  res.status = (code) => {
+    __httpStatus = Number(code) || __httpStatus;
+    return __origStatus(code);
+  };
+
+  res.json = (payload) => {
+    // payload может быть объектом ok()/rpcError()
+    (async () => {
+      try {
+        const errCode =
+          payload?.error?.code !== undefined && payload?.error?.code !== null
+            ? Number(payload.error.code)
+            : null;
+        const errMsg =
+          payload?.error?.message !== undefined && payload?.error?.message !== null
+            ? String(payload.error.message)
+            : null;
+
+        await recordPaymeEvent({
+          method: __paymeMethod ? String(__paymeMethod) : null,
+          stage: errCode ? "error" : "end",
+          payme_id: __paymePaymeId ? String(__paymePaymeId) : null,
+          order_id: __paymeOrderId ? Number(__paymeOrderId) : null,
+          rpc_id: __paymeRpcId !== undefined && __paymeRpcId !== null ? String(__paymeRpcId) : null,
+          http_status: __httpStatus,
+          error_code: Number.isFinite(errCode) ? errCode : null,
+          error_message: errMsg || null,
+          duration_ms: Date.now() - __paymeStart,
+          res_json: payload,
+        });
+      } catch {}
+    })();
+
+    return __origJson(payload);
+  };
+  // ===== /Payme Events logging =====
   try {
     if (!requireAuth(req)) {
       const reqId = req?.body?.id ?? null;
