@@ -881,17 +881,21 @@ async function paymeMerchantRpc(req, res) {
           const orderId = Number(tx.order_id);
           const order = await getOrderTx(client, orderId);
 
-          if (order) {
-            await debitLedgerOnceTx(client, {
-              clientId: Number(order.client_id),
-              amountTiyin: Number(order.amount_tiyin),
-              orderId,
-              paymeId,
-              reasonCode: Number.isFinite(reason) ? reason : null,
-            });
-
+        if (order) {
+          await debitLedgerOnceTx(client, {
+            clientId: Number(order.client_id),
+            amountTiyin: Number(order.amount_tiyin),
+            orderId,
+            paymeId,
+            reasonCode: Number.isFinite(reason) ? reason : null,
+          });
+        
+          try {
             await markOrderStatusTx(client, orderId, "cancelled");
+          } catch (e2) {
+            console.error("[payme] CancelTransaction: cannot set order status=cancelled:", e2?.message || e2);
           }
+        }
         }
 
         await client.query("COMMIT");
