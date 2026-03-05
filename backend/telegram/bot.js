@@ -8177,7 +8177,8 @@ bot.on("inline_query", async (ctx) => {
     // ✅ resKey теперь зависит от unlockStamp, иначе после оплаты липнет старый текст/markup
     const resKey = `${baseKey}:res:v5:u${unlockStamp}:o${offset}`;
 
-    // ✅ Для client-search results-cache можно использовать только если stamp учтён (мы учли)const cachedRes = cacheGet(resKey);
+    // ✅ Для client-search results-cache можно использовать только если stamp учтён (мы учли)
+const cachedRes = cacheGet(resKey);
 if (cachedRes && Array.isArray(cachedRes.page)) {
   await ctx.answerInlineQuery(cachedRes.page, {
     cache_time: roleForInline === "client" && !isMy ? 1 : 11,
