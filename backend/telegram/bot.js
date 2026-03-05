@@ -1238,7 +1238,7 @@ function cacheSet(key, data, ttlMs = INLINE_CACHE_TTL_MS) {
 }
 
 // Чтобы не долбить API при быстрых inline-вводах (Telegram шлёт много запросов)
-async function getOrFetchCached(key, ttlMs, fetcher) {
+async function getOrFetchCached(key, ttlMs, fetcher, hardTimeoutMs = 9000) {
   const cached = cacheGet(key);
   if (cached) return cached;
 
@@ -1250,8 +1250,32 @@ async function getOrFetchCached(key, ttlMs, fetcher) {
     }
   }
 
+  const controller = new AbortController();
+
+  const timeoutPromise = new Promise((_, rej) => {
+    const t = setTimeout(() => {
+      try { controller.abort(); } catch {}
+      rej(new Error("INLINE_FETCH_TIMEOUT"));
+    }, hardTimeoutMs);
+    t.unref?.();
+  });
+
   const p = (async () => {
-    const data = await fetcher();
+    const data = await Promise.race([
+      // fetcher может принимать signal или нет — передаем безопасно
+      (async () => {
+        try {
+          return await fetcher(controller.signal);
+        } catch (e) {
+          // если fetcher не принимает аргументы — попробуем без него
+          if (String(e?.message || "").includes("is not a function")) throw e;
+          throw e;
+        }
+      })(),
+      timeoutPromise,
+    ]);
+
+    // кэшируем только успешный результат
     cacheSet(key, data, ttlMs);
     return data;
   })();
@@ -1262,6 +1286,7 @@ async function getOrFetchCached(key, ttlMs, fetcher) {
     return await p;
   } finally {
     inlineInflight.delete(key);
+    try { controller.abort(); } catch {}
   }
 }
 
@@ -8150,40 +8175,40 @@ bot.on("inline_query", async (ctx) => {
     const apiKey = `${baseKey}:api`;
 
     // ✅ resKey теперь зависит от unlockStamp, иначе после оплаты липнет старый текст/markup
-    const resKey = `${baseKey}:res:v5:u${unlockStamp}`;
+    const resKey = `${baseKey}:res:v5:u${unlockStamp}:o${offset}`;
 
-    // ✅ Для client-search results-cache можно использовать только если stamp учтён (мы учли)
-    const cachedRes = cacheGet(resKey);
-    if (cachedRes && Array.isArray(cachedRes.resultsAll)) {
-      const resultsAll = cachedRes.resultsAll;
-      const page = resultsAll.slice(offset, offset + pageSize);
-      const nextOffset = offset + pageSize < resultsAll.length ? String(offset + pageSize) : "";
-
-      await ctx.answerInlineQuery(page, {
-        // для клиента ставим минимальный Telegram cache_time, чтобы не залипало
-        cache_time: roleForInline === "client" && !isMy ? 1 : 11,
-        is_personal: true,
-        next_offset: nextOffset,
-      });
-      return;
-    }
+    // ✅ Для client-search results-cache можно использовать только если stamp учтён (мы учли)const cachedRes = cacheGet(resKey);
+if (cachedRes && Array.isArray(cachedRes.page)) {
+  await ctx.answerInlineQuery(cachedRes.page, {
+    cache_time: roleForInline === "client" && !isMy ? 1 : 11,
+    is_personal: true,
+    next_offset: cachedRes.nextOffset || "",
+  });
+  return;
+}
 
     // 2) иначе — берём API-данные через inflight-dedup
-    const data = await getOrFetchCached(
-      apiKey,
-      12000,
-      async () => {
-        if (isMy) {
-          const resp = await axios.get(`/api/telegram/provider/${userId}/services`);
-          return resp.data;
-        } else {
-          const resp = await axios.get(`/api/telegram/client/${userId}/search`, {
-            params: { category },
-          });
-          return resp.data;
-        }
-      }
-    );
+const data = await getOrFetchCached(
+  apiKey,
+  12000,
+  async (signal) => {
+    if (isMy) {
+      const resp = await axios.get(`/api/telegram/provider/${userId}/services`, {
+        signal,
+        timeout: 8500,
+      });
+      return resp.data;
+    } else {
+      const resp = await axios.get(`/api/telegram/client/${userId}/search`, {
+        params: { category },
+        signal,
+        timeout: 8500,
+      });
+      return resp.data;
+    }
+  },
+  9000
+);
 
     if (!data || !data.success || !Array.isArray(data.items)) {
       console.log("[tg-bot] inline search resp malformed:", data);
@@ -8442,12 +8467,12 @@ bot.on("inline_query", async (ctx) => {
       });
     }
 
-    // ✅ Кэшируем уже собранные results (дорого пересобирать thumbs)
-    cacheSet(resKey, { resultsAll: results }, 30000);
+// ✅ Pagination: Telegram offset
+const page = results.slice(offset, offset + pageSize);
+const nextOffset = offset + pageSize < results.length ? String(offset + pageSize) : "";
 
-    // ✅ Pagination: Telegram offset
-    const page = results.slice(offset, offset + pageSize);
-    const nextOffset = offset + pageSize < results.length ? String(offset + pageSize) : "";
+// ✅ Кэшируем только страницу (не весь resultsAll) — экономия памяти
+cacheSet(resKey, { page, nextOffset }, 30000);
 
     try {
       await ctx.answerInlineQuery(page, {
