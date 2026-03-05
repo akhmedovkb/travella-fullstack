@@ -1,11 +1,21 @@
 // backend/controllers/paymeMerchantController.js
 const pool = require("../db");
 const crypto = require("crypto");
-const { recordPaymeEvent } = require("../utils/paymeEvents");
+
+// ✅ Self-contained: Payme Events logger is optional.
+// Если ../utils/paymeEvents отсутствует или временно сломан, процессинг НЕ должен падать.
+let recordPaymeEvent = async () => {};
+try {
+  // eslint-disable-next-line global-require
+  ({ recordPaymeEvent } = require("../utils/paymeEvents"));
+} catch {
+  // no-op
+}
 
 function getPaymeCreds() {
   const mode = String(process.env.PAYME_MODE || "").trim().toLowerCase();
 
+  // sandbox/test mode
   if (mode === "sandbox" || mode === "test" || mode === "dev") {
     return {
       login:
@@ -19,11 +29,22 @@ function getPaymeCreds() {
     };
   }
 
+  // prod/default
   return {
     login: process.env.PAYME_MERCHANT_LOGIN || "",
     key: process.env.PAYME_MERCHANT_KEY || "",
   };
 }
+
+/**
+ * Payme Merchant API (Paycom): JSON-RPC 2.0 via HTTP POST
+ * Auth: Basic base64(login:password)
+ *
+ * ENV:
+ *   PAYME_MODE=live|sandbox
+ *   PAYME_MERCHANT_LOGIN / PAYME_MERCHANT_KEY
+ *   PAYME_MERCHANT_LOGIN_SANDBOX / PAYME_MERCHANT_KEY_SANDBOX
+ */
 
 const TX_TIMEOUT_MS = 12 * 60 * 60 * 1000; // 12h
 
@@ -55,12 +76,12 @@ function nowMs() {
 }
 
 function toIntAmountTiyin(x) {
-  // Payme sends amount in tiyin (integer). Be strict.
+  // Payme sends "amount" in tiyin (integer). Be strict to avoid float bugs.
   const n = Number(x);
   if (!Number.isFinite(n)) return null;
   const i = Math.trunc(n);
   if (i <= 0) return null;
-  if (i !== n) return null;
+  if (i !== n) return null; // reject fractional values
   return i;
 }
 
@@ -90,24 +111,28 @@ function requireAuth(req) {
   const { login: expLogin, key: expKey } = getPaymeCreds();
   const got = parseBasicAuth(req);
 
-  // if creds missing => always deny
+  // если кредов нет — всегда запрещаем (чтобы не открыть дыру)
   if (!expLogin || !expKey) return false;
 
-  // login compare normal, key compare timing-safe
-  return !!got && got.login === expLogin && safeEq(got.key, expKey);
+  return !!got && got.login === expLogin && got.key === expKey;
 }
 
-/** ===== normalization ===== */
+/** ===== normalization (bank-grade) ===== */
+
 function normalizePaymeId(x) {
-  const s = String(x ?? "").replace(/\u0000/g, "").trim();
+  // Payme id может прилететь с пробелами/невидимыми символами из тестов/инструментов
+  // Нормализуем одинаково везде.
+  const s = String(x ?? "")
+    .replace(/\u0000/g, "") // null bytes
+    .trim();
+
+  // collapse whitespace inside (на случай "pm_tx_123 " / "pm_tx_ 123")
   return s.replace(/\s+/g, " ");
 }
 
-function normStatus(x) {
-  return String(x || "").trim().toLowerCase();
-}
-
-/** ===== Payme account ===== */
+/** ===== Payme account =====
+ * We use account.order_id (topup order id)
+ */
 function extractOrderId(params) {
   const oid = params?.account?.order_id ?? params?.account?.["order_id"];
   const n = Number(oid);
@@ -115,19 +140,17 @@ function extractOrderId(params) {
 }
 
 /** ===== advisory locks ===== */
+
 async function lockKeyTx(client, keyStr) {
-  await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [String(keyStr)]);
-}
-async function lockPaymeTx(client, paymeId) {
-  await lockKeyTx(client, `payme:${String(paymeId)}`);
-}
-async function lockOrderTx(client, orderId) {
-  await lockKeyTx(client, `order:${String(orderId)}`);
+  await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [
+    String(keyStr),
+  ]);
 }
 
 /** ===== DB helpers ===== */
+
 async function getOrderTx(client, orderId) {
-  // ✅ single source of truth
+  // ✅ Single source of truth (и FK-таргет для payme_transactions.order_id): topup_orders
   const { rows } = await client.query(
     `SELECT id, client_id, amount_tiyin, status, paid_at
        FROM topup_orders
@@ -136,6 +159,39 @@ async function getOrderTx(client, orderId) {
     [orderId]
   );
   return rows[0] || null;
+}
+
+// ✅ Migration safety: in some older DBs there is a legacy table payme_topup_orders.
+// Since payme_transactions.order_id has FK to topup_orders, we must ensure the row exists in topup_orders.
+// If it exists in payme_topup_orders, we copy it over (best-effort) before processing.
+async function ensureTopupOrderExistsTx(client, orderId) {
+  const { rows: ex } = await client.query(`SELECT 1 FROM topup_orders WHERE id=$1`, [orderId]);
+  if (ex.length) return;
+
+  // try legacy source
+  const { rows: legacy } = await client.query(
+    `SELECT id, client_id, amount_tiyin, status, created_at, paid_at
+       FROM payme_topup_orders
+      WHERE id=$1`,
+    [orderId]
+  );
+  const r = legacy[0];
+  if (!r) return;
+
+  // copy into current table (provider is required here)
+  await client.query(
+    `INSERT INTO topup_orders (id, client_id, amount_tiyin, provider, status, created_at, paid_at)
+     VALUES ($1,$2,$3,'payme',$4,COALESCE($5,now()),$6)
+     ON CONFLICT (id) DO NOTHING`,
+    [
+      Number(r.id),
+      Number(r.client_id),
+      Number(r.amount_tiyin),
+      String(r.status || "new"),
+      r.created_at || null,
+      r.paid_at || null,
+    ]
+  );
 }
 
 async function getTxForUpdate(client, paymeId) {
@@ -163,10 +219,16 @@ async function insertTxIfAbsent(client, { paymeId, orderId, amount, createTime }
 
 async function setTxState(client, paymeId, patch) {
   const state = Number.isFinite(patch?.state) ? patch.state : null;
-  const perform_time = Number.isFinite(patch?.perform_time) ? patch.perform_time : null;
-  const cancel_time = Number.isFinite(patch?.cancel_time) ? patch.cancel_time : null;
+  const perform_time = Number.isFinite(patch?.perform_time)
+    ? patch.perform_time
+    : null;
+  const cancel_time = Number.isFinite(patch?.cancel_time)
+    ? patch.cancel_time
+    : null;
   const reason =
-    patch && Object.prototype.hasOwnProperty.call(patch, "reason") ? patch.reason : null;
+    patch && Object.prototype.hasOwnProperty.call(patch, "reason")
+      ? patch.reason
+      : null;
 
   const { rows } = await client.query(
     `UPDATE payme_transactions
@@ -192,7 +254,7 @@ async function markOrderStatusTx(client, orderId, status, paidAt = null) {
   );
 }
 
-/** ===== ledger helpers (schema-safe) ===== */
+// ===== contact_balance_ledger helpers (schema-safe) =====
 const _ledgerColsCache = { cols: null };
 
 async function getLedgerCols(client) {
@@ -211,12 +273,65 @@ async function getLedgerCols(client) {
   return set;
 }
 
-function buildInsert(table, data) {
+function buildInsert(table, data, conflictCols) {
   const cols = Object.keys(data);
   const vals = cols.map((_, i) => `$${i + 1}`);
-  const sql = `INSERT INTO ${table} (${cols.join(", ")}) VALUES (${vals.join(", ")})`;
+  const sql =
+    `INSERT INTO ${table} (${cols.join(", ")}) VALUES (${vals.join(", ")}) ` +
+    (conflictCols?.length
+      ? `ON CONFLICT (${conflictCols.join(", ")}) DO NOTHING`
+      : "");
   const args = cols.map((c) => data[c]);
   return { sql, args };
+}
+
+// ===== schema-aware helpers (no more "column does not exist") =====
+const _schemaCache = {
+  cols: new Map(), // key: "schema.table" -> Set(col)
+  balanceCol: null, // cached chosen column name in clients
+};
+
+async function getColumns(client, table, schema = "public") {
+  const key = `${schema}.${table}`;
+  if (_schemaCache.cols.has(key)) return _schemaCache.cols.get(key);
+
+  const { rows } = await client.query(
+    `
+    SELECT column_name
+    FROM information_schema.columns
+    WHERE table_schema = $1 AND table_name = $2
+  `,
+    [schema, table]
+  );
+
+  const set = new Set(rows.map((r) => r.column_name));
+  _schemaCache.cols.set(key, set);
+  return set;
+}
+
+async function pickClientsBalanceColumn(client) {
+  if (_schemaCache.balanceCol) return _schemaCache.balanceCol;
+
+  const cols = await getColumns(client, "clients");
+  // пробуем самые вероятные варианты
+  const candidates = ["contact_balance", "contact_balance_tiyin", "balance_tiyin", "balance"];
+  const found = candidates.find((c) => cols.has(c)) || null;
+
+  _schemaCache.balanceCol = found;
+  return found;
+}
+
+async function bumpClientBalanceIfExists(client, clientId, deltaTiyin) {
+  // ✅ Variant B:
+  // clients.* balance columns are NOT used in this project.
+  // Single source of truth is contact_balance_ledger.
+  return;
+}
+
+// helper: does ON CONFLICT work? (requires unique/exclusion constraint)
+function isOnConflictNoConstraintErr(e) {
+  // "there is no unique or exclusion constraint matching the ON CONFLICT specification"
+  return String(e?.code || "") === "42P10";
 }
 
 async function creditLedgerOnceTx(client, { clientId, amountTiyin, orderId, paymeId }) {
@@ -225,7 +340,7 @@ async function creditLedgerOnceTx(client, { clientId, amountTiyin, orderId, paym
 
   const cols = await getLedgerCols(client);
 
-  // idempotency check by meta
+  // ✅ idempotency for your schema: meta->>'payme_id' + meta->>'order_id'
   if (cols.has("meta")) {
     const { rows: ex } = await client.query(
       `
@@ -257,7 +372,7 @@ async function creditLedgerOnceTx(client, { clientId, amountTiyin, orderId, paym
     };
   }
 
-  const { sql, args } = buildInsert("contact_balance_ledger", row);
+  const { sql, args } = buildInsert("contact_balance_ledger", row, null);
   await client.query(sql, args);
 }
 
@@ -267,7 +382,7 @@ async function debitLedgerOnceTx(client, { clientId, amountTiyin, orderId, payme
 
   const cols = await getLedgerCols(client);
 
-  // idempotency check
+  // ✅ idempotency for refund row
   if (cols.has("meta")) {
     const { rows: ex } = await client.query(
       `
@@ -286,7 +401,7 @@ async function debitLedgerOnceTx(client, { clientId, amountTiyin, orderId, payme
 
   const row = {};
   if (cols.has("client_id")) row.client_id = Number(clientId);
-  if (cols.has("amount")) row.amount = -amt; // reversal
+  if (cols.has("amount")) row.amount = -amt;
   if (cols.has("reason")) row.reason = "refund";
   if (cols.has("source")) row.source = "payme_refund";
   if (cols.has("service_id")) row.service_id = null;
@@ -300,11 +415,12 @@ async function debitLedgerOnceTx(client, { clientId, amountTiyin, orderId, payme
     };
   }
 
-  const { sql, args } = buildInsert("contact_balance_ledger", row);
+  const { sql, args } = buildInsert("contact_balance_ledger", row, null);
   await client.query(sql, args);
 }
 
 /** ===== rpc validation ===== */
+
 function validateRpc(body) {
   const jsonrpc = body?.jsonrpc;
   const id = body?.id;
@@ -324,6 +440,7 @@ function validateRpc(body) {
 }
 
 /** ===== main handler ===== */
+
 async function paymeMerchantRpc(req, res) {
   // ===== Payme Events logging (bank-grade, one place) =====
   const __paymeStart = Date.now();
@@ -339,8 +456,11 @@ async function paymeMerchantRpc(req, res) {
     (__paymeBody?.params?.account?.order_id ??
       __paymeBody?.params?.account?.["order_id"]) ?? null;
 
-  // ✅ payme transaction id is params.id (NOT body.id)
-  const __paymePaymeId = __paymeBody?.params?.id ?? null;
+  const __paymePaymeId =
+    __paymeBody?.params?.id ??
+    __paymeBody?.params?.transaction ??
+    __paymeBody?.id ??
+    null;
 
   try {
     await recordPaymeEvent({
@@ -416,21 +536,40 @@ async function paymeMerchantRpc(req, res) {
         return res.status(200).json(rpcError(id, -32602, "Invalid params.amount"));
       }
 
-      const { rows } = await pool.query(
-        `SELECT id, amount_tiyin, status
-           FROM topup_orders
-          WHERE id = $1`,
-        [orderId]
-      );
+      // bank-grade: do everything under one short tx + advisory lock
+      const client = await pool.connect();
+      let order = null;
+      try {
+        await client.query("BEGIN");
+        await lockKeyTx(client, `order:${orderId}`);
 
-      const order = rows[0];
+        // 🔁 auto-heal legacy environments (payme_topup_orders -> topup_orders)
+        await ensureTopupOrderExistsTx(client, orderId);
+
+        const { rows } = await client.query(
+          `SELECT id, amount_tiyin, status
+             FROM topup_orders
+            WHERE id = $1`,
+          [orderId]
+        );
+        order = rows[0] || null;
+        await client.query("COMMIT");
+      } catch (e) {
+        try {
+          await client.query("ROLLBACK");
+        } catch {}
+        console.error("[payme] CheckPerformTransaction error:", e?.message || e);
+        return res.status(200).json(rpcError(id, -32400, "Internal error"));
+      } finally {
+        client.release();
+      }
+
       if (!order) return res.status(200).json(rpcError(id, -31050, "Order not found"));
       if (Number(order.amount_tiyin) !== amount)
         return res.status(200).json(rpcError(id, -31001, "Incorrect amount"));
-
-      const st = normStatus(order.status);
-      if (st === "paid") return res.status(200).json(rpcError(id, -31008, "Already paid"));
-      if (st === "cancelled") return res.status(200).json(rpcError(id, -31008, "Order cancelled"));
+      if (order.status === "paid") return res.status(200).json(rpcError(id, -31008, "Already paid"));
+      if (order.status === "cancelled")
+        return res.status(200).json(rpcError(id, -31008, "Order cancelled"));
 
       return res.status(200).json(ok(id, { allow: true }));
     }
@@ -439,7 +578,8 @@ async function paymeMerchantRpc(req, res) {
     if (method === "CreateTransaction") {
       const orderId = extractOrderId(params);
       const amount = toIntAmountTiyin(params.amount);
-      const paymeId = normalizePaymeId(params.id);
+      const paymeIdRaw = params.id;
+      const paymeId = normalizePaymeId(paymeIdRaw);
       const time = Number(params.time);
 
       if (!paymeId) return res.status(200).json(rpcError(id, -32602, "Missing params.id"));
@@ -452,13 +592,26 @@ async function paymeMerchantRpc(req, res) {
       try {
         await client.query("BEGIN");
 
-        // ✅ serialize by payme tx + order
-        await lockPaymeTx(client, paymeId);
-        await lockOrderTx(client, orderId);
+        await lockKeyTx(client, `payme:${paymeId}`);
+        await lockKeyTx(client, `order:${orderId}`);
+
+        // 🔁 auto-heal legacy environments (payme_topup_orders -> topup_orders)
+        await ensureTopupOrderExistsTx(client, orderId);
 
         logPayme("CreateTransaction.begin", { paymeId, orderId, amount });
 
-        // 1) if tx exists => idempotent return (but validate order/amount)
+        // Edge-case guard: one order must not have 2 active transactions
+        const { rows: orderTxRows } = await client.query(
+          `SELECT payme_id, state
+             FROM payme_transactions
+            WHERE order_id = $1
+              AND state IN (1,2)
+            LIMIT 1
+            FOR UPDATE`,
+          [orderId]
+        );
+        const activeForOrder = orderTxRows[0] || null;
+
         const existing = await getTxForUpdate(client, paymeId);
         if (existing) {
           if (Number(existing.order_id) !== Number(orderId)) {
@@ -473,26 +626,13 @@ async function paymeMerchantRpc(req, res) {
           await client.query("COMMIT");
           return res.status(200).json(
             ok(id, {
-              create_time:
-                Number(existing.create_time) || (Number.isFinite(time) ? time : nowMs()),
+              create_time: Number(existing.create_time) || (Number.isFinite(time) ? time : nowMs()),
               transaction: paymeId,
               state: Number(existing.state),
               receivers: null,
             })
           );
         }
-
-        // 2) protect: one order must not have 2 active tx
-        const { rows: orderTxRows } = await client.query(
-          `SELECT payme_id, state
-             FROM payme_transactions
-            WHERE order_id = $1
-              AND state IN (1,2)
-            LIMIT 1
-            FOR UPDATE`,
-          [orderId]
-        );
-        const activeForOrder = orderTxRows[0] || null;
 
         if (activeForOrder && String(activeForOrder.payme_id) !== String(paymeId)) {
           await client.query("ROLLBACK");
@@ -501,7 +641,6 @@ async function paymeMerchantRpc(req, res) {
             .json(rpcError(id, -31099, "Transaction conflict (another active tx for order)"));
         }
 
-        // 3) lock & validate order
         const order = await getOrderTx(client, orderId);
         if (!order) {
           await client.query("ROLLBACK");
@@ -511,30 +650,32 @@ async function paymeMerchantRpc(req, res) {
           await client.query("ROLLBACK");
           return res.status(200).json(rpcError(id, -31001, "Incorrect amount"));
         }
-
-        const st = normStatus(order.status);
-        if (st === "paid") {
+        if (order.status === "paid") {
           await client.query("ROLLBACK");
           return res.status(200).json(rpcError(id, -31008, "Already paid"));
         }
-        if (st === "cancelled") {
+        if (order.status === "cancelled") {
           await client.query("ROLLBACK");
           return res.status(200).json(rpcError(id, -31008, "Order cancelled"));
         }
 
         const createTime = Number.isFinite(time) && time > 0 ? time : nowMs();
 
-        // 4) timeout rule
+        // Payme spec: do not allow creating too-old transactions
         if (nowMs() - createTime > TX_TIMEOUT_MS) {
           await client.query("ROLLBACK");
           return res.status(200).json(rpcError(id, -31008, "Transaction expired"));
         }
 
-        // 5) insert tx (idempotent on payme_id)
-        await insertTxIfAbsent(client, { paymeId, orderId, amount, createTime });
+        await insertTxIfAbsent(client, {
+          paymeId,
+          orderId,
+          amount,
+          createTime,
+        });
 
-        // 6) order status: new -> created (best-effort)
-        if (st === "new" || st === "created" || !st) {
+        // Keep compatibility with older bot statuses: 'new' -> 'created'
+        if (order.status === "new" || order.status === "created" || !order.status) {
           await markOrderStatusTx(client, orderId, "created");
         }
 
@@ -562,16 +703,19 @@ async function paymeMerchantRpc(req, res) {
     /** ---- PerformTransaction ---- */
     if (method === "PerformTransaction") {
       const paymeId = normalizePaymeId(params.id);
+
       if (!paymeId) return res.status(200).json(rpcError(id, -32602, "Missing params.id"));
 
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
 
-        await lockPaymeTx(client, paymeId);
+        // serialize all operations per payme transaction id
+        await lockKeyTx(client, `payme:${paymeId}`);
 
         logPayme("PerformTransaction.begin", { paymeId });
 
+        // Strict row lock ONLY
         const tx = await getTxForUpdate(client, paymeId);
         if (!tx) {
           await client.query("ROLLBACK");
@@ -585,16 +729,18 @@ async function paymeMerchantRpc(req, res) {
           return res.status(200).json(rpcError(id, -31003, "Transaction not found"));
         }
 
-        const orderId = Number(tx.order_id);
-        if (orderId) await lockOrderTx(client, orderId);
+        // lock order too
+        if (tx?.order_id) {
+          await lockKeyTx(client, `order:${tx.order_id}`);
+        }
 
-        // cancelled => refuse
+        // cancelled => refuse perform
         if (Number(tx.state) === -1 || Number(tx.state) === -2) {
           await client.query("COMMIT");
           return res.status(200).json(rpcError(id, -31008, "Transaction cancelled"));
         }
 
-        // expired => cancel -1 and refuse
+        // expired => cancel as -1 and refuse
         const ct = Number(tx.create_time) || 0;
         if (ct && nowMs() - ct > TX_TIMEOUT_MS) {
           const cancelTime = nowMs();
@@ -603,38 +749,46 @@ async function paymeMerchantRpc(req, res) {
           return res.status(200).json(rpcError(id, -31008, "Transaction expired"));
         }
 
-        // idempotent already performed
+        // idempotent: already performed
         if (Number(tx.state) === 2) {
           const pt = Number(tx.perform_time) || 0;
           await client.query("COMMIT");
-          return res.status(200).json(ok(id, { transaction: paymeId, perform_time: pt, state: 2 }));
+          return res.status(200).json(
+            ok(id, {
+              transaction: paymeId,
+              perform_time: pt,
+              state: 2,
+            })
+          );
         }
 
+        const orderId = Number(tx.order_id);
         const order = await getOrderTx(client, orderId);
         if (!order) {
           await client.query("ROLLBACK");
           return res.status(200).json(rpcError(id, -31050, "Order not found"));
         }
 
-        const st = normStatus(order.status);
-
-        // order cancelled => cancel tx and refuse
-        if (st === "cancelled") {
+        if (order.status === "cancelled") {
           const cancelTime = nowMs();
           await setTxState(client, paymeId, { state: -1, cancel_time: cancelTime, reason: 4 });
           await client.query("COMMIT");
           return res.status(200).json(rpcError(id, -31008, "Order cancelled"));
         }
 
-        // already paid => finalize tx as performed idempotently
-        if (st === "paid") {
+        if (order.status === "paid") {
           const performTime = order.paid_at ? new Date(order.paid_at).getTime() : nowMs();
           await setTxState(client, paymeId, { state: 2, perform_time: performTime });
           await client.query("COMMIT");
-          return res.status(200).json(ok(id, { transaction: paymeId, perform_time: performTime, state: 2 }));
+          return res.status(200).json(
+            ok(id, {
+              transaction: paymeId,
+              perform_time: performTime,
+              state: 2,
+            })
+          );
         }
 
-        // FK safety
         const { rows: cRows } = await client.query(`SELECT id FROM clients WHERE id=$1`, [
           Number(order.client_id),
         ]);
@@ -645,13 +799,9 @@ async function paymeMerchantRpc(req, res) {
 
         const performTime = nowMs();
 
-        // 1) set tx performed
         await setTxState(client, paymeId, { state: 2, perform_time: performTime });
-
-        // 2) mark order paid
         await markOrderStatusTx(client, orderId, "paid", new Date(performTime));
 
-        // 3) credit ledger once
         await creditLedgerOnceTx(client, {
           clientId: Number(order.client_id),
           amountTiyin: Number(order.amount_tiyin),
@@ -661,7 +811,13 @@ async function paymeMerchantRpc(req, res) {
 
         await client.query("COMMIT");
 
-        return res.status(200).json(ok(id, { transaction: paymeId, perform_time: performTime, state: 2 }));
+        return res.status(200).json(
+          ok(id, {
+            transaction: paymeId,
+            perform_time: performTime,
+            state: 2,
+          })
+        );
       } catch (e) {
         try {
           await client.query("ROLLBACK");
@@ -683,8 +839,7 @@ async function paymeMerchantRpc(req, res) {
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
-
-        await lockPaymeTx(client, paymeId);
+        await lockKeyTx(client, `payme:${paymeId}`);
 
         const tx = await getTxForUpdate(client, paymeId);
         if (!tx) {
@@ -692,10 +847,10 @@ async function paymeMerchantRpc(req, res) {
           return res.status(200).json(rpcError(id, -31003, "Transaction not found"));
         }
 
-        const orderId = Number(tx.order_id);
-        if (orderId) await lockOrderTx(client, orderId);
+        if (tx?.order_id) {
+          await lockKeyTx(client, `order:${tx.order_id}`);
+        }
 
-        // already cancelled => idempotent
         if (Number(tx.state) === -1 || Number(tx.state) === -2) {
           await client.query("COMMIT");
           return res.status(200).json(
@@ -717,12 +872,13 @@ async function paymeMerchantRpc(req, res) {
           reason: Number.isFinite(reason) ? reason : null,
         });
 
-        // reversal only if THIS request moved 2 -> -2
         const prevState = Number(tx.state);
         const newStateDb = Number(updated?.state ?? newState);
 
         if (prevState === 2 && newStateDb === -2) {
+          const orderId = Number(tx.order_id);
           const order = await getOrderTx(client, orderId);
+
           if (order) {
             await debitLedgerOnceTx(client, {
               clientId: Number(order.client_id),
