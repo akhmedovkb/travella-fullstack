@@ -1,4 +1,4 @@
-//backend/controllers/adminPaymeLabController.js
+// backend/controllers/adminPaymeLabController.js
 
 const axios = require("axios");
 
@@ -7,14 +7,17 @@ function basicAuth(login, key) {
 }
 
 function getBaseUrl(req) {
-  // 1) явный BASE_URL (если ты хочешь жестко задать домен)
   const envBase = String(process.env.BASE_URL || "").trim();
   if (envBase) return envBase.replace(/\/+$/, "");
 
-  // 2) авто-определение по запросу (работает и в Railway/Proxy)
   const xfProto = req.headers["x-forwarded-proto"];
   const xfHost = req.headers["x-forwarded-host"];
-  const proto = (Array.isArray(xfProto) ? xfProto[0] : xfProto) || req.protocol || "http";
+
+  const proto =
+    (Array.isArray(xfProto) ? xfProto[0] : xfProto) ||
+    req.protocol ||
+    "http";
+
   const host =
     (Array.isArray(xfHost) ? xfHost[0] : xfHost) ||
     req.get("host") ||
@@ -41,8 +44,15 @@ async function paymeLabRun(req, res) {
       params: params || {},
     };
 
-    const login = process.env.PAYME_MERCHANT_LOGIN_SANDBOX || process.env.PAYME_MERCHANT_LOGIN || "";
-    const key = process.env.PAYME_MERCHANT_KEY_SANDBOX || process.env.PAYME_MERCHANT_KEY || "";
+    const login =
+      process.env.PAYME_MERCHANT_LOGIN_SANDBOX ||
+      process.env.PAYME_MERCHANT_LOGIN ||
+      "";
+
+    const key =
+      process.env.PAYME_MERCHANT_KEY_SANDBOX ||
+      process.env.PAYME_MERCHANT_KEY ||
+      "";
 
     const response = await axios.post(url, rpc, {
       headers: {
@@ -50,19 +60,18 @@ async function paymeLabRun(req, res) {
         Authorization: basicAuth(login, key),
       },
       timeout: 20000,
-      validateStatus: () => true,
+      validateStatus: () => true, // чтобы не падать на не-2xx (на всякий)
     });
 
     return res.json({
       ok: true,
+      target_url: url,
       rpc,
       result: response.data,
       http_status: response.status,
-      target_url: url,
     });
   } catch (e) {
     console.error("PaymeLab error:", e?.response?.data || e.message);
-
     return res.status(500).json({
       ok: false,
       error: e?.response?.data || e.message,
