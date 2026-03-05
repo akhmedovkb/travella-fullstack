@@ -6254,7 +6254,13 @@ bot.action(/^balance:topup:(\d+)$/, async (ctx) => {
 
     // создаём order в БД
     const amountTiyin = Math.trunc(amountSum * 100); // сум -> тийин (UZS) :contentReference[oaicite:6]{index=6}
-    const clientId = Number(ctx.from?.id);
+    const chatId = ctx.from?.id;
+    const clientRow = await getClientRowByChatId(pool, chatId);
+    if (!clientRow?.id) {
+      await safeReply(ctx, "👋 Сначала привяжите аккаунт через /start");
+      return;
+    }
+    const clientId = Number(clientRow.id);
 
     const r = await pool.query(
       `INSERT INTO payme_topup_orders (client_id, amount_tiyin, status)
