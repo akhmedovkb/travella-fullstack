@@ -27,6 +27,7 @@ const paymeMerchantRoutes = require("./routes/paymeMerchantRoutes");
 const adminPaymeHealthRoutes = require("./routes/adminPaymeHealthRoutes");
 const { runPaymeHealthCheck } = require("./jobs/paymeHealthJob");
 const adminPaymeEventsRoutes = require("./routes/adminPaymeEventsRoutes");
+const adminPaymeLabRoutes = require("./routes/adminPaymeLabRoutes");
 
 dotenv.config();
 const app = express();
@@ -1006,6 +1007,7 @@ app.use("/api/admin/clients", adminContactBalanceRoutes);
 app.use("/api", paymeMerchantRoutes);
 app.use("/api/admin/payme", adminPaymeHealthRoutes);
 app.use("/api/admin/payme", adminPaymeEventsRoutes);
+app.use("/api/admin/payme/lab", adminPaymeLabRoutes);
 
 /** ===================== Start (в самом конце) ===================== */
 const PORT = process.env.PORT || 5000;
