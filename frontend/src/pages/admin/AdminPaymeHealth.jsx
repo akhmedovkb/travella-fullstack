@@ -86,6 +86,14 @@ export default function AdminPaymeHealth() {
     }
   }
 
+  function openInLab(r) {
+    if (!r) return;
+    // важно: seed в PaymeLab берётся из selected
+    setSelected(r);
+    // детали можно грузить отдельно по клику на строку, здесь не обязательно
+    setTab("lab");
+  }
+
   async function repair(paymeId) {
     if (!paymeId) return;
 
@@ -265,17 +273,25 @@ export default function AdminPaymeHealth() {
                           className="px-3 py-2 text-right"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          {r.health_status === "LOST_PAYMENT" ? (
+                          <div className="flex items-center justify-end gap-2">
                             <button
-                              className="px-3 py-1 rounded-lg bg-red-600 text-white disabled:opacity-60"
-                              disabled={repairingId === r.payme_id}
-                              onClick={() => repair(r.payme_id)}
+                              className="px-3 py-1 rounded-lg border bg-white hover:bg-gray-50"
+                              onClick={() => openInLab(r)}
+                              title="Открыть выбранную транзакцию в Payme Lab"
                             >
-                              {repairingId === r.payme_id ? "…" : "Repair"}
+                              Open in Lab
                             </button>
-                          ) : (
-                            <span className="text-xs text-gray-400">—</span>
-                          )}
+
+                            {r.health_status === "LOST_PAYMENT" ? (
+                              <button
+                                className="px-3 py-1 rounded-lg bg-red-600 text-white disabled:opacity-60"
+                                disabled={repairingId === r.payme_id}
+                                onClick={() => repair(r.payme_id)}
+                              >
+                                {repairingId === r.payme_id ? "…" : "Repair"}
+                              </button>
+                            ) : null}
+                          </div>
                         </td>
                       </tr>
                     ))}
