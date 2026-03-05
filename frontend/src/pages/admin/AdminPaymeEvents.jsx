@@ -1,7 +1,8 @@
-//frontend/src/pages/admin/AdminPaymeEvents.jsx
+// frontend/src/pages/admin/AdminPaymeEvents.jsx
 
 import { useEffect, useMemo, useState } from "react";
-import axios from "axios";
+import { apiGet } from "../../api";
+import { tError } from "../../shared/toast";
 
 export default function AdminPaymeEvents() {
   const [rows, setRows] = useState([]);
@@ -25,8 +26,12 @@ export default function AdminPaymeEvents() {
   async function load() {
     setLoading(true);
     try {
-      const { data } = await axios.get(`/api/admin/payme/events?${query}`);
+      const data = await apiGet(`/api/admin/payme/events?${query}`, "admin");
       setRows(Array.isArray(data?.rows) ? data.rows : []);
+    } catch (e) {
+      console.error(e);
+      setRows([]);
+      tError("Не удалось загрузить Payme Events");
     } finally {
       setLoading(false);
     }
@@ -36,10 +41,12 @@ export default function AdminPaymeEvents() {
     setSelected(id);
     setDetails(null);
     try {
-      const { data } = await axios.get(`/api/admin/payme/events/${id}`);
+      const data = await apiGet(`/api/admin/payme/events/${id}`, "admin");
       setDetails(data?.row || null);
-    } catch {
+    } catch (e) {
+      console.error(e);
       setDetails(null);
+      tError("Не удалось загрузить детали события");
     }
   }
 
@@ -163,16 +170,38 @@ export default function AdminPaymeEvents() {
           {details && (
             <div className="space-y-3 text-sm">
               <div className="grid grid-cols-2 gap-2">
-                <div><b>ID:</b> {details.id}</div>
-                <div><b>Created:</b> {details.created_at ? new Date(details.created_at).toLocaleString() : ""}</div>
-                <div><b>Method:</b> {details.method || ""}</div>
-                <div><b>Stage:</b> {details.stage || ""}</div>
-                <div><b>Payme ID:</b> {details.payme_id || ""}</div>
-                <div><b>Order ID:</b> {details.order_id ?? ""}</div>
-                <div><b>HTTP:</b> {details.http_status ?? ""}</div>
-                <div><b>Error:</b> {details.error_code ?? ""} {details.error_message ? `— ${details.error_message}` : ""}</div>
-                <div><b>IP:</b> {details.ip || ""}</div>
-                <div><b>ms:</b> {details.duration_ms ?? ""}</div>
+                <div>
+                  <b>ID:</b> {details.id}
+                </div>
+                <div>
+                  <b>Created:</b>{" "}
+                  {details.created_at ? new Date(details.created_at).toLocaleString() : ""}
+                </div>
+                <div>
+                  <b>Method:</b> {details.method || ""}
+                </div>
+                <div>
+                  <b>Stage:</b> {details.stage || ""}
+                </div>
+                <div>
+                  <b>Payme ID:</b> {details.payme_id || ""}
+                </div>
+                <div>
+                  <b>Order ID:</b> {details.order_id ?? ""}
+                </div>
+                <div>
+                  <b>HTTP:</b> {details.http_status ?? ""}
+                </div>
+                <div>
+                  <b>Error:</b> {details.error_code ?? ""}{" "}
+                  {details.error_message ? `— ${details.error_message}` : ""}
+                </div>
+                <div>
+                  <b>IP:</b> {details.ip || ""}
+                </div>
+                <div>
+                  <b>ms:</b> {details.duration_ms ?? ""}
+                </div>
               </div>
 
               <div>
