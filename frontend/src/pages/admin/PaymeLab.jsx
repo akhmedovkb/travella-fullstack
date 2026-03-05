@@ -28,7 +28,6 @@ function isoToMs(iso) {
 }
 
 function msToLocalIsoInput(ms) {
-  // input[type=datetime-local] expects YYYY-MM-DDTHH:mm
   if (!ms) return "";
   const d = new Date(ms);
   const pad = (n) => String(n).padStart(2, "0");
@@ -40,7 +39,7 @@ function msToLocalIsoInput(ms) {
   return `${y}-${m}-${day}T${hh}:${mm}`;
 }
 
-export default function PaymeLab() {
+export default function PaymeLab({ embedded = false } = {}) {
   // Core inputs
   const [orderId, setOrderId] = useState("11");
   const [amount, setAmount] = useState("100000"); // tiyins
@@ -70,11 +69,7 @@ export default function PaymeLab() {
   async function run(method, params) {
     setBusy(true);
     try {
-      const data = await apiPost(
-        "/api/admin/payme/lab/run",
-        { method, params },
-        "admin"
-      );
+      const data = await apiPost("/api/admin/payme/lab/run", { method, params }, "admin");
 
       const snap = {
         ts: nowMs(),
@@ -132,7 +127,6 @@ export default function PaymeLab() {
   }
 
   async function runFullScenario() {
-    // Bank-grade flow (happy path): Check -> Create -> Perform -> GetStatement
     setBusy(true);
     try {
       const ok1 = await run("CheckPerformTransaction", buildCheck());
@@ -151,14 +145,27 @@ export default function PaymeLab() {
     }
   }
 
+  const Wrapper = ({ children }) =>
+    embedded ? (
+      <div>{children}</div>
+    ) : (
+      <div className="p-4 md:p-6">
+        <h1 className="text-xl font-semibold mb-1">Payme Lab (Admin)</h1>
+        <p className="text-sm text-gray-500 mb-4">
+          Кнопки Merchant API через серверный прокси (Basic Auth хранится на backend).
+        </p>
+        {children}
+      </div>
+    );
+
   return (
-    <div className="p-4 md:p-6">
+    <Wrapper>
       <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-xl font-semibold">Payme Lab (Admin)</h1>
-          <p className="text-sm text-gray-500">
-            Кнопки Merchant API через серверный прокси (Basic Auth хранится на backend).
-          </p>
+          <div className="text-lg font-semibold">Payme Lab</div>
+          <div className="text-sm text-gray-500">
+            Check → Create → Perform → Cancel → GetStatement + auto-snapshot
+          </div>
         </div>
 
         <button
@@ -172,7 +179,7 @@ export default function PaymeLab() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Left: Controls */}
+        {/* Controls */}
         <div className="lg:col-span-1 bg-white rounded-xl shadow p-4">
           <div className="grid grid-cols-1 gap-3">
             <div>
@@ -299,7 +306,7 @@ export default function PaymeLab() {
           </div>
         </div>
 
-        {/* Middle: Snapshot */}
+        {/* Snapshot */}
         <div className="lg:col-span-2 bg-white rounded-xl shadow overflow-hidden">
           <div className="p-3 border-b flex items-center justify-between">
             <div className="text-sm text-gray-600">Snapshot</div>
@@ -340,7 +347,7 @@ export default function PaymeLab() {
           )}
         </div>
 
-        {/* Bottom: History list */}
+        {/* History */}
         <div className="lg:col-span-3 bg-white rounded-xl shadow overflow-hidden">
           <div className="p-3 border-b flex items-center justify-between">
             <div className="text-sm text-gray-600">History</div>
@@ -402,6 +409,6 @@ export default function PaymeLab() {
           </div>
         </div>
       </div>
-    </div>
+    </Wrapper>
   );
 }
