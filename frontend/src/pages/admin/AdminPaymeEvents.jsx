@@ -1,4 +1,4 @@
-// frontend/src/pages/admin/AdminPaymeEvents.jsx
+//frontend/src/pages/admin/AdminPaymeEvents.jsx
 
 import { useEffect, useMemo, useState } from "react";
 import { apiGet } from "../../api";
@@ -60,9 +60,7 @@ export default function AdminPaymeEvents() {
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <h2 className="text-xl font-semibold">Payme Events</h2>
-          <div className="text-sm opacity-70">
-            RPC request/response logs (begin/end/error)
-          </div>
+          <div className="text-sm opacity-70">RPC request/response logs (begin/end/error)</div>
         </div>
 
         <div className="flex flex-col gap-2 md:flex-row md:items-center">
@@ -73,11 +71,7 @@ export default function AdminPaymeEvents() {
             onChange={(e) => setQ(e.target.value)}
           />
 
-          <select
-            className="border rounded px-3 py-2"
-            value={method}
-            onChange={(e) => setMethod(e.target.value)}
-          >
+          <select className="border rounded px-3 py-2" value={method} onChange={(e) => setMethod(e.target.value)}>
             <option value="">All methods</option>
             <option value="CheckPerformTransaction">CheckPerformTransaction</option>
             <option value="CreateTransaction">CreateTransaction</option>
@@ -88,22 +82,14 @@ export default function AdminPaymeEvents() {
             <option value="SetFiscalData">SetFiscalData</option>
           </select>
 
-          <select
-            className="border rounded px-3 py-2"
-            value={stage}
-            onChange={(e) => setStage(e.target.value)}
-          >
+          <select className="border rounded px-3 py-2" value={stage} onChange={(e) => setStage(e.target.value)}>
             <option value="">All stages</option>
             <option value="begin">begin</option>
             <option value="end">end</option>
             <option value="error">error</option>
           </select>
 
-          <button
-            className="border rounded px-3 py-2"
-            onClick={load}
-            disabled={loading}
-          >
+          <button className="border rounded px-3 py-2" onClick={load} disabled={loading}>
             {loading ? "Loading..." : "Reload"}
           </button>
         </div>
@@ -129,15 +115,11 @@ export default function AdminPaymeEvents() {
                 {rows.map((r) => (
                   <tr
                     key={r.id}
-                    className={`border-t hover:bg-gray-50 cursor-pointer ${
-                      selected === r.id ? "bg-gray-50" : ""
-                    }`}
+                    className={`border-t hover:bg-gray-50 cursor-pointer ${selected === r.id ? "bg-gray-50" : ""}`}
                     onClick={() => openDetails(r.id)}
                   >
                     <td className="px-3 py-2">{r.id}</td>
-                    <td className="px-3 py-2">
-                      {r.created_at ? new Date(r.created_at).toLocaleString() : ""}
-                    </td>
+                    <td className="px-3 py-2">{r.created_at ? new Date(r.created_at).toLocaleString() : ""}</td>
                     <td className="px-3 py-2">{r.method || ""}</td>
                     <td className="px-3 py-2">{r.stage || ""}</td>
                     <td className="px-3 py-2">{r.order_id ?? ""}</td>
@@ -161,47 +143,21 @@ export default function AdminPaymeEvents() {
         <div className="border rounded-xl p-3">
           <div className="font-semibold mb-2">Details</div>
 
-          {!details && (
-            <div className="text-sm opacity-70">
-              Click an event row to view request/response.
-            </div>
-          )}
+          {!details && <div className="text-sm opacity-70">Click an event row to view request/response.</div>}
 
           {details && (
             <div className="space-y-3 text-sm">
               <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <b>ID:</b> {details.id}
-                </div>
-                <div>
-                  <b>Created:</b>{" "}
-                  {details.created_at ? new Date(details.created_at).toLocaleString() : ""}
-                </div>
-                <div>
-                  <b>Method:</b> {details.method || ""}
-                </div>
-                <div>
-                  <b>Stage:</b> {details.stage || ""}
-                </div>
-                <div>
-                  <b>Payme ID:</b> {details.payme_id || ""}
-                </div>
-                <div>
-                  <b>Order ID:</b> {details.order_id ?? ""}
-                </div>
-                <div>
-                  <b>HTTP:</b> {details.http_status ?? ""}
-                </div>
-                <div>
-                  <b>Error:</b> {details.error_code ?? ""}{" "}
-                  {details.error_message ? `— ${details.error_message}` : ""}
-                </div>
-                <div>
-                  <b>IP:</b> {details.ip || ""}
-                </div>
-                <div>
-                  <b>ms:</b> {details.duration_ms ?? ""}
-                </div>
+                <div><b>ID:</b> {details.id}</div>
+                <div><b>Created:</b> {details.created_at ? new Date(details.created_at).toLocaleString() : ""}</div>
+                <div><b>Method:</b> {details.method || ""}</div>
+                <div><b>Stage:</b> {details.stage || ""}</div>
+                <div><b>Payme ID:</b> {details.payme_id || ""}</div>
+                <div><b>Order ID:</b> {details.order_id ?? ""}</div>
+                <div><b>HTTP:</b> {details.http_status ?? ""}</div>
+                <div><b>Error:</b> {details.error_code ?? ""} {details.error_message ? `— ${details.error_message}` : ""}</div>
+                <div><b>IP:</b> {details.ip || ""}</div>
+                <div><b>ms:</b> {details.duration_ms ?? ""}</div>
               </div>
 
               <div>
