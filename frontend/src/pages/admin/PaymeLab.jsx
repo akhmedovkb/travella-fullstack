@@ -84,7 +84,6 @@ function healthStatusFromDetails(details) {
 
   const state = Number(tx.state);
   const amount = Number(tx.amount_tiyin || 0);
-
   const ledger = Array.isArray(details?.ledger) ? details.ledger : [];
   const ledgerRows = ledger.length;
   const ledgerSum = ledger.reduce((s, r) => s + Number(r?.amount || 0), 0);
@@ -98,21 +97,22 @@ function healthStatusFromDetails(details) {
   // LOST_PAYMENT: performed but no ledger
   if (state === 2 && ledgerRows === 0) return "LOST_PAYMENT";
 
-  // BAD_AMOUNT: performed but ledger_sum <= 0 (or mismatch will still be visible below)
+  // BAD_AMOUNT: performed but ledger_sum <= 0
   if (state === 2 && ledgerSum <= 0) return "BAD_AMOUNT";
 
   // REFUND_MISMATCH: canceled but ledger_sum > 0
   if ((state === -1 || state === -2) && ledgerSum > 0) return "REFUND_MISMATCH";
 
-  // Additional helpful: mismatch amount (not in Health, but useful)
+  // Extra: mismatch
   if (state === 2 && ledgerRows > 0 && amount > 0 && ledgerSum !== amount) return "AMOUNT_MISMATCH";
 
   return "OK";
 }
 
 /**
+ * PaymeLab
  * Props:
- * - embedded?: boolean
+ * - embedded?: boolean (if true, no outer page header/paddings)
  * - seed?: { orderId?: string|number, amount?: string|number, paymeId?: string }
  */
 export default function PaymeLab({ embedded = false, seed = null } = {}) {
@@ -121,7 +121,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
   const [amount, setAmount] = useState("100000"); // tiyins
   const [paymeId, setPaymeId] = useState(makeNewTxId());
 
-  // last selected payme id from Health
+  // selected tx_id from Health
   const [seedPaymeId, setSeedPaymeId] = useState("");
 
   // tx id mode:
@@ -129,7 +129,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
   // - "new": use custom/new tx_id (for Create new)
   const [txMode, setTxMode] = useState("new");
 
-  // Cancel reason presets
+  // Cancel reason
   const CANCEL_PRESETS = [
     { value: "", label: "— не указывать (null)" },
     { value: "1", label: "1 — отмена по инициативе клиента" },
@@ -154,8 +154,9 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
   const [statusLoading, setStatusLoading] = useState(false);
   const [txDetails, setTxDetails] = useState(null);
   const [txDetailsErr, setTxDetailsErr] = useState("");
+  const [repairing, setRepairing] = useState(false);
 
-  // Apply seed from parent (AdminPaymeHealth -> Lab tab)
+  // Apply seed from parent (Health -> Lab tab)
   useEffect(() => {
     const s = normalizeSeed(seed);
     if (!s) return;
@@ -241,7 +242,6 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
       setTxDetails(data);
       if (!silent) tSuccess("Status refreshed");
     } catch (e) {
-      // 404 is normal for NEW tx_id not created yet
       const st = Number(e?.status || 0);
       if (st === 404) {
         setTxDetails(null);
@@ -255,6 +255,23 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
       }
     } finally {
       setStatusLoading(false);
+    }
+  }
+
+  async function repairLedgerForCurrent() {
+    const id = String(parsed.paymeId || "").trim();
+    if (!id) return;
+    setRepairing(true);
+    try {
+      const data = await apiPost(`/api/admin/payme/repair/${encodeURIComponent(id)}`, {}, "admin");
+      if (data?.already) tSuccess("Ledger уже был (idempotent)");
+      else tSuccess("Ledger восстановлен");
+      await refreshStatus(id, true);
+    } catch (e) {
+      console.error(e);
+      tError("Repair ledger: ошибка");
+    } finally {
+      setRepairing(false);
     }
   }
 
@@ -285,7 +302,6 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
       setHistory((prev) => [snap, ...prev].slice(0, 30));
       tSuccess(`${method}: OK`);
 
-      // bank-grade: auto refresh status after each click (if params.id exists)
       if (autoStatus) {
         const id = params?.id ? String(params.id) : parsed.paymeId;
         await refreshStatus(id, true);
@@ -345,7 +361,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
   // ---- BANK-GRADE GUARD RAILS ----
   function switchToSeedOrFail() {
     if (!seedPaymeId) {
-      tError("Нет выбранного tx_id из Health. Открой транзакцию в Health → Open in Lab.");
+      tError("Нет выбранного tx_id из Health. Выбери транзакцию в Health.");
       return false;
     }
     if (txMode !== "seed") setTxMode("seed");
@@ -365,7 +381,6 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
   function ensureCreateSafeOrFix() {
     switchToNewEnsuringFreshTxId();
 
-    // Hard checks for safety
     if (txMode === "seed") {
       tError("Create запрещён в режиме selected tx_id (seed). Переключил на new.");
       return false;
@@ -381,7 +396,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
     return true;
   }
 
-  // ---- Quick actions ----
+  // ---- Quick actions row ----
   async function runCreateOnly() {
     if (!canRunBasic()) return tError("Заполни order_id и amount");
     if (!ensureCreateSafeOrFix()) return;
@@ -411,7 +426,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
     await run("PerformTransaction", buildPerform());
   }
 
-  // ---- Scenario presets (bank-grade) ----
+  // ---- Scenario presets ----
   async function scenarioReconcileStatement() {
     await run("GetStatement", buildStatement());
   }
@@ -482,7 +497,6 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
 
     const hs = d ? healthStatusFromDetails(d) : null;
 
-    // tx state label
     let stateLabel = "—";
     const st = Number(tx?.state);
     if (Number.isFinite(st)) {
@@ -491,6 +505,20 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
       else if (st === -1) stateLabel = "CANCELED (-1)";
       else if (st === -2) stateLabel = "CANCELED AFTER PERFORM (-2)";
       else stateLabel = `STATE ${st}`;
+    }
+
+    // Expected next action
+    let next = null;
+    if (!tx) {
+      next = txMode === "new" ? "Next: CreateTransaction" : "Next: select tx_id in Health";
+    } else if (st === 1) {
+      next = "Next: PerformTransaction";
+    } else if (st === 2 && ledgerRows === 0) {
+      next = "Next: Repair ledger";
+    } else if (st === 2 && ledgerRows > 0 && amountExpected > 0 && ledgerSum !== amountExpected) {
+      next = "Next: Investigate amount mismatch";
+    } else {
+      next = "Next: —";
     }
 
     return {
@@ -507,8 +535,9 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
       performTime: tx?.perform_time ?? null,
       cancelTime: tx?.cancel_time ?? null,
       reason: tx?.reason ?? null,
+      next,
     };
-  }, [txDetails]);
+  }, [txDetails, txMode]);
 
   const Wrapper = ({ children }) =>
     embedded ? (
@@ -579,9 +608,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          {statusComputed.hasTx
-            ? badgePill("ok", "DB: tx found")
-            : badgePill("warn", "DB: tx not found")}
+          {statusComputed.hasTx ? badgePill("ok", "DB: tx found") : badgePill("warn", "DB: tx not found")}
           {statusComputed.health &&
             (statusComputed.health === "OK"
               ? badgePill("ok", "HEALTH: OK")
@@ -598,7 +625,25 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
               : badgePill("info", `HEALTH: ${statusComputed.health}`))}
           {statusComputed.stateLabel !== "—" && badgePill("black", statusComputed.stateLabel)}
           {!!txDetailsErr && badgePill("warn", txDetailsErr)}
+          {statusComputed.next && badgePill("info", statusComputed.next)}
         </div>
+
+        {statusComputed.health === "LOST_PAYMENT" && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className="px-3 py-2 rounded-lg bg-red-600 text-white disabled:opacity-60"
+              onClick={repairLedgerForCurrent}
+              disabled={busy || repairing}
+              title="POST /api/admin/payme/repair/:paymeId"
+            >
+              {repairing ? "Repairing…" : "Repair ledger"}
+            </button>
+            <div className="text-xs text-gray-500">
+              LOST_PAYMENT = Perform был, но ledger не записался. Repair восстановит ledger идемпотентно.
+            </div>
+          </div>
+        )}
 
         <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
           <div className="bg-gray-50 border rounded-lg p-3">
@@ -610,27 +655,50 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
 
           <div className="bg-gray-50 border rounded-lg p-3">
             <div className="text-xs text-gray-500 mb-1">Order / Amount</div>
-            <div>order_id: <span className="font-mono">{String(statusComputed.orderId ?? parsed.orderId ?? "—")}</span></div>
-            <div>expected amount: <span className="font-mono">{String(statusComputed.amountExpected ?? 0)}</span></div>
-            <div className="mt-2">ledger_rows: <span className="font-mono">{String(statusComputed.ledgerRows)}</span></div>
-            <div>ledger_sum: <span className="font-mono">{String(statusComputed.ledgerSum)}</span></div>
+            <div>
+              order_id: <span className="font-mono">{String(statusComputed.orderId ?? parsed.orderId ?? "—")}</span>
+            </div>
+            <div>
+              expected amount: <span className="font-mono">{String(statusComputed.amountExpected ?? 0)}</span>
+            </div>
+            <div className="mt-2">
+              ledger_rows: <span className="font-mono">{String(statusComputed.ledgerRows)}</span>
+            </div>
+            <div>
+              ledger_sum: <span className="font-mono">{String(statusComputed.ledgerSum)}</span>
+            </div>
           </div>
 
           <div className="bg-gray-50 border rounded-lg p-3">
             <div className="text-xs text-gray-500 mb-1">Times</div>
-            <div>create_time: <span className="font-mono">{statusComputed.createTime ? fmtTs(Number(statusComputed.createTime)) : "—"}</span></div>
-            <div>perform_time: <span className="font-mono">{statusComputed.performTime ? fmtTs(Number(statusComputed.performTime)) : "—"}</span></div>
-            <div>cancel_time: <span className="font-mono">{statusComputed.cancelTime ? fmtTs(Number(statusComputed.cancelTime)) : "—"}</span></div>
-            <div className="mt-2">reason: <span className="font-mono">{String(statusComputed.reason ?? "—")}</span></div>
+            <div>
+              create_time:{" "}
+              <span className="font-mono">
+                {statusComputed.createTime ? fmtTs(Number(statusComputed.createTime)) : "—"}
+              </span>
+            </div>
+            <div>
+              perform_time:{" "}
+              <span className="font-mono">
+                {statusComputed.performTime ? fmtTs(Number(statusComputed.performTime)) : "—"}
+              </span>
+            </div>
+            <div>
+              cancel_time:{" "}
+              <span className="font-mono">
+                {statusComputed.cancelTime ? fmtTs(Number(statusComputed.cancelTime)) : "—"}
+              </span>
+            </div>
+            <div className="mt-2">
+              reason: <span className="font-mono">{String(statusComputed.reason ?? "—")}</span>
+            </div>
           </div>
         </div>
 
         {txDetails?.tx && (
           <div className="mt-3">
             <div className="text-xs text-gray-500 mb-1">Raw details (tx/order/ledger)</div>
-            <pre className="text-xs bg-gray-50 border rounded-lg p-3 overflow-auto">
-              {pretty(txDetails)}
-            </pre>
+            <pre className="text-xs bg-gray-50 border rounded-lg p-3 overflow-auto">{pretty(txDetails)}</pre>
           </div>
         )}
       </div>
@@ -640,9 +708,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
           <div>
             <div className="text-sm font-semibold text-gray-800">Scenario presets</div>
-            <div className="text-xs text-gray-500">
-              One-click sequences. Guard rails: авто txMode + авто tx_id.
-            </div>
+            <div className="text-xs text-gray-500">One-click sequences. Guard rails: авто txMode + авто tx_id.</div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -813,9 +879,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
             </div>
 
             <div>
-              <label className="block text-xs text-gray-500 mb-1">
-                payme tx id (params.id)
-              </label>
+              <label className="block text-xs text-gray-500 mb-1">payme tx id (params.id)</label>
               <input
                 className="w-full border rounded-lg px-3 py-2"
                 value={paymeId}
@@ -849,7 +913,6 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
               </div>
             </div>
 
-            {/* Cancel reason presets */}
             <div>
               <label className="block text-xs text-gray-500 mb-1">Cancel reason</label>
               <select
@@ -880,7 +943,6 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
               </div>
             </div>
 
-            {/* GetStatement range */}
             <div className="grid grid-cols-1 gap-2">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">GetStatement from</label>
@@ -904,7 +966,6 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
               </div>
             </div>
 
-            {/* Buttons */}
             <div className="pt-2 grid grid-cols-1 gap-2">
               <button
                 className="px-4 py-2 rounded-lg bg-black text-white disabled:opacity-60"
