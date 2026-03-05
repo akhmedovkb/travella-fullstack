@@ -25,10 +25,18 @@ function fmtTs(x) {
 function badge(status) {
   const base = "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium";
   if (status === "OK") return <span className={`${base} bg-green-100 text-green-700`}>✅ OK</span>;
-  if (status === "STUCK") return <span className={`${base} bg-purple-100 text-purple-800`}>⏳ STUCK</span>;
-  if (status === "LOST_PAYMENT") return <span className={`${base} bg-red-100 text-red-700`}>✖ LOST_PAYMENT</span>;
-  if (status === "BAD_AMOUNT") return <span className={`${base} bg-yellow-100 text-yellow-800`}>⚠ BAD_AMOUNT</span>;
-  if (status === "REFUND_MISMATCH") return <span className={`${base} bg-orange-100 text-orange-800`}>⚠ REFUND_MISMATCH</span>;
+  if (status === "STUCK")
+    return (
+      <span className={`${base} bg-purple-100 text-purple-800`}>
+        ⏳ STUCK
+      </span>
+    );
+  if (status === "LOST_PAYMENT")
+    return <span className={`${base} bg-red-100 text-red-700`}>✖ LOST_PAYMENT</span>;
+  if (status === "BAD_AMOUNT")
+    return <span className={`${base} bg-yellow-100 text-yellow-800`}>⚠ BAD_AMOUNT</span>;
+  if (status === "REFUND_MISMATCH")
+    return <span className={`${base} bg-orange-100 text-orange-800`}>⚠ REFUND_MISMATCH</span>;
   return <span className={`${base} bg-gray-100 text-gray-700`}>{String(status)}</span>;
 }
 
@@ -45,18 +53,15 @@ export default function AdminPaymeHealth() {
 
   const [tab, setTab] = useState("health"); // "health" | "events" | "lab"
 
-  // 👇 seed for PaymeLab tab
-  const [labSeed, setLabSeed] = useState(null); // { orderId, amount, paymeId }
-
   const canLoad = useMemo(() => true, []);
 
   async function load() {
     if (!canLoad) return;
     setLoading(true);
     try {
-      const url = `/api/admin/payme/health?limit=${encodeURIComponent(limit)}&onlyBad=${onlyBad ? 1 : 0}&q=${encodeURIComponent(
-        String(q || "").trim()
-      )}`;
+      const url = `/api/admin/payme/health?limit=${encodeURIComponent(limit)}&onlyBad=${
+        onlyBad ? 1 : 0
+      }&q=${encodeURIComponent(String(q || "").trim())}`;
       const data = await apiGet(url, "admin");
       setRows(Array.isArray(data?.rows) ? data.rows : Array.isArray(data) ? data : []);
     } catch (e) {
@@ -68,22 +73,10 @@ export default function AdminPaymeHealth() {
     }
   }
 
-  function seedFromRow(r) {
-    if (!r) return null;
-    const paymeId = r.payme_id ? String(r.payme_id) : "";
-    const orderId = r.order_id != null ? String(r.order_id) : "";
-    const amount = r.amount_tiyin != null ? String(r.amount_tiyin) : "";
-    return { paymeId, orderId, amount };
-  }
-
   async function openTx(r) {
     if (!r?.payme_id) return;
     setSelected(r);
     setDetails(null);
-
-    // ✅ сразу обновляем seed, чтобы Lab был готов
-    setLabSeed(seedFromRow(r));
-
     try {
       const data = await apiGet(`/api/admin/payme/tx/${encodeURIComponent(r.payme_id)}`, "admin");
       setDetails(data);
@@ -99,7 +92,11 @@ export default function AdminPaymeHealth() {
     setRepairingId(paymeId);
 
     try {
-      const data = await apiPost(`/api/admin/payme/repair/${encodeURIComponent(paymeId)}`, {}, "admin");
+      const data = await apiPost(
+        `/api/admin/payme/repair/${encodeURIComponent(paymeId)}`,
+        {},
+        "admin"
+      );
 
       if (data?.already) tSuccess("Ledger уже был (idempotent)");
       else tSuccess("Ledger восстановлен");
@@ -135,20 +132,31 @@ export default function AdminPaymeHealth() {
 
         <div className="flex items-center gap-2">
           <button
-            className={`px-3 py-2 rounded-lg text-sm ${tab === "health" ? "bg-black text-white" : "border bg-white"}`}
+            className={`px-3 py-2 rounded-lg text-sm ${
+              tab === "health" ? "bg-black text-white" : "border bg-white"
+            }`}
             onClick={() => setTab("health")}
           >
             Health
           </button>
           <button
-            className={`px-3 py-2 rounded-lg text-sm ${tab === "events" ? "bg-black text-white" : "border bg-white"}`}
+            className={`px-3 py-2 rounded-lg text-sm ${
+              tab === "events" ? "bg-black text-white" : "border bg-white"
+            }`}
             onClick={() => setTab("events")}
           >
             Events
           </button>
           <button
-            className={`px-3 py-2 rounded-lg text-sm ${tab === "lab" ? "bg-black text-white" : "border bg-white"}`}
+            className={`px-3 py-2 rounded-lg text-sm ${
+              tab === "lab" ? "bg-black text-white" : "border bg-white"
+            }`}
             onClick={() => setTab("lab")}
+            title={
+              selected?.payme_id
+                ? "Открыть Payme Lab для выбранной транзакции"
+                : "Открыть Payme Lab (можно и без выбранной транзакции)"
+            }
           >
             Lab
           </button>
@@ -159,7 +167,20 @@ export default function AdminPaymeHealth() {
       {tab === "events" && <AdminPaymeEvents />}
 
       {/* Lab tab */}
-      {tab === "lab" && <PaymeLab embedded seed={labSeed} />}
+      {tab === "lab" && (
+        <PaymeLab
+          embedded
+          seed={
+            selected
+              ? {
+                  orderId: selected.order_id,
+                  amount: selected.amount_tiyin,
+                  paymeId: selected.payme_id,
+                }
+              : null
+          }
+        />
+      )}
 
       {/* Health tab */}
       {tab === "health" && (
@@ -167,7 +188,9 @@ export default function AdminPaymeHealth() {
           <div className="bg-white rounded-xl shadow p-4 mb-4">
             <div className="flex flex-col md:flex-row gap-3 md:items-end">
               <div className="flex-1">
-                <label className="block text-xs text-gray-500 mb-1">Поиск (payme_id или order_id)</label>
+                <label className="block text-xs text-gray-500 mb-1">
+                  Поиск (payme_id или order_id)
+                </label>
                 <input
                   className="w-full border rounded-lg px-3 py-2"
                   value={q}
@@ -187,7 +210,11 @@ export default function AdminPaymeHealth() {
                 />
               </div>
               <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={onlyBad} onChange={(e) => setOnlyBad(e.target.checked)} />
+                <input
+                  type="checkbox"
+                  checked={onlyBad}
+                  onChange={(e) => setOnlyBad(e.target.checked)}
+                />
                 Только проблемы
               </label>
               <button
@@ -234,7 +261,10 @@ export default function AdminPaymeHealth() {
                         <td className="px-3 py-2">{money(r.amount_tiyin)}</td>
                         <td className="px-3 py-2">{money(r.ledger_sum)}</td>
                         <td className="px-3 py-2">{badge(r.health_status)}</td>
-                        <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
+                        <td
+                          className="px-3 py-2 text-right"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           {r.health_status === "LOST_PAYMENT" ? (
                             <button
                               className="px-3 py-1 rounded-lg bg-red-600 text-white disabled:opacity-60"
@@ -262,24 +292,7 @@ export default function AdminPaymeHealth() {
             </div>
 
             <div className="bg-white rounded-xl shadow p-4">
-              <div className="flex items-center justify-between mb-2">
-                <div className="text-sm text-gray-600">Детали</div>
-
-                {selected?.payme_id ? (
-                  <button
-                    type="button"
-                    className="px-3 py-1.5 rounded-lg border bg-white text-sm"
-                    onClick={() => {
-                      setLabSeed(seedFromRow(selected));
-                      setTab("lab");
-                      tSuccess("Открыто в Lab");
-                    }}
-                  >
-                    Open in Lab
-                  </button>
-                ) : null}
-              </div>
-
+              <div className="text-sm text-gray-600 mb-2">Детали</div>
               {!selected && <div className="text-sm text-gray-400">Выберите транзакцию слева</div>}
 
               {selected && (
@@ -306,20 +319,11 @@ export default function AdminPaymeHealth() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div>
-                      <div className="text-xs text-gray-500">amount</div>
-                      <div>{money(selected.amount_tiyin)}</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-gray-500">ledger_sum</div>
-                      <div>{money(selected.ledger_sum)}</div>
-                    </div>
-                  </div>
-
                   <div>
                     <div className="text-xs text-gray-500 mb-1">Ledger rows</div>
-                    <div className="text-xs text-gray-800">{details?.ledger ? details.ledger.length : "—"}</div>
+                    <div className="text-xs text-gray-800">
+                      {details?.ledger ? details.ledger.length : "—"}
+                    </div>
                   </div>
 
                   {details?.ledger?.length ? (
