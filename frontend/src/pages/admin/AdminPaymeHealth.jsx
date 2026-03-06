@@ -288,6 +288,7 @@ export default function AdminPaymeHealth() {
                       <th className="text-left px-3 py-2">amount</th>
                       <th className="text-left px-3 py-2">ledger_sum</th>
                       <th className="text-left px-3 py-2">status</th>
+                      <th className="text-left px-3 py-2">billing</th>
                       <th className="text-right px-3 py-2">actions</th>
                     </tr>
                   </thead>
@@ -306,6 +307,7 @@ export default function AdminPaymeHealth() {
                         <td className="px-3 py-2">{money(r.amount_tiyin)}</td>
                         <td className="px-3 py-2">{money(r.ledger_sum)}</td>
                         <td className="px-3 py-2">{badge(r.health_status)}</td>
+                        <td className="px-3 py-2">{badge(r.billing_status)}</td>
                         <td
                           className="px-3 py-2 text-right"
                           onClick={(e) => e.stopPropagation()}
@@ -334,7 +336,7 @@ export default function AdminPaymeHealth() {
                     ))}
                     {!rows.length && (
                       <tr>
-                        <td className="px-3 py-6 text-center text-gray-400" colSpan={7}>
+                        <td className="px-3 py-6 text-center text-gray-400" colSpan={8}>
                           Нет данных
                         </td>
                       </tr>
