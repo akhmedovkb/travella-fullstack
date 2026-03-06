@@ -204,7 +204,7 @@ export default function AdminPaymeHealth() {
       )}
       
       {/* Dashboard tab */}
-      {tab === "dashboard" && <AdminPaymeDashboard />}
+      {tab === "dashboard" && <PaymeDashboard />}
 
       {/* Health tab */}
       {tab === "health" && (
