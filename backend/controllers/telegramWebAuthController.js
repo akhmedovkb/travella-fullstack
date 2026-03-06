@@ -77,6 +77,19 @@ async function getTableColumns(client, tableName, candidates) {
   }, {});
 }
 
+function withAt(username) {
+  const u = String(username || "").trim();
+  if (!u) return null;
+  return u.startsWith("@") ? u : `@${u}`;
+}
+
+function buildDisplayName(tgUser) {
+  const first = String(tgUser?.first_name || "").trim();
+  const last = String(tgUser?.last_name || "").trim();
+  const full = `${first} ${last}`.trim();
+  return full || tgUser?.username || `Telegram User ${tgUser?.id}`;
+}
+
 function signProvider(providerRow) {
   const isAdmin = providerRow?.is_admin === true;
   return jwt.sign(
@@ -102,18 +115,13 @@ function signClient(clientRow) {
   );
 }
 
-function withAt(username) {
-  const u = String(username || "").trim();
-  if (!u) return null;
-  return u.startsWith("@") ? u : `@${u}`;
-}
-
 async function touchProviderTelegram(db, providerId, tgUser) {
   const cols = await getTableColumns(db, "providers", [
     "telegram_chat_id",
     "tg_chat_id",
     "telegram_web_chat_id",
     "social",
+    "name",
   ]);
 
   const sets = [];
@@ -136,20 +144,22 @@ async function touchProviderTelegram(db, providerId, tgUser) {
     sets.push(`social = COALESCE(NULLIF(social, ''), $${i++})`);
     vals.push(withAt(tgUser.username));
   }
+  if (cols.name) {
+    sets.push(`name = COALESCE(NULLIF(name, ''), $${i++})`);
+    vals.push(buildDisplayName(tgUser));
+  }
 
   if (!sets.length) return;
 
   vals.push(providerId);
-  await db.query(
-    `UPDATE providers SET ${sets.join(", ")} WHERE id = $${i}`,
-    vals
-  );
+  await db.query(`UPDATE providers SET ${sets.join(", ")} WHERE id = $${i}`, vals);
 }
 
 async function touchClientTelegram(db, clientId, tgUser) {
   const cols = await getTableColumns(db, "clients", [
     "telegram_chat_id",
     "telegram",
+    "name",
   ]);
 
   const sets = [];
@@ -164,14 +174,253 @@ async function touchClientTelegram(db, clientId, tgUser) {
     sets.push(`telegram = COALESCE(NULLIF(telegram, ''), $${i++})`);
     vals.push(withAt(tgUser.username));
   }
+  if (cols.name) {
+    sets.push(`name = COALESCE(NULLIF(name, ''), $${i++})`);
+    vals.push(buildDisplayName(tgUser));
+  }
 
   if (!sets.length) return;
 
   vals.push(clientId);
-  await db.query(
-    `UPDATE clients SET ${sets.join(", ")} WHERE id = $${i}`,
-    vals
+  await db.query(`UPDATE clients SET ${sets.join(", ")} WHERE id = $${i}`, vals);
+}
+
+async function findProviderByTelegram(db, tgId) {
+  return db.query(
+    `
+      SELECT *
+      FROM providers
+      WHERE telegram_chat_id::text = $1
+         OR tg_chat_id::text = $1
+         OR COALESCE(telegram_web_chat_id::text, '') = $1
+         OR COALESCE(telegram_refused_chat_id::text, '') = $1
+      ORDER BY id DESC
+      LIMIT 1
+    `,
+    [tgId]
   );
+}
+
+async function findClientByTelegram(db, tgId) {
+  return db.query(
+    `
+      SELECT *
+      FROM clients
+      WHERE telegram_chat_id::text = $1
+      ORDER BY id DESC
+      LIMIT 1
+    `,
+    [tgId]
+  );
+}
+
+async function findApprovedLeadByTelegram(db, tgId, requestedRole) {
+  const statuses =
+    requestedRole === "provider"
+      ? ["approved_provider"]
+      : requestedRole === "client"
+        ? ["approved_client"]
+        : ["approved_provider", "approved_client"];
+
+  const possibleChatCols = [
+    "telegram_chat_id",
+    "tg_chat_id",
+    "chat_id",
+    "telegram_id",
+  ];
+
+  const cols = await getTableColumns(db, "leads", [
+    ...possibleChatCols,
+    "status",
+    "name",
+    "phone",
+    "email",
+    "role",
+    "type",
+    "telegram",
+    "telegram_username",
+  ]);
+
+  const existingChatCols = possibleChatCols.filter((c) => cols[c]);
+  if (!existingChatCols.length || !cols.status) return null;
+
+  const whereChat = existingChatCols
+    .map((c) => `${c}::text = $1`)
+    .join(" OR ");
+
+  const q = await db.query(
+    `
+      SELECT *
+      FROM leads
+      WHERE (${whereChat})
+        AND status = ANY($2::text[])
+      ORDER BY id DESC
+      LIMIT 1
+    `,
+    [tgId, statuses]
+  );
+
+  return q.rows[0] || null;
+}
+
+async function createClientFromLead(db, lead, tgUser) {
+  const clientCols = await getTableColumns(db, "clients", [
+    "name",
+    "email",
+    "phone",
+    "telegram",
+    "telegram_chat_id",
+    "password",
+    "contact_balance",
+  ]);
+
+  const fields = [];
+  const values = [];
+  let i = 1;
+
+  const push = (field, value) => {
+    fields.push(field);
+    values.push(value);
+    return `$${i++}`;
+  };
+
+  const placeholders = [];
+
+  if (clientCols.name) {
+    placeholders.push(push("name", lead.name || buildDisplayName(tgUser)));
+  }
+  if (clientCols.email) {
+    placeholders.push(push("email", lead.email || null));
+  }
+  if (clientCols.phone) {
+    placeholders.push(push("phone", lead.phone || null));
+  }
+  if (clientCols.telegram) {
+    placeholders.push(push("telegram", withAt(tgUser.username)));
+  }
+  if (clientCols.telegram_chat_id) {
+    placeholders.push(push("telegram_chat_id", String(tgUser.id)));
+  }
+  if (clientCols.password) {
+    placeholders.push(push("password", null));
+  }
+  if (clientCols.contact_balance) {
+    placeholders.push(push("contact_balance", 0));
+  }
+
+  const sql = `
+    INSERT INTO clients (${fields.join(", ")})
+    VALUES (${placeholders.join(", ")})
+    RETURNING *
+  `;
+  const ins = await db.query(sql, values);
+  return ins.rows[0];
+}
+
+async function createProviderFromLead(db, lead, tgUser) {
+  const providerCols = await getTableColumns(db, "providers", [
+    "name",
+    "email",
+    "phone",
+    "social",
+    "type",
+    "telegram_chat_id",
+    "tg_chat_id",
+    "telegram_web_chat_id",
+    "password",
+  ]);
+
+  const fields = [];
+  const values = [];
+  let i = 1;
+
+  const push = (field, value) => {
+    fields.push(field);
+    values.push(value);
+    return `$${i++}`;
+  };
+
+  const placeholders = [];
+
+  if (providerCols.name) {
+    placeholders.push(push("name", lead.name || buildDisplayName(tgUser)));
+  }
+  if (providerCols.email) {
+    placeholders.push(push("email", lead.email || null));
+  }
+  if (providerCols.phone) {
+    placeholders.push(push("phone", lead.phone || null));
+  }
+  if (providerCols.social) {
+    placeholders.push(push("social", withAt(tgUser.username)));
+  }
+  if (providerCols.type) {
+    placeholders.push(push("type", lead.type || "agent"));
+  }
+  if (providerCols.telegram_chat_id) {
+    placeholders.push(push("telegram_chat_id", String(tgUser.id)));
+  }
+  if (providerCols.tg_chat_id) {
+    placeholders.push(push("tg_chat_id", String(tgUser.id)));
+  }
+  if (providerCols.telegram_web_chat_id) {
+    placeholders.push(push("telegram_web_chat_id", String(tgUser.id)));
+  }
+  if (providerCols.password) {
+    placeholders.push(push("password", null));
+  }
+
+  const sql = `
+    INSERT INTO providers (${fields.join(", ")})
+    VALUES (${placeholders.join(", ")})
+    RETURNING *
+  `;
+  const ins = await db.query(sql, values);
+  return ins.rows[0];
+}
+
+async function upsertApprovedLeadAccount(db, lead, tgUser) {
+  const status = String(lead?.status || "").trim().toLowerCase();
+
+  if (status === "approved_client") {
+    if (lead.phone) {
+      const byPhone = await db.query(
+        `SELECT * FROM clients WHERE phone = $1 ORDER BY id DESC LIMIT 1`,
+        [lead.phone]
+      );
+      if (byPhone.rowCount) {
+        await touchClientTelegram(db, byPhone.rows[0].id, tgUser);
+        const refetch = await findClientByTelegram(db, String(tgUser.id));
+        return { role: "client", row: refetch.rows[0] || byPhone.rows[0] };
+      }
+    }
+
+    const created = await createClientFromLead(db, lead, tgUser);
+    await touchClientTelegram(db, created.id, tgUser);
+    const refetch = await findClientByTelegram(db, String(tgUser.id));
+    return { role: "client", row: refetch.rows[0] || created };
+  }
+
+  if (status === "approved_provider") {
+    if (lead.phone) {
+      const byPhone = await db.query(
+        `SELECT * FROM providers WHERE phone = $1 ORDER BY id DESC LIMIT 1`,
+        [lead.phone]
+      );
+      if (byPhone.rowCount) {
+        await touchProviderTelegram(db, byPhone.rows[0].id, tgUser);
+        const refetch = await findProviderByTelegram(db, String(tgUser.id));
+        return { role: "provider", row: refetch.rows[0] || byPhone.rows[0] };
+      }
+    }
+
+    const created = await createProviderFromLead(db, lead, tgUser);
+    await touchProviderTelegram(db, created.id, tgUser);
+    const refetch = await findProviderByTelegram(db, String(tgUser.id));
+    return { role: "provider", row: refetch.rows[0] || created };
+  }
+
+  return null;
 }
 
 async function loginWithTelegram(req, res) {
@@ -193,27 +442,13 @@ async function loginWithTelegram(req, res) {
     await db.query("BEGIN");
 
     if (!requestedRole || requestedRole === "provider") {
-      const prov = await db.query(
-        `
-          SELECT *
-          FROM providers
-          WHERE telegram_chat_id::text = $1
-             OR tg_chat_id::text = $1
-             OR COALESCE(telegram_web_chat_id::text, '') = $1
-             OR COALESCE(telegram_refused_chat_id::text, '') = $1
-          ORDER BY id DESC
-          LIMIT 1
-        `,
-        [tgId]
-      );
-
+      const prov = await findProviderByTelegram(db, tgId);
       if (prov.rowCount) {
         const row = prov.rows[0];
         await touchProviderTelegram(db, row.id, tgUser);
         await db.query("COMMIT");
 
         const token = signProvider(row);
-
         return res.json({
           ok: true,
           role: "provider",
@@ -225,32 +460,19 @@ async function loginWithTelegram(req, res) {
             type: row.type,
             phone: row.phone,
             social: row.social,
-            telegram_chat_id: row.telegram_chat_id || null,
-            tg_chat_id: row.tg_chat_id || row.telegram_chat_id || null,
           },
         });
       }
     }
 
     if (!requestedRole || requestedRole === "client") {
-      const cli = await db.query(
-        `
-          SELECT *
-          FROM clients
-          WHERE telegram_chat_id::text = $1
-          ORDER BY id DESC
-          LIMIT 1
-        `,
-        [tgId]
-      );
-
+      const cli = await findClientByTelegram(db, tgId);
       if (cli.rowCount) {
         const row = cli.rows[0];
         await touchClientTelegram(db, row.id, tgUser);
         await db.query("COMMIT");
 
         const token = signClient(row);
-
         return res.json({
           ok: true,
           role: "client",
@@ -261,7 +483,46 @@ async function loginWithTelegram(req, res) {
             email: row.email,
             phone: row.phone,
             telegram: row.telegram || null,
-            telegram_chat_id: row.telegram_chat_id || null,
+          },
+        });
+      }
+    }
+
+    const approvedLead = await findApprovedLeadByTelegram(db, tgId, requestedRole);
+    if (approvedLead) {
+      const created = await upsertApprovedLeadAccount(db, approvedLead, tgUser);
+
+      if (created?.role === "provider") {
+        await db.query("COMMIT");
+        return res.json({
+          ok: true,
+          autoCreated: true,
+          role: "provider",
+          token: signProvider(created.row),
+          provider: {
+            id: created.row.id,
+            name: created.row.name,
+            email: created.row.email,
+            type: created.row.type,
+            phone: created.row.phone,
+            social: created.row.social,
+          },
+        });
+      }
+
+      if (created?.role === "client") {
+        await db.query("COMMIT");
+        return res.json({
+          ok: true,
+          autoCreated: true,
+          role: "client",
+          token: signClient(created.row),
+          client: {
+            id: created.row.id,
+            name: created.row.name,
+            email: created.row.email,
+            phone: created.row.phone,
+            telegram: created.row.telegram || null,
           },
         });
       }
@@ -271,8 +532,7 @@ async function loginWithTelegram(req, res) {
     return res.status(403).json({
       ok: false,
       error: "account_not_approved_or_not_linked",
-      message:
-        "Аккаунт не найден. Сначала пройди модерацию в лидах и привяжи Telegram.",
+      message: "Аккаунт не найден. Сначала пройди модерацию в лидах.",
     });
   } catch (e) {
     try {
