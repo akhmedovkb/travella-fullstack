@@ -39,6 +39,7 @@ import DonasDosasMonthlySalesMargin from "./pages/admin/DonasDosasMonthlySalesMa
 import DonasDosasInventory from "./pages/admin/DonasDosasInventory";
 import AdminPaymeHealth from "./pages/admin/AdminPaymeHealth";
 import PaymeLab from "./pages/admin/PaymeLab";
+import AdminBilling from "./pages/admin/AdminBilling";
 
 // Клиентские
 import ClientRegister from "./pages/ClientRegister";
@@ -322,6 +323,16 @@ export default function App() {
                 <PrivateRoute>
                   <AdminRoute>
                     <PaymeLab />
+                  </AdminRoute>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/admin/billing"
+              element={
+                <PrivateRoute>
+                  <AdminRoute>
+                    <AdminBilling />
                   </AdminRoute>
                 </PrivateRoute>
               }
