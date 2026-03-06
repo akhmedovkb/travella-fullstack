@@ -40,6 +40,7 @@ import DonasDosasInventory from "./pages/admin/DonasDosasInventory";
 import AdminPaymeHealth from "./pages/admin/AdminPaymeHealth";
 import PaymeLab from "./pages/admin/PaymeLab";
 import AdminBilling from "./pages/admin/AdminBilling";
+import AdminFinance from "./pages/admin/AdminFinance";
 
 // Клиентские
 import ClientRegister from "./pages/ClientRegister";
@@ -333,6 +334,16 @@ export default function App() {
                 <PrivateRoute>
                   <AdminRoute>
                     <AdminBilling />
+                  </AdminRoute>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/admin/finance"
+              element={
+                <PrivateRoute>
+                  <AdminRoute>
+                    <AdminFinance />
                   </AdminRoute>
                 </PrivateRoute>
               }
