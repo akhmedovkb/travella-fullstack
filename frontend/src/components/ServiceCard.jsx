@@ -149,21 +149,26 @@ function formatLeft(ms, dayLabel = "d") {
 
 /* ============== provider profile cache ============== */
 const providerCache = new Map();
-async function fetchProviderProfile(providerId) {
+
+async function fetchProviderProfile(providerId, serviceId) {
   if (!providerId) return null;
-  if (providerCache.has(providerId)) return providerCache.get(providerId);
+
+  const cacheKey = `${providerId}:${serviceId || ""}`;
+  if (providerCache.has(cacheKey)) return providerCache.get(cacheKey);
+
   const endpoints = [
-    `/api/providers/${providerId}`,
-    `/api/provider/${providerId}`,
-    `/api/suppliers/${providerId}`,
-    `/api/supplier/${providerId}`,
-    `/api/agencies/${providerId}`,
-    `/api/agency/${providerId}`,
-    `/api/companies/${providerId}`,
-    `/api/company/${providerId}`,
-    `/api/users/${providerId}`,
-    `/api/user/${providerId}`,
+    `/api/providers/${providerId}${serviceId ? `?serviceId=${serviceId}` : ""}`,
+    `/api/provider/${providerId}${serviceId ? `?serviceId=${serviceId}` : ""}`,
+    `/api/suppliers/${providerId}${serviceId ? `?serviceId=${serviceId}` : ""}`,
+    `/api/supplier/${providerId}${serviceId ? `?serviceId=${serviceId}` : ""}`,
+    `/api/agencies/${providerId}${serviceId ? `?serviceId=${serviceId}` : ""}`,
+    `/api/agency/${providerId}${serviceId ? `?serviceId=${serviceId}` : ""}`,
+    `/api/companies/${providerId}${serviceId ? `?serviceId=${serviceId}` : ""}`,
+    `/api/company/${providerId}${serviceId ? `?serviceId=${serviceId}` : ""}`,
+    `/api/users/${providerId}${serviceId ? `?serviceId=${serviceId}` : ""}`,
+    `/api/user/${providerId}${serviceId ? `?serviceId=${serviceId}` : ""}`,
   ];
+
   let profile = null;
   for (const url of endpoints) {
     try {
@@ -177,7 +182,8 @@ async function fetchProviderProfile(providerId) {
       }
     } catch {}
   }
-  providerCache.set(providerId, profile || null);
+
+  providerCache.set(cacheKey, profile || null);
   return profile;
 }
 
@@ -620,7 +626,7 @@ export default function ServiceCard({
     let alive = true;
     (async () => {
       if (!providerId) return;
-      const p = await fetchProviderProfile(providerId);
+      const p = await fetchProviderProfile(providerId, id);
       if (alive) setProvider(p);
     })();
     return () => {
