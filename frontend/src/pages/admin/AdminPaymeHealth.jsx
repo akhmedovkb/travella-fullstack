@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost } from "../../api";
 import { tError, tSuccess } from "../../shared/toast";
+import { useNavigate } from "react-router-dom";
 import AdminPaymeEvents from "./AdminPaymeEvents";
 import PaymeLab from "./PaymeLab";
 import PaymeDashboard from "./PaymeDashboard";
@@ -43,6 +44,7 @@ function badge(status) {
 }
 
 export default function AdminPaymeHealth() {
+  const navigate = useNavigate();
   const [q, setQ] = useState("");
   const [onlyBad, setOnlyBad] = useState(true);
   const [limit, setLimit] = useState(200);
@@ -192,8 +194,9 @@ export default function AdminPaymeHealth() {
             Live
           </button>
           <button
-            className="px-3 py-1 rounded-lg border text-sm"
+            className="px-3 py-2 rounded-lg text-sm border bg-white"
             onClick={() => navigate("/admin/billing")}
+            title="Открыть Billing"
           >
             Billing
           </button>
