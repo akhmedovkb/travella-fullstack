@@ -1,8 +1,9 @@
 // frontend/src/components/ServiceCard.jsx
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { apiGet } from "../api";
+import { apiGet, apiPost } from "../api";
 import WishHeart from "./WishHeart";
 const SHOW_REVIEWS = false;
 
@@ -504,6 +505,7 @@ export default function ServiceCard({
   className = "",
 }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
 
   const {
     svc,
@@ -531,6 +533,23 @@ export default function ServiceCard({
   const dayShort = t("countdown.days_short", { defaultValue: "d" });
 
   const id = svc.id ?? item.id;
+  const initialUnlocked =
+      viewerRole === "provider" ||
+      viewerRole === "admin" ||
+      Boolean(
+        svc?.unlocked ??
+          item?.unlocked ??
+          item?.service?.unlocked ??
+          item?.is_unlocked ??
+          item?.service?.is_unlocked
+      );
+    
+    const [unlocked, setUnlocked] = useState(initialUnlocked);
+    const [unlockLoading, setUnlockLoading] = useState(false);
+    
+    useEffect(() => {
+      setUnlocked(initialUnlocked);
+    }, [initialUnlocked, id]);
 
   /* изображения */
   const images = collectImages(
@@ -706,6 +725,55 @@ export default function ServiceCard({
 
   const hasDetailsBlock =
     direction || dates || hotel || accommodation || transfer || flightDetails;
+
+  async function handleUnlock(e) {
+  e?.stopPropagation?.();
+
+  const clientToken = localStorage.getItem("clientToken");
+  if (!clientToken) {
+    navigate("/client/login");
+    return;
+  }
+
+  if (!id) return;
+
+  try {
+    setUnlockLoading(true);
+
+    const res = await apiPost(
+      "/api/client/unlock-contact",
+      { service_id: id },
+      "client"
+    );
+
+    if (res?.ok && (res?.unlocked || res?.already)) {
+      setUnlocked(true);
+      return;
+    }
+
+    throw new Error("unlock_failed");
+  } catch (err) {
+    const code =
+      err?.response?.data?.code ||
+      err?.data?.code ||
+      err?.code;
+
+    if (code === "INSUFFICIENT_BALANCE") {
+      navigate("/client/balance");
+      return;
+    }
+
+    if (err?.response?.status === 401 || err?.response?.status === 403) {
+      navigate("/client/login");
+      return;
+    }
+
+    console.error("unlock contact error:", err);
+    alert(t("marketplace.unlock_error", { defaultValue: "Не удалось открыть контакты" }));
+  } finally {
+    setUnlockLoading(false);
+  }
+}
 
   return (
     <>
@@ -889,62 +957,76 @@ export default function ServiceCard({
           )}
 
           {/* поставщик / контакты */}
-          {(supplierName || supplierPhone || supplierTg?.label) && (
-            <div className="mt-2 text-sm space-y-0.5">
-              {supplierName && (
-                <div>
-                  <span className="text-gray-500">
-                    {t("marketplace.supplier") || "Поставщик"}:{" "}
-                  </span>
-                  {providerId ? (
-                    <a
-                      href={`/profile/provider/${providerId}`}
-                      className="underline hover:text-gray-900"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {supplierName}
-                    </a>
-                  ) : (
-                    <span className="font-medium">{supplierName}</span>
-                  )}
-                </div>
-              )}
+{(supplierName || supplierPhone || supplierTg?.label) && (
+  <div className="mt-2 text-sm space-y-1">
+    {supplierName && (
+      <div>
+        <span className="text-gray-500">
+          {t("marketplace.supplier") || "Поставщик"}:{" "}
+        </span>
+        {providerId ? (
+          <a
+            href={`/profile/provider/${providerId}`}
+            className="underline hover:text-gray-900"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {supplierName}
+          </a>
+        ) : (
+          <span className="font-medium">{supplierName}</span>
+        )}
+      </div>
+    )}
 
-              {supplierPhone && (
-                <div>
-                  <span className="text-gray-500">
-                    {t("marketplace.phone") || "Телефон"}:{" "}
-                  </span>
-                  <a
-                    href={`tel:${String(supplierPhone).replace(/\s+/g, "")}`}
-                    className="underline"
-                  >
-                    {supplierPhone}
-                  </a>
-                </div>
-              )}
+    {unlocked ? (
+      <>
+        {supplierPhone && (
+          <div>
+            <span className="text-gray-500">
+              {t("marketplace.phone") || "Телефон"}:{" "}
+            </span>
+            <a
+              href={`tel:${String(supplierPhone).replace(/\s+/g, "")}`}
+              className="underline"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {supplierPhone}
+            </a>
+          </div>
+        )}
 
-              {supplierTg?.label && (
-                <div>
-                  <span className="text-gray-500">
-                    {t("marketplace.telegram") || "Телеграм"}:{" "}
-                  </span>
-                  {supplierTg.href ? (
-                    <a
-                      href={supplierTg.href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline"
-                    >
-                      {supplierTg.label}
-                    </a>
-                  ) : (
-                    <span className="font-medium">{supplierTg.label}</span>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
+        {supplierTg?.label && (
+          <div>
+            <span className="text-gray-500">
+              {t("marketplace.telegram") || "Телеграм"}:{" "}
+            </span>
+            {supplierTg.href ? (
+              <a
+                href={supplierTg.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {supplierTg.label}
+              </a>
+            ) : (
+              <span className="font-medium">{supplierTg.label}</span>
+            )}
+          </div>
+        )}
+      </>
+    ) : (
+      (supplierPhone || supplierTg?.label) && (
+        <div className="rounded-lg bg-gray-50 border px-3 py-2 text-xs text-gray-600">
+          {t("marketplace.contacts_locked", {
+            defaultValue: "Контакты поставщика скрыты. Откройте контакты, чтобы увидеть телефон и Telegram.",
+          })}
+        </div>
+      )
+    )}
+  </div>
+)}
 
           {/* ссылка на всплывающее окно с подробностями тура */}
           {hasDetailsBlock && (
@@ -962,7 +1044,20 @@ export default function ServiceCard({
           )}
 
           {/* кнопка действия */}
-          <div className="mt-auto pt-3">
+          <div className="mt-auto pt-3 space-y-2">
+            {!unlocked && (supplierPhone || supplierTg?.label) && viewerRole !== "provider" && viewerRole !== "admin" && (
+              <button
+                type="button"
+                onClick={handleUnlock}
+                disabled={unlockLoading}
+                className="w-full bg-black text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-gray-900 disabled:opacity-60"
+              >
+                {unlockLoading
+                  ? t("marketplace.unlocking", { defaultValue: "Открытие..." })
+                  : t("marketplace.unlock_contacts", { defaultValue: "Открыть контакты" })}
+              </button>
+            )}
+          
             {showBookButton ? (
               <a
                 href={`/profile/provider/${providerId}?service=${id}#book`}
