@@ -121,7 +121,7 @@ async function adminPaymeTxDetails(req, res) {
     if (!txQ.rows.length) return res.status(404).json({ ok: false, message: "Not found" });
     const tx = txQ.rows[0];
 
-    const orderQ = await pool.query(`SELECT * FROM payme_topup_orders WHERE id=$1`, [tx.order_id]);
+    const orderQ = await pool.query(`SELECT * FROM topup_orders WHERE id=$1`, [tx.order_id]);
     const order = orderQ.rows[0] || null;
 
     const ledgerQ = await pool.query(
@@ -173,7 +173,7 @@ async function adminPaymeRepairLedger(req, res) {
     }
 
     const orderQ = await client.query(
-      `SELECT * FROM payme_topup_orders WHERE id=$1 FOR UPDATE`,
+      `SELECT * FROM topup_orders WHERE id=$1 FOR UPDATE`,
       [tx.order_id]
     );
     const order = orderQ.rows[0];
