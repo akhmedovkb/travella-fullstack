@@ -193,13 +193,6 @@ export default function AdminPaymeHealth() {
           >
             Live
           </button>
-          <button
-            className="px-3 py-2 rounded-lg text-sm border bg-white"
-            onClick={() => navigate("/admin/billing")}
-            title="Открыть Billing"
-          >
-            Billing
-          </button>
         </div>
       </div>
 
