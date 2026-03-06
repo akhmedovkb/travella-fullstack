@@ -406,10 +406,64 @@ async function adminPaymeDashboard(req,res){
 
 }
 
+async function adminPaymeLive(req, res) {
+  const limitRaw = Number(req.query.limit);
+  const limit = Number.isFinite(limitRaw)
+    ? Math.max(1, Math.min(200, Math.trunc(limitRaw)))
+    : 50;
+
+  try {
+    const q = await pool.query(
+      `
+      SELECT
+        p.payme_id,
+        p.order_id,
+        p.amount_tiyin,
+        p.state,
+        p.create_time,
+        p.perform_time,
+        p.cancel_time,
+        p.reason,
+        p.updated_at,
+        t.client_id,
+        t.status AS order_status,
+        COALESCE(lg.ledger_rows, 0) AS ledger_rows,
+        COALESCE(lg.ledger_sum, 0) AS ledger_sum
+      FROM payme_transactions p
+      LEFT JOIN topup_orders t
+        ON t.id = p.order_id
+      LEFT JOIN (
+        SELECT
+          l.meta->>'payme_id' AS payme_id,
+          COUNT(*)::bigint AS ledger_rows,
+          COALESCE(SUM(l.amount), 0)::bigint AS ledger_sum
+        FROM contact_balance_ledger l
+        WHERE l.source IN ('payme', 'payme_refund')
+          AND l.meta ? 'payme_id'
+        GROUP BY l.meta->>'payme_id'
+      ) lg
+        ON lg.payme_id = p.payme_id
+      ORDER BY COALESCE(p.updated_at, now()) DESC, p.create_time DESC
+      LIMIT $1
+      `,
+      [limit]
+    );
+
+    return res.json({
+      ok: true,
+      rows: q.rows,
+      limit,
+    });
+  } catch (e) {
+    console.error("adminPaymeLive error:", e);
+    return res.status(500).json({ ok: false, message: "Internal error" });
+  }
+}
 module.exports = {
   adminPaymeHealth,
   adminPaymeTxDetails,
   adminPaymeRepairLedger,
   adminPaymeRepairBulk,
   adminPaymeDashboard,
+  adminPaymeLive,
 };
