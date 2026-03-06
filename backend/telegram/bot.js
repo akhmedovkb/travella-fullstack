@@ -6263,8 +6263,8 @@ bot.action(/^balance:topup:(\d+)$/, async (ctx) => {
     const clientId = Number(clientRow.id);
 
     const r = await pool.query(
-      `INSERT INTO payme_topup_orders (client_id, amount_tiyin, status)
-       VALUES ($1,$2,'new')
+      `INSERT INTO topup_orders (client_id, amount_tiyin, provider, status)
+       VALUES ($1,$2,'payme','new')
        RETURNING id`,
       [clientId, amountTiyin]
     );
