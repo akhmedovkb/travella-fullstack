@@ -29,10 +29,10 @@ function safeEqHex(a, b) {
 function verifyTelegramAuth(payload) {
   const hash = String(payload?.hash || "");
   const botToken = getTelegramBotToken();
-  
+
   console.log("[tg-web-login] bot token prefix:", String(botToken || "").slice(0, 12));
   console.log("[tg-web-login] tg user id:", payload?.id, "username:", payload?.username);
-  
+
   if (!hash || !botToken) {
     return { ok: false, error: "telegram_login_not_configured" };
   }
@@ -44,7 +44,14 @@ function verifyTelegramAuth(payload) {
   }
 
   const dataCheckString = Object.keys(payload || {})
-    .filter((k) => k !== "hash" && payload[k] !== undefined && payload[k] !== null && payload[k] !== "")
+    .filter(
+      (k) =>
+        k !== "hash" &&
+        k !== "role" &&
+        payload[k] !== undefined &&
+        payload[k] !== null &&
+        payload[k] !== ""
+    )
     .sort()
     .map((k) => `${k}=${payload[k]}`)
     .join("\n");
