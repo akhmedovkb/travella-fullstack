@@ -357,9 +357,59 @@ async function adminPaymeRepairBulk(req, res) {
   }
 }
 
+async function adminPaymeDashboard(req,res){
+
+  const today = await pool.query(`
+  SELECT COUNT(*) 
+  FROM payme_transactions
+  WHERE state=2
+  AND to_timestamp(perform_time/1000)::date = CURRENT_DATE
+  `);
+
+  const success = await pool.query(`
+  SELECT COUNT(*) FROM payme_transactions
+  WHERE state=2
+  `);
+
+  const failed = await pool.query(`
+  SELECT COUNT(*) FROM payme_transactions
+  WHERE state<0
+  `);
+
+  const refunds = await pool.query(`
+  SELECT COUNT(*) FROM contact_balance_ledger
+  WHERE reason='refund'
+  `);
+
+  const ledger = await pool.query(`
+  SELECT COUNT(*) FROM contact_balance_ledger
+  WHERE reason='topup'
+  `);
+
+  const broken = await pool.query(`
+  SELECT COUNT(*)
+  FROM payme_transactions p
+  LEFT JOIN contact_balance_ledger l
+  ON l.meta->>'payme_id'=p.payme_id
+  WHERE p.state=2
+  AND l.id IS NULL
+  `);
+
+  res.json({
+    today_topups: today.rows[0].count,
+    success: success.rows[0].count,
+    failed: failed.rows[0].count,
+    refunds: refunds.rows[0].count,
+    ledger_credits: ledger.rows[0].count,
+    broken: broken.rows[0].count
+  });
+
+}
+
 module.exports = {
   adminPaymeHealth,
   adminPaymeTxDetails,
   adminPaymeRepairLedger,
-  adminPaymeRepairBulk, 
+  adminPaymeRepairBulk,
+  adminPaymeDashboard,
 };
