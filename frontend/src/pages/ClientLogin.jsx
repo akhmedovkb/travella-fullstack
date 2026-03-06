@@ -3,6 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { apiPost } from "../api";
 import LanguageSelector from "../components/LanguageSelector";
 import { useTranslation } from "react-i18next";
+import TelegramLoginButton from "../components/TelegramLoginButton";
 
 export default function ClientLogin() {
   const { t } = useTranslation();
@@ -64,6 +65,12 @@ export default function ClientLogin() {
           {loading ? t("common.loading") : t("client.login.loginBtn")}
         </button>
       </form>
+
+      <div className="my-4 flex items-center gap-3">
+        <div className="h-px bg-gray-200 flex-1" />
+        <span className="text-xs text-gray-400 uppercase">или</span>
+        <div className="h-px bg-gray-200 flex-1" />
+      </div>
 
       <div className="mt-3 text-sm text-gray-600">
         {t("client.login.noAccount")}{" "}
