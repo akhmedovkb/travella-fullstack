@@ -46,6 +46,7 @@ import AdminFinance from "./pages/admin/AdminFinance";
 import ClientRegister from "./pages/ClientRegister";
 import ClientLogin from "./pages/ClientLogin";
 import ClientDashboard from "./pages/ClientDashboard";
+import ClientBalance from "./pages/ClientBalance";
 
 // Провайдерские новые страницы
 import ProviderRequests from "./pages/ProviderRequests";
@@ -274,6 +275,14 @@ export default function App() {
               }
             />
             <Route path="/profile/client/:id" element={<ClientProfile />} />
+            <Route
+              path="/client/balance"
+              element={
+                <ClientPrivateRoute>
+                  <ClientBalance />
+                </ClientPrivateRoute>
+              }
+            />
 
             {/* Админ и CMS */}
             <Route path="/admin/moderation" element={<AdminModeration />} />
