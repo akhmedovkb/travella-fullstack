@@ -690,6 +690,14 @@ export default function ServiceCard({
     prov?.type || prov?.provider_type || prov?.category
   );
   const showBookButton = !!providerId && (providerLooksBookable || serviceLooksBookable);
+  const isProviderViewer = viewerRole === "provider";
+  const isAdminViewer = viewerRole === "admin";
+  
+  const canShowUnlockButton =
+    !unlocked &&
+    !isProviderViewer &&
+    !isAdminViewer &&
+    (supplierPhone || supplierTg?.label);
 
   // tooltip reviews (выключено)
   const [revOpen, setRevOpen] = useState(false);
@@ -1051,7 +1059,7 @@ export default function ServiceCard({
 
           {/* кнопка действия */}
           <div className="mt-auto pt-3 space-y-2">
-            {!unlocked && (supplierPhone || supplierTg?.label) && viewerRole !== "provider" && viewerRole !== "admin" && (
+            {canShowUnlockButton && (
               <button
                 type="button"
                 onClick={handleUnlock}
