@@ -5,7 +5,7 @@ import { apiGet, apiPost } from "../../api";
 import { tError, tSuccess } from "../../shared/toast";
 import AdminPaymeEvents from "./AdminPaymeEvents";
 import PaymeLab from "./PaymeLab";
-import AdminPaymeDashboard from "./PaymeDashboard";
+import PaymeDashboard from "./PaymeDashboard";
 
 function toNum(x) {
   const n = Number(x);
