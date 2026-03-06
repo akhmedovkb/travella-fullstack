@@ -29,6 +29,11 @@ function safeEqHex(a, b) {
 function verifyTelegramAuth(payload) {
   const hash = String(payload?.hash || "");
   const botToken = getTelegramBotToken();
+  
+  console.log("[tg-web-login] bot token prefix:", String(botToken || "").slice(0, 12));
+  console.log("[tg-web-login] tg user id:", payload?.id, "username:", payload?.username);
+  
+  const botToken = getTelegramBotToken();
 
   if (!hash || !botToken) {
     return { ok: false, error: "telegram_login_not_configured" };
