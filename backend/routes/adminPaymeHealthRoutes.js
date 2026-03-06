@@ -7,7 +7,8 @@ const {
   adminPaymeHealth,
   adminPaymeTxDetails,
   adminPaymeRepairLedger,
-  adminPaymeRepairBulk, // ✅ add
+  adminPaymeRepairBulk, 
+  adminPaymeDashboard,
 } = require("../controllers/adminPaymeHealthController");
 
 const router = express.Router();
@@ -17,6 +18,14 @@ router.get("/health", authenticateToken, requireAdmin, adminPaymeHealth);
 
 // GET /api/admin/payme/tx/:paymeId
 router.get("/tx/:paymeId", authenticateToken, requireAdmin, adminPaymeTxDetails);
+
+// GET /api/admin/payme/dashboard
+router.get(
+"/dashboard",
+authenticateToken,
+requireAdmin,
+adminPaymeDashboard
+);
 
 // POST /api/admin/payme/repair/:paymeId
 router.post("/repair/:paymeId", authenticateToken, requireAdmin, adminPaymeRepairLedger);
