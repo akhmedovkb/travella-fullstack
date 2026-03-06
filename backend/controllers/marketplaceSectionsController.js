@@ -78,7 +78,21 @@ exports.getTopServices = async (req, res) => {
     `;
     const r = await pool.query(sql, [...params, limit, offset]);
     const total = r.rows[0]?.total_count || 0;
-    res.json({ items: r.rows.map(({ total_count, ...row }) => row), page, limit, total });
+    
+    const viewer = getOptionalUserFromReq(req);
+    
+    const baseRows = r.rows.map(({ total_count, ...row }) => row);
+    
+    const safeRows = await Promise.all(
+      baseRows.map((row) => redactMarketplaceRow(row, viewer))
+    );
+    
+    res.json({
+      items: safeRows,
+      page,
+      limit,
+      total
+    });
   } catch (e) {
     console.error("getTopServices error:", e);
     res.status(500).json({ error: "Internal server error" });
