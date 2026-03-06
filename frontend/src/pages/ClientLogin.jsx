@@ -1,3 +1,5 @@
+//travella-fullstack/frontend/src/pages/ClientLogin.jsx
+
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { apiPost } from "../api";
@@ -19,9 +21,9 @@ export default function ClientLogin() {
     try {
       const payload = {
         ...form,
-        email: form.email ? String(form.email).trim().toLowerCase() : ""
+        email: form.email ? String(form.email).trim().toLowerCase() : "",
       };
-      const data = await apiPost("/api/clients/login", payload, false)
+      const data = await apiPost("/api/clients/login", payload, false);
       if (!data?.token) throw new Error("No token");
       localStorage.setItem("clientToken", data.token);
       nav("/client/dashboard");
@@ -36,9 +38,14 @@ export default function ClientLogin() {
     <div className="max-w-md mx-auto bg-white p-6 rounded-xl shadow">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold">{t("client.login.title")}</h1>
+        <LanguageSelector />
       </div>
 
-      {err && <div className="mb-3 bg-orange-500 text-white text-sm px-3 py-2 rounded">{err}</div>}
+      {err && (
+        <div className="mb-3 bg-orange-500 text-white text-sm px-3 py-2 rounded">
+          {err}
+        </div>
+      )}
 
       <form onSubmit={submit} className="space-y-3">
         <input
@@ -72,9 +79,14 @@ export default function ClientLogin() {
         <div className="h-px bg-gray-200 flex-1" />
       </div>
 
+      <TelegramLoginButton role="client" redirectTo="/client/dashboard" />
+
       <div className="mt-3 text-sm text-gray-600">
         {t("client.login.noAccount")}{" "}
-        <Link to="/client/register" className="text-orange-600 font-semibold hover:underline">
+        <Link
+          to="/client/register"
+          className="text-orange-600 font-semibold hover:underline"
+        >
           {t("client.login.registerLink")}
         </Link>
       </div>
