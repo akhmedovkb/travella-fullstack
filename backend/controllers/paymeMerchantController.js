@@ -289,10 +289,19 @@ async function pickClientsBalanceColumn(client) {
 }
 
 async function bumpClientBalanceIfExists(client, clientId, deltaTiyin) {
-  // ✅ Variant B:
-  // clients.* balance columns are NOT used in this project.
-  // Single source of truth is contact_balance_ledger.
-  return;
+  const col = await pickClientsBalanceColumn(client);
+  if (!col) return;
+
+  const cid = Number(clientId);
+  const delta = Math.trunc(Number(deltaTiyin) || 0);
+  if (!Number.isFinite(cid) || cid <= 0 || !Number.isFinite(delta) || delta === 0) return;
+
+  await client.query(
+    `UPDATE clients
+        SET ${col} = COALESCE(${col}, 0) + $2
+      WHERE id = $1`,
+    [cid, delta]
+  );
 }
 
 // helper: does ON CONFLICT work? (requires unique/exclusion constraint)
@@ -772,6 +781,8 @@ async function paymeMerchantRpc(req, res) {
           paymeId,
         });
 
+        await bumpClientBalanceIfExists(client, order.client_id, order.amount_tiyin);
+
         await client.query("COMMIT");
 
         return res.status(200).json(
@@ -850,6 +861,8 @@ async function paymeMerchantRpc(req, res) {
               paymeId,
               reasonCode: Number.isFinite(reason) ? reason : null,
             });
+
+            await bumpClientBalanceIfExists(client, order.client_id, -Math.abs(Number(order.amount_tiyin) || 0));
         
             try {
               await markOrderStatusTx(client, orderId, "cancelled");
