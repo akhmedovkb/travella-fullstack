@@ -1,6 +1,6 @@
-//frontend/src/pages/admin/AdminBilling.jsx
+// frontend/src/pages/admin/AdminBilling.jsx
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost } from "../../api";
 import { tError, tSuccess } from "../../shared/toast";
 
@@ -49,6 +49,8 @@ export default function AdminBilling() {
   const [clientsLimit, setClientsLimit] = useState(100);
 
   const [ledger, setLedger] = useState([]);
+  const [sortField, setSortField] = useState("created_at");
+  const [sortDir, setSortDir] = useState("desc");
   const [ledgerLoading, setLedgerLoading] = useState(false);
   const [ledgerClientId, setLedgerClientId] = useState("");
   const [ledgerReason, setLedgerReason] = useState("");
@@ -95,9 +97,7 @@ export default function AdminBilling() {
   async function loadLedger() {
     setLedgerLoading(true);
     try {
-      const parts = [
-        `limit=${encodeURIComponent(ledgerLimit)}`,
-      ];
+      const parts = [`limit=${encodeURIComponent(ledgerLimit)}`];
 
       if (String(ledgerClientId || "").trim()) {
         parts.push(`clientId=${encodeURIComponent(String(ledgerClientId).trim())}`);
@@ -160,6 +160,50 @@ export default function AdminBilling() {
       setAdjustLoading(false);
     }
   }
+
+  function toggleSort(field) {
+    if (sortField === field) {
+      setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDir("asc");
+    }
+  }
+
+  function sortIndicator(field) {
+    if (sortField !== field) return "";
+    return sortDir === "asc" ? " ▲" : " ▼";
+  }
+
+  const sortedLedger = useMemo(() => {
+    const arr = [...ledger];
+
+    arr.sort((a, b) => {
+      let av = a?.[sortField];
+      let bv = b?.[sortField];
+
+      if (sortField === "id" || sortField === "client_id" || sortField === "amount") {
+        av = Number(av || 0);
+        bv = Number(bv || 0);
+      } else if (sortField === "created_at") {
+        av = av ? new Date(av).getTime() : 0;
+        bv = bv ? new Date(bv).getTime() : 0;
+      } else {
+        av = String(av ?? "").toLowerCase();
+        bv = String(bv ?? "").toLowerCase();
+      }
+
+      if (av === bv) return 0;
+
+      if (sortDir === "asc") {
+        return av > bv ? 1 : -1;
+      }
+
+      return av < bv ? 1 : -1;
+    });
+
+    return arr;
+  }, [ledger, sortField, sortDir]);
 
   useEffect(() => {
     loadSummary();
@@ -428,24 +472,54 @@ export default function AdminBilling() {
               <table className="min-w-full text-sm">
                 <thead className="bg-gray-50 text-gray-600">
                   <tr>
-                    <th className="text-left px-3 py-2">id</th>
-                    <th className="text-left px-3 py-2">client_id</th>
-                    <th className="text-left px-3 py-2">amount</th>
-                    <th className="text-left px-3 py-2">reason</th>
-                    <th className="text-left px-3 py-2">source</th>
-                    <th className="text-left px-3 py-2">created_at</th>
+                    <th
+                      className="text-left px-3 py-2 cursor-pointer select-none"
+                      onClick={() => toggleSort("id")}
+                    >
+                      id{sortIndicator("id")}
+                    </th>
+                    <th
+                      className="text-left px-3 py-2 cursor-pointer select-none"
+                      onClick={() => toggleSort("client_id")}
+                    >
+                      client_id{sortIndicator("client_id")}
+                    </th>
+                    <th
+                      className="text-left px-3 py-2 cursor-pointer select-none"
+                      onClick={() => toggleSort("amount")}
+                    >
+                      amount{sortIndicator("amount")}
+                    </th>
+                    <th
+                      className="text-left px-3 py-2 cursor-pointer select-none"
+                      onClick={() => toggleSort("reason")}
+                    >
+                      reason{sortIndicator("reason")}
+                    </th>
+                    <th
+                      className="text-left px-3 py-2 cursor-pointer select-none"
+                      onClick={() => toggleSort("source")}
+                    >
+                      source{sortIndicator("source")}
+                    </th>
+                    <th
+                      className="text-left px-3 py-2 cursor-pointer select-none"
+                      onClick={() => toggleSort("created_at")}
+                    >
+                      created_at{sortIndicator("created_at")}
+                    </th>
                     <th className="text-left px-3 py-2">meta</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {ledger.length === 0 ? (
+                  {sortedLedger.length === 0 ? (
                     <tr>
                       <td className="px-3 py-6 text-center text-gray-400" colSpan={7}>
                         Нет данных
                       </td>
                     </tr>
                   ) : (
-                    ledger.map((r) => (
+                    sortedLedger.map((r) => (
                       <tr key={r.id} className="border-t">
                         <td className="px-3 py-2">{r.id}</td>
                         <td className="px-3 py-2">{r.client_id}</td>
