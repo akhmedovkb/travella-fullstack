@@ -5,6 +5,7 @@ import { apiGet, apiPost } from "../../api";
 import { tError, tSuccess } from "../../shared/toast";
 import AdminPaymeEvents from "./AdminPaymeEvents";
 import PaymeLab from "./PaymeLab";
+import AdminPaymeDashboard from "./AdminPaymeDashboard";
 
 function toNum(x) {
   const n = Number(x);
@@ -51,7 +52,7 @@ export default function AdminPaymeHealth() {
   const [details, setDetails] = useState(null);
   const [repairingId, setRepairingId] = useState(null);
 
-  const [tab, setTab] = useState("health"); // "health" | "events" | "lab"
+  const [tab, setTab] = useState("health"); // "health" | "events" | "lab" | "dashboard"
 
   const canLoad = useMemo(() => true, []);
 
@@ -147,6 +148,7 @@ export default function AdminPaymeHealth() {
           >
             Health
           </button>
+        
           <button
             className={`px-3 py-2 rounded-lg text-sm ${
               tab === "events" ? "bg-black text-white" : "border bg-white"
@@ -155,6 +157,7 @@ export default function AdminPaymeHealth() {
           >
             Events
           </button>
+        
           <button
             className={`px-3 py-2 rounded-lg text-sm ${
               tab === "lab" ? "bg-black text-white" : "border bg-white"
@@ -168,12 +171,22 @@ export default function AdminPaymeHealth() {
           >
             Lab
           </button>
+        
+          <button
+            className={`px-3 py-2 rounded-lg text-sm ${
+              tab === "dashboard" ? "bg-black text-white" : "border bg-white"
+            }`}
+            onClick={() => setTab("dashboard")}
+            title="Общий мониторинг Payme"
+          >
+            Dashboard
+          </button>
         </div>
       </div>
 
       {/* Events tab */}
       {tab === "events" && <AdminPaymeEvents />}
-
+      
       {/* Lab tab */}
       {tab === "lab" && (
         <PaymeLab
@@ -189,6 +202,9 @@ export default function AdminPaymeHealth() {
           }
         />
       )}
+      
+      {/* Dashboard tab */}
+      {tab === "dashboard" && <AdminPaymeDashboard />}
 
       {/* Health tab */}
       {tab === "health" && (
