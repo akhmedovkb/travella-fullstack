@@ -560,7 +560,22 @@ router.get("/service/:serviceId", async (req, res) => {
       }
     }
 
-    return res.json({ success: true, service: r.rows[0], unlocked });
+      const serviceRow = { ...r.rows[0] };
+      
+      if (!unlocked) {
+        serviceRow.provider_phone = null;
+        serviceRow.provider_telegram = null;
+        serviceRow.social = null;
+        serviceRow.telegram = null;
+        serviceRow.contact_phone = null;
+        serviceRow.whatsapp = null;
+      }
+      
+      return res.json({
+        success: true,
+        service: serviceRow,
+        unlocked,
+      });
   } catch (e) {
     console.error("[tg] /service/:id error:", e?.message || e);
     return res.status(500).json({ success: false, error: "server_error" });
