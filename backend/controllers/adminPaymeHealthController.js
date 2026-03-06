@@ -56,62 +56,75 @@ async function adminPaymeHealth(req, res) {
       WHERE l.source IN ('payme','payme_refund')
         AND l.meta ? 'payme_id'
       GROUP BY (l.meta->>'payme_id')
+    ),
+    joined AS (
+      SELECT
+        tx.payme_id,
+        tx.order_id,
+        tx.amount_tiyin,
+        tx.state,
+        tx.create_time,
+        tx.perform_time,
+        tx.cancel_time,
+        tx.reason,
+        tx.updated_at,
+        COALESCE(lg.ledger_rows,0) AS ledger_rows,
+        COALESCE(lg.ledger_sum,0) AS ledger_sum,
+        lg.first_ledger_at,
+        lg.last_ledger_at,
+
+        CASE
+          -- 🔴 STUCK (state=1 too long)
+          WHEN tx.state = 1
+               AND tx.create_time IS NOT NULL
+               AND (EXTRACT(EPOCH FROM (now() - to_timestamp(tx.create_time/1000))) > 900)
+            THEN 'STUCK'
+
+          -- 🔴 LOST PAYMENT
+          WHEN tx.state = 2 AND COALESCE(lg.ledger_rows,0) = 0
+            THEN 'LOST_PAYMENT'
+
+          -- 🟡 BAD AMOUNT
+          WHEN tx.state = 2 AND COALESCE(lg.ledger_sum,0) <= 0
+            THEN 'BAD_AMOUNT'
+
+          -- 🟠 REFUND MISMATCH
+          WHEN tx.state IN (-1,-2) AND COALESCE(lg.ledger_sum,0) > 0
+            THEN 'REFUND_MISMATCH'
+
+          ELSE 'OK'
+        END AS health_status,
+
+        CASE
+          -- performed, but ledger sum != expected topup
+          WHEN tx.state = 2
+               AND COALESCE(lg.ledger_sum,0) <> COALESCE(tx.amount_tiyin,0)
+            THEN 'LEDGER_MISMATCH'
+
+          -- refunded/cancelled, but ledger sum != negative expected amount
+          WHEN tx.state IN (-1,-2)
+               AND COALESCE(lg.ledger_sum,0) <> -COALESCE(tx.amount_tiyin,0)
+            THEN 'REFUND_MISMATCH'
+
+          -- performed, but no ledger rows at all
+          WHEN tx.state = 2
+               AND COALESCE(lg.ledger_rows,0) = 0
+            THEN 'LOST_PAYMENT'
+
+          ELSE 'OK'
+        END AS billing_status
+
+      FROM tx
+      LEFT JOIN lg ON lg.payme_id = tx.payme_id
     )
-    SELECT
-      tx.payme_id,
-      tx.order_id,
-      tx.amount_tiyin,
-      tx.state,
-      tx.create_time,
-      tx.perform_time,
-      tx.cancel_time,
-      tx.reason,
-      tx.updated_at,
-      COALESCE(lg.ledger_rows,0) AS ledger_rows,
-      COALESCE(lg.ledger_sum,0) AS ledger_sum,
-      lg.first_ledger_at,
-      lg.last_ledger_at,
-      CASE
-        -- 🔴 STUCK (state=1 too long)
-        WHEN tx.state = 1
-             AND tx.create_time IS NOT NULL
-             AND (EXTRACT(EPOCH FROM (now() - to_timestamp(tx.create_time/1000))) > 900)
-          THEN 'STUCK'
-
-        -- 🔴 LOST PAYMENT
-        WHEN tx.state = 2 AND COALESCE(lg.ledger_rows,0) = 0
-          THEN 'LOST_PAYMENT'
-
-        -- 🟡 BAD AMOUNT
-        WHEN tx.state = 2 AND COALESCE(lg.ledger_sum,0) <= 0
-          THEN 'BAD_AMOUNT'
-
-        -- 🟠 REFUND MISMATCH
-        WHEN tx.state IN (-1,-2) AND COALESCE(lg.ledger_sum,0) > 0
-          THEN 'REFUND_MISMATCH'
-
-        ELSE 'OK'
-      END AS health_status,
-
-      CASE
-        WHEN tx.state = 2
-             AND COALESCE(lg.ledger_sum, 0) <> COALESCE(tx.amount_tiyin, 0)
-          THEN 'LEDGER_MISMATCH'
-
-        WHEN tx.state IN (-1, -2)
-             AND COALESCE(lg.ledger_sum, 0) <> -COALESCE(tx.amount_tiyin, 0)
-          THEN 'REFUND_MISMATCH'
-
-        WHEN tx.state = 2
-             AND COALESCE(lg.ledger_rows, 0) = 0
-          THEN 'LOST_PAYMENT'
-
-        ELSE 'OK'
-      END AS billing_status
-    FROM tx
-    LEFT JOIN lg ON lg.payme_id = tx.payme_id
-    ${onlyBad ? "WHERE (CASE WHEN tx.state = 2 AND COALESCE(lg.ledger_rows,0) = 0 THEN 'LOST_PAYMENT' WHEN tx.state = 2 AND COALESCE(lg.ledger_sum,0) <= 0 THEN 'BAD_AMOUNT' WHEN tx.state IN (-1,-2) AND COALESCE(lg.ledger_sum,0) > 0 THEN 'REFUND_MISMATCH' ELSE 'OK' END) <> 'OK'" : ""}
-    ORDER BY tx.updated_at DESC NULLS LAST;
+    SELECT *
+    FROM joined
+    ${
+      onlyBad
+        ? "WHERE health_status <> 'OK' OR billing_status <> 'OK'"
+        : ""
+    }
+    ORDER BY updated_at DESC NULLS LAST;
   `;
 
   try {
