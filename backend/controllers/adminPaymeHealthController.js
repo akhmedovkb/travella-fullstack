@@ -77,21 +77,37 @@ async function adminPaymeHealth(req, res) {
              AND tx.create_time IS NOT NULL
              AND (EXTRACT(EPOCH FROM (now() - to_timestamp(tx.create_time/1000))) > 900)
           THEN 'STUCK'
-      
+
         -- 🔴 LOST PAYMENT
         WHEN tx.state = 2 AND COALESCE(lg.ledger_rows,0) = 0
           THEN 'LOST_PAYMENT'
-      
+
         -- 🟡 BAD AMOUNT
         WHEN tx.state = 2 AND COALESCE(lg.ledger_sum,0) <= 0
           THEN 'BAD_AMOUNT'
-      
+
         -- 🟠 REFUND MISMATCH
         WHEN tx.state IN (-1,-2) AND COALESCE(lg.ledger_sum,0) > 0
           THEN 'REFUND_MISMATCH'
-      
+
         ELSE 'OK'
-      END AS health_status
+      END AS health_status,
+
+      CASE
+        WHEN tx.state = 2
+             AND COALESCE(lg.ledger_sum, 0) <> COALESCE(tx.amount_tiyin, 0)
+          THEN 'LEDGER_MISMATCH'
+
+        WHEN tx.state IN (-1, -2)
+             AND COALESCE(lg.ledger_sum, 0) <> -COALESCE(tx.amount_tiyin, 0)
+          THEN 'REFUND_MISMATCH'
+
+        WHEN tx.state = 2
+             AND COALESCE(lg.ledger_rows, 0) = 0
+          THEN 'LOST_PAYMENT'
+
+        ELSE 'OK'
+      END AS billing_status
     FROM tx
     LEFT JOIN lg ON lg.payme_id = tx.payme_id
     ${onlyBad ? "WHERE (CASE WHEN tx.state = 2 AND COALESCE(lg.ledger_rows,0) = 0 THEN 'LOST_PAYMENT' WHEN tx.state = 2 AND COALESCE(lg.ledger_sum,0) <= 0 THEN 'BAD_AMOUNT' WHEN tx.state IN (-1,-2) AND COALESCE(lg.ledger_sum,0) > 0 THEN 'REFUND_MISMATCH' ELSE 'OK' END) <> 'OK'" : ""}
