@@ -580,7 +580,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
           <div>
             <div className="text-sm font-semibold text-gray-800">Status panel</div>
             <div className="text-xs text-gray-500">
-              DB: payme_transactions + payme_topup_orders + contact_balance_ledger
+              DB: topup_orders + payme_transactions + contact_balance_ledger
             </div>
           </div>
 
