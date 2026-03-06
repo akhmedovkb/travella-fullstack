@@ -143,6 +143,9 @@ app.use("/api/marketplace", marketplaceRoutes);
 const clientRoutes = require("./routes/clientRoutes");
 app.use("/api/clients", clientRoutes);
 
+const telegramWebAuthRoutes = require("./routes/telegramWebAuthRoutes");
+app.use("/api/auth", telegramWebAuthRoutes);
+
 const profileRoutes = require("./routes/profileRoutes");
 app.use("/api/profile", profileRoutes);
 
