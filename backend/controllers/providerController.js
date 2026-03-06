@@ -11,6 +11,9 @@ const {
   broadcastPriceDropCard,
 } = require("../utils/refusedPriceDropBroadcast");
 
+const jwt = require("jsonwebtoken");
+const JWT_SECRET = process.env.JWT_SECRET || "changeme_in_env";
+
 // ---------- Helpers ----------
 
 // ISO-639-1: приводим любые названия/коды к массиву кодов ["ru","en","uz"]
@@ -909,29 +912,86 @@ const updateServiceImagesOnly = async (req, res) => {
 };
 
 // ---------- Public provider card ----------
+function getOptionalUserFromReq(req) {
+  try {
+    const auth = String(req.headers?.authorization || "");
+    if (!auth.startsWith("Bearer ")) return null;
+    const token = auth.slice(7).trim();
+    if (!token) return null;
+    return jwt.verify(token, JWT_SECRET);
+  } catch {
+    return null;
+  }
+}
+
+async function canViewerSeeProviderContacts({ viewer, providerId, serviceId }) {
+  if (!viewer || !providerId) return false;
+
+  const role = String(viewer.role || "").toLowerCase();
+
+  if (role === "admin") return true;
+  if (role === "provider" && Number(viewer.id) === Number(providerId)) return true;
+
+  if (role === "client") {
+    const sid = Number(serviceId);
+    const cid = Number(viewer.id);
+
+    if (!Number.isFinite(cid) || cid <= 0) return false;
+    if (!Number.isFinite(sid) || sid <= 0) return false;
+
+    const q = await pool.query(
+      `
+      SELECT 1
+      FROM client_service_contact_unlocks u
+      JOIN services s ON s.id = u.service_id
+      WHERE u.client_id = $1
+        AND u.service_id = $2
+        AND s.provider_id = $3
+      LIMIT 1
+      `,
+      [cid, sid, providerId]
+    );
+
+    return q.rowCount > 0;
+  }
+
+  return false;
+}
+
 const getProviderPublicById = async (req, res) => {
   try {
     const id = Number(req.params.id);
+    const serviceId = Number(req.query.serviceId);
+    const viewer = getOptionalUserFromReq(req);
+
     const r = await pool.query(
       `SELECT id, name, type, location, phone, social, photo, address, languages, city_slugs
          FROM providers
         WHERE id=$1`,
       [id]
     );
+
     const row = r.rows[0] || null;
     if (!row) return res.json(null);
+
+    const canSeeContacts = await canViewerSeeProviderContacts({
+      viewer,
+      providerId: row.id,
+      serviceId,
+    });
 
     res.json({
       id: row.id,
       name: row.name,
       type: row.type,
       location: row.location,
-      phone: row.phone,
-      social: row.social,
+      phone: canSeeContacts ? row.phone : null,
+      social: canSeeContacts ? row.social : null,
       photo: row.photo,
       address: row.address,
       languages: normalizeLanguagesISO(row.languages ?? []),
       city_slugs: row.city_slugs || [],
+      contacts_unlocked: canSeeContacts,
     });
   } catch (err) {
     console.error("❌ Ошибка getProviderPublicById:", err);
