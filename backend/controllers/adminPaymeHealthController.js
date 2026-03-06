@@ -284,7 +284,7 @@ async function adminPaymeRepairBulk(req, res) {
       }
 
       const orderQ = await client.query(
-        `SELECT * FROM payme_topup_orders WHERE id=$1 FOR UPDATE`,
+        `SELECT * FROM topup_orders WHERE id=$1 FOR UPDATE`,
         [tx.order_id]
       );
       const order = orderQ.rows[0];
