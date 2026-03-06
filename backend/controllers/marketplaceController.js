@@ -1,6 +1,8 @@
 // backend/controllers/marketplaceController.js
 const db = require("../db");
 const pg = db?.query ? db : db?.pool;
+const jwt = require("jsonwebtoken");
+const JWT_SECRET = process.env.JWT_SECRET || "changeme_in_env";
 
 if (!pg || typeof pg.query !== "function") {
   throw new Error("DB driver not available: expected node-postgres Pool with .query()");
@@ -69,6 +71,109 @@ function mkTracer(req, tag = "MP") {
 }
 // ====== /TRACE HELPERS ======
 
+/* ===================== CONTACT SECURITY ===================== */
+
+function getOptionalUserFromReq(req) {
+  try {
+    const auth = String(req.headers?.authorization || "");
+    if (!auth.startsWith("Bearer ")) return null;
+
+    const token = auth.slice(7).trim();
+    if (!token) return null;
+
+    return jwt.verify(token, JWT_SECRET);
+  } catch {
+    return null;
+  }
+}
+
+async function canViewerSeeProviderContacts({ viewer, providerId, serviceId }) {
+  if (!viewer) return false;
+
+  const role = String(viewer.role || "").toLowerCase();
+  const viewerId = Number(viewer.id);
+  const pid = Number(providerId);
+  const sid = Number(serviceId);
+
+  if (!pid) return false;
+
+  if (role === "admin") return true;
+
+  if (role === "provider") {
+    return viewerId === pid;
+  }
+
+  if (role === "client") {
+    if (!viewerId || !sid) return false;
+
+    const q = await pg.query(
+      `
+      SELECT 1
+      FROM client_service_contact_unlocks u
+      JOIN services s ON s.id = u.service_id
+      WHERE u.client_id = $1
+      AND u.service_id = $2
+      AND s.provider_id = $3
+      LIMIT 1
+      `,
+      [viewerId, sid, pid]
+    );
+
+    return q.rowCount > 0;
+  }
+
+  return false;
+}
+
+function redactProviderContacts(provider) {
+  if (!provider || typeof provider !== "object") return provider;
+
+  return {
+    ...provider,
+    phone: null,
+    telegram: null,
+    telegram_username: null,
+    telegram_chat_id: null,
+    whatsapp: null,
+    social: null,
+    contact_phone: null,
+  };
+}
+
+async function redactMarketplaceRow(row, viewer) {
+  const providerId = row?.provider_id || row?.provider?.id;
+  const serviceId = row?.id;
+
+  const canSee = await canViewerSeeProviderContacts({
+    viewer,
+    providerId,
+    serviceId,
+  });
+
+  if (canSee) {
+    return {
+      ...row,
+      contacts_unlocked: true,
+    };
+  }
+
+  const safe = {
+    ...row,
+    contacts_unlocked: false,
+    provider_phone: null,
+    provider_telegram: null,
+    supplier_phone: null,
+    supplier_telegram: null,
+  };
+
+  if (safe.provider) {
+    safe.provider = redactProviderContacts(safe.provider);
+  }
+
+  return safe;
+}
+
+/* ===================== /CONTACT SECURITY ===================== */
 
 /* -------------------- константы/хелперы -------------------- */
 const PRICE_SQL = `COALESCE(NULLIF(s.details->>'netPrice','')::numeric, s.price)`;
@@ -317,9 +422,16 @@ module.exports.search = async (req, res, next) => {
     tr.log("where", where);
     const { rows } = await tr.wrapQuery(sql, params, "services");
     tr.log("result", { rows: rows.length });
+    
+    const viewer = getOptionalUserFromReq(req);
+    
+    const safeRows = await Promise.all(
+      rows.map((row) => redactMarketplaceRow(row, viewer))
+    );
+    
     tr.done();
-
-    return res.json({ items: rows, limit, offset });
+    
+    return res.json({ items: safeRows, limit, offset });
   } catch (err) {
     console.error("[MP:search ERR]", err?.message || err);
     next(err);
