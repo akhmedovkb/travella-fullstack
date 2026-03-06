@@ -3,12 +3,13 @@ const axiosBase = require("axios");
 const http = axiosBase.create({ timeout: 15000, responseType: "arraybuffer" });
 const path = require("path");
 const fs = require("fs");
-
 const express = require("express");
 const router = express.Router();
 const pool = require("../db");
 const telegramClientController = require("../controllers/telegramClientController");
 const telegramProviderController = require("../controllers/telegramProviderController");
+const { loginWithTelegram } = require("../controllers/telegramWebAuthController");
+
 let sharp = null;
 try {
   // sharp опционален: если не установлен — backend не падает
@@ -705,4 +706,8 @@ router.post(
   "/provider/:chatId/services/:serviceId/delete",
   telegramProviderController.deleteServiceFromBot
 );
+
+// WEB LOGIN через Telegram Widget
+router.post("/telegram-web-login", loginWithTelegram);
+
 module.exports = router;
