@@ -6,6 +6,7 @@ import { tError, tSuccess } from "../../shared/toast";
 import AdminPaymeEvents from "./AdminPaymeEvents";
 import PaymeLab from "./PaymeLab";
 import PaymeDashboard from "./PaymeDashboard";
+import PaymeLive from "./PaymeLive";
 
 function toNum(x) {
   const n = Number(x);
@@ -52,7 +53,7 @@ export default function AdminPaymeHealth() {
   const [details, setDetails] = useState(null);
   const [repairingId, setRepairingId] = useState(null);
 
-  const [tab, setTab] = useState("health"); // "health" | "events" | "lab" | "dashboard"
+  const [tab, setTab] = useState("health"); // "health" | "events" | "lab" | "dashboard" | "live"
 
   const canLoad = useMemo(() => true, []);
 
@@ -181,6 +182,15 @@ export default function AdminPaymeHealth() {
           >
             Dashboard
           </button>
+          <button
+            className={`px-3 py-2 rounded-lg text-sm ${
+              tab === "live" ? "bg-black text-white" : "border bg-white"
+            }`}
+            onClick={() => setTab("live")}
+            title="Live мониторинг транзакций Payme"
+          >
+            Live
+          </button>
         </div>
       </div>
 
@@ -205,6 +215,8 @@ export default function AdminPaymeHealth() {
       
       {/* Dashboard tab */}
       {tab === "dashboard" && <PaymeDashboard />}
+
+      {tab === "live" && <PaymeLive />}
 
       {/* Health tab */}
       {tab === "health" && (
