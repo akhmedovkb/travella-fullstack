@@ -161,39 +161,6 @@ async function getOrderTx(client, orderId) {
   return rows[0] || null;
 }
 
-// ✅ Migration safety: in some older DBs there is a legacy table payme_topup_orders.
-// Since payme_transactions.order_id has FK to topup_orders, we must ensure the row exists in topup_orders.
-// If it exists in payme_topup_orders, we copy it over (best-effort) before processing.
-async function ensureTopupOrderExistsTx(client, orderId) {
-  const { rows: ex } = await client.query(`SELECT 1 FROM topup_orders WHERE id=$1`, [orderId]);
-  if (ex.length) return;
-
-  // try legacy source
-  const { rows: legacy } = await client.query(
-    `SELECT id, client_id, amount_tiyin, status, created_at, paid_at
-       FROM payme_topup_orders
-      WHERE id=$1`,
-    [orderId]
-  );
-  const r = legacy[0];
-  if (!r) return;
-
-  // copy into current table (provider is required here)
-  await client.query(
-    `INSERT INTO topup_orders (id, client_id, amount_tiyin, provider, status, created_at, paid_at)
-     VALUES ($1,$2,$3,'payme',$4,COALESCE($5,now()),$6)
-     ON CONFLICT (id) DO NOTHING`,
-    [
-      Number(r.id),
-      Number(r.client_id),
-      Number(r.amount_tiyin),
-      String(r.status || "new"),
-      r.created_at || null,
-      r.paid_at || null,
-    ]
-  );
-}
-
 async function getTxForUpdate(client, paymeId) {
   const { rows } = await client.query(
     `SELECT payme_id, order_id, amount_tiyin, state, create_time, perform_time, cancel_time, reason
@@ -545,9 +512,6 @@ async function paymeMerchantRpc(req, res) {
         await client.query("BEGIN");
         await lockKeyTx(client, `order:${orderId}`);
 
-        // 🔁 auto-heal legacy environments (payme_topup_orders -> topup_orders)
-        await ensureTopupOrderExistsTx(client, orderId);
-
         const { rows } = await client.query(
           `SELECT id, amount_tiyin, status
              FROM topup_orders
@@ -596,9 +560,6 @@ async function paymeMerchantRpc(req, res) {
 
         await lockKeyTx(client, `payme:${paymeId}`);
         await lockKeyTx(client, `order:${orderId}`);
-
-        // 🔁 auto-heal legacy environments (payme_topup_orders -> topup_orders)
-        await ensureTopupOrderExistsTx(client, orderId);
 
         logPayme("CreateTransaction.begin", { paymeId, orderId, amount });
 
