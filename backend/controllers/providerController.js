@@ -927,15 +927,22 @@ async function canViewerSeeProviderContacts({ viewer, providerId, serviceId }) {
   if (!viewer || !providerId) return false;
 
   const role = String(viewer.role || "").toLowerCase();
+  const viewerId = Number(viewer.id);
+  const pid = Number(providerId);
+  const sid = Number(serviceId);
+
+  if (!Number.isFinite(pid) || pid <= 0) return false;
 
   if (role === "admin") return true;
-  if (role === "provider" && Number(viewer.id) === Number(providerId)) return true;
 
+  // provider видит ТОЛЬКО самого себя
+  if (role === "provider") {
+    return Number.isFinite(viewerId) && viewerId === pid;
+  }
+
+  // client видит ТОЛЬКО после unlock конкретной услуги
   if (role === "client") {
-    const sid = Number(serviceId);
-    const cid = Number(viewer.id);
-
-    if (!Number.isFinite(cid) || cid <= 0) return false;
+    if (!Number.isFinite(viewerId) || viewerId <= 0) return false;
     if (!Number.isFinite(sid) || sid <= 0) return false;
 
     const q = await pool.query(
@@ -948,13 +955,31 @@ async function canViewerSeeProviderContacts({ viewer, providerId, serviceId }) {
         AND s.provider_id = $3
       LIMIT 1
       `,
-      [cid, sid, providerId]
+      [viewerId, sid, pid]
     );
 
     return q.rowCount > 0;
   }
 
   return false;
+}
+
+function redactProviderContacts(obj) {
+  if (!obj || typeof obj !== "object") return obj;
+  return {
+    ...obj,
+    phone: null,
+    social: null,
+    telegram: null,
+    telegram_chat_id: null,
+    tg_chat_id: null,
+    whatsapp: null,
+    contact_phone: null,
+    provider_phone: null,
+    provider_telegram: null,
+    supplier_phone: null,
+    supplier_telegram: null,
+  };
 }
 
 const getProviderPublicById = async (req, res) => {
@@ -964,9 +989,12 @@ const getProviderPublicById = async (req, res) => {
     const viewer = getOptionalUserFromReq(req);
 
     const r = await pool.query(
-      `SELECT id, name, type, location, phone, social, photo, address, languages, city_slugs
-         FROM providers
-        WHERE id=$1`,
+      `
+      SELECT id, name, type, location, phone, social, photo, address, languages, city_slugs
+      FROM providers
+      WHERE id = $1
+      LIMIT 1
+      `,
       [id]
     );
 
@@ -979,7 +1007,7 @@ const getProviderPublicById = async (req, res) => {
       serviceId,
     });
 
-    res.json({
+    return res.json({
       id: row.id,
       name: row.name,
       type: row.type,
@@ -994,7 +1022,7 @@ const getProviderPublicById = async (req, res) => {
     });
   } catch (err) {
     console.error("❌ Ошибка getProviderPublicById:", err);
-    res.status(500).json({ message: "Ошибка сервера" });
+    return res.status(500).json({ message: "Ошибка сервера" });
   }
 };
 
