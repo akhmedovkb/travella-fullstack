@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost } from "../../api";
 import { tError, tSuccess } from "../../shared/toast";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import AdminPaymeEvents from "./AdminPaymeEvents";
 import PaymeLab from "./PaymeLab";
 import PaymeDashboard from "./PaymeDashboard";
@@ -28,23 +28,26 @@ function fmtTs(x) {
 function badge(status) {
   const base = "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium";
   if (status === "OK") return <span className={`${base} bg-green-100 text-green-700`}>✅ OK</span>;
-  if (status === "STUCK")
+  if (status === "STUCK") {
     return (
       <span className={`${base} bg-purple-100 text-purple-800`}>
         ⏳ STUCK
       </span>
     );
-  if (status === "LOST_PAYMENT")
+  }
+  if (status === "LOST_PAYMENT") {
     return <span className={`${base} bg-red-100 text-red-700`}>✖ LOST_PAYMENT</span>;
-  if (status === "BAD_AMOUNT")
+  }
+  if (status === "BAD_AMOUNT") {
     return <span className={`${base} bg-yellow-100 text-yellow-800`}>⚠ BAD_AMOUNT</span>;
-  if (status === "REFUND_MISMATCH")
+  }
+  if (status === "REFUND_MISMATCH") {
     return <span className={`${base} bg-orange-100 text-orange-800`}>⚠ REFUND_MISMATCH</span>;
+  }
   return <span className={`${base} bg-gray-100 text-gray-700`}>{String(status)}</span>;
 }
 
 export default function AdminPaymeHealth() {
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [q, setQ] = useState("");
   const [onlyBad, setOnlyBad] = useState(true);
@@ -187,13 +190,12 @@ export default function AdminPaymeHealth() {
   }, [searchParams]);
 
   return (
-    <div className="p-4 md:p-6">
-      {/* Header + Tabs */}
-      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-xl font-semibold">Payme Health (Admin)</h1>
+          <h2 className="text-xl font-semibold">Payme Merchant Console</h2>
           <p className="text-sm text-gray-500">
-            Bank-grade сверка: payme_transactions ↔ contact_balance_ledger (meta.payme_id)
+            Bank-grade monitoring: health, events, lab, dashboard, live.
           </p>
         </div>
 
@@ -261,10 +263,8 @@ export default function AdminPaymeHealth() {
         </div>
       </div>
 
-      {/* Events tab */}
       {tab === "events" && <AdminPaymeEvents />}
 
-      {/* Lab tab */}
       {tab === "lab" && (
         <PaymeLab
           embedded
@@ -280,15 +280,13 @@ export default function AdminPaymeHealth() {
         />
       )}
 
-      {/* Dashboard tab */}
       {tab === "dashboard" && <PaymeDashboard />}
 
       {tab === "live" && <PaymeLive />}
 
-      {/* Health tab */}
       {tab === "health" && (
         <>
-          <div className="bg-white rounded-xl shadow p-4 mb-4">
+          <div className="bg-white rounded-xl shadow p-4">
             <div className="flex flex-col md:flex-row gap-3 md:items-end">
               <div className="flex-1">
                 <label className="block text-xs text-gray-500 mb-1">
@@ -333,7 +331,7 @@ export default function AdminPaymeHealth() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="lg:col-span-2 bg-white rounded-xl shadow overflow-hidden">
               <div className="p-3 border-b flex items-center justify-between">
-                <div className="text-sm text-gray-600">Транзакции</div>
+                <div className="text-sm text-gray-600">Transactions</div>
                 <div className="text-xs text-gray-400">rows: {rows.length}</div>
               </div>
               <div className="overflow-auto">
@@ -405,7 +403,7 @@ export default function AdminPaymeHealth() {
             </div>
 
             <div className="bg-white rounded-xl shadow p-4">
-              <div className="text-sm text-gray-600 mb-2">Детали</div>
+              <div className="text-sm text-gray-600 mb-2">Details</div>
               {!selected && <div className="text-sm text-gray-400">Выберите транзакцию слева</div>}
 
               {selected && (
