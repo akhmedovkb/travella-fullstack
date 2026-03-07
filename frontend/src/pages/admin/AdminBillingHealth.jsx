@@ -12,6 +12,7 @@ function Badge({ kind = "gray", children }) {
     gray: "bg-gray-100 text-gray-700",
     black: "bg-black text-white",
     orange: "bg-orange-100 text-orange-800",
+    purple: "bg-purple-100 text-purple-800",
   };
 
   return (
@@ -58,6 +59,16 @@ function SmallAction({ children, onClick, disabled = false, tone = "default" }) 
       {children}
     </button>
   );
+}
+
+function problemBadge(problemType) {
+  const p = String(problemType || "").toUpperCase();
+
+  if (p === "LOST_PAYMENT") return <Badge kind="red">LOST_PAYMENT</Badge>;
+  if (p === "CANCELED_BUT_ORDER_PAID") return <Badge kind="orange">CANCELED_BUT_ORDER_PAID</Badge>;
+  if (p === "ORDER_STATUS_MISMATCH") return <Badge kind="yellow">ORDER_STATUS_MISMATCH</Badge>;
+  if (p === "TX_OK_ORDER_BAD") return <Badge kind="purple">TX_OK_ORDER_BAD</Badge>;
+  return <Badge kind="gray">{p || "UNKNOWN"}</Badge>;
 }
 
 export default function AdminBillingHealth() {
@@ -203,44 +214,28 @@ export default function AdminBillingHealth() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl shadow p-4">
           <div className="text-sm text-gray-500">Ledger mismatch</div>
-          <div
-            className={`mt-2 text-2xl font-semibold ${
-              stats.ledgerMismatch.length ? "text-red-600" : "text-gray-900"
-            }`}
-          >
+          <div className={`mt-2 text-2xl font-semibold ${stats.ledgerMismatch.length ? "text-red-600" : "text-gray-900"}`}>
             {stats.ledgerMismatch.length}
           </div>
         </div>
 
         <div className="bg-white rounded-xl shadow p-4">
           <div className="text-sm text-gray-500">Double unlock</div>
-          <div
-            className={`mt-2 text-2xl font-semibold ${
-              stats.doubleUnlock.length ? "text-red-600" : "text-gray-900"
-            }`}
-          >
+          <div className={`mt-2 text-2xl font-semibold ${stats.doubleUnlock.length ? "text-red-600" : "text-gray-900"}`}>
             {stats.doubleUnlock.length}
           </div>
         </div>
 
         <div className="bg-white rounded-xl shadow p-4">
           <div className="text-sm text-gray-500">Broken Payme</div>
-          <div
-            className={`mt-2 text-2xl font-semibold ${
-              stats.brokenPayme.length ? "text-red-600" : "text-gray-900"
-            }`}
-          >
+          <div className={`mt-2 text-2xl font-semibold ${stats.brokenPayme.length ? "text-red-600" : "text-gray-900"}`}>
             {stats.brokenPayme.length}
           </div>
         </div>
 
         <div className="bg-white rounded-xl shadow p-4">
           <div className="text-sm text-gray-500">Orphan orders</div>
-          <div
-            className={`mt-2 text-2xl font-semibold ${
-              stats.orphanOrders.length ? "text-red-600" : "text-gray-900"
-            }`}
-          >
+          <div className={`mt-2 text-2xl font-semibold ${stats.orphanOrders.length ? "text-red-600" : "text-gray-900"}`}>
             {stats.orphanOrders.length}
           </div>
         </div>
@@ -336,6 +331,7 @@ export default function AdminBillingHealth() {
                   <th className="text-left px-3 py-2">order_id</th>
                   <th className="text-left px-3 py-2">tx_state</th>
                   <th className="text-left px-3 py-2">order_status</th>
+                  <th className="text-left px-3 py-2">problem</th>
                   <th className="text-right px-3 py-2">actions</th>
                 </tr>
               </thead>
@@ -346,6 +342,7 @@ export default function AdminBillingHealth() {
                     <td className="px-3 py-2">{r.order_id}</td>
                     <td className="px-3 py-2">{r.state}</td>
                     <td className="px-3 py-2">{r.status}</td>
+                    <td className="px-3 py-2">{problemBadge(r.problem_type)}</td>
                     <td className="px-3 py-2 text-right">
                       <div className="flex justify-end gap-2 flex-wrap">
                         <SmallAction onClick={() => openPaymeHealth(r.payme_id)}>
