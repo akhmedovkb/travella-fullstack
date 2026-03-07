@@ -1,10 +1,9 @@
-//frontend/src/pages/admin/AdminFinance.jsx
+// frontend/src/pages/admin/AdminFinance.jsx
 
 import { useState } from "react";
 import AdminPaymeHealth from "./AdminPaymeHealth";
 import AdminBilling from "./AdminBilling";
 import AdminContactBalance from "./AdminContactBalance";
-import PaymeLab from "./PaymeLab";
 
 export default function AdminFinance() {
   const [tab, setTab] = useState("clients");
@@ -26,8 +25,8 @@ export default function AdminFinance() {
         <div>
           <h1 className="text-xl font-semibold">Finance (Admin)</h1>
           <p className="text-sm text-gray-500">
-            Clients — работа по конкретному клиенту. Payme — платежи и lab.
-            Audit — системный контроль и integrity guard.
+            Clients — работа по конкретному клиенту. Payme — платежи, health, live, events,
+            dashboard и lab. Audit — системный контроль и integrity guard.
           </p>
         </div>
 
@@ -45,11 +44,11 @@ export default function AdminFinance() {
           <div className="bg-white rounded-xl shadow p-4">
             <div className="text-sm font-semibold">Payme Health</div>
             <div className="text-xs text-gray-500 mt-1">
-              Состояние транзакций, lost payments, mismatch и repair.
+              Состояние транзакций, lost payments, mismatch, repair, live monitoring, events,
+              dashboard и lab.
             </div>
           </div>
           <AdminPaymeHealth />
-          <PaymeLab embedded />
         </div>
       )}
 
