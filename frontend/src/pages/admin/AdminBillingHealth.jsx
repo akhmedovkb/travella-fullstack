@@ -157,6 +157,11 @@ export default function AdminBillingHealth() {
     window.open(`/admin/payme-lab?${params.toString()}`, "_blank");
   }
 
+  function openClient(clientId) {
+    if (!clientId) return;
+    window.open(`/admin/contact-balance?client_id=${encodeURIComponent(clientId)}`, "_blank");
+  }
+
   useEffect(() => {
     load();
   }, []);
@@ -315,13 +320,18 @@ export default function AdminBillingHealth() {
                     <td className="px-3 py-2">{r.mirror_balance}</td>
                     <td className="px-3 py-2">{r.ledger_balance}</td>
                     <td className="px-3 py-2 text-right">
-                      <SmallAction
-                        tone="black"
-                        onClick={() => repairOne(r.client_id)}
-                        disabled={repairingClientId === r.client_id}
-                      >
-                        {repairingClientId === r.client_id ? "…" : "Repair"}
-                      </SmallAction>
+                      <div className="flex justify-end gap-2 flex-wrap">
+                        <SmallAction onClick={() => openClient(r.client_id)}>
+                          Open client
+                        </SmallAction>
+                        <SmallAction
+                          tone="black"
+                          onClick={() => repairOne(r.client_id)}
+                          disabled={repairingClientId === r.client_id}
+                        >
+                          {repairingClientId === r.client_id ? "…" : "Repair"}
+                        </SmallAction>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -392,9 +402,7 @@ export default function AdminBillingHealth() {
         }
       >
         {filteredBrokenPayme.length === 0 ? (
-          <div className="text-sm text-gray-500">
-            Для выбранного фильтра проблем нет.
-          </div>
+          <div className="text-sm text-gray-500">Для выбранного фильтра проблем нет.</div>
         ) : (
           <div className="overflow-auto">
             <table className="min-w-full text-sm">
@@ -476,16 +484,21 @@ export default function AdminBillingHealth() {
                     <td className="px-3 py-2">{r.amount_tiyin}</td>
                     <td className="px-3 py-2">{r.status}</td>
                     <td className="px-3 py-2 text-right">
-                      <SmallAction
-                        onClick={() =>
-                          openPaymeLab({
-                            orderId: r.id,
-                            amount: r.amount_tiyin,
-                          })
-                        }
-                      >
-                        Open in Lab
-                      </SmallAction>
+                      <div className="flex justify-end gap-2 flex-wrap">
+                        <SmallAction onClick={() => openClient(r.client_id)}>
+                          Open client
+                        </SmallAction>
+                        <SmallAction
+                          onClick={() =>
+                            openPaymeLab({
+                              orderId: r.id,
+                              amount: r.amount_tiyin,
+                            })
+                          }
+                        >
+                          Open in Lab
+                        </SmallAction>
+                      </div>
                     </td>
                   </tr>
                 ))}
