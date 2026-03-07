@@ -105,6 +105,20 @@ function healthStatusFromDetails(details) {
   return "OK";
 }
 
+function timelineTone(tone) {
+  if (tone === "ok") return "border-green-200 bg-green-50";
+  if (tone === "warn") return "border-yellow-200 bg-yellow-50";
+  if (tone === "bad") return "border-red-200 bg-red-50";
+  return "border-gray-200 bg-gray-50";
+}
+
+function timelineDotTone(tone) {
+  if (tone === "ok") return "bg-green-500";
+  if (tone === "warn") return "bg-yellow-500";
+  if (tone === "bad") return "bg-red-500";
+  return "bg-gray-300";
+}
+
 export default function PaymeLab({ embedded = false, seed = null } = {}) {
   const [searchParams] = useSearchParams();
   const [orderId, setOrderId] = useState("11");
@@ -137,7 +151,6 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
   const [txDetailsErr, setTxDetailsErr] = useState("");
   const [repairing, setRepairing] = useState(false);
 
-  // order builder / inspector
   const [newClientId, setNewClientId] = useState("");
   const [newAmountTiyin, setNewAmountTiyin] = useState("100000");
   const [creatingOrder, setCreatingOrder] = useState(false);
@@ -229,7 +242,10 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
     setInspectLoading(true);
     setOrderDetailsErr("");
     try {
-      const data = await apiGet(`/api/admin/payme/lab/orders/${encodeURIComponent(id)}/inspect`, "admin");
+      const data = await apiGet(
+        `/api/admin/payme/lab/orders/${encodeURIComponent(id)}/inspect`,
+        "admin"
+      );
       setOrderDetails(data);
       if (!silent) tSuccess("Order inspected");
     } catch (e) {
@@ -358,68 +374,68 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
-async function run(method, params) {
-  setBusy(true);
-  try {
-    const rpc = {
-      jsonrpc: "2.0",
-      id: Date.now(),
-      method,
-      params,
-    };
+  async function run(method, params) {
+    setBusy(true);
+    try {
+      const rpc = {
+        jsonrpc: "2.0",
+        id: Date.now(),
+        method,
+        params,
+      };
 
-    const data = await apiPost("/api/admin/payme/lab/run", rpc, "admin");
+      const data = await apiPost("/api/admin/payme/lab/run", rpc, "admin");
 
-    const snap = {
-      ts: nowMs(),
-      method,
-      params,
-      rpc: data?.rpc || rpc,
-      result: data?.result,
-    };
+      const snap = {
+        ts: nowMs(),
+        method,
+        params,
+        rpc: data?.rpc || rpc,
+        result: data?.result,
+      };
 
-    setLastSnap(snap);
-    setHistory((prev) => [snap, ...prev].slice(0, 30));
-    tSuccess(`${method}: OK`);
+      setLastSnap(snap);
+      setHistory((prev) => [snap, ...prev].slice(0, 30));
+      tSuccess(`${method}: OK`);
 
-    if (autoStatus) {
-      const id = params?.id ? String(params.id) : parsed.paymeId;
-      await refreshStatus(id, true);
+      if (autoStatus) {
+        const id = params?.id ? String(params.id) : parsed.paymeId;
+        await refreshStatus(id, true);
+      }
+
+      return snap;
+    } catch (e) {
+      console.error(e);
+      tError(`${method}: ошибка`);
+
+      const rpc = {
+        jsonrpc: "2.0",
+        id: Date.now(),
+        method,
+        params,
+      };
+
+      const snap = {
+        ts: nowMs(),
+        method,
+        params,
+        rpc,
+        error: e?.message || e,
+      };
+
+      setLastSnap(snap);
+      setHistory((prev) => [snap, ...prev].slice(0, 30));
+
+      if (autoStatus) {
+        const id = params?.id ? String(params.id) : parsed.paymeId;
+        await refreshStatus(id, true);
+      }
+
+      return null;
+    } finally {
+      setBusy(false);
     }
-
-    return snap;
-  } catch (e) {
-    console.error(e);
-    tError(`${method}: ошибка`);
-
-    const rpc = {
-      jsonrpc: "2.0",
-      id: Date.now(),
-      method,
-      params,
-    };
-
-    const snap = {
-      ts: nowMs(),
-      method,
-      params,
-      rpc,
-      error: e?.message || e,
-    };
-
-    setLastSnap(snap);
-    setHistory((prev) => [snap, ...prev].slice(0, 30));
-
-    if (autoStatus) {
-      const id = params?.id ? String(params.id) : parsed.paymeId;
-      await refreshStatus(id, true);
-    }
-
-    return null;
-  } finally {
-    setBusy(false);
   }
-}
 
   function buildCheck() {
     const oid = Number(parsed.orderId);
@@ -430,7 +446,7 @@ async function run(method, params) {
       },
     };
   }
-  
+
   function buildCreate() {
     const oid = Number(parsed.orderId);
     return {
@@ -442,15 +458,17 @@ async function run(method, params) {
       },
     };
   }
-  
+
   function buildPerform() {
     return { id: parsed.paymeId };
   }
+
   function buildCancel() {
     const p = { id: parsed.paymeId };
     if (parsed.cancelReason !== null) p.reason = parsed.cancelReason;
     return p;
   }
+
   function buildStatement() {
     return {
       from: parsed.from || nowMs() - 60 * 60 * 1000,
@@ -651,6 +669,141 @@ async function run(method, params) {
     };
   }, [orderDetails]);
 
+  const inspectorTimeline = useMemo(() => {
+    const order = orderSummary.order;
+    const client = orderSummary.client;
+    const txs = orderSummary.transactions;
+    const latestTx = orderSummary.latestTx;
+    const ledger = orderSummary.ledger;
+    const ledgerSum = orderSummary.ledgerSum;
+
+    if (!order) return [];
+
+    const st = Number(latestTx?.state);
+    const hasTx = !!latestTx;
+    const hasCreatedTx = hasTx;
+    const hasPerformed = st === 2 || st === -2;
+    const hasCancel = st === -1 || st === -2;
+    const positiveLedger = ledger.some((r) => Number(r?.amount || 0) > 0);
+    const negativeLedger = ledger.some((r) => Number(r?.amount || 0) < 0);
+    const expectedAmount = Number(order?.amount_tiyin || latestTx?.amount_tiyin || 0);
+
+    const createTone = hasCreatedTx ? "ok" : "muted";
+    const performTone =
+      hasPerformed && positiveLedger
+        ? "ok"
+        : hasPerformed && !positiveLedger
+        ? "bad"
+        : st === 1
+        ? "warn"
+        : "muted";
+
+    const cancelTone =
+      hasCancel && negativeLedger
+        ? "ok"
+        : hasCancel && !negativeLedger && ledgerSum > 0
+        ? "bad"
+        : hasCancel
+        ? "warn"
+        : "muted";
+
+    const ledgerCreditTone =
+      positiveLedger && ledgerSum === expectedAmount
+        ? "ok"
+        : positiveLedger && ledgerSum !== expectedAmount && !hasCancel
+        ? "warn"
+        : hasPerformed && !positiveLedger
+        ? "bad"
+        : "muted";
+
+    const ledgerReversalTone =
+      negativeLedger && ledgerSum === 0
+        ? "ok"
+        : negativeLedger && ledgerSum !== 0
+        ? "warn"
+        : hasCancel && ledgerSum > 0
+        ? "bad"
+        : "muted";
+
+    return [
+      {
+        key: "order",
+        title: "Order created",
+        tone: order ? "ok" : "muted",
+        ts: order?.created_at || null,
+        desc: order
+          ? `order #${order.id}, status=${order.status}, amount=${money(order.amount_tiyin)}`
+          : "Order not found",
+      },
+      {
+        key: "create",
+        title: "Transaction created",
+        tone: createTone,
+        ts: latestTx?.create_time ? Number(latestTx.create_time) : null,
+        desc: hasCreatedTx
+          ? `tx_id=${latestTx.payme_id}, state=${latestTx.state}`
+          : "CreateTransaction ещё не зафиксирован",
+      },
+      {
+        key: "perform",
+        title: "Performed",
+        tone: performTone,
+        ts: latestTx?.perform_time ? Number(latestTx.perform_time) : null,
+        desc: hasPerformed
+          ? positiveLedger
+            ? "Perform прошёл и credit в ledger найден"
+            : "Perform прошёл, но credit в ledger не найден"
+          : st === 1
+          ? "Tx создан, ждёт Perform"
+          : "Perform ещё не наступал",
+      },
+      {
+        key: "cancel",
+        title: "Cancel / refund",
+        tone: cancelTone,
+        ts: latestTx?.cancel_time ? Number(latestTx.cancel_time) : null,
+        desc: hasCancel
+          ? negativeLedger
+            ? "Cancel зафиксирован и reversal в ledger найден"
+            : ledgerSum > 0
+            ? "Cancel есть, но reversal в ledger отсутствует"
+            : "Cancel есть"
+          : "Cancel не было",
+      },
+      {
+        key: "ledger-credit",
+        title: "Ledger credit",
+        tone: ledgerCreditTone,
+        ts: ledger.find((r) => Number(r?.amount || 0) > 0)?.created_at || null,
+        desc: positiveLedger
+          ? `credit найден, ledger_sum=${money(ledgerSum)}`
+          : hasPerformed
+          ? "credit не найден"
+          : "credit ещё не ожидался",
+      },
+      {
+        key: "ledger-reversal",
+        title: "Ledger reversal",
+        tone: ledgerReversalTone,
+        ts: ledger.find((r) => Number(r?.amount || 0) < 0)?.created_at || null,
+        desc: negativeLedger
+          ? `reversal найден, ledger_sum=${money(ledgerSum)}`
+          : hasCancel
+          ? "reversal не найден"
+          : "reversal не ожидался",
+      },
+      {
+        key: "balance",
+        title: "Client balance snapshot",
+        tone: client ? "ok" : "muted",
+        ts: null,
+        desc: client
+          ? `client #${client.id}, balance=${money(client.contact_balance)}`
+          : "Client not found",
+      },
+    ];
+  }, [orderSummary]);
+
   return (
     <div className={embedded ? "" : "p-4 md:p-6"}>
       {!embedded && (
@@ -687,7 +840,9 @@ async function run(method, params) {
           <div className="flex items-center justify-between gap-2">
             <div>
               <div className="text-sm font-semibold text-gray-800">Create topup order</div>
-              <div className="text-xs text-gray-500">Создаёт topup_orders для теста Payme прямо из Finance.</div>
+              <div className="text-xs text-gray-500">
+                Создаёт topup_orders для теста Payme прямо из Finance.
+              </div>
             </div>
             {createdOrder?.order?.id ? badgePill("ok", `order #${createdOrder.order.id}`) : null}
           </div>
@@ -726,7 +881,8 @@ async function run(method, params) {
           </div>
 
           <div className="mt-2 text-[11px] text-gray-400">
-            Provider = payme, status = created. После создания новый order_id автоматически подставится в Lab.
+            Provider = payme, status = created. После создания новый order_id автоматически
+            подставится в Lab.
           </div>
 
           {createdOrder?.order && (
@@ -751,7 +907,9 @@ async function run(method, params) {
           <div className="flex items-center justify-between gap-2">
             <div>
               <div className="text-sm font-semibold text-gray-800">Payment inspector</div>
-              <div className="text-xs text-gray-500">Показывает order + tx + ledger + client balance по order_id.</div>
+              <div className="text-xs text-gray-500">
+                Показывает order + tx + ledger + client balance по order_id.
+              </div>
             </div>
             {orderSummary.order?.id ? badgePill("black", `inspect #${orderSummary.order.id}`) : null}
           </div>
@@ -783,27 +941,85 @@ async function run(method, params) {
             <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
               <div className="bg-gray-50 border rounded-lg p-3">
                 <div className="text-xs text-gray-500 mb-1">Order</div>
-                <div>id: <span className="font-mono">{orderSummary.order.id}</span></div>
-                <div>status: <span className="font-mono">{orderSummary.order.status}</span></div>
-                <div>provider: <span className="font-mono">{orderSummary.order.provider}</span></div>
-                <div>amount_tiyin: <span className="font-mono">{money(orderSummary.order.amount_tiyin)}</span></div>
+                <div>
+                  id: <span className="font-mono">{orderSummary.order.id}</span>
+                </div>
+                <div>
+                  status: <span className="font-mono">{orderSummary.order.status}</span>
+                </div>
+                <div>
+                  provider: <span className="font-mono">{orderSummary.order.provider}</span>
+                </div>
+                <div>
+                  amount_tiyin:{" "}
+                  <span className="font-mono">{money(orderSummary.order.amount_tiyin)}</span>
+                </div>
               </div>
               <div className="bg-gray-50 border rounded-lg p-3">
                 <div className="text-xs text-gray-500 mb-1">Client</div>
-                <div>client_id: <span className="font-mono">{orderSummary.order.client_id}</span></div>
-                <div>phone: <span className="font-mono">{orderSummary.client?.phone || "—"}</span></div>
-                <div>contact_balance: <span className="font-mono">{money(orderSummary.client?.contact_balance)}</span></div>
-                <div>tx_count / ledger_rows: <span className="font-mono">{orderSummary.transactions.length} / {orderSummary.ledger.length}</span></div>
+                <div>
+                  client_id: <span className="font-mono">{orderSummary.order.client_id}</span>
+                </div>
+                <div>
+                  phone: <span className="font-mono">{orderSummary.client?.phone || "—"}</span>
+                </div>
+                <div>
+                  contact_balance:{" "}
+                  <span className="font-mono">
+                    {money(orderSummary.client?.contact_balance)}
+                  </span>
+                </div>
+                <div>
+                  tx_count / ledger_rows:{" "}
+                  <span className="font-mono">
+                    {orderSummary.transactions.length} / {orderSummary.ledger.length}
+                  </span>
+                </div>
               </div>
             </div>
           )}
 
           {orderSummary.order && (
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              {orderSummary.transactions.length ? badgePill("ok", `tx: ${orderSummary.transactions.length}`) : badgePill("warn", "tx: 0")}
-              {orderSummary.ledger.length ? badgePill("ok", `ledger_sum: ${money(orderSummary.ledgerSum)}`) : badgePill("warn", "ledger: 0")}
+              {orderSummary.transactions.length
+                ? badgePill("ok", `tx: ${orderSummary.transactions.length}`)
+                : badgePill("warn", "tx: 0")}
+              {orderSummary.ledger.length
+                ? badgePill("ok", `ledger_sum: ${money(orderSummary.ledgerSum)}`)
+                : badgePill("warn", "ledger: 0")}
               {orderSummary.latestTx?.payme_id ? badgePill("info", orderSummary.latestTx.payme_id) : null}
-              {orderSummary.latestTx?.state === 2 && orderSummary.ledger.length === 0 ? badgePill("bad", "LOST_PAYMENT") : null}
+              {orderSummary.latestTx?.state === 2 && orderSummary.ledger.length === 0
+                ? badgePill("bad", "LOST_PAYMENT")
+                : null}
+            </div>
+          )}
+
+          {orderSummary.order && (
+            <div className="mt-4">
+              <div className="text-sm font-semibold text-gray-800 mb-2">Transaction timeline</div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {inspectorTimeline.map((item) => (
+                  <div
+                    key={item.key}
+                    className={`border rounded-lg p-3 ${timelineTone(item.tone)}`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span
+                          className={`w-2.5 h-2.5 rounded-full shrink-0 ${timelineDotTone(
+                            item.tone
+                          )}`}
+                        />
+                        <div className="font-medium text-sm">{item.title}</div>
+                      </div>
+                      <div className="text-[11px] text-gray-500 shrink-0">
+                        {item.ts ? fmtTs(item.ts) : "—"}
+                      </div>
+                    </div>
+                    <div className="mt-2 text-xs text-gray-700">{item.desc}</div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -874,7 +1090,8 @@ async function run(method, params) {
               {repairing ? "Repairing…" : "Repair ledger"}
             </button>
             <div className="text-xs text-gray-500">
-              LOST_PAYMENT = Perform был, но ledger не записался. Repair восстановит ledger идемпотентно.
+              LOST_PAYMENT = Perform был, но ledger не записался. Repair восстановит ledger
+              идемпотентно.
             </div>
           </div>
         )}
@@ -890,10 +1107,14 @@ async function run(method, params) {
           <div className="bg-gray-50 border rounded-lg p-3">
             <div className="text-xs text-gray-500 mb-1">Order / Amount</div>
             <div>
-              order_id: <span className="font-mono">{String(statusComputed.orderId ?? parsed.orderId ?? "—")}</span>
+              order_id:{" "}
+              <span className="font-mono">
+                {String(statusComputed.orderId ?? parsed.orderId ?? "—")}
+              </span>
             </div>
             <div>
-              expected amount: <span className="font-mono">{String(statusComputed.amountExpected ?? 0)}</span>
+              expected amount:{" "}
+              <span className="font-mono">{String(statusComputed.amountExpected ?? 0)}</span>
             </div>
             <div className="mt-2">
               ledger_rows: <span className="font-mono">{String(statusComputed.ledgerRows)}</span>
@@ -932,7 +1153,9 @@ async function run(method, params) {
         {txDetails?.tx && (
           <div className="mt-3">
             <div className="text-xs text-gray-500 mb-1">Raw details (tx/order/ledger)</div>
-            <pre className="text-xs bg-gray-50 border rounded-lg p-3 overflow-auto">{pretty(txDetails)}</pre>
+            <pre className="text-xs bg-gray-50 border rounded-lg p-3 overflow-auto">
+              {pretty(txDetails)}
+            </pre>
           </div>
         )}
       </div>
@@ -941,14 +1164,40 @@ async function run(method, params) {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
           <div>
             <div className="text-sm font-semibold text-gray-800">Scenario presets</div>
-            <div className="text-xs text-gray-500">One-click sequences. Guard rails: авто txMode + авто tx_id.</div>
+            <div className="text-xs text-gray-500">
+              One-click sequences. Guard rails: авто txMode + авто tx_id.
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <button className="px-3 py-2 rounded-lg border bg-white text-sm disabled:opacity-60" onClick={scenarioReconcileStatement} disabled={busy}>Reconcile (Statement)</button>
-            <button className="px-3 py-2 rounded-lg border bg-white text-sm disabled:opacity-60" onClick={scenarioCancelSelectedThenStatement} disabled={busy}>Cancel selected tx → Statement</button>
-            <button className="px-3 py-2 rounded-lg border bg-white text-sm disabled:opacity-60" onClick={scenarioHappyPathNewPayment} disabled={busy}>Happy path (new payment)</button>
-            <button className="px-3 py-2 rounded-lg border bg-white text-sm disabled:opacity-60" onClick={scenarioCreatePerformThenCancel} disabled={busy}>Create+Perform → Cancel (test)</button>
+            <button
+              className="px-3 py-2 rounded-lg border bg-white text-sm disabled:opacity-60"
+              onClick={scenarioReconcileStatement}
+              disabled={busy}
+            >
+              Reconcile (Statement)
+            </button>
+            <button
+              className="px-3 py-2 rounded-lg border bg-white text-sm disabled:opacity-60"
+              onClick={scenarioCancelSelectedThenStatement}
+              disabled={busy}
+            >
+              Cancel selected tx → Statement
+            </button>
+            <button
+              className="px-3 py-2 rounded-lg border bg-white text-sm disabled:opacity-60"
+              onClick={scenarioHappyPathNewPayment}
+              disabled={busy}
+            >
+              Happy path (new payment)
+            </button>
+            <button
+              className="px-3 py-2 rounded-lg border bg-white text-sm disabled:opacity-60"
+              onClick={scenarioCreatePerformThenCancel}
+              disabled={busy}
+            >
+              Create+Perform → Cancel (test)
+            </button>
           </div>
         </div>
       </div>
@@ -959,12 +1208,26 @@ async function run(method, params) {
 
           <div className="flex flex-wrap items-center gap-3">
             <label className="flex items-center gap-2 text-sm">
-              <input type="radio" name="txmode" value="seed" checked={txMode === "seed"} onChange={() => setTxMode("seed")} disabled={busy} />
+              <input
+                type="radio"
+                name="txmode"
+                value="seed"
+                checked={txMode === "seed"}
+                onChange={() => setTxMode("seed")}
+                disabled={busy}
+              />
               Use selected tx_id
             </label>
 
             <label className="flex items-center gap-2 text-sm">
-              <input type="radio" name="txmode" value="new" checked={txMode === "new"} onChange={() => setTxMode("new")} disabled={busy} />
+              <input
+                type="radio"
+                name="txmode"
+                value="new"
+                checked={txMode === "new"}
+                onChange={() => setTxMode("new")}
+                disabled={busy}
+              />
               Use new tx_id
             </label>
 
@@ -987,14 +1250,36 @@ async function run(method, params) {
           Selected tx_id: <span className="font-mono">{seedPaymeId || "—"}</span>
           <span className="mx-2">•</span>
           Current tx_id: <span className="font-mono">{parsed.paymeId || "—"}</span>
-          {txMode === "seed" ? <span className="ml-2 text-gray-400">(для Perform/Cancel по выбранному)</span> : <span className="ml-2 text-gray-400">(для Create нового платежа)</span>}
+          {txMode === "seed" ? (
+            <span className="ml-2 text-gray-400">(для Perform/Cancel по выбранному)</span>
+          ) : (
+            <span className="ml-2 text-gray-400">(для Create нового платежа)</span>
+          )}
         </div>
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <button className="px-3 py-2 rounded-lg border bg-white disabled:opacity-60 text-sm" onClick={runCreateOnly} disabled={busy}>Create only</button>
-        <button className="px-3 py-2 rounded-lg border bg-white disabled:opacity-60 text-sm" onClick={runCreateAndPerform} disabled={busy}>Create + Perform</button>
-        <button className="px-3 py-2 rounded-lg border bg-white disabled:opacity-60 text-sm" onClick={runCheckCreatePerform} disabled={busy}>Check + Create + Perform</button>
+        <button
+          className="px-3 py-2 rounded-lg border bg-white disabled:opacity-60 text-sm"
+          onClick={runCreateOnly}
+          disabled={busy}
+        >
+          Create only
+        </button>
+        <button
+          className="px-3 py-2 rounded-lg border bg-white disabled:opacity-60 text-sm"
+          onClick={runCreateAndPerform}
+          disabled={busy}
+        >
+          Create + Perform
+        </button>
+        <button
+          className="px-3 py-2 rounded-lg border bg-white disabled:opacity-60 text-sm"
+          onClick={runCheckCreatePerform}
+          disabled={busy}
+        >
+          Check + Create + Perform
+        </button>
         <button
           type="button"
           className="px-3 py-2 rounded-lg border bg-white disabled:opacity-60 text-sm"
@@ -1013,56 +1298,166 @@ async function run(method, params) {
           <div className="grid grid-cols-1 gap-3">
             <div>
               <label className="block text-xs text-gray-500 mb-1">order_id</label>
-              <input className="w-full border rounded-lg px-3 py-2" value={orderId} onChange={(e) => setOrderId(e.target.value)} placeholder="например 11" disabled={busy} />
+              <input
+                className="w-full border rounded-lg px-3 py-2"
+                value={orderId}
+                onChange={(e) => setOrderId(e.target.value)}
+                placeholder="например 11"
+                disabled={busy}
+              />
             </div>
 
             <div>
               <label className="block text-xs text-gray-500 mb-1">amount (tiyin)</label>
-              <input className="w-full border rounded-lg px-3 py-2" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="100000" disabled={busy} />
-              <div className="text-[11px] text-gray-400 mt-1">Например 100000 = 1 000.00 UZS (если minor=100)</div>
+              <input
+                className="w-full border rounded-lg px-3 py-2"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="100000"
+                disabled={busy}
+              />
+              <div className="text-[11px] text-gray-400 mt-1">
+                Например 100000 = 1 000.00 UZS (если minor=100)
+              </div>
             </div>
 
             <div>
               <label className="block text-xs text-gray-500 mb-1">payme tx id (params.id)</label>
-              <input className="w-full border rounded-lg px-3 py-2" value={paymeId} onChange={(e) => setPaymeId(e.target.value)} disabled={busy || txMode === "seed"} title={txMode === "seed" ? "В режиме selected tx_id поле редактировать нельзя" : ""} />
+              <input
+                className="w-full border rounded-lg px-3 py-2"
+                value={paymeId}
+                onChange={(e) => setPaymeId(e.target.value)}
+                disabled={busy || txMode === "seed"}
+                title={txMode === "seed" ? "В режиме selected tx_id поле редактировать нельзя" : ""}
+              />
               <div className="flex gap-2 mt-2">
-                <button type="button" className="px-3 py-2 rounded-lg border bg-white text-sm disabled:opacity-60" onClick={() => { setTxMode("new"); setPaymeId(makeNewTxId()); }} disabled={busy}>New tx_id</button>
-                <button type="button" className="px-3 py-2 rounded-lg border bg-white text-sm disabled:opacity-60" onClick={() => { setFromIso(msToLocalIsoInput(nowMs() - 60 * 60 * 1000)); setToIso(msToLocalIsoInput(nowMs() + 5 * 60 * 1000)); }} disabled={busy}>Reset range</button>
+                <button
+                  type="button"
+                  className="px-3 py-2 rounded-lg border bg-white text-sm disabled:opacity-60"
+                  onClick={() => {
+                    setTxMode("new");
+                    setPaymeId(makeNewTxId());
+                  }}
+                  disabled={busy}
+                >
+                  New tx_id
+                </button>
+                <button
+                  type="button"
+                  className="px-3 py-2 rounded-lg border bg-white text-sm disabled:opacity-60"
+                  onClick={() => {
+                    setFromIso(msToLocalIsoInput(nowMs() - 60 * 60 * 1000));
+                    setToIso(msToLocalIsoInput(nowMs() + 5 * 60 * 1000));
+                  }}
+                  disabled={busy}
+                >
+                  Reset range
+                </button>
               </div>
             </div>
 
             <div>
               <label className="block text-xs text-gray-500 mb-1">Cancel reason</label>
-              <select className="w-full border rounded-lg px-3 py-2 bg-white" value={cancelPreset} onChange={(e) => setCancelPreset(e.target.value)} disabled={busy}>
+              <select
+                className="w-full border rounded-lg px-3 py-2 bg-white"
+                value={cancelPreset}
+                onChange={(e) => setCancelPreset(e.target.value)}
+                disabled={busy}
+              >
                 {CANCEL_PRESETS.map((p) => (
-                  <option key={p.value} value={p.value}>{p.label}</option>
+                  <option key={p.value} value={p.value}>
+                    {p.label}
+                  </option>
                 ))}
               </select>
               {cancelPreset === "custom" && (
                 <div className="mt-2">
-                  <input className="w-full border rounded-lg px-3 py-2" value={cancelCustom} onChange={(e) => setCancelCustom(e.target.value)} placeholder="введи число, например 1" disabled={busy} />
+                  <input
+                    className="w-full border rounded-lg px-3 py-2"
+                    value={cancelCustom}
+                    onChange={(e) => setCancelCustom(e.target.value)}
+                    placeholder="введи число, например 1"
+                    disabled={busy}
+                  />
                 </div>
               )}
-              <div className="text-[11px] text-gray-400 mt-1">Если выбрать “не указывать”, поле reason не отправляется (null).</div>
+              <div className="text-[11px] text-gray-400 mt-1">
+                Если выбрать “не указывать”, поле reason не отправляется (null).
+              </div>
             </div>
 
             <div className="grid grid-cols-1 gap-2">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">GetStatement from</label>
-                <input type="datetime-local" className="w-full border rounded-lg px-3 py-2" value={fromIso} onChange={(e) => setFromIso(e.target.value)} disabled={busy} />
+                <input
+                  type="datetime-local"
+                  className="w-full border rounded-lg px-3 py-2"
+                  value={fromIso}
+                  onChange={(e) => setFromIso(e.target.value)}
+                  disabled={busy}
+                />
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">GetStatement to</label>
-                <input type="datetime-local" className="w-full border rounded-lg px-3 py-2" value={toIso} onChange={(e) => setToIso(e.target.value)} disabled={busy} />
+                <input
+                  type="datetime-local"
+                  className="w-full border rounded-lg px-3 py-2"
+                  value={toIso}
+                  onChange={(e) => setToIso(e.target.value)}
+                  disabled={busy}
+                />
               </div>
             </div>
 
             <div className="pt-2 grid grid-cols-1 gap-2">
-              <button className="px-4 py-2 rounded-lg bg-black text-white disabled:opacity-60" onClick={() => { if (!canRunBasic()) return tError("Заполни order_id и amount"); run("CheckPerformTransaction", buildCheck()); }} disabled={busy}>CheckPerformTransaction</button>
-              <button className="px-4 py-2 rounded-lg border bg-white disabled:opacity-60" onClick={() => { if (!canRunBasic()) return tError("Заполни order_id и amount"); if (!ensureCreateSafeOrFix()) return; run("CreateTransaction", buildCreate()); }} disabled={busy}>CreateTransaction</button>
-              <button className="px-4 py-2 rounded-lg border bg-white disabled:opacity-60" onClick={() => { if (!canRunIdOnly()) return tError("Нужен tx_id"); run("PerformTransaction", buildPerform()); }} disabled={busy}>PerformTransaction</button>
-              <button className="px-4 py-2 rounded-lg border bg-white disabled:opacity-60" onClick={() => { if (!canRunIdOnly()) return tError("Нужен tx_id"); run("CancelTransaction", buildCancel()); }} disabled={busy}>CancelTransaction</button>
-              <button className="px-4 py-2 rounded-lg border bg-white disabled:opacity-60" onClick={() => run("GetStatement", buildStatement())} disabled={busy}>GetStatement</button>
+              <button
+                className="px-4 py-2 rounded-lg bg-black text-white disabled:opacity-60"
+                onClick={() => {
+                  if (!canRunBasic()) return tError("Заполни order_id и amount");
+                  run("CheckPerformTransaction", buildCheck());
+                }}
+                disabled={busy}
+              >
+                CheckPerformTransaction
+              </button>
+              <button
+                className="px-4 py-2 rounded-lg border bg-white disabled:opacity-60"
+                onClick={() => {
+                  if (!canRunBasic()) return tError("Заполни order_id и amount");
+                  if (!ensureCreateSafeOrFix()) return;
+                  run("CreateTransaction", buildCreate());
+                }}
+                disabled={busy}
+              >
+                CreateTransaction
+              </button>
+              <button
+                className="px-4 py-2 rounded-lg border bg-white disabled:opacity-60"
+                onClick={() => {
+                  if (!canRunIdOnly()) return tError("Нужен tx_id");
+                  run("PerformTransaction", buildPerform());
+                }}
+                disabled={busy}
+              >
+                PerformTransaction
+              </button>
+              <button
+                className="px-4 py-2 rounded-lg border bg-white disabled:opacity-60"
+                onClick={() => {
+                  if (!canRunIdOnly()) return tError("Нужен tx_id");
+                  run("CancelTransaction", buildCancel());
+                }}
+                disabled={busy}
+              >
+                CancelTransaction
+              </button>
+              <button
+                className="px-4 py-2 rounded-lg border bg-white disabled:opacity-60"
+                onClick={() => run("GetStatement", buildStatement())}
+                disabled={busy}
+              >
+                GetStatement
+              </button>
             </div>
           </div>
         </div>
@@ -1078,22 +1473,45 @@ async function run(method, params) {
           ) : (
             <div className="p-4 grid grid-cols-1 gap-4">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-700">{new Date(lastSnap.ts).toLocaleString("ru-RU", { timeZone: "Asia/Tashkent" })}</span>
-                <span className="text-xs px-2 py-1 rounded bg-black text-white">{lastSnap.method}</span>
-                {lastSnap?.result?.error && <span className="text-xs px-2 py-1 rounded bg-red-100 text-red-700">RPC error</span>}
-                {lastSnap?.error && <span className="text-xs px-2 py-1 rounded bg-red-100 text-red-700">HTTP error</span>}
+                <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-700">
+                  {new Date(lastSnap.ts).toLocaleString("ru-RU", {
+                    timeZone: "Asia/Tashkent",
+                  })}
+                </span>
+                <span className="text-xs px-2 py-1 rounded bg-black text-white">
+                  {lastSnap.method}
+                </span>
+                {lastSnap?.result?.error && (
+                  <span className="text-xs px-2 py-1 rounded bg-red-100 text-red-700">
+                    RPC error
+                  </span>
+                )}
+                {lastSnap?.error && (
+                  <span className="text-xs px-2 py-1 rounded bg-red-100 text-red-700">
+                    HTTP error
+                  </span>
+                )}
               </div>
 
               <div>
                 <div className="text-xs text-gray-500 mb-1">Merchant RPC body</div>
                 <pre className="text-xs bg-gray-50 border rounded-lg p-3 overflow-auto">
-                  {pretty(lastSnap.rpc || { jsonrpc: "2.0", id: null, method: lastSnap.method, params: lastSnap.params })}
+                  {pretty(
+                    lastSnap.rpc || {
+                      jsonrpc: "2.0",
+                      id: null,
+                      method: lastSnap.method,
+                      params: lastSnap.params,
+                    }
+                  )}
                 </pre>
               </div>
 
               <div>
                 <div className="text-xs text-gray-500 mb-1">Backend result</div>
-                <pre className="text-xs bg-gray-50 border rounded-lg p-3 overflow-auto">{pretty(lastSnap.result ?? lastSnap.error)}</pre>
+                <pre className="text-xs bg-gray-50 border rounded-lg p-3 overflow-auto">
+                  {pretty(lastSnap.result ?? lastSnap.error)}
+                </pre>
               </div>
             </div>
           )}
@@ -1102,7 +1520,17 @@ async function run(method, params) {
         <div className="lg:col-span-3 bg-white rounded-xl shadow overflow-hidden">
           <div className="p-3 border-b flex items-center justify-between">
             <div className="text-sm text-gray-600">History</div>
-            <button type="button" className="text-sm px-3 py-1.5 rounded-lg border bg-white" onClick={() => { setHistory([]); setLastSnap(null); }} disabled={busy}>Clear</button>
+            <button
+              type="button"
+              className="text-sm px-3 py-1.5 rounded-lg border bg-white"
+              onClick={() => {
+                setHistory([]);
+                setLastSnap(null);
+              }}
+              disabled={busy}
+            >
+              Clear
+            </button>
           </div>
           <div className="overflow-auto">
             <table className="min-w-full text-sm">
@@ -1118,16 +1546,34 @@ async function run(method, params) {
               </thead>
               <tbody>
                 {history.length === 0 ? (
-                  <tr><td className="px-3 py-3 text-gray-500" colSpan={6}>пусто</td></tr>
+                  <tr>
+                    <td className="px-3 py-3 text-gray-500" colSpan={6}>
+                      пусто
+                    </td>
+                  </tr>
                 ) : (
                   history.map((h, idx) => (
                     <tr key={`${h.ts}_${idx}`} className="border-t">
-                      <td className="px-3 py-2 text-xs text-gray-500">{new Date(h.ts).toLocaleTimeString("ru-RU", { timeZone: "Asia/Tashkent" })}</td>
+                      <td className="px-3 py-2 text-xs text-gray-500">
+                        {new Date(h.ts).toLocaleTimeString("ru-RU", {
+                          timeZone: "Asia/Tashkent",
+                        })}
+                      </td>
                       <td className="px-3 py-2 font-medium">{h.method}</td>
-                      <td className="px-3 py-2">{String(h?.params?.account?.order_id ?? "—")}</td>
+                      <td className="px-3 py-2">
+                        {String(h?.params?.account?.order_id ?? "—")}
+                      </td>
                       <td className="px-3 py-2">{String(h?.params?.amount ?? "—")}</td>
                       <td className="px-3 py-2">{String(h?.params?.id ?? "—")}</td>
-                      <td className="px-3 py-2 text-right"><button type="button" className="px-3 py-1.5 rounded-lg border bg-white" onClick={() => setLastSnap(h)}>Open</button></td>
+                      <td className="px-3 py-2 text-right">
+                        <button
+                          type="button"
+                          className="px-3 py-1.5 rounded-lg border bg-white"
+                          onClick={() => setLastSnap(h)}
+                        >
+                          Open
+                        </button>
+                      </td>
                     </tr>
                   ))
                 )}
