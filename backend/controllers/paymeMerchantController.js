@@ -312,30 +312,15 @@ function isOnConflictNoConstraintErr(e) {
 
 async function creditLedgerOnceTx(client, { clientId, amountTiyin, orderId, paymeId }) {
   const amt = Number(amountTiyin);
-  if (!Number.isFinite(amt) || amt <= 0) throw new Error("creditLedgerOnceTx: bad amountTiyin");
+  if (!Number.isFinite(amt) || amt <= 0) {
+    throw new Error("creditLedgerOnceTx: bad amountTiyin");
+  }
 
   const cols = await getLedgerCols(client);
 
-  // ✅ idempotency for your schema: meta->>'payme_id' + meta->>'order_id'
-  if (cols.has("meta")) {
-    const { rows: ex } = await client.query(
-      `
-      SELECT 1
-      FROM contact_balance_ledger
-      WHERE source = 'payme'
-        AND reason = 'topup'
-        AND meta->>'payme_id' = $1
-        AND meta->>'order_id' = $2
-      LIMIT 1
-      `,
-      [String(paymeId), String(orderId)]
-    );
-    if (ex.length) return;
-  }
-
   const row = {};
   if (cols.has("client_id")) row.client_id = Number(clientId);
-  if (cols.has("amount")) row.amount = amt; // ✅ your DB uses amount (tiyin)
+  if (cols.has("amount")) row.amount = amt;
   if (cols.has("reason")) row.reason = "topup";
   if (cols.has("source")) row.source = "payme";
   if (cols.has("service_id")) row.service_id = null;
@@ -348,33 +333,25 @@ async function creditLedgerOnceTx(client, { clientId, amountTiyin, orderId, paym
     };
   }
 
-  const { sql, args } = buildInsert("contact_balance_ledger", row, null);
-  await client.query(sql, args);
+  try {
+    const { sql, args } = buildInsert("contact_balance_ledger", row, null);
+    await client.query(sql, args);
+  } catch (e) {
+    // unique index ux_cbl_payme_topup_once сработал -> значит запись уже есть, считаем идемпотентным успехом
+    if (String(e?.code || "") === "23505") {
+      return;
+    }
+    throw e;
+  }
 }
 
 async function debitLedgerOnceTx(client, { clientId, amountTiyin, orderId, paymeId, reasonCode }) {
-  const refundPaymeId = `${String(paymeId)}_refund`;
   const amt = Number(amountTiyin);
-  if (!Number.isFinite(amt) || amt <= 0) throw new Error("debitLedgerOnceTx: bad amountTiyin");
+  if (!Number.isFinite(amt) || amt <= 0) {
+    throw new Error("debitLedgerOnceTx: bad amountTiyin");
+  }
 
   const cols = await getLedgerCols(client);
-
-  // ✅ idempotency for refund row
-  if (cols.has("meta")) {
-    const { rows: ex } = await client.query(
-      `
-      SELECT 1
-      FROM contact_balance_ledger
-      WHERE source = 'payme_refund'
-        AND reason = 'refund'
-        AND meta->>'payme_id' = $1
-        AND meta->>'order_id' = $2
-      LIMIT 1
-      `,
-      [String(refundPaymeId), String(orderId)]
-    );
-    if (ex.length) return;
-  }
 
   const row = {};
   if (cols.has("client_id")) row.client_id = Number(clientId);
@@ -385,16 +362,24 @@ async function debitLedgerOnceTx(client, { clientId, amountTiyin, orderId, payme
 
   if (cols.has("meta")) {
     row.meta = {
-      payme_id: String(refundPaymeId),
+      payme_id: `${String(paymeId)}_refund`,
       original_payme_id: String(paymeId),
       order_id: String(orderId),
       kind: "refund",
-      reason_code: Number.isFinite(Number(reasonCode)) ? Number(reasonCode) : null,
+      reason_code: Number.isFinite(Number(reasonCode)) ? Number(reasonCode) : 0,
     };
   }
 
-  const { sql, args } = buildInsert("contact_balance_ledger", row, null);
-  await client.query(sql, args);
+  try {
+    const { sql, args } = buildInsert("contact_balance_ledger", row, null);
+    await client.query(sql, args);
+  } catch (e) {
+    // unique index ux_cbl_payme_refund_once сработал -> refund уже записан, считаем идемпотентным успехом
+    if (String(e?.code || "") === "23505") {
+      return;
+    }
+    throw e;
+  }
 }
 
 /** ===== rpc validation ===== */
