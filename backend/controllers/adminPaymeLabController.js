@@ -1,9 +1,15 @@
 // backend/controllers/adminPaymeLabController.js
 
 const axios = require("axios");
+const pool = require("../db");
 
 function safeStr(x) {
   return String(x ?? "").trim();
+}
+
+function toInt(x, def = 0) {
+  const n = Number(String(x ?? "").trim());
+  return Number.isFinite(n) ? Math.trunc(n) : def;
 }
 
 function basicAuth(login, key) {
@@ -85,7 +91,6 @@ async function paymeLabRun(req, res) {
         "Content-Type": "application/json",
         Authorization: basicAuth(login, key),
       },
-      // на всякий случай: даже если вернется не-2xx, мы покажем payload
       validateStatus: () => true,
     });
 
@@ -97,7 +102,6 @@ async function paymeLabRun(req, res) {
       rpc_url: rpcUrl,
     });
   } catch (e) {
-    // НЕ логируем Authorization
     console.error("[payme-lab] run error:", e?.code || "", e?.message || e);
     if (e?.response?.data) console.error("[payme-lab] response:", e.response.data);
 
@@ -108,4 +112,118 @@ async function paymeLabRun(req, res) {
   }
 }
 
-module.exports = { paymeLabRun };
+async function createTopupOrder(req, res) {
+  const clientId = toInt(req.body?.client_id, 0);
+  const amountTiyin = toInt(req.body?.amount_tiyin, 0);
+  const provider = safeStr(req.body?.provider || "payme").toLowerCase() || "payme";
+  const status = safeStr(req.body?.status || "created").toLowerCase() || "created";
+
+  if (!clientId) {
+    return res.status(400).json({ ok: false, message: "client_id required" });
+  }
+  if (!amountTiyin || amountTiyin <= 0) {
+    return res.status(400).json({ ok: false, message: "amount_tiyin must be > 0" });
+  }
+  if (!provider) {
+    return res.status(400).json({ ok: false, message: "provider required" });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const clientQ = await client.query(
+      `SELECT id, phone, contact_balance FROM clients WHERE id=$1 LIMIT 1`,
+      [clientId]
+    );
+    if (!clientQ.rows.length) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ ok: false, message: `Client ${clientId} not found` });
+    }
+
+    const ins = await client.query(
+      `
+      INSERT INTO topup_orders (client_id, amount_tiyin, provider, status)
+      VALUES ($1, $2, $3, $4)
+      RETURNING *
+      `,
+      [clientId, amountTiyin, provider, status]
+    );
+
+    await client.query("COMMIT");
+    return res.json({ ok: true, order: ins.rows[0], client: clientQ.rows[0] });
+  } catch (e) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {}
+    console.error("createTopupOrder error:", e);
+    return res.status(500).json({ ok: false, message: "Internal error" });
+  } finally {
+    client.release();
+  }
+}
+
+async function inspectTopupOrder(req, res) {
+  const orderId = toInt(req.params.orderId || req.query.order_id, 0);
+  if (!orderId) {
+    return res.status(400).json({ ok: false, message: "orderId required" });
+  }
+
+  try {
+    const orderQ = await pool.query(`SELECT * FROM topup_orders WHERE id=$1`, [orderId]);
+    const order = orderQ.rows[0] || null;
+    if (!order) {
+      return res.status(404).json({ ok: false, message: "Order not found" });
+    }
+
+    const clientQ = await pool.query(
+      `SELECT id, phone, contact_balance FROM clients WHERE id=$1 LIMIT 1`,
+      [order.client_id]
+    );
+
+    const txQ = await pool.query(
+      `SELECT * FROM payme_transactions WHERE order_id=$1 ORDER BY updated_at DESC NULLS LAST, create_time DESC`,
+      [orderId]
+    );
+
+    const ledgerQ = await pool.query(
+      `
+      SELECT *
+      FROM contact_balance_ledger
+      WHERE (meta->>'order_id' = $1)
+         OR (
+            client_id = $2
+            AND source IN ('payme','payme_refund')
+            AND meta->>'order_id' = $1
+         )
+      ORDER BY created_at ASC
+      `,
+      [String(orderId), Number(order.client_id)]
+    );
+
+    const ledgerRows = ledgerQ.rows;
+    const ledgerSum = ledgerRows.reduce((s, r) => s + Number(r?.amount || 0), 0);
+
+    return res.json({
+      ok: true,
+      order,
+      client: clientQ.rows[0] || null,
+      transactions: txQ.rows,
+      ledger: ledgerRows,
+      summary: {
+        tx_count: txQ.rows.length,
+        ledger_rows: ledgerRows.length,
+        ledger_sum: ledgerSum,
+      },
+    });
+  } catch (e) {
+    console.error("inspectTopupOrder error:", e);
+    return res.status(500).json({ ok: false, message: "Internal error" });
+  }
+}
+
+module.exports = {
+  paymeLabRun,
+  createTopupOrder,
+  inspectTopupOrder,
+};
