@@ -1,23 +1,23 @@
 // backend/routes/adminContactBalanceRoutes.js
 const express = require("express");
 const authenticateToken = require("../middleware/authenticateToken");
-const requireAdmin = require("../middleware/requireAdmin"); // у тебя такой мидлварь обычно есть
+const requireAdmin = require("../middleware/requireAdmin");
 
 const {
-  adminClientSearch,
-  adminGetClientContactBalance,
-  adminAdjustClientContactBalance,
+  searchClients,
+  getClientContactBalance,
+  adjustClientContactBalance,
 } = require("../controllers/adminContactBalanceController");
 
 const router = express.Router();
 
-// /api/admin/clients/search?q=...
-router.get("/search", authenticateToken, requireAdmin, adminClientSearch);
-
-// /api/admin/clients/:id/contact-balance
-router.get("/:id/contact-balance", authenticateToken, requireAdmin, adminGetClientContactBalance);
-
-// /api/admin/clients/:id/contact-balance/adjust
-router.post("/:id/contact-balance/adjust", authenticateToken, requireAdmin, adminAdjustClientContactBalance);
+router.get("/search", authenticateToken, requireAdmin, searchClients);
+router.get("/:id/contact-balance", authenticateToken, requireAdmin, getClientContactBalance);
+router.post(
+  "/:id/contact-balance/adjust",
+  authenticateToken,
+  requireAdmin,
+  adjustClientContactBalance
+);
 
 module.exports = router;
