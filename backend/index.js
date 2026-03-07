@@ -31,6 +31,7 @@ const adminPaymeLabRoutes = require("./routes/adminPaymeLabRoutes");
 const adminBillingRoutes = require("./routes/adminBillingRoutes");
 const clientBillingRoutes = require("./routes/clientBillingRoutes");
 const adminBillingHealthRoutes = require("./routes/adminBillingHealthRoutes");
+const adminPaymeAutoFixRoutes = require("./routes/adminPaymeAutoFixRoutes");
 
 dotenv.config();
 const app = express();
@@ -1017,6 +1018,7 @@ app.use("/api/admin/payme/lab", adminPaymeLabRoutes);
 app.use("/api/admin/billing", adminBillingRoutes);
 app.use("/api/client", clientBillingRoutes);
 app.use("/api/admin", adminBillingHealthRoutes);
+app.use("/api/admin/payme", adminPaymeAutoFixRoutes);
 
 /** ===================== Start (в самом конце) ===================== */
 const PORT = process.env.PORT || 5000;
