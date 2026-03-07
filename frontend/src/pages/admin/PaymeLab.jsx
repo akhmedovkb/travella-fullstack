@@ -336,7 +336,7 @@ async function run(method, params) {
   try {
     const rpc = {
       jsonrpc: "2.0",
-      id: `lab_${Date.now()}`,
+      id: Date.now(),
       method,
       params,
     };
@@ -367,7 +367,7 @@ async function run(method, params) {
 
     const rpc = {
       jsonrpc: "2.0",
-      id: `lab_${Date.now()}`,
+      id: Date.now(),
       method,
       params,
     };
