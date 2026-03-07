@@ -55,6 +55,7 @@ export default function AdminPaymeHealth() {
   const [selected, setSelected] = useState(null);
   const [details, setDetails] = useState(null);
   const [repairingId, setRepairingId] = useState(null);
+  const [autoFixing, setAutoFixing] = useState(false);
 
   const [tab, setTab] = useState("health"); // "health" | "events" | "lab" | "dashboard" | "live"
 
@@ -117,9 +118,7 @@ export default function AdminPaymeHealth() {
 
   function openInLab(r) {
     if (!r) return;
-    // важно: seed в PaymeLab берётся из selected
     setSelected(r);
-    // детали можно грузить отдельно по клику на строку, здесь не обязательно
     setTab("lab");
   }
 
@@ -151,12 +150,34 @@ export default function AdminPaymeHealth() {
     }
   }
 
+  async function runAutoFix() {
+    setAutoFixing(true);
+    try {
+      const res = await apiPost("/api/admin/payme/autofix", {}, "admin");
+
+      tSuccess("Auto Fix завершен");
+
+      await load();
+
+      if (selected?.payme_id) {
+        await openTx({ payme_id: selected.payme_id });
+      }
+
+      console.log("[payme-autofix-report]", res?.report || res);
+    } catch (e) {
+      console.error(e);
+      tError("Auto Fix ошибка");
+    } finally {
+      setAutoFixing(false);
+    }
+  }
+
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-    useEffect(() => {
+  useEffect(() => {
     const qpPaymeId = String(searchParams.get("payme_id") || "").trim();
     if (!qpPaymeId) return;
 
@@ -164,7 +185,7 @@ export default function AdminPaymeHealth() {
     load(qpPaymeId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
-  
+
   return (
     <div className="p-4 md:p-6">
       {/* Header + Tabs */}
@@ -176,7 +197,7 @@ export default function AdminPaymeHealth() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             className={`px-3 py-2 rounded-lg text-sm ${
               tab === "health" ? "bg-black text-white" : "border bg-white"
@@ -185,7 +206,7 @@ export default function AdminPaymeHealth() {
           >
             Health
           </button>
-        
+
           <button
             className={`px-3 py-2 rounded-lg text-sm ${
               tab === "events" ? "bg-black text-white" : "border bg-white"
@@ -194,7 +215,7 @@ export default function AdminPaymeHealth() {
           >
             Events
           </button>
-        
+
           <button
             className={`px-3 py-2 rounded-lg text-sm ${
               tab === "lab" ? "bg-black text-white" : "border bg-white"
@@ -208,7 +229,7 @@ export default function AdminPaymeHealth() {
           >
             Lab
           </button>
-        
+
           <button
             className={`px-3 py-2 rounded-lg text-sm ${
               tab === "dashboard" ? "bg-black text-white" : "border bg-white"
@@ -218,6 +239,7 @@ export default function AdminPaymeHealth() {
           >
             Dashboard
           </button>
+
           <button
             className={`px-3 py-2 rounded-lg text-sm ${
               tab === "live" ? "bg-black text-white" : "border bg-white"
@@ -227,12 +249,21 @@ export default function AdminPaymeHealth() {
           >
             Live
           </button>
+
+          <button
+            className="px-3 py-2 rounded-lg text-sm bg-red-600 text-white disabled:opacity-60"
+            onClick={runAutoFix}
+            disabled={autoFixing}
+            title="Автоматически исправить типичные проблемы Payme"
+          >
+            {autoFixing ? "AUTO FIX…" : "AUTO FIX PAYME"}
+          </button>
         </div>
       </div>
 
       {/* Events tab */}
       {tab === "events" && <AdminPaymeEvents />}
-      
+
       {/* Lab tab */}
       {tab === "lab" && (
         <PaymeLab
@@ -248,7 +279,7 @@ export default function AdminPaymeHealth() {
           }
         />
       )}
-      
+
       {/* Dashboard tab */}
       {tab === "dashboard" && <PaymeDashboard />}
 
