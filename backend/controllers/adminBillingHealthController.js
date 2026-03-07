@@ -1,5 +1,3 @@
-//backend/controllers/adminBillingHealthController.js
-
 const pool = require("../db");
 
 async function syncOneClientBalance(client, clientId) {
