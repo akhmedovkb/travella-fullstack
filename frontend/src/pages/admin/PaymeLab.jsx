@@ -63,6 +63,10 @@ function fmtTs(x) {
   }
 }
 
+function money(x) {
+  return Math.round(Number(x || 0)).toLocaleString("ru-RU");
+}
+
 function badgePill(kind, text) {
   const base = "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium";
   const map = {
@@ -88,48 +92,26 @@ function healthStatusFromDetails(details) {
   const ledgerRows = ledger.length;
   const ledgerSum = ledger.reduce((s, r) => s + Number(r?.amount || 0), 0);
 
-  // STUCK: state=1 and create_time older than 15min
   if (state === 1 && Number(tx.create_time) > 0) {
     const ageSec = (Date.now() - Number(tx.create_time)) / 1000;
     if (ageSec > 900) return "STUCK";
   }
-
-  // LOST_PAYMENT: performed but no ledger
   if (state === 2 && ledgerRows === 0) return "LOST_PAYMENT";
-
-  // BAD_AMOUNT: performed but ledger_sum <= 0
   if (state === 2 && ledgerSum <= 0) return "BAD_AMOUNT";
-
-  // REFUND_MISMATCH: canceled but ledger_sum > 0
   if ((state === -1 || state === -2) && ledgerSum > 0) return "REFUND_MISMATCH";
-
-  // Extra: mismatch
   if (state === 2 && ledgerRows > 0 && amount > 0 && ledgerSum !== amount) return "AMOUNT_MISMATCH";
 
   return "OK";
 }
 
-/**
- * PaymeLab
- * Props:
- * - embedded?: boolean (if true, no outer page header/paddings)
- * - seed?: { orderId?: string|number, amount?: string|number, paymeId?: string }
- */
 export default function PaymeLab({ embedded = false, seed = null } = {}) {
-  // Core inputs
   const [orderId, setOrderId] = useState("11");
-  const [amount, setAmount] = useState("100000"); // tiyins
+  const [amount, setAmount] = useState("100000");
   const [paymeId, setPaymeId] = useState(makeNewTxId());
 
-  // selected tx_id from Health
   const [seedPaymeId, setSeedPaymeId] = useState("");
-
-  // tx id mode:
-  // - "seed": use selected tx_id from Health (for Perform/Cancel on existing)
-  // - "new": use custom/new tx_id (for Create new)
   const [txMode, setTxMode] = useState("new");
 
-  // Cancel reason
   const CANCEL_PRESETS = [
     { value: "", label: "— не указывать (null)" },
     { value: "1", label: "1 — отмена по инициативе клиента" },
@@ -140,41 +122,49 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
   const [cancelPreset, setCancelPreset] = useState("");
   const [cancelCustom, setCancelCustom] = useState("");
 
-  // GetStatement range
   const [fromIso, setFromIso] = useState(msToLocalIsoInput(nowMs() - 60 * 60 * 1000));
   const [toIso, setToIso] = useState(msToLocalIsoInput(nowMs() + 5 * 60 * 1000));
 
-  // UI state
   const [busy, setBusy] = useState(false);
   const [lastSnap, setLastSnap] = useState(null);
-  const [history, setHistory] = useState([]); // newest first
+  const [history, setHistory] = useState([]);
 
-  // Status panel
   const [autoStatus, setAutoStatus] = useState(true);
   const [statusLoading, setStatusLoading] = useState(false);
   const [txDetails, setTxDetails] = useState(null);
   const [txDetailsErr, setTxDetailsErr] = useState("");
   const [repairing, setRepairing] = useState(false);
 
-  // Apply seed from parent (Health -> Lab tab)
+  // order builder / inspector
+  const [newClientId, setNewClientId] = useState("");
+  const [newAmountTiyin, setNewAmountTiyin] = useState("100000");
+  const [creatingOrder, setCreatingOrder] = useState(false);
+  const [createdOrder, setCreatedOrder] = useState(null);
+
+  const [inspectOrderId, setInspectOrderId] = useState("");
+  const [inspectLoading, setInspectLoading] = useState(false);
+  const [orderDetails, setOrderDetails] = useState(null);
+  const [orderDetailsErr, setOrderDetailsErr] = useState("");
+
   useEffect(() => {
     const s = normalizeSeed(seed);
     if (!s) return;
 
-    if (s.orderId) setOrderId(String(s.orderId));
+    if (s.orderId) {
+      setOrderId(String(s.orderId));
+      setInspectOrderId(String(s.orderId));
+    }
     if (s.amount) setAmount(String(s.amount));
 
     if (s.paymeId) setSeedPaymeId(String(s.paymeId));
     else setSeedPaymeId("");
 
-    // If currently in seed-mode, follow selected tx_id
     if (txMode === "seed" && s.paymeId) {
       setPaymeId(String(s.paymeId));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seed?.orderId, seed?.amount, seed?.paymeId]);
 
-  // If user switches txMode manually
   useEffect(() => {
     if (txMode === "seed") {
       if (seedPaymeId) setPaymeId(seedPaymeId);
@@ -184,7 +174,6 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
       }
     }
     if (txMode === "new") {
-      // if accidentally equals seed -> create a fresh one
       if (seedPaymeId && paymeId === seedPaymeId) {
         setPaymeId(makeNewTxId());
       }
@@ -227,6 +216,64 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
     return true;
   }
 
+  async function inspectOrder(idOverride = null, silent = false) {
+    const id = String(idOverride || inspectOrderId || orderId || "").trim();
+    if (!id) {
+      setOrderDetails(null);
+      setOrderDetailsErr("");
+      return;
+    }
+
+    setInspectLoading(true);
+    setOrderDetailsErr("");
+    try {
+      const data = await apiGet(`/api/admin/payme/lab/orders/${encodeURIComponent(id)}/inspect`, "admin");
+      setOrderDetails(data);
+      if (!silent) tSuccess("Order inspected");
+    } catch (e) {
+      console.error(e);
+      setOrderDetails(null);
+      setOrderDetailsErr(e?.message || "Inspect error");
+      if (!silent) tError("Inspect order: ошибка");
+    } finally {
+      setInspectLoading(false);
+    }
+  }
+
+  async function createOrder() {
+    const clientId = toInt(newClientId, 0);
+    const amountTiyin = toInt(newAmountTiyin, 0);
+    if (!clientId) return tError("Укажи существующий client_id");
+    if (!amountTiyin || amountTiyin <= 0) return tError("Укажи amount_tiyin > 0");
+
+    setCreatingOrder(true);
+    try {
+      const data = await apiPost(
+        "/api/admin/payme/lab/orders/create",
+        { client_id: clientId, amount_tiyin: amountTiyin, provider: "payme", status: "created" },
+        "admin"
+      );
+      const ord = data?.order || null;
+      setCreatedOrder(data);
+      if (ord?.id) {
+        setOrderId(String(ord.id));
+        setInspectOrderId(String(ord.id));
+        setAmount(String(ord.amount_tiyin ?? amountTiyin));
+        setPaymeId(makeNewTxId());
+        setTxMode("new");
+        await inspectOrder(String(ord.id), true);
+        tSuccess(`Order #${ord.id} создан`);
+      } else {
+        tSuccess("Order создан");
+      }
+    } catch (e) {
+      console.error(e);
+      tError(e?.message || "Create order: ошибка");
+    } finally {
+      setCreatingOrder(false);
+    }
+  }
+
   async function refreshStatus(idOverride = null, silent = false) {
     const id = String(idOverride || parsed.paymeId || "").trim();
     if (!id) {
@@ -267,6 +314,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
       if (data?.already) tSuccess("Ledger уже был (idempotent)");
       else tSuccess("Ledger восстановлен");
       await refreshStatus(id, true);
+      if (parsed.orderId) await inspectOrder(parsed.orderId, true);
     } catch (e) {
       console.error(e);
       tError("Repair ledger: ошибка");
@@ -275,7 +323,6 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
     }
   }
 
-  // Auto-refresh status when user opens from Health (seed changes)
   useEffect(() => {
     if (!autoStatus) return;
     if (!seedPaymeId) return;
@@ -284,7 +331,6 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seedPaymeId]);
 
-  // ---- RPC runner ----
   async function run(method, params) {
     setBusy(true);
     try {
@@ -306,6 +352,9 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
         const id = params?.id ? String(params.id) : parsed.paymeId;
         await refreshStatus(id, true);
       }
+      if (parsed.orderId) {
+        await inspectOrder(parsed.orderId, true);
+      }
 
       return snap;
     } catch (e) {
@@ -324,6 +373,9 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
         const id = params?.id ? String(params.id) : parsed.paymeId;
         await refreshStatus(id, true);
       }
+      if (parsed.orderId) {
+        await inspectOrder(parsed.orderId, true);
+      }
 
       return null;
     } finally {
@@ -331,7 +383,6 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
     }
   }
 
-  // ---- Builders ----
   function buildCheck() {
     return { amount: parsed.amount, account: { order_id: parsed.orderId } };
   }
@@ -358,7 +409,6 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
     };
   }
 
-  // ---- BANK-GRADE GUARD RAILS ----
   function switchToSeedOrFail() {
     if (!seedPaymeId) {
       tError("Нет выбранного tx_id из Health. Выбери транзакцию в Health.");
@@ -396,7 +446,6 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
     return true;
   }
 
-  // ---- Quick actions row ----
   async function runCreateOnly() {
     if (!canRunBasic()) return tError("Заполни order_id и amount");
     if (!ensureCreateSafeOrFix()) return;
@@ -426,7 +475,6 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
     await run("PerformTransaction", buildPerform());
   }
 
-  // ---- Scenario presets ----
   async function scenarioReconcileStatement() {
     await run("GetStatement", buildStatement());
   }
@@ -507,7 +555,6 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
       else stateLabel = `STATE ${st}`;
     }
 
-    // Expected next action
     let next = null;
     if (!tx) {
       next = txMode === "new" ? "Next: CreateTransaction" : "Next: select tx_id in Health";
@@ -539,6 +586,22 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
     };
   }, [txDetails, txMode]);
 
+  const orderSummary = useMemo(() => {
+    const order = orderDetails?.order || null;
+    const client = orderDetails?.client || null;
+    const transactions = Array.isArray(orderDetails?.transactions) ? orderDetails.transactions : [];
+    const ledger = Array.isArray(orderDetails?.ledger) ? orderDetails.ledger : [];
+    const ledgerSum = ledger.reduce((s, r) => s + Number(r?.amount || 0), 0);
+    return {
+      order,
+      client,
+      transactions,
+      ledger,
+      ledgerSum,
+      latestTx: transactions[0] || null,
+    };
+  }, [orderDetails]);
+
   return (
     <div className={embedded ? "" : "p-4 md:p-6"}>
       {!embedded && (
@@ -554,7 +617,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
         <div>
           <div className="text-lg font-semibold">Payme Lab</div>
           <div className="text-sm text-gray-500">
-            Merchant RPC actions + presets + status panel + auto-snapshot
+            Merchant RPC actions + order builder + order inspector + auto-snapshot
           </div>
         </div>
 
@@ -570,7 +633,133 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
         </div>
       </div>
 
-      {/* STATUS PANEL */}
+      <div className="mb-4 grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <div className="bg-white rounded-xl shadow p-4">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <div className="text-sm font-semibold text-gray-800">Create topup order</div>
+              <div className="text-xs text-gray-500">Создаёт topup_orders для теста Payme прямо из Finance.</div>
+            </div>
+            {createdOrder?.order?.id ? badgePill("ok", `order #${createdOrder.order.id}`) : null}
+          </div>
+
+          <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">client_id</label>
+              <input
+                className="w-full border rounded-lg px-3 py-2"
+                value={newClientId}
+                onChange={(e) => setNewClientId(e.target.value)}
+                placeholder="например 25"
+                disabled={creatingOrder || busy}
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">amount_tiyin</label>
+              <input
+                className="w-full border rounded-lg px-3 py-2"
+                value={newAmountTiyin}
+                onChange={(e) => setNewAmountTiyin(e.target.value)}
+                placeholder="100000"
+                disabled={creatingOrder || busy}
+              />
+            </div>
+            <div className="flex items-end">
+              <button
+                type="button"
+                className="w-full px-4 py-2 rounded-lg bg-black text-white disabled:opacity-60"
+                onClick={createOrder}
+                disabled={creatingOrder || busy}
+              >
+                {creatingOrder ? "Creating…" : "Create order"}
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-2 text-[11px] text-gray-400">
+            Provider = payme, status = created. После создания новый order_id автоматически подставится в Lab.
+          </div>
+
+          {createdOrder?.order && (
+            <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+              <div className="bg-gray-50 border rounded-lg p-3">
+                <div className="text-xs text-gray-500 mb-1">order_id</div>
+                <div className="font-mono">{createdOrder.order.id}</div>
+              </div>
+              <div className="bg-gray-50 border rounded-lg p-3">
+                <div className="text-xs text-gray-500 mb-1">client_id</div>
+                <div className="font-mono">{createdOrder.order.client_id}</div>
+              </div>
+              <div className="bg-gray-50 border rounded-lg p-3">
+                <div className="text-xs text-gray-500 mb-1">amount_tiyin</div>
+                <div className="font-mono">{createdOrder.order.amount_tiyin}</div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white rounded-xl shadow p-4">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <div className="text-sm font-semibold text-gray-800">Payment inspector</div>
+              <div className="text-xs text-gray-500">Показывает order + tx + ledger + client balance по order_id.</div>
+            </div>
+            {orderSummary.order?.id ? badgePill("black", `inspect #${orderSummary.order.id}`) : null}
+          </div>
+
+          <div className="mt-3 flex flex-col md:flex-row gap-3 md:items-end">
+            <div className="flex-1">
+              <label className="block text-xs text-gray-500 mb-1">order_id</label>
+              <input
+                className="w-full border rounded-lg px-3 py-2"
+                value={inspectOrderId}
+                onChange={(e) => setInspectOrderId(e.target.value)}
+                placeholder="например 21"
+                disabled={inspectLoading || busy}
+              />
+            </div>
+            <button
+              type="button"
+              className="px-4 py-2 rounded-lg border bg-white disabled:opacity-60"
+              onClick={() => inspectOrder(null, false)}
+              disabled={inspectLoading || busy}
+            >
+              {inspectLoading ? "Inspecting…" : "Inspect order"}
+            </button>
+          </div>
+
+          {!!orderDetailsErr && <div className="mt-2 text-sm text-red-600">{orderDetailsErr}</div>}
+
+          {orderSummary.order && (
+            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+              <div className="bg-gray-50 border rounded-lg p-3">
+                <div className="text-xs text-gray-500 mb-1">Order</div>
+                <div>id: <span className="font-mono">{orderSummary.order.id}</span></div>
+                <div>status: <span className="font-mono">{orderSummary.order.status}</span></div>
+                <div>provider: <span className="font-mono">{orderSummary.order.provider}</span></div>
+                <div>amount_tiyin: <span className="font-mono">{money(orderSummary.order.amount_tiyin)}</span></div>
+              </div>
+              <div className="bg-gray-50 border rounded-lg p-3">
+                <div className="text-xs text-gray-500 mb-1">Client</div>
+                <div>client_id: <span className="font-mono">{orderSummary.order.client_id}</span></div>
+                <div>phone: <span className="font-mono">{orderSummary.client?.phone || "—"}</span></div>
+                <div>contact_balance: <span className="font-mono">{money(orderSummary.client?.contact_balance)}</span></div>
+                <div>tx_count / ledger_rows: <span className="font-mono">{orderSummary.transactions.length} / {orderSummary.ledger.length}</span></div>
+              </div>
+            </div>
+          )}
+
+          {orderSummary.order && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {orderSummary.transactions.length ? badgePill("ok", `tx: ${orderSummary.transactions.length}`) : badgePill("warn", "tx: 0")}
+              {orderSummary.ledger.length ? badgePill("ok", `ledger_sum: ${money(orderSummary.ledgerSum)}`) : badgePill("warn", "ledger: 0")}
+              {orderSummary.latestTx?.payme_id ? badgePill("info", orderSummary.latestTx.payme_id) : null}
+              {orderSummary.latestTx?.state === 2 && orderSummary.ledger.length === 0 ? badgePill("bad", "LOST_PAYMENT") : null}
+            </div>
+          )}
+        </div>
+      </div>
+
       <div className="mb-4 bg-white rounded-xl shadow p-4">
         <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
           <div>
@@ -699,7 +888,6 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
         )}
       </div>
 
-      {/* Scenario presets */}
       <div className="mb-4 bg-white rounded-xl shadow p-4">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
           <div>
@@ -708,72 +896,26 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              className="px-3 py-2 rounded-lg border bg-white text-sm disabled:opacity-60"
-              onClick={scenarioReconcileStatement}
-              disabled={busy}
-              title="GetStatement по диапазону"
-            >
-              Reconcile (Statement)
-            </button>
-
-            <button
-              className="px-3 py-2 rounded-lg border bg-white text-sm disabled:opacity-60"
-              onClick={scenarioCancelSelectedThenStatement}
-              disabled={busy}
-              title="Cancel selected (auto seed) → Statement"
-            >
-              Cancel selected tx → Statement
-            </button>
-
-            <button
-              className="px-3 py-2 rounded-lg border bg-white text-sm disabled:opacity-60"
-              onClick={scenarioHappyPathNewPayment}
-              disabled={busy}
-              title="Happy path new payment (auto new + fresh tx_id)"
-            >
-              Happy path (new payment)
-            </button>
-
-            <button
-              className="px-3 py-2 rounded-lg border bg-white text-sm disabled:opacity-60"
-              onClick={scenarioCreatePerformThenCancel}
-              disabled={busy}
-              title="Test cancel after perform (auto new + fresh tx_id)"
-            >
-              Create+Perform → Cancel (test)
-            </button>
+            <button className="px-3 py-2 rounded-lg border bg-white text-sm disabled:opacity-60" onClick={scenarioReconcileStatement} disabled={busy}>Reconcile (Statement)</button>
+            <button className="px-3 py-2 rounded-lg border bg-white text-sm disabled:opacity-60" onClick={scenarioCancelSelectedThenStatement} disabled={busy}>Cancel selected tx → Statement</button>
+            <button className="px-3 py-2 rounded-lg border bg-white text-sm disabled:opacity-60" onClick={scenarioHappyPathNewPayment} disabled={busy}>Happy path (new payment)</button>
+            <button className="px-3 py-2 rounded-lg border bg-white text-sm disabled:opacity-60" onClick={scenarioCreatePerformThenCancel} disabled={busy}>Create+Perform → Cancel (test)</button>
           </div>
         </div>
       </div>
 
-      {/* TX MODE SWITCH */}
       <div className="mb-4 bg-white rounded-xl shadow p-3">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
           <div className="text-sm text-gray-700 font-medium">tx_id mode</div>
 
           <div className="flex flex-wrap items-center gap-3">
             <label className="flex items-center gap-2 text-sm">
-              <input
-                type="radio"
-                name="txmode"
-                value="seed"
-                checked={txMode === "seed"}
-                onChange={() => setTxMode("seed")}
-                disabled={busy}
-              />
+              <input type="radio" name="txmode" value="seed" checked={txMode === "seed"} onChange={() => setTxMode("seed")} disabled={busy} />
               Use selected tx_id
             </label>
 
             <label className="flex items-center gap-2 text-sm">
-              <input
-                type="radio"
-                name="txmode"
-                value="new"
-                checked={txMode === "new"}
-                onChange={() => setTxMode("new")}
-                disabled={busy}
-              />
+              <input type="radio" name="txmode" value="new" checked={txMode === "new"} onChange={() => setTxMode("new")} disabled={busy} />
               Use new tx_id
             </label>
 
@@ -786,7 +928,6 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
                 setPaymeId(makeNewTxId());
                 tSuccess("Новый tx_id создан");
               }}
-              title="Переключить на new и сгенерировать новый tx_id"
             >
               Generate new tx_id
             </button>
@@ -797,40 +938,14 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
           Selected tx_id: <span className="font-mono">{seedPaymeId || "—"}</span>
           <span className="mx-2">•</span>
           Current tx_id: <span className="font-mono">{parsed.paymeId || "—"}</span>
-          {txMode === "seed" ? (
-            <span className="ml-2 text-gray-400">(для Perform/Cancel по выбранному)</span>
-          ) : (
-            <span className="ml-2 text-gray-400">(для Create нового платежа)</span>
-          )}
+          {txMode === "seed" ? <span className="ml-2 text-gray-400">(для Perform/Cancel по выбранному)</span> : <span className="ml-2 text-gray-400">(для Create нового платежа)</span>}
         </div>
       </div>
 
-      {/* Quick actions row */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <button
-          className="px-3 py-2 rounded-lg border bg-white disabled:opacity-60 text-sm"
-          onClick={runCreateOnly}
-          disabled={busy}
-          title="CreateTransaction (auto new + guard rails)"
-        >
-          Create only
-        </button>
-        <button
-          className="px-3 py-2 rounded-lg border bg-white disabled:opacity-60 text-sm"
-          onClick={runCreateAndPerform}
-          disabled={busy}
-          title="Create → Perform (auto new + guard rails)"
-        >
-          Create + Perform
-        </button>
-        <button
-          className="px-3 py-2 rounded-lg border bg-white disabled:opacity-60 text-sm"
-          onClick={runCheckCreatePerform}
-          disabled={busy}
-          title="Check → Create → Perform (auto new + guard rails)"
-        >
-          Check + Create + Perform
-        </button>
+        <button className="px-3 py-2 rounded-lg border bg-white disabled:opacity-60 text-sm" onClick={runCreateOnly} disabled={busy}>Create only</button>
+        <button className="px-3 py-2 rounded-lg border bg-white disabled:opacity-60 text-sm" onClick={runCreateAndPerform} disabled={busy}>Create + Perform</button>
+        <button className="px-3 py-2 rounded-lg border bg-white disabled:opacity-60 text-sm" onClick={runCheckCreatePerform} disabled={busy}>Check + Create + Perform</button>
         <button
           type="button"
           className="px-3 py-2 rounded-lg border bg-white disabled:opacity-60 text-sm"
@@ -839,187 +954,70 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
             setPaymeId(makeNewTxId());
           }}
           disabled={busy}
-          title="Сгенерировать новый tx_id"
         >
           New tx_id
         </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Controls */}
         <div className="lg:col-span-1 bg-white rounded-xl shadow p-4">
           <div className="grid grid-cols-1 gap-3">
             <div>
               <label className="block text-xs text-gray-500 mb-1">order_id</label>
-              <input
-                className="w-full border rounded-lg px-3 py-2"
-                value={orderId}
-                onChange={(e) => setOrderId(e.target.value)}
-                placeholder="например 11"
-                disabled={busy}
-              />
+              <input className="w-full border rounded-lg px-3 py-2" value={orderId} onChange={(e) => setOrderId(e.target.value)} placeholder="например 11" disabled={busy} />
             </div>
 
             <div>
               <label className="block text-xs text-gray-500 mb-1">amount (tiyin)</label>
-              <input
-                className="w-full border rounded-lg px-3 py-2"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="100000"
-                disabled={busy}
-              />
-              <div className="text-[11px] text-gray-400 mt-1">
-                Например 100000 = 1 000.00 UZS (если minor=100)
-              </div>
+              <input className="w-full border rounded-lg px-3 py-2" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="100000" disabled={busy} />
+              <div className="text-[11px] text-gray-400 mt-1">Например 100000 = 1 000.00 UZS (если minor=100)</div>
             </div>
 
             <div>
               <label className="block text-xs text-gray-500 mb-1">payme tx id (params.id)</label>
-              <input
-                className="w-full border rounded-lg px-3 py-2"
-                value={paymeId}
-                onChange={(e) => setPaymeId(e.target.value)}
-                disabled={busy || txMode === "seed"}
-                title={txMode === "seed" ? "В режиме selected tx_id поле редактировать нельзя" : ""}
-              />
+              <input className="w-full border rounded-lg px-3 py-2" value={paymeId} onChange={(e) => setPaymeId(e.target.value)} disabled={busy || txMode === "seed"} title={txMode === "seed" ? "В режиме selected tx_id поле редактировать нельзя" : ""} />
               <div className="flex gap-2 mt-2">
-                <button
-                  type="button"
-                  className="px-3 py-2 rounded-lg border bg-white text-sm disabled:opacity-60"
-                  onClick={() => {
-                    setTxMode("new");
-                    setPaymeId(makeNewTxId());
-                  }}
-                  disabled={busy}
-                >
-                  New tx_id
-                </button>
-                <button
-                  type="button"
-                  className="px-3 py-2 rounded-lg border bg-white text-sm disabled:opacity-60"
-                  onClick={() => {
-                    setFromIso(msToLocalIsoInput(nowMs() - 60 * 60 * 1000));
-                    setToIso(msToLocalIsoInput(nowMs() + 5 * 60 * 1000));
-                  }}
-                  disabled={busy}
-                >
-                  Reset range
-                </button>
+                <button type="button" className="px-3 py-2 rounded-lg border bg-white text-sm disabled:opacity-60" onClick={() => { setTxMode("new"); setPaymeId(makeNewTxId()); }} disabled={busy}>New tx_id</button>
+                <button type="button" className="px-3 py-2 rounded-lg border bg-white text-sm disabled:opacity-60" onClick={() => { setFromIso(msToLocalIsoInput(nowMs() - 60 * 60 * 1000)); setToIso(msToLocalIsoInput(nowMs() + 5 * 60 * 1000)); }} disabled={busy}>Reset range</button>
               </div>
             </div>
 
             <div>
               <label className="block text-xs text-gray-500 mb-1">Cancel reason</label>
-              <select
-                className="w-full border rounded-lg px-3 py-2 bg-white"
-                value={cancelPreset}
-                onChange={(e) => setCancelPreset(e.target.value)}
-                disabled={busy}
-              >
+              <select className="w-full border rounded-lg px-3 py-2 bg-white" value={cancelPreset} onChange={(e) => setCancelPreset(e.target.value)} disabled={busy}>
                 {CANCEL_PRESETS.map((p) => (
-                  <option key={p.value} value={p.value}>
-                    {p.label}
-                  </option>
+                  <option key={p.value} value={p.value}>{p.label}</option>
                 ))}
               </select>
               {cancelPreset === "custom" && (
                 <div className="mt-2">
-                  <input
-                    className="w-full border rounded-lg px-3 py-2"
-                    value={cancelCustom}
-                    onChange={(e) => setCancelCustom(e.target.value)}
-                    placeholder="введи число, например 1"
-                    disabled={busy}
-                  />
+                  <input className="w-full border rounded-lg px-3 py-2" value={cancelCustom} onChange={(e) => setCancelCustom(e.target.value)} placeholder="введи число, например 1" disabled={busy} />
                 </div>
               )}
-              <div className="text-[11px] text-gray-400 mt-1">
-                Если выбрать “не указывать”, поле reason не отправляется (null).
-              </div>
+              <div className="text-[11px] text-gray-400 mt-1">Если выбрать “не указывать”, поле reason не отправляется (null).</div>
             </div>
 
             <div className="grid grid-cols-1 gap-2">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">GetStatement from</label>
-                <input
-                  type="datetime-local"
-                  className="w-full border rounded-lg px-3 py-2"
-                  value={fromIso}
-                  onChange={(e) => setFromIso(e.target.value)}
-                  disabled={busy}
-                />
+                <input type="datetime-local" className="w-full border rounded-lg px-3 py-2" value={fromIso} onChange={(e) => setFromIso(e.target.value)} disabled={busy} />
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">GetStatement to</label>
-                <input
-                  type="datetime-local"
-                  className="w-full border rounded-lg px-3 py-2"
-                  value={toIso}
-                  onChange={(e) => setToIso(e.target.value)}
-                  disabled={busy}
-                />
+                <input type="datetime-local" className="w-full border rounded-lg px-3 py-2" value={toIso} onChange={(e) => setToIso(e.target.value)} disabled={busy} />
               </div>
             </div>
 
             <div className="pt-2 grid grid-cols-1 gap-2">
-              <button
-                className="px-4 py-2 rounded-lg bg-black text-white disabled:opacity-60"
-                onClick={() => {
-                  if (!canRunBasic()) return tError("Заполни order_id и amount");
-                  run("CheckPerformTransaction", buildCheck());
-                }}
-                disabled={busy}
-              >
-                CheckPerformTransaction
-              </button>
-
-              <button
-                className="px-4 py-2 rounded-lg border bg-white disabled:opacity-60"
-                onClick={() => {
-                  if (!canRunBasic()) return tError("Заполни order_id и amount");
-                  if (!ensureCreateSafeOrFix()) return;
-                  run("CreateTransaction", buildCreate());
-                }}
-                disabled={busy}
-              >
-                CreateTransaction
-              </button>
-
-              <button
-                className="px-4 py-2 rounded-lg border bg-white disabled:opacity-60"
-                onClick={() => {
-                  if (!canRunIdOnly()) return tError("Нужен tx_id");
-                  run("PerformTransaction", buildPerform());
-                }}
-                disabled={busy}
-              >
-                PerformTransaction
-              </button>
-
-              <button
-                className="px-4 py-2 rounded-lg border bg-white disabled:opacity-60"
-                onClick={() => {
-                  if (!canRunIdOnly()) return tError("Нужен tx_id");
-                  run("CancelTransaction", buildCancel());
-                }}
-                disabled={busy}
-              >
-                CancelTransaction
-              </button>
-
-              <button
-                className="px-4 py-2 rounded-lg border bg-white disabled:opacity-60"
-                onClick={() => run("GetStatement", buildStatement())}
-                disabled={busy}
-              >
-                GetStatement
-              </button>
+              <button className="px-4 py-2 rounded-lg bg-black text-white disabled:opacity-60" onClick={() => { if (!canRunBasic()) return tError("Заполни order_id и amount"); run("CheckPerformTransaction", buildCheck()); }} disabled={busy}>CheckPerformTransaction</button>
+              <button className="px-4 py-2 rounded-lg border bg-white disabled:opacity-60" onClick={() => { if (!canRunBasic()) return tError("Заполни order_id и amount"); if (!ensureCreateSafeOrFix()) return; run("CreateTransaction", buildCreate()); }} disabled={busy}>CreateTransaction</button>
+              <button className="px-4 py-2 rounded-lg border bg-white disabled:opacity-60" onClick={() => { if (!canRunIdOnly()) return tError("Нужен tx_id"); run("PerformTransaction", buildPerform()); }} disabled={busy}>PerformTransaction</button>
+              <button className="px-4 py-2 rounded-lg border bg-white disabled:opacity-60" onClick={() => { if (!canRunIdOnly()) return tError("Нужен tx_id"); run("CancelTransaction", buildCancel()); }} disabled={busy}>CancelTransaction</button>
+              <button className="px-4 py-2 rounded-lg border bg-white disabled:opacity-60" onClick={() => run("GetStatement", buildStatement())} disabled={busy}>GetStatement</button>
             </div>
           </div>
         </div>
 
-        {/* Snapshot */}
         <div className="lg:col-span-2 bg-white rounded-xl shadow overflow-hidden">
           <div className="p-3 border-b flex items-center justify-between">
             <div className="text-sm text-gray-600">Snapshot</div>
@@ -1031,50 +1029,29 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
           ) : (
             <div className="p-4 grid grid-cols-1 gap-4">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-700">
-                  {new Date(lastSnap.ts).toLocaleString("ru-RU", { timeZone: "Asia/Tashkent" })}
-                </span>
+                <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-700">{new Date(lastSnap.ts).toLocaleString("ru-RU", { timeZone: "Asia/Tashkent" })}</span>
                 <span className="text-xs px-2 py-1 rounded bg-black text-white">{lastSnap.method}</span>
-                {lastSnap?.result?.error && (
-                  <span className="text-xs px-2 py-1 rounded bg-red-100 text-red-700">RPC error</span>
-                )}
-                {lastSnap?.error && (
-                  <span className="text-xs px-2 py-1 rounded bg-red-100 text-red-700">HTTP error</span>
-                )}
+                {lastSnap?.result?.error && <span className="text-xs px-2 py-1 rounded bg-red-100 text-red-700">RPC error</span>}
+                {lastSnap?.error && <span className="text-xs px-2 py-1 rounded bg-red-100 text-red-700">HTTP error</span>}
               </div>
 
               <div>
                 <div className="text-xs text-gray-500 mb-1">Request body (sent to /api/admin/payme/lab/run)</div>
-                <pre className="text-xs bg-gray-50 border rounded-lg p-3 overflow-auto">
-                  {pretty({ method: lastSnap.method, params: lastSnap.params })}
-                </pre>
+                <pre className="text-xs bg-gray-50 border rounded-lg p-3 overflow-auto">{pretty({ method: lastSnap.method, params: lastSnap.params })}</pre>
               </div>
 
               <div>
                 <div className="text-xs text-gray-500 mb-1">Backend result</div>
-                <pre className="text-xs bg-gray-50 border rounded-lg p-3 overflow-auto">
-                  {pretty(lastSnap.result ?? lastSnap.error)}
-                </pre>
+                <pre className="text-xs bg-gray-50 border rounded-lg p-3 overflow-auto">{pretty(lastSnap.result ?? lastSnap.error)}</pre>
               </div>
             </div>
           )}
         </div>
 
-        {/* History */}
         <div className="lg:col-span-3 bg-white rounded-xl shadow overflow-hidden">
           <div className="p-3 border-b flex items-center justify-between">
             <div className="text-sm text-gray-600">History</div>
-            <button
-              type="button"
-              className="text-sm px-3 py-1.5 rounded-lg border bg-white"
-              onClick={() => {
-                setHistory([]);
-                setLastSnap(null);
-              }}
-              disabled={busy}
-            >
-              Clear
-            </button>
+            <button type="button" className="text-sm px-3 py-1.5 rounded-lg border bg-white" onClick={() => { setHistory([]); setLastSnap(null); }} disabled={busy}>Clear</button>
           </div>
           <div className="overflow-auto">
             <table className="min-w-full text-sm">
@@ -1090,30 +1067,16 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
               </thead>
               <tbody>
                 {history.length === 0 ? (
-                  <tr>
-                    <td className="px-3 py-3 text-gray-500" colSpan={6}>
-                      пусто
-                    </td>
-                  </tr>
+                  <tr><td className="px-3 py-3 text-gray-500" colSpan={6}>пусто</td></tr>
                 ) : (
                   history.map((h, idx) => (
                     <tr key={`${h.ts}_${idx}`} className="border-t">
-                      <td className="px-3 py-2 text-xs text-gray-500">
-                        {new Date(h.ts).toLocaleTimeString("ru-RU", { timeZone: "Asia/Tashkent" })}
-                      </td>
+                      <td className="px-3 py-2 text-xs text-gray-500">{new Date(h.ts).toLocaleTimeString("ru-RU", { timeZone: "Asia/Tashkent" })}</td>
                       <td className="px-3 py-2 font-medium">{h.method}</td>
                       <td className="px-3 py-2">{String(h?.params?.account?.order_id ?? "—")}</td>
                       <td className="px-3 py-2">{String(h?.params?.amount ?? "—")}</td>
                       <td className="px-3 py-2">{String(h?.params?.id ?? "—")}</td>
-                      <td className="px-3 py-2 text-right">
-                        <button
-                          type="button"
-                          className="px-3 py-1.5 rounded-lg border bg-white"
-                          onClick={() => setLastSnap(h)}
-                        >
-                          Open
-                        </button>
-                      </td>
+                      <td className="px-3 py-2 text-right"><button type="button" className="px-3 py-1.5 rounded-lg border bg-white" onClick={() => setLastSnap(h)}>Open</button></td>
                     </tr>
                   ))
                 )}
