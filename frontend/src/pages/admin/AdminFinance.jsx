@@ -25,8 +25,9 @@ export default function AdminFinance() {
         <div>
           <h1 className="text-xl font-semibold">Finance (Admin)</h1>
           <p className="text-sm text-gray-500">
-            Clients — работа по конкретному клиенту. Payme — платежи, health, live, events,
-            dashboard и lab. Audit — системный контроль и integrity guard.
+            Clients — работа по конкретному клиенту.  
+            Payme — платежи, monitoring и диагностика.  
+            Audit — системный контроль и integrity guard.
           </p>
         </div>
 
@@ -39,18 +40,7 @@ export default function AdminFinance() {
 
       {tab === "clients" && <AdminContactBalance />}
 
-      {tab === "payme" && (
-        <div className="space-y-4">
-          <div className="bg-white rounded-xl shadow p-4">
-            <div className="text-sm font-semibold">Payme Merchant Console</div>
-            <div className="text-xs text-gray-500 mt-1">
-              Bank-grade monitoring: health, events, lab, dashboard, live.
-            </div>
-          </div>
-
-          <AdminPaymeHealth />
-        </div>
-      )}
+      {tab === "payme" && <AdminPaymeHealth />}
 
       {tab === "audit" && <AdminBilling />}
     </div>
