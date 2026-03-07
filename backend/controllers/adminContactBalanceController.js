@@ -97,7 +97,6 @@ async function searchClients(req, res) {
     const cols = await getClientsColumns();
 
     const selectCols = ["id"];
-
     if (cols.has("full_name")) selectCols.push("full_name");
     if (cols.has("name")) selectCols.push("name");
     if (cols.has("username")) selectCols.push("username");
@@ -240,6 +239,46 @@ async function getClientContactBalance(req, res) {
       [clientId]
     );
 
+    const paymeQ = await pool.query(
+      `
+      SELECT
+        t.payme_id,
+        t.order_id,
+        t.amount_tiyin,
+        t.state,
+        t.create_time,
+        t.perform_time,
+        t.cancel_time,
+        t.reason,
+        o.status AS order_status,
+        o.created_at AS order_created_at,
+        o.paid_at AS order_paid_at
+      FROM payme_transactions t
+      INNER JOIN topup_orders o ON o.id = t.order_id
+      WHERE o.client_id = $1
+      ORDER BY COALESCE(t.create_time, 0) DESC, t.payme_id DESC
+      LIMIT 100
+    `,
+      [clientId]
+    );
+
+    const paymeStatsQ = await pool.query(
+      `
+      SELECT
+        COUNT(*)::int AS tx_count,
+        COUNT(*) FILTER (WHERE t.state = 1)::int AS created_count,
+        COUNT(*) FILTER (WHERE t.state = 2)::int AS performed_count,
+        COUNT(*) FILTER (WHERE t.state IN (-1, -2))::int AS canceled_count,
+        COALESCE(SUM(CASE WHEN t.state = 2 THEN t.amount_tiyin ELSE 0 END), 0)::bigint AS performed_sum,
+        COALESCE(SUM(CASE WHEN t.state IN (-1, -2) THEN t.amount_tiyin ELSE 0 END), 0)::bigint AS canceled_sum,
+        MAX(COALESCE(t.perform_time, t.create_time, 0)) AS last_payme_time
+      FROM payme_transactions t
+      INNER JOIN topup_orders o ON o.id = t.order_id
+      WHERE o.client_id = $1
+    `,
+      [clientId]
+    );
+
     const balance = await getBalanceFromLedger(pool, clientId);
 
     return res.json({
@@ -260,7 +299,17 @@ async function getClientContactBalance(req, res) {
         last_operation_at: null,
         ledger_rows: 0,
       },
+      payme_stats: paymeStatsQ.rows[0] || {
+        tx_count: 0,
+        created_count: 0,
+        performed_count: 0,
+        canceled_count: 0,
+        performed_sum: 0,
+        canceled_sum: 0,
+        last_payme_time: null,
+      },
       ledger: ledgerQ.rows,
+      payme_transactions: paymeQ.rows,
     });
   } catch (e) {
     console.error("getClientContactBalance error:", e);
@@ -301,13 +350,10 @@ async function adjustClientContactBalance(req, res) {
 
     const fields = [];
     const values = [];
-    let i = 1;
 
     function push(col, val) {
       fields.push(col);
       values.push(val);
-      i += 1;
-      return `$${i - 1}`;
     }
 
     push("client_id", clientId);
