@@ -1,7 +1,7 @@
 // frontend/src/pages/admin/PaymeLab.jsx
 
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { apiGet, apiPost } from "../../api";
 import { tError, tSuccess } from "../../shared/toast";
 
@@ -121,7 +121,81 @@ function timelineDotTone(tone) {
   return "bg-gray-300";
 }
 
+function parseMaybeJson(x) {
+  if (x == null) return null;
+  if (typeof x === "object") return x;
+  const s = String(x).trim();
+  if (!s) return null;
+  try {
+    return JSON.parse(s);
+  } catch {
+    return s;
+  }
+}
+
+function pickFirstDefined(obj, keys) {
+  for (const k of keys) {
+    if (obj && obj[k] !== undefined && obj[k] !== null && obj[k] !== "") {
+      return obj[k];
+    }
+  }
+  return null;
+}
+
+function extractRawPayload(eventRow) {
+  if (!eventRow || typeof eventRow !== "object") {
+    return {
+      request: null,
+      response: null,
+      error: null,
+    };
+  }
+
+  const request = parseMaybeJson(
+    pickFirstDefined(eventRow, [
+      "request_body",
+      "request_payload",
+      "request_json",
+      "req_body",
+      "req_payload",
+      "payload",
+      "params",
+      "request",
+      "rpc",
+      "body",
+    ])
+  );
+
+  const response = parseMaybeJson(
+    pickFirstDefined(eventRow, [
+      "response_body",
+      "response_payload",
+      "response_json",
+      "res_body",
+      "res_payload",
+      "result",
+      "response",
+      "rpc_result",
+      "data",
+    ])
+  );
+
+  const error = parseMaybeJson(
+    pickFirstDefined(eventRow, [
+      "error_body",
+      "error_payload",
+      "error_json",
+      "error",
+      "error_message",
+      "exception",
+    ])
+  );
+
+  return { request, response, error };
+}
+
 export default function PaymeLab({ embedded = false, seed = null } = {}) {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
   const [orderId, setOrderId] = useState("11");
@@ -168,6 +242,24 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
   const [inspectorEvents, setInspectorEvents] = useState([]);
   const [inspectorEventsLoading, setInspectorEventsLoading] = useState(false);
   const [inspectorEventsErr, setInspectorEventsErr] = useState("");
+
+  const [openRpcRaw, setOpenRpcRaw] = useState({});
+
+  function toggleRpcRaw(method) {
+    setOpenRpcRaw((prev) => ({
+      ...prev,
+      [method]: !prev[method],
+    }));
+  }
+
+  function openInHealthByPaymeId(id) {
+    const paymeId2 = String(id || "").trim();
+    if (!paymeId2) {
+      tError("Нет payme_id для перехода в Health");
+      return;
+    }
+    navigate(`/admin/finance?tab=payme&payme_id=${encodeURIComponent(paymeId2)}`);
+  }
 
   useEffect(() => {
     const s = normalizeSeed(seed);
@@ -918,6 +1010,21 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
         ts = begin?.created_at || null;
       }
 
+      const beginRaw = extractRawPayload(begin);
+      const endRaw = extractRawPayload(end);
+      const errorRaw = extractRawPayload(error);
+
+      const hasAnyRaw =
+        beginRaw.request ||
+        beginRaw.response ||
+        beginRaw.error ||
+        endRaw.request ||
+        endRaw.response ||
+        endRaw.error ||
+        errorRaw.request ||
+        errorRaw.response ||
+        errorRaw.error;
+
       return {
         method,
         begin,
@@ -927,6 +1034,12 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
         desc,
         ts,
         count: events.length,
+        hasAnyRaw: !!hasAnyRaw,
+        raw: {
+          begin: beginRaw,
+          end: endRaw,
+          error: errorRaw,
+        },
       };
     });
   }, [inspectorEvents]);
@@ -1116,6 +1229,15 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
               {orderSummary.latestTx?.state === 2 && orderSummary.ledger.length === 0
                 ? badgePill("bad", "LOST_PAYMENT")
                 : null}
+              {orderSummary.latestTx?.payme_id ? (
+                <button
+                  type="button"
+                  className="px-2.5 py-1 rounded border bg-white text-xs"
+                  onClick={() => openInHealthByPaymeId(orderSummary.latestTx.payme_id)}
+                >
+                  Open in Health
+                </button>
+              ) : null}
             </div>
           )}
 
@@ -1158,6 +1280,15 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
                   ) : (
                     <span className="text-xs text-gray-500">events: {inspectorEvents.length}</span>
                   )}
+                  {orderSummary.latestTx?.payme_id ? (
+                    <button
+                      type="button"
+                      className="px-2.5 py-1.5 rounded-lg border bg-white text-xs"
+                      onClick={() => openInHealthByPaymeId(orderSummary.latestTx.payme_id)}
+                    >
+                      Open latest tx in Health
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     className="px-2.5 py-1.5 rounded-lg border bg-white text-xs"
@@ -1206,6 +1337,15 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
                       {item.end ? badgePill("ok", "end") : null}
                       {item.error ? badgePill("bad", "error") : null}
                       {item.count ? badgePill("black", `rows: ${item.count}`) : null}
+                      {item.hasAnyRaw ? (
+                        <button
+                          type="button"
+                          className="px-2 py-0.5 rounded border bg-white text-[11px]"
+                          onClick={() => toggleRpcRaw(item.method)}
+                        >
+                          {openRpcRaw[item.method] ? "Hide raw" : "Open raw"}
+                        </button>
+                      ) : null}
                     </div>
 
                     {(item.begin || item.end || item.error) && (
@@ -1231,6 +1371,115 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
                         ) : null}
                       </div>
                     )}
+
+                    {openRpcRaw[item.method] && item.hasAnyRaw ? (
+                      <div className="mt-3 space-y-3">
+                        <div className="border rounded-lg bg-white p-3">
+                          <div className="text-xs font-medium text-gray-700 mb-2">Raw begin</div>
+                          <div className="space-y-2">
+                            {item.raw.begin.request ? (
+                              <div>
+                                <div className="text-[11px] text-gray-500 mb-1">request</div>
+                                <pre className="text-[11px] bg-gray-50 border rounded p-2 overflow-auto">
+                                  {pretty(item.raw.begin.request)}
+                                </pre>
+                              </div>
+                            ) : null}
+                            {item.raw.begin.response ? (
+                              <div>
+                                <div className="text-[11px] text-gray-500 mb-1">response</div>
+                                <pre className="text-[11px] bg-gray-50 border rounded p-2 overflow-auto">
+                                  {pretty(item.raw.begin.response)}
+                                </pre>
+                              </div>
+                            ) : null}
+                            {item.raw.begin.error ? (
+                              <div>
+                                <div className="text-[11px] text-gray-500 mb-1">error</div>
+                                <pre className="text-[11px] bg-gray-50 border rounded p-2 overflow-auto">
+                                  {pretty(item.raw.begin.error)}
+                                </pre>
+                              </div>
+                            ) : null}
+                            {!item.raw.begin.request &&
+                            !item.raw.begin.response &&
+                            !item.raw.begin.error ? (
+                              <div className="text-[11px] text-gray-400">Нет raw begin payload</div>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        <div className="border rounded-lg bg-white p-3">
+                          <div className="text-xs font-medium text-gray-700 mb-2">Raw end</div>
+                          <div className="space-y-2">
+                            {item.raw.end.request ? (
+                              <div>
+                                <div className="text-[11px] text-gray-500 mb-1">request</div>
+                                <pre className="text-[11px] bg-gray-50 border rounded p-2 overflow-auto">
+                                  {pretty(item.raw.end.request)}
+                                </pre>
+                              </div>
+                            ) : null}
+                            {item.raw.end.response ? (
+                              <div>
+                                <div className="text-[11px] text-gray-500 mb-1">response</div>
+                                <pre className="text-[11px] bg-gray-50 border rounded p-2 overflow-auto">
+                                  {pretty(item.raw.end.response)}
+                                </pre>
+                              </div>
+                            ) : null}
+                            {item.raw.end.error ? (
+                              <div>
+                                <div className="text-[11px] text-gray-500 mb-1">error</div>
+                                <pre className="text-[11px] bg-gray-50 border rounded p-2 overflow-auto">
+                                  {pretty(item.raw.end.error)}
+                                </pre>
+                              </div>
+                            ) : null}
+                            {!item.raw.end.request &&
+                            !item.raw.end.response &&
+                            !item.raw.end.error ? (
+                              <div className="text-[11px] text-gray-400">Нет raw end payload</div>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        <div className="border rounded-lg bg-white p-3">
+                          <div className="text-xs font-medium text-gray-700 mb-2">Raw error</div>
+                          <div className="space-y-2">
+                            {item.raw.error.request ? (
+                              <div>
+                                <div className="text-[11px] text-gray-500 mb-1">request</div>
+                                <pre className="text-[11px] bg-gray-50 border rounded p-2 overflow-auto">
+                                  {pretty(item.raw.error.request)}
+                                </pre>
+                              </div>
+                            ) : null}
+                            {item.raw.error.response ? (
+                              <div>
+                                <div className="text-[11px] text-gray-500 mb-1">response</div>
+                                <pre className="text-[11px] bg-gray-50 border rounded p-2 overflow-auto">
+                                  {pretty(item.raw.error.response)}
+                                </pre>
+                              </div>
+                            ) : null}
+                            {item.raw.error.error ? (
+                              <div>
+                                <div className="text-[11px] text-gray-500 mb-1">error</div>
+                                <pre className="text-[11px] bg-gray-50 border rounded p-2 overflow-auto">
+                                  {pretty(item.raw.error.error)}
+                                </pre>
+                              </div>
+                            ) : null}
+                            {!item.raw.error.request &&
+                            !item.raw.error.response &&
+                            !item.raw.error.error ? (
+                              <div className="text-[11px] text-gray-400">Нет raw error payload</div>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 ))}
               </div>
