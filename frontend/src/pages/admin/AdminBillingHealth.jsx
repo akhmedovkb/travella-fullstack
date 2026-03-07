@@ -410,6 +410,7 @@ export default function AdminBillingHealth() {
                 <tr>
                   <th className="text-left px-3 py-2">payme_id</th>
                   <th className="text-left px-3 py-2">order_id</th>
+                  <th className="text-left px-3 py-2">client_id</th>
                   <th className="text-left px-3 py-2">tx_state</th>
                   <th className="text-left px-3 py-2">order_status</th>
                   <th className="text-left px-3 py-2">problem</th>
