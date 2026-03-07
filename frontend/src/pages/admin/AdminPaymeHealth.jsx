@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost } from "../../api";
 import { tError, tSuccess } from "../../shared/toast";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import AdminPaymeEvents from "./AdminPaymeEvents";
 import PaymeLab from "./PaymeLab";
 import PaymeDashboard from "./PaymeDashboard";
@@ -45,6 +45,7 @@ function badge(status) {
 
 export default function AdminPaymeHealth() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [q, setQ] = useState("");
   const [onlyBad, setOnlyBad] = useState(true);
   const [limit, setLimit] = useState(200);
@@ -59,15 +60,39 @@ export default function AdminPaymeHealth() {
 
   const canLoad = useMemo(() => true, []);
 
-  async function load() {
+  async function load(qOverride = null) {
     if (!canLoad) return;
     setLoading(true);
     try {
+      const qValue =
+        qOverride !== null ? String(qOverride || "").trim() : String(q || "").trim();
+
       const url = `/api/admin/payme/health?limit=${encodeURIComponent(limit)}&onlyBad=${
         onlyBad ? 1 : 0
-      }&q=${encodeURIComponent(String(q || "").trim())}`;
+      }&q=${encodeURIComponent(qValue)}`;
+
       const data = await apiGet(url, "admin");
-      setRows(Array.isArray(data?.rows) ? data.rows : Array.isArray(data) ? data : []);
+      const nextRows = Array.isArray(data?.rows) ? data.rows : Array.isArray(data) ? data : [];
+      setRows(nextRows);
+
+      if (qValue) {
+        const exact =
+          nextRows.find((r) => String(r?.payme_id || "") === qValue) ||
+          nextRows.find((r) => String(r?.order_id || "") === qValue);
+
+        if (exact) {
+          setSelected(exact);
+          try {
+            const detailsData = await apiGet(
+              `/api/admin/payme/tx/${encodeURIComponent(exact.payme_id)}`,
+              "admin"
+            );
+            setDetails(detailsData);
+          } catch (e) {
+            console.error(e);
+          }
+        }
+      }
     } catch (e) {
       console.error(e);
       tError("Не удалось загрузить Payme Health");
@@ -131,6 +156,15 @@ export default function AdminPaymeHealth() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+    useEffect(() => {
+    const qpPaymeId = String(searchParams.get("payme_id") || "").trim();
+    if (!qpPaymeId) return;
+
+    setQ(qpPaymeId);
+    load(qpPaymeId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+  
   return (
     <div className="p-4 md:p-6">
       {/* Header + Tabs */}
