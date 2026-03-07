@@ -1,10 +1,16 @@
-//backend/controllers/clientBillingController.js
-  
+// backend/controllers/clientBillingController.js
 const pool = require("../db");
 
 const CONTACT_UNLOCK_PRICE = Number(process.env.CONTACT_UNLOCK_PRICE || 10000);
 
 let _clientsBalanceColumn = null;
+
+function clampInt(x, def, min, max) {
+  const n = Number(x);
+  if (!Number.isFinite(n)) return def;
+  const i = Math.trunc(n);
+  return Math.max(min, Math.min(max, i));
+}
 
 async function getClientsBalanceColumn(client) {
   if (_clientsBalanceColumn !== null) return _clientsBalanceColumn;
@@ -12,15 +18,17 @@ async function getClientsBalanceColumn(client) {
   const r = await client.query(`
     SELECT column_name
     FROM information_schema.columns
-    WHERE table_name='clients'
+    WHERE table_schema='public' AND table_name='clients'
   `);
 
   const names = r.rows.map((x) => x.column_name);
 
   const candidates = [
     "contact_balance",
+    "contact_balance_tiyin",
+    "balance_tiyin",
     "balance",
-    "wallet_balance"
+    "wallet_balance",
   ];
 
   for (const c of candidates) {
@@ -65,8 +73,37 @@ async function syncClientBalanceMirror(client, clientId) {
   return balance;
 }
 
-async function getClientBalance(req, res) {
-  const clientId = req.user.id;
+function buildPaymeCheckoutUrl({
+  merchantId,
+  checkoutBase,
+  orderId,
+  amountTiyin,
+  lang,
+  callbackUrl,
+}) {
+  const parts = [
+    `m=${merchantId}`,
+    `ac.order_id=${orderId}`,
+    `a=${amountTiyin}`,
+    `l=${lang || "ru"}`,
+  ];
+
+  if (callbackUrl) {
+    parts.push(`c=${callbackUrl}`);
+  }
+
+  const params = parts.join(";");
+  const encoded = Buffer.from(params, "utf8").toString("base64");
+
+  return `${String(checkoutBase || "https://checkout.paycom.uz").replace(/\/+$/, "")}/${encoded}`;
+}
+
+async function clientBalance(req, res) {
+  const clientId = req.user?.id;
+
+  if (!clientId) {
+    return res.status(401).json({ ok: false, message: "Unauthorized" });
+  }
 
   try {
     const client = await pool.connect();
@@ -74,26 +111,172 @@ async function getClientBalance(req, res) {
     try {
       const balance = await getBalanceFromLedger(client, clientId);
 
-      res.json({
+      return res.json({
         ok: true,
         balance,
-        unlock_price: CONTACT_UNLOCK_PRICE
+        unlock_price: CONTACT_UNLOCK_PRICE,
       });
     } finally {
       client.release();
     }
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ ok: false });
+    console.error("clientBalance error:", e);
+    return res.status(500).json({ ok: false });
+  }
+}
+
+async function clientBalanceLedger(req, res) {
+  const clientId = req.user?.id;
+
+  if (!clientId) {
+    return res.status(401).json({ ok: false, message: "Unauthorized" });
+  }
+
+  const limit = clampInt(req.query.limit, 50, 1, 200);
+  const offset = clampInt(req.query.offset, 0, 0, 1000000);
+
+  try {
+    const { rows } = await pool.query(
+      `
+      SELECT
+        id,
+        client_id,
+        amount,
+        reason,
+        source,
+        service_id,
+        meta,
+        created_at
+      FROM contact_balance_ledger
+      WHERE client_id = $1
+      ORDER BY created_at DESC, id DESC
+      LIMIT $2 OFFSET $3
+      `,
+      [clientId, limit, offset]
+    );
+
+    const balance = await (async () => {
+      const client = await pool.connect();
+      try {
+        return await getBalanceFromLedger(client, clientId);
+      } finally {
+        client.release();
+      }
+    })();
+
+    return res.json({
+      ok: true,
+      rows,
+      limit,
+      offset,
+      balance,
+      unlock_price: CONTACT_UNLOCK_PRICE,
+    });
+  } catch (e) {
+    console.error("clientBalanceLedger error:", e);
+    return res.status(500).json({ ok: false, message: "Internal error" });
+  }
+}
+
+async function createTopupOrder(req, res) {
+  const clientId = req.user?.id;
+
+  if (!clientId) {
+    return res.status(401).json({ ok: false, message: "Unauthorized" });
+  }
+
+  const amountSum = Math.trunc(Number(req.body?.amount));
+  if (!Number.isFinite(amountSum) || amountSum <= 0) {
+    return res.status(400).json({ ok: false, message: "Bad amount" });
+  }
+
+  const amountTiyin = amountSum * 100;
+
+  const MERCHANT_ID = process.env.PAYME_MERCHANT_ID || "";
+  const CHECKOUT_URL =
+    process.env.PAYME_CHECKOUT_URL || "https://checkout.paycom.uz";
+  const SITE_PUBLIC =
+    process.env.SITE_PUBLIC_URL || process.env.SITE_URL || "";
+
+  if (!MERCHANT_ID || !SITE_PUBLIC) {
+    return res.status(500).json({
+      ok: false,
+      message: "Payme is not configured",
+    });
+  }
+
+  const db = await pool.connect();
+
+  try {
+    await db.query("BEGIN");
+
+    const existsQ = await db.query(
+      `SELECT id FROM clients WHERE id = $1 LIMIT 1`,
+      [clientId]
+    );
+
+    if (!existsQ.rows.length) {
+      await db.query("ROLLBACK");
+      return res.status(404).json({ ok: false, message: "Client not found" });
+    }
+
+    const ins = await db.query(
+      `
+      INSERT INTO topup_orders (client_id, amount_tiyin, provider, status)
+      VALUES ($1, $2, 'payme', 'new')
+      RETURNING id, client_id, amount_tiyin, status, created_at
+      `,
+      [clientId, amountTiyin]
+    );
+
+    const order = ins.rows[0];
+
+    const callbackUrl = `${String(SITE_PUBLIC).replace(/\/+$/, "")}/client/balance?order_id=${order.id}`;
+
+    const pay_url = buildPaymeCheckoutUrl({
+      merchantId: MERCHANT_ID,
+      checkoutBase: CHECKOUT_URL,
+      orderId: order.id,
+      amountTiyin,
+      lang: "ru",
+      callbackUrl,
+    });
+
+    await db.query("COMMIT");
+
+    return res.json({
+      ok: true,
+      order: {
+        id: Number(order.id),
+        client_id: Number(order.client_id),
+        amount_tiyin: Number(order.amount_tiyin),
+        amount_sum: Math.trunc(Number(order.amount_tiyin) / 100),
+        status: order.status,
+        created_at: order.created_at,
+      },
+      pay_url,
+    });
+  } catch (e) {
+    try {
+      await db.query("ROLLBACK");
+    } catch {}
+    console.error("createTopupOrder error:", e);
+    return res.status(500).json({ ok: false, message: "Internal error" });
+  } finally {
+    db.release();
   }
 }
 
 async function unlockContact(req, res) {
-  const clientId = req.user.id;
-  const serviceId = Number(req.body.service_id);
+  const clientId = req.user?.id;
+  const serviceId = Number(req.body?.service_id);
+
+  if (!clientId) {
+    return res.status(401).json({ ok: false, message: "Unauthorized" });
+  }
 
   if (!serviceId) {
-    return res.status(400).json({ ok: false });
+    return res.status(400).json({ ok: false, message: "Bad service_id" });
   }
 
   const client = await pool.connect();
@@ -102,6 +285,8 @@ async function unlockContact(req, res) {
     await client.query("BEGIN");
 
     const price = CONTACT_UNLOCK_PRICE;
+
+    await client.query(`SELECT id FROM clients WHERE id=$1 FOR UPDATE`, [clientId]);
 
     const existing = await client.query(
       `
@@ -117,12 +302,14 @@ async function unlockContact(req, res) {
     if (existing.rows.length) {
       const balance = await getBalanceFromLedger(client, clientId);
 
-      await client.query("ROLLBACK");
+      await client.query("COMMIT");
 
       return res.json({
         ok: true,
         already: true,
-        balance
+        unlocked: true,
+        charged: 0,
+        balance,
       });
     }
 
@@ -134,7 +321,33 @@ async function unlockContact(req, res) {
       return res.status(400).json({
         ok: false,
         error: "not_enough_balance",
-        balance
+        balance,
+        need: price,
+      });
+    }
+
+    const unlockInsert = await client.query(
+      `
+      INSERT INTO client_service_contact_unlocks
+      (client_id, service_id, price_charged)
+      VALUES ($1,$2,$3)
+      ON CONFLICT (client_id, service_id) DO NOTHING
+      RETURNING id
+      `,
+      [clientId, serviceId, price]
+    );
+
+    if (!unlockInsert.rows.length) {
+      const newBalance = await getBalanceFromLedger(client, clientId);
+
+      await client.query("COMMIT");
+
+      return res.json({
+        ok: true,
+        already: true,
+        unlocked: true,
+        charged: 0,
+        balance: newBalance,
       });
     }
 
@@ -148,37 +361,39 @@ async function unlockContact(req, res) {
         clientId,
         -price,
         serviceId,
-        JSON.stringify({ service_id: serviceId })
+        JSON.stringify({
+          service_id: serviceId,
+          unlock_id: unlockInsert.rows[0].id,
+          channel: "web",
+        }),
       ]
-    );
-
-    await client.query(
-      `
-      INSERT INTO client_service_contact_unlocks
-      (client_id, service_id)
-      VALUES ($1,$2)
-      `,
-      [clientId, serviceId]
     );
 
     const newBalance = await syncClientBalanceMirror(client, clientId);
 
     await client.query("COMMIT");
 
-    res.json({
+    return res.json({
       ok: true,
-      balance: newBalance
+      unlocked: true,
+      already: false,
+      charged: price,
+      balance: newBalance,
     });
   } catch (e) {
-    await client.query("ROLLBACK");
-    console.error(e);
-    res.status(500).json({ ok: false });
+    try {
+      await client.query("ROLLBACK");
+    } catch {}
+    console.error("unlockContact error:", e);
+    return res.status(500).json({ ok: false });
   } finally {
     client.release();
   }
 }
 
 module.exports = {
-  getClientBalance,
-  unlockContact
+  clientBalance,
+  clientBalanceLedger,
+  createTopupOrder,
+  unlockContact,
 };
