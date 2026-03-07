@@ -33,7 +33,7 @@ const clientBillingRoutes = require("./routes/clientBillingRoutes");
 
 dotenv.config();
 const app = express();
-
+app.set("trust proxy", 1);
 
 // Telegram health (passive) on boot — no network calls
 getTelegramHealth({ probe: false })
