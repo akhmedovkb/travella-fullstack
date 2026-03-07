@@ -394,9 +394,17 @@ async function run(method, params) {
   }
 }
 
-  function buildCheck() {
-    return { amount: parsed.amount, account: { order_id: parsed.orderId } };
+  function buildCreate() {
+    return {
+      id: parsed.paymeId,
+      time: nowMs(),
+      amount: parsed.amount,
+      account: {
+        order_id: Number(parsed.orderId),
+      },
+    };
   }
+  
   function buildCreate() {
     return {
       id: parsed.paymeId,
