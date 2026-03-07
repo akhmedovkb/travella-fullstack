@@ -65,8 +65,10 @@ function problemBadge(problemType) {
   const p = String(problemType || "").toUpperCase();
 
   if (p === "LOST_PAYMENT") return <Badge kind="red">LOST_PAYMENT</Badge>;
-  if (p === "CANCELED_BUT_ORDER_PAID") return <Badge kind="orange">CANCELED_BUT_ORDER_PAID</Badge>;
-  if (p === "ORDER_STATUS_MISMATCH") return <Badge kind="yellow">ORDER_STATUS_MISMATCH</Badge>;
+  if (p === "CANCELED_BUT_ORDER_PAID")
+    return <Badge kind="orange">CANCELED_BUT_ORDER_PAID</Badge>;
+  if (p === "ORDER_STATUS_MISMATCH")
+    return <Badge kind="yellow">ORDER_STATUS_MISMATCH</Badge>;
   if (p === "TX_OK_ORDER_BAD") return <Badge kind="purple">TX_OK_ORDER_BAD</Badge>;
   return <Badge kind="gray">{p || "UNKNOWN"}</Badge>;
 }
@@ -76,6 +78,7 @@ export default function AdminBillingHealth() {
   const [repairingAll, setRepairingAll] = useState(false);
   const [repairingClientId, setRepairingClientId] = useState(null);
   const [repairingPaymeId, setRepairingPaymeId] = useState(null);
+  const [brokenFilter, setBrokenFilter] = useState("ALL");
   const [data, setData] = useState(null);
 
   async function load() {
@@ -125,7 +128,11 @@ export default function AdminBillingHealth() {
     if (!paymeId) return;
     setRepairingPaymeId(paymeId);
     try {
-      const res = await apiPost(`/api/admin/payme/repair/${encodeURIComponent(paymeId)}`, {}, "admin");
+      const res = await apiPost(
+        `/api/admin/payme/repair/${encodeURIComponent(paymeId)}`,
+        {},
+        "admin"
+      );
       if (res?.already) tSuccess("Ledger уже был (idempotent)");
       else tSuccess("Ledger repaired");
       await load();
@@ -176,6 +183,32 @@ export default function AdminBillingHealth() {
     };
   }, [data]);
 
+  const brokenProblemCounts = useMemo(() => {
+    const out = {
+      ALL: stats.brokenPayme.length,
+      LOST_PAYMENT: 0,
+      CANCELED_BUT_ORDER_PAID: 0,
+      ORDER_STATUS_MISMATCH: 0,
+      TX_OK_ORDER_BAD: 0,
+      UNKNOWN: 0,
+    };
+
+    for (const r of stats.brokenPayme) {
+      const key = String(r?.problem_type || "UNKNOWN").toUpperCase();
+      if (out[key] === undefined) out.UNKNOWN += 1;
+      else out[key] += 1;
+    }
+
+    return out;
+  }, [stats.brokenPayme]);
+
+  const filteredBrokenPayme = useMemo(() => {
+    if (brokenFilter === "ALL") return stats.brokenPayme;
+    return stats.brokenPayme.filter(
+      (r) => String(r?.problem_type || "UNKNOWN").toUpperCase() === brokenFilter
+    );
+  }, [stats.brokenPayme, brokenFilter]);
+
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-xl shadow p-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -214,28 +247,44 @@ export default function AdminBillingHealth() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl shadow p-4">
           <div className="text-sm text-gray-500">Ledger mismatch</div>
-          <div className={`mt-2 text-2xl font-semibold ${stats.ledgerMismatch.length ? "text-red-600" : "text-gray-900"}`}>
+          <div
+            className={`mt-2 text-2xl font-semibold ${
+              stats.ledgerMismatch.length ? "text-red-600" : "text-gray-900"
+            }`}
+          >
             {stats.ledgerMismatch.length}
           </div>
         </div>
 
         <div className="bg-white rounded-xl shadow p-4">
           <div className="text-sm text-gray-500">Double unlock</div>
-          <div className={`mt-2 text-2xl font-semibold ${stats.doubleUnlock.length ? "text-red-600" : "text-gray-900"}`}>
+          <div
+            className={`mt-2 text-2xl font-semibold ${
+              stats.doubleUnlock.length ? "text-red-600" : "text-gray-900"
+            }`}
+          >
             {stats.doubleUnlock.length}
           </div>
         </div>
 
         <div className="bg-white rounded-xl shadow p-4">
           <div className="text-sm text-gray-500">Broken Payme</div>
-          <div className={`mt-2 text-2xl font-semibold ${stats.brokenPayme.length ? "text-red-600" : "text-gray-900"}`}>
+          <div
+            className={`mt-2 text-2xl font-semibold ${
+              stats.brokenPayme.length ? "text-red-600" : "text-gray-900"
+            }`}
+          >
             {stats.brokenPayme.length}
           </div>
         </div>
 
         <div className="bg-white rounded-xl shadow p-4">
           <div className="text-sm text-gray-500">Orphan orders</div>
-          <div className={`mt-2 text-2xl font-semibold ${stats.orphanOrders.length ? "text-red-600" : "text-gray-900"}`}>
+          <div
+            className={`mt-2 text-2xl font-semibold ${
+              stats.orphanOrders.length ? "text-red-600" : "text-gray-900"
+            }`}
+          >
             {stats.orphanOrders.length}
           </div>
         </div>
@@ -315,12 +364,36 @@ export default function AdminBillingHealth() {
 
       <Box
         title="Broken Payme"
-        count={stats.brokenPayme.length}
-        kind={stats.brokenPayme.length ? "red" : "green"}
+        count={filteredBrokenPayme.length}
+        kind={filteredBrokenPayme.length ? "red" : "green"}
+        right={
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              className="border rounded-lg px-3 py-1.5 text-sm bg-white"
+              value={brokenFilter}
+              onChange={(e) => setBrokenFilter(e.target.value)}
+            >
+              <option value="ALL">All ({brokenProblemCounts.ALL})</option>
+              <option value="LOST_PAYMENT">
+                LOST_PAYMENT ({brokenProblemCounts.LOST_PAYMENT})
+              </option>
+              <option value="CANCELED_BUT_ORDER_PAID">
+                CANCELED_BUT_ORDER_PAID ({brokenProblemCounts.CANCELED_BUT_ORDER_PAID})
+              </option>
+              <option value="ORDER_STATUS_MISMATCH">
+                ORDER_STATUS_MISMATCH ({brokenProblemCounts.ORDER_STATUS_MISMATCH})
+              </option>
+              <option value="TX_OK_ORDER_BAD">
+                TX_OK_ORDER_BAD ({brokenProblemCounts.TX_OK_ORDER_BAD})
+              </option>
+              <option value="UNKNOWN">UNKNOWN ({brokenProblemCounts.UNKNOWN})</option>
+            </select>
+          </div>
+        }
       >
-        {stats.brokenPayme.length === 0 ? (
+        {filteredBrokenPayme.length === 0 ? (
           <div className="text-sm text-gray-500">
-            Неконсистентных Payme transaction / order status не найдено.
+            Для выбранного фильтра проблем нет.
           </div>
         ) : (
           <div className="overflow-auto">
@@ -336,7 +409,7 @@ export default function AdminBillingHealth() {
                 </tr>
               </thead>
               <tbody>
-                {stats.brokenPayme.map((r, idx) => (
+                {filteredBrokenPayme.map((r, idx) => (
                   <tr key={`${r.payme_id}_${idx}`} className="border-t">
                     <td className="px-3 py-2 break-all">{r.payme_id}</td>
                     <td className="px-3 py-2">{r.order_id}</td>
