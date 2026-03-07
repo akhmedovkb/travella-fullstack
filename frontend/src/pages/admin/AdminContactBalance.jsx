@@ -70,6 +70,7 @@ export default function AdminContactBalance() {
   const [loading, setLoading] = useState(false);
   const [balance, setBalance] = useState(0);
   const [ledger, setLedger] = useState([]);
+  const [stats, setStats] = useState(null);
 
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("admin_adjust");
@@ -97,16 +98,22 @@ export default function AdminContactBalance() {
 
   async function loadClient(client) {
     if (!client?.id) return;
+
     setSelected(client);
     setLoading(true);
+
     try {
       const data = await apiGet(`/api/admin/clients/${client.id}/contact-balance`, "admin");
+
+      setSelected(data?.client || client);
       setBalance(toNum(data?.balance || 0));
+      setStats(data?.stats || null);
       setLedger(Array.isArray(data?.ledger) ? data.ledger : data?.items || data?.rows || []);
     } catch (e) {
       console.error(e);
       tError("Не удалось загрузить баланс клиента");
       setBalance(0);
+      setStats(null);
       setLedger([]);
     } finally {
       setLoading(false);
@@ -154,7 +161,7 @@ export default function AdminContactBalance() {
     return () => window.removeEventListener("keydown", onKey);
   }, [canSearch]);
 
-  const stats = useMemo(() => {
+  const fallbackStats = useMemo(() => {
     const rows = Array.isArray(ledger) ? ledger : [];
 
     let totalIn = 0;
@@ -196,20 +203,22 @@ export default function AdminContactBalance() {
     const lastOperationAt = rows.length ? rows[0]?.created_at || null : null;
 
     return {
-      totalIn,
-      totalOut,
-      unlockCount,
-      topupCount,
-      refundCount,
-      adminAdjustCount,
-      topupSum,
-      refundSum,
-      unlockSum,
-      adminAdjustSum,
-      lastOperationAt,
-      rowsCount: rows.length,
+      total_in: totalIn,
+      total_out: totalOut,
+      unlock_count: unlockCount,
+      topup_count: topupCount,
+      refund_count: refundCount,
+      admin_adjust_count: adminAdjustCount,
+      topup_sum: topupSum,
+      refund_sum: refundSum,
+      unlock_sum: unlockSum,
+      admin_adjust_sum: adminAdjustSum,
+      last_operation_at: lastOperationAt,
+      ledger_rows: rows.length,
     };
   }, [ledger]);
+
+  const s = stats || fallbackStats;
 
   const selectedTitle = selected
     ? selected.full_name || selected.name || selected.username || `Client #${selected.id}`
@@ -220,7 +229,7 @@ export default function AdminContactBalance() {
       <div>
         <h1 className="text-xl font-semibold">Clients</h1>
         <p className="text-sm text-gray-500">
-          Основная рабочая страница: поиск клиента → баланс → статистика → корректировка → ledger.
+          Одна рабочая страница по клиенту: баланс, статистика, корректировка и ledger.
         </p>
       </div>
 
@@ -317,7 +326,7 @@ export default function AdminContactBalance() {
                   {loading ? "…" : `${money(balance)} сум`}
                 </div>
                 <div className="mt-2 text-xs text-gray-400">
-                  last operation: {fmtTs(stats.lastOperationAt)}
+                  last operation: {fmtTs(s?.last_operation_at)}
                 </div>
               </div>
             </div>
@@ -326,42 +335,42 @@ export default function AdminContactBalance() {
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
             <StatCard
               title="Total in"
-              value={money(stats.totalIn)}
+              value={money(s?.total_in)}
               tone="green"
-              subtitle={`topups: ${stats.topupCount}`}
+              subtitle={`topups: ${toNum(s?.topup_count)}`}
             />
             <StatCard
               title="Total out"
-              value={money(stats.totalOut)}
+              value={money(s?.total_out)}
               tone="red"
-              subtitle={`refunds + unlocks + other debits`}
+              subtitle="refunds + unlocks + debits"
             />
             <StatCard
               title="Unlocks"
-              value={String(stats.unlockCount)}
-              subtitle={`sum: ${money(stats.unlockSum)}`}
+              value={String(toNum(s?.unlock_count))}
+              subtitle={`sum: ${money(s?.unlock_sum)}`}
             />
             <StatCard
               title="Refunds"
-              value={String(stats.refundCount)}
-              subtitle={`sum: ${money(stats.refundSum)}`}
+              value={String(toNum(s?.refund_count))}
+              subtitle={`sum: ${money(s?.refund_sum)}`}
             />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
             <StatCard
               title="Topups"
-              value={String(stats.topupCount)}
-              subtitle={`sum: ${money(stats.topupSum)}`}
+              value={String(toNum(s?.topup_count))}
+              subtitle={`sum: ${money(s?.topup_sum)}`}
             />
             <StatCard
               title="Admin adjust"
-              value={String(stats.adminAdjustCount)}
-              subtitle={`net: ${money(stats.adminAdjustSum)}`}
+              value={String(toNum(s?.admin_adjust_count))}
+              subtitle={`net: ${money(s?.admin_adjust_sum)}`}
             />
             <StatCard
               title="Ledger rows"
-              value={String(stats.rowsCount)}
+              value={String(toNum(s?.ledger_rows))}
             />
             <StatCard
               title="Mirror balance"
@@ -475,7 +484,7 @@ export default function AdminContactBalance() {
             <div className="p-3 border-b flex items-center justify-between">
               <div className="text-sm font-medium">Ledger клиента</div>
               <div className="text-xs text-gray-400">
-                последние {Math.min(ledger?.length || 0, 100)} записей
+                последние {Math.min(ledger?.length || 0, 200)} записей
               </div>
             </div>
 
@@ -493,7 +502,7 @@ export default function AdminContactBalance() {
                 </thead>
                 <tbody>
                   {ledger?.length ? (
-                    ledger.slice(0, 100).map((r, idx) => (
+                    ledger.slice(0, 200).map((r, idx) => (
                       <tr key={r.id || `${r.created_at}-${idx}`} className="border-t">
                         <td className="px-3 py-2 whitespace-nowrap">{fmtTs(r.created_at)}</td>
                         <td
