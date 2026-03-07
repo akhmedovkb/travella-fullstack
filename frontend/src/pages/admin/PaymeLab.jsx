@@ -1,6 +1,7 @@
 // frontend/src/pages/admin/PaymeLab.jsx
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { apiGet, apiPost } from "../../api";
 import { tError, tSuccess } from "../../shared/toast";
 
@@ -105,6 +106,7 @@ function healthStatusFromDetails(details) {
 }
 
 export default function PaymeLab({ embedded = false, seed = null } = {}) {
+  const [searchParams] = useSearchParams();
   const [orderId, setOrderId] = useState("11");
   const [amount, setAmount] = useState("100000");
   const [paymeId, setPaymeId] = useState(makeNewTxId());
@@ -330,6 +332,31 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
     refreshStatus(seedPaymeId, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seedPaymeId]);
+
+  useEffect(() => {
+    const qpSeedPaymeId = String(searchParams.get("seed_payme_id") || "").trim();
+    const qpOrderId = String(searchParams.get("order_id") || "").trim();
+    const qpAmount = String(searchParams.get("amount") || "").trim();
+
+    if (!qpSeedPaymeId && !qpOrderId && !qpAmount) return;
+
+    if (qpOrderId) {
+      setOrderId(qpOrderId);
+      setInspectOrderId(qpOrderId);
+    }
+
+    if (qpAmount) {
+      setAmount(qpAmount);
+    }
+
+    if (qpSeedPaymeId) {
+      setSeedPaymeId(qpSeedPaymeId);
+      setPaymeId(qpSeedPaymeId);
+      setTxMode("seed");
+      refreshStatus(qpSeedPaymeId, true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
 async function run(method, params) {
   setBusy(true);
