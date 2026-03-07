@@ -394,25 +394,28 @@ async function run(method, params) {
   }
 }
 
-  function buildCreate() {
+  function buildCheck() {
+    const oid = Number(parsed.orderId);
     return {
-      id: parsed.paymeId,
-      time: nowMs(),
       amount: parsed.amount,
       account: {
-        order_id: Number(parsed.orderId),
+        order_id: oid,
       },
     };
   }
   
   function buildCreate() {
+    const oid = Number(parsed.orderId);
     return {
       id: parsed.paymeId,
       time: nowMs(),
       amount: parsed.amount,
-      account: { order_id: parsed.orderId },
+      account: {
+        order_id: oid,
+      },
     };
   }
+  
   function buildPerform() {
     return { id: parsed.paymeId };
   }
