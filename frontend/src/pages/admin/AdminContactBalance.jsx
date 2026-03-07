@@ -566,6 +566,7 @@ export default function AdminContactBalance() {
                     <th className="text-left px-3 py-2">create</th>
                     <th className="text-left px-3 py-2">perform</th>
                     <th className="text-left px-3 py-2">cancel</th>
+                    <th className="text-left px-3 py-2">tools</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -582,6 +583,35 @@ export default function AdminContactBalance() {
                         <td className="px-3 py-2 whitespace-nowrap">{fmtMs(r.create_time)}</td>
                         <td className="px-3 py-2 whitespace-nowrap">{fmtMs(r.perform_time)}</td>
                         <td className="px-3 py-2 whitespace-nowrap">{fmtMs(r.cancel_time)}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          <div className="flex gap-2">
+                          
+                          <button
+                          className="text-xs px-2 py-1 border rounded hover:bg-gray-50"
+                          onClick={() =>
+                          window.open(
+                          `/admin/payme-health?payme_id=${encodeURIComponent(r.payme_id)}`,
+                          "_blank"
+                          )
+                          }
+                          >
+                          🔎 Health
+                          </button>
+                          
+                          <button
+                          className="text-xs px-2 py-1 border rounded hover:bg-gray-50"
+                          onClick={() =>
+                          window.open(
+                          `/admin/payme-lab?seed_payme_id=${encodeURIComponent(r.payme_id)}`,
+                          "_blank"
+                          )
+                          }
+                          >
+                          🧪 Lab
+                          </button>
+                          
+                          </div>
+                        </td>
                       </tr>
                     ))
                   ) : (
