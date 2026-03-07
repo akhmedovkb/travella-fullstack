@@ -539,21 +539,17 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
     };
   }, [txDetails, txMode]);
 
-  const Wrapper = ({ children }) =>
-    embedded ? (
-      <div>{children}</div>
-    ) : (
-      <div className="p-4 md:p-6">
-        <h1 className="text-xl font-semibold mb-1">Payme Lab (Admin)</h1>
-        <p className="text-sm text-gray-500 mb-4">
-          Merchant RPC + bank-grade status (payme_transactions ↔ ledger).
-        </p>
-        {children}
-      </div>
-    );
-
   return (
-    <Wrapper>
+    <div className={embedded ? "" : "p-4 md:p-6"}>
+      {!embedded && (
+        <>
+          <h1 className="text-xl font-semibold mb-1">Payme Lab (Admin)</h1>
+          <p className="text-sm text-gray-500 mb-4">
+            Merchant RPC + bank-grade status (payme_transactions ↔ ledger).
+          </p>
+        </>
+      )}
+
       <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
         <div>
           <div className="text-lg font-semibold">Payme Lab</div>
@@ -1126,6 +1122,6 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
           </div>
         </div>
       </div>
-    </Wrapper>
+    </div>
   );
 }
