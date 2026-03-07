@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost } from "../../api";
 import { tError, tSuccess } from "../../shared/toast";
+import AdminBillingHealth from "./AdminBillingHealth";
 
 function toNum(x) {
   const n = Number(x);
@@ -43,11 +44,6 @@ export default function AdminBilling() {
   const [summary, setSummary] = useState(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
 
-  const [clients, setClients] = useState([]);
-  const [clientsLoading, setClientsLoading] = useState(false);
-  const [clientsQ, setClientsQ] = useState("");
-  const [clientsLimit, setClientsLimit] = useState(100);
-
   const [ledger, setLedger] = useState([]);
   const [sortField, setSortField] = useState("created_at");
   const [sortDir, setSortDir] = useState("desc");
@@ -73,24 +69,6 @@ export default function AdminBilling() {
       setSummary(null);
     } finally {
       setSummaryLoading(false);
-    }
-  }
-
-  async function loadClients() {
-    setClientsLoading(true);
-    try {
-      const url = `/api/admin/billing/clients?limit=${encodeURIComponent(
-        clientsLimit
-      )}&q=${encodeURIComponent(String(clientsQ || "").trim())}`;
-
-      const data = await apiGet(url, "admin");
-      setClients(Array.isArray(data?.rows) ? data.rows : []);
-    } catch (e) {
-      console.error(e);
-      tError("Не удалось загрузить balances клиентов");
-      setClients([]);
-    } finally {
-      setClientsLoading(false);
     }
   }
 
@@ -152,7 +130,7 @@ export default function AdminBilling() {
       setAdjustAmount("");
       setAdjustNote("");
 
-      await Promise.all([loadSummary(), loadClients(), loadLedger()]);
+      await Promise.all([loadSummary(), loadLedger()]);
     } catch (e) {
       console.error(e);
       tError("Не удалось сделать корректировку");
@@ -194,11 +172,7 @@ export default function AdminBilling() {
       }
 
       if (av === bv) return 0;
-
-      if (sortDir === "asc") {
-        return av > bv ? 1 : -1;
-      }
-
+      if (sortDir === "asc") return av > bv ? 1 : -1;
       return av < bv ? 1 : -1;
     });
 
@@ -207,17 +181,16 @@ export default function AdminBilling() {
 
   useEffect(() => {
     loadSummary();
-    loadClients();
     loadLedger();
   }, []);
 
   return (
-    <div className="p-4 md:p-6 space-y-4">
+    <div className="space-y-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-xl font-semibold">Billing (Admin)</h1>
+          <h2 className="text-xl font-semibold">Audit</h2>
           <p className="text-sm text-gray-500">
-            Балансы клиентов, ledger и ручные корректировки
+            Summary — общая картина. Ledger — глобальный аудит. Health — integrity guard.
           </p>
         </div>
 
@@ -233,20 +206,20 @@ export default function AdminBilling() {
 
           <button
             className={`px-3 py-2 rounded-lg text-sm ${
-              tab === "clients" ? "bg-black text-white" : "border bg-white"
-            }`}
-            onClick={() => setTab("clients")}
-          >
-            Clients
-          </button>
-
-          <button
-            className={`px-3 py-2 rounded-lg text-sm ${
               tab === "ledger" ? "bg-black text-white" : "border bg-white"
             }`}
             onClick={() => setTab("ledger")}
           >
             Ledger
+          </button>
+
+          <button
+            className={`px-3 py-2 rounded-lg text-sm ${
+              tab === "health" ? "bg-black text-white" : "border bg-white"
+            }`}
+            onClick={() => setTab("health")}
+          >
+            Health
           </button>
         </div>
       </div>
@@ -326,84 +299,6 @@ export default function AdminBilling() {
         </div>
       )}
 
-      {tab === "clients" && (
-        <div className="space-y-4">
-          <div className="bg-white rounded-xl shadow p-4">
-            <div className="flex flex-col md:flex-row gap-3 md:items-end">
-              <div className="flex-1">
-                <label className="block text-xs text-gray-500 mb-1">Поиск по client_id</label>
-                <input
-                  className="w-full border rounded-lg px-3 py-2"
-                  value={clientsQ}
-                  onChange={(e) => setClientsQ(e.target.value)}
-                  placeholder="39"
-                />
-              </div>
-
-              <div className="w-full md:w-40">
-                <label className="block text-xs text-gray-500 mb-1">Limit</label>
-                <input
-                  type="number"
-                  className="w-full border rounded-lg px-3 py-2"
-                  value={clientsLimit}
-                  onChange={(e) => setClientsLimit(toNum(e.target.value) || 100)}
-                  min={1}
-                  max={500}
-                />
-              </div>
-
-              <button
-                className="px-4 py-2 rounded-lg bg-black text-white disabled:opacity-60"
-                onClick={loadClients}
-                disabled={clientsLoading}
-              >
-                {clientsLoading ? "Загрузка…" : "Обновить"}
-              </button>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl shadow overflow-hidden">
-            <div className="p-3 border-b flex items-center justify-between">
-              <div className="text-sm text-gray-600">Client balances</div>
-              <div className="text-xs text-gray-400">rows: {clients.length}</div>
-            </div>
-
-            <div className="overflow-auto">
-              <table className="min-w-full text-sm">
-                <thead className="bg-gray-50 text-gray-600">
-                  <tr>
-                    <th className="text-left px-3 py-2">client_id</th>
-                    <th className="text-left px-3 py-2">balance</th>
-                    <th className="text-left px-3 py-2">total_in</th>
-                    <th className="text-left px-3 py-2">total_out</th>
-                    <th className="text-left px-3 py-2">last_operation</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {clients.length === 0 ? (
-                    <tr>
-                      <td className="px-3 py-6 text-center text-gray-400" colSpan={5}>
-                        Нет данных
-                      </td>
-                    </tr>
-                  ) : (
-                    clients.map((r) => (
-                      <tr key={r.client_id} className="border-t">
-                        <td className="px-3 py-2">{r.client_id}</td>
-                        <td className="px-3 py-2 font-medium">{money(r.balance)}</td>
-                        <td className="px-3 py-2 text-green-700">{money(r.total_in)}</td>
-                        <td className="px-3 py-2 text-red-600">{money(r.total_out)}</td>
-                        <td className="px-3 py-2">{fmtTs(r.last_operation_at)}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
       {tab === "ledger" && (
         <div className="space-y-4">
           <div className="bg-white rounded-xl shadow p-4">
@@ -424,7 +319,7 @@ export default function AdminBilling() {
                   className="w-full border rounded-lg px-3 py-2"
                   value={ledgerReason}
                   onChange={(e) => setLedgerReason(e.target.value)}
-                  placeholder="topup / refund / manual_adjustment"
+                  placeholder="topup / refund / unlock_contact"
                 />
               </div>
 
@@ -434,7 +329,7 @@ export default function AdminBilling() {
                   className="w-full border rounded-lg px-3 py-2"
                   value={ledgerSource}
                   onChange={(e) => setLedgerSource(e.target.value)}
-                  placeholder="payme / admin / payme_refund"
+                  placeholder="payme / admin / web"
                 />
               </div>
 
@@ -464,7 +359,7 @@ export default function AdminBilling() {
 
           <div className="bg-white rounded-xl shadow overflow-hidden">
             <div className="p-3 border-b flex items-center justify-between">
-              <div className="text-sm text-gray-600">Ledger</div>
+              <div className="text-sm text-gray-600">Global Ledger</div>
               <div className="text-xs text-gray-400">rows: {ledger.length}</div>
             </div>
 
@@ -547,6 +442,8 @@ export default function AdminBilling() {
           </div>
         </div>
       )}
+
+      {tab === "health" && <AdminBillingHealth />}
     </div>
   );
 }
