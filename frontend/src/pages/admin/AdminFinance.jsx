@@ -42,12 +42,12 @@ export default function AdminFinance() {
       {tab === "payme" && (
         <div className="space-y-4">
           <div className="bg-white rounded-xl shadow p-4">
-            <div className="text-sm font-semibold">Payme Health</div>
+            <div className="text-sm font-semibold">Payme Merchant Console</div>
             <div className="text-xs text-gray-500 mt-1">
-              Состояние транзакций, lost payments, mismatch, repair, live monitoring, events,
-              dashboard и lab.
+              Bank-grade monitoring: health, events, lab, dashboard, live.
             </div>
           </div>
+
           <AdminPaymeHealth />
         </div>
       )}
