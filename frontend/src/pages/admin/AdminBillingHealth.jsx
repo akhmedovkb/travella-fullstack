@@ -11,10 +11,15 @@ function Badge({ kind = "gray", children }) {
     yellow: "bg-yellow-100 text-yellow-800",
     gray: "bg-gray-100 text-gray-700",
     black: "bg-black text-white",
+    orange: "bg-orange-100 text-orange-800",
   };
 
   return (
-    <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${map[kind] || map.gray}`}>
+    <span
+      className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
+        map[kind] || map.gray
+      }`}
+    >
       {children}
     </span>
   );
@@ -35,10 +40,31 @@ function Box({ title, count, kind = "gray", children, right = null }) {
   );
 }
 
+function SmallAction({ children, onClick, disabled = false, tone = "default" }) {
+  const cls =
+    tone === "danger"
+      ? "bg-red-600 text-white border-red-600"
+      : tone === "black"
+      ? "bg-black text-white border-black"
+      : "bg-white text-gray-800 border-gray-300 hover:bg-gray-50";
+
+  return (
+    <button
+      className={`px-3 py-1 rounded-lg border text-xs disabled:opacity-60 ${cls}`}
+      onClick={onClick}
+      disabled={disabled}
+      type="button"
+    >
+      {children}
+    </button>
+  );
+}
+
 export default function AdminBillingHealth() {
   const [loading, setLoading] = useState(false);
   const [repairingAll, setRepairingAll] = useState(false);
   const [repairingClientId, setRepairingClientId] = useState(null);
+  const [repairingPaymeId, setRepairingPaymeId] = useState(null);
   const [data, setData] = useState(null);
 
   async function load() {
@@ -84,6 +110,35 @@ export default function AdminBillingHealth() {
     }
   }
 
+  async function repairPaymeLedger(paymeId) {
+    if (!paymeId) return;
+    setRepairingPaymeId(paymeId);
+    try {
+      const res = await apiPost(`/api/admin/payme/repair/${encodeURIComponent(paymeId)}`, {}, "admin");
+      if (res?.already) tSuccess("Ledger уже был (idempotent)");
+      else tSuccess("Ledger repaired");
+      await load();
+    } catch (e) {
+      console.error(e);
+      tError("Не удалось восстановить ledger");
+    } finally {
+      setRepairingPaymeId(null);
+    }
+  }
+
+  function openPaymeHealth(paymeId) {
+    if (!paymeId) return;
+    window.open(`/admin/payme-health?payme_id=${encodeURIComponent(paymeId)}`, "_blank");
+  }
+
+  function openPaymeLab({ paymeId, orderId, amount }) {
+    const params = new URLSearchParams();
+    if (paymeId) params.set("seed_payme_id", paymeId);
+    if (orderId) params.set("order_id", String(orderId));
+    if (amount) params.set("amount", String(amount));
+    window.open(`/admin/payme-lab?${params.toString()}`, "_blank");
+  }
+
   useEffect(() => {
     load();
   }, []);
@@ -121,7 +176,11 @@ export default function AdminBillingHealth() {
         </div>
 
         <div className="flex items-center gap-2">
-          {stats.ok ? <Badge kind="green">System OK</Badge> : <Badge kind="red">Issues: {stats.totalIssues}</Badge>}
+          {stats.ok ? (
+            <Badge kind="green">System OK</Badge>
+          ) : (
+            <Badge kind="red">Issues: {stats.totalIssues}</Badge>
+          )}
 
           <button
             className="px-4 py-2 rounded-lg border bg-white disabled:opacity-60"
@@ -144,28 +203,44 @@ export default function AdminBillingHealth() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl shadow p-4">
           <div className="text-sm text-gray-500">Ledger mismatch</div>
-          <div className={`mt-2 text-2xl font-semibold ${stats.ledgerMismatch.length ? "text-red-600" : "text-gray-900"}`}>
+          <div
+            className={`mt-2 text-2xl font-semibold ${
+              stats.ledgerMismatch.length ? "text-red-600" : "text-gray-900"
+            }`}
+          >
             {stats.ledgerMismatch.length}
           </div>
         </div>
 
         <div className="bg-white rounded-xl shadow p-4">
           <div className="text-sm text-gray-500">Double unlock</div>
-          <div className={`mt-2 text-2xl font-semibold ${stats.doubleUnlock.length ? "text-red-600" : "text-gray-900"}`}>
+          <div
+            className={`mt-2 text-2xl font-semibold ${
+              stats.doubleUnlock.length ? "text-red-600" : "text-gray-900"
+            }`}
+          >
             {stats.doubleUnlock.length}
           </div>
         </div>
 
         <div className="bg-white rounded-xl shadow p-4">
           <div className="text-sm text-gray-500">Broken Payme</div>
-          <div className={`mt-2 text-2xl font-semibold ${stats.brokenPayme.length ? "text-red-600" : "text-gray-900"}`}>
+          <div
+            className={`mt-2 text-2xl font-semibold ${
+              stats.brokenPayme.length ? "text-red-600" : "text-gray-900"
+            }`}
+          >
             {stats.brokenPayme.length}
           </div>
         </div>
 
         <div className="bg-white rounded-xl shadow p-4">
           <div className="text-sm text-gray-500">Orphan orders</div>
-          <div className={`mt-2 text-2xl font-semibold ${stats.orphanOrders.length ? "text-red-600" : "text-gray-900"}`}>
+          <div
+            className={`mt-2 text-2xl font-semibold ${
+              stats.orphanOrders.length ? "text-red-600" : "text-gray-900"
+            }`}
+          >
             {stats.orphanOrders.length}
           </div>
         </div>
@@ -196,13 +271,13 @@ export default function AdminBillingHealth() {
                     <td className="px-3 py-2">{r.mirror_balance}</td>
                     <td className="px-3 py-2">{r.ledger_balance}</td>
                     <td className="px-3 py-2 text-right">
-                      <button
-                        className="px-3 py-1 rounded-lg bg-black text-white disabled:opacity-60"
+                      <SmallAction
+                        tone="black"
                         onClick={() => repairOne(r.client_id)}
                         disabled={repairingClientId === r.client_id}
                       >
                         {repairingClientId === r.client_id ? "…" : "Repair"}
-                      </button>
+                      </SmallAction>
                     </td>
                   </tr>
                 ))}
@@ -249,7 +324,9 @@ export default function AdminBillingHealth() {
         kind={stats.brokenPayme.length ? "red" : "green"}
       >
         {stats.brokenPayme.length === 0 ? (
-          <div className="text-sm text-gray-500">Неконсистентных Payme transaction / order status не найдено.</div>
+          <div className="text-sm text-gray-500">
+            Неконсистентных Payme transaction / order status не найдено.
+          </div>
         ) : (
           <div className="overflow-auto">
             <table className="min-w-full text-sm">
@@ -259,6 +336,7 @@ export default function AdminBillingHealth() {
                   <th className="text-left px-3 py-2">order_id</th>
                   <th className="text-left px-3 py-2">tx_state</th>
                   <th className="text-left px-3 py-2">order_status</th>
+                  <th className="text-right px-3 py-2">actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -268,6 +346,31 @@ export default function AdminBillingHealth() {
                     <td className="px-3 py-2">{r.order_id}</td>
                     <td className="px-3 py-2">{r.state}</td>
                     <td className="px-3 py-2">{r.status}</td>
+                    <td className="px-3 py-2 text-right">
+                      <div className="flex justify-end gap-2 flex-wrap">
+                        <SmallAction onClick={() => openPaymeHealth(r.payme_id)}>
+                          Open in Health
+                        </SmallAction>
+                        <SmallAction
+                          onClick={() =>
+                            openPaymeLab({
+                              paymeId: r.payme_id,
+                              orderId: r.order_id,
+                              amount: r.amount_tiyin,
+                            })
+                          }
+                        >
+                          Open in Lab
+                        </SmallAction>
+                        <SmallAction
+                          tone="danger"
+                          onClick={() => repairPaymeLedger(r.payme_id)}
+                          disabled={repairingPaymeId === r.payme_id}
+                        >
+                          {repairingPaymeId === r.payme_id ? "…" : "Repair Ledger"}
+                        </SmallAction>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -292,6 +395,7 @@ export default function AdminBillingHealth() {
                   <th className="text-left px-3 py-2">client_id</th>
                   <th className="text-left px-3 py-2">amount_tiyin</th>
                   <th className="text-left px-3 py-2">status</th>
+                  <th className="text-right px-3 py-2">actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -301,6 +405,18 @@ export default function AdminBillingHealth() {
                     <td className="px-3 py-2">{r.client_id}</td>
                     <td className="px-3 py-2">{r.amount_tiyin}</td>
                     <td className="px-3 py-2">{r.status}</td>
+                    <td className="px-3 py-2 text-right">
+                      <SmallAction
+                        onClick={() =>
+                          openPaymeLab({
+                            orderId: r.id,
+                            amount: r.amount_tiyin,
+                          })
+                        }
+                      >
+                        Open in Lab
+                      </SmallAction>
+                    </td>
                   </tr>
                 ))}
               </tbody>
