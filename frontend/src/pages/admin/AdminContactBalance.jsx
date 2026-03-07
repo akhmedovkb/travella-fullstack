@@ -1,6 +1,7 @@
 //frontend/src/pages/admin/AdminContactBalance.jsx
   
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { apiGet, apiPost } from "../../api";
 import { tError, tSuccess } from "../../shared/toast";
 
@@ -87,6 +88,7 @@ function StatCard({ title, value, tone = "default", subtitle = "" }) {
 }
 
 export default function AdminContactBalance() {
+  const [searchParams] = useSearchParams();
   const [q, setQ] = useState("");
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState([]);
@@ -121,6 +123,29 @@ export default function AdminContactBalance() {
       tError("Не удалось выполнить поиск клиентов");
     } finally {
       setSearching(false);
+    }
+  }
+
+    async function loadClientById(clientId) {
+    const id = Number(clientId);
+    if (!Number.isFinite(id) || id <= 0) return;
+
+    setLoading(true);
+    try {
+      const data = await apiGet(`/api/admin/clients/${id}/contact-balance`, "admin");
+
+      const client = data?.client || { id };
+      setSelected(client);
+      setBalance(toNum(data?.balance || 0));
+      setStats(data?.stats || null);
+      setPaymeStats(data?.payme_stats || null);
+      setLedger(Array.isArray(data?.ledger) ? data.ledger : []);
+      setPaymeTx(Array.isArray(data?.payme_transactions) ? data.payme_transactions : []);
+    } catch (e) {
+      console.error(e);
+      tError("Не удалось загрузить клиента по client_id");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -192,6 +217,13 @@ export default function AdminContactBalance() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [canSearch]);
+
+    useEffect(() => {
+    const qpClientId = String(searchParams.get("client_id") || "").trim();
+    if (!qpClientId) return;
+    loadClientById(qpClientId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   const fallbackStats = useMemo(() => {
     const rows = Array.isArray(ledger) ? ledger : [];
