@@ -2,232 +2,197 @@
 
 const pool = require("../db");
 
-function clampInt(x, def, min, max) {
-  const n = Number(x);
-  if (!Number.isFinite(n)) return def;
-  const i = Math.trunc(n);
-  return Math.max(min, Math.min(max, i));
+async function syncOneClientBalance(client, clientId) {
+  const { rows: colRows } = await client.query(`
+    SELECT column_name
+    FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='clients'
+  `);
+
+  const cols = new Set(colRows.map((r) => r.column_name));
+  const balanceCol =
+    ["contact_balance", "contact_balance_tiyin", "balance_tiyin", "balance", "wallet_balance"].find(
+      (c) => cols.has(c)
+    ) || null;
+
+  if (!balanceCol) {
+    throw new Error("No balance column found in clients");
+  }
+
+  const { rows } = await client.query(
+    `
+    SELECT COALESCE(SUM(amount),0)::bigint AS balance
+    FROM contact_balance_ledger
+    WHERE client_id = $1
+  `,
+    [clientId]
+  );
+
+  const balance = Number(rows[0]?.balance || 0);
+
+  await client.query(
+    `
+    UPDATE clients
+    SET ${balanceCol} = $2
+    WHERE id = $1
+  `,
+    [clientId, balance]
+  );
+
+  return balance;
 }
 
-async function adminBillingSummary(req, res) {
+async function getBillingHealthData() {
+  const ledgerMismatch = await pool.query(`
+    SELECT
+      c.id AS client_id,
+      COALESCE(c.contact_balance,0) AS mirror_balance,
+      COALESCE(l.balance,0) AS ledger_balance
+    FROM clients c
+    LEFT JOIN (
+      SELECT client_id, COALESCE(SUM(amount),0)::bigint AS balance
+      FROM contact_balance_ledger
+      GROUP BY client_id
+    ) l ON l.client_id = c.id
+    WHERE COALESCE(c.contact_balance,0) != COALESCE(l.balance,0)
+    ORDER BY c.id DESC
+    LIMIT 50
+  `);
+
+  const doubleUnlock = await pool.query(`
+    SELECT
+      client_id,
+      service_id,
+      COUNT(*) AS cnt
+    FROM client_service_contact_unlocks
+    GROUP BY client_id, service_id
+    HAVING COUNT(*) > 1
+    LIMIT 50
+  `);
+
+  const brokenPayme = await pool.query(`
+    SELECT
+      t.payme_id,
+      t.order_id,
+      t.state,
+      o.status
+    FROM payme_transactions t
+    LEFT JOIN topup_orders o ON o.id = t.order_id
+    WHERE
+      (t.state = 2 AND o.status != 'paid')
+      OR
+      (t.state IN (-1,-2) AND o.status = 'paid')
+    LIMIT 50
+  `);
+
+  const orphanOrders = await pool.query(`
+    SELECT
+      o.id,
+      o.client_id,
+      o.amount_tiyin,
+      o.status
+    FROM topup_orders o
+    LEFT JOIN payme_transactions t ON t.order_id = o.id
+    WHERE t.order_id IS NULL
+      AND o.status != 'new'
+    LIMIT 50
+  `);
+
+  return {
+    ok: true,
+    ledger_mismatch: ledgerMismatch.rows,
+    double_unlock: doubleUnlock.rows,
+    broken_payme: brokenPayme.rows,
+    orphan_orders: orphanOrders.rows,
+  };
+}
+
+async function adminBillingHealth(req, res) {
   try {
-    const totalBalanceQ = await pool.query(`
-      SELECT COALESCE(SUM(amount), 0)::bigint AS total_balance
-      FROM contact_balance_ledger
-    `);
-
-    const totalTopupsQ = await pool.query(`
-      SELECT COALESCE(SUM(amount), 0)::bigint AS total_topups
-      FROM contact_balance_ledger
-      WHERE reason = 'topup'
-        AND source = 'payme'
-        AND amount > 0
-    `);
-
-    const totalRefundsQ = await pool.query(`
-      SELECT COALESCE(SUM(ABS(amount)), 0)::bigint AS total_refunds
-      FROM contact_balance_ledger
-      WHERE reason = 'refund'
-        AND amount < 0
-    `);
-
-    const totalDebitsQ = await pool.query(`
-      SELECT COALESCE(SUM(ABS(amount)), 0)::bigint AS total_debits
-      FROM contact_balance_ledger
-      WHERE amount < 0
-    `);
-
-    const clientsWithBalanceQ = await pool.query(`
-      SELECT COUNT(*)::bigint AS cnt
-      FROM (
-        SELECT client_id
-        FROM contact_balance_ledger
-        GROUP BY client_id
-        HAVING COALESCE(SUM(amount), 0) <> 0
-      ) x
-    `);
-
-    const txCountQ = await pool.query(`
-      SELECT COUNT(*)::bigint AS cnt
-      FROM payme_transactions
-    `);
-
-    return res.json({
-      ok: true,
-      total_balance: Number(totalBalanceQ.rows[0]?.total_balance || 0),
-      total_topups: Number(totalTopupsQ.rows[0]?.total_topups || 0),
-      total_refunds: Number(totalRefundsQ.rows[0]?.total_refunds || 0),
-      total_debits: Number(totalDebitsQ.rows[0]?.total_debits || 0),
-      clients_with_balance: Number(clientsWithBalanceQ.rows[0]?.cnt || 0),
-      payme_tx_count: Number(txCountQ.rows[0]?.cnt || 0),
-    });
+    const data = await getBillingHealthData();
+    return res.json(data);
   } catch (e) {
-    console.error("adminBillingSummary error:", e);
-    return res.status(500).json({ ok: false, message: "Internal error" });
+    console.error("adminBillingHealth error:", e);
+    return res.status(500).json({ ok: false });
   }
 }
 
-async function adminBillingClients(req, res) {
-  const limit = clampInt(req.query.limit, 100, 1, 500);
-  const offset = clampInt(req.query.offset, 0, 0, 1000000);
-  const q = String(req.query.q || "").trim();
-
-  try {
-    const sql = `
-      WITH balances AS (
-        SELECT
-          l.client_id,
-          COALESCE(SUM(l.amount), 0)::bigint AS balance,
-          COALESCE(SUM(CASE WHEN l.amount > 0 THEN l.amount ELSE 0 END), 0)::bigint AS total_in,
-          COALESCE(SUM(CASE WHEN l.amount < 0 THEN ABS(l.amount) ELSE 0 END), 0)::bigint AS total_out,
-          MAX(l.created_at) AS last_operation_at
-        FROM contact_balance_ledger l
-        GROUP BY l.client_id
-      )
-      SELECT
-        b.client_id,
-        b.balance,
-        b.total_in,
-        b.total_out,
-        b.last_operation_at
-      FROM balances b
-      WHERE (
-        $1::text IS NULL
-        OR CAST(b.client_id AS text) ILIKE $1
-      )
-      ORDER BY b.balance DESC, b.client_id DESC
-      LIMIT $2 OFFSET $3
-    `;
-
-    const like = q ? `%${q}%` : null;
-    const { rows } = await pool.query(sql, [like, limit, offset]);
-
-    return res.json({
-      ok: true,
-      rows,
-      limit,
-      offset,
-    });
-  } catch (e) {
-    console.error("adminBillingClients error:", e);
-    return res.status(500).json({ ok: false, message: "Internal error" });
-  }
-}
-
-async function adminBillingLedger(req, res) {
-  const limit = clampInt(req.query.limit, 100, 1, 500);
-  const offset = clampInt(req.query.offset, 0, 0, 1000000);
-  const clientId = req.query.clientId ? Number(req.query.clientId) : null;
-  const reason = String(req.query.reason || "").trim();
-  const source = String(req.query.source || "").trim();
-
-  try {
-    const sql = `
-      SELECT
-        id,
-        client_id,
-        amount,
-        reason,
-        source,
-        service_id,
-        meta,
-        created_at
-      FROM contact_balance_ledger
-      WHERE ($1::bigint IS NULL OR client_id = $1)
-        AND ($2::text IS NULL OR reason = $2)
-        AND ($3::text IS NULL OR source = $3)
-      ORDER BY created_at DESC, id DESC
-      LIMIT $4 OFFSET $5
-    `;
-
-    const { rows } = await pool.query(sql, [
-      Number.isFinite(clientId) ? clientId : null,
-      reason || null,
-      source || null,
-      limit,
-      offset,
-    ]);
-
-    return res.json({
-      ok: true,
-      rows,
-      limit,
-      offset,
-    });
-  } catch (e) {
-    console.error("adminBillingLedger error:", e);
-    return res.status(500).json({ ok: false, message: "Internal error" });
-  }
-}
-
-async function adminBillingAdjust(req, res) {
-  const clientId = Number(req.body?.client_id);
-  const amount = Number(req.body?.amount);
-  const note = String(req.body?.note || "").trim();
-
+async function adminBillingRepairOne(req, res) {
+  const clientId = Number(req.params.clientId);
   if (!Number.isFinite(clientId) || clientId <= 0) {
-    return res.status(400).json({ ok: false, message: "Bad client_id" });
-  }
-
-  if (!Number.isFinite(amount) || amount === 0) {
-    return res.status(400).json({ ok: false, message: "Bad amount" });
-  }
-
-  if (!note) {
-    return res.status(400).json({ ok: false, message: "Note is required" });
+    return res.status(400).json({ ok: false, message: "Bad clientId" });
   }
 
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-
-    const existsQ = await client.query(`SELECT id FROM clients WHERE id=$1`, [clientId]);
-    if (!existsQ.rows.length) {
-      await client.query("ROLLBACK");
-      return res.status(404).json({ ok: false, message: "Client not found" });
-    }
-
-    const ins = await client.query(
-      `
-      INSERT INTO contact_balance_ledger
-        (client_id, amount, reason, source, service_id, meta)
-      VALUES
-        ($1, $2, 'manual_adjustment', 'admin', NULL, $3)
-      RETURNING id, created_at
-      `,
-      [
-        clientId,
-        Math.trunc(amount),
-        {
-          note,
-          adjusted_by: "admin",
-        },
-      ]
-    );
-
+    const balance = await syncOneClientBalance(client, clientId);
     await client.query("COMMIT");
 
     return res.json({
       ok: true,
-      row: {
-        id: ins.rows[0]?.id || null,
-        created_at: ins.rows[0]?.created_at || null,
-      },
+      client_id: clientId,
+      repaired_balance: balance,
     });
   } catch (e) {
     try {
       await client.query("ROLLBACK");
     } catch {}
-    console.error("adminBillingAdjust error:", e);
-    return res.status(500).json({ ok: false, message: "Internal error" });
+    console.error("adminBillingRepairOne error:", e);
+    return res.status(500).json({ ok: false, message: "Repair failed" });
   } finally {
     client.release();
   }
 }
 
+async function adminBillingRepairAll(req, res) {
+  const db = await pool.connect();
+  try {
+    await db.query("BEGIN");
+
+    const { rows } = await db.query(`
+      SELECT
+        c.id AS client_id
+      FROM clients c
+      LEFT JOIN (
+        SELECT client_id, COALESCE(SUM(amount),0)::bigint AS balance
+        FROM contact_balance_ledger
+        GROUP BY client_id
+      ) l ON l.client_id = c.id
+      WHERE COALESCE(c.contact_balance,0) != COALESCE(l.balance,0)
+      ORDER BY c.id DESC
+      LIMIT 500
+    `);
+
+    const repaired = [];
+    for (const r of rows) {
+      const balance = await syncOneClientBalance(db, Number(r.client_id));
+      repaired.push({
+        client_id: Number(r.client_id),
+        repaired_balance: balance,
+      });
+    }
+
+    await db.query("COMMIT");
+
+    return res.json({
+      ok: true,
+      repaired_count: repaired.length,
+      repaired,
+    });
+  } catch (e) {
+    try {
+      await db.query("ROLLBACK");
+    } catch {}
+    console.error("adminBillingRepairAll error:", e);
+    return res.status(500).json({ ok: false, message: "Repair all failed" });
+  } finally {
+    db.release();
+  }
+}
+
 module.exports = {
-  adminBillingSummary,
-  adminBillingClients,
-  adminBillingLedger,
-  adminBillingAdjust,
+  adminBillingHealth,
+  adminBillingRepairOne,
+  adminBillingRepairAll,
 };
