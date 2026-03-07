@@ -1,372 +1,362 @@
 // backend/controllers/adminContactBalanceController.js
 const pool = require("../db");
 
-/**
- * Мы делаем контроллер "устойчивым":
- * - Достаём список колонок таблиц через information_schema (кэшируем)
- * - Строим запросы только по реально существующим колонкам
- * - Баланс считаем так:
- *    1) если есть clients.contact_balance — берём его
- *    2) иначе считаем суммой по contact_balance_ledger (если есть)
- */
+let _clientsColsCache = null;
+let _ledgerColsCache = null;
 
-const _cache = {
-  columns: new Map(), // key: "schema.table" -> Set(columns)
-};
+async function getClientsColumns() {
+  if (_clientsColsCache) return _clientsColsCache;
 
-async function getColumns(table, schema = "public") {
-  const key = `${schema}.${table}`;
-  if (_cache.columns.has(key)) return _cache.columns.get(key);
-
-  const { rows } = await pool.query(
-    `
+  const { rows } = await pool.query(`
     SELECT column_name
     FROM information_schema.columns
-    WHERE table_schema = $1 AND table_name = $2
-  `,
-    [schema, table]
-  );
+    WHERE table_schema='public' AND table_name='clients'
+  `);
 
-  const set = new Set(rows.map((r) => r.column_name));
-  _cache.columns.set(key, set);
-  return set;
+  _clientsColsCache = new Set(rows.map((r) => r.column_name));
+  return _clientsColsCache;
 }
 
-function pickFirst(cols, candidates) {
-  for (const c of candidates) if (cols.has(c)) return c;
+async function getLedgerColumns() {
+  if (_ledgerColsCache) return _ledgerColsCache;
+
+  const { rows } = await pool.query(`
+    SELECT column_name
+    FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='contact_balance_ledger'
+  `);
+
+  _ledgerColsCache = new Set(rows.map((r) => r.column_name));
+  return _ledgerColsCache;
+}
+
+function pickFirstExisting(cols, candidates) {
+  for (const c of candidates) {
+    if (cols.has(c)) return c;
+  }
   return null;
 }
 
-function toNum(x) {
-  const n = Number(x);
-  return Number.isFinite(n) ? n : 0;
+async function getClientsBalanceColumn(client) {
+  const { rows } = await client.query(`
+    SELECT column_name
+    FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='clients'
+  `);
+
+  const cols = new Set(rows.map((r) => r.column_name));
+  return (
+    pickFirstExisting(cols, [
+      "contact_balance",
+      "contact_balance_tiyin",
+      "balance_tiyin",
+      "balance",
+      "wallet_balance",
+    ]) || null
+  );
 }
 
-async function findClientByQuery(qRaw) {
-  const q = String(qRaw || "").trim();
-  if (q.length < 2) return [];
+async function getBalanceFromLedger(client, clientId) {
+  const { rows } = await client.query(
+    `
+    SELECT COALESCE(SUM(amount), 0)::bigint AS balance
+    FROM contact_balance_ledger
+    WHERE client_id = $1
+  `,
+    [clientId]
+  );
 
-  const cols = await getColumns("clients");
-
-  const colId = pickFirst(cols, ["id"]);
-  if (!colId) return [];
-
-  const colPhone = pickFirst(cols, ["phone", "phone_number", "tel"]);
-  const colEmail = pickFirst(cols, ["email", "mail"]);
-  const colName = pickFirst(cols, ["full_name", "name"]);
-  const colUsername = pickFirst(cols, ["username", "tg_username", "telegram_username"]);
-  const colTg = pickFirst(cols, ["telegram_chat_id", "telegram_id", "tg_id", "chat_id"]);
-
-  // Собираем условия по тем колонкам, которые реально есть
-  const where = [];
-  const params = [];
-  let p = 1;
-
-  // Если q — число, пробуем по ID и tg id
-  const asNum = Number(q);
-  const isNum = Number.isFinite(asNum) && String(asNum) === q;
-
-  if (isNum) {
-    where.push(`${colId} = $${p++}`);
-    params.push(asNum);
-    if (colTg) {
-      where.push(`${colTg} = $${p++}`);
-      params.push(asNum);
-    }
-  }
-
-  const like = `%${q}%`;
-  if (colPhone) {
-    where.push(`${colPhone} ILIKE $${p++}`);
-    params.push(like);
-  }
-  if (colEmail) {
-    where.push(`${colEmail} ILIKE $${p++}`);
-    params.push(like);
-  }
-  if (colName) {
-    where.push(`${colName} ILIKE $${p++}`);
-    params.push(like);
-  }
-  if (colUsername) {
-    where.push(`${colUsername} ILIKE $${p++}`);
-    params.push(like);
-  }
-
-  if (!where.length) return [];
-
-  // select только существующие колонки
-  const select = [
-    `${colId} AS id`,
-    colName ? `${colName} AS full_name` : `NULL AS full_name`,
-    colPhone ? `${colPhone} AS phone` : `NULL AS phone`,
-    colEmail ? `${colEmail} AS email` : `NULL AS email`,
-    colTg ? `${colTg} AS telegram_chat_id` : `NULL AS telegram_chat_id`,
-    colUsername ? `${colUsername} AS username` : `NULL AS username`,
-  ];
-
-  const sql = `
-    SELECT ${select.join(", ")}
-    FROM clients
-    WHERE (${where.join(" OR ")})
-    ORDER BY id DESC
-    LIMIT 25
-  `;
-
-  const { rows } = await pool.query(sql, params);
-  return rows || [];
+  return Number(rows[0]?.balance || 0);
 }
 
-async function hasView(viewName, schema = "public") {
-  try {
-    const { rows } = await pool.query(
+async function syncClientBalanceMirror(client, clientId) {
+  const balanceCol = await getClientsBalanceColumn(client);
+  const balance = await getBalanceFromLedger(client, clientId);
+
+  if (balanceCol) {
+    await client.query(
       `
-      SELECT 1
-        FROM information_schema.views
-       WHERE table_schema = $1
-         AND table_name = $2
-       LIMIT 1
+      UPDATE clients
+      SET ${balanceCol} = $2
+      WHERE id = $1
     `,
-      [schema, viewName]
+      [clientId, balance]
     );
-    return !!rows?.length;
-  } catch {
-    return false;
+  }
+
+  return balance;
+}
+
+async function searchClients(req, res) {
+  try {
+    const q = String(req.query.q || "").trim();
+    if (q.length < 2) {
+      return res.json({ ok: true, items: [] });
+    }
+
+    const cols = await getClientsColumns();
+
+    const selectCols = ["id"];
+
+    if (cols.has("full_name")) selectCols.push("full_name");
+    if (cols.has("name")) selectCols.push("name");
+    if (cols.has("username")) selectCols.push("username");
+    if (cols.has("phone")) selectCols.push("phone");
+    if (cols.has("email")) selectCols.push("email");
+    if (cols.has("telegram_chat_id")) selectCols.push("telegram_chat_id");
+
+    const whereParts = [];
+    const args = [];
+    let i = 1;
+
+    const qLike = `%${q}%`;
+
+    if (/^\d+$/.test(q)) {
+      whereParts.push(`CAST(id AS TEXT) ILIKE $${i++}`);
+      args.push(qLike);
+    }
+
+    if (cols.has("full_name")) {
+      whereParts.push(`COALESCE(full_name,'') ILIKE $${i++}`);
+      args.push(qLike);
+    }
+    if (cols.has("name")) {
+      whereParts.push(`COALESCE(name,'') ILIKE $${i++}`);
+      args.push(qLike);
+    }
+    if (cols.has("username")) {
+      whereParts.push(`COALESCE(username,'') ILIKE $${i++}`);
+      args.push(qLike);
+    }
+    if (cols.has("phone")) {
+      whereParts.push(`COALESCE(phone,'') ILIKE $${i++}`);
+      args.push(qLike);
+    }
+    if (cols.has("email")) {
+      whereParts.push(`COALESCE(email,'') ILIKE $${i++}`);
+      args.push(qLike);
+    }
+    if (cols.has("telegram_chat_id")) {
+      whereParts.push(`CAST(COALESCE(telegram_chat_id, 0) AS TEXT) ILIKE $${i++}`);
+      args.push(qLike);
+    }
+
+    if (!whereParts.length) {
+      return res.json({ ok: true, items: [] });
+    }
+
+    const sql = `
+      SELECT ${selectCols.join(", ")}
+      FROM clients
+      WHERE ${whereParts.join(" OR ")}
+      ORDER BY id DESC
+      LIMIT 50
+    `;
+
+    const { rows } = await pool.query(sql, args);
+
+    return res.json({
+      ok: true,
+      items: rows,
+    });
+  } catch (e) {
+    console.error("searchClients error:", e);
+    return res.status(500).json({ ok: false, message: "Internal error" });
   }
 }
 
-async function getClientBalanceAndLedger(clientId) {
-  const cid = Number(clientId);
+async function getClientContactBalance(req, res) {
+  const clientId = Number(req.params.id);
 
-  const hasUnifiedView = await hasView("v_client_balance_ledger_all");
-
-  // 1) balance
-  let balance = 0;
-
-  if (hasUnifiedView) {
-    const r = await pool.query(
-      `SELECT COALESCE(SUM(amount),0) AS bal
-         FROM v_client_balance_ledger_all
-        WHERE client_id = $1`,
-      [cid]
-    );
-    balance = toNum(r.rows?.[0]?.bal);
-  } else {
-    const colsClients = await getColumns("clients");
-    const colsLedger = await getColumns("contact_balance_ledger").catch(() => new Set());
-
-    if (colsClients.has("contact_balance")) {
-      const r = await pool.query(
-        `SELECT COALESCE(contact_balance,0) AS bal FROM clients WHERE id=$1`,
-        [cid]
-      );
-      balance = toNum(r.rows?.[0]?.bal);
-    } else if (colsLedger.size) {
-      const r = await pool.query(
-        `SELECT COALESCE(SUM(amount),0) AS bal
-           FROM contact_balance_ledger
-          WHERE client_id = $1`,
-        [cid]
-      );
-      balance = toNum(r.rows?.[0]?.bal);
-    } else {
-      balance = 0;
-    }
+  if (!Number.isFinite(clientId) || clientId <= 0) {
+    return res.status(400).json({ ok: false, message: "Bad client id" });
   }
 
-  // 2) ledger
-  let ledger = [];
+  try {
+    const cols = await getClientsColumns();
 
-  if (hasUnifiedView) {
-    const cols = await getColumns("v_client_balance_ledger_all").catch(() => new Set());
+    const selectCols = ["id"];
+    if (cols.has("full_name")) selectCols.push("full_name");
+    if (cols.has("name")) selectCols.push("name");
+    if (cols.has("username")) selectCols.push("username");
+    if (cols.has("phone")) selectCols.push("phone");
+    if (cols.has("email")) selectCols.push("email");
+    if (cols.has("telegram_chat_id")) selectCols.push("telegram_chat_id");
 
-    const hasId = cols.has("id");
-    const hasCreatedAt = cols.has("created_at");
-    const hasServiceId = cols.has("service_id");
-    const hasReason = cols.has("reason");
-    const hasSource = cols.has("source");
-    const hasMeta = cols.has("meta");
-
-    const sel = [
-      hasId ? "id" : "NULL::bigint AS id",
-      "client_id",
-      "amount",
-      hasReason ? "reason" : "NULL::text AS reason",
-      hasServiceId ? "service_id" : "NULL::bigint AS service_id",
-      hasSource ? "source" : "NULL::text AS source",
-      hasMeta ? "meta" : "NULL::jsonb AS meta",
-      hasCreatedAt ? "created_at" : "now() AS created_at",
-    ].join(", ");
-
-    const order = `${hasCreatedAt ? "created_at" : "1"} DESC, ${hasId ? "id" : "1"} DESC`;
-
-    const r = await pool.query(
+    const clientQ = await pool.query(
       `
-      SELECT ${sel}
-        FROM v_client_balance_ledger_all
-       WHERE client_id = $1
-       ORDER BY ${order}
-       LIMIT 100
-      `,
-      [cid]
+      SELECT ${selectCols.join(", ")}
+      FROM clients
+      WHERE id = $1
+      LIMIT 1
+    `,
+      [clientId]
     );
 
-    ledger = r.rows || [];
-  } else {
-    // fallback (если у тебя есть legacy таблица client_balance_ledger)
+    if (!clientQ.rows.length) {
+      return res.status(404).json({ ok: false, message: "Client not found" });
+    }
+
+    const ledgerQ = await pool.query(
+      `
+      SELECT
+        id,
+        client_id,
+        amount,
+        reason,
+        source,
+        service_id,
+        meta,
+        created_at
+      FROM contact_balance_ledger
+      WHERE client_id = $1
+      ORDER BY created_at DESC, id DESC
+      LIMIT 200
+    `,
+      [clientId]
+    );
+
+    const statsQ = await pool.query(
+      `
+      SELECT
+        COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0)::bigint AS total_in,
+        COALESCE(SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END), 0)::bigint AS total_out,
+
+        COUNT(*) FILTER (WHERE reason = 'topup')::int AS topup_count,
+        COUNT(*) FILTER (WHERE reason = 'refund')::int AS refund_count,
+        COUNT(*) FILTER (WHERE reason = 'unlock_contact')::int AS unlock_count,
+        COUNT(*) FILTER (WHERE reason = 'admin_adjust')::int AS admin_adjust_count,
+
+        COALESCE(SUM(CASE WHEN reason = 'topup' THEN amount ELSE 0 END), 0)::bigint AS topup_sum,
+        COALESCE(SUM(CASE WHEN reason = 'refund' THEN ABS(amount) ELSE 0 END), 0)::bigint AS refund_sum,
+        COALESCE(SUM(CASE WHEN reason = 'unlock_contact' THEN ABS(amount) ELSE 0 END), 0)::bigint AS unlock_sum,
+        COALESCE(SUM(CASE WHEN reason = 'admin_adjust' THEN amount ELSE 0 END), 0)::bigint AS admin_adjust_sum,
+
+        MAX(created_at) AS last_operation_at,
+        COUNT(*)::int AS ledger_rows
+      FROM contact_balance_ledger
+      WHERE client_id = $1
+    `,
+      [clientId]
+    );
+
+    const balance = await getBalanceFromLedger(pool, clientId);
+
+    return res.json({
+      ok: true,
+      client: clientQ.rows[0],
+      balance,
+      stats: statsQ.rows[0] || {
+        total_in: 0,
+        total_out: 0,
+        topup_count: 0,
+        refund_count: 0,
+        unlock_count: 0,
+        admin_adjust_count: 0,
+        topup_sum: 0,
+        refund_sum: 0,
+        unlock_sum: 0,
+        admin_adjust_sum: 0,
+        last_operation_at: null,
+        ledger_rows: 0,
+      },
+      ledger: ledgerQ.rows,
+    });
+  } catch (e) {
+    console.error("getClientContactBalance error:", e);
+    return res.status(500).json({ ok: false, message: "Internal error" });
+  }
+}
+
+async function adjustClientContactBalance(req, res) {
+  const clientId = Number(req.params.id);
+  const amount = Number(req.body?.amount);
+  const reason = String(req.body?.reason || "admin_adjust").trim() || "admin_adjust";
+  const note = String(req.body?.note || "").trim();
+
+  if (!Number.isFinite(clientId) || clientId <= 0) {
+    return res.status(400).json({ ok: false, message: "Bad client id" });
+  }
+
+  if (!Number.isFinite(amount) || amount === 0) {
+    return res.status(400).json({ ok: false, message: "Bad amount" });
+  }
+
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const existsQ = await client.query(
+      `SELECT id FROM clients WHERE id = $1 FOR UPDATE`,
+      [clientId]
+    );
+
+    if (!existsQ.rows.length) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ ok: false, message: "Client not found" });
+    }
+
+    const ledgerCols = await getLedgerColumns();
+
+    const fields = [];
+    const values = [];
+    let i = 1;
+
+    function push(col, val) {
+      fields.push(col);
+      values.push(val);
+      i += 1;
+      return `$${i - 1}`;
+    }
+
+    push("client_id", clientId);
+    push("amount", Math.trunc(amount));
+
+    if (ledgerCols.has("reason")) push("reason", reason);
+    if (ledgerCols.has("source")) push("source", "admin");
+    if (ledgerCols.has("service_id")) push("service_id", null);
+    if (ledgerCols.has("meta")) {
+      push("meta", {
+        note,
+        channel: "admin",
+        kind: "manual_adjustment",
+      });
+    }
+
+    const placeholders = fields.map((_, idx) => `$${idx + 1}`);
+
+    await client.query(
+      `
+      INSERT INTO contact_balance_ledger
+      (${fields.join(", ")})
+      VALUES (${placeholders.join(", ")})
+    `,
+      values
+    );
+
+    const balance = await syncClientBalanceMirror(client, clientId);
+
+    await client.query("COMMIT");
+
+    return res.json({
+      ok: true,
+      client_id: clientId,
+      balance,
+    });
+  } catch (e) {
     try {
-      const r = await pool.query(
-        `
-        SELECT
-          id, client_id, amount, reason, service_id, source, meta, created_at
-        FROM contact_balance_ledger
-        WHERE client_id = $1
-        ORDER BY created_at DESC, id DESC
-        LIMIT 100
-        `,
-        [cid]
-      );
-      ledger = r.rows || [];
-    } catch {
-      ledger = [];
-    }
-  }
-
-  return { balance, ledger };
-}
-
-async function adjustClientBalanceTx(clientId, amount, reason, note) {
-  const colsClients = await getColumns("clients");
-  const colsLedger = await getColumns("contact_balance_ledger").catch(() => new Set());
-  const hasContactBalance = colsClients.has("contact_balance");
-  const hasLedger = colsLedger.size > 0;
-
-  if (!hasLedger) {
-    throw new Error("contact_balance_ledger table not found (required)");
-  }
-
-  const a = toNum(amount);
-  if (!a) throw new Error("amount_invalid");
-
-  const rReason = String(reason || "admin_adjust").slice(0, 64);
-  const rNote = String(note || "").slice(0, 500);
-
-  await pool.query("BEGIN");
-  try {
-    // lock клиента
-    await pool.query(`SELECT id FROM clients WHERE id = $1 FOR UPDATE`, [clientId]);
-
-    // ledger insert (минимальный набор)
-    // используем только реально существующие колонки
-    const c = colsLedger;
-
-    const cols = ["client_id", "amount"];
-    const vals = ["$1", "$2"];
-    const params = [clientId, a];
-    let p = 3;
-
-    if (c.has("reason")) {
-      cols.push("reason");
-      vals.push(`$${p++}`);
-      params.push(rReason);
-    }
-    if (c.has("note")) {
-      cols.push("note");
-      vals.push(`$${p++}`);
-      params.push(rNote);
-    } else if (c.has("comment")) {
-      cols.push("comment");
-      vals.push(`$${p++}`);
-      params.push(rNote);
-    }
-    if (c.has("source")) {
-      cols.push("source");
-      vals.push(`$${p++}`);
-      params.push("admin");
-    }
-    if (c.has("meta")) {
-      cols.push("meta");
-      vals.push(`$${p++}`);
-      params.push({ by: "admin", reason: rReason });
-    }
-
-    await pool.query(`INSERT INTO contact_balance_ledger (${cols.join(",")}) VALUES (${vals.join(",")})`, params);
-
-    // при наличии clients.contact_balance — обновляем его тоже (чтобы бот/веб быстро читали)
-    if (hasContactBalance) {
-      await pool.query(
-        `UPDATE clients
-            SET contact_balance = COALESCE(contact_balance,0) + $2
-          WHERE id = $1`,
-        [clientId, a]
-      );
-    }
-
-    await pool.query("COMMIT");
-  } catch (e) {
-    await pool.query("ROLLBACK");
-    throw e;
-  }
-}
-
-/* ===================== Handlers ===================== */
-
-async function adminClientSearch(req, res) {
-  try {
-    const q = req.query?.q || "";
-    const items = await findClientByQuery(q);
-    res.json({ items });
-  } catch (e) {
-    console.error("[adminClientSearch]", e?.message || e);
-    res.status(500).json({ error: "server_error" });
-  }
-}
-
-async function adminGetClientContactBalance(req, res) {
-  try {
-    const clientId = Number(req.params?.id || 0);
-    if (!clientId) return res.status(400).json({ error: "bad_client_id" });
-
-    const { balance, ledger } = await getClientBalanceAndLedger(clientId);
-    res.json({ balance, ledger });
-  } catch (e) {
-    console.error("[adminGetClientContactBalance]", e?.message || e);
-    res.status(500).json({ error: "server_error" });
-  }
-}
-
-async function adminAdjustClientContactBalance(req, res) {
-  try {
-    const clientId = Number(req.params?.id || 0);
-    if (!clientId) return res.status(400).json({ error: "bad_client_id" });
-
-    const amount = toNum(req.body?.amount);
-    const reason = String(req.body?.reason || "admin_adjust");
-    const note = String(req.body?.note || "");
-
-    if (!amount) return res.status(400).json({ error: "amount_required" });
-
-    await adjustClientBalanceTx(clientId, amount, reason, note);
-
-    const { balance } = await getClientBalanceAndLedger(clientId);
-    res.json({ ok: true, balance });
-  } catch (e) {
-    const msg = String(e?.message || e);
-    console.error("[adminAdjustClientContactBalance]", msg);
-
-    if (msg === "amount_invalid") {
-      return res.status(400).json({ error: "amount_invalid" });
-    }
-    if (msg.includes("contact_balance_ledger table not found")) {
-      return res.status(500).json({ error: "ledger_table_missing" });
-    }
-
-    res.status(500).json({ error: "server_error" });
+      await client.query("ROLLBACK");
+    } catch {}
+    console.error("adjustClientContactBalance error:", e);
+    return res.status(500).json({ ok: false, message: "Internal error" });
+  } finally {
+    client.release();
   }
 }
 
 module.exports = {
-  adminClientSearch,
-  adminGetClientContactBalance,
-  adminAdjustClientContactBalance,
+  searchClients,
+  getClientContactBalance,
+  adjustClientContactBalance,
 };
