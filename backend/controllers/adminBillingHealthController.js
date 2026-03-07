@@ -72,14 +72,46 @@ async function getBillingHealthData() {
     SELECT
       t.payme_id,
       t.order_id,
+      t.amount_tiyin,
       t.state,
-      o.status
+      t.perform_time,
+      t.cancel_time,
+      o.status,
+      CASE
+        WHEN t.state = 2 AND COALESCE(o.status, '') != 'paid' THEN 'TX_OK_ORDER_BAD'
+        WHEN t.state IN (-1, -2) AND o.status = 'paid' THEN 'CANCELED_BUT_ORDER_PAID'
+        WHEN t.state = 2 AND NOT EXISTS (
+          SELECT 1
+          FROM contact_balance_ledger l
+          WHERE l.client_id = o.client_id
+            AND (
+              (l.reason = 'topup' AND l.source = 'payme')
+              OR (l.meta::text ILIKE '%' || t.payme_id || '%')
+            )
+        ) THEN 'LOST_PAYMENT'
+        WHEN t.state = 1 AND COALESCE(o.status, '') = 'paid' THEN 'ORDER_STATUS_MISMATCH'
+        ELSE 'UNKNOWN'
+      END AS problem_type
     FROM payme_transactions t
     LEFT JOIN topup_orders o ON o.id = t.order_id
     WHERE
-      (t.state = 2 AND o.status != 'paid')
+      (t.state = 2 AND COALESCE(o.status, '') != 'paid')
       OR
       (t.state IN (-1,-2) AND o.status = 'paid')
+      OR
+      (t.state = 1 AND COALESCE(o.status, '') = 'paid')
+      OR
+      (
+        t.state = 2 AND NOT EXISTS (
+          SELECT 1
+          FROM contact_balance_ledger l
+          WHERE l.client_id = o.client_id
+            AND (
+              (l.reason = 'topup' AND l.source = 'payme')
+              OR (l.meta::text ILIKE '%' || t.payme_id || '%')
+            )
+        )
+      )
     LIMIT 50
   `);
 
