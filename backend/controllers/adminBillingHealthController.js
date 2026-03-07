@@ -1,3 +1,5 @@
+//backend/controllers/adminBillingHealthController.js
+
 const pool = require("../db");
 
 async function syncOneClientBalance(client, clientId) {
@@ -72,6 +74,7 @@ async function getBillingHealthData() {
     SELECT
       t.payme_id,
       t.order_id,
+      o.client_id,
       t.amount_tiyin,
       t.state,
       t.perform_time,
