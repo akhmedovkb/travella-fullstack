@@ -331,57 +331,68 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seedPaymeId]);
 
-  async function run(method, params) {
-    setBusy(true);
-    try {
-      const data = await apiPost("/api/admin/payme/lab/run", { method, params }, "admin");
+async function run(method, params) {
+  setBusy(true);
+  try {
+    const rpc = {
+      jsonrpc: "2.0",
+      id: `lab_${Date.now()}`,
+      method,
+      params,
+    };
 
-      const snap = {
-        ts: nowMs(),
-        method,
-        params,
-        rpc: data?.rpc,
-        result: data?.result,
-      };
+    const data = await apiPost("/api/admin/payme/lab/run", rpc, "admin");
 
-      setLastSnap(snap);
-      setHistory((prev) => [snap, ...prev].slice(0, 30));
-      tSuccess(`${method}: OK`);
+    const snap = {
+      ts: nowMs(),
+      method,
+      params,
+      rpc: data?.rpc || rpc,
+      result: data?.result,
+    };
 
-      if (autoStatus) {
-        const id = params?.id ? String(params.id) : parsed.paymeId;
-        await refreshStatus(id, true);
-      }
-      if (parsed.orderId) {
-        await inspectOrder(parsed.orderId, true);
-      }
+    setLastSnap(snap);
+    setHistory((prev) => [snap, ...prev].slice(0, 30));
+    tSuccess(`${method}: OK`);
 
-      return snap;
-    } catch (e) {
-      console.error(e);
-      tError(`${method}: ошибка`);
-      const snap = {
-        ts: nowMs(),
-        method,
-        params,
-        error: e?.message || e,
-      };
-      setLastSnap(snap);
-      setHistory((prev) => [snap, ...prev].slice(0, 30));
-
-      if (autoStatus) {
-        const id = params?.id ? String(params.id) : parsed.paymeId;
-        await refreshStatus(id, true);
-      }
-      if (parsed.orderId) {
-        await inspectOrder(parsed.orderId, true);
-      }
-
-      return null;
-    } finally {
-      setBusy(false);
+    if (autoStatus) {
+      const id = params?.id ? String(params.id) : parsed.paymeId;
+      await refreshStatus(id, true);
     }
+
+    return snap;
+  } catch (e) {
+    console.error(e);
+    tError(`${method}: ошибка`);
+
+    const rpc = {
+      jsonrpc: "2.0",
+      id: `lab_${Date.now()}`,
+      method,
+      params,
+    };
+
+    const snap = {
+      ts: nowMs(),
+      method,
+      params,
+      rpc,
+      error: e?.message || e,
+    };
+
+    setLastSnap(snap);
+    setHistory((prev) => [snap, ...prev].slice(0, 30));
+
+    if (autoStatus) {
+      const id = params?.id ? String(params.id) : parsed.paymeId;
+      await refreshStatus(id, true);
+    }
+
+    return null;
+  } finally {
+    setBusy(false);
   }
+}
 
   function buildCheck() {
     return { amount: parsed.amount, account: { order_id: parsed.orderId } };
@@ -1036,8 +1047,10 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
               </div>
 
               <div>
-                <div className="text-xs text-gray-500 mb-1">Request body (sent to /api/admin/payme/lab/run)</div>
-                <pre className="text-xs bg-gray-50 border rounded-lg p-3 overflow-auto">{pretty({ method: lastSnap.method, params: lastSnap.params })}</pre>
+                <div className="text-xs text-gray-500 mb-1">Merchant RPC body</div>
+                <pre className="text-xs bg-gray-50 border rounded-lg p-3 overflow-auto">
+                  {pretty(lastSnap.rpc || { jsonrpc: "2.0", id: null, method: lastSnap.method, params: lastSnap.params })}
+                </pre>
               </div>
 
               <div>
