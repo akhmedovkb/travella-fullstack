@@ -114,7 +114,29 @@ async function getBillingHealthData() {
               OR (l.meta::text ILIKE '%' || t.payme_id || '%')
             )
         )
-      )
+    )
+    ORDER BY
+      CASE
+        WHEN
+          t.state = 2 AND NOT EXISTS (
+            SELECT 1
+            FROM contact_balance_ledger l
+            WHERE l.client_id = o.client_id
+          )
+        THEN 1
+
+        WHEN t.state = 2 AND COALESCE(o.status,'') != 'paid'
+        THEN 2
+
+        WHEN t.state IN (-1,-2) AND o.status = 'paid'
+        THEN 3
+
+        WHEN t.state = 1 AND COALESCE(o.status,'') = 'paid'
+        THEN 4
+
+        ELSE 5
+      END,
+      t.perform_time DESC NULLS LAST
     LIMIT 50
   `);
 
