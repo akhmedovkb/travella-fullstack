@@ -22,6 +22,15 @@ function fmtTs(ts) {
   }
 }
 
+function fmtMs(ms) {
+  if (!ms) return "—";
+  try {
+    return new Date(Number(ms)).toLocaleString("ru-RU", { timeZone: "Asia/Tashkent" });
+  } catch {
+    return String(ms);
+  }
+}
+
 function sign(n) {
   const v = toNum(n);
   return v > 0 ? `+${money(v)}` : `${money(v)}`;
@@ -39,6 +48,23 @@ function reasonLabel(reason) {
   if (r === "fix_bug") return "Fix bug";
 
   return reason || "—";
+}
+
+function paymeStateLabel(state) {
+  const s = Number(state);
+  if (s === 1) return "CREATED";
+  if (s === 2) return "PERFORMED";
+  if (s === -1) return "CANCELED";
+  if (s === -2) return "CANCELED_AFTER_PERFORM";
+  return String(state ?? "—");
+}
+
+function paymeStateClass(state) {
+  const s = Number(state);
+  if (s === 2) return "text-green-700";
+  if (s === 1) return "text-yellow-700";
+  if (s === -1 || s === -2) return "text-red-600";
+  return "text-gray-700";
 }
 
 function StatCard({ title, value, tone = "default", subtitle = "" }) {
@@ -71,6 +97,8 @@ export default function AdminContactBalance() {
   const [balance, setBalance] = useState(0);
   const [ledger, setLedger] = useState([]);
   const [stats, setStats] = useState(null);
+  const [paymeStats, setPaymeStats] = useState(null);
+  const [paymeTx, setPaymeTx] = useState([]);
 
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("admin_adjust");
@@ -108,13 +136,17 @@ export default function AdminContactBalance() {
       setSelected(data?.client || client);
       setBalance(toNum(data?.balance || 0));
       setStats(data?.stats || null);
-      setLedger(Array.isArray(data?.ledger) ? data.ledger : data?.items || data?.rows || []);
+      setPaymeStats(data?.payme_stats || null);
+      setLedger(Array.isArray(data?.ledger) ? data.ledger : []);
+      setPaymeTx(Array.isArray(data?.payme_transactions) ? data.payme_transactions : []);
     } catch (e) {
       console.error(e);
       tError("Не удалось загрузить баланс клиента");
       setBalance(0);
       setStats(null);
+      setPaymeStats(null);
       setLedger([]);
+      setPaymeTx([]);
     } finally {
       setLoading(false);
     }
@@ -219,6 +251,15 @@ export default function AdminContactBalance() {
   }, [ledger]);
 
   const s = stats || fallbackStats;
+  const p = paymeStats || {
+    tx_count: 0,
+    created_count: 0,
+    performed_count: 0,
+    canceled_count: 0,
+    performed_sum: 0,
+    canceled_sum: 0,
+    last_payme_time: null,
+  };
 
   const selectedTitle = selected
     ? selected.full_name || selected.name || selected.username || `Client #${selected.id}`
@@ -229,7 +270,7 @@ export default function AdminContactBalance() {
       <div>
         <h1 className="text-xl font-semibold">Clients</h1>
         <p className="text-sm text-gray-500">
-          Одна рабочая страница по клиенту: баланс, статистика, корректировка и ledger.
+          Одна рабочая страница по клиенту: balance, ledger, Payme transactions и корректировки.
         </p>
       </div>
 
@@ -379,6 +420,31 @@ export default function AdminContactBalance() {
             />
           </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            <StatCard
+              title="Payme tx"
+              value={String(toNum(p?.tx_count))}
+              subtitle={`last: ${fmtMs(p?.last_payme_time)}`}
+            />
+            <StatCard
+              title="Performed"
+              value={String(toNum(p?.performed_count))}
+              tone="green"
+              subtitle={`sum: ${money(p?.performed_sum)}`}
+            />
+            <StatCard
+              title="Created"
+              value={String(toNum(p?.created_count))}
+              tone="yellow"
+            />
+            <StatCard
+              title="Canceled"
+              value={String(toNum(p?.canceled_count))}
+              tone="red"
+              subtitle={`sum: ${money(p?.canceled_sum)}`}
+            />
+          </div>
+
           <div className="bg-white rounded-xl shadow p-4">
             <div className="font-medium mb-3">Быстрая корректировка</div>
 
@@ -477,6 +543,56 @@ export default function AdminContactBalance() {
 
             <div className="mt-2 text-xs text-gray-500">
               Корректировки делай через ledger, а не прямым изменением `clients.contact_balance`.
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow overflow-hidden">
+            <div className="p-3 border-b flex items-center justify-between">
+              <div className="text-sm font-medium">Payme transactions</div>
+              <div className="text-xs text-gray-400">
+                последние {Math.min(paymeTx?.length || 0, 100)} записей
+              </div>
+            </div>
+
+            <div className="overflow-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-gray-50 text-gray-600">
+                  <tr>
+                    <th className="text-left px-3 py-2">payme_id</th>
+                    <th className="text-left px-3 py-2">order_id</th>
+                    <th className="text-left px-3 py-2">amount</th>
+                    <th className="text-left px-3 py-2">state</th>
+                    <th className="text-left px-3 py-2">order_status</th>
+                    <th className="text-left px-3 py-2">create</th>
+                    <th className="text-left px-3 py-2">perform</th>
+                    <th className="text-left px-3 py-2">cancel</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paymeTx?.length ? (
+                    paymeTx.map((r, idx) => (
+                      <tr key={`${r.payme_id}_${idx}`} className="border-t">
+                        <td className="px-3 py-2 break-all">{r.payme_id}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{r.order_id}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{money(r.amount_tiyin)}</td>
+                        <td className={`px-3 py-2 whitespace-nowrap font-medium ${paymeStateClass(r.state)}`}>
+                          {paymeStateLabel(r.state)}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap">{r.order_status || "—"}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{fmtMs(r.create_time)}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{fmtMs(r.perform_time)}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{fmtMs(r.cancel_time)}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td className="px-3 py-6 text-gray-500 text-center" colSpan={8}>
+                        Нет Payme transactions
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
 
