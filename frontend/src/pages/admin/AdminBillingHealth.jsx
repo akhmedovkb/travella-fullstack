@@ -1,8 +1,8 @@
 //frontend/src/pages/admin/AdminBillingHealth.jsx
 
 import { useEffect, useMemo, useState } from "react";
-import { apiGet } from "../../api";
-import { tError } from "../../shared/toast";
+import { apiGet, apiPost } from "../../api";
+import { tError, tSuccess } from "../../shared/toast";
 
 function Badge({ kind = "gray", children }) {
   const map = {
@@ -20,12 +20,15 @@ function Badge({ kind = "gray", children }) {
   );
 }
 
-function Box({ title, count, kind = "gray", children }) {
+function Box({ title, count, kind = "gray", children, right = null }) {
   return (
     <div className="bg-white rounded-xl shadow overflow-hidden">
-      <div className="p-3 border-b flex items-center justify-between">
-        <div className="text-sm font-medium">{title}</div>
-        <Badge kind={kind}>{count}</Badge>
+      <div className="p-3 border-b flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="text-sm font-medium">{title}</div>
+          <Badge kind={kind}>{count}</Badge>
+        </div>
+        {right}
       </div>
       <div className="p-3">{children}</div>
     </div>
@@ -34,6 +37,8 @@ function Box({ title, count, kind = "gray", children }) {
 
 export default function AdminBillingHealth() {
   const [loading, setLoading] = useState(false);
+  const [repairingAll, setRepairingAll] = useState(false);
+  const [repairingClientId, setRepairingClientId] = useState(null);
   const [data, setData] = useState(null);
 
   async function load() {
@@ -47,6 +52,35 @@ export default function AdminBillingHealth() {
       setData(null);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function repairOne(clientId) {
+    if (!clientId) return;
+    setRepairingClientId(clientId);
+    try {
+      const res = await apiPost(`/api/admin/billing/health/repair/${clientId}`, {}, "admin");
+      tSuccess(`Client ${res?.client_id || clientId} repaired`);
+      await load();
+    } catch (e) {
+      console.error(e);
+      tError("Не удалось выполнить repair");
+    } finally {
+      setRepairingClientId(null);
+    }
+  }
+
+  async function repairAll() {
+    setRepairingAll(true);
+    try {
+      const res = await apiPost("/api/admin/billing/health/repair-all", {}, "admin");
+      tSuccess(`Repair all done: ${res?.repaired_count || 0}`);
+      await load();
+    } catch (e) {
+      console.error(e);
+      tError("Не удалось выполнить repair all");
+    } finally {
+      setRepairingAll(false);
     }
   }
 
@@ -87,18 +121,22 @@ export default function AdminBillingHealth() {
         </div>
 
         <div className="flex items-center gap-2">
-          {stats.ok ? (
-            <Badge kind="green">System OK</Badge>
-          ) : (
-            <Badge kind="red">Issues: {stats.totalIssues}</Badge>
-          )}
+          {stats.ok ? <Badge kind="green">System OK</Badge> : <Badge kind="red">Issues: {stats.totalIssues}</Badge>}
 
           <button
-            className="px-4 py-2 rounded-lg bg-black text-white disabled:opacity-60"
+            className="px-4 py-2 rounded-lg border bg-white disabled:opacity-60"
             onClick={load}
             disabled={loading}
           >
             {loading ? "Загрузка…" : "Обновить"}
+          </button>
+
+          <button
+            className="px-4 py-2 rounded-lg bg-black text-white disabled:opacity-60"
+            onClick={repairAll}
+            disabled={repairingAll || stats.ledgerMismatch.length === 0}
+          >
+            {repairingAll ? "Repairing…" : "Repair all"}
           </button>
         </div>
       </div>
@@ -148,6 +186,7 @@ export default function AdminBillingHealth() {
                   <th className="text-left px-3 py-2">client_id</th>
                   <th className="text-left px-3 py-2">mirror_balance</th>
                   <th className="text-left px-3 py-2">ledger_balance</th>
+                  <th className="text-right px-3 py-2">actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -156,6 +195,15 @@ export default function AdminBillingHealth() {
                     <td className="px-3 py-2">{r.client_id}</td>
                     <td className="px-3 py-2">{r.mirror_balance}</td>
                     <td className="px-3 py-2">{r.ledger_balance}</td>
+                    <td className="px-3 py-2 text-right">
+                      <button
+                        className="px-3 py-1 rounded-lg bg-black text-white disabled:opacity-60"
+                        onClick={() => repairOne(r.client_id)}
+                        disabled={repairingClientId === r.client_id}
+                      >
+                        {repairingClientId === r.client_id ? "…" : "Repair"}
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
