@@ -1,4 +1,4 @@
-//backend/routes/adminPaymeLabRoutes.js
+// backend/routes/adminPaymeLabRoutes.js
 
 const express = require("express");
 const authenticateToken = require("../middleware/authenticateToken");
