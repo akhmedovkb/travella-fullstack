@@ -100,7 +100,9 @@ function healthStatusFromDetails(details) {
   if (state === 2 && ledgerRows === 0) return "LOST_PAYMENT";
   if (state === 2 && ledgerSum <= 0) return "BAD_AMOUNT";
   if ((state === -1 || state === -2) && ledgerSum > 0) return "REFUND_MISMATCH";
-  if (state === 2 && ledgerRows > 0 && amount > 0 && ledgerSum !== amount) return "AMOUNT_MISMATCH";
+  if (state === 2 && ledgerRows > 0 && amount > 0 && ledgerSum !== amount) {
+    return "AMOUNT_MISMATCH";
+  }
 
   return "OK";
 }
@@ -121,6 +123,7 @@ function timelineDotTone(tone) {
 
 export default function PaymeLab({ embedded = false, seed = null } = {}) {
   const [searchParams] = useSearchParams();
+
   const [orderId, setOrderId] = useState("11");
   const [amount, setAmount] = useState("100000");
   const [paymeId, setPaymeId] = useState(makeNewTxId());
@@ -135,6 +138,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
     { value: "3", label: "3 — истёк таймаут / не выполнено" },
     { value: "custom", label: "Custom…" },
   ];
+
   const [cancelPreset, setCancelPreset] = useState("");
   const [cancelCustom, setCancelCustom] = useState("");
 
@@ -160,6 +164,10 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
   const [inspectLoading, setInspectLoading] = useState(false);
   const [orderDetails, setOrderDetails] = useState(null);
   const [orderDetailsErr, setOrderDetailsErr] = useState("");
+
+  const [inspectorEvents, setInspectorEvents] = useState([]);
+  const [inspectorEventsLoading, setInspectorEventsLoading] = useState(false);
+  const [inspectorEventsErr, setInspectorEventsErr] = useState("");
 
   useEffect(() => {
     const s = normalizeSeed(seed);
@@ -231,6 +239,48 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
     return true;
   }
 
+  async function loadInspectorEvents(orderIdOverride = null, paymeIdOverride = null, silent = true) {
+    const oid = String(orderIdOverride || inspectOrderId || orderId || "").trim();
+    const pid = String(paymeIdOverride || "").trim();
+
+    const qValue = pid || oid;
+    if (!qValue) {
+      setInspectorEvents([]);
+      setInspectorEventsErr("");
+      return;
+    }
+
+    setInspectorEventsLoading(true);
+    setInspectorEventsErr("");
+
+    try {
+      const data = await apiGet(
+        `/api/admin/payme/events?limit=100&q=${encodeURIComponent(qValue)}`,
+        "admin"
+      );
+
+      const rows = Array.isArray(data?.rows) ? data.rows : [];
+
+      const filtered = rows.filter((r) => {
+        const rowOrderId = String(r?.order_id ?? "").trim();
+        const rowPaymeId = String(r?.payme_id ?? "").trim();
+
+        if (pid && rowPaymeId === pid) return true;
+        if (oid && rowOrderId === oid) return true;
+        return false;
+      });
+
+      setInspectorEvents(filtered);
+    } catch (e) {
+      console.error(e);
+      setInspectorEvents([]);
+      setInspectorEventsErr(e?.message || "Events load error");
+      if (!silent) tError("Не удалось загрузить события Payme");
+    } finally {
+      setInspectorEventsLoading(false);
+    }
+  }
+
   async function inspectOrder(idOverride = null, silent = false) {
     const id = String(idOverride || inspectOrderId || orderId || "").trim();
     if (!id) {
@@ -246,7 +296,14 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
         `/api/admin/payme/lab/orders/${encodeURIComponent(id)}/inspect`,
         "admin"
       );
+
       setOrderDetails(data);
+
+      const latestTx =
+        Array.isArray(data?.transactions) && data.transactions.length ? data.transactions[0] : null;
+
+      await loadInspectorEvents(String(data?.order?.id || id), String(latestTx?.payme_id || ""));
+
       if (!silent) tSuccess("Order inspected");
     } catch (e) {
       console.error(e);
@@ -261,6 +318,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
   async function createOrder() {
     const clientId = toInt(newClientId, 0);
     const amountTiyin = toInt(newAmountTiyin, 0);
+
     if (!clientId) return tError("Укажи существующий client_id");
     if (!amountTiyin || amountTiyin <= 0) return tError("Укажи amount_tiyin > 0");
 
@@ -271,8 +329,10 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
         { client_id: clientId, amount_tiyin: amountTiyin, provider: "payme", status: "created" },
         "admin"
       );
+
       const ord = data?.order || null;
       setCreatedOrder(data);
+
       if (ord?.id) {
         setOrderId(String(ord.id));
         setInspectOrderId(String(ord.id));
@@ -326,6 +386,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
   async function repairLedgerForCurrent() {
     const id = String(parsed.paymeId || "").trim();
     if (!id) return;
+
     setRepairing(true);
     try {
       const data = await apiPost(`/api/admin/payme/repair/${encodeURIComponent(id)}`, {}, "admin");
@@ -659,6 +720,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
     const transactions = Array.isArray(orderDetails?.transactions) ? orderDetails.transactions : [];
     const ledger = Array.isArray(orderDetails?.ledger) ? orderDetails.ledger : [];
     const ledgerSum = ledger.reduce((s, r) => s + Number(r?.amount || 0), 0);
+
     return {
       order,
       client,
@@ -669,10 +731,18 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
     };
   }, [orderDetails]);
 
+  useEffect(() => {
+    const oid = String(orderSummary?.order?.id || "").trim();
+    const pid = String(orderSummary?.latestTx?.payme_id || "").trim();
+    if (!oid && !pid) return;
+
+    loadInspectorEvents(oid, pid, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderSummary?.order?.id, orderSummary?.latestTx?.payme_id]);
+
   const inspectorTimeline = useMemo(() => {
     const order = orderSummary.order;
     const client = orderSummary.client;
-    const txs = orderSummary.transactions;
     const latestTx = orderSummary.latestTx;
     const ledger = orderSummary.ledger;
     const ledgerSum = orderSummary.ledgerSum;
@@ -803,6 +873,63 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
       },
     ];
   }, [orderSummary]);
+
+  const rpcTimeline = useMemo(() => {
+    const methods = [
+      "CheckPerformTransaction",
+      "CreateTransaction",
+      "PerformTransaction",
+      "CancelTransaction",
+      "GetStatement",
+    ];
+
+    const rows = Array.isArray(inspectorEvents) ? inspectorEvents : [];
+
+    return methods.map((method) => {
+      const events = rows
+        .filter((r) => String(r?.method || "") === method)
+        .sort((a, b) => {
+          const ai = Number(a?.id || 0);
+          const bi = Number(b?.id || 0);
+          return ai - bi;
+        });
+
+      const begin = events.find((e) => e?.stage === "begin") || null;
+      const end = [...events].reverse().find((e) => e?.stage === "end") || null;
+      const error = [...events].reverse().find((e) => e?.stage === "error") || null;
+
+      let tone = "muted";
+      let desc = "Нет событий";
+      let ts = null;
+
+      if (error) {
+        tone = "bad";
+        desc = `error${error?.error_code != null ? ` ${error.error_code}` : ""}${
+          error?.error_message ? ` — ${error.error_message}` : ""
+        }`;
+        ts = error?.created_at || null;
+      } else if (end) {
+        tone = "ok";
+        desc = `end, http=${end?.http_status ?? "—"}, ms=${end?.duration_ms ?? "—"}`;
+        ts = end?.created_at || null;
+      } else if (begin) {
+        tone = "warn";
+        desc = "begin есть, end/error пока нет";
+        ts = begin?.created_at || null;
+      }
+
+      return {
+        method,
+        begin,
+        end,
+        error,
+        tone,
+        desc,
+        ts,
+        count: events.length,
+      };
+    });
+  }, [inspectorEvents]);
 
   return (
     <div className={embedded ? "" : "p-4 md:p-6"}>
@@ -965,9 +1092,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
                 </div>
                 <div>
                   contact_balance:{" "}
-                  <span className="font-mono">
-                    {money(orderSummary.client?.contact_balance)}
-                  </span>
+                  <span className="font-mono">{money(orderSummary.client?.contact_balance)}</span>
                 </div>
                 <div>
                   tx_count / ledger_rows:{" "}
@@ -1017,6 +1142,95 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
                       </div>
                     </div>
                     <div className="mt-2 text-xs text-gray-700">{item.desc}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {orderSummary.order && (
+            <div className="mt-4">
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <div className="text-sm font-semibold text-gray-800">RPC events timeline</div>
+                <div className="flex items-center gap-2">
+                  {inspectorEventsLoading ? (
+                    <span className="text-xs text-gray-500">Loading…</span>
+                  ) : (
+                    <span className="text-xs text-gray-500">events: {inspectorEvents.length}</span>
+                  )}
+                  <button
+                    type="button"
+                    className="px-2.5 py-1.5 rounded-lg border bg-white text-xs"
+                    onClick={() =>
+                      loadInspectorEvents(
+                        String(orderSummary?.order?.id || ""),
+                        String(orderSummary?.latestTx?.payme_id || ""),
+                        false
+                      )
+                    }
+                    disabled={inspectorEventsLoading || busy}
+                  >
+                    Reload events
+                  </button>
+                </div>
+              </div>
+
+              {!!inspectorEventsErr && (
+                <div className="mb-2 text-xs text-red-600">{inspectorEventsErr}</div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {rpcTimeline.map((item) => (
+                  <div
+                    key={item.method}
+                    className={`border rounded-lg p-3 ${timelineTone(item.tone)}`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span
+                          className={`w-2.5 h-2.5 rounded-full shrink-0 ${timelineDotTone(
+                            item.tone
+                          )}`}
+                        />
+                        <div className="font-medium text-sm">{item.method}</div>
+                      </div>
+                      <div className="text-[11px] text-gray-500 shrink-0">
+                        {item.ts ? fmtTs(item.ts) : "—"}
+                      </div>
+                    </div>
+
+                    <div className="mt-2 text-xs text-gray-700">{item.desc}</div>
+
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {item.begin ? badgePill("info", "begin") : null}
+                      {item.end ? badgePill("ok", "end") : null}
+                      {item.error ? badgePill("bad", "error") : null}
+                      {item.count ? badgePill("black", `rows: ${item.count}`) : null}
+                    </div>
+
+                    {(item.begin || item.end || item.error) && (
+                      <div className="mt-2 text-[11px] text-gray-500 space-y-1">
+                        {item.begin ? <div>begin: {fmtTs(item.begin.created_at)}</div> : null}
+                        {item.end ? (
+                          <div>
+                            end: {fmtTs(item.end.created_at)}
+                            {item.end.http_status != null ? ` • http=${item.end.http_status}` : ""}
+                            {item.end.duration_ms != null ? ` • ${item.end.duration_ms}ms` : ""}
+                          </div>
+                        ) : null}
+                        {item.error ? (
+                          <div>
+                            error: {fmtTs(item.error.created_at)}
+                            {item.error.error_code != null
+                              ? ` • code=${item.error.error_code}`
+                              : ""}
+                            {item.error.error_message
+                              ? ` • ${item.error.error_message}`
+                              : ""}
+                          </div>
+                        ) : null}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -1370,6 +1584,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
                   </option>
                 ))}
               </select>
+
               {cancelPreset === "custom" && (
                 <div className="mt-2">
                   <input
@@ -1381,6 +1596,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
                   />
                 </div>
               )}
+
               <div className="text-[11px] text-gray-400 mt-1">
                 Если выбрать “не указывать”, поле reason не отправляется (null).
               </div>
@@ -1420,6 +1636,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
               >
                 CheckPerformTransaction
               </button>
+
               <button
                 className="px-4 py-2 rounded-lg border bg-white disabled:opacity-60"
                 onClick={() => {
@@ -1431,6 +1648,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
               >
                 CreateTransaction
               </button>
+
               <button
                 className="px-4 py-2 rounded-lg border bg-white disabled:opacity-60"
                 onClick={() => {
@@ -1441,6 +1659,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
               >
                 PerformTransaction
               </button>
+
               <button
                 className="px-4 py-2 rounded-lg border bg-white disabled:opacity-60"
                 onClick={() => {
@@ -1451,6 +1670,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
               >
                 CancelTransaction
               </button>
+
               <button
                 className="px-4 py-2 rounded-lg border bg-white disabled:opacity-60"
                 onClick={() => run("GetStatement", buildStatement())}
@@ -1469,7 +1689,9 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
           </div>
 
           {!lastSnap ? (
-            <div className="p-4 text-sm text-gray-500">Нажми любую кнопку — тут появится RPC + ответ.</div>
+            <div className="p-4 text-sm text-gray-500">
+              Нажми любую кнопку — тут появится RPC + ответ.
+            </div>
           ) : (
             <div className="p-4 grid grid-cols-1 gap-4">
               <div className="flex flex-wrap items-center gap-2">
@@ -1532,6 +1754,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
               Clear
             </button>
           </div>
+
           <div className="overflow-auto">
             <table className="min-w-full text-sm">
               <thead className="bg-gray-50 text-gray-600">
