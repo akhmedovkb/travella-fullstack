@@ -40,9 +40,17 @@ function getMerchantRpcUrl(req) {
   const explicit = safeStr(process.env.PAYME_MERCHANT_RPC_URL);
   if (explicit) return explicit;
 
-  const proto = safeStr(req?.protocol) || "http";
+  const xfProto = safeStr(req?.headers?.["x-forwarded-proto"]).split(",")[0].trim();
+  const proto =
+    xfProto ||
+    safeStr(req?.protocol) ||
+    (safeStr(req?.headers?.host).includes("localhost") ? "http" : "https");
+
   const host = safeStr(req?.get?.("host") || req?.headers?.host);
-  if (host) return `${proto}://${host}/api/merchant/payme`;
+
+  if (host) {
+    return `${proto}://${host}/api/merchant/payme`;
+  }
 
   const port = safeStr(process.env.PORT) || "4000";
   return `http://127.0.0.1:${port}/api/merchant/payme`;
