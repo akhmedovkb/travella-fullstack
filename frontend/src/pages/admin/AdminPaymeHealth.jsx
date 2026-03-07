@@ -13,9 +13,11 @@ function toNum(x) {
   const n = Number(x);
   return Number.isFinite(n) ? n : 0;
 }
+
 function money(n) {
   return Math.round(toNum(n)).toLocaleString("ru-RU");
 }
+
 function fmtTs(x) {
   if (!x) return "—";
   try {
@@ -27,7 +29,11 @@ function fmtTs(x) {
 
 function badge(status) {
   const base = "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium";
-  if (status === "OK") return <span className={`${base} bg-green-100 text-green-700`}>✅ OK</span>;
+
+  if (status === "OK") {
+    return <span className={`${base} bg-green-100 text-green-700`}>✅ OK</span>;
+  }
+
   if (status === "STUCK") {
     return (
       <span className={`${base} bg-purple-100 text-purple-800`}>
@@ -35,20 +41,29 @@ function badge(status) {
       </span>
     );
   }
+
   if (status === "LOST_PAYMENT") {
     return <span className={`${base} bg-red-100 text-red-700`}>✖ LOST_PAYMENT</span>;
   }
+
   if (status === "BAD_AMOUNT") {
     return <span className={`${base} bg-yellow-100 text-yellow-800`}>⚠ BAD_AMOUNT</span>;
   }
+
   if (status === "REFUND_MISMATCH") {
-    return <span className={`${base} bg-orange-100 text-orange-800`}>⚠ REFUND_MISMATCH</span>;
+    return (
+      <span className={`${base} bg-orange-100 text-orange-800`}>
+        ⚠ REFUND_MISMATCH
+      </span>
+    );
   }
+
   return <span className={`${base} bg-gray-100 text-gray-700`}>{String(status)}</span>;
 }
 
 export default function AdminPaymeHealth() {
   const [searchParams] = useSearchParams();
+
   const [q, setQ] = useState("");
   const [onlyBad, setOnlyBad] = useState(true);
   const [limit, setLimit] = useState(200);
@@ -60,12 +75,13 @@ export default function AdminPaymeHealth() {
   const [repairingId, setRepairingId] = useState(null);
   const [autoFixing, setAutoFixing] = useState(false);
 
-  const [tab, setTab] = useState("health"); // "health" | "events" | "lab" | "dashboard" | "live"
+  const [tab, setTab] = useState("health"); // health | events | lab | dashboard | live
 
   const canLoad = useMemo(() => true, []);
 
   async function load(qOverride = null) {
     if (!canLoad) return;
+
     setLoading(true);
     try {
       const qValue =
@@ -108,8 +124,10 @@ export default function AdminPaymeHealth() {
 
   async function openTx(r) {
     if (!r?.payme_id) return;
+
     setSelected(r);
     setDetails(null);
+
     try {
       const data = await apiGet(`/api/admin/payme/tx/${encodeURIComponent(r.payme_id)}`, "admin");
       setDetails(data);
@@ -191,99 +209,82 @@ export default function AdminPaymeHealth() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h2 className="text-xl font-semibold">Payme Merchant Console</h2>
-          <p className="text-sm text-gray-500">
-            Bank-grade monitoring: health, events, lab, dashboard, live.
-          </p>
-        </div>
+      {/* Single header for the whole Payme module */}
+      <div className="bg-white rounded-xl shadow p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold">Payme Merchant Console</h2>
+            <div className="text-xs text-gray-500 mt-1">
+              Bank-grade monitoring: health, events, lab, dashboard, live.
+            </div>
+          </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            className={`px-3 py-2 rounded-lg text-sm ${
-              tab === "health" ? "bg-black text-white" : "border bg-white"
-            }`}
-            onClick={() => setTab("health")}
-          >
-            Health
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              className={`px-3 py-1.5 rounded-lg text-sm ${
+                tab === "health" ? "bg-black text-white" : "border bg-white"
+              }`}
+              onClick={() => setTab("health")}
+            >
+              Health
+            </button>
 
-          <button
-            className={`px-3 py-2 rounded-lg text-sm ${
-              tab === "events" ? "bg-black text-white" : "border bg-white"
-            }`}
-            onClick={() => setTab("events")}
-          >
-            Events
-          </button>
+            <button
+              className={`px-3 py-1.5 rounded-lg text-sm ${
+                tab === "events" ? "bg-black text-white" : "border bg-white"
+              }`}
+              onClick={() => setTab("events")}
+            >
+              Events
+            </button>
 
-          <button
-            className={`px-3 py-2 rounded-lg text-sm ${
-              tab === "lab" ? "bg-black text-white" : "border bg-white"
-            }`}
-            onClick={() => setTab("lab")}
-            title={
-              selected?.payme_id
-                ? "Открыть Payme Lab для выбранной транзакции"
-                : "Открыть Payme Lab (можно и без выбранной транзакции)"
-            }
-          >
-            Lab
-          </button>
+            <button
+              className={`px-3 py-1.5 rounded-lg text-sm ${
+                tab === "lab" ? "bg-black text-white" : "border bg-white"
+              }`}
+              onClick={() => setTab("lab")}
+              title={
+                selected?.payme_id
+                  ? "Открыть Payme Lab для выбранной транзакции"
+                  : "Открыть Payme Lab"
+              }
+            >
+              Lab
+            </button>
 
-          <button
-            className={`px-3 py-2 rounded-lg text-sm ${
-              tab === "dashboard" ? "bg-black text-white" : "border bg-white"
-            }`}
-            onClick={() => setTab("dashboard")}
-            title="Общий мониторинг Payme"
-          >
-            Dashboard
-          </button>
+            <button
+              className={`px-3 py-1.5 rounded-lg text-sm ${
+                tab === "dashboard" ? "bg-black text-white" : "border bg-white"
+              }`}
+              onClick={() => setTab("dashboard")}
+              title="Общий мониторинг Payme"
+            >
+              Dashboard
+            </button>
 
-          <button
-            className={`px-3 py-2 rounded-lg text-sm ${
-              tab === "live" ? "bg-black text-white" : "border bg-white"
-            }`}
-            onClick={() => setTab("live")}
-            title="Live мониторинг транзакций Payme"
-          >
-            Live
-          </button>
+            <button
+              className={`px-3 py-1.5 rounded-lg text-sm ${
+                tab === "live" ? "bg-black text-white" : "border bg-white"
+              }`}
+              onClick={() => setTab("live")}
+              title="Live мониторинг транзакций Payme"
+            >
+              Live
+            </button>
 
-          <button
-            className="px-3 py-2 rounded-lg text-sm bg-red-600 text-white disabled:opacity-60"
-            onClick={runAutoFix}
-            disabled={autoFixing}
-            title="Автоматически исправить типичные проблемы Payme"
-          >
-            {autoFixing ? "AUTO FIX…" : "AUTO FIX PAYME"}
-          </button>
+            <button
+              className="px-3 py-1.5 rounded-lg text-sm bg-red-600 text-white disabled:opacity-60"
+              onClick={runAutoFix}
+              disabled={autoFixing}
+              title="Автоматически исправить типичные проблемы Payme"
+            >
+              {autoFixing ? "AUTO FIX…" : "AUTO FIX PAYME"}
+            </button>
+          </div>
         </div>
       </div>
 
-      {tab === "events" && <AdminPaymeEvents />}
-
-      {tab === "lab" && (
-        <PaymeLab
-          embedded
-          seed={
-            selected
-              ? {
-                  orderId: selected.order_id,
-                  amount: selected.amount_tiyin,
-                  paymeId: selected.payme_id,
-                }
-              : null
-          }
-        />
-      )}
-
-      {tab === "dashboard" && <PaymeDashboard />}
-
-      {tab === "live" && <PaymeLive />}
-
+      {/* Health */}
       {tab === "health" && (
         <>
           <div className="bg-white rounded-xl shadow p-4">
@@ -299,6 +300,7 @@ export default function AdminPaymeHealth() {
                   placeholder="pm_tx_... или 123"
                 />
               </div>
+
               <div className="w-full md:w-40">
                 <label className="block text-xs text-gray-500 mb-1">Limit</label>
                 <input
@@ -310,6 +312,7 @@ export default function AdminPaymeHealth() {
                   max={2000}
                 />
               </div>
+
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
@@ -318,6 +321,7 @@ export default function AdminPaymeHealth() {
                 />
                 Только проблемы
               </label>
+
               <button
                 className="px-4 py-2 rounded-lg bg-black text-white disabled:opacity-60"
                 onClick={load}
@@ -334,6 +338,7 @@ export default function AdminPaymeHealth() {
                 <div className="text-sm text-gray-600">Transactions</div>
                 <div className="text-xs text-gray-400">rows: {rows.length}</div>
               </div>
+
               <div className="overflow-auto">
                 <table className="min-w-full text-sm">
                   <thead className="bg-gray-50 text-gray-600">
@@ -348,6 +353,7 @@ export default function AdminPaymeHealth() {
                       <th className="text-right px-3 py-2">actions</th>
                     </tr>
                   </thead>
+
                   <tbody>
                     {rows.map((r) => (
                       <tr
@@ -390,6 +396,7 @@ export default function AdminPaymeHealth() {
                         </td>
                       </tr>
                     ))}
+
                     {!rows.length && (
                       <tr>
                         <td className="px-3 py-6 text-center text-gray-400" colSpan={8}>
@@ -404,7 +411,10 @@ export default function AdminPaymeHealth() {
 
             <div className="bg-white rounded-xl shadow p-4">
               <div className="text-sm text-gray-600 mb-2">Details</div>
-              {!selected && <div className="text-sm text-gray-400">Выберите транзакцию слева</div>}
+
+              {!selected && (
+                <div className="text-sm text-gray-400">Выберите транзакцию слева</div>
+              )}
 
               {selected && (
                 <div className="space-y-3">
@@ -416,14 +426,17 @@ export default function AdminPaymeHealth() {
                       <div className="text-xs text-gray-500">order_id</div>
                       <div>{selected.order_id}</div>
                     </div>
+
                     <div>
                       <div className="text-xs text-gray-500">state</div>
                       <div>{selected.state}</div>
                     </div>
+
                     <div>
                       <div className="text-xs text-gray-500">perform_time</div>
                       <div className="text-xs">{selected.perform_time || "—"}</div>
                     </div>
+
                     <div>
                       <div className="text-xs text-gray-500">updated_at</div>
                       <div className="text-xs">{fmtTs(selected.updated_at)}</div>
@@ -467,6 +480,31 @@ export default function AdminPaymeHealth() {
           </div>
         </>
       )}
+
+      {/* Events */}
+      {tab === "events" && <AdminPaymeEvents />}
+
+      {/* Lab */}
+      {tab === "lab" && (
+        <PaymeLab
+          embedded
+          seed={
+            selected
+              ? {
+                  orderId: selected.order_id,
+                  amount: selected.amount_tiyin,
+                  paymeId: selected.payme_id,
+                }
+              : null
+          }
+        />
+      )}
+
+      {/* Dashboard */}
+      {tab === "dashboard" && <PaymeDashboard />}
+
+      {/* Live */}
+      {tab === "live" && <PaymeLive />}
     </div>
   );
 }
