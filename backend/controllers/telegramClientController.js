@@ -660,28 +660,103 @@ async function searchClientServices(req, res) {
           AND (
             (s.details::jsonb->>'expiration') IS NULL
             OR (s.details::jsonb->>'expiration')::timestamp > NOW()
-            )
+          )
+          AND (
+            COALESCE(
+              CASE
+                WHEN (s.details::jsonb->>'departureFlightDate') ~ '^\\d{4}-\\d{2}-\\d{2}$'
+                  THEN to_date(s.details::jsonb->>'departureFlightDate', 'YYYY-MM-DD')
+              END,
+              CASE
+                WHEN (s.details::jsonb->>'departureDate') ~ '^\\d{4}-\\d{2}-\\d{2}$'
+                  THEN to_date(s.details::jsonb->>'departureDate', 'YYYY-MM-DD')
+              END,
+              CASE
+                WHEN (s.details::jsonb->>'startFlightDate') ~ '^\\d{4}-\\d{2}-\\d{2}$'
+                  THEN to_date(s.details::jsonb->>'startFlightDate', 'YYYY-MM-DD')
+              END,
+              CASE
+                WHEN (s.details::jsonb->>'startDate') ~ '^\\d{4}-\\d{2}-\\d{2}$'
+                  THEN to_date(s.details::jsonb->>'startDate', 'YYYY-MM-DD')
+              END,
+              CASE
+                WHEN (s.details::jsonb->>'checkInDate') ~ '^\\d{4}-\\d{2}-\\d{2}$'
+                  THEN to_date(s.details::jsonb->>'checkInDate', 'YYYY-MM-DD')
+              END,
+              CASE
+                WHEN (s.details::jsonb->>'eventDate') ~ '^\\d{4}-\\d{2}-\\d{2}$'
+                  THEN to_date(s.details::jsonb->>'eventDate', 'YYYY-MM-DD')
+              END
+            ) IS NULL
+            OR
+            COALESCE(
+              CASE
+                WHEN (s.details::jsonb->>'departureFlightDate') ~ '^\\d{4}-\\d{2}-\\d{2}$'
+                  THEN to_date(s.details::jsonb->>'departureFlightDate', 'YYYY-MM-DD')
+              END,
+              CASE
+                WHEN (s.details::jsonb->>'departureDate') ~ '^\\d{4}-\\d{2}-\\d{2}$'
+                  THEN to_date(s.details::jsonb->>'departureDate', 'YYYY-MM-DD')
+              END,
+              CASE
+                WHEN (s.details::jsonb->>'startFlightDate') ~ '^\\d{4}-\\d{2}-\\d{2}$'
+                  THEN to_date(s.details::jsonb->>'startFlightDate', 'YYYY-MM-DD')
+              END,
+              CASE
+                WHEN (s.details::jsonb->>'startDate') ~ '^\\d{4}-\\d{2}-\\d{2}$'
+                  THEN to_date(s.details::jsonb->>'startDate', 'YYYY-MM-DD')
+              END,
+              CASE
+                WHEN (s.details::jsonb->>'checkInDate') ~ '^\\d{4}-\\d{2}-\\d{2}$'
+                  THEN to_date(s.details::jsonb->>'checkInDate', 'YYYY-MM-DD')
+              END,
+              CASE
+                WHEN (s.details::jsonb->>'eventDate') ~ '^\\d{4}-\\d{2}-\\d{2}$'
+                  THEN to_date(s.details::jsonb->>'eventDate', 'YYYY-MM-DD')
+              END
+            ) >= CURRENT_DATE
+          )
         ORDER BY
           COALESCE(
             CASE
-              WHEN (s.details::jsonb->>'startDate') ~ '^\d{4}-\d{2}-\d{2}$'
+              WHEN (s.details::jsonb->>'departureFlightDate') ~ '^\\d{4}-\\d{2}-\\d{2}$'
+                THEN to_date(s.details::jsonb->>'departureFlightDate', 'YYYY-MM-DD')
+            END,
+            CASE
+              WHEN (s.details::jsonb->>'departureDate') ~ '^\\d{4}-\\d{2}-\\d{2}$'
+                THEN to_date(s.details::jsonb->>'departureDate', 'YYYY-MM-DD')
+            END,
+            CASE
+              WHEN (s.details::jsonb->>'startFlightDate') ~ '^\\d{4}-\\d{2}-\\d{2}$'
+                THEN to_date(s.details::jsonb->>'startFlightDate', 'YYYY-MM-DD')
+            END,
+            CASE
+              WHEN (s.details::jsonb->>'startDate') ~ '^\\d{4}-\\d{2}-\\d{2}$'
                 THEN to_date(s.details::jsonb->>'startDate', 'YYYY-MM-DD')
             END,
             CASE
-              WHEN (s.details::jsonb->>'checkInDate') ~ '^\d{4}-\d{2}-\d{2}$'
+              WHEN (s.details::jsonb->>'checkInDate') ~ '^\\d{4}-\\d{2}-\\d{2}$'
                 THEN to_date(s.details::jsonb->>'checkInDate', 'YYYY-MM-DD')
             END,
             CASE
-              WHEN (s.details::jsonb->>'endFlightDate') ~ '^\d{4}-\d{2}-\d{2}$'
+              WHEN (s.details::jsonb->>'eventDate') ~ '^\\d{4}-\\d{2}-\\d{2}$'
+                THEN to_date(s.details::jsonb->>'eventDate', 'YYYY-MM-DD')
+            END,
+            CASE
+              WHEN (s.details::jsonb->>'endFlightDate') ~ '^\\d{4}-\\d{2}-\\d{2}$'
                 THEN to_date(s.details::jsonb->>'endFlightDate', 'YYYY-MM-DD')
             END,
             CASE
-              WHEN (s.details::jsonb->>'eventDate') ~ '^\d{4}-\d{2}-\d{2}$'
-                THEN to_date(s.details::jsonb->>'eventDate', 'YYYY-MM-DD')
+              WHEN (s.details::jsonb->>'endDate') ~ '^\\d{4}-\\d{2}-\\d{2}$'
+                THEN to_date(s.details::jsonb->>'endDate', 'YYYY-MM-DD')
+            END,
+            CASE
+              WHEN (s.details::jsonb->>'checkOutDate') ~ '^\\d{4}-\\d{2}-\\d{2}$'
+                THEN to_date(s.details::jsonb->>'checkOutDate', 'YYYY-MM-DD')
             END
           ) ASC NULLS LAST,
           s.created_at DESC
-          LIMIT 50
+        LIMIT 200
       `,
       [category]
     );
@@ -693,7 +768,6 @@ async function searchClientServices(req, res) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // ✅ FIX: гарантированный placeholder (наш встроенный роут)
     const PLACEHOLDER = `${base}/api/telegram/placeholder.png`;
 
     const normalized = items
@@ -703,61 +777,55 @@ async function searchClientServices(req, res) {
         const cat = String(row.category || "").toLowerCase();
         const isRefused = cat.startsWith("refused_") || cat === "author_tour";
 
-        // старт/ключевая дата (для отказов важно НЕ показывать то, что уже началось/улетело)
         const start =
           safeParseDate(det.departureFlightDate) ||
           safeParseDate(det.departureDate) ||
-          safeParseDate(det.checkInDate) ||
           safeParseDate(det.startFlightDate) ||
-          safeParseDate(det.startDate);
+          safeParseDate(det.startDate) ||
+          safeParseDate(det.checkInDate) ||
+          safeParseDate(det.eventDate);
 
-        // конец (fallback)
         const end =
+          safeParseDate(det.returnFlightDate) ||
           safeParseDate(det.endFlightDate) ||
           safeParseDate(det.endDate) ||
           safeParseDate(det.checkOutDate);
 
-        // Для refused_* / author_tour: если старт уже прошёл — скрываем (даже если end ещё впереди)
         if (isRefused) {
           if (start) return start >= today;
           if (end) return end >= today;
-          return true; // если дат нет — показываем
+          return true;
         }
 
-        // Для остальных: как раньше — по endDate
         if (!end) return true;
         return end >= today;
-     })
-     .map((row) => {
-      let imgs = row.images;
+      })
+      .map((row) => {
+        let imgs = row.images;
 
-      // привести к массиву
-      if (!imgs) imgs = [];
-      if (typeof imgs === "string") {
-        try {
-          imgs = JSON.parse(imgs);
-        } catch {
-          imgs = [imgs];
+        if (!imgs) imgs = [];
+        if (typeof imgs === "string") {
+          try {
+            imgs = JSON.parse(imgs);
+          } catch {
+            imgs = [imgs];
+          }
         }
-      }
-      if (!Array.isArray(imgs)) imgs = [];
+        if (!Array.isArray(imgs)) imgs = [];
 
-      // есть ли вообще “валидная” картинка-строка
-      const hasAny = imgs.some((x) => typeof x === "string" && x.trim());
+        const hasAny = imgs.some((x) => typeof x === "string" && x.trim());
 
-      // Telegram-friendly URL (НЕ dataURL)
-      const imageUrl = hasAny
-        ? `${base}/api/telegram/service-image/${row.id}`
-        : PLACEHOLDER;
+        const imageUrl = hasAny
+          ? `${base}/api/telegram/service-image/${row.id}`
+          : PLACEHOLDER;
 
-      return {
-        ...row,
-        images: imgs,
-        imageUrl,
-      };
-    });
+        return {
+          ...row,
+          images: imgs,
+          imageUrl,
+        };
+      });
 
-    // ✅ FIX: убрали недостижимый второй return
     return res.json({ success: true, items: normalized });
   } catch (e) {
     console.error("GET /api/telegram/client/:chatId/search error:", e);
@@ -767,7 +835,6 @@ async function searchClientServices(req, res) {
     });
   }
 }
-
 async function createQuickRequestFromTelegram(req, res) {
   try {
     const { serviceId, chatId, message, username, firstName, lastName } = req.body || {};
