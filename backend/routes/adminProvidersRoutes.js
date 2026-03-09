@@ -49,11 +49,21 @@ router.get("/providers-table", authenticateToken, requireAdmin, async (req, res)
   const params = [];
   let idx = 1;
 
-  if (q && q.trim()) {
-    where.push(`(LOWER(p.name) ILIKE $${idx} OR LOWER(p.email) ILIKE $${idx} OR p.phone ILIKE $${idx})`);
-    params.push(`%${q.toLowerCase()}%`);
-    idx++;
-  }
+if (q && q.trim()) {
+  where.push(`
+    (
+      LOWER(COALESCE(p.name, '')) ILIKE $${idx}
+      OR LOWER(COALESCE(p.email, '')) ILIKE $${idx}
+      OR COALESCE(p.phone, '') ILIKE $${idx}
+      OR LOWER(COALESCE(p.type, '')) ILIKE $${idx}
+      OR LOWER(COALESCE(p.location, '')) ILIKE $${idx}
+      OR LOWER(COALESCE(p.social::text, '')) ILIKE $${idx}
+      OR COALESCE(CAST(p.telegram_chat_id AS text), '') ILIKE $${idx}
+    )
+  `);
+  params.push(`%${q.toLowerCase()}%`);
+  idx++;
+}
   if (type && type.trim()) {
     where.push(`p.type = $${idx}`); params.push(type); idx++;
   }
