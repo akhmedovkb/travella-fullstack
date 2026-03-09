@@ -54,9 +54,72 @@ async function createLead(req, res) {
 /* ================= LIST LEADS ================= */
 async function listLeads(req, res) {
   try {
-    const r = await pool.query(
-      `SELECT * FROM leads ORDER BY created_at DESC LIMIT 200`
+    const {
+      status = "",
+      lang = "",
+      page = "",
+      q = "",
+      limit = "200",
+    } = req.query || {};
+
+    const where = [];
+    const params = [];
+    let i = 1;
+
+    if (String(status).trim()) {
+      where.push(`status = $${i++}`);
+      params.push(String(status).trim());
+    }
+
+    if (String(lang).trim()) {
+      where.push(`lang = $${i++}`);
+      params.push(String(lang).trim());
+    }
+
+    if (String(page).trim()) {
+      where.push(`page = $${i++}`);
+      params.push(String(page).trim());
+    }
+
+    if (String(q).trim()) {
+      where.push(`
+        (
+          COALESCE(name, '') ILIKE $${i}
+          OR COALESCE(phone, '') ILIKE $${i}
+          OR COALESCE(city, '') ILIKE $${i}
+          OR COALESCE(comment, '') ILIKE $${i}
+          OR COALESCE(page, '') ILIKE $${i}
+          OR COALESCE(lang, '') ILIKE $${i}
+          OR COALESCE(status, '') ILIKE $${i}
+          OR COALESCE(service, '') ILIKE $${i}
+          OR COALESCE(source, '') ILIKE $${i}
+          OR COALESCE(requested_role, '') ILIKE $${i}
+          OR COALESCE(decision, '') ILIKE $${i}
+          OR COALESCE(telegram_username, '') ILIKE $${i}
+          OR COALESCE(telegram_first_name, '') ILIKE $${i}
+          OR COALESCE(CAST(telegram_chat_id AS TEXT), '') ILIKE $${i}
+        )
+      `);
+      params.push(`%${String(q).trim()}%`);
+      i++;
+    }
+
+    const safeLimit = Math.min(
+      Math.max(Number.parseInt(limit, 10) || 200, 1),
+      1000
     );
+
+    params.push(safeLimit);
+
+    const sql = `
+      SELECT *
+      FROM leads
+      ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+      ORDER BY created_at DESC
+      LIMIT $${i}
+    `;
+
+    const r = await pool.query(sql, params);
     return res.json({ ok: true, items: r.rows });
   } catch (e) {
     console.error("listLeads error:", e);
