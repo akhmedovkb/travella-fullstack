@@ -17,7 +17,6 @@ function formatDt(val) {
   const d = val instanceof Date ? val : new Date(val);
   if (Number.isNaN(d.getTime())) return "";
   try {
-    // dd.mm.yyyy, hh:mm
     return new Intl.DateTimeFormat("ru-RU", {
       day: "2-digit",
       month: "2-digit",
@@ -39,17 +38,75 @@ function providerFrom(svc) {
   };
 }
 
+function parseJsonSafe(value, fallback = null) {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+function normalizeDetails(details) {
+  if (!details) return {};
+  if (typeof details === "object" && !Array.isArray(details)) return details;
+  if (typeof details === "string") {
+    const parsed = parseJsonSafe(details, {});
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed
+      : {};
+  }
+  return {};
+}
+
+function normalizeImages(images) {
+  if (!images) return [];
+  if (Array.isArray(images)) return images.filter(Boolean);
+
+  if (typeof images === "string") {
+    const parsed = parseJsonSafe(images, null);
+    if (Array.isArray(parsed)) return parsed.filter(Boolean);
+    if (parsed && typeof parsed === "string") return [parsed];
+    return images.trim() ? [images.trim()] : [];
+  }
+
+  return [];
+}
+
+function pickFirst(...vals) {
+  for (const v of vals) {
+    if (v === 0) return v;
+    if (typeof v === "string" && v.trim()) return v.trim();
+    if (v !== null && typeof v !== "undefined" && v !== "") return v;
+  }
+  return null;
+}
+
 function Card({ item, tab, onApprove, onReject, onUnpublish, t }) {
   const s = item || {};
-  const d = typeof s.details === "object" && s.details !== null ? s.details : {};
-  const cover = Array.isArray(s.images) && s.images.length ? s.images[0] : null;
+  const d = normalizeDetails(s.details);
+  const images = normalizeImages(s.images);
+
+  const cover = pickFirst(
+    images[0],
+    d.image,
+    d.imageUrl,
+    d.cover,
+    d.coverImage,
+    d.photo,
+    d.photoUrl
+  );
+
   const prov = providerFrom(s);
   const isRefused = isRefusedCategory(s.category);
   const createdAtLabel = formatDt(
-    s.created_at || s.createdAt || s.submitted_at || s.submittedAt || s.updated_at || s.updatedAt
+    s.created_at ||
+      s.createdAt ||
+      s.submitted_at ||
+      s.submittedAt ||
+      s.updated_at ||
+      s.updatedAt
   );
 
-  // Локализация типа поставщика по уже существующим ключам provider.types.*
   const providerTypeLabel = (() => {
     const v = prov.type;
     if (!v) return "";
@@ -61,7 +118,6 @@ function Card({ item, tab, onApprove, onReject, onUnpublish, t }) {
       .join(", ");
   })();
 
-  // Локализация категории: service.categories.* -> service.types.* -> top-level key -> raw
   const categoryLabel = s.category
     ? t(`service.categories.${s.category}`, {
         defaultValue: t(`service.types.${s.category}`, {
@@ -73,15 +129,78 @@ function Card({ item, tab, onApprove, onReject, onUnpublish, t }) {
   const yesLabel = t("common.yes", { defaultValue: "Да" });
   const noLabel = t("common.no", { defaultValue: "Нет" });
 
-  // набор ключей, которые мы выведем "красиво" (чтобы потом не дублировать в «прочих полях»)
+  const displayTitle = pickFirst(
+    s.title,
+    d.title,
+    d.hotel,
+    d.eventName,
+    d.ticketTitle,
+    d.directionTo,
+    t("moderation.no_title", { defaultValue: "(без названия)" })
+  );
+
+  const netPrice = pickFirst(d.netPrice, d.net_price, d.priceNet, d.price_net);
+  const grossPrice = pickFirst(
+    d.grossPrice,
+    d.gross_price,
+    d.price,
+    s.price
+  );
+  const oldPrice = pickFirst(
+    d.previousPrice,
+    d.oldPrice,
+    d.old_price,
+    d.prevPrice
+  );
+
+  const dateFrom = pickFirst(
+    d.departureFlightDate,
+    d.departureDate,
+    d.startFlightDate,
+    d.startDate,
+    d.checkInDate,
+    d.eventDate
+  );
+
+  const dateTo = pickFirst(
+    d.returnFlightDate,
+    d.endFlightDate,
+    d.endDate,
+    d.checkOutDate
+  );
+
+  const roomCategory = pickFirst(
+    d.roomCategory,
+    d.room_category,
+    d.accommodationCategory,
+    d.accommodation_category,
+    d.category
+  );
+
+  const flightType = pickFirst(
+    d.flightType,
+    d.flight_type,
+    d.tripType,
+    d.trip_type
+  );
+
   const prettyKeys = new Set([
+    "title",
+    "direction",
     "directionCountry",
     "directionFrom",
     "directionTo",
     "startDate",
     "endDate",
+    "checkInDate",
+    "checkOutDate",
+    "eventDate",
     "hotel",
+    "roomCategory",
+    "room_category",
     "accommodation",
+    "accommodationCategory",
+    "accommodation_category",
     "food",
     "transfer",
     "changeable",
@@ -89,31 +208,60 @@ function Card({ item, tab, onApprove, onReject, onUnpublish, t }) {
     "isActive",
     "expiration",
     "expiration_at",
+    "expiration_ts",
     "departureFlightDate",
+    "departureDate",
+    "startFlightDate",
     "returnFlightDate",
+    "endFlightDate",
+    "flightType",
+    "flight_type",
     "flightDetails",
     "flight_details",
     "flight_info",
+    "netPrice",
+    "net_price",
+    "grossPrice",
+    "gross_price",
+    "previousPrice",
+    "oldPrice",
+    "old_price",
+    "price",
+    "image",
+    "imageUrl",
+    "cover",
+    "coverImage",
+    "photo",
+    "photoUrl",
   ]);
 
-  // Вспомогательно: есть ли вообще что показывать в подробном блоке
   const hasExtraDetails =
+    images.length > 0 ||
     d.directionCountry ||
     d.directionFrom ||
     d.directionTo ||
-    d.startDate ||
-    d.endDate ||
+    dateFrom ||
+    dateTo ||
     d.hotel ||
+    roomCategory ||
     d.accommodation ||
     d.food ||
     d.transfer ||
+    netPrice != null ||
+    grossPrice != null ||
+    oldPrice != null ||
     typeof d.changeable !== "undefined" ||
     typeof d.visaIncluded !== "undefined" ||
     typeof d.isActive !== "undefined" ||
     d.expiration ||
     d.expiration_at ||
+    d.expiration_ts ||
     d.departureFlightDate ||
+    d.departureDate ||
+    d.startFlightDate ||
     d.returnFlightDate ||
+    d.endFlightDate ||
+    flightType ||
     d.flightDetails ||
     d.flight_details ||
     d.flight_info;
@@ -122,20 +270,26 @@ function Card({ item, tab, onApprove, onReject, onUnpublish, t }) {
     <div className="border rounded-lg p-4 bg-white shadow-sm flex flex-col">
       <div className="flex gap-3">
         <div className="w-24 h-16 bg-gray-100 rounded overflow-hidden">
-          {cover ? <img src={cover} alt="" className="w-full h-full object-cover" /> : null}
+          {cover ? (
+            <img src={cover} alt="" className="w-full h-full object-cover" />
+          ) : null}
         </div>
+
         <div className="flex-1 min-w-0">
           <div className="font-semibold truncate">
             {isRefused ? `#${s.id} — ` : ""}
-            {s.title ||
-              t("moderation.no_title", { defaultValue: "(без названия)" })}
+            {displayTitle}
           </div>
+
           <div className="text-xs text-gray-600">{categoryLabel}</div>
+
           {isRefused && createdAtLabel && (
             <div className="text-xs text-gray-500 mt-0.5">
-              {t("moderation.created_at", { defaultValue: "Создан" })}: {createdAtLabel}
+              {t("moderation.created_at", { defaultValue: "Создан" })}:{" "}
+              {createdAtLabel}
             </div>
           )}
+
           <div className="text-xs text-gray-600 mt-1">
             {t("moderation.supplier", { defaultValue: "Поставщик" })}:{" "}
             {prov.id ? (
@@ -152,11 +306,14 @@ function Card({ item, tab, onApprove, onReject, onUnpublish, t }) {
             )}
             {providerTypeLabel ? ` (${providerTypeLabel})` : ""}
           </div>
+
           <div className="text-sm mt-1">
-            {d?.netPrice != null || d?.grossPrice != null ? (
-              <>
-                Netto: {fmt(d?.netPrice)} / Gross: {fmt(d?.grossPrice)}
-              </>
+            {netPrice != null || grossPrice != null || oldPrice != null ? (
+              <div className="flex flex-wrap gap-x-3 gap-y-1">
+                {netPrice != null && <span>Netto: {fmt(netPrice)}</span>}
+                {grossPrice != null && <span>Gross: {fmt(grossPrice)}</span>}
+                {oldPrice != null && <span>Old: {fmt(oldPrice)}</span>}
+              </div>
             ) : null}
           </div>
         </div>
@@ -168,7 +325,6 @@ function Card({ item, tab, onApprove, onReject, onUnpublish, t }) {
         </div>
       )}
 
-      {/* Краткая сетка как было */}
       <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-gray-700">
         {d.direction && (
           <div>
@@ -206,7 +362,6 @@ function Card({ item, tab, onApprove, onReject, onUnpublish, t }) {
         )}
       </div>
 
-      {/* 🔍 Новый подробный блок: все ключевые поля details перед approve */}
       {hasExtraDetails && (
         <div className="mt-3 text-xs bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-1">
           <div className="font-semibold mb-1">
@@ -215,7 +370,24 @@ function Card({ item, tab, onApprove, onReject, onUnpublish, t }) {
             })}
           </div>
 
-          {/* Направление и даты */}
+          {images.length > 0 && (
+            <div className="mb-2">
+              <div className="text-gray-500 mb-1">
+                {t("moderation.photos", { defaultValue: "Фото" })}:
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                {images.slice(0, 6).map((img, idx) => (
+                  <img
+                    key={`${s.id}-img-${idx}`}
+                    src={img}
+                    alt=""
+                    className="w-20 h-16 object-cover rounded border border-gray-200 bg-white"
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
           {d.directionCountry && (
             <div>
               <span className="text-gray-500">
@@ -224,6 +396,7 @@ function Card({ item, tab, onApprove, onReject, onUnpublish, t }) {
               <span className="font-medium">{d.directionCountry}</span>
             </div>
           )}
+
           {(d.directionFrom || d.directionTo) && (
             <div>
               <span className="text-gray-500">
@@ -234,18 +407,18 @@ function Card({ item, tab, onApprove, onReject, onUnpublish, t }) {
               </span>
             </div>
           )}
-          {(d.startDate || d.endDate) && (
+
+          {(dateFrom || dateTo) && (
             <div>
               <span className="text-gray-500">
-                {t("moderation.dates", { defaultValue: "Даты тура" })}:{" "}
+                {t("moderation.dates", { defaultValue: "Даты" })}:{" "}
               </span>
               <span className="font-medium">
-                {d.startDate || "—"} {d.endDate && "→"} {d.endDate || ""}
+                {dateFrom || "—"} {dateTo && "→"} {dateTo || ""}
               </span>
             </div>
           )}
 
-          {/* Отель / размещение / питание / трансфер */}
           {d.hotel && (
             <div>
               <span className="text-gray-500">
@@ -254,16 +427,31 @@ function Card({ item, tab, onApprove, onReject, onUnpublish, t }) {
               <span className="font-medium">{d.hotel}</span>
             </div>
           )}
+
+          {roomCategory && (
+            <div>
+              <span className="text-gray-500">
+                {t("moderation.room_category", {
+                  defaultValue: "Категория номера",
+                })}
+                :{" "}
+              </span>
+              <span className="font-medium">{roomCategory}</span>
+            </div>
+          )}
+
           {d.accommodation && (
             <div>
               <span className="text-gray-500">
                 {t("moderation.accommodation", {
                   defaultValue: "Размещение",
-                })}:{" "}
+                })}
+                :{" "}
               </span>
               <span className="font-medium">{d.accommodation}</span>
             </div>
           )}
+
           {d.food && (
             <div>
               <span className="text-gray-500">
@@ -272,6 +460,7 @@ function Card({ item, tab, onApprove, onReject, onUnpublish, t }) {
               <span className="font-medium">{d.food}</span>
             </div>
           )}
+
           {d.transfer && (
             <div>
               <span className="text-gray-500">
@@ -281,72 +470,112 @@ function Card({ item, tab, onApprove, onReject, onUnpublish, t }) {
             </div>
           )}
 
-          {/* Флаги */}
+          {(netPrice != null || grossPrice != null || oldPrice != null) && (
+            <div>
+              <span className="text-gray-500">
+                {t("moderation.prices", { defaultValue: "Цены" })}:{" "}
+              </span>
+              <span className="font-medium">
+                {netPrice != null ? `Netto ${fmt(netPrice)}` : ""}
+                {netPrice != null && grossPrice != null ? " / " : ""}
+                {grossPrice != null ? `Gross ${fmt(grossPrice)}` : ""}
+                {oldPrice != null ? ` / Old ${fmt(oldPrice)}` : ""}
+              </span>
+            </div>
+          )}
+
           {typeof d.changeable !== "undefined" && (
             <div>
               <span className="text-gray-500">
                 {t("moderation.changeable", {
                   defaultValue: "Можно вносить изменения",
-                })}:{" "}
+                })}
+                :{" "}
               </span>
               <span className="font-medium">
                 {d.changeable ? yesLabel : noLabel}
               </span>
             </div>
           )}
+
           {typeof d.visaIncluded !== "undefined" && (
             <div>
               <span className="text-gray-500">
                 {t("moderation.visa_included", {
                   defaultValue: "Виза включена",
-                })}:{" "}
+                })}
+                :{" "}
               </span>
               <span className="font-medium">
                 {d.visaIncluded ? yesLabel : noLabel}
               </span>
             </div>
           )}
+
           {typeof d.isActive !== "undefined" && (
             <div>
               <span className="text-gray-500">
                 {t("moderation.is_active", {
                   defaultValue: "Актуально",
-                })}:{" "}
+                })}
+                :{" "}
               </span>
               <span className="font-medium">
                 {d.isActive ? yesLabel : noLabel}
               </span>
             </div>
           )}
-          {(d.expiration || d.expiration_at) && (
+
+          {(d.expiration || d.expiration_at || d.expiration_ts) && (
             <div>
               <span className="text-gray-500">
                 {t("moderation.expiration", {
                   defaultValue: "Таймер актуальности",
-                })}:{" "}
+                })}
+                :{" "}
               </span>
               <span className="font-medium">
-                {d.expiration || d.expiration_at}
+                {pickFirst(d.expiration, d.expiration_at, d.expiration_ts)}
               </span>
             </div>
           )}
 
-          {/* Полёт */}
-          {(d.departureFlightDate || d.returnFlightDate) && (
+          {(d.departureFlightDate ||
+            d.departureDate ||
+            d.startFlightDate ||
+            d.returnFlightDate ||
+            d.endFlightDate) && (
             <div>
               <span className="text-gray-500">
                 {t("moderation.flight_dates", {
                   defaultValue: "Даты рейса",
-                })}:{" "}
+                })}
+                :{" "}
               </span>
               <span className="font-medium">
-                {d.departureFlightDate || "—"}{" "}
-                {d.returnFlightDate && "→"} {d.returnFlightDate || ""}
+                {pickFirst(
+                  d.departureFlightDate,
+                  d.departureDate,
+                  d.startFlightDate
+                ) || "—"}{" "}
+                {(d.returnFlightDate || d.endFlightDate) && "→"}{" "}
+                {pickFirst(d.returnFlightDate, d.endFlightDate) || ""}
               </span>
             </div>
           )}
 
-          {/* Детали рейса отдельным блоком */}
+          {flightType && (
+            <div>
+              <span className="text-gray-500">
+                {t("moderation.flight_type", {
+                  defaultValue: "Тип перелёта",
+                })}
+                :{" "}
+              </span>
+              <span className="font-medium">{flightType}</span>
+            </div>
+          )}
+
           {(d.flightDetails || d.flight_details || d.flight_info) && (
             <div className="mt-1 rounded-md bg-white border border-gray-200 px-2 py-1.5 text-[11px] whitespace-pre-wrap leading-snug">
               <div className="font-semibold mb-1">
@@ -360,7 +589,6 @@ function Card({ item, tab, onApprove, onReject, onUnpublish, t }) {
             </div>
           )}
 
-          {/* Прочие поля details (чтобы модератор видел вообще всё) */}
           {Object.keys(d).some((k) => !prettyKeys.has(k)) && (
             <div className="mt-2 border-t border-gray-200 pt-1">
               <div className="text-[11px] font-semibold text-gray-500 mb-1">
@@ -401,7 +629,6 @@ function Card({ item, tab, onApprove, onReject, onUnpublish, t }) {
       )}
 
       <div className="mt-4 flex gap-2">
-        {/* В rejected показываем «Подтвердить» (approve), в pending — обычный approve/reject */}
         <button
           onClick={() => onApprove(s.id)}
           className="px-3 py-1.5 rounded bg-emerald-600 text-white text-sm hover:bg-emerald-700"
@@ -427,7 +654,6 @@ function Card({ item, tab, onApprove, onReject, onUnpublish, t }) {
           </button>
         )}
 
-        {/* Unpublish уместен только для опубликованных (оставим как раньше) */}
         {item.status === "published" && (
           <button
             onClick={() => onUnpublish(s.id)}
@@ -444,7 +670,7 @@ function Card({ item, tab, onApprove, onReject, onUnpublish, t }) {
 export default function AdminModeration() {
   const { t } = useTranslation();
 
-  const [tab, setTab] = useState("pending"); // 'pending' | 'rejected'
+  const [tab, setTab] = useState("pending");
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [counts, setCounts] = useState({ pending: 0, rejected: 0 });
@@ -460,10 +686,7 @@ export default function AdminModeration() {
       const json = decodeURIComponent(
         atob(base64)
           .split("")
-          .map(
-            (c) =>
-              "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)
-          )
+          .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
           .join("")
       );
       const claims = JSON.parse(json);
@@ -525,18 +748,13 @@ export default function AdminModeration() {
 
   useEffect(() => {
     load(tab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
   const approve = async (id) => {
     try {
-      await axios.post(
-        `${API_BASE}/api/admin/services/${id}/approve`,
-        {},
-        cfg
-      );
-      tSuccess(
-        t("moderation.approved", { defaultValue: "Опубликовано" })
-      );
+      await axios.post(`${API_BASE}/api/admin/services/${id}/approve`, {}, cfg);
+      tSuccess(t("moderation.approved", { defaultValue: "Опубликовано" }));
       setItems((prev) => prev.filter((x) => x.id !== id));
       setCounts((c) => ({
         ...c,
@@ -550,21 +768,21 @@ export default function AdminModeration() {
   };
 
   const reject = async (id, reason) => {
-    if (!reason || !reason.trim())
+    if (!reason || !reason.trim()) {
       return tInfo(
         t("moderation.enter_reason_short", {
           defaultValue: "Укажите причину",
         })
       );
+    }
+
     try {
       await axios.post(
         `${API_BASE}/api/admin/services/${id}/reject`,
         { reason },
         cfg
       );
-      tSuccess(
-        t("moderation.rejected", { defaultValue: "Отклонено" })
-      );
+      tSuccess(t("moderation.rejected", { defaultValue: "Отклонено" }));
       setItems((prev) => prev.filter((x) => x.id !== id));
       setCounts((c) => ({
         ...c,
@@ -572,9 +790,7 @@ export default function AdminModeration() {
         rejected: (c.rejected || 0) + 1,
       }));
     } catch {
-      tError(
-        t("moderation.reject_error", { defaultValue: "Ошибка reject" })
-      );
+      tError(t("moderation.reject_error", { defaultValue: "Ошибка reject" }));
     }
   };
 
@@ -632,7 +848,6 @@ export default function AdminModeration() {
         </button>
       </div>
 
-      {/* Tabs */}
       <div className="mb-5 inline-flex rounded-full bg-white shadow-sm overflow-hidden">
         <button
           className={`px-4 py-1.5 text-sm font-medium ${
@@ -647,6 +862,7 @@ export default function AdminModeration() {
             {counts.pending || 0}
           </span>
         </button>
+
         <button
           className={`px-4 py-1.5 text-sm font-medium ${
             tab === "rejected"
