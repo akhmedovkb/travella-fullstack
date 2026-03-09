@@ -196,7 +196,7 @@ export default function AdminLeads() {
     try {
       setLoading(true);
       setErr("");
-      const data = await listLeads({ status, lang, page });
+      const data = await listLeads({ status, lang, page, q });
       setItems(data.items || []);
     } catch (e) {
       setErr(e.message || "Failed to load");
