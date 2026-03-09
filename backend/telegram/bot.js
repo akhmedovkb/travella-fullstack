@@ -3189,12 +3189,10 @@ function parseImagesAny(images) {
   return [];
 }
 
-
 function getStartDateForSort(svc) {
   const d = parseDetailsAny(svc.details);
   const cat = String(svc.category || svc.type || "").toLowerCase();
 
-  // helper: взять первое найденное поле
   const pick = (...keys) => {
     for (const k of keys) {
       const v = d?.[k];
@@ -3204,7 +3202,6 @@ function getStartDateForSort(svc) {
     return null;
   };
 
-  // 1) Самые частые поля по категориям
   let raw =
     (cat === "refused_hotel" &&
       pick(
@@ -3229,9 +3226,12 @@ function getStartDateForSort(svc) {
         "startDate",
         "start_date"
       )) ||
-    // refused_tour и остальные
     pick(
       "departureFlightDate",
+      "departureDate",
+      "departure_date",
+      "startFlightDate",
+      "start_flight_date",
       "startDate",
       "start_date",
       "dateFrom",
@@ -3245,7 +3245,6 @@ function getStartDateForSort(svc) {
   let dt = parseDateSafe(raw);
   if (dt) return dt;
 
-  // 2) Если start не найден — берём end/checkout как fallback
   raw = pick(
     "endDate",
     "end_date",
@@ -3258,12 +3257,9 @@ function getStartDateForSort(svc) {
   dt = parseDateSafe(raw);
   if (dt) return dt;
 
-  // 3) Совсем крайний случай — top-level
   dt = parseDateSafe(svc.startDate || svc.start_date || svc.date);
   return dt;
 }
-
-
 
 function pickPrice(details, svc, role) {
   const d = details || {};
