@@ -170,8 +170,16 @@ export default function ClientBalance() {
               </thead>
               <tbody>
                 {ledger.map((row) => (
-                  <tr key={row.id} className="border-b last:border-b-0">
-                    <td className="py-3 pr-4 whitespace-nowrap">{fmtTs(row.created_at)}</td>
+                  <tr key={row.id} className="border-b last:border-b-0 align-top">
+                    <td className="py-3 pr-4 whitespace-nowrap">
+                      <div>{fmtTs(row.created_at)}</div>
+                      {row.fiscal_received_at ? (
+                        <div className="mt-1 text-xs text-gray-400">
+                          Фискализация: {fmtTs(row.fiscal_received_at)}
+                        </div>
+                      ) : null}
+                    </td>
+                
                     <td
                       className={`py-3 pr-4 whitespace-nowrap font-medium ${
                         Number(row.amount) < 0 ? "text-red-600" : "text-green-600"
@@ -180,8 +188,30 @@ export default function ClientBalance() {
                       {Number(row.amount) > 0 ? "+" : ""}
                       {money(row.amount)} сум
                     </td>
-                    <td className="py-3 pr-4">{row.reason || "—"}</td>
-                    <td className="py-3 pr-4">{row.source || "—"}</td>
+                
+                    <td className="py-3 pr-4">
+                      <div>{row.reason || "—"}</div>
+                      {row.fiscal_receipt_id ? (
+                        <div className="mt-1 text-xs text-gray-500">
+                          Чек: <span className="font-mono">{row.fiscal_receipt_id}</span>
+                        </div>
+                      ) : null}
+                      {row.fiscal_sign ? (
+                        <div className="mt-1 text-xs text-gray-400">
+                          Fiscal sign: <span className="font-mono">{row.fiscal_sign}</span>
+                        </div>
+                      ) : null}
+                    </td>
+                
+                    <td className="py-3 pr-4">
+                      <div>{row.source || "—"}</div>
+                      {row.fiscal_terminal_id ? (
+                        <div className="mt-1 text-xs text-gray-400">
+                          Terminal: <span className="font-mono">{row.fiscal_terminal_id}</span>
+                        </div>
+                      ) : null}
+                    </td>
+                
                     <td className="py-3 pr-4">{row.service_id || "—"}</td>
                   </tr>
                 ))}
