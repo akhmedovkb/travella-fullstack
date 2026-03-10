@@ -130,21 +130,44 @@ async function listLeads(req, res) {
     const sql = `
       SELECT
         l.*,
-
+      
         cm.id AS client_match_id,
         cm.name AS client_match_name,
         cm.email AS client_match_email,
         cm.phone AS client_match_phone,
         cm.telegram AS client_match_telegram,
         cm.telegram_chat_id AS client_match_chat_id,
-
+      
         pm.id AS provider_match_id,
         pm.name AS provider_match_name,
         pm.email AS provider_match_email,
         pm.phone AS provider_match_phone,
         pm.type AS provider_match_type,
         pm.social AS provider_match_social,
-        pm.telegram_chat_id AS provider_match_chat_id
+        pm.telegram_chat_id AS provider_match_chat_id,
+      
+        CASE
+          WHEN cm.id IS NOT NULL AND pm.id IS NOT NULL THEN TRUE
+          ELSE FALSE
+        END AS has_both_client_and_provider,
+      
+        CASE
+          WHEN cm.id IS NOT NULL AND pm.id IS NOT NULL AND
+               cm.telegram_chat_id IS NOT NULL AND pm.telegram_chat_id IS NOT NULL AND
+               cm.telegram_chat_id::text = pm.telegram_chat_id::text
+          THEN 'same_chat_id'
+      
+          WHEN cm.id IS NOT NULL AND pm.id IS NOT NULL AND
+               NULLIF(regexp_replace(COALESCE(cm.phone, ''), '\\D', '', 'g'), '') IS NOT NULL AND
+               regexp_replace(COALESCE(cm.phone, ''), '\\D', '', 'g')
+               = regexp_replace(COALESCE(pm.phone, ''), '\\D', '', 'g')
+          THEN 'same_phone'
+      
+          WHEN cm.id IS NOT NULL AND pm.id IS NOT NULL
+          THEN 'possible_duplicate'
+      
+          ELSE NULL
+        END AS duplicate_reason
 
       FROM leads l
 
