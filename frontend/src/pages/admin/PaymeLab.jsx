@@ -1115,7 +1115,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
             className="px-4 py-2 rounded-lg bg-black text-white disabled:opacity-60"
             onClick={runFullScenario}
             disabled={busy}
-            title="Happy path: Check → Create → Perform → GetStatement"
+            title="Happy path: Check → Create → Perform → SetFiscalData → GetStatement"
           >
             {busy ? "RUN…" : "RUN FULL SCENARIO"}
           </button>
