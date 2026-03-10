@@ -998,10 +998,76 @@ async function paymeMerchantRpc(req, res) {
       return res.status(200).json(ok(id, { transactions: result }));
     }
 
-    /** ---- SetFiscalData (optional) ---- */
-    if (method === "SetFiscalData") {
-      return res.status(200).json(ok(id, { success: true }));
+/** ---- SetFiscalData ---- */
+if (method === "SetFiscalData") {
+  const paymeId = normalizePaymeId(params?.id);
+  const fiscalData = params?.fiscal_data || null;
+
+  if (!paymeId) {
+    return res.status(200).json(rpcError(id, -32602, "Missing params.id"));
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await lockKeyTx(client, `payme:${paymeId}`);
+
+    const { rows } = await client.query(
+      `SELECT payme_id, state
+         FROM payme_transactions
+        WHERE payme_id = $1
+        FOR UPDATE`,
+      [paymeId]
+    );
+
+    const tx = rows[0] || null;
+
+    if (!tx) {
+      await client.query("ROLLBACK");
+      return res
+        .status(200)
+        .json(rpcError(id, -31003, "Transaction not found"));
     }
+
+    const receiptId =
+      fiscalData && typeof fiscalData === "object"
+        ? String(fiscalData.receipt_id ?? "")
+        : "";
+    const fiscalSign =
+      fiscalData && typeof fiscalData === "object"
+        ? String(fiscalData.fiscal_sign ?? "")
+        : "";
+    const terminalId =
+      fiscalData && typeof fiscalData === "object"
+        ? String(fiscalData.terminal_id ?? "")
+        : "";
+
+    await client.query(
+      `UPDATE payme_transactions
+          SET fiscal_data = $2,
+              fiscal_receipt_id = NULLIF($3, ''),
+              fiscal_sign = NULLIF($4, ''),
+              fiscal_terminal_id = NULLIF($5, ''),
+              fiscal_received_at = now(),
+              updated_at = now()
+        WHERE payme_id = $1`,
+      [paymeId, fiscalData, receiptId, fiscalSign, terminalId]
+    );
+
+    await client.query("COMMIT");
+
+    return res.status(200).json(ok(id, { success: true }));
+  } catch (e) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {}
+
+    console.error("[payme] SetFiscalData error:", e?.message || e);
+    return res.status(200).json(rpcError(id, -32400, "Internal error"));
+  } finally {
+    client.release();
+  }
+}
 
     return res.status(200).json(rpcError(id, -32601, "Method not found"));
   } catch (e) {
