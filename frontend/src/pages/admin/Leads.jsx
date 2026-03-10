@@ -169,6 +169,28 @@ function LinkedEntityBadge({ kind, row }) {
   return <span className="text-gray-400">—</span>;
 }
 
+function DuplicateWarningBadge({ row }) {
+  if (!row?.has_both_client_and_provider) {
+    return <span className="text-gray-400">—</span>;
+  }
+
+  const reasonMap = {
+    same_chat_id: "Один и тот же Telegram chat_id в client и provider",
+    same_phone: "Один и тот же телефон в client и provider",
+    possible_duplicate: "Найден и client, и provider — нужна проверка",
+  };
+
+  const reason = reasonMap[row.duplicate_reason] || "Возможный дубль";
+
+  return (
+    <div className="space-y-1">
+      <Badge className="bg-red-50 text-red-700 border-red-200">
+        DUBLICATE WARNING
+      </Badge>
+      <div className="text-xs text-red-600">{reason}</div>
+    </div>
+  );
+}
 export default function AdminLeads() {
   const [params, setParams] = useSearchParams();
   const [items, setItems] = useState([]);
