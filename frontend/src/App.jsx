@@ -43,6 +43,7 @@ import AdminPaymeHealth from "./pages/admin/AdminPaymeHealth";
 import PaymeLab from "./pages/admin/PaymeLab";
 import AdminBilling from "./pages/admin/AdminBilling";
 import AdminFinance from "./pages/admin/AdminFinance";
+import AdminOperations from "./pages/admin/AdminOperations";
 
 // Клиентские
 import ClientRegister from "./pages/ClientRegister";
@@ -295,6 +296,16 @@ export default function App() {
                 <PrivateRoute>
                   <AdminRoute>
                     <AdminProviders />
+                  </AdminRoute>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/admin/operations"
+              element={
+                <PrivateRoute>
+                  <AdminRoute>
+                    <AdminOperations />
                   </AdminRoute>
                 </PrivateRoute>
               }
