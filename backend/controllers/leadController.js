@@ -67,40 +67,56 @@ async function listLeads(req, res) {
     let i = 1;
 
     if (String(status).trim()) {
-      where.push(`status = $${i++}`);
+      where.push(`l.status = $${i++}`);
       params.push(String(status).trim());
     }
 
     if (String(lang).trim()) {
-      where.push(`lang = $${i++}`);
+      where.push(`l.lang = $${i++}`);
       params.push(String(lang).trim());
     }
 
     if (String(page).trim()) {
-      where.push(`page = $${i++}`);
+      where.push(`l.page = $${i++}`);
       params.push(String(page).trim());
     }
 
     if (String(q).trim()) {
+      const needle = `%${String(q).trim()}%`;
+
       where.push(`
         (
-          COALESCE(name, '') ILIKE $${i}
-          OR COALESCE(phone, '') ILIKE $${i}
-          OR COALESCE(city, '') ILIKE $${i}
-          OR COALESCE(comment, '') ILIKE $${i}
-          OR COALESCE(page, '') ILIKE $${i}
-          OR COALESCE(lang, '') ILIKE $${i}
-          OR COALESCE(status, '') ILIKE $${i}
-          OR COALESCE(service, '') ILIKE $${i}
-          OR COALESCE(source, '') ILIKE $${i}
-          OR COALESCE(requested_role, '') ILIKE $${i}
-          OR COALESCE(decision, '') ILIKE $${i}
-          OR COALESCE(telegram_username, '') ILIKE $${i}
-          OR COALESCE(telegram_first_name, '') ILIKE $${i}
-          OR COALESCE(CAST(telegram_chat_id AS TEXT), '') ILIKE $${i}
+          COALESCE(l.name, '') ILIKE $${i}
+          OR COALESCE(l.phone, '') ILIKE $${i}
+          OR COALESCE(l.city, '') ILIKE $${i}
+          OR COALESCE(l.comment, '') ILIKE $${i}
+          OR COALESCE(l.page, '') ILIKE $${i}
+          OR COALESCE(l.lang, '') ILIKE $${i}
+          OR COALESCE(l.status, '') ILIKE $${i}
+          OR COALESCE(l.service, '') ILIKE $${i}
+          OR COALESCE(l.source, '') ILIKE $${i}
+          OR COALESCE(l.requested_role, '') ILIKE $${i}
+          OR COALESCE(l.decision, '') ILIKE $${i}
+          OR COALESCE(l.telegram_username, '') ILIKE $${i}
+          OR COALESCE(l.telegram_first_name, '') ILIKE $${i}
+          OR COALESCE(CAST(l.telegram_chat_id AS TEXT), '') ILIKE $${i}
+
+          OR COALESCE(cm.name, '') ILIKE $${i}
+          OR COALESCE(cm.email, '') ILIKE $${i}
+          OR COALESCE(cm.phone, '') ILIKE $${i}
+          OR COALESCE(cm.telegram, '') ILIKE $${i}
+          OR COALESCE(CAST(cm.telegram_chat_id AS TEXT), '') ILIKE $${i}
+
+          OR COALESCE(pm.name, '') ILIKE $${i}
+          OR COALESCE(pm.email, '') ILIKE $${i}
+          OR COALESCE(pm.phone, '') ILIKE $${i}
+          OR COALESCE(pm.type, '') ILIKE $${i}
+          OR COALESCE(pm.social, '') ILIKE $${i}
+          OR COALESCE(CAST(pm.telegram_chat_id AS TEXT), '') ILIKE $${i}
         )
       `);
-      params.push(`%${String(q).trim()}%`);
+
+      params.push(needle);
       i++;
     }
 
@@ -112,10 +128,117 @@ async function listLeads(req, res) {
     params.push(safeLimit);
 
     const sql = `
-      SELECT *
-      FROM leads
+      SELECT
+        l.*,
+
+        cm.id AS client_match_id,
+        cm.name AS client_match_name,
+        cm.email AS client_match_email,
+        cm.phone AS client_match_phone,
+        cm.telegram AS client_match_telegram,
+        cm.telegram_chat_id AS client_match_chat_id,
+
+        pm.id AS provider_match_id,
+        pm.name AS provider_match_name,
+        pm.email AS provider_match_email,
+        pm.phone AS provider_match_phone,
+        pm.type AS provider_match_type,
+        pm.social AS provider_match_social,
+        pm.telegram_chat_id AS provider_match_chat_id
+
+      FROM leads l
+
+      LEFT JOIN LATERAL (
+        SELECT
+          c.id,
+          c.name,
+          c.email,
+          c.phone,
+          c.telegram,
+          c.telegram_chat_id
+        FROM clients c
+        WHERE
+          (
+            l.telegram_chat_id IS NOT NULL
+            AND c.telegram_chat_id IS NOT NULL
+            AND c.telegram_chat_id::text = l.telegram_chat_id::text
+          )
+          OR
+          (
+            NULLIF(regexp_replace(COALESCE(l.phone, ''), '\\D', '', 'g'), '') IS NOT NULL
+            AND regexp_replace(COALESCE(c.phone, ''), '\\D', '', 'g')
+                = regexp_replace(COALESCE(l.phone, ''), '\\D', '', 'g')
+          )
+          OR
+          (
+            NULLIF(TRIM(COALESCE(l.telegram_username, '')), '') IS NOT NULL
+            AND LOWER(TRIM(BOTH '@' FROM COALESCE(c.telegram, '')))
+                = LOWER(TRIM(BOTH '@' FROM COALESCE(l.telegram_username, '')))
+          )
+        ORDER BY
+          CASE
+            WHEN l.telegram_chat_id IS NOT NULL
+             AND c.telegram_chat_id IS NOT NULL
+             AND c.telegram_chat_id::text = l.telegram_chat_id::text THEN 1
+            WHEN NULLIF(regexp_replace(COALESCE(l.phone, ''), '\\D', '', 'g'), '') IS NOT NULL
+             AND regexp_replace(COALESCE(c.phone, ''), '\\D', '', 'g')
+                 = regexp_replace(COALESCE(l.phone, ''), '\\D', '', 'g') THEN 2
+            WHEN NULLIF(TRIM(COALESCE(l.telegram_username, '')), '') IS NOT NULL
+             AND LOWER(TRIM(BOTH '@' FROM COALESCE(c.telegram, '')))
+                 = LOWER(TRIM(BOTH '@' FROM COALESCE(l.telegram_username, ''))) THEN 3
+            ELSE 99
+          END,
+          c.id DESC
+        LIMIT 1
+      ) cm ON TRUE
+
+      LEFT JOIN LATERAL (
+        SELECT
+          p.id,
+          p.name,
+          p.email,
+          p.phone,
+          p.type,
+          p.social,
+          p.telegram_chat_id
+        FROM providers p
+        WHERE
+          (
+            l.telegram_chat_id IS NOT NULL
+            AND p.telegram_chat_id IS NOT NULL
+            AND p.telegram_chat_id::text = l.telegram_chat_id::text
+          )
+          OR
+          (
+            NULLIF(regexp_replace(COALESCE(l.phone, ''), '\\D', '', 'g'), '') IS NOT NULL
+            AND regexp_replace(COALESCE(p.phone, ''), '\\D', '', 'g')
+                = regexp_replace(COALESCE(l.phone, ''), '\\D', '', 'g')
+          )
+          OR
+          (
+            NULLIF(TRIM(COALESCE(l.telegram_username, '')), '') IS NOT NULL
+            AND LOWER(TRIM(BOTH '@' FROM COALESCE(p.social, '')))
+                LIKE '%' || LOWER(TRIM(BOTH '@' FROM COALESCE(l.telegram_username, ''))) || '%'
+          )
+        ORDER BY
+          CASE
+            WHEN l.telegram_chat_id IS NOT NULL
+             AND p.telegram_chat_id IS NOT NULL
+             AND p.telegram_chat_id::text = l.telegram_chat_id::text THEN 1
+            WHEN NULLIF(regexp_replace(COALESCE(l.phone, ''), '\\D', '', 'g'), '') IS NOT NULL
+             AND regexp_replace(COALESCE(p.phone, ''), '\\D', '', 'g')
+                 = regexp_replace(COALESCE(l.phone, ''), '\\D', '', 'g') THEN 2
+            WHEN NULLIF(TRIM(COALESCE(l.telegram_username, '')), '') IS NOT NULL
+             AND LOWER(TRIM(BOTH '@' FROM COALESCE(p.social, '')))
+                 LIKE '%' || LOWER(TRIM(BOTH '@' FROM COALESCE(l.telegram_username, ''))) || '%' THEN 3
+            ELSE 99
+          END,
+          p.id DESC
+        LIMIT 1
+      ) pm ON TRUE
+
       ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
-      ORDER BY created_at DESC
+      ORDER BY l.created_at DESC
       LIMIT $${i}
     `;
 
