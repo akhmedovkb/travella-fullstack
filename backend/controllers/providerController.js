@@ -939,30 +939,47 @@ async function canViewerSeeProviderContacts({ viewer, providerId, serviceId }) {
 
   if (role === "admin") return true;
 
-  // provider видит ТОЛЬКО самого себя
+  // provider видит только самого себя
   if (role === "provider") {
     return Number.isFinite(viewerId) && viewerId === pid;
   }
 
-  // client видит ТОЛЬКО после unlock конкретной услуги
+  // client видит контакты только после unlock
   if (role === "client") {
     if (!Number.isFinite(viewerId) || viewerId <= 0) return false;
-    if (!Number.isFinite(sid) || sid <= 0) return false;
 
-    const q = await pool.query(
+    // 1) если профиль открыт из конкретной услуги
+    if (Number.isFinite(sid) && sid > 0) {
+      const q = await pool.query(
+        `
+        SELECT 1
+        FROM client_service_contact_unlocks u
+        JOIN services s ON s.id = u.service_id
+        WHERE u.client_id = $1
+          AND u.service_id = $2
+          AND s.provider_id = $3
+        LIMIT 1
+        `,
+        [viewerId, sid, pid]
+      );
+
+      if (q.rowCount > 0) return true;
+    }
+
+    // 2) если клиент уже unlock-нул ЛЮБУЮ услугу этого поставщика
+    const qAny = await pool.query(
       `
       SELECT 1
       FROM client_service_contact_unlocks u
       JOIN services s ON s.id = u.service_id
       WHERE u.client_id = $1
-        AND u.service_id = $2
-        AND s.provider_id = $3
+        AND s.provider_id = $2
       LIMIT 1
       `,
-      [viewerId, sid, pid]
+      [viewerId, pid]
     );
 
-    return q.rowCount > 0;
+    return qAny.rowCount > 0;
   }
 
   return false;
