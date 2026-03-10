@@ -136,6 +136,39 @@ function DecisionBadge({ decision }) {
   return <Badge className="bg-gray-50 text-gray-700 border-gray-200">{d}</Badge>;
 }
 
+function LinkedEntityBadge({ kind, row }) {
+  if (kind === "client" && row?.client_match_id) {
+    return (
+      <div className="space-y-1">
+        <Badge className="bg-blue-50 text-blue-700 border-blue-200">
+          CLIENT #{row.client_match_id}
+        </Badge>
+        <div className="text-xs text-gray-500">
+          {row.client_match_name || "—"}
+          {row.client_match_phone ? ` · ${row.client_match_phone}` : ""}
+        </div>
+      </div>
+    );
+  }
+
+  if (kind === "provider" && row?.provider_match_id) {
+    return (
+      <div className="space-y-1">
+        <Badge className="bg-green-50 text-green-700 border-green-200">
+          PROVIDER #{row.provider_match_id}
+        </Badge>
+        <div className="text-xs text-gray-500">
+          {row.provider_match_name || "—"}
+          {row.provider_match_type ? ` · ${row.provider_match_type}` : ""}
+          {row.provider_match_phone ? ` · ${row.provider_match_phone}` : ""}
+        </div>
+      </div>
+    );
+  }
+
+  return <span className="text-gray-400">—</span>;
+}
+
 export default function AdminLeads() {
   const [params, setParams] = useSearchParams();
   const [items, setItems] = useState([]);
@@ -179,6 +212,22 @@ export default function AdminLeads() {
         r.decision,
         r.telegram_username,
         r.telegram_first_name,
+      
+        r.client_match_id,
+        r.client_match_name,
+        r.client_match_email,
+        r.client_match_phone,
+        r.client_match_telegram,
+        r.client_match_chat_id,
+      
+        r.provider_match_id,
+        r.provider_match_name,
+        r.provider_match_email,
+        r.provider_match_phone,
+        r.provider_match_type,
+        r.provider_match_social,
+        r.provider_match_chat_id,
+      
         u.source,
         u.medium,
         u.campaign,
@@ -664,6 +713,13 @@ async function adminDelete(path) {
                     ) : (
                       <span className="text-gray-400">—</span>
                     )}
+                  </td>
+
+                  <td className="py-2 pr-4">
+                    <div className="space-y-2">
+                      <LinkedEntityBadge kind="client" row={r} />
+                      <LinkedEntityBadge kind="provider" row={r} />
+                    </div>
                   </td>
 
                   <td className="py-2 pr-4">
