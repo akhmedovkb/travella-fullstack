@@ -1013,7 +1013,7 @@ if (method === "SetFiscalData") {
     await lockKeyTx(client, `payme:${paymeId}`);
 
     const { rows } = await client.query(
-      `SELECT payme_id, state
+      `SELECT payme_id, state, fiscal_receipt_id
          FROM payme_transactions
         WHERE payme_id = $1
         FOR UPDATE`,
@@ -1027,6 +1027,11 @@ if (method === "SetFiscalData") {
       return res
         .status(200)
         .json(rpcError(id, -31003, "Transaction not found"));
+    }
+
+    if (tx.fiscal_receipt_id) {
+      await client.query("COMMIT");
+      return res.status(200).json(ok(id, { success: true }));
     }
 
     const receiptId =
