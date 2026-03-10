@@ -1,7 +1,7 @@
 // frontend/src/pages/ClientBalance.jsx
 import { useEffect, useState } from "react";
 import { apiGet, apiPost } from "../api";
-import { tError, tSuccess, tInfo } from "../shared/toast";
+import { tError, tSuccess } from "../shared/toast";
 
 function money(n) {
   return Math.round(Number(n || 0)).toLocaleString("ru-RU");
