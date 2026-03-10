@@ -215,9 +215,10 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
 
   const [cancelPreset, setCancelPreset] = useState("");
   const [cancelCustom, setCancelCustom] = useState("");
-
   
+  const [fromIso, setFromIso] = useState(msToLocalIsoInput(nowMs() - 60 * 60 * 1000));
   const [toIso, setToIso] = useState(msToLocalIsoInput(nowMs() + 5 * 60 * 1000));
+  
   const [fiscalReceiptId, setFiscalReceiptId] = useState("");
   const [fiscalTerminalId, setFiscalTerminalId] = useState("PAYME_LAB");
   const [fiscalSign, setFiscalSign] = useState("");
