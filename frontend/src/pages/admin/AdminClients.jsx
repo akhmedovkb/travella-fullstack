@@ -2,12 +2,8 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { toast } from "react-toastify";
-import { apiGet } from "../../api";
+import { apiDelete, apiGet } from "../../api";
 
-/**
- * Храним "последний просмотр" в localStorage,
- * чтобы подсвечивать новых клиентов (created_at > lastSeen).
- */
 const LS_KEY = "admin.clients.lastSeenISO";
 
 function useLastSeen() {
@@ -27,6 +23,7 @@ export default function AdminClients() {
   const [items, setItems] = useState([]);
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
   const [nextCursor, setNextCursor] = useState(null);
   const [lastSeen, setLastSeen] = useLastSeen();
   const pollTimer = useRef(null);
@@ -78,7 +75,7 @@ export default function AdminClients() {
         toast.info(`Новых клиентов: ${count}`, { icon: "🆕" });
       }
     } catch {
-      // тихо
+      //
     }
   }, [lastSeen]);
 
@@ -114,6 +111,28 @@ export default function AdminClients() {
     [lastSeen]
   );
 
+  const handleDelete = async (client) => {
+    const id = Number(client?.id || 0);
+    if (!id) return;
+
+    const ok = window.confirm(
+      `Удалить клиента #${id}${client?.name ? ` (${client.name})` : ""}?\n\nЭто действие необратимо.`
+    );
+    if (!ok) return;
+
+    try {
+      setDeletingId(id);
+      await apiDelete(`/api/admin/clients-table/${id}`, "provider");
+      setItems((prev) => prev.filter((x) => Number(x.id) !== id));
+      toast.success(`Клиент #${id} удалён`);
+    } catch (e) {
+      console.error(e);
+      toast.error(e?.message || "Не удалось удалить клиента");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   return (
     <div className="p-4 max-w-7xl mx-auto">
       <div className="flex items-center justify-between mb-4">
@@ -122,7 +141,6 @@ export default function AdminClients() {
           <button
             onClick={onClearNewMark}
             className="px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
-            title="Отметить текущий момент как последнюю точку просмотра"
           >
             Сбросить «Новые»
           </button>
@@ -156,17 +174,18 @@ export default function AdminClients() {
               <th className="text-left p-3">TG Chat ID</th>
               <th className="text-left p-3">Создан</th>
               <th className="text-left p-3">Обновлен</th>
+              <th className="text-left p-3">Действия</th>
             </tr>
           </thead>
 
           <tbody>
             {items.map((c) => {
               const newBadge = isNew(c.created_at);
+              const isDeleting = deletingId === Number(c.id);
 
               return (
                 <tr key={c.id} className={`border-t ${newBadge ? "bg-blue-50" : ""}`}>
                   <td className="p-3">{c.id}</td>
-
                   <td className="p-3">
                     <div className="flex items-center gap-2">
                       {newBadge && (
@@ -177,7 +196,6 @@ export default function AdminClients() {
                       <span className="font-medium">{c.name || "—"}</span>
                     </div>
                   </td>
-
                   <td className="p-3">{c.email || "—"}</td>
                   <td className="p-3">{c.phone || "—"}</td>
                   <td className="p-3">{c.telegram || "—"}</td>
@@ -188,13 +206,25 @@ export default function AdminClients() {
                   <td className="p-3">
                     {c.updated_at ? new Date(c.updated_at).toLocaleString() : "—"}
                   </td>
+                  <td className="p-3">
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(c)}
+                      disabled={isDeleting}
+                      className={`px-3 py-1.5 rounded-lg text-white ${
+                        isDeleting ? "bg-gray-400 cursor-not-allowed" : "bg-red-600 hover:bg-red-700"
+                      }`}
+                    >
+                      {isDeleting ? "Удаление..." : "Удалить"}
+                    </button>
+                  </td>
                 </tr>
               );
             })}
 
             {!items.length && !loading && (
               <tr>
-                <td className="p-6 text-center text-gray-500" colSpan={8}>
+                <td className="p-6 text-center text-gray-500" colSpan={9}>
                   Ничего не найдено
                 </td>
               </tr>
