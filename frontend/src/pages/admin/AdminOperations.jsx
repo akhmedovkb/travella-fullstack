@@ -5,6 +5,7 @@ import AdminModeration from "../AdminModeration";
 import AdminLeads from "./Leads";
 import AdminRefusedActual from "./AdminRefusedActual";
 import AdminProviders from "./AdminProviders";
+import AdminClients from "./AdminClients";
 
 const TABS = [
   {
@@ -26,6 +27,11 @@ const TABS = [
     id: "providers",
     label: "Провайдеры",
     hint: "Поиск, просмотр и контроль зарегистрированных провайдеров.",
+  },
+  {
+    id: "clients",
+    label: "Клиенты",
+    hint: "Поиск, просмотр и контроль зарегистрированных клиентов.",
   },
 ];
 
@@ -70,6 +76,7 @@ export default function AdminOperations() {
           <TabBtn id="leads">Leads</TabBtn>
           <TabBtn id="refused">Актуальные отказы</TabBtn>
           <TabBtn id="providers">Провайдеры</TabBtn>
+          <TabBtn id="clients">Клиенты</TabBtn>
         </div>
       </div>
 
@@ -77,6 +84,7 @@ export default function AdminOperations() {
       {activeTab === "leads" && <AdminLeads />}
       {activeTab === "refused" && <AdminRefusedActual />}
       {activeTab === "providers" && <AdminProviders />}
+      {activeTab === "clients" && <AdminClients />}
     </div>
   );
 }
