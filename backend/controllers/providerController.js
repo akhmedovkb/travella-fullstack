@@ -939,9 +939,9 @@ async function canViewerSeeProviderContacts({ viewer, providerId, serviceId }) {
 
   if (role === "admin") return true;
 
-  // provider видит только самого себя
+  // provider видит всех
   if (role === "provider") {
-    return Number.isFinite(viewerId) && viewerId === pid;
+    return true;
   }
 
   // client видит контакты только после unlock
@@ -983,6 +983,71 @@ async function canViewerSeeProviderContacts({ viewer, providerId, serviceId }) {
   }
 
   return false;
+}
+
+async function getUnlockedProviderIdSetForViewer(viewer) {
+  const role = String(viewer?.role || "").toLowerCase();
+  const viewerId = Number(viewer?.id);
+
+  if (!viewer || !Number.isFinite(viewerId) || viewerId <= 0) {
+    return new Set();
+  }
+
+  if (role === "admin") {
+    return "__ALL__";
+  }
+
+  if (role !== "client") {
+    return new Set();
+  }
+
+  const q = await pool.query(
+    `
+    SELECT DISTINCT s.provider_id
+    FROM client_service_contact_unlocks u
+    JOIN services s ON s.id = u.service_id
+    WHERE u.client_id = $1
+      AND s.provider_id IS NOT NULL
+    `,
+    [viewerId]
+  );
+
+  return new Set(
+    (q.rows || [])
+      .map((r) => Number(r.provider_id))
+      .filter((n) => Number.isFinite(n) && n > 0)
+  );
+}
+
+function applyProviderContactVisibility(row, viewer, unlockedSet) {
+  const pid = Number(row?.provider_id ?? row?.id);
+  const role = String(viewer?.role || "").toLowerCase();
+  const viewerId = Number(viewer?.id);
+
+  const canSeeContacts =
+    unlockedSet === "__ALL__" ||
+    role === "provider" ||
+    (unlockedSet instanceof Set && unlockedSet.has(pid));
+
+  return {
+    ...row,
+    phone: Object.prototype.hasOwnProperty.call(row, "phone")
+      ? (canSeeContacts ? row.phone : null)
+      : row.phone,
+    social: Object.prototype.hasOwnProperty.call(row, "social")
+      ? (canSeeContacts ? row.social : null)
+      : row.social,
+    telegram: Object.prototype.hasOwnProperty.call(row, "telegram")
+      ? (canSeeContacts ? row.telegram : null)
+      : row.telegram,
+    provider_phone: Object.prototype.hasOwnProperty.call(row, "provider_phone")
+      ? (canSeeContacts ? row.provider_phone : null)
+      : row.provider_phone,
+    provider_social: Object.prototype.hasOwnProperty.call(row, "provider_social")
+      ? (canSeeContacts ? row.provider_social : null)
+      : row.provider_social,
+    contacts_unlocked: !!canSeeContacts,
+  };
 }
 
 function redactProviderContacts(obj) {
@@ -1640,11 +1705,20 @@ function pushLangWhere(where, vals, lang) {
 }
 
 // SELECT из provider_services (каскад), затем join на providers и доп.фильтры
-async function baseSearchFromServices({ type, city, q, language, limit, date, start, end }) {
+async function baseSearchFromServices({
+  type,
+  city,
+  q,
+  language,
+  limit,
+  date,
+  start,
+  end,
+  viewer = null,
+}) {
   const vals = [];
   const whereProv = [];
 
-  // 1) slug города
   let citySlug = null;
   if (city) {
     try {
@@ -1653,12 +1727,10 @@ async function baseSearchFromServices({ type, city, q, language, limit, date, st
     } catch {}
   }
 
-  // 2) категории
   const categories = catsForPublic(type);
-  vals.push(categories);                 // $1
+  vals.push(categories);
   const iCats = 1;
 
-  // 3) CTE по услугам — без фильтра города, только актив/цены/категории
   const svcCTE = `
     WITH svc AS (
       SELECT DISTINCT s.provider_id
@@ -1669,17 +1741,14 @@ async function baseSearchFromServices({ type, city, q, language, limit, date, st
     )
   `;
 
-  // 4) фильтр текста по провайдеру
   if (q) {
     vals.push(`%${q}%`);
     const i = vals.length;
     whereProv.push(`(p.name ILIKE $${i} OR p.email ILIKE $${i} OR p.phone ILIKE $${i})`);
   }
 
-  // 5) язык провайдера
   pushLangWhere(whereProv, vals, language);
 
-  // 6) город — фильтруем на уровне провайдера:
   if (citySlug) {
     vals.push(citySlug);
     const iSlug = vals.length;
@@ -1700,7 +1769,6 @@ async function baseSearchFromServices({ type, city, q, language, limit, date, st
     `);
   }
 
-  // 7) занятость как было
   let busyClause = "";
   if (date) {
     vals.push(date);
@@ -1722,8 +1790,10 @@ async function baseSearchFromServices({ type, city, q, language, limit, date, st
       )
     `;
   } else if (start && end) {
-    vals.push(start); const is = vals.length;
-    vals.push(end);   const ie = vals.length;
+    vals.push(start);
+    const is = vals.length;
+    vals.push(end);
+    const ie = vals.length;
     busyClause = `
       AND NOT EXISTS (
         SELECT 1
@@ -1742,14 +1812,22 @@ async function baseSearchFromServices({ type, city, q, language, limit, date, st
     `;
   }
 
-  // 8) лимит
   vals.push(Math.min(Math.max(Number(limit) || 30, 1), 100));
   const iLimit = vals.length;
 
   const sql = `
     ${svcCTE}
-    SELECT p.id, p.name, p.type, p.location, p.city_slugs,
-           p.phone, p.email, p.photo, p.languages, p.social AS telegram
+    SELECT
+      p.id,
+      p.name,
+      p.type,
+      p.location,
+      p.city_slugs,
+      p.phone,
+      p.email,
+      p.photo,
+      p.languages,
+      p.social AS telegram
     FROM providers p
     JOIN svc ON svc.provider_id = p.id
     ${whereProv.length ? "WHERE " + whereProv.join(" AND ") : ""}
@@ -1759,7 +1837,9 @@ async function baseSearchFromServices({ type, city, q, language, limit, date, st
   `;
 
   const { rows } = await pool.query(sql, vals);
-  return rows;
+
+  const unlockedSet = await getUnlockedProviderIdSetForViewer(viewer);
+  return rows.map((row) => applyProviderContactVisibility(row, viewer, unlockedSet));
 }
 
 
@@ -1767,7 +1847,11 @@ async function baseSearchFromServices({ type, city, q, language, limit, date, st
 async function searchProvidersPublic(req, res) {
   try {
     const params = parsePublicQuery(req.query);
-    const items = await baseSearchFromServices({ ...params });
+    const viewer = getOptionalUserFromReq(req);
+    const items = await baseSearchFromServices({
+      ...params,
+      viewer,
+    });
     res.json({ items });
   } catch (e) {
     console.error("GET /api/providers/search", e);
@@ -1779,12 +1863,20 @@ async function searchProvidersPublic(req, res) {
 async function availableProvidersPublic(req, res) {
   try {
     const params = parsePublicQuery(req.query);
-    // если нет даты/интервала — это тот же /search
+    const viewer = getOptionalUserFromReq(req);
+
     if (!params.date && !(params.start && params.end)) {
-      const items = await baseSearchFromServices({ ...params });
+      const items = await baseSearchFromServices({
+        ...params,
+        viewer,
+      });
       return res.json({ items });
     }
-    const items = await baseSearchFromServices({ ...params });
+
+    const items = await baseSearchFromServices({
+      ...params,
+      viewer,
+    });
     res.json({ items });
   } catch (e) {
     console.error("GET /api/providers/available", e);
