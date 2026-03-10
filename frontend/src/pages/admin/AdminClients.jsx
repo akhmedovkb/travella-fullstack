@@ -1,0 +1,227 @@
+// frontend/src/pages/admin/AdminClients.jsx
+
+import { useEffect, useRef, useState, useCallback } from "react";
+import { toast } from "react-toastify";
+import { apiGet } from "../../api";
+
+/**
+ * Храним "последний просмотр" в localStorage,
+ * чтобы подсвечивать новых клиентов (created_at > lastSeen).
+ */
+const LS_KEY = "admin.clients.lastSeenISO";
+
+function useLastSeen() {
+  const [lastSeen, setLastSeen] = useState(() => {
+    return localStorage.getItem(LS_KEY) || new Date(0).toISOString();
+  });
+
+  const save = (iso) => {
+    localStorage.setItem(LS_KEY, iso);
+    setLastSeen(iso);
+  };
+
+  return [lastSeen, save];
+}
+
+export default function AdminClients() {
+  const [items, setItems] = useState([]);
+  const [q, setQ] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [nextCursor, setNextCursor] = useState(null);
+  const [lastSeen, setLastSeen] = useLastSeen();
+  const pollTimer = useRef(null);
+
+  const fetchList = useCallback(
+    async (opts = {}) => {
+      setLoading(true);
+      try {
+        const params = new URLSearchParams();
+        if (q) params.set("q", q);
+        if (opts.limit) params.set("limit", String(opts.limit));
+        if (opts.cursor?.cursor_created_at && opts.cursor?.cursor_id) {
+          params.set("cursor_created_at", opts.cursor.cursor_created_at);
+          params.set("cursor_id", opts.cursor.cursor_id);
+        }
+
+        const res = await apiGet(`/api/admin/clients-table?${params.toString()}`, "provider");
+        const payload =
+          res && res.data && (res.data.items || res.data.nextCursor !== undefined)
+            ? res.data
+            : res;
+
+        const newItems = payload?.items || [];
+        if (opts.append) {
+          setItems((prev) => [...prev, ...newItems]);
+        } else {
+          setItems(newItems);
+        }
+        setNextCursor(payload?.nextCursor || null);
+      } catch (e) {
+        console.error(e);
+        toast.error("Не удалось загрузить список клиентов");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [q]
+  );
+
+  const checkNew = useCallback(async () => {
+    try {
+      const since = encodeURIComponent(lastSeen);
+      const res = await apiGet(`/api/admin/clients-table/new-count?since=${since}`, "provider");
+      const payload =
+        res && res.data && typeof res.data.count !== "undefined" ? res.data : res;
+      const count = Number(payload?.count || 0);
+
+      if (count > 0) {
+        toast.info(`Новых клиентов: ${count}`, { icon: "🆕" });
+      }
+    } catch {
+      // тихо
+    }
+  }, [lastSeen]);
+
+  useEffect(() => {
+    fetchList({ limit: 50 });
+  }, [fetchList]);
+
+  useEffect(() => {
+    pollTimer.current = setInterval(checkNew, 30000);
+    return () => clearInterval(pollTimer.current);
+  }, [checkNew]);
+
+  const onSearch = (e) => {
+    e?.preventDefault?.();
+    fetchList({ limit: 50 });
+  };
+
+  const onClearNewMark = () => {
+    const now = new Date().toISOString();
+    setLastSeen(now);
+    toast.success("Метка обновлена — «новые» сброшены");
+  };
+
+  const isNew = useCallback(
+    (created_at) => {
+      if (!created_at) return false;
+      try {
+        return new Date(created_at).toISOString() > (lastSeen || "");
+      } catch {
+        return false;
+      }
+    },
+    [lastSeen]
+  );
+
+  return (
+    <div className="p-4 max-w-7xl mx-auto">
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-2xl font-semibold">Клиенты</h1>
+        <div className="flex gap-2">
+          <button
+            onClick={onClearNewMark}
+            className="px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+            title="Отметить текущий момент как последнюю точку просмотра"
+          >
+            Сбросить «Новые»
+          </button>
+        </div>
+      </div>
+
+      <form onSubmit={onSearch} className="flex flex-wrap gap-2 mb-3">
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Поиск: имя / email / телефон / telegram / chat id"
+          className="input input-bordered w-full md:w-[420px] px-3 py-2 rounded-lg border border-gray-300"
+        />
+        <button
+          type="submit"
+          className="px-3 py-2 rounded-lg bg-gray-800 text-white hover:bg-black"
+        >
+          Найти
+        </button>
+      </form>
+
+      <div className="overflow-auto border rounded-xl">
+        <table className="min-w-full text-sm">
+          <thead className="bg-gray-50 sticky top-0 z-10">
+            <tr>
+              <th className="text-left p-3">ID</th>
+              <th className="text-left p-3">Имя</th>
+              <th className="text-left p-3">Email</th>
+              <th className="text-left p-3">Телефон</th>
+              <th className="text-left p-3">Telegram</th>
+              <th className="text-left p-3">TG Chat ID</th>
+              <th className="text-left p-3">Создан</th>
+              <th className="text-left p-3">Обновлен</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {items.map((c) => {
+              const newBadge = isNew(c.created_at);
+
+              return (
+                <tr key={c.id} className={`border-t ${newBadge ? "bg-blue-50" : ""}`}>
+                  <td className="p-3">{c.id}</td>
+
+                  <td className="p-3">
+                    <div className="flex items-center gap-2">
+                      {newBadge && (
+                        <span className="px-2 py-0.5 text-xs rounded-full bg-blue-600 text-white">
+                          NEW
+                        </span>
+                      )}
+                      <span className="font-medium">{c.name || "—"}</span>
+                    </div>
+                  </td>
+
+                  <td className="p-3">{c.email || "—"}</td>
+                  <td className="p-3">{c.phone || "—"}</td>
+                  <td className="p-3">{c.telegram || "—"}</td>
+                  <td className="p-3">{c.telegram_chat_id || "—"}</td>
+                  <td className="p-3">
+                    {c.created_at ? new Date(c.created_at).toLocaleString() : "—"}
+                  </td>
+                  <td className="p-3">
+                    {c.updated_at ? new Date(c.updated_at).toLocaleString() : "—"}
+                  </td>
+                </tr>
+              );
+            })}
+
+            {!items.length && !loading && (
+              <tr>
+                <td className="p-6 text-center text-gray-500" colSpan={8}>
+                  Ничего не найдено
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="flex items-center justify-between mt-3">
+        <div className="text-sm text-gray-500">
+          Последний просмотр новых: {new Date(lastSeen).toLocaleString()}
+        </div>
+
+        <div>
+          {nextCursor ? (
+            <button
+              onClick={() => fetchList({ append: true, cursor: nextCursor, limit: 50 })}
+              className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300"
+              disabled={loading}
+            >
+              {loading ? "Загрузка..." : "Загрузить ещё"}
+            </button>
+          ) : (
+            <span className="text-sm text-gray-400">Достигнут конец списка</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
