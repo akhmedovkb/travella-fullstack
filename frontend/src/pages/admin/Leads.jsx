@@ -191,6 +191,7 @@ function DuplicateWarningBadge({ row }) {
     </div>
   );
 }
+
 export default function AdminLeads() {
   const [params, setParams] = useSearchParams();
   const [items, setItems] = useState([]);
@@ -198,7 +199,6 @@ export default function AdminLeads() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
 
-  // toast
   const [toast, setToast] = useState("");
   function showToast(msg) {
     setToast(msg);
@@ -206,7 +206,6 @@ export default function AdminLeads() {
     showToast._t = window.setTimeout(() => setToast(""), 2500);
   }
 
-  // whoami debug (самодостаточно)
   const [whoami, setWhoami] = useState(null);
   const [whoamiErr, setWhoamiErr] = useState("");
 
@@ -217,8 +216,10 @@ export default function AdminLeads() {
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
+
     return items.filter((r) => {
       if (!needle) return true;
+
       const u = r.utm || {};
       const hay = [
         r.name,
@@ -234,14 +235,14 @@ export default function AdminLeads() {
         r.decision,
         r.telegram_username,
         r.telegram_first_name,
-      
+
         r.client_match_id,
         r.client_match_name,
         r.client_match_email,
         r.client_match_phone,
         r.client_match_telegram,
         r.client_match_chat_id,
-      
+
         r.provider_match_id,
         r.provider_match_name,
         r.provider_match_email,
@@ -249,16 +250,20 @@ export default function AdminLeads() {
         r.provider_match_type,
         r.provider_match_social,
         r.provider_match_chat_id,
-      
+
         u.source,
         u.medium,
         u.campaign,
         u.content,
         u.term,
         new Date(r.created_at).toLocaleString(),
+
+        r.has_both_client_and_provider ? "duplicate" : "",
+        r.duplicate_reason,
       ]
         .join(" ")
         .toLowerCase();
+
       return hay.includes(needle);
     });
   }, [items, q]);
@@ -280,8 +285,8 @@ export default function AdminLeads() {
     try {
       const data = await listLeadPages();
       setPages(data.items || []);
-    } catch (e) {
-      // ignore
+    } catch {
+      //
     }
   }
 
@@ -301,8 +306,6 @@ export default function AdminLeads() {
     await fetchLeads();
   }
 
-
-  // ===================== RESET (самодостаточно, но максимально совместимо) =====================
   function getAPIBase() {
     return (
       import.meta.env.VITE_API_BASE ||
@@ -333,7 +336,6 @@ export default function AdminLeads() {
   }
 
   function getAuthToken() {
-    // 1) прямые ключи (localStorage)
     const directKeys = [
       "token",
       "adminToken",
@@ -349,13 +351,11 @@ export default function AdminLeads() {
       if (v && String(v).trim()) return String(v).trim();
     }
 
-    // 2) sessionStorage (часто там)
     for (const k of directKeys) {
       const v = sessionStorage.getItem(k);
       if (v && String(v).trim()) return String(v).trim();
     }
 
-    // 3) JSON-объекты (часто auth/user/session)
     const jsonKeys = ["auth", "user", "session", "admin", "profile"];
     for (const k of jsonKeys) {
       const raw = localStorage.getItem(k) || sessionStorage.getItem(k);
@@ -389,56 +389,54 @@ export default function AdminLeads() {
     try {
       data = await res.json();
     } catch {
-      // ignore
+      //
     }
 
     if (!res.ok) {
-      // Показать реальную причину (включая debug из requireAdmin)
-      const msg =
-        data?.message ||
-        data?.error ||
-        `Request failed (${res.status})`;
-      const extra = data?.debug ? `\n\nDEBUG:\n${JSON.stringify(data.debug, null, 2)}` : "";
+      const msg = data?.message || data?.error || `Request failed (${res.status})`;
+      const extra = data?.debug
+        ? `\n\nDEBUG:\n${JSON.stringify(data.debug, null, 2)}`
+        : "";
       throw new Error(msg + extra);
     }
 
     return data;
   }
 
-async function adminDelete(path) {
-  const API_BASE = getAPIBase();
-  if (!API_BASE) throw new Error("API_BASE is not defined");
+  async function adminDelete(path) {
+    const API_BASE = getAPIBase();
+    if (!API_BASE) throw new Error("API_BASE is not defined");
 
-  const url = `${API_BASE}${path}`;
-  const token = getAuthToken();
+    const url = `${API_BASE}${path}`;
+    const token = getAuthToken();
 
-  const res = await fetch(url, {
-    method: "DELETE",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    credentials: "include",
-  });
+    const res = await fetch(url, {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      credentials: "include",
+    });
 
-  let data = null;
-  try {
-    data = await res.json();
-  } catch {}
+    let data = null;
+    try {
+      data = await res.json();
+    } catch {
+      //
+    }
 
-  if (!res.ok) {
-    const msg = data?.message || data?.error || `Request failed (${res.status})`;
-    const extra = data?.debug
-      ? `\n\nDEBUG:\n${JSON.stringify(data.debug, null, 2)}`
-      : "";
-    throw new Error(msg + extra);
+    if (!res.ok) {
+      const msg = data?.message || data?.error || `Request failed (${res.status})`;
+      const extra = data?.debug
+        ? `\n\nDEBUG:\n${JSON.stringify(data.debug, null, 2)}`
+        : "";
+      throw new Error(msg + extra);
+    }
+
+    return data;
   }
 
-  return data;
-}
-
-
-  
   function isClientLead(r) {
     const rr = String(r.requested_role || "").trim().toLowerCase();
     const src = String(r.source || "").trim().toLowerCase();
@@ -501,14 +499,15 @@ async function adminDelete(path) {
 
       showToast(
         `✅ Reset provider OK (providerId: ${data?.providerId ?? "—"})` +
-          (data?.providerFound === false ? " (provider not found, lead reset ok)" : "")
+          (data?.providerFound === false
+            ? " (provider not found, lead reset ok)"
+            : "")
       );
       await fetchLeads();
     } catch (e) {
       alert(e?.message || "Reset provider failed");
     }
   }
-
 
   async function fetchWhoami() {
     try {
@@ -529,7 +528,9 @@ async function adminDelete(path) {
       let data = null;
       try {
         data = await res.json();
-      } catch {}
+      } catch {
+        //
+      }
 
       if (!res.ok) {
         throw new Error(data?.message || data?.error || `whoami failed (${res.status})`);
@@ -540,13 +541,11 @@ async function adminDelete(path) {
       setWhoamiErr(e?.message || "whoami failed");
     }
   }
-  // ===================== /RESET =====================
 
   return (
     <main className="p-6">
       <h1 className="text-2xl font-semibold mb-4">Лиды</h1>
 
-      {/* toast */}
       {toast ? (
         <div className="mb-3">
           <span className="inline-flex items-center px-3 py-2 rounded bg-green-50 text-green-800 border border-green-200 text-sm">
@@ -555,7 +554,6 @@ async function adminDelete(path) {
         </div>
       ) : null}
 
-      {/* ✅ whoami debug */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <button
           onClick={fetchWhoami}
@@ -565,19 +563,16 @@ async function adminDelete(path) {
           Whoami
         </button>
 
-        {whoamiErr ? (
-          <span className="text-sm text-red-600">{whoamiErr}</span>
-        ) : null}
+        {whoamiErr ? <span className="text-sm text-red-600">{whoamiErr}</span> : null}
 
         {whoami ? (
           <span className="text-sm text-gray-700">
-            role: <span className="font-mono">{String(whoami.role || "")}</span>{" "}
-            | roles:{" "}
+            role: <span className="font-mono">{String(whoami.role || "")}</span> | roles:{" "}
             <span className="font-mono">
               {Array.isArray(whoami.roles) ? whoami.roles.join(",") : ""}
             </span>{" "}
-            | is_admin: <span className="font-mono">{String(!!whoami.is_admin)}</span>{" "}
-            | id: <span className="font-mono">{String(whoami.id)}</span>
+            | is_admin: <span className="font-mono">{String(!!whoami.is_admin)}</span> | id:{" "}
+            <span className="font-mono">{String(whoami.id)}</span>
           </span>
         ) : null}
       </div>
@@ -648,7 +643,7 @@ async function adminDelete(path) {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="min-w-[1500px] text-sm">
+        <table className="min-w-[1750px] text-sm">
           <thead>
             <tr className="border-b text-left">
               <th className="py-2 pr-4">Дата</th>
@@ -659,6 +654,8 @@ async function adminDelete(path) {
               <th className="py-2 pr-4">Decision</th>
               <th className="py-2 pr-4">Статус</th>
               <th className="py-2 pr-4">Telegram</th>
+              <th className="py-2 pr-4">Связано</th>
+              <th className="py-2 pr-4">Дубль</th>
               <th className="py-2 pr-4">Действия</th>
             </tr>
           </thead>
@@ -668,9 +665,14 @@ async function adminDelete(path) {
               const isTelegramLead = !!r.telegram_chat_id;
               const undecided = !r.decision;
               const canAutoAccept = isTelegramLead && undecided;
-              
+
               return (
-                <tr key={r.id} className="border-b align-top">
+                <tr
+                  key={r.id}
+                  className={`border-b align-top ${
+                    r.has_both_client_and_provider ? "bg-red-50/60" : ""
+                  }`}
+                >
                   <td className="py-2 pr-4 whitespace-nowrap">
                     {new Date(r.created_at).toLocaleString()}
                   </td>
@@ -723,13 +725,10 @@ async function adminDelete(path) {
                     {isTelegramLead ? (
                       <div className="space-y-1">
                         <div className="text-xs text-gray-700">
-                          chat_id:{" "}
-                          <span className="font-mono">{String(r.telegram_chat_id)}</span>
+                          chat_id: <span className="font-mono">{String(r.telegram_chat_id)}</span>
                         </div>
                         {r.telegram_username ? (
-                          <div className="text-xs text-gray-500">
-                            @{r.telegram_username}
-                          </div>
+                          <div className="text-xs text-gray-500">@{r.telegram_username}</div>
                         ) : null}
                       </div>
                     ) : (
@@ -742,6 +741,10 @@ async function adminDelete(path) {
                       <LinkedEntityBadge kind="client" row={r} />
                       <LinkedEntityBadge kind="provider" row={r} />
                     </div>
+                  </td>
+
+                  <td className="py-2 pr-4">
+                    <DuplicateWarningBadge row={r} />
                   </td>
 
                   <td className="py-2 pr-4">
@@ -796,15 +799,15 @@ async function adminDelete(path) {
                           onClick={async () => {
                             const ok = window.confirm(
                               `⚠️ УДАЛИТЬ ПОЛНОСТЬЮ?\n\n` +
-                              `Lead ID: ${r.id}\n` +
-                              `Телефон: ${r.phone || "—"}\n` +
-                              `chat_id: ${r.telegram_chat_id || "—"}\n\n` +
-                              `Будут удалены:\n` +
-                              `• лид\n• клиент / поставщик\n• Telegram-привязка\n\n` +
-                              `ОТМЕНЫ НЕТ`
+                                `Lead ID: ${r.id}\n` +
+                                `Телефон: ${r.phone || "—"}\n` +
+                                `chat_id: ${r.telegram_chat_id || "—"}\n\n` +
+                                `Будут удалены:\n` +
+                                `• лид\n• клиент / поставщик\n• Telegram-привязка\n\n` +
+                                `ОТМЕНЫ НЕТ`
                             );
                             if (!ok) return;
-                        
+
                             try {
                               await adminDelete(`/api/admin/leads/${r.id}`);
                               showToast("🗑 Лид и пользователь полностью удалены");
@@ -818,7 +821,6 @@ async function adminDelete(path) {
                         >
                           🗑 Удалить
                         </button>
-
                       </div>
                     ) : (
                       <span className="text-gray-400">—</span>
