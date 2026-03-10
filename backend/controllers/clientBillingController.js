@@ -136,24 +136,36 @@ async function clientBalanceLedger(req, res) {
   const offset = clampInt(req.query.offset, 0, 0, 1000000);
 
   try {
-    const { rows } = await pool.query(
-      `
-      SELECT
-        id,
-        client_id,
-        amount,
-        reason,
-        source,
-        service_id,
-        meta,
-        created_at
-      FROM contact_balance_ledger
-      WHERE client_id = $1
-      ORDER BY created_at DESC, id DESC
-      LIMIT $2 OFFSET $3
-      `,
-      [clientId, limit, offset]
-    );
+        const { rows } = await pool.query(
+          `
+          SELECT
+            l.id,
+            l.client_id,
+            l.amount,
+            l.reason,
+            l.source,
+            l.service_id,
+            l.meta,
+            l.created_at,
+        
+            pt.payme_id,
+            pt.state AS payme_state,
+            pt.amount_tiyin,
+            pt.perform_time,
+            pt.fiscal_receipt_id,
+            pt.fiscal_sign,
+            pt.fiscal_terminal_id,
+            pt.fiscal_received_at
+        
+          FROM contact_balance_ledger l
+          LEFT JOIN payme_transactions pt
+            ON pt.payme_id = l.meta->>'payme_id'
+          WHERE l.client_id = $1
+          ORDER BY l.created_at DESC, l.id DESC
+          LIMIT $2 OFFSET $3
+          `,
+          [clientId, limit, offset]
+        );
 
     const balance = await (async () => {
       const client = await pool.connect();
