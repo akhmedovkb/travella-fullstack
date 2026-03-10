@@ -216,8 +216,12 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
   const [cancelPreset, setCancelPreset] = useState("");
   const [cancelCustom, setCancelCustom] = useState("");
 
-  const [fromIso, setFromIso] = useState(msToLocalIsoInput(nowMs() - 60 * 60 * 1000));
+  
   const [toIso, setToIso] = useState(msToLocalIsoInput(nowMs() + 5 * 60 * 1000));
+  const [fiscalReceiptId, setFiscalReceiptId] = useState("");
+  const [fiscalTerminalId, setFiscalTerminalId] = useState("PAYME_LAB");
+  const [fiscalSign, setFiscalSign] = useState("");
+  const [fiscalDateTime, setFiscalDateTime] = useState(msToLocalIsoInput(nowMs()));
 
   const [busy, setBusy] = useState(false);
   const [lastSnap, setLastSnap] = useState(null);
@@ -629,6 +633,20 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
     };
   }
 
+  function buildSetFiscalData() {
+    const dt = fiscalDateTime ? new Date(fiscalDateTime).toISOString() : new Date().toISOString();
+  
+    return {
+      id: parsed.paymeId,
+      fiscal_data: {
+        receipt_id: String(fiscalReceiptId || `rcpt_${nowMs()}`),
+        terminal_id: String(fiscalTerminalId || "PAYME_LAB"),
+        fiscal_sign: String(fiscalSign || `fsign_${nowMs()}`),
+        date_time: dt,
+      },
+    };
+  }
+
   function switchToSeedOrFail() {
     if (!seedPaymeId) {
       tError("Нет выбранного tx_id из Health. Выбери транзакцию в Health.");
@@ -749,8 +767,35 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
     tSuccess("Scenario: Create→Perform→Cancel done");
   }
 
+  async function scenarioPerformThenFiscalize() {
+    if (!canRunIdOnly()) return tError("Нужен tx_id");
+  
+    const ok = await run("PerformTransaction", buildPerform());
+    if (!ok) return;
+  
+    await run("SetFiscalData", buildSetFiscalData());
+    tSuccess("Scenario: Perform → SetFiscalData done");
+  }
+
   async function runFullScenario() {
-    return scenarioHappyPathNewPayment();
+    if (!canRunBasic()) return tError("Заполни order_id и amount");
+  
+    switchToNewEnsuringFreshTxId();
+    if (!ensureCreateSafeOrFix()) return;
+  
+    const ok1 = await run("CheckPerformTransaction", buildCheck());
+    if (!ok1) return;
+  
+    const ok2 = await run("CreateTransaction", buildCreate());
+    if (!ok2) return;
+  
+    const ok3 = await run("PerformTransaction", buildPerform());
+    if (!ok3) return;
+  
+    await run("SetFiscalData", buildSetFiscalData());
+    await run("GetStatement", buildStatement());
+  
+    tSuccess("RUN FULL SCENARIO done");
   }
 
   const statusComputed = useMemo(() => {
@@ -971,6 +1016,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
       "CheckPerformTransaction",
       "CreateTransaction",
       "PerformTransaction",
+      "SetFiscalData",
       "CancelTransaction",
       "GetStatement",
     ];
@@ -1661,6 +1707,13 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
             >
               Create+Perform → Cancel (test)
             </button>
+            <button
+              className="px-3 py-2 rounded-lg border bg-white text-sm disabled:opacity-60"
+              onClick={scenarioPerformThenFiscalize}
+              disabled={busy}
+            >
+              Perform → SetFiscalData
+            </button>
           </div>
         </div>
       </div>
@@ -1872,6 +1925,55 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
                   disabled={busy}
                 />
               </div>
+              <div className="border rounded-lg p-3 bg-gray-50">
+                <div className="text-xs font-semibold text-gray-700 mb-2">SetFiscalData</div>
+              
+                <div className="grid grid-cols-1 gap-2">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">receipt_id</label>
+                    <input
+                      className="w-full border rounded-lg px-3 py-2"
+                      value={fiscalReceiptId}
+                      onChange={(e) => setFiscalReceiptId(e.target.value)}
+                      placeholder={`rcpt_${nowMs()}`}
+                      disabled={busy}
+                    />
+                  </div>
+              
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">terminal_id</label>
+                    <input
+                      className="w-full border rounded-lg px-3 py-2"
+                      value={fiscalTerminalId}
+                      onChange={(e) => setFiscalTerminalId(e.target.value)}
+                      placeholder="PAYME_LAB"
+                      disabled={busy}
+                    />
+                  </div>
+              
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">fiscal_sign</label>
+                    <input
+                      className="w-full border rounded-lg px-3 py-2"
+                      value={fiscalSign}
+                      onChange={(e) => setFiscalSign(e.target.value)}
+                      placeholder={`fsign_${nowMs()}`}
+                      disabled={busy}
+                    />
+                  </div>
+              
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">date_time</label>
+                    <input
+                      type="datetime-local"
+                      className="w-full border rounded-lg px-3 py-2"
+                      value={fiscalDateTime}
+                      onChange={(e) => setFiscalDateTime(e.target.value)}
+                      disabled={busy}
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="pt-2 grid grid-cols-1 gap-2">
@@ -1926,6 +2028,16 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
                 disabled={busy}
               >
                 GetStatement
+              </button>
+              <button
+                  className="px-4 py-2 rounded-lg border bg-white disabled:opacity-60"
+                  onClick={() => {
+                    if (!canRunIdOnly()) return tError("Нужен tx_id");
+                    run("SetFiscalData", buildSetFiscalData());
+                  }}
+                  disabled={busy}
+                >
+                  SetFiscalData
               </button>
             </div>
           </div>
