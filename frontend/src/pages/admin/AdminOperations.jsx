@@ -20,8 +20,8 @@ const TABS = [
   },
   {
     id: "refused",
-    label: "Актуальные отказы",
-    hint: "Актуальность отказов, ручная проверка и контроль.",
+    label: "Все отказные услуги",
+    hint: "Все refused_* услуги: просмотр, фильтрация, продление, удаление и ручная проверка актуальности.",
   },
   {
     id: "providers",
@@ -74,7 +74,7 @@ export default function AdminOperations() {
         <div className="flex flex-wrap items-center gap-2">
           <TabBtn id="moderation">Модерация услуг</TabBtn>
           <TabBtn id="leads">Leads</TabBtn>
-          <TabBtn id="refused">Актуальные отказы</TabBtn>
+          <TabBtn id="refused">Все отказные услуги</TabBtn>
           <TabBtn id="providers">Провайдеры</TabBtn>
           <TabBtn id="clients">Клиенты</TabBtn>
         </div>
