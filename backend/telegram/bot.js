@@ -2815,43 +2815,6 @@ bot.action(/^svc_edit_start:(\d+)$/, async (ctx) => {
   }
 });
 
-bot.action(/^trash:pick:(\d+)$/, async (ctx) => {
-  try {
-    const serviceId = ctx.match[1];
-    await ctx.answerCbQuery();
-
-    // Показываем панель действий для выбранной услуги (в ответ отдельным сообщением)
-    await ctx.reply(
-      `🧺 Выбрана услуга <code>#${serviceId}</code>\n\nЧто сделать?`,
-      {
-        parse_mode: "HTML",
-        reply_markup: {
-          inline_keyboard: [
-            [
-              { text: "♻️ Восстановить", callback_data: `svc_restore:${serviceId}` },
-              { text: "❌ Удалить навсегда", callback_data: `svc_purge:${serviceId}` },
-            ],
-            [{ text: "⬅️ Назад к корзине", callback_data: "trash:back" }],
-          ],
-        },
-      }
-    );
-  } catch (e) {
-    console.error("[bot] trash:pick error:", e?.message || e);
-    return ctx.reply("❌ Ошибка. Попробуйте ещё раз.");
-  }
-});
-
-bot.action(/^trash:back$/, async (ctx) => {
-  try {
-    await ctx.answerCbQuery();
-    await sendTrashList(ctx);
-  } catch (e) {
-    console.error("[bot] trash:back error:", e?.message || e);
-    return ctx.reply("❌ Не удалось обновить корзину.");
-  }
-});
-
 bot.action(/^trash:menu$/, async (ctx) => {
   try {
     await ctx.answerCbQuery();
