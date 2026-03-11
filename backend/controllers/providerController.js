@@ -68,6 +68,107 @@ function pickFirst(obj, keys = []) {
   return null;
 }
 
+function toPlainObject(value) {
+  if (!value) return {};
+  if (typeof value === "object" && !Array.isArray(value)) return value;
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? parsed
+        : {};
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
+function firstNonEmptyValue(...values) {
+  for (const v of values) {
+    if (v == null) continue;
+    if (typeof v === "string" && v.trim()) return v.trim();
+    if (typeof v === "number" && Number.isFinite(v)) return String(v);
+    if (v instanceof Date && !Number.isNaN(v.getTime())) return v.toISOString();
+  }
+  return "";
+}
+
+function normalizeRefusedStartDate(details = {}, category = "") {
+  const d = { ...toPlainObject(details) };
+  const cat = String(category || d.category || "").trim().toLowerCase();
+
+  // новый единый стандарт уже есть
+  const already = firstNonEmptyValue(d.startDate, d.start_date);
+  if (already) {
+    d.startDate = already;
+    delete d.start_date;
+    return d;
+  }
+
+  if (cat === "refused_flight") {
+    d.startDate = firstNonEmptyValue(
+      d.departureFlightDate,
+      d.departureDate,
+      d.departure_date,
+      d.flightDate,
+      d.flight_date,
+      d.dateFrom,
+      d.date_from,
+      d.date
+    );
+  } else if (cat === "refused_hotel") {
+    d.startDate = firstNonEmptyValue(
+      d.checkinDate,
+      d.checkInDate,
+      d.check_in,
+      d.check_in_date,
+      d.dateFrom,
+      d.date_from,
+      d.date
+    );
+  } else if (cat === "refused_ticket" || cat === "refused_event_ticket") {
+    d.startDate = firstNonEmptyValue(
+      d.eventDate,
+      d.event_date,
+      d.date,
+      d.dateFrom,
+      d.date_from
+    );
+  } else if (cat === "refused_tour") {
+    d.startDate = firstNonEmptyValue(
+      d.dateFrom,
+      d.date_from,
+      d.departureFlightDate,
+      d.departureDate,
+      d.departure_date,
+      d.startDate,
+      d.start_date
+    );
+  } else {
+    d.startDate = firstNonEmptyValue(
+      d.startDate,
+      d.start_date,
+      d.dateFrom,
+      d.date_from,
+      d.departureFlightDate,
+      d.departureDate,
+      d.departure_date,
+      d.flightDate,
+      d.flight_date,
+      d.checkinDate,
+      d.checkInDate,
+      d.check_in,
+      d.check_in_date,
+      d.eventDate,
+      d.event_date,
+      d.date
+    );
+  }
+
+  delete d.start_date;
+  return d;
+}
 
 // Нормализуем Telegram username к виду "@username"
 function normalizeTelegramUsername(input) {
@@ -651,12 +752,33 @@ const addService = async (req, res) => {
       vehicleModelStr,
     } = normalizeServicePayload(req.body);
 
+    let normalizedDetailsObj = detailsObj ?? {};
+
+    if (String(category || "").toLowerCase().startsWith("refused_")) {
+      normalizedDetailsObj = normalizeRefusedStartDate(normalizedDetailsObj, category);
+    }
+
     const extended = isExtendedCategory(category);
     
     // ── Business validation: expire_at must not be earlier than start_date
     // Источники: либо в теле напрямую, либо в details.*
-    const startRaw  = pickFirst(req.body, ["start_date"]) ?? pickFirst(detailsObj, ["start_date","start_at","begin_date"]);
-    const expireRaw = pickFirst(req.body, ["expire_at","expiration_at"]) ?? pickFirst(detailsObj, ["expire_at","expiration_at","valid_until"]);
+    const startRaw =
+      pickFirst(req.body, ["start_date", "startDate"]) ??
+      pickFirst(normalizedDetailsObj, [
+        "startDate",
+        "start_date",
+        "start_at",
+        "begin_date",
+      ]);
+    
+    const expireRaw =
+      pickFirst(req.body, ["expire_at", "expiration_at"]) ??
+      pickFirst(normalizedDetailsObj, [
+        "expire_at",
+        "expiration_at",
+        "valid_until",
+        "expiration",
+      ]);
     const startDate  = parseDateSafe(startRaw);
     const expireDate = parseDateSafe(expireRaw);
     if (startDate && expireDate && expireDate < startDate) {
@@ -682,7 +804,7 @@ const addService = async (req, res) => {
       category,
       JSON.stringify(imagesArr),
       JSON.stringify(extended ? [] : availabilityArr),
-      JSON.stringify(detailsObj ?? {}),
+      JSON.stringify(normalizedDetailsObj ?? {}),
       vehicleModelStr,
     ]
   );
@@ -785,11 +907,32 @@ const updateService = async (req, res) => {
       vehicleModelStr,
     } = normalizeServicePayload(req.body);
 
+    let normalizedDetailsObj = detailsObj ?? {};
+
+    if (String(category || "").toLowerCase().startsWith("refused_")) {
+      normalizedDetailsObj = normalizeRefusedStartDate(normalizedDetailsObj, category);
+    }
+
     const extended = isExtendedCategory(category);
     
     // ── Business validation: expire_at must not be earlier than start_date
-    const startRaw  = pickFirst(req.body, ["start_date"]) ?? pickFirst(detailsObj, ["start_date","start_at","begin_date"]);
-    const expireRaw = pickFirst(req.body, ["expire_at","expiration_at"]) ?? pickFirst(detailsObj, ["expire_at","expiration_at","valid_until"]);
+    const startRaw =
+      pickFirst(req.body, ["start_date", "startDate"]) ??
+      pickFirst(normalizedDetailsObj, [
+        "startDate",
+        "start_date",
+        "start_at",
+        "begin_date",
+      ]);
+    
+    const expireRaw =
+      pickFirst(req.body, ["expire_at", "expiration_at"]) ??
+      pickFirst(normalizedDetailsObj, [
+        "expire_at",
+        "expiration_at",
+        "valid_until",
+        "expiration",
+      ]);
     const startDate  = parseDateSafe(startRaw);
     const expireDate = parseDateSafe(expireRaw);
     if (startDate && expireDate && expireDate < startDate) {
@@ -820,7 +963,7 @@ const updateService = async (req, res) => {
         category,
         JSON.stringify(imagesArr ?? []),
         JSON.stringify(extended ? [] : (availabilityArr ?? [])),
-        JSON.stringify(detailsObj ?? {}),
+        JSON.stringify(normalizedDetailsObj ?? {}),
         vehicleModelStr,
         serviceId,
         providerId,
