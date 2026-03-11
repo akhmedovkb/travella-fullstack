@@ -117,29 +117,43 @@ exports.listActualRefused = async (req, res) => {
   try {
     const {
       category = "",         // refused_tour / refused_hotel / refused_flight / refused_ticket
-      status = "",           // published / approved
-      q = "",                // поиск по названию/отелю/направлению/провайдеру
+      status = "",           // published / approved / draft / rejected ...
+      q = "",                // поиск
       page = "1",
       limit = "30",
-      includeInactive = "0", // 1 = показывать всё, 0 = только актуальные по isServiceActual
+
+      // NEW:
+      // all | actual | inactive
+      actuality: actualityRaw = "",
+
+      // backward compatibility:
+      // includeInactive=1 => all, includeInactive=0 => actual
+      includeInactive = "",
+
       // sorting
-      // created_at | provider | sort_date
-      sortBy: sortByRaw = "sort_date",
-      // asc | desc
-      sortOrder: sortOrderRaw = "asc",
+      sortBy: sortByRaw = "sort_date", // created_at | provider | sort_date
+      sortOrder: sortOrderRaw = "asc", // asc | desc
     } = req.query;
+
     const sortBy = String(sortByRaw || "sort_date").toLowerCase();
-    const sortOrder = String(sortOrderRaw || "asc").toLowerCase() === "desc" ? "desc" : "asc";
+    const sortOrder =
+      String(sortOrderRaw || "asc").toLowerCase() === "desc" ? "desc" : "asc";
     const dir = sortOrder === "desc" ? -1 : 1;
 
     const pageNum = Math.max(parseInt(page, 10) || 1, 1);
     const limitNum = Math.min(Math.max(parseInt(limit, 10) || 30, 1), 100);
-    const offset = (pageNum - 1) * limitNum;
+
+    // без поломки старой логики:
+    // priority: actuality -> includeInactive -> default(actual)
+    let actuality = String(actualityRaw || "").trim().toLowerCase();
+    if (!["all", "actual", "inactive"].includes(actuality)) {
+      if (String(includeInactive) === "1") actuality = "all";
+      else actuality = "actual";
+    }
 
     const where = [];
     const params = [];
 
-    // отказные категории
     where.push(`s.category LIKE 'refused_%'`);
     where.push(`s.deleted_at IS NULL`);
 
@@ -152,11 +166,10 @@ exports.listActualRefused = async (req, res) => {
       params.push(status);
       where.push(`LOWER(s.status) = LOWER($${params.length})`);
     } else {
-      // по умолчанию берём те, что реально на витрине
+      // дефолт как раньше: то, что реально на витрине
       where.push(`LOWER(s.status) IN ('published', 'approved')`);
     }
 
-    // простая текстовая фильтрация
     if (q && q.trim()) {
       params.push(`%${q.trim().toLowerCase()}%`);
       const pIdx = params.length;
@@ -173,45 +186,44 @@ exports.listActualRefused = async (req, res) => {
 
     const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
-    const totalSql = `
-      SELECT COUNT(*)::int AS total
-      FROM services s
-      JOIN providers p ON p.id = s.provider_id
-      ${whereSql}
-    `;
-    const totalRes = await db.query(totalSql, params);
-    const total = totalRes.rows?.[0]?.total || 0;
-
+    // ВАЖНО:
+    // раньше LIMIT/OFFSET применялись ДО JS-фильтрации по actual,
+    // из-за чего ломалась пагинация и total.
+    // Теперь сначала берём все подходящие rows, потом JS filter/sort, потом slice.
     const sql = `
       SELECT
-        s.id, s.category, s.status, s.title, s.provider_id, s.created_at, s.updated_at,
+        s.id,
+        s.category,
+        s.status,
+        s.title,
+        s.provider_id,
+        s.created_at,
+        s.updated_at,
         s.expiration_at AS expiration,
         s.details,
+
         p.id AS p_id,
         p.name AS p_name,
         p.phone AS p_phone,
         p.social AS p_social,
         p.telegram_refused_chat_id
+
       FROM services s
       JOIN providers p ON p.id = s.provider_id
       ${whereSql}
       ORDER BY s.id DESC
-      LIMIT ${limitNum} OFFSET ${offset}
     `;
+
     const rowsRes = await db.query(sql, params);
     const rows = Array.isArray(rowsRes.rows) ? rowsRes.rows : [];
 
-    // JS-фильтрация актуальности + сортировка по ближайшей дате
     let items = rows.map((r) => {
       const detailsObj = parseDetailsAny(r.details);
-
-      // isServiceActual умеет брать expiration из svc.expiration — мы его подали как alias expiration
       const actual = isServiceActual(detailsObj, r);
-
       const dt = getStartDateForAdminSort(r);
       const chatId = pickProviderChatId(r);
-
       const meta = (detailsObj && detailsObj.tg_actual_reminders_meta) || {};
+
       return {
         id: r.id,
         category: r.category,
@@ -219,6 +231,8 @@ exports.listActualRefused = async (req, res) => {
         title: r.title,
         providerId: r.provider_id,
         createdAt: r.created_at ? new Date(r.created_at).toISOString() : null,
+        updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : null,
+        expiration: r.expiration ? new Date(r.expiration).toISOString() : null,
         provider: {
           id: r.p_id,
           name: r.p_name,
@@ -227,7 +241,7 @@ exports.listActualRefused = async (req, res) => {
           chatId,
         },
         details: detailsObj,
-        isActual: actual,
+        isActual: !!actual,
         startDateForSort: dt ? dt.toISOString() : null,
         meta: {
           lastSentAt: meta.lastSentAt || null,
@@ -239,11 +253,12 @@ exports.listActualRefused = async (req, res) => {
       };
     });
 
-    if (includeInactive !== "1") {
+    if (actuality === "actual") {
       items = items.filter((x) => x.isActual);
+    } else if (actuality === "inactive") {
+      items = items.filter((x) => !x.isActual);
     }
 
-    // сортировка (после фильтра includeInactive — важно)
     items.sort((a, b) => {
       if (sortBy === "created_at") {
         const da = a.createdAt ? new Date(a.createdAt) : null;
@@ -257,11 +272,9 @@ exports.listActualRefused = async (req, res) => {
       if (sortBy === "provider") {
         const pa = (a.provider?.name || "").toString().toLowerCase();
         const pb = (b.provider?.name || "").toString().toLowerCase();
-        // localeCompare даёт стабильную сортировку для кириллицы/латиницы
         return pa.localeCompare(pb, "ru", { sensitivity: "base" }) * dir;
       }
 
-      // default: sort_date (твоя "Дата (сорт)" = startDateForSort)
       const da = a.startDateForSort ? new Date(a.startDateForSort) : null;
       const dbb = b.startDateForSort ? new Date(b.startDateForSort) : null;
       if (!da && !dbb) return 0;
@@ -270,14 +283,19 @@ exports.listActualRefused = async (req, res) => {
       return (da.getTime() - dbb.getTime()) * dir;
     });
 
+    const total = items.length;
+    const offset = (pageNum - 1) * limitNum;
+    const paged = items.slice(offset, offset + limitNum);
+
     res.json({
       success: true,
       total,
       page: pageNum,
+      limit: limitNum,
       sortBy,
       sortOrder,
-      limit: limitNum,
-      items,
+      actuality,
+      items: paged,
     });
   } catch (e) {
     console.error("[adminRefused] listActualRefused error:", e);
@@ -460,5 +478,111 @@ exports.askActualNow = async (req, res) => {
   } catch (e) {
     console.error("[adminRefused] askActualNow error:", e);
     res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+exports.extendRefusedService = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id) {
+      return res.status(400).json({ success: false, message: "Bad id" });
+    }
+
+    const checkRes = await db.query(
+      `
+      SELECT id, category, status, details, expiration_at
+      FROM services
+      WHERE id = $1
+        AND deleted_at IS NULL
+        AND category LIKE 'refused_%'
+      LIMIT 1
+      `,
+      [id]
+    );
+
+    const row = checkRes.rows?.[0];
+    if (!row) {
+      return res.status(404).json({ success: false, message: "Not found" });
+    }
+
+    const updRes = await db.query(
+      `
+      UPDATE services
+         SET
+           expiration_at = COALESCE(expiration_at, NOW()) + interval '7 days',
+           details = jsonb_set(
+             jsonb_set(
+               COALESCE(details::jsonb, '{}'::jsonb),
+               '{isActive}',
+               'true'::jsonb,
+               true
+             ),
+             '{expiration}',
+             to_jsonb(
+               (COALESCE(expiration_at, NOW()) + interval '7 days')::timestamp
+             )::jsonb,
+             true
+           ),
+           updated_at = NOW()
+       WHERE id = $1
+         AND deleted_at IS NULL
+         AND category LIKE 'refused_%'
+       RETURNING id, category, status, details, expiration_at, updated_at
+      `,
+      [id]
+    );
+
+    const updated = updRes.rows?.[0];
+    return res.json({
+      success: true,
+      message: "Extended",
+      item: {
+        ...updated,
+        details: parseDetailsAny(updated?.details),
+      },
+    });
+  } catch (e) {
+    console.error("[adminRefused] extendRefusedService error:", e);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+exports.deleteRefusedService = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id) {
+      return res.status(400).json({ success: false, message: "Bad id" });
+    }
+
+    const actorId = Number(req.user?.id) || null;
+
+    const delRes = await db.query(
+      `
+      UPDATE services
+         SET
+           status = 'deleted',
+           deleted_at = NOW(),
+           deleted_by = $2,
+           updated_at = NOW()
+       WHERE id = $1
+         AND deleted_at IS NULL
+         AND category LIKE 'refused_%'
+       RETURNING id
+      `,
+      [id, actorId]
+    );
+
+    if (!delRes.rowCount) {
+      return res.status(404).json({ success: false, message: "Not found" });
+    }
+
+    return res.json({
+      success: true,
+      message: "Deleted",
+      id,
+    });
+  } catch (e) {
+    console.error("[adminRefused] deleteRefusedService error:", e);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 };
