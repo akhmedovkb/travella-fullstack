@@ -5316,50 +5316,7 @@ bot.action(/^svc_delete_confirm:(\d+)$/, async (ctx) => {
   }
 });
 
-// ♻️ Restore
-bot.action(/^svc_restore:(\d+)$/, async (ctx) => {
-  try {
-    const serviceId = ctx.match[1];
 
-    // ответ на callback сразу (чтобы не крутилось)
-    await ctx.answerCbQuery("Восстанавливаю...");
-
-    // ✅ гасим кнопки СРАЗУ (до API), чтобы не было double-click
-    try {
-      await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
-    } catch {}
-
-    const actorId = getActorId(ctx);
-
-    const r = await axios.post(
-      `/api/telegram/provider/${actorId}/services/${serviceId}/restore`
-    );
-
-    // ✅ server теперь возвращает { ok: true } или { ok:false, reason:"NOT_IN_TRASH" }
-    if (r?.data?.ok === true || r?.data?.success === true) {
-      await ctx.reply(`♻️ Услуга <code>#${serviceId}</code> восстановлена.`, {
-        parse_mode: "HTML",
-      });
-      await sendTrashList(ctx);
-      return;
-    }
-
-    if (r?.data?.ok === false && r?.data?.reason === "NOT_IN_TRASH") {
-      await ctx.reply(`⚠️ Услуга <code>#${serviceId}</code> уже не в корзине.`, {
-        parse_mode: "HTML",
-      });
-      await sendTrashList(ctx);
-      return;
-    }
-
-    return ctx.reply(`❌ Не удалось восстановить услугу <code>#${serviceId}</code>.`, {
-      parse_mode: "HTML",
-    });
-  } catch (e) {
-    console.error("[bot] svc_restore error:", e?.message || e);
-    return ctx.reply("❌ Ошибка при восстановлении.");
-  }
-});
 
 // ❌ Purge (confirm screen)
 bot.action(/^svc_purge:(\d+)$/, async (ctx) => {
@@ -5385,49 +5342,6 @@ bot.action(/^svc_purge:(\d+)$/, async (ctx) => {
       },
     }
   );
-});
-
-// ✅ Purge confirm
-bot.action(/^svc_purge_confirm:(\d+)$/, async (ctx) => {
-  try {
-    const serviceId = ctx.match[1];
-
-    await ctx.answerCbQuery("Удаляю...");
-
-    // ✅ гасим кнопки confirm-сообщения СРАЗУ (до API)
-    try {
-      await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
-    } catch {}
-
-    const actorId = getActorId(ctx);
-
-    const r = await axios.delete(
-      `/api/telegram/provider/${actorId}/services/${serviceId}/purge`
-    );
-
-    if (r?.data?.ok === true || r?.data?.success === true) {
-      await ctx.reply(`✅ Услуга <code>#${serviceId}</code> удалена навсегда.`, {
-        parse_mode: "HTML",
-      });
-      await sendTrashList(ctx);
-      return;
-    }
-
-    if (r?.data?.ok === false && r?.data?.reason === "NOT_IN_TRASH") {
-      await ctx.reply(`⚠️ Услуга <code>#${serviceId}</code> уже не в корзине.`, {
-        parse_mode: "HTML",
-      });
-      await sendTrashList(ctx);
-      return;
-    }
-
-    return ctx.reply(`❌ Не удалось удалить навсегда <code>#${serviceId}</code>.`, {
-      parse_mode: "HTML",
-    });
-  } catch (e) {
-    console.error("[bot] svc_purge_confirm error:", e?.message || e);
-    return ctx.reply("❌ Ошибка при удалении навсегда.");
-  }
 });
 
 bot.action(/^trash:open$/, async (ctx) => {
