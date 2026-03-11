@@ -130,6 +130,11 @@ function extractPrimaryStartField(details, svc = {}) {
   const d = toObj(details);
   const cat = String(svc.category || d.category || "").toLowerCase();
 
+  // 1) Новый единый стандарт для всех refused_* услуг
+  const unified = firstNonEmpty(d.startDate, d.start_date);
+  if (unified) return unified;
+
+  // 2) Обратная совместимость со старыми записями
   if (cat === "refused_flight") {
     return firstNonEmpty(
       d.departureFlightDate,
@@ -137,8 +142,6 @@ function extractPrimaryStartField(details, svc = {}) {
       d.departure_date,
       d.flightDate,
       d.flight_date,
-      d.startDate,
-      d.start_date,
       d.dateFrom,
       d.date_from,
       d.date
@@ -151,8 +154,6 @@ function extractPrimaryStartField(details, svc = {}) {
       d.checkInDate,
       d.check_in,
       d.check_in_date,
-      d.startDate,
-      d.start_date,
       d.dateFrom,
       d.date_from,
       d.date
@@ -164,17 +165,13 @@ function extractPrimaryStartField(details, svc = {}) {
       d.eventDate,
       d.event_date,
       d.date,
-      d.startDate,
-      d.start_date,
       d.dateFrom,
       d.date_from
     );
   }
 
-  // refused_tour and fallback
+  // refused_tour и общий fallback для старых данных
   return firstNonEmpty(
-    d.startDate,
-    d.start_date,
     d.dateFrom,
     d.date_from,
     d.departureFlightDate,
