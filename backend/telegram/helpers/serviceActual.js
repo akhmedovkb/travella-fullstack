@@ -138,7 +138,10 @@ function extractPrimaryStartField(details, svc = {}) {
       d.flightDate,
       d.flight_date,
       d.startDate,
-      d.start_date
+      d.start_date,
+      d.dateFrom,
+      d.date_from,
+      d.date
     );
   }
 
@@ -149,7 +152,10 @@ function extractPrimaryStartField(details, svc = {}) {
       d.check_in,
       d.check_in_date,
       d.startDate,
-      d.start_date
+      d.start_date,
+      d.dateFrom,
+      d.date_from,
+      d.date
     );
   }
 
@@ -159,7 +165,9 @@ function extractPrimaryStartField(details, svc = {}) {
       d.event_date,
       d.date,
       d.startDate,
-      d.start_date
+      d.start_date,
+      d.dateFrom,
+      d.date_from
     );
   }
 
@@ -167,10 +175,20 @@ function extractPrimaryStartField(details, svc = {}) {
   return firstNonEmpty(
     d.startDate,
     d.start_date,
+    d.dateFrom,
+    d.date_from,
     d.departureFlightDate,
     d.departureDate,
-    d.dateFrom,
-    d.date_from
+    d.departure_date,
+    d.flightDate,
+    d.flight_date,
+    d.checkinDate,
+    d.checkInDate,
+    d.check_in,
+    d.check_in_date,
+    d.eventDate,
+    d.event_date,
+    d.date
   );
 }
 
