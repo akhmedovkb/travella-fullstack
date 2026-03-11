@@ -169,6 +169,8 @@ exports.listActualRefused = async (req, res) => {
     if (status) {
       params.push(status);
       where.push(`LOWER(s.status) = LOWER($${params.length})`);
+    } else if (String(showDeleted) === "1") {
+      // показываем любые статусы, включая deleted
     } else {
       // дефолт как раньше: то, что реально на витрине
       where.push(`LOWER(s.status) IN ('published', 'approved')`);
