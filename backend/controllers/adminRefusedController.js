@@ -586,3 +586,50 @@ exports.deleteRefusedService = async (req, res) => {
     return res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
+exports.restoreRefusedService = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Bad id",
+      });
+    }
+
+    const upd = await db.query(
+      `
+      UPDATE services
+      SET
+        deleted_at = NULL,
+        status = 'published',
+        updated_at = NOW()
+      WHERE id = $1
+        AND category LIKE 'refused_%'
+      RETURNING id
+      `,
+      [id]
+    );
+
+    if (!upd.rowCount) {
+      return res.status(404).json({
+        success: false,
+        message: "Service not found",
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: "Service restored",
+      id,
+    });
+  } catch (e) {
+    console.error("[adminRefused] restoreRefusedService error:", e);
+
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+};
