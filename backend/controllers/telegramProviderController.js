@@ -938,67 +938,171 @@ async function deleteServiceFromBot(req, res) {
 }
 
 async function restoreServiceFromBot(req, res) {
-  const { chatId, serviceId } = req.params;
+  try {
+    const { chatId, serviceId } = req.params;
 
-  const prov = await pool.query(
-    `SELECT id FROM providers
-     WHERE telegram_chat_id::text = $1
-        OR tg_chat_id::text = $1
-        OR telegram_web_chat_id::text = $1
-        OR telegram_refused_chat_id::text = $1
-     LIMIT 1`,
-    [chatId]
-  );
-  if (!prov.rowCount) return res.sendStatus(403);
+    const provRes = await pool.query(
+      `SELECT id
+         FROM providers
+        WHERE telegram_chat_id::text = $1
+           OR tg_chat_id::text = $1
+           OR telegram_web_chat_id::text = $1
+           OR telegram_refused_chat_id::text = $1
+        LIMIT 1`,
+      [chatId]
+    );
 
-  const r = await pool.query(
-    `
-    UPDATE services
-       SET deleted_at = NULL,
-           deleted_by = NULL,
-           status = 'draft',
-           updated_at = NOW()
-     WHERE id = $1
-       AND provider_id = $2
-       AND deleted_at IS NOT NULL
-    `,
-    [serviceId, prov.rows[0].id]
-  );
+    if (!provRes.rowCount) {
+      return res
+        .status(403)
+        .json({ success: false, error: "PROVIDER_NOT_FOUND" });
+    }
 
-  if (!r.rowCount) {
-    return res.json({ ok: false, reason: "NOT_IN_TRASH" });
+    const providerId = provRes.rows[0].id;
+
+    const upd = await pool.query(
+      `
+      UPDATE services
+         SET deleted_at = NULL,
+             deleted_by = NULL,
+             status = 'draft',
+             updated_at = NOW()
+       WHERE id = $1
+         AND provider_id = $2
+         AND deleted_at IS NOT NULL
+       RETURNING id, status, deleted_at
+      `,
+      [serviceId, providerId]
+    );
+
+    if (!upd.rowCount) {
+      const check = await pool.query(
+        `
+        SELECT id, provider_id, deleted_at
+          FROM services
+         WHERE id = $1
+         LIMIT 1
+        `,
+        [serviceId]
+      );
+
+      if (!check.rowCount) {
+        return res
+          .status(404)
+          .json({ success: false, error: "SERVICE_NOT_FOUND" });
+      }
+
+      if (Number(check.rows[0].provider_id) !== Number(providerId)) {
+        return res.status(403).json({ success: false, error: "FORBIDDEN" });
+      }
+
+      if (!check.rows[0].deleted_at) {
+        return res
+          .status(409)
+          .json({ success: false, error: "NOT_DELETED" });
+      }
+
+      return res
+        .status(409)
+        .json({ success: false, error: "RESTORE_FAILED" });
+    }
+
+    return res.json({
+      success: true,
+      item: upd.rows[0],
+    });
+  } catch (e) {
+    console.error("[tg] restoreServiceFromBot error:", e);
+    return res.status(500).json({ success: false, error: "SERVER_ERROR" });
   }
-
-  return res.json({ ok: true });
 }
-
 
 async function purgeServiceFromBot(req, res) {
-  const { chatId, serviceId } = req.params;
+  try {
+    const { chatId, serviceId } = req.params;
 
-  const prov = await pool.query(
-    `SELECT id FROM providers
-     WHERE telegram_chat_id::text = $1
-        OR tg_chat_id::text = $1
-        OR telegram_web_chat_id::text = $1
-        OR telegram_refused_chat_id::text = $1
-     LIMIT 1`,
-    [chatId]
-  );
-  if (!prov.rowCount) return res.sendStatus(403);
+    const provRes = await pool.query(
+      `SELECT id
+         FROM providers
+        WHERE telegram_chat_id::text = $1
+           OR tg_chat_id::text = $1
+           OR telegram_web_chat_id::text = $1
+           OR telegram_refused_chat_id::text = $1
+        LIMIT 1`,
+      [chatId]
+    );
 
-const del = await pool.query(
-  `DELETE FROM services
-   WHERE id = $1
-     AND provider_id = $2
-     AND deleted_at IS NOT NULL`,
-  [serviceId, prov.rows[0].id]
-);
+    if (!provRes.rowCount) {
+      return res
+        .status(403)
+        .json({ success: false, error: "PROVIDER_NOT_FOUND" });
+    }
 
-if (!del.rowCount) {
-  return res.json({ ok: false, reason: "NOT_IN_TRASH" });
-}
-return res.json({ ok: true });
+    const providerId = provRes.rows[0].id;
+
+    const del = await pool.query(
+      `
+      DELETE FROM services
+       WHERE id = $1
+         AND provider_id = $2
+         AND deleted_at IS NOT NULL
+       RETURNING id
+      `,
+      [serviceId, providerId]
+    );
+
+    if (!del.rowCount) {
+      const check = await pool.query(
+        `
+        SELECT id, provider_id, deleted_at
+          FROM services
+         WHERE id = $1
+         LIMIT 1
+        `,
+        [serviceId]
+      );
+
+      if (!check.rowCount) {
+        return res
+          .status(404)
+          .json({ success: false, error: "SERVICE_NOT_FOUND" });
+      }
+
+      if (Number(check.rows[0].provider_id) !== Number(providerId)) {
+        return res.status(403).json({ success: false, error: "FORBIDDEN" });
+      }
+
+      if (!check.rows[0].deleted_at) {
+        return res
+          .status(409)
+          .json({ success: false, error: "NOT_IN_TRASH" });
+      }
+
+      return res
+        .status(409)
+        .json({ success: false, error: "PURGE_FAILED" });
+    }
+
+    return res.json({
+      success: true,
+      purgedId: del.rows[0].id,
+    });
+  } catch (e) {
+    console.error("[tg] purgeServiceFromBot error:", e);
+
+    const msg = String(e?.message || "");
+    if (
+      msg.includes("violates foreign key constraint") ||
+      msg.includes("update or delete on table")
+    ) {
+      return res.status(409).json({
+        success: false,
+        error: "FK_CONSTRAINT",
+      });
+    }
+
+    return res.status(500).json({ success: false, error: "SERVER_ERROR" });
+  }
 }
 
 /**
