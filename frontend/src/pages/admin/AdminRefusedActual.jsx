@@ -262,7 +262,7 @@ export default function AdminRefusedActual() {
   const [category, setCategory] = useState(""); // empty => all refused_*
   const [status, setStatus] = useState(""); // empty => published/approved
   const [q, setQ] = useState("");
-  const [includeInactive, setIncludeInactive] = useState(false);
+  const [actuality, setActuality] = useState("actual"); // all | actual | inactive
 
   // Pagination
   const [page, setPage] = useState(1);
@@ -392,7 +392,7 @@ const thClass = (field) =>
           q: q || "",
           page: nextPage,
           limit,
-          includeInactive: includeInactive ? "1" : "0",
+          actuality,
           sortBy,
           sortOrder,
         },
@@ -430,13 +430,13 @@ const thClass = (field) =>
   useEffect(() => {
     setPage(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [category, status, includeInactive, limit, sortBy, sortOrder]);
+  }, [category, status, actuality, limit, sortBy, sortOrder]);
 
   useEffect(() => {
     if (!canUse) return;
     loadList(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canUse, category, status, includeInactive, limit, sortBy, sortOrder]);
+  }, [canUse, category, status, actuality, limit, sortBy, sortOrder]);
 
   useEffect(() => {
     if (!canUse) return;
@@ -499,6 +499,61 @@ const thClass = (field) =>
     }
   }
 
+    async function extendService(id) {
+    setSendingId(id);
+    setError("");
+    try {
+      const resp = await http.post(apiPath(`/admin/refused/${id}/extend`));
+      const data = ensureJsonOrThrow(resp, "extendService");
+      if (!data?.success) {
+        throw new Error(data?.message || "Не удалось продлить");
+      }
+
+      showToast("ok", "✅ Продлено на 7 дней");
+      await loadList(page);
+
+      if (detailsItem?.id === id) {
+        await openDetails(id);
+      }
+    } catch (e) {
+      const info = extractAxiosError(e);
+      setError(info.msg);
+      showToast("err", `❌ ${info.msg}`);
+    } finally {
+      setSendingId(null);
+    }
+  }
+
+  async function deleteService(id) {
+    const ok = window.confirm(`Удалить услугу #${id}?`);
+    if (!ok) return;
+
+    setSendingId(id);
+    setError("");
+    try {
+      const resp = await http.delete(apiPath(`/admin/refused/${id}`));
+      const data = ensureJsonOrThrow(resp, "deleteService");
+      if (!data?.success) {
+        throw new Error(data?.message || "Не удалось удалить");
+      }
+
+      showToast("ok", "✅ Услуга удалена");
+
+      if (detailsItem?.id === id) {
+        setDetailsOpen(false);
+        setDetailsItem(null);
+      }
+
+      await loadList(page);
+    } catch (e) {
+      const info = extractAxiosError(e);
+      setError(info.msg);
+      showToast("err", `❌ ${info.msg}`);
+    } finally {
+      setSendingId(null);
+    }
+  }
+
   const categories = [
     { value: "", label: "Все отказные" },
     { value: "refused_tour", label: "Отказной тур" },
@@ -513,6 +568,11 @@ const thClass = (field) =>
     { value: "approved", label: "approved" },
     { value: "draft", label: "draft" },
     { value: "rejected", label: "rejected" },
+  ];
+  const actualityOptions = [
+    { value: "all", label: "Все" },
+    { value: "actual", label: "Только актуальные" },
+    { value: "inactive", label: "Только неактуальные" },
   ];
   const sortLabel = useMemo(() => {
     const name =
@@ -529,9 +589,9 @@ const thClass = (field) =>
     <div className="p-4 md:p-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">Актуальные отказы</h1>
+          <h1 className="text-xl font-semibold text-gray-900">Все отказные услуги</h1>
           <p className="text-sm text-gray-600 mt-1">
-            Список refused_* услуг, сортировка по ближайшей дате. Можно вручную спросить актуальность у поставщика в Telegram.
+            Список всех refused_* услуг. Можно фильтровать актуальные и неактуальные, вручную спросить актуальность у поставщика, продлить или удалить услугу.
           </p>
           <div className="mt-2 text-xs text-gray-500">
             API base:{" "}
@@ -646,17 +706,22 @@ const thClass = (field) =>
             </select>
           </div>
 
-          <div className="md:col-span-12 flex items-center justify-between gap-3 pt-1">
-            <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-              <input
-                type="checkbox"
-                className="h-4 w-4"
-                checked={includeInactive}
-                onChange={(e) => setIncludeInactive(e.target.checked)}
-              />
-              Показывать неактуальные тоже
-            </label>
-
+          <div className="md:col-span-3">
+            <label className="text-xs font-medium text-gray-600">Актуальность</label>
+            <select
+              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-gray-200"
+              value={actuality}
+              onChange={(e) => setActuality(e.target.value)}
+            >
+              {actualityOptions.map((a) => (
+                <option key={a.value} value={a.value}>
+                  {a.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          
+          <div className="md:col-span-9 flex items-center justify-end gap-3 pt-1">
             <button
               onClick={() => loadList(page)}
               className="rounded-xl border border-gray-200 px-3 py-2 text-sm hover:bg-gray-50"
@@ -876,6 +941,34 @@ const thClass = (field) =>
                             Force
                           </button>
 
+                          <button
+                              onClick={() => extendService(it.id)}
+                              disabled={sendingId === it.id}
+                              className={classNames(
+                                "rounded-lg px-3 py-1.5 text-xs border",
+                                sendingId === it.id
+                                  ? "border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed"
+                                  : "border-green-200 text-green-700 bg-green-50 hover:bg-green-100"
+                              )}
+                              title="Продлить на 7 дней"
+                            >
+                              Продлить
+                            </button>
+                            
+                            <button
+                              onClick={() => deleteService(it.id)}
+                              disabled={sendingId === it.id}
+                              className={classNames(
+                                "rounded-lg px-3 py-1.5 text-xs border",
+                                sendingId === it.id
+                                  ? "border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed"
+                                  : "border-red-200 text-red-700 bg-red-50 hover:bg-red-100"
+                              )}
+                              title="Удалить услугу"
+                            >
+                              Удалить
+                            </button>
+
                           <a
                             href={`/dashboard?from=admin&service=${it.id}`}
                             className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs hover:bg-gray-50"
@@ -952,28 +1045,45 @@ const thClass = (field) =>
                   </span>
                 ) : null}
               </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => askActual(detailsItem.id, false)}
-                  className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-700 hover:bg-blue-100"
-                  disabled={
-                    !detailsItem?.provider?.chatId ||
-                    sendingId === detailsItem.id
-                  }
-                >
-                  Спросить
-                </button>
-                <button
-                  onClick={() => askActual(detailsItem.id, true)}
-                  className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900 hover:bg-amber-100"
-                  disabled={
-                    !detailsItem?.provider?.chatId ||
-                    sendingId === detailsItem.id
-                  }
-                >
-                  Force
-                </button>
-              </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => askActual(detailsItem.id, false)}
+                    className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-700 hover:bg-blue-100"
+                    disabled={
+                      !detailsItem?.provider?.chatId ||
+                      sendingId === detailsItem.id
+                    }
+                  >
+                    Спросить
+                  </button>
+                
+                  <button
+                    onClick={() => askActual(detailsItem.id, true)}
+                    className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900 hover:bg-amber-100"
+                    disabled={
+                      !detailsItem?.provider?.chatId ||
+                      sendingId === detailsItem.id
+                    }
+                  >
+                    Force
+                  </button>
+                
+                  <button
+                    onClick={() => extendService(detailsItem.id)}
+                    className="rounded-xl border border-green-200 bg-green-50 px-4 py-2 text-sm text-green-700 hover:bg-green-100"
+                    disabled={sendingId === detailsItem.id}
+                  >
+                    Продлить
+                  </button>
+                
+                  <button
+                    onClick={() => deleteService(detailsItem.id)}
+                    className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 hover:bg-red-100"
+                    disabled={sendingId === detailsItem.id}
+                  >
+                    Удалить
+                  </button>
+                </div>
             </div>
           ) : null
         }
