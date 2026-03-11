@@ -3,12 +3,15 @@ import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 
 /**
- * Admin tool: shows актуальные refused_* services + manual "ask actual" button
+ * Admin tool: shows refused_* services + manual actions
  *
- * Backend endpoints (already in your repo):
- *  - GET  /api/admin/refused/actual
- *  - GET  /api/admin/refused/:id
- *  - POST /api/admin/refused/:id/ask-actual?force=1
+ * Backend endpoints:
+ *  - GET    /api/admin/refused/actual
+ *  - GET    /api/admin/refused/:id
+ *  - POST   /api/admin/refused/:id/ask-actual?force=1
+ *  - POST   /api/admin/refused/:id/extend
+ *  - DELETE /api/admin/refused/:id
+ *  - POST   /api/admin/refused/:id/restore
  *
  * IMPORTANT:
  * This page must call the real backend API (Railway / api.travella.uz).
@@ -39,10 +42,12 @@ function getRuntimeApiBase() {
 /** Env config support */
 function getEnvApiBase() {
   const v =
-    (import.meta?.env?.VITE_API_BASE_URL ||
+    (
+      import.meta?.env?.VITE_API_BASE_URL ||
       import.meta?.env?.VITE_API_URL ||
       import.meta?.env?.VITE_API_BASE ||
-      "")
+      ""
+    )
       .toString()
       .trim();
   return v;
@@ -54,13 +59,11 @@ function getEnvApiBase() {
  * - if base ends with "/api" -> we should not prefix "/api" again
  */
 function normalizeApiBase(raw) {
-  const b = (raw || "").toString().trim().replace(/\/+$/, "");
-  return b;
+  return (raw || "").toString().trim().replace(/\/+$/, "");
 }
 
 function computeApiPrefix(base) {
-  // If base ends with /api -> no additional prefix; else prefix requests with /api
-  if (!base) return "/api"; // default for local dev same-origin (optional)
+  if (!base) return "/api";
   const b = base.replace(/\/+$/, "");
   return b.endsWith("/api") ? "" : "/api";
 }
@@ -83,17 +86,20 @@ function classNames(...a) {
 }
 
 function isProbablyHtmlPayload(data, contentType) {
-  if (contentType && String(contentType).toLowerCase().includes("text/html"))
+  if (contentType && String(contentType).toLowerCase().includes("text/html")) {
     return true;
+  }
   if (typeof data !== "string") return false;
   const t = data.trim().slice(0, 200).toLowerCase();
   return t.startsWith("<!doctype html") || t.startsWith("<html");
 }
 
 function extractAxiosError(e) {
-  const status = e?.response?.status;
-  const contentType = e?.response?.headers?.["content-type"];
-  const data = e?.response?.data;
+  const status = e?.response?.status || e?.__resp?.status;
+  const contentType =
+    e?.response?.headers?.["content-type"] ||
+    e?.__resp?.headers?.["content-type"];
+  const data = e?.response?.data ?? e?.__resp?.data;
 
   let msg =
     e?.response?.data?.message ||
@@ -101,21 +107,16 @@ function extractAxiosError(e) {
     e?.message ||
     "Ошибка";
 
-  // If HTML returned instead of JSON — provide actionable message
   if (isProbablyHtmlPayload(data, contentType)) {
     const hint =
-      "API вернул HTML вместо JSON. Обычно это значит, что API_BASE не настроен и запрос ушёл на фронтенд (Vercel) вместо backend (Railway).";
-    msg = `${hint} (status=${status || "?"}, content-type=${
-      contentType || "?"
-    })`;
+      "API вернул HTML вместо JSON. Обычно это значит, что API_BASE не настроен и запрос ушёл на фронтенд вместо backend.";
+    msg = `${hint} (status=${status || "?"}, content-type=${contentType || "?"})`;
   } else if (typeof data === "string" && data.trim()) {
-    // sometimes backend returns plain string
     msg = `${msg} (status=${status || "?"})`;
   } else if (status) {
     msg = `${msg} (status=${status})`;
   }
 
-  // For debugging: show a tiny snippet if it's string
   const snippet =
     typeof data === "string" ? data.trim().slice(0, 180) : null;
 
@@ -126,9 +127,9 @@ function readUrlSort() {
   try {
     const sp = new URLSearchParams(window.location.search || "");
     const sortBy = (sp.get("sortBy") || "sort_date").toLowerCase();
-    const sortOrder = (sp.get("sortOrder") || "asc").toLowerCase() === "desc" ? "desc" : "asc";
+    const sortOrder =
+      (sp.get("sortOrder") || "asc").toLowerCase() === "desc" ? "desc" : "asc";
 
-    // whitelist
     const allowed = new Set(["created_at", "provider", "sort_date"]);
     return {
       sortBy: allowed.has(sortBy) ? sortBy : "sort_date",
@@ -196,19 +197,19 @@ function Modal({ open, title, onClose, children, footer }) {
         aria-hidden="true"
       />
       <div className="absolute inset-0 flex items-center justify-center p-4">
-        <div className="w-full max-w-4xl rounded-2xl bg-white shadow-xl border border-gray-200 overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+        <div className="w-full max-w-4xl overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl">
+          <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
             <div className="text-base font-semibold text-gray-900">{title}</div>
             <button
               onClick={onClose}
-              className="rounded-lg px-3 py-1.5 text-sm border border-gray-200 hover:bg-gray-50"
+              className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm hover:bg-gray-50"
             >
               Закрыть
             </button>
           </div>
           <div className="max-h-[75vh] overflow-auto p-5">{children}</div>
           {footer ? (
-            <div className="px-5 py-4 border-t border-gray-200 bg-gray-50">
+            <div className="border-t border-gray-200 bg-gray-50 px-5 py-4">
               {footer}
             </div>
           ) : null}
@@ -221,13 +222,9 @@ function Modal({ open, title, onClose, children, footer }) {
 export default function AdminRefusedActual() {
   const token = useMemo(() => getAuthToken(), []);
 
-  // Self-sufficient API base resolution:
-  // 1) env
-  // 2) runtime window.frontend.API_BASE
   const base = useMemo(() => {
     const env = normalizeApiBase(getEnvApiBase());
     const rt = normalizeApiBase(getRuntimeApiBase());
-    // prefer env, fallback runtime
     return env || rt || "";
   }, []);
 
@@ -236,10 +233,10 @@ export default function AdminRefusedActual() {
 
   const http = useMemo(() => {
     const inst = axios.create({
-      baseURL: base || "", // if empty, same-origin (only OK for local dev proxy)
+      baseURL: base || "",
       withCredentials: true,
       timeout: 20000,
-      validateStatus: () => true, // we handle status manually to show better errors
+      validateStatus: () => true,
     });
 
     inst.interceptors.request.use((config) => {
@@ -258,31 +255,26 @@ export default function AdminRefusedActual() {
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
 
-  // Filters
-  const [category, setCategory] = useState(""); // empty => all refused_*
-  const [status, setStatus] = useState(""); // empty => published/approved
+  const [category, setCategory] = useState("");
+  const [status, setStatus] = useState("");
   const [q, setQ] = useState("");
-  const [actuality, setActuality] = useState("actual"); // all | actual | inactive
+  const [actuality, setActuality] = useState("actual");
+  const [visibility, setVisibility] = useState("active"); // active | deleted | all
 
-  // Pagination
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(30);
 
-  // Sorting (persisted in URL)
   const initialSort = useMemo(() => readUrlSort(), []);
   const [sortBy, setSortBy] = useState(initialSort.sortBy);
   const [sortOrder, setSortOrder] = useState(initialSort.sortOrder);
-  
-  // UI messages
+
   const [error, setError] = useState("");
   const [toast, setToast] = useState(null);
 
-  // Details modal
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [detailsItem, setDetailsItem] = useState(null);
 
-  // Ask actual action state
   const [sendingId, setSendingId] = useState(null);
 
   const pageCount = useMemo(() => {
@@ -292,43 +284,38 @@ export default function AdminRefusedActual() {
 
   const canUse = useMemo(() => !!token, [token]);
 
-  // If base is empty AND we're not in local dev, warn loudly
   const baseLooksMissing = useMemo(() => {
     if (base) return false;
     const host = (window?.location?.hostname || "").toLowerCase();
-    // On local dev with proxy, empty base is OK; on real domains it's not.
     return host && host !== "localhost" && host !== "127.0.0.1";
   }, [base]);
 
   function showToast(kind, text) {
-    setToast({ kind, text, at: Date.now() });
+    const entry = { kind, text, at: Date.now() };
+    setToast(entry);
     setTimeout(() => {
-      setToast((t) =>
-        t && t.at ? (Date.now() - t.at > 2500 ? null : t) : null
-      );
+      setToast((t) => (t?.at === entry.at ? null : t));
     }, 2800);
   }
 
   function ensureJsonOrThrow(resp, where = "") {
-    const status = resp?.status;
+    const statusCode = resp?.status;
     const contentType = resp?.headers?.["content-type"];
     const data = resp?.data;
 
-    // Non-2xx -> show meaningful error
-    if (!status || status < 200 || status >= 300) {
+    if (!statusCode || statusCode < 200 || statusCode >= 300) {
       const msg =
         data?.message ||
         data?.error ||
         (typeof data === "string" ? data.slice(0, 120) : null) ||
-        `HTTP ${status || "?"}`;
+        `HTTP ${statusCode || "?"}`;
       const err = new Error(
-        `${msg} (status=${status || "?"}${where ? `, ${where}` : ""})`
+        `${msg} (status=${statusCode || "?"}${where ? `, ${where}` : ""})`
       );
       err.__resp = resp;
       throw err;
     }
 
-    // HTML => wrong API base
     if (isProbablyHtmlPayload(data, contentType)) {
       const err = new Error(
         `API вернул HTML вместо JSON (${where || "request"}). Проверь VITE_API_BASE_URL или window.frontend.API_BASE.`
@@ -337,7 +324,6 @@ export default function AdminRefusedActual() {
       throw err;
     }
 
-    // Expect object with success
     if (!data || typeof data !== "object") {
       const err = new Error(
         `Bad response (${where || "request"}): ожидали JSON-объект`
@@ -349,23 +335,18 @@ export default function AdminRefusedActual() {
     return data;
   }
 
-const thClass = (field) =>
+  const thClass = (field) =>
     classNames(
       "px-3 py-2 text-left font-medium select-none",
       "cursor-pointer hover:text-blue-700",
       sortBy === field ? "bg-blue-50/60 text-blue-900" : ""
     );
+
   const tdClass = (field) =>
-    classNames(
-      "px-3 py-2",
-      sortBy === field ? "bg-blue-50/30" : ""
-    );
+    classNames("px-3 py-2", sortBy === field ? "bg-blue-50/30" : "");
 
   const iconClass = (field) =>
-    classNames(
-      sortBy === field ? "text-blue-700" : "text-gray-400",
-      "ml-1"
-    );
+    classNames(sortBy === field ? "text-blue-700" : "text-gray-400", "ml-1");
 
   function toggleSort(field) {
     setPage(1);
@@ -379,20 +360,25 @@ const thClass = (field) =>
     });
   }
 
-  const sortIcon = (field) => (sortBy === field ? (sortOrder === "asc" ? "▲" : "▼") : "");
+  const sortIcon = (field) =>
+    sortBy === field ? (sortOrder === "asc" ? "▲" : "▼") : "";
 
   async function loadList(nextPage = page) {
     setLoading(true);
     setError("");
     try {
+      const showDeleted = visibility === "active" ? "0" : "1";
+      const effectiveStatus = visibility === "deleted" ? "deleted" : status || "";
+
       const resp = await http.get(apiPath("/admin/refused/actual"), {
         params: {
           category: category || "",
-          status: status || "",
+          status: effectiveStatus,
           q: q || "",
           page: nextPage,
           limit,
           actuality,
+          showDeleted,
           sortBy,
           sortOrder,
         },
@@ -409,12 +395,10 @@ const thClass = (field) =>
       const ct = resp?.headers?.["content-type"];
       const data = resp?.data;
 
-      // Prefer our computed msg; add snippet when available
       let msg = info.msg;
       if (isProbablyHtmlPayload(data, ct)) {
-        msg =
-          msg +
-          " → Настрой API_BASE: VITE_API_BASE_URL (Vercel) или window.frontend.API_BASE.";
+        msg +=
+          " → Настрой API_BASE: VITE_API_BASE_URL или window.frontend.API_BASE.";
       } else if (info.snippet) {
         msg = `${msg}. Ответ: ${info.snippet}`;
       }
@@ -429,14 +413,13 @@ const thClass = (field) =>
 
   useEffect(() => {
     setPage(1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [category, status, actuality, limit, sortBy, sortOrder]);
+  }, [category, status, actuality, visibility, limit, sortBy, sortOrder]);
 
   useEffect(() => {
     if (!canUse) return;
     loadList(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canUse, category, status, actuality, limit, sortBy, sortOrder]);
+  }, [canUse, category, status, actuality, visibility, limit, sortBy, sortOrder]);
 
   useEffect(() => {
     if (!canUse) return;
@@ -453,7 +436,7 @@ const thClass = (field) =>
       const resp = await http.get(apiPath(`/admin/refused/${id}`));
       const data = ensureJsonOrThrow(resp, "openDetails");
       if (!data?.success) throw new Error(data?.message || "Bad response");
-      setDetailsItem(data.item);
+      setDetailsItem(data.item || null);
     } catch (e) {
       const info = extractAxiosError(e);
       setError(info.msg || "Ошибка загрузки деталей");
@@ -482,14 +465,19 @@ const thClass = (field) =>
         throw new Error(data?.message || "Не удалось отправить");
       }
 
-      // Response variants: {sent:true, used, chatId} or {ok:true,...}
       if (data?.sent || data?.ok) {
         showToast("ok", `✅ Отправлено, chatId=${data?.chatId || "—"}`);
       } else {
-        showToast("warn", `⚠️ Не отправлено: ${data?.tg?.error || data?.message || "unknown"}`);
+        showToast(
+          "warn",
+          `⚠️ Не отправлено: ${data?.tg?.error || data?.message || "unknown"}`
+        );
       }
 
       await loadList(page);
+      if (detailsItem?.id === id) {
+        await openDetails(id);
+      }
     } catch (e) {
       const info = extractAxiosError(e);
       setError(info.msg);
@@ -499,7 +487,7 @@ const thClass = (field) =>
     }
   }
 
-    async function extendService(id) {
+  async function extendService(id) {
     setSendingId(id);
     setError("");
     try {
@@ -540,10 +528,33 @@ const thClass = (field) =>
       showToast("ok", "✅ Услуга удалена");
 
       if (detailsItem?.id === id) {
-        setDetailsOpen(false);
-        setDetailsItem(null);
+        await openDetails(id);
+      }
+      await loadList(page);
+    } catch (e) {
+      const info = extractAxiosError(e);
+      setError(info.msg);
+      showToast("err", `❌ ${info.msg}`);
+    } finally {
+      setSendingId(null);
+    }
+  }
+
+  async function restoreService(id) {
+    setSendingId(id);
+    setError("");
+    try {
+      const resp = await http.post(apiPath(`/admin/refused/${id}/restore`));
+      const data = ensureJsonOrThrow(resp, "restoreService");
+      if (!data?.success) {
+        throw new Error(data?.message || "Не удалось восстановить");
       }
 
+      showToast("ok", "✅ Услуга восстановлена");
+
+      if (detailsItem?.id === id) {
+        await openDetails(id);
+      }
       await loadList(page);
     } catch (e) {
       const info = extractAxiosError(e);
@@ -569,11 +580,19 @@ const thClass = (field) =>
     { value: "draft", label: "draft" },
     { value: "rejected", label: "rejected" },
   ];
+
   const actualityOptions = [
     { value: "all", label: "Все" },
     { value: "actual", label: "Только актуальные" },
     { value: "inactive", label: "Только неактуальные" },
   ];
+
+  const visibilityOptions = [
+    { value: "active", label: "Активные" },
+    { value: "deleted", label: "Удалённые" },
+    { value: "all", label: "Все" },
+  ];
+
   const sortLabel = useMemo(() => {
     const name =
       sortBy === "created_at"
@@ -589,15 +608,17 @@ const thClass = (field) =>
     <div className="p-4 md:p-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">Все отказные услуги</h1>
-          <p className="text-sm text-gray-600 mt-1">
-            Список всех refused_* услуг. Можно фильтровать актуальные и неактуальные, вручную спросить актуальность у поставщика, продлить или удалить услугу.
+          <h1 className="text-xl font-semibold text-gray-900">
+            Все отказные услуги
+          </h1>
+          <p className="mt-1 text-sm text-gray-600">
+            Список всех refused_* услуг. Можно фильтровать актуальные,
+            неактуальные и удалённые, вручную спросить актуальность у
+            поставщика, продлить, удалить или восстановить услугу.
           </p>
           <div className="mt-2 text-xs text-gray-500">
             API base:{" "}
-            <span className="font-mono">
-              {base ? base : "— (не задан)"}
-            </span>
+            <span className="font-mono">{base ? base : "— (не задан)"}</span>
             {" • "}
             prefix: <span className="font-mono">{apiPrefix || "—"}</span>
           </div>
@@ -607,9 +628,12 @@ const thClass = (field) =>
           <div
             className={classNames(
               "rounded-xl border px-4 py-2 text-sm shadow-sm",
-              toast.kind === "ok" && "bg-green-50 border-green-200 text-green-800",
-              toast.kind === "warn" && "bg-amber-50 border-amber-200 text-amber-900",
-              toast.kind === "err" && "bg-red-50 border-red-200 text-red-800"
+              toast.kind === "ok" &&
+                "border-green-200 bg-green-50 text-green-800",
+              toast.kind === "warn" &&
+                "border-amber-200 bg-amber-50 text-amber-900",
+              toast.kind === "err" &&
+                "border-red-200 bg-red-50 text-red-800"
             )}
           >
             {toast.text}
@@ -619,7 +643,8 @@ const thClass = (field) =>
 
       {!canUse ? (
         <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-800">
-          Не найден JWT токен в localStorage/sessionStorage. Админ-страница требует авторизацию (Authorization: Bearer ...).
+          Не найден JWT токен в localStorage/sessionStorage. Админ-страница
+          требует авторизацию.
         </div>
       ) : null}
 
@@ -627,11 +652,13 @@ const thClass = (field) =>
         <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900">
           <div className="font-semibold">API_BASE не настроен</div>
           <div className="mt-1 text-sm">
-            Сейчас base пустой, а домен не localhost — запросы уйдут на фронтенд и вернут HTML (Bad response).
+            Сейчас base пустой, а домен не localhost — запросы уйдут на фронтенд
+            и вернут HTML.
             <div className="mt-2">
-              Настрой на Vercel env:{" "}
-              <span className="font-mono">VITE_API_BASE_URL=https://api.travella.uz</span>{" "}
-              (или домен Railway).
+              Настрой env:{" "}
+              <span className="font-mono">
+                VITE_API_BASE_URL=https://api.travella.uz
+              </span>
             </div>
           </div>
         </div>
@@ -640,7 +667,9 @@ const thClass = (field) =>
       <div className="mt-5 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-12 md:items-end">
           <div className="md:col-span-3">
-            <label className="text-xs font-medium text-gray-600">Категория</label>
+            <label className="text-xs font-medium text-gray-600">
+              Категория
+            </label>
             <select
               className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-gray-200"
               value={category}
@@ -660,6 +689,7 @@ const thClass = (field) =>
               className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-gray-200"
               value={status}
               onChange={(e) => setStatus(e.target.value)}
+              disabled={visibility === "deleted"}
             >
               {statuses.map((s) => (
                 <option key={s.value || "default"} value={s.value}>
@@ -669,7 +699,41 @@ const thClass = (field) =>
             </select>
           </div>
 
-          <div className="md:col-span-4">
+          <div className="md:col-span-3">
+            <label className="text-xs font-medium text-gray-600">
+              Видимость
+            </label>
+            <select
+              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-gray-200"
+              value={visibility}
+              onChange={(e) => setVisibility(e.target.value)}
+            >
+              {visibilityOptions.map((v) => (
+                <option key={v.value} value={v.value}>
+                  {v.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="md:col-span-3">
+            <label className="text-xs font-medium text-gray-600">
+              Актуальность
+            </label>
+            <select
+              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-gray-200"
+              value={actuality}
+              onChange={(e) => setActuality(e.target.value)}
+            >
+              {actualityOptions.map((a) => (
+                <option key={a.value} value={a.value}>
+                  {a.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="md:col-span-8">
             <label className="text-xs font-medium text-gray-600">Поиск</label>
             <div className="mt-1 flex gap-2">
               <input
@@ -706,22 +770,7 @@ const thClass = (field) =>
             </select>
           </div>
 
-          <div className="md:col-span-3">
-            <label className="text-xs font-medium text-gray-600">Актуальность</label>
-            <select
-              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-gray-200"
-              value={actuality}
-              onChange={(e) => setActuality(e.target.value)}
-            >
-              {actualityOptions.map((a) => (
-                <option key={a.value} value={a.value}>
-                  {a.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          
-          <div className="md:col-span-9 flex items-center justify-end gap-3 pt-1">
+          <div className="md:col-span-2 flex items-center justify-end gap-3 pt-1">
             <button
               onClick={() => loadList(page)}
               className="rounded-xl border border-gray-200 px-3 py-2 text-sm hover:bg-gray-50"
@@ -737,6 +786,7 @@ const thClass = (field) =>
             {error}
           </div>
         ) : null}
+
         <div className="mt-4 flex items-center justify-between gap-3">
           <div className="text-xs text-gray-600">
             Сортировка:{" "}
@@ -747,8 +797,8 @@ const thClass = (field) =>
         </div>
 
         <div className="mt-4 overflow-auto rounded-xl border border-gray-200">
-          <table className="min-w-[980px] w-full text-sm">
-            <thead className="bg-gray-50 text-gray-700 sticky top-0 z-10">
+          <table className="min-w-[1080px] w-full text-sm">
+            <thead className="sticky top-0 z-10 bg-gray-50 text-gray-700">
               <tr>
                 <th className="px-3 py-2 text-left font-medium">ID</th>
                 <th className="px-3 py-2 text-left font-medium">Категория</th>
@@ -758,17 +808,24 @@ const thClass = (field) =>
                   onClick={() => toggleSort("created_at")}
                   title="Сортировать по дате создания"
                 >
-                  Дата создания{" "}
-                  <span className={iconClass("created_at")}>{sortIcon("created_at")}</span>
-                  <SortBadge active={sortBy === "created_at"} dir={sortOrder} />
+                  Дата создания
+                  <span className={iconClass("created_at")}>
+                    {sortIcon("created_at")}
+                  </span>
+                  <SortBadge
+                    active={sortBy === "created_at"}
+                    dir={sortOrder}
+                  />
                 </th>
                 <th
                   className={thClass("sort_date")}
                   onClick={() => toggleSort("sort_date")}
                   title="Сортировать по ближайшей дате услуги"
                 >
-                  Дата (сорт){" "}
-                  <span className={iconClass("sort_date")}>{sortIcon("sort_date")}</span>
+                  Дата (сорт)
+                  <span className={iconClass("sort_date")}>
+                    {sortIcon("sort_date")}
+                  </span>
                   <SortBadge active={sortBy === "sort_date"} dir={sortOrder} />
                 </th>
                 <th
@@ -776,8 +833,10 @@ const thClass = (field) =>
                   onClick={() => toggleSort("provider")}
                   title="Сортировать по провайдеру"
                 >
-                  Провайдер{" "}
-                  <span className={iconClass("provider")}>{sortIcon("provider")}</span>
+                  Провайдер
+                  <span className={iconClass("provider")}>
+                    {sortIcon("provider")}
+                  </span>
                   <SortBadge active={sortBy === "provider"} dir={sortOrder} />
                 </th>
                 <th className="px-3 py-2 text-left font-medium">TG</th>
@@ -785,6 +844,7 @@ const thClass = (field) =>
                 <th className="px-3 py-2 text-left font-medium">Действия</th>
               </tr>
             </thead>
+
             <tbody className="divide-y divide-gray-200">
               {loading ? (
                 <tr>
@@ -796,6 +856,7 @@ const thClass = (field) =>
                 items.map((it) => {
                   const tgOk = !!it?.provider?.chatId;
                   const actual = !!it.isActual;
+                  const deleted = !!it.deletedAt || String(it.status || "").toLowerCase() === "deleted";
 
                   const meta = it.meta || {};
                   const lockUntil = meta.lockUntil;
@@ -803,20 +864,18 @@ const thClass = (field) =>
                   const lastAnswer = meta.lastAnswer;
 
                   return (
-                    <tr
-                      key={it.id}
-                      className="bg-white hover:bg-gray-50"
-                    >
-                     <td className="px-3 py-2 whitespace-nowrap text-gray-900">
+                    <tr key={it.id} className="bg-white hover:bg-gray-50">
+                      <td className="whitespace-nowrap px-3 py-2 text-gray-900">
                         {it.id}
                       </td>
 
-                      <td className="px-3 py-2 whitespace-nowrap">
+                      <td className="whitespace-nowrap px-3 py-2">
                         <Badge tone="blue">{it.category}</Badge>
-                        <div className="mt-1">
+                        <div className="mt-1 flex flex-wrap gap-1">
                           <Badge tone={actual ? "green" : "red"}>
                             {actual ? "actual" : "inactive"}
                           </Badge>
+                          {deleted ? <Badge tone="amber">deleted</Badge> : null}
                         </div>
                       </td>
 
@@ -830,15 +889,16 @@ const thClass = (field) =>
                             70
                           )}
                         </div>
-                        <div className="text-xs text-gray-600 mt-0.5">
-                          status:{" "}
-                          <span className="font-mono">{it.status}</span>
+                        <div className="mt-0.5 text-xs text-gray-600">
+                          status: <span className="font-mono">{it.status}</span>
                         </div>
                       </td>
-                      {/* Дата создания (ОДНА колонка) */}
+
                       <td className={classNames(tdClass("created_at"), "whitespace-nowrap")}>
                         {it.createdAt ? (
-                          <div className="text-gray-900">{formatDate(it.createdAt)}</div>
+                          <div className="text-gray-900">
+                            {formatDate(it.createdAt)}
+                          </div>
                         ) : (
                           <div className="text-gray-500">—</div>
                         )}
@@ -855,25 +915,23 @@ const thClass = (field) =>
                       </td>
 
                       <td className={tdClass("provider")}>
-                        <div className="text-gray-900 font-medium">
-                          {it?.provider?.companyName ||
-                            it?.provider?.name ||
-                            "—"}
+                        <div className="font-medium text-gray-900">
+                          {it?.provider?.companyName || it?.provider?.name || "—"}
                         </div>
-                        <div className="text-xs text-gray-600 mt-0.5">
+                        <div className="mt-0.5 text-xs text-gray-600">
                           {it?.provider?.phone ? `📞 ${it.provider.phone}` : ""}
                           {it?.provider?.telegramUsername
-                            ? `  •  @${it.provider.telegramUsername}`
+                            ? ` • @${it.provider.telegramUsername}`
                             : ""}
                         </div>
                       </td>
 
-                      <td className="px-3 py-2 whitespace-nowrap">
+                      <td className="whitespace-nowrap px-3 py-2">
                         <Badge tone={tgOk ? "green" : "red"}>
                           {tgOk ? "chatId OK" : "нет chatId"}
                         </Badge>
                         {tgOk ? (
-                          <div className="text-xs text-gray-600 mt-0.5 font-mono">
+                          <div className="mt-0.5 font-mono text-xs text-gray-600">
                             {it.provider.chatId}
                           </div>
                         ) : null}
@@ -900,7 +958,7 @@ const thClass = (field) =>
                         </div>
                       </td>
 
-                      <td className="px-3 py-2 whitespace-nowrap">
+                      <td className="whitespace-nowrap px-3 py-2">
                         <div className="flex flex-wrap gap-2">
                           <button
                             onClick={() => openDetails(it.id)}
@@ -909,74 +967,92 @@ const thClass = (field) =>
                             Детали
                           </button>
 
-                          <button
-                            onClick={() => askActual(it.id, false)}
-                            disabled={!tgOk || sendingId === it.id}
-                            className={classNames(
-                              "rounded-lg px-3 py-1.5 text-xs border",
-                              !tgOk || sendingId === it.id
-                                ? "border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed"
-                                : "border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100"
-                            )}
-                            title={
-                              !tgOk
-                                ? "У провайдера нет telegram chatId"
-                                : "Спросить актуальность"
-                            }
-                          >
-                            {sendingId === it.id ? "Отправка…" : "Спросить"}
-                          </button>
+                          {!deleted ? (
+                            <>
+                              <button
+                                onClick={() => askActual(it.id, false)}
+                                disabled={!tgOk || sendingId === it.id}
+                                className={classNames(
+                                  "rounded-lg border px-3 py-1.5 text-xs",
+                                  !tgOk || sendingId === it.id
+                                    ? "cursor-not-allowed border-gray-200 bg-gray-50 text-gray-400"
+                                    : "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                                )}
+                                title={
+                                  !tgOk
+                                    ? "У провайдера нет telegram chatId"
+                                    : "Спросить актуальность"
+                                }
+                              >
+                                {sendingId === it.id ? "Отправка…" : "Спросить"}
+                              </button>
 
-                          <button
-                            onClick={() => askActual(it.id, true)}
-                            disabled={!tgOk || sendingId === it.id}
-                            className={classNames(
-                              "rounded-lg px-3 py-1.5 text-xs border",
-                              !tgOk || sendingId === it.id
-                                ? "border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed"
-                                : "border-amber-200 text-amber-900 bg-amber-50 hover:bg-amber-100"
-                            )}
-                            title="Принудительно, даже если lockUntil не прошёл"
-                          >
-                            Force
-                          </button>
+                              <button
+                                onClick={() => askActual(it.id, true)}
+                                disabled={!tgOk || sendingId === it.id}
+                                className={classNames(
+                                  "rounded-lg border px-3 py-1.5 text-xs",
+                                  !tgOk || sendingId === it.id
+                                    ? "cursor-not-allowed border-gray-200 bg-gray-50 text-gray-400"
+                                    : "border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                                )}
+                                title="Принудительно, даже если lockUntil не прошёл"
+                              >
+                                Force
+                              </button>
 
-                          <button
-                              onClick={() => extendService(it.id)}
-                              disabled={sendingId === it.id}
-                              className={classNames(
-                                "rounded-lg px-3 py-1.5 text-xs border",
-                                sendingId === it.id
-                                  ? "border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed"
-                                  : "border-green-200 text-green-700 bg-green-50 hover:bg-green-100"
-                              )}
-                              title="Продлить на 7 дней"
-                            >
-                              Продлить
-                            </button>
-                            
+                              <button
+                                onClick={() => extendService(it.id)}
+                                disabled={sendingId === it.id}
+                                className={classNames(
+                                  "rounded-lg border px-3 py-1.5 text-xs",
+                                  sendingId === it.id
+                                    ? "cursor-not-allowed border-gray-200 bg-gray-50 text-gray-400"
+                                    : "border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
+                                )}
+                                title="Продлить на 7 дней"
+                              >
+                                Продлить
+                              </button>
+
+                              <button
+                                onClick={() => deleteService(it.id)}
+                                disabled={sendingId === it.id}
+                                className={classNames(
+                                  "rounded-lg border px-3 py-1.5 text-xs",
+                                  sendingId === it.id
+                                    ? "cursor-not-allowed border-gray-200 bg-gray-50 text-gray-400"
+                                    : "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+                                )}
+                                title="Удалить услугу"
+                              >
+                                Удалить
+                              </button>
+
+                              <a
+                                href={`/dashboard?from=admin&service=${it.id}`}
+                                className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs hover:bg-gray-50"
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                На сайте
+                              </a>
+                            </>
+                          ) : (
                             <button
-                              onClick={() => deleteService(it.id)}
+                              onClick={() => restoreService(it.id)}
                               disabled={sendingId === it.id}
                               className={classNames(
-                                "rounded-lg px-3 py-1.5 text-xs border",
+                                "rounded-lg border px-3 py-1.5 text-xs",
                                 sendingId === it.id
-                                  ? "border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed"
-                                  : "border-red-200 text-red-700 bg-red-50 hover:bg-red-100"
+                                  ? "cursor-not-allowed border-gray-200 bg-gray-50 text-gray-400"
+                                  : "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
                               )}
-                              title="Удалить услугу"
+                              title="Восстановить услугу"
                             >
-                              Удалить
+                              Восстановить
                             </button>
-
-                          <a
-                            href={`/dashboard?from=admin&service=${it.id}`}
-                            className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs hover:bg-gray-50"
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            На сайте
-                          </a>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1045,6 +1121,19 @@ const thClass = (field) =>
                   </span>
                 ) : null}
               </div>
+
+              {String(detailsItem?.status || "").toLowerCase() === "deleted" ||
+              detailsItem?.deletedAt ? (
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => restoreService(detailsItem.id)}
+                    className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-700 hover:bg-blue-100"
+                    disabled={sendingId === detailsItem.id}
+                  >
+                    Восстановить
+                  </button>
+                </div>
+              ) : (
                 <div className="flex flex-wrap gap-2">
                   <button
                     onClick={() => askActual(detailsItem.id, false)}
@@ -1056,7 +1145,7 @@ const thClass = (field) =>
                   >
                     Спросить
                   </button>
-                
+
                   <button
                     onClick={() => askActual(detailsItem.id, true)}
                     className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900 hover:bg-amber-100"
@@ -1067,7 +1156,7 @@ const thClass = (field) =>
                   >
                     Force
                   </button>
-                
+
                   <button
                     onClick={() => extendService(detailsItem.id)}
                     className="rounded-xl border border-green-200 bg-green-50 px-4 py-2 text-sm text-green-700 hover:bg-green-100"
@@ -1075,7 +1164,7 @@ const thClass = (field) =>
                   >
                     Продлить
                   </button>
-                
+
                   <button
                     onClick={() => deleteService(detailsItem.id)}
                     className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 hover:bg-red-100"
@@ -1084,6 +1173,7 @@ const thClass = (field) =>
                     Удалить
                   </button>
                 </div>
+              )}
             </div>
           ) : null
         }
@@ -1092,7 +1182,7 @@ const thClass = (field) =>
           <div className="text-sm text-gray-600">Загрузка…</div>
         ) : detailsItem ? (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
-            <div className="md:col-span-5 rounded-2xl border border-gray-200 p-4">
+            <div className="rounded-2xl border border-gray-200 p-4 md:col-span-5">
               <div className="text-sm font-semibold text-gray-900">Основное</div>
               <div className="mt-3 space-y-2 text-sm text-gray-800">
                 <div>
@@ -1106,6 +1196,22 @@ const thClass = (field) =>
                 <div>
                   <span className="text-gray-600">Статус:</span>{" "}
                   <span className="font-mono">{detailsItem.status}</span>
+                </div>
+                <div>
+                  <span className="text-gray-600">Удалена:</span>{" "}
+                  <Badge
+                    tone={
+                      String(detailsItem?.status || "").toLowerCase() === "deleted" ||
+                      detailsItem?.deletedAt
+                        ? "amber"
+                        : "green"
+                    }
+                  >
+                    {String(detailsItem?.status || "").toLowerCase() === "deleted" ||
+                    detailsItem?.deletedAt
+                      ? "да"
+                      : "нет"}
+                  </Badge>
                 </div>
                 <div>
                   <span className="text-gray-600">Актуален:</span>{" "}
@@ -1125,10 +1231,20 @@ const thClass = (field) =>
                   <span className="text-gray-600">Title:</span>{" "}
                   <span>{detailsItem.title || "—"}</span>
                 </div>
+                <div>
+                  <span className="text-gray-600">Deleted at:</span>{" "}
+                  <span className="font-mono">
+                    {detailsItem.deletedAt
+                      ? formatDate(detailsItem.deletedAt)
+                      : "—"}
+                  </span>
+                </div>
               </div>
 
               <div className="mt-4 border-t border-gray-200 pt-4">
-                <div className="text-sm font-semibold text-gray-900">Провайдер</div>
+                <div className="text-sm font-semibold text-gray-900">
+                  Провайдер
+                </div>
                 <div className="mt-3 space-y-2 text-sm text-gray-800">
                   <div>
                     <span className="text-gray-600">Компания/имя:</span>{" "}
@@ -1162,9 +1278,11 @@ const thClass = (field) =>
               </div>
             </div>
 
-            <div className="md:col-span-7 rounded-2xl border border-gray-200 p-4">
-              <div className="text-sm font-semibold text-gray-900">details (JSON)</div>
-              <pre className="mt-3 whitespace-pre-wrap break-words rounded-xl bg-gray-50 border border-gray-200 p-3 text-xs text-gray-800">
+            <div className="rounded-2xl border border-gray-200 p-4 md:col-span-7">
+              <div className="text-sm font-semibold text-gray-900">
+                details (JSON)
+              </div>
+              <pre className="mt-3 whitespace-pre-wrap break-words rounded-xl border border-gray-200 bg-gray-50 p-3 text-xs text-gray-800">
                 {JSON.stringify(detailsItem.details || {}, null, 2)}
               </pre>
             </div>
