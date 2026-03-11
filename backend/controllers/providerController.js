@@ -26,13 +26,18 @@ function normalizeLanguagesISO(input, fallback = []) {
   if (input == null) {
     raw = Array.isArray(fallback)
       ? fallback
-      : (typeof fallback === "object" && fallback) ? Object.keys(fallback) : [];
+      : typeof fallback === "object" && fallback
+      ? Object.keys(fallback)
+      : [];
   } else if (Array.isArray(input)) {
     raw = input;
   } else if (typeof input === "object") {
     raw = Object.keys(input); // {"ru":"native"} -> ["ru"]
   } else if (typeof input === "string") {
-    raw = input.split(/[,\|;\n•]+/).map((s) => s.trim()).filter(Boolean);
+    raw = input
+      .split(/[,\|;\n•]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
   } else {
     raw = [];
   }
@@ -55,13 +60,17 @@ function parseDateSafe(v) {
   try {
     const d = new Date(String(v));
     return Number.isFinite(d.getTime()) ? d : null;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 function pickFirst(obj, keys = []) {
   for (const k of keys) {
     if (!k) continue;
     const val = k.includes(".")
-      ? k.split(".").reduce((o, kk) => (o && o[kk] != null ? o[kk] : undefined), obj)
+      ? k
+          .split(".")
+          .reduce((o, kk) => (o && o[kk] != null ? o[kk] : undefined), obj)
       : obj?.[k];
     if (val != null && String(val).trim() !== "") return val;
   }
@@ -98,7 +107,6 @@ function normalizeRefusedStartDate(details = {}, category = "") {
   const d = { ...toPlainObject(details) };
   const cat = String(category || d.category || "").trim().toLowerCase();
 
-  // новый единый стандарт уже есть
   const already = firstNonEmptyValue(d.startDate, d.start_date);
   if (already) {
     d.startDate = already;
@@ -113,6 +121,7 @@ function normalizeRefusedStartDate(details = {}, category = "") {
       d.departure_date,
       d.flightDate,
       d.flight_date,
+      d.returnFlightDate,
       d.dateFrom,
       d.date_from,
       d.date
@@ -137,31 +146,14 @@ function normalizeRefusedStartDate(details = {}, category = "") {
     );
   } else if (cat === "refused_tour") {
     d.startDate = firstNonEmptyValue(
-      d.dateFrom,
-      d.date_from,
-      d.departureFlightDate,
-      d.departureDate,
-      d.departure_date,
-      d.startDate,
-      d.start_date
-    );
-  } else {
-    d.startDate = firstNonEmptyValue(
       d.startDate,
       d.start_date,
-      d.dateFrom,
-      d.date_from,
+      d.startFlightDate,
       d.departureFlightDate,
       d.departureDate,
       d.departure_date,
-      d.flightDate,
-      d.flight_date,
-      d.checkinDate,
-      d.checkInDate,
-      d.check_in,
-      d.check_in_date,
-      d.eventDate,
-      d.event_date,
+      d.dateFrom,
+      d.date_from,
       d.date
     );
   }
@@ -178,7 +170,9 @@ function normalizeTelegramUsername(input) {
   s = s.replace(/\s+/g, "");
   let m = s.match(/^tg:\/\/resolve\?domain=([A-Za-z0-9_]{3,})/i);
   if (m) return "@" + m[1];
-  m = s.match(/^(?:https?:\/\/)?(?:t\.me|telegram\.me|telegram\.dog)\/@?([A-Za-z0-9_]{3,})$/i);
+  m = s.match(
+    /^(?:https?:\/\/)?(?:t\.me|telegram\.me|telegram\.dog)\/@?([A-Za-z0-9_]{3,})$/i
+  );
   if (m) return "@" + m[1];
   m = s.match(/^@?([A-Za-z0-9_]{3,})$/);
   if (m) return "@" + m[1];
@@ -237,10 +231,10 @@ async function tableHasColumns(arg1, arg2, arg3) {
   if (Array.isArray(arg3)) {
     client = arg1 || pool;
     table = arg2;
-    cols  = arg3;
+    cols = arg3;
   } else {
     table = arg1;
-    cols  = arg2;
+    cols = arg2;
   }
   const q = await client.query(
     `SELECT column_name
@@ -249,7 +243,7 @@ async function tableHasColumns(arg1, arg2, arg3) {
         AND column_name = ANY($2::text[])`,
     [table, cols]
   );
-  const set = new Set(q.rows.map(r => r.column_name));
+  const set = new Set(q.rows.map((r) => r.column_name));
   return cols.reduce((acc, c) => ((acc[c] = set.has(c)), acc), {});
 }
 
@@ -289,7 +283,16 @@ function parseMoneySafe(v) {
 
 // Главное: единая и безопасная нормализация входа сервиса
 function normalizeServicePayload(body = {}) {
-  const { title, description, price, category, images, availability, details, vehicle_model } = body;
+  const {
+    title,
+    description,
+    price,
+    category,
+    images,
+    availability,
+    details,
+    vehicle_model,
+  } = body;
 
   const titleStr = String(title ?? "").trim();
   const descStr = typeof description === "string" ? description : "";
@@ -334,7 +337,11 @@ function normalizeServicePayload(body = {}) {
   // Нормализуем цены в details (если пришли строками)
   if (detailsObj) {
     for (const k of ["netPrice", "grossPrice"]) {
-      if (detailsObj[k] !== undefined && detailsObj[k] !== null && String(detailsObj[k]).trim() !== "") {
+      if (
+        detailsObj[k] !== undefined &&
+        detailsObj[k] !== null &&
+        String(detailsObj[k]).trim() !== ""
+      ) {
         const n = parseMoneySafe(detailsObj[k]);
         if (Number.isFinite(n)) detailsObj[k] = n;
       }
@@ -353,7 +360,7 @@ function normalizeServicePayload(body = {}) {
 
   // vehicle_model — только для транспортных категорий (в таблице services тоже поддерживаем)
   const vehicleModelStr = isTransportCategory(catStr)
-    ? (String(vehicle_model || "").trim() || null)
+    ? String(vehicle_model || "").trim() || null
     : null;
 
   return {
@@ -388,7 +395,11 @@ function normalizeProviderServicePayload(body = {}, fallbackCategory = null) {
   let details = {};
   if (body.details) {
     if (typeof body.details === "string") {
-      try { details = JSON.parse(body.details) || {}; } catch { details = {}; }
+      try {
+        details = JSON.parse(body.details) || {};
+      } catch {
+        details = {};
+      }
     } else if (typeof body.details === "object") {
       details = { ...body.details };
     }
@@ -407,7 +418,7 @@ function normalizeProviderServicePayload(body = {}, fallbackCategory = null) {
 
   // vehicle_model приходит отдельным полем; только для транспортных категорий
   const vehicle_model = isTransportCategory(category)
-    ? (String(body.vehicle_model || "").trim() || null)
+    ? String(body.vehicle_model || "").trim() || null
     : null;
 
   // is_active
@@ -430,10 +441,9 @@ const registerProvider = async (req, res) => {
       return res.status(400).json({ message: "Некорректный формат изображения" });
     }
 
-    const existing = await pool.query(
-      "SELECT 1 FROM providers WHERE lower(email) = $1",
-      [emailNorm]
-    );
+    const existing = await pool.query("SELECT 1 FROM providers WHERE lower(email) = $1", [
+      emailNorm,
+    ]);
     if (existing.rows.length) {
       return res.status(400).json({ message: "Email уже используется" });
     }
@@ -481,7 +491,9 @@ const loginProvider = async (req, res) => {
         try {
           const newHash = await bcrypt.hash(plain, 10);
           await pool.query("UPDATE providers SET password=$1 WHERE id=$2", [newHash, row.id]);
-        } catch (e) { console.warn("rehash-on-login failed:", e); }
+        } catch (e) {
+          console.warn("rehash-on-login failed:", e);
+        }
       }
     }
     if (!ok) return res.status(400).json({ message: "Неверный email или пароль" });
@@ -489,14 +501,19 @@ const loginProvider = async (req, res) => {
     // проверим, есть ли колонка hotel_id
     const cols = await tableHasColumns(pool, "providers", ["hotel_id"]);
     const isAdmin = row.is_admin === true;
-    const payload = { id: row.id, role: "provider", roles: isAdmin ? ["admin"] : [], is_admin: isAdmin };
+    const payload = {
+      id: row.id,
+      role: "provider",
+      roles: isAdmin ? ["admin"] : [],
+      is_admin: isAdmin,
+    };
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "7d" });
 
     res.json({
       message: "Вход успешен",
       provider: {
         id: row.id,
-        hotel_id: cols.hotel_id ? (row.hotel_id ?? null) : null,
+        hotel_id: cols.hotel_id ? row.hotel_id ?? null : null,
         name: row.name,
         email: row.email,
         type: row.type,
@@ -521,7 +538,6 @@ const loginProvider = async (req, res) => {
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
-
 
 // ---------- Profile ----------
 const getProviderProfile = async (req, res) => {
@@ -568,7 +584,6 @@ const getProviderProfile = async (req, res) => {
   }
 };
 
-
 const updateProviderProfile = async (req, res) => {
   try {
     const id = req.user.id;
@@ -589,7 +604,7 @@ const updateProviderProfile = async (req, res) => {
     const toTextArray = (v, fallback) => {
       if (Array.isArray(v)) return v.map((x) => String(x).trim()).filter(Boolean);
       if (typeof v === "string") return [v.trim()].filter(Boolean);
-      return Array.isArray(fallback) ? fallback : (typeof fallback === "string" ? [fallback] : []);
+      return Array.isArray(fallback) ? fallback : typeof fallback === "string" ? [fallback] : [];
     };
 
     // прислали ли social в payload?
@@ -612,10 +627,9 @@ const updateProviderProfile = async (req, res) => {
       languages: normalizeLanguagesISO(req.body.languages, old.languages), // jsonb
     };
 
-        // car_fleet (массив авто) — опционально; если не прислали, оставляем как было
+    // car_fleet (массив авто) — опционально; если не прислали, оставляем как было
     const hasFleet = Object.prototype.hasOwnProperty.call(req.body || {}, "car_fleet");
-    const nextFleet = hasFleet ? normalizeCarFleet(req.body.car_fleet) : (old.car_fleet || []);
-
+    const nextFleet = hasFleet ? normalizeCarFleet(req.body.car_fleet) : old.car_fleet || [];
 
     // city_slugs: можно прислать готовые (city_slugs), а можно — только location
     let incomingSlugs = Array.isArray(req.body.city_slugs)
@@ -651,10 +665,10 @@ const updateProviderProfile = async (req, res) => {
       updated.certificate,
       updated.address,
       JSON.stringify(updated.languages ?? []),
-      incomingSlugs || [],        // $9
+      incomingSlugs || [], // $9
       JSON.stringify(nextFleet || []), // $10
-      id,                              // $11 — WHERE id = $11
-      tgChanged,                       // $12 — для CASE WHEN $12::bool
+      id, // $11 — WHERE id = $11
+      tgChanged, // $12 — для CASE WHEN $12::bool
     ];
 
     const upd = await pool.query(
@@ -735,7 +749,6 @@ const changeProviderPassword = async (req, res) => {
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
-;
 
 // ---------- Services CRUD ----------
 const addService = async (req, res) => {
@@ -759,18 +772,11 @@ const addService = async (req, res) => {
     }
 
     const extended = isExtendedCategory(category);
-    
+
     // ── Business validation: expire_at must not be earlier than start_date
-    // Источники: либо в теле напрямую, либо в details.*
     const startRaw =
       pickFirst(req.body, ["start_date", "startDate"]) ??
-      pickFirst(normalizedDetailsObj, [
-        "startDate",
-        "start_date",
-        "start_at",
-        "begin_date",
-      ]);
-    
+      pickFirst(normalizedDetailsObj, ["startDate", "start_date", "start_at", "begin_date"]);
     const expireRaw =
       pickFirst(req.body, ["expire_at", "expiration_at"]) ??
       pickFirst(normalizedDetailsObj, [
@@ -779,36 +785,37 @@ const addService = async (req, res) => {
         "valid_until",
         "expiration",
       ]);
-    const startDate  = parseDateSafe(startRaw);
+
+    const startDate = parseDateSafe(startRaw);
     const expireDate = parseDateSafe(expireRaw);
     if (startDate && expireDate && expireDate < startDate) {
       return res.status(400).json({
         code: "EXPIRY_BEFORE_START",
-        message: "Expiration must not be earlier than start date"
+        message: "Expiration must not be earlier than start date",
       });
     }
 
-  const ins = await pool.query(
-    `INSERT INTO services
+    const ins = await pool.query(
+      `INSERT INTO services
        (provider_id, title, description, price, category, images, availability, details, vehicle_model,
         status, moderation_status, submitted_at, updated_at)
      VALUES
        ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8::jsonb,$9,
         'pending','pending', NOW(), NOW())
      RETURNING *`,
-    [
-      providerId,
-      title,
-      extended ? null : descriptionStr,
-      extended ? null : priceNum,
-      category,
-      JSON.stringify(imagesArr),
-      JSON.stringify(extended ? [] : availabilityArr),
-      JSON.stringify(normalizedDetailsObj ?? {}),
-      vehicleModelStr,
-    ]
-  );
-    
+      [
+        providerId,
+        title,
+        extended ? null : descriptionStr,
+        extended ? null : priceNum,
+        category,
+        JSON.stringify(imagesArr),
+        JSON.stringify(extended ? [] : availabilityArr),
+        JSON.stringify(normalizedDetailsObj ?? {}),
+        vehicleModelStr,
+      ]
+    );
+
     // ✅ уведомление админу (не ломаем создание, если телега упала)
     try {
       await notifyModerationNew({ service: ins.rows[0].id });
@@ -819,7 +826,7 @@ const addService = async (req, res) => {
     res.status(201).json(ins.rows[0]);
   } catch (err) {
     console.error("❌ Ошибка добавления услуги:", err);
-        // дружелюбный маппинг pg: time zone displacement out of range (22009)
+    // дружелюбный маппинг pg: time zone displacement out of range (22009)
     const msg = (err && err.message) || "";
     const where = (err && err.where) || "";
     const routine = (err && err.routine) || "";
@@ -831,7 +838,7 @@ const addService = async (req, res) => {
     if (isTzOutOfRange) {
       return res.status(400).json({
         code: "EXPIRY_BEFORE_START",
-        message: "Expiration must not be earlier than start date"
+        message: "Expiration must not be earlier than start date",
       });
     }
     res.status(500).json({ message: "Ошибка сервера" });
@@ -841,10 +848,9 @@ const addService = async (req, res) => {
 const getServices = async (req, res) => {
   try {
     const providerId = req.user.id;
-    const r = await pool.query(
-      "SELECT * FROM services WHERE provider_id=$1 ORDER BY id DESC",
-      [providerId]
-    );
+    const r = await pool.query("SELECT * FROM services WHERE provider_id=$1 ORDER BY id DESC", [
+      providerId,
+    ]);
     res.json(r.rows);
   } catch (err) {
     console.error("❌ Ошибка получения услуг:", err);
@@ -914,17 +920,11 @@ const updateService = async (req, res) => {
     }
 
     const extended = isExtendedCategory(category);
-    
+
     // ── Business validation: expire_at must not be earlier than start_date
     const startRaw =
       pickFirst(req.body, ["start_date", "startDate"]) ??
-      pickFirst(normalizedDetailsObj, [
-        "startDate",
-        "start_date",
-        "start_at",
-        "begin_date",
-      ]);
-    
+      pickFirst(normalizedDetailsObj, ["startDate", "start_date", "start_at", "begin_date"]);
     const expireRaw =
       pickFirst(req.body, ["expire_at", "expiration_at"]) ??
       pickFirst(normalizedDetailsObj, [
@@ -933,12 +933,12 @@ const updateService = async (req, res) => {
         "valid_until",
         "expiration",
       ]);
-    const startDate  = parseDateSafe(startRaw);
+    const startDate = parseDateSafe(startRaw);
     const expireDate = parseDateSafe(expireRaw);
     if (startDate && expireDate && expireDate < startDate) {
       return res.status(400).json({
         code: "EXPIRY_BEFORE_START",
-        message: "Expiration must not be earlier than start date"
+        message: "Expiration must not be earlier than start date",
       });
     }
 
@@ -962,7 +962,7 @@ const updateService = async (req, res) => {
         extended ? null : priceNum,
         category,
         JSON.stringify(imagesArr ?? []),
-        JSON.stringify(extended ? [] : (availabilityArr ?? [])),
+        JSON.stringify(extended ? [] : availabilityArr ?? []),
         JSON.stringify(normalizedDetailsObj ?? {}),
         vehicleModelStr,
         serviceId,
@@ -978,9 +978,9 @@ const updateService = async (req, res) => {
     try {
       const nextSvcRow = upd.rows[0];
       const nextPrices = extractPrices(nextSvcRow);
-    
+
       const drop = isPriceDrop(prevPrices, nextPrices);
-    
+
       // Рассылаем только для refused_* (логика внутри broadcastPriceDropCard)
       if (drop.any) {
         await broadcastPriceDropCard(nextSvcRow.id, "🔥 <b>ЦЕНА СНИЖЕНА!</b>");
@@ -992,7 +992,7 @@ const updateService = async (req, res) => {
     return res.json(upd.rows[0]);
   } catch (err) {
     console.error("❌ Ошибка обновления услуги:", err);
-        // дружелюбный маппинг pg: time zone displacement out of range (22009)
+    // дружелюбный маппинг pg: time zone displacement out of range (22009)
     const msg = (err && err.message) || "";
     const where = (err && err.where) || "";
     const routine = (err && err.routine) || "";
@@ -1004,7 +1004,7 @@ const updateService = async (req, res) => {
     if (isTzOutOfRange) {
       return res.status(400).json({
         code: "EXPIRY_BEFORE_START",
-        message: "Expiration must not be earlier than start date"
+        message: "Expiration must not be earlier than start date",
       });
     }
     return res.status(500).json({ message: "Ошибка сервера" });
@@ -1165,7 +1165,6 @@ async function getUnlockedProviderIdSetForViewer(viewer) {
 function applyProviderContactVisibility(row, viewer, unlockedSet) {
   const pid = Number(row?.provider_id ?? row?.id);
   const role = String(viewer?.role || "").toLowerCase();
-  const viewerId = Number(viewer?.id);
 
   const canSeeContacts =
     unlockedSet === "__ALL__" ||
@@ -1175,19 +1174,29 @@ function applyProviderContactVisibility(row, viewer, unlockedSet) {
   return {
     ...row,
     phone: Object.prototype.hasOwnProperty.call(row, "phone")
-      ? (canSeeContacts ? row.phone : null)
+      ? canSeeContacts
+        ? row.phone
+        : null
       : row.phone,
     social: Object.prototype.hasOwnProperty.call(row, "social")
-      ? (canSeeContacts ? row.social : null)
+      ? canSeeContacts
+        ? row.social
+        : null
       : row.social,
     telegram: Object.prototype.hasOwnProperty.call(row, "telegram")
-      ? (canSeeContacts ? row.telegram : null)
+      ? canSeeContacts
+        ? row.telegram
+        : null
       : row.telegram,
     provider_phone: Object.prototype.hasOwnProperty.call(row, "provider_phone")
-      ? (canSeeContacts ? row.provider_phone : null)
+      ? canSeeContacts
+        ? row.provider_phone
+        : null
       : row.provider_phone,
     provider_social: Object.prototype.hasOwnProperty.call(row, "provider_social")
-      ? (canSeeContacts ? row.provider_social : null)
+      ? canSeeContacts
+        ? row.provider_social
+        : null
       : row.provider_social,
     contacts_unlocked: !!canSeeContacts,
   };
@@ -1404,10 +1413,10 @@ const toggleProviderFavorite = async (req, res) => {
 
     if (ins.rowCount) return res.json({ added: true });
 
-    await pool.query(
-      `DELETE FROM provider_favorites WHERE provider_id=$1 AND service_id=$2`,
-      [providerId, service_id]
-    );
+    await pool.query(`DELETE FROM provider_favorites WHERE provider_id=$1 AND service_id=$2`, [
+      providerId,
+      service_id,
+    ]);
     res.json({ added: false });
   } catch (err) {
     console.error("❌ toggleProviderFavorite:", err);
@@ -1419,10 +1428,10 @@ const removeProviderFavorite = async (req, res) => {
   try {
     const providerId = req.user.id;
     const serviceId = Number(req.params.serviceId);
-    await pool.query(
-      `DELETE FROM provider_favorites WHERE provider_id=$1 AND service_id=$2`,
-      [providerId, serviceId]
-    );
+    await pool.query(`DELETE FROM provider_favorites WHERE provider_id=$1 AND service_id=$2`, [
+      providerId,
+      serviceId,
+    ]);
     res.json({ ok: true });
   } catch (err) {
     console.error("❌ removeProviderFavorite:", err);
@@ -1487,7 +1496,7 @@ const createProviderService = async (req, res) => {
       return res.status(403).json({ message: "Forbidden" });
     }
 
-  const { category, title, price, currency, details, vehicle_model, is_active } =
+    const { category, title, price, currency, details, vehicle_model, is_active } =
       normalizeProviderServicePayload(req.body);
 
     if (!category) {
@@ -1499,7 +1508,7 @@ const createProviderService = async (req, res) => {
          (provider_id, category, title, price, currency, is_active, details, vehicle_model)
        VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8)
        RETURNING id, provider_id, category, title, price, currency, is_active, details, vehicle_model, created_at, updated_at`,
-      [providerId, category, title, price, currency, is_active, JSON.stringify(details||{}), vehicle_model]
+      [providerId, category, title, price, currency, is_active, JSON.stringify(details || {}), vehicle_model]
     );
     res.status(201).json(ins.rows[0]);
   } catch (err) {
@@ -1518,41 +1527,44 @@ const patchProviderService = async (req, res) => {
     }
 
     // убедимся, что запись принадлежит провайдеру
-    const cur = await pool.query(
-      `SELECT * FROM provider_services WHERE id=$1 AND provider_id=$2`,
-      [id, providerId]
-    );
+    const cur = await pool.query(`SELECT * FROM provider_services WHERE id=$1 AND provider_id=$2`, [
+      id,
+      providerId,
+    ]);
     if (!cur.rowCount) return res.status(404).json({ message: "Услуга не найдена" });
 
     // 1) Определяем эффективную категорию: из тела или из текущей строки
     const current = cur.rows[0];
     const effectiveCategory =
-      (Object.prototype.hasOwnProperty.call(req.body, "category") && req.body.category)
+      Object.prototype.hasOwnProperty.call(req.body, "category") && req.body.category
         ? String(req.body.category).trim()
         : String(current.category || "").trim();
 
-  // применяем только присланные поля; подставляем текущую категорию, если её не прислали
-  const currentCategory = cur.rows[0].category;
-  const patch = normalizeProviderServicePayload(req.body, currentCategory);
+    // 2) применяем только присланные поля; подставляем текущую категорию, если её не прислали
+    const currentCategory = cur.rows[0].category;
+    const patch = normalizeProviderServicePayload(req.body, currentCategory);
 
     const sets = [];
     const vals = [];
-    const push = (sql, v) => { sets.push(sql); vals.push(v); };
+    const push = (sql, v) => {
+      sets.push(sql);
+      vals.push(v);
+    };
 
     if (patch.title !== null && Object.prototype.hasOwnProperty.call(req.body, "title"))
-      push(`title = $${vals.length+1}`, patch.title);
+      push(`title = $${vals.length + 1}`, patch.title);
     if (Object.prototype.hasOwnProperty.call(req.body, "price"))
-      push(`price = $${vals.length+1}`, patch.price);
+      push(`price = $${vals.length + 1}`, patch.price);
     if (Object.prototype.hasOwnProperty.call(req.body, "currency"))
-      push(`currency = $${vals.length+1}`, patch.currency);
+      push(`currency = $${vals.length + 1}`, patch.currency);
     if (Object.prototype.hasOwnProperty.call(req.body, "is_active"))
-      push(`is_active = $${vals.length+1}`, patch.is_active);
+      push(`is_active = $${vals.length + 1}`, patch.is_active);
     if (Object.prototype.hasOwnProperty.call(req.body, "details"))
-      push(`details = $${vals.length+1}::jsonb`, JSON.stringify(patch.details || {}));
+      push(`details = $${vals.length + 1}::jsonb`, JSON.stringify(patch.details || {}));
 
     // 3) Категория — если пришла в payload
     if (Object.prototype.hasOwnProperty.call(req.body, "category") && patch.category) {
-      push(`category = $${vals.length+1}`, patch.category);
+      push(`category = $${vals.length + 1}`, patch.category);
     }
 
     // 4) vehicle_model — можно менять и без category в body.
@@ -1560,20 +1572,20 @@ const patchProviderService = async (req, res) => {
     if (Object.prototype.hasOwnProperty.call(req.body, "vehicle_model")) {
       const vm = String(req.body.vehicle_model || "").trim() || null;
       const vmToSave = isTransportCategory(effectiveCategory) ? vm : null;
-      push(`vehicle_model = $${vals.length+1}`, vmToSave);
+      push(`vehicle_model = $${vals.length + 1}`, vmToSave);
     }
 
     if (!sets.length) {
       return res.json(current); // нечего менять
     }
 
-    vals.push(id);        // $n-1
-    vals.push(providerId);// $n
+    vals.push(id); // $n-1
+    vals.push(providerId); // $n
 
     const upd = await pool.query(
       `UPDATE provider_services
           SET ${sets.join(", ")}, updated_at = NOW()
-        WHERE id = $${vals.length-1} AND provider_id = $${vals.length}
+        WHERE id = $${vals.length - 1} AND provider_id = $${vals.length}
         RETURNING id, provider_id, category, title, price, currency, is_active, details, vehicle_model, created_at, updated_at`,
       vals
     );
@@ -1611,8 +1623,14 @@ const bulkCreateProviderServices = async (req, res) => {
         `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}::jsonb, $${base + 8})`
       );
       values.push(
-        providerId, r.category, r.title, r.price, r.currency, r.is_active,
-        JSON.stringify(r.details || {}), r.vehicle_model
+        providerId,
+        r.category,
+        r.title,
+        r.price,
+        r.currency,
+        r.is_active,
+        JSON.stringify(r.details || {}),
+        r.vehicle_model
       );
     });
 
@@ -1650,7 +1668,7 @@ const deleteProviderService = async (req, res) => {
          AND provider_id = $2
          AND deleted_at IS NULL
       `,
-        [id, providerId]
+      [id, providerId]
     );
     if (!del.rowCount) return res.status(404).json({ message: "Услуга не найдена" });
     res.json({ ok: true });
@@ -1786,9 +1804,7 @@ module.exports = {
   getProviderDeletedServices,
   restoreProviderService,
   purgeProviderService,
-
 };
-
 
 /* ===========================
  *  PUBLIC: SEARCH / AVAILABLE
@@ -1796,14 +1812,22 @@ module.exports = {
 
 // Категории для каскада (как в UI)
 const GUIDE_CATS_PUBLIC = [
-  "city_tour_guide","mountain_tour_guide",
-  "desert_tour_guide","safari_tour_guide",
-  "meet","seeoff","translation",
+  "city_tour_guide",
+  "mountain_tour_guide",
+  "desert_tour_guide",
+  "safari_tour_guide",
+  "meet",
+  "seeoff",
+  "translation",
 ];
 const TRANSPORT_CATS_PUBLIC = [
-  "city_tour_transport","mountain_tour_transport",
-  "desert_tour_transport","safari_tour_transport",
-  "one_way_transfer","dinner_transfer","border_transfer",
+  "city_tour_transport",
+  "mountain_tour_transport",
+  "desert_tour_transport",
+  "safari_tour_transport",
+  "one_way_transfer",
+  "dinner_transfer",
+  "border_transfer",
 ];
 function catsForPublic(type) {
   const t = String(type || "").toLowerCase();
@@ -1984,7 +2008,6 @@ async function baseSearchFromServices({
   const unlockedSet = await getUnlockedProviderIdSetForViewer(viewer);
   return rows.map((row) => applyProviderContactVisibility(row, viewer, unlockedSet));
 }
-
 
 // GET /api/providers/search
 async function searchProvidersPublic(req, res) {
