@@ -6,10 +6,13 @@ const { tgSend } = require("../utils/telegram");
 const CLIENT_BOT_TOKEN = (process.env.TELEGRAM_CLIENT_BOT_TOKEN || "").trim();
 
 // helpers для проверки актуальности услуги
-// Важно: serviceActual.js НЕ экспортирует parseDetailsAny/parseDateSafe.
-// Поэтому делаем безопасные парсеры локально, а из helper берём только isServiceActual + parseDateFlexible.
-const { isServiceActual, parseDateFlexible } = require("../telegram/helpers/serviceActual");
-const { buildSvcActualKeyboard } = require("../telegram/keyboards/serviceActual");
+const {
+  isServiceActual,
+  parseDateFlexible,
+} = require("../telegram/helpers/serviceActual");
+const {
+  buildSvcActualKeyboard,
+} = require("../telegram/keyboards/serviceActual");
 
 // безопасный парсинг details (json/json-string/null)
 function parseDetailsAny(details) {
@@ -48,7 +51,10 @@ function parseDateSafe(val) {
 
     if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
 
-    const iso = `${y}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
+    const iso = `${y}-${String(mm).padStart(2, "0")}-${String(dd).padStart(
+      2,
+      "0"
+    )}`;
     const d = new Date(iso);
     return Number.isNaN(d.getTime()) ? null : d;
   }
@@ -78,11 +84,26 @@ function getStartDateForAdminSort(svc) {
 
   let raw =
     (cat === "refused_hotel" &&
-      pick("checkinDate", "checkInDate", "check_in", "check_in_date", "startDate", "start_date")) ||
+      pick(
+        "checkinDate",
+        "checkInDate",
+        "check_in",
+        "check_in_date",
+        "startDate",
+        "start_date"
+      )) ||
     (cat === "refused_ticket" &&
       pick("eventDate", "event_date", "date", "startDate", "start_date")) ||
     (cat === "refused_flight" &&
-      pick("departureFlightDate", "departureDate", "departure_date", "startFlightDate", "start_flight_date", "startDate", "start_date")) ||
+      pick(
+        "departureFlightDate",
+        "departureDate",
+        "departure_date",
+        "startFlightDate",
+        "start_flight_date",
+        "startDate",
+        "start_date"
+      )) ||
     pick("departureFlightDate", "startDate", "start_date", "dateFrom", "date_from");
 
   let dt = parseDateSafe(raw);
@@ -103,7 +124,10 @@ function getStartDateForAdminSort(svc) {
 
 function normalizeMeta(detailsObj) {
   const d = detailsObj && typeof detailsObj === "object" ? detailsObj : {};
-  if (!d.tg_actual_reminders_meta || typeof d.tg_actual_reminders_meta !== "object") {
+  if (
+    !d.tg_actual_reminders_meta ||
+    typeof d.tg_actual_reminders_meta !== "object"
+  ) {
     d.tg_actual_reminders_meta = {};
   }
   return d;
@@ -116,13 +140,12 @@ function nowIso() {
 exports.listActualRefused = async (req, res) => {
   try {
     const {
-      category = "",         // refused_tour / refused_hotel / refused_flight / refused_ticket
-      status = "",           // published / approved / draft / rejected ...
-      q = "",                // поиск
+      category = "", // refused_tour / refused_hotel / refused_flight / refused_ticket
+      status = "", // published / approved / draft / rejected / deleted
+      q = "",
       page = "1",
       limit = "30",
 
-      // NEW:
       // all | actual | inactive
       actuality: actualityRaw = "",
 
@@ -130,6 +153,7 @@ exports.listActualRefused = async (req, res) => {
       // includeInactive=1 => all, includeInactive=0 => actual
       includeInactive = "",
 
+      // 0 => only non-deleted, 1 => include deleted too
       showDeleted = "0",
 
       // sorting
@@ -145,8 +169,6 @@ exports.listActualRefused = async (req, res) => {
     const pageNum = Math.max(parseInt(page, 10) || 1, 1);
     const limitNum = Math.min(Math.max(parseInt(limit, 10) || 30, 1), 100);
 
-    // без поломки старой логики:
-    // priority: actuality -> includeInactive -> default(actual)
     let actuality = String(actualityRaw || "").trim().toLowerCase();
     if (!["all", "actual", "inactive"].includes(actuality)) {
       if (String(includeInactive) === "1") actuality = "all";
@@ -157,9 +179,10 @@ exports.listActualRefused = async (req, res) => {
     const params = [];
 
     where.push(`s.category LIKE 'refused_%'`);
+
     if (String(showDeleted) !== "1") {
-        where.push(`s.deleted_at IS NULL`);
-      }
+      where.push(`s.deleted_at IS NULL`);
+    }
 
     if (category && String(category).startsWith("refused_")) {
       params.push(category);
@@ -170,9 +193,8 @@ exports.listActualRefused = async (req, res) => {
       params.push(status);
       where.push(`LOWER(s.status) = LOWER($${params.length})`);
     } else if (String(showDeleted) === "1") {
-      // показываем любые статусы, включая deleted
+      // без фильтра по status, чтобы видеть и deleted
     } else {
-      // дефолт как раньше: то, что реально на витрине
       where.push(`LOWER(s.status) IN ('published', 'approved')`);
     }
 
@@ -192,10 +214,6 @@ exports.listActualRefused = async (req, res) => {
 
     const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
-    // ВАЖНО:
-    // раньше LIMIT/OFFSET применялись ДО JS-фильтрации по actual,
-    // из-за чего ломалась пагинация и total.
-    // Теперь сначала берём все подходящие rows, потом JS filter/sort, потом slice.
     const sql = `
       SELECT
         s.id,
@@ -205,6 +223,8 @@ exports.listActualRefused = async (req, res) => {
         s.provider_id,
         s.created_at,
         s.updated_at,
+        s.deleted_at,
+        s.deleted_by,
         s.expiration_at AS expiration,
         s.details,
 
@@ -238,6 +258,8 @@ exports.listActualRefused = async (req, res) => {
         providerId: r.provider_id,
         createdAt: r.created_at ? new Date(r.created_at).toISOString() : null,
         updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : null,
+        deletedAt: r.deleted_at ? new Date(r.deleted_at).toISOString() : null,
+        deletedBy: r.deleted_by || null,
         expiration: r.expiration ? new Date(r.expiration).toISOString() : null,
         provider: {
           id: r.p_id,
@@ -301,6 +323,7 @@ exports.listActualRefused = async (req, res) => {
       sortBy,
       sortOrder,
       actuality,
+      showDeleted: String(showDeleted) === "1" ? "1" : "0",
       items: paged,
     });
   } catch (e) {
@@ -312,7 +335,9 @@ exports.listActualRefused = async (req, res) => {
 exports.getRefusedById = async (req, res) => {
   try {
     const id = Number(req.params.id);
-    if (!id) return res.status(400).json({ success: false, message: "Bad id" });
+    if (!id) {
+      return res.status(400).json({ success: false, message: "Bad id" });
+    }
 
     const sql = `
       SELECT
@@ -325,23 +350,43 @@ exports.getRefusedById = async (req, res) => {
       FROM services s
       JOIN providers p ON p.id = s.provider_id
       WHERE s.id = $1
-        AND s.deleted_at IS NULL
       LIMIT 1
     `;
     const r = await db.query(sql, [id]);
     const row = r.rows?.[0];
-    if (!row) return res.status(404).json({ success: false, message: "Not found" });
+    if (!row) {
+      return res.status(404).json({ success: false, message: "Not found" });
+    }
 
     const detailsObj = parseDetailsAny(row.details);
     const chatId = pickProviderChatId(row);
 
-    // isServiceActual понимает svc.expiration (не expiration_at), поэтому подаем алиас
-    const svcForActual = { ...row, expiration: row.expiration_at || row.expiration || null };
+    const svcForActual = {
+      ...row,
+      expiration: row.expiration_at || row.expiration || null,
+    };
 
     res.json({
       success: true,
       item: {
-        ...row,
+        id: row.id,
+        category: row.category,
+        status: row.status,
+        title: row.title,
+        providerId: row.provider_id,
+        createdAt: row.created_at
+          ? new Date(row.created_at).toISOString()
+          : null,
+        updatedAt: row.updated_at
+          ? new Date(row.updated_at).toISOString()
+          : null,
+        deletedAt: row.deleted_at
+          ? new Date(row.deleted_at).toISOString()
+          : null,
+        deletedBy: row.deleted_by || null,
+        expiration: row.expiration_at
+          ? new Date(row.expiration_at).toISOString()
+          : null,
         details: detailsObj,
         provider: {
           id: row.p_id,
@@ -366,7 +411,9 @@ exports.getRefusedById = async (req, res) => {
 exports.askActualNow = async (req, res) => {
   try {
     const id = Number(req.params.id);
-    if (!id) return res.status(400).json({ success: false, message: "Bad id" });
+    if (!id) {
+      return res.status(400).json({ success: false, message: "Bad id" });
+    }
 
     const sql = `
       SELECT
@@ -381,29 +428,29 @@ exports.askActualNow = async (req, res) => {
     `;
     const r = await db.query(sql, [id]);
     const row = r.rows?.[0];
-    if (!row) return res.status(404).json({ success: false, message: "Not found" });
+    if (!row) {
+      return res.status(404).json({ success: false, message: "Not found" });
+    }
 
     const chatId = pickProviderChatId(row);
     if (!chatId) {
-      return res.json({ success: false, message: "Provider has no telegram chat id" });
+      return res.json({
+        success: false,
+        message: "Provider has no telegram chat id",
+      });
     }
 
     const detailsObj = normalizeMeta(parseDetailsAny(row.details));
     const meta = detailsObj.tg_actual_reminders_meta;
 
-    // Telegram parse_mode safety:
-    // Раньше мы отправляли Markdown и подставляли динамические значения (title/category).
-    // Из-за символов вроде "*" в названиях (например "5*") Telegram падал с
-    // "can't parse entities". Поэтому шлём в HTML (дефолт в tgSend) и экранируем.
     const escapeHtml = (s) =>
       String(s ?? "")
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
-        .replace(/\"/g, "&quot;")
+        .replace(/"/g, "&quot;")
         .replace(/'/g, "&#39;");
 
-    // антиспам: если lockUntil ещё не прошёл — не шлём (если не force)
     const force = String(req.query.force || "0") === "1";
     if (!force && meta.lockUntil) {
       const lock = new Date(meta.lockUntil);
@@ -411,7 +458,11 @@ exports.askActualNow = async (req, res) => {
         return res.json({
           success: false,
           message: `Locked until ${meta.lockUntil}`,
-          meta: { lockUntil: meta.lockUntil, lastSentAt: meta.lastSentAt || null },
+          locked: true,
+          meta: {
+            lockUntil: meta.lockUntil,
+            lastSentAt: meta.lastSentAt || null,
+          },
         });
       }
     }
@@ -421,19 +472,25 @@ exports.askActualNow = async (req, res) => {
     const safeCategory = escapeHtml(row.category);
     const d = parseDetailsAny(row.details);
 
-    // даты (берём самые вероятные поля по категориям)
     const dateInfo =
       (d.startDate && d.endDate && `${d.startDate} → ${d.endDate}`) ||
-      (d.checkinDate && d.checkoutDate && `${d.checkinDate} → ${d.checkoutDate}`) ||
-      (d.checkInDate && d.checkOutDate && `${d.checkInDate} → ${d.checkOutDate}`) ||
+      (d.checkinDate &&
+        d.checkoutDate &&
+        `${d.checkinDate} → ${d.checkoutDate}`) ||
+      (d.checkInDate &&
+        d.checkOutDate &&
+        `${d.checkInDate} → ${d.checkOutDate}`) ||
       (d.departureFlightDate &&
-        `${d.departureFlightDate}${d.returnFlightDate ? ` → ${d.returnFlightDate}` : ""}`) ||
+        `${d.departureFlightDate}${
+          d.returnFlightDate ? ` → ${d.returnFlightDate}` : ""
+        }`) ||
       (d.eventDate && String(d.eventDate)) ||
       "";
-    
-    // направление/локация/отель
+
     const placeInfo =
-      [d.directionCountry, d.directionFrom, d.directionTo].filter(Boolean).join(" / ") ||
+      [d.directionCountry, d.directionFrom, d.directionTo]
+        .filter(Boolean)
+        .join(" / ") ||
       [d.country, d.city].filter(Boolean).join(" / ") ||
       (d.hotel && String(d.hotel)) ||
       "";
@@ -442,12 +499,13 @@ exports.askActualNow = async (req, res) => {
       `⏰ <b>Проверка актуальности</b>\n\n` +
       `Код: <code>#R${row.id}</code>\n` +
       `Услуга: <b>${safeTitle}</b>\n` +
-      (placeInfo ? `Направление/отель: <b>${escapeHtml(placeInfo)}</b>\n` : "") +
+      (placeInfo
+        ? `Направление/отель: <b>${escapeHtml(placeInfo)}</b>\n`
+        : "") +
       (dateInfo ? `Даты: <b>${escapeHtml(dateInfo)}</b>\n` : "") +
       `Категория: <code>${safeCategory}</code>\n\n` +
       `Актуально ли предложение сейчас?`;
 
-    // tgSend по умолчанию шлёт с parse_mode=HTML, поэтому parse_mode не передаём.
     const sendOk = await tgSend(
       chatId,
       msg,
@@ -458,13 +516,11 @@ exports.askActualNow = async (req, res) => {
       CLIENT_BOT_TOKEN || ""
     );
 
-    // обновляем meta
     meta.lastSentAt = nowIso();
     meta.lastSentBy = "admin";
-    meta.lockUntil = new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString(); // 6 часов
+    meta.lockUntil = new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString();
     meta.lastSendOk = !!sendOk;
 
-    // пишем в details обратно
     await db.query(`UPDATE services SET details = $1 WHERE id = $2`, [
       JSON.stringify(detailsObj),
       row.id,
@@ -473,6 +529,7 @@ exports.askActualNow = async (req, res) => {
     res.json({
       success: true,
       ok: !!sendOk,
+      sent: !!sendOk,
       chatId,
       message: "Sent",
       meta: {
@@ -609,6 +666,7 @@ exports.restoreRefusedService = async (req, res) => {
       UPDATE services
       SET
         deleted_at = NULL,
+        deleted_by = NULL,
         status = 'published',
         updated_at = NOW()
       WHERE id = $1
