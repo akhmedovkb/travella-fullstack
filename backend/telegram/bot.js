@@ -5216,23 +5216,34 @@ bot.action(/^svc_archive:(\d+)$/, async (ctx) => {
 /* ===================== УДАЛЕНИЕ УСЛУГИ ИЗ "МОИ КАРТОЧКИ" ===================== */
 
 bot.action(/^svc_delete:(\d+)$/, async (ctx) => {
-  const serviceId = ctx.match[1];
-  await ctx.answerCbQuery();
+  try {
+    const serviceId = ctx.match[1];
+    await ctx.answerCbQuery();
 
-  await ctx.reply(
-    `🗑 <b>Удалить услугу #${serviceId}?</b>\n\nУслуга будет скрыта из всех списков.`,
-    {
-      parse_mode: "HTML",
-      reply_markup: {
-        inline_keyboard: [
-          [
-            { text: "❌ Отмена", callback_data: "noop:0" },
-            { text: "🗑 Удалить", callback_data: `svc_delete_confirm:${serviceId}` },
+    // гасим кнопки на исходной карточке, чтобы не было повторных кликов
+    try {
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+    } catch {}
+
+    await ctx.reply(
+      `🗑 <b>Удалить услугу #${serviceId}?</b>\n\nУслуга будет скрыта из всех списков и попадёт в корзину.`,
+      {
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: "↩️ Отмена", callback_data: "prov_services:list" },
+              { text: "🗑 Удалить", callback_data: `svc_delete_confirm:${serviceId}` },
+            ],
+            [{ text: "🖼 Мои карточки", callback_data: "prov_services:list_cards" }],
           ],
-        ],
-      },
-    }
-  );
+        },
+      }
+    );
+  } catch (e) {
+    console.error("[bot] svc_delete error:", e?.message || e);
+    return ctx.reply("❌ Не удалось открыть подтверждение удаления.");
+  }
 });
 
 // Подтверждение в боте
@@ -5242,6 +5253,7 @@ bot.action(/^svc_delete_confirm:(\d+)$/, async (ctx) => {
     const serviceId = ctx.match[1];
     await ctx.answerCbQuery("Удаляю...");
 
+    // гасим кнопки confirm-сообщения
     try {
       await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
     } catch {}
@@ -5253,9 +5265,21 @@ bot.action(/^svc_delete_confirm:(\d+)$/, async (ctx) => {
     );
 
     if (r?.data?.success === true) {
-      await ctx.reply(`✅ Услуга <code>#${serviceId}</code> удалена.`, {
-        parse_mode: "HTML",
-      });
+      await ctx.reply(
+        `✅ Услуга <code>#${serviceId}</code> удалена.\n\nОна перемещена в корзину.`,
+        {
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: "🧺 Открыть корзину", callback_data: "trash:open" },
+                { text: "🖼 Мои карточки", callback_data: "prov_services:list_cards" },
+              ],
+              [{ text: "📋 Мои услуги", callback_data: "prov_services:list" }],
+            ],
+          },
+        }
+      );
       return;
     }
 
@@ -5273,7 +5297,11 @@ bot.action(/^svc_delete_confirm:(\d+)$/, async (ctx) => {
     }
 
     if (code === 409 || data?.error === "ALREADY_DELETED") {
-      return ctx.reply("⚠️ Услуга уже удалена.");
+      return ctx.reply("⚠️ Услуга уже удалена.", {
+        reply_markup: {
+          inline_keyboard: [[{ text: "🧺 Открыть корзину", callback_data: "trash:open" }]],
+        },
+      });
     }
 
     if (
@@ -5451,20 +5479,42 @@ bot.action(/^trash:restore:(\d+)$/, async (ctx) => {
     } catch {}
 
     const actorId = getActorId(ctx);
-
     const r = await axios.post(
       `/api/telegram/provider/${actorId}/services/${serviceId}/restore`
     );
 
-    if (r?.data?.success === true) {
-      return ctx.reply(`♻️ Услуга <code>#${serviceId}</code> восстановлена.`, {
+    if (r?.data?.success === true || r?.data?.ok === true) {
+      await ctx.reply(`♻️ Услуга <code>#${serviceId}</code> восстановлена.`, {
         parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: "🧺 Обновить корзину", callback_data: "trash:open" },
+              { text: "🖼 Мои карточки", callback_data: "prov_services:list_cards" },
+            ],
+          ],
+        },
       });
+
+      await renderTrash(ctx);
+      return;
     }
 
-    return ctx.reply(`❌ Не удалось восстановить услугу <code>#${serviceId}</code>.`, {
+    if (
+      (r?.data?.success === false && r?.data?.error === "NOT_DELETED") ||
+      (r?.data?.ok === false && r?.data?.reason === "NOT_IN_TRASH")
+    ) {
+      await ctx.reply(`⚠️ Услуга <code>#${serviceId}</code> уже не в корзине.`, {
+        parse_mode: "HTML",
+      });
+      await renderTrash(ctx);
+      return;
+    }
+
+    await ctx.reply(`❌ Не удалось восстановить услугу <code>#${serviceId}</code>.`, {
       parse_mode: "HTML",
     });
+    return renderTrash(ctx);
   } catch (e) {
     const data = e?.response?.data || {};
     const code = e?.response?.status;
@@ -5472,11 +5522,13 @@ bot.action(/^trash:restore:(\d+)$/, async (ctx) => {
     console.error("[bot] trash:restore error:", data || e?.message || e);
 
     if (code === 404 || data?.error === "SERVICE_NOT_FOUND") {
-      return ctx.reply("⚠️ Услуга не найдена.");
+      await ctx.reply("⚠️ Услуга не найдена.");
+      return renderTrash(ctx);
     }
 
     if (code === 409 || data?.error === "NOT_DELETED") {
-      return ctx.reply("⚠️ Услуга уже восстановлена.");
+      await ctx.reply("⚠️ Услуга уже восстановлена.");
+      return renderTrash(ctx);
     }
 
     if (
@@ -5484,10 +5536,12 @@ bot.action(/^trash:restore:(\d+)$/, async (ctx) => {
       data?.error === "FORBIDDEN" ||
       data?.error === "PROVIDER_NOT_FOUND"
     ) {
-      return ctx.reply("⛔ Нет доступа к этой услуге.");
+      await ctx.reply("⛔ Нет доступа к этой услуге.");
+      return renderTrash(ctx);
     }
 
-    return ctx.reply("❌ Ошибка при восстановлении услуги.");
+    await ctx.reply("❌ Ошибка при восстановлении услуги.");
+    return renderTrash(ctx);
   }
 });
 
@@ -5526,20 +5580,35 @@ bot.action(/^trash:purge_confirm:(\d+)$/, async (ctx) => {
     } catch {}
 
     const actorId = getActorId(ctx);
-
-    const r = await axios.post(
+    const r = await axios.delete(
       `/api/telegram/provider/${actorId}/services/${serviceId}/purge`
     );
 
-    if (r?.data?.success === true) {
-      return ctx.reply(`🔥 Услуга <code>#${serviceId}</code> удалена навсегда.`, {
+    if (r?.data?.success === true || r?.data?.ok === true) {
+      await ctx.reply(`🔥 Услуга <code>#${serviceId}</code> удалена навсегда.`, {
         parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [[{ text: "🧺 Обновить корзину", callback_data: "trash:open" }]],
+        },
       });
+
+      await renderTrash(ctx);
+      return;
     }
 
-    return ctx.reply(`❌ Не удалось удалить навсегда услугу <code>#${serviceId}</code>.`, {
+    if (
+      (r?.data?.success === false && r?.data?.error === "NOT_IN_TRASH") ||
+      (r?.data?.ok === false && r?.data?.reason === "NOT_IN_TRASH")
+    ) {
+      await ctx.reply("⚠️ Услуга уже не находится в корзине.");
+      await renderTrash(ctx);
+      return;
+    }
+
+    await ctx.reply(`❌ Не удалось удалить навсегда <code>#${serviceId}</code>.`, {
       parse_mode: "HTML",
     });
+    return renderTrash(ctx);
   } catch (e) {
     const data = e?.response?.data || {};
     const code = e?.response?.status;
@@ -5547,17 +5616,18 @@ bot.action(/^trash:purge_confirm:(\d+)$/, async (ctx) => {
     console.error("[bot] trash:purge_confirm error:", data || e?.message || e);
 
     if (code === 404 || data?.error === "SERVICE_NOT_FOUND") {
-      return ctx.reply("⚠️ Услуга не найдена.");
+      await ctx.reply("⚠️ Услуга не найдена.");
+      return renderTrash(ctx);
     }
 
     if (code === 409 || data?.error === "NOT_IN_TRASH") {
-      return ctx.reply("⚠️ Услуга не находится в корзине.");
+      await ctx.reply("⚠️ Услуга не находится в корзине.");
+      return renderTrash(ctx);
     }
 
     if (code === 409 || data?.error === "FK_CONSTRAINT") {
-      return ctx.reply(
-        "⚠️ Нельзя удалить навсегда: услуга связана с другими данными."
-      );
+      await ctx.reply("⚠️ Нельзя удалить навсегда: услуга связана с другими данными.");
+      return renderTrash(ctx);
     }
 
     if (
@@ -5565,10 +5635,12 @@ bot.action(/^trash:purge_confirm:(\d+)$/, async (ctx) => {
       data?.error === "FORBIDDEN" ||
       data?.error === "PROVIDER_NOT_FOUND"
     ) {
-      return ctx.reply("⛔ Нет доступа к этой услуге.");
+      await ctx.reply("⛔ Нет доступа к этой услуге.");
+      return renderTrash(ctx);
     }
 
-    return ctx.reply("❌ Ошибка при полном удалении услуги.");
+    await ctx.reply("❌ Ошибка при полном удалении услуги.");
+    return renderTrash(ctx);
   }
 });
 
