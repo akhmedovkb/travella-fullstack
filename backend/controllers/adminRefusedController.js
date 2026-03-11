@@ -82,33 +82,67 @@ function getStartDateForAdminSort(svc) {
     return null;
   };
 
-  let raw =
-    (cat === "refused_hotel" &&
-      pick(
+  // 1) Новый единый стандарт для всех refused_* услуг
+  let raw = pick("startDate", "start_date");
+
+  // 2) Обратная совместимость со старыми данными
+  if (!raw) {
+    if (cat === "refused_hotel") {
+      raw = pick(
         "checkinDate",
         "checkInDate",
         "check_in",
         "check_in_date",
-        "startDate",
-        "start_date"
-      )) ||
-    (cat === "refused_ticket" &&
-      pick("eventDate", "event_date", "date", "startDate", "start_date")) ||
-    (cat === "refused_flight" &&
-      pick(
+        "dateFrom",
+        "date_from",
+        "date"
+      );
+    } else if (cat === "refused_ticket") {
+      raw = pick(
+        "eventDate",
+        "event_date",
+        "date",
+        "dateFrom",
+        "date_from"
+      );
+    } else if (cat === "refused_flight") {
+      raw = pick(
         "departureFlightDate",
         "departureDate",
         "departure_date",
         "startFlightDate",
         "start_flight_date",
-        "startDate",
-        "start_date"
-      )) ||
-    pick("departureFlightDate", "startDate", "start_date", "dateFrom", "date_from");
+        "flightDate",
+        "flight_date",
+        "dateFrom",
+        "date_from",
+        "date"
+      );
+    } else {
+      // refused_tour и общий fallback
+      raw = pick(
+        "dateFrom",
+        "date_from",
+        "departureFlightDate",
+        "departureDate",
+        "departure_date",
+        "flightDate",
+        "flight_date",
+        "checkinDate",
+        "checkInDate",
+        "check_in",
+        "check_in_date",
+        "eventDate",
+        "event_date",
+        "date"
+      );
+    }
+  }
 
   let dt = parseDateSafe(raw);
   if (dt) return dt;
 
+  // fallback по конечной дате, если стартовая не найдена/битая
   raw = pick(
     "endDate",
     "end_date",
