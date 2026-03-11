@@ -5238,16 +5238,54 @@ bot.action(/^svc_delete:(\d+)$/, async (ctx) => {
 // Подтверждение в боте
 
 bot.action(/^svc_delete_confirm:(\d+)$/, async (ctx) => {
-  const serviceId = ctx.match[1];
-  await ctx.answerCbQuery();
+  try {
+    const serviceId = ctx.match[1];
+    await ctx.answerCbQuery("Удаляю...");
 
-  const actorId = getActorId(ctx);
+    try {
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+    } catch {}
 
-  await axios.post(
-    `/api/telegram/provider/${actorId}/services/${serviceId}/delete`
-  );
+    const actorId = getActorId(ctx);
 
-  await ctx.reply(`✅ Услуга #${serviceId} удалена.`);
+    const r = await axios.post(
+      `/api/telegram/provider/${actorId}/services/${serviceId}/delete`
+    );
+
+    if (r?.data?.success === true) {
+      await ctx.reply(`✅ Услуга <code>#${serviceId}</code> удалена.`, {
+        parse_mode: "HTML",
+      });
+      return;
+    }
+
+    return ctx.reply(`❌ Не удалось удалить услугу <code>#${serviceId}</code>.`, {
+      parse_mode: "HTML",
+    });
+  } catch (e) {
+    const data = e?.response?.data || {};
+    const code = e?.response?.status;
+
+    console.error("[bot] svc_delete_confirm error:", data || e?.message || e);
+
+    if (code === 404 || data?.error === "SERVICE_NOT_FOUND") {
+      return ctx.reply("⚠️ Услуга уже не найдена.");
+    }
+
+    if (code === 409 || data?.error === "ALREADY_DELETED") {
+      return ctx.reply("⚠️ Услуга уже удалена.");
+    }
+
+    if (
+      code === 403 ||
+      data?.error === "FORBIDDEN" ||
+      data?.error === "PROVIDER_NOT_FOUND"
+    ) {
+      return ctx.reply("⛔ Нет доступа к этой услуге.");
+    }
+
+    return ctx.reply("❌ Ошибка при удалении услуги.");
+  }
 });
 
 // ♻️ Restore
