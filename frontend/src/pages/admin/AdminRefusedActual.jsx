@@ -12,13 +12,8 @@ import axios from "axios";
  *  - POST   /api/admin/refused/:id/extend
  *  - DELETE /api/admin/refused/:id
  *  - POST   /api/admin/refused/:id/restore
- *
- * IMPORTANT:
- * This page must call the real backend API (Railway / api.travella.uz).
- * If API base is empty and you’re on Vercel, requests hit same-origin and return HTML -> "Bad response".
  */
 
-/** Grab JWT from storages (support different keys used in your project) */
 function getAuthToken() {
   return (
     localStorage.getItem("token") ||
@@ -29,7 +24,6 @@ function getAuthToken() {
   );
 }
 
-/** Runtime config support: window.frontend.API_BASE */
 function getRuntimeApiBase() {
   try {
     const v = window?.frontend?.API_BASE;
@@ -39,7 +33,6 @@ function getRuntimeApiBase() {
   }
 }
 
-/** Env config support */
 function getEnvApiBase() {
   const v =
     (
@@ -53,11 +46,6 @@ function getEnvApiBase() {
   return v;
 }
 
-/**
- * Normalize API base:
- * - removes trailing slashes
- * - if base ends with "/api" -> we should not prefix "/api" again
- */
 function normalizeApiBase(raw) {
   return (raw || "").toString().trim().replace(/\/+$/, "");
 }
@@ -175,6 +163,7 @@ function Badge({ children, tone = "gray" }) {
     blue: "bg-blue-50 text-blue-700 border-blue-200",
     amber: "bg-amber-50 text-amber-800 border-amber-200",
   };
+
   return (
     <span
       className={classNames(
@@ -189,6 +178,7 @@ function Badge({ children, tone = "gray" }) {
 
 function Modal({ open, title, onClose, children, footer }) {
   if (!open) return null;
+
   return (
     <div className="fixed inset-0 z-50">
       <div
@@ -368,7 +358,8 @@ export default function AdminRefusedActual() {
     setError("");
     try {
       const showDeleted = visibility === "active" ? "0" : "1";
-      const effectiveStatus = visibility === "deleted" ? "deleted" : status || "";
+      const effectiveStatus =
+        visibility === "deleted" ? "deleted" : status || "";
 
       const resp = await http.get(apiPath("/admin/refused/actual"), {
         params: {
@@ -459,7 +450,10 @@ export default function AdminRefusedActual() {
       const data = ensureJsonOrThrow(resp, "askActual");
       if (!data?.success) {
         if (data?.locked && data?.meta?.lockUntil) {
-          showToast("warn", `⏳ Заблокировано до ${formatDate(data.meta.lockUntil)}`);
+          showToast(
+            "warn",
+            `⏳ Заблокировано до ${formatDate(data.meta.lockUntil)}`
+          );
           return;
         }
         throw new Error(data?.message || "Не удалось отправить");
@@ -613,8 +607,8 @@ export default function AdminRefusedActual() {
           </h1>
           <p className="mt-1 text-sm text-gray-600">
             Список всех refused_* услуг. Можно фильтровать актуальные,
-            неактуальные и удалённые, вручную спросить актуальность у
-            поставщика, продлить, удалить или восстановить услугу.
+            неактуальные и удалённые, вручную спросить актуальность у поставщика,
+            продлить, удалить или восстановить услугу.
           </p>
           <div className="mt-2 text-xs text-gray-500">
             API base:{" "}
@@ -856,7 +850,9 @@ export default function AdminRefusedActual() {
                 items.map((it) => {
                   const tgOk = !!it?.provider?.chatId;
                   const actual = !!it.isActual;
-                  const deleted = !!it.deletedAt || String(it.status || "").toLowerCase() === "deleted";
+                  const deleted =
+                    !!it.deletedAt ||
+                    String(it.status || "").toLowerCase() === "deleted";
 
                   const meta = it.meta || {};
                   const lockUntil = meta.lockUntil;
@@ -894,7 +890,12 @@ export default function AdminRefusedActual() {
                         </div>
                       </td>
 
-                      <td className={classNames(tdClass("created_at"), "whitespace-nowrap")}>
+                      <td
+                        className={classNames(
+                          tdClass("created_at"),
+                          "whitespace-nowrap"
+                        )}
+                      >
                         {it.createdAt ? (
                           <div className="text-gray-900">
                             {formatDate(it.createdAt)}
@@ -904,7 +905,12 @@ export default function AdminRefusedActual() {
                         )}
                       </td>
 
-                      <td className={classNames(tdClass("sort_date"), "whitespace-nowrap")}>
+                      <td
+                        className={classNames(
+                          tdClass("sort_date"),
+                          "whitespace-nowrap"
+                        )}
+                      >
                         {it.startDateForSort ? (
                           <div className="text-gray-900">
                             {formatDate(it.startDateForSort)}
@@ -1201,14 +1207,14 @@ export default function AdminRefusedActual() {
                   <span className="text-gray-600">Удалена:</span>{" "}
                   <Badge
                     tone={
-                      String(detailsItem?.status || "").toLowerCase() === "deleted" ||
-                      detailsItem?.deletedAt
+                      String(detailsItem?.status || "").toLowerCase() ===
+                        "deleted" || detailsItem?.deletedAt
                         ? "amber"
                         : "green"
                     }
                   >
-                    {String(detailsItem?.status || "").toLowerCase() === "deleted" ||
-                    detailsItem?.deletedAt
+                    {String(detailsItem?.status || "").toLowerCase() ===
+                      "deleted" || detailsItem?.deletedAt
                       ? "да"
                       : "нет"}
                   </Badge>
