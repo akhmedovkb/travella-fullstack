@@ -11,6 +11,7 @@ const {
   askActualNow,
   extendRefusedService,
   deleteRefusedService,
+  restoreRefusedService,
 } = require("../controllers/adminRefusedController");
 
 router.use(authenticateToken);
@@ -30,5 +31,8 @@ router.post("/refused/:id/extend", extendRefusedService);
 
 // soft delete
 router.delete("/refused/:id", deleteRefusedService);
+
+// восстановить soft-deleted услугу
+router.post("/refused/:id/restore", restoreRefusedService);
 
 module.exports = router;
