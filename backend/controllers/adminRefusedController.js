@@ -130,6 +130,8 @@ exports.listActualRefused = async (req, res) => {
       // includeInactive=1 => all, includeInactive=0 => actual
       includeInactive = "",
 
+      showDeleted = "0",
+
       // sorting
       sortBy: sortByRaw = "sort_date", // created_at | provider | sort_date
       sortOrder: sortOrderRaw = "asc", // asc | desc
@@ -155,7 +157,9 @@ exports.listActualRefused = async (req, res) => {
     const params = [];
 
     where.push(`s.category LIKE 'refused_%'`);
-    where.push(`s.deleted_at IS NULL`);
+    if (String(showDeleted) !== "1") {
+        where.push(`s.deleted_at IS NULL`);
+      }
 
     if (category && String(category).startsWith("refused_")) {
       params.push(category);
