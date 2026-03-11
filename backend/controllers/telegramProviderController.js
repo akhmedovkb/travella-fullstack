@@ -349,13 +349,14 @@ async function getProviderServices(req, res) {
         p.social AS provider_telegram
       FROM services s
       LEFT JOIN providers p ON p.id = s.provider_id
-      WHERE s.provider_id = $1
-        AND s.category = ANY($2::text[])
-        AND s.status != 'archived'
-        AND (
-          s.expiration_at IS NULL
-          OR s.expiration_at > NOW()
-        )
+        WHERE s.provider_id = $1
+          AND s.category = ANY($2::text[])
+          AND s.deleted_at IS NULL
+          AND s.status NOT IN ('archived', 'deleted')
+          AND (
+            s.expiration_at IS NULL
+            OR s.expiration_at > NOW()
+          )
       ORDER BY s.created_at DESC
       LIMIT 100
       `,
@@ -870,29 +871,69 @@ async function deleteServiceFromBot(req, res) {
         LIMIT 1`,
       [chatId]
     );
+
     if (!provRes.rowCount) {
-      return res.status(403).json({ success: false });
+      return res
+        .status(403)
+        .json({ success: false, error: "PROVIDER_NOT_FOUND" });
     }
 
-    await pool.query(
+    const providerId = provRes.rows[0].id;
+
+    const upd = await pool.query(
       `
       UPDATE services
-         SET
-           status = 'deleted',
-           deleted_at = NOW(),
-           deleted_by = $2,
-           updated_at = NOW()
+         SET status = 'deleted',
+             deleted_at = NOW(),
+             deleted_by = $2,
+             updated_at = NOW()
        WHERE id = $1
          AND provider_id = $2
          AND deleted_at IS NULL
+       RETURNING id, status, deleted_at
       `,
-      [serviceId, provRes.rows[0].id]
+      [serviceId, providerId]
     );
 
-    return res.json({ success: true });
+    if (!upd.rowCount) {
+      const check = await pool.query(
+        `
+        SELECT id, provider_id, deleted_at
+          FROM services
+         WHERE id = $1
+         LIMIT 1
+        `,
+        [serviceId]
+      );
+
+      if (!check.rowCount) {
+        return res
+          .status(404)
+          .json({ success: false, error: "SERVICE_NOT_FOUND" });
+      }
+
+      if (Number(check.rows[0].provider_id) !== Number(providerId)) {
+        return res.status(403).json({ success: false, error: "FORBIDDEN" });
+      }
+
+      if (check.rows[0].deleted_at) {
+        return res
+          .status(409)
+          .json({ success: false, error: "ALREADY_DELETED" });
+      }
+
+      return res
+        .status(409)
+        .json({ success: false, error: "DELETE_FAILED" });
+    }
+
+    return res.json({
+      success: true,
+      item: upd.rows[0],
+    });
   } catch (e) {
     console.error("[tg] deleteServiceFromBot error:", e);
-    return res.status(500).json({ success: false });
+    return res.status(500).json({ success: false, error: "SERVER_ERROR" });
   }
 }
 
