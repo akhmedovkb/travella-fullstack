@@ -5446,33 +5446,48 @@ bot.action(/^trash:restore:(\d+)$/, async (ctx) => {
     const serviceId = ctx.match[1];
     await ctx.answerCbQuery("Восстанавливаю...");
 
-    // гасим кнопки СРАЗУ
     try {
       await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
     } catch {}
 
     const actorId = getActorId(ctx);
-    const r = await axios.post(`/api/telegram/provider/${actorId}/services/${serviceId}/restore`);
 
-    if (r?.data?.ok === true || r?.data?.success === true) {
-      await ctx.answerCbQuery("✅ Восстановлено");
-      // возвращаемся в корзину (редактируем тот же message)
-      await renderTrash(ctx);
-      return;
+    const r = await axios.post(
+      `/api/telegram/provider/${actorId}/services/${serviceId}/restore`
+    );
+
+    if (r?.data?.success === true) {
+      return ctx.reply(`♻️ Услуга <code>#${serviceId}</code> восстановлена.`, {
+        parse_mode: "HTML",
+      });
     }
 
-    if (r?.data?.ok === false && r?.data?.reason === "NOT_IN_TRASH") {
-      await ctx.answerCbQuery("⚠️ Уже не в корзине");
-      await renderTrash(ctx);
-      return;
-    }
-
-    await ctx.answerCbQuery("❌ Не удалось", { show_alert: true });
-    return renderTrash(ctx);
+    return ctx.reply(`❌ Не удалось восстановить услугу <code>#${serviceId}</code>.`, {
+      parse_mode: "HTML",
+    });
   } catch (e) {
-    console.error("[bot] trash:restore error:", e?.message || e);
-    await ctx.answerCbQuery("❌ Ошибка", { show_alert: true });
-    return renderTrash(ctx);
+    const data = e?.response?.data || {};
+    const code = e?.response?.status;
+
+    console.error("[bot] trash:restore error:", data || e?.message || e);
+
+    if (code === 404 || data?.error === "SERVICE_NOT_FOUND") {
+      return ctx.reply("⚠️ Услуга не найдена.");
+    }
+
+    if (code === 409 || data?.error === "NOT_DELETED") {
+      return ctx.reply("⚠️ Услуга уже восстановлена.");
+    }
+
+    if (
+      code === 403 ||
+      data?.error === "FORBIDDEN" ||
+      data?.error === "PROVIDER_NOT_FOUND"
+    ) {
+      return ctx.reply("⛔ Нет доступа к этой услуге.");
+    }
+
+    return ctx.reply("❌ Ошибка при восстановлении услуги.");
   }
 });
 
@@ -5504,34 +5519,56 @@ bot.action(/^trash:purge:(\d+)$/, async (ctx) => {
 bot.action(/^trash:purge_confirm:(\d+)$/, async (ctx) => {
   try {
     const serviceId = ctx.match[1];
-    await ctx.answerCbQuery("Удаляю...");
+    await ctx.answerCbQuery("Удаляю навсегда...");
 
-    // гасим кнопки СРАЗУ
     try {
       await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
     } catch {}
 
     const actorId = getActorId(ctx);
-    const r = await axios.delete(`/api/telegram/provider/${actorId}/services/${serviceId}/purge`);
 
-    if (r?.data?.ok === true || r?.data?.success === true) {
-      await ctx.answerCbQuery("✅ Удалено");
-      await renderTrash(ctx);
-      return;
+    const r = await axios.post(
+      `/api/telegram/provider/${actorId}/services/${serviceId}/purge`
+    );
+
+    if (r?.data?.success === true) {
+      return ctx.reply(`🔥 Услуга <code>#${serviceId}</code> удалена навсегда.`, {
+        parse_mode: "HTML",
+      });
     }
 
-    if (r?.data?.ok === false && r?.data?.reason === "NOT_IN_TRASH") {
-      await ctx.answerCbQuery("⚠️ Уже не в корзине");
-      await renderTrash(ctx);
-      return;
-    }
-
-    await ctx.answerCbQuery("❌ Не удалось", { show_alert: true });
-    return renderTrash(ctx);
+    return ctx.reply(`❌ Не удалось удалить навсегда услугу <code>#${serviceId}</code>.`, {
+      parse_mode: "HTML",
+    });
   } catch (e) {
-    console.error("[bot] trash:purge_confirm error:", e?.message || e);
-    await ctx.answerCbQuery("❌ Ошибка", { show_alert: true });
-    return renderTrash(ctx);
+    const data = e?.response?.data || {};
+    const code = e?.response?.status;
+
+    console.error("[bot] trash:purge_confirm error:", data || e?.message || e);
+
+    if (code === 404 || data?.error === "SERVICE_NOT_FOUND") {
+      return ctx.reply("⚠️ Услуга не найдена.");
+    }
+
+    if (code === 409 || data?.error === "NOT_IN_TRASH") {
+      return ctx.reply("⚠️ Услуга не находится в корзине.");
+    }
+
+    if (code === 409 || data?.error === "FK_CONSTRAINT") {
+      return ctx.reply(
+        "⚠️ Нельзя удалить навсегда: услуга связана с другими данными."
+      );
+    }
+
+    if (
+      code === 403 ||
+      data?.error === "FORBIDDEN" ||
+      data?.error === "PROVIDER_NOT_FOUND"
+    ) {
+      return ctx.reply("⛔ Нет доступа к этой услуге.");
+    }
+
+    return ctx.reply("❌ Ошибка при полном удалении услуги.");
   }
 });
 
