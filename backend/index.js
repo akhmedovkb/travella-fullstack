@@ -791,9 +791,7 @@ app.get("/api/public/donas/summary-range", async (req, res) => {
         opex: Math.round(tOpex),
         opexExtra: Math.round(tOpexExtra),
         capex: Math.round(tCapex),
-        opexExtra: Math.round(tOpexExtra),
-        capex: Math.round(tCapex),
-        loan: Math.round(loan * months), // справочно, фикс. платёж * кол-во месяцев
+        loan: Math.round(loan * months),
         netOperating: Math.round(tNetOperating),
         cashFlow: Math.round(tCashFlow),
         avgDscr: avgDscr == null ? null : Number(avgDscr.toFixed(2)),
