@@ -889,6 +889,7 @@ app.use("/api/admin/donas", adminDonasRecipeRoutes);
 app.use("/api/admin/donas", adminDonasCogsRoutes);
 app.use("/api/admin/donas", adminDonasMenuItemsRoutes);
 app.use("/api/admin/donas", adminDonasIngredientsRoutes);
+app.use("/api/admin/donas", adminDonasFinanceMonthsRoutes);
 app.use(donasPublicMenuRoutes);
 app.use("/api/admin/donas/opex", adminDonasOpexRoutes);
 app.use("/api/admin/donas/finance", adminDonasFinanceRoutes);
