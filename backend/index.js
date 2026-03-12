@@ -3,7 +3,6 @@ const pool = require("./db");
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
-const { askActualReminder } = require("./jobs/askActualReminder");
 const tbTemplatesRoutes = require("./routes/TBtemplatesRoutes");
 const { getTelegramHealth } = require("./utils/telegram");
 const path = require("path");
