@@ -32,6 +32,7 @@ const adminBillingRoutes = require("./routes/adminBillingRoutes");
 const clientBillingRoutes = require("./routes/clientBillingRoutes");
 const adminBillingHealthRoutes = require("./routes/adminBillingHealthRoutes");
 const adminPaymeAutoFixRoutes = require("./routes/adminPaymeAutoFixRoutes");
+const { startJobsScheduler } = require("./jobs/scheduler");
 
 dotenv.config();
 const app = express();
@@ -825,118 +826,17 @@ try {
   );
 }
 
-/** ===================== Ask Actual Reminder Scheduler ===================== */
-// 10:00 / 14:00 / 18:00 по Ташкенту, без cron
-const REM_TZ = "Asia/Tashkent";
-const REM_HOURS = new Set([10, 14, 18]);
-let lastReminderKey = null; // чтобы не запускать дважды в одну минуту на одном инстансе
-
-function getTZParts(date = new Date(), timeZone = REM_TZ) {
-  const dtf = new Intl.DateTimeFormat("en-GB", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hourCycle: "h23",
-  });
-  const parts = dtf.formatToParts(date);
-  const map = {};
-  for (const p of parts) {
-    if (p.type !== "literal") map[p.type] = p.value;
-  }
-  const ymd = `${map.year}-${map.month}-${map.day}`;
-  return {
-    ymd,
-    hour: Number(map.hour),
-    minute: Number(map.minute),
-  };
-}
-
-function startAskActualReminderScheduler() {
-  console.log(
-    "[askActualReminder] scheduler enabled: 10:00 / 14:00 / 18:00 Asia/Tashkent"
-  );
-
-  // Пингуем часто, но job запускаем строго в нужные часы и только 1 раз на слот
-  setInterval(async () => {
-    try {
-      const { ymd, hour, minute } = getTZParts(new Date(), REM_TZ);
-
-      if (!REM_HOURS.has(hour)) return;
-
-      // чтобы не промахнуться из-за дрейфа таймера/нагрузки:
-      // считаем "окно запуска" первые 3 минуты нужного часа
-      if (minute > 2) return;
-
-      const slotKey = `${ymd}:${hour}`; // один запуск на часовой слот на инстанс
-      if (lastReminderKey === slotKey) return;
-
-      lastReminderKey = slotKey;
-
-      await askActualReminder();
-    } catch (e) {
-      console.error("[askActualReminder] tick error:", e?.message || e);
-    }
-  }, 30 * 1000); // каждые 30 секунд
-}
-
-/** ===================== /Ask Actual Reminder Scheduler ===================== */
-
-// ✅ Запускаем планировщик напоминаний (не зависит от polling — отправка идёт через tgSend в job)
-// ✅ Запускаем планировщик напоминаний (не зависит от polling — отправка идёт через tgSend в job)
-if (process.env.DISABLE_REMINDER_SCHEDULER === "1" || process.env.NODE_ENV === "test") {
-  console.log("[askActualReminder] scheduler disabled for tests/flags");
+if (
+  process.env.DISABLE_REMINDER_SCHEDULER === "1" ||
+  process.env.NODE_ENV === "test"
+) {
+  console.log("[jobs] scheduler disabled for tests/flags");
 } else {
   try {
-    startAskActualReminderScheduler();
+    startJobsScheduler();
   } catch (e) {
-    console.warn("[askActualReminder] scheduler start failed:", e?.message || e);
+    console.warn("[jobs] scheduler start failed:", e?.message || e);
   }
-}
-
-const TG_DISABLED =
-  process.env.DISABLE_TG_BOT === "1" || process.env.NODE_ENV === "test";
-
-if (bot && !TG_DISABLED) {
-  console.log("[tg-bot] index.js: starting bot (polling) ...");
-
-  (async () => {
-    try {
-      // 🔥 критично: выключаем webhook у CLIENT-бота перед polling
-      await bot.telegram.deleteWebhook({ drop_pending_updates: true });
-      console.log("[tg-bot] webhook deleted (drop pending updates)");
-
-      await bot.launch();
-      console.log("🤖 Telegram bot started (polling)");
-    } catch (e) {
-      const desc =
-        (e && e.response && e.response.description) ||
-        e?.description ||
-        e?.message ||
-        String(e);
-
-      if (desc && desc.includes("Conflict: terminated by other getUpdates request")) {
-        console.warn(
-          "[tg-bot] 409 Conflict: другой процесс уже делает getUpdates этим токеном. " +
-            "Этот экземпляр бота не будет получать обновления, но API продолжит работать.",
-          desc
-        );
-      } else {
-        console.error(
-          "[tg-bot] start error — бот будет отключён, но API продолжит работать:",
-          desc
-        );
-      }
-    }
-  })();
-
-  process.once("SIGINT", () => bot.stop("SIGINT"));
-  process.once("SIGTERM", () => bot.stop("SIGTERM"));
-} else {
-  console.log("⚠️ Telegram bot is disabled (tests/flags/no token)");
 }
 
 /** ===================== EntryFees ===================== */
