@@ -24,7 +24,6 @@ const adminDonasInventoryRoutes = require("./routes/adminDonasInventoryRoutes");
 const adminContactBalanceRoutes = require("./routes/adminContactBalanceRoutes");
 const paymeMerchantRoutes = require("./routes/paymeMerchantRoutes");
 const adminPaymeHealthRoutes = require("./routes/adminPaymeHealthRoutes");
-const { runPaymeHealthCheck } = require("./jobs/paymeHealthJob");
 const adminPaymeEventsRoutes = require("./routes/adminPaymeEventsRoutes");
 const adminPaymeLabRoutes = require("./routes/adminPaymeLabRoutes");
 const adminBillingRoutes = require("./routes/adminBillingRoutes");
