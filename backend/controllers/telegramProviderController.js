@@ -1017,70 +1017,137 @@ async function restoreServiceFromBot(req, res) {
   }
 }
 
+// HARD DELETE SERVICE FROM TRASH
 async function purgeServiceFromBot(req, res) {
   try {
     const { chatId, serviceId } = req.params;
 
+    // 1. Найти провайдера
     const provRes = await pool.query(
-      `SELECT id
-         FROM providers
-        WHERE telegram_chat_id::text = $1
-           OR tg_chat_id::text = $1
-           OR telegram_web_chat_id::text = $1
-           OR telegram_refused_chat_id::text = $1
-        LIMIT 1`,
+      `
+      SELECT id
+      FROM providers
+      WHERE telegram_chat_id::text = $1
+         OR tg_chat_id::text = $1
+         OR telegram_web_chat_id::text = $1
+         OR telegram_refused_chat_id::text = $1
+      LIMIT 1
+      `,
       [chatId]
     );
 
     if (!provRes.rowCount) {
-      return res
-        .status(403)
-        .json({ success: false, error: "PROVIDER_NOT_FOUND" });
+      return res.status(403).json({
+        success: false,
+        error: "PROVIDER_NOT_FOUND",
+      });
     }
 
     const providerId = provRes.rows[0].id;
 
+    // 2. Найти услугу
+    const svcRes = await pool.query(
+      `
+      SELECT id, provider_id, deleted_at
+      FROM services
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [serviceId]
+    );
+
+    if (!svcRes.rowCount) {
+      return res.status(404).json({
+        success: false,
+        error: "SERVICE_NOT_FOUND",
+      });
+    }
+
+    const svc = svcRes.rows[0];
+
+    if (Number(svc.provider_id) !== Number(providerId)) {
+      return res.status(403).json({
+        success: false,
+        error: "FORBIDDEN",
+      });
+    }
+
+    if (!svc.deleted_at) {
+      return res.status(409).json({
+        success: false,
+        error: "NOT_IN_TRASH",
+      });
+    }
+
+    // 3. Проверка связанных данных
+    const blockers = [];
+
+    const checks = [
+      {
+        table: "bookings",
+        field: "service_id",
+        code: "HAS_BOOKINGS",
+      },
+      {
+        table: "booking_requests",
+        field: "service_id",
+        code: "HAS_REQUESTS",
+      },
+      {
+        table: "client_service_contact_unlocks",
+        field: "service_id",
+        code: "HAS_UNLOCKS",
+      },
+      {
+        table: "provider_favorites",
+        field: "service_id",
+        code: "HAS_FAVORITES",
+      },
+    ];
+
+    for (const c of checks) {
+      try {
+        const r = await pool.query(
+          `SELECT 1 FROM ${c.table} WHERE ${c.field} = $1 LIMIT 1`,
+          [serviceId]
+        );
+
+        if (r.rowCount) {
+          blockers.push(c.code);
+        }
+      } catch (e) {
+        console.warn(
+          `[tg purge] check skipped for table ${c.table}:`,
+          e.message
+        );
+      }
+    }
+
+    if (blockers.length) {
+      return res.status(409).json({
+        success: false,
+        error: "PURGE_BLOCKED",
+        blockers,
+      });
+    }
+
+    // 4. Жёсткое удаление
     const del = await pool.query(
       `
       DELETE FROM services
-       WHERE id = $1
-         AND provider_id = $2
-         AND deleted_at IS NOT NULL
-       RETURNING id
+      WHERE id = $1
+        AND provider_id = $2
+        AND deleted_at IS NOT NULL
+      RETURNING id
       `,
       [serviceId, providerId]
     );
 
     if (!del.rowCount) {
-      const check = await pool.query(
-        `
-        SELECT id, provider_id, deleted_at
-          FROM services
-         WHERE id = $1
-         LIMIT 1
-        `,
-        [serviceId]
-      );
-
-      if (!check.rowCount) {
-        return res
-          .status(404)
-          .json({ success: false, error: "SERVICE_NOT_FOUND" });
-      }
-
-      if (Number(check.rows[0].provider_id) !== Number(providerId)) {
-        return res.status(403).json({ success: false, error: "FORBIDDEN" });
-      }
-
-      if (!check.rows[0].deleted_at) {
-        return res
-          .status(409)
-          .json({ success: false, error: "NOT_IN_TRASH" });
-      }
-
-      return res
-        .status(409)
-        .json({ success: false, error: "PURGE_FAILED" });
+      return res.status(409).json({
+        success: false,
+        error: "PURGE_FAILED",
+      });
     }
 
     return res.json({
@@ -1090,18 +1157,10 @@ async function purgeServiceFromBot(req, res) {
   } catch (e) {
     console.error("[tg] purgeServiceFromBot error:", e);
 
-    const msg = String(e?.message || "");
-    if (
-      msg.includes("violates foreign key constraint") ||
-      msg.includes("update or delete on table")
-    ) {
-      return res.status(409).json({
-        success: false,
-        error: "FK_CONSTRAINT",
-      });
-    }
-
-    return res.status(500).json({ success: false, error: "SERVER_ERROR" });
+    return res.status(500).json({
+      success: false,
+      error: "SERVER_ERROR",
+    });
   }
 }
 
