@@ -841,18 +841,6 @@ if (
 
 /** ===================== /Ask Actual Reminder Scheduler ===================== */
 
-// ✅ Запускаем планировщик напоминаний (не зависит от polling — отправка идёт через tgSend в job)
-// ✅ Запускаем планировщик напоминаний (не зависит от polling — отправка идёт через tgSend в job)
-if (process.env.DISABLE_REMINDER_SCHEDULER === "1" || process.env.NODE_ENV === "test") {
-  console.log("[askActualReminder] scheduler disabled for tests/flags");
-} else {
-  try {
-    startAskActualReminderScheduler();
-  } catch (e) {
-    console.warn("[askActualReminder] scheduler start failed:", e?.message || e);
-  }
-}
-
 const TG_DISABLED =
   process.env.DISABLE_TG_BOT === "1" || process.env.NODE_ENV === "test";
 
