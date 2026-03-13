@@ -785,21 +785,19 @@ app.get("/api/public/donas/summary-range", async (req, res) => {
         currency,
       },
       months: outMonths,
-      totals: {
-        revenue: Math.round(tRevenue),
-        cogs: Math.round(tCogs),
-        payroll: Math.round(tPayroll),
-        opex: Math.round(tOpex),
-        opexExtra: Math.round(tOpexExtra),
-        capex: Math.round(tCapex),
-        opexExtra: Math.round(tOpexExtra),
-        capex: Math.round(tCapex),
-        loan: Math.round(loan * months), // справочно, фикс. платёж * кол-во месяцев
-        netOperating: Math.round(tNetOperating),
-        cashFlow: Math.round(tCashFlow),
-        avgDscr: avgDscr == null ? null : Number(avgDscr.toFixed(2)),
-        minDscr: minDscr == null ? null : Number(minDscr.toFixed(2)),
-      },
+        totals: {
+          revenue: Math.round(tRevenue),
+          cogs: Math.round(tCogs),
+          payroll: Math.round(tPayroll),
+          opex: Math.round(tOpex),
+          opexExtra: Math.round(tOpexExtra),
+          capex: Math.round(tCapex),
+          loan: Math.round(loan * months),
+          netOperating: Math.round(tNetOperating),
+          cashFlow: Math.round(tCashFlow),
+          avgDscr: avgDscr == null ? null : Number(avgDscr.toFixed(2)),
+          minDscr: minDscr == null ? null : Number(minDscr.toFixed(2)),
+        },
     });
   } catch (e) {
     console.error("GET /api/public/donas/summary-range error:", e);
