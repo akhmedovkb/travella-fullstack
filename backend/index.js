@@ -3,7 +3,7 @@ const pool = require("./db");
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
-const { askActualReminder } = require("./jobs/askActualReminder");
+const { startJobsScheduler } = require("./jobs/scheduler");
 const tbTemplatesRoutes = require("./routes/TBtemplatesRoutes");
 const { getTelegramHealth } = require("./utils/telegram");
 const path = require("path");
@@ -826,61 +826,17 @@ try {
 }
 
 /** ===================== Ask Actual Reminder Scheduler ===================== */
-// 10:00 / 14:00 / 18:00 по Ташкенту, без cron
-const REM_TZ = "Asia/Tashkent";
-const REM_HOURS = new Set([10, 14, 18]);
-let lastReminderKey = null; // чтобы не запускать дважды в одну минуту на одном инстансе
-
-function getTZParts(date = new Date(), timeZone = REM_TZ) {
-  const dtf = new Intl.DateTimeFormat("en-GB", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hourCycle: "h23",
-  });
-  const parts = dtf.formatToParts(date);
-  const map = {};
-  for (const p of parts) {
-    if (p.type !== "literal") map[p.type] = p.value;
+if (
+  process.env.DISABLE_REMINDER_SCHEDULER === "1" ||
+  process.env.NODE_ENV === "test"
+) {
+  console.log("[jobs] scheduler disabled for tests/flags");
+} else {
+  try {
+    startJobsScheduler();
+  } catch (e) {
+    console.warn("[jobs] scheduler start failed:", e?.message || e);
   }
-  const ymd = `${map.year}-${map.month}-${map.day}`;
-  return {
-    ymd,
-    hour: Number(map.hour),
-    minute: Number(map.minute),
-  };
-}
-
-function startAskActualReminderScheduler() {
-  console.log(
-    "[askActualReminder] scheduler enabled: 10:00 / 14:00 / 18:00 Asia/Tashkent"
-  );
-
-  // Пингуем часто, но job запускаем строго в нужные часы и только 1 раз на слот
-  setInterval(async () => {
-    try {
-      const { ymd, hour, minute } = getTZParts(new Date(), REM_TZ);
-
-      if (!REM_HOURS.has(hour)) return;
-
-      // чтобы не промахнуться из-за дрейфа таймера/нагрузки:
-      // считаем "окно запуска" первые 3 минуты нужного часа
-      if (minute > 2) return;
-
-      const slotKey = `${ymd}:${hour}`; // один запуск на часовой слот на инстанс
-      if (lastReminderKey === slotKey) return;
-
-      lastReminderKey = slotKey;
-
-      await askActualReminder();
-    } catch (e) {
-      console.error("[askActualReminder] tick error:", e?.message || e);
-    }
-  }, 30 * 1000); // каждые 30 секунд
 }
 
 /** ===================== /Ask Actual Reminder Scheduler ===================== */
