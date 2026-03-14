@@ -124,6 +124,51 @@ function clampString(s, maxLen) {
   return str.length > maxLen ? str.slice(0, maxLen) : str;
 }
 
+function normalizeDateTimeInput(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return `${raw}T23:59:00`;
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}$/.test(raw)) {
+    return raw.replace(/\s+/, "T") + ":00";
+  }
+
+  if (/^\d{4}\.\d{2}\.\d{2}\s+\d{2}:\d{2}$/.test(raw)) {
+    const [datePart, timePart] = raw.split(/\s+/);
+    const normalizedDate = datePart.replace(/\./g, "-");
+    return `${normalizedDate}T${timePart}:00`;
+  }
+
+  return raw;
+}
+
+function parseExpirationForStorage(value) {
+  if (value === undefined) {
+    return { provided: false, valid: true, value: undefined };
+  }
+
+  if (value === null) {
+    return { provided: true, valid: true, value: null };
+  }
+
+  const raw = String(value).trim();
+  if (!raw) {
+    return { provided: true, valid: true, value: null };
+  }
+
+  const normalized = normalizeDateTimeInput(raw);
+  const d = new Date(normalized);
+
+  if (Number.isNaN(d.getTime())) {
+    return { provided: true, valid: false, value: null };
+  }
+
+  return { provided: true, valid: true, value: d.toISOString() };
+}
+
 /**
  * Получить заявки поставщика по его Telegram chatId
  * GET /api/telegram/provider/:chatId/bookings?status=pending
@@ -465,7 +510,6 @@ async function getProviderDeletedServices(req, res) {
   }
 }
 
-
 /**
  * ✅ Публичный поиск (маркетплейс) для provider-бота
  * GET /api/telegram/provider/:chatId/search?category=refused_tour
@@ -551,7 +595,6 @@ async function searchPublicServices(req, res) {
   }
 }
 
-
 async function serviceActionFromBot(req, res, action) {
   try {
     const { chatId, serviceId } = req.params;
@@ -615,9 +658,9 @@ async function serviceActionFromBot(req, res, action) {
         [svcId, providerId]
       );
       updated = updRes.rows[0];
-} else if (action === "extend7") {
-  const updRes = await pool.query(
-    `
+    } else if (action === "extend7") {
+      const updRes = await pool.query(
+        `
       UPDATE services
          SET
            expiration_at = COALESCE(expiration_at, NOW()) + interval '7 days',
@@ -638,10 +681,10 @@ async function serviceActionFromBot(req, res, action) {
          AND provider_id = $2
        RETURNING id, status, details, expiration_at
     `,
-    [svcId, providerId]
-  );
-  updated = updRes.rows[0];
-} else if (action === "archive") {
+        [svcId, providerId]
+      );
+      updated = updRes.rows[0];
+    } else if (action === "archive") {
       const updRes = await pool.query(
         `
           UPDATE services
@@ -736,10 +779,25 @@ async function createServiceFromBot(req, res) {
       }
     }
 
-    const safeDetails = details && typeof details === "object" ? details : {};
-    const safeImagesArr = Array.isArray(images) ? images : [];
+    const safeDetails =
+      details && typeof details === "object" && !Array.isArray(details)
+        ? { ...details }
+        : {};
 
+    const safeImagesArr = Array.isArray(images) ? images : [];
     const normalizedImages = await normalizeImagesForDb(safeImagesArr);
+
+    const expirationParsed = parseExpirationForStorage(safeDetails.expiration);
+    if (!expirationParsed.valid) {
+      return res.status(400).json({
+        success: false,
+        error: "BAD_EXPIRATION",
+      });
+    }
+
+    if (expirationParsed.provided) {
+      safeDetails.expiration = expirationParsed.value;
+    }
 
     const safeDetailsJson = JSON.stringify(safeDetails);
     const safeImagesJson = JSON.stringify(normalizedImages);
@@ -753,6 +811,7 @@ async function createServiceFromBot(req, res) {
           price,
           details,
           images,
+          expiration_at,
           status,
           moderation_status,
           submitted_at,
@@ -765,6 +824,7 @@ async function createServiceFromBot(req, res) {
           $4,
           $5::jsonb,
           $6::jsonb,
+          $7,
           'pending',
           'pending',
           NOW(),
@@ -772,10 +832,17 @@ async function createServiceFromBot(req, res) {
         )
         RETURNING id, title, category, status, moderation_status, details, images
       `,
-      [providerId, safeTitle, category, priceNum, safeDetailsJson, safeImagesJson]
+      [
+        providerId,
+        safeTitle,
+        category,
+        priceNum,
+        safeDetailsJson,
+        safeImagesJson,
+        expirationParsed.provided ? expirationParsed.value : null,
+      ]
     );
-    // ✅ ВАЖНО: уведомить админов о новой услуге на модерации
-    // (веб-кабинет делает это через notifyModerationNew, а бот раньше не делал)
+
     try {
       await notifyModerationNew({ service: insertRes.rows[0].id });
     } catch (e) {
@@ -814,7 +881,9 @@ async function getProviderServiceByIdFromBot(req, res) {
       [chatId]
     );
     if (providerRes.rowCount === 0) {
-      return res.status(404).json({ success: false, error: "PROVIDER_NOT_FOUND" });
+      return res
+        .status(404)
+        .json({ success: false, error: "PROVIDER_NOT_FOUND" });
     }
     const providerId = providerRes.rows[0].id;
 
@@ -842,7 +911,9 @@ async function getProviderServiceByIdFromBot(req, res) {
     );
 
     if (svcRes.rowCount === 0) {
-      return res.status(404).json({ success: false, error: "SERVICE_NOT_FOUND" });
+      return res
+        .status(404)
+        .json({ success: false, error: "SERVICE_NOT_FOUND" });
     }
 
     return res.json({ success: true, service: svcRes.rows[0] });
@@ -856,7 +927,6 @@ async function getProviderServiceByIdFromBot(req, res) {
  Soft-delete (status = deleted)
  МОИ КАРТОЧКИ
  */
-
 async function deleteServiceFromBot(req, res) {
   try {
     const { chatId, serviceId } = req.params;
@@ -1022,7 +1092,6 @@ async function purgeServiceFromBot(req, res) {
   try {
     const { chatId, serviceId } = req.params;
 
-    // 1. Найти провайдера
     const provRes = await pool.query(
       `
       SELECT id
@@ -1045,7 +1114,6 @@ async function purgeServiceFromBot(req, res) {
 
     const providerId = provRes.rows[0].id;
 
-    // 2. Найти услугу
     const svcRes = await pool.query(
       `
       SELECT id, provider_id, deleted_at
@@ -1079,7 +1147,6 @@ async function purgeServiceFromBot(req, res) {
       });
     }
 
-    // 3. Проверка связанных данных
     const blockers = [];
 
     const checks = [
@@ -1131,7 +1198,6 @@ async function purgeServiceFromBot(req, res) {
       });
     }
 
-    // 4. Жёсткое удаление
     const del = await pool.query(
       `
       DELETE FROM services
@@ -1178,7 +1244,7 @@ async function updateServiceFromBot(req, res) {
     }
 
     const providerRes = await pool.query(
-       `SELECT id
+      `SELECT id
          FROM providers
         WHERE telegram_chat_id::text = $1
            OR tg_chat_id::text = $1
@@ -1188,7 +1254,9 @@ async function updateServiceFromBot(req, res) {
       [chatId]
     );
     if (providerRes.rowCount === 0) {
-      return res.status(404).json({ success: false, error: "PROVIDER_NOT_FOUND" });
+      return res
+        .status(404)
+        .json({ success: false, error: "PROVIDER_NOT_FOUND" });
     }
     const providerId = providerRes.rows[0].id;
 
@@ -1201,14 +1269,18 @@ async function updateServiceFromBot(req, res) {
     );
 
     if (svcRes.rowCount === 0) {
-      return res.status(404).json({ success: false, error: "SERVICE_NOT_FOUND" });
+      return res
+        .status(404)
+        .json({ success: false, error: "SERVICE_NOT_FOUND" });
     }
 
     const existing = svcRes.rows[0];
     const prevPrices = extractPrices(existing);
 
     if (!REFUSED_CATEGORIES.includes(existing.category)) {
-      return res.status(400).json({ success: false, error: "CATEGORY_NOT_EDITABLE" });
+      return res
+        .status(400)
+        .json({ success: false, error: "CATEGORY_NOT_EDITABLE" });
     }
 
     const body = req.body || {};
@@ -1228,32 +1300,76 @@ async function updateServiceFromBot(req, res) {
 
     let prevDetails = existing.details || {};
     if (typeof prevDetails === "string") {
-      try { prevDetails = JSON.parse(prevDetails); } catch { prevDetails = {}; }
-    }
-    const patchDetails = body.details && typeof body.details === "object" ? body.details : {};
-    const mergedDetails = { ...(prevDetails || {}), ...(patchDetails || {}) };
-
-    let nextExpirationAt = existing.expiration_at || null;
-    if (mergedDetails && mergedDetails.expiration) {
-      const d = new Date(mergedDetails.expiration);
-      if (!Number.isNaN(d.getTime())) {
-        nextExpirationAt = d.toISOString();
+      try {
+        prevDetails = JSON.parse(prevDetails);
+      } catch {
+        prevDetails = {};
       }
     }
+    if (!prevDetails || typeof prevDetails !== "object" || Array.isArray(prevDetails)) {
+      prevDetails = {};
+    }
 
-    // images:
-    //   omitted -> keep existing
-    //   null    -> clear
-    //   array   -> replace (ВАЖНО: await!)
+    const rawPatchDetails =
+      body.details && typeof body.details === "object" && !Array.isArray(body.details)
+        ? body.details
+        : {};
+
+    const patchDetails = { ...rawPatchDetails };
+    const hasExpirationInPatch = Object.prototype.hasOwnProperty.call(
+      patchDetails,
+      "expiration"
+    );
+
+    if (hasExpirationInPatch) {
+      const parsed = parseExpirationForStorage(patchDetails.expiration);
+      if (!parsed.valid) {
+        return res.status(400).json({
+          success: false,
+          error: "BAD_EXPIRATION",
+        });
+      }
+      patchDetails.expiration = parsed.value;
+    }
+
+    const mergedDetails = {
+      ...(prevDetails || {}),
+      ...(patchDetails || {}),
+    };
+
+    let nextExpirationAt = existing.expiration_at || null;
+
+    if (hasExpirationInPatch) {
+      nextExpirationAt = patchDetails.expiration || null;
+    } else if (
+      Object.prototype.hasOwnProperty.call(mergedDetails, "expiration") &&
+      mergedDetails.expiration
+    ) {
+      const parsedMerged = parseExpirationForStorage(mergedDetails.expiration);
+      if (!parsedMerged.valid) {
+        return res.status(400).json({
+          success: false,
+          error: "BAD_EXPIRATION",
+        });
+      }
+      mergedDetails.expiration = parsedMerged.value;
+      nextExpirationAt = parsedMerged.value;
+    }
+
     let nextImages = existing.images || [];
     if (typeof nextImages === "string") {
-      try { nextImages = JSON.parse(nextImages); } catch { nextImages = []; }
+      try {
+        nextImages = JSON.parse(nextImages);
+      } catch {
+        nextImages = [];
+      }
     }
+    if (!Array.isArray(nextImages)) nextImages = [];
+
     if (Object.prototype.hasOwnProperty.call(body, "images")) {
       if (body.images === null) {
         nextImages = [];
       } else if (Array.isArray(body.images)) {
-        // ✅ FIX: await (иначе в БД попадёт {} и будет jsonb_typeof <> 'array')
         nextImages = await normalizeImagesForDb(body.images);
       }
     }
@@ -1269,7 +1385,8 @@ async function updateServiceFromBot(req, res) {
            images = $7::jsonb,
            status = 'pending',
            moderation_status = 'pending',
-           submitted_at = NOW()
+           submitted_at = NOW(),
+           updated_at = NOW()
        WHERE id = $1 AND provider_id = $2
        RETURNING id, title, price, category, status, details, images, expiration_at
       `,
@@ -1283,28 +1400,36 @@ async function updateServiceFromBot(req, res) {
         JSON.stringify(nextImages),
       ]
     );
-    // ✅ PRICE DROP BROADCAST (если цена снижена)
+
     try {
       const nextSvcRow = updRes.rows[0];
       const nextPrices = extractPrices(nextSvcRow);
       const drop = isPriceDrop(prevPrices, nextPrices);
-    
+
       if (drop.any) {
         await broadcastPriceDropCard(nextSvcRow.id, "🔥 <b>ЦЕНА СНИЖЕНА!</b>");
       }
     } catch (e) {
       console.error("[price drop] broadcast failed (bot):", e?.message || e);
     }
-    // ✅ Если услуга снова ушла на модерацию — уведомим админов
+
     try {
       await notifyModerationNew({ service: updRes.rows[0].id });
     } catch (e) {
-      console.error("[telegram] notifyModerationNew (update) failed:", e?.message || e);
+      console.error(
+        "[telegram] notifyModerationNew (update) failed:",
+        e?.message || e
+      );
     }
+
     return res.json({ success: true, service: updRes.rows[0] });
   } catch (err) {
     console.error("[telegram] updateServiceFromBot error:", err);
-    return res.status(500).json({ success: false, error: "SERVER_ERROR" });
+    return res.status(500).json({
+      success: false,
+      error: "SERVER_ERROR",
+      message: err?.message || "Unknown error",
+    });
   }
 }
 
