@@ -64,21 +64,27 @@ function pushProviderSearchClauses(where, params, startIdx, rawQuery) {
       `COALESCE(p.email, '') ILIKE $${idx}`,
       `COALESCE(p.phone, '') ILIKE $${idx}`,
       `COALESCE(p.type, '') ILIKE $${idx}`,
-      `COALESCE(p.social::text, '') ILIKE $${idx}`,
-
-      `array_to_string(COALESCE(p.location, ARRAY[]::text[]), ' ') ILIKE $${idx}`,
-      `array_to_string(COALESCE(p.languages, ARRAY[]::text[]), ' ') ILIKE $${idx}`,
-      `array_to_string(COALESCE(p.city_slugs, ARRAY[]::text[]), ' ') ILIKE $${idx}`,
-
-      `COALESCE(CAST(p.telegram_chat_id AS text), '') ILIKE $${idx}`
+      `COALESCE(array_to_string(p.location, ' '), '') ILIKE $${idx}`,
+      `COALESCE(p.social, '') ILIKE $${idx}`,
+      `COALESCE(p.telegram_chat_id::text, '') ILIKE $${idx}`,
+      `COALESCE(p.tg_chat_id::text, '') ILIKE $${idx}`,
+      `COALESCE(p.telegram_web_chat_id::text, '') ILIKE $${idx}`,
+      `COALESCE(p.telegram_refused_chat_id::text, '') ILIKE $${idx}`,
+      `COALESCE(p.languages::text, '') ILIKE $${idx}`,
+      `COALESCE(array_to_string(p.city_slugs, ' '), '') ILIKE $${idx}`,
+      `COALESCE(p.address, '') ILIKE $${idx}`,
+      `COALESCE(p.account_status, '') ILIKE $${idx}`
     ];
 
     params.push(like);
     idx += 1;
 
     if (numeric) {
-      parts.push(`CAST(p.id AS text) = $${idx}`);
-      parts.push(`CAST(p.telegram_chat_id AS text) = $${idx}`);
+      parts.push(`p.id::text = $${idx}`);
+      parts.push(`p.telegram_chat_id::text = $${idx}`);
+      parts.push(`p.tg_chat_id::text = $${idx}`);
+      parts.push(`p.telegram_web_chat_id::text = $${idx}`);
+      parts.push(`p.telegram_refused_chat_id::text = $${idx}`);
       params.push(numeric);
       idx += 1;
     }
@@ -111,14 +117,22 @@ function pushClientSearchClauses(where, params, startIdx, rawQuery) {
       `COALESCE(c.email, '') ILIKE $${idx}`,
       `COALESCE(c.phone, '') ILIKE $${idx}`,
       `COALESCE(c.telegram, '') ILIKE $${idx}`,
-      `COALESCE(CAST(c.telegram_chat_id AS text), '') ILIKE $${idx}`,
+      `COALESCE(c.tg_username, '') ILIKE $${idx}`,
+      `COALESCE(c.telegram_chat_id::text, '') ILIKE $${idx}`,
+      `COALESCE(c.tg_chat_id::text, '') ILIKE $${idx}`,
+      `COALESCE(array_to_string(c.languages, ' '), '') ILIKE $${idx}`,
+      `COALESCE(c.location::text, '') ILIKE $${idx}`,
+      `COALESCE(c.account_status, '') ILIKE $${idx}`,
+      `COALESCE(c.source, '') ILIKE $${idx}`
     ];
+
     params.push(like);
     idx += 1;
 
     if (numeric) {
-      parts.push(`CAST(c.id AS text) = $${idx}`);
-      parts.push(`CAST(c.telegram_chat_id AS text) = $${idx}`);
+      parts.push(`c.id::text = $${idx}`);
+      parts.push(`c.telegram_chat_id::text = $${idx}`);
+      parts.push(`c.tg_chat_id::text = $${idx}`);
       params.push(numeric);
       idx += 1;
     }
