@@ -858,6 +858,20 @@ export default function AdminRefusedActual() {
                   const lockUntil = meta.lockUntil;
                   const lastSentAt = meta.lastSentAt;
                   const lastAnswer = meta.lastAnswer;
+                  const lastSentBy = String(meta.lastSentBy || "").toLowerCase();
+
+                  const sentBadge =
+                    lastSentBy === "job"
+                      ? {
+                          text: "AUTO",
+                          cls: "border-violet-200 bg-violet-50 text-violet-700",
+                        }
+                      : lastSentBy === "admin"
+                      ? {
+                          text: "ADMIN",
+                          cls: "border-sky-200 bg-sky-50 text-sky-700",
+                        }
+                      : null;
 
                   return (
                     <tr key={it.id} className="bg-white hover:bg-gray-50">
@@ -949,6 +963,16 @@ export default function AdminRefusedActual() {
                           <span className="font-mono">
                             {lastSentAt ? formatDate(lastSentAt) : "—"}
                           </span>
+                          {lastSentAt && sentBadge ? (
+                            <span
+                              className={classNames(
+                                "ml-1 inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-semibold leading-none",
+                                sentBadge.cls
+                              )}
+                            >
+                              {sentBadge.text}
+                            </span>
+                          ) : null}
                         </div>
                         <div className="text-xs text-gray-700">
                           answer:{" "}
