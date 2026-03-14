@@ -55,8 +55,10 @@ export default function AdminOperations() {
     <button
       type="button"
       onClick={() => setTab(id)}
-      className={`px-3 py-2 rounded-lg text-sm transition ${
-        activeTab === id ? "bg-black text-white" : "border bg-white hover:bg-gray-50"
+      className={`w-full rounded-lg px-3 py-2 text-sm text-center transition ${
+        activeTab === id
+          ? "bg-black text-white"
+          : "border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
       }`}
     >
       {children}
@@ -65,13 +67,13 @@ export default function AdminOperations() {
 
   return (
     <div className="p-4 md:p-6 space-y-4">
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+      <div className="space-y-3">
         <div>
           <h1 className="text-xl font-semibold">Admin Operations</h1>
           <p className="text-sm text-gray-500">{activeMeta.hint}</p>
         </div>
-
-        <div className="flex flex-wrap items-center gap-2">
+  
+        <div className="grid w-full grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5">
           <TabBtn id="moderation">Модерация услуг</TabBtn>
           <TabBtn id="leads">Leads</TabBtn>
           <TabBtn id="refused">Все отказные услуги</TabBtn>
@@ -79,7 +81,7 @@ export default function AdminOperations() {
           <TabBtn id="clients">Клиенты</TabBtn>
         </div>
       </div>
-
+  
       {activeTab === "moderation" && <AdminModeration />}
       {activeTab === "leads" && <AdminLeads />}
       {activeTab === "refused" && <AdminRefusedActual />}
