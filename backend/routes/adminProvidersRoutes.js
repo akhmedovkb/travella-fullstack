@@ -37,6 +37,103 @@ function qi(name) {
   return `"${String(name).replace(/"/g, '""')}"`;
 }
 
+function escapeLike(value) {
+  return String(value || "").replace(/[%_]/g, "\\$&");
+}
+
+function splitSearchTerms(value) {
+  return String(value || "")
+    .trim()
+    .split(/\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 8);
+}
+
+function pushProviderSearchClauses(where, params, startIdx, rawQuery) {
+  const terms = splitSearchTerms(rawQuery);
+  let idx = startIdx;
+
+  for (const term of terms) {
+    const like = `%${escapeLike(term)}%`;
+    const digits = String(term).replace(/\D/g, "");
+    const numeric = /^\d+$/.test(term) ? term : null;
+
+    const parts = [
+      `COALESCE(p.name, '') ILIKE $${idx}`,
+      `COALESCE(p.email, '') ILIKE $${idx}`,
+      `COALESCE(p.phone, '') ILIKE $${idx}`,
+      `COALESCE(p.type, '') ILIKE $${idx}`,
+      `COALESCE(p.location, '') ILIKE $${idx}`,
+      `COALESCE(p.social::text, '') ILIKE $${idx}`,
+      `COALESCE(CAST(p.telegram_chat_id AS text), '') ILIKE $${idx}`,
+      `COALESCE(array_to_string(p.languages, ' '), '') ILIKE $${idx}`,
+      `COALESCE(array_to_string(p.city_slugs, ' '), '') ILIKE $${idx}`,
+    ];
+    params.push(like);
+    idx += 1;
+
+    if (numeric) {
+      parts.push(`CAST(p.id AS text) = $${idx}`);
+      parts.push(`CAST(p.telegram_chat_id AS text) = $${idx}`);
+      params.push(numeric);
+      idx += 1;
+    }
+
+    if (digits) {
+      parts.push(
+        `regexp_replace(COALESCE(p.phone, ''), '[^0-9]+', '', 'g') ILIKE $${idx}`
+      );
+      params.push(`%${digits}%`);
+      idx += 1;
+    }
+
+    where.push(`(${parts.join(" OR ")})`);
+  }
+
+  return idx;
+}
+
+function pushClientSearchClauses(where, params, startIdx, rawQuery) {
+  const terms = splitSearchTerms(rawQuery);
+  let idx = startIdx;
+
+  for (const term of terms) {
+    const like = `%${escapeLike(term)}%`;
+    const digits = String(term).replace(/\D/g, "");
+    const numeric = /^\d+$/.test(term) ? term : null;
+
+    const parts = [
+      `COALESCE(c.name, '') ILIKE $${idx}`,
+      `COALESCE(c.email, '') ILIKE $${idx}`,
+      `COALESCE(c.phone, '') ILIKE $${idx}`,
+      `COALESCE(c.telegram, '') ILIKE $${idx}`,
+      `COALESCE(CAST(c.telegram_chat_id AS text), '') ILIKE $${idx}`,
+    ];
+    params.push(like);
+    idx += 1;
+
+    if (numeric) {
+      parts.push(`CAST(c.id AS text) = $${idx}`);
+      parts.push(`CAST(c.telegram_chat_id AS text) = $${idx}`);
+      params.push(numeric);
+      idx += 1;
+    }
+
+    if (digits) {
+      parts.push(
+        `regexp_replace(COALESCE(c.phone, ''), '[^0-9]+', '', 'g') ILIKE $${idx}`
+      );
+      params.push(`%${digits}%`);
+      idx += 1;
+    }
+
+    where.push(`(${parts.join(" OR ")})`);
+  }
+
+  return idx;
+}
+
 async function listDirectFkRefs(db, targetTable) {
   const sql = `
     SELECT
@@ -119,20 +216,8 @@ router.get("/providers-table", authenticateToken, requireAdmin, async (req, res)
     const params = [];
     let idx = 1;
 
-    if (q && q.trim()) {
-      where.push(`
-        (
-          LOWER(COALESCE(p.name, '')) ILIKE $${idx}
-          OR LOWER(COALESCE(p.email, '')) ILIKE $${idx}
-          OR COALESCE(p.phone, '') ILIKE $${idx}
-          OR LOWER(COALESCE(p.type, '')) ILIKE $${idx}
-          OR LOWER(COALESCE(p.location, '')) ILIKE $${idx}
-          OR LOWER(COALESCE(p.social::text, '')) ILIKE $${idx}
-          OR COALESCE(CAST(p.telegram_chat_id AS text), '') ILIKE $${idx}
-        )
-      `);
-      params.push(`%${String(q).trim().toLowerCase()}%`);
-      idx++;
+    if (q && String(q).trim()) {
+      idx = pushProviderSearchClauses(where, params, idx, q);
     }
 
     if (type && type.trim()) {
@@ -142,7 +227,9 @@ router.get("/providers-table", authenticateToken, requireAdmin, async (req, res)
     }
 
     if (cursor_created_at && cursor_id) {
-      where.push(`(p.created_at, p.id) < ($${idx}::timestamptz, $${idx + 1}::bigint)`);
+      where.push(
+        `(p.created_at, p.id) < ($${idx}::timestamptz, $${idx + 1}::bigint)`
+      );
       params.push(new Date(cursor_created_at).toISOString(), cursor_id);
       idx += 2;
     }
@@ -187,66 +274,76 @@ router.get("/providers-table", authenticateToken, requireAdmin, async (req, res)
   }
 });
 
-router.get("/providers-table/new-count", authenticateToken, requireAdmin, async (req, res) => {
-  try {
-    const { since } = req.query;
-    if (!since) return res.json({ count: 0 });
+router.get(
+  "/providers-table/new-count",
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const { since } = req.query;
+      if (!since) return res.json({ count: 0 });
 
-    const sql = `SELECT COUNT(*)::int AS count FROM providers WHERE created_at > $1`;
-    const { rows } = await pool.query(sql, [new Date(since).toISOString()]);
+      const sql = `SELECT COUNT(*)::int AS count FROM providers WHERE created_at > $1`;
+      const { rows } = await pool.query(sql, [new Date(since).toISOString()]);
 
-    return res.type("application/json").json({ count: rows[0]?.count || 0 });
-  } catch (e) {
-    console.error("GET /api/admin/providers-table/new-count error:", e);
-    return res.status(500).json({ error: "Failed to load providers new count" });
+      return res.type("application/json").json({ count: rows[0]?.count || 0 });
+    } catch (e) {
+      console.error("GET /api/admin/providers-table/new-count error:", e);
+      return res.status(500).json({ error: "Failed to load providers new count" });
+    }
   }
-});
+);
 
-router.delete("/providers-table/:id", authenticateToken, requireAdmin, async (req, res) => {
-  const id = Number(req.params.id);
-  if (!Number.isFinite(id) || id <= 0) {
-    return res.status(400).json({ ok: false, error: "Bad provider id" });
-  }
-
-  const db = await pool.connect();
-  try {
-    await db.query("BEGIN");
-
-    const result = await deleteEntityWithDirectRefs(db, "providers", id);
-
-    if (result.notFound) {
-      await db.query("ROLLBACK");
-      return res.status(404).json({ ok: false, error: "Provider not found" });
+router.delete(
+  "/providers-table/:id",
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) {
+      return res.status(400).json({ ok: false, error: "Bad provider id" });
     }
 
-    await db.query("COMMIT");
-    return res.json({
-      ok: true,
-      deleted: "provider",
-      id,
-      deletedRefs: result.deletedRefs,
-    });
-  } catch (e) {
-    await db.query("ROLLBACK");
-    console.error("DELETE /api/admin/providers-table/:id error:", e);
+    const db = await pool.connect();
+    try {
+      await db.query("BEGIN");
 
-    if (e?.code === "23503") {
-      return res.status(409).json({
-        ok: false,
-        error: "Provider is still referenced by other records",
-        detail: e?.detail || null,
+      const result = await deleteEntityWithDirectRefs(db, "providers", id);
+
+      if (result.notFound) {
+        await db.query("ROLLBACK");
+        return res.status(404).json({ ok: false, error: "Provider not found" });
+      }
+
+      await db.query("COMMIT");
+      return res.json({
+        ok: true,
+        deleted: "provider",
+        id,
+        deletedRefs: result.deletedRefs,
       });
-    }
+    } catch (e) {
+      await db.query("ROLLBACK");
+      console.error("DELETE /api/admin/providers-table/:id error:", e);
 
-    return res.status(500).json({
-      ok: false,
-      error: "Failed to delete provider",
-      detail: e?.message || null,
-    });
-  } finally {
-    db.release();
+      if (e?.code === "23503") {
+        return res.status(409).json({
+          ok: false,
+          error: "Provider is still referenced by other records",
+          detail: e?.detail || null,
+        });
+      }
+
+      return res.status(500).json({
+        ok: false,
+        error: "Failed to delete provider",
+        detail: e?.message || null,
+      });
+    } finally {
+      db.release();
+    }
   }
-});
+);
 
 /* =========================
    CLIENTS TABLE
@@ -261,21 +358,13 @@ router.get("/clients-table", authenticateToken, requireAdmin, async (req, res) =
     let idx = 1;
 
     if (q && String(q).trim()) {
-      where.push(`
-        (
-          LOWER(COALESCE(c.name, '')) ILIKE $${idx}
-          OR LOWER(COALESCE(c.email, '')) ILIKE $${idx}
-          OR COALESCE(c.phone, '') ILIKE $${idx}
-          OR LOWER(COALESCE(c.telegram, '')) ILIKE $${idx}
-          OR COALESCE(CAST(c.telegram_chat_id AS text), '') ILIKE $${idx}
-        )
-      `);
-      params.push(`%${String(q).trim().toLowerCase()}%`);
-      idx++;
+      idx = pushClientSearchClauses(where, params, idx, q);
     }
 
     if (cursor_created_at && cursor_id) {
-      where.push(`(c.created_at, c.id) < ($${idx}::timestamptz, $${idx + 1}::bigint)`);
+      where.push(
+        `(c.created_at, c.id) < ($${idx}::timestamptz, $${idx + 1}::bigint)`
+      );
       params.push(new Date(cursor_created_at).toISOString(), cursor_id);
       idx += 2;
     }
@@ -316,65 +405,75 @@ router.get("/clients-table", authenticateToken, requireAdmin, async (req, res) =
   }
 });
 
-router.get("/clients-table/new-count", authenticateToken, requireAdmin, async (req, res) => {
-  try {
-    const { since } = req.query;
-    if (!since) return res.json({ count: 0 });
+router.get(
+  "/clients-table/new-count",
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const { since } = req.query;
+      if (!since) return res.json({ count: 0 });
 
-    const sql = `SELECT COUNT(*)::int AS count FROM clients WHERE created_at > $1`;
-    const { rows } = await pool.query(sql, [new Date(since).toISOString()]);
+      const sql = `SELECT COUNT(*)::int AS count FROM clients WHERE created_at > $1`;
+      const { rows } = await pool.query(sql, [new Date(since).toISOString()]);
 
-    return res.type("application/json").json({ count: rows[0]?.count || 0 });
-  } catch (e) {
-    console.error("GET /api/admin/clients-table/new-count error:", e);
-    return res.status(500).json({ error: "Failed to load clients new count" });
+      return res.type("application/json").json({ count: rows[0]?.count || 0 });
+    } catch (e) {
+      console.error("GET /api/admin/clients-table/new-count error:", e);
+      return res.status(500).json({ error: "Failed to load clients new count" });
+    }
   }
-});
+);
 
-router.delete("/clients-table/:id", authenticateToken, requireAdmin, async (req, res) => {
-  const id = Number(req.params.id);
-  if (!Number.isFinite(id) || id <= 0) {
-    return res.status(400).json({ ok: false, error: "Bad client id" });
-  }
-
-  const db = await pool.connect();
-  try {
-    await db.query("BEGIN");
-
-    const result = await deleteEntityWithDirectRefs(db, "clients", id);
-
-    if (result.notFound) {
-      await db.query("ROLLBACK");
-      return res.status(404).json({ ok: false, error: "Client not found" });
+router.delete(
+  "/clients-table/:id",
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) {
+      return res.status(400).json({ ok: false, error: "Bad client id" });
     }
 
-    await db.query("COMMIT");
-    return res.json({
-      ok: true,
-      deleted: "client",
-      id,
-      deletedRefs: result.deletedRefs,
-    });
-  } catch (e) {
-    await db.query("ROLLBACK");
-    console.error("DELETE /api/admin/clients-table/:id error:", e);
+    const db = await pool.connect();
+    try {
+      await db.query("BEGIN");
 
-    if (e?.code === "23503") {
-      return res.status(409).json({
-        ok: false,
-        error: "Client is still referenced by other records",
-        detail: e?.detail || null,
+      const result = await deleteEntityWithDirectRefs(db, "clients", id);
+
+      if (result.notFound) {
+        await db.query("ROLLBACK");
+        return res.status(404).json({ ok: false, error: "Client not found" });
+      }
+
+      await db.query("COMMIT");
+      return res.json({
+        ok: true,
+        deleted: "client",
+        id,
+        deletedRefs: result.deletedRefs,
       });
-    }
+    } catch (e) {
+      await db.query("ROLLBACK");
+      console.error("DELETE /api/admin/clients-table/:id error:", e);
 
-    return res.status(500).json({
-      ok: false,
-      error: "Failed to delete client",
-      detail: e?.message || null,
-    });
-  } finally {
-    db.release();
+      if (e?.code === "23503") {
+        return res.status(409).json({
+          ok: false,
+          error: "Client is still referenced by other records",
+          detail: e?.detail || null,
+        });
+      }
+
+      return res.status(500).json({
+        ok: false,
+        error: "Failed to delete client",
+        detail: e?.message || null,
+      });
+    } finally {
+      db.release();
+    }
   }
-});
+);
 
 module.exports = router;
