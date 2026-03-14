@@ -64,12 +64,15 @@ function pushProviderSearchClauses(where, params, startIdx, rawQuery) {
       `COALESCE(p.email, '') ILIKE $${idx}`,
       `COALESCE(p.phone, '') ILIKE $${idx}`,
       `COALESCE(p.type, '') ILIKE $${idx}`,
-      `COALESCE(p.location, '') ILIKE $${idx}`,
       `COALESCE(p.social::text, '') ILIKE $${idx}`,
-      `COALESCE(CAST(p.telegram_chat_id AS text), '') ILIKE $${idx}`,
-      `COALESCE(array_to_string(p.languages, ' '), '') ILIKE $${idx}`,
-      `COALESCE(array_to_string(p.city_slugs, ' '), '') ILIKE $${idx}`,
+
+      `array_to_string(COALESCE(p.location, ARRAY[]::text[]), ' ') ILIKE $${idx}`,
+      `array_to_string(COALESCE(p.languages, ARRAY[]::text[]), ' ') ILIKE $${idx}`,
+      `array_to_string(COALESCE(p.city_slugs, ARRAY[]::text[]), ' ') ILIKE $${idx}`,
+
+      `COALESCE(CAST(p.telegram_chat_id AS text), '') ILIKE $${idx}`
     ];
+
     params.push(like);
     idx += 1;
 
