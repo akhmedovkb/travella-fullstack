@@ -1,54 +1,173 @@
+//backend/jobs/scheduler.js
+
+const cron = require("node-cron");
 const { askActualReminder } = require("./askActualReminder");
 const { cleanupExpiredServicesJob } = require("./cleanupExpiredServicesJob");
-const { purgeDeletedServicesJob } = require("./purgeDeletedServicesJob");
-const { getTZParts, DEFAULT_TZ } = require("./jobTime");
 
-const TZ = DEFAULT_TZ;
+const TZ = "Asia/Tashkent";
+const ASK_HOURS = new Set([10, 14, 18]);
+const ASK_WINDOW_MINUTES = 25;
 
-let lastReminderKey = null;
-let lastExpiredCleanupKey = null;
-let lastDeletedPurgeKey = null;
+// Храним уже обработанные слоты в памяти процесса:
+// ключ формата YYYY-MM-DD-HH
+const executedAskSlots = new Set();
+
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
+
+function getTashkentNowParts(date = new Date()) {
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  });
+
+  const parts = fmt.formatToParts(date);
+  const map = {};
+  for (const p of parts) {
+    if (p.type !== "literal") map[p.type] = p.value;
+  }
+
+  return {
+    year: Number(map.year),
+    month: Number(map.month),
+    day: Number(map.day),
+    hour: Number(map.hour),
+    minute: Number(map.minute),
+    second: Number(map.second),
+    ymd: `${map.year}-${map.month}-${map.day}`,
+  };
+}
+
+function makeAskSlotKey(parts) {
+  return `${parts.ymd}-${pad2(parts.hour)}`;
+}
+
+function pruneExecutedAskSlots(nowParts) {
+  // Держим только сегодня/вчера, чтобы set не рос бесконечно
+  const keepPrefixes = new Set([nowParts.ymd]);
+
+  const yesterday = new Date(
+    Date.UTC(nowParts.year, nowParts.month - 1, nowParts.day)
+  );
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+
+  const yy = yesterday.getUTCFullYear();
+  const mm = pad2(yesterday.getUTCMonth() + 1);
+  const dd = pad2(yesterday.getUTCDate());
+  keepPrefixes.add(`${yy}-${mm}-${dd}`);
+
+  for (const key of executedAskSlots) {
+    const prefix = key.slice(0, 10);
+    if (!keepPrefixes.has(prefix)) {
+      executedAskSlots.delete(key);
+    }
+  }
+}
+
+async function maybeRunAskActualReminder() {
+  const nowParts = getTashkentNowParts();
+  pruneExecutedAskSlots(nowParts);
+
+  const { hour, minute } = nowParts;
+
+  if (!ASK_HOURS.has(hour)) {
+    return;
+  }
+
+  if (minute > ASK_WINDOW_MINUTES) {
+    return;
+  }
+
+  const slotKey = makeAskSlotKey(nowParts);
+
+  if (executedAskSlots.has(slotKey)) {
+    return;
+  }
+
+  console.log(
+    `[scheduler] askActualReminder slot started: ${slotKey} (${TZ}), minute=${minute}`
+  );
+
+  try {
+    const result = await askActualReminder({
+      dryRun: false,
+      windowMinutes: ASK_WINDOW_MINUTES,
+    });
+
+    executedAskSlots.add(slotKey);
+
+    console.log(
+      `[scheduler] askActualReminder slot finished: ${slotKey}`,
+      result || {}
+    );
+  } catch (err) {
+    console.error(
+      `[scheduler] askActualReminder slot failed: ${slotKey}`,
+      err
+    );
+  }
+}
+
+async function runCleanupExpiredServicesJob() {
+  console.log(`[scheduler] cleanupExpiredServicesJob started (${TZ})`);
+
+  try {
+    const result = await cleanupExpiredServicesJob();
+    console.log(
+      `[scheduler] cleanupExpiredServicesJob finished`,
+      result || {}
+    );
+  } catch (err) {
+    console.error(`[scheduler] cleanupExpiredServicesJob failed`, err);
+  }
+}
 
 function startJobsScheduler() {
-  console.log("[jobs] scheduler enabled (Asia/Tashkent)");
-  console.log("[jobs] askActualReminder => 10:00 / 14:00 / 18:00");
-  console.log("[jobs] cleanupExpiredServices => daily 03:00");
-  console.log("[jobs] purgeDeletedServices => daily 03:30");
+  if (
+    String(process.env.DISABLE_REMINDER_SCHEDULER || "").trim() === "1" ||
+    String(process.env.DISABLE_REMINDER_SCHEDULER || "")
+      .trim()
+      .toLowerCase() === "true"
+  ) {
+    console.log("[scheduler] disabled by DISABLE_REMINDER_SCHEDULER");
+    return;
+  }
 
-  setInterval(async () => {
-    try {
-      const { ymd, hour, minute } = getTZParts(new Date(), TZ);
+  if (process.env.NODE_ENV === "test") {
+    console.log("[scheduler] skipped in test mode");
+    return;
+  }
 
-      // 1) Ask Actual Reminder
-      if (new Set([10, 14, 18]).has(hour) && minute <= 2) {
-        const slotKey = `${ymd}:ask:${hour}`;
-        if (lastReminderKey !== slotKey) {
-          lastReminderKey = slotKey;
-          await askActualReminder();
-        }
-      }
+  console.log(
+    `[scheduler] started. TZ=${TZ}, askHours=${Array.from(ASK_HOURS).join(
+      ","
+    )}, askWindowMinutes=${ASK_WINDOW_MINUTES}`
+  );
 
-      // 2) Cleanup expired services
-      if (hour === 3 && minute <= 2) {
-        const slotKey = `${ymd}:cleanupExpiredServices`;
-        if (lastExpiredCleanupKey !== slotKey) {
-          lastExpiredCleanupKey = slotKey;
-          await cleanupExpiredServicesJob();
-        }
-      }
+  // Частый тик для окна 10/14/18 с защитой от дублей по slotKey
+  cron.schedule(
+    "*/1 * * * *",
+    async () => {
+      await maybeRunAskActualReminder();
+    },
+    { timezone: TZ }
+  );
 
-      // 3) Purge deleted services
-      if (hour === 3 && minute >= 30 && minute <= 32) {
-        const slotKey = `${ymd}:purgeDeletedServices`;
-        if (lastDeletedPurgeKey !== slotKey) {
-          lastDeletedPurgeKey = slotKey;
-          await purgeDeletedServicesJob();
-        }
-      }
-    } catch (e) {
-      console.error("[jobs] tick error:", e?.message || e);
-    }
-  }, 30 * 1000);
+  // Ночной cleanup expired refused -> archived
+  cron.schedule(
+    "0 3 * * *",
+    async () => {
+      await runCleanupExpiredServicesJob();
+    },
+    { timezone: TZ }
+  );
 }
 
 module.exports = {
