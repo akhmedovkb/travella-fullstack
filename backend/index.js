@@ -817,10 +817,11 @@ try {
   ({ bot } = require("./telegram/bot"));
   console.log("[tg-bot] index.js: bot module loaded =", !!bot);
 } catch (e) {
-  console.warn(
-    "[tg-bot] bot module not loaded:",
-    (e && (e.code || e.message)) || e
-  );
+  console.error("[tg-bot] bot module not loaded:");
+  console.error(e);
+  if (e && e.stack) {
+    console.error(e.stack);
+  }
 }
 
 /** ===================== Ask Actual Reminder Scheduler ===================== */
