@@ -1,7 +1,7 @@
 // backend/controllers/clientBillingController.js
 const pool = require("../db");
 
-const { getContactUnlockSettings } = require("../utils/contactUnlockSettings");
+const CONTACT_UNLOCK_PRICE = Number(process.env.CONTACT_UNLOCK_PRICE || 10000);
 
 let _clientsBalanceColumn = null;
 
@@ -110,14 +110,11 @@ async function clientBalance(req, res) {
 
     try {
       const balance = await getBalanceFromLedger(client, clientId);
-      const unlockSettings = await getContactUnlockSettings(client);
 
       return res.json({
         ok: true,
         balance,
-        unlock_price: unlockSettings.effective_price,
-        unlock_is_paid: unlockSettings.is_paid,
-        unlock_base_price: unlockSettings.price,
+        unlock_price: CONTACT_UNLOCK_PRICE,
       });
     } finally {
       client.release();
@@ -139,49 +136,41 @@ async function clientBalanceLedger(req, res) {
   const offset = clampInt(req.query.offset, 0, 0, 1000000);
 
   try {
-    const { rows } = await pool.query(
-      `
-      SELECT
-        l.id,
-        l.client_id,
-        l.amount,
-        l.reason,
-        l.source,
-        l.service_id,
-        l.meta,
-        l.created_at,
+        const { rows } = await pool.query(
+          `
+          SELECT
+            l.id,
+            l.client_id,
+            l.amount,
+            l.reason,
+            l.source,
+            l.service_id,
+            l.meta,
+            l.created_at,
+        
+            pt.payme_id,
+            pt.state AS payme_state,
+            pt.amount_tiyin,
+            pt.perform_time,
+            pt.fiscal_receipt_id,
+            pt.fiscal_sign,
+            pt.fiscal_terminal_id,
+            pt.fiscal_received_at
+        
+          FROM contact_balance_ledger l
+          LEFT JOIN payme_transactions pt
+            ON pt.payme_id = l.meta->>'payme_id'
+          WHERE l.client_id = $1
+          ORDER BY l.created_at DESC, l.id DESC
+          LIMIT $2 OFFSET $3
+          `,
+          [clientId, limit, offset]
+        );
 
-        pt.payme_id,
-        pt.state AS payme_state,
-        pt.amount_tiyin,
-        pt.perform_time,
-        pt.fiscal_receipt_id,
-        pt.fiscal_sign,
-        pt.fiscal_terminal_id,
-        pt.fiscal_received_at
-
-      FROM contact_balance_ledger l
-      LEFT JOIN payme_transactions pt
-        ON pt.payme_id = l.meta->>'payme_id'
-      WHERE l.client_id = $1
-      ORDER BY l.created_at DESC, l.id DESC
-      LIMIT $2 OFFSET $3
-      `,
-      [clientId, limit, offset]
-    );
-
-    const payload = await (async () => {
+    const balance = await (async () => {
       const client = await pool.connect();
       try {
-        const balance = await getBalanceFromLedger(client, clientId);
-        const unlockSettings = await getContactUnlockSettings(client);
-
-        return {
-          balance,
-          unlock_price: unlockSettings.effective_price,
-          unlock_is_paid: unlockSettings.is_paid,
-          unlock_base_price: unlockSettings.price,
-        };
+        return await getBalanceFromLedger(client, clientId);
       } finally {
         client.release();
       }
@@ -192,10 +181,8 @@ async function clientBalanceLedger(req, res) {
       rows,
       limit,
       offset,
-      balance: payload.balance,
-      unlock_price: payload.unlock_price,
-      unlock_is_paid: payload.unlock_is_paid,
-      unlock_base_price: payload.unlock_base_price,
+      balance,
+      unlock_price: CONTACT_UNLOCK_PRICE,
     });
   } catch (e) {
     console.error("clientBalanceLedger error:", e);
@@ -309,8 +296,7 @@ async function unlockContact(req, res) {
   try {
     await client.query("BEGIN");
 
-    const unlockSettings = await getContactUnlockSettings(client);
-    const price = Number(unlockSettings.effective_price || 0);
+    const price = CONTACT_UNLOCK_PRICE;
 
     await client.query(`SELECT id FROM clients WHERE id=$1 FOR UPDATE`, [clientId]);
 
@@ -336,14 +322,12 @@ async function unlockContact(req, res) {
         unlocked: true,
         charged: 0,
         balance,
-        unlock_price: price,
-        unlock_is_paid: unlockSettings.is_paid,
       });
     }
 
     const balance = await getBalanceFromLedger(client, clientId);
 
-    if (price > 0 && balance < price) {
+    if (balance < price) {
       await client.query("ROLLBACK");
 
       return res.status(400).json({
@@ -376,35 +360,28 @@ async function unlockContact(req, res) {
         unlocked: true,
         charged: 0,
         balance: newBalance,
-        unlock_price: price,
-        unlock_is_paid: unlockSettings.is_paid,
       });
     }
 
-    if (price > 0) {
-      await client.query(
-        `
-        INSERT INTO contact_balance_ledger
-        (client_id, amount, reason, service_id, source, meta)
-        VALUES ($1,$2,'unlock_contact',$3,'web',$4::jsonb)
-        `,
-        [
-          clientId,
-          -price,
-          serviceId,
-          JSON.stringify({
-            service_id: serviceId,
-            unlock_id: unlockInsert.rows[0].id,
-            channel: "web",
-          }),
-        ]
-      );
-    }
+    await client.query(
+      `
+      INSERT INTO contact_balance_ledger
+      (client_id, amount, reason, service_id, source, meta)
+      VALUES ($1,$2,'unlock_contact',$3,'web',$4::jsonb)
+      `,
+      [
+        clientId,
+        -price,
+        serviceId,
+        JSON.stringify({
+          service_id: serviceId,
+          unlock_id: unlockInsert.rows[0].id,
+          channel: "web",
+        }),
+      ]
+    );
 
-    const newBalance =
-      price > 0
-        ? await syncClientBalanceMirror(client, clientId)
-        : await getBalanceFromLedger(client, clientId);
+    const newBalance = await syncClientBalanceMirror(client, clientId);
 
     await client.query("COMMIT");
 
@@ -414,8 +391,6 @@ async function unlockContact(req, res) {
       already: false,
       charged: price,
       balance: newBalance,
-      unlock_price: price,
-      unlock_is_paid: unlockSettings.is_paid,
     });
   } catch (e) {
     try {
