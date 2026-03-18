@@ -1,7 +1,7 @@
 // frontend/src/pages/admin/AdminBilling.jsx
 
 import { useEffect, useMemo, useState } from "react";
-import { apiGet, apiPost } from "../../api";
+import { apiGet, apiPost, apiPut } from "../../api";
 import { tError, tSuccess } from "../../shared/toast";
 import AdminBillingHealth from "./AdminBillingHealth";
 
@@ -44,6 +44,10 @@ export default function AdminBilling() {
   const [summary, setSummary] = useState(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
 
+  const [unlockIsPaid, setUnlockIsPaid] = useState(true);
+  const [unlockPrice, setUnlockPrice] = useState("10000");
+  const [unlockSaving, setUnlockSaving] = useState(false);
+
   const [ledger, setLedger] = useState([]);
   const [sortField, setSortField] = useState("created_at");
   const [sortDir, setSortDir] = useState("desc");
@@ -61,14 +65,63 @@ export default function AdminBilling() {
   async function loadSummary() {
     setSummaryLoading(true);
     try {
-      const data = await apiGet("/api/admin/billing/summary", "admin");
-      setSummary(data || null);
+      const [summaryData, unlockData] = await Promise.all([
+        apiGet("/api/admin/billing/summary", "admin"),
+        apiGet("/api/admin/billing/contact-unlock-settings", "admin"),
+      ]);
+
+      setSummary({
+        ...(summaryData || {}),
+        contact_unlock_is_paid: Boolean(unlockData?.is_paid),
+        contact_unlock_price: Number(unlockData?.price || 0),
+        contact_unlock_effective_price: Number(unlockData?.effective_price || 0),
+        contact_unlock_updated_at: unlockData?.updated_at || null,
+      });
+
+      setUnlockIsPaid(Boolean(unlockData?.is_paid));
+      setUnlockPrice(String(unlockData?.price ?? 10000));
     } catch (e) {
       console.error(e);
       tError("Не удалось загрузить Billing Summary");
       setSummary(null);
     } finally {
       setSummaryLoading(false);
+    }
+  }
+
+  async function saveUnlockSettings() {
+    const priceNum = Math.max(0, Math.trunc(Number(unlockPrice || 0)));
+
+    if (!Number.isFinite(priceNum)) {
+      return tError("Некорректная цена открытия контактов");
+    }
+
+    setUnlockSaving(true);
+    try {
+      const data = await apiPut(
+        "/api/admin/billing/contact-unlock-settings",
+        {
+          is_paid: unlockIsPaid,
+          price: priceNum,
+        },
+        "admin"
+      );
+
+      setUnlockIsPaid(Boolean(data?.is_paid));
+      setUnlockPrice(String(data?.price ?? priceNum));
+
+      tSuccess(
+        Boolean(data?.is_paid)
+          ? "Открытие контактов переведено в платный режим"
+          : "Открытие контактов переведено в бесплатный режим"
+      );
+
+      await loadSummary();
+    } catch (e) {
+      console.error(e);
+      tError("Не удалось сохранить настройки открытия контактов");
+    } finally {
+      setUnlockSaving(false);
     }
   }
 
@@ -234,6 +287,62 @@ export default function AdminBilling() {
             >
               {summaryLoading ? "Загрузка…" : "Обновить"}
             </button>
+          </div>
+
+          <div className="bg-white rounded-xl shadow p-4">
+            <div className="text-sm font-medium mb-3">Открытие контактов</div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Режим</label>
+                <select
+                  className="w-full border rounded-lg px-3 py-2"
+                  value={unlockIsPaid ? "paid" : "free"}
+                  onChange={(e) => setUnlockIsPaid(e.target.value === "paid")}
+                >
+                  <option value="paid">Платно</option>
+                  <option value="free">Бесплатно</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Цена (сум)</label>
+                <input
+                  className="w-full border rounded-lg px-3 py-2"
+                  value={unlockPrice}
+                  onChange={(e) => setUnlockPrice(e.target.value)}
+                  disabled={!unlockIsPaid}
+                  placeholder="10000"
+                />
+              </div>
+
+              <div className="flex items-end">
+                <button
+                  className="w-full px-4 py-2 rounded-lg bg-black text-white disabled:opacity-60"
+                  onClick={saveUnlockSettings}
+                  disabled={unlockSaving}
+                >
+                  {unlockSaving ? "Сохраняю…" : "Сохранить"}
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-3 text-sm text-gray-600">
+              Текущий режим:{" "}
+              <span className="font-medium">
+                {summary?.contact_unlock_is_paid ? "платно" : "бесплатно"}
+              </span>
+              {" · "}
+              effective price:{" "}
+              <span className="font-medium">
+                {money(summary?.contact_unlock_effective_price || 0)} сум
+              </span>
+              {" · "}
+              updated:{" "}
+              <span className="font-medium">
+                {fmtTs(summary?.contact_unlock_updated_at)}
+              </span>
+            </div>
           </div>
 
           {!summary ? (
