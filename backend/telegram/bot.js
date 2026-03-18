@@ -177,9 +177,6 @@ async function withServiceLock(pool, clientId, serviceId, fn) {
 /* ===================== CONTACT UNLOCK (per service) ===================== */
 
 // Цена открытия контактов
-const { getContactUnlockSettings } = require("../utils/contactUnlockSettings");
-
-// Цена по умолчанию остаётся в env, но реальная цена unlock берётся из БД.
 const CONTACT_UNLOCK_PRICE = Number(process.env.CONTACT_UNLOCK_PRICE || "10000");
 
 // =========================
@@ -458,30 +455,31 @@ async function getLastBalanceOpsUnified(pool, clientId, limit = 5) {
 async function unlockContactsForService(db, { clientId, serviceId, price }) {
   const cid = Number(clientId);
   const sid = Number(serviceId);
-  const p = Math.max(0, Number(price || 0));
+  const p = Number(price);
 
   if (!Number.isFinite(cid) || cid <= 0) return { ok: false, reason: "bad_client" };
   if (!Number.isFinite(sid) || sid <= 0) return { ok: false, reason: "bad_service" };
-  if (!Number.isFinite(p) || p < 0) return { ok: false, reason: "bad_price" };
+  if (!Number.isFinite(p) || p <= 0) return { ok: false, reason: "bad_price" };
 
+  // 🔒 блокируем строку клиента
   const balRes = await db.query(
     `
     SELECT contact_balance
     FROM clients
     WHERE id = $1
     FOR UPDATE
-    `,
+  `,
     [cid]
   );
 
   if (!balRes.rows.length) return { ok: false, reason: "no_client" };
 
   const balance = Number(balRes.rows[0].contact_balance || 0);
-
-  if (p > 0 && balance < p) {
+  if (balance < p) {
     return { ok: false, reason: "no_balance", balance, need: p };
   }
 
+  // 🧾 идемпотентный unlock
   const unlockRes = await db.query(
     `
     INSERT INTO client_service_contact_unlocks
@@ -489,57 +487,47 @@ async function unlockContactsForService(db, { clientId, serviceId, price }) {
     VALUES ($1, $2, $3)
     ON CONFLICT (client_id, service_id) DO NOTHING
     RETURNING id
-    `,
+  `,
     [cid, sid, p]
   );
 
+  // уже был unlock — НИЧЕГО не списываем
   if (!unlockRes.rows.length) {
-    return { ok: true, already: true, charged: 0, balance };
+    return { ok: true, already: true, charged: 0 };
   }
 
-  if (p > 0) {
-    const upd = await db.query(
-      `
-      UPDATE clients
-      SET contact_balance = contact_balance - $1
-      WHERE id = $2 AND contact_balance >= $1
-      RETURNING contact_balance
-      `,
-      [p, cid]
-    );
+  // 💰 списываем баланс (доп. защита от гонок)
+  const upd = await db.query(
+    `
+    UPDATE clients
+    SET contact_balance = contact_balance - $1
+    WHERE id = $2 AND contact_balance >= $1
+    RETURNING contact_balance
+  `,
+    [p, cid]
+  );
 
-    if (!upd.rows.length) {
-      return { ok: false, reason: "no_balance", balance, need: p };
-    }
-
-    await db.query(
-      `
-      INSERT INTO contact_balance_ledger
-        (client_id, amount, reason, service_id, source, meta)
-      VALUES ($1, $2, 'unlock_contact', $3, 'telegram', $4::jsonb)
-      `,
-      [
-        cid,
-        -p,
-        sid,
-        JSON.stringify({ unlock_id: unlockRes.rows[0].id }),
-      ]
-    );
-
-    return {
-      ok: true,
-      charged: p,
-      unlockId: unlockRes.rows[0].id,
-      balance: Number(upd.rows[0]?.contact_balance || 0),
-    };
+  // если вдруг не списалось — откатываем unlock (но мы в транзакции withServiceLock → откатится и так)
+  if (!upd.rows.length) {
+    return { ok: false, reason: "no_balance", balance, need: p };
   }
 
-  return {
-    ok: true,
-    charged: 0,
-    unlockId: unlockRes.rows[0].id,
-    balance,
-  };
+  // 📒 ledger (привязываем к unlock_id, чтобы потом можно было аудитить)
+  await db.query(
+    `
+    INSERT INTO contact_balance_ledger
+      (client_id, amount, reason, service_id, source, meta)
+    VALUES ($1, $2, 'unlock_contact', $3, 'telegram', $4::jsonb)
+  `,
+    [
+      cid,
+      -p,
+      sid,
+      JSON.stringify({ unlock_id: unlockRes.rows[0].id }),
+    ]
+  );
+
+  return { ok: true, charged: p, unlockId: unlockRes.rows[0].id };
 }
 
 // ===================== CONTACT BALANCE (top-up) =====================
@@ -6299,8 +6287,7 @@ bot.action("balance:check", async (ctx) => {
     // ✅ unified balance
     const balNum = await getClientBalanceUnified(pool, clientRow.id);
     const bal = Number(balNum || 0).toLocaleString("ru-RU");
-    const unlockSettings = await getContactUnlockSettings(pool);
-    const need = Number(unlockSettings.effective_price || 0).toLocaleString("ru-RU");
+    const need = Number(CONTACT_UNLOCK_PRICE || 10000).toLocaleString("ru-RU");
     const topupUrl = `${SITE_URL}/dashboard/balance`;
 
     const hasLast = !!ctx.session?.lastUnlockServiceId;
@@ -6756,12 +6743,10 @@ let result;
 try {
   // 🔥 BANK-GRADE advisory lock: в той же транзакции, что и списание/insert
 result = await withServiceLock(pool, clientRow.id, serviceId, async (db) => {
-  const unlockSettings = await getContactUnlockSettings(db);
-
   return unlockContactsForService(db, {
     clientId: clientRow.id,
     serviceId,
-    price: Number(unlockSettings.effective_price || 0),
+    price: Number(CONTACT_UNLOCK_PRICE || 10000),
   });
 });
 } catch (e) {
