@@ -11,11 +11,30 @@ const {
   adminBillingAdjust,
 } = require("../controllers/adminBillingController");
 
+const {
+  adminGetContactUnlockSettings,
+  adminSetContactUnlockSettings,
+} = require("../controllers/adminContactUnlockController");
+
 const router = express.Router();
 
 router.get("/summary", authenticateToken, requireAdmin, adminBillingSummary);
 router.get("/clients", authenticateToken, requireAdmin, adminBillingClients);
 router.get("/ledger", authenticateToken, requireAdmin, adminBillingLedger);
 router.post("/adjust", authenticateToken, requireAdmin, adminBillingAdjust);
+
+router.get(
+  "/contact-unlock-settings",
+  authenticateToken,
+  requireAdmin,
+  adminGetContactUnlockSettings
+);
+
+router.put(
+  "/contact-unlock-settings",
+  authenticateToken,
+  requireAdmin,
+  adminSetContactUnlockSettings
+);
 
 module.exports = router;
