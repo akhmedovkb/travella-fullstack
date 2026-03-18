@@ -1,6 +1,6 @@
-//backend/utils/contactUnlockSettings.js
-
-const DEFAULT_CONTACT_UNLOCK_PRICE = Number(process.env.CONTACT_UNLOCK_PRICE || 10000);
+const DEFAULT_CONTACT_UNLOCK_PRICE = Number(
+  process.env.CONTACT_UNLOCK_PRICE || 10000
+);
 
 let _settingsTableReady = false;
 
@@ -17,17 +17,23 @@ async function ensureContactUnlockSettingsTable(db) {
     CREATE TABLE IF NOT EXISTS contact_unlock_settings (
       id INTEGER PRIMARY KEY DEFAULT 1,
       is_paid BOOLEAN NOT NULL DEFAULT TRUE,
-      price INTEGER NOT NULL DEFAULT ${Math.max(0, Math.trunc(DEFAULT_CONTACT_UNLOCK_PRICE))},
+      price INTEGER NOT NULL DEFAULT ${Math.max(
+        0,
+        Math.trunc(DEFAULT_CONTACT_UNLOCK_PRICE)
+      )},
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       CONSTRAINT contact_unlock_settings_singleton CHECK (id = 1)
     );
   `);
 
-  await db.query(`
+  await db.query(
+    `
     INSERT INTO contact_unlock_settings (id, is_paid, price)
     VALUES (1, TRUE, $1)
     ON CONFLICT (id) DO NOTHING
-  `, [Math.max(0, Math.trunc(DEFAULT_CONTACT_UNLOCK_PRICE))]);
+    `,
+    [Math.max(0, Math.trunc(DEFAULT_CONTACT_UNLOCK_PRICE))]
+  );
 
   _settingsTableReady = true;
 }
