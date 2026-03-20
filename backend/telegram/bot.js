@@ -948,7 +948,16 @@ async function refreshUnlockedCard(ctx, serviceId) {
 }
 
 // Убираем из текста любые "Подробнее ... открыть(ссылка)" до оплаты
-function stripLockedLinks(text) {
+function stripLockedLinks(text, options = {}) {
+  const unlockPrice = Number(
+    options?.unlockPrice ??
+    options?.effectivePrice ??
+    options?.contactUnlockPrice ??
+    0
+  );
+
+  const isFreeMode = unlockPrice <= 0;
+
   let s = String(text || "");
 
   // 1) HTML вариант: 👉 Подробнее ...: <a href="...">открыть</a>
@@ -962,9 +971,12 @@ function stripLockedLinks(text) {
 
   s = s.replace(/\n{3,}/g, "\n\n").trim();
 
-  // добавим понятное пояснение
-  if (s) s += "\n\n🔒 Подробнее на сайте и быстрый запрос будут доступны после оплаты открытия контактов.";
-  else s = "🔒 Подробнее на сайте и быстрый запрос будут доступны после оплаты открытия контактов.";
+  const tail = isFreeMode
+    ? "🔓 Подробнее на сайте и быстрый запрос будут доступны после открытия контактов."
+    : "🔒 Подробнее на сайте и быстрый запрос будут доступны после оплаты открытия контактов.";
+
+  if (s) s += `\n\n${tail}`;
+  else s = tail;
 
   return s;
 }
@@ -8753,12 +8765,17 @@ const data = await getOrFetchCached(
           ? { forceRefused: true }
           : {};
       
+      const unlockSettings = await getContactUnlockSettings(pool);
+      const unlockPrice = Number(unlockSettings.effective_price || 0);
+      const isFreeMode = unlockPrice <= 0;
+
       const built = buildServiceMessage(
         svc,
         svcCategory,
         cardRole,
-        // 🔒 В INLINE НИКОГДА не вшиваем контакты в текст (иначе их увидит весь чат)
-        { ...cardOptions, unlocked: false }
+        // 🔒 В INLINE контакты в сам текст не вшиваем.
+        // Но unlockPrice передаём, чтобы текст/заметки/логика были согласованы с режимом.
+        { ...cardOptions, unlocked: false, unlockPrice }
       );
       
       // ✅ НИКОГДА не используем голые переменные text/serviceUrl/photoUrl/kbExtra
@@ -8769,7 +8786,7 @@ const data = await getOrFetchCached(
       
       let textFinal = builtText;
       if (roleForInline === "client" && !canSeeContacts) {
-        textFinal = stripLockedLinks(builtText);
+        textFinal = stripLockedLinks(builtText, { unlockPrice });
       }
 
       const description = buildInlineDescription(svc, svcCategory, cardRole);
@@ -8783,26 +8800,27 @@ const data = await getOrFetchCached(
           ? `https://t.me/${BOT_USERNAME}?start=refused_${svc.id}`
           : `${SITE_URL}/?service=${svc.id}`;
       
-      let keyboardForClient = canSeeContacts
-        ? {
-            inline_keyboard: [
-              [
-                { text: "👤 Контакты в боте", url: deepLink },          // только в ЛС
-                { text: "Подробнее на сайте", url: serviceUrl },
+      let keyboardForClient =
+        canSeeContacts || isFreeMode
+          ? {
+              inline_keyboard: [
+                [
+                  { text: "👤 Контакты в боте", url: deepLink },
+                  { text: "Подробнее на сайте", url: serviceUrl },
+                ],
+                [
+                  { text: "📩 Быстрый запрос", callback_data: `request:${svc.id}` },
+                ],
               ],
-              [
-                { text: "📩 Быстрый запрос", callback_data: `request:${svc.id}` }, // это ок (не раскрывает контакты)
+            }
+          : {
+              inline_keyboard: [
+                [
+                  { text: "🔓 Открыть в боте", url: deepLink },
+                  { text: "Подробнее на сайте", url: serviceUrl },
+                ],
               ],
-            ],
-          }
-        : {
-            inline_keyboard: [
-              [
-                { text: "🔓 Открыть в боте", url: deepLink },            // только в ЛС
-                { text: "Подробнее на сайте", url: serviceUrl },
-              ],
-            ],
-          };
+            };
       
       // ➜ добавляем кнопку "Детали рейса"
       if (kbExtra?.inline_keyboard?.length) {
