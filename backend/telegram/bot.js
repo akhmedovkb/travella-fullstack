@@ -4556,75 +4556,84 @@ bot.start(async (ctx) => {
           }
 
         const svc = data.service;
-        
+
         // ✅ важно: в некоторых местах категория хранится в s.type, а не в s.category
-        const category = String(svc.category || svc.type || "refused_tour").trim().toLowerCase();
-        
+        const category = String(svc.category || svc.type || "refused_tour")
+          .trim()
+          .toLowerCase();
+
         // 🔐 вычисляем unlock заранее
         let unlocked = true;
-          
-          if (role === "client") {
-            const clientRow = await getClientRowByChatId(pool, actorId);
-            unlocked = clientRow?.id
-              ? await isContactsUnlocked(pool, {
-                  clientId: clientRow.id,
-                  serviceId,
-                })
-              : false;
-          }
+        let unlockPrice = 0;
 
-          // buildServiceMessage у тебя уже есть в bot.js (ты его используешь для карточек)
+        if (role === "client") {
+          const clientRow = await getClientRowByChatId(pool, actorId);
+
+          const unlockSettings = await getContactUnlockSettings(pool);
+          unlockPrice = Number(unlockSettings.effective_price || 0);
+
+          const alreadyUnlocked = clientRow?.id
+            ? await isContactsUnlocked(pool, {
+                clientId: clientRow.id,
+                serviceId,
+              })
+            : false;
+
+          // ✅ бесплатный режим = сразу считаем карточку открытой
+          unlocked = unlockPrice <= 0 ? true : alreadyUnlocked;
+        }
+
         const cardRole = role === "client" ? "client" : role;
-
-          
         const isRefused = String(category || "").startsWith("refused_");
-          
+
         const { text, photoUrl, serviceUrl, kbExtra } =
           buildServiceMessage(svc, category, cardRole, {
             unlocked,
+            unlockPrice,
             isInline: false,
             forceRefused: isRefused,
           });
-          
-          let textFinal = text;
-          let kb = { inline_keyboard: [] };
-          
-          if (role === "client") {
-            // 🔒 До оплаты скрываем "Подробнее/Быстрый запрос" и ссылку в тексте
-         
-            if (!unlocked) {
-              textFinal = stripLockedLinks(text);
-              kb = {
-                inline_keyboard: [
-                                    [
-                                      {
-                                        text: "🔓 Открыть контакты (10 000 сум)",
-                                        callback_data: buildUnlockCbData(ctx.from.id, serviceId),
-                                      },
-                                    ],
-                                  ],
-                    };
-            } else {
-              kb = {
-                inline_keyboard: [
-                  [{ text: "Подробнее на сайте", url: serviceUrl }],
-                  [{ text: "📩 Быстрый запрос", callback_data: `quick:${serviceId}` }],
-                ],
-              };
-            }
-          } else {
-            // provider/admin
+
+        let textFinal = text;
+        let kb = { inline_keyboard: [] };
+
+        if (role === "client") {
+          if (!unlocked) {
+            textFinal = stripLockedLinks(text);
+
             kb = {
               inline_keyboard: [
+                [
+                  {
+                    text:
+                      unlockPrice > 0
+                        ? `🔓 Открыть контакты (${unlockPrice.toLocaleString("ru-RU")} сум)`
+                        : "🔓 Открыть контакты",
+                    callback_data: buildUnlockCbData(ctx.from.id, serviceId),
+                  },
+                ],
+              ],
+            };
+          } else {
+            // ✅ в бесплатном режиме / после unlock показываем сразу открытые действия
+            kb = {
+              inline_keyboard: [
+                ...(kbExtra?.inline_keyboard?.length ? kbExtra.inline_keyboard : []),
                 [{ text: "Подробнее на сайте", url: serviceUrl }],
                 [{ text: "📩 Быстрый запрос", callback_data: `quick:${serviceId}` }],
               ],
             };
           }
-          // ✅ добавляем кнопку "✈️ Детали рейса" ТОЛЬКО если контакты доступны (unlocked / provider / admin)
-          if ((role !== "client" || unlocked) && kbExtra?.inline_keyboard?.length) {
-            kb.inline_keyboard = [...kbExtra.inline_keyboard, ...(kb.inline_keyboard || [])];
-          }
+        } else {
+          // provider/admin
+          kb = {
+            inline_keyboard: [
+              ...(kbExtra?.inline_keyboard?.length ? kbExtra.inline_keyboard : []),
+              [{ text: "Подробнее на сайте", url: serviceUrl }],
+              [{ text: "📩 Быстрый запрос", callback_data: `quick:${serviceId}` }],
+            ],
+          };
+        }
 
           if (photoUrl) {
             await safeReplyWithPhoto(ctx, photoUrl, textFinal, {
