@@ -1,3 +1,5 @@
+//backend/utils/contactUnlockSettings.js
+
 const DEFAULT_CONTACT_UNLOCK_PRICE = Number(
   process.env.CONTACT_UNLOCK_PRICE || 10000
 );
