@@ -429,8 +429,13 @@ function buildServiceMessage(svc, category, role = "client", options = {}) {
 
   const d = parseDetailsAny(svc.details);
 
-  // ✅ единственный источник правды по доступу к контактам — флаг options.unlocked
-  const unlocked = options?.unlocked === true;
+  // ✅ единый источник правды:
+  // - если явно передали unlocked=true → показываем контакты
+  // - если админ/провайдер → показываем контакты
+  // - если открытие контактов переведено в бесплатный режим → тоже показываем сразу
+  const unlockPrice = Number(options?.unlockPrice ?? options?.effectivePrice ?? options?.contactUnlockPrice ?? 0);
+  const isFreeMode = unlockPrice <= 0;
+  const unlocked = options?.unlocked === true || isFreeMode;
 
   const newBadge = options?.newBadge === true;
 
@@ -1057,6 +1062,28 @@ const priceKind =
   parts.push(`👉 Подробнее и бронирование: ${a(serviceUrl, "открыть")}`);
 
   return { text: parts.join("\n"), photoUrl: getFirstImageUrl(svc), serviceUrl };
+}
+
+function shouldRenderUnlockButton(role = "client", options = {}) {
+  const r = String(role || "").toLowerCase();
+
+  // админ/провайдеру кнопка не нужна
+  if (r === "admin" || r === "provider") return false;
+
+  const unlockPrice = Number(
+    options?.unlockPrice ??
+    options?.effectivePrice ??
+    options?.contactUnlockPrice ??
+    0
+  );
+
+  // в бесплатном режиме кнопка unlock не нужна
+  if (unlockPrice <= 0) return false;
+
+  // если уже unlocked — тоже не нужна
+  if (options?.unlocked === true) return false;
+
+  return true;
 }
 
 module.exports = { buildServiceMessage };
