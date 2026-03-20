@@ -260,6 +260,11 @@ export default function AdminRefusedActual() {
 
   const [error, setError] = useState("");
   const [toast, setToast] = useState(null);
+  const [unlockCfgLoading, setUnlockCfgLoading] = useState(false);
+  const [unlockCfgSaving, setUnlockCfgSaving] = useState(false);
+  const [unlockIsPaid, setUnlockIsPaid] = useState(true);
+  const [unlockPrice, setUnlockPrice] = useState("10000");
+  const [unlockUpdatedAt, setUnlockUpdatedAt] = useState(null);
 
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsLoading, setDetailsLoading] = useState(false);
@@ -323,6 +328,72 @@ export default function AdminRefusedActual() {
     }
 
     return data;
+  }
+
+    async function loadContactUnlockSettings() {
+    setUnlockCfgLoading(true);
+    try {
+      const resp = await http.get(apiPath("/admin/billing/contact-unlock-settings"));
+      const data = ensureJsonOrThrow(resp, "loadContactUnlockSettings");
+
+      if (!data?.ok) {
+        throw new Error(data?.message || "Не удалось загрузить настройки");
+      }
+
+      setUnlockIsPaid(Boolean(data.is_paid));
+      setUnlockPrice(String(data.price ?? 10000));
+      setUnlockUpdatedAt(data.updated_at || null);
+    } catch (e) {
+      const info = extractAxiosError(e);
+      setError(info.msg || "Ошибка загрузки настроек открытия контактов");
+    } finally {
+      setUnlockCfgLoading(false);
+    }
+  }
+
+  async function saveContactUnlockSettings() {
+    const priceNum = Math.max(0, Math.trunc(Number(unlockPrice || 0)));
+
+    if (!Number.isFinite(priceNum)) {
+      showToast("err", "❌ Некорректная цена");
+      return;
+    }
+
+    setUnlockCfgSaving(true);
+    setError("");
+
+    try {
+      const resp = await http.put(
+        apiPath("/admin/billing/contact-unlock-settings"),
+        {
+          is_paid: unlockIsPaid,
+          price: priceNum,
+        }
+      );
+
+      const data = ensureJsonOrThrow(resp, "saveContactUnlockSettings");
+
+      if (!data?.ok) {
+        throw new Error(data?.message || "Не удалось сохранить настройки");
+      }
+
+      setUnlockIsPaid(Boolean(data.is_paid));
+      setUnlockPrice(String(data.price ?? priceNum));
+      setUnlockUpdatedAt(data.updated_at || null);
+
+      showToast(
+        "ok",
+        data?.is_paid
+          ? "✅ Открытие контактов переведено в платный режим"
+          : "✅ Открытие контактов переведено в бесплатный режим"
+      );
+    } catch (e) {
+      const info = extractAxiosError(e);
+      setError(info.msg);
+      showToast("err", `❌ ${info.msg}`);
+    } finally {
+      setUnlockCfgSaving(false);
+    }
   }
 
   const thClass = (field) =>
@@ -409,6 +480,7 @@ export default function AdminRefusedActual() {
   useEffect(() => {
     if (!canUse) return;
     loadList(1);
+    loadContactUnlockSettings();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canUse, category, status, actuality, visibility, limit, sortBy, sortOrder]);
 
@@ -657,6 +729,66 @@ export default function AdminRefusedActual() {
           </div>
         </div>
       ) : null}
+
+      <div className="mt-5 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div>
+            <div className="text-sm font-semibold text-gray-900">
+              Открытие контактов
+            </div>
+            <div className="mt-1 text-xs text-gray-500">
+              Этот переключатель влияет и на сайт, и на Telegram-бот.
+              {unlockUpdatedAt ? ` Обновлено: ${formatDate(unlockUpdatedAt)}` : ""}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3 md:items-end">
+            <div>
+              <label className="text-xs font-medium text-gray-600">Режим</label>
+              <select
+                className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-gray-200"
+                value={unlockIsPaid ? "paid" : "free"}
+                onChange={(e) => setUnlockIsPaid(e.target.value === "paid")}
+                disabled={unlockCfgLoading || unlockCfgSaving}
+              >
+                <option value="paid">Платно</option>
+                <option value="free">Бесплатно</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-gray-600">
+                Цена (сум)
+              </label>
+              <input
+                className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-gray-200 disabled:bg-gray-50"
+                value={unlockPrice}
+                onChange={(e) => setUnlockPrice(e.target.value)}
+                disabled={!unlockIsPaid || unlockCfgLoading || unlockCfgSaving}
+                placeholder="10000"
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={loadContactUnlockSettings}
+                disabled={unlockCfgLoading || unlockCfgSaving}
+                className="rounded-xl border border-gray-200 px-3 py-2 text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {unlockCfgLoading ? "Загрузка…" : "Обновить"}
+              </button>
+
+              <button
+                onClick={saveContactUnlockSettings}
+                disabled={unlockCfgLoading || unlockCfgSaving}
+                className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {unlockCfgSaving ? "Сохранение…" : "Сохранить"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div className="mt-5 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-12 md:items-end">
