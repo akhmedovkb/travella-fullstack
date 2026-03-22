@@ -1,8 +1,7 @@
-// frontend/src/pages/admin/AdminClients.jsx
-
 import { useEffect, useRef, useState, useCallback } from "react";
 import { toast } from "react-toastify";
-import { apiDelete, apiGet } from "../../api";
+import { apiDelete, apiGet, apiPost } from "../../api";
+import ClientAccessModal from "../../components/admin/ClientAccessModal";
 
 const LS_KEY = "admin.clients.lastSeenISO";
 
@@ -19,6 +18,10 @@ function useLastSeen() {
   return [lastSeen, save];
 }
 
+function money(n) {
+  return Math.round(Number(n || 0)).toLocaleString("ru-RU");
+}
+
 export default function AdminClients() {
   const [items, setItems] = useState([]);
   const [q, setQ] = useState("");
@@ -27,6 +30,9 @@ export default function AdminClients() {
   const [nextCursor, setNextCursor] = useState(null);
   const [lastSeen, setLastSeen] = useLastSeen();
   const pollTimer = useRef(null);
+
+  const [selectedClient, setSelectedClient] = useState(null);
+  const [modalOpen, setModalOpen] = useState(false);
 
   const fetchList = useCallback(
     async (opts = {}) => {
@@ -46,12 +52,46 @@ export default function AdminClients() {
             ? res.data
             : res;
 
-        const newItems = payload?.items || [];
+        const baseItems = payload?.items || [];
+
+        // Добираем balance/unlock_count из нового admin clients endpoint
+        let extraRows = [];
+        try {
+          const resExtra = await apiGet("/api/admin/clients?limit=200&offset=0", "admin");
+          const payloadExtra =
+            resExtra && resExtra.data && Array.isArray(resExtra.data.rows)
+              ? resExtra.data
+              : resExtra;
+          extraRows = payloadExtra?.rows || [];
+        } catch (e) {
+          console.warn("[AdminClients] extra rows fetch failed:", e?.message || e);
+        }
+
+        const extraMap = new Map(
+          extraRows.map((r) => [
+            Number(r.id),
+            {
+              balance_current: r.balance_current ?? 0,
+              unlock_count: r.unlock_count ?? 0,
+            },
+          ])
+        );
+
+        const newItems = baseItems.map((item) => {
+          const extra = extraMap.get(Number(item.id));
+          return {
+            ...item,
+            balance_current: extra?.balance_current ?? item.balance_current ?? 0,
+            unlock_count: extra?.unlock_count ?? item.unlock_count ?? 0,
+          };
+        });
+
         if (opts.append) {
           setItems((prev) => [...prev, ...newItems]);
         } else {
           setItems(newItems);
         }
+
         setNextCursor(payload?.nextCursor || null);
       } catch (e) {
         console.error(e);
@@ -93,10 +133,18 @@ export default function AdminClients() {
     fetchList({ limit: 50 });
   };
 
-  const onClearNewMark = () => {
+  const onClearNewMark = async () => {
     const now = new Date().toISOString();
     setLastSeen(now);
+
+    try {
+      await apiPost("/api/admin/clients/reset-new", {}, "admin");
+    } catch (e) {
+      console.warn("[AdminClients] reset-new failed:", e?.message || e);
+    }
+
     toast.success("Метка обновлена — «новые» сброшены");
+    fetchList({ limit: 50 });
   };
 
   const isNew = useCallback(
@@ -133,9 +181,14 @@ export default function AdminClients() {
     }
   };
 
+  const openAccess = (client) => {
+    setSelectedClient(client);
+    setModalOpen(true);
+  };
+
   return (
     <div className="p-4 max-w-7xl mx-auto">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
         <h1 className="text-2xl font-semibold">Клиенты</h1>
         <div className="flex gap-2">
           <button
@@ -172,6 +225,8 @@ export default function AdminClients() {
               <th className="text-left p-3">Телефон</th>
               <th className="text-left p-3">Telegram</th>
               <th className="text-left p-3">TG Chat ID</th>
+              <th className="text-left p-3">Баланс</th>
+              <th className="text-left p-3">Unlocks</th>
               <th className="text-left p-3">Создан</th>
               <th className="text-left p-3">Обновлен</th>
               <th className="text-left p-3">Действия</th>
@@ -200,6 +255,8 @@ export default function AdminClients() {
                   <td className="p-3">{c.phone || "—"}</td>
                   <td className="p-3">{c.telegram || "—"}</td>
                   <td className="p-3">{c.telegram_chat_id || "—"}</td>
+                  <td className="p-3">{money(c.balance_current || 0)}</td>
+                  <td className="p-3">{Number(c.unlock_count || 0)}</td>
                   <td className="p-3">
                     {c.created_at ? new Date(c.created_at).toLocaleString() : "—"}
                   </td>
@@ -207,16 +264,26 @@ export default function AdminClients() {
                     {c.updated_at ? new Date(c.updated_at).toLocaleString() : "—"}
                   </td>
                   <td className="p-3">
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(c)}
-                      disabled={isDeleting}
-                      className={`px-3 py-1.5 rounded-lg text-white ${
-                        isDeleting ? "bg-gray-400 cursor-not-allowed" : "bg-red-600 hover:bg-red-700"
-                      }`}
-                    >
-                      {isDeleting ? "Удаление..." : "Удалить"}
-                    </button>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openAccess(c)}
+                        className="px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+                      >
+                        Подробнее / Доступы
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(c)}
+                        disabled={isDeleting}
+                        className={`px-3 py-1.5 rounded-lg text-white ${
+                          isDeleting ? "bg-gray-400 cursor-not-allowed" : "bg-red-600 hover:bg-red-700"
+                        }`}
+                      >
+                        {isDeleting ? "Удаление..." : "Удалить"}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );
@@ -224,7 +291,7 @@ export default function AdminClients() {
 
             {!items.length && !loading && (
               <tr>
-                <td className="p-6 text-center text-gray-500" colSpan={9}>
+                <td className="p-6 text-center text-gray-500" colSpan={11}>
                   Ничего не найдено
                 </td>
               </tr>
@@ -233,7 +300,7 @@ export default function AdminClients() {
         </table>
       </div>
 
-      <div className="flex items-center justify-between mt-3">
+      <div className="flex items-center justify-between mt-3 gap-3 flex-wrap">
         <div className="text-sm text-gray-500">
           Последний просмотр новых: {new Date(lastSeen).toLocaleString()}
         </div>
@@ -252,6 +319,16 @@ export default function AdminClients() {
           )}
         </div>
       </div>
+
+      <ClientAccessModal
+        open={modalOpen}
+        client={selectedClient}
+        onClose={() => {
+          setModalOpen(false);
+          setSelectedClient(null);
+        }}
+        onChanged={() => fetchList({ limit: 50 })}
+      />
     </div>
   );
 }
