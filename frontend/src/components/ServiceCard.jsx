@@ -539,23 +539,27 @@ export default function ServiceCard({
   const dayShort = t("countdown.days_short", { defaultValue: "d" });
 
   const id = svc.id ?? item.id;
+  
   const initialUnlocked =
-      viewerRole === "provider" ||
-      viewerRole === "admin" ||
-      Boolean(
+    viewerRole === "provider" ||
+    viewerRole === "admin" ||
+    Boolean(
+      svc?.contacts_unlocked ??
+        item?.contacts_unlocked ??
+        item?.service?.contacts_unlocked ??
         svc?.unlocked ??
-          item?.unlocked ??
-          item?.service?.unlocked ??
-          item?.is_unlocked ??
-          item?.service?.is_unlocked
-      );
-    
-    const [unlocked, setUnlocked] = useState(initialUnlocked);
-    const [unlockLoading, setUnlockLoading] = useState(false);
-    
-    useEffect(() => {
-      setUnlocked(initialUnlocked);
-    }, [initialUnlocked, id]);
+        item?.unlocked ??
+        item?.service?.unlocked ??
+        item?.is_unlocked ??
+        item?.service?.is_unlocked
+    );
+  
+  const [unlocked, setUnlocked] = useState(initialUnlocked);
+  const [unlockLoading, setUnlockLoading] = useState(false);
+  
+  useEffect(() => {
+    setUnlocked(initialUnlocked);
+  }, [initialUnlocked, id]);
 
   /* изображения */
   const images = collectImages(
@@ -693,11 +697,13 @@ export default function ServiceCard({
   const isProviderViewer = viewerRole === "provider";
   const isAdminViewer = viewerRole === "admin";
   
-  const canShowUnlockButton =
-    !unlocked &&
-    !isProviderViewer &&
-    !isAdminViewer &&
-    (supplierPhone || supplierTg?.label);
+const hasAnySupplierContacts = Boolean(supplierPhone || supplierTg?.label);
+
+const canShowUnlockButton =
+  !unlocked &&
+  !isProviderViewer &&
+  !isAdminViewer &&
+  hasAnySupplierContacts;
 
   // tooltip reviews (выключено)
   const [revOpen, setRevOpen] = useState(false);
@@ -740,7 +746,7 @@ export default function ServiceCard({
   const hasDetailsBlock =
     direction || dates || hotel || accommodation || transfer || flightDetails;
 
-  async function handleUnlock(e) {
+async function handleUnlock(e) {
   e?.stopPropagation?.();
 
   const clientToken = localStorage.getItem("clientToken");
@@ -769,10 +775,12 @@ export default function ServiceCard({
   } catch (err) {
     const code =
       err?.response?.data?.code ||
+      err?.response?.data?.error ||
       err?.data?.code ||
+      err?.data?.error ||
       err?.code;
 
-    if (code === "INSUFFICIENT_BALANCE") {
+    if (code === "INSUFFICIENT_BALANCE" || code === "not_enough_balance") {
       navigate("/client/balance");
       return;
     }
@@ -783,7 +791,11 @@ export default function ServiceCard({
     }
 
     console.error("unlock contact error:", err);
-    alert(t("marketplace.unlock_error", { defaultValue: "Не удалось открыть контакты" }));
+    alert(
+      t("marketplace.unlock_error", {
+        defaultValue: "Не удалось открыть контакты",
+      })
+    );
   } finally {
     setUnlockLoading(false);
   }
