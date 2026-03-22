@@ -5,11 +5,16 @@ const jwt = require("jsonwebtoken");
 const pool = require("../db");
 const { resolveCitySlugs } = require("../utils/cities");
 const { notifyModerationNew } = require("../utils/telegram");
+
 const {
   extractPrices,
   isPriceDrop,
   broadcastPriceDropCard,
 } = require("../utils/refusedPriceDropBroadcast");
+
+const { getContactUnlockSettings } = require("../utils/contactUnlockSettings");
+
+require("../utils/refusedPriceDropBroadcast");
 
 if (!process.env.JWT_SECRET) {
   throw new Error("JWT_SECRET environment variable is required");
@@ -1082,16 +1087,22 @@ async function canViewerSeeProviderContacts({ viewer, providerId, serviceId }) {
 
   if (role === "admin") return true;
 
-  // provider видит всех
+  // provider видит контакты всех
   if (role === "provider") {
     return true;
   }
 
-  // client видит контакты только после unlock
   if (role === "client") {
     if (!Number.isFinite(viewerId) || viewerId <= 0) return false;
 
-    // 1) если профиль открыт из конкретной услуги
+    const unlockSettings = await getContactUnlockSettings(pool);
+
+    // Бесплатный режим: все клиенты видят контакты
+    if (!unlockSettings.is_paid) {
+      return true;
+    }
+
+    // Платный режим: если профиль открыт из конкретной услуги
     if (Number.isFinite(sid) && sid > 0) {
       const q = await pool.query(
         `
@@ -1109,7 +1120,7 @@ async function canViewerSeeProviderContacts({ viewer, providerId, serviceId }) {
       if (q.rowCount > 0) return true;
     }
 
-    // 2) если клиент уже unlock-нул ЛЮБУЮ услугу этого поставщика
+    // Платный режим: если клиент уже unlock-нул любую услугу этого провайдера
     const qAny = await pool.query(
       `
       SELECT 1
@@ -1132,16 +1143,23 @@ async function getUnlockedProviderIdSetForViewer(viewer) {
   const role = String(viewer?.role || "").toLowerCase();
   const viewerId = Number(viewer?.id);
 
-  if (!viewer || !Number.isFinite(viewerId) || viewerId <= 0) {
+  if (!viewer) {
     return new Set();
   }
 
-  if (role === "admin") {
+  if (role === "admin" || role === "provider") {
     return "__ALL__";
   }
 
-  if (role !== "client") {
+  if (role !== "client" || !Number.isFinite(viewerId) || viewerId <= 0) {
     return new Set();
+  }
+
+  const unlockSettings = await getContactUnlockSettings(pool);
+
+  // Бесплатный режим: клиент видит контакты всех провайдеров
+  if (!unlockSettings.is_paid) {
+    return "__ALL__";
   }
 
   const q = await pool.query(
