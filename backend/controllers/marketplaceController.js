@@ -3,6 +3,7 @@ const db = require("../db");
 const pg = db?.query ? db : db?.pool;
 const jwt = require("jsonwebtoken");
 const JWT_SECRET = process.env.JWT_SECRET || "changeme_in_env";
+const { getContactUnlockSettings } = require("../utils/contactUnlockSettings");
 
 if (!pg || typeof pg.query !== "function") {
   throw new Error("DB driver not available: expected node-postgres Pool with .query()");
@@ -95,31 +96,56 @@ async function canViewerSeeProviderContacts({ viewer, providerId, serviceId }) {
   const pid = Number(providerId);
   const sid = Number(serviceId);
 
-  if (!pid) return false;
+  if (!Number.isFinite(pid) || pid <= 0) return false;
 
   if (role === "admin") return true;
 
   if (role === "provider") {
-    return viewerId === pid;
+    return Number.isFinite(viewerId) && viewerId === pid;
   }
 
   if (role === "client") {
-    if (!viewerId || !sid) return false;
+    if (!Number.isFinite(viewerId) || viewerId <= 0) return false;
 
-    const q = await pg.query(
+    const unlockSettings = await getContactUnlockSettings(pg);
+
+    // Бесплатный режим: все клиенты видят контакты
+    if (!unlockSettings.is_paid) {
+      return true;
+    }
+
+    // Платный режим: если открыт конкретный service
+    if (Number.isFinite(sid) && sid > 0) {
+      const q = await pg.query(
+        `
+        SELECT 1
+        FROM client_service_contact_unlocks u
+        JOIN services s ON s.id = u.service_id
+        WHERE u.client_id = $1
+          AND u.service_id = $2
+          AND s.provider_id = $3
+        LIMIT 1
+        `,
+        [viewerId, sid, pid]
+      );
+
+      if (q.rowCount > 0) return true;
+    }
+
+    // Платный режим: если клиент уже открыл любую услугу этого провайдера
+    const qAny = await pg.query(
       `
       SELECT 1
       FROM client_service_contact_unlocks u
       JOIN services s ON s.id = u.service_id
       WHERE u.client_id = $1
-      AND u.service_id = $2
-      AND s.provider_id = $3
+        AND s.provider_id = $2
       LIMIT 1
       `,
-      [viewerId, sid, pid]
+      [viewerId, pid]
     );
 
-    return q.rowCount > 0;
+    return qAny.rowCount > 0;
   }
 
   return false;
