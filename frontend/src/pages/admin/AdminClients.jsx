@@ -1,3 +1,5 @@
+//frontend/src/pages/admin/AdminClients.jsx
+
 import { useEffect, useRef, useState, useCallback } from "react";
 import { toast } from "react-toastify";
 import { apiDelete, apiGet, apiPost } from "../../api";
