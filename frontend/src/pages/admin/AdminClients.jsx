@@ -24,6 +24,43 @@ function money(n) {
   return Math.round(Number(n || 0)).toLocaleString("ru-RU");
 }
 
+function fmtCellDate(x) {
+  if (!x) return "—";
+  try {
+    const d = new Date(x);
+    const date = d.toLocaleDateString("ru-RU");
+    const time = d.toLocaleTimeString("ru-RU", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+    return `${date}, ${time}`;
+  } catch {
+    return String(x);
+  }
+}
+
+function StatCard({ label, value, sub, valueClass = "" }) {
+  return (
+    <div className="rounded-2xl border bg-white p-4">
+      <div className="text-xs text-gray-500">{label}</div>
+      <div className={`mt-1 text-2xl font-semibold ${valueClass}`}>{value}</div>
+      <div className="mt-1 text-sm text-gray-500">{sub}</div>
+    </div>
+  );
+}
+
+function CellText({ children, className = "", title }) {
+  return (
+    <div
+      className={`truncate whitespace-nowrap ${className}`}
+      title={title ?? (typeof children === "string" ? children : undefined)}
+    >
+      {children || "—"}
+    </div>
+  );
+}
+
 export default function AdminClients() {
   const [items, setItems] = useState([]);
   const [q, setQ] = useState("");
@@ -333,49 +370,30 @@ export default function AdminClients() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-4">
-        <div className="rounded-2xl border bg-white p-4">
-          <div className="text-xs text-gray-500">Режим unlock</div>
-          <div
-            className={`mt-1 text-lg font-semibold ${
-              dashboard.is_paid ? "text-red-600" : "text-green-600"
-            }`}
-          >
-            {dashboard.is_paid ? "ПЛАТНО" : "БЕСПЛАТНО"}
-          </div>
-          <div className="mt-1 text-sm text-gray-500">
-            Цена: {money(dashboard.price || 0)} сум
-          </div>
-        </div>
+        <StatCard
+          label="Режим unlock"
+          value={dashboard.is_paid ? "ПЛАТНО" : "БЕСПЛАТНО"}
+          sub={`Цена: ${money(dashboard.price || 0)} сум`}
+          valueClass={dashboard.is_paid ? "text-red-600" : "text-green-600"}
+        />
 
-        <div className="rounded-2xl border bg-white p-4">
-          <div className="text-xs text-gray-500">Клиенты</div>
-          <div className="mt-1 text-2xl font-semibold">
-            {money(dashboard.clients_total || 0)}
-          </div>
-          <div className="mt-1 text-sm text-gray-500">
-            Суммарный баланс: {money(dashboard.balance_total || 0)} сум
-          </div>
-        </div>
+        <StatCard
+          label="Клиенты"
+          value={money(dashboard.clients_total || 0)}
+          sub={`Суммарный баланс: ${money(dashboard.balance_total || 0)} сум`}
+        />
 
-        <div className="rounded-2xl border bg-white p-4">
-          <div className="text-xs text-gray-500">Unlocks</div>
-          <div className="mt-1 text-2xl font-semibold">
-            {money(dashboard.unlocks_total || 0)}
-          </div>
-          <div className="mt-1 text-sm text-gray-500">
-            Сегодня: {money(dashboard.unlocks_today || 0)}
-          </div>
-        </div>
+        <StatCard
+          label="Unlocks"
+          value={money(dashboard.unlocks_total || 0)}
+          sub={`Сегодня: ${money(dashboard.unlocks_today || 0)}`}
+        />
 
-        <div className="rounded-2xl border bg-white p-4">
-          <div className="text-xs text-gray-500">Выручка</div>
-          <div className="mt-1 text-2xl font-semibold">
-            {money(dashboard.revenue_total || 0)} сум
-          </div>
-          <div className="mt-1 text-sm text-gray-500">
-            Сегодня: {money(dashboard.revenue_today || 0)} сум
-          </div>
-        </div>
+        <StatCard
+          label="Выручка"
+          value={`${money(dashboard.revenue_total || 0)} сум`}
+          sub={`Сегодня: ${money(dashboard.revenue_today || 0)} сум`}
+        />
       </div>
 
       <form onSubmit={onSearch} className="flex flex-wrap gap-2 mb-3">
@@ -383,31 +401,45 @@ export default function AdminClients() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Поиск: имя / email / телефон / telegram / chat id"
-          className="input input-bordered w-full md:w-[420px] px-3 py-2 rounded-lg border border-gray-300"
+          className="w-full md:w-[420px] px-3 py-2 rounded-lg border border-gray-300 text-sm"
         />
         <button
           type="submit"
-          className="px-3 py-2 rounded-lg bg-gray-800 text-white hover:bg-black"
+          className="px-3 py-2 rounded-lg bg-gray-800 text-white hover:bg-black text-sm"
         >
           Найти
         </button>
       </form>
 
-      <div className="overflow-auto border rounded-xl">
-        <table className="min-w-full text-sm">
+      <div className="border rounded-2xl bg-white overflow-hidden">
+        <table className="w-full table-fixed text-xs">
+          <colgroup>
+            <col className="w-[56px]" />
+            <col className="w-[150px]" />
+            <col className="w-[220px]" />
+            <col className="w-[135px]" />
+            <col className="w-[150px]" />
+            <col className="w-[115px]" />
+            <col className="w-[80px]" />
+            <col className="w-[80px]" />
+            <col className="w-[120px]" />
+            <col className="w-[120px]" />
+            <col className="w-[150px]" />
+          </colgroup>
+
           <thead className="bg-gray-50 sticky top-0 z-10">
-            <tr>
-              <th className="text-left p-3">ID</th>
-              <th className="text-left p-3">Имя</th>
-              <th className="text-left p-3">Email</th>
-              <th className="text-left p-3">Телефон</th>
-              <th className="text-left p-3">Telegram</th>
-              <th className="text-left p-3">TG Chat ID</th>
-              <th className="text-left p-3">Баланс</th>
-              <th className="text-left p-3">Unlocks</th>
-              <th className="text-left p-3">Создан</th>
-              <th className="text-left p-3">Обновлен</th>
-              <th className="text-left p-3">Действия</th>
+            <tr className="text-gray-700">
+              <th className="text-left px-2 py-3 font-semibold">ID</th>
+              <th className="text-left px-2 py-3 font-semibold">Имя</th>
+              <th className="text-left px-2 py-3 font-semibold">Email</th>
+              <th className="text-left px-2 py-3 font-semibold">Телефон</th>
+              <th className="text-left px-2 py-3 font-semibold">Telegram</th>
+              <th className="text-left px-2 py-3 font-semibold">TG Chat ID</th>
+              <th className="text-left px-2 py-3 font-semibold">Баланс</th>
+              <th className="text-left px-2 py-3 font-semibold">Unlocks</th>
+              <th className="text-left px-2 py-3 font-semibold">Создан</th>
+              <th className="text-left px-2 py-3 font-semibold">Обновлен</th>
+              <th className="text-left px-2 py-3 font-semibold">Действия</th>
             </tr>
           </thead>
 
@@ -417,45 +449,92 @@ export default function AdminClients() {
               const isDeleting = deletingId === Number(c.id);
 
               return (
-                <tr key={c.id} className={`border-t ${newBadge ? "bg-blue-50" : ""}`}>
-                  <td className="p-3">{c.id}</td>
-                  <td className="p-3">
-                    <div className="flex items-center gap-2">
+                <tr
+                  key={c.id}
+                  className={`border-t align-top hover:bg-gray-50 ${
+                    newBadge ? "bg-blue-50/60" : ""
+                  }`}
+                >
+                  <td className="px-2 py-2 text-gray-800">{c.id}</td>
+
+                  <td className="px-2 py-2">
+                    <div className="flex items-center gap-2 min-w-0">
                       {newBadge && (
-                        <span className="px-2 py-0.5 text-xs rounded-full bg-blue-600 text-white">
+                        <span className="shrink-0 px-2 py-0.5 text-[10px] rounded-full bg-blue-600 text-white">
                           NEW
                         </span>
                       )}
-                      <span className="font-medium">{c.name || "—"}</span>
+                      <CellText className="font-medium text-gray-900" title={c.name}>
+                        {c.name || "—"}
+                      </CellText>
                     </div>
                   </td>
-                  <td className="p-3">{c.email || "—"}</td>
-                  <td className="p-3">{c.phone || "—"}</td>
-                  <td className="p-3">{c.telegram || "—"}</td>
-                  <td className="p-3">{c.telegram_chat_id || "—"}</td>
-                  <td className="p-3">{money(c.balance_current || 0)}</td>
-                  <td className="p-3">{Number(c.unlock_count || 0)}</td>
-                  <td className="p-3">
-                    {c.created_at ? new Date(c.created_at).toLocaleString() : "—"}
+
+                  <td className="px-2 py-2">
+                    <CellText title={c.email}>{c.email || "—"}</CellText>
                   </td>
-                  <td className="p-3">
-                    {c.updated_at ? new Date(c.updated_at).toLocaleString() : "—"}
+
+                  <td className="px-2 py-2">
+                    <CellText title={c.phone}>{c.phone || "—"}</CellText>
                   </td>
-                  <td className="p-3">
-                    <div className="flex flex-wrap gap-2">
+
+                  <td className="px-2 py-2">
+                    <CellText title={c.telegram}>{c.telegram || "—"}</CellText>
+                  </td>
+
+                  <td className="px-2 py-2">
+                    <CellText title={String(c.telegram_chat_id || "—")}>
+                      {c.telegram_chat_id || "—"}
+                    </CellText>
+                  </td>
+
+                  <td className="px-2 py-2 text-gray-900">{money(c.balance_current || 0)}</td>
+
+                  <td className="px-2 py-2 text-gray-900">
+                    {Number(c.unlock_count || 0)}
+                  </td>
+
+                  <td className="px-2 py-2 text-gray-700">
+                    <div className="leading-4" title={fmtCellDate(c.created_at)}>
+                      {c.created_at ? (
+                        <>
+                          <div>{new Date(c.created_at).toLocaleDateString("ru-RU")}</div>
+                          <div>{new Date(c.created_at).toLocaleTimeString("ru-RU")}</div>
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                    </div>
+                  </td>
+
+                  <td className="px-2 py-2 text-gray-700">
+                    <div className="leading-4" title={fmtCellDate(c.updated_at)}>
+                      {c.updated_at ? (
+                        <>
+                          <div>{new Date(c.updated_at).toLocaleDateString("ru-RU")}</div>
+                          <div>{new Date(c.updated_at).toLocaleTimeString("ru-RU")}</div>
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                    </div>
+                  </td>
+
+                  <td className="px-2 py-2">
+                    <div className="flex flex-col gap-1">
                       <button
                         type="button"
                         onClick={() => openAccess(c)}
-                        className="px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+                        className="w-full px-2 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-[11px] font-medium"
                       >
-                        Подробнее / Доступы
+                        Доступы
                       </button>
 
                       <button
                         type="button"
                         onClick={() => handleDelete(c)}
                         disabled={isDeleting}
-                        className={`px-3 py-1.5 rounded-lg text-white ${
+                        className={`w-full px-2 py-1.5 rounded-lg text-white text-[11px] font-medium ${
                           isDeleting
                             ? "bg-gray-400 cursor-not-allowed"
                             : "bg-red-600 hover:bg-red-700"
@@ -471,8 +550,16 @@ export default function AdminClients() {
 
             {!items.length && !loading && (
               <tr>
-                <td className="p-6 text-center text-gray-500" colSpan={11}>
+                <td className="px-3 py-8 text-center text-gray-500" colSpan={11}>
                   Ничего не найдено
+                </td>
+              </tr>
+            )}
+
+            {loading && !items.length && (
+              <tr>
+                <td className="px-3 py-8 text-center text-gray-500" colSpan={11}>
+                  Загрузка...
                 </td>
               </tr>
             )}
@@ -489,7 +576,7 @@ export default function AdminClients() {
           {nextCursor ? (
             <button
               onClick={() => fetchList({ append: true, cursor: nextCursor, limit: 50 })}
-              className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300"
+              className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 text-sm"
               disabled={loading}
             >
               {loading ? "Загрузка..." : "Загрузить ещё"}
