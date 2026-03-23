@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { toast } from "react-toastify";
+import axios from "axios";
 import { apiDelete, apiGet, apiPost } from "../../api";
 import ClientAccessModal from "../../components/admin/ClientAccessModal";
 
@@ -40,14 +41,26 @@ function fmtCellDate(x) {
   }
 }
 
+function getAuthHeader() {
+  const token =
+    localStorage.getItem("adminToken") ||
+    localStorage.getItem("providerToken") ||
+    localStorage.getItem("token") ||
+    "";
+
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 function StatCard({ label, value, sub, valueClass = "" }) {
   return (
-    <div className="rounded-2xl border bg-white p-4 min-w-0">
+    <div className="min-w-0 rounded-2xl border bg-white p-4">
       <div className="text-xs text-gray-500">{label}</div>
-      <div className={`mt-1 text-2xl font-semibold ${valueClass}`}>{value}</div>
-      <div className="mt-1 text-sm text-gray-500 truncate" title={sub}>
-        {sub}
+      <div
+        className={`mt-1 text-lg xl:text-2xl font-semibold leading-tight break-words whitespace-normal ${valueClass}`}
+      >
+        {value}
       </div>
+      <div className="mt-1 text-sm text-gray-500 break-words whitespace-normal">{sub}</div>
     </div>
   );
 }
@@ -61,36 +74,6 @@ function CellText({ children, className = "", title }) {
       {children || "—"}
     </div>
   );
-}
-
-async function putJson(url, body) {
-  const token =
-    localStorage.getItem("adminToken") ||
-    localStorage.getItem("providerToken") ||
-    localStorage.getItem("token") ||
-    "";
-
-  const res = await fetch(url, {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify(body || {}),
-  });
-
-  let data = null;
-  try {
-    data = await res.json();
-  } catch {
-    data = null;
-  }
-
-  if (!res.ok) {
-    throw new Error(data?.message || `HTTP ${res.status}`);
-  }
-
-  return data;
 }
 
 export default function AdminClients() {
@@ -274,17 +257,25 @@ export default function AdminClients() {
     try {
       setSavingSettings(true);
 
-      await putJson("/api/admin/billing/contact-unlock-settings", {
-        is_paid: unlockSettings.is_paid,
-        price: Number(unlockSettings.price || 0),
-      });
+      await axios.put(
+        "/api/admin/billing/contact-unlock-settings",
+        {
+          is_paid: unlockSettings.is_paid,
+          price: Number(unlockSettings.price || 0),
+        },
+        {
+          headers: {
+            ...getAuthHeader(),
+          },
+        }
+      );
 
       toast.success("Настройки сохранены");
       await loadUnlockSettings();
       await loadDashboard();
     } catch (e) {
       console.error(e);
-      toast.error(e?.message || "Ошибка сохранения");
+      toast.error("Ошибка сохранения");
     } finally {
       setSavingSettings(false);
     }
@@ -440,10 +431,193 @@ export default function AdminClients() {
       </form>
 
       <div className="border rounded-2xl bg-white overflow-hidden">
-        <table className="w-full table-fixed text-xs">
+        <table className="w-full table-fixed text-[11px] xl:text-xs">
           <colgroup>
-            <col className="w-[50px]" />
-            <col className="w-[130px]" />
-            <col className="w-[220px]" />
-            <col className="w-[125px]" />
-            <col class
+            <col className="w-[48px]" />
+            <col className="w-[115px]" />
+            <col className="w-[170px]" />
+            <col className="w-[100px]" />
+            <col className="w-[120px]" />
+            <col className="w-[95px]" />
+            <col className="w-[70px]" />
+            <col className="w-[65px]" />
+            <col className="w-[90px]" />
+            <col className="w-[90px]" />
+            <col className="w-[120px]" />
+          </colgroup>
+
+          <thead className="bg-gray-50 sticky top-0 z-10">
+            <tr className="text-gray-700">
+              <th className="text-left px-2 py-3 font-semibold">ID</th>
+              <th className="text-left px-2 py-3 font-semibold">Имя</th>
+              <th className="text-left px-2 py-3 font-semibold">Email</th>
+              <th className="text-left px-2 py-3 font-semibold">Телефон</th>
+              <th className="text-left px-2 py-3 font-semibold">Telegram</th>
+              <th className="text-left px-2 py-3 font-semibold">TG Chat ID</th>
+              <th className="text-left px-2 py-3 font-semibold">Баланс</th>
+              <th className="text-left px-2 py-3 font-semibold">Unlocks</th>
+              <th className="text-left px-2 py-3 font-semibold">Создан</th>
+              <th className="text-left px-2 py-3 font-semibold">Обновлен</th>
+              <th className="text-left px-2 py-3 font-semibold">Действия</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {items.map((c) => {
+              const newBadge = isNew(c.created_at);
+              const isDeleting = deletingId === Number(c.id);
+
+              return (
+                <tr
+                  key={c.id}
+                  className={`border-t align-top hover:bg-gray-50 ${
+                    newBadge ? "bg-blue-50/60" : ""
+                  }`}
+                >
+                  <td className="px-2 py-2 text-gray-800">{c.id}</td>
+
+                  <td className="px-2 py-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      {newBadge && (
+                        <span className="shrink-0 px-2 py-0.5 text-[10px] rounded-full bg-blue-600 text-white">
+                          NEW
+                        </span>
+                      )}
+                      <CellText className="font-medium text-gray-900" title={c.name}>
+                        {c.name || "—"}
+                      </CellText>
+                    </div>
+                  </td>
+
+                  <td className="px-2 py-2">
+                    <CellText title={c.email}>{c.email || "—"}</CellText>
+                  </td>
+
+                  <td className="px-2 py-2">
+                    <CellText title={c.phone}>{c.phone || "—"}</CellText>
+                  </td>
+
+                  <td className="px-2 py-2">
+                    <CellText title={c.telegram}>{c.telegram || "—"}</CellText>
+                  </td>
+
+                  <td className="px-2 py-2">
+                    <CellText title={String(c.telegram_chat_id || "—")}>
+                      {c.telegram_chat_id || "—"}
+                    </CellText>
+                  </td>
+
+                  <td className="px-2 py-2 text-gray-900">{money(c.balance_current || 0)}</td>
+
+                  <td className="px-2 py-2 text-gray-900">
+                    {Number(c.unlock_count || 0)}
+                  </td>
+
+                  <td className="px-2 py-2 text-gray-700">
+                    <div className="leading-4" title={fmtCellDate(c.created_at)}>
+                      {c.created_at ? (
+                        <>
+                          <div>{new Date(c.created_at).toLocaleDateString("ru-RU")}</div>
+                          <div>{new Date(c.created_at).toLocaleTimeString("ru-RU")}</div>
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                    </div>
+                  </td>
+
+                  <td className="px-2 py-2 text-gray-700">
+                    <div className="leading-4" title={fmtCellDate(c.updated_at)}>
+                      {c.updated_at ? (
+                        <>
+                          <div>{new Date(c.updated_at).toLocaleDateString("ru-RU")}</div>
+                          <div>{new Date(c.updated_at).toLocaleTimeString("ru-RU")}</div>
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                    </div>
+                  </td>
+
+                  <td className="px-2 py-2">
+                    <div className="flex flex-col gap-1">
+                      <button
+                        type="button"
+                        onClick={() => openAccess(c)}
+                        className="w-full px-2 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-[11px] font-medium"
+                      >
+                        Доступы
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(c)}
+                        disabled={isDeleting}
+                        className={`w-full px-2 py-1.5 rounded-lg text-white text-[11px] font-medium ${
+                          isDeleting
+                            ? "bg-gray-400 cursor-not-allowed"
+                            : "bg-red-600 hover:bg-red-700"
+                        }`}
+                      >
+                        {isDeleting ? "Удаление..." : "Удалить"}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+
+            {!items.length && !loading && (
+              <tr>
+                <td className="px-3 py-8 text-center text-gray-500" colSpan={11}>
+                  Ничего не найдено
+                </td>
+              </tr>
+            )}
+
+            {loading && !items.length && (
+              <tr>
+                <td className="px-3 py-8 text-center text-gray-500" colSpan={11}>
+                  Загрузка...
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="flex items-center justify-between mt-3 gap-3 flex-wrap">
+        <div className="text-sm text-gray-500">
+          Последний просмотр новых: {new Date(lastSeen).toLocaleString()}
+        </div>
+
+        <div>
+          {nextCursor ? (
+            <button
+              onClick={() => fetchList({ append: true, cursor: nextCursor, limit: 50 })}
+              className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 text-sm"
+              disabled={loading}
+            >
+              {loading ? "Загрузка..." : "Загрузить ещё"}
+            </button>
+          ) : (
+            <span className="text-sm text-gray-400">Достигнут конец списка</span>
+          )}
+        </div>
+      </div>
+
+      <ClientAccessModal
+        open={modalOpen}
+        client={selectedClient}
+        onClose={() => {
+          setModalOpen(false);
+          setSelectedClient(null);
+        }}
+        onChanged={async () => {
+          await fetchList({ limit: 50 });
+          await loadDashboard();
+        }}
+      />
+    </div>
+  );
+}
