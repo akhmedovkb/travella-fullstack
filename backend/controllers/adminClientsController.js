@@ -600,6 +600,80 @@ async function adjustClientBalance(req, res) {
   }
 }
 
+async function getClientsDashboard(req, res) {
+  try {
+    const settings = await getContactUnlockSettings(pool);
+
+    const sql = `
+      WITH client_stats AS (
+        SELECT
+          COUNT(*)::int AS clients_total
+        FROM clients
+      ),
+      balance_stats AS (
+        SELECT
+          COALESCE(SUM(amount), 0)::bigint AS balance_total
+        FROM contact_balance_ledger
+      ),
+      unlock_stats AS (
+        SELECT
+          COUNT(*)::int AS unlocks_total,
+          COUNT(*) FILTER (
+            WHERE created_at >= date_trunc('day', NOW() AT TIME ZONE 'Asia/Tashkent')
+              AND created_at < date_trunc('day', NOW() AT TIME ZONE 'Asia/Tashkent') + interval '1 day'
+          )::int AS unlocks_today
+        FROM client_service_contact_unlocks
+      ),
+      revenue_stats AS (
+        SELECT
+          COALESCE(SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END), 0)::bigint AS revenue_total,
+          COALESCE(SUM(
+            CASE
+              WHEN amount < 0
+               AND created_at >= date_trunc('day', NOW() AT TIME ZONE 'Asia/Tashkent')
+               AND created_at < date_trunc('day', NOW() AT TIME ZONE 'Asia/Tashkent') + interval '1 day'
+              THEN ABS(amount)
+              ELSE 0
+            END
+          ), 0)::bigint AS revenue_today
+        FROM contact_balance_ledger
+      )
+      SELECT
+        cs.clients_total,
+        bs.balance_total,
+        us.unlocks_total,
+        us.unlocks_today,
+        rs.revenue_total,
+        rs.revenue_today
+      FROM client_stats cs
+      CROSS JOIN balance_stats bs
+      CROSS JOIN unlock_stats us
+      CROSS JOIN revenue_stats rs
+    `;
+
+    const { rows } = await pool.query(sql);
+    const row = rows[0] || {};
+
+    return res.json({
+      ok: true,
+      dashboard: {
+        mode: settings.is_paid ? "paid" : "free",
+        is_paid: !!settings.is_paid,
+        price: Number(settings.price || 0),
+        clients_total: Number(row.clients_total || 0),
+        balance_total: Number(row.balance_total || 0),
+        unlocks_total: Number(row.unlocks_total || 0),
+        unlocks_today: Number(row.unlocks_today || 0),
+        revenue_total: Number(row.revenue_total || 0),
+        revenue_today: Number(row.revenue_today || 0),
+      },
+    });
+  } catch (e) {
+    console.error("getClientsDashboard error:", e);
+    return res.status(500).json({ ok: false, message: "Internal error" });
+  }
+}
+
 module.exports = {
   listClients,
   resetNewClients,
@@ -610,4 +684,5 @@ module.exports = {
   grantClientUnlock,
   revokeClientUnlock,
   adjustClientBalance,
+  getClientsDashboard,
 };
