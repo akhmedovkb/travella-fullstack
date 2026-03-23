@@ -36,6 +36,57 @@ export default function AdminClients() {
   const [selectedClient, setSelectedClient] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
 
+  const [unlockSettings, setUnlockSettings] = useState({
+    is_paid: true,
+    price: 10000,
+  });
+  const [savingSettings, setSavingSettings] = useState(false);
+
+  const [dashboard, setDashboard] = useState({
+    mode: "paid",
+    is_paid: true,
+    price: 0,
+    clients_total: 0,
+    balance_total: 0,
+    unlocks_total: 0,
+    unlocks_today: 0,
+    revenue_total: 0,
+    revenue_today: 0,
+  });
+
+  const loadUnlockSettings = useCallback(async () => {
+    try {
+      const res = await apiGet("/api/admin/billing/contact-unlock-settings", "admin");
+      const data = res?.data || res;
+
+      if (data?.settings) {
+        setUnlockSettings({
+          is_paid: data.settings.is_paid,
+          price: data.settings.price,
+        });
+      } else if (typeof data?.is_paid !== "undefined") {
+        setUnlockSettings({
+          is_paid: data.is_paid,
+          price: data.price,
+        });
+      }
+    } catch (e) {
+      console.warn("[unlock settings] load failed", e?.message || e);
+    }
+  }, []);
+
+  const loadDashboard = useCallback(async () => {
+    try {
+      const res = await apiGet("/api/admin/clients/dashboard", "admin");
+      const data = res?.data || res;
+      if (data?.dashboard) {
+        setDashboard(data.dashboard);
+      }
+    } catch (e) {
+      console.warn("[AdminClients] dashboard load failed:", e?.message || e);
+    }
+  }, []);
+
   const fetchList = useCallback(
     async (opts = {}) => {
       setLoading(true);
@@ -56,7 +107,6 @@ export default function AdminClients() {
 
         const baseItems = payload?.items || [];
 
-        // Добираем balance/unlock_count из нового admin clients endpoint
         let extraRows = [];
         try {
           const resExtra = await apiGet("/api/admin/clients?limit=200&offset=0", "admin");
@@ -123,7 +173,9 @@ export default function AdminClients() {
 
   useEffect(() => {
     fetchList({ limit: 50 });
-  }, [fetchList]);
+    loadUnlockSettings();
+    loadDashboard();
+  }, [fetchList, loadUnlockSettings, loadDashboard]);
 
   useEffect(() => {
     pollTimer.current = setInterval(checkNew, 30000);
@@ -147,6 +199,30 @@ export default function AdminClients() {
 
     toast.success("Метка обновлена — «новые» сброшены");
     fetchList({ limit: 50 });
+  };
+
+  const saveUnlockSettings = async () => {
+    try {
+      setSavingSettings(true);
+
+      await apiPost(
+        "/api/admin/billing/contact-unlock-settings",
+        {
+          is_paid: unlockSettings.is_paid,
+          price: Number(unlockSettings.price || 0),
+        },
+        "admin"
+      );
+
+      toast.success("Настройки сохранены");
+      await loadUnlockSettings();
+      await loadDashboard();
+    } catch (e) {
+      console.error(e);
+      toast.error("Ошибка сохранения");
+    } finally {
+      setSavingSettings(false);
+    }
   };
 
   const isNew = useCallback(
@@ -175,6 +251,7 @@ export default function AdminClients() {
       await apiDelete(`/api/admin/clients-table/${id}`, "provider");
       setItems((prev) => prev.filter((x) => Number(x.id) !== id));
       toast.success(`Клиент #${id} удалён`);
+      await loadDashboard();
     } catch (e) {
       console.error(e);
       toast.error(e?.message || "Не удалось удалить клиента");
@@ -199,6 +276,105 @@ export default function AdminClients() {
           >
             Сбросить «Новые»
           </button>
+        </div>
+      </div>
+
+      <div className="mb-4 rounded-2xl border bg-white p-4 flex flex-wrap items-center gap-4">
+        <div className="text-sm font-semibold">Открытие контактов:</div>
+
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="radio"
+            checked={unlockSettings.is_paid === true}
+            onChange={() => setUnlockSettings((s) => ({ ...s, is_paid: true }))}
+          />
+          Платно
+        </label>
+
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="radio"
+            checked={unlockSettings.is_paid === false}
+            onChange={() => setUnlockSettings((s) => ({ ...s, is_paid: false }))}
+          />
+          Бесплатно
+        </label>
+
+        <div className="flex items-center gap-2">
+          <span className="text-sm">Цена:</span>
+          <input
+            type="number"
+            value={unlockSettings.price}
+            onChange={(e) =>
+              setUnlockSettings((s) => ({
+                ...s,
+                price: e.target.value,
+              }))
+            }
+            className="w-[120px] rounded-lg border px-2 py-1 text-sm"
+          />
+          <span className="text-sm">сум</span>
+        </div>
+
+        <button
+          onClick={saveUnlockSettings}
+          disabled={savingSettings}
+          className="px-3 py-1.5 rounded-lg bg-black text-white text-sm"
+        >
+          {savingSettings ? "Сохранение..." : "Сохранить"}
+        </button>
+
+        <div className="ml-auto text-xs text-gray-500">
+          Текущий режим:{" "}
+          <b className={unlockSettings.is_paid ? "text-red-600" : "text-green-600"}>
+            {unlockSettings.is_paid ? "ПЛАТНО" : "БЕСПЛАТНО"}
+          </b>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-4">
+        <div className="rounded-2xl border bg-white p-4">
+          <div className="text-xs text-gray-500">Режим unlock</div>
+          <div
+            className={`mt-1 text-lg font-semibold ${
+              dashboard.is_paid ? "text-red-600" : "text-green-600"
+            }`}
+          >
+            {dashboard.is_paid ? "ПЛАТНО" : "БЕСПЛАТНО"}
+          </div>
+          <div className="mt-1 text-sm text-gray-500">
+            Цена: {money(dashboard.price || 0)} сум
+          </div>
+        </div>
+
+        <div className="rounded-2xl border bg-white p-4">
+          <div className="text-xs text-gray-500">Клиенты</div>
+          <div className="mt-1 text-2xl font-semibold">
+            {money(dashboard.clients_total || 0)}
+          </div>
+          <div className="mt-1 text-sm text-gray-500">
+            Суммарный баланс: {money(dashboard.balance_total || 0)} сум
+          </div>
+        </div>
+
+        <div className="rounded-2xl border bg-white p-4">
+          <div className="text-xs text-gray-500">Unlocks</div>
+          <div className="mt-1 text-2xl font-semibold">
+            {money(dashboard.unlocks_total || 0)}
+          </div>
+          <div className="mt-1 text-sm text-gray-500">
+            Сегодня: {money(dashboard.unlocks_today || 0)}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border bg-white p-4">
+          <div className="text-xs text-gray-500">Выручка</div>
+          <div className="mt-1 text-2xl font-semibold">
+            {money(dashboard.revenue_total || 0)} сум
+          </div>
+          <div className="mt-1 text-sm text-gray-500">
+            Сегодня: {money(dashboard.revenue_today || 0)} сум
+          </div>
         </div>
       </div>
 
@@ -280,7 +456,9 @@ export default function AdminClients() {
                         onClick={() => handleDelete(c)}
                         disabled={isDeleting}
                         className={`px-3 py-1.5 rounded-lg text-white ${
-                          isDeleting ? "bg-gray-400 cursor-not-allowed" : "bg-red-600 hover:bg-red-700"
+                          isDeleting
+                            ? "bg-gray-400 cursor-not-allowed"
+                            : "bg-red-600 hover:bg-red-700"
                         }`}
                       >
                         {isDeleting ? "Удаление..." : "Удалить"}
@@ -329,7 +507,10 @@ export default function AdminClients() {
           setModalOpen(false);
           setSelectedClient(null);
         }}
-        onChanged={() => fetchList({ limit: 50 })}
+        onChanged={async () => {
+          await fetchList({ limit: 50 });
+          await loadDashboard();
+        }}
       />
     </div>
   );
