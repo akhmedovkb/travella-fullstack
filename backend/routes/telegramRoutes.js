@@ -722,6 +722,12 @@ router.post(
   telegramProviderController.deleteServiceFromBot
 );
 
+// готово после proof 
+router.post(
+  "/provider/:chatId/services/:serviceId/submit",
+  telegramProviderController.submitServiceFromBot
+);
+
 // WEB LOGIN через Telegram Widget
 router.post("/telegram-web-login", loginWithTelegram);
 
