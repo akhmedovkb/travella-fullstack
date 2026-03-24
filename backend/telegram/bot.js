@@ -149,6 +149,41 @@ const axios = axiosBase.create({
   timeout: 10000,
 });
 
+function guessMimeByPath(path) {
+  const p = String(path || "").toLowerCase();
+  if (p.endsWith(".png")) return "image/png";
+  if (p.endsWith(".webp")) return "image/webp";
+  if (p.endsWith(".gif")) return "image/gif";
+  return "image/jpeg";
+}
+
+async function tgFileIdToDataUrlForProof(fileId) {
+  if (!fileId) return null;
+
+  const link = await bot.telegram.getFileLink(fileId);
+  const url = String(link || "").trim();
+  if (!url) return null;
+
+  const r = await axiosBase.get(url, {
+    responseType: "arraybuffer",
+    timeout: 15000,
+  });
+
+  const buf = Buffer.from(r.data);
+  const MAX = 6 * 1024 * 1024; // 6MB
+  if (!buf.length || buf.length > MAX) return null;
+
+  let pathname = "";
+  try {
+    pathname = new URL(url).pathname || "";
+  } catch {
+    pathname = "";
+  }
+
+  const mime = guessMimeByPath(pathname);
+  return `data:${mime};base64,${buf.toString("base64")}`;
+}
+
 /* ===================== PG ADVISORY LOCK (ANTI DOUBLE SPEND) ===================== */
 
 async function withServiceLock(pool, clientId, serviceId, fn) {
@@ -8469,7 +8504,9 @@ bot.on("photo", async (ctx, next) => {
     const proofServiceId = ctx.session?.awaitingProofForServiceId;
     if (proofServiceId) {
       const photos = ctx.message?.photo;
-      const best = Array.isArray(photos) && photos.length ? photos[photos.length - 1] : null;
+      const best = Array.isArray(photos) && photos.length
+        ? photos[photos.length - 1]
+        : null;
       const fileId = best?.file_id;
 
       if (!fileId) {
@@ -8477,7 +8514,39 @@ bot.on("photo", async (ctx, next) => {
         return;
       }
 
-      const tgRef = `tg:${fileId}`;
+      // 🔥 конвертация Telegram file_id → data:image
+      let proofDataUrl = null;
+      try {
+        const link = await bot.telegram.getFileLink(fileId);
+        const url = String(link || "").trim();
+
+        const r = await axiosBase.get(url, {
+          responseType: "arraybuffer",
+          timeout: 15000,
+        });
+
+        const buf = Buffer.from(r.data);
+        if (!buf.length || buf.length > 6 * 1024 * 1024) {
+          throw new Error("file too large or empty");
+        }
+
+        let mime = "image/jpeg";
+        try {
+          const pathname = new URL(url).pathname || "";
+          if (pathname.endsWith(".png")) mime = "image/png";
+          else if (pathname.endsWith(".webp")) mime = "image/webp";
+          else if (pathname.endsWith(".gif")) mime = "image/gif";
+        } catch {}
+
+        proofDataUrl = `data:${mime};base64,${buf.toString("base64")}`;
+      } catch (e) {
+        console.error("[tg] proof convert error:", e);
+        await safeReply(
+          ctx,
+          "⚠️ Не удалось обработать скриншот. Попробуйте отправить другое изображение."
+        );
+        return;
+      }
 
       const svcRes = await pool.query(
         `
@@ -8503,7 +8572,7 @@ bot.on("photo", async (ctx, next) => {
         ? currentDetails.proofImages.filter(Boolean)
         : [];
 
-      proofImages.push(tgRef);
+      proofImages.push(proofDataUrl);
 
       const nextDetails = {
         ...currentDetails,
@@ -8530,12 +8599,15 @@ bot.on("photo", async (ctx, next) => {
     // 1) Фото в режиме редактирования изображений услуги
     if (await handleSvcEditWizardPhoto(ctx)) return;
 
-    // 1b) Фото в старом режиме редактирования (если где-то ещё используется ctx.session.state)
+    // 1b) Старый режим редактирования
     const legacyState = ctx.session?.state;
     const legacyDraft = ctx.session?.serviceDraft;
+
     if (legacyState === "svc_edit_images" && legacyDraft) {
       const photos = ctx.message?.photo;
-      const best = Array.isArray(photos) && photos.length ? photos[photos.length - 1] : null;
+      const best = Array.isArray(photos) && photos.length
+        ? photos[photos.length - 1]
+        : null;
       const fileId = best?.file_id;
 
       if (!fileId) {
@@ -8560,12 +8632,15 @@ bot.on("photo", async (ctx, next) => {
     const draft = ctx.session?.serviceDraft;
 
     const wizStep = ctx.session?.wiz?.step;
-    const isCreatePhotoStep = state === "svc_create_photo" || wizStep === "create_images";
+    const isCreatePhotoStep =
+      state === "svc_create_photo" || wizStep === "create_images";
 
     if (!isCreatePhotoStep || !draft) return next();
 
     const photos = ctx.message?.photo;
-    const best = Array.isArray(photos) && photos.length ? photos[photos.length - 1] : null;
+    const best = Array.isArray(photos) && photos.length
+      ? photos[photos.length - 1]
+      : null;
     const fileId = best?.file_id;
 
     if (!fileId) {
@@ -8578,16 +8653,21 @@ bot.on("photo", async (ctx, next) => {
     draft.images.push(tgRef);
     draft.telegramPhotoFileId = fileId;
 
-    // В мастере создания после фото — финализируем создание
     if (state === "svc_create_photo") {
       await finishCreateServiceFromWizard(ctx);
       return;
     }
 
-    await safeReply(ctx, `✅ Фото добавлено. Сейчас выбрано: ${draft.images.length} шт.`);
+    await safeReply(
+      ctx,
+      `✅ Фото добавлено. Сейчас выбрано: ${draft.images.length} шт.`
+    );
   } catch (e) {
     console.error("photo handler error:", e);
-    await safeReply(ctx, "⚠️ Ошибка при обработке фото. Попробуйте ещё раз.");
+    await safeReply(
+      ctx,
+      "⚠️ Ошибка при обработке фото. Попробуйте ещё раз."
+    );
   }
 });
 
