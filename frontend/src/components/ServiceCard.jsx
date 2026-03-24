@@ -594,8 +594,11 @@ export default function ServiceCard({
     item?.proofImages,
     item?.proof_images
   );
+  const hasProof = proofImages.length > 0;
 
   const [idx, setIdx] = useState(0);
+  const [selectedProofImage, setSelectedProofImage] = useState(null);
+
   useEffect(() => {
     setIdx(0);
   }, [id]);
@@ -647,7 +650,7 @@ export default function ServiceCard({
     return () => {
       alive = false;
     };
-  }, [providerId]);
+  }, [providerId, id]);
   const prov = { ...(inlineProvider || {}), ...(provider || {}) };
 
   const supplierName = firstNonEmpty(
@@ -907,9 +910,17 @@ export default function ServiceCard({
             </div>
           )}
 
+          {hasProof && (
+            <div className="absolute left-2 top-2 z-30 pointer-events-none">
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600/95 text-white text-[11px] font-semibold px-2.5 py-1 shadow-lg ring-1 ring-white/20 backdrop-blur-sm">
+                ✔ {t("marketplace.verified_proof", { defaultValue: "Проверено" })}
+              </span>
+            </div>
+          )}
+
           {/* top overlay: таймер + бейдж + избранное */}
           <div className="absolute top-2 left-2 right-2 z-20 flex items-center justify-between pointer-events-none">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 ml-0 sm:ml-0">
               {expireAt &&
                 (isExpired ? (
                   <span className="pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs bg-black/50 backdrop-blur-md ring-1 ring-white/20">
@@ -990,23 +1001,70 @@ export default function ServiceCard({
             </div>
           )}
 
-          {proofImages.length > 0 && (
-            <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50/60 px-3 py-2">
-              <div className="text-xs font-semibold text-emerald-700">
-                {t("marketplace.proof_images", {
-                  defaultValue: "Подтверждение подлинности",
-                })}
+          {hasProof && (
+            <div className="mt-3 rounded-xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white px-3 py-3 shadow-sm">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-xs font-semibold text-emerald-700">
+                  {t("marketplace.proof_images", {
+                    defaultValue: "Подтверждение подлинности",
+                  })}
+                </div>
+                <div className="text-[11px] text-emerald-700/80">
+                  {proofImages.length}{" "}
+                  {t("marketplace.proof_images_count", {
+                    defaultValue: "фото",
+                  })}
+                </div>
               </div>
+
               <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-                {proofImages.slice(0, 6).map((img, i) => (
-                  <img
+                {proofImages.slice(0, 4).map((img, i) => (
+                  <button
                     key={`${id}-proof-${i}`}
-                    src={img}
-                    alt=""
-                    className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-lg border border-emerald-200 bg-white shrink-0"
-                  />
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedProofImage(img);
+                    }}
+                    className="relative shrink-0 rounded-xl overflow-hidden border border-emerald-200 bg-white hover:opacity-90"
+                    title={t("marketplace.open_proof_image", {
+                      defaultValue: "Открыть изображение",
+                    })}
+                  >
+                    <img
+                      src={img}
+                      alt=""
+                      className="w-16 h-16 sm:w-20 sm:h-20 object-cover"
+                    />
+                  </button>
                 ))}
+
+                {proofImages.length > 4 && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDetailsOpen(true);
+                    }}
+                    className="w-16 h-16 sm:w-20 sm:h-20 shrink-0 flex items-center justify-center rounded-xl bg-emerald-700 text-white text-sm font-semibold"
+                  >
+                    +{proofImages.length - 4}
+                  </button>
+                )}
               </div>
+
+              <button
+                type="button"
+                className="mt-2 text-xs font-semibold text-emerald-700 underline underline-offset-2 hover:text-emerald-800"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDetailsOpen(true);
+                }}
+              >
+                {t("marketplace.check_authenticity", {
+                  defaultValue: "Проверить подлинность",
+                })}
+              </button>
             </div>
           )}
 
@@ -1187,21 +1245,36 @@ export default function ServiceCard({
           </div>
         )}
 
-        {proofImages.length > 0 && (
-          <div className="mt-2 mb-2">
-            <div className="font-semibold mb-2 text-emerald-700">
-              {t("marketplace.proof_images", {
-                defaultValue: "Подтверждение подлинности",
-              })}
+        {hasProof && (
+          <div className="mt-3 mb-2 rounded-xl border border-emerald-200 bg-emerald-50/60 p-3">
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <div className="font-semibold text-emerald-700">
+                {t("marketplace.proof_images", {
+                  defaultValue: "Подтверждение подлинности",
+                })}
+              </div>
+              <div className="text-[11px] text-emerald-700/80">
+                {proofImages.length}{" "}
+                {t("marketplace.proof_images_count", {
+                  defaultValue: "фото",
+                })}
+              </div>
             </div>
+
             <div className="grid grid-cols-2 gap-2">
               {proofImages.map((img, i) => (
-                <img
+                <button
                   key={`${id}-proof-popup-${i}`}
-                  src={img}
-                  alt=""
-                  className="w-full h-24 object-cover rounded-lg border border-emerald-200 bg-white"
-                />
+                  type="button"
+                  className="rounded-xl overflow-hidden border border-emerald-200 bg-white hover:opacity-90"
+                  onClick={() => setSelectedProofImage(img)}
+                >
+                  <img
+                    src={img}
+                    alt=""
+                    className="w-full h-24 object-cover"
+                  />
+                </button>
               ))}
             </div>
           </div>
@@ -1218,6 +1291,34 @@ export default function ServiceCard({
           </div>
         )}
       </DetailsPopup>
+
+      {selectedProofImage &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[4000] bg-black/85 flex items-center justify-center p-4"
+            onClick={() => setSelectedProofImage(null)}
+          >
+            <div
+              className="relative max-w-[95vw] max-h-[95vh]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                className="absolute -top-3 -right-3 w-9 h-9 rounded-full bg-white text-black shadow-lg text-lg font-semibold"
+                onClick={() => setSelectedProofImage(null)}
+                aria-label={t("common.close", { defaultValue: "Закрыть" })}
+              >
+                ×
+              </button>
+              <img
+                src={selectedProofImage}
+                alt=""
+                className="max-w-[95vw] max-h-[95vh] object-contain rounded-2xl shadow-2xl"
+              />
+            </div>
+          </div>,
+          document.body
+        )}
     </>
   );
 }
