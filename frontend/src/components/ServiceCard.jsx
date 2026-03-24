@@ -532,6 +532,9 @@ export default function ServiceCard({
     flightDetails,
   } = extractServiceFields(item, viewerRole);
 
+  const isProviderViewer = viewerRole === "provider";
+  const isAdminViewer = viewerRole === "admin";
+
   /* таймер */
   const expireAt = resolveExpireAt(svc, details);
   const leftMs = expireAt ? expireAt - now : null;
@@ -595,6 +598,8 @@ export default function ServiceCard({
     item?.proof_images
   );
   const hasProof = proofImages.length > 0;
+  const canViewProof = hasProof && (isProviderViewer || isAdminViewer || unlocked);
+  const showProofBadgeOnly = hasProof && !canViewProof;
 
   const [idx, setIdx] = useState(0);
   const [selectedProofImage, setSelectedProofImage] = useState(null);
@@ -708,8 +713,6 @@ export default function ServiceCard({
     prov?.type || prov?.provider_type || prov?.category
   );
   const showBookButton = !!providerId && (providerLooksBookable || serviceLooksBookable);
-  const isProviderViewer = viewerRole === "provider";
-  const isAdminViewer = viewerRole === "admin";
 
   const hasAnySupplierContacts = Boolean(supplierPhone || supplierTg?.label);
 
@@ -758,7 +761,13 @@ export default function ServiceCard({
   const detailsBtnRef = useRef(null);
 
   const hasDetailsBlock =
-    direction || dates || hotel || accommodation || transfer || flightDetails || proofImages.length > 0;
+    direction ||
+    dates ||
+    hotel ||
+    accommodation ||
+    transfer ||
+    flightDetails ||
+    hasProof;
 
   async function handleUnlock(e) {
     e?.stopPropagation?.();
@@ -1017,54 +1026,65 @@ export default function ServiceCard({
                 </div>
               </div>
 
-              <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-                {proofImages.slice(0, 4).map((img, i) => (
-                  <button
-                    key={`${id}-proof-${i}`}
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedProofImage(img);
-                    }}
-                    className="relative shrink-0 rounded-xl overflow-hidden border border-emerald-200 bg-white hover:opacity-90"
-                    title={t("marketplace.open_proof_image", {
-                      defaultValue: "Открыть изображение",
-                    })}
-                  >
-                    <img
-                      src={img}
-                      alt=""
-                      className="w-16 h-16 sm:w-20 sm:h-20 object-cover"
-                    />
-                  </button>
-                ))}
+              {canViewProof ? (
+                <>
+                  <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+                    {proofImages.slice(0, 4).map((img, i) => (
+                      <button
+                        key={`${id}-proof-${i}`}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedProofImage(img);
+                        }}
+                        className="relative shrink-0 rounded-xl overflow-hidden border border-emerald-200 bg-white hover:opacity-90"
+                        title={t("marketplace.open_proof_image", {
+                          defaultValue: "Открыть изображение",
+                        })}
+                      >
+                        <img
+                          src={img}
+                          alt=""
+                          className="w-16 h-16 sm:w-20 sm:h-20 object-cover"
+                        />
+                      </button>
+                    ))}
 
-                {proofImages.length > 4 && (
+                    {proofImages.length > 4 && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDetailsOpen(true);
+                        }}
+                        className="w-16 h-16 sm:w-20 sm:h-20 shrink-0 flex items-center justify-center rounded-xl bg-emerald-700 text-white text-sm font-semibold"
+                      >
+                        +{proofImages.length - 4}
+                      </button>
+                    )}
+                  </div>
+
                   <button
                     type="button"
+                    className="mt-2 text-xs font-semibold text-emerald-700 underline underline-offset-2 hover:text-emerald-800"
                     onClick={(e) => {
                       e.stopPropagation();
                       setDetailsOpen(true);
                     }}
-                    className="w-16 h-16 sm:w-20 sm:h-20 shrink-0 flex items-center justify-center rounded-xl bg-emerald-700 text-white text-sm font-semibold"
                   >
-                    +{proofImages.length - 4}
+                    {t("marketplace.check_authenticity", {
+                      defaultValue: "Проверить подлинность",
+                    })}
                   </button>
-                )}
-              </div>
-
-              <button
-                type="button"
-                className="mt-2 text-xs font-semibold text-emerald-700 underline underline-offset-2 hover:text-emerald-800"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setDetailsOpen(true);
-                }}
-              >
-                {t("marketplace.check_authenticity", {
-                  defaultValue: "Проверить подлинность",
-                })}
-              </button>
+                </>
+              ) : (
+                <div className="mt-2 rounded-lg bg-white/80 border border-emerald-100 px-3 py-2 text-xs text-gray-700">
+                  {t("marketplace.proof_locked_hint", {
+                    defaultValue:
+                      "Подтверждение есть. Проверка доступна после открытия контактов.",
+                  })}
+                </div>
+              )}
             </div>
           )}
 
@@ -1261,22 +1281,31 @@ export default function ServiceCard({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              {proofImages.map((img, i) => (
-                <button
-                  key={`${id}-proof-popup-${i}`}
-                  type="button"
-                  className="rounded-xl overflow-hidden border border-emerald-200 bg-white hover:opacity-90"
-                  onClick={() => setSelectedProofImage(img)}
-                >
-                  <img
-                    src={img}
-                    alt=""
-                    className="w-full h-24 object-cover"
-                  />
-                </button>
-              ))}
-            </div>
+            {canViewProof ? (
+              <div className="grid grid-cols-2 gap-2">
+                {proofImages.map((img, i) => (
+                  <button
+                    key={`${id}-proof-popup-${i}`}
+                    type="button"
+                    className="rounded-xl overflow-hidden border border-emerald-200 bg-white hover:opacity-90"
+                    onClick={() => setSelectedProofImage(img)}
+                  >
+                    <img
+                      src={img}
+                      alt=""
+                      className="w-full h-24 object-cover"
+                    />
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-lg bg-white/80 border border-emerald-100 px-3 py-2 text-xs text-gray-700">
+                {t("marketplace.proof_locked_hint", {
+                  defaultValue:
+                    "Подтверждение есть. Проверка доступна после открытия контактов.",
+                })}
+              </div>
+            )}
           </div>
         )}
 
