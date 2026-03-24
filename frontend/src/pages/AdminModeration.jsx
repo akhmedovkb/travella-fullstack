@@ -1,6 +1,7 @@
 // frontend/src/pages/AdminModeration.jsx
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { createPortal } from "react-dom";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
 import { tSuccess, tError, tInfo } from "../shared/toast";
@@ -81,11 +82,51 @@ function pickFirst(...vals) {
   return null;
 }
 
-function Card({ item, tab, onApprove, onReject, onUnpublish, t }) {
+function ProofLightbox({ image, onClose }) {
+  if (!image) return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[4000] bg-black/85 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="relative max-w-[95vw] max-h-[95vh]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute -top-3 -right-3 w-9 h-9 rounded-full bg-white text-black shadow-lg text-lg font-semibold"
+          aria-label="Close"
+        >
+          ×
+        </button>
+        <img
+          src={image}
+          alt=""
+          className="max-w-[95vw] max-h-[95vh] object-contain rounded-2xl shadow-2xl bg-white"
+        />
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+function Card({
+  item,
+  tab,
+  onApprove,
+  onReject,
+  onUnpublish,
+  t,
+  onOpenProof,
+}) {
   const s = item || {};
   const d = normalizeDetails(s.details);
   const images = normalizeImages(s.images);
   const proofImages = normalizeImages(d.proofImages);
+  const hasProof = proofImages.length > 0;
 
   const cover = pickFirst(
     images[0],
@@ -271,9 +312,21 @@ function Card({ item, tab, onApprove, onReject, onUnpublish, t }) {
     d.flight_info;
 
   return (
-    <div className="border rounded-lg p-4 bg-white shadow-sm flex flex-col">
-      <div className="flex gap-3">
-        <div className="w-24 h-16 bg-gray-100 rounded overflow-hidden">
+    <div className="border rounded-lg p-4 bg-white shadow-sm flex flex-col relative">
+      <div className="absolute top-3 right-3 z-10">
+        {hasProof ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 text-white text-[11px] font-semibold px-2.5 py-1 shadow">
+            ✔ {t("moderation.proof_exists", { defaultValue: "Есть proof" })}
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 rounded-full bg-gray-300 text-gray-800 text-[11px] font-semibold px-2.5 py-1">
+            {t("moderation.proof_missing", { defaultValue: "Нет proof" })}
+          </span>
+        )}
+      </div>
+
+      <div className="flex gap-3 pr-24">
+        <div className="w-24 h-16 bg-gray-100 rounded overflow-hidden shrink-0">
           {cover ? (
             <img src={cover} alt="" className="w-full h-full object-cover" />
           ) : null}
@@ -366,6 +419,48 @@ function Card({ item, tab, onApprove, onReject, onUnpublish, t }) {
         )}
       </div>
 
+      {proofImages.length > 0 && (
+        <div className="mt-3 rounded-xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-3 shadow-sm">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <div className="text-xs font-semibold text-emerald-700">
+              {t("moderation.proof_images", {
+                defaultValue: "Подтверждение подлинности",
+              })}
+            </div>
+            <div className="text-[11px] text-emerald-700/80">
+              {proofImages.length}{" "}
+              {t("moderation.proof_count", { defaultValue: "фото" })}
+            </div>
+          </div>
+
+          <div className="flex gap-2 flex-wrap">
+            {proofImages.slice(0, 6).map((img, idx) => (
+              <button
+                key={`${s.id}-proof-${idx}`}
+                type="button"
+                onClick={() => onOpenProof(img)}
+                className="rounded-xl overflow-hidden border border-emerald-200 bg-white hover:opacity-90"
+                title={t("moderation.open_proof", {
+                  defaultValue: "Открыть подтверждение",
+                })}
+              >
+                <img
+                  src={img}
+                  alt=""
+                  className="w-24 h-20 object-cover bg-white"
+                />
+              </button>
+            ))}
+
+            {proofImages.length > 6 && (
+              <div className="w-24 h-20 rounded-xl bg-emerald-700 text-white flex items-center justify-center text-sm font-semibold">
+                +{proofImages.length - 6}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {hasExtraDetails && (
         <div className="mt-3 text-xs bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-1">
           <div className="font-semibold mb-1">
@@ -386,27 +481,6 @@ function Card({ item, tab, onApprove, onReject, onUnpublish, t }) {
                     src={img}
                     alt=""
                     className="w-20 h-16 object-cover rounded border border-gray-200 bg-white"
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {proofImages.length > 0 && (
-            <div className="mb-2">
-              <div className="text-gray-500 mb-1">
-                {t("moderation.proof_images", {
-                  defaultValue: "Подтверждение подлинности",
-                })}
-                :
-              </div>
-              <div className="flex gap-2 flex-wrap">
-                {proofImages.slice(0, 8).map((img, idx) => (
-                  <img
-                    key={`${s.id}-proof-${idx}`}
-                    src={img}
-                    alt=""
-                    className="w-20 h-16 object-cover rounded border border-emerald-200 bg-white"
                   />
                 ))}
               </div>
@@ -699,6 +773,7 @@ export default function AdminModeration() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [counts, setCounts] = useState({ pending: 0, rejected: 0 });
+  const [proofViewer, setProofViewer] = useState(null);
 
   const token = localStorage.getItem("token");
   const cfg = { headers: { Authorization: `Bearer ${token}` } };
@@ -857,75 +932,83 @@ export default function AdminModeration() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto p-4">
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">
-          {t("moderation.title", { defaultValue: "Модерация услуг" })}
-        </h1>
-        <button
-          onClick={() => {
-            load(tab);
-            refreshCounts();
-          }}
-          className="px-3 py-1.5 rounded bg-gray-900 text-white text-sm"
-        >
-          {t("common.refresh", { defaultValue: "Обновить" })}
-        </button>
+    <>
+      <div className="max-w-6xl mx-auto p-4">
+        <div className="mb-4 flex items-center justify-between">
+          <h1 className="text-2xl font-bold">
+            {t("moderation.title", { defaultValue: "Модерация услуг" })}
+          </h1>
+          <button
+            onClick={() => {
+              load(tab);
+              refreshCounts();
+            }}
+            className="px-3 py-1.5 rounded bg-gray-900 text-white text-sm"
+          >
+            {t("common.refresh", { defaultValue: "Обновить" })}
+          </button>
+        </div>
+
+        <div className="mb-5 inline-flex rounded-full bg-white shadow-sm overflow-hidden">
+          <button
+            className={`px-4 py-1.5 text-sm font-medium ${
+              tab === "pending"
+                ? "bg-gray-900 text-white"
+                : "text-gray-700 hover:bg-gray-100"
+            }`}
+            onClick={() => setTab("pending")}
+          >
+            {t("moderation.tabs.pending", { defaultValue: "Ожидают" })}
+            <span className="ml-2 inline-flex items-center justify-center min-w-[22px] h-[22px] px-1 text-xs rounded-full bg-gray-200 text-gray-700">
+              {counts.pending || 0}
+            </span>
+          </button>
+
+          <button
+            className={`px-4 py-1.5 text-sm font-medium ${
+              tab === "rejected"
+                ? "bg-gray-900 text-white"
+                : "text-gray-700 hover:bg-gray-100"
+            }`}
+            onClick={() => setTab("rejected")}
+          >
+            {t("moderation.tabs.rejected", { defaultValue: "Отклонённые" })}
+            <span className="ml-2 inline-flex items-center justify-center min-w-[22px] h-[22px] px-1 text-xs rounded-full bg-gray-200 text-gray-700">
+              {counts.rejected || 0}
+            </span>
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="text-gray-600">
+            {t("common.loading", { defaultValue: "Загрузка…" })}
+          </div>
+        ) : items.length === 0 ? (
+          <div className="text-gray-600">
+            {t("moderation.empty", { defaultValue: "Нет элементов" })}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {items.map((it) => (
+              <Card
+                key={it.id}
+                item={it}
+                tab={tab}
+                onApprove={approve}
+                onReject={reject}
+                onUnpublish={unpublish}
+                onOpenProof={setProofViewer}
+                t={t}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
-      <div className="mb-5 inline-flex rounded-full bg-white shadow-sm overflow-hidden">
-        <button
-          className={`px-4 py-1.5 text-sm font-medium ${
-            tab === "pending"
-              ? "bg-gray-900 text-white"
-              : "text-gray-700 hover:bg-gray-100"
-          }`}
-          onClick={() => setTab("pending")}
-        >
-          {t("moderation.tabs.pending", { defaultValue: "Ожидают" })}
-          <span className="ml-2 inline-flex items-center justify-center min-w-[22px] h-[22px] px-1 text-xs rounded-full bg-gray-200 text-gray-700">
-            {counts.pending || 0}
-          </span>
-        </button>
-
-        <button
-          className={`px-4 py-1.5 text-sm font-medium ${
-            tab === "rejected"
-              ? "bg-gray-900 text-white"
-              : "text-gray-700 hover:bg-gray-100"
-          }`}
-          onClick={() => setTab("rejected")}
-        >
-          {t("moderation.tabs.rejected", { defaultValue: "Отклонённые" })}
-          <span className="ml-2 inline-flex items-center justify-center min-w-[22px] h-[22px] px-1 text-xs rounded-full bg-gray-200 text-gray-700">
-            {counts.rejected || 0}
-          </span>
-        </button>
-      </div>
-
-      {loading ? (
-        <div className="text-gray-600">
-          {t("common.loading", { defaultValue: "Загрузка…" })}
-        </div>
-      ) : items.length === 0 ? (
-        <div className="text-gray-600">
-          {t("moderation.empty", { defaultValue: "Нет элементов" })}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {items.map((it) => (
-            <Card
-              key={it.id}
-              item={it}
-              tab={tab}
-              onApprove={approve}
-              onReject={reject}
-              onUnpublish={unpublish}
-              t={t}
-            />
-          ))}
-        </div>
-      )}
-    </div>
+      <ProofLightbox
+        image={proofViewer}
+        onClose={() => setProofViewer(null)}
+      />
+    </>
   );
 }
