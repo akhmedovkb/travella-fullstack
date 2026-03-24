@@ -826,7 +826,7 @@ async function createServiceFromBot(req, res) {
           $6::jsonb,
           $7,
           'draft',
-          NULL,
+          'draft',
           NULL,
           NOW()
         )
