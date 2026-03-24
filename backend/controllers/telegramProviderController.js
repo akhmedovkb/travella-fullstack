@@ -825,9 +825,9 @@ async function createServiceFromBot(req, res) {
           $5::jsonb,
           $6::jsonb,
           $7,
-          'pending',
-          'pending',
-          NOW(),
+          'draft',
+          NULL,
+          NULL,
           NOW()
         )
         RETURNING id, title, category, status, moderation_status, details, images
@@ -1433,6 +1433,92 @@ async function updateServiceFromBot(req, res) {
   }
 }
 
+async function submitServiceFromBot(req, res) {
+  try {
+    const { chatId, serviceId } = req.params;
+    const svcId = Number(serviceId);
+
+    if (!Number.isFinite(svcId) || svcId <= 0) {
+      return res.status(400).json({ success: false, error: "BAD_SERVICE_ID" });
+    }
+
+    const providerRes = await pool.query(
+      `SELECT id
+         FROM providers
+        WHERE telegram_chat_id::text = $1
+           OR tg_chat_id::text = $1
+           OR telegram_web_chat_id::text = $1
+           OR telegram_refused_chat_id::text = $1
+        LIMIT 1`,
+      [chatId]
+    );
+
+    if (!providerRes.rowCount) {
+      return res.status(404).json({ success: false, error: "PROVIDER_NOT_FOUND" });
+    }
+
+    const providerId = providerRes.rows[0].id;
+
+    const svcRes = await pool.query(
+      `SELECT id, category, details, status
+         FROM services
+        WHERE id = $1 AND provider_id = $2
+        LIMIT 1`,
+      [svcId, providerId]
+    );
+
+    if (!svcRes.rowCount) {
+      return res.status(404).json({ success: false, error: "SERVICE_NOT_FOUND" });
+    }
+
+    const svc = svcRes.rows[0];
+
+    const details =
+      svc.details && typeof svc.details === "object"
+        ? svc.details
+        : {};
+
+    const proofImages = Array.isArray(details.proofImages)
+      ? details.proofImages.filter(Boolean)
+      : [];
+
+    if (!proofImages.length) {
+      return res.status(400).json({
+        success: false,
+        error: "PROOF_REQUIRED",
+        message: "Proof images are required",
+      });
+    }
+
+    const upd = await pool.query(
+      `
+      UPDATE services
+         SET status = 'pending',
+             moderation_status = 'pending',
+             submitted_at = NOW(),
+             updated_at = NOW()
+       WHERE id = $1 AND provider_id = $2
+       RETURNING id, status, moderation_status
+      `,
+      [svcId, providerId]
+    );
+
+    try {
+      await notifyModerationNew({ service: svcId });
+    } catch (e) {
+      console.error("[telegram] notifyModerationNew failed:", e);
+    }
+
+    return res.json({
+      success: true,
+      service: upd.rows[0],
+    });
+  } catch (err) {
+    console.error("[telegram] submitServiceFromBot error:", err);
+    return res.status(500).json({ success: false, error: "SERVER_ERROR" });
+  }
+}
+
 module.exports = {
   getProviderBookings,
   confirmBooking,
@@ -1450,4 +1536,5 @@ module.exports = {
   extendService7FromBot,
   archiveServiceFromBot,
   createServiceFromBot,
+  submitServiceFromBot,
 };
