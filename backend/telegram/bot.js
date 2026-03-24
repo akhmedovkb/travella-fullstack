@@ -4380,8 +4380,36 @@ async function finishCreateServiceFromWizard(ctx) {
       return;
     }
 
+    const createdServiceId = data?.service?.id;
+
+    const refusedCategories = [
+      "refused_tour",
+      "refused_hotel",
+      "refused_flight",
+      "refused_ticket",
+      "refused_event_ticket",
+    ];
+
+    if (refusedCategories.includes(String(category || "").toLowerCase())) {
+      ctx.session.awaitingProofForServiceId = createdServiceId;
+      ctx.session.awaitingProofForCategory = String(category || "").toLowerCase();
+
+      await ctx.reply(
+        `✅ Заявка #${createdServiceId} создана.\n\n` +
+          `Теперь для отправки на модерацию вы обязаны отправить скриншоты, ` +
+          `подтверждающие подлинность вашей брони ` +
+          `тура / отеля / авиабилета / билета на мероприятие.\n\n` +
+          `📎 Отправьте сюда изображения подтверждения.\n` +
+          `Когда закончите, отправьте сообщение: ГОТОВО`
+      );
+
+      resetServiceWizard(ctx);
+
+      return;
+    }
+
     await ctx.reply(
-      `✅ Готово!\n\nУслуга #${data.service.id} создана и отправлена на модерацию.\nПосле одобрения она появится в поиске.`
+      `✅ Готово!\n\nУслуга #${createdServiceId} создана и отправлена на модерацию.\nПосле одобрения она появится в поиске.`
     );
 
     resetServiceWizard(ctx);
@@ -8437,6 +8465,68 @@ bot.on("text", async (ctx, next) => {
 
 bot.on("photo", async (ctx, next) => {
   try {
+    // 0) Фото-подтверждения для уже созданной refused-услуги
+    const proofServiceId = ctx.session?.awaitingProofForServiceId;
+    if (proofServiceId) {
+      const photos = ctx.message?.photo;
+      const best = Array.isArray(photos) && photos.length ? photos[photos.length - 1] : null;
+      const fileId = best?.file_id;
+
+      if (!fileId) {
+        await safeReply(ctx, "⚠️ Не удалось получить file_id. Отправьте скриншот ещё раз.");
+        return;
+      }
+
+      const tgRef = `tg:${fileId}`;
+
+      const svcRes = await pool.query(
+        `
+          SELECT id, details
+            FROM services
+           WHERE id = $1
+           LIMIT 1
+        `,
+        [proofServiceId]
+      );
+
+      if (!svcRes.rows.length) {
+        await safeReply(ctx, "⚠️ Услуга для привязки скриншотов не найдена.");
+        return;
+      }
+
+      const currentDetails =
+        svcRes.rows[0].details && typeof svcRes.rows[0].details === "object"
+          ? svcRes.rows[0].details
+          : {};
+
+      const proofImages = Array.isArray(currentDetails.proofImages)
+        ? currentDetails.proofImages.filter(Boolean)
+        : [];
+
+      proofImages.push(tgRef);
+
+      const nextDetails = {
+        ...currentDetails,
+        proofImages,
+      };
+
+      await pool.query(
+        `
+          UPDATE services
+             SET details = $1::jsonb,
+                 updated_at = NOW()
+           WHERE id = $2
+        `,
+        [JSON.stringify(nextDetails), proofServiceId]
+      );
+
+      await safeReply(
+        ctx,
+        `📎 Скриншот подтверждения сохранён.\nСейчас загружено: ${proofImages.length} шт.\n\nОтправьте ещё скриншоты или напишите «ГОТОВО».`
+      );
+      return;
+    }
+
     // 1) Фото в режиме редактирования изображений услуги
     if (await handleSvcEditWizardPhoto(ctx)) return;
 
@@ -8465,14 +8555,10 @@ bot.on("photo", async (ctx, next) => {
       return;
     }
 
-
-    // 2) Фото в мастере создания услуги (текущий мастер использует ctx.session.state)
+    // 2) Фото в мастере создания услуги
     const state = ctx.session?.state;
     const draft = ctx.session?.serviceDraft;
 
-    // Поддержка двух вариантов (на случай старого/другого кода):
-    // - state === "svc_create_photo" (актуальный мастер)
-    // - ctx.session.wiz.step === "create_images" (если где-то ещё используется)
     const wizStep = ctx.session?.wiz?.step;
     const isCreatePhotoStep = state === "svc_create_photo" || wizStep === "create_images";
 
@@ -8492,18 +8578,106 @@ bot.on("photo", async (ctx, next) => {
     draft.images.push(tgRef);
     draft.telegramPhotoFileId = fileId;
 
-    // В мастере создания «Отказной тур/отель» по UX ожидается одно фото.
-    // После получения фото — финализируем создание.
+    // В мастере создания после фото — финализируем создание
     if (state === "svc_create_photo") {
       await finishCreateServiceFromWizard(ctx);
       return;
     }
 
-    // fallback (если где-то ещё используется многофото режим)
     await safeReply(ctx, `✅ Фото добавлено. Сейчас выбрано: ${draft.images.length} шт.`);
   } catch (e) {
     console.error("photo handler error:", e);
     await safeReply(ctx, "⚠️ Ошибка при обработке фото. Попробуйте ещё раз.");
+  }
+});
+
+bot.hears(/^(готово|done)$/i, async (ctx) => {
+  try {
+    const serviceId = Number(ctx.session?.awaitingProofForServiceId || 0);
+    if (!serviceId) return;
+
+    const svcRes = await pool.query(
+      `
+        SELECT id, details
+          FROM services
+         WHERE id = $1
+         LIMIT 1
+      `,
+      [serviceId]
+    );
+
+    if (!svcRes.rows.length) {
+      ctx.session.awaitingProofForServiceId = null;
+      ctx.session.awaitingProofForCategory = null;
+
+      await safeReply(
+        ctx,
+        "⚠️ Услуга для подтверждения не найдена. Создайте услугу заново."
+      );
+      return;
+    }
+
+    const details =
+      svcRes.rows[0].details && typeof svcRes.rows[0].details === "object"
+        ? svcRes.rows[0].details
+        : {};
+
+    const proofImages = Array.isArray(details.proofImages)
+      ? details.proofImages.filter(Boolean)
+      : [];
+
+    if (proofImages.length === 0) {
+      await safeReply(
+        ctx,
+        "⚠️ Сначала отправьте хотя бы один скриншот, подтверждающий подлинность брони."
+      );
+      return;
+    }
+
+    const chatId = getActorId(ctx);
+    if (!chatId) {
+      await safeReply(ctx, "⚠️ Не удалось определить пользователя. Попробуйте ещё раз.");
+      return;
+    }
+
+    const { data } = await axios.post(
+      `/api/telegram/provider/${chatId}/services/${serviceId}/submit`
+    );
+
+    if (!data || data.success === false) {
+      await safeReply(
+        ctx,
+        "⚠️ Не удалось отправить услугу на модерацию. Попробуйте позже."
+      );
+      return;
+    }
+
+    ctx.session.awaitingProofForServiceId = null;
+    ctx.session.awaitingProofForCategory = null;
+
+    await safeReply(
+      ctx,
+      `✅ Готово!\n\n` +
+        `Услуга #${serviceId} отправлена на модерацию.\n` +
+        `Скриншоты подтверждения прикреплены.\n` +
+        `После одобрения услуга появится в поиске.`
+    );
+
+    await safeReply(ctx, "Что делаем дальше? 👇", {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "📋 Мои услуги", callback_data: "prov_services:list" }],
+          [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
+          [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
+        ],
+      },
+    });
+  } catch (e) {
+    console.error("[tg-bot] proof done error:", e?.response?.data || e);
+    await safeReply(
+      ctx,
+      "⚠️ Ошибка при завершении отправки на модерацию. Попробуйте ещё раз."
+    );
   }
 });
 
@@ -8968,7 +9142,7 @@ bot.action(/^svc_edit_img_(?:remove|del):(\d+)$/, async (ctx) => {
 
     await safeReply(
       ctx,
-      `✅ Удалено. Сейчас в услуге: ${draft.images.length} шт.\\n\\nОтправьте новое фото или нажмите «✅ Готово».`,
+      `✅ Удалено. Сейчас в услуге: ${draft.images.length} шт.\\n\\nОтправьте новое фото или нажмите «✅ ».`,
       buildEditImagesKeyboard(draft)
     );
   } catch (e) {
