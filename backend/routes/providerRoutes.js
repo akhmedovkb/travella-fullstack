@@ -206,6 +206,49 @@ router.post(
   async (req, res, next) => {
     try {
       const { id } = req.params;
+
+      const checkRes = await pool.query(
+        `
+          SELECT id, category, details, status, moderation_status
+            FROM services
+           WHERE id = $1
+             AND provider_id = $2
+           LIMIT 1
+        `,
+        [id, req.user.id]
+      );
+
+      if (!checkRes.rows.length) {
+        return res.status(404).json({ message: "Service not found" });
+      }
+
+      const svc = checkRes.rows[0];
+      const category = String(svc.category || "").toLowerCase();
+      const details =
+        svc.details && typeof svc.details === "object" ? svc.details : {};
+
+      const refusedCategories = [
+        "refused_tour",
+        "refused_hotel",
+        "refused_flight",
+        "refused_ticket",
+        "refused_event_ticket",
+      ];
+
+      if (refusedCategories.includes(category)) {
+        const proofImages = Array.isArray(details.proofImages)
+          ? details.proofImages.filter(Boolean)
+          : [];
+
+        if (proofImages.length === 0) {
+          return res.status(400).json({
+            message:
+              "Before sending to moderation, upload screenshots confirming the authenticity of the booking/ticket.",
+            code: "PROOF_IMAGES_REQUIRED",
+          });
+        }
+      }
+
       const { rows } = await pool.query(
         `
           UPDATE services
@@ -216,17 +259,22 @@ router.post(
            WHERE id=$1
              AND provider_id=$2
              AND (status IN ('draft','rejected') OR status IS NULL)
-           RETURNING id, status, moderation_status, submitted_at
+           RETURNING id, category, status, moderation_status, submitted_at, details
         `,
         [id, req.user.id]
       );
 
       if (!rows.length) {
-        return res.status(409).json({ message: "Service must be in draft/rejected (or empty status) to submit" });
+        return res.status(409).json({
+          message:
+            "Service must be in draft/rejected (or empty status) to submit",
+        });
       }
+
       try {
         await notifyModerationNew({ service: rows[0].id });
       } catch {}
+
       return res.json({ ok: true, service: rows[0] });
     } catch (e) {
       next(e);
