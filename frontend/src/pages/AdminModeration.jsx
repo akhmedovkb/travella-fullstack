@@ -85,9 +85,11 @@ function Card({ item, tab, onApprove, onReject, onUnpublish, t }) {
   const s = item || {};
   const d = normalizeDetails(s.details);
   const images = normalizeImages(s.images);
+  const proofImages = normalizeImages(d.proofImages);
 
   const cover = pickFirst(
     images[0],
+    proofImages[0],
     d.image,
     d.imageUrl,
     d.cover,
@@ -233,9 +235,11 @@ function Card({ item, tab, onApprove, onReject, onUnpublish, t }) {
     "coverImage",
     "photo",
     "photoUrl",
+    "proofImages",
   ]);
 
   const hasExtraDetails =
+    proofImages.length > 0 ||
     images.length > 0 ||
     d.directionCountry ||
     d.directionFrom ||
@@ -382,6 +386,27 @@ function Card({ item, tab, onApprove, onReject, onUnpublish, t }) {
                     src={img}
                     alt=""
                     className="w-20 h-16 object-cover rounded border border-gray-200 bg-white"
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {proofImages.length > 0 && (
+            <div className="mb-2">
+              <div className="text-gray-500 mb-1">
+                {t("moderation.proof_images", {
+                  defaultValue: "Подтверждение подлинности",
+                })}
+                :
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                {proofImages.slice(0, 8).map((img, idx) => (
+                  <img
+                    key={`${s.id}-proof-${idx}`}
+                    src={img}
+                    alt=""
+                    className="w-20 h-16 object-cover rounded border border-emerald-200 bg-white"
                   />
                 ))}
               </div>
