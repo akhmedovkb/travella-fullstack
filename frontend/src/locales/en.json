@@ -46,7 +46,28 @@
     "sent": "Booking request sent",
     "error": "Failed to send booking"
   },
-
+"balance": {
+  "title": "Client Balance",
+  "subtitle": "Top up via Payme and charges for unlocking contacts",
+  "current": "Current balance",
+  "unlock_price": "Contact unlock price",
+  "topup": "Top up balance",
+  "choose_amount": "Choose amount or enter your own",
+  "custom_placeholder": "Custom amount, e.g. 75000",
+  "creating": "Creating…",
+  "pay": "Pay via Payme",
+  "history": "Transaction history",
+  "records": "records",
+  "empty": "No transactions yet",
+  "date": "Date",
+  "amount": "Amount",
+  "reason": "Reason",
+  "source": "Source",
+  "load_error": "Failed to load balance",
+  "invalid_amount": "Enter a valid amount",
+  "topup_created": "Top-up order created: {{amount}} sum",
+  "payme_error": "Payme error"
+},
   "bookings": {
     "provider_cancel_reason": "Specify cancellation reason",
     "waiting_for_requester": "Offer sent. Waiting for client confirmation.",
