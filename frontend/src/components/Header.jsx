@@ -51,7 +51,16 @@ const IconHeart = (p) => (
     />
   </svg>
 );
-
+const IconWallet = (p) => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
+    <path
+      d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18a2 2 0 0 1 2 2v1H6.5a1.5 1.5 0 0 0 0 3H20v6a2 2 0 0 1-2 2H6.5A2.5 2.5 0 0 1 4 16.5v-9Z"
+      stroke="currentColor"
+      strokeWidth="2"
+    />
+    <circle cx="16.5" cy="11.5" r="1" fill="currentColor" />
+  </svg>
+);
 const IconUsers = (p) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
     <path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="currentColor" strokeWidth="2" />
@@ -164,12 +173,28 @@ function detectAdminFromJwt() {
   }
 }
 
+function formatHeaderBalance(value, lang = "ru") {
+  const amount = Number(value || 0) / 100;
+
+  const locale =
+    lang === "uz" ? "uz-UZ" :
+    lang === "en" ? "en-US" :
+    "ru-RU";
+
+  const currency =
+    lang === "uz" ? "so'm" :
+    lang === "en" ? "sum" :
+    "сум";
+
+  return `${Math.round(amount).toLocaleString(locale)} ${currency}`;
+}
+
 export default function Header() {
   const hasClient = !!localStorage.getItem("clientToken");
   const hasProvider = !!localStorage.getItem("token") || !!localStorage.getItem("providerToken");
   const role = hasClient ? "client" : hasProvider ? "provider" : null;
 
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const location = useLocation();
 
   const [isAdmin, setIsAdmin] = useState(false);
@@ -187,6 +212,8 @@ export default function Header() {
   const [counts, setCounts] = useState(null);
   const [loading, setLoading] = useState(false);
   const [favCount, setFavCount] = useState(0);
+  const [clientBalance, setClientBalance] = useState(0);
+  const [balanceLoading, setBalanceLoading] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0);
 
   // Admin detect
@@ -249,6 +276,39 @@ export default function Header() {
       window.removeEventListener("provider:favorites:changed", onChanged);
     };
   }, [role]);
+
+    useEffect(() => {
+    if (role !== "client") {
+      setClientBalance(0);
+      return;
+    }
+  
+    let alive = true;
+  
+    const loadBalance = async () => {
+      try {
+        setBalanceLoading(true);
+        const res = await apiGet("/api/client/balance", "client");
+        if (!alive) return;
+        setClientBalance(Number(res?.balance || 0));
+      } catch {
+        if (!alive) return;
+        setClientBalance(0);
+      } finally {
+        if (alive) setBalanceLoading(false);
+      }
+    };
+  
+    loadBalance();
+  
+    const onChanged = () => loadBalance();
+    window.addEventListener("client:balance:changed", onChanged);
+  
+    return () => {
+      alive = false;
+      window.removeEventListener("client:balance:changed", onChanged);
+    };
+  }, [role, refreshTick]);
 
   // Counters (provider)
   useEffect(() => {
@@ -508,10 +568,34 @@ export default function Header() {
 
             {role === "client" && (
               <>
-                <NavBadgeDark to="/client/dashboard" label={t("client.header.cabinet", "Кабинет")} icon={<IconDashboard />} />
+                <NavBadgeDark
+                  to="/client/dashboard"
+                  label={t("client.header.cabinet", { defaultValue: "Кабинет" })}
+                  icon={<IconDashboard />}
+                />
+            
+                <NavLink
+                  to="/client/balance"
+                  className={({ isActive }) =>
+                    [
+                      "relative shrink-0 inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full transition-colors whitespace-nowrap",
+                      "text-sm",
+                      isActive
+                        ? "bg-white/10 text-white font-semibold after:content-[''] after:absolute after:left-3 after:right-3 after:-bottom-1 after:h-[2px] after:bg-orange-400 after:rounded-full"
+                        : "text-white/80 hover:text-white hover:bg-white/10",
+                    ].join(" ")
+                  }
+                >
+                  <IconWallet />
+                  <span>{t("client.header.balance", { defaultValue: "Баланс" })}</span>
+                  <span className="ml-1 rounded-full bg-orange-500 text-white text-[11px] px-2 py-0.5 leading-none">
+                    {balanceLoading ? "…" : formatHeaderBalance(clientBalance, i18n.language)}
+                  </span>
+                </NavLink>
+            
                 <NavBadgeDark
                   to="/client/dashboard?tab=favorites"
-                  label={t("client.header.favorites", "Избранное")}
+                  label={t("client.header.favorites", { defaultValue: "Избранное" })}
                   icon={<IconHeart />}
                   value={favCount}
                 />
@@ -575,17 +659,30 @@ export default function Header() {
                   </>
                 )}
 
-                {role === "client" && (
-                  <>
-                    <NavItemMobileDark to="/client/dashboard" label={t("client.header.cabinet", "Кабинет")} icon={<IconDashboard />} />
-                    <NavItemMobileDark
-                      to="/client/dashboard?tab=favorites"
-                      label={t("client.header.favorites", "Избранное")}
-                      icon={<IconHeart />}
-                      badge={favCount}
-                    />
-                  </>
-                )}
+              {role === "client" && (
+                <>
+                  <NavItemMobileDark
+                    to="/client/dashboard"
+                    label={t("client.header.cabinet", { defaultValue: "Кабинет" })}
+                    icon={<IconDashboard />}
+                  />
+              
+                  <NavItemMobileDark
+                    to="/client/balance"
+                    label={`${t("client.header.balance", { defaultValue: "Баланс" })} · ${
+                      balanceLoading ? "…" : formatHeaderBalance(clientBalance, i18n.language)
+                    }`}
+                    icon={<IconWallet />}
+                  />
+              
+                  <NavItemMobileDark
+                    to="/client/dashboard?tab=favorites"
+                    label={t("client.header.favorites", { defaultValue: "Избранное" })}
+                    icon={<IconHeart />}
+                    badge={favCount}
+                  />
+                </>
+              )}
               </RowGroupDark>
             )}
 
