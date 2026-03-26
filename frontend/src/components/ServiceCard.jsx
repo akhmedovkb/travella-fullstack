@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { apiGet, apiPost } from "../api";
+import { tSuccess } from "../shared/toast";
 import WishHeart from "./WishHeart";
 const SHOW_REVIEWS = false;
 
@@ -797,10 +798,28 @@ export default function ServiceCard({
         "client"
       );
 
-      if (res?.ok && (res?.unlocked || res?.already)) {
-        setUnlocked(true);
-        return;
+    if (res?.ok && (res?.unlocked || res?.already)) {
+      setUnlocked(true);
+      window.dispatchEvent(new Event("client:balance:changed"));
+    
+      const chargedSum = Number(res?.charged_sum || 0);
+    
+      if (res?.already) {
+        tSuccess(
+          t("marketplace.contacts_already_opened", {
+            defaultValue: "Контакты уже были открыты",
+          })
+        );
+      } else {
+        tSuccess(
+          t("marketplace.contacts_unlocked_success", {
+            defaultValue: `💸 Списано ${chargedSum.toLocaleString("ru-RU")} сум · Контакты разблокированы`,
+          })
+        );
       }
+    
+      return;
+    }
 
       throw new Error("unlock_failed");
     } catch (err) {
