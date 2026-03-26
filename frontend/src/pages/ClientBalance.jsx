@@ -134,7 +134,7 @@ export default function ClientBalance() {
               {t("balance.unlock_price")}
             </div>
             <div className="mt-2 text-3xl font-semibold">
-              {formatMoney(unlockPrice, i18n.language)}
+              {formatMoney(unlockPrice, i18n.language, true)}
             </div>
           </div>
         </div>
