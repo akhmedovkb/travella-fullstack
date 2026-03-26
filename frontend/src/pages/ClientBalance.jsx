@@ -53,6 +53,7 @@ export default function ClientBalance() {
       setBalance(Number(bal?.balance || 0));
       setUnlockPrice(Number(bal?.unlock_price || 10000));
       setLedger(Array.isArray(led?.rows) ? led.rows : []);
+      window.dispatchEvent(new Event("client:balance:changed"));
     } catch (e) {
       console.error(e);
       tError(t("balance.load_error"));
