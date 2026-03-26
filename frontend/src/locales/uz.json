@@ -229,7 +229,11 @@
       },
       "uploadPhoto": "Rasm yuklash"
     },
-    "header": { "cabinet": "Kabinet", "favorites": "Sevimlilar" },
+      "header": {
+    "cabinet": "Kabinet",
+    "favorites": "Sevimlilar",
+    "balance": "Balans"
+  },
     "login": {
       "loginBtn": "Kirish",
       "noAccount": "Akkaunt yo‘qmi?",
