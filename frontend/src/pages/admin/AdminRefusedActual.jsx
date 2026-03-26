@@ -341,7 +341,7 @@ export default function AdminRefusedActual() {
       }
 
       setUnlockIsPaid(Boolean(data.is_paid));
-      setUnlockPrice(String(data.price ?? 10000));
+      setUnlockPrice(String(Math.round(Number(data.price ?? 0) / 100)));
       setUnlockUpdatedAt(data.updated_at || null);
     } catch (e) {
       const info = extractAxiosError(e);
@@ -367,7 +367,7 @@ export default function AdminRefusedActual() {
         apiPath("/admin/billing/contact-unlock-settings"),
         {
           is_paid: unlockIsPaid,
-          price: priceNum,
+          price: Math.round(priceNum * 100),
         }
       );
 
@@ -378,7 +378,7 @@ export default function AdminRefusedActual() {
       }
 
       setUnlockIsPaid(Boolean(data.is_paid));
-      setUnlockPrice(String(data.price ?? priceNum));
+      setUnlockPrice(String(Math.round(Number(data.price ?? priceNum) / 100)));
       setUnlockUpdatedAt(data.updated_at || null);
 
       showToast(
