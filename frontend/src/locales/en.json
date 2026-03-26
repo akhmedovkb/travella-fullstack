@@ -223,7 +223,8 @@
       "saveBtn": "Save",
       "tabs": {
         "myBookings": "My bookings",
-        "myRequests": "My requests"
+        "myRequests": "My requests",
+        "balance": "Balance"
       },
       "uploadPhoto": "Upload photo"
     },
