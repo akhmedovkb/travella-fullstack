@@ -524,6 +524,8 @@
   "address": "Адрес",
   "adults": "Взрослые (12+)",
   "children": "Дети (2–11)",
+  "contacts_already_opened": "Контакты уже были открыты",
+  "contacts_unlocked_success": "💸 Списано {{amount}} сум · Контакты разблокированы",
   "date": "Дата",
   "end_date": "Дата окончания",
   "flight": "Отказной авиабилет",
