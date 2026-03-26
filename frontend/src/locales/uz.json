@@ -523,6 +523,8 @@
   "make_cover": "Muqova qilish",
 
 "marketplace": {
+  "contacts_already_opened": "Kontaktlar avval ochilgan",
+  "contacts_unlocked_success": "💸 {{amount}} so'm yechildi · Kontaktlar ochildi",
   "verified_proof": "Tasdiqlangan",
   "proof_images": "Haqiqiylik tasdig‘i",
   "proof_images_count": "foto",
