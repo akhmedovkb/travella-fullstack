@@ -4,12 +4,21 @@ import { apiGet, apiPost } from "../api";
 import { tError, tSuccess } from "../shared/toast";
 import { useTranslation } from "react-i18next";
 
-function moneySum(n) {
-  return Math.round(Number(n || 0)).toLocaleString("ru-RU");
-}
+function formatMoney(value, lang = "ru", fromTiyin = false) {
+  const amount = Number(value || 0);
+  const sumValue = fromTiyin ? amount / 100 : amount;
 
-function moneyTiyin(n) {
-  return Math.round(Number(n || 0) / 100).toLocaleString("ru-RU");
+  const locale =
+    lang === "uz" ? "uz-UZ" :
+    lang === "en" ? "en-US" :
+    "ru-RU";
+
+  const currencyLabel =
+    lang === "uz" ? "so'm" :
+    lang === "en" ? "sum" :
+    "сум";
+
+  return `${Math.round(sumValue).toLocaleString(locale)} ${currencyLabel}`;
 }
 
 function fmtTs(x) {
@@ -24,7 +33,7 @@ function fmtTs(x) {
 const PRESETS = [25000, 50000, 100000, 200000];
 
 export default function ClientBalance() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   const [balance, setBalance] = useState(0);
   const [unlockPrice, setUnlockPrice] = useState(10000);
@@ -71,7 +80,7 @@ export default function ClientBalance() {
       }
 
       tSuccess(
-        t("balance.topup_created", { amount: moneySum(sum) })
+        t("balance.topup_created", { amount: formatMoney(sum, i18n.language) })
       );
 
       window.location.href = data.pay_url;
@@ -115,7 +124,7 @@ export default function ClientBalance() {
               {t("balance.current")}
             </div>
             <div className="mt-2 text-3xl font-semibold">
-              {moneyTiyin(balance)} {t("common.currency")}
+              {formatMoney(balance, i18n.language, true)}
             </div>
           </div>
 
@@ -124,7 +133,7 @@ export default function ClientBalance() {
               {t("balance.unlock_price")}
             </div>
             <div className="mt-2 text-3xl font-semibold">
-              {moneySum(unlockPrice)} {t("common.currency")}
+              {formatMoney(unlockPrice, i18n.language)}
             </div>
           </div>
         </div>
@@ -148,7 +157,7 @@ export default function ClientBalance() {
               onClick={() => doTopup(v)}
               disabled={topupLoading}
             >
-              {moneySum(v)} {t("common.currency")}
+              {formatMoney(v, i18n.language)}
             </button>
           ))}
         </div>
@@ -213,7 +222,7 @@ export default function ClientBalance() {
                       }`}
                     >
                       {Number(row.amount) > 0 ? "+" : ""}
-                      {moneyTiyin(row.amount)} {t("common.currency")}
+                      {formatMoney(row.amount, i18n.language, true)}
                     </td>
 
                     <td className="py-3 pr-4">
