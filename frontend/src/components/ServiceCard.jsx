@@ -811,11 +811,12 @@ export default function ServiceCard({
           })
         );
       } else {
-        tSuccess(
-          t("marketplace.contacts_unlocked_success", {
-            defaultValue: `💸 Списано ${chargedSum.toLocaleString("ru-RU")} сум · Контакты разблокированы`,
-          })
-        );
+          tSuccess(
+            t("marketplace.contacts_unlocked_success", {
+              amount: chargedSum.toLocaleString("ru-RU"),
+              defaultValue: `💸 Списано ${chargedSum.toLocaleString("ru-RU")} сум · Контакты разблокированы`,
+            })
+          );
       }
     
       return;
