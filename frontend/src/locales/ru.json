@@ -226,7 +226,11 @@
       "tabs": { "myBookings": "Мои бронирования", "myRequests": "Мои запросы", "balance": "Баланс" },
       "uploadPhoto": "Загрузить фото"
     },
-    "header": { "cabinet": "Кабинет", "favorites": "Избранное" },
+    "header": {
+    "cabinet": "Кабинет",
+    "favorites": "Избранное",
+    "balance": "Баланс"
+  },
     "login": {
       "loginBtn": "Войти",
       "noAccount": "Нет аккаунта?",
