@@ -2371,15 +2371,26 @@ useEffect(() => {
 
           <div className="mt-6 bg-white rounded-xl shadow p-6 border">
             <div className="flex items-center gap-3 border-b pb-3 mb-4">
-                <TabButton tabKey="requests">{t("tabs.my_requests", { defaultValue: "Мои запросы" })}</TabButton>
-                <TabButton tabKey="bookings">{t("tabs.my_bookings", { defaultValue: "Мои бронирования" })}</TabButton>
-                <TabButton tabKey="favorites">{t("tabs.favorites", { defaultValue: "Избранное" })}</TabButton>
-                <div className="ml-auto">
-                  <button onClick={handleRefreshClick} className="text-orange-600 hover:underline text-sm">
-                    {t("client.dashboard.refresh", { defaultValue: "Обновить" })}
-                  </button>
-                </div>
+              <TabButton tabKey="requests">{t("tabs.my_requests", { defaultValue: "Мои запросы" })}</TabButton>
+              <TabButton tabKey="bookings">{t("tabs.my_bookings", { defaultValue: "Мои бронирования" })}</TabButton>
+              <TabButton tabKey="favorites">{t("tabs.favorites", { defaultValue: "Избранное" })}</TabButton>
+            
+              <div className="ml-auto flex items-center gap-3">
+                <Link
+                  to="/client/balance"
+                  className="text-sm font-medium text-orange-600 hover:underline"
+                >
+                  {t("client.balance.open", { defaultValue: "Баланс" })}
+                </Link>
+            
+                <button
+                  onClick={handleRefreshClick}
+                  className="text-orange-600 hover:underline text-sm"
+                >
+                  {t("client.dashboard.refresh", { defaultValue: "Обновить" })}
+                </button>
               </div>
+            </div>
 
             {activeTab === "requests"  && <RequestsList />}
             {activeTab === "bookings"  && <ClientBookings refreshKey={bookingsRefreshKey} />}
