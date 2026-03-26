@@ -223,7 +223,7 @@
       "requestDeleted": "Запрос удалён",
       "deleteRequest": "Удалить",
       "saveBtn": "Сохранить",
-      "tabs": { "myBookings": "Мои бронирования", "myRequests": "Мои запросы" },
+      "tabs": { "myBookings": "Мои бронирования", "myRequests": "Мои запросы", "balance": "Баланс" },
       "uploadPhoto": "Загрузить фото"
     },
     "header": { "cabinet": "Кабинет", "favorites": "Избранное" },
