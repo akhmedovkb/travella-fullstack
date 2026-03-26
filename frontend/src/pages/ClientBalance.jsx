@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { apiGet, apiPost } from "../api";
 import { tError, tSuccess } from "../shared/toast";
+import { useTranslation } from "react-i18next";
 
 function moneySum(n) {
   return Math.round(Number(n || 0)).toLocaleString("ru-RU");
@@ -23,6 +24,8 @@ function fmtTs(x) {
 const PRESETS = [25000, 50000, 100000, 200000];
 
 export default function ClientBalance() {
+  const { t } = useTranslation();
+
   const [balance, setBalance] = useState(0);
   const [unlockPrice, setUnlockPrice] = useState(10000);
   const [ledger, setLedger] = useState([]);
@@ -43,7 +46,7 @@ export default function ClientBalance() {
       setLedger(Array.isArray(led?.rows) ? led.rows : []);
     } catch (e) {
       console.error(e);
-      tError("Не удалось загрузить баланс");
+      tError(t("balance.load_error"));
     } finally {
       setLoading(false);
     }
@@ -52,7 +55,7 @@ export default function ClientBalance() {
   async function doTopup(amount) {
     const sum = Math.trunc(Number(amount || 0));
     if (!Number.isFinite(sum) || sum <= 0) {
-      return tError("Укажи корректную сумму");
+      return tError(t("balance.invalid_amount"));
     }
 
     setTopupLoading(true);
@@ -67,11 +70,14 @@ export default function ClientBalance() {
         throw new Error("pay_url not returned");
       }
 
-      tSuccess(`Заказ на пополнение создан: ${moneySum(sum)} сум`);
+      tSuccess(
+        t("balance.topup_created", { amount: moneySum(sum) })
+      );
+
       window.location.href = data.pay_url;
     } catch (e) {
       console.error(e);
-      tError(e?.message || "Не удалось создать заказ Payme");
+      tError(e?.message || t("balance.payme_error"));
     } finally {
       setTopupLoading(false);
     }
@@ -86,9 +92,11 @@ export default function ClientBalance() {
       <div className="bg-white rounded-2xl shadow p-5">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold">Баланс клиента</h1>
+            <h1 className="text-2xl font-semibold">
+              {t("balance.title")}
+            </h1>
             <p className="text-sm text-gray-500 mt-1">
-              Пополнение через Payme и списание за открытие контактов
+              {t("balance.subtitle")}
             </p>
           </div>
 
@@ -97,28 +105,38 @@ export default function ClientBalance() {
             onClick={loadAll}
             disabled={loading}
           >
-            {loading ? "Загрузка…" : "Обновить"}
+            {loading ? t("common.loading") : t("common.refresh")}
           </button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5">
           <div className="rounded-2xl bg-gray-50 border p-5">
-            <div className="text-sm text-gray-500">Текущий баланс</div>
-            <div className="mt-2 text-3xl font-semibold">{moneyTiyin(balance)} сум</div>
+            <div className="text-sm text-gray-500">
+              {t("balance.current")}
+            </div>
+            <div className="mt-2 text-3xl font-semibold">
+              {moneyTiyin(balance)} {t("common.currency")}
+            </div>
           </div>
 
           <div className="rounded-2xl bg-gray-50 border p-5">
-            <div className="text-sm text-gray-500">Цена открытия контактов</div>
-            <div className="mt-2 text-3xl font-semibold">{moneySum(unlockPrice)} сум</div>
+            <div className="text-sm text-gray-500">
+              {t("balance.unlock_price")}
+            </div>
+            <div className="mt-2 text-3xl font-semibold">
+              {moneySum(unlockPrice)} {t("common.currency")}
+            </div>
           </div>
         </div>
       </div>
 
       <div className="bg-white rounded-2xl shadow p-5 space-y-4">
         <div>
-          <h2 className="text-lg font-semibold">Пополнить баланс</h2>
+          <h2 className="text-lg font-semibold">
+            {t("balance.topup")}
+          </h2>
           <p className="text-sm text-gray-500 mt-1">
-            Выбери сумму или введи свою
+            {t("balance.choose_amount")}
           </p>
         </div>
 
@@ -130,7 +148,7 @@ export default function ClientBalance() {
               onClick={() => doTopup(v)}
               disabled={topupLoading}
             >
-              {moneySum(v)} сум
+              {moneySum(v)} {t("common.currency")}
             </button>
           ))}
         </div>
@@ -140,83 +158,75 @@ export default function ClientBalance() {
             className="flex-1 border rounded-xl px-4 py-3"
             value={customAmount}
             onChange={(e) => setCustomAmount(e.target.value)}
-            placeholder="Своя сумма, например 75000"
+            placeholder={t("balance.custom_placeholder")}
           />
           <button
             className="px-5 py-3 rounded-xl bg-black text-white disabled:opacity-60"
             onClick={() => doTopup(customAmount)}
             disabled={topupLoading}
           >
-            {topupLoading ? "Создание…" : "Оплатить через Payme"}
+            {topupLoading
+              ? t("balance.creating")
+              : t("balance.pay")}
           </button>
         </div>
       </div>
 
       <div className="bg-white rounded-2xl shadow p-5">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">История операций</h2>
-          <div className="text-sm text-gray-500">{ledger.length} записей</div>
+          <h2 className="text-lg font-semibold">
+            {t("balance.history")}
+          </h2>
+          <div className="text-sm text-gray-500">
+            {ledger.length} {t("balance.records")}
+          </div>
         </div>
 
         {!ledger.length ? (
-          <div className="text-sm text-gray-400">Операций пока нет</div>
+          <div className="text-sm text-gray-400">
+            {t("balance.empty")}
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="border-b text-left text-gray-500">
-                  <th className="py-2 pr-4">Дата</th>
-                  <th className="py-2 pr-4">Сумма</th>
-                  <th className="py-2 pr-4">Причина</th>
-                  <th className="py-2 pr-4">Источник</th>
+                  <th className="py-2 pr-4">{t("balance.date")}</th>
+                  <th className="py-2 pr-4">{t("balance.amount")}</th>
+                  <th className="py-2 pr-4">{t("balance.reason")}</th>
+                  <th className="py-2 pr-4">{t("balance.source")}</th>
                   <th className="py-2 pr-4">Service ID</th>
                 </tr>
               </thead>
               <tbody>
                 {ledger.map((row) => (
-                  <tr key={row.id} className="border-b last:border-b-0 align-top">
-                    <td className="py-3 pr-4 whitespace-nowrap">
-                      <div>{fmtTs(row.created_at)}</div>
-                      {row.fiscal_received_at ? (
-                        <div className="mt-1 text-xs text-gray-400">
-                          Фискализация: {fmtTs(row.fiscal_received_at)}
-                        </div>
-                      ) : null}
+                  <tr key={row.id} className="border-b">
+                    <td className="py-3 pr-4">
+                      {fmtTs(row.created_at)}
                     </td>
-                
+
                     <td
-                      className={`py-3 pr-4 whitespace-nowrap font-medium ${
-                        Number(row.amount) < 0 ? "text-red-600" : "text-green-600"
+                      className={`py-3 pr-4 font-medium ${
+                        Number(row.amount) < 0
+                          ? "text-red-600"
+                          : "text-green-600"
                       }`}
                     >
                       {Number(row.amount) > 0 ? "+" : ""}
-                      {moneyTiyin(row.amount)} сум
+                      {moneyTiyin(row.amount)} {t("common.currency")}
                     </td>
-                
+
                     <td className="py-3 pr-4">
-                      <div>{row.reason || "—"}</div>
-                      {row.fiscal_receipt_id ? (
-                        <div className="mt-1 text-xs text-gray-500">
-                          Чек: <span className="font-mono">{row.fiscal_receipt_id}</span>
-                        </div>
-                      ) : null}
-                      {row.fiscal_sign ? (
-                        <div className="mt-1 text-xs text-gray-400">
-                          Fiscal sign: <span className="font-mono">{row.fiscal_sign}</span>
-                        </div>
-                      ) : null}
+                      {row.reason || "—"}
                     </td>
-                
+
                     <td className="py-3 pr-4">
-                      <div>{row.source || "—"}</div>
-                      {row.fiscal_terminal_id ? (
-                        <div className="mt-1 text-xs text-gray-400">
-                          Terminal: <span className="font-mono">{row.fiscal_terminal_id}</span>
-                        </div>
-                      ) : null}
+                      {row.source || "—"}
                     </td>
-                
-                    <td className="py-3 pr-4">{row.service_id || "—"}</td>
+
+                    <td className="py-3 pr-4">
+                      {row.service_id || "—"}
+                    </td>
                   </tr>
                 ))}
               </tbody>
