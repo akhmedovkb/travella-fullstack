@@ -3,8 +3,12 @@ import { useEffect, useState } from "react";
 import { apiGet, apiPost } from "../api";
 import { tError, tSuccess } from "../shared/toast";
 
-function money(n) {
+function moneySum(n) {
   return Math.round(Number(n || 0)).toLocaleString("ru-RU");
+}
+
+function moneyTiyin(n) {
+  return Math.round(Number(n || 0) / 100).toLocaleString("ru-RU");
 }
 
 function fmtTs(x) {
@@ -63,7 +67,7 @@ export default function ClientBalance() {
         throw new Error("pay_url not returned");
       }
 
-      tSuccess(`Заказ на пополнение создан: ${money(sum)} сум`);
+      tSuccess(`Заказ на пополнение создан: ${moneySum(sum)} сум`);
       window.location.href = data.pay_url;
     } catch (e) {
       console.error(e);
@@ -100,12 +104,12 @@ export default function ClientBalance() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5">
           <div className="rounded-2xl bg-gray-50 border p-5">
             <div className="text-sm text-gray-500">Текущий баланс</div>
-            <div className="mt-2 text-3xl font-semibold">{money(balance)} сум</div>
+            <div className="mt-2 text-3xl font-semibold">{moneyTiyin(balance)} сум</div>
           </div>
 
           <div className="rounded-2xl bg-gray-50 border p-5">
             <div className="text-sm text-gray-500">Цена открытия контактов</div>
-            <div className="mt-2 text-3xl font-semibold">{money(unlockPrice)} сум</div>
+            <div className="mt-2 text-3xl font-semibold">{moneySum(unlockPrice)} сум</div>
           </div>
         </div>
       </div>
@@ -126,7 +130,7 @@ export default function ClientBalance() {
               onClick={() => doTopup(v)}
               disabled={topupLoading}
             >
-              {money(v)} сум
+              {moneySum(v)} сум
             </button>
           ))}
         </div>
@@ -186,7 +190,7 @@ export default function ClientBalance() {
                       }`}
                     >
                       {Number(row.amount) > 0 ? "+" : ""}
-                      {money(row.amount)} сум
+                      {moneyTiyin(row.amount)} сум
                     </td>
                 
                     <td className="py-3 pr-4">
