@@ -335,8 +335,10 @@ async function unlockContact(req, res) {
         already: true,
         unlocked: true,
         charged: 0,
+        charged_sum: 0,
         balance,
         unlock_price: price,
+        unlock_price_sum: Math.round(Number(price || 0) / 100),
         unlock_is_paid: unlockSettings.is_paid,
       });
     }
@@ -375,8 +377,10 @@ async function unlockContact(req, res) {
         already: true,
         unlocked: true,
         charged: 0,
+        charged_sum: 0,
         balance: newBalance,
         unlock_price: price,
+        unlock_price_sum: Math.round(Number(price || 0) / 100),
         unlock_is_paid: unlockSettings.is_paid,
       });
     }
@@ -413,8 +417,10 @@ async function unlockContact(req, res) {
       unlocked: true,
       already: false,
       charged: price,
+      charged_sum: Math.round(Number(price || 0) / 100),
       balance: newBalance,
       unlock_price: price,
+      unlock_price_sum: Math.round(Number(price || 0) / 100),
       unlock_is_paid: unlockSettings.is_paid,
     });
   } catch (e) {
