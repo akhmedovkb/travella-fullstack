@@ -114,12 +114,12 @@ export default function AdminClients() {
       if (data?.settings) {
         setUnlockSettings({
           is_paid: data.settings.is_paid,
-          price: data.settings.price,
+          price: Math.round(Number(data.settings.price || 0) / 100),
         });
       } else if (typeof data?.is_paid !== "undefined") {
         setUnlockSettings({
           is_paid: data.is_paid,
-          price: data.price,
+          price: Math.round(Number(data.price || 0) / 100),
         });
       }
     } catch (e) {
@@ -261,7 +261,7 @@ export default function AdminClients() {
         "/api/admin/billing/contact-unlock-settings",
         {
           is_paid: unlockSettings.is_paid,
-          price: Number(unlockSettings.price || 0),
+          price: Math.round(Number(unlockSettings.price || 0) * 100),
         },
         {
           headers: {
