@@ -522,6 +522,8 @@
   "make_cover": "Make cover",
 
 "marketplace": {
+  "contacts_already_opened": "Contacts were already unlocked",
+  "contacts_unlocked_success": "💸 {{amount}} sum charged · Contacts unlocked",
   "verified_proof": "Verified",
   "proof_images": "Authenticity proof",
   "proof_images_count": "photos",
