@@ -2371,18 +2371,26 @@ useEffect(() => {
 
           <div className="mt-6 bg-white rounded-xl shadow p-6 border">
             <div className="flex items-center gap-3 border-b pb-3 mb-4">
-              <TabButton tabKey="requests">{t("tabs.my_requests", { defaultValue: "Мои запросы" })}</TabButton>
-              <TabButton tabKey="bookings">{t("tabs.my_bookings", { defaultValue: "Мои бронирования" })}</TabButton>
-              <TabButton tabKey="favorites">{t("tabs.favorites", { defaultValue: "Избранное" })}</TabButton>
+              <TabButton tabKey="requests">
+                {t("tabs.my_requests", { defaultValue: "Мои запросы" })}
+              </TabButton>
             
-              <div className="ml-auto flex items-center gap-3">
-                <Link
-                  to="/client/balance"
-                  className="text-sm font-medium text-orange-600 hover:underline"
-                >
-                  {t("client.balance.open", { defaultValue: "Баланс" })}
-                </Link>
+              <TabButton tabKey="bookings">
+                {t("tabs.my_bookings", { defaultValue: "Мои бронирования" })}
+              </TabButton>
             
+              <TabButton tabKey="favorites">
+                {t("tabs.favorites", { defaultValue: "Избранное" })}
+              </TabButton>
+            
+              <Link
+                to="/client/balance"
+                className="px-3 py-2 text-sm font-medium text-gray-700 hover:text-orange-600 border-b-2 border-transparent hover:border-orange-500"
+              >
+                {t("client.balance.open", { defaultValue: "Баланс" })}
+              </Link>
+            
+              <div className="ml-auto">
                 <button
                   onClick={handleRefreshClick}
                   className="text-orange-600 hover:underline text-sm"
