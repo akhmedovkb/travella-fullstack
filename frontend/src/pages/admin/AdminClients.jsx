@@ -24,7 +24,13 @@ function useLastSeen() {
 function money(n) {
   return Math.round(Number(n || 0)).toLocaleString("ru-RU");
 }
+function toTiyin(sumValue) {
+  return Math.round(Number(sumValue || 0) * 100);
+}
 
+function fromTiyin(tiyinValue) {
+  return Math.round(Number(tiyinValue || 0) / 100);
+}
 function fmtCellDate(x) {
   if (!x) return "—";
   try {
@@ -112,14 +118,14 @@ export default function AdminClients() {
       const data = res?.data || res;
 
       if (data?.settings) {
-        setUnlockSettings({
-          is_paid: data.settings.is_paid,
-          price: Math.round(Number(data.settings.price || 0) / 100),
-        });
+          setUnlockSettings({
+            is_paid: data.settings.is_paid,
+            price: fromTiyin(data.settings.price),
+          });
       } else if (typeof data?.is_paid !== "undefined") {
         setUnlockSettings({
           is_paid: data.is_paid,
-          price: Math.round(Number(data.price || 0) / 100),
+          price: fromTiyin(data.price),
         });
       }
     } catch (e) {
