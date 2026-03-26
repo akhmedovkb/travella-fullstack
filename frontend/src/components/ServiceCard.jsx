@@ -713,14 +713,22 @@ export default function ServiceCard({
     prov?.type || prov?.provider_type || prov?.category
   );
   const showBookButton = !!providerId && (providerLooksBookable || serviceLooksBookable);
-
+  
+  const isClientViewer = viewerRole === "client";
+  const hasUnlockTarget = Boolean(providerId && id);
   const hasAnySupplierContacts = Boolean(supplierPhone || supplierTg?.label);
-
+  
   const canShowUnlockButton =
     !unlocked &&
+    isClientViewer &&
     !isProviderViewer &&
     !isAdminViewer &&
-    hasAnySupplierContacts;
+    hasUnlockTarget;
+  
+  const canShowContacts =
+    isProviderViewer ||
+    isAdminViewer ||
+    unlocked;
 
   // tooltip reviews (выключено)
   const [revOpen, setRevOpen] = useState(false);
