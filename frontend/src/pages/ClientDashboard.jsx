@@ -2382,14 +2382,7 @@ useEffect(() => {
               <TabButton tabKey="favorites">
                 {t("tabs.favorites", { defaultValue: "Избранное" })}
               </TabButton>
-            
-              <Link
-                to="/client/balance"
-                className="px-3 py-2 text-sm font-medium text-gray-700 hover:text-orange-600 border-b-2 border-transparent hover:border-orange-500"
-              >
-                {t("client.tabs.balance", { defaultValue: "Баланс" })}
-              </Link>
-            
+                      
               <div className="ml-auto">
                 <button
                   onClick={handleRefreshClick}
