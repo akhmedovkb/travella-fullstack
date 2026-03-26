@@ -495,6 +495,12 @@
   "make_cover": "Muqova qilish",
 
 "marketplace": {
+  "verified_proof": "Tasdiqlangan",
+  "proof_images": "Haqiqiylik tasdig‘i",
+  "proof_images_count": "foto",
+  "open_proof_image": "Rasmni ochish",
+  "check_authenticity": "Haqiqiyligini tekshirish",
+  "proof_locked_hint": "Tasdiq mavjud. Tekshirish kontaktlarni ochgandan keyin доступно bo‘ladi.",
   "accommodation": "Joylashtirish",
   "address": "Manzil",
   "adults": "Kattalar (12+)",
