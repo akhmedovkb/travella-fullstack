@@ -228,7 +228,11 @@
       },
       "uploadPhoto": "Upload photo"
     },
-    "header": { "cabinet": "Cabinet", "favorites": "Favorites" },
+      "header": {
+    "cabinet": "Cabinet",
+    "favorites": "Favorites",
+    "balance": "Balance"
+  },
     "login": {
       "loginBtn": "Login",
       "noAccount": "No account?",
