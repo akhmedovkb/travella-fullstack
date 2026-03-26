@@ -224,7 +224,8 @@
       "saveBtn": "Saqlash",
       "tabs": {
         "myBookings": "Mening bronlarim",
-        "myRequests": "Mening so‘rovlarim"
+        "myRequests": "Mening so‘rovlarim",
+        "balance": "Balans"
       },
       "uploadPhoto": "Rasm yuklash"
     },
