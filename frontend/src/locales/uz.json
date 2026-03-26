@@ -46,7 +46,29 @@
     "sent": "Bron so‘rovi yuborildi",
     "error": "Bron yuborilmadi"
   },
-
+  
+"balance": {
+  "title": "Mijoz balansi",
+  "subtitle": "Payme orqali to‘ldirish va kontaktlarni ochish uchun yechish",
+  "current": "Joriy balans",
+  "unlock_price": "Kontakt ochish narxi",
+  "topup": "Balansni to‘ldirish",
+  "choose_amount": "Summani tanlang yoki o‘zingiz kiriting",
+  "custom_placeholder": "O‘z summangiz, masalan 75000",
+  "creating": "Yaratilmoqda…",
+  "pay": "Payme orqali to‘lash",
+  "history": "Operatsiyalar tarixi",
+  "records": "yozuv",
+  "empty": "Hozircha operatsiyalar yo‘q",
+  "date": "Sana",
+  "amount": "Summa",
+  "reason": "Sabab",
+  "source": "Manba",
+  "load_error": "Balansni yuklab bo‘lmadi",
+  "invalid_amount": "To‘g‘ri summa kiriting",
+  "topup_created": "To‘ldirish buyurtmasi yaratildi: {{amount}} so‘m",
+  "payme_error": "Payme xatosi"
+},
   "bookings": {
     "provider_cancel_reason": "Bekor qilish sababini ko‘rsating",
     "waiting_for_requester": "Taklif yuborildi. Mijoz tasdig‘i kutilmoqda.",
