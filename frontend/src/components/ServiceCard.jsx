@@ -1196,27 +1196,35 @@ export default function ServiceCard({
               )}
 
               {unlocked ? (
-                <div className="flex flex-wrap gap-x-3 gap-y-1">
+                <div className="space-y-0.5 text-[13px] leading-5">
                   {supplierPhone && (
-                    <a
-                      href={`tel:${String(supplierPhone).replace(/\s+/g, "")}`}
-                      className="underline truncate"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      📞 {supplierPhone}
-                    </a>
+                    <div>
+                      <a
+                        href={`tel:${String(supplierPhone).replace(/\s+/g, "")}`}
+                        className="underline text-gray-700 hover:text-gray-900"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        📞 {supplierPhone}
+                      </a>
+                    </div>
                   )}
               
                   {supplierTg?.label && (
-                    <a
-                      href={supplierTg.href || "#"}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline truncate"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      TG {supplierTg.label}
-                    </a>
+                    <div>
+                      {supplierTg.href ? (
+                        <a
+                          href={supplierTg.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline text-gray-700 hover:text-gray-900"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          TG {supplierTg.label}
+                        </a>
+                      ) : (
+                        <span className="text-gray-700">TG {supplierTg.label}</span>
+                      )}
+                    </div>
                   )}
                 </div>
               ) : (
