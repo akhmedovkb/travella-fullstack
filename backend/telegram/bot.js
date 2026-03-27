@@ -12,6 +12,7 @@ const { buildSvcActualKeyboard } = require("./keyboards/serviceActual");
 const { handleServiceActualCallback } = require("./handlers/serviceActualHandler");
 const { buildServiceMessage } = require("../utils/telegramServiceCard");
 const { getContactUnlockSettings } = require("../utils/contactUnlockSettings");
+const { unlockContactTx } = require("../utils/contactUnlock");
 
 /* ===================== CONFIG ===================== */
 const OFFER_VERSION = process.env.OFFER_VERSION || "v1.0";
@@ -314,11 +315,11 @@ async function ensureUnlockTables(pool) {
     `);
 
     // ✅ ВАЖНО: bank-grade идемпотентность списания unlock
-    // один unlock = одно списание (client_id, service_id, reason='unlock_contacts')
+    // один unlock = одно списание (client_id, service_id, reason='unlock_contact')
     await pool.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS ux_contact_ledger_unlock_once
       ON contact_balance_ledger (client_id, service_id, reason)
-      WHERE reason = 'unlock_contacts';
+      WHERE reason = 'unlock_contact';
     `);
 
     _unlockTablesReady = true;
@@ -488,90 +489,27 @@ async function getLastBalanceOpsUnified(pool, clientId, limit = 5) {
 }
 
 // транзакция: если уже unlocked — не списываем повторно
-async function unlockContactsForService(db, { clientId, serviceId, price }) {
-  const cid = Number(clientId);
-  const sid = Number(serviceId);
-  const p = Math.max(0, Number(price || 0));
+async function unlockContactsForService(db, clientId, serviceId, price) {
+  const result = await unlockContactTx(db, {
+    clientId,
+    serviceId,
+    price,
+    source: "telegram",
+  });
 
-  if (!Number.isFinite(cid) || cid <= 0) return { ok: false, reason: "bad_client" };
-  if (!Number.isFinite(sid) || sid <= 0) return { ok: false, reason: "bad_service" };
-  if (!Number.isFinite(p) || p < 0) return { ok: false, reason: "bad_price" };
-
-  const balRes = await db.query(
-    `
-    SELECT contact_balance
-    FROM clients
-    WHERE id = $1
-    FOR UPDATE
-  `,
-    [cid]
-  );
-
-  if (!balRes.rows.length) return { ok: false, reason: "no_client" };
-
-  const balance = Number(balRes.rows[0].contact_balance || 0);
-
-  if (p > 0 && balance < p) {
-    return { ok: false, reason: "no_balance", balance, need: p };
-  }
-
-  const unlockRes = await db.query(
-    `
-    INSERT INTO client_service_contact_unlocks
-      (client_id, service_id, price_charged)
-    VALUES ($1, $2, $3)
-    ON CONFLICT (client_id, service_id) DO NOTHING
-    RETURNING id
-  `,
-    [cid, sid, p]
-  );
-
-  if (!unlockRes.rows.length) {
-    return { ok: true, already: true, charged: 0, balance };
-  }
-
-  if (p > 0) {
-    const upd = await db.query(
-      `
-      UPDATE clients
-      SET contact_balance = contact_balance - $1
-      WHERE id = $2 AND contact_balance >= $1
-      RETURNING contact_balance
-    `,
-      [p, cid]
-    );
-
-    if (!upd.rows.length) {
-      return { ok: false, reason: "no_balance", balance, need: p };
-    }
-
-    await db.query(
-      `
-      INSERT INTO contact_balance_ledger
-        (client_id, amount, reason, service_id, source, meta)
-      VALUES ($1, $2, 'unlock_contact', $3, 'telegram', $4::jsonb)
-    `,
-      [
-        cid,
-        -p,
-        sid,
-        JSON.stringify({ unlock_id: unlockRes.rows[0].id }),
-      ]
-    );
-
+  if (!result.ok && result.reason === "no_balance") {
     return {
-      ok: true,
-      charged: p,
-      unlockId: unlockRes.rows[0].id,
-      balance: Number(upd.rows[0]?.contact_balance || 0),
+      ok: false,
+      reason: "no_balance",
+      balance: result.balance,
+      need: result.need,
     };
   }
 
   return {
     ok: true,
-    charged: 0,
-    unlockId: unlockRes.rows[0].id,
-    balance,
+    already: result.already,
+    balance: result.balance,
   };
 }
 
@@ -6637,7 +6575,7 @@ bot.on("successful_payment", async (ctx) => {
                 FROM contact_balance_ledger
                WHERE client_id = $1
                  AND service_id = $2
-                 AND reason = 'unlock_contacts'
+                 AND reason = 'unlock_contact'
                LIMIT 1
               `,
               [cid, sid]
