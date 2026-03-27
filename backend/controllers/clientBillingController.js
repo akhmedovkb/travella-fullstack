@@ -1,6 +1,6 @@
 // backend/controllers/clientBillingController.js
 const pool = require("../db");
-
+const { unlockContactTx } = require("../utils/contactUnlock");
 const { getContactUnlockSettings } = require("../utils/contactUnlockSettings");
 
 let _clientsBalanceColumn = null;
@@ -293,144 +293,53 @@ async function createTopupOrder(req, res) {
 }
 
 async function unlockContact(req, res) {
-  const clientId = req.user?.id;
-  const serviceId = Number(req.body?.service_id);
-
-  if (!clientId) {
-    return res.status(401).json({ ok: false, message: "Unauthorized" });
-  }
+  const clientId = req.user.id;
+  const { serviceId } = req.body;
 
   if (!serviceId) {
-    return res.status(400).json({ ok: false, message: "Bad service_id" });
+    return res.status(400).json({ error: "serviceId required" });
   }
 
-  const client = await pool.connect();
+  const db = await pool.connect();
 
   try {
-    await client.query("BEGIN");
+    await db.query("BEGIN");
 
-    const unlockSettings = await getContactUnlockSettings(client);
-    const price = Number(unlockSettings.effective_price || 0);
-
-    await client.query(`SELECT id FROM clients WHERE id=$1 FOR UPDATE`, [clientId]);
-
-    const existing = await client.query(
-      `
-      SELECT id
-      FROM client_service_contact_unlocks
-      WHERE client_id=$1
-      AND service_id=$2
-      LIMIT 1
-      `,
-      [clientId, serviceId]
+    const { rows } = await db.query(
+      `SELECT value FROM contact_unlock_settings WHERE key='price' LIMIT 1`
     );
 
-    if (existing.rows.length) {
-      const balance = await getBalanceFromLedger(client, clientId);
+    const price = Number(rows[0]?.value || 10000);
 
-      await client.query("COMMIT");
+    const result = await unlockContactTx(db, {
+      clientId,
+      serviceId,
+      price,
+      source: "web",
+    });
 
-      return res.json({
-        ok: true,
-        already: true,
-        unlocked: true,
-        charged: 0,
-        charged_sum: 0,
-        balance,
-        unlock_price: price,
-        unlock_price_sum: Math.round(Number(price || 0) / 100),
-        unlock_is_paid: unlockSettings.is_paid,
-      });
-    }
-
-    const balance = await getBalanceFromLedger(client, clientId);
-
-    if (price > 0 && balance < price) {
-      await client.query("ROLLBACK");
-
+    if (!result.ok && result.reason === "no_balance") {
+      await db.query("ROLLBACK");
       return res.status(400).json({
-        ok: false,
-        error: "not_enough_balance",
-        balance,
-        need: price,
+        error: "no_balance",
+        balance: result.balance,
+        need: result.need,
       });
     }
 
-    const unlockInsert = await client.query(
-      `
-      INSERT INTO client_service_contact_unlocks
-      (client_id, service_id, price_charged)
-      VALUES ($1,$2,$3)
-      ON CONFLICT (client_id, service_id) DO NOTHING
-      RETURNING id
-      `,
-      [clientId, serviceId, price]
-    );
-
-    if (!unlockInsert.rows.length) {
-      const newBalance = await getBalanceFromLedger(client, clientId);
-
-      await client.query("COMMIT");
-
-      return res.json({
-        ok: true,
-        already: true,
-        unlocked: true,
-        charged: 0,
-        charged_sum: 0,
-        balance: newBalance,
-        unlock_price: price,
-        unlock_price_sum: Math.round(Number(price || 0) / 100),
-        unlock_is_paid: unlockSettings.is_paid,
-      });
-    }
-
-    if (price > 0) {
-      await client.query(
-        `
-        INSERT INTO contact_balance_ledger
-        (client_id, amount, reason, service_id, source, meta)
-        VALUES ($1,$2,'unlock_contact',$3,'web',$4::jsonb)
-        `,
-        [
-          clientId,
-          -price,
-          serviceId,
-          JSON.stringify({
-            service_id: serviceId,
-            unlock_id: unlockInsert.rows[0].id,
-            channel: "web",
-          }),
-        ]
-      );
-    }
-
-    const newBalance =
-      price > 0
-        ? await syncClientBalanceMirror(client, clientId)
-        : await getBalanceFromLedger(client, clientId);
-
-    await client.query("COMMIT");
+    await db.query("COMMIT");
 
     return res.json({
-      ok: true,
-      unlocked: true,
-      already: false,
-      charged: price,
-      charged_sum: Math.round(Number(price || 0) / 100),
-      balance: newBalance,
-      unlock_price: price,
-      unlock_price_sum: Math.round(Number(price || 0) / 100),
-      unlock_is_paid: unlockSettings.is_paid,
+      success: true,
+      already: result.already,
+      balance: result.balance,
     });
   } catch (e) {
-    try {
-      await client.query("ROLLBACK");
-    } catch {}
+    await db.query("ROLLBACK");
     console.error("unlockContact error:", e);
-    return res.status(500).json({ ok: false });
+    return res.status(500).json({ error: "server_error" });
   } finally {
-    client.release();
+    db.release();
   }
 }
 
