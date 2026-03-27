@@ -58,8 +58,7 @@ async function getBalanceFromLedger(client, clientId) {
 async function syncClientBalanceMirror(client, clientId) {
   const col = await getClientsBalanceColumn(client);
   const balance = await getBalanceFromLedger(client, clientId);
-  console.log("[clientBalance] ledger balance for", clientId, "=", balance);
-
+  
   if (col) {
     await client.query(
       `
@@ -112,6 +111,7 @@ async function clientBalance(req, res) {
 
     try {
       const balance = await getBalanceFromLedger(client, clientId);
+      console.log("[clientBalance] ledger balance for", clientId, "=", balance);
       const unlockSettings = await getContactUnlockSettings(client);
 
       return res.json({
