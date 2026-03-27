@@ -351,10 +351,7 @@ async function getClientRowByChatId(pool, chatId) {
     const row = r.rows?.[0] || null;
     if (!row?.id) return null;
 
-    // 2) unified balance (view → fallback)
-    const bal = await getClientBalanceUnified(pool, Number(row.id));
-
-    return { id: Number(row.id), contact_balance: Number(bal || 0) };
+    return { id: Number(row.id) };
   } catch (e) {
     console.error("[tg-bot] getClientRowByChatId error:", e?.message || e);
     return null;
@@ -432,11 +429,10 @@ async function getClientBalanceUnified(pool, clientId) {
     return toNum(r.rows?.[0]?.bal);
   }
 
-  // fallback legacy cached balance
   const r = await pool.query(
-    `SELECT COALESCE(contact_balance,0) AS bal
-       FROM clients
-      WHERE id = $1`,
+    `SELECT COALESCE(SUM(amount),0) AS bal
+       FROM contact_balance_ledger
+      WHERE client_id = $1`,
     [Number(clientId)]
   );
   return toNum(r.rows?.[0]?.bal);
@@ -573,21 +569,7 @@ async function unlockContactsForService(db, { clientId, serviceId, price }) {
     ]
   );
 
-  // 6. синк зеркала
-  await db.query(
-    `
-    UPDATE clients
-    SET contact_balance = (
-      SELECT COALESCE(SUM(amount),0)
-      FROM contact_balance_ledger
-      WHERE client_id=$1
-    )
-    WHERE id=$1
-    `,
-    [clientId]
-  );
-
-  const newBal = await db.query(
+ const newBal = await db.query(
     `
     SELECT COALESCE(SUM(amount),0)::bigint AS balance
     FROM contact_balance_ledger
@@ -627,16 +609,15 @@ async function addContactBalanceLedgerTx(db, {
   );
 
   const r2 = await db.query(
-    `UPDATE clients
-        SET contact_balance = COALESCE(contact_balance,0) + $2
-      WHERE id=$1
-      RETURNING COALESCE(contact_balance,0) AS contact_balance`,
-    [cid, Math.trunc(amt)]
+    `SELECT COALESCE(SUM(amount),0) AS balance
+       FROM contact_balance_ledger
+      WHERE client_id = $1`,
+    [cid]
   );
 
   return {
     ledger_id: r1.rows?.[0]?.id,
-    balance: Number(r2.rows?.[0]?.contact_balance || 0),
+    balance: Number(r2.rows?.[0]?.balance || 0),
   };
 }
 
