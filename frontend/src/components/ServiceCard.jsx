@@ -543,10 +543,16 @@ export default function ServiceCard({
   const dayShort = t("countdown.days_short", { defaultValue: "d" });
 
   const id = svc.id ?? item.id;
+  const unlockStorageKey = id ? `marketplace:unlocked:${id}` : null;
+  const unlockedFromStorage =
+    typeof window !== "undefined" &&
+    unlockStorageKey &&
+    window.localStorage.getItem(unlockStorageKey) === "1";
   
   const initialUnlocked =
     viewerRole === "provider" ||
     viewerRole === "admin" ||
+    unlockedFromStorage ||
     [
       svc?.unlocked,
       item?.unlocked,
@@ -562,8 +568,13 @@ export default function ServiceCard({
   const [unlockLoading, setUnlockLoading] = useState(false);
   
   useEffect(() => {
-    setUnlocked(initialUnlocked);
-  }, [initialUnlocked, id]);
+    const localUnlocked =
+      typeof window !== "undefined" &&
+      unlockStorageKey &&
+      window.localStorage.getItem(unlockStorageKey) === "1";
+  
+    setUnlocked(Boolean(initialUnlocked || localUnlocked));
+  }, [initialUnlocked, unlockStorageKey, id]);
 
   /* изображения услуги */
   const images = collectImages(
@@ -799,6 +810,10 @@ export default function ServiceCard({
       );
 
     if (res?.ok && (res?.unlocked || res?.already)) {
+      if (typeof window !== "undefined" && unlockStorageKey) {
+        window.localStorage.setItem(unlockStorageKey, "1");
+      }
+    
       setUnlocked(true);
       window.dispatchEvent(new Event("client:balance:changed"));
     
@@ -811,12 +826,12 @@ export default function ServiceCard({
           })
         );
       } else {
-          tSuccess(
-            t("marketplace.contacts_unlocked_success", {
-              amount: chargedSum.toLocaleString("ru-RU"),
-              defaultValue: `💸 Списано ${chargedSum.toLocaleString("ru-RU")} сум · Контакты разблокированы`,
-            })
-          );
+        tSuccess(
+          t("marketplace.contacts_unlocked_success", {
+            amount: chargedSum.toLocaleString("ru-RU"),
+            defaultValue: `💸 Списано ${chargedSum.toLocaleString("ru-RU")} сум · Контакты разблокированы`,
+          })
+        );
       }
     
       return;
