@@ -1198,31 +1198,31 @@ export default function ServiceCard({
               {unlocked ? (
                 <div className="space-y-0.5 text-[13px] leading-5">
                   {supplierPhone && (
-                    <div>
+                    <div className="flex items-center gap-1 text-gray-700">
+                      <span>📞</span>
                       <a
                         href={`tel:${String(supplierPhone).replace(/\s+/g, "")}`}
-                        className="underline text-gray-700 hover:text-gray-900"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        📞 {supplierPhone}
+                        {supplierPhone}
                       </a>
                     </div>
                   )}
               
                   {supplierTg?.label && (
-                    <div>
+                    <div className="flex items-center gap-1 text-gray-700">
+                      <span>✈️</span>
                       {supplierTg.href ? (
                         <a
                           href={supplierTg.href}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="underline text-gray-700 hover:text-gray-900"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          TG {supplierTg.label}
+                          {supplierTg.label}
                         </a>
                       ) : (
-                        <span className="text-gray-700">TG {supplierTg.label}</span>
+                        <span>{supplierTg.label}</span>
                       )}
                     </div>
                   )}
