@@ -68,6 +68,7 @@ async function readClientIdentity(id) {
   );
 
   const c = rows[0] || null;
+  console.log("[readClientIdentity] id =", id, "row =", c);
   const val = c
     ? {
         email: pickEmail(c),
