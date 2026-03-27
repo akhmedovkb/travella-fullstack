@@ -133,12 +133,11 @@ module.exports = async function authenticateToken(req, res, next) {
 
     // если провайдера не нашли — мягко проверим клиента
     let cIdentity = null;
-    if (!pFlags && !role && id != null) {
+    if (!pFlags && id != null) {
       try {
         const c = await pool.query("SELECT 1 FROM clients WHERE id=$1 LIMIT 1", [id]);
         if (c.rowCount > 0) {
-          role = "client";
-          // и сразу подтянем identity (email/name) чтобы аудит не был null
+          if (!role) role = "client";
           try {
             cIdentity = await readClientIdentity(id);
           } catch (e) {
