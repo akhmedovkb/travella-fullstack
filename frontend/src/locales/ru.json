@@ -523,6 +523,7 @@
   "accommodation": "Размещение",
   "address": "Адрес",
   "adults": "Взрослые (12+)",
+  "already_opened": "Уже открыто",
   "children": "Дети (2–11)",
   "contacts_already_opened": "Контакты уже были открыты",
   "contacts_unlocked_success": "💸 Списано {{amount}} сум · Контакты разблокированы",
