@@ -811,6 +811,9 @@ export default function ServiceCard({
   // popup деталей тура
   const [detailsOpen, setDetailsOpen] = useState(false);
   const detailsBtnRef = useRef(null);
+  
+  // modal баланса
+  const [showBalancePrompt, setShowBalancePrompt] = useState(false);
 
   const hasDetailsBlock =
     direction ||
@@ -879,17 +882,7 @@ export default function ServiceCard({
         err?.code;
 
       if (code === "INSUFFICIENT_BALANCE" || code === "not_enough_balance") {
-        const goToBalance = window.confirm(
-          t("marketplace.not_enough_balance_go_to_balance", {
-            defaultValue:
-              "Недостаточно средств для открытия контактов.\n\nПерейти на страницу «Баланс клиента»?",
-          })
-        );
-      
-        if (goToBalance) {
-          navigate("/client/balance");
-        }
-      
+        setShowBalancePrompt(true);
         return;
       }
 
@@ -1416,7 +1409,63 @@ export default function ServiceCard({
           </div>
         )}
       </DetailsPopup>
-
+      
+      {showBalancePrompt &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[3900] bg-black/40 backdrop-blur-[2px] flex items-center justify-center p-4 animate-[fadeIn_.18s_ease-out]"
+            onClick={() => setShowBalancePrompt(false)}
+          >
+            <div
+              className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-gray-200 overflow-hidden animate-[scaleIn_.18s_ease-out]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-5 py-4 border-b border-gray-100">
+                <div className="text-lg font-semibold text-gray-900">
+                  Недостаточно средств
+                </div>
+                <div className="mt-1 text-sm text-gray-600">
+                  Для открытия контактов недостаточно средств. Перейти к пополнению баланса?
+                </div>
+              </div>
+      
+              <div className="px-5 py-4 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowBalancePrompt(false)}
+                  className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                >
+                  Отмена
+                </button>
+      
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowBalancePrompt(false);
+                    navigate("/client/balance");
+                  }}
+                  className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-orange-200 transition hover:bg-orange-600 hover:shadow-orange-300 active:scale-[0.98]"
+                >
+                  Перейти к балансу
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+        <style>
+          {`
+            @keyframes fadeIn {
+              from { opacity: 0; }
+              to { opacity: 1; }
+            }
+        
+            @keyframes scaleIn {
+              from { opacity: 0; transform: scale(0.96) translateY(8px); }
+              to { opacity: 1; transform: scale(1) translateY(0); }
+            }
+          `}
+        </style>
       {selectedProofImage &&
         createPortal(
           <div
