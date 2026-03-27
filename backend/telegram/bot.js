@@ -6944,20 +6944,10 @@ if (!result.ok) {
   return { ok: false, reason: result.reason || "failed" };
 }
 
-if (result.already) {
-  try {
-    await ctx.answerCbQuery("✅ Уже открыто", { show_alert: false });
-  } catch {}
-} else {
-  const charged = Number(result.charged || 0);
+try {
+  await ctx.answerCbQuery("⏳ Открываем контакты...", { show_alert: false });
+} catch {}
 
-  try {
-    await ctx.answerCbQuery(
-      `✅ Контакты открыты. Списано: ${charged.toLocaleString("ru-RU")} сум`,
-      { show_alert: true }
-    );
-  } catch {}
-}
 if (ctx.chat?.type === "private") {
   try {
     await refreshUnlockedCard(ctx, serviceId);
@@ -6965,12 +6955,36 @@ if (ctx.chat?.type === "private") {
     console.error("[tg-bot] refreshUnlockedCard failed:", e?.message || e);
   }
 } else {
-  // на всякий — но сюда мы уже не дойдём из-за PATCH B
   try {
-    await safeReply(ctx, "✅ Готово. Откройте карточку в личке с ботом.", { disable_web_page_preview: true });
+    await safeReply(
+      ctx,
+      "✅ Готово. Откройте карточку в личке с ботом.",
+      { disable_web_page_preview: true }
+    );
   } catch {}
 }
-  return { ok: true };
+
+if (result.already) {
+  try {
+    await bot.telegram.sendMessage(
+      ctx.from.id,
+      "✅ Контакты уже были открыты",
+      { disable_web_page_preview: true }
+    );
+  } catch {}
+} else {
+  const charged = Number(result.charged || 0);
+
+  try {
+    await bot.telegram.sendMessage(
+      ctx.from.id,
+      `✅ Контакты открыты\n💸 Списано: ${charged.toLocaleString("ru-RU")} сум`,
+      { disable_web_page_preview: true }
+    );
+  } catch {}
+}
+
+return { ok: true };
 }
 
 /* ===================== TEXT HANDLER (wizard + quick request) ===================== */
