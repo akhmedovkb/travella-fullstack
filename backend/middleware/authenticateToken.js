@@ -188,21 +188,23 @@ module.exports = async function authenticateToken(req, res, next) {
       null;
 
     req.user = {
-      ...payload,
       id,
       role,
       roles,
       is_admin,
       is_moderator,
       permissions: (pFlags && pFlags.permissions) || payload.permissions || [],
-
-      // нормализованные поля (их используй в audit)
+    
+      // только безопасные поля
+      iat: payload.iat,
+      exp: payload.exp,
+    
+      // нормализованные данные из БД
       email,
       name,
-
-      // для совместимости (если где-то в коде ждут эти ключи)
-      mail: payload.mail || email || null,
-      full_name: payload.full_name || payload.fullname || name || null,
+    
+      mail: email || null,
+      full_name: name || null,
     };
 
     return next();
