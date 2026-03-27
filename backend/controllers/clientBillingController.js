@@ -106,23 +106,33 @@ async function clientBalance(req, res) {
     return res.status(401).json({ ok: false, message: "Unauthorized" });
   }
 
+try {
+  const client = await pool.connect();
+
   try {
-    const client = await pool.connect();
+    const balance = await getBalanceFromLedger(client, clientId);
+    console.log("[clientBalance] ledger balance for", clientId, "=", balance);
 
-    try {
-      const balance = await getBalanceFromLedger(client, clientId);
-      console.log("[clientBalance] ledger balance for", clientId, "=", balance);
-      const unlockSettings = await getContactUnlockSettings(client);
+    const who = await client.query(`
+      SELECT
+        current_database() AS db,
+        current_user AS db_user,
+        inet_server_addr()::text AS server_addr,
+        inet_server_port() AS server_port
+    `);
+    console.log("[clientBalance] db info =", who.rows[0]);
 
-      return res.json({
-        ok: true,
-        balance,
-        unlock_price: unlockSettings.effective_price,
-        unlock_is_paid: unlockSettings.is_paid,
-        unlock_base_price: unlockSettings.price,
-      });
-    } finally {
-      client.release();
+    const unlockSettings = await getContactUnlockSettings(client);
+
+    return res.json({
+      ok: true,
+      balance,
+      unlock_price: unlockSettings.effective_price,
+      unlock_is_paid: unlockSettings.is_paid,
+      unlock_base_price: unlockSettings.price,
+    });
+  } finally {
+    client.release();
     }
   } catch (e) {
     console.error("clientBalance error:", e);
