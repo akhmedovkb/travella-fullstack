@@ -235,7 +235,11 @@ function currencyMinorFactor(ccy) {
   if (c === "EUR") return 100;
   return 1;
 }
-
+function tiyinToSum(x) {
+  const n = Number(x || 0);
+  if (!Number.isFinite(n)) return 0;
+  return Math.trunc(n / 100);
+}
 function buildPaymeCheckoutUrl({ merchantId, checkoutBase, orderId, amountTiyin, lang, callbackUrl }) {
   const parts = [
     `m=${merchantId}`,
@@ -6867,7 +6871,7 @@ result = await withServiceLock(pool, clientRow.id, serviceId, async (db) => {
   return unlockContactsForService(db, {
     clientId: clientRow.id,
     serviceId,
-    price: Number(unlockSettings.effective_price || 0),
+    price: tiyinToSum(unlockSettings.effective_price || 0),
   });
 });
 } catch (e) {
@@ -9044,7 +9048,7 @@ const data = await getOrFetchCached(
           : {};
       
       const unlockSettings = await getContactUnlockSettings(pool);
-      const unlockPrice = Number(unlockSettings.effective_price || 0);
+      const unlockPrice = tiyinToSum(unlockSettings.effective_price || 0);
       const isFreeMode = unlockPrice <= 0;
 
       const built = buildServiceMessage(
