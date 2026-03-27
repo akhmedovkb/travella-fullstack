@@ -1215,19 +1215,15 @@ export default function ServiceCard({
                       onClick={(e) => e.stopPropagation()}
                       className="inline-flex items-center justify-center gap-2 rounded-lg bg-sky-500 px-3 py-2 text-sm font-semibold text-white hover:bg-sky-600"
                     >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        viewBox="0 0 240 240"
-                        width="16"
-                        height="16"
-                        className="shrink-0"
-                      >
-                        <circle cx="120" cy="120" r="120" fill="white" />
-                        <path
-                          d="M180 75L60 120l30 10 10 30 15-20 25 20 10-85z"
-                          fill="#229ED9"
-                        />
-                      </svg>
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 496 512"
+                      width="16"
+                      height="16"
+                      fill="white"
+                    >
+                      <path d="M248 8C111 8 0 119 0 256s111 248 248 248 248-111 248-248S385 8 248 8zm121.8 169.9l-40.7 191.5c-3.1 13.9-11.3 17.3-22.9 10.8l-63.3-46.7-30.5 29.3c-3.4 3.4-6.2 6.2-12.7 6.2l4.5-63.9 116.4-105.2c5.1-4.5-1.1-7-7.9-2.5L169.4 297 107 277.5c-13.6-4.2-13.9-13.6 2.8-20.1l244.3-94.2c11.3-4.2 21.2 2.5 17.7 14.7z"/>
+                    </svg>
                     </a>
                   )}
                 </div>
