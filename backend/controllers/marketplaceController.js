@@ -132,20 +132,7 @@ async function canViewerSeeProviderContacts({ viewer, providerId, serviceId }) {
       if (q.rowCount > 0) return true;
     }
 
-    // Платный режим: если клиент уже открыл любую услугу этого провайдера
-    const qAny = await pg.query(
-      `
-      SELECT 1
-      FROM client_service_contact_unlocks u
-      JOIN services s ON s.id = u.service_id
-      WHERE u.client_id = $1
-        AND s.provider_id = $2
-      LIMIT 1
-      `,
-      [viewerId, pid]
-    );
-
-    return qAny.rowCount > 0;
+    return false;
   }
 
   return false;
