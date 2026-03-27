@@ -121,6 +121,7 @@ try {
         inet_server_port() AS server_port
     `);
     console.log("[clientBalance] db info =", who.rows[0]);
+    console.log("[clientBalance] DATABASE_URL =", process.env.DATABASE_URL);
 
     const unlockSettings = await getContactUnlockSettings(client);
 
