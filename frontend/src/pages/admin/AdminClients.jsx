@@ -398,7 +398,7 @@ export default function AdminClients() {
         <StatCard
           label="Режим unlock"
           value={dashboard.is_paid ? "ПЛАТНО" : "БЕСПЛАТНО"}
-          sub={`Цена: ${money(dashboard.price || 0)} сум`}
+          sub={`Цена: ${money(fromTiyin(dashboard.price || 0))} сум`}
           valueClass={dashboard.is_paid ? "text-red-600" : "text-green-600"}
         />
 
