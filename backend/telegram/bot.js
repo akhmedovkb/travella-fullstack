@@ -489,89 +489,113 @@ async function getLastBalanceOpsUnified(pool, clientId, limit = 5) {
 
 // транзакция: если уже unlocked — не списываем повторно
 async function unlockContactsForService(db, { clientId, serviceId, price }) {
-  const cid = Number(clientId);
-  const sid = Number(serviceId);
-  const p = Math.max(0, Number(price || 0));
+  const safePrice = Math.abs(Number(price) || 0);
 
-  if (!Number.isFinite(cid) || cid <= 0) return { ok: false, reason: "bad_client" };
-  if (!Number.isFinite(sid) || sid <= 0) return { ok: false, reason: "bad_service" };
-  if (!Number.isFinite(p) || p < 0) return { ok: false, reason: "bad_price" };
+  // 1. lock клиента
+  await db.query(`SELECT id FROM clients WHERE id=$1 FOR UPDATE`, [clientId]);
 
-  const balRes = await db.query(
+  // 2. уже открыт?
+  const existing = await db.query(
     `
-    SELECT contact_balance
-    FROM clients
-    WHERE id = $1
-    FOR UPDATE
-  `,
-    [cid]
+    SELECT id
+    FROM client_service_contact_unlocks
+    WHERE client_id=$1 AND service_id=$2
+    LIMIT 1
+    `,
+    [clientId, serviceId]
   );
 
-  if (!balRes.rows.length) return { ok: false, reason: "no_client" };
-
-  const balance = Number(balRes.rows[0].contact_balance || 0);
-
-  if (p > 0 && balance < p) {
-    return { ok: false, reason: "no_balance", balance, need: p };
-  }
-
-  const unlockRes = await db.query(
-    `
-    INSERT INTO client_service_contact_unlocks
-      (client_id, service_id, price_charged)
-    VALUES ($1, $2, $3)
-    ON CONFLICT (client_id, service_id) DO NOTHING
-    RETURNING id
-  `,
-    [cid, sid, p]
-  );
-
-  if (!unlockRes.rows.length) {
-    return { ok: true, already: true, charged: 0, balance };
-  }
-
-  if (p > 0) {
-    const upd = await db.query(
+  if (existing.rows.length) {
+    const { rows } = await db.query(
       `
-      UPDATE clients
-      SET contact_balance = contact_balance - $1
-      WHERE id = $2 AND contact_balance >= $1
-      RETURNING contact_balance
-    `,
-      [p, cid]
-    );
-
-    if (!upd.rows.length) {
-      return { ok: false, reason: "no_balance", balance, need: p };
-    }
-
-    await db.query(
-      `
-      INSERT INTO contact_balance_ledger
-        (client_id, amount, reason, service_id, source, meta)
-      VALUES ($1, $2, 'unlock_contact', $3, 'telegram', $4::jsonb)
-    `,
-      [
-        cid,
-        -p,
-        sid,
-        JSON.stringify({ unlock_id: unlockRes.rows[0].id }),
-      ]
+      SELECT COALESCE(SUM(amount),0)::bigint AS balance
+      FROM contact_balance_ledger
+      WHERE client_id=$1
+      `,
+      [clientId]
     );
 
     return {
       ok: true,
-      charged: p,
-      unlockId: unlockRes.rows[0].id,
-      balance: Number(upd.rows[0]?.contact_balance || 0),
+      already: true,
+      balance: Number(rows[0]?.balance || 0),
     };
   }
 
+  // 3. баланс через ledger
+  const bal = await db.query(
+    `
+    SELECT COALESCE(SUM(amount),0)::bigint AS balance
+    FROM contact_balance_ledger
+    WHERE client_id=$1
+    `,
+    [clientId]
+  );
+
+  const balance = Number(bal.rows[0]?.balance || 0);
+
+  if (balance < safePrice) {
+    return {
+      ok: false,
+      reason: "no_balance",
+      balance,
+      need: safePrice,
+    };
+  }
+
+  // 4. фиксируем unlock
+  await db.query(
+    `
+    INSERT INTO client_service_contact_unlocks
+      (client_id, service_id, price_charged, source)
+    VALUES ($1,$2,$3,'telegram')
+    ON CONFLICT DO NOTHING
+    `,
+    [clientId, serviceId, safePrice]
+  );
+
+  // 5. списание через ledger
+  await db.query(
+    `
+    INSERT INTO contact_balance_ledger
+      (client_id, amount, reason, service_id, source, meta)
+    VALUES ($1,$2,'unlock_contact',$3,'telegram',$4::jsonb)
+    `,
+    [
+      clientId,
+      -safePrice,
+      serviceId,
+      JSON.stringify({ service_id: serviceId }),
+    ]
+  );
+
+  // 6. синк зеркала
+  await db.query(
+    `
+    UPDATE clients
+    SET contact_balance = (
+      SELECT COALESCE(SUM(amount),0)
+      FROM contact_balance_ledger
+      WHERE client_id=$1
+    )
+    WHERE id=$1
+    `,
+    [clientId]
+  );
+
+  const newBal = await db.query(
+    `
+    SELECT COALESCE(SUM(amount),0)::bigint AS balance
+    FROM contact_balance_ledger
+    WHERE client_id=$1
+    `,
+    [clientId]
+  );
+
   return {
     ok: true,
-    charged: 0,
-    unlockId: unlockRes.rows[0].id,
-    balance,
+    already: false,
+    balance: Number(newBal.rows[0]?.balance || 0),
   };
 }
 
