@@ -6944,15 +6944,20 @@ if (!result.ok) {
   return { ok: false, reason: result.reason || "failed" };
 }
 
-const charged = Number(result.charged || 0);
-
-const note = result.already
-  ? "✅ Контакты уже были открыты"
-  : `✅ Контакты открыты. Списано: ${charged.toLocaleString("ru-RU")} сум`;
+if (result.already) {
+  try {
+    await ctx.answerCbQuery("✅ Уже открыто", { show_alert: false });
+  } catch {}
+} else {
+  const charged = Number(result.charged || 0);
 
   try {
-    await ctx.answerCbQuery(note, { show_alert: true });
+    await ctx.answerCbQuery(
+      `✅ Контакты открыты. Списано: ${charged.toLocaleString("ru-RU")} сум`,
+      { show_alert: true }
+    );
   } catch {}
+}
 if (ctx.chat?.type === "private") {
   try {
     await refreshUnlockedCard(ctx, serviceId);
