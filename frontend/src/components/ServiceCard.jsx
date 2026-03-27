@@ -1196,21 +1196,25 @@ export default function ServiceCard({
               )}
 
               {unlocked ? (
-                <div className="space-y-0.5 text-[13px] leading-5">
+                <div className="mt-2 grid grid-cols-2 gap-2">
                   {supplierPhone && (
-                    <div className="flex items-center gap-1 text-gray-700">
+                    <a
+                      href={`tel:${String(supplierPhone).replace(/\s+/g, "")}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-green-500 px-3 py-2 text-sm font-semibold text-white hover:bg-green-600"
+                    >
                       <span>📞</span>
-                      <a
-                        href={`tel:${String(supplierPhone).replace(/\s+/g, "")}`}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {supplierPhone}
-                      </a>
-                    </div>
+                    </a>
                   )}
               
-                  {supplierTg?.label && (
-                    <div className="flex items-center gap-1 text-gray-700">
+                  {supplierTg?.href && (
+                    <a
+                      href={supplierTg.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-sky-500 px-3 py-2 text-sm font-semibold text-white hover:bg-sky-600"
+                    >
                       <svg
                         xmlns="http://www.w3.org/2000/svg"
                         viewBox="0 0 240 240"
@@ -1218,26 +1222,13 @@ export default function ServiceCard({
                         height="16"
                         className="shrink-0"
                       >
-                        <circle cx="120" cy="120" r="120" fill="#229ED9" />
+                        <circle cx="120" cy="120" r="120" fill="white" />
                         <path
                           d="M180 75L60 120l30 10 10 30 15-20 25 20 10-85z"
-                          fill="white"
+                          fill="#229ED9"
                         />
                       </svg>
-                  
-                      {supplierTg.href ? (
-                        <a
-                          href={supplierTg.href}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {supplierTg.label}
-                        </a>
-                      ) : (
-                        <span>{supplierTg.label}</span>
-                      )}
-                    </div>
+                    </a>
                   )}
                 </div>
               ) : (
