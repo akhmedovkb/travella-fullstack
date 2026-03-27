@@ -506,33 +506,17 @@ async function unlockContactsForService(db, { clientId, serviceId, price }) {
   );
 
   if (existing.rows.length) {
-    const { rows } = await db.query(
-      `
-      SELECT COALESCE(SUM(amount),0)::bigint AS balance
-      FROM contact_balance_ledger
-      WHERE client_id=$1
-      `,
-      [clientId]
-    );
-
+    const balance = await getClientBalanceUnified(db, clientId);
+  
     return {
       ok: true,
       already: true,
-      balance: Number(rows[0]?.balance || 0),
+      balance: Number(balance || 0),
     };
   }
 
   // 3. баланс через ledger
-  const bal = await db.query(
-    `
-    SELECT COALESCE(SUM(amount),0)::bigint AS balance
-    FROM contact_balance_ledger
-    WHERE client_id=$1
-    `,
-    [clientId]
-  );
-
-  const balance = Number(bal.rows[0]?.balance || 0);
+  const balance = Number(await getClientBalanceUnified(db, clientId) || 0);
 
   if (balance < safePrice) {
     return {
@@ -569,20 +553,13 @@ async function unlockContactsForService(db, { clientId, serviceId, price }) {
     ]
   );
 
- const newBal = await db.query(
-    `
-    SELECT COALESCE(SUM(amount),0)::bigint AS balance
-    FROM contact_balance_ledger
-    WHERE client_id=$1
-    `,
-    [clientId]
-  );
+  const newBal = await getClientBalanceUnified(db, clientId);
 
   return {
     ok: true,
     already: false,
     charged: safePrice,
-    balance: Number(newBal.rows[0]?.balance || 0),
+    balance: Number(newBal || 0),
   };
 }
 
@@ -6392,7 +6369,7 @@ bot.action("balance:check", async (ctx) => {
     const balNum = await getClientBalanceUnified(pool, clientRow.id);
     const bal = Number(balNum || 0).toLocaleString("ru-RU");
     const unlockSettings = await getContactUnlockSettings(pool);
-const need = Number(unlockSettings.effective_price || 0).toLocaleString("ru-RU");
+    const need = tiyinToSum(unlockSettings.effective_price || 0).toLocaleString("ru-RU");
     const topupUrl = `${SITE_URL}/dashboard/balance`;
 
     const hasLast = !!ctx.session?.lastUnlockServiceId;
