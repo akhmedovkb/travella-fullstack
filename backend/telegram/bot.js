@@ -418,17 +418,6 @@ function toNum(x) {
 }
 
 async function getClientBalanceUnified(pool, clientId) {
-  const hasView = await hasRelation(pool, "v_client_balance_ledger_all");
-  if (hasView) {
-    const r = await pool.query(
-      `SELECT COALESCE(SUM(amount),0) AS bal
-         FROM v_client_balance_ledger_all
-        WHERE client_id = $1`,
-      [Number(clientId)]
-    );
-    return toNum(r.rows?.[0]?.bal);
-  }
-
   const r = await pool.query(
     `SELECT COALESCE(SUM(amount),0) AS bal
        FROM contact_balance_ledger
