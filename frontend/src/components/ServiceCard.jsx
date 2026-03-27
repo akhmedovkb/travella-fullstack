@@ -879,7 +879,17 @@ export default function ServiceCard({
         err?.code;
 
       if (code === "INSUFFICIENT_BALANCE" || code === "not_enough_balance") {
-        navigate("/client/balance");
+        const goToBalance = window.confirm(
+          t("marketplace.not_enough_balance_go_to_balance", {
+            defaultValue:
+              "Недостаточно средств для открытия контактов.\n\nПерейти на страницу «Баланс клиента»?",
+          })
+        );
+      
+        if (goToBalance) {
+          navigate("/client/balance");
+        }
+      
         return;
       }
 
