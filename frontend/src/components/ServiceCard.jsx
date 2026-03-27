@@ -855,7 +855,10 @@ export default function ServiceCard({
     <>
       <div
         className={[
-          "group relative bg-white border rounded-xl overflow-hidden shadow-sm flex flex-col",
+          "group relative border rounded-xl overflow-hidden shadow-sm flex flex-col transition",
+          unlocked
+            ? "bg-gray-50 border-gray-200 opacity-90"
+            : "bg-white border-gray-200",
           className,
         ].join(" ")}
       >
@@ -1019,7 +1022,15 @@ export default function ServiceCard({
 
         {/* BODY */}
         <div className="p-3 flex-1 flex flex-col">
-          <div className="font-semibold line-clamp-2">{title}</div>
+          <div className="flex items-start gap-2">
+            <div className="font-semibold line-clamp-2">{title}</div>
+          
+            {unlocked && isClientViewer && (
+              <span className="shrink-0 inline-flex items-center rounded-full bg-emerald-100 text-emerald-700 px-2 py-0.5 text-[11px] font-semibold">
+                {t("marketplace.already_opened", { defaultValue: "Уже открыто" })}
+              </span>
+            )}
+          </div>
 
           {direction && (
             <div className="mt-1 text-xs text-gray-700">{direction}</div>
