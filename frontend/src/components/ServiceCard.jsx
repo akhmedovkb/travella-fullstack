@@ -543,19 +543,20 @@ export default function ServiceCard({
   const dayShort = t("countdown.days_short", { defaultValue: "d" });
 
   const id = svc.id ?? item.id;
+  
   const initialUnlocked =
     viewerRole === "provider" ||
     viewerRole === "admin" ||
-    Boolean(
-      svc?.unlocked ??
-        item?.unlocked ??
-        item?.service?.unlocked ??
-        item?.is_unlocked ??
-        item?.service?.is_unlocked ??
-        svc?.contacts_unlocked ??
-        item?.contacts_unlocked ??
-        item?.service?.contacts_unlocked
-    );
+    [
+      svc?.unlocked,
+      item?.unlocked,
+      item?.service?.unlocked,
+      item?.is_unlocked,
+      item?.service?.is_unlocked,
+      svc?.contacts_unlocked,
+      item?.contacts_unlocked,
+      item?.service?.contacts_unlocked,
+    ].some((v) => v === true);
   
   const [unlocked, setUnlocked] = useState(initialUnlocked);
   const [unlockLoading, setUnlockLoading] = useState(false);
