@@ -1213,16 +1213,21 @@ export default function ServiceCard({
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}
-                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-sky-500 px-3 py-2 text-sm font-semibold text-white hover:bg-sky-600"
+                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#229ED9] px-3 py-2 text-sm font-semibold text-white transition active:scale-[0.98] hover:bg-[#1d8ecf]"
                     >
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
-                      viewBox="0 0 496 512"
+                      viewBox="0 0 24 24"
                       width="16"
                       height="16"
-                      fill="white"
+                      className="shrink-0"
+                      aria-hidden="true"
                     >
-                      <path d="M248 8C111 8 0 119 0 256s111 248 248 248 248-111 248-248S385 8 248 8zm121.8 169.9l-40.7 191.5c-3.1 13.9-11.3 17.3-22.9 10.8l-63.3-46.7-30.5 29.3c-3.4 3.4-6.2 6.2-12.7 6.2l4.5-63.9 116.4-105.2c5.1-4.5-1.1-7-7.9-2.5L169.4 297 107 277.5c-13.6-4.2-13.9-13.6 2.8-20.1l244.3-94.2c11.3-4.2 21.2 2.5 17.7 14.7z"/>
+                      <circle cx="12" cy="12" r="12" fill="white" />
+                      <path
+                        fill="#229ED9"
+                        d="M17.52 7.18 6.98 11.25c-.72.29-.71.69-.13.87l2.7.84 6.24-3.94c.29-.18.56-.08.34.12l-5.05 4.56-.19 2.67c.28 0 .41-.13.56-.28l1.31-1.27 2.73 2.02c.5.28.86.14.98-.46l1.8-8.5c.17-.73-.28-1.06-.82-.7Z"
+                      />
                     </svg>
                     </a>
                   )}
