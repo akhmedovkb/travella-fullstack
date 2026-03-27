@@ -543,6 +543,22 @@ export default function ServiceCard({
   const dayShort = t("countdown.days_short", { defaultValue: "d" });
 
   const id = svc.id ?? item.id;
+  
+  // provider profile
+  const [provider, setProvider] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!providerId) return;
+      const p = await fetchProviderProfile(providerId, id);
+      if (alive) setProvider(p);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [providerId, id]);
+  const prov = { ...(inlineProvider || {}), ...(provider || {}) };
+  
   const unlockStorageKey = id ? `marketplace:unlocked:${id}` : null;
   const unlockedFromStorage =
     typeof window !== "undefined" &&
@@ -562,6 +578,7 @@ export default function ServiceCard({
       svc?.contacts_unlocked,
       item?.contacts_unlocked,
       item?.service?.contacts_unlocked,
+      provider?.contacts_unlocked,
     ].some((v) => v === true);
   
   const [unlocked, setUnlocked] = useState(initialUnlocked);
@@ -573,8 +590,38 @@ export default function ServiceCard({
       unlockStorageKey &&
       window.localStorage.getItem(unlockStorageKey) === "1";
   
-    setUnlocked(Boolean(initialUnlocked || localUnlocked));
-  }, [initialUnlocked, unlockStorageKey, id]);
+    setUnlocked(
+      Boolean(
+        localUnlocked ||
+          [
+            svc?.unlocked,
+            item?.unlocked,
+            item?.service?.unlocked,
+            item?.is_unlocked,
+            item?.service?.is_unlocked,
+            svc?.contacts_unlocked,
+            item?.contacts_unlocked,
+            item?.service?.contacts_unlocked,
+            provider?.contacts_unlocked,
+          ].some((v) => v === true) ||
+          viewerRole === "provider" ||
+          viewerRole === "admin"
+      )
+    );
+  }, [
+    id,
+    unlockStorageKey,
+    viewerRole,
+    svc?.unlocked,
+    svc?.contacts_unlocked,
+    item?.unlocked,
+    item?.contacts_unlocked,
+    item?.is_unlocked,
+    item?.service?.unlocked,
+    item?.service?.is_unlocked,
+    item?.service?.contacts_unlocked,
+    provider?.contacts_unlocked,
+  ]);
 
   /* изображения услуги */
   const images = collectImages(
@@ -654,21 +701,6 @@ export default function ServiceCard({
       else prev();
     }
   };
-
-  // provider profile
-  const [provider, setProvider] = useState(null);
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      if (!providerId) return;
-      const p = await fetchProviderProfile(providerId, id);
-      if (alive) setProvider(p);
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [providerId, id]);
-  const prov = { ...(inlineProvider || {}), ...(provider || {}) };
 
   const supplierName = firstNonEmpty(
     prov?.name,
