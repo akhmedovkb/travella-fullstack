@@ -100,6 +100,7 @@ function buildPaymeCheckoutUrl({
 
 async function clientBalance(req, res) {
   const clientId = req.user?.id;
+  console.log("[clientBalance] req.user =", req.user);
 
   if (!clientId) {
     return res.status(401).json({ ok: false, message: "Unauthorized" });
