@@ -1196,48 +1196,35 @@ export default function ServiceCard({
               )}
 
               {unlocked ? (
-                <>
+                <div className="flex flex-wrap gap-x-3 gap-y-1">
                   {supplierPhone && (
-                    <div>
-                      <span className="text-gray-500">
-                        {t("marketplace.phone") || "Телефон"}:{" "}
-                      </span>
-                      <a
-                        href={`tel:${String(supplierPhone).replace(/\s+/g, "")}`}
-                        className="underline"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {supplierPhone}
-                      </a>
-                    </div>
+                    <a
+                      href={`tel:${String(supplierPhone).replace(/\s+/g, "")}`}
+                      className="underline truncate"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      📞 {supplierPhone}
+                    </a>
                   )}
-
+              
                   {supplierTg?.label && (
-                    <div>
-                      <span className="text-gray-500">
-                        {t("marketplace.telegram") || "Телеграм"}:{" "}
-                      </span>
-                      {supplierTg.href ? (
-                        <a
-                          href={supplierTg.href}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="underline"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {supplierTg.label}
-                        </a>
-                      ) : (
-                        <span className="font-medium">{supplierTg.label}</span>
-                      )}
-                    </div>
+                    <a
+                      href={supplierTg.href || "#"}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline truncate"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      TG {supplierTg.label}
+                    </a>
                   )}
-                </>
+                </div>
               ) : (
                 (supplierPhone || supplierTg?.label) && (
                   <div className="rounded-lg bg-gray-50 border px-3 py-2 text-xs text-gray-600">
                     {t("marketplace.contacts_locked", {
-                      defaultValue: "Контакты поставщика скрыты. Откройте контакты, чтобы увидеть телефон и Telegram.",
+                      defaultValue:
+                        "Контакты поставщика скрыты. Откройте контакты, чтобы увидеть телефон и Telegram.",
                     })}
                   </div>
                 )
