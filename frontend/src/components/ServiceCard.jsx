@@ -1211,7 +1211,20 @@ export default function ServiceCard({
               
                   {supplierTg?.label && (
                     <div className="flex items-center gap-1 text-gray-700">
-                      <span>✈️</span>
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 240 240"
+                        width="16"
+                        height="16"
+                        className="shrink-0"
+                      >
+                        <circle cx="120" cy="120" r="120" fill="#229ED9" />
+                        <path
+                          d="M180 75L60 120l30 10 10 30 15-20 25 20 10-85z"
+                          fill="white"
+                        />
+                      </svg>
+                  
                       {supplierTg.href ? (
                         <a
                           href={supplierTg.href}
