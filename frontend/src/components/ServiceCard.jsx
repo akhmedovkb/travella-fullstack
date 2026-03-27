@@ -1420,22 +1420,49 @@ export default function ServiceCard({
               className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-gray-200 overflow-hidden animate-[scaleIn_.18s_ease-out]"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="px-5 py-4 border-b border-gray-100">
+          <div className="px-5 py-4 border-b border-orange-100 bg-gradient-to-r from-orange-50 to-white">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-100 text-orange-600">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  width="20"
+                  height="20"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M12 8v5" />
+                  <path d="M12 16h.01" />
+                </svg>
+              </div>
+          
+              <div>
                 <div className="text-lg font-semibold text-gray-900">
-                  Недостаточно средств
+                  {t("marketplace.balance_modal_title", {
+                    defaultValue: "Недостаточно средств",
+                  })}
                 </div>
-                <div className="mt-1 text-sm text-gray-600">
-                  Для открытия контактов недостаточно средств. Перейти к пополнению баланса?
+          
+                <div className="mt-1 text-sm leading-6 text-gray-600">
+                  {t("marketplace.balance_modal_text", {
+                    defaultValue:
+                      "Для открытия контактов на балансе недостаточно средств. Пополните баланс и вернитесь к этой карточке.",
+                  })}
                 </div>
               </div>
-      
+            </div>
+          </div>      
               <div className="px-5 py-4 flex items-center justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => setShowBalancePrompt(false)}
                   className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
                 >
-                  Отмена
+                  {t("common.cancel", { defaultValue: "Отмена" })}
                 </button>
       
                 <button
@@ -1446,7 +1473,9 @@ export default function ServiceCard({
                   }}
                   className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-orange-200 transition hover:bg-orange-600 hover:shadow-orange-300 active:scale-[0.98]"
                 >
-                  Перейти к балансу
+                  {t("marketplace.go_to_balance", {
+                    defaultValue: "Пополнить баланс",
+                  })}
                 </button>
               </div>
             </div>
