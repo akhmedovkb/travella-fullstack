@@ -599,6 +599,7 @@ async function unlockContactsForService(db, { clientId, serviceId, price }) {
   return {
     ok: true,
     already: false,
+    charged: safePrice,
     balance: Number(newBal.rows[0]?.balance || 0),
   };
 }
@@ -4672,8 +4673,8 @@ bot.start(async (ctx) => {
         if (role === "client") {
           const clientRow = await getClientRowByChatId(pool, actorId);
 
-          const unlockSettings = await getContactUnlockSettings(pool);
-          unlockPrice = Number(unlockSettings.effective_price || 0);
+        const unlockSettings = await getContactUnlockSettings(pool);
+        unlockPrice = tiyinToSum(unlockSettings.effective_price || 0);
 
           const alreadyUnlocked = clientRow?.id
             ? await isContactsUnlocked(pool, {
