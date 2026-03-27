@@ -922,7 +922,6 @@ const priceKind =
       text: parts.join("\n"),
       photoUrl: getFirstImageUrl(svc),
       serviceUrl,
-      hasFlightDetails: !!flightDetails
     };
   }
 
