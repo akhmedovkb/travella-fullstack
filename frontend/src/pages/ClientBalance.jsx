@@ -125,7 +125,7 @@ export default function ClientBalance() {
               {t("balance.current")}
             </div>
             <div className="mt-2 text-3xl font-semibold">
-              {formatMoney(balance, i18n.language, true)}
+              {formatMoney(balance, i18n.language)}
             </div>
           </div>
 
@@ -223,7 +223,7 @@ export default function ClientBalance() {
                       }`}
                     >
                       {Number(row.amount) > 0 ? "+" : ""}
-                      {formatMoney(row.amount, i18n.language, true)}
+                      {formatMoney(row.amount, i18n.language)}
                     </td>
 
                     <td className="py-3 pr-4">
