@@ -176,36 +176,36 @@ module.exports = async function authenticateToken(req, res, next) {
     // 2) из providers (pFlags.email/name)
     // 3) из clients (cIdentity.email/name)
     const email =
+      (roleLc === "client"
+        ? (cIdentity && cIdentity.email)
+        : (pFlags && pFlags.email)) ||
       pickEmail(payload) ||
-      (pFlags && pFlags.email) ||
-      (cIdentity && cIdentity.email) ||
       null;
-
+    
     const name =
+      (roleLc === "client"
+        ? (cIdentity && cIdentity.name)
+        : (pFlags && pFlags.name)) ||
       pickName(payload) ||
-      (pFlags && pFlags.name) ||
-      (cIdentity && cIdentity.name) ||
       null;
 
-    req.user = {
-      id,
-      role,
-      roles,
-      is_admin,
-      is_moderator,
-      permissions: (pFlags && pFlags.permissions) || payload.permissions || [],
-    
-      // только безопасные поля
-      iat: payload.iat,
-      exp: payload.exp,
-    
-      // нормализованные данные из БД
-      email,
-      name,
-    
-      mail: email || null,
-      full_name: name || null,
-    };
+  req.user = {
+    id,
+    role,
+    roles,
+    is_admin,
+    is_moderator,
+    permissions: (pFlags && pFlags.permissions) || payload.permissions || [],
+  
+    iat: payload.iat,
+    exp: payload.exp,
+  
+    email,
+    name,
+  
+    mail: email || null,
+    full_name: name || null,
+  };
 
     return next();
   } catch (e) {
