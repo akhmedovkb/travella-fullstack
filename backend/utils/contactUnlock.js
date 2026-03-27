@@ -38,6 +38,8 @@ async function syncClientBalanceMirror(db, clientId) {
 }
 
 async function unlockContactTx(db, { clientId, serviceId, price, source = "web" }) {
+  const safePrice = Math.abs(Number(price) || 0);
+
   // 1. lock клиента
   await db.query(`SELECT id FROM clients WHERE id=$1 FOR UPDATE`, [clientId]);
 
@@ -60,31 +62,33 @@ async function unlockContactTx(db, { clientId, serviceId, price, source = "web" 
   // 3. баланс через ledger
   const balance = await getBalanceFromLedger(db, clientId);
 
-  if (balance < price) {
-    return { ok: false, reason: "no_balance", balance, need: price };
+  if (balance < safePrice) {
+    return { ok: false, reason: "no_balance", balance, need: safePrice };
   }
 
   // 4. фиксируем unlock
   await db.query(
     `
-    INSERT INTO client_service_contact_unlocks (client_id, service_id)
-    VALUES ($1,$2)
+    INSERT INTO client_service_contact_unlocks
+      (client_id, service_id, price_charged, source)
+    VALUES ($1,$2,$3,$4)
     ON CONFLICT DO NOTHING
     `,
-    [clientId, serviceId]
+    [clientId, serviceId, safePrice, source]
   );
 
   // 5. списание через ledger
   await db.query(
     `
-    INSERT INTO contact_balance_ledger (client_id, amount, reason, source, service_id, meta)
-    VALUES ($1, $2, 'unlock_contact', $3, $4, $5)
+    INSERT INTO contact_balance_ledger
+      (client_id, amount, reason, service_id, source, meta)
+    VALUES ($1,$2,'unlock_contact',$3,$4,$5::jsonb)
     `,
     [
       clientId,
-      -Math.abs(Number(price)),
-      source,
+      -safePrice,
       serviceId,
+      source,
       JSON.stringify({ service_id: serviceId }),
     ]
   );
