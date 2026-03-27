@@ -134,7 +134,7 @@ module.exports = async function authenticateToken(req, res, next) {
 
     // если провайдера не нашли — мягко проверим клиента
     let cIdentity = null;
-    if (!pFlags && id != null) {
+    if (id != null) {
       try {
         const c = await pool.query("SELECT 1 FROM clients WHERE id=$1 LIMIT 1", [id]);
         if (c.rowCount > 0) {
@@ -174,19 +174,15 @@ module.exports = async function authenticateToken(req, res, next) {
     // 1) то что уже есть в токене (payload.email/mail/full_name)
     // 2) из providers (pFlags.email/name)
     // 3) из clients (cIdentity.email/name)
-    const email =
-      (roleLc === "client"
-        ? (cIdentity && cIdentity.email)
-        : (pFlags && pFlags.email)) ||
-      pickEmail(payload) ||
-      null;
-    
-    const name =
-      (roleLc === "client"
-        ? (cIdentity && cIdentity.name)
-        : (pFlags && pFlags.name)) ||
-      pickName(payload) ||
-      null;
+  const email =
+    roleLc === "client"
+      ? (cIdentity && cIdentity.email) || null
+      : ((pFlags && pFlags.email) || pickEmail(payload) || null);
+  
+  const name =
+    roleLc === "client"
+      ? (cIdentity && cIdentity.name) || null
+      : ((pFlags && pFlags.name) || pickName(payload) || null);
 
   req.user = {
     id,
