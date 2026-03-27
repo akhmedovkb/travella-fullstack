@@ -59,7 +59,6 @@ async function readClientIdentity(id) {
     SELECT
       id,
       email,
-      full_name,
       name
     FROM clients
     WHERE id = $1
