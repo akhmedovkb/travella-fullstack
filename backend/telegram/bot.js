@@ -6649,6 +6649,23 @@ bot.on("successful_payment", async (ctx) => {
       await tx.query("COMMIT");
 
       const bal = Number(res?.balance || 0).toLocaleString("ru-RU");
+      const sid = Number(ctx.session?.lastUnlockServiceId || 0);
+      
+      if (sid > 0) {
+        try {
+          await safeReply(
+            ctx,
+            `✅ Оплата прошла успешно!\n\nВаш баланс: <b>${bal}</b> сум\n🔓 Пытаюсь автоматически открыть контакты...`,
+            { parse_mode: "HTML" }
+          );
+      
+          const retryRes = await doUnlockFlow(ctx, sid);
+          if (retryRes?.ok) return;
+        } catch (e) {
+          console.error("[tg-bot] auto-retry after payment error:", e?.message || e);
+        }
+      }
+      
       await safeReply(
         ctx,
         `✅ Оплата прошла успешно!\n\nВаш баланс: <b>${bal}</b> сум`,
@@ -6657,7 +6674,7 @@ bot.on("successful_payment", async (ctx) => {
           reply_markup: {
             inline_keyboard: [
               [{ text: "🔄 Проверить баланс", callback_data: "balance:check" }],
-              ...(ctx.session?.lastUnlockServiceId ? [[{ text: "🔓 Повторить открытие", callback_data: "balance:retry" }]] : []),
+              ...(sid > 0 ? [[{ text: "🔓 Повторить открытие", callback_data: "balance:retry" }]] : []),
             ],
           },
         }
