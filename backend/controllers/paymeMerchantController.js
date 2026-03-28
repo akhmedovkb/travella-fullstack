@@ -820,6 +820,96 @@ async function paymeMerchantRpc(req, res) {
 
         await syncClientBalanceMirror(client, order.client_id);
 
+        // 🔥 AUTO-RETRY pending unlock after successful topup
+        try {
+          const clientId = Number(order.client_id);
+
+          const pending = await client.query(
+            `
+            SELECT id, service_id
+            FROM client_pending_unlocks
+            WHERE client_id = $1
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1
+            `,
+            [clientId]
+          );
+
+          if (pending.rowCount > 0) {
+            const pendingRow = pending.rows[0];
+            const serviceId = Number(pendingRow.service_id);
+
+            await lockKeyTx(client, `unlock:${clientId}:${serviceId}`);
+
+            const already = await client.query(
+              `
+              SELECT 1
+              FROM client_service_contact_unlocks
+              WHERE client_id = $1 AND service_id = $2
+              LIMIT 1
+              `,
+              [clientId, serviceId]
+            );
+
+            if (!already.rowCount) {
+              const settings = await client.query(
+                `
+                SELECT is_paid, price
+                FROM contact_unlock_settings
+                ORDER BY id ASC
+                LIMIT 1
+                `
+              );
+
+              const isPaid = !!settings.rows[0]?.is_paid;
+              const effectivePrice = isPaid ? Number(settings.rows[0]?.price || 0) : 0;
+              const priceSum = Math.trunc(effectivePrice / 100);
+
+              const balanceAfterTopup = await getLedgerBalance(client, clientId);
+
+              if (balanceAfterTopup >= priceSum && priceSum >= 0) {
+                await client.query(
+                  `
+                  INSERT INTO client_service_contact_unlocks
+                    (client_id, service_id, price_charged, source, note)
+                  VALUES ($1, $2, $3, 'payme_auto', 'auto-retry after Payme topup')
+                  ON CONFLICT DO NOTHING
+                  `,
+                  [clientId, serviceId, priceSum]
+                );
+
+                await client.query(
+                  `
+                  INSERT INTO contact_balance_ledger
+                    (client_id, amount, reason, service_id, source, meta)
+                  VALUES ($1, $2, 'unlock_contact', $3, 'payme_auto', $4::jsonb)
+                  `,
+                  [
+                    clientId,
+                    -priceSum,
+                    serviceId,
+                    JSON.stringify({
+                      service_id: serviceId,
+                      auto_retry: true,
+                      payme_id: String(paymeId),
+                      order_id: String(orderId),
+                    }),
+                  ]
+                );
+
+                await syncClientBalanceMirror(client, clientId);
+              }
+            }
+
+            await client.query(
+              `DELETE FROM client_pending_unlocks WHERE id = $1`,
+              [Number(pendingRow.id)]
+            );
+          }
+        } catch (e) {
+          console.error("[payme] auto-retry pending unlock error:", e?.message || e);
+        }
+
         await client.query("COMMIT");
 
         return res.status(200).json(
