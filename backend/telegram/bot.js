@@ -6861,18 +6861,17 @@ if (!result.ok) {
         "💳 <b>Недостаточно средств</b>\n\n" +
           `💰 Баланс: <b>${bal}</b> сум\n` +
           `🔒 Нужно: <b>${need}</b> сум\n\n` +
-          "Нажмите «Пополнить баланс», затем «Проверить баланс».",
+          "Пополните баланс и нажмите «Повторить открытие».",
         {
           parse_mode: "HTML",
           disable_web_page_preview: true,
           reply_markup: {
             inline_keyboard: [
               [
-              PAYMENTS_PROVIDER_TOKEN
-                ? { text: "💳 Пополнить баланс", callback_data: "balance:topup" }
-                : { text: "💳 Пополнить баланс", url: topupUrl },
+                PAYMENTS_PROVIDER_TOKEN
+                  ? { text: "💳 Пополнить баланс", callback_data: "balance:topup" }
+                  : { text: "💳 Пополнить баланс", url: topupUrl },
               ],
-              [{ text: "🔄 Проверить баланс", callback_data: "balance:check" }],
               [{ text: "🔓 Повторить открытие", callback_data: "balance:retry" }],
             ],
           },
