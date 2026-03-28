@@ -6861,6 +6861,26 @@ if (!result.ok) {
       ctx.session.lastUnlockServiceId = serviceId;
     } catch {}
 
+        try {
+      await pool.query(
+        `
+        INSERT INTO client_pending_unlocks (client_id, service_id)
+        VALUES ($1, $2)
+        `,
+        [clientRow.id, serviceId]
+      );
+    } catch (e) {
+      console.error("[tg-bot] pending unlock insert error:", e?.message || e);
+    }
+
+    // 1) как и раньше: alert
+    try {
+      await ctx.answerCbQuery(
+        `💳 Недостаточно средств.\nБаланс: ${bal} сум\nНужно: ${need} сум`,
+        { show_alert: true }
+      );
+    } catch {}
+
     // 1) как и раньше: alert
     try {
       await ctx.answerCbQuery(
