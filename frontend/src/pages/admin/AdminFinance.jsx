@@ -28,6 +28,7 @@ export default function AdminFinance() {
           <p className="text-sm text-gray-500">
             Clients — работа по конкретному клиенту.  
             Payme — платежи, monitoring и диагностика.  
+            Funnel — кого можно дожимать по открытию контактов.  
             Audit — системный контроль и integrity guard.
           </p>
         </div>
@@ -41,12 +42,9 @@ export default function AdminFinance() {
       </div>
 
       {tab === "clients" && <AdminContactBalance />}
-
       {tab === "payme" && <AdminPaymeHealth />}
-
-      {tab === "audit" && <AdminBilling />}
-
       {tab === "funnel" && <AdminUnlockFunnel />}
+      {tab === "audit" && <AdminBilling />}
     </div>
   );
 }
