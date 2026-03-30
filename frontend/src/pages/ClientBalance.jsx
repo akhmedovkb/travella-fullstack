@@ -42,6 +42,9 @@ export default function ClientBalance() {
   const [topupLoading, setTopupLoading] = useState(false);
   const [customAmount, setCustomAmount] = useState("");
 
+  // 🔥 ВАЖНО: service_id из URL
+  const [serviceId, setServiceId] = useState(null);
+
   async function loadAll() {
     setLoading(true);
     try {
@@ -70,9 +73,18 @@ export default function ClientBalance() {
 
     setTopupLoading(true);
     try {
+      const payload = {
+        amount: sum,
+      };
+
+      // 🔥 если есть service_id — добавляем
+      if (serviceId) {
+        payload.service_id = serviceId;
+      }
+
       const data = await apiPost(
         "/api/client/balance/topup-order",
-        { amount: sum },
+        payload,
         "client"
       );
 
@@ -94,6 +106,15 @@ export default function ClientBalance() {
   }
 
   useEffect(() => {
+    // 🔥 достаём service_id из URL
+    const params = new URLSearchParams(window.location.search);
+    const sid = Number(params.get("service_id"));
+
+    if (sid && Number.isFinite(sid)) {
+      setServiceId(sid);
+      console.log("[ClientBalance] service_id from URL =", sid);
+    }
+
     loadAll();
   }, []);
 
@@ -118,6 +139,13 @@ export default function ClientBalance() {
             {loading ? t("common.loading") : t("common.refresh")}
           </button>
         </div>
+
+        {/* 🔥 показываем контекст */}
+        {serviceId && (
+          <div className="mt-4 text-sm text-blue-600">
+            {t("balance.context_unlock")}: #{serviceId}
+          </div>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5">
           <div className="rounded-2xl bg-gray-50 border p-5">
