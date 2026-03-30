@@ -784,6 +784,26 @@ async function paymeMerchantRpc(req, res) {
 
           await syncClientBalanceMirror(client, order.client_id);
 
+          // 🔥 FUNNEL: payment_success
+          try {
+            const clientId = Number(order.client_id);
+          
+            await client.query(
+              `
+              INSERT INTO contact_unlock_funnel
+                (client_id, service_id, source, step, status, payme_id, order_id)
+              VALUES ($1, NULL, 'web', 'payment_success', 'success', $2, $3)
+              `,
+              [
+                clientId,
+                String(paymeId),
+                String(orderId),
+              ]
+            );
+          } catch (e) {
+            console.error("[funnel] payment_success error:", e?.message || e);
+          }
+
           await client.query("COMMIT");
           return res.status(200).json(
             ok(id, {
@@ -990,6 +1010,26 @@ async function paymeMerchantRpc(req, res) {
               paymeId,
               reasonCode: Number.isFinite(reason) ? reason : null,
             });
+
+            // 🔥 FUNNEL: payment_canceled
+              try {
+                const clientId = Number(order.client_id);
+              
+                await client.query(
+                  `
+                  INSERT INTO contact_unlock_funnel
+                    (client_id, service_id, source, step, status, payme_id, order_id)
+                  VALUES ($1, NULL, 'web', 'payment_canceled', 'error', $2, $3)
+                  `,
+                  [
+                    clientId,
+                    String(paymeId),
+                    String(orderId),
+                  ]
+                );
+              } catch (e) {
+                console.error("[funnel] payment_canceled error:", e?.message || e);
+              }
 
             await syncClientBalanceMirror(client, order.client_id);
 
