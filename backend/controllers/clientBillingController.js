@@ -2,6 +2,7 @@
 const pool = require("../db");
 
 const { getContactUnlockSettings } = require("../utils/contactUnlockSettings");
+const { logUnlockFunnel } = require("../utils/contactUnlockFunnel");
 
 let _clientsBalanceColumn = null;
 
@@ -10,6 +11,23 @@ function clampInt(x, def, min, max) {
   if (!Number.isFinite(n)) return def;
   const i = Math.trunc(n);
   return Math.max(min, Math.min(max, i));
+}
+
+function toIntOrNull(x) {
+  const n = Number(x);
+  return Number.isFinite(n) ? Math.trunc(n) : null;
+}
+
+function getSessionKey(req) {
+  return req.headers["x-session-key"] || null;
+}
+
+async function safeLogUnlockFunnel(dbOrPayload, maybePayload = null) {
+  try {
+    await logUnlockFunnel(dbOrPayload, maybePayload);
+  } catch (e) {
+    console.error("[unlock-funnel] log error:", e?.message || e);
+  }
 }
 
 async function getClientsBalanceColumn(client) {
@@ -58,7 +76,7 @@ async function getBalanceFromLedger(client, clientId) {
 async function syncClientBalanceMirror(client, clientId) {
   const col = await getClientsBalanceColumn(client);
   const balance = await getBalanceFromLedger(client, clientId);
-  
+
   if (col) {
     await client.query(
       `
@@ -106,34 +124,34 @@ async function clientBalance(req, res) {
     return res.status(401).json({ ok: false, message: "Unauthorized" });
   }
 
-try {
-  const client = await pool.connect();
-
   try {
-    const balance = await getBalanceFromLedger(client, clientId);
-    console.log("[clientBalance] ledger balance for", clientId, "=", balance);
+    const client = await pool.connect();
 
-    const who = await client.query(`
-      SELECT
-        current_database() AS db,
-        current_user AS db_user,
-        inet_server_addr()::text AS server_addr,
-        inet_server_port() AS server_port
-    `);
-    console.log("[clientBalance] db info =", who.rows[0]);
-    console.log("[clientBalance] DATABASE_URL =", process.env.DATABASE_URL);
+    try {
+      const balance = await getBalanceFromLedger(client, clientId);
+      console.log("[clientBalance] ledger balance for", clientId, "=", balance);
 
-    const unlockSettings = await getContactUnlockSettings(client);
+      const who = await client.query(`
+        SELECT
+          current_database() AS db,
+          current_user AS db_user,
+          inet_server_addr()::text AS server_addr,
+          inet_server_port() AS server_port
+      `);
+      console.log("[clientBalance] db info =", who.rows[0]);
+      console.log("[clientBalance] DATABASE_URL =", process.env.DATABASE_URL);
 
-    return res.json({
-      ok: true,
-      balance,
-      unlock_price: unlockSettings.effective_price,
-      unlock_is_paid: unlockSettings.is_paid,
-      unlock_base_price: unlockSettings.price,
-    });
-  } finally {
-    client.release();
+      const unlockSettings = await getContactUnlockSettings(client);
+
+      return res.json({
+        ok: true,
+        balance,
+        unlock_price: unlockSettings.effective_price,
+        unlock_is_paid: unlockSettings.is_paid,
+        unlock_base_price: unlockSettings.price,
+      });
+    } finally {
+      client.release();
     }
   } catch (e) {
     console.error("clientBalance error:", e);
@@ -269,6 +287,25 @@ async function createTopupOrder(req, res) {
 
     const order = ins.rows[0];
 
+    const rawServiceId = toIntOrNull(req.body?.service_id);
+    if (rawServiceId && rawServiceId > 0) {
+      await safeLogUnlockFunnel(db, {
+        clientId,
+        serviceId: rawServiceId,
+        source: "web",
+        step: "topup_order_created",
+        status: "info",
+        priceTiyin: amountTiyin,
+        orderId: Number(order.id),
+        sessionKey: getSessionKey(req),
+        meta: {
+          flow: "client_balance_topup",
+          provider: "payme",
+          callback_path: "/client/balance",
+        },
+      });
+    }
+
     const callbackUrl = `${String(SITE_PUBLIC).replace(/\/+$/, "")}/client/balance?order_id=${order.id}`;
 
     const pay_url = buildPaymeCheckoutUrl({
@@ -325,6 +362,20 @@ async function unlockContact(req, res) {
     const unlockSettings = await getContactUnlockSettings(client);
     const price = Number(unlockSettings.effective_price || 0);
 
+    await safeLogUnlockFunnel(client, {
+      clientId,
+      serviceId,
+      source: "web",
+      step: "unlock_clicked",
+      status: "info",
+      priceTiyin: price,
+      sessionKey: getSessionKey(req),
+      meta: {
+        channel: "web",
+        route: "/api/client/unlock-contact",
+      },
+    });
+
     await client.query(`SELECT id FROM clients WHERE id=$1 FOR UPDATE`, [clientId]);
 
     const existing = await client.query(
@@ -340,6 +391,22 @@ async function unlockContact(req, res) {
 
     if (existing.rows.length) {
       const balance = await getBalanceFromLedger(client, clientId);
+
+      await safeLogUnlockFunnel(client, {
+        clientId,
+        serviceId,
+        source: "web",
+        step: "unlock_already_opened",
+        status: "success",
+        priceTiyin: price,
+        balanceBefore: balance,
+        balanceAfter: balance,
+        sessionKey: getSessionKey(req),
+        meta: {
+          channel: "web",
+          already: true,
+        },
+      });
 
       await client.query("COMMIT");
 
@@ -359,6 +426,23 @@ async function unlockContact(req, res) {
     const balance = await getBalanceFromLedger(client, clientId);
 
     if (price > 0 && balance < price) {
+      await safeLogUnlockFunnel(client, {
+        clientId,
+        serviceId,
+        source: "web",
+        step: "unlock_no_balance",
+        status: "fail",
+        priceTiyin: price,
+        balanceBefore: balance,
+        balanceAfter: balance,
+        sessionKey: getSessionKey(req),
+        meta: {
+          channel: "web",
+          need: price,
+          shortfall: Math.max(0, price - balance),
+        },
+      });
+
       await client.query("ROLLBACK");
 
       return res.status(400).json({
@@ -382,6 +466,22 @@ async function unlockContact(req, res) {
 
     if (!unlockInsert.rows.length) {
       const newBalance = await getBalanceFromLedger(client, clientId);
+
+      await safeLogUnlockFunnel(client, {
+        clientId,
+        serviceId,
+        source: "web",
+        step: "unlock_already_opened",
+        status: "success",
+        priceTiyin: price,
+        balanceBefore: newBalance,
+        balanceAfter: newBalance,
+        sessionKey: getSessionKey(req),
+        meta: {
+          channel: "web",
+          conflict_after_insert: true,
+        },
+      });
 
       await client.query("COMMIT");
 
@@ -423,6 +523,24 @@ async function unlockContact(req, res) {
         ? await syncClientBalanceMirror(client, clientId)
         : await getBalanceFromLedger(client, clientId);
 
+    await safeLogUnlockFunnel(client, {
+      clientId,
+      serviceId,
+      source: "web",
+      step: "unlock_success",
+      status: "success",
+      priceTiyin: price,
+      balanceBefore: balance,
+      balanceAfter: newBalance,
+      sessionKey: getSessionKey(req),
+      meta: {
+        channel: "web",
+        charged: price,
+        unlock_id: unlockInsert.rows[0]?.id || null,
+        is_paid_mode: !!unlockSettings.is_paid,
+      },
+    });
+
     await client.query("COMMIT");
 
     return res.json({
@@ -440,6 +558,23 @@ async function unlockContact(req, res) {
     try {
       await client.query("ROLLBACK");
     } catch {}
+
+    try {
+      await safeLogUnlockFunnel({
+        clientId,
+        serviceId,
+        source: "web",
+        step: "unlock_error",
+        status: "fail",
+        priceTiyin: 0,
+        sessionKey: getSessionKey(req),
+        meta: {
+          channel: "web",
+          error: e?.message || String(e),
+        },
+      });
+    } catch {}
+
     console.error("unlockContact error:", e);
     return res.status(500).json({ ok: false });
   } finally {
