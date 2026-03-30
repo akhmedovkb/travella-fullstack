@@ -2832,9 +2832,11 @@ bot.action("svc_edit_cancel", async (ctx) => {
     ctx.session.wizardStack = [];
     ctx.session.serviceDraft = null;
     ctx.session.editingServiceId = null;
-
-    // ✅ ВАЖНО: полностью вычищаем “след” редактирования
     ctx.session.editWiz = null;
+
+    try {
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+    } catch {}
 
     await safeReply(ctx, "❌ Редактирование отменено.");
   } catch (e) {
