@@ -4,6 +4,7 @@ import { useState } from "react";
 import AdminPaymeHealth from "./AdminPaymeHealth";
 import AdminBilling from "./AdminBilling";
 import AdminContactBalance from "./AdminContactBalance";
+import AdminUnlockFunnel from "./AdminUnlockFunnel";
 
 export default function AdminFinance() {
   const [tab, setTab] = useState("clients");
@@ -34,6 +35,7 @@ export default function AdminFinance() {
         <div className="flex flex-wrap items-center gap-2">
           <TabBtn id="clients">Clients</TabBtn>
           <TabBtn id="payme">Payme</TabBtn>
+          <TabBtn id="funnel">Funnel</TabBtn>
           <TabBtn id="audit">Audit</TabBtn>
         </div>
       </div>
@@ -43,6 +45,8 @@ export default function AdminFinance() {
       {tab === "payme" && <AdminPaymeHealth />}
 
       {tab === "audit" && <AdminBilling />}
+
+      {tab === "funnel" && <AdminUnlockFunnel />}
     </div>
   );
 }
