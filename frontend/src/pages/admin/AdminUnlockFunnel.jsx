@@ -14,7 +14,7 @@ function fmtTs(x) {
 }
 
 function money(n) {
-  return Math.round(Number(n || 0)).toLocaleString("ru-RU");
+  return Math.round(Number(n || 0) / 100).toLocaleString("ru-RU");
 }
 
 function SegmentBadge({ segment }) {
