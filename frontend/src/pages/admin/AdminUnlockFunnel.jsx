@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiGet } from "../../api";
 import { tError } from "../../shared/toast";
+import { formatTiyinToSum } from "../../utils/money";
 
 function fmtTs(x) {
   if (!x) return "—";
@@ -13,17 +14,6 @@ function fmtTs(x) {
   }
 }
 
-function money(n) {
-  const val = Number(n || 0);
-
-  // если уже похоже на сум (маленькое число) — не делим
-  if (val < 10000) {
-    return Math.round(val).toLocaleString("ru-RU");
-  }
-
-  // если это тийины — делим
-  return Math.round(val / 100).toLocaleString("ru-RU");
-}
 
 function SegmentBadge({ segment }) {
   const s = String(segment || "").toLowerCase();
@@ -258,10 +248,10 @@ export default function AdminUnlockFunnel() {
                     <td className="px-3 py-2">{r.attempts_count || 0}</td>
                     <td className="px-3 py-2">
                       <div className="text-xs text-gray-500">
-                        {money(r.balance_before)} → {money(r.balance_after)}
+                        {formatTiyinToSum(r.balance_before)} сум → {formatTiyinToSum(r.balance_after)} сум
                       </div>
                       <div className="text-xs text-gray-400">
-                        price: {money(r.price_tiyin)}
+                        price: {formatTiyinToSum(r.price_tiyin)} сум
                       </div>
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap">{fmtTs(r.last_seen_at)}</td>
