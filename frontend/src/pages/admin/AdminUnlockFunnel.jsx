@@ -20,27 +20,31 @@ function money(n) {
 function SegmentBadge({ segment }) {
   const s = String(segment || "").toLowerCase();
 
-  const cls =
-    s === "hot_no_balance"
-      ? "bg-red-100 text-red-700"
-      : s === "hot_topup_created"
-      ? "bg-orange-100 text-orange-800"
-      : s === "warm_clicked"
-      ? "bg-yellow-100 text-yellow-800"
-      : s === "closed"
-      ? "bg-green-100 text-green-700"
-      : "bg-gray-100 text-gray-700";
+const cls =
+  s === "hot_no_balance"
+    ? "bg-red-100 text-red-700"
+    : s === "hot_paid_not_opened"
+    ? "bg-pink-100 text-pink-700"
+    : s === "hot_topup_created"
+    ? "bg-orange-100 text-orange-800"
+    : s === "warm_clicked"
+    ? "bg-yellow-100 text-yellow-800"
+    : s === "closed"
+    ? "bg-green-100 text-green-700"
+    : "bg-gray-100 text-gray-700";
 
-  const label =
-    s === "hot_no_balance"
-      ? "NO BALANCE"
-      : s === "hot_topup_created"
-      ? "TOPUP STARTED"
-      : s === "warm_clicked"
-      ? "CLICKED"
-      : s === "closed"
-      ? "CLOSED"
-      : "OTHER";
+const label =
+  s === "hot_no_balance"
+    ? "NO BALANCE"
+    : s === "hot_paid_not_opened"
+    ? "PAID NOT OPENED"
+    : s === "hot_topup_created"
+    ? "TOPUP STARTED"
+    : s === "warm_clicked"
+    ? "CLICKED"
+    : s === "closed"
+    ? "CLOSED"
+    : "OTHER";
 
   return (
     <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${cls}`}>
@@ -51,7 +55,9 @@ function SegmentBadge({ segment }) {
 
 function StatCard({ title, value, tone = "default" }) {
   const toneCls =
-    tone === "red"
+    tone === "pink"
+      ? "text-pink-600"
+      : tone === "red"
       ? "text-red-600"
       : tone === "orange"
       ? "text-orange-600"
@@ -141,18 +147,19 @@ export default function AdminUnlockFunnel() {
 
             <div>
               <label className="block text-xs text-gray-500 mb-1">Segment</label>
-              <select
-                className="border rounded-lg px-3 py-2"
-                value={segment}
-                onChange={(e) => setSegment(e.target.value)}
-              >
-                <option value="">All</option>
-                <option value="hot_no_balance">No balance</option>
-                <option value="hot_topup_created">Topup started</option>
-                <option value="warm_clicked">Clicked only</option>
-                <option value="other_open">Other open</option>
-                <option value="closed">Closed</option>
-              </select>
+                <select
+                  className="border rounded-lg px-3 py-2"
+                  value={segment}
+                  onChange={(e) => setSegment(e.target.value)}
+                >
+                  <option value="">All</option>
+                  <option value="hot_no_balance">No balance</option>
+                  <option value="hot_paid_not_opened">Paid but not opened</option>
+                  <option value="hot_topup_created">Topup started</option>
+                  <option value="warm_clicked">Clicked only</option>
+                  <option value="other_open">Other open</option>
+                  <option value="closed">Closed</option>
+                </select>
             </div>
 
             <div>
@@ -179,8 +186,9 @@ export default function AdminUnlockFunnel() {
       </div>
 
       {summary && (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4">
           <StatCard title="No balance" value={summary.hot_no_balance || 0} tone="red" />
+          <StatCard title="Paid not opened" value={summary.hot_paid_not_opened || 0} tone="pink" />
           <StatCard title="Topup started" value={summary.hot_topup_created || 0} tone="orange" />
           <StatCard title="Clicked only" value={summary.warm_clicked || 0} tone="yellow" />
           <StatCard title="Other open" value={summary.other_open || 0} />
