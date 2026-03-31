@@ -787,12 +787,12 @@ async function paymeMerchantRpc(req, res) {
           // 🔥 FUNNEL: payment_success
           try {
             const clientId = Number(order.client_id);
-          
+
             await client.query(
               `
               INSERT INTO contact_unlock_funnel
                 (client_id, service_id, source, step, status, payme_id, order_id)
-              VALUES ($1, NULL, 'web', 'payment_success', 'success', $2, $3)
+              VALUES ($1, 0, 'web', 'payment_success', 'success', $2, $3)
               `,
               [
                 clientId,
@@ -839,6 +839,26 @@ async function paymeMerchantRpc(req, res) {
         });
 
         await syncClientBalanceMirror(client, order.client_id);
+
+        // 🔥 FUNNEL: payment_success
+        try {
+          const clientId = Number(order.client_id);
+
+          await client.query(
+            `
+            INSERT INTO contact_unlock_funnel
+              (client_id, service_id, source, step, status, payme_id, order_id)
+            VALUES ($1, 0, 'web', 'payment_success', 'success', $2, $3)
+            `,
+            [
+              clientId,
+              String(paymeId),
+              String(orderId),
+            ]
+          );
+        } catch (e) {
+          console.error("[funnel] payment_success error:", e?.message || e);
+        }
 
         // 🔥 AUTO-RETRY pending unlock after successful topup
         try {
@@ -1012,24 +1032,24 @@ async function paymeMerchantRpc(req, res) {
             });
 
             // 🔥 FUNNEL: payment_canceled
-              try {
-                const clientId = Number(order.client_id);
-              
-                await client.query(
-                  `
-                  INSERT INTO contact_unlock_funnel
-                    (client_id, service_id, source, step, status, payme_id, order_id)
-                  VALUES ($1, NULL, 'web', 'payment_canceled', 'error', $2, $3)
-                  `,
-                  [
-                    clientId,
-                    String(paymeId),
-                    String(orderId),
-                  ]
-                );
-              } catch (e) {
-                console.error("[funnel] payment_canceled error:", e?.message || e);
-              }
+            try {
+              const clientId = Number(order.client_id);
+
+              await client.query(
+                `
+                INSERT INTO contact_unlock_funnel
+                  (client_id, service_id, source, step, status, payme_id, order_id)
+                VALUES ($1, 0, 'web', 'payment_canceled', 'error', $2, $3)
+                `,
+                [
+                  clientId,
+                  String(paymeId),
+                  String(orderId),
+                ]
+              );
+            } catch (e) {
+              console.error("[funnel] payment_canceled error:", e?.message || e);
+            }
 
             await syncClientBalanceMirror(client, order.client_id);
 
@@ -1128,81 +1148,81 @@ async function paymeMerchantRpc(req, res) {
       return res.status(200).json(ok(id, { transactions: result }));
     }
 
-/** ---- SetFiscalData ---- */
-if (method === "SetFiscalData") {
-  const paymeId = normalizePaymeId(params?.id);
-  const fiscalData = params?.fiscal_data || null;
+    /** ---- SetFiscalData ---- */
+    if (method === "SetFiscalData") {
+      const paymeId = normalizePaymeId(params?.id);
+      const fiscalData = params?.fiscal_data || null;
 
-  if (!paymeId) {
-    return res.status(200).json(rpcError(id, -32602, "Missing params.id"));
-  }
+      if (!paymeId) {
+        return res.status(200).json(rpcError(id, -32602, "Missing params.id"));
+      }
 
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    await lockKeyTx(client, `payme:${paymeId}`);
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        await lockKeyTx(client, `payme:${paymeId}`);
 
-    const { rows } = await client.query(
-      `SELECT payme_id, state, fiscal_receipt_id
-         FROM payme_transactions
-        WHERE payme_id = $1
-        FOR UPDATE`,
-      [paymeId]
-    );
+        const { rows } = await client.query(
+          `SELECT payme_id, state, fiscal_receipt_id
+             FROM payme_transactions
+            WHERE payme_id = $1
+            FOR UPDATE`,
+          [paymeId]
+        );
 
-    const tx = rows[0] || null;
+        const tx = rows[0] || null;
 
-    if (!tx) {
-      await client.query("ROLLBACK");
-      return res
-        .status(200)
-        .json(rpcError(id, -31003, "Transaction not found"));
+        if (!tx) {
+          await client.query("ROLLBACK");
+          return res
+            .status(200)
+            .json(rpcError(id, -31003, "Transaction not found"));
+        }
+
+        if (tx.fiscal_receipt_id) {
+          await client.query("COMMIT");
+          return res.status(200).json(ok(id, { success: true }));
+        }
+
+        const receiptId =
+          fiscalData && typeof fiscalData === "object"
+            ? String(fiscalData.receipt_id ?? "")
+            : "";
+        const fiscalSign =
+          fiscalData && typeof fiscalData === "object"
+            ? String(fiscalData.fiscal_sign ?? "")
+            : "";
+        const terminalId =
+          fiscalData && typeof fiscalData === "object"
+            ? String(fiscalData.terminal_id ?? "")
+            : "";
+
+        await client.query(
+          `UPDATE payme_transactions
+              SET fiscal_data = $2,
+                  fiscal_receipt_id = NULLIF($3, ''),
+                  fiscal_sign = NULLIF($4, ''),
+                  fiscal_terminal_id = NULLIF($5, ''),
+                  fiscal_received_at = now(),
+                  updated_at = now()
+            WHERE payme_id = $1`,
+          [paymeId, fiscalData, receiptId, fiscalSign, terminalId]
+        );
+
+        await client.query("COMMIT");
+
+        return res.status(200).json(ok(id, { success: true }));
+      } catch (e) {
+        try {
+          await client.query("ROLLBACK");
+        } catch {}
+
+        console.error("[payme] SetFiscalData error:", e?.message || e);
+        return res.status(200).json(rpcError(id, -32400, "Internal error"));
+      } finally {
+        client.release();
+      }
     }
-
-    if (tx.fiscal_receipt_id) {
-      await client.query("COMMIT");
-      return res.status(200).json(ok(id, { success: true }));
-    }
-
-    const receiptId =
-      fiscalData && typeof fiscalData === "object"
-        ? String(fiscalData.receipt_id ?? "")
-        : "";
-    const fiscalSign =
-      fiscalData && typeof fiscalData === "object"
-        ? String(fiscalData.fiscal_sign ?? "")
-        : "";
-    const terminalId =
-      fiscalData && typeof fiscalData === "object"
-        ? String(fiscalData.terminal_id ?? "")
-        : "";
-
-    await client.query(
-      `UPDATE payme_transactions
-          SET fiscal_data = $2,
-              fiscal_receipt_id = NULLIF($3, ''),
-              fiscal_sign = NULLIF($4, ''),
-              fiscal_terminal_id = NULLIF($5, ''),
-              fiscal_received_at = now(),
-              updated_at = now()
-        WHERE payme_id = $1`,
-      [paymeId, fiscalData, receiptId, fiscalSign, terminalId]
-    );
-
-    await client.query("COMMIT");
-
-    return res.status(200).json(ok(id, { success: true }));
-  } catch (e) {
-    try {
-      await client.query("ROLLBACK");
-    } catch {}
-
-    console.error("[payme] SetFiscalData error:", e?.message || e);
-    return res.status(200).json(rpcError(id, -32400, "Internal error"));
-  } finally {
-    client.release();
-  }
-}
 
     return res.status(200).json(rpcError(id, -32601, "Method not found"));
   } catch (e) {
