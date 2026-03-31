@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost } from "../../api";
 import { tError, tSuccess } from "../../shared/toast";
+import { formatTiyinToSum } from "../../utils/money";
 import AdminBillingHealth from "./AdminBillingHealth";
 
 function toNum(x) {
@@ -10,9 +11,6 @@ function toNum(x) {
   return Number.isFinite(n) ? n : 0;
 }
 
-function money(n) {
-  return Math.round(toNum(n)).toLocaleString("ru-RU");
-}
 
 function fmtTs(x) {
   if (!x) return "—";
@@ -23,7 +21,7 @@ function fmtTs(x) {
   }
 }
 
-function StatCard({ title, value, danger = false, warn = false }) {
+function StatCard({ title, value, danger = false, warn = false, isMoney = true }) {
   const valueCls = danger
     ? "text-red-600"
     : warn
@@ -33,7 +31,7 @@ function StatCard({ title, value, danger = false, warn = false }) {
   return (
     <div className="bg-white rounded-xl shadow p-4">
       <div className="text-sm text-gray-500">{title}</div>
-      <div className={`mt-2 text-2xl font-semibold ${valueCls}`}>{money(value)}</div>
+      <div className={`mt-2 text-2xl font-semibold ${valueCls}`}>{isMoney ? `${formatTiyinToSum(value)} сум` : toNum(value).toLocaleString("ru-RU")}</div>
     </div>
   );
 }
@@ -102,6 +100,7 @@ export default function AdminBilling() {
   async function submitAdjust() {
     const client_id = Number(adjustClientId);
     const amount = Number(adjustAmount);
+    const amountTiyin = Math.round(amount * 100);
     const note = String(adjustNote || "").trim();
 
     if (!Number.isFinite(client_id) || client_id <= 0) {
@@ -120,7 +119,7 @@ export default function AdminBilling() {
         "/api/admin/billing/adjust",
         {
           client_id,
-          amount,
+          amount: amountTiyin,
           note,
         },
         "admin"
@@ -246,8 +245,8 @@ export default function AdminBilling() {
               <StatCard title="Total topups" value={summary.total_topups} />
               <StatCard title="Total refunds" value={summary.total_refunds} warn />
               <StatCard title="Total debits" value={summary.total_debits} danger />
-              <StatCard title="Clients with balance" value={summary.clients_with_balance} />
-              <StatCard title="Payme tx count" value={summary.payme_tx_count} />
+              <StatCard title="Clients with balance" value={summary.clients_with_balance} isMoney={false} />
+              <StatCard title="Payme tx count" value={summary.payme_tx_count} isMoney={false} />
             </div>
           )}
 
@@ -266,7 +265,7 @@ export default function AdminBilling() {
               </div>
 
               <div>
-                <label className="block text-xs text-gray-500 mb-1">amount</label>
+                <label className="block text-xs text-gray-500 mb-1">amount (сум)</label>
                 <input
                   className="w-full border rounded-lg px-3 py-2"
                   value={adjustAmount}
@@ -423,7 +422,7 @@ export default function AdminBilling() {
                             Number(r.amount) < 0 ? "text-red-600" : "text-green-700"
                           }`}
                         >
-                          {money(r.amount)}
+                          {formatTiyinToSum(r.amount)} сум
                         </td>
                         <td className="px-3 py-2">{r.reason}</td>
                         <td className="px-3 py-2">{r.source}</td>
