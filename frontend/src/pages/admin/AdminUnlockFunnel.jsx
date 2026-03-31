@@ -14,7 +14,15 @@ function fmtTs(x) {
 }
 
 function money(n) {
-  return Math.round(Number(n || 0) / 100).toLocaleString("ru-RU");
+  const val = Number(n || 0);
+
+  // если уже похоже на сум (маленькое число) — не делим
+  if (val < 10000) {
+    return Math.round(val).toLocaleString("ru-RU");
+  }
+
+  // если это тийины — делим
+  return Math.round(val / 100).toLocaleString("ru-RU");
 }
 
 function SegmentBadge({ segment }) {
