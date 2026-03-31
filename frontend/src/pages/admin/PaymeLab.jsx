@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { apiGet, apiPost } from "../../api";
 import { tError, tSuccess } from "../../shared/toast";
+import { formatTiyinToSum } from "../../utils/money";
 
 function nowMs() {
   return Date.now();
@@ -65,7 +66,7 @@ function fmtTs(x) {
 }
 
 function money(x) {
-  return Math.round(Number(x || 0)).toLocaleString("ru-RU");
+  return formatTiyinToSum(x);
 }
 
 function badgePill(kind, text) {
@@ -1146,7 +1147,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">amount_tiyin</label>
+              <label className="block text-xs text-gray-500 mb-1">amount_tiyin (raw)</label>
               <input
                 className="w-full border rounded-lg px-3 py-2"
                 value={newAmountTiyin}
@@ -1183,8 +1184,8 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
                 <div className="font-mono">{createdOrder.order.client_id}</div>
               </div>
               <div className="bg-gray-50 border rounded-lg p-3">
-                <div className="text-xs text-gray-500 mb-1">amount_tiyin</div>
-                <div className="font-mono">{createdOrder.order.amount_tiyin}</div>
+                <div className="text-xs text-gray-500 mb-1">amount_tiyin (raw)</div>
+                <div className="font-mono">{createdOrder.order.amount_tiyin} raw · {formatTiyinToSum(createdOrder.order.amount_tiyin)} сум</div>
               </div>
             </div>
           )}
@@ -1630,7 +1631,7 @@ export default function PaymeLab({ embedded = false, seed = null } = {}) {
               ledger_rows: <span className="font-mono">{String(statusComputed.ledgerRows)}</span>
             </div>
             <div>
-              ledger_sum: <span className="font-mono">{String(statusComputed.ledgerSum)}</span>
+              ledger_sum: <span className="font-mono">{formatTiyinToSum(statusComputed.ledgerSum)} сум</span>
             </div>
           </div>
 
