@@ -14,6 +14,7 @@ function normalizeSegment(x) {
   if (!s) return "";
   const allowed = new Set([
     "hot_no_balance",
+    "hot_paid_not_opened",
     "hot_topup_created",
     "warm_clicked",
     "closed",
@@ -103,6 +104,7 @@ async function getUnlockFunnel(req, res) {
           g.last_seen_at,
           CASE
             WHEN lr.step = 'unlock_no_balance' THEN 'hot_no_balance'
+            WHEN lr.step = 'payment_success' THEN 'hot_paid_not_opened'
             WHEN lr.step = 'topup_order_created' THEN 'hot_topup_created'
             WHEN lr.step = 'unlock_clicked' THEN 'warm_clicked'
             WHEN lr.step IN ('unlock_success', 'unlock_already_opened') THEN 'closed'
@@ -110,6 +112,7 @@ async function getUnlockFunnel(req, res) {
           END AS segment,
           CASE
             WHEN lr.step = 'unlock_no_balance' THEN 100
+            WHEN lr.step = 'payment_success' THEN 95
             WHEN lr.step = 'topup_order_created' THEN 90
             WHEN lr.step = 'unlock_clicked' THEN 70
             WHEN lr.step IN ('unlock_success', 'unlock_already_opened') THEN 0
@@ -141,6 +144,7 @@ async function getUnlockFunnel(req, res) {
     const summary = {
       total: rows.length,
       hot_no_balance: rows.filter((r) => r.segment === "hot_no_balance").length,
+      hot_paid_not_opened: rows.filter((r) => r.segment === "hot_paid_not_opened").length,
       hot_topup_created: rows.filter((r) => r.segment === "hot_topup_created").length,
       warm_clicked: rows.filter((r) => r.segment === "warm_clicked").length,
       other_open: rows.filter((r) => r.segment === "other_open").length,
