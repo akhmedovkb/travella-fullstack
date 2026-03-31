@@ -1,12 +1,18 @@
-//backend/routes/adminUnlockNudgeRoutes.js
+// backend/routes/adminUnlockNudgeRoutes.js
 
 const express = require("express");
 const authenticateToken = require("../middleware/authenticateToken");
 const requireAdmin = require("../middleware/requireAdmin");
-const { getPaidNotOpened } = require("../controllers/adminUnlockNudgeController");
+const {
+  getUnlockNudgeAnalytics,
+} = require("../controllers/adminUnlockNudgeController");
 
 const router = express.Router();
 
-router.get("/", authenticateToken, requireAdmin, getPaidNotOpened);
+// Оба адреса рабочие:
+// GET /api/admin/unlock-nudge
+// GET /api/admin/unlock-nudge/analytics
+router.get("/", authenticateToken, requireAdmin, getUnlockNudgeAnalytics);
+router.get("/analytics", authenticateToken, requireAdmin, getUnlockNudgeAnalytics);
 
 module.exports = router;
