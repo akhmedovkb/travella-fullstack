@@ -4,15 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { apiGet, apiPost } from "../../api";
 import { tError, tSuccess } from "../../shared/toast";
+import { formatTiyinToSum, sumToTiyin } from "../../utils/money";
 
 function toNum(x) {
   const n = Number(x);
   return Number.isFinite(n) ? n : 0;
 }
 
-function money(n) {
-  return Math.round(toNum(n)).toLocaleString("ru-RU");
-}
 
 function fmtTs(ts) {
   if (!ts) return "—";
@@ -34,7 +32,8 @@ function fmtMs(ms) {
 
 function sign(n) {
   const v = toNum(n);
-  return v > 0 ? `+${money(v)}` : `${money(v)}`;
+  const abs = formatTiyinToSum(Math.abs(v));
+  return v > 0 ? `+${abs}` : v < 0 ? `-${abs}` : abs;
 }
 
 function reasonLabel(reason) {
@@ -396,7 +395,7 @@ export default function AdminContactBalance() {
               <div className="text-right">
                 <div className="text-sm text-gray-500">Текущий баланс</div>
                 <div className="text-3xl font-semibold">
-                  {loading ? "…" : `${money(balance)} сум`}
+                  {loading ? "…" : `${formatTiyinToSum(balance)} сум`}
                 </div>
                 <div className="mt-2 text-xs text-gray-400">
                   last operation: {fmtTs(s?.last_operation_at)}
@@ -408,25 +407,25 @@ export default function AdminContactBalance() {
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
             <StatCard
               title="Total in"
-              value={money(s?.total_in)}
+              value={formatTiyinToSum(s?.total_in)}
               tone="green"
               subtitle={`topups: ${toNum(s?.topup_count)}`}
             />
             <StatCard
               title="Total out"
-              value={money(s?.total_out)}
+              value={formatTiyinToSum(s?.total_out)}
               tone="red"
               subtitle="refunds + unlocks + debits"
             />
             <StatCard
               title="Unlocks"
               value={String(toNum(s?.unlock_count))}
-              subtitle={`sum: ${money(s?.unlock_sum)}`}
+              subtitle={`sum: ${formatTiyinToSum(s?.unlock_sum)} сум`}
             />
             <StatCard
               title="Refunds"
               value={String(toNum(s?.refund_count))}
-              subtitle={`sum: ${money(s?.refund_sum)}`}
+              subtitle={`sum: ${formatTiyinToSum(s?.refund_sum)} сум`}
             />
           </div>
 
@@ -434,12 +433,12 @@ export default function AdminContactBalance() {
             <StatCard
               title="Topups"
               value={String(toNum(s?.topup_count))}
-              subtitle={`sum: ${money(s?.topup_sum)}`}
+              subtitle={`sum: ${formatTiyinToSum(s?.topup_sum)} сум`}
             />
             <StatCard
               title="Admin adjust"
               value={String(toNum(s?.admin_adjust_count))}
-              subtitle={`net: ${money(s?.admin_adjust_sum)}`}
+              subtitle={`net: ${formatTiyinToSum(s?.admin_adjust_sum)} сум`}
             />
             <StatCard
               title="Ledger rows"
@@ -447,7 +446,7 @@ export default function AdminContactBalance() {
             />
             <StatCard
               title="Mirror balance"
-              value={money(balance)}
+              value={formatTiyinToSum(balance)}
               subtitle="clients.contact_balance"
             />
           </div>
@@ -462,7 +461,7 @@ export default function AdminContactBalance() {
               title="Performed"
               value={String(toNum(p?.performed_count))}
               tone="green"
-              subtitle={`sum: ${money(p?.performed_sum)}`}
+              subtitle={`sum: ${formatTiyinToSum(p?.performed_sum)} сум`}
             />
             <StatCard
               title="Created"
@@ -473,7 +472,7 @@ export default function AdminContactBalance() {
               title="Canceled"
               value={String(toNum(p?.canceled_count))}
               tone="red"
-              subtitle={`sum: ${money(p?.canceled_sum)}`}
+              subtitle={`sum: ${formatTiyinToSum(p?.canceled_sum)} сум`}
             />
           </div>
 
@@ -484,7 +483,7 @@ export default function AdminContactBalance() {
               <div className="md:col-span-3">
                 <input
                   className="w-full border rounded-lg px-3 py-2 outline-none focus:ring"
-                  placeholder="amount, например 10000"
+                  placeholder="amount в сумах, например 10000"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   disabled={!selected || saving}
@@ -607,7 +606,7 @@ export default function AdminContactBalance() {
                       <tr key={`${r.payme_id}_${idx}`} className="border-t">
                         <td className="px-3 py-2 break-all">{r.payme_id}</td>
                         <td className="px-3 py-2 whitespace-nowrap">{r.order_id}</td>
-                        <td className="px-3 py-2 whitespace-nowrap">{money(r.amount_tiyin)}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{formatTiyinToSum(r.amount_tiyin)} сум</td>
                         <td className={`px-3 py-2 whitespace-nowrap font-medium ${paymeStateClass(r.state)}`}>
                           {paymeStateLabel(r.state)}
                         </td>
@@ -688,7 +687,7 @@ export default function AdminContactBalance() {
                             toNum(r.amount) < 0 ? "text-red-600" : "text-green-700"
                           }`}
                         >
-                          {sign(r.amount)}
+                          {sign(r.amount)} сум
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap">
                           {reasonLabel(r.reason || r.type)}
