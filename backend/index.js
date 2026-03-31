@@ -33,6 +33,7 @@ const clientBillingRoutes = require("./routes/clientBillingRoutes");
 const adminBillingHealthRoutes = require("./routes/adminBillingHealthRoutes");
 const adminPaymeAutoFixRoutes = require("./routes/adminPaymeAutoFixRoutes");
 const adminClientsRoutes = require("./routes/adminClientsRoutes");
+const adminUnlockNudgeRoutes = require("./routes/adminUnlockNudgeRoutes");
 const adminUnlockFunnelRoutes = require("./routes/adminUnlockFunnelRoutes");
 
 dotenv.config();
@@ -966,6 +967,7 @@ app.use("/api/admin", adminBillingHealthRoutes);
 app.use("/api/admin/payme", adminPaymeAutoFixRoutes);
 app.use("/api/admin/clients", adminClientsRoutes);
 app.use("/api/admin/unlock-funnel", adminUnlockFunnelRoutes);
+app.use("/api/admin/unlock-nudge", adminUnlockNudgeRoutes);
 
 /** ===================== Start (в самом конце) ===================== */
 const PORT = process.env.PORT || 5000;
