@@ -8,15 +8,13 @@ import AdminPaymeEvents from "./AdminPaymeEvents";
 import PaymeLab from "./PaymeLab";
 import PaymeDashboard from "./PaymeDashboard";
 import PaymeLive from "./PaymeLive";
+import { formatTiyinToSum } from "../../utils/money";
 
 function toNum(x) {
   const n = Number(x);
   return Number.isFinite(n) ? n : 0;
 }
 
-function money(n) {
-  return Math.round(toNum(n)).toLocaleString("ru-RU");
-}
 
 function fmtTs(x) {
   if (!x) return "—";
@@ -366,8 +364,8 @@ export default function AdminPaymeHealth() {
                         <td className="px-3 py-2 font-mono text-xs">{r.payme_id}</td>
                         <td className="px-3 py-2">{r.order_id}</td>
                         <td className="px-3 py-2">{r.state}</td>
-                        <td className="px-3 py-2">{money(r.amount_tiyin)}</td>
-                        <td className="px-3 py-2">{money(r.ledger_sum)}</td>
+                        <td className="px-3 py-2">{formatTiyinToSum(r.amount_tiyin)} сум</td>
+                        <td className="px-3 py-2">{formatTiyinToSum(r.ledger_sum)} сум</td>
                         <td className="px-3 py-2">{badge(r.health_status)}</td>
                         <td className="px-3 py-2">{badge(r.billing_status)}</td>
                         <td
@@ -465,7 +463,7 @@ export default function AdminPaymeHealth() {
                           {details.ledger.map((l) => (
                             <tr key={l.id} className="border-t">
                               <td className="px-2 py-1">{l.id}</td>
-                              <td className="px-2 py-1">{money(l.amount)}</td>
+                              <td className="px-2 py-1">{formatTiyinToSum(l.amount)} сум</td>
                               <td className="px-2 py-1">{l.source}</td>
                               <td className="px-2 py-1">{fmtTs(l.created_at)}</td>
                             </tr>
