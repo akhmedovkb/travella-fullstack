@@ -1153,28 +1153,41 @@ async function notifyModerationUnpublished({ service }) {
 
 /* ====================== ADMIN NOTIFY HELPERS ====================== */
 
-async function sendUnlockNudge(chatId, serviceTitle, serviceId = null) {
+async function sendUnlockNudge(chatId, opts = {}) {
   if (!chatId) return false;
 
-  const title = String(serviceTitle || "услуга").trim();
-  const cleanServiceId = Number(serviceId);
-  const openUrl =
-    Number.isFinite(cleanServiceId) && cleanServiceId > 0
-      ? `${SITE}/client/balance?service_id=${cleanServiceId}`
-      : `${SITE}/marketplace`;
+  const kind = String(opts.kind || "first").trim().toLowerCase();
+  const serviceTitle = String(opts.serviceTitle || "").trim();
+  const serviceId = Number(opts.serviceId);
+  const hasService = serviceTitle.length > 0;
 
-  const text =
-    `💰 Вы уже пополнили баланс\n\n` +
-    `Осталось открыть контакты:\n` +
-    `👉 ${esc(title)}\n\n` +
-    `Не упустите клиента`;
+  const openUrl =
+    Number.isFinite(serviceId) && serviceId > 0
+      ? `${SITE}/client/balance?service_id=${serviceId}`
+      : `${SITE}/client/balance`;
+
+  let text = "";
+
+  if (kind === "second") {
+    text =
+      `⏳ Вы уже пополнили баланс\n\n` +
+      (hasService
+        ? `Контакты по услуге всё ещё не открыты:\n👉 ${esc(serviceTitle)}\n\n`
+        : `Контакты всё ещё не открыты.\n\n`) +
+      `Остался один шаг — открыть контакты.`;
+  } else {
+    text =
+      `💰 Вы уже пополнили баланс\n\n` +
+      (hasService
+        ? `Осталось открыть контакты:\n👉 ${esc(serviceTitle)}\n\n`
+        : `Осталось открыть контакты.\n\n`) +
+      `Не упустите клиента`;
+  }
 
   try {
     return await tgSend(chatId, text, {
       reply_markup: {
-        inline_keyboard: [
-          [{ text: "Открыть контакты", url: openUrl }],
-        ],
+        inline_keyboard: [[{ text: "Открыть контакты", url: openUrl }]],
       },
     });
   } catch (e) {
