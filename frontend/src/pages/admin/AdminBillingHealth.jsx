@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost } from "../../api";
 import { tError, tSuccess } from "../../shared/toast";
+import { formatTiyinToSum } from "../../utils/money";
 
 function Badge({ kind = "gray", children }) {
   const map = {
@@ -317,8 +318,8 @@ export default function AdminBillingHealth() {
                 {stats.ledgerMismatch.map((r, idx) => (
                   <tr key={`${r.client_id}_${idx}`} className="border-t">
                     <td className="px-3 py-2">{r.client_id}</td>
-                    <td className="px-3 py-2">{r.mirror_balance}</td>
-                    <td className="px-3 py-2">{r.ledger_balance}</td>
+                    <td className="px-3 py-2">{formatTiyinToSum(r.mirror_balance)} сум</td>
+                    <td className="px-3 py-2">{formatTiyinToSum(r.ledger_balance)} сум</td>
                     <td className="px-3 py-2 text-right">
                       <div className="flex justify-end gap-2 flex-wrap">
                         <SmallAction onClick={() => openClient(r.client_id)}>
@@ -472,7 +473,7 @@ export default function AdminBillingHealth() {
                 <tr>
                   <th className="text-left px-3 py-2">order_id</th>
                   <th className="text-left px-3 py-2">client_id</th>
-                  <th className="text-left px-3 py-2">amount_tiyin</th>
+                  <th className="text-left px-3 py-2">amount</th>
                   <th className="text-left px-3 py-2">status</th>
                   <th className="text-right px-3 py-2">actions</th>
                 </tr>
@@ -482,7 +483,7 @@ export default function AdminBillingHealth() {
                   <tr key={`${r.id}_${idx}`} className="border-t">
                     <td className="px-3 py-2">{r.id}</td>
                     <td className="px-3 py-2">{r.client_id}</td>
-                    <td className="px-3 py-2">{r.amount_tiyin}</td>
+                    <td className="px-3 py-2">{formatTiyinToSum(r.amount_tiyin)} сум</td>
                     <td className="px-3 py-2">{r.status}</td>
                     <td className="px-3 py-2 text-right">
                       <div className="flex justify-end gap-2 flex-wrap">
