@@ -3,6 +3,7 @@
 const cron = require("node-cron");
 const { askActualReminder } = require("./askActualReminder");
 const { cleanupExpiredServicesJob } = require("./cleanupExpiredServicesJob");
+const { runUnlockNudge } = require("./unlockNudgeJob");
 
 const TZ = "Asia/Tashkent";
 const ASK_HOURS = new Set([10, 14, 18]);
@@ -165,6 +166,15 @@ function startJobsScheduler() {
     "0 3 * * *",
     async () => {
       await runCleanupExpiredServicesJob();
+    },
+    { timezone: TZ }
+  );
+
+  // Unlock nudge каждые 10 минут
+  cron.schedule(
+    "*/10 * * * *",
+    async () => {
+      await runUnlockNudge();
     },
     { timezone: TZ }
   );
