@@ -1152,6 +1152,37 @@ async function notifyModerationUnpublished({ service }) {
 }
 
 /* ====================== ADMIN NOTIFY HELPERS ====================== */
+
+async function sendUnlockNudge(chatId, serviceTitle, serviceId = null) {
+  if (!chatId) return false;
+
+  const title = String(serviceTitle || "услуга").trim();
+  const cleanServiceId = Number(serviceId);
+  const openUrl =
+    Number.isFinite(cleanServiceId) && cleanServiceId > 0
+      ? `${SITE}/client/balance?service_id=${cleanServiceId}`
+      : `${SITE}/marketplace`;
+
+  const text =
+    `💰 Вы уже пополнили баланс\n\n` +
+    `Осталось открыть контакты:\n` +
+    `👉 ${esc(title)}\n\n` +
+    `Не упустите клиента`;
+
+  try {
+    return await tgSend(chatId, text, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "Открыть контакты", url: openUrl }],
+        ],
+      },
+    });
+  } catch (e) {
+    console.error("[tg] sendUnlockNudge error:", e?.response?.data || e?.message || e);
+    return false;
+  }
+}
+
 async function tgSendToAdmins(text, extra = {}) {
   const ids = await getAdminChatIds();
   if (!ids.length) return { ok: false, error: "no_admin_chat_ids" };
@@ -1248,6 +1279,7 @@ module.exports = {
   tgSend,
   tgSendPhoto,
   tgSendToAdmins,
+  sendUnlockNudge,
 
   // HEALTH:
   getTelegramHealth,
