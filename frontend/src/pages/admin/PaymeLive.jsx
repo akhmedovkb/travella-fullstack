@@ -3,15 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { apiGet } from "../../api";
 import { tError } from "../../shared/toast";
+import { formatTiyinToSum } from "../../utils/money";
 
 function toNum(x) {
   const n = Number(x);
   return Number.isFinite(n) ? n : 0;
 }
 
-function money(n) {
-  return Math.round(toNum(n)).toLocaleString("ru-RU");
-}
 
 function fmtTs(x) {
   if (!x) return "—";
@@ -156,11 +154,11 @@ export default function PaymeLive() {
                     <td className="px-3 py-2 font-mono text-xs">{r.payme_id}</td>
                     <td className="px-3 py-2">{r.order_id}</td>
                     <td className="px-3 py-2">{r.client_id ?? "—"}</td>
-                    <td className="px-3 py-2">{money(r.amount_tiyin)}</td>
+                    <td className="px-3 py-2">{formatTiyinToSum(r.amount_tiyin)} сум</td>
                     <td className="px-3 py-2">{stateBadge(r.state)}</td>
                     <td className="px-3 py-2">{r.order_status || "—"}</td>
                     <td className="px-3 py-2">{r.ledger_rows}</td>
-                    <td className="px-3 py-2">{money(r.ledger_sum)}</td>
+                    <td className="px-3 py-2">{formatTiyinToSum(r.ledger_sum)} сум</td>
                   </tr>
                 ))
               )}
