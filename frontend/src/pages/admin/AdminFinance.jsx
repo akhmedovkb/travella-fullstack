@@ -5,6 +5,7 @@ import AdminPaymeHealth from "./AdminPaymeHealth";
 import AdminBilling from "./AdminBilling";
 import AdminContactBalance from "./AdminContactBalance";
 import AdminUnlockFunnel from "./AdminUnlockFunnel";
+import AdminUnlockNudgeAnalytics from "./AdminUnlockNudgeAnalytics";
 
 export default function AdminFinance() {
   const [tab, setTab] = useState("clients");
@@ -26,9 +27,10 @@ export default function AdminFinance() {
         <div>
           <h1 className="text-xl font-semibold">Finance (Admin)</h1>
           <p className="text-sm text-gray-500">
-            Clients — работа по конкретному клиенту.  
-            Payme — платежи, monitoring и диагностика.  
-            Funnel — кого можно дожимать по открытию контактов.  
+            Clients — работа по конкретному клиенту.
+            Payme — платежи, monitoring и диагностика.
+            Funnel — кого можно дожимать по открытию контактов.
+            Nudges — аналитика по 1-му и 2-му nudge.
             Audit — системный контроль и integrity guard.
           </p>
         </div>
@@ -37,6 +39,7 @@ export default function AdminFinance() {
           <TabBtn id="clients">Clients</TabBtn>
           <TabBtn id="payme">Payme</TabBtn>
           <TabBtn id="funnel">Funnel</TabBtn>
+          <TabBtn id="nudges">Nudges</TabBtn>
           <TabBtn id="audit">Audit</TabBtn>
         </div>
       </div>
@@ -44,6 +47,7 @@ export default function AdminFinance() {
       {tab === "clients" && <AdminContactBalance />}
       {tab === "payme" && <AdminPaymeHealth />}
       {tab === "funnel" && <AdminUnlockFunnel />}
+      {tab === "nudges" && <AdminUnlockNudgeAnalytics />}
       {tab === "audit" && <AdminBilling />}
     </div>
   );
