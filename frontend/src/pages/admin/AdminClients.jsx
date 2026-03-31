@@ -5,6 +5,7 @@ import { toast } from "react-toastify";
 import axios from "axios";
 import { apiDelete, apiGet, apiPost } from "../../api";
 import ClientAccessModal from "../../components/admin/ClientAccessModal";
+import { formatTiyinToSum, sumToTiyin } from "../../utils/money";
 
 const LS_KEY = "admin.clients.lastSeenISO";
 
@@ -24,10 +25,6 @@ function useLastSeen() {
 function money(n) {
   return Math.round(Number(n || 0)).toLocaleString("ru-RU");
 }
-function toTiyin(sumValue) {
-  return Math.round(Number(sumValue || 0) * 100);
-}
-
 function fromTiyin(tiyinValue) {
   return Math.round(Number(tiyinValue || 0) / 100);
 }
@@ -405,7 +402,7 @@ export default function AdminClients() {
         <StatCard
           label="Клиенты"
           value={money(dashboard.clients_total || 0)}
-          sub={`Суммарный баланс: ${money(dashboard.balance_total || 0)} сум`}
+          sub={`Суммарный баланс: ${formatTiyinToSum(dashboard.balance_total || 0)} сум`}
         />
 
         <StatCard
@@ -416,8 +413,8 @@ export default function AdminClients() {
 
         <StatCard
           label="Выручка"
-          value={`${money(dashboard.revenue_total || 0)} сум`}
-          sub={`Сегодня: ${money(dashboard.revenue_today || 0)} сум`}
+          value={`${formatTiyinToSum(dashboard.revenue_total || 0)} сум`}
+          sub={`Сегодня: ${formatTiyinToSum(dashboard.revenue_today || 0)} сум`}
         />
       </div>
 
@@ -513,7 +510,7 @@ export default function AdminClients() {
                     </CellText>
                   </td>
 
-                  <td className="px-2 py-2 text-gray-900">{money(c.balance_current || 0)}</td>
+                  <td className="px-2 py-2 text-gray-900">{formatTiyinToSum(c.balance_current || 0)} сум</td>
 
                   <td className="px-2 py-2 text-gray-900">
                     {Number(c.unlock_count || 0)}
