@@ -1,27 +1,55 @@
 //frontend/src/pages/admin/AdminPaymeEvents.jsx
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { apiGet } from "../../api";
 import { tError } from "../../shared/toast";
 
+function normalizeStateToFilters(stateValue) {
+  const s = String(stateValue || "").trim().toUpperCase();
+
+  if (s === "PERFORMED") {
+    return { method: "PerformTransaction", stage: "end" };
+  }
+  if (s === "FAILED") {
+    return { method: "", stage: "error" };
+  }
+  if (s === "REFUNDED") {
+    return { method: "CancelTransaction", stage: "end" };
+  }
+
+  return { method: "", stage: "" };
+}
+
 export default function AdminPaymeEvents() {
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const initialQ = searchParams.get("q") || "";
+  const initialMethod = searchParams.get("method") || "";
+  const initialStage = searchParams.get("stage") || "";
+  const initialLimit = searchParams.get("limit") || "200";
+  const initialState = searchParams.get("state") || "";
+
+  const derivedFromState = normalizeStateToFilters(initialState);
+
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  const [q, setQ] = useState("");
-  const [method, setMethod] = useState("");
-  const [stage, setStage] = useState("");
+  const [q, setQ] = useState(initialQ);
+  const [method, setMethod] = useState(initialMethod || derivedFromState.method);
+  const [stage, setStage] = useState(initialStage || derivedFromState.stage);
+  const [limit, setLimit] = useState(initialLimit);
   const [selected, setSelected] = useState(null);
   const [details, setDetails] = useState(null);
 
   const query = useMemo(() => {
     const p = new URLSearchParams();
-    p.set("limit", "200");
+    p.set("limit", String(limit || "200"));
     if (q.trim()) p.set("q", q.trim());
     if (method) p.set("method", method);
     if (stage) p.set("stage", stage);
     return p.toString();
-  }, [q, method, stage]);
+  }, [q, method, stage, limit]);
 
   async function load() {
     setLoading(true);
@@ -51,6 +79,17 @@ export default function AdminPaymeEvents() {
   }
 
   useEffect(() => {
+    const p = new URLSearchParams();
+
+    if (q.trim()) p.set("q", q.trim());
+    if (method) p.set("method", method);
+    if (stage) p.set("stage", stage);
+    if (limit && String(limit) !== "200") p.set("limit", String(limit));
+
+    setSearchParams(p, { replace: true });
+  }, [q, method, stage, limit, setSearchParams]);
+
+  useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
@@ -60,7 +99,9 @@ export default function AdminPaymeEvents() {
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <h2 className="text-xl font-semibold">Payme Events</h2>
-          <div className="text-sm opacity-70">RPC request/response logs (begin/end/error)</div>
+          <div className="text-sm opacity-70">
+            RPC request/response logs (begin/end/error)
+          </div>
         </div>
 
         <div className="flex flex-col gap-2 md:flex-row md:items-center">
@@ -71,7 +112,11 @@ export default function AdminPaymeEvents() {
             onChange={(e) => setQ(e.target.value)}
           />
 
-          <select className="border rounded px-3 py-2" value={method} onChange={(e) => setMethod(e.target.value)}>
+          <select
+            className="border rounded px-3 py-2"
+            value={method}
+            onChange={(e) => setMethod(e.target.value)}
+          >
             <option value="">All methods</option>
             <option value="CheckPerformTransaction">CheckPerformTransaction</option>
             <option value="CreateTransaction">CreateTransaction</option>
@@ -82,14 +127,32 @@ export default function AdminPaymeEvents() {
             <option value="SetFiscalData">SetFiscalData</option>
           </select>
 
-          <select className="border rounded px-3 py-2" value={stage} onChange={(e) => setStage(e.target.value)}>
+          <select
+            className="border rounded px-3 py-2"
+            value={stage}
+            onChange={(e) => setStage(e.target.value)}
+          >
             <option value="">All stages</option>
             <option value="begin">begin</option>
             <option value="end">end</option>
             <option value="error">error</option>
           </select>
 
-          <button className="border rounded px-3 py-2" onClick={load} disabled={loading}>
+          <input
+            type="number"
+            min="1"
+            max="1000"
+            className="border rounded px-3 py-2 w-full md:w-28"
+            value={limit}
+            onChange={(e) => setLimit(e.target.value || "200")}
+            placeholder="Limit"
+          />
+
+          <button
+            className="border rounded px-3 py-2"
+            onClick={load}
+            disabled={loading}
+          >
             {loading ? "Loading..." : "Reload"}
           </button>
         </div>
@@ -115,11 +178,15 @@ export default function AdminPaymeEvents() {
                 {rows.map((r) => (
                   <tr
                     key={r.id}
-                    className={`border-t hover:bg-gray-50 cursor-pointer ${selected === r.id ? "bg-gray-50" : ""}`}
+                    className={`border-t hover:bg-gray-50 cursor-pointer ${
+                      selected === r.id ? "bg-gray-50" : ""
+                    }`}
                     onClick={() => openDetails(r.id)}
                   >
                     <td className="px-3 py-2">{r.id}</td>
-                    <td className="px-3 py-2">{r.created_at ? new Date(r.created_at).toLocaleString() : ""}</td>
+                    <td className="px-3 py-2">
+                      {r.created_at ? new Date(r.created_at).toLocaleString() : ""}
+                    </td>
                     <td className="px-3 py-2">{r.method || ""}</td>
                     <td className="px-3 py-2">{r.stage || ""}</td>
                     <td className="px-3 py-2">{r.order_id ?? ""}</td>
@@ -143,21 +210,49 @@ export default function AdminPaymeEvents() {
         <div className="border rounded-xl p-3">
           <div className="font-semibold mb-2">Details</div>
 
-          {!details && <div className="text-sm opacity-70">Click an event row to view request/response.</div>}
+          {!details && (
+            <div className="text-sm opacity-70">
+              Click an event row to view request/response.
+            </div>
+          )}
 
           {details && (
             <div className="space-y-3 text-sm">
               <div className="grid grid-cols-2 gap-2">
-                <div><b>ID:</b> {details.id}</div>
-                <div><b>Created:</b> {details.created_at ? new Date(details.created_at).toLocaleString() : ""}</div>
-                <div><b>Method:</b> {details.method || ""}</div>
-                <div><b>Stage:</b> {details.stage || ""}</div>
-                <div><b>Payme ID:</b> {details.payme_id || ""}</div>
-                <div><b>Order ID:</b> {details.order_id ?? ""}</div>
-                <div><b>HTTP:</b> {details.http_status ?? ""}</div>
-                <div><b>Error:</b> {details.error_code ?? ""} {details.error_message ? `— ${details.error_message}` : ""}</div>
-                <div><b>IP:</b> {details.ip || ""}</div>
-                <div><b>ms:</b> {details.duration_ms ?? ""}</div>
+                <div>
+                  <b>ID:</b> {details.id}
+                </div>
+                <div>
+                  <b>Created:</b>{" "}
+                  {details.created_at
+                    ? new Date(details.created_at).toLocaleString()
+                    : ""}
+                </div>
+                <div>
+                  <b>Method:</b> {details.method || ""}
+                </div>
+                <div>
+                  <b>Stage:</b> {details.stage || ""}
+                </div>
+                <div>
+                  <b>Payme ID:</b> {details.payme_id || ""}
+                </div>
+                <div>
+                  <b>Order ID:</b> {details.order_id ?? ""}
+                </div>
+                <div>
+                  <b>HTTP:</b> {details.http_status ?? ""}
+                </div>
+                <div>
+                  <b>Error:</b> {details.error_code ?? ""}{" "}
+                  {details.error_message ? `— ${details.error_message}` : ""}
+                </div>
+                <div>
+                  <b>IP:</b> {details.ip || ""}
+                </div>
+                <div>
+                  <b>ms:</b> {details.duration_ms ?? ""}
+                </div>
               </div>
 
               <div>
