@@ -24,19 +24,6 @@
   "back": "← Orqaga",
   "badges": { "boosted": "Tavsiya etiladi" },
   
-  "balance.hero_title": "🔓 Kontaktlarni oching",
-  "balance.hero_subtitle": "To‘g‘ridan-to‘g‘ri bog‘laning",
-  "balance.hero_context": "Siz deyarli ochdingiz",
-  "balance.not_enough": "Balans yetarli emas",
-  "balance.need_more": "Yetishmayapti",
-  "balance.can_open": "Ochish mumkin",
-  "balance.contacts": "kontakt",
-  "balance.recommended": "Tavsiya",
-  "balance.pay_cta": "🚀 To‘ldirish va ochish",
-  "balance.instant_unlock": "To‘lovdan keyin ochiladi",
-  "balance.urgency": "Taklifni boshqalar olib qo‘yishi mumkin",
-  "balance.unlocked_success": "Kontaktlar ochildi 🎉"б
-
   "booking": {
     "date": "Sana",
     "pax": "Yo'lovchilar",
@@ -80,7 +67,29 @@
   "load_error": "Balansni yuklab bo‘lmadi",
   "invalid_amount": "To‘g‘ri summa kiriting",
   "topup_created": "To‘ldirish buyurtmasi yaratildi: {{amount}} so‘m",
-  "payme_error": "Payme xatosi"
+  "payme_error": "Payme xatosi",
+  "hero_title": "🔓 Kontaktlarni oching",
+  "hero_subtitle": "To‘g‘ridan-to‘g‘ri bog‘laning",
+  "hero_context": "Siz deyarli ochdingiz",
+  
+  "not_enough": "Balans yetarli emas",
+  "need_more": "Yetishmayapti",
+  
+  "can_open": "Ochish mumkin",
+  "contacts": "kontakt",
+  "recommended": "Tavsiya",
+  
+  "pay_cta": "🚀 To‘ldirish va ochish",
+  "instant_unlock": "To‘lovdan keyin ochiladi",
+  "urgency": "Taklifni boshqalar olib qo‘yishi mumkin",
+  
+  "unlocked_success": "Kontaktlar ochildi 🎉",
+  
+  "nudge_title": "Siz deyarli ochdingiz",
+  "nudge_text": "Yana bir qadam — va bog‘lanasiz",
+  "nudge_price": "Tavsiya etilgan summa",
+  "nudge_cta": "Hozir ochish",
+  "nudge_later": "Keyinroq"
 },
   "bookings": {
     "provider_cancel_reason": "Bekor qilish sababini ko‘rsating",
