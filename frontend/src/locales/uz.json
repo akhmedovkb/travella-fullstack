@@ -23,6 +23,19 @@
   "authored_tour": "Mualliflik turi",
   "back": "← Orqaga",
   "badges": { "boosted": "Tavsiya etiladi" },
+  
+  "balance.hero_title": "🔓 Kontaktlarni oching",
+  "balance.hero_subtitle": "To‘g‘ridan-to‘g‘ri bog‘laning",
+  "balance.hero_context": "Siz deyarli ochdingiz",
+  "balance.not_enough": "Balans yetarli emas",
+  "balance.need_more": "Yetishmayapti",
+  "balance.can_open": "Ochish mumkin",
+  "balance.contacts": "kontakt",
+  "balance.recommended": "Tavsiya",
+  "balance.pay_cta": "🚀 To‘ldirish va ochish",
+  "balance.instant_unlock": "To‘lovdan keyin ochiladi",
+  "balance.urgency": "Taklifni boshqalar olib qo‘yishi mumkin",
+  "balance.unlocked_success": "Kontaktlar ochildi 🎉"б
 
   "booking": {
     "date": "Sana",
