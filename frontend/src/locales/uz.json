@@ -314,7 +314,9 @@
     "print_pdf": "Chop etish / PDF",
     "pros": "Afzalliklar",
     "cons": "Kamchiliklar",
-    "features": "Xususiyatlar"
+    "features": "Xususiyatlar",
+    "cancel": "Bekor qilish",
+    "sum_currency": "so‘m"
   },
 
   "confirm_delete": "Elementni o‘chirasizmi?",
@@ -571,6 +573,27 @@
   "infants": "Chaqaloqlar (0–1)",
   "location": "Manzil",
   "location_placeholder": "Manzilni kiriting ...",
+  "login_modal_title": "Kontaktlarni ochish",
+  "login_modal_subtitle": "Davom etish uchun tizimga kiring",
+  "login_modal_text": "Kontaktlarni ochish uchun mijoz sifatida tizimga kiring.",
+  "login_modal_hint_title": "Keyin nima bo‘ladi",
+  "login_modal_hint_text": "Tizimga kirgandan so‘ng kontaktlarni ochishingiz mumkin.",
+  "login_as_client": "Mijoz sifatida kirish",
+
+  "pay_modal_title": "Kontaktlarni ochish uchun to‘lov",
+  "pay_modal_subtitle": "To‘lovdan oldin summani tekshiring",
+  "pay_modal_amount_label": "Summa",
+  "pay_modal_order": "Buyurtma",
+  "pay_modal_hint_title": "To‘lovdan keyin",
+  "pay_modal_hint_text": "Kontaktlar avtomatik ochiladi.",
+  "go_to_payment": "To‘lovga o‘tish",
+
+  "balance_modal_title": "Balans yetarli emas",
+  "balance_modal_text": "Kontaktlarni ochish uchun mablag‘ yetarli emas.",
+  "go_to_balance": "Balansni to‘ldirish",
+
+  "no_image": "Rasm yo‘q",
+  "verified_proof": "Tasdiqlangan",
   "more_details": "Batafsil",
   "no_image": "Rasm yo‘q",
   "no_results": "Natijalar yo‘q",
