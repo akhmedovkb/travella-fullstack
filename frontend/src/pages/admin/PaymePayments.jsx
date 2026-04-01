@@ -159,6 +159,7 @@ export default function PaymePayments() {
         <table className="min-w-full text-sm">
           <thead className="bg-gray-50">
             <tr>
+              <th className="px-3 py-2">Client ID</th>
               <th className="px-3 py-2 text-left">Client</th>
               <th className="px-3 py-2 text-left">Phone</th>
               <th className="px-3 py-2 text-left">Amount</th>
@@ -180,11 +181,10 @@ export default function PaymePayments() {
             ) : (
               rows.map((r) => (
                 <tr key={r.payme_id} className="border-t hover:bg-gray-50">
-                  <td className="px-3 py-2">
-                    <div className="font-medium">{r.name || `Client #${r.client_id}`}</div>
-                    <div className="text-xs text-gray-400">
-                      client_id: {r.client_id ?? "—"}
-                    </div>
+                  <td className="px-3 py-2 text-blue-600 cursor-pointer hover:underline">
+                    <a href={`/admin/finance?tab=clients&client_id=${r.client_id}`}>
+                      {r.client_id}
+                    </a>
                   </td>
 
                   <td className="px-3 py-2">{r.phone || "—"}</td>
