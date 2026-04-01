@@ -599,7 +599,16 @@
   "tour_details": "Детали тура",
   "transport": "Транспорт",
   "transfer": "Трансфер",
-  "website": "Сайт"
+  "website": "Сайт",
+  "unlock_contacts": "Открыть контакты",
+  "unlocking": "Открытие...",
+  "pay_modal_title": "Пополнение для открытия контактов",
+  "pay_modal_subtitle": "Перед оплатой проверьте сумму пополнения",
+  "pay_modal_amount_label": "СУММА К ОПЛАТЕ",
+  "pay_modal_order": "Заказ",
+  "pay_modal_hint_title": "Что будет после оплаты",
+  "pay_modal_hint_text": "После успешной оплаты контакты поставщика откроются автоматически, и вы вернётесь к этой карточке.",
+  "go_to_payment": "Перейти к оплате"
 },
 
   "messages": {
