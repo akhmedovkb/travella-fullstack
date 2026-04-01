@@ -117,32 +117,18 @@ useEffect(() => {
   }
 
   loadAll().then(() => {
-    // 🔥 если вернулись после оплаты
     if (sid && orderId) {
       console.log("[POST-PAYMENT] payment detected");
 
-      // даём backend время сделать auto-unlock
       setTimeout(() => {
-        // 🔥 помечаем как открыто
-        window.localStorage.setItem(
-          `marketplace:unlocked:${sid}`,
-          "1"
-        );
+        window.localStorage.setItem(`marketplace:unlocked:${sid}`, "1");
 
-        // 🔥 уведомление
         tSuccess("Контакты открыты 🎉");
+        window.dispatchEvent(new Event("client:balance:changed"));
 
-        // 🔥 обновляем UI
-        window.dispatchEvent(
-          new Event("client:balance:changed")
-        );
-
-        // 🔥 чистим URL (чтобы не повторялось)
-        window.history.replaceState(
-          {},
-          "",
-          "/client/balance"
-        );
+        setTimeout(() => {
+          window.location.href = `/marketplace?opened=${sid}`;
+        }, 900);
       }, 800);
     }
   });
