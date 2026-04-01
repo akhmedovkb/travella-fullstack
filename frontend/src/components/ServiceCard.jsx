@@ -817,6 +817,14 @@ const [highlighted, setHighlighted] = useState(false);
 // modals
 const [showBalancePrompt, setShowBalancePrompt] = useState(false);
 const [showLoginModal, setShowLoginModal] = useState(false);
+const [unlockPayModal, setUnlockPayModal] = useState({
+  open: false,
+  shortfallSum: 0,
+  shortfallTiyin: 0,
+  payUrl: "",
+  orderId: null,
+  serviceId: null,
+});
 
   const hasDetailsBlock =
     direction ||
@@ -898,22 +906,36 @@ useEffect(() => {
       }
 
       if (res?.ok && res?.need_pay && res?.pay_url) {
-        window.location.href = res.pay_url;
+        setUnlockPayModal({
+          open: true,
+          shortfallSum: Number(res?.shortfall_sum || res?.order?.amount_sum || 0),
+          shortfallTiyin: Number(res?.shortfall_tiyin || res?.order?.amount_tiyin || 0),
+          payUrl: String(res?.pay_url || ""),
+          orderId: Number(res?.order_id || res?.order?.id || 0) || null,
+          serviceId: Number(res?.service_id || id) || Number(id) || null,
+        });
         return;
       }
 
-      throw new Error("unlock_auto_failed");
-    } catch (err) {
-      const status = err?.status || err?.response?.status;
-      const code =
-        err?.response?.data?.code ||
-        err?.response?.data?.error ||
-        err?.data?.code ||
-        err?.data?.error ||
-        err?.code;
+      if (res?.need_pay) {
+        setShowBalancePrompt(true);
+        return;
+      }
 
-      if (status === 401 || status === 403) {
-        setShowLoginModal(true);
+      throw new Error("unlock_failed");
+    } catch (err) {
+      const data = err?.response?.data || err?.data || {};
+      const code = data?.code || data?.error || err?.code;
+
+      if (data?.need_pay && data?.pay_url) {
+        setUnlockPayModal({
+          open: true,
+          shortfallSum: Number(data?.shortfall_sum || data?.order?.amount_sum || 0),
+          shortfallTiyin: Number(data?.shortfall_tiyin || data?.order?.amount_tiyin || 0),
+          payUrl: String(data?.pay_url || ""),
+          orderId: Number(data?.order_id || data?.order?.id || 0) || null,
+          serviceId: Number(data?.service_id || id) || Number(id) || null,
+        });
         return;
       }
 
@@ -922,7 +944,12 @@ useEffect(() => {
         return;
       }
 
-      console.error("unlock auto error:", err);
+      if (err?.response?.status === 401 || err?.response?.status === 403) {
+        setShowLoginModal(true);
+        return;
+      }
+
+      console.error("unlock contact error:", err);
       alert(
         t("marketplace.unlock_error", {
           defaultValue: "Не удалось открыть контакты",
@@ -1519,6 +1546,124 @@ useEffect(() => {
                   >
                     {t("marketplace.login_as_client", {
                       defaultValue: "Войти как клиент",
+                    })}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+
+      {unlockPayModal.open &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[3925] bg-black/45 backdrop-blur-[2px] flex items-center justify-center p-4 animate-[fadeIn_.18s_ease-out]"
+            onClick={() =>
+              setUnlockPayModal({
+                open: false,
+                shortfallSum: 0,
+                shortfallTiyin: 0,
+                payUrl: "",
+                orderId: null,
+                serviceId: null,
+              })
+            }
+          >
+            <div
+              className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl border border-gray-200 animate-[scaleIn_.18s_ease-out]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="bg-gradient-to-r from-orange-500 to-amber-400 px-6 py-5 text-white">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/20 text-2xl">
+                    💳
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold leading-tight">
+                      {t("marketplace.pay_modal_title", {
+                        defaultValue: "Пополнение для открытия контактов",
+                      })}
+                    </h3>
+                    <p className="text-sm text-white/90">
+                      {t("marketplace.pay_modal_subtitle", {
+                        defaultValue: "Перед оплатой проверьте сумму пополнения",
+                      })}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="px-6 py-5">
+                <div className="rounded-2xl border border-orange-100 bg-orange-50 px-4 py-4">
+                  <div className="text-xs font-medium uppercase tracking-wide text-orange-700/80">
+                    {t("marketplace.pay_modal_amount_label", {
+                      defaultValue: "Сумма к оплате",
+                    })}
+                  </div>
+                  <div className="mt-1 text-3xl font-bold tracking-tight text-gray-900">
+                    {Number(unlockPayModal.shortfallSum || 0).toLocaleString("ru-RU")} 
+                    <span className="text-xl font-semibold text-gray-700">
+                      {t("common.sum_currency", { defaultValue: "сум" })}
+                    </span>
+                  </div>
+                  {!!unlockPayModal.orderId && (
+                    <div className="mt-2 text-sm text-gray-600">
+                      {t("marketplace.pay_modal_order", {
+                        defaultValue: "Заказ",
+                      })}: #{unlockPayModal.orderId}
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-4 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 text-lg">✨</div>
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">
+                        {t("marketplace.pay_modal_hint_title", {
+                          defaultValue: "Что будет после оплаты",
+                        })}
+                      </p>
+                      <p className="mt-1 text-sm leading-6 text-gray-600">
+                        {t("marketplace.pay_modal_hint_text", {
+                          defaultValue:
+                            "После успешной оплаты контакты поставщика откроются автоматически, и вы вернётесь к этой карточке.",
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setUnlockPayModal({
+                        open: false,
+                        shortfallSum: 0,
+                        shortfallTiyin: 0,
+                        payUrl: "",
+                        orderId: null,
+                        serviceId: null,
+                      })
+                    }
+                    className="inline-flex w-full items-center justify-center rounded-2xl border border-gray-200 px-4 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+                  >
+                    {t("common.cancel", { defaultValue: "Отмена" })}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const url = String(unlockPayModal.payUrl || "").trim();
+                      if (!url) return;
+                      window.location.href = url;
+                    }}
+                    className="inline-flex w-full items-center justify-center rounded-2xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-orange-200 transition hover:bg-orange-600"
+                  >
+                    {t("marketplace.go_to_payment", {
+                      defaultValue: "Перейти к оплате",
                     })}
                   </button>
                 </div>
