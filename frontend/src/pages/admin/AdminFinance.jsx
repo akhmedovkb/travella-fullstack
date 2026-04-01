@@ -20,6 +20,7 @@ const VALID_TABS = new Set([
   "nudges",
   "audit",
   "health",
+  "payments",
 ]);
 
 function normalizeTab(x) {
