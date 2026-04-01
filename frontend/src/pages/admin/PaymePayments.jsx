@@ -40,7 +40,7 @@ export default function PaymePayments() {
                 <td className="px-3 py-2">{r.name || r.client_id}</td>
                 <td className="px-3 py-2">{r.phone}</td>
                 <td className="px-3 py-2 font-semibold">
-                  {Number(r.amount) / 100} сум
+                  {Number(r.amount)} сум
                 </td>
                 <td className="px-3 py-2">{r.state}</td>
                 <td className="px-3 py-2">
