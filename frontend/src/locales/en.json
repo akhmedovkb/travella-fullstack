@@ -608,7 +608,16 @@
   "tour_details": "Tour details",
   "transport": "Transport",
   "transfer": "Transfer",
-  "website": "Website"
+  "website": "Website",
+  "unlock_contacts": "Unlock contacts",
+  "unlocking": "Unlocking...",
+  "pay_modal_title": "Top up to unlock contacts",
+  "pay_modal_subtitle": "Please check the top-up amount before payment",
+  "pay_modal_amount_label": "AMOUNT TO PAY",
+  "pay_modal_order": "Order",
+  "pay_modal_hint_title": "What happens after payment",
+  "pay_modal_hint_text": "After successful payment, the provider's contacts will open automatically and you will return to this card.",
+  "go_to_payment": "Go to payment"
 },
 
   "messages": {
