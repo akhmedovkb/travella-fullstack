@@ -1,7 +1,8 @@
 // frontend/src/pages/admin/AdminFinance.jsx
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
+
 import AdminPaymeHealth from "./AdminPaymeHealth";
 import AdminBilling from "./AdminBilling";
 import AdminContactBalance from "./AdminContactBalance";
@@ -28,21 +29,14 @@ function normalizeTab(x) {
 export default function AdminFinance() {
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const urlTab = useMemo(() => normalizeTab(searchParams.get("tab")), [searchParams]);
-  const [tab, setTab] = useState(urlTab);
-
-  useEffect(() => {
-    if (tab !== urlTab) {
-      setTab(urlTab);
-    }
-  }, [urlTab, tab]);
+  const tab = useMemo(() => {
+    return normalizeTab(searchParams.get("tab"));
+  }, [searchParams]);
 
   function setTabAndUrl(nextTab) {
-    const normalized = normalizeTab(nextTab);
     const p = new URLSearchParams(searchParams);
-    p.set("tab", normalized);
-    setSearchParams(p, { replace: false });
-    setTab(normalized);
+    p.set("tab", normalizeTab(nextTab));
+    setSearchParams(p);
   }
 
   const TabBtn = ({ id, children }) => (
@@ -61,15 +55,6 @@ export default function AdminFinance() {
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <h1 className="text-xl font-semibold">Finance (Admin)</h1>
-          <p className="text-sm text-gray-500">
-            Clients — работа по конкретному клиенту.
-            Payme — dashboard и общая сводка.
-            Events — RPC request/response logs.
-            Funnel — кого можно дожимать по открытию контактов.
-            Nudges — аналитика по 1-му и 2-му nudge.
-            Audit — системный контроль и integrity guard.
-            Health — проблемные транзакции.
-          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
