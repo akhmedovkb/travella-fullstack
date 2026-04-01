@@ -1,4 +1,5 @@
-// backend/controllers/clientBillingController.js
+//backend/controllers/clientBillingController.js
+
 const pool = require("../db");
 
 const { getContactUnlockSettings } = require("../utils/contactUnlockSettings");
@@ -114,6 +115,16 @@ function buildPaymeCheckoutUrl({
   const encoded = Buffer.from(params, "utf8").toString("base64");
 
   return `${String(checkoutBase || "https://checkout.paycom.uz").replace(/\/+$/, "")}/${encoded}`;
+}
+
+function buildBalanceCallbackUrl(sitePublic, orderId, serviceId = null) {
+  const base = `${String(sitePublic || "").replace(/\/+$/, "")}/client/balance`;
+  const params = new URLSearchParams();
+  params.set("order_id", String(orderId));
+  if (serviceId && Number(serviceId) > 0) {
+    params.set("service_id", String(serviceId));
+  }
+  return `${base}?${params.toString()}`;
 }
 
 async function clientBalance(req, res) {
@@ -306,7 +317,11 @@ async function createTopupOrder(req, res) {
       });
     }
 
-    const callbackUrl = `${String(SITE_PUBLIC).replace(/\/+$/, "")}/client/balance?order_id=${order.id}`;
+    const callbackUrl = buildBalanceCallbackUrl(
+      SITE_PUBLIC,
+      order.id,
+      rawServiceId
+    );
 
     const pay_url = buildPaymeCheckoutUrl({
       merchantId: MERCHANT_ID,
@@ -336,6 +351,136 @@ async function createTopupOrder(req, res) {
       await db.query("ROLLBACK");
     } catch {}
     console.error("createTopupOrder error:", e);
+    return res.status(500).json({ ok: false, message: "Internal error" });
+  } finally {
+    db.release();
+  }
+}
+
+async function unlockAuto(req, res) {
+  const clientId = req.user?.id;
+  const serviceId = Number(req.body?.service_id);
+
+  if (!clientId) {
+    return res.status(401).json({ ok: false, message: "Unauthorized" });
+  }
+
+  if (!serviceId || !Number.isFinite(serviceId)) {
+    return res.status(400).json({ ok: false, message: "Bad service_id" });
+  }
+
+  const MERCHANT_ID = process.env.PAYME_MERCHANT_ID || "";
+  const CHECKOUT_URL =
+    process.env.PAYME_CHECKOUT_URL || "https://checkout.paycom.uz";
+  const SITE_PUBLIC =
+    process.env.SITE_PUBLIC_URL || process.env.SITE_URL || "";
+
+  if (!MERCHANT_ID || !SITE_PUBLIC) {
+    return res.status(500).json({
+      ok: false,
+      message: "Payme is not configured",
+    });
+  }
+
+  const db = await pool.connect();
+
+  try {
+    await db.query("BEGIN");
+
+    const unlockSettings = await getContactUnlockSettings(db);
+    const price = Number(unlockSettings.effective_price || 0);
+
+    const balance = await getBalanceFromLedger(db, clientId);
+
+    await safeLogUnlockFunnel(db, {
+      clientId,
+      serviceId,
+      source: "web",
+      step: "unlock_auto_clicked",
+      status: "info",
+      priceTiyin: price,
+      balanceBefore: balance,
+      balanceAfter: balance,
+      sessionKey: getSessionKey(req),
+      meta: {
+        channel: "web",
+        route: "/api/client/unlock-auto",
+      },
+    });
+
+    if (price <= 0 || balance >= price) {
+      await db.query("COMMIT");
+      return unlockContact(req, res);
+    }
+
+    const needTiyin = price - balance;
+
+    const ins = await db.query(
+      `
+      INSERT INTO topup_orders (client_id, amount_tiyin, provider, status)
+      VALUES ($1, $2, 'payme', 'new')
+      RETURNING id, client_id, amount_tiyin, status, created_at
+      `,
+      [clientId, needTiyin]
+    );
+
+    const order = ins.rows[0];
+
+    await safeLogUnlockFunnel(db, {
+      clientId,
+      serviceId,
+      source: "web",
+      step: "unlock_auto_topup_created",
+      status: "info",
+      priceTiyin: price,
+      orderId: Number(order.id),
+      balanceBefore: balance,
+      balanceAfter: balance,
+      sessionKey: getSessionKey(req),
+      meta: {
+        channel: "web",
+        shortfall: needTiyin,
+      },
+    });
+
+    const callbackUrl = buildBalanceCallbackUrl(
+      SITE_PUBLIC,
+      order.id,
+      serviceId
+    );
+
+    const pay_url = buildPaymeCheckoutUrl({
+      merchantId: MERCHANT_ID,
+      checkoutBase: CHECKOUT_URL,
+      orderId: order.id,
+      amountTiyin: needTiyin,
+      lang: "ru",
+      callbackUrl,
+    });
+
+    await db.query("COMMIT");
+
+    return res.json({
+      ok: true,
+      unlocked: false,
+      need_pay: true,
+      shortfall_tiyin: needTiyin,
+      shortfall_sum: Math.trunc(needTiyin / 100),
+      pay_url,
+      order: {
+        id: Number(order.id),
+        client_id: Number(order.client_id),
+        amount_tiyin: Number(order.amount_tiyin),
+        amount_sum: Math.trunc(Number(order.amount_tiyin) / 100),
+        status: order.status,
+        created_at: order.created_at,
+      },
+    });
+  } catch (e) {
+    try {
+      await db.query("ROLLBACK");
+    } catch {}
+    console.error("unlockAuto error:", e);
     return res.status(500).json({ ok: false, message: "Internal error" });
   } finally {
     db.release();
@@ -586,5 +731,6 @@ module.exports = {
   clientBalance,
   clientBalanceLedger,
   createTopupOrder,
+  unlockAuto,
   unlockContact,
 };
