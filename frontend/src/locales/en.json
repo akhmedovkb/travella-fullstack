@@ -313,7 +313,9 @@
     "print_pdf": "Print / PDF",
     "pros": "Pros",
     "cons": "Cons",
-    "features": "Features"
+    "features": "Features",
+    "cancel": "Cancel",
+    "sum_currency": "UZS"
   },
 
   "confirm_delete": "Delete item?",
