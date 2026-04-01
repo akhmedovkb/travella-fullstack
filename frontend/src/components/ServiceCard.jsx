@@ -760,11 +760,9 @@ export default function ServiceCard({
   
   const isClientViewer = viewerRole === "client";
   const hasUnlockTarget = Boolean(providerId && id);
-  const hasAnySupplierContacts = Boolean(supplierPhone || supplierTg?.label);
   
   const canShowUnlockButton =
     !unlocked &&
-    isClientViewer &&
     !isProviderViewer &&
     !isAdminViewer &&
     hasUnlockTarget;
