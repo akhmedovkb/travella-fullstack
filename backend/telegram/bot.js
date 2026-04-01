@@ -3178,6 +3178,30 @@ async function finishEditWizard(ctx) {
     }
 
     await safeReply(ctx, `✅ Изменения сохранены (#${draft.id}).`);
+
+      // 👉 ПЕРЕХОД В PROOF
+      ctx.session.awaitingProofForServiceId = draft.id;
+      ctx.session.awaitingProofForCategory = category;
+      
+      // ❗ НЕ сбрасываем wizard здесь!
+      // resetServiceWizard(ctx); ← УБРАТЬ ОТСЮДА
+      
+      await safeReply(
+        ctx,
+        "📸 Отправьте подтверждение (пруф):\n\n" +
+        "• скриншоты бронирования\n" +
+        "• ваучер\n" +
+        "• билеты\n\n" +
+        "После загрузки нажмите «✅ Готово»",
+        {
+          reply_markup: {
+            keyboard: [[{ text: "✅ Готово" }]],
+            resize_keyboard: true,
+          },
+        }
+      );
+      
+      return;
   } catch (e) {
     console.error("[tg-bot] finishEditWizard error:", {
       message: e?.message || null,
@@ -3186,6 +3210,7 @@ async function finishEditWizard(ctx) {
     });
     await safeReply(ctx, "⚠️ Ошибка сохранения изменений.");
   } finally {
+  if (!ctx.session?.awaitingProofForServiceId) {
     resetServiceWizard(ctx);
 
     await safeReply(ctx, "Что делаем дальше? 👇", {
@@ -3199,6 +3224,7 @@ async function finishEditWizard(ctx) {
       },
     });
   }
+}
 }
 
 function logUpdate(ctx, label = "update") {
