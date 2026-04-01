@@ -105,18 +105,48 @@ export default function ClientBalance() {
     }
   }
 
-  useEffect(() => {
-    // 🔥 достаём service_id из URL
-    const params = new URLSearchParams(window.location.search);
-    const sid = Number(params.get("service_id"));
+useEffect(() => {
+  const params = new URLSearchParams(window.location.search);
 
-    if (sid && Number.isFinite(sid)) {
-      setServiceId(sid);
-      console.log("[ClientBalance] service_id from URL =", sid);
+  const sid = Number(params.get("service_id"));
+  const orderId = params.get("order_id");
+
+  if (sid && Number.isFinite(sid)) {
+    setServiceId(sid);
+    console.log("[ClientBalance] service_id =", sid);
+  }
+
+  loadAll().then(() => {
+    // 🔥 если вернулись после оплаты
+    if (sid && orderId) {
+      console.log("[POST-PAYMENT] payment detected");
+
+      // даём backend время сделать auto-unlock
+      setTimeout(() => {
+        // 🔥 помечаем как открыто
+        window.localStorage.setItem(
+          `marketplace:unlocked:${sid}`,
+          "1"
+        );
+
+        // 🔥 уведомление
+        tSuccess("Контакты открыты 🎉");
+
+        // 🔥 обновляем UI
+        window.dispatchEvent(
+          new Event("client:balance:changed")
+        );
+
+        // 🔥 чистим URL (чтобы не повторялось)
+        window.history.replaceState(
+          {},
+          "",
+          "/client/balance"
+        );
+      }, 800);
     }
-
-    loadAll();
-  }, []);
+  });
+}, []);
 
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-6">
