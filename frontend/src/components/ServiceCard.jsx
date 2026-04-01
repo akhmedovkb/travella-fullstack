@@ -543,7 +543,7 @@ export default function ServiceCard({
   const dayShort = t("countdown.days_short", { defaultValue: "d" });
 
   const id = svc.id ?? item.id;
-  
+
   // provider profile
   const [provider, setProvider] = useState(null);
   useEffect(() => {
@@ -558,13 +558,13 @@ export default function ServiceCard({
     };
   }, [providerId, id]);
   const prov = { ...(inlineProvider || {}), ...(provider || {}) };
-  
+
   const unlockStorageKey = id ? `marketplace:unlocked:${id}` : null;
   const unlockedFromStorage =
     typeof window !== "undefined" &&
     unlockStorageKey &&
     window.localStorage.getItem(unlockStorageKey) === "1";
-  
+
   const initialUnlocked =
     viewerRole === "provider" ||
     viewerRole === "admin" ||
@@ -580,16 +580,16 @@ export default function ServiceCard({
       item?.service?.contacts_unlocked,
       provider?.contacts_unlocked,
     ].some((v) => v === true);
-  
+
   const [unlocked, setUnlocked] = useState(initialUnlocked);
   const [unlockLoading, setUnlockLoading] = useState(false);
-  
+
   useEffect(() => {
     const localUnlocked =
       typeof window !== "undefined" &&
       unlockStorageKey &&
       window.localStorage.getItem(unlockStorageKey) === "1";
-  
+
     setUnlocked(
       Boolean(
         localUnlocked ||
@@ -757,16 +757,16 @@ export default function ServiceCard({
     prov?.type || prov?.provider_type || prov?.category
   );
   const showBookButton = !!providerId && (providerLooksBookable || serviceLooksBookable);
-  
+
   const isClientViewer = viewerRole === "client";
   const hasUnlockTarget = Boolean(providerId && id);
-  
+
   const canShowUnlockButton =
     !unlocked &&
     !isProviderViewer &&
     !isAdminViewer &&
     hasUnlockTarget;
-  
+
   const canShowContacts =
     isProviderViewer ||
     isAdminViewer ||
@@ -809,9 +809,10 @@ export default function ServiceCard({
   // popup деталей тура
   const [detailsOpen, setDetailsOpen] = useState(false);
   const detailsBtnRef = useRef(null);
-  
-  // modal баланса
+
+  // modals
   const [showBalancePrompt, setShowBalancePrompt] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
   const hasDetailsBlock =
     direction ||
@@ -827,7 +828,7 @@ export default function ServiceCard({
 
     const clientToken = localStorage.getItem("clientToken");
     if (!clientToken) {
-      navigate("/client/login");
+      setShowLoginModal(true);
       return;
     }
 
@@ -842,33 +843,33 @@ export default function ServiceCard({
         "client"
       );
 
-    if (res?.ok && (res?.unlocked || res?.already)) {
-      if (typeof window !== "undefined" && unlockStorageKey) {
-        window.localStorage.setItem(unlockStorageKey, "1");
+      if (res?.ok && (res?.unlocked || res?.already)) {
+        if (typeof window !== "undefined" && unlockStorageKey) {
+          window.localStorage.setItem(unlockStorageKey, "1");
+        }
+
+        setUnlocked(true);
+        window.dispatchEvent(new Event("client:balance:changed"));
+
+        const chargedSum = Number(res?.charged_sum || 0);
+
+        if (res?.already) {
+          tSuccess(
+            t("marketplace.contacts_already_opened", {
+              defaultValue: "Контакты уже были открыты",
+            })
+          );
+        } else {
+          tSuccess(
+            t("marketplace.contacts_unlocked_success", {
+              amount: chargedSum.toLocaleString("ru-RU"),
+              defaultValue: `💸 Списано ${chargedSum.toLocaleString("ru-RU")} сум · Контакты разблокированы`,
+            })
+          );
+        }
+
+        return;
       }
-    
-      setUnlocked(true);
-      window.dispatchEvent(new Event("client:balance:changed"));
-    
-      const chargedSum = Number(res?.charged_sum || 0);
-    
-      if (res?.already) {
-        tSuccess(
-          t("marketplace.contacts_already_opened", {
-            defaultValue: "Контакты уже были открыты",
-          })
-        );
-      } else {
-        tSuccess(
-          t("marketplace.contacts_unlocked_success", {
-            amount: chargedSum.toLocaleString("ru-RU"),
-            defaultValue: `💸 Списано ${chargedSum.toLocaleString("ru-RU")} сум · Контакты разблокированы`,
-          })
-        );
-      }
-    
-      return;
-    }
 
       throw new Error("unlock_failed");
     } catch (err) {
@@ -885,7 +886,7 @@ export default function ServiceCard({
       }
 
       if (err?.response?.status === 401 || err?.response?.status === 403) {
-        navigate("/client/login");
+        setShowLoginModal(true);
         return;
       }
 
@@ -1073,7 +1074,7 @@ export default function ServiceCard({
         <div className="p-3 flex-1 flex flex-col">
           <div className="flex items-start gap-2">
             <div className="font-semibold line-clamp-2">{title}</div>
-          
+
             {unlocked && isClientViewer && (
               <span className="shrink-0 inline-flex items-center rounded-full bg-emerald-100 text-emerald-700 px-2 py-0.5 text-[11px] font-semibold">
                 {t("marketplace.already_opened", { defaultValue: "Уже открыто" })}
@@ -1207,7 +1208,7 @@ export default function ServiceCard({
                       <span>📞</span>
                     </a>
                   )}
-              
+
                   {supplierTg?.href && (
                     <a
                       href={supplierTg.href}
@@ -1216,20 +1217,20 @@ export default function ServiceCard({
                       onClick={(e) => e.stopPropagation()}
                       className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#229ED9] px-3 py-2 text-sm font-semibold text-white transition active:scale-[0.98] hover:bg-[#1d8ecf]"
                     >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      viewBox="0 0 24 24"
-                      width="16"
-                      height="16"
-                      className="shrink-0"
-                      aria-hidden="true"
-                    >
-                      <circle cx="12" cy="12" r="12" fill="white" />
-                      <path
-                        fill="#229ED9"
-                        d="M17.52 7.18 6.98 11.25c-.72.29-.71.69-.13.87l2.7.84 6.24-3.94c.29-.18.56-.08.34.12l-5.05 4.56-.19 2.67c.28 0 .41-.13.56-.28l1.31-1.27 2.73 2.02c.5.28.86.14.98-.46l1.8-8.5c.17-.73-.28-1.06-.82-.7Z"
-                      />
-                    </svg>
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        width="16"
+                        height="16"
+                        className="shrink-0"
+                        aria-hidden="true"
+                      >
+                        <circle cx="12" cy="12" r="12" fill="white" />
+                        <path
+                          fill="#229ED9"
+                          d="M17.52 7.18 6.98 11.25c-.72.29-.71.69-.13.87l2.7.84 6.24-3.94c.29-.18.56-.08.34.12l-5.05 4.56-.19 2.67c.28 0 .41-.13.56-.28l1.31-1.27 2.73 2.02c.5.28.86.14.98-.46l1.8-8.5c.17-.73-.28-1.06-.82-.7Z"
+                        />
+                      </svg>
                     </a>
                   )}
                 </div>
@@ -1407,7 +1408,92 @@ export default function ServiceCard({
           </div>
         )}
       </DetailsPopup>
-      
+
+      {showLoginModal &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[3950] flex items-center justify-center bg-black/50 px-4 animate-[fadeIn_.18s_ease-out]"
+            onClick={() => setShowLoginModal(false)}
+          >
+            <div
+              className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl border border-gray-200 animate-[scaleIn_.18s_ease-out]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="bg-gradient-to-r from-orange-500 to-amber-400 px-6 py-5 text-white">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/20 text-2xl">
+                    🔓
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold leading-tight">
+                      {t("marketplace.login_modal_title", {
+                        defaultValue: "Открытие контактов",
+                      })}
+                    </h3>
+                    <p className="text-sm text-white/90">
+                      {t("marketplace.login_modal_subtitle", {
+                        defaultValue: "Войдите как клиент, чтобы продолжить",
+                      })}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="px-6 py-5">
+                <p className="text-sm leading-6 text-gray-600">
+                  {t("marketplace.login_modal_text", {
+                    defaultValue:
+                      "Чтобы открыть телефон и Telegram поставщика, сначала выполните вход в клиентский аккаунт.",
+                  })}
+                </p>
+
+                <div className="mt-4 rounded-2xl border border-orange-100 bg-orange-50 px-4 py-3">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 text-lg">💡</div>
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">
+                        {t("marketplace.login_modal_hint_title", {
+                          defaultValue: "Что будет дальше",
+                        })}
+                      </p>
+                      <p className="mt-1 text-sm text-gray-600">
+                        {t("marketplace.login_modal_hint_text", {
+                          defaultValue:
+                            "После входа вы сможете открыть контакты и связаться с поставщиком напрямую.",
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={() => setShowLoginModal(false)}
+                    className="inline-flex w-full items-center justify-center rounded-2xl border border-gray-200 px-4 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+                  >
+                    {t("common.cancel", { defaultValue: "Отмена" })}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowLoginModal(false);
+                      navigate("/client/login");
+                    }}
+                    className="inline-flex w-full items-center justify-center rounded-2xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-orange-200 transition hover:bg-orange-600"
+                  >
+                    {t("marketplace.login_as_client", {
+                      defaultValue: "Войти как клиент",
+                    })}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+
       {showBalancePrompt &&
         createPortal(
           <div
@@ -1418,42 +1504,42 @@ export default function ServiceCard({
               className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-gray-200 overflow-hidden animate-[scaleIn_.18s_ease-out]"
               onClick={(e) => e.stopPropagation()}
             >
-          <div className="px-5 py-4 border-b border-orange-100 bg-gradient-to-r from-orange-50 to-white">
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-100 text-orange-600">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  width="20"
-                  height="20"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <circle cx="12" cy="12" r="10" />
-                  <path d="M12 8v5" />
-                  <path d="M12 16h.01" />
-                </svg>
-              </div>
-          
-              <div>
-                <div className="text-lg font-semibold text-gray-900">
-                  {t("marketplace.balance_modal_title", {
-                    defaultValue: "Недостаточно средств",
-                  })}
+              <div className="px-5 py-4 border-b border-orange-100 bg-gradient-to-r from-orange-50 to-white">
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-100 text-orange-600">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      width="20"
+                      height="20"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <circle cx="12" cy="12" r="10" />
+                      <path d="M12 8v5" />
+                      <path d="M12 16h.01" />
+                    </svg>
+                  </div>
+
+                  <div>
+                    <div className="text-lg font-semibold text-gray-900">
+                      {t("marketplace.balance_modal_title", {
+                        defaultValue: "Недостаточно средств",
+                      })}
+                    </div>
+
+                    <div className="mt-1 text-sm leading-6 text-gray-600">
+                      {t("marketplace.balance_modal_text", {
+                        defaultValue:
+                          "Для открытия контактов на балансе недостаточно средств. Пополните баланс и вернитесь к этой карточке.",
+                      })}
+                    </div>
+                  </div>
                 </div>
-          
-                <div className="mt-1 text-sm leading-6 text-gray-600">
-                  {t("marketplace.balance_modal_text", {
-                    defaultValue:
-                      "Для открытия контактов на балансе недостаточно средств. Пополните баланс и вернитесь к этой карточке.",
-                  })}
-                </div>
               </div>
-            </div>
-          </div>      
               <div className="px-5 py-4 flex items-center justify-end gap-3">
                 <button
                   type="button"
@@ -1462,7 +1548,7 @@ export default function ServiceCard({
                 >
                   {t("common.cancel", { defaultValue: "Отмена" })}
                 </button>
-      
+
                 <button
                   type="button"
                   onClick={() => {
@@ -1480,19 +1566,21 @@ export default function ServiceCard({
           </div>,
           document.body
         )}
-        <style>
-          {`
-            @keyframes fadeIn {
-              from { opacity: 0; }
-              to { opacity: 1; }
-            }
-        
-            @keyframes scaleIn {
-              from { opacity: 0; transform: scale(0.96) translateY(8px); }
-              to { opacity: 1; transform: scale(1) translateY(0); }
-            }
-          `}
-        </style>
+
+      <style>
+        {`
+          @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+          }
+
+          @keyframes scaleIn {
+            from { opacity: 0; transform: scale(0.96) translateY(8px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
+          }
+        `}
+      </style>
+
       {selectedProofImage &&
         createPortal(
           <div
