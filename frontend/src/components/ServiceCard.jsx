@@ -806,13 +806,17 @@ export default function ServiceCard({
       ? favoriteIds.has(String(id))
       : false;
 
-  // popup деталей тура
-  const [detailsOpen, setDetailsOpen] = useState(false);
-  const detailsBtnRef = useRef(null);
+// popup деталей тура
+const [detailsOpen, setDetailsOpen] = useState(false);
+const detailsBtnRef = useRef(null);
 
-  // modals
-  const [showBalancePrompt, setShowBalancePrompt] = useState(false);
-  const [showLoginModal, setShowLoginModal] = useState(false);
+// highlight after return from payment
+const cardRef = useRef(null);
+const [highlighted, setHighlighted] = useState(false);
+
+// modals
+const [showBalancePrompt, setShowBalancePrompt] = useState(false);
+const [showLoginModal, setShowLoginModal] = useState(false);
 
   const hasDetailsBlock =
     direction ||
@@ -822,7 +826,29 @@ export default function ServiceCard({
     transfer ||
     flightDetails ||
     hasProof;
+  
+useEffect(() => {
+  const params = new URLSearchParams(window.location.search);
+  const openedId = Number(params.get("opened"));
 
+  if (!openedId || Number(openedId) !== Number(id)) return;
+
+  setHighlighted(true);
+
+  setTimeout(() => {
+    cardRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  }, 150);
+
+  const timer = setTimeout(() => {
+    setHighlighted(false);
+  }, 2500);
+
+  return () => clearTimeout(timer);
+}, [id]);
+  
   async function handleUnlock(e) {
     e?.stopPropagation?.();
 
@@ -904,14 +930,16 @@ export default function ServiceCard({
   return (
     <>
       <div
+        ref={cardRef}
         className={[
           "group relative border rounded-xl overflow-hidden shadow-sm flex flex-col transition",
           unlocked
             ? "bg-gray-50 border-gray-200 opacity-90"
             : "bg-white border-gray-200",
+          highlighted ? "ring-2 ring-orange-400 shadow-xl" : "",
           className,
         ].join(" ")}
-      >
+        >
         {/* IMAGES */}
         <div
           className="h-48 sm:h-60 bg-gray-100 relative select-none overflow-hidden"
@@ -1553,7 +1581,7 @@ export default function ServiceCard({
                   type="button"
                   onClick={() => {
                     setShowBalancePrompt(false);
-                    navigate("/client/balance");
+                    navigate(`/client/balance?service_id=${id}`);
                   }}
                   className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-orange-200 transition hover:bg-orange-600 hover:shadow-orange-300 active:scale-[0.98]"
                 >
