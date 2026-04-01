@@ -21,6 +21,28 @@ function normalizeStateToFilters(stateValue) {
   return { method: "", stage: "" };
 }
 
+function formatTashkentYmd(value) {
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Tashkent",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date(value));
+  } catch {
+    return "";
+  }
+}
+
+function getTodayTashkentYmd() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tashkent",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
 export default function AdminPaymeEvents() {
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -29,6 +51,7 @@ export default function AdminPaymeEvents() {
   const initialStage = searchParams.get("stage") || "";
   const initialLimit = searchParams.get("limit") || "200";
   const initialState = searchParams.get("state") || "";
+  const initialDate = searchParams.get("date") || "";
 
   const derivedFromState = normalizeStateToFilters(initialState);
 
@@ -39,6 +62,7 @@ export default function AdminPaymeEvents() {
   const [method, setMethod] = useState(initialMethod || derivedFromState.method);
   const [stage, setStage] = useState(initialStage || derivedFromState.stage);
   const [limit, setLimit] = useState(initialLimit);
+  const [datePreset, setDatePreset] = useState(initialDate); // "", "today"
   const [selected, setSelected] = useState(null);
   const [details, setDetails] = useState(null);
 
@@ -50,6 +74,13 @@ export default function AdminPaymeEvents() {
     if (stage) p.set("stage", stage);
     return p.toString();
   }, [q, method, stage, limit]);
+
+  const filteredRows = useMemo(() => {
+    if (datePreset !== "today") return rows;
+
+    const todayYmd = getTodayTashkentYmd();
+    return rows.filter((r) => formatTashkentYmd(r.created_at) === todayYmd);
+  }, [rows, datePreset]);
 
   async function load() {
     setLoading(true);
@@ -84,10 +115,11 @@ export default function AdminPaymeEvents() {
     if (q.trim()) p.set("q", q.trim());
     if (method) p.set("method", method);
     if (stage) p.set("stage", stage);
+    if (datePreset) p.set("date", datePreset);
     if (limit && String(limit) !== "200") p.set("limit", String(limit));
 
     setSearchParams(p, { replace: true });
-  }, [q, method, stage, limit, setSearchParams]);
+  }, [q, method, stage, datePreset, limit, setSearchParams]);
 
   useEffect(() => {
     load();
@@ -138,6 +170,15 @@ export default function AdminPaymeEvents() {
             <option value="error">error</option>
           </select>
 
+          <select
+            className="border rounded px-3 py-2"
+            value={datePreset}
+            onChange={(e) => setDatePreset(e.target.value)}
+          >
+            <option value="">All dates</option>
+            <option value="today">Today (Tashkent)</option>
+          </select>
+
           <input
             type="number"
             min="1"
@@ -158,6 +199,12 @@ export default function AdminPaymeEvents() {
         </div>
       </div>
 
+      {datePreset === "today" && (
+        <div className="mt-3 text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+          Showing only today’s events in Asia/Tashkent.
+        </div>
+      )}
+
       <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="border rounded-xl overflow-hidden">
           <div className="overflow-auto">
@@ -175,7 +222,7 @@ export default function AdminPaymeEvents() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
+                {filteredRows.map((r) => (
                   <tr
                     key={r.id}
                     className={`border-t hover:bg-gray-50 cursor-pointer ${
@@ -195,7 +242,7 @@ export default function AdminPaymeEvents() {
                     <td className="px-3 py-2">{r.duration_ms ?? ""}</td>
                   </tr>
                 ))}
-                {!rows.length && (
+                {!filteredRows.length && (
                   <tr>
                     <td className="px-3 py-6 opacity-60" colSpan={8}>
                       No events
