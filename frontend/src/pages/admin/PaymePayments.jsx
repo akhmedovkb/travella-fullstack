@@ -180,31 +180,42 @@ export default function PaymePayments() {
               </tr>
             ) : (
               rows.map((r) => (
-                <tr key={r.payme_id} className="border-t hover:bg-gray-50">
-                  <td className="px-3 py-2 text-blue-600 cursor-pointer hover:underline">
-                    <a href={`/admin/finance?tab=clients&client_id=${r.client_id}`}>
-                      {r.client_id}
-                    </a>
+                <tr
+                  key={r.payme_id}
+                  className="border-t hover:bg-gray-50 cursor-pointer"
+                  onClick={() =>
+                    r.client_id &&
+                    window.location.assign(
+                      `/admin/finance?tab=clients&client_id=${r.client_id}`
+                    )
+                  }
+                >
+                  <td className="px-3 py-2 text-blue-600 font-medium">
+                    {r.client_id}
                   </td>
-
-                  <td className="px-3 py-2">{r.phone || "—"}</td>
-
-                  <td className="px-3 py-2 font-semibold">{money(r.amount)}</td>
-
+                
                   <td className="px-3 py-2">
-                    <span
-                      className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${stateBadgeClass(
-                        r.state
-                      )}`}
-                    >
+                    {r.name || "—"}
+                  </td>
+                
+                  <td className="px-3 py-2">
+                    {r.phone || "—"}
+                  </td>
+                
+                  <td className="px-3 py-2 font-semibold">
+                    {money(r.amount)}
+                  </td>
+                
+                  <td className="px-3 py-2">
+                    <span className={`px-2 py-1 rounded text-xs ${stateBadgeClass(r.state)}`}>
                       {stateLabel(r.state)}
                     </span>
                   </td>
-
+                
                   <td className="px-3 py-2">{fmtTs(r.created_at)}</td>
                   <td className="px-3 py-2">{fmtTs(r.performed_at)}</td>
-                  <td className="px-3 py-2">{r.payme_id || "—"}</td>
-                  <td className="px-3 py-2">{r.order_id ?? "—"}</td>
+                  <td className="px-3 py-2">{r.payme_id}</td>
+                  <td className="px-3 py-2">{r.order_id}</td>
                 </tr>
               ))
             )}
