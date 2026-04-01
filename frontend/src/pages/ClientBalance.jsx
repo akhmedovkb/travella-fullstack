@@ -1,4 +1,5 @@
 // frontend/src/pages/ClientBalance.jsx
+
 import { useEffect, useState } from "react";
 import { apiGet, apiPost } from "../api";
 import { tError, tSuccess } from "../shared/toast";
@@ -30,8 +31,6 @@ function fmtTs(x) {
   }
 }
 
-const PRESETS = [25000, 50000, 100000, 200000];
-
 export default function ClientBalance() {
   const { t, i18n } = useTranslation();
 
@@ -41,8 +40,6 @@ export default function ClientBalance() {
   const [loading, setLoading] = useState(false);
   const [topupLoading, setTopupLoading] = useState(false);
   const [customAmount, setCustomAmount] = useState("");
-
-  // 🔥 ВАЖНО: service_id из URL
   const [serviceId, setServiceId] = useState(null);
 
   async function loadAll() {
@@ -58,7 +55,6 @@ export default function ClientBalance() {
       setLedger(Array.isArray(led?.rows) ? led.rows : []);
       window.dispatchEvent(new Event("client:balance:changed"));
     } catch (e) {
-      console.error(e);
       tError(t("balance.load_error"));
     } finally {
       setLoading(false);
@@ -67,20 +63,12 @@ export default function ClientBalance() {
 
   async function doTopup(amount) {
     const sum = Math.trunc(Number(amount || 0));
-    if (!Number.isFinite(sum) || sum <= 0) {
-      return tError(t("balance.invalid_amount"));
-    }
+    if (!sum) return tError(t("balance.invalid_amount"));
 
     setTopupLoading(true);
     try {
-      const payload = {
-        amount: sum,
-      };
-
-      // 🔥 если есть service_id — добавляем
-      if (serviceId) {
-        payload.service_id = serviceId;
-      }
+      const payload = { amount: sum };
+      if (serviceId) payload.service_id = serviceId;
 
       const data = await apiPost(
         "/api/client/balance/topup-order",
@@ -88,205 +76,168 @@ export default function ClientBalance() {
         "client"
       );
 
-      if (!data?.pay_url) {
-        throw new Error("pay_url not returned");
-      }
-
-      tSuccess(
-        t("balance.topup_created", { amount: formatMoney(sum, i18n.language) })
-      );
-
+      tSuccess(formatMoney(sum, i18n.language));
       window.location.href = data.pay_url;
     } catch (e) {
-      console.error(e);
-      tError(e?.message || t("balance.payme_error"));
+      tError(t("balance.payme_error"));
     } finally {
       setTopupLoading(false);
     }
   }
 
-useEffect(() => {
-  const params = new URLSearchParams(window.location.search);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sid = Number(params.get("service_id"));
+    const orderId = params.get("order_id");
 
-  const sid = Number(params.get("service_id"));
-  const orderId = params.get("order_id");
+    if (sid) setServiceId(sid);
 
-  if (sid && Number.isFinite(sid)) {
-    setServiceId(sid);
-    console.log("[ClientBalance] service_id =", sid);
-  }
-
-  loadAll().then(() => {
-    if (sid && orderId) {
-      console.log("[POST-PAYMENT] payment detected");
-
-      setTimeout(() => {
-        window.localStorage.setItem(`marketplace:unlocked:${sid}`, "1");
-
-        tSuccess("Контакты открыты 🎉");
-        window.dispatchEvent(new Event("client:balance:changed"));
-
+    loadAll().then(() => {
+      if (sid && orderId) {
         setTimeout(() => {
-          window.location.href = `/marketplace?opened=${sid}`;
-        }, 900);
-      }, 800);
-    }
-  });
-}, []);
+          localStorage.setItem(`marketplace:unlocked:${sid}`, "1");
+
+          tSuccess(t("balance.unlocked_success"));
+          window.dispatchEvent(new Event("client:balance:changed"));
+
+          setTimeout(() => {
+            window.location.href = `/marketplace?opened=${sid}`;
+          }, 800);
+        }, 700);
+      }
+    });
+  }, []);
+
+  const need = Math.max(unlockPrice - balance, 0);
+
+  const recommendedAmount =
+    need > 0 ? Math.ceil(need / 10000) * 10000 : unlockPrice;
 
   return (
-    <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-6">
-      <div className="bg-white rounded-2xl shadow p-5">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold">
-              {t("balance.title")}
-            </h1>
-            <p className="text-sm text-gray-500 mt-1">
-              {t("balance.subtitle")}
-            </p>
-          </div>
+    <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-6 pb-24">
 
-          <button
-            className="px-4 py-2 rounded-xl border bg-white hover:bg-gray-50"
-            onClick={loadAll}
-            disabled={loading}
-          >
-            {loading ? t("common.loading") : t("common.refresh")}
-          </button>
+      {/* 🔥 HERO */}
+      <div className="rounded-2xl bg-gradient-to-r from-orange-500 to-amber-400 text-white p-5">
+        <div className="text-lg font-bold">
+          {t("balance.hero_title")}
         </div>
 
-        {/* 🔥 показываем контекст */}
+        <div className="text-sm mt-1 opacity-90">
+          {t("balance.hero_subtitle")}
+        </div>
+
         {serviceId && (
-          <div className="mt-4 text-sm text-blue-600">
-            {t("balance.context_unlock")}: #{serviceId}
+          <div className="mt-3 bg-white/20 px-3 py-2 rounded-xl text-sm">
+            {t("balance.hero_context")} #{serviceId}
           </div>
         )}
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5">
-          <div className="rounded-2xl bg-gray-50 border p-5">
-            <div className="text-sm text-gray-500">
-              {t("balance.current")}
-            </div>
-            <div className="mt-2 text-3xl font-semibold">
-              {formatMoney(balance, i18n.language)}
-            </div>
-          </div>
-
-          <div className="rounded-2xl bg-gray-50 border p-5">
-            <div className="text-sm text-gray-500">
-              {t("balance.unlock_price")}
-            </div>
-            <div className="mt-2 text-3xl font-semibold">
-              {formatMoney(unlockPrice, i18n.language, true)}
-            </div>
-          </div>
-        </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow p-5 space-y-4">
-        <div>
-          <h2 className="text-lg font-semibold">
-            {t("balance.topup")}
-          </h2>
-          <p className="text-sm text-gray-500 mt-1">
-            {t("balance.choose_amount")}
-          </p>
-        </div>
-
-        <div className="flex flex-wrap gap-3">
-          {PRESETS.map((v) => (
-            <button
-              key={v}
-              className="px-4 py-2 rounded-xl border bg-white hover:bg-gray-50 disabled:opacity-60"
-              onClick={() => doTopup(v)}
-              disabled={topupLoading}
-            >
-              {formatMoney(v, i18n.language)}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex flex-col md:flex-row gap-3">
-          <input
-            className="flex-1 border rounded-xl px-4 py-3"
-            value={customAmount}
-            onChange={(e) => setCustomAmount(e.target.value)}
-            placeholder={t("balance.custom_placeholder")}
-          />
-          <button
-            className="px-5 py-3 rounded-xl bg-black text-white disabled:opacity-60"
-            onClick={() => doTopup(customAmount)}
-            disabled={topupLoading}
-          >
-            {topupLoading
-              ? t("balance.creating")
-              : t("balance.pay")}
-          </button>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-2xl shadow p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">
-            {t("balance.history")}
-          </h2>
+      {/* 💰 BALANCE */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-gray-50 border rounded-xl p-4">
           <div className="text-sm text-gray-500">
-            {ledger.length} {t("balance.records")}
+            {t("balance.current")}
+          </div>
+          <div className="text-2xl font-bold">
+            {formatMoney(balance, i18n.language)}
           </div>
         </div>
 
-        {!ledger.length ? (
-          <div className="text-sm text-gray-400">
-            {t("balance.empty")}
+        <div className="bg-gray-50 border rounded-xl p-4">
+          <div className="text-sm text-gray-500">
+            {t("balance.unlock_price")}
           </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="border-b text-left text-gray-500">
-                  <th className="py-2 pr-4">{t("balance.date")}</th>
-                  <th className="py-2 pr-4">{t("balance.amount")}</th>
-                  <th className="py-2 pr-4">{t("balance.reason")}</th>
-                  <th className="py-2 pr-4">{t("balance.source")}</th>
-                  <th className="py-2 pr-4">Service ID</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ledger.map((row) => (
-                  <tr key={row.id} className="border-b">
-                    <td className="py-3 pr-4">
-                      {fmtTs(row.created_at)}
-                    </td>
-
-                    <td
-                      className={`py-3 pr-4 font-medium ${
-                        Number(row.amount) < 0
-                          ? "text-red-600"
-                          : "text-green-600"
-                      }`}
-                    >
-                      {Number(row.amount) > 0 ? "+" : ""}
-                      {formatMoney(row.amount, i18n.language)}
-                    </td>
-
-                    <td className="py-3 pr-4">
-                      {row.reason || "—"}
-                    </td>
-
-                    <td className="py-3 pr-4">
-                      {row.source || "—"}
-                    </td>
-
-                    <td className="py-3 pr-4">
-                      {row.service_id || "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="text-2xl font-bold">
+            {formatMoney(unlockPrice, i18n.language, true)}
           </div>
-        )}
+        </div>
+      </div>
+
+      {/* 🚨 NOT ENOUGH */}
+      {need > 0 && (
+        <div className="bg-red-50 border border-red-200 p-4 rounded-xl">
+          <b>{t("balance.not_enough")}</b>
+          <div>
+            {t("balance.need_more")}: {formatMoney(need, i18n.language)}
+          </div>
+        </div>
+      )}
+
+      {/* 📊 CONTACT COUNT */}
+      {balance > 0 && (
+        <div className="bg-green-50 border border-green-200 p-4 rounded-xl">
+          {t("balance.can_open")}: {Math.floor(balance / unlockPrice)}
+        </div>
+      )}
+
+      {/* 🎯 PACKAGES */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[10000, 25000, 50000, 100000].map((v) => (
+          <button
+            key={v}
+            onClick={() => setCustomAmount(v)}
+            className={`p-4 rounded-xl border ${
+              v === recommendedAmount
+                ? "border-orange-500 bg-orange-50"
+                : "border-gray-200"
+            }`}
+          >
+            <div className="font-bold">
+              {formatMoney(v, i18n.language)}
+            </div>
+            <div className="text-xs">
+              {Math.floor(v / unlockPrice)} {t("balance.contacts")}
+            </div>
+            {v === recommendedAmount && (
+              <div className="text-[10px] text-orange-600">
+                {t("balance.recommended")}
+              </div>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* ✍️ CUSTOM */}
+      <input
+        className="w-full border rounded-xl px-4 py-3"
+        value={customAmount}
+        onChange={(e) => setCustomAmount(e.target.value)}
+        placeholder={t("balance.custom_placeholder")}
+      />
+
+      {/* 🔥 CTA */}
+      <button
+        onClick={() => doTopup(customAmount || recommendedAmount)}
+        className="w-full py-4 bg-black text-white rounded-xl font-semibold text-lg"
+      >
+        {topupLoading
+          ? t("balance.creating")
+          : t("balance.pay_cta")}
+      </button>
+
+      <div className="text-xs text-gray-500 text-center">
+        {t("balance.instant_unlock")}
+      </div>
+
+      {serviceId && (
+        <div className="text-xs text-red-500 text-center">
+          {t("balance.urgency")}
+        </div>
+      )}
+
+      {/* 📜 HISTORY */}
+      <div className="bg-white rounded-xl p-4">
+        <h3 className="font-semibold mb-2">{t("balance.history")}</h3>
+
+        {ledger.map((row) => (
+          <div key={row.id} className="flex justify-between text-sm border-b py-2">
+            <div>{fmtTs(row.created_at)}</div>
+            <div className={row.amount > 0 ? "text-green-600" : "text-red-600"}>
+              {formatMoney(row.amount, i18n.language)}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
