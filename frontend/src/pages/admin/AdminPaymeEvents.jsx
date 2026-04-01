@@ -109,17 +109,28 @@ export default function AdminPaymeEvents() {
     }
   }
 
-  useEffect(() => {
-    const p = new URLSearchParams();
+useEffect(() => {
+  const p = new URLSearchParams(searchParams);
 
-    if (q.trim()) p.set("q", q.trim());
-    if (method) p.set("method", method);
-    if (stage) p.set("stage", stage);
-    if (datePreset) p.set("date", datePreset);
-    if (limit && String(limit) !== "200") p.set("limit", String(limit));
+  p.set("tab", "events");
 
-    setSearchParams(p, { replace: true });
-  }, [q, method, stage, datePreset, limit, setSearchParams]);
+  if (q.trim()) p.set("q", q.trim());
+  else p.delete("q");
+
+  if (method) p.set("method", method);
+  else p.delete("method");
+
+  if (stage) p.set("stage", stage);
+  else p.delete("stage");
+
+  if (datePreset) p.set("date", datePreset);
+  else p.delete("date");
+
+  if (limit && String(limit) !== "200") p.set("limit", String(limit));
+  else p.delete("limit");
+
+  setSearchParams(p, { replace: true });
+}, [q, method, stage, datePreset, limit, searchParams, setSearchParams]);
 
   useEffect(() => {
     load();
