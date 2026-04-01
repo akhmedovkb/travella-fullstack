@@ -51,6 +51,7 @@ export default function ClientBalance() {
 
   const [showAutoPayModal, setShowAutoPayModal] = useState(false);
   const [autoPayPromptSeen, setAutoPayPromptSeen] = useState(false);
+  const [returnUnlockLoading, setReturnUnlockLoading] = useState(false);
 
   async function loadAll() {
     setLoading(true);
@@ -122,6 +123,42 @@ export default function ClientBalance() {
     }
   }
 
+  async function tryUnlockAfterReturn(serviceIdFromUrl) {
+    if (!serviceIdFromUrl) return false;
+
+    setReturnUnlockLoading(true);
+    try {
+      const result = await apiPost(
+        "/api/client/unlock-contact",
+        { service_id: serviceIdFromUrl },
+        "client"
+      );
+
+      if (result?.ok && (result?.unlocked || result?.already)) {
+        localStorage.setItem(`marketplace:unlocked:${serviceIdFromUrl}`, "1");
+        tSuccess(
+          t("balance.unlocked_success", {
+            defaultValue: "Контакты открыты 🎉",
+          })
+        );
+        window.dispatchEvent(new Event("client:balance:changed"));
+
+        setTimeout(() => {
+          window.location.href = `/marketplace?opened=${serviceIdFromUrl}`;
+        }, 700);
+
+        return true;
+      }
+
+      return false;
+    } catch (e) {
+      console.error("[ClientBalance] tryUnlockAfterReturn error:", e);
+      return false;
+    } finally {
+      setReturnUnlockLoading(false);
+    }
+  }
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const sid = Number(params.get("service_id"));
@@ -131,22 +168,14 @@ export default function ClientBalance() {
       setServiceId(sid);
     }
 
-    loadAll().then(() => {
+    loadAll().then(async () => {
       if (sid && orderId) {
-        setTimeout(() => {
-          localStorage.setItem(`marketplace:unlocked:${sid}`, "1");
+        const unlocked = await tryUnlockAfterReturn(sid);
 
-          tSuccess(
-            t("balance.unlocked_success", {
-              defaultValue: "Контакты открыты 🎉",
-            })
-          );
-          window.dispatchEvent(new Event("client:balance:changed"));
-
-          setTimeout(() => {
-            window.location.href = `/marketplace?opened=${sid}`;
-          }, 800);
-        }, 700);
+        if (!unlocked) {
+          // если unlock пока не прошёл, просто обновим баланс/ledger и оставим пользователя на странице
+          await loadAll();
+        }
       }
     });
   }, [t]);
@@ -222,6 +251,12 @@ export default function ClientBalance() {
           </div>
         )}
       </div>
+
+      {(loading || returnUnlockLoading) && (
+        <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-700">
+          {t("common.loading", { defaultValue: "Загрузка…" })}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-gray-50 border rounded-xl p-4">
