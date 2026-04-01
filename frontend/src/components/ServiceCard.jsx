@@ -864,7 +864,7 @@ useEffect(() => {
       setUnlockLoading(true);
 
       const res = await apiPost(
-        "/api/client/unlock-contact",
+        "/api/client/unlock-auto",
         { service_id: id },
         "client"
       );
@@ -897,8 +897,14 @@ useEffect(() => {
         return;
       }
 
-      throw new Error("unlock_failed");
+      if (res?.ok && res?.need_pay && res?.pay_url) {
+        window.location.href = res.pay_url;
+        return;
+      }
+
+      throw new Error("unlock_auto_failed");
     } catch (err) {
+      const status = err?.status || err?.response?.status;
       const code =
         err?.response?.data?.code ||
         err?.response?.data?.error ||
@@ -906,17 +912,17 @@ useEffect(() => {
         err?.data?.error ||
         err?.code;
 
+      if (status === 401 || status === 403) {
+        setShowLoginModal(true);
+        return;
+      }
+
       if (code === "INSUFFICIENT_BALANCE" || code === "not_enough_balance") {
         setShowBalancePrompt(true);
         return;
       }
 
-      if (err?.response?.status === 401 || err?.response?.status === 403) {
-        setShowLoginModal(true);
-        return;
-      }
-
-      console.error("unlock contact error:", err);
+      console.error("unlock auto error:", err);
       alert(
         t("marketplace.unlock_error", {
           defaultValue: "Не удалось открыть контакты",
