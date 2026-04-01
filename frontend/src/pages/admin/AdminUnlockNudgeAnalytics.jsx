@@ -3,10 +3,7 @@
 import { useEffect, useState } from "react";
 import { apiGet } from "../../api";
 import { tError } from "../../shared/toast";
-
-function moneyFromTiyin(n) {
-  return Math.round(Number(n || 0) / 100).toLocaleString("ru-RU");
-}
+import { formatTiyinToSumWithCurrency } from "../../utils/money";
 
 function fmtTs(x) {
   if (!x) return "—";
@@ -62,7 +59,9 @@ function StatusBadge({ status }) {
       : "OPENED WITHOUT NUDGE";
 
   return (
-    <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${cls}`}>
+    <span
+      className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${cls}`}
+    >
       {label}
     </span>
   );
@@ -83,7 +82,11 @@ export default function AdminUnlockNudgeAnalytics() {
       p.set("limit", String(limit || 100));
       if (status) p.set("status", status);
 
-      const data = await apiGet(`/api/admin/unlock-nudge/analytics?${p.toString()}`, "admin");
+      const data = await apiGet(
+        `/api/admin/unlock-nudge/analytics?${p.toString()}`,
+        "admin"
+      );
+
       setRows(Array.isArray(data?.rows) ? data.rows : []);
       setSummary(data?.summary || null);
     } catch (e) {
@@ -98,7 +101,6 @@ export default function AdminUnlockNudgeAnalytics() {
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -108,7 +110,8 @@ export default function AdminUnlockNudgeAnalytics() {
           <div>
             <div className="text-lg font-semibold">Unlock Nudge Analytics</div>
             <div className="text-sm text-gray-500">
-              Аналитика по оплате, дожиму через 1-й и 2-й nudge и итоговому открытию контактов.
+              Аналитика по оплате, дожиму через 1-й и 2-й nudge и итоговому
+              открытию контактов.
             </div>
           </div>
 
@@ -184,19 +187,19 @@ export default function AdminUnlockNudgeAnalytics() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <StatCard
               title="Зависло"
-              value={`${moneyFromTiyin(summary.stuck_tiyin)} сум`}
+              value={formatTiyinToSumWithCurrency(summary.stuck_tiyin)}
               tone="red"
               hint="Оплатили, но контакты ещё не открыты"
             />
             <StatCard
               title="Дожато"
-              value={`${moneyFromTiyin(summary.squeezed_tiyin)} сум`}
+              value={formatTiyinToSumWithCurrency(summary.squeezed_tiyin)}
               tone="green"
               hint="Открыли после 1-го или 2-го nudge"
             />
             <StatCard
               title="Ещё в риске"
-              value={`${moneyFromTiyin(summary.risk_tiyin)} сум`}
+              value={formatTiyinToSumWithCurrency(summary.risk_tiyin)}
               tone="orange"
               hint="Уже nudged, но всё ещё не открыли"
             />
@@ -231,7 +234,10 @@ export default function AdminUnlockNudgeAnalytics() {
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td className="px-3 py-6 text-center text-gray-400" colSpan={11}>
+                  <td
+                    className="px-3 py-6 text-center text-gray-400"
+                    colSpan={11}
+                  >
                     Нет данных
                   </td>
                 </tr>
@@ -242,30 +248,49 @@ export default function AdminUnlockNudgeAnalytics() {
                     className="border-t hover:bg-gray-50"
                   >
                     <td className="px-3 py-2 align-top">
-                      <div className="font-medium">{r.client_name || `Client #${r.client_id}`}</div>
-                      <div className="text-xs text-gray-400">client_id: {r.client_id}</div>
-                      <div className="text-xs text-gray-400">{r.client_phone || "—"}</div>
+                      <div className="font-medium">
+                        {r.client_name || `Client #${r.client_id}`}
+                      </div>
+                      <div className="text-xs text-gray-400">
+                        client_id: {r.client_id}
+                      </div>
+                      <div className="text-xs text-gray-400">
+                        {r.client_phone || "—"}
+                      </div>
                     </td>
 
                     <td className="px-3 py-2 align-top">
-                      <div className="font-medium">{r.service_title || `Service #${r.service_id}`}</div>
+                      <div className="font-medium">
+                        {r.service_title || `Service #${r.service_id}`}
+                      </div>
                       <div className="text-xs text-gray-400">
-                        service_id: {r.service_id} · {r.service_category || "—"}
+                        service_id: {r.service_id} ·{" "}
+                        {r.service_category || "—"}
                       </div>
                     </td>
 
                     <td className="px-3 py-2 align-top">{r.step || "—"}</td>
                     <td className="px-3 py-2 align-top">{r.nudge_count || 0}</td>
-                    <td className="px-3 py-2 align-top">{r.last_nudge_kind || "—"}</td>
+                    <td className="px-3 py-2 align-top">
+                      {r.last_nudge_kind || "—"}
+                    </td>
 
                     <td className="px-3 py-2 align-top">
                       <StatusBadge status={r.status} />
                     </td>
 
-                    <td className="px-3 py-2 align-top">{moneyFromTiyin(r.price_tiyin)} сум</td>
-                    <td className="px-3 py-2 align-top">{fmtTs(r.payment_success_at)}</td>
-                    <td className="px-3 py-2 align-top">{fmtTs(r.first_nudge_sent_at)}</td>
-                    <td className="px-3 py-2 align-top">{fmtTs(r.second_nudge_sent_at)}</td>
+                    <td className="px-3 py-2 align-top">
+                      {formatTiyinToSumWithCurrency(r.price_tiyin)}
+                    </td>
+                    <td className="px-3 py-2 align-top">
+                      {fmtTs(r.payment_success_at)}
+                    </td>
+                    <td className="px-3 py-2 align-top">
+                      {fmtTs(r.first_nudge_sent_at)}
+                    </td>
+                    <td className="px-3 py-2 align-top">
+                      {fmtTs(r.second_nudge_sent_at)}
+                    </td>
                     <td className="px-3 py-2 align-top">{fmtTs(r.unlock_at)}</td>
                   </tr>
                 ))
