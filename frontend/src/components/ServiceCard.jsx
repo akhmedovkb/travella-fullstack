@@ -1061,7 +1061,7 @@ useEffect(() => {
           )}
 
           {hasProof && (
-            <div className="absolute left-2 top-2 z-30 pointer-events-none">
+            <div className="absolute left-2 top-11 z-30 pointer-events-none">
               <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600/95 text-white text-[11px] font-semibold px-2.5 py-1 shadow-lg ring-1 ring-white/20 backdrop-blur-sm">
                 ✔ {t("marketplace.verified_proof", { defaultValue: "Проверено" })}
               </span>
