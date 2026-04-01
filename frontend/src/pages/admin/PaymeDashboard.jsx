@@ -49,9 +49,9 @@ export default function PaymeDashboard() {
     load();
   }, []);
 
-  function goToEvents(params = {}) {
+  function goToPayments(params = {}) {
     const p = new URLSearchParams();
-    p.set("tab", "events");
+    p.set("tab", "payments");
 
     Object.entries(params).forEach(([key, value]) => {
       if (value !== undefined && value !== null && String(value) !== "") {
@@ -86,27 +86,27 @@ export default function PaymeDashboard() {
         <StatCard
           title="Total Topups Today"
           value={stats.today_topups ?? 0}
-          onClick={() => goToEvents({ state: "PERFORMED", date: "today" })}
+          onClick={() => goToPayments({ state: "2" })}
         />
 
         <StatCard
           title="Successful Payments"
           value={stats.success ?? 0}
-          onClick={() => goToEvents({ state: "PERFORMED" })}
+          onClick={() => goToPayments({ state: "2" })}
         />
 
         <StatCard
           title="Failed Payments"
           value={stats.failed ?? 0}
           tone="red"
-          onClick={() => goToEvents({ state: "FAILED" })}
+          onClick={() => goToPayments({ state: "-1" })}
         />
 
         <StatCard
           title="Refunds"
           value={stats.refunds ?? 0}
           tone="yellow"
-          onClick={() => goToEvents({ state: "REFUNDED" })}
+          onClick={() => goToPayments({ state: "-2" })}
         />
 
         <StatCard
