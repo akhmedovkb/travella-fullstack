@@ -471,6 +471,10 @@ async function paymeMerchantRpc(req, res) {
   };
 
   res.json = (payload) => {
+    console.log("[PAYME RAW RESPONSE]");
+    console.log(JSON.stringify(payload, null, 2));
+    console.log("====================================");
+    
     (async () => {
       try {
         const errCode =
