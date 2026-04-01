@@ -4,13 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { apiGet, apiPost } from "../../api";
 import { tError, tSuccess } from "../../shared/toast";
-import { formatTiyinToSum, sumToTiyin } from "../../utils/money";
+import { formatTiyinToSum } from "../../utils/money";
 
 function toNum(x) {
   const n = Number(x);
   return Number.isFinite(n) ? n : 0;
 }
-
 
 function fmtTs(ts) {
   if (!ts) return "—";
@@ -88,6 +87,8 @@ function StatCard({ title, value, tone = "default", subtitle = "" }) {
 
 export default function AdminContactBalance() {
   const [searchParams] = useSearchParams();
+  const clientIdFromUrl = String(searchParams.get("client_id") || "").trim();
+
   const [q, setQ] = useState("");
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState([]);
@@ -125,7 +126,7 @@ export default function AdminContactBalance() {
     }
   }
 
-    async function loadClientById(clientId) {
+  async function loadClientById(clientId) {
     const id = Number(clientId);
     if (!Number.isFinite(id) || id <= 0) return;
 
@@ -135,6 +136,11 @@ export default function AdminContactBalance() {
 
       const client = data?.client || { id };
       setSelected(client);
+      setResults((prev) => {
+        const has = Array.isArray(prev) && prev.some((x) => Number(x?.id) === id);
+        return has ? prev : [client, ...(Array.isArray(prev) ? prev : [])];
+      });
+
       setBalance(toNum(data?.balance || 0));
       setStats(data?.stats || null);
       setPaymeStats(data?.payme_stats || null);
@@ -217,12 +223,11 @@ export default function AdminContactBalance() {
     return () => window.removeEventListener("keydown", onKey);
   }, [canSearch]);
 
-    useEffect(() => {
-    const qpClientId = String(searchParams.get("client_id") || "").trim();
-    if (!qpClientId) return;
-    loadClientById(qpClientId);
+  useEffect(() => {
+    if (!clientIdFromUrl) return;
+    loadClientById(clientIdFromUrl);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
+  }, [clientIdFromUrl]);
 
   const fallbackStats = useMemo(() => {
     const rows = Array.isArray(ledger) ? ledger : [];
@@ -440,10 +445,7 @@ export default function AdminContactBalance() {
               value={String(toNum(s?.admin_adjust_count))}
               subtitle={`net: ${formatTiyinToSum(s?.admin_adjust_sum)} сум`}
             />
-            <StatCard
-              title="Ledger rows"
-              value={String(toNum(s?.ledger_rows))}
-            />
+            <StatCard title="Ledger rows" value={String(toNum(s?.ledger_rows))} />
             <StatCard
               title="Mirror balance"
               value={formatTiyinToSum(balance)}
@@ -606,7 +608,9 @@ export default function AdminContactBalance() {
                       <tr key={`${r.payme_id}_${idx}`} className="border-t">
                         <td className="px-3 py-2 break-all">{r.payme_id}</td>
                         <td className="px-3 py-2 whitespace-nowrap">{r.order_id}</td>
-                        <td className="px-3 py-2 whitespace-nowrap">{formatTiyinToSum(r.amount_tiyin)} сум</td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          {formatTiyinToSum(r.amount_tiyin)} сум
+                        </td>
                         <td className={`px-3 py-2 whitespace-nowrap font-medium ${paymeStateClass(r.state)}`}>
                           {paymeStateLabel(r.state)}
                         </td>
@@ -616,38 +620,36 @@ export default function AdminContactBalance() {
                         <td className="px-3 py-2 whitespace-nowrap">{fmtMs(r.cancel_time)}</td>
                         <td className="px-3 py-2 whitespace-nowrap">
                           <div className="flex gap-2">
-                          
-                          <button
-                          className="text-xs px-2 py-1 border rounded hover:bg-gray-50"
-                          onClick={() =>
-                          window.open(
-                          `/admin/payme-health?payme_id=${encodeURIComponent(r.payme_id)}`,
-                          "_blank"
-                          )
-                          }
-                          >
-                          🔎 Health
-                          </button>
-                          
-                          <button
-                          className="text-xs px-2 py-1 border rounded hover:bg-gray-50"
-                          onClick={() =>
-                          window.open(
-                          `/admin/payme-lab?seed_payme_id=${encodeURIComponent(r.payme_id)}`,
-                          "_blank"
-                          )
-                          }
-                          >
-                          🧪 Lab
-                          </button>
-                          
+                            <button
+                              className="text-xs px-2 py-1 border rounded hover:bg-gray-50"
+                              onClick={() =>
+                                window.open(
+                                  `/admin/payme-health?payme_id=${encodeURIComponent(r.payme_id)}`,
+                                  "_blank"
+                                )
+                              }
+                            >
+                              🔎 Health
+                            </button>
+
+                            <button
+                              className="text-xs px-2 py-1 border rounded hover:bg-gray-50"
+                              onClick={() =>
+                                window.open(
+                                  `/admin/payme-lab?seed_payme_id=${encodeURIComponent(r.payme_id)}`,
+                                  "_blank"
+                                )
+                              }
+                            >
+                              🧪 Lab
+                            </button>
                           </div>
                         </td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td className="px-3 py-6 text-gray-500 text-center" colSpan={8}>
+                      <td className="px-3 py-6 text-gray-500 text-center" colSpan={9}>
                         Нет Payme transactions
                       </td>
                     </tr>
