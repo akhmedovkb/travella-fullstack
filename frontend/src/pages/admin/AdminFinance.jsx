@@ -10,6 +10,7 @@ import AdminUnlockFunnel from "./AdminUnlockFunnel";
 import AdminUnlockNudgeAnalytics from "./AdminUnlockNudgeAnalytics";
 import PaymeDashboard from "./PaymeDashboard";
 import AdminPaymeEvents from "./AdminPaymeEvents";
+import PaymePayments from "./PaymePayments";
 
 const VALID_TABS = new Set([
   "clients",
@@ -65,6 +66,7 @@ export default function AdminFinance() {
           <TabBtn id="nudges">Nudges</TabBtn>
           <TabBtn id="audit">Audit</TabBtn>
           <TabBtn id="health">Health</TabBtn>
+          <TabBtn id="payments">Payments</TabBtn>
         </div>
       </div>
 
@@ -75,6 +77,7 @@ export default function AdminFinance() {
       {tab === "nudges" && <AdminUnlockNudgeAnalytics />}
       {tab === "audit" && <AdminBilling />}
       {tab === "health" && <AdminPaymeHealth />}
+      {tab === "payments" && <PaymePayments />}
     </div>
   );
 }
