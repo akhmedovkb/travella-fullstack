@@ -35,6 +35,7 @@ const adminPaymeAutoFixRoutes = require("./routes/adminPaymeAutoFixRoutes");
 const adminClientsRoutes = require("./routes/adminClientsRoutes");
 const adminUnlockNudgeRoutes = require("./routes/adminUnlockNudgeRoutes");
 const adminUnlockFunnelRoutes = require("./routes/adminUnlockFunnelRoutes");
+const adminPaymePaymentsRoutes = require("./routes/adminPaymePaymentsRoutes");
 
 dotenv.config();
 const app = express();
