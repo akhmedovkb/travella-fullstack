@@ -66,7 +66,29 @@
   "load_error": "Failed to load balance",
   "invalid_amount": "Enter a valid amount",
   "topup_created": "Top-up order created: {{amount}} sum",
-  "payme_error": "Payme error"
+  "payme_error": "Payme error",
+  "hero_title": "🔓 Unlock contacts",
+  "hero_subtitle": "Contact directly & book faster",
+  "hero_context": "You're almost there",
+  
+  "not_enough": "Insufficient balance",
+  "need_more": "Need more",
+  
+  "can_open": "You can unlock",
+  "contacts": "contacts",
+  "recommended": "Recommended",
+  
+  "pay_cta": "🚀 Top up & unlock",
+  "instant_unlock": "Instant access after payment",
+  "urgency": "This offer may be taken",
+  
+  "unlocked_success": "Contacts unlocked 🎉",
+  
+  "nudge_title": "You're almost there",
+  "nudge_text": "One more step to contact directly",
+  "nudge_price": "Recommended amount",
+  "nudge_cta": "Unlock now",
+  "nudge_later": "Later"
 },
   "bookings": {
     "provider_cancel_reason": "Specify cancellation reason",
