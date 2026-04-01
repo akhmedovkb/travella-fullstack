@@ -6,24 +6,23 @@ async function adminPaymePayments(req, res) {
   try {
     const { rows } = await pool.query(`
       SELECT
-        pt.id,
         pt.payme_id,
         pt.order_id,
-        pt.amount,
+        pt.amount_tiyin / 100.0 AS amount,
         pt.state,
         pt.created_at,
-        pt.perform_time,
+        to_timestamp(pt.perform_time / 1000.0) AS performed_at,
 
         c.id as client_id,
+        c.name,
         c.phone,
-        c.email,
-        c.name
+        c.email
 
       FROM payme_transactions pt
       LEFT JOIN topup_orders o ON o.id = pt.order_id
       LEFT JOIN clients c ON c.id = o.client_id
 
-      ORDER BY pt.id DESC
+      ORDER BY pt.created_at DESC
       LIMIT 200
     `);
 
