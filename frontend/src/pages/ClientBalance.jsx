@@ -49,6 +49,9 @@ export default function ClientBalance() {
   const [customAmount, setCustomAmount] = useState("");
   const [serviceId, setServiceId] = useState(null);
 
+  const [showAutoPayModal, setShowAutoPayModal] = useState(false);
+  const [autoPayPromptSeen, setAutoPayPromptSeen] = useState(false);
+
   async function loadAll() {
     setLoading(true);
     try {
@@ -63,7 +66,11 @@ export default function ClientBalance() {
       window.dispatchEvent(new Event("client:balance:changed"));
     } catch (e) {
       console.error("[ClientBalance] loadAll error:", e);
-      tError(t("balance.load_error", { defaultValue: "Не удалось загрузить баланс" }));
+      tError(
+        t("balance.load_error", {
+          defaultValue: "Не удалось загрузить баланс",
+        })
+      );
     } finally {
       setLoading(false);
     }
@@ -72,7 +79,11 @@ export default function ClientBalance() {
   async function doTopup(amountSumInput) {
     const sum = Math.trunc(Number(amountSumInput || 0));
     if (!Number.isFinite(sum) || sum <= 0) {
-      return tError(t("balance.invalid_amount", { defaultValue: "Укажи корректную сумму" }));
+      return tError(
+        t("balance.invalid_amount", {
+          defaultValue: "Укажи корректную сумму",
+        })
+      );
     }
 
     setTopupLoading(true);
@@ -100,7 +111,12 @@ export default function ClientBalance() {
       window.location.href = data.pay_url;
     } catch (e) {
       console.error("[ClientBalance] doTopup error:", e);
-      tError(e?.message || t("balance.payme_error", { defaultValue: "Ошибка Payme" }));
+      tError(
+        e?.message ||
+          t("balance.payme_error", {
+            defaultValue: "Ошибка Payme",
+          })
+      );
     } finally {
       setTopupLoading(false);
     }
@@ -133,12 +149,11 @@ export default function ClientBalance() {
         }, 700);
       }
     });
-  }, [i18n.language, t]);
+  }, [t]);
 
   const {
     balanceTiyin,
     unlockPriceTiyin,
-    balanceSum,
     unlockPriceSum,
     needTiyin,
     needSum,
@@ -147,7 +162,6 @@ export default function ClientBalance() {
     const balanceTiyinLocal = Number(balance || 0);
     const unlockPriceTiyinLocal = Number(unlockPrice || 0);
 
-    const balanceSumLocal = Math.round(balanceTiyinLocal / 100);
     const unlockPriceSumLocal = Math.round(unlockPriceTiyinLocal / 100);
 
     const needTiyinLocal = Math.max(unlockPriceTiyinLocal - balanceTiyinLocal, 0);
@@ -161,13 +175,23 @@ export default function ClientBalance() {
     return {
       balanceTiyin: balanceTiyinLocal,
       unlockPriceTiyin: unlockPriceTiyinLocal,
-      balanceSum: balanceSumLocal,
       unlockPriceSum: unlockPriceSumLocal,
       needTiyin: needTiyinLocal,
       needSum: needSumLocal,
       recommendedAmount: recommendedAmountLocal,
     };
   }, [balance, unlockPrice]);
+
+  useEffect(() => {
+    if (!serviceId) return;
+    if (topupLoading) return;
+    if (needTiyin <= 0) return;
+    if (autoPayPromptSeen) return;
+
+    setCustomAmount(String(recommendedAmount));
+    setShowAutoPayModal(true);
+    setAutoPayPromptSeen(true);
+  }, [serviceId, needTiyin, recommendedAmount, topupLoading, autoPayPromptSeen]);
 
   const effectivePayAmount =
     Math.trunc(Number(customAmount || 0)) > 0
@@ -176,10 +200,11 @@ export default function ClientBalance() {
 
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-6 pb-24">
-      {/* HERO */}
       <div className="rounded-2xl bg-gradient-to-r from-orange-500 to-amber-400 text-white p-5">
         <div className="text-lg font-bold">
-          {t("balance.hero_title", { defaultValue: "🔓 Открой контакты поставщика" })}
+          {t("balance.hero_title", {
+            defaultValue: "🔓 Открой контакты поставщика",
+          })}
         </div>
 
         <div className="text-sm mt-1 opacity-90">
@@ -198,11 +223,12 @@ export default function ClientBalance() {
         )}
       </div>
 
-      {/* BALANCE */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-gray-50 border rounded-xl p-4">
           <div className="text-sm text-gray-500">
-            {t("balance.current", { defaultValue: "Текущий баланс" })}
+            {t("balance.current", {
+              defaultValue: "Текущий баланс",
+            })}
           </div>
           <div className="text-2xl font-bold">
             {formatMoney(balanceTiyin, i18n.language, true)}
@@ -211,7 +237,9 @@ export default function ClientBalance() {
 
         <div className="bg-gray-50 border rounded-xl p-4">
           <div className="text-sm text-gray-500">
-            {t("balance.unlock_price", { defaultValue: "Цена открытия контактов" })}
+            {t("balance.unlock_price", {
+              defaultValue: "Цена открытия контактов",
+            })}
           </div>
           <div className="text-2xl font-bold">
             {formatMoney(unlockPriceTiyin, i18n.language, true)}
@@ -219,26 +247,31 @@ export default function ClientBalance() {
         </div>
       </div>
 
-      {/* NOT ENOUGH */}
       {needTiyin > 0 && (
         <div className="bg-red-50 border border-red-200 p-4 rounded-xl">
-          <b>{t("balance.not_enough", { defaultValue: "Недостаточно средств" })}</b>
+          <b>
+            {t("balance.not_enough", {
+              defaultValue: "Недостаточно средств",
+            })}
+          </b>
           <div>
-            {t("balance.need_more", { defaultValue: "Не хватает" })}:{" "}
-            {formatMoney(needSum, i18n.language)}
+            {t("balance.need_more", {
+              defaultValue: "Не хватает",
+            })}
+            : {formatMoney(needSum, i18n.language)}
           </div>
         </div>
       )}
 
-      {/* CONTACT COUNT */}
       {balanceTiyin > 0 && unlockPriceTiyin > 0 && (
         <div className="bg-green-50 border border-green-200 p-4 rounded-xl">
-          {t("balance.can_open", { defaultValue: "Можно открыть контактов" })}:{" "}
-          {Math.floor(balanceTiyin / unlockPriceTiyin)}
+          {t("balance.can_open", {
+            defaultValue: "Можно открыть контактов",
+          })}
+          : {Math.floor(balanceTiyin / unlockPriceTiyin)}
         </div>
       )}
 
-      {/* PACKAGES */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {PRESET_AMOUNTS_SUM.map((v) => (
           <button
@@ -257,19 +290,22 @@ export default function ClientBalance() {
 
             <div className="text-xs">
               {unlockPriceSum > 0 ? Math.floor(v / unlockPriceSum) : 0}{" "}
-              {t("balance.contacts", { defaultValue: "контактов" })}
+              {t("balance.contacts", {
+                defaultValue: "контактов",
+              })}
             </div>
 
             {v === recommendedAmount && (
               <div className="text-[10px] text-orange-600">
-                {t("balance.recommended", { defaultValue: "Рекомендуем" })}
+                {t("balance.recommended", {
+                  defaultValue: "Рекомендуем",
+                })}
               </div>
             )}
           </button>
         ))}
       </div>
 
-      {/* CUSTOM */}
       <input
         className="w-full border rounded-xl px-4 py-3"
         value={customAmount}
@@ -280,7 +316,6 @@ export default function ClientBalance() {
         inputMode="numeric"
       />
 
-      {/* CTA */}
       <button
         type="button"
         onClick={() => doTopup(effectivePayAmount)}
@@ -288,8 +323,12 @@ export default function ClientBalance() {
         className="w-full py-4 bg-black text-white rounded-xl font-semibold text-lg disabled:opacity-60"
       >
         {topupLoading
-          ? t("balance.creating", { defaultValue: "Создание…" })
-          : t("balance.pay_cta", { defaultValue: "🚀 Пополнить и открыть" })}
+          ? t("balance.creating", {
+              defaultValue: "Создание…",
+            })
+          : t("balance.pay_cta", {
+              defaultValue: "🚀 Пополнить и открыть",
+            })}
       </button>
 
       <div className="text-xs text-gray-500 text-center">
@@ -301,20 +340,24 @@ export default function ClientBalance() {
       {serviceId && (
         <div className="text-xs text-red-500 text-center">
           {t("balance.urgency_real", {
-            defaultValue: "После оплаты контакты откроются именно для этого предложения",
+            defaultValue:
+              "После оплаты контакты откроются именно для этого предложения",
           })}
         </div>
       )}
 
-      {/* HISTORY */}
       <div className="bg-white rounded-xl p-4">
         <h3 className="font-semibold mb-2">
-          {t("balance.history", { defaultValue: "История операций" })}
+          {t("balance.history", {
+            defaultValue: "История операций",
+          })}
         </h3>
 
         {!ledger.length ? (
           <div className="text-sm text-gray-400">
-            {t("balance.empty", { defaultValue: "Операций пока нет" })}
+            {t("balance.empty", {
+              defaultValue: "Операций пока нет",
+            })}
           </div>
         ) : (
           <div className="space-y-0">
@@ -329,7 +372,9 @@ export default function ClientBalance() {
 
                 <div
                   className={
-                    Number(row.amount) > 0 ? "text-green-600 font-medium" : "text-red-600 font-medium"
+                    Number(row.amount) > 0
+                      ? "text-green-600 font-medium"
+                      : "text-red-600 font-medium"
                   }
                 >
                   {Number(row.amount) > 0 ? "+" : ""}
@@ -340,6 +385,90 @@ export default function ClientBalance() {
           </div>
         )}
       </div>
+
+      {showAutoPayModal && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4"
+          onClick={() => setShowAutoPayModal(false)}
+        >
+          <div
+            className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="bg-gradient-to-r from-orange-500 to-amber-400 px-6 py-5 text-white">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/20 text-2xl">
+                  ⚡
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold leading-tight">
+                    {t("balance.autopay_title", {
+                      defaultValue: "Вы почти открыли контакты",
+                    })}
+                  </h3>
+                  <p className="text-sm text-white/90">
+                    {t("balance.autopay_subtitle", {
+                      defaultValue: "Остался один шаг до прямого контакта",
+                    })}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-5">
+              <div className="rounded-2xl border border-orange-100 bg-orange-50 px-4 py-3">
+                <div className="text-sm text-gray-700">
+                  {t("balance.autopay_amount_label", {
+                    defaultValue: "Рекомендуем пополнить",
+                  })}
+                </div>
+                <div className="mt-1 text-2xl font-bold text-gray-900">
+                  {formatMoney(recommendedAmount, i18n.language)}
+                </div>
+                <div className="mt-1 text-xs text-gray-500">
+                  {unlockPriceSum > 0
+                    ? `${Math.floor(recommendedAmount / unlockPriceSum)} ${t("balance.contacts", {
+                        defaultValue: "контактов",
+                      })}`
+                    : null}
+                </div>
+              </div>
+
+              <p className="mt-4 text-sm leading-6 text-gray-600">
+                {t("balance.autopay_text", {
+                  defaultValue:
+                    "После оплаты контакты откроются автоматически, и вы вернётесь к объявлению.",
+                })}
+              </p>
+
+              <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={() => setShowAutoPayModal(false)}
+                  className="inline-flex w-full items-center justify-center rounded-2xl border border-gray-200 px-4 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+                >
+                  {t("balance.autopay_later", {
+                    defaultValue: "Позже",
+                  })}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAutoPayModal(false);
+                    doTopup(recommendedAmount);
+                  }}
+                  className="inline-flex w-full items-center justify-center rounded-2xl bg-black px-4 py-3 text-sm font-semibold text-white shadow-lg transition hover:opacity-90"
+                >
+                  {t("balance.autopay_cta", {
+                    defaultValue: "Перейти к оплате",
+                  })}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
