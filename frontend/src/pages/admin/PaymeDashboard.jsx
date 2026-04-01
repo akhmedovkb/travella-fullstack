@@ -86,7 +86,7 @@ export default function PaymeDashboard() {
         <StatCard
           title="Total Topups Today"
           value={stats.today_topups ?? 0}
-          onClick={() => goToEvents({ state: "PERFORMED" })}
+          onClick={() => goToEvents({ state: "PERFORMED", date: "today" })}
         />
 
         <StatCard
