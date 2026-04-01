@@ -960,6 +960,7 @@ app.use("/api/admin/clients", adminContactBalanceRoutes);
 app.use("/api", paymeMerchantRoutes);
 app.use("/api/admin/payme", adminPaymeHealthRoutes);
 app.use("/api/admin/payme", adminPaymeEventsRoutes);
+app.use("/api/admin/payme", adminPaymePaymentsRoutes);
 app.use("/api/admin/payme/lab", adminPaymeLabRoutes);
 app.use("/api/admin/billing", adminBillingRoutes);
 app.use("/api/client", clientBillingRoutes);
