@@ -426,6 +426,12 @@ async function paymeMerchantRpc(req, res) {
   const __paymeUa = req.headers["user-agent"] || null;
 
   const __paymeBody = req.body || {};
+  
+  console.log("====================================");
+  console.log("[PAYME RAW REQUEST]");
+  console.log(JSON.stringify(__paymeBody, null, 2));
+  console.log("====================================");
+  
   const __paymeRpcId = __paymeBody?.id ?? null;
   const __paymeMethod = __paymeBody?.method ?? null;
 
