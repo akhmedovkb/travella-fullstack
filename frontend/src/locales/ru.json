@@ -311,7 +311,9 @@
     "print_pdf": "Печать / PDF",
     "pros": "Плюсы",
     "cons": "Минусы",
-    "features": "Фишки"
+    "features": "Фишки",
+    "cancel": "Отмена",
+    "sum_currency": "сум"
   },
 
   "confirm_delete": "Удалить элемент?",
@@ -561,6 +563,28 @@
   "infants": "Младенцы (0–1)",
   "location": "Локация",
   "location_placeholder": "Внесите локацию ...",
+  "login_modal_title": "Открыть контакты",
+  "login_modal_subtitle": "Войдите как клиент",
+  "login_modal_text": "Чтобы открыть контакты, войдите как клиент.",
+  "login_modal_hint_title": "Что дальше",
+  "login_modal_hint_text": "После входа вы сможете открыть контакты.",
+  "login_as_client": "Войти как клиент",
+
+  "pay_modal_title": "Пополните баланс",
+  "pay_modal_subtitle": "Проверьте сумму",
+  "pay_modal_amount_label": "Сумма",
+  "pay_modal_order": "Заказ",
+  "pay_modal_hint_title": "После оплаты",
+  "pay_modal_hint_text": "Контакты откроются автоматически.",
+  "go_to_payment": "Перейти к оплате",
+
+  "balance_modal_title": "Недостаточно средств",
+  "balance_modal_text": "Недостаточно средств для открытия контактов.",
+  "go_to_balance": "Пополнить баланс",
+
+  "no_image": "Нет изображения",
+  "verified_proof": "Проверено"
+},
   "more_details": "Подробнее",
   "no_image": "Нет изображения",
   "no_results": "Нет результатов",
