@@ -148,11 +148,10 @@ async function buildMrzVariants(filePath) {
           height: cropHeight,
         })
         .rotate(angle, { background: { r: 255, g: 255, b: 255, alpha: 1 } })
-        .resize({ width: Math.max(width * 2, 1200) })
+        .resize({ width: width * 3 })
         .grayscale()
         .normalize()
         .sharpen()
-        .threshold(170)
         .toFile(outPath);
 
       out.push({
