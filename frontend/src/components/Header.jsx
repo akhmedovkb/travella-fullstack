@@ -475,7 +475,7 @@ export default function Header() {
                     <div className="absolute left-0 mt-2 w-64 rounded-2xl bg-[#171717] ring-1 ring-white/10 shadow-xl overflow-hidden z-30">
                       <DropdownItem
                         to="/dashboard/passport-parser"
-                        label="Pasport Parser"
+                        label="Passport Parser"
                         icon={<IconDoc />}
                       />
                     </div>
