@@ -98,8 +98,8 @@ export default function PassportParser() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <div className="rounded-2xl bg-white p-6 shadow-sm border">
+      <div className="mx-auto max-w-6xl space-y-6">
+        <div className="rounded-2xl border bg-white p-6 shadow-sm">
           <h1 className="text-2xl font-semibold text-gray-900">
             Passport Parser
           </h1>
@@ -107,39 +107,51 @@ export default function PassportParser() {
             Загрузи фото паспортов, распознай данные и скачай результат в Excel.
           </p>
 
-          <div className="mt-6 flex flex-col gap-4 md:flex-row md:items-center">
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={handleFileChange}
-              className="block w-full text-sm text-gray-700 file:mr-4 file:rounded-xl file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:text-white hover:file:bg-blue-700"
-            />
+          <div className="mt-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="flex flex-wrap items-center gap-4">
+              <input
+                id="passport-files"
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleFileChange}
+                className="hidden"
+              />
 
-            <button
-              type="button"
-              onClick={handleParse}
-              disabled={loading}
-              className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {loading ? "Распознаём..." : "Распознать"}
-            </button>
+              <label
+                htmlFor="passport-files"
+                className="inline-flex cursor-pointer items-center justify-center rounded-xl bg-blue-600 px-5 py-3 text-sm font-medium text-white transition hover:bg-blue-700"
+              >
+                Выбрать файлы
+              </label>
 
-            <button
-              type="button"
-              onClick={handleDownloadExcel}
-              disabled={!successCount}
-              className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              Скачать Excel
-            </button>
-          </div>
-
-          {!!files.length && (
-            <div className="mt-4 text-sm text-gray-600">
-              Выбрано файлов: <span className="font-semibold">{files.length}</span>
+              <span className="text-sm text-gray-600">
+                {files.length
+                  ? `Выбрано файлов: ${files.length}`
+                  : "Файл не выбран"}
+              </span>
             </div>
-          )}
+
+            <div className="flex flex-wrap items-center gap-4">
+              <button
+                type="button"
+                onClick={handleParse}
+                disabled={loading}
+                className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loading ? "Распознаём..." : "Распознать"}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleDownloadExcel}
+                disabled={!successCount}
+                className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Скачать Excel
+              </button>
+            </div>
+          </div>
 
           {!!error && (
             <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -149,21 +161,21 @@ export default function PassportParser() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-3">
-          <div className="rounded-2xl bg-white p-5 shadow-sm border">
+          <div className="rounded-2xl border bg-white p-5 shadow-sm">
             <div className="text-sm text-gray-500">Всего результатов</div>
             <div className="mt-2 text-3xl font-semibold text-gray-900">
               {results.length}
             </div>
           </div>
 
-          <div className="rounded-2xl bg-white p-5 shadow-sm border">
+          <div className="rounded-2xl border bg-white p-5 shadow-sm">
             <div className="text-sm text-gray-500">Успешно</div>
             <div className="mt-2 text-3xl font-semibold text-emerald-600">
               {successCount}
             </div>
           </div>
 
-          <div className="rounded-2xl bg-white p-5 shadow-sm border">
+          <div className="rounded-2xl border bg-white p-5 shadow-sm">
             <div className="text-sm text-gray-500">Ошибки</div>
             <div className="mt-2 text-3xl font-semibold text-red-600">
               {failCount}
@@ -171,7 +183,7 @@ export default function PassportParser() {
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-2xl bg-white shadow-sm border">
+        <div className="overflow-hidden rounded-2xl border bg-white shadow-sm">
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead className="bg-gray-100 text-gray-700">
@@ -239,7 +251,7 @@ export default function PassportParser() {
         </div>
 
         {!!results.length && (
-          <div className="rounded-2xl bg-white p-5 shadow-sm border">
+          <div className="rounded-2xl border bg-white p-5 shadow-sm">
             <h2 className="text-lg font-semibold text-gray-900">
               Ошибки распознавания
             </h2>
@@ -255,7 +267,9 @@ export default function PassportParser() {
                       className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
                     >
                       <div className="font-medium">{item.fileName || "-"}</div>
-                      <div className="mt-1">{item.message || "Ошибка обработки"}</div>
+                      <div className="mt-1">
+                        {item.message || "Ошибка обработки"}
+                      </div>
                     </div>
                   ))
               )}
