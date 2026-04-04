@@ -3,6 +3,7 @@
 const express = require("express");
 const multer = require("multer");
 const fs = require("fs");
+const sharp = require("sharp");
 const Tesseract = require("tesseract.js");
 const { parse } = require("mrz");
 
@@ -23,9 +24,25 @@ router.post("/parse", upload.array("files", 100), async (req, res) => {
     const results = [];
 
     for (const file of files) {
+      let processedPaths = [];
+
       try {
-        const ocrText = await readMrzText(file.path);
-        const mrzLines = extractMrzLines(ocrText);
+        const variants = await buildMrzVariants(file.path);
+        processedPaths = variants.map((v) => v.path);
+
+        let mrzLines = null;
+        let matchedVariant = null;
+
+        for (const variant of variants) {
+          const ocrText = await readMrzText(variant.path);
+          const found = extractMrzLines(ocrText);
+
+          if (found) {
+            mrzLines = found;
+            matchedVariant = variant.label;
+            break;
+          }
+        }
 
         if (!mrzLines) {
           results.push({
@@ -33,6 +50,7 @@ router.post("/parse", upload.array("files", 100), async (req, res) => {
             success: false,
             message: "MRZ not detected",
           });
+          cleanupProcessed(processedPaths);
           safeUnlink(file.path);
           continue;
         }
@@ -45,7 +63,9 @@ router.post("/parse", upload.array("files", 100), async (req, res) => {
             success: false,
             message: "MRZ parsed but not valid",
             rawMrz: mrzLines,
+            variant: matchedVariant || null,
           });
+          cleanupProcessed(processedPaths);
           safeUnlink(file.path);
           continue;
         }
@@ -56,9 +76,11 @@ router.post("/parse", upload.array("files", 100), async (req, res) => {
           fileName: file.originalname,
           success: true,
           source: "MRZ",
+          variant: matchedVariant || null,
           row,
         });
 
+        cleanupProcessed(processedPaths);
         safeUnlink(file.path);
       } catch (err) {
         results.push({
@@ -66,6 +88,7 @@ router.post("/parse", upload.array("files", 100), async (req, res) => {
           success: false,
           message: err.message || "Failed to process file",
         });
+        cleanupProcessed(processedPaths);
         safeUnlink(file.path);
       }
     }
@@ -79,6 +102,50 @@ router.post("/parse", upload.array("files", 100), async (req, res) => {
     });
   }
 });
+
+async function buildMrzVariants(filePath) {
+  const meta = await sharp(filePath).metadata();
+  const width = meta.width || 0;
+  const height = meta.height || 0;
+
+  if (!width || !height) {
+    throw new Error("Cannot read image metadata");
+  }
+
+  const specs = [
+    { label: "bottom_40", topRatio: 0.60, heightRatio: 0.40 },
+    { label: "bottom_35", topRatio: 0.65, heightRatio: 0.35 },
+    { label: "bottom_30", topRatio: 0.70, heightRatio: 0.30 },
+    { label: "bottom_25", topRatio: 0.75, heightRatio: 0.25 },
+  ];
+
+  const out = [];
+
+  for (const spec of specs) {
+    const top = Math.max(0, Math.floor(height * spec.topRatio));
+    const cropHeight = Math.min(height - top, Math.floor(height * spec.heightRatio));
+
+    if (cropHeight < 40) continue;
+
+    const outPath = `${filePath}-${spec.label}.png`;
+
+    await sharp(filePath)
+      .extract({
+        left: 0,
+        top,
+        width,
+        height: cropHeight,
+      })
+      .grayscale()
+      .normalize()
+      .sharpen()
+      .toFile(outPath);
+
+    out.push({ label: spec.label, path: outPath });
+  }
+
+  return out;
+}
 
 async function readMrzText(filePath) {
   const { data } = await Tesseract.recognize(filePath, "eng", {
@@ -98,14 +165,27 @@ function extractMrzLines(text) {
 
   const mrzCandidates = lines.filter(
     (line) =>
-      line.length >= 40 &&
+      line.length >= 30 &&
       /^[A-Z0-9<]+$/.test(line) &&
       (line.startsWith("P<") || line.includes("<<"))
   );
 
   if (mrzCandidates.length >= 2) {
-    const lastTwo = mrzCandidates.slice(-2).map(normalizeMrzLineTD3);
-    return lastTwo;
+    return mrzCandidates.slice(-2).map(normalizeMrzLineTD3);
+  }
+
+  if (mrzCandidates.length === 1) {
+    const single = mrzCandidates[0];
+
+    const firstP = single.indexOf("P<");
+    if (firstP > 0) {
+      const maybeLine1 = single.slice(firstP);
+      const maybeLine2 = single.slice(0, firstP);
+
+      if (maybeLine1.length >= 30 && maybeLine2.length >= 30) {
+        return [normalizeMrzLineTD3(maybeLine1), normalizeMrzLineTD3(maybeLine2)];
+      }
+    }
   }
 
   return null;
@@ -168,6 +248,12 @@ function formatMrzDate(value) {
   const fullYear = yy <= currentYY + 10 ? 2000 + yy : 1900 + yy;
 
   return `${dd}.${mm}.${fullYear}`;
+}
+
+function cleanupProcessed(paths) {
+  for (const p of paths || []) {
+    safeUnlink(p);
+  }
 }
 
 function safeUnlink(filePath) {
