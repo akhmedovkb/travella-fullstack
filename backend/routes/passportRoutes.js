@@ -25,6 +25,7 @@ router.post("/parse", upload.array("files", 100), async (req, res) => {
 
     for (const file of files) {
       let processedPaths = [];
+      let debugOcr = [];
 
       try {
         const variants = await buildMrzVariants(file.path);
@@ -35,6 +36,11 @@ router.post("/parse", upload.array("files", 100), async (req, res) => {
 
         for (const variant of variants) {
           const ocrText = await readMrzText(variant.path);
+          debugOcr.push({
+            variant: variant.label,
+            text: ocrText.slice(0, 500),
+          });
+
           const found = extractMrzLines(ocrText);
 
           if (found) {
@@ -49,6 +55,7 @@ router.post("/parse", upload.array("files", 100), async (req, res) => {
             fileName: file.originalname,
             success: false,
             message: "MRZ not detected",
+            debug: debugOcr,
           });
           cleanupProcessed(processedPaths);
           safeUnlink(file.path);
@@ -64,6 +71,7 @@ router.post("/parse", upload.array("files", 100), async (req, res) => {
             message: "MRZ parsed but not valid",
             rawMrz: mrzLines,
             variant: matchedVariant || null,
+            debug: debugOcr,
           });
           cleanupProcessed(processedPaths);
           safeUnlink(file.path);
@@ -87,6 +95,7 @@ router.post("/parse", upload.array("files", 100), async (req, res) => {
           fileName: file.originalname,
           success: false,
           message: err.message || "Failed to process file",
+          debug: debugOcr,
         });
         cleanupProcessed(processedPaths);
         safeUnlink(file.path);
@@ -112,36 +121,45 @@ async function buildMrzVariants(filePath) {
     throw new Error("Cannot read image metadata");
   }
 
-  const specs = [
+  const cropSpecs = [
+    { label: "bottom_45", topRatio: 0.55, heightRatio: 0.45 },
     { label: "bottom_40", topRatio: 0.60, heightRatio: 0.40 },
     { label: "bottom_35", topRatio: 0.65, heightRatio: 0.35 },
     { label: "bottom_30", topRatio: 0.70, heightRatio: 0.30 },
-    { label: "bottom_25", topRatio: 0.75, heightRatio: 0.25 },
   ];
 
+  const rotations = [-7, -4, 0, 4, 7];
   const out = [];
 
-  for (const spec of specs) {
-    const top = Math.max(0, Math.floor(height * spec.topRatio));
-    const cropHeight = Math.min(height - top, Math.floor(height * spec.heightRatio));
+  for (const cropSpec of cropSpecs) {
+    const top = Math.max(0, Math.floor(height * cropSpec.topRatio));
+    const cropHeight = Math.min(height - top, Math.floor(height * cropSpec.heightRatio));
 
-    if (cropHeight < 40) continue;
+    if (cropHeight < 60) continue;
 
-    const outPath = `${filePath}-${spec.label}.png`;
+    for (const angle of rotations) {
+      const outPath = `${filePath}-${cropSpec.label}-rot${String(angle).replace("-", "m")}.png`;
 
-    await sharp(filePath)
-      .extract({
-        left: 0,
-        top,
-        width,
-        height: cropHeight,
-      })
-      .grayscale()
-      .normalize()
-      .sharpen()
-      .toFile(outPath);
+      await sharp(filePath)
+        .extract({
+          left: 0,
+          top,
+          width,
+          height: cropHeight,
+        })
+        .rotate(angle, { background: { r: 255, g: 255, b: 255, alpha: 1 } })
+        .resize({ width: Math.max(width * 2, 1200) })
+        .grayscale()
+        .normalize()
+        .sharpen()
+        .threshold(170)
+        .toFile(outPath);
 
-    out.push({ label: spec.label, path: outPath });
+      out.push({
+        label: `${cropSpec.label}_rot_${angle}`,
+        path: outPath,
+      });
+    }
   }
 
   return out;
@@ -165,7 +183,7 @@ function extractMrzLines(text) {
 
   const mrzCandidates = lines.filter(
     (line) =>
-      line.length >= 30 &&
+      line.length >= 25 &&
       /^[A-Z0-9<]+$/.test(line) &&
       (line.startsWith("P<") || line.includes("<<"))
   );
@@ -176,13 +194,13 @@ function extractMrzLines(text) {
 
   if (mrzCandidates.length === 1) {
     const single = mrzCandidates[0];
-
     const firstP = single.indexOf("P<");
-    if (firstP > 0) {
-      const maybeLine1 = single.slice(firstP);
-      const maybeLine2 = single.slice(0, firstP);
 
-      if (maybeLine1.length >= 30 && maybeLine2.length >= 30) {
+    if (firstP > 0) {
+      const maybeLine2 = single.slice(0, firstP);
+      const maybeLine1 = single.slice(firstP);
+
+      if (maybeLine1.length >= 25 && maybeLine2.length >= 25) {
         return [normalizeMrzLineTD3(maybeLine1), normalizeMrzLineTD3(maybeLine2)];
       }
     }
