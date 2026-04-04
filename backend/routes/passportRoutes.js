@@ -1,146 +1,183 @@
 //backend/routes/passportRoutes.js
 
 const express = require("express");
-const router = express.Router();
 const multer = require("multer");
+const fs = require("fs");
 const Tesseract = require("tesseract.js");
 const { parse } = require("mrz");
-const vision = require("@google-cloud/vision");
 
-const upload = multer({ dest: "uploads/" });
-const client = new vision.ImageAnnotatorClient();
+const router = express.Router();
 
-router.post("/parse", upload.array("files"), async (req, res) => {
+const upload = multer({
+  dest: "backend/uploads/",
+  limits: { fileSize: 15 * 1024 * 1024 },
+});
+
+router.post("/parse", upload.array("files", 100), async (req, res) => {
   try {
-    const results = [];
-
-    for (const file of req.files) {
-      let parsed = null;
-
-      // =========================
-      // 1. MRZ (БЫСТРО + БЕСПЛАТНО)
-      // =========================
-      try {
-        const { data: { text } } = await Tesseract.recognize(
-          file.path,
-          "ocrb",
-          {
-            tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<"
-          }
-        );
-
-        const mrzText = extractMRZ(text);
-
-        if (mrzText) {
-          const result = parse(mrzText);
-
-          if (result.valid) {
-            parsed = formatMRZ(result.fields);
-          }
-        }
-      } catch (e) {
-        console.log("MRZ fail:", e.message);
-      }
-
-      // =========================
-      // 2. FALLBACK → GOOGLE VISION
-      // =========================
-      if (!parsed) {
-        try {
-          const [result] = await client.textDetection(file.path);
-          const text = result.fullTextAnnotation?.text || "";
-
-          parsed = formatVision(text);
-        } catch (e) {
-          console.log("Vision fail:", e.message);
-        }
-      }
-
-      results.push(parsed || { error: "Cannot parse passport" });
+    const files = req.files || [];
+    if (!files.length) {
+      return res.status(400).json({ success: false, message: "No files uploaded" });
     }
 
-    res.json({ success: true, data: results });
+    const results = [];
 
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ success: false });
+    for (const file of files) {
+      try {
+        const ocrText = await readMrzText(file.path);
+        const mrzLines = extractMrzLines(ocrText);
+
+        if (!mrzLines) {
+          results.push({
+            fileName: file.originalname,
+            success: false,
+            message: "MRZ not detected",
+          });
+          safeUnlink(file.path);
+          continue;
+        }
+
+        const parsed = parse(mrzLines);
+
+        if (!parsed || !parsed.valid || !parsed.fields) {
+          results.push({
+            fileName: file.originalname,
+            success: false,
+            message: "MRZ parsed but not valid",
+            rawMrz: mrzLines,
+          });
+          safeUnlink(file.path);
+          continue;
+        }
+
+        const row = formatForYourTable(parsed.fields, file.originalname, mrzLines);
+
+        results.push({
+          fileName: file.originalname,
+          success: true,
+          source: "MRZ",
+          row,
+        });
+
+        safeUnlink(file.path);
+      } catch (err) {
+        results.push({
+          fileName: file.originalname,
+          success: false,
+          message: err.message || "Failed to process file",
+        });
+        safeUnlink(file.path);
+      }
+    }
+
+    return res.json({ success: true, data: results });
+  } catch (err) {
+    console.error("[passport/parse] error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
   }
 });
 
-// =========================
-// MRZ FUNCTIONS
-// =========================
+async function readMrzText(filePath) {
+  const { data } = await Tesseract.recognize(filePath, "eng", {
+    tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
+    tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<",
+    preserve_interword_spaces: "1",
+  });
 
-function extractMRZ(text) {
-  const lines = text.split("\n").map(l => l.trim());
+  return (data?.text || "").toUpperCase();
+}
 
-  const mrzLines = lines.filter(l => l.includes("<<") && l.length > 30);
+function extractMrzLines(text) {
+  const lines = String(text)
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\s+/g, "").trim())
+    .filter(Boolean);
 
-  if (mrzLines.length >= 2) {
-    return mrzLines.slice(-2);
+  const mrzCandidates = lines.filter(
+    (line) =>
+      line.length >= 40 &&
+      /^[A-Z0-9<]+$/.test(line) &&
+      (line.startsWith("P<") || line.includes("<<"))
+  );
+
+  if (mrzCandidates.length >= 2) {
+    const lastTwo = mrzCandidates.slice(-2).map(normalizeMrzLineTD3);
+    return lastTwo;
   }
 
   return null;
 }
 
-function formatMRZ(f) {
+function normalizeMrzLineTD3(line) {
+  if (line.length > 44) return line.slice(0, 44);
+  if (line.length < 44) return line.padEnd(44, "<");
+  return line;
+}
+
+function formatForYourTable(fields, fileName, rawMrz) {
+  const sex = normalizeSex(fields.sex);
+  const birthDate = formatMrzDate(fields.birthDate);
+  const expiryDate = formatMrzDate(fields.expirationDate);
+
   return {
     TYPE: "Adult",
-    TITLE: f.sex === "M" ? "MR" : "MRS",
-    FIRST_NAME: f.givenNames,
-    LAST_NAME: f.surname,
-    DOB: formatDate(f.birthDate),
-    GENDER: f.sex === "M" ? "Male" : "Female",
-    CITIZENSHIP: "TJ",
+    TITLE: sex === "Female" ? "MRS" : "MR",
+    FIRST_NAME: cleanName(fields.givenNames),
+    LAST_NAME: cleanName(fields.surname),
+    DOB: birthDate,
+    GENDER: sex,
+    CITIZENSHIP: fields.nationality || "TJ",
     DOCUMENT_TYPE: "Passport no",
-    DOCUMENT_NUMBER: f.documentNumber,
-    DOCUMENT_ISSUE_COUNTRY: "TJ",
-    NATIONALITY: "TJ",
+    DOCUMENT_NUMBER: fields.documentNumber || "",
+    DOCUMENT_ISSUE_COUNTRY: fields.issuingState || "TJ",
+    NATIONALITY: fields.nationality || "TJ",
     ISSUE_DATE: "",
-    EXPIRY_DATE: formatDate(f.expirationDate),
-    SOURCE: "MRZ"
+    EXPIRY_DATE: expiryDate,
+    _meta: {
+      fileName,
+      rawMrz,
+    },
   };
 }
 
-// =========================
-// GOOGLE VISION PARSER
-// =========================
-
-function formatVision(text) {
-  const nameMatch = text.match(/Surname[:\s]+([A-Z]+)/i);
-  const firstMatch = text.match(/Given Names[:\s]+([A-Z]+)/i);
-
-  const passport = text.match(/[A-Z]{2}\d{6,7}/)?.[0] || "";
-  const dates = text.match(/\d{2}\.\d{2}\.\d{4}/g) || [];
-
-  return {
-    TYPE: "Adult",
-    TITLE: "MR",
-    FIRST_NAME: firstMatch?.[1] || "",
-    LAST_NAME: nameMatch?.[1] || "",
-    DOB: dates[0] || "",
-    GENDER: text.includes("F") ? "Female" : "Male",
-    CITIZENSHIP: "TJ",
-    DOCUMENT_TYPE: "Passport no",
-    DOCUMENT_NUMBER: passport,
-    DOCUMENT_ISSUE_COUNTRY: "TJ",
-    NATIONALITY: "TJ",
-    ISSUE_DATE: dates[1] || "",
-    EXPIRY_DATE: dates[2] || "",
-    SOURCE: "VISION"
-  };
+function cleanName(value) {
+  return String(value || "")
+    .replace(/</g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
-// =========================
+function normalizeSex(value) {
+  if (value === "F") return "Female";
+  if (value === "M") return "Male";
+  return "";
+}
 
-function formatDate(dateStr) {
-  if (!dateStr) return "";
+function formatMrzDate(value) {
+  const v = String(value || "").trim();
+  if (!/^\d{6}$/.test(v)) return "";
 
-  const year = "20" + dateStr.slice(0, 2);
-  const month = dateStr.slice(2, 4);
-  const day = dateStr.slice(4, 6);
+  const yy = Number(v.slice(0, 2));
+  const mm = v.slice(2, 4);
+  const dd = v.slice(4, 6);
 
-  return `${day}.${month}.${year}`;
+  const currentYY = Number(new Date().getFullYear().toString().slice(-2));
+  const fullYear = yy <= currentYY + 10 ? 2000 + yy : 1900 + yy;
+
+  return `${dd}.${mm}.${fullYear}`;
+}
+
+function safeUnlink(filePath) {
+  try {
+    if (filePath && fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+  } catch (e) {
+    console.warn("[passport/parse] failed to delete temp file:", e.message);
+  }
 }
 
 module.exports = router;
