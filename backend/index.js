@@ -36,6 +36,7 @@ const adminClientsRoutes = require("./routes/adminClientsRoutes");
 const adminUnlockNudgeRoutes = require("./routes/adminUnlockNudgeRoutes");
 const adminUnlockFunnelRoutes = require("./routes/adminUnlockFunnelRoutes");
 const adminPaymePaymentsRoutes = require("./routes/adminPaymePaymentsRoutes");
+const passportRoutes = require("./routes/passportRoutes");
 
 dotenv.config();
 const app = express();
@@ -977,3 +978,6 @@ app.listen(PORT, () => {
   console.log("[CORS] allowed:", Array.from(WHITELIST));
   console.log(`🚀 Сервер запущен на порту ${PORT}`);
 });
+
+/** ===================== UTILS ===================== */
+app.use("/api/passport", passportRoutes);
