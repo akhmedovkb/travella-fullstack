@@ -206,6 +206,8 @@ export default function Header() {
 
   const [servicesOpen, setServicesOpen] = useState(false);
   const servicesRef = useRef(null);
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const toolsRef = useRef(null);
 
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -250,6 +252,9 @@ export default function Header() {
       }
       if (servicesRef.current && !servicesRef.current.contains(e.target)) {
         setServicesOpen(false);
+      }
+      if (toolsRef.current && !toolsRef.current.contains(e.target)) {
+        setToolsOpen(false);
       }
     };
     document.addEventListener("mousedown", onDoc);
@@ -392,11 +397,12 @@ export default function Header() {
   const providerRequests = (counts?.requests_open || 0) + (counts?.requests_accepted || 0);
   const bookingsBadge = (counts?.bookings_pending ?? counts?.bookings_total ?? 0) || 0;
 
-  // close mobile & dropdowns on route change
+  // close mobile & s on route change
   useEffect(() => {
     setMobileOpen(false);
     setAdminOpen(false);
     setServicesOpen(false);
+    setToolsOpen(false);
     setDonasOpen(false);
     setDonasMobileOpen(false);
   }, [location]);
@@ -404,6 +410,7 @@ export default function Header() {
   // активен ли блок "Услуги"
   const servicesActive =
     location.pathname.startsWith("/dashboard/services/") || location.pathname === "/dashboard/calendar";
+  const toolsActive = location.pathname.startsWith("/dashboard/passport-parser");
 
   // активен ли DONA'S DOSAS
   const donasActive = location.pathname.startsWith("/admin/donas-dosas/");
@@ -441,8 +448,46 @@ export default function Header() {
             {/* Продукты */}
             <nav className="hidden md:flex items-center gap-2 lg:gap-3">
               <NavItemDark to="/" label="MARKETPLACE" end />
-              {role === "provider" && <NavItemDark to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />}
-              <NavItemDark to="/hotels" label={t("nav.hotels", "Отели")} icon={<IconHotel />} />
+              {role === "provider" && (
+                <NavItemDark
+                  to="/tour-builder"
+                  label={t("nav.tour_builder", "Tour Builder")}
+                />
+              )}
+
+              {role === "provider" && (
+                <div className="relative" ref={toolsRef}>
+                  <button
+                    type="button"
+                    onClick={() => setToolsOpen((v) => !v)}
+                    className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full text-sm transition ${
+                      toolsOpen || toolsActive
+                        ? "bg-white/10 text-white"
+                        : "text-white/80 hover:text-white hover:bg-white/10"
+                    }`}
+                  >
+                    <IconDoc />
+                    <span>Инструменты</span>
+                    <IconChevron className={`transition ${toolsOpen ? "rotate-180" : ""}`} />
+                  </button>
+
+                  {toolsOpen && (
+                    <div className="absolute left-0 mt-2 w-64 rounded-2xl bg-[#171717] ring-1 ring-white/10 shadow-xl overflow-hidden z-30">
+                      <DropdownItem
+                        to="/dashboard/passport-parser"
+                        label="Pasport Parser"
+                        icon={<IconDoc />}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <NavItemDark
+                to="/hotels"
+                label={t("nav.hotels", "Отели")}
+                icon={<IconHotel />}
+              />
             </nav>
 
             {/* Admin Desktop */}
@@ -688,8 +733,27 @@ export default function Header() {
 
             <RowGroupDark title={t("nav.products", "Продукты")}>
               <NavItemMobileDark to="/marketplace" label="MARKETPLACE" />
-              {role === "provider" && <NavItemMobileDark to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />}
-              <NavItemMobileDark to="/hotels" label={t("nav.hotels", "Отели")} icon={<IconHotel />} />
+
+              {role === "provider" && (
+                <NavItemMobileDark
+                  to="/tour-builder"
+                  label={t("nav.tour_builder", "Tour Builder")}
+                />
+              )}
+
+              {role === "provider" && (
+                <NavItemMobileDark
+                  to="/dashboard/passport-parser"
+                  label="Pasport Parser"
+                  icon={<IconDoc />}
+                />
+              )}
+
+              <NavItemMobileDark
+                to="/hotels"
+                label={t("nav.hotels", "Отели")}
+                icon={<IconHotel />}
+              />
             </RowGroupDark>
 
             {isAdmin && (
