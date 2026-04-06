@@ -24,8 +24,10 @@ const emptyAgentForm = {
   address: "",
 };
 
+const todayIso = new Date().toISOString().slice(0, 10);
+
 const emptySaleForm = {
-  sale_date: new Date().toISOString().slice(0, 10),
+  sale_date: todayIso,
   agent_id: "",
   service_type: "airticket",
   direction: "",
@@ -130,6 +132,8 @@ export default function AdminTravelSales() {
   const [balanceDateTo, setBalanceDateTo] = useState("");
   const [balanceServiceType, setBalanceServiceType] = useState("");
   const [paymentDrafts, setPaymentDrafts] = useState({});
+  const [paymentDateDrafts, setPaymentDateDrafts] = useState({});
+  const [commentDrafts, setCommentDrafts] = useState({});
   const [paymentSavingId, setPaymentSavingId] = useState(null);
 
   async function loadAgents() {
@@ -207,11 +211,19 @@ export default function AdminTravelSales() {
       const rows = Array.isArray(res?.rows) ? res.rows : [];
       setBalanceReport(rows);
 
-      const drafts = {};
+      const paymentMap = {};
+      const paymentDateMap = {};
+      const commentMap = {};
+
       rows.forEach((r) => {
-        drafts[r.id] = num(r.payment);
+        paymentMap[r.id] = num(r.payment);
+        paymentDateMap[r.id] = iso(r.payment_date) || todayIso;
+        commentMap[r.id] = r.comment || "";
       });
-      setPaymentDrafts(drafts);
+
+      setPaymentDrafts(paymentMap);
+      setPaymentDateDrafts(paymentDateMap);
+      setCommentDrafts(commentMap);
     } catch (e) {
       console.error(e);
       tError(e?.message || "Не удалось загрузить баланс агентов");
@@ -406,11 +418,16 @@ export default function AdminTravelSales() {
   async function handleSavePayment(rowId) {
     try {
       setPaymentSavingId(rowId);
-      const payment = Number(paymentDrafts[rowId] || 0);
+
+      const payload = {
+        payment: Number(paymentDrafts[rowId] || 0),
+        payment_date: paymentDateDrafts[rowId] || todayIso,
+        comment: commentDrafts[rowId] || "",
+      };
 
       await apiPut(
         `/api/admin/travel-sales/daily-sales/${rowId}/payment`,
-        { payment },
+        payload,
         "admin"
       );
 
@@ -463,9 +480,10 @@ export default function AdminTravelSales() {
         "Направление": row.direction || "",
         "Name of traveller": row.traveller_name || "",
         "Сумма продажи": Number(row.sale_amount || 0),
-        "Сумма нетто": Number(row.net_amount || 0),
         "Оплата": Number(row.payment || 0),
+        "Дата оплаты": iso(row.payment_date) || "",
         "Баланс": Number(row.balance || 0),
+        "Комментарий": row.comment || "",
       }))
     );
   }
@@ -979,12 +997,12 @@ export default function AdminTravelSales() {
                       </td>
                     </tr>
                   ) : salesReport.length === 0 ? (
-                    <tr>
-                      <td className="px-3 py-6 text-gray-500" colSpan={9}>
-                        Нет данных
-                      </td>
-                    </tr>
-                  ) : (
+                      <tr>
+                        <td className="px-3 py-6 text-gray-500" colSpan={9}>
+                          Нет данных
+                        </td>
+                      </tr>
+                    ) : (
                     salesReport.map((row, idx) => (
                       <tr key={row.id} className="border-b">
                         <td className="px-3 py-2">{idx + 1}</td>
@@ -1088,26 +1106,28 @@ export default function AdminTravelSales() {
                     <th className="px-3 py-2">Name of traveller</th>
                     <th className="px-3 py-2">Сумма продажи</th>
                     <th className="px-3 py-2">Оплата</th>
+                    <th className="px-3 py-2">Дата оплаты</th>
                     <th className="px-3 py-2">Баланс</th>
+                    <th className="px-3 py-2">Комментарий</th>
                     <th className="px-3 py-2">Сохранить</th>
                   </tr>
                 </thead>
                 <tbody>
                   {balanceLoading ? (
                     <tr>
-                      <td className="px-3 py-6 text-gray-500" colSpan={10}>
+                      <td className="px-3 py-6 text-gray-500" colSpan={12}>
                         Загрузка...
                       </td>
                     </tr>
                   ) : balanceReport.length === 0 ? (
                     <tr>
-                      <td className="px-3 py-6 text-gray-500" colSpan={10}>
+                      <td className="px-3 py-6 text-gray-500" colSpan={12}>
                         Нет данных
                       </td>
                     </tr>
                   ) : (
                     balanceReport.map((row, idx) => (
-                      <tr key={row.id} className="border-b">
+                      <tr key={row.id} className="border-b align-top">
                         <td className="px-3 py-2">{idx + 1}</td>
                         <td className="px-3 py-2">{iso(row.sale_date)}</td>
                         <td className="px-3 py-2">{row.agent}</td>
@@ -1118,10 +1138,23 @@ export default function AdminTravelSales() {
                         <td className="px-3 py-2">
                           <input
                             type="number"
-                            className="w-32 border rounded-lg px-3 py-2"
+                            className="w-28 border rounded-lg px-3 py-2"
                             value={paymentDrafts[row.id] ?? ""}
                             onChange={(e) =>
                               setPaymentDrafts((p) => ({
+                                ...p,
+                                [row.id]: e.target.value,
+                              }))
+                            }
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            type="date"
+                            className="w-40 border rounded-lg px-3 py-2"
+                            value={paymentDateDrafts[row.id] || todayIso}
+                            onChange={(e) =>
+                              setPaymentDateDrafts((p) => ({
                                 ...p,
                                 [row.id]: e.target.value,
                               }))
@@ -1136,6 +1169,20 @@ export default function AdminTravelSales() {
                           }`}
                         >
                           {money(row.balance)}
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            type="text"
+                            className="w-52 border rounded-lg px-3 py-2"
+                            value={commentDrafts[row.id] ?? ""}
+                            onChange={(e) =>
+                              setCommentDrafts((p) => ({
+                                ...p,
+                                [row.id]: e.target.value,
+                              }))
+                            }
+                            placeholder="Комментарий"
+                          />
                         </td>
                         <td className="px-3 py-2">
                           <button
