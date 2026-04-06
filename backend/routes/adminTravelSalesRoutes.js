@@ -29,6 +29,7 @@ router.get("/daily-sales", authenticateToken, requireAdmin, getDailySales);
 router.post("/daily-sales", authenticateToken, requireAdmin, createDailySale);
 router.put("/daily-sales/:id", authenticateToken, requireAdmin, updateDailySale);
 router.delete("/daily-sales/:id", authenticateToken, requireAdmin, deleteDailySale);
+
 router.put("/daily-sales/:id/payment", authenticateToken, requireAdmin, updatePayment);
 
 router.get("/reports/sales", authenticateToken, requireAdmin, getSalesReport);
