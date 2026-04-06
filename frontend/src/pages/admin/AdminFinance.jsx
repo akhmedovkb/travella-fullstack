@@ -11,6 +11,7 @@ import AdminUnlockNudgeAnalytics from "./AdminUnlockNudgeAnalytics";
 import PaymeDashboard from "./PaymeDashboard";
 import AdminPaymeEvents from "./AdminPaymeEvents";
 import PaymePayments from "./PaymePayments";
+import AdminTravelSales from "./AdminTravelSales";
 
 const VALID_TABS = new Set([
   "clients",
@@ -21,6 +22,7 @@ const VALID_TABS = new Set([
   "audit",
   "health",
   "payments",
+  "travel",
 ]);
 
 function normalizeTab(x) {
@@ -68,6 +70,7 @@ export default function AdminFinance() {
           <TabBtn id="audit">Audit</TabBtn>
           <TabBtn id="health">Health</TabBtn>
           <TabBtn id="payments">Payments</TabBtn>
+          <TabBtn id="travel">Travel Sales</TabBtn>
         </div>
       </div>
 
@@ -79,6 +82,7 @@ export default function AdminFinance() {
       {tab === "audit" && <AdminBilling />}
       {tab === "health" && <AdminPaymeHealth />}
       {tab === "payments" && <PaymePayments />}
+      {tab === "travel" && <AdminTravelSales />}
     </div>
   );
 }
