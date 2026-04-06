@@ -24,6 +24,10 @@ function validateDate(v) {
   return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
 }
 
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 function normalizeServiceType(v) {
   const s = toStr(v).toLowerCase();
   if (["airticket", "visa", "tourpackage"].includes(s)) return s;
@@ -53,6 +57,8 @@ async function ensureTables() {
       sale_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
       net_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
       payment NUMERIC(14,2) NOT NULL DEFAULT 0,
+      payment_date DATE NOT NULL DEFAULT CURRENT_DATE,
+      comment TEXT NOT NULL DEFAULT '',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
@@ -66,6 +72,16 @@ async function ensureTables() {
   await db.query(`
     ALTER TABLE travel_daily_sales
     ADD COLUMN IF NOT EXISTS traveller_name TEXT NOT NULL DEFAULT '';
+  `);
+
+  await db.query(`
+    ALTER TABLE travel_daily_sales
+    ADD COLUMN IF NOT EXISTS payment_date DATE NOT NULL DEFAULT CURRENT_DATE;
+  `);
+
+  await db.query(`
+    ALTER TABLE travel_daily_sales
+    ADD COLUMN IF NOT EXISTS comment TEXT NOT NULL DEFAULT '';
   `);
 
   await db.query(`
@@ -273,6 +289,8 @@ async function getDailySales(req, res) {
         s.sale_amount,
         s.net_amount,
         s.payment,
+        s.payment_date,
+        s.comment,
         s.created_at,
         s.updated_at
       FROM travel_daily_sales s
@@ -356,7 +374,10 @@ async function createDailySale(req, res) {
         direction,
         traveller_name,
         sale_amount,
-        net_amount
+        net_amount,
+        payment,
+        payment_date,
+        comment
       )
       VALUES (
         COALESCE($1::date, CURRENT_DATE),
@@ -365,7 +386,10 @@ async function createDailySale(req, res) {
         $4,
         $5,
         $6,
-        $7
+        $7,
+        0,
+        CURRENT_DATE,
+        ''
       )
       RETURNING
         id,
@@ -377,6 +401,8 @@ async function createDailySale(req, res) {
         sale_amount,
         net_amount,
         payment,
+        payment_date,
+        comment,
         created_at,
         updated_at
       `,
@@ -466,6 +492,8 @@ async function updateDailySale(req, res) {
         sale_amount,
         net_amount,
         payment,
+        payment_date,
+        comment,
         created_at,
         updated_at
       `,
@@ -518,6 +546,8 @@ async function updatePayment(req, res) {
 
     const id = Number(req.params?.id);
     const payment = toNum(req.body?.payment);
+    const paymentDate = validateDate(req.body?.payment_date) || todayIso();
+    const comment = toStr(req.body?.comment);
 
     if (!Number.isFinite(id) || id <= 0) {
       return res.status(400).json({ ok: false, message: "Bad id" });
@@ -532,8 +562,10 @@ async function updatePayment(req, res) {
       UPDATE travel_daily_sales
       SET
         payment = $1,
+        payment_date = $2::date,
+        comment = $3,
         updated_at = NOW()
-      WHERE id = $2
+      WHERE id = $4
       RETURNING
         id,
         sale_date,
@@ -544,10 +576,12 @@ async function updatePayment(req, res) {
         sale_amount,
         net_amount,
         payment,
+        payment_date,
+        comment,
         created_at,
         updated_at
       `,
-      [payment, id]
+      [payment, paymentDate, comment, id]
     );
 
     if (!rows.length) {
@@ -647,6 +681,8 @@ async function getAgentBalanceReport(req, res) {
           s.sale_amount,
           s.net_amount,
           s.payment,
+          s.payment_date,
+          s.comment,
           SUM(COALESCE(s.sale_amount, 0) - COALESCE(s.payment, 0))
             OVER (
               PARTITION BY s.agent_id
@@ -671,6 +707,8 @@ async function getAgentBalanceReport(req, res) {
         sale_amount,
         net_amount,
         payment,
+        payment_date,
+        comment,
         balance
       FROM base
       ORDER BY sale_date DESC, id DESC
