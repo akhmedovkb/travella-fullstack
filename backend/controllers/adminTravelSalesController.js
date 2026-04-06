@@ -18,6 +18,18 @@ function clampInt(v, def, min, max) {
   return Math.max(min, Math.min(max, i));
 }
 
+function validateDate(v) {
+  const s = toStr(v);
+  if (!s) return null;
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+}
+
+function normalizeServiceType(v) {
+  const s = toStr(v).toLowerCase();
+  if (["airticket", "visa", "tourpackage"].includes(s)) return s;
+  return "";
+}
+
 async function ensureTables() {
   await db.query(`
     CREATE TABLE IF NOT EXISTS travel_agents (
@@ -35,13 +47,25 @@ async function ensureTables() {
       id BIGSERIAL PRIMARY KEY,
       sale_date DATE NOT NULL DEFAULT CURRENT_DATE,
       agent_id BIGINT NOT NULL REFERENCES travel_agents(id) ON DELETE RESTRICT,
+      service_type TEXT NOT NULL DEFAULT '',
       direction TEXT NOT NULL DEFAULT '',
+      traveller_name TEXT NOT NULL DEFAULT '',
       sale_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
       net_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
       payment NUMERIC(14,2) NOT NULL DEFAULT 0,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+  `);
+
+  await db.query(`
+    ALTER TABLE travel_daily_sales
+    ADD COLUMN IF NOT EXISTS service_type TEXT NOT NULL DEFAULT '';
+  `);
+
+  await db.query(`
+    ALTER TABLE travel_daily_sales
+    ADD COLUMN IF NOT EXISTS traveller_name TEXT NOT NULL DEFAULT '';
   `);
 
   await db.query(`
@@ -53,12 +77,11 @@ async function ensureTables() {
     CREATE INDEX IF NOT EXISTS idx_travel_daily_sales_sale_date
     ON travel_daily_sales(sale_date);
   `);
-}
 
-function validateDate(v) {
-  const s = toStr(v);
-  if (!s) return null;
-  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS idx_travel_daily_sales_service_type
+    ON travel_daily_sales(service_type);
+  `);
 }
 
 /**
@@ -235,6 +258,7 @@ async function getDailySales(req, res) {
     const agentId = req.query.agent_id ? Number(req.query.agent_id) : null;
     const dateFrom = validateDate(req.query.date_from);
     const dateTo = validateDate(req.query.date_to);
+    const serviceType = normalizeServiceType(req.query.service_type);
 
     const { rows } = await db.query(
       `
@@ -243,7 +267,9 @@ async function getDailySales(req, res) {
         s.sale_date,
         s.agent_id,
         a.name AS agent_name,
+        s.service_type,
         s.direction,
+        s.traveller_name,
         s.sale_amount,
         s.net_amount,
         s.payment,
@@ -254,13 +280,15 @@ async function getDailySales(req, res) {
       WHERE ($1::bigint IS NULL OR s.agent_id = $1)
         AND ($2::date IS NULL OR s.sale_date >= $2::date)
         AND ($3::date IS NULL OR s.sale_date <= $3::date)
+        AND ($4::text = '' OR s.service_type = $4)
       ORDER BY s.sale_date DESC, s.id DESC
-      LIMIT $4 OFFSET $5
+      LIMIT $5 OFFSET $6
       `,
       [
         Number.isFinite(agentId) ? agentId : null,
         dateFrom,
         dateTo,
+        serviceType,
         limit,
         offset,
       ]
@@ -284,12 +312,18 @@ async function createDailySale(req, res) {
 
     const saleDate = validateDate(req.body?.sale_date) || null;
     const agentId = Number(req.body?.agent_id);
+    const serviceType = normalizeServiceType(req.body?.service_type);
     const direction = toStr(req.body?.direction);
+    const travellerName = toStr(req.body?.traveller_name);
     const saleAmount = toNum(req.body?.sale_amount);
     const netAmount = toNum(req.body?.net_amount);
 
     if (!Number.isFinite(agentId) || agentId <= 0) {
       return res.status(400).json({ ok: false, message: "agent_id is required" });
+    }
+
+    if (!serviceType) {
+      return res.status(400).json({ ok: false, message: "service_type is required" });
     }
 
     if (!direction) {
@@ -318,7 +352,9 @@ async function createDailySale(req, res) {
       INSERT INTO travel_daily_sales (
         sale_date,
         agent_id,
+        service_type,
         direction,
+        traveller_name,
         sale_amount,
         net_amount
       )
@@ -327,20 +363,24 @@ async function createDailySale(req, res) {
         $2,
         $3,
         $4,
-        $5
+        $5,
+        $6,
+        $7
       )
       RETURNING
         id,
         sale_date,
         agent_id,
+        service_type,
         direction,
+        traveller_name,
         sale_amount,
         net_amount,
         payment,
         created_at,
         updated_at
       `,
-      [saleDate, agentId, direction, saleAmount, netAmount]
+      [saleDate, agentId, serviceType, direction, travellerName, saleAmount, netAmount]
     );
 
     return res.json({
@@ -360,7 +400,9 @@ async function updateDailySale(req, res) {
     const id = Number(req.params?.id);
     const saleDate = validateDate(req.body?.sale_date);
     const agentId = Number(req.body?.agent_id);
+    const serviceType = normalizeServiceType(req.body?.service_type);
     const direction = toStr(req.body?.direction);
+    const travellerName = toStr(req.body?.traveller_name);
     const saleAmount = toNum(req.body?.sale_amount);
     const netAmount = toNum(req.body?.net_amount);
 
@@ -374,6 +416,10 @@ async function updateDailySale(req, res) {
 
     if (!saleDate) {
       return res.status(400).json({ ok: false, message: "sale_date is required" });
+    }
+
+    if (!serviceType) {
+      return res.status(400).json({ ok: false, message: "service_type is required" });
     }
 
     if (!direction) {
@@ -403,23 +449,27 @@ async function updateDailySale(req, res) {
       SET
         sale_date = $1::date,
         agent_id = $2,
-        direction = $3,
-        sale_amount = $4,
-        net_amount = $5,
+        service_type = $3,
+        direction = $4,
+        traveller_name = $5,
+        sale_amount = $6,
+        net_amount = $7,
         updated_at = NOW()
-      WHERE id = $6
+      WHERE id = $8
       RETURNING
         id,
         sale_date,
         agent_id,
+        service_type,
         direction,
+        traveller_name,
         sale_amount,
         net_amount,
         payment,
         created_at,
         updated_at
       `,
-      [saleDate, agentId, direction, saleAmount, netAmount, id]
+      [saleDate, agentId, serviceType, direction, travellerName, saleAmount, netAmount, id]
     );
 
     if (!rows.length) {
@@ -488,7 +538,9 @@ async function updatePayment(req, res) {
         id,
         sale_date,
         agent_id,
+        service_type,
         direction,
+        traveller_name,
         sale_amount,
         net_amount,
         payment,
@@ -525,6 +577,7 @@ async function getSalesReport(req, res) {
     const agentId = req.query.agent_id ? Number(req.query.agent_id) : null;
     const dateFrom = validateDate(req.query.date_from);
     const dateTo = validateDate(req.query.date_to);
+    const serviceType = normalizeServiceType(req.query.service_type);
 
     const { rows } = await db.query(
       `
@@ -532,7 +585,9 @@ async function getSalesReport(req, res) {
         s.id,
         s.sale_date,
         a.name AS agent,
+        s.service_type,
         s.direction,
+        s.traveller_name,
         s.sale_amount,
         s.net_amount,
         (s.sale_amount - s.net_amount) AS margin
@@ -541,13 +596,15 @@ async function getSalesReport(req, res) {
       WHERE ($1::bigint IS NULL OR s.agent_id = $1)
         AND ($2::date IS NULL OR s.sale_date >= $2::date)
         AND ($3::date IS NULL OR s.sale_date <= $3::date)
+        AND ($4::text = '' OR s.service_type = $4)
       ORDER BY s.sale_date DESC, s.id DESC
-      LIMIT $4 OFFSET $5
+      LIMIT $5 OFFSET $6
       `,
       [
         Number.isFinite(agentId) ? agentId : null,
         dateFrom,
         dateTo,
+        serviceType,
         limit,
         offset,
       ]
@@ -574,6 +631,7 @@ async function getAgentBalanceReport(req, res) {
     const agentId = req.query.agent_id ? Number(req.query.agent_id) : null;
     const dateFrom = validateDate(req.query.date_from);
     const dateTo = validateDate(req.query.date_to);
+    const serviceType = normalizeServiceType(req.query.service_type);
 
     const { rows } = await db.query(
       `
@@ -583,7 +641,9 @@ async function getAgentBalanceReport(req, res) {
           s.sale_date,
           s.agent_id,
           a.name AS agent,
+          s.service_type,
           s.direction,
+          s.traveller_name,
           s.sale_amount,
           s.net_amount,
           s.payment,
@@ -598,25 +658,29 @@ async function getAgentBalanceReport(req, res) {
         WHERE ($1::bigint IS NULL OR s.agent_id = $1)
           AND ($2::date IS NULL OR s.sale_date >= $2::date)
           AND ($3::date IS NULL OR s.sale_date <= $3::date)
+          AND ($4::text = '' OR s.service_type = $4)
       )
       SELECT
         id,
         sale_date,
         agent_id,
         agent,
+        service_type,
         direction,
+        traveller_name,
         sale_amount,
         net_amount,
         payment,
         balance
       FROM base
       ORDER BY sale_date DESC, id DESC
-      LIMIT $4 OFFSET $5
+      LIMIT $5 OFFSET $6
       `,
       [
         Number.isFinite(agentId) ? agentId : null,
         dateFrom,
         dateTo,
+        serviceType,
         limit,
         offset,
       ]
