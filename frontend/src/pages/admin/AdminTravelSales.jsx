@@ -1,8 +1,22 @@
 //frontend/src/pages/admin/AdminTravelSales.jsx
 
 import React, { useEffect, useMemo, useState } from "react";
+import * as XLSX from "xlsx";
+import { saveAs } from "file-saver";
 import { apiDelete, apiGet, apiPost, apiPut } from "../../api";
 import { tError, tSuccess } from "../../shared/toast";
+
+const SERVICE_TYPE_OPTIONS = [
+  { value: "airticket", label: "Авиабилет" },
+  { value: "visa", label: "Виза" },
+  { value: "tourpackage", label: "Турпакет" },
+];
+
+const SERVICE_TYPE_LABELS = {
+  airticket: "Авиабилет",
+  visa: "Виза",
+  tourpackage: "Турпакет",
+};
 
 const emptyAgentForm = {
   name: "",
@@ -13,7 +27,9 @@ const emptyAgentForm = {
 const emptySaleForm = {
   sale_date: new Date().toISOString().slice(0, 10),
   agent_id: "",
+  service_type: "airticket",
   direction: "",
+  traveller_name: "",
   sale_amount: "",
   net_amount: "",
 };
@@ -43,6 +59,10 @@ function clsTab(active) {
     : "px-3 py-2 rounded-lg border bg-white text-sm";
 }
 
+function typeLabel(v) {
+  return SERVICE_TYPE_LABELS[v] || "—";
+}
+
 function Card({ title, children, right }) {
   return (
     <div className="bg-white rounded-2xl shadow-sm border p-4 md:p-5">
@@ -65,6 +85,19 @@ function StatCard({ title, value, hint }) {
   );
 }
 
+function exportToExcel(filename, rows) {
+  const worksheet = XLSX.utils.json_to_sheet(rows);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Report");
+  const wbout = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+  saveAs(
+    new Blob([wbout], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    }),
+    filename
+  );
+}
+
 export default function AdminTravelSales() {
   const [tab, setTab] = useState("agents");
 
@@ -81,18 +114,21 @@ export default function AdminTravelSales() {
   const [dailyFilterAgentId, setDailyFilterAgentId] = useState("");
   const [dailyDateFrom, setDailyDateFrom] = useState("");
   const [dailyDateTo, setDailyDateTo] = useState("");
+  const [dailyServiceType, setDailyServiceType] = useState("");
 
   const [salesReport, setSalesReport] = useState([]);
   const [salesReportLoading, setSalesReportLoading] = useState(false);
   const [salesAgentId, setSalesAgentId] = useState("");
   const [salesDateFrom, setSalesDateFrom] = useState("");
   const [salesDateTo, setSalesDateTo] = useState("");
+  const [salesServiceType, setSalesServiceType] = useState("");
 
   const [balanceReport, setBalanceReport] = useState([]);
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [balanceAgentId, setBalanceAgentId] = useState("");
   const [balanceDateFrom, setBalanceDateFrom] = useState("");
   const [balanceDateTo, setBalanceDateTo] = useState("");
+  const [balanceServiceType, setBalanceServiceType] = useState("");
   const [paymentDrafts, setPaymentDrafts] = useState({});
   const [paymentSavingId, setPaymentSavingId] = useState(null);
 
@@ -121,6 +157,7 @@ export default function AdminTravelSales() {
       if (dailyFilterAgentId) q.set("agent_id", dailyFilterAgentId);
       if (dailyDateFrom) q.set("date_from", dailyDateFrom);
       if (dailyDateTo) q.set("date_to", dailyDateTo);
+      if (dailyServiceType) q.set("service_type", dailyServiceType);
 
       const res = await apiGet(`/api/admin/travel-sales/daily-sales?${q.toString()}`, "admin");
       setDailySales(Array.isArray(res?.rows) ? res.rows : []);
@@ -140,6 +177,7 @@ export default function AdminTravelSales() {
       if (salesAgentId) q.set("agent_id", salesAgentId);
       if (salesDateFrom) q.set("date_from", salesDateFrom);
       if (salesDateTo) q.set("date_to", salesDateTo);
+      if (salesServiceType) q.set("service_type", salesServiceType);
 
       const res = await apiGet(`/api/admin/travel-sales/reports/sales?${q.toString()}`, "admin");
       setSalesReport(Array.isArray(res?.rows) ? res.rows : []);
@@ -159,6 +197,7 @@ export default function AdminTravelSales() {
       if (balanceAgentId) q.set("agent_id", balanceAgentId);
       if (balanceDateFrom) q.set("date_from", balanceDateFrom);
       if (balanceDateTo) q.set("date_to", balanceDateTo);
+      if (balanceServiceType) q.set("service_type", balanceServiceType);
 
       const res = await apiGet(
         `/api/admin/travel-sales/reports/agent-balance?${q.toString()}`,
@@ -186,10 +225,22 @@ export default function AdminTravelSales() {
   }, []);
 
   useEffect(() => {
-    if (tab === "daily") loadDailySales();
-    if (tab === "sales") loadSalesReport();
-    if (tab === "balance") loadBalanceReport();
-  }, [tab]);
+    if (tab === "daily") {
+      loadDailySales();
+    }
+  }, [tab, dailyFilterAgentId, dailyDateFrom, dailyDateTo, dailyServiceType]);
+
+  useEffect(() => {
+    if (tab === "sales") {
+      loadSalesReport();
+    }
+  }, [tab, salesAgentId, salesDateFrom, salesDateTo, salesServiceType]);
+
+  useEffect(() => {
+    if (tab === "balance") {
+      loadBalanceReport();
+    }
+  }, [tab, balanceAgentId, balanceDateFrom, balanceDateTo, balanceServiceType]);
 
   const totalSales = useMemo(
     () => salesReport.reduce((s, r) => s + Number(r.sale_amount || 0), 0),
@@ -277,7 +328,9 @@ export default function AdminTravelSales() {
       const payload = {
         sale_date: saleForm.sale_date,
         agent_id: Number(saleForm.agent_id),
+        service_type: String(saleForm.service_type || "").trim(),
         direction: String(saleForm.direction || "").trim(),
+        traveller_name: String(saleForm.traveller_name || "").trim(),
         sale_amount: Number(saleForm.sale_amount || 0),
         net_amount: Number(saleForm.net_amount || 0),
       };
@@ -288,6 +341,10 @@ export default function AdminTravelSales() {
       }
       if (!payload.sale_date) {
         tError("Укажи дату");
+        return;
+      }
+      if (!payload.service_type) {
+        tError("Выбери тип услуги");
         return;
       }
       if (!payload.direction) {
@@ -319,7 +376,9 @@ export default function AdminTravelSales() {
     setSaleForm({
       sale_date: iso(row.sale_date),
       agent_id: String(row.agent_id || ""),
+      service_type: row.service_type || "airticket",
       direction: row.direction || "",
+      traveller_name: row.traveller_name || "",
       sale_amount: num(row.sale_amount),
       net_amount: num(row.net_amount),
     });
@@ -364,6 +423,51 @@ export default function AdminTravelSales() {
     } finally {
       setPaymentSavingId(null);
     }
+  }
+
+  function exportSalesReport() {
+    if (!salesReport.length) {
+      tError("Нет данных для экспорта");
+      return;
+    }
+
+    exportToExcel(
+      `travel-sales-report-${new Date().toISOString().slice(0, 10)}.xlsx`,
+      salesReport.map((row, idx) => ({
+        "№": idx + 1,
+        "Дата": iso(row.sale_date),
+        "Агент": row.agent,
+        "Тип услуги": typeLabel(row.service_type),
+        "Направление": row.direction || "",
+        "Name of traveller": row.traveller_name || "",
+        "Сумма продажи": Number(row.sale_amount || 0),
+        "Сумма нетто": Number(row.net_amount || 0),
+        "Маржа": Number(row.margin || 0),
+      }))
+    );
+  }
+
+  function exportBalanceReport() {
+    if (!balanceReport.length) {
+      tError("Нет данных для экспорта");
+      return;
+    }
+
+    exportToExcel(
+      `travel-agent-balance-${new Date().toISOString().slice(0, 10)}.xlsx`,
+      balanceReport.map((row, idx) => ({
+        "№": idx + 1,
+        "Дата": iso(row.sale_date),
+        "Агент": row.agent,
+        "Тип услуги": typeLabel(row.service_type),
+        "Направление": row.direction || "",
+        "Name of traveller": row.traveller_name || "",
+        "Сумма продажи": Number(row.sale_amount || 0),
+        "Сумма нетто": Number(row.net_amount || 0),
+        "Оплата": Number(row.payment || 0),
+        "Баланс": Number(row.balance || 0),
+      }))
+    );
   }
 
   return (
@@ -564,6 +668,23 @@ export default function AdminTravelSales() {
                 </div>
 
                 <div>
+                  <label className="block text-sm text-gray-600 mb-1">Тип услуги</label>
+                  <select
+                    className="w-full border rounded-lg px-3 py-2"
+                    value={saleForm.service_type}
+                    onChange={(e) =>
+                      setSaleForm((p) => ({ ...p, service_type: e.target.value }))
+                    }
+                  >
+                    {SERVICE_TYPE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
                   <label className="block text-sm text-gray-600 mb-1">Направление</label>
                   <input
                     className="w-full border rounded-lg px-3 py-2"
@@ -571,7 +692,19 @@ export default function AdminTravelSales() {
                     onChange={(e) =>
                       setSaleForm((p) => ({ ...p, direction: e.target.value }))
                     }
-                    placeholder="Например: Дели / Дубай / Турпакет"
+                    placeholder="Например: Дели / Дубай / Ташкент"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Name of traveller</label>
+                  <input
+                    className="w-full border rounded-lg px-3 py-2"
+                    value={saleForm.traveller_name}
+                    onChange={(e) =>
+                      setSaleForm((p) => ({ ...p, traveller_name: e.target.value }))
+                    }
+                    placeholder="Например: Ali Valiyev"
                   />
                 </div>
 
@@ -612,6 +745,7 @@ export default function AdminTravelSales() {
                   {(editingSaleId ||
                     saleForm.agent_id ||
                     saleForm.direction ||
+                    saleForm.traveller_name ||
                     saleForm.sale_amount ||
                     saleForm.net_amount) && (
                     <button
@@ -648,6 +782,19 @@ export default function AdminTravelSales() {
                     ))}
                   </select>
 
+                  <select
+                    className="border rounded-lg px-3 py-2 text-sm"
+                    value={dailyServiceType}
+                    onChange={(e) => setDailyServiceType(e.target.value)}
+                  >
+                    <option value="">Все типы</option>
+                    {SERVICE_TYPE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+
                   <input
                     type="date"
                     className="border rounded-lg px-3 py-2 text-sm"
@@ -678,7 +825,9 @@ export default function AdminTravelSales() {
                       <th className="px-3 py-2">№</th>
                       <th className="px-3 py-2">Дата</th>
                       <th className="px-3 py-2">Агент</th>
+                      <th className="px-3 py-2">Тип</th>
                       <th className="px-3 py-2">Направление</th>
+                      <th className="px-3 py-2">Name of traveller</th>
                       <th className="px-3 py-2">Продажа</th>
                       <th className="px-3 py-2">Нетто</th>
                       <th className="px-3 py-2">Оплата</th>
@@ -688,13 +837,13 @@ export default function AdminTravelSales() {
                   <tbody>
                     {dailyLoading ? (
                       <tr>
-                        <td className="px-3 py-6 text-gray-500" colSpan={8}>
+                        <td className="px-3 py-6 text-gray-500" colSpan={10}>
                           Загрузка...
                         </td>
                       </tr>
                     ) : dailySales.length === 0 ? (
                       <tr>
-                        <td className="px-3 py-6 text-gray-500" colSpan={8}>
+                        <td className="px-3 py-6 text-gray-500" colSpan={10}>
                           Нет данных
                         </td>
                       </tr>
@@ -704,7 +853,9 @@ export default function AdminTravelSales() {
                           <td className="px-3 py-2">{idx + 1}</td>
                           <td className="px-3 py-2">{iso(row.sale_date)}</td>
                           <td className="px-3 py-2">{row.agent_name}</td>
+                          <td className="px-3 py-2">{typeLabel(row.service_type)}</td>
                           <td className="px-3 py-2">{row.direction}</td>
+                          <td className="px-3 py-2">{row.traveller_name || "—"}</td>
                           <td className="px-3 py-2">{money(row.sale_amount)}</td>
                           <td className="px-3 py-2">{money(row.net_amount)}</td>
                           <td className="px-3 py-2">{money(row.payment)}</td>
@@ -761,6 +912,19 @@ export default function AdminTravelSales() {
                   ))}
                 </select>
 
+                <select
+                  className="border rounded-lg px-3 py-2 text-sm"
+                  value={salesServiceType}
+                  onChange={(e) => setSalesServiceType(e.target.value)}
+                >
+                  <option value="">Все типы</option>
+                  {SERVICE_TYPE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+
                 <input
                   type="date"
                   className="border rounded-lg px-3 py-2 text-sm"
@@ -781,6 +945,14 @@ export default function AdminTravelSales() {
                 >
                   Фильтр
                 </button>
+
+                <button
+                  className="px-3 py-2 rounded-lg bg-black text-white text-sm"
+                  onClick={exportSalesReport}
+                  type="button"
+                >
+                  Excel
+                </button>
               </div>
             }
           >
@@ -791,7 +963,9 @@ export default function AdminTravelSales() {
                     <th className="px-3 py-2">№</th>
                     <th className="px-3 py-2">Дата</th>
                     <th className="px-3 py-2">Агент</th>
+                    <th className="px-3 py-2">Тип</th>
                     <th className="px-3 py-2">Направление</th>
+                    <th className="px-3 py-2">Name of traveller</th>
                     <th className="px-3 py-2">Сумма продажи</th>
                     <th className="px-3 py-2">Сумма нетто</th>
                     <th className="px-3 py-2">Маржа</th>
@@ -800,13 +974,13 @@ export default function AdminTravelSales() {
                 <tbody>
                   {salesReportLoading ? (
                     <tr>
-                      <td className="px-3 py-6 text-gray-500" colSpan={7}>
+                      <td className="px-3 py-6 text-gray-500" colSpan={9}>
                         Загрузка...
                       </td>
                     </tr>
                   ) : salesReport.length === 0 ? (
                     <tr>
-                      <td className="px-3 py-6 text-gray-500" colSpan={7}>
+                      <td className="px-3 py-6 text-gray-500" colSpan={9}>
                         Нет данных
                       </td>
                     </tr>
@@ -816,7 +990,9 @@ export default function AdminTravelSales() {
                         <td className="px-3 py-2">{idx + 1}</td>
                         <td className="px-3 py-2">{iso(row.sale_date)}</td>
                         <td className="px-3 py-2">{row.agent}</td>
+                        <td className="px-3 py-2">{typeLabel(row.service_type)}</td>
                         <td className="px-3 py-2">{row.direction || "—"}</td>
+                        <td className="px-3 py-2">{row.traveller_name || "—"}</td>
                         <td className="px-3 py-2">{money(row.sale_amount)}</td>
                         <td className="px-3 py-2">{money(row.net_amount)}</td>
                         <td className="px-3 py-2 font-medium text-emerald-700">
@@ -856,6 +1032,19 @@ export default function AdminTravelSales() {
                   ))}
                 </select>
 
+                <select
+                  className="border rounded-lg px-3 py-2 text-sm"
+                  value={balanceServiceType}
+                  onChange={(e) => setBalanceServiceType(e.target.value)}
+                >
+                  <option value="">Все типы</option>
+                  {SERVICE_TYPE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+
                 <input
                   type="date"
                   className="border rounded-lg px-3 py-2 text-sm"
@@ -876,6 +1065,14 @@ export default function AdminTravelSales() {
                 >
                   Фильтр
                 </button>
+
+                <button
+                  className="px-3 py-2 rounded-lg bg-black text-white text-sm"
+                  onClick={exportBalanceReport}
+                  type="button"
+                >
+                  Excel
+                </button>
               </div>
             }
           >
@@ -886,7 +1083,9 @@ export default function AdminTravelSales() {
                     <th className="px-3 py-2">№</th>
                     <th className="px-3 py-2">Дата</th>
                     <th className="px-3 py-2">Агент</th>
+                    <th className="px-3 py-2">Тип</th>
                     <th className="px-3 py-2">Направление</th>
+                    <th className="px-3 py-2">Name of traveller</th>
                     <th className="px-3 py-2">Сумма продажи</th>
                     <th className="px-3 py-2">Оплата</th>
                     <th className="px-3 py-2">Баланс</th>
@@ -896,13 +1095,13 @@ export default function AdminTravelSales() {
                 <tbody>
                   {balanceLoading ? (
                     <tr>
-                      <td className="px-3 py-6 text-gray-500" colSpan={8}>
+                      <td className="px-3 py-6 text-gray-500" colSpan={10}>
                         Загрузка...
                       </td>
                     </tr>
                   ) : balanceReport.length === 0 ? (
                     <tr>
-                      <td className="px-3 py-6 text-gray-500" colSpan={8}>
+                      <td className="px-3 py-6 text-gray-500" colSpan={10}>
                         Нет данных
                       </td>
                     </tr>
@@ -912,7 +1111,9 @@ export default function AdminTravelSales() {
                         <td className="px-3 py-2">{idx + 1}</td>
                         <td className="px-3 py-2">{iso(row.sale_date)}</td>
                         <td className="px-3 py-2">{row.agent}</td>
+                        <td className="px-3 py-2">{typeLabel(row.service_type)}</td>
                         <td className="px-3 py-2">{row.direction || "—"}</td>
+                        <td className="px-3 py-2">{row.traveller_name || "—"}</td>
                         <td className="px-3 py-2">{money(row.sale_amount)}</td>
                         <td className="px-3 py-2">
                           <input
