@@ -3480,21 +3480,35 @@ function normalizeDateInput(raw) {
   const txt = String(raw).trim();
   if (/^(нет|пропустить|skip|-)\s*$/i.test(txt)) return null;
 
-  // 1️⃣ YYYY-MM-DD / YYYY.MM.DD / YYYY/MM/DD
+  let y, mm, dd;
+
   const iso = txt.match(/^(\d{4})[.\-/](\d{2})[.\-/](\d{2})$/);
   if (iso) {
-    const [, y, mm, dd] = iso;
-    return `${y}-${mm}-${dd}`;
+    y = Number(iso[1]);
+    mm = Number(iso[2]);
+    dd = Number(iso[3]);
+  } else {
+    const dmy = txt.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+    if (!dmy) return null;
+    dd = Number(dmy[1]);
+    mm = Number(dmy[2]);
+    y = Number(dmy[3]);
   }
 
-  // 2️⃣ DD.MM.YYYY  (КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ)
-  const dmy = txt.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
-  if (dmy) {
-    const [, dd, mm, y] = dmy;
-    return `${y}-${mm}-${dd}`;
+  if (mm < 1 || mm > 12) return null;
+  if (dd < 1 || dd > 31) return null;
+
+  const dt = new Date(y, mm - 1, dd);
+  if (
+    Number.isNaN(dt.getTime()) ||
+    dt.getFullYear() !== y ||
+    dt.getMonth() !== mm - 1 ||
+    dt.getDate() !== dd
+  ) {
+    return null;
   }
 
-  return null;
+  return `${y}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
 }
 
 function normalizeDateTimeInput(raw) {
