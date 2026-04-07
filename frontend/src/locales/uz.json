@@ -710,6 +710,9 @@
     "hotels_admin": "Mehmonxonalar (admin)"
   },
 
+  "insurance_included": "Sug'urta kiritilgan",
+  "early_check_in": "Erta joylashish",
+  "arrival_fast_track": "Kelishda Fast Track",
   "net_price": "Netto narx",
   "current_password": "Eski parol",
   "new_password": "Yangi parol",
