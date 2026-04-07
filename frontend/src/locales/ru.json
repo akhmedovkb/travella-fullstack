@@ -598,6 +598,12 @@
   },
   "select_category": "Выберите категорию",
   "start_date": "Дата начала",
+    "stickers": {
+    "refused_tour": "ОТКАЗНОЙ ТУР",
+    "refused_hotel": "ОТКАЗНОЙ ОТЕЛЬ",
+    "refused_flight": "ОТКАЗНОЙ АВИАБИЛЕТ",
+    "refused_ticket": "ОТКАЗНОЙ БИЛЕТ"
+  },
   "supplier": "Поставщик",
   "telegram": "Телеграм",
   "time_expired": "Время истекло",
