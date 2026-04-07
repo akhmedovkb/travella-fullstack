@@ -167,6 +167,25 @@ function normalizeRefusedStartDate(details = {}, category = "") {
   return d;
 }
 
+function normalizeIncludedOptions(details = {}) {
+  const d = { ...toPlainObject(details) };
+
+  d.insuranceIncluded =
+    d.insuranceIncluded === true || d.insurance_included === true;
+
+  d.earlyCheckIn =
+    d.earlyCheckIn === true || d.early_check_in === true;
+
+  d.arrivalFastTrack =
+    d.arrivalFastTrack === true || d.arrival_fast_track === true;
+
+  delete d.insurance_included;
+  delete d.early_check_in;
+  delete d.arrival_fast_track;
+
+  return d;
+}
+
 // Нормализуем Telegram username к виду "@username"
 function normalizeTelegramUsername(input) {
   if (!input) return null;
@@ -323,6 +342,10 @@ function normalizeServicePayload(body = {}) {
     } else if (typeof details === "object") {
       detailsObj = { ...details };
     }
+  }
+
+  if (detailsObj) {
+    detailsObj = normalizeIncludedOptions(detailsObj);
   }
 
   // seats — только у транспорта
@@ -771,7 +794,9 @@ const addService = async (req, res) => {
     } = normalizeServicePayload(req.body);
 
     let normalizedDetailsObj = detailsObj ?? {};
-
+    
+    normalizedDetailsObj = normalizeIncludedOptions(normalizedDetailsObj);
+    
     if (String(category || "").toLowerCase().startsWith("refused_")) {
       normalizedDetailsObj = normalizeRefusedStartDate(normalizedDetailsObj, category);
     }
@@ -917,9 +942,16 @@ const updateService = async (req, res) => {
       detailsObj,
       vehicleModelStr,
     } = normalizeServicePayload(req.body);
-
-    let normalizedDetailsObj = detailsObj ?? {};
-
+    
+    const oldDetailsObj = toPlainObject(cur.rows[0]?.details);
+    
+    let normalizedDetailsObj = {
+      ...oldDetailsObj,
+      ...(detailsObj ?? {}),
+    };
+    
+    normalizedDetailsObj = normalizeIncludedOptions(normalizedDetailsObj);
+    
     if (String(category || "").toLowerCase().startsWith("refused_")) {
       normalizedDetailsObj = normalizeRefusedStartDate(normalizedDetailsObj, category);
     }
