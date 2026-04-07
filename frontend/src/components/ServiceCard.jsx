@@ -1467,6 +1467,30 @@ useEffect(() => {
             <span className="font-medium">{transfer}</span>
           </div>
         )}
+        {details.insuranceIncluded && (
+          <div className="text-xs sm:text-sm mb-1">
+            <span className="text-gray-500">
+              {t("insurance_included")}:{" "}
+            </span>
+            <span className="font-medium">✓</span>
+          </div>
+        )}
+        {details.earlyCheckIn && (
+          <div className="text-xs sm:text-sm mb-1">
+            <span className="text-gray-500">
+              {t("early_check_in")}:{" "}
+            </span>
+            <span className="font-medium">✓</span>
+          </div>
+        )}
+        {details.arrivalFastTrack && (
+          <div className="text-xs sm:text-sm mb-1">
+            <span className="text-gray-500">
+              {t("arrival_fast_track")}:{" "}
+            </span>
+            <span className="font-medium">✓</span>
+          </div>
+        )}
         {prettyPrice && (
           <div className="text-xs sm:text-sm mb-2">
             <span className="text-gray-500">
