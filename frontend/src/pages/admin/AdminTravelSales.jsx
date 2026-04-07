@@ -24,7 +24,15 @@ const emptyAgentForm = {
   address: "",
 };
 
-const todayIso = new Date().toISOString().slice(0, 10);
+function localTodayIso() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+const todayIso = localTodayIso();
 
 const emptySaleForm = {
   sale_date: todayIso,
@@ -271,9 +279,12 @@ export default function AdminTravelSales() {
 
   const totalBalance = useMemo(() => {
     const byAgent = new Map();
+  
     balanceReport.forEach((r) => {
+      if (byAgent.has(r.agent_id)) return;
       byAgent.set(r.agent_id, Number(r.balance || 0));
     });
+  
     return Array.from(byAgent.values()).reduce((s, n) => s + n, 0);
   }, [balanceReport]);
 
