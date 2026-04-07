@@ -610,6 +610,12 @@
   },
   "select_category": "Kategoriya tanlang",
   "start_date": "Boshlanish sanasi",
+  "stickers": {
+    "refused_tour": "QAYTARILGAN TUR",
+    "refused_hotel": "QAYTARILGAN OTEL",
+    "refused_flight": "QAYTARILGAN AVIACHIPTA",
+    "refused_ticket": "QAYTARILGAN BILET"
+  },
   "supplier": "Yetkazib beruvchi",
   "telegram": "Telegram",
   "time_expired": "Vaqt tugadi",
