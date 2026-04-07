@@ -853,11 +853,22 @@ if (bot && !TG_DISABLED) {
   console.log("[tg-bot] index.js: starting bot (polling) ...");
 
   (async () => {
+    // 1) deleteWebhook не должен убивать запуск polling
     try {
-      // 🔥 критично: выключаем webhook у CLIENT-бота перед polling
       await bot.telegram.deleteWebhook({ drop_pending_updates: true });
       console.log("[tg-bot] webhook deleted (drop pending updates)");
+    } catch (e) {
+      const desc =
+        (e && e.response && e.response.description) ||
+        e?.description ||
+        e?.message ||
+        String(e);
 
+      console.error("[tg-bot] deleteWebhook failed (ignored):", desc);
+    }
+
+    // 2) launch пробуем всегда, даже если deleteWebhook упал
+    try {
       await bot.launch();
       console.log("🤖 Telegram bot started (polling)");
     } catch (e) {
@@ -874,10 +885,7 @@ if (bot && !TG_DISABLED) {
           desc
         );
       } else {
-        console.error(
-          "[tg-bot] start error — бот будет отключён, но API продолжит работать:",
-          desc
-        );
+        console.error("[tg-bot] launch failed:", desc);
       }
     }
   })();
