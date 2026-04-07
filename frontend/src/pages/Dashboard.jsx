@@ -767,6 +767,9 @@ const scrollToProfilePart = useCallback((key) => {
     transfer: "",
     changeable: false,
     visaIncluded: false,
+    insuranceIncluded: false,
+    earlyCheckIn: false,
+    arrivalFastTrack: false,
     netPrice: "",
     expiration: "",
     isActive: true,
@@ -1313,6 +1316,9 @@ useEffect(() => {
         transfer: d.transfer || "",
         changeable: d.changeable || false,
         visaIncluded: d.visaIncluded || false,
+        insuranceIncluded: d.insuranceIncluded || false,
+        earlyCheckIn: d.earlyCheckIn || false,
+        arrivalFastTrack: d.arrivalFastTrack || false,
         netPrice: d.netPrice ?? "",
         expiration: expIso,
         isActive: d.isActive ?? true,
@@ -1993,6 +1999,37 @@ useEffect(() => {
                     />
                     {t("changeable")}
                   </label>
+                  
+                  <br />
+                  <label className="inline-flex items-center mb-2">
+                    <input
+                      type="checkbox"
+                      checked={details.insuranceIncluded || false}
+                      onChange={(e) => setDetails({ ...details, insuranceIncluded: e.target.checked })}
+                      className="mr-2"
+                    />
+                    {t("insurance_included")}
+                  </label>
+                  <br />
+                  <label className="inline-flex items-center mb-2">
+                    <input
+                      type="checkbox"
+                      checked={details.earlyCheckIn || false}
+                      onChange={(e) => setDetails({ ...details, earlyCheckIn: e.target.checked })}
+                      className="mr-2"
+                    />
+                    {t("early_check_in")}
+                  </label>
+                  <br />
+                  <label className="inline-flex items-center mb-2">
+                    <input
+                      type="checkbox"
+                      checked={details.arrivalFastTrack || false}
+                      onChange={(e) => setDetails({ ...details, arrivalFastTrack: e.target.checked })}
+                      className="mr-2"
+                    />
+                    {t("arrival_fast_track")}
+                  </label>
 
                    <MoneyField
                      label={null}
@@ -2007,7 +2044,7 @@ useEffect(() => {
                      placeholder={t("gross_price")}
                    />
                   
-    <label className="block font-medium mt-2 mb-1">{t("expiration_timer")}</label>
+                <label className="block font-medium mt-2 mb-1">{t("expiration_timer")}</label>
                   <input
                     type="datetime-local"
                     step="60"
@@ -2168,7 +2205,36 @@ useEffect(() => {
                     />
                     <label>{t("changeable")}</label>
                   </div>
-
+                  <br />
+                  <label className="inline-flex items-center mb-2">
+                    <input
+                      type="checkbox"
+                      checked={details.insuranceIncluded || false}
+                      onChange={(e) => setDetails({ ...details, insuranceIncluded: e.target.checked })}
+                      className="mr-2"
+                    />
+                    {t("insurance_included")}
+                  </label>
+                  <br />
+                  <label className="inline-flex items-center mb-2">
+                    <input
+                      type="checkbox"
+                      checked={details.earlyCheckIn || false}
+                      onChange={(e) => setDetails({ ...details, earlyCheckIn: e.target.checked })}
+                      className="mr-2"
+                    />
+                    {t("early_check_in")}
+                  </label>
+                  <br />
+                  <label className="inline-flex items-center mb-2">
+                    <input
+                      type="checkbox"
+                      checked={details.arrivalFastTrack || false}
+                      onChange={(e) => setDetails({ ...details, arrivalFastTrack: e.target.checked })}
+                      className="mr-2"
+                    />
+                    {t("arrival_fast_track")}
+                  </label>
                   <div className="mb-2">
                      <MoneyField
                        label={null}
