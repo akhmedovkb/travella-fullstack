@@ -731,6 +731,9 @@
     "hotels_admin": "Hotels (admin)"
   },
 
+  "insurance_included": "Insurance included",
+  "early_check_in": "Early check-in",
+  "arrival_fast_track": "Arrival Fast Track",
   "net_price": "Net price",
   "current_password": "Current password",
   "new_password": "New password",
