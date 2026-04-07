@@ -623,6 +623,12 @@
   },
   "select_category": "Select category",
   "start_date": "Start date",
+  "stickers": {
+    "refused_tour": "REFUSED TOUR",
+    "refused_hotel": "REFUSED HOTEL",
+    "refused_flight": "REFUSED FLIGHT",
+    "refused_ticket": "REFUSED TICKET"
+  },
   "supplier": "Supplier",
   "telegram": "Telegram",
   "time_expired": "Time expired",
