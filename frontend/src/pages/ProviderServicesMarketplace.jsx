@@ -2821,7 +2821,36 @@ useEffect(() => {
                         />
                         {t("changeable")}
                       </label>
-
+                      <br />
+                      <label className="inline-flex items-center mb-2">
+                        <input
+                          type="checkbox"
+                          checked={details.insuranceIncluded || false}
+                          onChange={(e) => setDetails({ ...details, insuranceIncluded: e.target.checked })}
+                          className="mr-2"
+                        />
+                        {t("insurance_included")}
+                      </label>
+                      <br />
+                      <label className="inline-flex items-center mb-2">
+                        <input
+                          type="checkbox"
+                          checked={details.earlyCheckIn || false}
+                          onChange={(e) => setDetails({ ...details, earlyCheckIn: e.target.checked })}
+                          className="mr-2"
+                        />
+                        {t("early_check_in")}
+                      </label>
+                      <br />
+                      <label className="inline-flex items-center mb-2">
+                        <input
+                          type="checkbox"
+                          checked={details.arrivalFastTrack || false}
+                          onChange={(e) => setDetails({ ...details, arrivalFastTrack: e.target.checked })}
+                          className="mr-2"
+                        />
+                        {t("arrival_fast_track")}
+                      </label>
                        <MoneyField
                          label={null}
                          value={details.netPrice}
