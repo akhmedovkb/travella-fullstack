@@ -678,6 +678,9 @@
     "hotels_admin": "Отели (админ)"
   },
 
+  "insurance_included": "Страховка включена",
+  "early_check_in": "Раннее заселение",
+  "arrival_fast_track": "Fast Track по прилёту",
   "net_price": "Цена нетто",
   "current_password": "Старый пароль",
   "new_password": "Новый пароль",
