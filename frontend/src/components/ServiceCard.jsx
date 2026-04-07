@@ -102,6 +102,51 @@ const isGuideOrTransport = (raw) => {
   return /(гид|экскур|трансфер|transport|driver|taxi|car|bus|авто|транспорт)/i.test(s);
 };
 
+/* стикер на карточку - "отказной" */
+const getMarketplaceSticker = (rawCategory, t) => {
+  const category = String(rawCategory || "").trim().toLowerCase();
+
+  switch (category) {
+    case "refused_tour":
+      return {
+        label: t("marketplace.stickers.refused_tour", {
+          defaultValue: "ОТКАЗНОЙ ТУР",
+        }),
+        className:
+          "bg-amber-500/95 text-white ring-1 ring-white/20",
+      };
+
+    case "refused_hotel":
+      return {
+        label: t("marketplace.stickers.refused_hotel", {
+          defaultValue: "ОТКАЗНОЙ ОТЕЛЬ",
+        }),
+        className:
+          "bg-sky-600/95 text-white ring-1 ring-white/20",
+      };
+
+    case "refused_flight":
+      return {
+        label: t("marketplace.stickers.refused_flight", {
+          defaultValue: "ОТКАЗНОЙ АВИАБИЛЕТ",
+        }),
+        className:
+          "bg-violet-600/95 text-white ring-1 ring-white/20",
+      };
+
+    case "refused_ticket":
+      return {
+        label: t("marketplace.stickers.refused_ticket", {
+          defaultValue: "ОТКАЗНОЙ БИЛЕТ",
+        }),
+        className:
+          "bg-emerald-600/95 text-white ring-1 ring-white/20",
+      };
+
+    default:
+      return null;
+  }
+};
 // --- expiry helpers ---
 function resolveExpireAt(svc, details) {
   const s = svc || {};
@@ -749,6 +794,11 @@ export default function ServiceCard({
     statusLower === "draft" || statusLower === "published" ? null : statusRaw;
   const badge = rating > 0 ? `★ ${rating.toFixed(1)}` : statusForBadge;
 
+  const categorySticker = getMarketplaceSticker(
+    svc.category || details?.category || item?.category,
+    t
+  );
+  
   // бронь vs быстрый запрос
   const serviceLooksBookable = isGuideOrTransport(
     svc.category || details?.category || item?.category
@@ -1070,7 +1120,18 @@ useEffect(() => {
 
           {/* top overlay: таймер + бейдж + избранное */}
           <div className="absolute top-2 left-2 right-2 z-20 flex items-center justify-between pointer-events-none">
-            <div className="flex items-center gap-2 ml-0 sm:ml-0">
+            <div className="flex items-center gap-2 ml-0 sm:ml-0 flex-wrap">
+              {categorySticker && (
+                <span
+                  className={[
+                    "pointer-events-auto inline-flex items-center rounded-full px-2.5 py-1 text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wide shadow-lg backdrop-blur-md",
+                    categorySticker.className,
+                  ].join(" ")}
+                >
+                  {categorySticker.label}
+                </span>
+              )}
+          
               {expireAt &&
                 (isExpired ? (
                   <span className="pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs bg-black/50 backdrop-blur-md ring-1 ring-white/20">
@@ -1084,13 +1145,14 @@ useEffect(() => {
                     ⏳ {formatLeft(leftMs, dayShort)}
                   </span>
                 ))}
+          
               {badge && (
                 <span className="pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs bg-black/50 backdrop-blur-md ring-1 ring-white/20">
                   {badge}
                 </span>
               )}
             </div>
-
+          
             <div className="pointer-events-auto">
               <WishHeart
                 active={activeFav}
