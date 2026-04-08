@@ -669,7 +669,16 @@
   "pay_modal_order": "Order",
   "pay_modal_hint_title": "What happens after payment",
   "pay_modal_hint_text": "After successful payment, the provider's contacts will open automatically and you will return to this card.",
-  "go_to_payment": "Go to payment"
+  "go_to_payment": "Go to payment",
+  "price_hint": "Best-value offer",
+  "contacts_inside_hint": "Contacts unlock instantly after payment",
+  "supplier": "Supplier",
+  "more_details": "More details",
+  "watching_now_cta": "Watching now: {{count}}",
+  "offer_may_expire_anytime": "This offer may become unavailable at any time",
+  "unlock_contacts_cta_hint": "Contacts unlock instantly after payment",
+  "unlock_contacts_cta_primary": "Unlock phone and Telegram",
+  "opened_contacts_cta": "Contacts already unlocked: {{count}}"
 },
 
   "messages": {
