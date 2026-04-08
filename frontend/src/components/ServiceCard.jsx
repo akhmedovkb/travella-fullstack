@@ -876,14 +876,17 @@ const [unlockPayModal, setUnlockPayModal] = useState({
   serviceId: null,
 });
 
-  const hasDetailsBlock =
-    direction ||
-    dates ||
-    hotel ||
-    accommodation ||
-    transfer ||
-    flightDetails ||
-    hasProof;
+const hasDetailsBlock =
+  direction ||
+  dates ||
+  hotel ||
+  accommodation ||
+  transfer ||
+  flightDetails ||
+  hasProof ||
+  details.insuranceIncluded ||
+  details.earlyCheckIn ||
+  details.arrivalFastTrack;
   
 useEffect(() => {
   const params = new URLSearchParams(window.location.search);
@@ -1218,6 +1221,28 @@ useEffect(() => {
             <div className="mt-1 text-sm">
               {t("marketplace.price") || "Цена"}:{" "}
               <span className="font-semibold">{prettyPrice}</span>
+            </div>
+          )}
+          
+          {(details.insuranceIncluded || details.earlyCheckIn || details.arrivalFastTrack) && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {details.insuranceIncluded && (
+                <span className="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 text-[11px] font-medium">
+                  🛡 {t("insurance_included")}
+                </span>
+              )}
+          
+              {details.earlyCheckIn && (
+                <span className="inline-flex items-center rounded-full bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-1 text-[11px] font-medium">
+                  🏨 {t("early_check_in")}
+                </span>
+              )}
+          
+              {details.arrivalFastTrack && (
+                <span className="inline-flex items-center rounded-full bg-violet-50 text-violet-700 border border-violet-200 px-2.5 py-1 text-[11px] font-medium">
+                  🛬 {t("arrival_fast_track")}
+                </span>
+              )}
             </div>
           )}
 
