@@ -646,6 +646,10 @@
   "unlock_intro_whats_inside": "To‘lovdan keyin nimalar ochiladi",
   "unlock_intro_urgency": "Bunday takliflar juda tez bron qilinadi",
   "unlock_intro_urgency_hint": "Taklifni qo‘ldan boy bermaslik uchun kontaktlarni hozir oching.",
+  "unlock_success_title": "Kontaktlar ochildi",
+  "unlock_success_subtitle": "Yetkazib beruvchi bilan hozirning o‘zida bog‘lanish mumkin",
+  "unlock_success_action_text": "Taklif hali aktual paytda hozir bog‘laning.",
+  "unlock_success_saved_hint": "Kontaktlar muvaffaqiyatli to‘lovdan keyin ochildi va shu kartochkada saqlanib qoladi",
   "website": "Sayt"
 },
 
