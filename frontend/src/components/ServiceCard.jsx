@@ -1029,23 +1029,21 @@ useEffect(() => {
   } catch {
     viewerKey = `vk_${Math.random().toString(36).slice(2)}${Date.now()}`;
   }
-
-  const registerView = async () => {
-    try {
-      await apiPost(
-        `/api/service-stats/${id}/view`,
-        {},
-        null,
-        {
-          headers: {
-            "x-viewer-key": viewerKey,
-          },
-        }
-      );
-    } catch (err) {
-      console.error("register view error:", err);
-    }
-  };
+  
+const registerView = async () => {
+  try {
+    await fetch(`/api/service-stats/${id}/view`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-viewer-key": viewerKey,
+      },
+      body: JSON.stringify({}),
+    });
+  } catch (err) {
+    console.error("register view error:", err);
+  }
+};
 
   const loadStats = async () => {
     try {
