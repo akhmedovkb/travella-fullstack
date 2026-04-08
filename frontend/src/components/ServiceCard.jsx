@@ -2053,18 +2053,36 @@ async function handleUnlock(e) {
                   </div>
                 </div>
       
-                <div className="mt-4 rounded-2xl border border-gray-200 bg-white px-4 py-4">
-                  <div className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                    {t("marketplace.unlock_intro_price_label", {
-                      defaultValue: "Стоимость открытия",
+                <div className="mt-4 overflow-hidden rounded-2xl border border-orange-200 bg-gradient-to-br from-orange-50 via-white to-amber-50 shadow-sm">
+                  <div className="px-4 py-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-orange-700/70">
+                      {t("marketplace.unlock_intro_price_label", {
+                        defaultValue: "Стоимость открытия",
+                      })}
+                    </div>
+                
+                    <div className="mt-2 flex items-end gap-2">
+                      <div className="text-4xl font-black tracking-tight leading-none text-gray-900">
+                        {Number(unlockIntroPriceSum || unlockPayModal.shortfallSum || 0).toLocaleString("ru-RU")}
+                      </div>
+                
+                      <div className="mb-1 text-base font-semibold text-orange-700/80">
+                        {t("common.sum_currency", { defaultValue: "сум" })}
+                      </div>
+                    </div>
+                
+                    <div className="mt-2 inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-red-600 animate-pulse">
+                      🔥 {t("marketplace.unlock_intro_price_hint", {
+                        defaultValue: "Открывается сразу после оплаты",
+                      })}
+                    </div>
+                  </div>
+                
+                  <div className="border-t border-orange-100 bg-white/70 px-4 py-2 text-[11px] text-gray-600">
+                    {t("marketplace.unlock_intro_price_subhint", {
+                      defaultValue: "После оплаты телефон и Telegram поставщика станут доступны в этой карточке.",
                     })}
                   </div>
-                <div className="mt-1 text-3xl font-bold tracking-tight text-gray-900">
-                  {Number(unlockIntroPriceSum || unlockPayModal.shortfallSum || 0).toLocaleString("ru-RU")}{" "}
-                  <span className="text-xl font-semibold text-gray-700">
-                    {t("common.sum_currency", { defaultValue: "сум" })}
-                  </span>
-                </div>
                 </div>
       
                 <div className="mt-6 flex flex-col gap-3 sm:flex-row">
