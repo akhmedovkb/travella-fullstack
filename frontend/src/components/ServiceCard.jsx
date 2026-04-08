@@ -1383,14 +1383,6 @@ async function handleUnlock(e) {
             </div>
           )}
 
-          {hasProof && (
-            <div className="absolute left-2 top-11 z-30 pointer-events-none">
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600/95 text-white text-[11px] font-semibold px-2.5 py-1 shadow-lg ring-1 ring-white/20 backdrop-blur-sm">
-                ✔ {t("marketplace.verified_proof", { defaultValue: "Проверено" })}
-              </span>
-            </div>
-          )}
-
           {/* top overlay: таймер + бейдж + избранное */}
           <div className="absolute top-2 left-2 right-2 z-20 flex items-center justify-between pointer-events-none">
             <div className="flex items-center gap-2 ml-0 sm:ml-0 flex-wrap">
@@ -1422,6 +1414,11 @@ async function handleUnlock(e) {
               {badge && (
                 <span className="pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs bg-black/50 backdrop-blur-md ring-1 ring-white/20">
                   {badge}
+                </span>
+              )}
+              {hasProof && (
+                <span className="pointer-events-auto inline-flex items-center gap-1 rounded-full bg-emerald-600/95 text-white text-xs px-2 py-0.5 ring-1 ring-white/20 backdrop-blur-md">
+                  ✔ {t("marketplace.verified_proof", { defaultValue: "Проверено" })}
                 </span>
               )}
             </div>
@@ -1714,32 +1711,37 @@ async function handleUnlock(e) {
           )}
 
           <div className="mt-auto pt-3 space-y-2">
-            {canShowUnlockButton && (
-              <>
-                <button
-                  type="button"
-                  onClick={openUnlockIntro}
-                  disabled={unlockLoading || unlockIntroLoading}
-                  className={[
-                    "w-full rounded-xl px-3 py-3 text-sm font-semibold text-white transition disabled:opacity-60",
-                    !isExpired && expireAt
-                      ? "bg-gradient-to-r from-orange-500 to-orange-600 shadow-lg shadow-orange-200 hover:from-orange-600 hover:to-orange-700"
-                      : "bg-black hover:bg-gray-900",
-                  ].join(" ")}
-                >
-                  {unlockLoading || unlockIntroLoading
-                    ? t("marketplace.unlocking", { defaultValue: "Открытие..." })
-                    : `🔓 ${t("marketplace.unlock_contacts", { defaultValue: "Открыть контакты" })}`}
-                </button>
-            
-                <div className="text-center text-[11px] text-gray-500">
-                  {t("marketplace.pay_modal_hint_text", {
-                    defaultValue:
-                      "После успешной оплаты контакты поставщика откроются автоматически, и вы вернётесь к этой карточке.",
-                  })}
-                </div>
-              </>
-            )}
+              {canShowUnlockButton && (
+                <>
+                  <button
+                    type="button"
+                    onClick={openUnlockIntro}
+                    disabled={unlockLoading || unlockIntroLoading}
+                    className={[
+                      "w-full rounded-2xl px-4 py-3.5 text-sm font-semibold text-white transition disabled:opacity-60 disabled:cursor-not-allowed active:scale-[0.99]",
+                      !isExpired && expireAt
+                        ? "bg-gradient-to-r from-orange-500 via-orange-500 to-red-500 shadow-lg shadow-orange-200 hover:from-orange-600 hover:via-orange-600 hover:to-red-600"
+                        : "bg-black hover:bg-gray-900",
+                    ].join(" ")}
+                  >
+                    {unlockLoading || unlockIntroLoading ? (
+                      t("marketplace.unlocking", { defaultValue: "Открытие..." })
+                    ) : (
+                      <span className="inline-flex items-center justify-center gap-2">
+                        <span>🔓</span>
+                        <span>{t("marketplace.unlock_contacts", { defaultValue: "Открыть контакты" })}</span>
+                      </span>
+                    )}
+                  </button>
+              
+                  <div className="rounded-xl border border-orange-100 bg-orange-50 px-3 py-2 text-center text-[11px] text-gray-600">
+                    {t("marketplace.pay_modal_hint_text", {
+                      defaultValue:
+                        "После успешной оплаты контакты поставщика откроются автоматически, и вы вернётесь к этой карточке.",
+                    })}
+                  </div>
+                </>
+              )}
 
               {showBookButton ? (
                 <a
