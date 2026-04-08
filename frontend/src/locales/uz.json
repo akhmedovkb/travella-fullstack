@@ -628,6 +628,16 @@
   "transfer": "Transfer",
   "unlock_contacts": "Kontaktlarni ochish",
   "unlocking": "Ochilmoqda...",
+  "unlock_intro_title": "Kontaktlarni ochish",
+  "unlock_intro_subtitle": "Bu taklifni istalgan payt olib qo‘yishlari mumkin",
+  "unlock_intro_text": "Ochilgandan so‘ng siz darhol yetkazib beruvchining kontaktlarini olasiz va bron qilish uchun tez bog‘lanishingiz mumkin.",
+  "unlock_intro_whats_inside": "Nimalar ochiladi",
+  "unlock_intro_phone": "Yetkazib beruvchining telefoni",
+  "unlock_intro_telegram": "Bog‘lanish uchun Telegram",
+  "unlock_intro_fast_booking": "Tez bron qilish imkoniyati",
+  "unlock_intro_price_label": "Ochish narxi",
+  "unlock_intro_price_value": "10 000 so‘m",
+  "unlock_intro_cta": "Kontaktlarni ochish",
   "website": "Sayt"
 },
 
