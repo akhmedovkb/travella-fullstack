@@ -38,6 +38,7 @@ const adminUnlockFunnelRoutes = require("./routes/adminUnlockFunnelRoutes");
 const adminPaymePaymentsRoutes = require("./routes/adminPaymePaymentsRoutes");
 const passportRoutes = require("./routes/passportRoutes");
 const adminTravelSalesRoutes = require("./routes/adminTravelSalesRoutes");
+const serviceStatsRoutes = require("./routes/serviceStatsRoutes");
 
 dotenv.config();
 const app = express();
@@ -983,3 +984,4 @@ app.listen(PORT, () => {
 
 /** ===================== UTILS ===================== */
 app.use("/api/passport", passportRoutes);
+app.use("/api/service-stats", serviceStatsRoutes);
