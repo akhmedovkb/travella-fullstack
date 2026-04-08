@@ -541,6 +541,9 @@ function extractServiceFields(item, viewerRole) {
     flatTg,
     status,
     flightDetails,
+    insuranceIncluded: details?.insuranceIncluded,
+    earlyCheckIn: details?.earlyCheckIn,
+    arrivalFastTrack: details?.arrivalFastTrack,
   };
 }
 
