@@ -406,10 +406,11 @@ const left = firstNonEmpty(
 const right = firstNonEmpty(
   bag.hotel_check_out,
   bag.checkOut,
-  bag.returnDate,
+  bag.endDate,
   bag.end_flight_date,
   bag.endFlightDate,
-  bag.returnFlightDate
+  bag.returnFlightDate,
+  bag.returnDate
 );
 
 function formatDateShort(value) {
