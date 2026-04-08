@@ -952,6 +952,36 @@ const hasDetailsBlock =
   details.arrivalFastTrack;
   
 const [showUnlockSuccessModal, setShowUnlockSuccessModal] = useState(false);
+const [copiedPhone, setCopiedPhone] = useState(false);
+const [copiedTelegram, setCopiedTelegram] = useState(false);
+const copyTextSafe = async (text, type) => {
+  try {
+    await navigator.clipboard.writeText(text);
+
+    if (type === "phone") {
+      setCopiedPhone(true);
+      setTimeout(() => setCopiedPhone(false), 1500);
+    }
+
+    if (type === "tg") {
+      setCopiedTelegram(true);
+      setTimeout(() => setCopiedTelegram(false), 1500);
+    }
+  } catch (e) {
+    console.error("Copy failed", e);
+  }
+};
+
+const normalizePhoneHref = (phone) => {
+  if (!phone) return "";
+  return `tel:${phone.replace(/\s+/g, "")}`;
+};
+
+const normalizeTelegramHref = (tg) => {
+  if (!tg) return "";
+  const clean = tg.replace("@", "");
+  return `https://t.me/${clean}`;
+};
   
 useEffect(() => {
   const params = new URLSearchParams(window.location.search);
@@ -1917,87 +1947,100 @@ async function handleUnlock(e) {
           </div>,
           document.body
         )}
-      {showUnlockSuccessModal &&
-        createPortal(
-          <div
-            className="fixed inset-0 z-[3955] flex items-center justify-center bg-black/50 px-4 animate-[fadeIn_.18s_ease-out]"
-            onClick={() => setShowUnlockSuccessModal(false)}
-          >
-            <div
-              className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl border border-gray-200 animate-[scaleIn_.18s_ease-out]"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="bg-gradient-to-r from-emerald-500 to-green-400 px-6 py-5 text-white">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/20 text-2xl">
-                    ✅
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-bold leading-tight">
-                      {t("marketplace.success_title", {
-                        defaultValue: "Контакты открыты",
-                      })}
-                    </h3>
-                    <p className="text-sm text-white/90">
-                      {t("marketplace.success_subtitle", {
-                        defaultValue:
-                          "Теперь вы можете сразу связаться с поставщиком и забронировать",
-                      })}
-                    </p>
-                  </div>
+        {showUnlockSuccessModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-2xl w-[95%] max-w-md p-6 animate-[scaleIn_0.25s_ease]">
+        
+              {/* HEADER */}
+              <div className="flex flex-col items-center text-center mb-4">
+                <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center mb-3 animate-pulse">
+                  <span className="text-green-600 text-2xl">✔</span>
                 </div>
+        
+                <h2 className="text-lg font-semibold">
+                  Контакты открыты
+                </h2>
+        
+                <p className="text-sm text-gray-500">
+                  Можно сразу связаться с поставщиком
+                </p>
               </div>
-      
-              <div className="px-6 py-5">
-                <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-4">
-                  {title && (
-                    <div className="text-base font-bold text-gray-900 leading-snug">
-                      {title}
+        
+              {/* CONTACTS */}
+              <div className="space-y-3">
+        
+                {/* NAME */}
+                {supplierName && (
+                  <div className="text-sm text-gray-800 font-medium">
+                    {supplierName}
+                  </div>
+                )}
+        
+                {/* PHONE */}
+                {supplierPhone && (
+                  <div className="flex items-center justify-between bg-gray-50 rounded-xl px-3 py-2">
+                    <span className="text-sm">{supplierPhone}</span>
+        
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => copyTextSafe(supplierPhone, "phone")}
+                        className="text-xs px-2 py-1 bg-gray-200 rounded-lg"
+                      >
+                        {copiedPhone ? "Скопировано" : "Копировать"}
+                      </button>
+        
+                      <a
+                        href={normalizePhoneHref(supplierPhone)}
+                        className="text-xs px-2 py-1 bg-green-500 text-white rounded-lg"
+                      >
+                        Позвонить
+                      </a>
                     </div>
-                  )}
-      
-                  {direction && (
-                    <div className="mt-1 text-sm text-gray-600">
-                      {direction}
+                  </div>
+                )}
+        
+                {/* TELEGRAM */}
+                {supplierTg && (
+                  <div className="flex items-center justify-between bg-gray-50 rounded-xl px-3 py-2">
+                    <span className="text-sm">@{supplierTg.replace("@", "")}</span>
+        
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => copyTextSafe(supplierTg, "tg")}
+                        className="text-xs px-2 py-1 bg-gray-200 rounded-lg"
+                      >
+                        {copiedTelegram ? "Скопировано" : "Копировать"}
+                      </button>
+        
+                      <a
+                        href={normalizeTelegramHref(supplierTg)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs px-2 py-1 bg-blue-500 text-white rounded-lg"
+                      >
+                        Telegram
+                      </a>
                     </div>
-                  )}
-                </div>
-      
-                <div className="mt-4 grid grid-cols-1 gap-3">
-                  {supplierPhone && (
-                    <a
-                      href={`tel:${String(supplierPhone).replace(/\s+/g, "")}`}
-                      onClick={(e) => e.stopPropagation()}
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-green-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-green-200 transition hover:bg-green-600"
-                    >
-                      📞 {t("marketplace.call_now", { defaultValue: "Позвонить" })}
-                    </a>
-                  )}
-      
-                  {supplierTg?.href && (
-                    <a
-                      href={supplierTg.href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#229ED9] px-4 py-3 text-sm font-semibold text-white shadow-lg transition hover:bg-[#1d8ecf]"
-                    >
-                      💬 {t("marketplace.open_telegram", { defaultValue: "Открыть Telegram" })}
-                    </a>
-                  )}
-      
-                  <button
-                    type="button"
-                    onClick={() => setShowUnlockSuccessModal(false)}
-                    className="inline-flex w-full items-center justify-center rounded-2xl border border-gray-200 px-4 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
-                  >
-                    {t("common.close", { defaultValue: "Закрыть" })}
-                  </button>
-                </div>
+                  </div>
+                )}
+        
               </div>
+        
+              {/* TRUST BLOCK */}
+              <div className="mt-4 text-xs text-gray-500 text-center">
+                Контакты получены после успешной оплаты и уже сохранены в этой карточке
+              </div>
+        
+              {/* ACTION */}
+              <button
+                onClick={() => setShowUnlockSuccessModal(false)}
+                className="mt-5 w-full bg-black text-white py-2 rounded-xl font-medium"
+              >
+                Закрыть
+              </button>
+        
             </div>
-          </div>,
-          document.body
+          </div>
         )}
       {showLoginModal &&
         createPortal(
