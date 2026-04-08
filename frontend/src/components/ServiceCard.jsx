@@ -395,23 +395,78 @@ function extractServiceFields(item, viewerRole) {
     svc.transfer_type
   );
 
-  const left = firstNonEmpty(
-    bag.hotel_check_in,
-    bag.checkIn,
-    bag.startDate,
-    bag.start_flight_date,
-    bag.startFlightDate,
-    bag.departureFlightDate
-  );
-  const right = firstNonEmpty(
-    bag.hotel_check_out,
-    bag.checkOut,
-    bag.returnDate,
-    bag.end_flight_date,
-    bag.endFlightDate,
-    bag.returnFlightDate
-  );
-  const dates = left && right ? `${left} → ${right}` : left || right || null;
+const left = firstNonEmpty(
+  bag.hotel_check_in,
+  bag.checkIn,
+  bag.startDate,
+  bag.start_flight_date,
+  bag.startFlightDate,
+  bag.departureFlightDate
+);
+const right = firstNonEmpty(
+  bag.hotel_check_out,
+  bag.checkOut,
+  bag.returnDate,
+  bag.end_flight_date,
+  bag.endFlightDate,
+  bag.returnFlightDate
+);
+
+function formatDateShort(value) {
+  if (!value) return null;
+
+  const s = String(value).trim();
+
+  // если строка уже формата YYYY-MM-DD
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) {
+    return `${m[3]}.${m[2]}`;
+  }
+
+  const dt = new Date(s);
+  if (Number.isNaN(dt.getTime())) return s;
+
+  const dd = String(dt.getDate()).padStart(2, "0");
+  const mm = String(dt.getMonth() + 1).padStart(2, "0");
+  return `${dd}.${mm}`;
+}
+
+function parseDateOnly(value) {
+  if (!value) return null;
+
+  const s = String(value).trim();
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) {
+    return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  }
+
+  const dt = new Date(s);
+  if (Number.isNaN(dt.getTime())) return null;
+
+  return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+}
+
+const leftDate = parseDateOnly(left);
+const rightDate = parseDateOnly(right);
+
+const nightsCount =
+  leftDate && rightDate
+    ? Math.max(
+        0,
+        Math.round((rightDate.getTime() - leftDate.getTime()) / 86400000) - 1
+      )
+    : null;
+
+const dates =
+  left && right
+    ? `${formatDateShort(left)} - ${formatDateShort(right)}${
+        nightsCount > 0 ? ` • ${nightsCount} ноч.` : ""
+      }`
+    : left
+    ? formatDateShort(left)
+    : right
+    ? formatDateShort(right)
+    : null;
 
   const dirFrom = firstNonEmpty(
     details?.directionFrom,
@@ -1216,7 +1271,7 @@ useEffect(() => {
           )}
           {dates && (
             <div className="text-xs text-gray-500">
-              {t("common.date") || "Дата"}: {dates}
+              {t("marketplace.dates_label", { defaultValue: "Даты" })}: {dates}
             </div>
           )}
 
@@ -1466,7 +1521,7 @@ useEffect(() => {
         {dates && (
           <div className="text-xs sm:text-sm mb-1">
             <span className="text-gray-500">
-              {t("common.date") || "Дата"}:{" "}
+              {t("marketplace.dates_label", { defaultValue: "Даты" })}:{" "}
             </span>
             <span className="font-medium">{dates}</span>
           </div>
