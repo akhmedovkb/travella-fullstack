@@ -551,6 +551,7 @@
   "balance_modal_text": "There is not enough balance to unlock contacts. Top up your balance and return to this card.",
   "contacts_already_opened": "Contacts were already unlocked",
   "contacts_unlocked_success": "💸 {{amount}} sum charged · Contacts unlocked",
+  "dates_label": "Dates",
   "go_to_balance": "Top up balance",
   "verified_proof": "Verified",
   "proof_images": "Authenticity proof",
