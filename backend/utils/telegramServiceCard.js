@@ -825,7 +825,17 @@ const priceKind =
 
     const foodPretty = foodLabel(d.food);
     parts.push(labelLine("🍽", "Питание", foodPretty || "—"));
-
+    if (d.insuranceIncluded) {
+      parts.push(labelLine("🛡", "Страховка", "Включена"));
+    }
+    
+    if (d.earlyCheckIn) {
+      parts.push(labelLine("🏨", "Раннее заселение", "Доступно"));
+    }
+    
+    if (d.arrivalFastTrack) {
+      parts.push(labelLine("🛬", "Arrival Fast Track", "Включён"));
+    }
     if (priceWithCur != null && String(priceWithCur).trim()) {
       parts.push(`💸 <b>Цена</b>: ${escapeHtml(String(priceWithCur))} (${priceKind})`);
     }
@@ -898,6 +908,18 @@ const priceKind =
 
     if (d.changeable === true) parts.push(labelLine("🔁", "Изменения", "Можно вносить изменения"));
     if (d.changeable === false) parts.push(labelLine("⛔", "Изменения", "Без изменений"));
+
+    if (d.insuranceIncluded) {
+      parts.push(labelLine("🛡", "Страховка", "Включена"));
+    }
+    
+    if (d.earlyCheckIn) {
+      parts.push(labelLine("🏨", "Раннее заселение", "Доступно"));
+    }
+    
+    if (d.arrivalFastTrack) {
+      parts.push(labelLine("🛬", "Arrival Fast Track", "Включён"));
+    }
 
     if (priceWithCur != null && String(priceWithCur).trim()) {
       parts.push(`💸 <b>Цена</b>: ${escapeHtml(String(priceWithCur))} (${priceKind})`);
