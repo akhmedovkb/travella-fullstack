@@ -1488,39 +1488,43 @@ async function handleUnlock(e) {
           )}
 
           <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
-            <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-1 text-gray-600">
-              👁 {viewsCount}
-            </span>
+            {viewsCount > 0 && (
+              <span className="inline-flex items-center rounded-full border border-gray-200 bg-white px-2.5 py-1 text-gray-600">
+                👁 {viewsCount}
+              </span>
+            )}
           
             {watchingNow > 0 && (
-              <span className="inline-flex items-center rounded-full bg-red-50 px-2 py-1 font-semibold text-red-600">
+              <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2.5 py-1 font-semibold text-red-600 animate-pulse">
                 ⚡ {watchingNow} {t("marketplace.watching_now", { defaultValue: "смотрят сейчас" })}
               </span>
             )}
           
             {unlocksCount > 0 && (
-              <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-1 font-semibold text-emerald-700">
+              <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 font-semibold text-emerald-700">
                 🔓 {unlocksCount} {t("marketplace.opened_contacts_count", { defaultValue: "открыли контакты" })}
               </span>
             )}
           </div>
           
           {prettyPrice && (
-            <div className="mt-3 flex items-end justify-between">
-              <div>
-                <div className="text-[11px] uppercase tracking-wide text-gray-400">
-                  {t("marketplace.price") || "Цена"}
+            <div className="mt-3 rounded-2xl border border-orange-100 bg-gradient-to-br from-orange-50 to-white px-3 py-3">
+              <div className="flex items-end justify-between gap-3">
+                <div>
+                  <div className="text-[11px] uppercase tracking-wide text-orange-700/70">
+                    {t("marketplace.price") || "Цена"}
+                  </div>
+                  <div className="text-3xl font-extrabold leading-none text-gray-900">
+                    {prettyPrice}
+                  </div>
                 </div>
-                <div className="text-2xl font-bold leading-none text-gray-900">
-                  {prettyPrice}
-                </div>
-              </div>
           
-              {!isExpired && expireAt && (
-                <div className="text-[11px] font-semibold text-red-500 animate-pulse">
-                  {t("marketplace.hurry_up", { defaultValue: "Успейте" })}
-                </div>
-              )}
+                {!isExpired && expireAt && (
+                  <div className="shrink-0 rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-red-600 border border-red-200 animate-pulse">
+                    {t("marketplace.hurry_up", { defaultValue: "Успейте" })}
+                  </div>
+                )}
+              </div>
             </div>
           )}
           
@@ -1737,18 +1741,18 @@ async function handleUnlock(e) {
               </>
             )}
 
-            {showBookButton ? (
-              <a
-                href={`/profile/provider/${providerId}?service=${id}#book`}
-                className="w-full inline-flex items-center justify-center bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {t("actions.book") || "Бронировать"}
-              </a>
-            ) : (
+              {showBookButton ? (
+                <a
+                  href={`/profile/provider/${providerId}?service=${id}#book`}
+                  className="w-full inline-flex items-center justify-center rounded-xl border border-orange-200 bg-orange-50 px-3 py-2.5 text-sm font-semibold text-orange-700 transition hover:bg-orange-100"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {t("actions.book") || "Бронировать"}
+                </a>
+              ) : (
               <button
                 onClick={() => onQuickRequest?.(id, providerId, title)}
-                className="w-full bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600"
+                className="w-full rounded-xl border border-orange-200 bg-orange-50 px-3 py-2.5 text-sm font-semibold text-orange-700 transition hover:bg-orange-100"
               >
                 {t("actions.quick_request") || "Быстрый запрос"}
               </button>
@@ -2109,29 +2113,31 @@ async function handleUnlock(e) {
                 )}
         
                 {/* TELEGRAM */}
-                {supplierTg && (
-                  <div className="flex items-center justify-between bg-gray-50 rounded-xl px-3 py-2">
-                    <span className="text-sm">@{supplierTg.replace("@", "")}</span>
-        
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => copyTextSafe(supplierTg, "tg")}
-                        className="text-xs px-2 py-1 bg-gray-200 rounded-lg"
-                      >
-                        {copiedTelegram ? "Скопировано" : "Копировать"}
-                      </button>
-        
+              {supplierTg?.label && (
+                <div className="flex items-center justify-between bg-gray-50 rounded-xl px-3 py-2">
+                  <span className="text-sm">{supplierTg.label}</span>
+              
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => copyTextSafe(supplierTg.label, "tg")}
+                      className="text-xs px-2 py-1 bg-gray-200 rounded-lg"
+                    >
+                      {copiedTelegram ? "Скопировано" : "Копировать"}
+                    </button>
+              
+                    {supplierTg.href && (
                       <a
-                        href={normalizeTelegramHref(supplierTg)}
+                        href={supplierTg.href}
                         target="_blank"
                         rel="noreferrer"
                         className="text-xs px-2 py-1 bg-blue-500 text-white rounded-lg"
                       >
                         Telegram
                       </a>
-                    </div>
+                    )}
                   </div>
-                )}
+                </div>
+              )}
         
               </div>
         
