@@ -1425,9 +1425,21 @@ async function handleUnlock(e) {
           )}
 
           {prettyPrice && (
-            <div className="mt-1 text-sm">
-              {t("marketplace.price") || "Цена"}:{" "}
-              <span className="font-semibold">{prettyPrice}</span>
+            <div className="mt-3 flex items-end justify-between">
+              <div>
+                <div className="text-[11px] uppercase tracking-wide text-gray-400">
+                  {t("marketplace.price") || "Цена"}
+                </div>
+                <div className="text-2xl font-bold leading-none text-gray-900">
+                  {prettyPrice}
+                </div>
+              </div>
+          
+              {!isExpired && expireAt && (
+                <div className="text-[11px] font-semibold text-red-500 animate-pulse">
+                  {t("marketplace.hurry_up", { defaultValue: "Успейте" })}
+                </div>
+              )}
             </div>
           )}
           
