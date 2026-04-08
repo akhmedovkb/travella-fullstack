@@ -951,6 +951,8 @@ const hasDetailsBlock =
   details.earlyCheckIn ||
   details.arrivalFastTrack;
   
+const [showUnlockSuccessModal, setShowUnlockSuccessModal] = useState(false);
+  
 useEffect(() => {
   const params = new URLSearchParams(window.location.search);
   const openedId = Number(params.get("opened"));
@@ -973,7 +975,7 @@ useEffect(() => {
   return () => clearTimeout(timer);
 }, [id]);
   
-  async function openUnlockIntro() {
+async function openUnlockIntro() {
   const clientToken = localStorage.getItem("clientToken");
 
   if (!clientToken) {
@@ -998,6 +1000,7 @@ useEffect(() => {
       }
 
       setUnlocked(true);
+      setShowUnlockSuccessModal(true);
       window.dispatchEvent(new Event("client:balance:changed"));
 
       const chargedSum = Number(res?.charged_sum || 0);
@@ -1081,7 +1084,7 @@ useEffect(() => {
   }
 }
   
-  async function handleUnlock(e) {
+async function handleUnlock(e) {
     e?.stopPropagation?.();
 
     const clientToken = localStorage.getItem("clientToken");
@@ -1107,6 +1110,7 @@ useEffect(() => {
         }
 
         setUnlocked(true);
+        setShowUnlockSuccessModal(true);
         window.dispatchEvent(new Event("client:balance:changed"));
 
         const chargedSum = Number(res?.charged_sum || 0);
@@ -1585,10 +1589,10 @@ useEffect(() => {
               <button
                 type="button"
                 onClick={openUnlockIntro}
-                disabled={unlockLoading}
+                disabled={unlockLoading || unlockIntroLoading}
                 className="w-full bg-black text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-gray-900 disabled:opacity-60"
               >
-                {unlockLoading
+                {unlockLoading || unlockIntroLoading
                   ? t("marketplace.unlocking", { defaultValue: "Открытие..." })
                   : t("marketplace.unlock_contacts", { defaultValue: "Открыть контакты" })}
               </button>
@@ -1906,6 +1910,88 @@ useEffect(() => {
                       : t("marketplace.unlock_intro_cta", {
                           defaultValue: "Продолжить",
                         })}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+      {showUnlockSuccessModal &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[3955] flex items-center justify-center bg-black/50 px-4 animate-[fadeIn_.18s_ease-out]"
+            onClick={() => setShowUnlockSuccessModal(false)}
+          >
+            <div
+              className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl border border-gray-200 animate-[scaleIn_.18s_ease-out]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="bg-gradient-to-r from-emerald-500 to-green-400 px-6 py-5 text-white">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/20 text-2xl">
+                    ✅
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold leading-tight">
+                      {t("marketplace.success_title", {
+                        defaultValue: "Контакты открыты",
+                      })}
+                    </h3>
+                    <p className="text-sm text-white/90">
+                      {t("marketplace.success_subtitle", {
+                        defaultValue:
+                          "Теперь вы можете сразу связаться с поставщиком и забронировать",
+                      })}
+                    </p>
+                  </div>
+                </div>
+              </div>
+      
+              <div className="px-6 py-5">
+                <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-4">
+                  {title && (
+                    <div className="text-base font-bold text-gray-900 leading-snug">
+                      {title}
+                    </div>
+                  )}
+      
+                  {direction && (
+                    <div className="mt-1 text-sm text-gray-600">
+                      {direction}
+                    </div>
+                  )}
+                </div>
+      
+                <div className="mt-4 grid grid-cols-1 gap-3">
+                  {supplierPhone && (
+                    <a
+                      href={`tel:${String(supplierPhone).replace(/\s+/g, "")}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-green-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-green-200 transition hover:bg-green-600"
+                    >
+                      📞 {t("marketplace.call_now", { defaultValue: "Позвонить" })}
+                    </a>
+                  )}
+      
+                  {supplierTg?.href && (
+                    <a
+                      href={supplierTg.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#229ED9] px-4 py-3 text-sm font-semibold text-white shadow-lg transition hover:bg-[#1d8ecf]"
+                    >
+                      💬 {t("marketplace.open_telegram", { defaultValue: "Открыть Telegram" })}
+                    </a>
+                  )}
+      
+                  <button
+                    type="button"
+                    onClick={() => setShowUnlockSuccessModal(false)}
+                    className="inline-flex w-full items-center justify-center rounded-2xl border border-gray-200 px-4 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+                  >
+                    {t("common.close", { defaultValue: "Закрыть" })}
                   </button>
                 </div>
               </div>
