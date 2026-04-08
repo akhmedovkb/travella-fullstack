@@ -609,6 +609,7 @@
   "go_to_payment": "Go to payment",
   "phone": "Phone",
   "price": "Price",
+  "price_currency": "c.u.",
   "propose_price": "Propose a price",
   "refused_event": "Refused event ticket",
   "results": "Search results",
