@@ -936,7 +936,7 @@ const [unlockPayModal, setUnlockPayModal] = useState({
   orderId: null,
   serviceId: null,
 });
-
+const [showUnlockIntroModal, setShowUnlockIntroModal] = useState(false);
 const hasDetailsBlock =
   direction ||
   dates ||
@@ -1474,7 +1474,7 @@ useEffect(() => {
             {canShowUnlockButton && (
               <button
                 type="button"
-                onClick={handleUnlock}
+                onClick={() => setShowUnlockIntroModal(true)}
                 disabled={unlockLoading}
                 className="w-full bg-black text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-gray-900 disabled:opacity-60"
               >
@@ -1642,6 +1642,123 @@ useEffect(() => {
         )}
       </DetailsPopup>
 
+      {showUnlockIntroModal &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[3940] flex items-center justify-center bg-black/50 px-4 animate-[fadeIn_.18s_ease-out]"
+            onClick={() => setShowUnlockIntroModal(false)}
+          >
+            <div
+              className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl border border-gray-200 animate-[scaleIn_.18s_ease-out]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="bg-gradient-to-r from-orange-500 to-amber-400 px-6 py-5 text-white">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/20 text-2xl">
+                    ⚡
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold leading-tight">
+                      {t("marketplace.unlock_intro_title", {
+                        defaultValue: "Открытие контактов",
+                      })}
+                    </h3>
+                    <p className="text-sm text-white/90">
+                      {t("marketplace.unlock_intro_subtitle", {
+                        defaultValue: "Этот вариант могут забрать в любой момент",
+                      })}
+                    </p>
+                  </div>
+                </div>
+              </div>
+      
+              <div className="px-6 py-5">
+                <p className="text-sm leading-6 text-gray-700">
+                  {t("marketplace.unlock_intro_text", {
+                    defaultValue:
+                      "После открытия вы сразу получите контакты поставщика и сможете быстро связаться для бронирования.",
+                  })}
+                </p>
+      
+                <div className="mt-4 rounded-2xl border border-orange-100 bg-orange-50 px-4 py-4">
+                  <div className="text-xs font-medium uppercase tracking-wide text-orange-700/80">
+                    {t("marketplace.unlock_intro_whats_inside", {
+                      defaultValue: "Что откроется",
+                    })}
+                  </div>
+      
+                  <div className="mt-3 space-y-2 text-sm text-gray-800">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">📞</span>
+                      <span>
+                        {t("marketplace.unlock_intro_phone", {
+                          defaultValue: "Телефон поставщика",
+                        })}
+                      </span>
+                    </div>
+      
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">📨</span>
+                      <span>
+                        {t("marketplace.unlock_intro_telegram", {
+                          defaultValue: "Telegram для связи",
+                        })}
+                      </span>
+                    </div>
+      
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">⚡</span>
+                      <span>
+                        {t("marketplace.unlock_intro_fast_booking", {
+                          defaultValue: "Возможность быстро забронировать",
+                        })}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+      
+                <div className="mt-4 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4">
+                  <div className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                    {t("marketplace.unlock_intro_price_label", {
+                      defaultValue: "Стоимость открытия",
+                    })}
+                  </div>
+                  <div className="mt-1 text-3xl font-bold tracking-tight text-gray-900">
+                    {t("marketplace.unlock_intro_price_value", {
+                      defaultValue: "10 000 сум",
+                    })}
+                  </div>
+                </div>
+      
+                <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={() => setShowUnlockIntroModal(false)}
+                    className="inline-flex w-full items-center justify-center rounded-2xl border border-gray-200 px-4 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+                  >
+                    {t("common.cancel", { defaultValue: "Отмена" })}
+                  </button>
+      
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      setShowUnlockIntroModal(false);
+                      handleUnlock(e);
+                    }}
+                    className="inline-flex w-full items-center justify-center rounded-2xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-orange-200 transition hover:bg-orange-600"
+                  >
+                    {unlockLoading
+                      ? t("marketplace.unlocking", { defaultValue: "Открытие..." })
+                      : t("marketplace.unlock_intro_cta", {
+                          defaultValue: "Открыть контакты",
+                        })}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
       {showLoginModal &&
         createPortal(
           <div
