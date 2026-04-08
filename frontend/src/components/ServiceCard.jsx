@@ -1484,25 +1484,32 @@ async function handleUnlock(e) {
             </div>
           )}
 
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
-            {viewsCount > 0 && (
-              <span className="inline-flex items-center rounded-full border border-gray-200 bg-white px-2.5 py-1 text-gray-600">
-                👁 {viewsCount}
-              </span>
-            )}
-          
-            {watchingNow > 0 && (
-              <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2.5 py-1 font-semibold text-red-600 animate-pulse">
-                ⚡ {watchingNow} {t("marketplace.watching_now", { defaultValue: "смотрят сейчас" })}
-              </span>
-            )}
-          
-            {unlocksCount > 0 && (
-              <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 font-semibold text-emerald-700">
-                🔓 {unlocksCount} {t("marketplace.opened_contacts_count", { defaultValue: "открыли контакты" })}
-              </span>
-            )}
-          </div>
+            <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] sm:text-[11px]">
+              {viewsCount > 0 && (
+                <span className="inline-flex max-w-full items-center rounded-full border border-gray-200 bg-white px-2 py-0.5 text-gray-600">
+                  <span className="mr-1">👁</span>
+                  <span>{viewsCount}</span>
+                </span>
+              )}
+            
+              {watchingNow > 0 && (
+                <span className="inline-flex max-w-full items-center rounded-full border border-red-200 bg-red-50 px-2 py-0.5 font-semibold text-red-600 animate-pulse">
+                  <span className="mr-1">⚡</span>
+                  <span className="truncate">
+                    {watchingNow} {t("marketplace.watching_now", { defaultValue: "смотрят сейчас" })}
+                  </span>
+                </span>
+              )}
+            
+              {unlocksCount > 0 && (
+                <span className="inline-flex max-w-full items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700">
+                  <span className="mr-1">🔓</span>
+                  <span className="truncate">
+                    {unlocksCount} {t("marketplace.opened_contacts_count", { defaultValue: "открыли контакты" })}
+                  </span>
+                </span>
+              )}
+            </div>
           
           {prettyPrice && (
             <div className="mt-3 rounded-2xl border border-orange-100 bg-gradient-to-br from-orange-50 to-white px-3 py-3">
