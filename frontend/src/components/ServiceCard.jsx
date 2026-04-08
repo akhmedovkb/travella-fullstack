@@ -937,6 +937,8 @@ const [unlockPayModal, setUnlockPayModal] = useState({
   serviceId: null,
 });
 const [showUnlockIntroModal, setShowUnlockIntroModal] = useState(false);
+const [unlockIntroPriceSum, setUnlockIntroPriceSum] = useState(null);
+const [unlockIntroLoading, setUnlockIntroLoading] = useState(false);
 const hasDetailsBlock =
   direction ||
   dates ||
@@ -970,6 +972,114 @@ useEffect(() => {
 
   return () => clearTimeout(timer);
 }, [id]);
+  
+  async function openUnlockIntro() {
+  const clientToken = localStorage.getItem("clientToken");
+
+  if (!clientToken) {
+    setShowLoginModal(true);
+    return;
+  }
+
+  if (!id) return;
+
+  try {
+    setUnlockIntroLoading(true);
+
+    const res = await apiPost(
+      "/api/client/unlock-auto",
+      { service_id: id },
+      "client"
+    );
+
+    if (res?.ok && (res?.unlocked || res?.already)) {
+      if (typeof window !== "undefined" && unlockStorageKey) {
+        window.localStorage.setItem(unlockStorageKey, "1");
+      }
+
+      setUnlocked(true);
+      window.dispatchEvent(new Event("client:balance:changed"));
+
+      const chargedSum = Number(res?.charged_sum || 0);
+
+      if (res?.already) {
+        tSuccess(
+          t("marketplace.contacts_already_opened", {
+            defaultValue: "Контакты уже были открыты",
+          })
+        );
+      } else {
+        tSuccess(
+          t("marketplace.contacts_unlocked_success", {
+            amount: chargedSum.toLocaleString("ru-RU"),
+            defaultValue: `💸 Списано ${chargedSum.toLocaleString("ru-RU")} сум · Контакты разблокированы`,
+          })
+        );
+      }
+
+      return;
+    }
+
+    if (res?.ok && res?.need_pay) {
+      setUnlockIntroPriceSum(Number(res?.shortfall_sum || res?.order?.amount_sum || 0));
+
+      setUnlockPayModal({
+        open: false,
+        shortfallSum: Number(res?.shortfall_sum || res?.order?.amount_sum || 0),
+        shortfallTiyin: Number(res?.shortfall_tiyin || res?.order?.amount_tiyin || 0),
+        payUrl: String(res?.pay_url || ""),
+        orderId: Number(res?.order_id || res?.order?.id || 0) || null,
+        serviceId: Number(res?.service_id || id) || Number(id) || null,
+      });
+
+      setShowUnlockIntroModal(true);
+      return;
+    }
+
+    if (res?.need_pay) {
+      setUnlockIntroPriceSum(Number(res?.shortfall_sum || res?.order?.amount_sum || 0) || 0);
+      setShowUnlockIntroModal(true);
+      return;
+    }
+
+    throw new Error("unlock_failed");
+  } catch (err) {
+    const data = err?.response?.data || err?.data || {};
+    const code = data?.code || data?.error || err?.code;
+
+    if (data?.need_pay || code === "INSUFFICIENT_BALANCE" || code === "not_enough_balance") {
+      const shortfallSum = Number(data?.shortfall_sum || data?.order?.amount_sum || 0);
+
+      setUnlockIntroPriceSum(shortfallSum || 0);
+
+      setUnlockPayModal({
+        open: false,
+        shortfallSum,
+        shortfallTiyin: Number(data?.shortfall_tiyin || data?.order?.amount_tiyin || 0),
+        payUrl: String(data?.pay_url || ""),
+        orderId: Number(data?.order_id || data?.order?.id || 0) || null,
+        serviceId: Number(data?.service_id || id) || Number(id) || null,
+      });
+
+      setShowUnlockIntroModal(true);
+      return;
+    }
+
+    if (err?.response?.status === 401 || err?.response?.status === 403) {
+      setShowLoginModal(true);
+      return;
+    }
+
+    console.error("unlock intro error:", err);
+    alert(
+      t("marketplace.unlock_error", {
+        defaultValue: "Не удалось открыть контакты",
+      })
+    );
+  } finally {
+    setUnlockIntroLoading(false);
+  }
+}
   
   async function handleUnlock(e) {
     e?.stopPropagation?.();
@@ -1474,7 +1584,7 @@ useEffect(() => {
             {canShowUnlockButton && (
               <button
                 type="button"
-                onClick={() => setShowUnlockIntroModal(true)}
+                onClick={openUnlockIntro}
                 disabled={unlockLoading}
                 className="w-full bg-black text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-gray-900 disabled:opacity-60"
               >
@@ -1760,11 +1870,12 @@ useEffect(() => {
                       defaultValue: "Стоимость открытия",
                     })}
                   </div>
-                  <div className="mt-1 text-3xl font-bold tracking-tight text-gray-900">
-                    {t("marketplace.unlock_intro_price_value", {
-                      defaultValue: "10 000 сум",
-                    })}
-                  </div>
+                <div className="mt-1 text-3xl font-bold tracking-tight text-gray-900">
+                  {Number(unlockIntroPriceSum || unlockPayModal.shortfallSum || 0).toLocaleString("ru-RU")}{" "}
+                  <span className="text-xl font-semibold text-gray-700">
+                    {t("common.sum_currency", { defaultValue: "сум" })}
+                  </span>
+                </div>
                 </div>
       
                 <div className="mt-6 flex flex-col gap-3 sm:flex-row">
@@ -1778,9 +1889,15 @@ useEffect(() => {
       
                   <button
                     type="button"
-                    onClick={(e) => {
+                    onClick={() => {
                       setShowUnlockIntroModal(false);
-                      handleUnlock(e);
+                    
+                      if (unlockPayModal?.payUrl) {
+                        setUnlockPayModal((prev) => ({ ...prev, open: true }));
+                        return;
+                      }
+                    
+                      setShowBalancePrompt(true);
                     }}
                     className="inline-flex w-full items-center justify-center rounded-2xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-orange-200 transition hover:bg-orange-600"
                   >
