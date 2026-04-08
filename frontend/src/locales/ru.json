@@ -584,6 +584,7 @@
   "go_to_payment": "Перейти к оплате",
   "phone": "Телефон",
   "price": "Цена",
+  "price_currency": "у.е.",
   "propose_price": "Предложить цену",
   "refused_event": "Отказной билет на мероприятие",
   "results": "Результаты поиска",
