@@ -638,6 +638,9 @@
   "unlock_intro_price_label": "Ochish narxi",
   "unlock_intro_price_value": "10 000 so‘m",
   "unlock_intro_cta": "Kontaktlarni ochish",
+  "unlock_intro_whats_inside": "To‘lovdan keyin nimalar ochiladi",
+  "unlock_intro_urgency": "Bunday takliflar juda tez bron qilinadi",
+  "unlock_intro_urgency_hint": "Taklifni qo‘ldan boy bermaslik uchun kontaktlarni hozir oching.",
   "website": "Sayt"
 },
 
