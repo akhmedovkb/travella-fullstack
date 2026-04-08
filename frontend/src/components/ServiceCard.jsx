@@ -1630,16 +1630,30 @@ async function handleUnlock(e) {
 
           <div className="mt-auto pt-3 space-y-2">
             {canShowUnlockButton && (
-              <button
-                type="button"
-                onClick={openUnlockIntro}
-                disabled={unlockLoading || unlockIntroLoading}
-                className="w-full bg-black text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-gray-900 disabled:opacity-60"
-              >
-                {unlockLoading || unlockIntroLoading
-                  ? t("marketplace.unlocking", { defaultValue: "Открытие..." })
-                  : t("marketplace.unlock_contacts", { defaultValue: "Открыть контакты" })}
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={openUnlockIntro}
+                  disabled={unlockLoading || unlockIntroLoading}
+                  className={[
+                    "w-full rounded-xl px-3 py-3 text-sm font-semibold text-white transition disabled:opacity-60",
+                    !isExpired && expireAt
+                      ? "bg-gradient-to-r from-orange-500 to-orange-600 shadow-lg shadow-orange-200 hover:from-orange-600 hover:to-orange-700"
+                      : "bg-black hover:bg-gray-900",
+                  ].join(" ")}
+                >
+                  {unlockLoading || unlockIntroLoading
+                    ? t("marketplace.unlocking", { defaultValue: "Открытие..." })
+                    : `🔓 ${t("marketplace.unlock_contacts", { defaultValue: "Открыть контакты" })}`}
+                </button>
+            
+                <div className="text-center text-[11px] text-gray-500">
+                  {t("marketplace.pay_modal_hint_text", {
+                    defaultValue:
+                      "После успешной оплаты контакты поставщика откроются автоматически, и вы вернётесь к этой карточке.",
+                  })}
+                </div>
+              </>
             )}
 
             {showBookButton ? (
