@@ -2488,6 +2488,30 @@ async function promptEditState(ctx, state) {
         editWizNavKeyboard()
       );
       return;
+      
+    case "svc_edit_tour_insurance":
+      await safeReply(
+        ctx,
+        `🛡 Страховка включена? (текущее: ${draft.insuranceIncluded ? "да" : "нет"}).\nОтветьте да/нет или нажмите «⏭ Пропустить»:`,
+        editWizNavKeyboard()
+      );
+      return;
+    
+    case "svc_edit_tour_early_checkin":
+      await safeReply(
+        ctx,
+        `🏨 Раннее заселение? (текущее: ${draft.earlyCheckIn ? "да" : "нет"}).\nОтветьте да/нет или нажмите «⏭ Пропустить»:`,
+        editWizNavKeyboard()
+      );
+      return;
+    
+    case "svc_edit_tour_fast_track":
+      await safeReply(
+        ctx,
+        `🛬 Arrival Fast Track? (текущее: ${draft.arrivalFastTrack ? "да" : "нет"}).\nОтветьте да/нет или нажмите «⏭ Пропустить»:`,
+        editWizNavKeyboard()
+      );
+  return;
 
     /* ===================== HOTEL ===================== */
 
@@ -2531,6 +2555,86 @@ async function promptEditState(ctx, state) {
       );
       return;
 
+    case "svc_edit_hotel_roomcat":
+      await safeReply(
+        ctx,
+        `⭐️ Категория номера (текущее: ${draft.roomCategory || "(пусто)"}).\nВведите или нажмите «⏭ Пропустить»:`,
+        editWizNavKeyboard()
+      );
+      return;
+    
+    case "svc_edit_hotel_accommodation":
+      await safeReply(
+        ctx,
+        `🛏 Размещение (текущее: ${draft.accommodation || "(пусто)"}).\nВведите или нажмите «⏭ Пропустить»:`,
+        editWizNavKeyboard()
+      );
+      return;
+    
+    case "svc_edit_hotel_food":
+      await safeReply(
+        ctx,
+        `🍽 Питание (текущее: ${draft.food || "(пусто)"}).\nВведите или нажмите «⏭ Пропустить»:`,
+        editWizNavKeyboard()
+      );
+      return;
+    
+    case "svc_edit_hotel_halal":
+      await safeReply(
+        ctx,
+        `🥗 Halal питание? (текущее: ${draft.halal ? "да" : "нет"}).\nОтветьте да/нет или нажмите «⏭ Пропустить»:`,
+        editWizNavKeyboard()
+      );
+      return;
+    
+    case "svc_edit_hotel_transfer":
+      await safeReply(
+        ctx,
+        `🚗 Трансфер (текущее: ${draft.transfer || "(пусто)"}).\nВведите или нажмите «⏭ Пропустить»:`,
+        editWizNavKeyboard()
+      );
+      return;
+    
+    case "svc_edit_hotel_changeable":
+      await safeReply(
+        ctx,
+        `🔁 Можно вносить изменения? (текущее: ${draft.changeable ? "да" : "нет"}).\nОтветьте да/нет или нажмите «⏭ Пропустить»:`,
+        editWizNavKeyboard()
+      );
+      return;
+    
+    case "svc_edit_hotel_pax":
+      await safeReply(
+        ctx,
+        `👥 Количество человек (текущее: ${draft.adt || 0}/${draft.chd || 0}/${draft.inf || 0}).\nВведите в формате ADT/CHD/INF или нажмите «⏭ Пропустить»:`,
+        editWizNavKeyboard()
+      );
+      return;
+    
+    case "svc_edit_hotel_insurance":
+      await safeReply(
+        ctx,
+        `🛡 Страховка включена? (текущее: ${draft.insuranceIncluded ? "да" : "нет"}).\nОтветьте да/нет или нажмите «⏭ Пропустить»:`,
+        editWizNavKeyboard()
+      );
+      return;
+    
+    case "svc_edit_hotel_early_checkin":
+      await safeReply(
+        ctx,
+        `🏨 Раннее заселение? (текущее: ${draft.earlyCheckIn ? "да" : "нет"}).\nОтветьте да/нет или нажмите «⏭ Пропустить»:`,
+        editWizNavKeyboard()
+      );
+      return;
+    
+    case "svc_edit_hotel_fast_track":
+      await safeReply(
+        ctx,
+        `🛬 Arrival Fast Track? (текущее: ${draft.arrivalFastTrack ? "да" : "нет"}).\nОтветьте да/нет или нажмите «⏭ Пропустить»:`,
+        editWizNavKeyboard()
+      );
+      return;
+          
     case "svc_edit_images": {
       const images = ctx.session?.serviceDraft?.images || [];
 
@@ -2700,6 +2804,9 @@ bot.action("svc_edit:skip", async (ctx) => {
       "svc_edit_hotel_transfer",
       "svc_edit_hotel_changeable",
       "svc_edit_hotel_pax",
+      "svc_edit_hotel_insurance",
+      "svc_edit_hotel_early_checkin",
+      "svc_edit_hotel_fast_track",
       "svc_edit_price",
       "svc_edit_grossPrice",
       "svc_edit_expiration",
@@ -2721,6 +2828,9 @@ bot.action("svc_edit:skip", async (ctx) => {
       "svc_edit_tour_accommodation",
       "svc_edit_tour_roomcat",
       "svc_edit_tour_food",
+      "svc_edit_tour_insurance",
+      "svc_edit_tour_early_checkin",
+      "svc_edit_tour_fast_track",
       "svc_edit_price",
       "svc_edit_grossPrice",
       "svc_edit_expiration",
@@ -2918,6 +3028,10 @@ bot.action(/^svc_edit_start:(\d+)$/, async (ctx) => {
       halal: typeof det.halal === "boolean" ? det.halal : false,
       transfer: det.transfer || "",
       changeable: typeof det.changeable === "boolean" ? det.changeable : false,
+
+      insuranceIncluded: !!det.insuranceIncluded,
+      earlyCheckIn: !!det.earlyCheckIn,
+      arrivalFastTrack: !!det.arrivalFastTrack,
 
       // pax: поддержим оба варианта ключей (на случай старых данных)
       adt: Number.isFinite(det.adt) ? det.adt : (Number.isFinite(det.accommodationADT) ? det.accommodationADT : 0),
@@ -3121,6 +3235,10 @@ async function finishEditWizard(ctx) {
       halal: isHotel ? !!draft.halal : false,
       transfer: isTicket ? "" : String(draft.transfer || "").trim(),
       changeable: isHotel ? !!draft.changeable : false,
+
+      insuranceIncluded: !isTicket && !isFlight ? !!draft.insuranceIncluded : false,
+      earlyCheckIn: !isTicket && !isFlight ? !!draft.earlyCheckIn : false,
+      arrivalFastTrack: !isTicket && !isFlight ? !!draft.arrivalFastTrack : false,
 
       adt: isHotel ? Number(draft.adt ?? 0) : 0,
       chd: isHotel ? Number(draft.chd ?? 0) : 0,
@@ -3966,6 +4084,10 @@ function buildDetailsForRefusedTour(draft, netPriceNum) {
     roomCategory: draft.roomCategory || "", // legacy-совместимость
     food: draft.food || "",
 
+    insuranceIncluded: !!draft.insuranceIncluded,
+    earlyCheckIn: !!draft.earlyCheckIn,
+    arrivalFastTrack: !!draft.arrivalFastTrack,
+    
     netPrice: netPriceNum,
     grossPrice: typeof draft.grossPriceNum === "number" ? draft.grossPriceNum : null,
     expiration: draft.expiration || null,
@@ -3991,6 +4113,10 @@ function buildDetailsForRefusedHotel(draft, netPriceNum) {
     adt: typeof draft.adt === "number" ? draft.adt : 0,
     chd: typeof draft.chd === "number" ? draft.chd : 0,
     inf: typeof draft.inf === "number" ? draft.inf : 0,
+
+    insuranceIncluded: !!draft.insuranceIncluded,
+    earlyCheckIn: !!draft.earlyCheckIn,
+    arrivalFastTrack: !!draft.arrivalFastTrack,
     
     // legacy
     accommodationADT: typeof draft.adt === "number" ? draft.adt : 0,
@@ -4178,6 +4304,27 @@ async function promptWizardState(ctx, state) {
       );
       return;
 
+    case "svc_create_tour_insurance":
+      await ctx.reply("🛡 *Страховка включена?* Ответьте `да` или `нет`:", {
+        parse_mode: "Markdown",
+        ...wizNavKeyboard(),
+      });
+      return;
+
+    case "svc_create_tour_early_checkin":
+      await ctx.reply("🏨 *Раннее заселение доступно?* Ответьте `да` или `нет`:", {
+        parse_mode: "Markdown",
+        ...wizNavKeyboard(),
+      });
+      return;
+
+    case "svc_create_tour_fast_track":
+      await ctx.reply("🛬 *Arrival Fast Track включён?* Ответьте `да` или `нет`:", {
+        parse_mode: "Markdown",
+        ...wizNavKeyboard(),
+      });
+      return;
+
     // ===== REFUSED HOTEL =====
     case "svc_hotel_country":
       await ctx.reply("🌍 Укажите *страну* (например: Турция):", {
@@ -4263,6 +4410,27 @@ async function promptWizardState(ctx, state) {
       );
       return;
 
+        case "svc_hotel_insurance":
+      await ctx.reply("🛡 *Страховка включена?* Ответьте `да` или `нет`:", {
+        parse_mode: "Markdown",
+        ...wizNavKeyboard(),
+      });
+      return;
+
+    case "svc_hotel_early_checkin":
+      await ctx.reply("🏨 *Раннее заселение доступно?* Ответьте `да` или `нет`:", {
+        parse_mode: "Markdown",
+        ...wizNavKeyboard(),
+      });
+      return;
+
+    case "svc_hotel_fast_track":
+      await ctx.reply("🛬 *Arrival Fast Track включён?* Ответьте `да` или `нет`:", {
+        parse_mode: "Markdown",
+        ...wizNavKeyboard(),
+      });
+      return;
+      
     case "svc_create_price": {
       const cat = ctx.session?.serviceDraft?.category;
             const label =
@@ -7355,12 +7523,75 @@ async function handleSvcEditWizardText(ctx) {
       case "svc_edit_tour_food": {
         if (!keep()) draft.food = text;
         await go(
+          "svc_edit_tour_insurance",
+          `🛡 Страховка включена? (текущее: ${draft.insuranceIncluded ? "да" : "нет"}).\nОтветьте да/нет или нажмите «⏭ Пропустить»:`
+        );
+        return true;
+      }
+
+      case "svc_edit_tour_insurance": {
+        if (!keep()) {
+          const b = parseYesNoLocal();
+          if (b === null) {
+            await safeReply(
+              ctx,
+              "⚠️ Ответьте да/нет или «пропустить».",
+              editWizNavKeyboard()
+            );
+            return true;
+          }
+          draft.insuranceIncluded = b;
+        }
+      
+        await go(
+          "svc_edit_tour_early_checkin",
+          `🏨 Раннее заселение? (текущее: ${draft.earlyCheckIn ? "да" : "нет"}).\nОтветьте да/нет или нажмите «⏭ Пропустить»:`
+        );
+        return true;
+      }
+      
+      case "svc_edit_tour_early_checkin": {
+        if (!keep()) {
+          const b = parseYesNoLocal();
+          if (b === null) {
+            await safeReply(
+              ctx,
+              "⚠️ Ответьте да/нет или «пропустить».",
+              editWizNavKeyboard()
+            );
+            return true;
+          }
+          draft.earlyCheckIn = b;
+        }
+      
+        await go(
+          "svc_edit_tour_fast_track",
+          `🛬 Arrival Fast Track? (текущее: ${draft.arrivalFastTrack ? "да" : "нет"}).\nОтветьте да/нет или нажмите «⏭ Пропустить»:`
+        );
+        return true;
+      }
+      
+      case "svc_edit_tour_fast_track": {
+        if (!keep()) {
+          const b = parseYesNoLocal();
+          if (b === null) {
+            await safeReply(
+              ctx,
+              "⚠️ Ответьте да/нет или «пропустить».",
+              editWizNavKeyboard()
+            );
+            return true;
+          }
+          draft.arrivalFastTrack = b;
+        }
+      
+        await go(
           "svc_edit_price",
           `💰 Цена НЕТТО (текущее: ${draft.price || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`
         );
         return true;
       }
-
+        
       case "svc_edit_hotel_country": {
         if (!keep()) draft.country = text;
         await go(
@@ -7524,13 +7755,75 @@ async function handleSvcEditWizardText(ctx) {
           draft.inf = p.inf;
         }
 
-        await go(
-          "svc_edit_price",
-          `💰 Цена НЕТТО (текущее: ${draft.price || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`
-        );
+          await go(
+            "svc_edit_hotel_insurance",
+            `🛡 Страховка включена? (текущее: ${draft.insuranceIncluded ? "да" : "нет"}).\nОтветьте да/нет или нажмите «⏭ Пропустить»:`
+          );
         return true;
       }
 
+        case "svc_edit_hotel_insurance": {
+          if (!keep()) {
+            const b = parseYesNoLocal();
+            if (b === null) {
+              await safeReply(
+                ctx,
+                "⚠️ Ответьте да/нет или «пропустить».",
+                editWizNavKeyboard()
+              );
+              return true;
+            }
+            draft.insuranceIncluded = b;
+          }
+        
+          await go(
+            "svc_edit_hotel_early_checkin",
+            `🏨 Раннее заселение? (текущее: ${draft.earlyCheckIn ? "да" : "нет"}).\nОтветьте да/нет или нажмите «⏭ Пропустить»:`
+          );
+          return true;
+        }
+        
+        case "svc_edit_hotel_early_checkin": {
+          if (!keep()) {
+            const b = parseYesNoLocal();
+            if (b === null) {
+              await safeReply(
+                ctx,
+                "⚠️ Ответьте да/нет или «пропустить».",
+                editWizNavKeyboard()
+              );
+              return true;
+            }
+            draft.earlyCheckIn = b;
+          }
+        
+          await go(
+            "svc_edit_hotel_fast_track",
+            `🛬 Arrival Fast Track? (текущее: ${draft.arrivalFastTrack ? "да" : "нет"}).\nОтветьте да/нет или нажмите «⏭ Пропустить»:`
+          );
+          return true;
+        }
+        
+        case "svc_edit_hotel_fast_track": {
+          if (!keep()) {
+            const b = parseYesNoLocal();
+            if (b === null) {
+              await safeReply(
+                ctx,
+                "⚠️ Ответьте да/нет или «пропустить».",
+                editWizNavKeyboard()
+              );
+              return true;
+            }
+            draft.arrivalFastTrack = b;
+          }
+        
+          await go(
+            "svc_edit_price",
+            `💰 Цена НЕТТО (текущее: ${draft.price || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`
+          );
+          return true;
+        }
       case "svc_edit_price": {
         if (!keep()) {
           const n = parseNum();
@@ -8330,11 +8623,58 @@ bot.on("text", async (ctx, next) => {
           draft.food = v;
         
           pushWizardState(ctx, "svc_create_tour_food");
+          ctx.session.state = "svc_create_tour_insurance";
+          await promptWizardState(ctx, "svc_create_tour_insurance");
+          return;
+        }
+          
+        case "svc_create_tour_insurance": {
+          const yn = parseYesNo(text);
+          if (yn === null) {
+            await ctx.reply("😕 Ответьте `да` или `нет`.", {
+              parse_mode: "Markdown",
+              ...wizNavKeyboard(),
+            });
+            return;
+          }
+          draft.insuranceIncluded = yn;
+          pushWizardState(ctx, "svc_create_tour_insurance");
+          ctx.session.state = "svc_create_tour_early_checkin";
+          await promptWizardState(ctx, "svc_create_tour_early_checkin");
+          return;
+        }
+        
+        case "svc_create_tour_early_checkin": {
+          const yn = parseYesNo(text);
+          if (yn === null) {
+            await ctx.reply("😕 Ответьте `да` или `нет`.", {
+              parse_mode: "Markdown",
+              ...wizNavKeyboard(),
+            });
+            return;
+          }
+          draft.earlyCheckIn = yn;
+          pushWizardState(ctx, "svc_create_tour_early_checkin");
+          ctx.session.state = "svc_create_tour_fast_track";
+          await promptWizardState(ctx, "svc_create_tour_fast_track");
+          return;
+        }
+        
+        case "svc_create_tour_fast_track": {
+          const yn = parseYesNo(text);
+          if (yn === null) {
+            await ctx.reply("😕 Ответьте `да` или `нет`.", {
+              parse_mode: "Markdown",
+              ...wizNavKeyboard(),
+            });
+            return;
+          }
+          draft.arrivalFastTrack = yn;
+          pushWizardState(ctx, "svc_create_tour_fast_track");
           ctx.session.state = "svc_create_price";
           await promptWizardState(ctx, "svc_create_price");
           return;
         }
-
         // ===== HOTEL FLOW =====
         case "svc_hotel_country": {
           const v = await requireTextField(ctx, text, "Страна", { min: 2 });
@@ -8492,11 +8832,58 @@ bot.on("text", async (ctx, next) => {
           draft.chd = pax.chd;
           draft.inf = pax.inf;
           pushWizardState(ctx, "svc_hotel_pax");
+          ctx.session.state = "svc_hotel_insurance";
+          await promptWizardState(ctx, "svc_hotel_insurance");
+          return;
+        }
+
+        case "svc_hotel_insurance": {
+          const yn = parseYesNo(text);
+          if (yn === null) {
+            await ctx.reply("😕 Ответьте `да` или `нет`.", {
+              parse_mode: "Markdown",
+              ...wizNavKeyboard(),
+            });
+            return;
+          }
+          draft.insuranceIncluded = yn;
+          pushWizardState(ctx, "svc_hotel_insurance");
+          ctx.session.state = "svc_hotel_early_checkin";
+          await promptWizardState(ctx, "svc_hotel_early_checkin");
+          return;
+        }
+        
+        case "svc_hotel_early_checkin": {
+          const yn = parseYesNo(text);
+          if (yn === null) {
+            await ctx.reply("😕 Ответьте `да` или `нет`.", {
+              parse_mode: "Markdown",
+              ...wizNavKeyboard(),
+            });
+            return;
+          }
+          draft.earlyCheckIn = yn;
+          pushWizardState(ctx, "svc_hotel_early_checkin");
+          ctx.session.state = "svc_hotel_fast_track";
+          await promptWizardState(ctx, "svc_hotel_fast_track");
+          return;
+        }
+        
+        case "svc_hotel_fast_track": {
+          const yn = parseYesNo(text);
+          if (yn === null) {
+            await ctx.reply("😕 Ответьте `да` или `нет`.", {
+              parse_mode: "Markdown",
+              ...wizNavKeyboard(),
+            });
+            return;
+          }
+          draft.arrivalFastTrack = yn;
+          pushWizardState(ctx, "svc_hotel_fast_track");
           ctx.session.state = "svc_create_price";
           await promptWizardState(ctx, "svc_create_price");
           return;
         }
-
         case "svc_create_price":
           draft.price = text;
           pushWizardState(ctx, "svc_create_price");
