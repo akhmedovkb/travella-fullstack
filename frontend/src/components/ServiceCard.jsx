@@ -956,6 +956,9 @@ const hasDetailsBlock =
 const [showUnlockSuccessModal, setShowUnlockSuccessModal] = useState(false);
 const [copiedPhone, setCopiedPhone] = useState(false);
 const [copiedTelegram, setCopiedTelegram] = useState(false);
+const [viewsCount, setViewsCount] = useState(0);
+const [watchingNow, setWatchingNow] = useState(0);
+const [unlocksCount, setUnlocksCount] = useState(0);
 const copyTextSafe = async (text, type) => {
   try {
     await navigator.clipboard.writeText(text);
@@ -1007,6 +1010,68 @@ useEffect(() => {
   return () => clearTimeout(timer);
 }, [id]);
   
+useEffect(() => {
+  if (!id) return;
+
+  let cancelled = false;
+
+  const storageKey = "travella:viewerKey";
+  let viewerKey = "";
+  try {
+    viewerKey = localStorage.getItem(storageKey) || "";
+    if (!viewerKey) {
+      viewerKey =
+        (typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `vk_${Math.random().toString(36).slice(2)}${Date.now()}`);
+      localStorage.setItem(storageKey, viewerKey);
+    }
+  } catch {
+    viewerKey = `vk_${Math.random().toString(36).slice(2)}${Date.now()}`;
+  }
+
+  const registerView = async () => {
+    try {
+      await apiPost(
+        `/api/service-stats/${id}/view`,
+        {},
+        null,
+        {
+          headers: {
+            "x-viewer-key": viewerKey,
+          },
+        }
+      );
+    } catch (err) {
+      console.error("register view error:", err);
+    }
+  };
+
+  const loadStats = async () => {
+    try {
+      const res = await apiGet(`/api/service-stats/${id}`);
+      const data = res?.data || res || {};
+      if (cancelled) return;
+
+      setViewsCount(Number(data.viewsCount || 0));
+      setWatchingNow(Number(data.watchingNow || 0));
+      setUnlocksCount(Number(data.unlocksCount || 0));
+    } catch (err) {
+      console.error("load service stats error:", err);
+    }
+  };
+
+  registerView();
+  loadStats();
+
+  const interval = setInterval(loadStats, 15000);
+
+  return () => {
+    cancelled = true;
+    clearInterval(interval);
+  };
+}, [id]);
+
 async function openUnlockIntro() {
   const clientToken = localStorage.getItem("clientToken");
 
@@ -1424,6 +1489,24 @@ async function handleUnlock(e) {
             </div>
           )}
 
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
+            <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-1 text-gray-600">
+              👁 {viewsCount}
+            </span>
+          
+            {watchingNow > 0 && (
+              <span className="inline-flex items-center rounded-full bg-red-50 px-2 py-1 font-semibold text-red-600">
+                ⚡ {watchingNow} {t("marketplace.watching_now", { defaultValue: "смотрят сейчас" })}
+              </span>
+            )}
+          
+            {unlocksCount > 0 && (
+              <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-1 font-semibold text-emerald-700">
+                🔓 {unlocksCount} {t("marketplace.opened_contacts_count", { defaultValue: "открыли контакты" })}
+              </span>
+            )}
+          </div>
+          
           {prettyPrice && (
             <div className="mt-3 flex items-end justify-between">
               <div>
