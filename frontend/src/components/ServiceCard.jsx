@@ -1649,24 +1649,40 @@ return (
                 <div className="mt-2 grid grid-cols-2 gap-2">
                   {supplierPhone && (
                     <a
-                      href={`tel:${String(supplierPhone).replace(/\s+/g, "")}`}
-                      onClick={(e) => e.stopPropagation()}
+                      href={normalizePhoneHref(supplierPhone)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        postUnlockStep("unlock_phone_clicked", {
+                          source: "card_contacts",
+                          has_phone: true,
+                          has_telegram: Boolean(supplierTg?.href),
+                        });
+                      }}
                       className="inline-flex items-center justify-center gap-2 rounded-xl bg-green-500 px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition active:scale-[0.98] hover:bg-green-600"
                       title={supplierPhone}
                     >
                       <span>📞</span>
-                      <span>{t("marketplace.call", { defaultValue: "Позвонить" })}</span>
+                      <span>
+                        {t("marketplace.call", { defaultValue: "Позвонить" })}
+                      </span>
                     </a>
                   )}
-
+              
                   {supplierTg?.href && (
                     <a
                       href={supplierTg.href}
                       target="_blank"
                       rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        postUnlockStep("unlock_telegram_clicked", {
+                          source: "card_contacts",
+                          has_phone: Boolean(supplierPhone),
+                          has_telegram: true,
+                        });
+                      }}
                       className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#229ED9] px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition active:scale-[0.98] hover:bg-[#1d8ecf]"
-                      title={supplierTg.label || "Telegram"}
+                      title={supplierTg.label || t("common.telegram", { defaultValue: "Telegram" })}
                     >
                       <svg
                         xmlns="http://www.w3.org/2000/svg"
@@ -1682,7 +1698,9 @@ return (
                           d="M17.52 7.18 6.98 11.25c-.72.29-.71.69-.13.87l2.7.84 6.24-3.94c.29-.18.56-.08.34.12l-5.05 4.56-.19 2.67c.28 0 .41-.13.56-.28l1.31-1.27 2.73 2.02c.5.28.86.14.98-.46l1.8-8.5c.17-.73-.28-1.06-.82-.7Z"
                         />
                       </svg>
-                      <span>Telegram</span>
+                      <span>
+                        {t("common.telegram", { defaultValue: "Telegram" })}
+                      </span>
                     </a>
                   )}
                 </div>
