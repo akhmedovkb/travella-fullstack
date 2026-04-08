@@ -959,6 +959,38 @@ const [copiedTelegram, setCopiedTelegram] = useState(false);
 const [viewsCount, setViewsCount] = useState(0);
 const [watchingNow, setWatchingNow] = useState(0);
 const [unlocksCount, setUnlocksCount] = useState(0);
+const postUnlockStep = async (step, meta = {}) => {
+  try {
+    const clientToken = localStorage.getItem("clientToken");
+    if (!clientToken || !id) return;
+
+    await apiPost(
+      "/api/client/unlock-funnel-step",
+      {
+        service_id: id,
+        step,
+        meta,
+      },
+      "client"
+    );
+  } catch (err) {
+    console.error("unlock funnel step error:", err);
+  }
+};
+
+const closeUnlockPayModal = async () => {
+  await postUnlockStep("unlock_pay_modal_closed");
+
+  setUnlockPayModal({
+    open: false,
+    shortfallSum: 0,
+    shortfallTiyin: 0,
+    payUrl: "",
+    orderId: null,
+    serviceId: null,
+  });
+};
+
 const copyTextSafe = async (text, type) => {
   try {
     await navigator.clipboard.writeText(text);
@@ -1051,9 +1083,9 @@ const registerView = async () => {
       const data = res?.data || res || {};
       if (cancelled) return;
 
-      setViewsCount(Number(data.viewsCount || 0));
+      setViewsCount(Number(data.viewsLast24h || data.viewsCount || 0));
       setWatchingNow(Number(data.watchingNow || 0));
-      setUnlocksCount(Number(data.unlocksCount || 0));
+      setUnlocksCount(Number(data.unlocksLast24h || data.unlocksCount || 0));
     } catch (err) {
       console.error("load service stats error:", err);
     }
@@ -1096,6 +1128,10 @@ async function openUnlockIntro() {
 
       setUnlocked(true);
       setShowUnlockSuccessModal(true);
+      await postUnlockStep("unlock_success_modal_opened", {
+        already: Boolean(res?.already),
+      });
+
       window.dispatchEvent(new Event("client:balance:changed"));
 
       const chargedSum = Number(res?.charged_sum || 0);
@@ -1119,24 +1155,42 @@ async function openUnlockIntro() {
     }
 
     if (res?.ok && res?.need_pay) {
-      setUnlockIntroPriceSum(Number(res?.shortfall_sum || res?.order?.amount_sum || 0));
+      const nextShortfallSum = Number(
+        res?.shortfall_sum || res?.order?.amount_sum || 0
+      );
+
+      setUnlockIntroPriceSum(nextShortfallSum);
 
       setUnlockPayModal({
         open: false,
-        shortfallSum: Number(res?.shortfall_sum || res?.order?.amount_sum || 0),
-        shortfallTiyin: Number(res?.shortfall_tiyin || res?.order?.amount_tiyin || 0),
+        shortfallSum: nextShortfallSum,
+        shortfallTiyin: Number(
+          res?.shortfall_tiyin || res?.order?.amount_tiyin || 0
+        ),
         payUrl: String(res?.pay_url || ""),
         orderId: Number(res?.order_id || res?.order?.id || 0) || null,
         serviceId: Number(res?.service_id || id) || Number(id) || null,
       });
 
       setShowUnlockIntroModal(true);
+      await postUnlockStep("unlock_intro_opened", {
+        shortfall_sum: nextShortfallSum,
+        pay_url_exists: Boolean(res?.pay_url),
+      });
       return;
     }
 
     if (res?.need_pay) {
-      setUnlockIntroPriceSum(Number(res?.shortfall_sum || res?.order?.amount_sum || 0) || 0);
+      const nextShortfallSum = Number(
+        res?.shortfall_sum || res?.order?.amount_sum || 0
+      );
+
+      setUnlockIntroPriceSum(nextShortfallSum);
       setShowUnlockIntroModal(true);
+      await postUnlockStep("unlock_intro_opened", {
+        shortfall_sum: nextShortfallSum,
+        pay_url_exists: Boolean(res?.pay_url),
+      });
       return;
     }
 
@@ -1145,7 +1199,11 @@ async function openUnlockIntro() {
     const data = err?.response?.data || err?.data || {};
     const code = data?.code || data?.error || err?.code;
 
-    if (data?.need_pay || code === "INSUFFICIENT_BALANCE" || code === "not_enough_balance") {
+    if (
+      data?.need_pay ||
+      code === "INSUFFICIENT_BALANCE" ||
+      code === "not_enough_balance"
+    ) {
       const shortfallSum = Number(data?.shortfall_sum || data?.order?.amount_sum || 0);
 
       setUnlockIntroPriceSum(shortfallSum || 0);
@@ -1153,13 +1211,19 @@ async function openUnlockIntro() {
       setUnlockPayModal({
         open: false,
         shortfallSum,
-        shortfallTiyin: Number(data?.shortfall_tiyin || data?.order?.amount_tiyin || 0),
+        shortfallTiyin: Number(
+          data?.shortfall_tiyin || data?.order?.amount_tiyin || 0
+        ),
         payUrl: String(data?.pay_url || ""),
         orderId: Number(data?.order_id || data?.order?.id || 0) || null,
         serviceId: Number(data?.service_id || id) || Number(id) || null,
       });
 
       setShowUnlockIntroModal(true);
+      await postUnlockStep("unlock_intro_opened", {
+        shortfall_sum: shortfallSum,
+        pay_url_exists: Boolean(data?.pay_url),
+      });
       return;
     }
 
@@ -1179,111 +1243,7 @@ async function openUnlockIntro() {
   }
 }
   
-async function handleUnlock(e) {
-    e?.stopPropagation?.();
-
-    const clientToken = localStorage.getItem("clientToken");
-    if (!clientToken) {
-      setShowLoginModal(true);
-      return;
-    }
-
-    if (!id) return;
-
-    try {
-      setUnlockLoading(true);
-
-      const res = await apiPost(
-        "/api/client/unlock-auto",
-        { service_id: id },
-        "client"
-      );
-
-      if (res?.ok && (res?.unlocked || res?.already)) {
-        if (typeof window !== "undefined" && unlockStorageKey) {
-          window.localStorage.setItem(unlockStorageKey, "1");
-        }
-
-        setUnlocked(true);
-        setShowUnlockSuccessModal(true);
-        window.dispatchEvent(new Event("client:balance:changed"));
-
-        const chargedSum = Number(res?.charged_sum || 0);
-
-        if (res?.already) {
-          tSuccess(
-            t("marketplace.contacts_already_opened", {
-              defaultValue: "Контакты уже были открыты",
-            })
-          );
-        } else {
-          tSuccess(
-            t("marketplace.contacts_unlocked_success", {
-              amount: chargedSum.toLocaleString("ru-RU"),
-              defaultValue: `💸 Списано ${chargedSum.toLocaleString("ru-RU")} сум · Контакты разблокированы`,
-            })
-          );
-        }
-
-        return;
-      }
-
-      if (res?.ok && res?.need_pay && res?.pay_url) {
-        setUnlockPayModal({
-          open: true,
-          shortfallSum: Number(res?.shortfall_sum || res?.order?.amount_sum || 0),
-          shortfallTiyin: Number(res?.shortfall_tiyin || res?.order?.amount_tiyin || 0),
-          payUrl: String(res?.pay_url || ""),
-          orderId: Number(res?.order_id || res?.order?.id || 0) || null,
-          serviceId: Number(res?.service_id || id) || Number(id) || null,
-        });
-        return;
-      }
-
-      if (res?.need_pay) {
-        setShowBalancePrompt(true);
-        return;
-      }
-
-      throw new Error("unlock_failed");
-    } catch (err) {
-      const data = err?.response?.data || err?.data || {};
-      const code = data?.code || data?.error || err?.code;
-
-      if (data?.need_pay && data?.pay_url) {
-        setUnlockPayModal({
-          open: true,
-          shortfallSum: Number(data?.shortfall_sum || data?.order?.amount_sum || 0),
-          shortfallTiyin: Number(data?.shortfall_tiyin || data?.order?.amount_tiyin || 0),
-          payUrl: String(data?.pay_url || ""),
-          orderId: Number(data?.order_id || data?.order?.id || 0) || null,
-          serviceId: Number(data?.service_id || id) || Number(id) || null,
-        });
-        return;
-      }
-
-      if (code === "INSUFFICIENT_BALANCE" || code === "not_enough_balance") {
-        setShowBalancePrompt(true);
-        return;
-      }
-
-      if (err?.response?.status === 401 || err?.response?.status === 403) {
-        setShowLoginModal(true);
-        return;
-      }
-
-      console.error("unlock contact error:", err);
-      alert(
-        t("marketplace.unlock_error", {
-          defaultValue: "Не удалось открыть контакты",
-        })
-      );
-    } finally {
-      setUnlockLoading(false);
-    }
-  }
-
-  return (
+return (
     <>
       <div
         ref={cardRef}
@@ -1753,6 +1713,44 @@ async function handleUnlock(e) {
             </button>
           )}
 
+          {!unlocked && !isProviderViewer && !isAdminViewer && (
+            <div className="mt-3 space-y-2">
+              {watchingNow > 0 && (
+                <div className="flex items-center gap-2 rounded-2xl border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  <span className="text-base leading-none">🔥</span>
+                  <span className="font-medium">
+                    {t("marketplace.watching_now_cta", {
+                      count: watchingNow,
+                      defaultValue: `Сейчас смотрят: ${watchingNow}`,
+                    })}
+                  </span>
+                </div>
+              )}
+          
+              {unlocksCount > 0 && (
+                <div className="flex items-center gap-2 rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                  <span className="text-base leading-none">✅</span>
+                  <span className="font-medium">
+                    {t("marketplace.opened_contacts_cta", {
+                      count: unlocksCount,
+                      defaultValue: `Уже открыли контакты: ${unlocksCount}`,
+                    })}
+                  </span>
+                </div>
+              )}
+          
+              {expireAt && !isExpired && (
+                <div className="flex items-center gap-2 rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+                  <span className="text-base leading-none">⏳</span>
+                  <span className="font-medium">
+                    {t("marketplace.offer_may_expire_anytime", {
+                      defaultValue: "Предложение может стать неактуальным в любой момент",
+                    })}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
           <div className="mt-auto pt-3 space-y-2">
               {canShowUnlockButton && (
                 <>
@@ -1772,17 +1770,20 @@ async function handleUnlock(e) {
                     ) : (
                       <span className="inline-flex items-center justify-center gap-2">
                         <span>🔓</span>
-                        <span>{t("marketplace.unlock_contacts", { defaultValue: "Открыть контакты" })}</span>
+                        <span>
+                        {t("marketplace.unlock_contacts_cta_primary", {
+                          defaultValue: "Открыть телефон и Telegram",
+                        })}
+                        </span>
                       </span>
                     )}
                   </button>
               
-                  <div className="rounded-xl border border-orange-100 bg-orange-50 px-3 py-2 text-center text-[11px] text-gray-600">
-                    {t("marketplace.pay_modal_hint_text", {
-                      defaultValue:
-                        "После успешной оплаты контакты поставщика откроются автоматически, и вы вернётесь к этой карточке.",
+                  <p className="text-[12px] leading-5 text-gray-500">
+                    {t("marketplace.unlock_contacts_cta_hint", {
+                      defaultValue: "Контакты откроются сразу после оплаты",
                     })}
-                  </div>
+                  </p>
                 </>
               )}
 
@@ -1948,7 +1949,10 @@ async function handleUnlock(e) {
         createPortal(
           <div
             className="fixed inset-0 z-[3940] flex items-center justify-center bg-black/50 px-4 animate-[fadeIn_.18s_ease-out]"
-            onClick={() => setShowUnlockIntroModal(false)}
+            onClick={async () => {
+              await postUnlockStep("unlock_intro_closed");
+              setShowUnlockIntroModal(false);
+            }}
           >
             <div
               className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl border border-gray-200 animate-[scaleIn_.18s_ease-out]"
@@ -2013,46 +2017,78 @@ async function handleUnlock(e) {
                     })}
                   </div>
       
-                  <div className="mt-3 space-y-2 text-sm text-gray-700">
-                    <div className="flex items-center gap-2">
-                      <span className="text-base">📞</span>
-                      <span>
-                        {t("marketplace.unlock_intro_phone", {
-                          defaultValue: "Телефон поставщика",
-                        })}
-                      </span>
-                    </div>
-      
-                    <div className="flex items-center gap-2">
-                      <span className="text-base">✈️</span>
-                      <span>
-                        {t("marketplace.unlock_intro_fast_booking", {
-                          defaultValue: "Быстрая связь для бронирования",
-                        })}
-                      </span>
-                    </div>
-      
-                    <div className="flex items-center gap-2">
-                      <span className="text-base">💬</span>
-                      <span>
-                        {t("marketplace.unlock_intro_telegram", {
-                          defaultValue: "Telegram поставщика",
-                        })}
-                      </span>
-                    </div>
-                  </div>
-                </div>
+              <div className="mt-3 space-y-2 text-sm text-gray-700">
+  <div className="flex items-center gap-2">
+    <span className="text-base">📞</span>
+    <span>
+      {t("marketplace.unlock_intro_phone", {
+        defaultValue: "Телефон поставщика",
+      })}
+    </span>
+  </div>
+
+  <div className="flex items-center gap-2">
+    <span className="text-base">✈️</span>
+    <span>
+      {t("marketplace.unlock_intro_fast_booking", {
+        defaultValue: "Быстрая связь для бронирования",
+      })}
+    </span>
+  </div>
+
+  <div className="flex items-center gap-2">
+    <span className="text-base">💬</span>
+    <span>
+      {t("marketplace.unlock_intro_telegram", {
+        defaultValue: "Telegram поставщика",
+      })}
+    </span>
+  </div>
+
+  {hasProof && (
+    <div className="flex items-center gap-2">
+      <span className="text-base">🛡️</span>
+      <span>
+        {t("marketplace.unlock_intro_benefit_proof", {
+          defaultValue: "Подтверждение / proof",
+        })}
+      </span>
+    </div>
+  )}
+</div>              </div>
       
                 <div className="mt-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-3">
                   <div className="text-sm font-semibold text-red-700">
-                    {t("marketplace.unlock_intro_urgency", {
-                      defaultValue: "Такие варианты часто бронируют очень быстро",
-                    })}
+                    {watchingNow > 0
+                      ? t("marketplace.unlock_intro_urgency_watching_title", {
+                          count: watchingNow,
+                          defaultValue: `Сейчас смотрят: ${watchingNow}`,
+                        })
+                      : unlocksCount > 0
+                      ? t("marketplace.unlock_intro_urgency_unlocked_title", {
+                          count: unlocksCount,
+                          defaultValue: `Уже открыли контакты: ${unlocksCount}`,
+                        })
+                      : t("marketplace.unlock_intro_urgency", {
+                          defaultValue: "Такие варианты часто бронируют очень быстро",
+                        })}
                   </div>
+                
                   <div className="mt-1 text-xs text-red-600">
-                    {t("marketplace.unlock_intro_urgency_hint", {
-                      defaultValue: "Откройте контакты сейчас, чтобы не упустить предложение.",
-                    })}
+                    {watchingNow > 0
+                      ? t("marketplace.unlock_intro_dynamic_watching", {
+                          count: watchingNow,
+                          defaultValue: `Сейчас эту услугу смотрят ${watchingNow} чел.`,
+                        })
+                      : unlocksCount > 0
+                      ? t("marketplace.unlock_intro_dynamic_unlocked", {
+                          count: unlocksCount,
+                          defaultValue: `Контакты уже открывали ${unlocksCount} раз`,
+                        })
+                      : t("marketplace.unlock_intro_dynamic_default", {
+                          defaultValue:
+                            "Такие варианты могут быстро стать неактуальными, лучше связаться с поставщиком сразу.",
+                        })}
                   </div>
                 </div>
       
@@ -2091,7 +2127,10 @@ async function handleUnlock(e) {
                 <div className="mt-6 flex flex-col gap-3 sm:flex-row">
                   <button
                     type="button"
-                    onClick={() => setShowUnlockIntroModal(false)}
+                    onClick={async () => {
+                      await postUnlockStep("unlock_intro_closed");
+                      setShowUnlockIntroModal(false);
+                    }}
                     className="inline-flex w-full items-center justify-center rounded-2xl border border-gray-200 px-4 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
                   >
                     {t("common.cancel", { defaultValue: "Отмена" })}
@@ -2099,8 +2138,13 @@ async function handleUnlock(e) {
       
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={async () => {
                       setShowUnlockIntroModal(false);
+                    
+                      await postUnlockStep("unlock_intro_continue_clicked", {
+                        shortfall_sum: Number(unlockIntroPriceSum || unlockPayModal.shortfallSum || 0),
+                        pay_url_exists: Boolean(unlockPayModal?.payUrl),
+                      });
                     
                       if (unlockPayModal?.payUrl) {
                         setUnlockPayModal((prev) => ({ ...prev, open: true }));
@@ -2167,6 +2211,12 @@ async function handleUnlock(e) {
         
                       <a
                         href={normalizePhoneHref(supplierPhone)}
+                        onClick={() =>
+                          postUnlockStep("unlock_phone_clicked", {
+                            has_phone: true,
+                            has_telegram: Boolean(supplierTg?.href),
+                          })
+                        }
                         className="text-xs px-2 py-1 bg-green-500 text-white rounded-lg"
                       >
                         Позвонить
@@ -2191,6 +2241,12 @@ async function handleUnlock(e) {
                     {supplierTg.href && (
                       <a
                         href={supplierTg.href}
+                        onClick={() =>
+                          postUnlockStep("unlock_telegram_clicked", {
+                            has_phone: Boolean(supplierPhone),
+                            has_telegram: true,
+                          })
+                        }
                         target="_blank"
                         rel="noreferrer"
                         className="text-xs px-2 py-1 bg-blue-500 text-white rounded-lg"
@@ -2204,9 +2260,16 @@ async function handleUnlock(e) {
         
               </div>
         
-              {/* TRUST BLOCK */}
-              <div className="mt-4 text-xs text-gray-500 text-center">
-                Контакты получены после успешной оплаты и уже сохранены в этой карточке
+              <p className="mt-4 text-sm leading-6 text-gray-600 text-center">
+                {t("marketplace.unlock_success_action_text", {
+                  defaultValue: "Свяжитесь сейчас, пока предложение ещё актуально.",
+                })}
+              </p>
+              
+              <div className="mt-3 text-xs text-gray-500 text-center">
+                {t("marketplace.unlock_success_saved_hint", {
+                  defaultValue: "Контакты получены после успешной оплаты и уже сохранены в этой карточке",
+                })}
               </div>
         
               {/* ACTION */}
@@ -2309,16 +2372,7 @@ async function handleUnlock(e) {
         createPortal(
           <div
             className="fixed inset-0 z-[3925] bg-black/45 backdrop-blur-[2px] flex items-center justify-center p-4 animate-[fadeIn_.18s_ease-out]"
-            onClick={() =>
-              setUnlockPayModal({
-                open: false,
-                shortfallSum: 0,
-                shortfallTiyin: 0,
-                payUrl: "",
-                orderId: null,
-                serviceId: null,
-              })
-            }
+            onClick={closeUnlockPayModal}
           >
             <div
               className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl border border-gray-200 animate-[scaleIn_.18s_ease-out]"
@@ -2347,9 +2401,9 @@ async function handleUnlock(e) {
               <div className="px-6 py-5">
                 <div className="rounded-2xl border border-orange-100 bg-orange-50 px-4 py-4">
                   <div className="text-xs font-medium uppercase tracking-wide text-orange-700/80">
-                    {t("marketplace.pay_modal_amount_label", {
-                      defaultValue: "Сумма к оплате",
-                    })}
+                  {t("marketplace.pay_modal_amount_label", {
+                    defaultValue: "Сумма для мгновенного открытия контактов",
+                  })}
                   </div>
                   <div className="mt-1 text-3xl font-bold tracking-tight text-gray-900">
                     {Number(unlockPayModal.shortfallSum || 0).toLocaleString("ru-RU")} 
@@ -2388,16 +2442,7 @@ async function handleUnlock(e) {
                 <div className="mt-6 flex flex-col gap-3 sm:flex-row">
                   <button
                     type="button"
-                    onClick={() =>
-                      setUnlockPayModal({
-                        open: false,
-                        shortfallSum: 0,
-                        shortfallTiyin: 0,
-                        payUrl: "",
-                        orderId: null,
-                        serviceId: null,
-                      })
-                    }
+                    onClick={closeUnlockPayModal}
                     className="inline-flex w-full items-center justify-center rounded-2xl border border-gray-200 px-4 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
                   >
                     {t("common.cancel", { defaultValue: "Отмена" })}
@@ -2405,9 +2450,15 @@ async function handleUnlock(e) {
 
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={async () => {
                       const url = String(unlockPayModal.payUrl || "").trim();
                       if (!url) return;
+                    
+                      await postUnlockStep("unlock_pay_modal_continue_clicked", {
+                        order_id: unlockPayModal.orderId || null,
+                        shortfall_sum: Number(unlockPayModal.shortfallSum || 0),
+                      });
+                    
                       window.location.href = url;
                     }}
                     className="inline-flex w-full items-center justify-center rounded-2xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-orange-200 transition hover:bg-orange-600"
