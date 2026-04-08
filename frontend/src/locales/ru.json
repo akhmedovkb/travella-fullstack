@@ -616,7 +616,17 @@
   "verified_proof": "Проверено",
   "website": "Сайт",
   "unlock_contacts": "Открыть контакты",
-  "unlocking": "Открытие..."
+  "unlocking": "Открытие...",
+  "unlock_intro_title": "Открытие контактов",
+  "unlock_intro_subtitle": "Этот вариант могут забрать в любой момент",
+  "unlock_intro_text": "После открытия вы сразу получите контакты поставщика и сможете быстро связаться для бронирования.",
+  "unlock_intro_whats_inside": "Что откроется",
+  "unlock_intro_phone": "Телефон поставщика",
+  "unlock_intro_telegram": "Telegram для связи",
+  "unlock_intro_fast_booking": "Возможность быстро забронировать",
+  "unlock_intro_price_label": "Стоимость открытия",
+  "unlock_intro_price_value": "10 000 сум",
+  "unlock_intro_cta": "Открыть контакты"
 },
 
   "messages": {
