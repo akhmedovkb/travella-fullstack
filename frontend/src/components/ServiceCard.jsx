@@ -2178,11 +2178,15 @@ return (
                 </div>
         
                 <h2 className="text-lg font-semibold">
-                  Контакты открыты
+                  {t("marketplace.unlock_success_title", {
+                    defaultValue: "Контакты открыты",
+                  })}
                 </h2>
         
                 <p className="text-sm text-gray-500">
-                  Можно сразу связаться с поставщиком
+                  {t("marketplace.unlock_success_subtitle", {
+                    defaultValue: "Можно сразу связаться с поставщиком",
+                  })}
                 </p>
               </div>
         
@@ -2203,10 +2207,13 @@ return (
         
                     <div className="flex gap-2">
                       <button
+                        type="button"
                         onClick={() => copyTextSafe(supplierPhone, "phone")}
                         className="text-xs px-2 py-1 bg-gray-200 rounded-lg"
                       >
-                        {copiedPhone ? "Скопировано" : "Копировать"}
+                        {copiedPhone
+                          ? t("common.copied", { defaultValue: "Скопировано" })
+                          : t("common.copy", { defaultValue: "Копировать" })}
                       </button>
         
                       <a
@@ -2219,44 +2226,47 @@ return (
                         }
                         className="text-xs px-2 py-1 bg-green-500 text-white rounded-lg"
                       >
-                        Позвонить
+                        {t("marketplace.call", { defaultValue: "Позвонить" })}
                       </a>
                     </div>
                   </div>
                 )}
         
                 {/* TELEGRAM */}
-              {supplierTg?.label && (
-                <div className="flex items-center justify-between bg-gray-50 rounded-xl px-3 py-2">
-                  <span className="text-sm">{supplierTg.label}</span>
-              
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => copyTextSafe(supplierTg.label, "tg")}
-                      className="text-xs px-2 py-1 bg-gray-200 rounded-lg"
-                    >
-                      {copiedTelegram ? "Скопировано" : "Копировать"}
-                    </button>
-              
-                    {supplierTg.href && (
-                      <a
-                        href={supplierTg.href}
-                        onClick={() =>
-                          postUnlockStep("unlock_telegram_clicked", {
-                            has_phone: Boolean(supplierPhone),
-                            has_telegram: true,
-                          })
-                        }
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-xs px-2 py-1 bg-blue-500 text-white rounded-lg"
+                {supplierTg?.label && (
+                  <div className="flex items-center justify-between bg-gray-50 rounded-xl px-3 py-2">
+                    <span className="text-sm">{supplierTg.label}</span>
+        
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => copyTextSafe(supplierTg.label, "tg")}
+                        className="text-xs px-2 py-1 bg-gray-200 rounded-lg"
                       >
-                        Telegram
-                      </a>
-                    )}
+                        {copiedTelegram
+                          ? t("common.copied", { defaultValue: "Скопировано" })
+                          : t("common.copy", { defaultValue: "Копировать" })}
+                      </button>
+        
+                      {supplierTg.href && (
+                        <a
+                          href={supplierTg.href}
+                          onClick={() =>
+                            postUnlockStep("unlock_telegram_clicked", {
+                              has_phone: Boolean(supplierPhone),
+                              has_telegram: true,
+                            })
+                          }
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs px-2 py-1 bg-blue-500 text-white rounded-lg"
+                        >
+                          {t("common.telegram", { defaultValue: "Telegram" })}
+                        </a>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
         
               </div>
         
@@ -2265,7 +2275,7 @@ return (
                   defaultValue: "Свяжитесь сейчас, пока предложение ещё актуально.",
                 })}
               </p>
-              
+        
               <div className="mt-3 text-xs text-gray-500 text-center">
                 {t("marketplace.unlock_success_saved_hint", {
                   defaultValue: "Контакты получены после успешной оплаты и уже сохранены в этой карточке",
@@ -2274,10 +2284,11 @@ return (
         
               {/* ACTION */}
               <button
+                type="button"
                 onClick={() => setShowUnlockSuccessModal(false)}
                 className="mt-5 w-full bg-black text-white py-2 rounded-xl font-medium"
               >
-                Закрыть
+                {t("common.close", { defaultValue: "Закрыть" })}
               </button>
         
             </div>
