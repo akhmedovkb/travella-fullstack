@@ -1632,46 +1632,49 @@ async function handleUnlock(e) {
             </div>
           )}
 
-          {(supplierName || supplierPhone || supplierTg?.label) && (
-            <div className="mt-2 text-sm space-y-1">
               {supplierName && (
-                <div>
-                  <span className="text-gray-500">
-                    {t("marketplace.supplier") || "Поставщик"}:{" "}
-                  </span>
+                <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-3 py-2">
+                  <div className="text-[11px] text-gray-500">
+                    {t("marketplace.supplier") || "Поставщик"}
+                  </div>
+              
                   {providerId ? (
                     <a
                       href={`/profile/provider/${providerId}`}
-                      className="underline hover:text-gray-900"
                       onClick={(e) => e.stopPropagation()}
+                      className="max-w-[60%] truncate text-sm font-semibold text-gray-900 hover:underline"
                     >
                       {supplierName}
                     </a>
                   ) : (
-                    <span className="font-medium">{supplierName}</span>
+                    <span className="max-w-[60%] truncate text-sm font-semibold text-gray-900">
+                      {supplierName}
+                    </span>
                   )}
                 </div>
               )}
-
               {unlocked ? (
                 <div className="mt-2 grid grid-cols-2 gap-2">
                   {supplierPhone && (
                     <a
                       href={`tel:${String(supplierPhone).replace(/\s+/g, "")}`}
                       onClick={(e) => e.stopPropagation()}
-                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-green-500 px-3 py-2 text-sm font-semibold text-white hover:bg-green-600"
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-green-500 px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition active:scale-[0.98] hover:bg-green-600"
+                      title={supplierPhone}
                     >
                       <span>📞</span>
+                      <span>{t("marketplace.call", { defaultValue: "Позвонить" })}</span>
                     </a>
                   )}
-
+              
                   {supplierTg?.href && (
                     <a
                       href={supplierTg.href}
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}
-                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#229ED9] px-3 py-2 text-sm font-semibold text-white transition active:scale-[0.98] hover:bg-[#1d8ecf]"
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#229ED9] px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition active:scale-[0.98] hover:bg-[#1d8ecf]"
+                      title={supplierTg.label || "Telegram"}
                     >
                       <svg
                         xmlns="http://www.w3.org/2000/svg"
@@ -1687,6 +1690,7 @@ async function handleUnlock(e) {
                           d="M17.52 7.18 6.98 11.25c-.72.29-.71.69-.13.87l2.7.84 6.24-3.94c.29-.18.56-.08.34.12l-5.05 4.56-.19 2.67c.28 0 .41-.13.56-.28l1.31-1.27 2.73 2.02c.5.28.86.14.98-.46l1.8-8.5c.17-.73-.28-1.06-.82-.7Z"
                         />
                       </svg>
+                      <span>Telegram</span>
                     </a>
                   )}
                 </div>
