@@ -634,7 +634,11 @@
   "unlock_intro_cta": "Открыть контакты",
   "unlock_intro_whats_inside": "Что откроется после оплаты",
   "unlock_intro_urgency": "Такие варианты часто бронируют очень быстро",
-  "unlock_intro_urgency_hint": "Откройте контакты сейчас, чтобы не упустить предложение."
+  "unlock_intro_urgency_hint": "Откройте контакты сейчас, чтобы не упустить предложение.",
+  "unlock_success_title": "Контакты открыты",
+  "unlock_success_subtitle": "Можно сразу связаться с поставщиком",
+  "unlock_success_action_text": "Свяжитесь сейчас, пока предложение ещё актуально.",
+  "unlock_success_saved_hint": "Контакты получены после успешной оплаты и уже сохранены в этой карточке"
 },
 
   "messages": {
