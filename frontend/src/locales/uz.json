@@ -591,6 +591,7 @@
   "go_to_payment": "To‘lovga o‘tish",
   "phone": "Telefon",
   "price": "Narx",
+  "price_currency": "sh.b.",
   "propose_price": "Narx taklif qilish",
   "proof_images": "Haqiqiylik tasdig‘i",
   "proof_images_count": "foto",
