@@ -1524,9 +1524,9 @@ async function handleUnlock(e) {
                         <div className="text-3xl sm:text-[34px] font-black leading-none text-gray-900 tracking-tight">
                           {prettyPrice}
                         </div>
-            
+                      
                         <div className="mb-0.5 text-[11px] font-semibold text-orange-700/80">
-                          {t("common.sum_currency", { defaultValue: "сум" })}
+                          {t("marketplace.price_currency", { defaultValue: "у.е." })}
                         </div>
                       </div>
                     </div>
@@ -2069,9 +2069,9 @@ async function handleUnlock(e) {
                         {Number(unlockIntroPriceSum || unlockPayModal.shortfallSum || 0).toLocaleString("ru-RU")}
                       </div>
                 
-                      <div className="mb-1 text-base font-semibold text-orange-700/80">
-                        {t("common.sum_currency", { defaultValue: "сум" })}
-                      </div>
+                    <div className="mb-1 text-base font-semibold text-orange-700/80">
+                      {t("marketplace.price_currency", { defaultValue: "у.е." })}
+                    </div>
                     </div>
                 
                     <div className="mt-2 inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-red-600 animate-pulse">
