@@ -325,7 +325,7 @@ function DetailsPopup({ open, anchorRef, onClose, children }) {
 }
 
 /* ============== field extractor ============== */
-function extractServiceFields(item, viewerRole) {
+function extractServiceFields(item, viewerRole, t) {
   const svc = item?.service || item || {};
   const details = mergeDetails(svc, item);
   const bag = { ...details, ...svc, ...item };
@@ -460,7 +460,9 @@ const nightsCount =
 const dates =
   left && right
     ? `${formatDateShort(left)} - ${formatDateShort(right)}${
-        nightsCount > 0 ? ` • ${nightsCount} ноч.` : ""
+        nightsCount > 0
+          ? ` • ${nightsCount} ${t("marketplace.nights_short", { defaultValue: "ноч." })}`
+          : ""
       }`
     : left
     ? formatDateShort(left)
@@ -634,7 +636,7 @@ export default function ServiceCard({
     status: statusRaw,
     details,
     flightDetails,
-  } = extractServiceFields(item, viewerRole);
+  } = extractServiceFields(item, viewerRole, t);
 
   const isProviderViewer = viewerRole === "provider";
   const isAdminViewer = viewerRole === "admin";
