@@ -626,7 +626,10 @@
   "unlock_intro_fast_booking": "Возможность быстро забронировать",
   "unlock_intro_price_label": "Стоимость открытия",
   "unlock_intro_price_value": "10 000 сум",
-  "unlock_intro_cta": "Открыть контакты"
+  "unlock_intro_cta": "Открыть контакты",
+  "unlock_intro_whats_inside": "Что откроется после оплаты",
+  "unlock_intro_urgency": "Такие варианты часто бронируют очень быстро",
+  "unlock_intro_urgency_hint": "Откройте контакты сейчас, чтобы не упустить предложение."
 },
 
   "messages": {
