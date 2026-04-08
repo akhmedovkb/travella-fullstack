@@ -579,7 +579,7 @@
   "login_modal_hint_title": "What happens next",
   "login_modal_hint_text": "After logging in, you will be able to unlock contacts and contact the provider directly.",
   "login_as_client": "Log in as Client",
-
+  "nights_short": "nights",
   "pay_modal_title": "Top up to unlock contacts",
   "pay_modal_subtitle": "Check the amount before payment",
   "pay_modal_amount_label": "Amount",
