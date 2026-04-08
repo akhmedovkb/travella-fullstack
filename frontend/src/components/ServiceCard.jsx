@@ -1641,7 +1641,7 @@ useEffect(() => {
           </div>
         )}
       </DetailsPopup>
-
+      
       {showUnlockIntroModal &&
         createPortal(
           <div
@@ -1673,21 +1673,45 @@ useEffect(() => {
               </div>
       
               <div className="px-6 py-5">
-                <p className="text-sm leading-6 text-gray-700">
-                  {t("marketplace.unlock_intro_text", {
-                    defaultValue:
-                      "После открытия вы сразу получите контакты поставщика и сможете быстро связаться для бронирования.",
-                  })}
-                </p>
+                <div className="rounded-2xl border border-orange-100 bg-orange-50 px-4 py-4">
+                  {title && (
+                    <div className="text-base font-bold text-gray-900 leading-snug">
+                      {title}
+                    </div>
+                  )}
       
-                <div className="mt-4 rounded-2xl border border-orange-100 bg-orange-50 px-4 py-4">
-                  <div className="text-xs font-medium uppercase tracking-wide text-orange-700/80">
+                  {direction && (
+                    <div className="mt-1 text-sm text-gray-600">
+                      {direction}
+                    </div>
+                  )}
+      
+                  {dates && (
+                    <div className="mt-1 text-sm text-gray-600">
+                      {t("marketplace.dates_label", { defaultValue: "Даты" })}: {dates}
+                    </div>
+                  )}
+      
+                  {prettyPrice && (
+                    <div className="mt-3">
+                      <div className="text-xs font-medium uppercase tracking-wide text-orange-700/80">
+                        {t("marketplace.price", { defaultValue: "Цена" })}
+                      </div>
+                      <div className="text-2xl font-bold text-gray-900">
+                        {prettyPrice}
+                      </div>
+                    </div>
+                  )}
+                </div>
+      
+                <div className="mt-4 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4">
+                  <div className="text-sm font-semibold text-gray-900">
                     {t("marketplace.unlock_intro_whats_inside", {
-                      defaultValue: "Что откроется",
+                      defaultValue: "Что откроется после оплаты",
                     })}
                   </div>
       
-                  <div className="mt-3 space-y-2 text-sm text-gray-800">
+                  <div className="mt-3 space-y-2 text-sm text-gray-700">
                     <div className="flex items-center gap-2">
                       <span className="text-base">📞</span>
                       <span>
@@ -1698,26 +1722,39 @@ useEffect(() => {
                     </div>
       
                     <div className="flex items-center gap-2">
-                      <span className="text-base">📨</span>
+                      <span className="text-base">✈️</span>
                       <span>
-                        {t("marketplace.unlock_intro_telegram", {
-                          defaultValue: "Telegram для связи",
+                        {t("marketplace.unlock_intro_fast_booking", {
+                          defaultValue: "Быстрая связь для бронирования",
                         })}
                       </span>
                     </div>
       
                     <div className="flex items-center gap-2">
-                      <span className="text-base">⚡</span>
+                      <span className="text-base">💬</span>
                       <span>
-                        {t("marketplace.unlock_intro_fast_booking", {
-                          defaultValue: "Возможность быстро забронировать",
+                        {t("marketplace.unlock_intro_telegram", {
+                          defaultValue: "Telegram поставщика",
                         })}
                       </span>
                     </div>
                   </div>
                 </div>
       
-                <div className="mt-4 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4">
+                <div className="mt-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-3">
+                  <div className="text-sm font-semibold text-red-700">
+                    {t("marketplace.unlock_intro_urgency", {
+                      defaultValue: "Такие варианты часто бронируют очень быстро",
+                    })}
+                  </div>
+                  <div className="mt-1 text-xs text-red-600">
+                    {t("marketplace.unlock_intro_urgency_hint", {
+                      defaultValue: "Откройте контакты сейчас, чтобы не упустить предложение.",
+                    })}
+                  </div>
+                </div>
+      
+                <div className="mt-4 rounded-2xl border border-gray-200 bg-white px-4 py-4">
                   <div className="text-xs font-medium uppercase tracking-wide text-gray-500">
                     {t("marketplace.unlock_intro_price_label", {
                       defaultValue: "Стоимость открытия",
@@ -1750,7 +1787,7 @@ useEffect(() => {
                     {unlockLoading
                       ? t("marketplace.unlocking", { defaultValue: "Открытие..." })
                       : t("marketplace.unlock_intro_cta", {
-                          defaultValue: "Открыть контакты",
+                          defaultValue: "Продолжить",
                         })}
                   </button>
                 </div>
