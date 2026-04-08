@@ -152,6 +152,8 @@ function resolveExpireAt(svc, details) {
   const s = svc || {};
   const d = details || {};
   const cand =
+    s.expiration_at ??
+    s.expirationAt ??
     s.expires_at ??
     s.expire_at ??
     s.expireAt ??
