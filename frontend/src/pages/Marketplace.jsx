@@ -130,16 +130,347 @@ function parseDetails(svc) {
   return d || {};
 }
 
+function parseDateFlexible(val) {
+  if (!val) return null;
+
+  if (val instanceof Date) {
+    return Number.isNaN(val.getTime()) ? null : val;
+  }
+
+  const s = String(val).trim();
+  if (!s) return null;
+
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) {
+    let [, y, a, b] = m;
+    let mm = Number(a);
+    let dd = Number(b);
+
+    if (mm > 12 && dd >= 1 && dd <= 12) {
+      [mm, dd] = [dd, mm];
+    }
+
+    if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
+      const d = new Date(`${y}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}T00:00:00`);
+      return Number.isNaN(d.getTime()) ? null : d;
+    }
+  }
+
+  m = s.match(/^(\d{4})\.(\d{2})\.(\d{2})$/);
+  if (m) {
+    const [, y, mm, dd] = m;
+    const d = new Date(`${y}-${mm}-${dd}T00:00:00`);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  m = s.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  if (m) {
+    const [, dd, mm, y] = m;
+    const d = new Date(`${y}-${mm}-${dd}T00:00:00`);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  if (/^\d{10,13}$/.test(s)) {
+    const num = Number(s);
+    const d = new Date(s.length === 13 ? num : num * 1000);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function hasTimePart(val) {
+  if (!val) return false;
+  return /[T ]\d{2}:\d{2}/.test(String(val).trim());
+}
+
+function formatYmdInTashkent(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null;
+
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tashkent",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
+  const map = {};
+  for (const p of parts) map[p.type] = p.value;
+
+  if (!map.year || !map.month || !map.day) return null;
+  return `${map.year}-${map.month}-${map.day}`;
+}
+
+function todayYmdInTashkent() {
+  return formatYmdInTashkent(new Date());
+}
+
+function dateOnlyIsPast(raw) {
+  const parsed = parseDateFlexible(raw);
+  if (!parsed) return false;
+
+  const candidateYmd =
+    typeof raw === "string" && /^\d{4}[-.]\d{2}[-.]\d{2}$/.test(raw.trim())
+      ? raw.trim().replace(/\./g, "-")
+      : formatYmdInTashkent(parsed);
+
+  const todayYmd = todayYmdInTashkent();
+  if (!candidateYmd || !todayYmd) return false;
+
+  return candidateYmd < todayYmd;
+}
+
+function dateTimeIsPast(raw) {
+  const parsed = parseDateFlexible(raw);
+  if (!parsed) return false;
+  return parsed.getTime() < Date.now();
+}
+
+function isMomentPassed(raw) {
+  if (!raw) return false;
+  return hasTimePart(raw) ? dateTimeIsPast(raw) : dateOnlyIsPast(raw);
+}
+
+function pickPrimaryServiceDate(svc, d) {
+  const category = String(svc?.category || d?.category || "").toLowerCase();
+
+  if (category === "refused_tour") {
+    return (
+      d?.endDate ||
+      d?.end_date ||
+      d?.returnFlightDate ||
+      d?.returnDate ||
+      d?.startDate ||
+      d?.start_date
+    );
+  }
+
+  if (category === "refused_hotel") {
+    return (
+      d?.checkOut ||
+      d?.check_out ||
+      d?.hotel_check_out ||
+      d?.endDate ||
+      d?.end_date ||
+      d?.checkIn ||
+      d?.check_in ||
+      d?.hotel_check_in
+    );
+  }
+
+  if (category === "refused_flight") {
+    return (
+      d?.returnFlightDate ||
+      d?.return_flight_date ||
+      d?.endFlightDate ||
+      d?.end_flight_date ||
+      d?.departureFlightDate ||
+      d?.departure_date ||
+      d?.startDate
+    );
+  }
+
+  if (category === "refused_ticket" || category === "refused_event_ticket") {
+    return (
+      d?.eventDate ||
+      d?.event_date ||
+      d?.startDate ||
+      d?.start_date ||
+      d?.date
+    );
+  }
+
+  return (
+    d?.endDate ||
+    d?.end_date ||
+    d?.checkOut ||
+    d?.check_out ||
+    d?.hotel_check_out ||
+    d?.returnFlightDate ||
+    d?.eventDate ||
+    d?.startDate ||
+    d?.date
+  );
+}
+
+function parseDateFlexible(val) {
+  if (!val) return null;
+
+  if (val instanceof Date) {
+    return Number.isNaN(val.getTime()) ? null : val;
+  }
+
+  const s = String(val).trim();
+  if (!s) return null;
+
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) {
+    let [, y, a, b] = m;
+    let mm = Number(a);
+    let dd = Number(b);
+
+    if (mm > 12 && dd >= 1 && dd <= 12) {
+      [mm, dd] = [dd, mm];
+    }
+
+    if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
+      const d = new Date(`${y}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}T00:00:00`);
+      return Number.isNaN(d.getTime()) ? null : d;
+    }
+  }
+
+  m = s.match(/^(\d{4})\.(\d{2})\.(\d{2})$/);
+  if (m) {
+    const [, y, mm, dd] = m;
+    const d = new Date(`${y}-${mm}-${dd}T00:00:00`);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  m = s.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  if (m) {
+    const [, dd, mm, y] = m;
+    const d = new Date(`${y}-${mm}-${dd}T00:00:00`);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  if (/^\d{10,13}$/.test(s)) {
+    const num = Number(s);
+    const d = new Date(s.length === 13 ? num : num * 1000);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function hasTimePart(val) {
+  if (!val) return false;
+  return /[T ]\d{2}:\d{2}/.test(String(val).trim());
+}
+
+function formatYmdInTashkent(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null;
+
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tashkent",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
+  const map = {};
+  for (const p of parts) map[p.type] = p.value;
+
+  if (!map.year || !map.month || !map.day) return null;
+  return `${map.year}-${map.month}-${map.day}`;
+}
+
+function todayYmdInTashkent() {
+  return formatYmdInTashkent(new Date());
+}
+
+function dateOnlyIsPast(raw) {
+  const parsed = parseDateFlexible(raw);
+  if (!parsed) return false;
+
+  const candidateYmd =
+    typeof raw === "string" && /^\d{4}[-.]\d{2}[-.]\d{2}$/.test(raw.trim())
+      ? raw.trim().replace(/\./g, "-")
+      : formatYmdInTashkent(parsed);
+
+  const todayYmd = todayYmdInTashkent();
+  if (!candidateYmd || !todayYmd) return false;
+
+  return candidateYmd < todayYmd;
+}
+
+function dateTimeIsPast(raw) {
+  const parsed = parseDateFlexible(raw);
+  if (!parsed) return false;
+  return parsed.getTime() < Date.now();
+}
+
+function isMomentPassed(raw) {
+  if (!raw) return false;
+  return hasTimePart(raw) ? dateTimeIsPast(raw) : dateOnlyIsPast(raw);
+}
+
+function pickPrimaryServiceDate(svc, d) {
+  const category = String(svc?.category || d?.category || "").toLowerCase();
+
+  if (category === "refused_tour") {
+    return (
+      d?.endDate ||
+      d?.end_date ||
+      d?.returnFlightDate ||
+      d?.returnDate ||
+      d?.startDate ||
+      d?.start_date
+    );
+  }
+
+  if (category === "refused_hotel") {
+    return (
+      d?.checkOut ||
+      d?.check_out ||
+      d?.hotel_check_out ||
+      d?.endDate ||
+      d?.end_date ||
+      d?.checkIn ||
+      d?.check_in ||
+      d?.hotel_check_in
+    );
+  }
+
+  if (category === "refused_flight") {
+    return (
+      d?.returnFlightDate ||
+      d?.return_flight_date ||
+      d?.endFlightDate ||
+      d?.end_flight_date ||
+      d?.departureFlightDate ||
+      d?.departure_date ||
+      d?.startDate
+    );
+  }
+
+  if (category === "refused_ticket" || category === "refused_event_ticket") {
+    return (
+      d?.eventDate ||
+      d?.event_date ||
+      d?.startDate ||
+      d?.start_date ||
+      d?.date
+    );
+  }
+
+  return (
+    d?.endDate ||
+    d?.end_date ||
+    d?.checkOut ||
+    d?.check_out ||
+    d?.hotel_check_out ||
+    d?.returnFlightDate ||
+    d?.eventDate ||
+    d?.startDate ||
+    d?.date
+  );
+}
+
 function isMarketplaceVisible(it, nowTs = Date.now()) {
   const svc = it?.service || it || {};
   const d = parseDetails(svc);
 
-  // если выключено вручную — не показываем
   if (d.isActive === false) return false;
 
-  // если истёк таймер — не показываем
+  const primaryDate = pickPrimaryServiceDate(svc, d);
+  if (primaryDate && isMomentPassed(primaryDate)) return false;
+
   const exp = resolveExpireAt(svc);
-  return exp ? nowTs <= exp : true;
+  if (exp && nowTs > exp) return false;
+
+  return true;
 }
 
 
