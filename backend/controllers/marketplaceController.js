@@ -4,7 +4,7 @@ const pg = db?.query ? db : db?.pool;
 const jwt = require("jsonwebtoken");
 const JWT_SECRET = process.env.JWT_SECRET || "changeme_in_env";
 const { getContactUnlockSettings } = require("../utils/contactUnlockSettings");
-
+const { isServiceActual } = require("../telegram/helpers/serviceActual");
 if (!pg || typeof pg.query !== "function") {
   throw new Error("DB driver not available: expected node-postgres Pool with .query()");
 }
@@ -379,7 +379,6 @@ module.exports.search = async (req, res, next) => {
     where.push(`s.deleted_at IS NULL`);
     if (only_active) {
       where.push(`COALESCE((s.details->>'isActive')::boolean, TRUE) = TRUE`);
-      where.push(`(s.expiration_at IS NULL OR s.expiration_at > now())`);
     }
 
     if (cats && cats.length) {
@@ -432,19 +431,27 @@ module.exports.search = async (req, res, next) => {
       LIMIT $${p++} OFFSET $${p++}
     `;
 
-    tr.log("where", where);
-    const { rows } = await tr.wrapQuery(sql, params, "services");
-    tr.log("result", { rows: rows.length });
-    
-    const viewer = getOptionalUserFromReq(req);
-    
-    const safeRows = await Promise.all(
-      rows.map((row) => redactMarketplaceRow(row, viewer))
-    );
-    
-    tr.done();
-    
-    return res.json({ items: safeRows, limit, offset });
+  tr.log("where", where);
+  const { rows } = await tr.wrapQuery(sql, params, "services");
+  
+  const filteredRows = only_active
+    ? rows.filter((row) => isServiceActual(row.details, row))
+    : rows;
+  
+  tr.log("result", {
+    rows_before_actual_filter: rows.length,
+    rows_after_actual_filter: filteredRows.length,
+  });
+  
+  const viewer = getOptionalUserFromReq(req);
+  
+  const safeRows = await Promise.all(
+    filteredRows.map((row) => redactMarketplaceRow(row, viewer))
+  );
+  
+  tr.done();
+  
+  return res.json({ items: safeRows, limit, offset });
   } catch (err) {
     console.error("[MP:search ERR]", err?.message || err);
     next(err);
