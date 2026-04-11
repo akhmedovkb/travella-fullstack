@@ -941,7 +941,7 @@ const inputCls = (season) =>
 
       <div className="overflow-auto border rounded">
         <table className="w-full min-w-[1200px] text-sm align-top">
-          <thead className="bg-gray-50">
+          <thead>
             <tr>
               <th className="text-left px-3 py-2">
                 {t("room_category",{defaultValue:"Категория"})}
