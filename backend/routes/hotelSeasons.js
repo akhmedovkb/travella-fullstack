@@ -145,12 +145,12 @@ router.put('/:seasonId', canWrite, async (req, res, next) => {
       `UPDATE hotel_seasons
           SET label=$1, start_date=$2, end_date=$3, updated_at=NOW()
         WHERE id=$4 AND hotel_id=$5
-          RETURNING
-            id,
-            hotel_id,
-            label,
-            start_date::text AS start_date,
-            end_date::text AS end_date
+        RETURNING
+          id,
+          hotel_id,
+          label,
+          start_date::text AS start_date,
+          end_date::text AS end_date`,
       [String(label).trim() || 'low', start, end, seasonId, hotelId]
     );
     if (!rows.length) return res.status(404).json({ error: 'not_found' });
