@@ -796,6 +796,8 @@ export default function AdminModeration() {
     imagesJson: "[]",
     availabilityJson: "[]",
   });
+  const [editImages, setEditImages] = useState([]);
+  const [newImageUrl, setNewImageUrl] = useState("");
 
   const token = localStorage.getItem("token");
   const cfg = { headers: { Authorization: `Bearer ${token}` } };
@@ -948,6 +950,8 @@ export default function AdminModeration() {
       const availability = Array.isArray(s.availability)
         ? s.availability
         : parseJsonSafe(s.availability, []) || [];
+      setEditImages(images);
+      setNewImageUrl("");
 
       setEditItemId(id);
       setEditForm({
@@ -972,23 +976,33 @@ export default function AdminModeration() {
     }
   };
 
+    const removeEditImage = (idx) => {
+    setEditImages((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const addEditImage = () => {
+    const list = String(newImageUrl || "")
+      .split(/\r?\n|,/)
+      .map((x) => x.trim())
+      .filter(Boolean);
+
+    if (!list.length) return;
+
+    setEditImages((prev) => [...prev, ...list]);
+    setNewImageUrl("");
+  };
+  
   const saveEdit = async () => {
     const details = parseJsonSafe(editForm.detailsJson, null);
-    const images = parseJsonSafe(editForm.imagesJson, null);
+    const images = Array.isArray(editImages)
+      ? editImages.filter((x) => String(x || "").trim())
+      : [];
     const availability = parseJsonSafe(editForm.availabilityJson, null);
 
     if (!details || typeof details !== "object" || Array.isArray(details)) {
       return tError(
         t("moderation.details_json_invalid", {
           defaultValue: "details должен быть объектом JSON",
-        })
-      );
-    }
-
-    if (!Array.isArray(images)) {
-      return tError(
-        t("moderation.images_json_invalid", {
-          defaultValue: "images должен быть JSON-массивом",
         })
       );
     }
@@ -1243,20 +1257,57 @@ export default function AdminModeration() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-1">
-                    images JSON
+                  <label className="block text-sm font-medium mb-2">
+                    {t("moderation.images", { defaultValue: "Изображения" })}
                   </label>
-                  <textarea
-                    value={editForm.imagesJson}
-                    onChange={(e) =>
-                      setEditForm((prev) => ({
-                        ...prev,
-                        imagesJson: e.target.value,
-                      }))
-                    }
-                    rows={5}
-                    className="w-full border rounded-lg px-3 py-2 font-mono text-xs"
-                  />
+
+                  {editImages.length > 0 ? (
+                    <div className="flex flex-wrap gap-3 mb-3">
+                      {editImages.map((img, idx) => (
+                        <div
+                          key={`${img}-${idx}`}
+                          className="relative w-28 h-24 rounded-lg overflow-hidden border bg-gray-50"
+                        >
+                          <img
+                            src={img}
+                            alt=""
+                            className="w-full h-full object-cover"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeEditImage(idx)}
+                            className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/75 text-white text-sm"
+                            title={t("common.delete", { defaultValue: "Удалить" })}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-gray-500 mb-3">
+                      {t("moderation.no_images", {
+                        defaultValue: "Нет изображений",
+                      })}
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <textarea
+                      value={newImageUrl}
+                      onChange={(e) => setNewImageUrl(e.target.value)}
+                      placeholder="https://... (можно несколько ссылок, каждая с новой строки)"
+                      rows={3}
+                      className="w-full border rounded-lg px-3 py-2"
+                    />
+                    <button
+                      type="button"
+                      onClick={addEditImage}
+                      className="px-4 py-2 rounded-lg bg-gray-900 text-white hover:bg-black"
+                    >
+                      {t("common.add", { defaultValue: "Добавить" })}
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">
