@@ -116,6 +116,7 @@ function ProofLightbox({ image, onClose }) {
 function Card({
   item,
   tab,
+  onEdit,
   onApprove,
   onReject,
   onUnpublish,
@@ -729,6 +730,13 @@ function Card({
 
       <div className="mt-4 flex gap-2">
         <button
+          onClick={() => onEdit(s.id)}
+          className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700"
+        >
+          {t("common.edit", { defaultValue: "Редактировать" })}
+        </button>
+
+        <button
           onClick={() => onApprove(s.id)}
           className="px-3 py-1.5 rounded bg-emerald-600 text-white text-sm hover:bg-emerald-700"
         >
@@ -774,6 +782,20 @@ export default function AdminModeration() {
   const [loading, setLoading] = useState(true);
   const [counts, setCounts] = useState({ pending: 0, rejected: 0 });
   const [proofViewer, setProofViewer] = useState(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editLoading, setEditLoading] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editItemId, setEditItemId] = useState(null);
+  const [editForm, setEditForm] = useState({
+    title: "",
+    description: "",
+    category: "",
+    price: "",
+    vehicle_model: "",
+    detailsJson: "{}",
+    imagesJson: "[]",
+    availabilityJson: "[]",
+  });
 
   const token = localStorage.getItem("token");
   const cfg = { headers: { Authorization: `Bearer ${token}` } };
@@ -916,6 +938,106 @@ export default function AdminModeration() {
     }
   };
 
+  const openEdit = async (id) => {
+    setEditLoading(true);
+    try {
+      const res = await axios.get(`${API_BASE}/api/admin/services/${id}`, cfg);
+      const s = res.data || {};
+      const details = normalizeDetails(s.details);
+      const images = normalizeImages(s.images);
+      const availability = Array.isArray(s.availability)
+        ? s.availability
+        : parseJsonSafe(s.availability, []) || [];
+
+      setEditItemId(id);
+      setEditForm({
+        title: s.title || "",
+        description: s.description || "",
+        category: s.category || "",
+        price: s.price ?? "",
+        vehicle_model: s.vehicle_model || "",
+        detailsJson: JSON.stringify(details, null, 2),
+        imagesJson: JSON.stringify(images, null, 2),
+        availabilityJson: JSON.stringify(availability, null, 2),
+      });
+      setEditOpen(true);
+    } catch {
+      tError(
+        t("moderation.load_edit_error", {
+          defaultValue: "Не удалось загрузить услугу для редактирования",
+        })
+      );
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  const saveEdit = async () => {
+    const details = parseJsonSafe(editForm.detailsJson, null);
+    const images = parseJsonSafe(editForm.imagesJson, null);
+    const availability = parseJsonSafe(editForm.availabilityJson, null);
+
+    if (!details || typeof details !== "object" || Array.isArray(details)) {
+      return tError(
+        t("moderation.details_json_invalid", {
+          defaultValue: "details должен быть объектом JSON",
+        })
+      );
+    }
+
+    if (!Array.isArray(images)) {
+      return tError(
+        t("moderation.images_json_invalid", {
+          defaultValue: "images должен быть JSON-массивом",
+        })
+      );
+    }
+
+    if (!Array.isArray(availability)) {
+      return tError(
+        t("moderation.availability_json_invalid", {
+          defaultValue: "availability должен быть JSON-массивом",
+        })
+      );
+    }
+
+    setEditSaving(true);
+    try {
+      await axios.put(
+        `${API_BASE}/api/admin/services/${editItemId}`,
+        {
+          title: editForm.title,
+          description: editForm.description,
+          category: editForm.category,
+          price: editForm.price === "" ? null : editForm.price,
+          vehicle_model: editForm.vehicle_model,
+          details,
+          images,
+          availability,
+        },
+        cfg
+      );
+
+      tSuccess(
+        t("moderation.saved", {
+          defaultValue: "Изменения сохранены",
+        })
+      );
+      setEditOpen(false);
+      setEditItemId(null);
+      await load(tab);
+      await refreshCounts();
+    } catch {
+      tError(
+        t("moderation.save_error", {
+          defaultValue: "Не удалось сохранить изменения",
+        })
+      );
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
   if (!isAdmin) {
     return (
       <div className="max-w-5xl mx-auto p-4">
@@ -994,6 +1116,7 @@ export default function AdminModeration() {
                 key={it.id}
                 item={it}
                 tab={tab}
+                onEdit={openEdit}
                 onApprove={approve}
                 onReject={reject}
                 onUnpublish={unpublish}
@@ -1004,6 +1127,178 @@ export default function AdminModeration() {
           </div>
         )}
       </div>
+      {editOpen &&
+        createPortal(
+          <div className="fixed inset-0 z-[5000] bg-black/60 flex items-center justify-center p-4">
+            <div className="w-full max-w-3xl max-h-[92vh] overflow-y-auto rounded-2xl bg-white shadow-2xl">
+              <div className="flex items-center justify-between px-5 py-4 border-b">
+                <div className="text-lg font-semibold">
+                  {t("moderation.edit_service", {
+                    defaultValue: "Редактирование услуги",
+                  })}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditOpen(false)}
+                  className="text-2xl leading-none text-gray-500 hover:text-black"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="p-5 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">
+                      Title
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.title}
+                      onChange={(e) =>
+                        setEditForm((prev) => ({ ...prev, title: e.target.value }))
+                      }
+                      className="w-full border rounded-lg px-3 py-2"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-1">
+                      Category
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.category}
+                      onChange={(e) =>
+                        setEditForm((prev) => ({ ...prev, category: e.target.value }))
+                      }
+                      className="w-full border rounded-lg px-3 py-2"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-1">
+                      Price
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.price}
+                      onChange={(e) =>
+                        setEditForm((prev) => ({ ...prev, price: e.target.value }))
+                      }
+                      className="w-full border rounded-lg px-3 py-2"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-1">
+                      Vehicle model
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.vehicle_model}
+                      onChange={(e) =>
+                        setEditForm((prev) => ({
+                          ...prev,
+                          vehicle_model: e.target.value,
+                        }))
+                      }
+                      className="w-full border rounded-lg px-3 py-2"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    Description
+                  </label>
+                  <textarea
+                    value={editForm.description}
+                    onChange={(e) =>
+                      setEditForm((prev) => ({
+                        ...prev,
+                        description: e.target.value,
+                      }))
+                    }
+                    rows={4}
+                    className="w-full border rounded-lg px-3 py-2"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    details JSON
+                  </label>
+                  <textarea
+                    value={editForm.detailsJson}
+                    onChange={(e) =>
+                      setEditForm((prev) => ({
+                        ...prev,
+                        detailsJson: e.target.value,
+                      }))
+                    }
+                    rows={14}
+                    className="w-full border rounded-lg px-3 py-2 font-mono text-xs"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    images JSON
+                  </label>
+                  <textarea
+                    value={editForm.imagesJson}
+                    onChange={(e) =>
+                      setEditForm((prev) => ({
+                        ...prev,
+                        imagesJson: e.target.value,
+                      }))
+                    }
+                    rows={5}
+                    className="w-full border rounded-lg px-3 py-2 font-mono text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    availability JSON
+                  </label>
+                  <textarea
+                    value={editForm.availabilityJson}
+                    onChange={(e) =>
+                      setEditForm((prev) => ({
+                        ...prev,
+                        availabilityJson: e.target.value,
+                      }))
+                    }
+                    rows={5}
+                    className="w-full border rounded-lg px-3 py-2 font-mono text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 px-5 py-4 border-t">
+                <button
+                  type="button"
+                  onClick={() => setEditOpen(false)}
+                  className="px-4 py-2 rounded-lg bg-gray-100 text-gray-800 hover:bg-gray-200"
+                >
+                  {t("common.cancel", { defaultValue: "Отмена" })}
+                </button>
+                <button
+                  type="button"
+                  onClick={saveEdit}
+                  disabled={editSaving || editLoading}
+                  className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60"
+                >
+                  {editSaving
+                    ? t("common.saving", { defaultValue: "Сохранение..." })
+                    : t("common.save", { defaultValue: "Сохранить" })}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
 
       <ProofLightbox
         image={proofViewer}
