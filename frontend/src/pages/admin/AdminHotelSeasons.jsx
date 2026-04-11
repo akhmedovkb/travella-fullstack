@@ -26,20 +26,33 @@ api.interceptors.request.use((cfg) => {
 // нормализация в YYYY-MM-DD для <input type="date">
 const iso = (d) => {
   if (!d) return "";
+
+  const formatLocalDate = (x) => {
+    if (!(x instanceof Date) || Number.isNaN(x.getTime())) return "";
+    const y = x.getFullYear();
+    const m = String(x.getMonth() + 1).padStart(2, "0");
+    const day = String(x.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+
   if (d instanceof Date) {
-    if (Number.isNaN(d.getTime())) return "";
-    return d.toISOString().slice(0, 10);
+    return formatLocalDate(d);
   }
-  const s = String(d);
+
+  const s = String(d).trim();
+
   // уже YYYY-MM-DD
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-  // ISO со временем
+
+  // ISO со временем: берём только дату слева, без Date/UTC-конвертации
   if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.slice(0, 10);
-  // вдруг пришло только «YYYY-MM-DD …»
+
+  // вдруг пришло только "YYYY-MM-DD ..."
   const first10 = s.slice(0, 10);
   if (/^\d{4}-\d{2}-\d{2}$/.test(first10)) return first10;
+
   const x = new Date(s);
-  return Number.isNaN(x.getTime()) ? "" : x.toISOString().slice(0, 10);
+  return formatLocalDate(x);
 };
 
 const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
