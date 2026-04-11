@@ -202,7 +202,7 @@ const slugify = (s) =>
     .slice(0, 40);
 
 const numOrNull = (v) => (v === "" || v === null || v === undefined ? null : Number(v));
-
+const SEASONS = ["low", "shoulder", "high"];
 /* ---------- AsyncSelect i18n + debounce ---------- */
 const makeAsyncSelectI18n = (t) => ({
   noOptionsMessage: ({ inputValue }) =>
@@ -331,6 +331,10 @@ export default function AdminHotelForm({ hotelIdProp, onSaved } = {}) {
             resident: toMealSet(r?.prices?.low?.resident),
             nonResident: toMealSet(r?.prices?.low?.nonResident),
           },
+          shoulder: {
+            resident: toMealSet(r?.prices?.shoulder?.resident),
+            nonResident: toMealSet(r?.prices?.shoulder?.nonResident),
+          },
           high: {
             resident: toMealSet(r?.prices?.high?.resident),
             nonResident: toMealSet(r?.prices?.high?.nonResident),
@@ -399,7 +403,8 @@ export default function AdminHotelForm({ hotelIdProp, onSaved } = {}) {
     ...base,
     count: "",
     prices: {
-      low:  { resident: makeMealSet(), nonResident: makeMealSet() },
+      low: { resident: makeMealSet(), nonResident: makeMealSet() },
+      shoulder: { resident: makeMealSet(), nonResident: makeMealSet() },
       high: { resident: makeMealSet(), nonResident: makeMealSet() },
     },
   });
@@ -414,7 +419,7 @@ const isFilled = (v) => !(v === "" || v === null || v === undefined);
 
 const rowHasAnyPrice = (row) => {
   if (!row?.prices) return false;
-  const seasons = ["low", "high"];
+  const seasons = ["low", "shoulder", "high"];
   const persons = ["resident", "nonResident"];
   for (const season of seasons) {
     for (const person of persons) {
@@ -438,9 +443,22 @@ const invalidRowIds = useMemo(
 
   // стили для ячеек по сезону (LR белый, HR бледно-серый)
   const tdCls = (season, extra = "") =>
-    `px-2 py-1 ${season === "high" ? "bg-gray-50" : "bg-white"} ${extra}`;
+    `px-2 py-1 ${
+      season === "high"
+        ? "bg-gray-50"
+        : season === "shoulder"
+        ? "bg-amber-50"
+        : "bg-white"
+    } ${extra}`;
+
   const inputCls = (season) =>
-    `w-28 border rounded px-2 py-1 ${season === "high" ? "bg-gray-50" : "bg-white"}`;
+    `w-28 border rounded px-2 py-1 ${
+      season === "high"
+        ? "bg-gray-50"
+        : season === "shoulder"
+        ? "bg-amber-50"
+        : "bg-white"
+    }`;
 
   // Доп. место
   const [extraBedPrice, setExtraBedPrice] = useState("");
@@ -681,11 +699,15 @@ const invalidRowIds = useMemo(
         count: Number(r.count || 0),
         prices: {
           low: {
-            resident:    normalizeMealSet(r.prices.low.resident),
+            resident: normalizeMealSet(r.prices.low.resident),
             nonResident: normalizeMealSet(r.prices.low.nonResident),
           },
+          shoulder: {
+            resident: normalizeMealSet(r.prices.shoulder.resident),
+            nonResident: normalizeMealSet(r.prices.shoulder.nonResident),
+          },
           high: {
-            resident:    normalizeMealSet(r.prices.high.resident),
+            resident: normalizeMealSet(r.prices.high.resident),
             nonResident: normalizeMealSet(r.prices.high.nonResident),
           },
         },
@@ -927,30 +949,51 @@ const invalidRowIds = useMemo(
               <th className="text-left px-3 py-2">
                 {t("count_short",{defaultValue:"Кол-во"})}
               </th>
-              <th className="px-3 py-2 text-center bg-white" colSpan={10}>
-                {t("low_season",{defaultValue:"Низкий сезон"})}
-              </th>
-              <th className="px-3 py-2 text-center bg-gray-100 border-l border-gray-200" colSpan={10}>
-                {t("high_season",{defaultValue:"Высокий сезон"})}
-              </th>
+               <th className="px-3 py-2 text-center bg-white" colSpan={10}>
+                 {t("low_season", { defaultValue: "Низкий сезон" })}
+               </th>
+               <th className="px-3 py-2 text-center bg-amber-50 border-l border-gray-200" colSpan={10}>
+                 {t("shoulder_season", { defaultValue: "Средний сезон" })}
+               </th>
+               <th className="px-3 py-2 text-center bg-gray-100 border-l border-gray-200" colSpan={10}>
+                 {t("high_season", { defaultValue: "Высокий сезон" })}
+               </th>
               <th className="w-[1%] px-3 py-2"></th>
             </tr>
             <tr className="bg-gray-50">
               <th></th><th></th>
-              <th className="text-center px-3 py-1 bg-white" colSpan={5}>{t("for_residents",{defaultValue:"Для резидентов"})}</th>
-              <th className="text-center px-3 py-1 bg-white" colSpan={5}>{t("for_nonresidents",{defaultValue:"Для нерезидентов"})}</th>
-              <th className="text-center px-3 py-1 bg-gray-100 border-l border-gray-200" colSpan={5}>{t("for_residents",{defaultValue:"Для резидентов"})}</th>
-              <th className="text-center px-3 py-1 bg-gray-100" colSpan={5}>{t("for_nonresidents",{defaultValue:"Для нерезидентов"})}</th>
+               <th className="text-center px-3 py-1 bg-white" colSpan={5}>{t("for_residents",{defaultValue:"Для резидентов"})}</th>
+               <th className="text-center px-3 py-1 bg-white" colSpan={5}>{t("for_nonresidents",{defaultValue:"Для нерезидентов"})}</th>
+               
+               <th className="text-center px-3 py-1 bg-amber-50 border-l border-gray-200" colSpan={5}>{t("for_residents",{defaultValue:"Для резидентов"})}</th>
+               <th className="text-center px-3 py-1 bg-amber-50" colSpan={5}>{t("for_nonresidents",{defaultValue:"Для нерезидентов"})}</th>
+               
+               <th className="text-center px-3 py-1 bg-gray-100 border-l border-gray-200" colSpan={5}>{t("for_residents",{defaultValue:"Для резидентов"})}</th>
+               <th className="text-center px-3 py-1 bg-gray-100" colSpan={5}>{t("for_nonresidents",{defaultValue:"Для нерезидентов"})}</th>
               <th></th>
             </tr>
             <tr className="bg-gray-50 text-xs">
               <th></th><th></th>
-              {MEAL_PLANS.map((mp) => (<th key={`low-res-${mp}`} className="px-2 py-1 bg-white">{mp}</th>))}
-              {MEAL_PLANS.map((mp) => (<th key={`low-non-${mp}`} className="px-2 py-1 bg-white">{mp}</th>))}
-              {MEAL_PLANS.map((mp, i) => (
-                <th key={`high-res-${mp}`} className={`px-2 py-1 bg-gray-100 ${i===0 ? "border-l border-gray-200" : ""}`}>{mp}</th>
-              ))}
-              {MEAL_PLANS.map((mp) => (<th key={`high-non-${mp}`} className="px-2 py-1 bg-gray-100">{mp}</th>))}
+                  {MEAL_PLANS.map((mp) => (
+                    <th key={`low-res-${mp}`} className="px-2 py-1 bg-white">{mp}</th>
+                  ))}
+                  {MEAL_PLANS.map((mp) => (
+                    <th key={`low-non-${mp}`} className="px-2 py-1 bg-white">{mp}</th>
+                  ))}
+                  
+                  {MEAL_PLANS.map((mp, i) => (
+                    <th key={`shoulder-res-${mp}`} className={`px-2 py-1 bg-amber-50 ${i === 0 ? "border-l border-gray-200" : ""}`}>{mp}</th>
+                  ))}
+                  {MEAL_PLANS.map((mp) => (
+                    <th key={`shoulder-non-${mp}`} className="px-2 py-1 bg-amber-50">{mp}</th>
+                  ))}
+                  
+                  {MEAL_PLANS.map((mp, i) => (
+                    <th key={`high-res-${mp}`} className={`px-2 py-1 bg-gray-100 ${i === 0 ? "border-l border-gray-200" : ""}`}>{mp}</th>
+                  ))}
+                  {MEAL_PLANS.map((mp) => (
+                    <th key={`high-non-${mp}`} className="px-2 py-1 bg-gray-100">{mp}</th>
+                  ))}
               <th></th>
             </tr>
           </thead>
@@ -999,6 +1042,44 @@ const invalidRowIds = useMemo(
                     />
                   </td>
                 ))}
+                 
+                {/* shoulder / resident */}
+                {MEAL_PLANS.map((mp, i) => (
+                  <td
+                    className={tdCls("shoulder", i === 0 ? "border-l border-gray-200" : "")}
+                    key={`${row.id}-shoulder-res-${mp}`}
+                  >
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      className={inputCls("shoulder")}
+                      placeholder={currency}
+                      value={row.prices.shoulder.resident[mp] ?? ""}
+                      onChange={(e) =>
+                        updateMealPrice(row.id, "shoulder", "resident", mp, e.target.value)
+                      }
+                    />
+                  </td>
+                ))}
+
+                {/* shoulder / nonresident */}
+                {MEAL_PLANS.map((mp) => (
+                  <td className={tdCls("shoulder")} key={`${row.id}-shoulder-non-${mp}`}>
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      className={inputCls("shoulder")}
+                      placeholder={currency}
+                      value={row.prices.shoulder.nonResident[mp] ?? ""}
+                      onChange={(e) =>
+                        updateMealPrice(row.id, "shoulder", "nonResident", mp, e.target.value)
+                      }
+                    />
+                  </td>
+                ))}
+                 
                 {/* low / nonresident */}
                 {MEAL_PLANS.map((mp) => (
                   <td className={tdCls("low")} key={`${row.id}-low-non-${mp}`}>
