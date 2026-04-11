@@ -62,6 +62,97 @@ router.get("/services/:id(\\d+)", authenticateToken, requireAdmin, async (req, r
   res.json(q.rows[0]);
 });
 
+// полное редактирование услуги админом без ломания модерации
+router.put("/services/:id(\\d+)", authenticateToken, requireAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id <= 0) {
+    return res.status(400).json({ message: "Bad service id" });
+  }
+
+  const parseMaybeJson = (value, fallback) => {
+    if (typeof value === "undefined") return fallback;
+    if (value === null) return null;
+    if (typeof value === "string") {
+      try {
+        return JSON.parse(value);
+      } catch {
+        throw new Error("INVALID_JSON");
+      }
+    }
+    return value;
+  };
+
+  try {
+    const cur = await pool.query(`SELECT * FROM services WHERE id = $1`, [id]);
+    if (!cur.rows.length) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    const row = cur.rows[0];
+    const body = req.body || {};
+
+    let nextImages;
+    let nextAvailability;
+    let nextDetails;
+
+    try {
+      nextImages = parseMaybeJson(body.images, row.images ?? []);
+      nextAvailability = parseMaybeJson(body.availability, row.availability ?? []);
+      nextDetails = parseMaybeJson(body.details, row.details ?? {});
+    } catch {
+      return res.status(400).json({ message: "Invalid JSON payload" });
+    }
+
+    const nextTitle =
+      typeof body.title === "undefined" ? row.title : body.title;
+    const nextDescription =
+      typeof body.description === "undefined" ? row.description : body.description;
+    const nextCategory =
+      typeof body.category === "undefined" ? row.category : body.category;
+    const nextPrice =
+      typeof body.price === "undefined" ? row.price : body.price;
+    const nextVehicleModel =
+      typeof body.vehicle_model === "undefined"
+        ? row.vehicle_model
+        : body.vehicle_model;
+
+    const upd = await pool.query(
+      `UPDATE services
+          SET title = $2,
+              description = $3,
+              category = $4,
+              price = $5,
+             images = $6::jsonb,
+              availability = $7::jsonb,
+              details = $8::jsonb,
+              vehicle_model = $9,
+              updated_at = NOW()
+        WHERE id = $1
+        RETURNING *`,
+      [
+        id,
+        nextTitle,
+        nextDescription,
+        nextCategory,
+        nextPrice,
+        JSON.stringify(Array.isArray(nextImages) ? nextImages : []),
+        JSON.stringify(Array.isArray(nextAvailability) ? nextAvailability : []),
+        JSON.stringify(
+          nextDetails && typeof nextDetails === "object" && !Array.isArray(nextDetails)
+            ? nextDetails
+            : {}
+        ),
+        nextVehicleModel,
+      ]
+    );
+
+    return res.json({ ok: true, service: upd.rows[0] });
+  } catch (e) {
+    console.error("[admin update service] error:", e);
+    return res.status(500).json({ message: "Internal error" });
+  }
+});
+
 /**
  * ✅ Авто-запись previousPrice при изменении цены в админке
  * PATCH /api/admin/services/:id/price
