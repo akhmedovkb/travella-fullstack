@@ -113,12 +113,12 @@ router.post('/', canWrite, async (req, res, next) => {
     const { rows } = await db.query(
       `INSERT INTO hotel_seasons (hotel_id, label, start_date, end_date, created_at, updated_at)
        VALUES ($1,$2,$3,$4, NOW(), NOW())
-        RETURNING
-          id,
-          hotel_id,
-          label,
-          start_date::text AS start_date,
-          end_date::text AS end_date
+       RETURNING
+         id,
+         hotel_id,
+         label,
+         start_date::text AS start_date,
+         end_date::text AS end_date`,
       [hotelId, String(label).trim() || 'low', start, end]
     );
     res.json(rows[0]);
