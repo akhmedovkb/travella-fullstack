@@ -949,13 +949,13 @@ const inputCls = (season) =>
               <th className="text-left px-3 py-2">
                 {t("count_short",{defaultValue:"Кол-во"})}
               </th>
-               <th className="px-3 py-2 text-center bg-white" colSpan={10}>
+               <th className="px-3 py-2 text-center bg-white rounded-tl-md" colSpan={10}>
                  {t("low_season", { defaultValue: "Низкий сезон" })}
                </th>
-               <th className="px-3 py-2 text-center bg-slate-50 border-l border-gray-200" colSpan={10}>
+               <th className="px-3 py-2 text-center bg-slate-50 border-l border-gray-300" colSpan={10}>
                  {t("shoulder_season", { defaultValue: "Средний сезон" })}
                </th>
-               <th className="px-3 py-2 text-center bg-gray-100 border-l border-gray-200" colSpan={10}>
+               <th className="px-3 py-2 text-center bg-gray-100 border-l border-gray-300 rounded-tr-md" colSpan={10}>
                  {t("high_season", { defaultValue: "Высокий сезон" })}
                </th>
               <th className="w-[1%] px-3 py-2"></th>
@@ -965,10 +965,10 @@ const inputCls = (season) =>
                <th className="text-center px-3 py-1 bg-white" colSpan={5}>{t("for_residents",{defaultValue:"Для резидентов"})}</th>
                <th className="text-center px-3 py-1 bg-white" colSpan={5}>{t("for_nonresidents",{defaultValue:"Для нерезидентов"})}</th>
                
-               <th className="text-center px-3 py-1 bg-slate-50 border-l border-gray-200" colSpan={5}>{t("for_residents",{defaultValue:"Для резидентов"})}</th>
+               <th className="text-center px-3 py-1 bg-slate-50 border-l border-gray-300" colSpan={5}>{t("for_residents",{defaultValue:"Для резидентов"})}</th>
                <th className="text-center px-3 py-1 bg-slate-50" colSpan={5}>{t("for_nonresidents",{defaultValue:"Для нерезидентов"})}</th>
                
-               <th className="text-center px-3 py-1 bg-gray-100 border-l border-gray-200" colSpan={5}>{t("for_residents",{defaultValue:"Для резидентов"})}</th>
+               <th className="text-center px-3 py-1 bg-gray-100 border-l border-gray-300" colSpan={5}>{t("for_residents",{defaultValue:"Для резидентов"})}</th>
                <th className="text-center px-3 py-1 bg-gray-100" colSpan={5}>{t("for_nonresidents",{defaultValue:"Для нерезидентов"})}</th>
               <th></th>
             </tr>
@@ -982,14 +982,14 @@ const inputCls = (season) =>
                   ))}
                   
                   {MEAL_PLANS.map((mp, i) => (
-                    <th key={`shoulder-res-${mp}`} className={`px-2 py-1 bg-slate-50 ${i === 0 ? "border-l border-gray-200" : ""}`}>{mp}</th>
+                    <th key={`shoulder-res-${mp}`} className={`px-2 py-1 bg-slate-50 ${i === 0 ? "border-l border-gray-300" : ""}`}>{mp}</th>
                   ))}
                   {MEAL_PLANS.map((mp) => (
                     <th key={`shoulder-non-${mp}`} className="px-2 py-1 bg-slate-50">{mp}</th>
                   ))}
                   
                   {MEAL_PLANS.map((mp, i) => (
-                    <th key={`high-res-${mp}`} className={`px-2 py-1 bg-gray-100 ${i === 0 ? "border-l border-gray-200" : ""}`}>{mp}</th>
+                    <th key={`high-res-${mp}`} className={`px-2 py-1 bg-gray-100 ${i === 0 ? "border-l border-gray-300" : ""}`}>{mp}</th>
                   ))}
                   {MEAL_PLANS.map((mp) => (
                     <th key={`high-non-${mp}`} className="px-2 py-1 bg-gray-100">{mp}</th>
@@ -1058,7 +1058,7 @@ const inputCls = (season) =>
                {/* shoulder / resident */}
                 {MEAL_PLANS.map((mp, i) => (
                   <td
-                    className={tdCls("shoulder", i === 0 ? "border-l border-gray-200" : "")}
+                    className={tdCls("shoulder", i === 0 ? "border-l border-gray-300" : "")}
                     key={`${row.id}-shoulder-res-${mp}`}
                   >
                     <input
@@ -1094,7 +1094,7 @@ const inputCls = (season) =>
                  
                 {/* high / resident */}
                 {MEAL_PLANS.map((mp, i) => (
-                  <td className={tdCls("high", i===0 ? "border-l border-gray-200" : "")} key={`${row.id}-high-res-${mp}`}>
+                  <td className={tdCls("high", i===0 ? "border-l border-gray-300" : "")} key={`${row.id}-high-res-${mp}`}>
                     <input
                       type="number" min={0} step="0.01"
                       className={inputCls("high")}
