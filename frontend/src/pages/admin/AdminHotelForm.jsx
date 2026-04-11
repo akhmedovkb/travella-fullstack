@@ -442,23 +442,23 @@ const invalidRowIds = useMemo(
 
 
   // стили для ячеек по сезону (LR белый, HR бледно-серый)
-  const tdCls = (season, extra = "") =>
-    `px-2 py-1 ${
-      season === "high"
-        ? "bg-gray-50"
-        : season === "shoulder"
-        ? "bg-amber-50"
-        : "bg-white"
-    } ${extra}`;
+const tdCls = (season, extra = "") =>
+  `px-2 py-1 ${
+    season === "high"
+      ? "bg-gray-100"
+      : season === "shoulder"
+      ? "bg-slate-50"
+      : "bg-white"
+  } ${extra}`;
 
-  const inputCls = (season) =>
-    `w-28 border rounded px-2 py-1 ${
-      season === "high"
-        ? "bg-gray-50"
-        : season === "shoulder"
-        ? "bg-amber-50"
-        : "bg-white"
-    }`;
+const inputCls = (season) =>
+  `w-28 border rounded px-2 py-1 ${
+    season === "high"
+      ? "bg-gray-100"
+      : season === "shoulder"
+      ? "bg-slate-50"
+      : "bg-white"
+  }`;
 
   // Доп. место
   const [extraBedPrice, setExtraBedPrice] = useState("");
@@ -952,7 +952,7 @@ const invalidRowIds = useMemo(
                <th className="px-3 py-2 text-center bg-white" colSpan={10}>
                  {t("low_season", { defaultValue: "Низкий сезон" })}
                </th>
-               <th className="px-3 py-2 text-center bg-amber-50 border-l border-gray-200" colSpan={10}>
+               <th className="px-3 py-2 text-center bg-slate-50 border-l border-gray-200" colSpan={10}>
                  {t("shoulder_season", { defaultValue: "Средний сезон" })}
                </th>
                <th className="px-3 py-2 text-center bg-gray-100 border-l border-gray-200" colSpan={10}>
@@ -965,8 +965,8 @@ const invalidRowIds = useMemo(
                <th className="text-center px-3 py-1 bg-white" colSpan={5}>{t("for_residents",{defaultValue:"Для резидентов"})}</th>
                <th className="text-center px-3 py-1 bg-white" colSpan={5}>{t("for_nonresidents",{defaultValue:"Для нерезидентов"})}</th>
                
-               <th className="text-center px-3 py-1 bg-amber-50 border-l border-gray-200" colSpan={5}>{t("for_residents",{defaultValue:"Для резидентов"})}</th>
-               <th className="text-center px-3 py-1 bg-amber-50" colSpan={5}>{t("for_nonresidents",{defaultValue:"Для нерезидентов"})}</th>
+               <th className="text-center px-3 py-1 bg-slate-50 border-l border-gray-200" colSpan={5}>{t("for_residents",{defaultValue:"Для резидентов"})}</th>
+               <th className="text-center px-3 py-1 bg-slate-50" colSpan={5}>{t("for_nonresidents",{defaultValue:"Для нерезидентов"})}</th>
                
                <th className="text-center px-3 py-1 bg-gray-100 border-l border-gray-200" colSpan={5}>{t("for_residents",{defaultValue:"Для резидентов"})}</th>
                <th className="text-center px-3 py-1 bg-gray-100" colSpan={5}>{t("for_nonresidents",{defaultValue:"Для нерезидентов"})}</th>
@@ -982,10 +982,10 @@ const invalidRowIds = useMemo(
                   ))}
                   
                   {MEAL_PLANS.map((mp, i) => (
-                    <th key={`shoulder-res-${mp}`} className={`px-2 py-1 bg-amber-50 ${i === 0 ? "border-l border-gray-200" : ""}`}>{mp}</th>
+                    <th key={`shoulder-res-${mp}`} className={`px-2 py-1 bg-slate-50 ${i === 0 ? "border-l border-gray-200" : ""}`}>{mp}</th>
                   ))}
                   {MEAL_PLANS.map((mp) => (
-                    <th key={`shoulder-non-${mp}`} className="px-2 py-1 bg-amber-50">{mp}</th>
+                    <th key={`shoulder-non-${mp}`} className="px-2 py-1 bg-slate-50">{mp}</th>
                   ))}
                   
                   {MEAL_PLANS.map((mp, i) => (
@@ -1043,7 +1043,19 @@ const invalidRowIds = useMemo(
                   </td>
                 ))}
                  
-                {/* shoulder / resident */}
+                {/* low / nonresident */}
+                {MEAL_PLANS.map((mp) => (
+                  <td className={tdCls("low")} key={`${row.id}-low-non-${mp}`}>
+                    <input
+                      type="number" min={0} step="0.01"
+                      className={inputCls("low")}
+                      placeholder={currency}
+                      value={row.prices.low.nonResident[mp] ?? ""}
+                      onChange={(e) => updateMealPrice(row.id, "low", "nonResident", mp, e.target.value)}
+                    />
+                  </td>
+                ))}
+               {/* shoulder / resident */}
                 {MEAL_PLANS.map((mp, i) => (
                   <td
                     className={tdCls("shoulder", i === 0 ? "border-l border-gray-200" : "")}
@@ -1080,18 +1092,6 @@ const invalidRowIds = useMemo(
                   </td>
                 ))}
                  
-                {/* low / nonresident */}
-                {MEAL_PLANS.map((mp) => (
-                  <td className={tdCls("low")} key={`${row.id}-low-non-${mp}`}>
-                    <input
-                      type="number" min={0} step="0.01"
-                      className={inputCls("low")}
-                      placeholder={currency}
-                      value={row.prices.low.nonResident[mp] ?? ""}
-                      onChange={(e) => updateMealPrice(row.id, "low", "nonResident", mp, e.target.value)}
-                    />
-                  </td>
-                ))}
                 {/* high / resident */}
                 {MEAL_PLANS.map((mp, i) => (
                   <td className={tdCls("high", i===0 ? "border-l border-gray-200" : "")} key={`${row.id}-high-res-${mp}`}>
