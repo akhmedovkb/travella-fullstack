@@ -47,7 +47,7 @@ async function hasOverlap({ hotelId, start, end, exceptId = null }) {
     SELECT id
       FROM hotel_seasons
      WHERE hotel_id = $1
-       AND start_date <= $3::date
+       AND  <= $3::date
        AND end_date   >= $2::date
   `;
   if (exceptId) { params.push(exceptId); sql += ` AND id <> $4`; }
@@ -62,7 +62,7 @@ async function ensureTable() {
       id         SERIAL PRIMARY KEY,
       hotel_id   INTEGER NOT NULL REFERENCES hotels(id) ON DELETE CASCADE,
       label      TEXT NOT NULL, -- 'low' | 'high' | произвольный тег
-      start_date DATE NOT NULL,
+       DATE NOT NULL,
       end_date   DATE NOT NULL,
       created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
       updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
@@ -79,7 +79,12 @@ router.get('/', tryAuth, async (req, res, next) => {
     await ensureTable();
     const { id: hotelId } = req.params;
     const { rows } = await db.query(
-      `SELECT id, hotel_id, label, start_date, end_date
+      `SELECT
+          id,
+          hotel_id,
+          label,
+          start_date::text AS start_date,
+          end_date::text AS end_date
          FROM hotel_seasons
         WHERE hotel_id=$1
         ORDER BY start_date ASC, id ASC`,
@@ -108,7 +113,12 @@ router.post('/', canWrite, async (req, res, next) => {
     const { rows } = await db.query(
       `INSERT INTO hotel_seasons (hotel_id, label, start_date, end_date, created_at, updated_at)
        VALUES ($1,$2,$3,$4, NOW(), NOW())
-       RETURNING id, hotel_id, label, start_date, end_date`,
+       RETURNING
+         id,
+         hotel_id,
+         label,
+         start_date::text AS start_date,
+         end_date::text AS end_date`,
       [hotelId, String(label).trim() || 'low', start, end]
     );
     res.json(rows[0]);
@@ -135,7 +145,12 @@ router.put('/:seasonId', canWrite, async (req, res, next) => {
       `UPDATE hotel_seasons
           SET label=$1, start_date=$2, end_date=$3, updated_at=NOW()
         WHERE id=$4 AND hotel_id=$5
-      RETURNING id, hotel_id, label, start_date, end_date`,
+      RETURNING
+        id,
+        hotel_id,
+        label,
+        start_date::text AS start_date,
+        end_date::text AS end_date`,
       [String(label).trim() || 'low', start, end, seasonId, hotelId]
     );
     if (!rows.length) return res.status(404).json({ error: 'not_found' });
@@ -204,7 +219,12 @@ router.put('/bulk', canWrite, async (req, res, next) => {
     await client.query('COMMIT');
 
     const { rows } = await db.query(
-      `SELECT id, hotel_id, label, start_date, end_date
+      `SELECT
+          id,
+          hotel_id,
+          label,
+          start_date::text AS start_date,
+          end_date::text AS end_date
          FROM hotel_seasons
         WHERE hotel_id=$1
         ORDER BY start_date ASC, id ASC`,
