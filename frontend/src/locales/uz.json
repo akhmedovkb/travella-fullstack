@@ -650,6 +650,8 @@
   "unlock_intro_title": "Kontaktlarni ochish",
   "unlock_intro_urgency": "Bunday takliflar juda tez bron qilinadi",
   "unlock_intro_urgency_hint": "Taklif sizga mos bo‘lsa, ta`minot bilan darhol bog‘langaningiz ma’qul.",
+  "marketplace.unlock_intro_urgency_unlocked_title": "Kontaktlarni allaqchon ochishgan",
+  "unlock_intro_urgency_watching_title": "Hozir ko`rishmoqda",
   "unlock_intro_whats_inside": "To‘lovdan keyin nimalar ochiladi",
   "unlock_success_action_text": "Taklif dolzarbligida qolayotgan paytda ta`minotchi bilan hozir bog‘laning.",
   "unlock_success_saved_hint": "Kontaktlar saqlandi va shu kartada ko‘rinadi.",
