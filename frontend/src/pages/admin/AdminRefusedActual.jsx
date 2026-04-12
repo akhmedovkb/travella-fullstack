@@ -121,6 +121,38 @@ function safeJsonParse(input, fallback) {
   }
 }
 
+function toDateTimeLocal(value) {
+  if (!value) return "";
+  const s = String(value).trim();
+  if (!s) return "";
+
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(s)) return s;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return `${s}T00:00`;
+
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return "";
+
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mi = String(d.getMinutes()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+}
+
+function toNumericString(v) {
+  if (v === null || typeof v === "undefined" || v === "") return "";
+  const n = Number(v);
+  return Number.isFinite(n) ? String(n) : String(v);
+}
+
+function calcMargin(details) {
+  const net = Number(details?.netPrice || 0);
+  const gross = Number(details?.grossPrice || 0);
+  if (!Number.isFinite(net) || !Number.isFinite(gross)) return null;
+  return gross - net;
+}
+
 function readUrlSort() {
   try {
     const sp = new URLSearchParams(window.location.search || "");
@@ -284,6 +316,40 @@ function createEditFormFromService(service) {
       ? { ...service.details }
       : {};
 
+  const category = String(service?.category || "").toLowerCase();
+
+  if (category === "refused_flight") {
+    if (!details.departureFlightDate && details.startDate) {
+      details.departureFlightDate = details.startDate;
+    }
+    if (!details.returnFlightDate && details.endDate) {
+      details.returnFlightDate = details.endDate;
+    }
+    details.departureFlightDate = toDateTimeLocal(details.departureFlightDate);
+    details.returnFlightDate = toDateTimeLocal(details.returnFlightDate);
+    details.startDate = toDateTimeLocal(details.startDate || details.departureFlightDate);
+    details.endDate = toDateTimeLocal(details.endDate || details.returnFlightDate);
+    details.netPrice = toNumericString(details.netPrice ?? service?.price);
+    details.grossPrice = toNumericString(details.grossPrice ?? service?.price);
+  }
+
+  if (
+    category === "refused_tour" ||
+    category === "refused_hotel" ||
+    category === "refused_ticket"
+  ) {
+    if (details.startDate) details.startDate = toDateTimeLocal(details.startDate);
+    if (details.endDate) details.endDate = toDateTimeLocal(details.endDate);
+    if (details.departureFlightDate) {
+      details.departureFlightDate = toDateTimeLocal(details.departureFlightDate);
+    }
+    if (details.returnFlightDate) {
+      details.returnFlightDate = toDateTimeLocal(details.returnFlightDate);
+    }
+    details.netPrice = toNumericString(details.netPrice ?? service?.price);
+    details.grossPrice = toNumericString(details.grossPrice ?? service?.price);
+  }
+
   const images = Array.isArray(service?.images) ? service.images : [];
   const availability = Array.isArray(service?.availability)
     ? service.availability
@@ -322,18 +388,33 @@ function buildEditPayload(form) {
   };
 }
 
-function renderDetailFields(editForm, setEditForm) {
+function renderDetailFields(editForm, setEditForm, extra = {}) {
   const category = String(editForm?.category || "").toLowerCase();
   const details = editForm?.details || {};
+  const hotelOptions = Array.isArray(extra.hotelOptions) ? extra.hotelOptions : [];
+  const hotelLoading = !!extra.hotelLoading;
+  const onHotelSearch = typeof extra.onHotelSearch === "function" ? extra.onHotelSearch : null;
 
   const updateDetailsField = (key, value) => {
     setEditForm((prev) => {
-      const nextDetails = { ...(prev?.details || {}), [key]: value };
-      return {
+      const prevDetails = prev?.details || {};
+      const nextDetails = { ...prevDetails, [key]: value };
+      const next = {
         ...prev,
         details: nextDetails,
         rawDetailsText: JSON.stringify(nextDetails, null, 2),
       };
+
+      if (key === "grossPrice") {
+        next.price = value;
+      }
+
+      if (String(prev?.category || "").toLowerCase() === "refused_flight") {
+        if (key === "departureFlightDate") nextDetails.startDate = value;
+        if (key === "returnFlightDate") nextDetails.endDate = value;
+      }
+
+      return next;
     });
   };
 
@@ -352,6 +433,33 @@ function renderDetailFields(editForm, setEditForm) {
     </Field>
   );
 
+  const hotelField = (key = "hotel", label = "Отель") => (
+    <Field label={label} key={key} hint={hotelLoading ? "Поиск..." : ""}>
+      <>
+        <input
+          list="admin-hotel-options"
+          className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-gray-200"
+          value={details?.[key] || ""}
+          onChange={(e) => {
+            updateDetailsField(key, e.target.value);
+            if (onHotelSearch) onHotelSearch(e.target.value);
+          }}
+          placeholder="Найдите отель или введите вручную"
+        />
+        <datalist id="admin-hotel-options">
+          {hotelOptions.map((h, idx) => {
+            const labelText = [h.name, h.city, h.country].filter(Boolean).join(" • ");
+            return (
+              <option key={`${h.id || h.name || "hotel"}-${idx}`} value={h.name || ""}>
+                {labelText}
+              </option>
+            );
+          })}
+        </datalist>
+      </>
+    </Field>
+  );
+
   if (category === "refused_tour") {
     return (
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -362,7 +470,7 @@ function renderDetailFields(editForm, setEditForm) {
         {dateField("endDate", "Дата конца")}
         {dateField("departureFlightDate", "Дата рейса вылета")}
         {dateField("returnFlightDate", "Дата рейса обратно")}
-        <div className="md:col-span-3">{textField("hotel", "Отель")}</div>
+        <div className="md:col-span-3">{hotelField("hotel", "Отель")}</div>
         {textField("accommodationCategory", "Категория номера")}
         {textField("accommodation", "Размещение")}
         {textField("food", "Питание")}
@@ -393,7 +501,7 @@ function renderDetailFields(editForm, setEditForm) {
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         {textField("directionCountry", "Страна")}
         {textField("directionTo", "Город")}
-        {textField("hotel", "Отель")}
+        {hotelField("hotel", "Отель")}
         {dateField("startDate", "Дата заезда")}
         {dateField("endDate", "Дата выезда")}
         {textField("roomCategory", "Категория номера")}
@@ -539,6 +647,9 @@ export default function AdminRefusedActual() {
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState("");
   const [editForm, setEditForm] = useState(null);
+  const [hotelQuery, setHotelQuery] = useState("");
+  const [hotelOptions, setHotelOptions] = useState([]);
+  const [hotelLoading, setHotelLoading] = useState(false);
 
   const [sendingId, setSendingId] = useState(null);
 
@@ -780,6 +891,8 @@ export default function AdminRefusedActual() {
     setEditLoading(true);
     setEditError("");
     setEditForm(null);
+    setHotelQuery("");
+    setHotelOptions([]);
     try {
       const resp = await http.get(apiPath(`/admin/services/${id}`));
       const data = ensureJsonOrThrow(resp, "openEdit");
@@ -847,6 +960,30 @@ export default function AdminRefusedActual() {
       setEditError(info.msg || "Ошибка сохранения услуги");
     } finally {
       setEditSaving(false);
+    }
+  }
+
+  async function searchHotels(name) {
+    const q = String(name || "").trim();
+    setHotelQuery(q);
+
+    if (q.length < 2) {
+      setHotelOptions([]);
+      return;
+    }
+
+    setHotelLoading(true);
+    try {
+      const resp = await http.get(apiPath("/hotels/search"), {
+        params: { name: q, limit: 8 },
+      });
+      const data = ensureJsonOrThrow(resp, "searchHotels");
+      const rows = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : [];
+      setHotelOptions(rows);
+    } catch {
+      setHotelOptions([]);
+    } finally {
+      setHotelLoading(false);
     }
   }
 
@@ -1760,11 +1897,7 @@ export default function AdminRefusedActual() {
                 </Field>
 
                 <Field label="Категория">
-                  <SelectInput
-                    value={editForm.category}
-                    onChange={(e) => updateEditRoot("category", e.target.value)}
-                    options={categories.filter((c) => c.value)}
-                  />
+                  <TextInput value={editForm.category} onChange={() => {}} />
                 </Field>
 
                 <Field label="Цена (services.price)">
@@ -1809,8 +1942,79 @@ export default function AdminRefusedActual() {
             </div>
 
             <div className="rounded-2xl border border-gray-200 p-4">
-              <div className="text-sm font-semibold text-gray-900">Быстрое редактирование details по категории</div>
-              <div className="mt-4">{renderDetailFields(editForm, setEditForm)}</div>
+              <div className="flex items-center justify-between gap-3"><div className="text-sm font-semibold text-gray-900">Быстрое редактирование details по категории</div>{hotelQuery ? <div className="text-xs text-gray-500">Поиск отеля: {hotelQuery}</div> : null}</div>
+              <div className="mt-4">{renderDetailFields(editForm, setEditForm, {
+                hotelOptions,
+                hotelLoading,
+                onHotelSearch: searchHotels,
+              })}</div>
+
+              {(() => {
+                const margin = calcMargin(editForm?.details || {});
+                const net = Number(editForm?.details?.netPrice || 0);
+                const gross = Number(editForm?.details?.grossPrice || 0);
+
+                if (!Number.isFinite(net) || !Number.isFinite(gross)) return null;
+
+                return (
+                  <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                    <div className="text-sm font-semibold text-amber-900">Маржа</div>
+                    <div className="mt-2 grid grid-cols-1 gap-3 md:grid-cols-3">
+                      <div className="rounded-xl bg-white px-3 py-2 text-sm">
+                        <div className="text-gray-500">Net</div>
+                        <div className="font-semibold text-gray-900">{net || 0}</div>
+                      </div>
+                      <div className="rounded-xl bg-white px-3 py-2 text-sm">
+                        <div className="text-gray-500">Gross</div>
+                        <div className="font-semibold text-gray-900">{gross || 0}</div>
+                      </div>
+                      <div className="rounded-xl bg-white px-3 py-2 text-sm">
+                        <div className="text-gray-500">Margin</div>
+                        <div className={`font-semibold ${margin >= 0 ? "text-green-700" : "text-red-700"}`}>
+                          {margin >= 0 ? "+" : ""}
+                          {margin}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setEditForm((prev) => {
+                      const nextDetails = { ...(prev?.details || {}), isActive: true };
+                      return {
+                        ...prev,
+                        details: nextDetails,
+                        rawDetailsText: JSON.stringify(nextDetails, null, 2),
+                      };
+                    })
+                  }
+                  className="rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700 hover:bg-green-100"
+                >
+                  Сделать актуальным
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setEditForm((prev) => {
+                      const nextDetails = { ...(prev?.details || {}), isActive: false };
+                      return {
+                        ...prev,
+                        details: nextDetails,
+                        rawDetailsText: JSON.stringify(nextDetails, null, 2),
+                      };
+                    })
+                  }
+                  className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 hover:bg-red-100"
+                >
+                  Сделать неактуальным
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
