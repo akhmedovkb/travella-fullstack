@@ -597,6 +597,7 @@
   "phone": "Phone",
   "price": "Price",
   "price_currency": "c.u.",
+  "price_hint": "GREATE DEAL",
   "proof_images": "Authenticity proof",
   "proof_images_count": "photos",
   "proof_locked_hint": "Proof is available. Verification becomes available after unlocking contacts.",
