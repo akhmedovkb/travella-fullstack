@@ -641,6 +641,7 @@
   "unlock_contacts_cta_hint": "Kontaktlar to‘lovdan keyin darhol ochiladi",
   "unlock_contacts_cta_primary": "Telefon va Telegramni ochish",
   "unlock_intro_benefit_proof": "Tekshirilganlikning isboti",
+  "unlock_intro_dynamic_default": "Bunday variantlar tezda noaktual bo‘lib qolishi mumkin, eng yaxshisi yetkazib beruvchi bilan hozir bog‘lanish.",
   "unlock_intro_dynamic_watching": "Hozir korishmoqda",
   "unlock_intro_dynamic_unlocked": "Kontaktlarni allaqchon ochishgan",
   "unlock_intro_cta": "Kontaktlarni ochish",
