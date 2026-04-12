@@ -598,6 +598,7 @@
   "phone": "Telefon",
   "price": "Narx",
   "price_currency": "sh.b.",
+  "price_hint": "Foydali taklif",
   "proof_images": "Haqiqiylik tasdig‘i",
   "proof_images_count": "foto",
   "proof_locked_hint": "Tasdiq mavjud. Tekshiruv kontaktlar ochilgandan keyin mavjud bo‘ladi.",
