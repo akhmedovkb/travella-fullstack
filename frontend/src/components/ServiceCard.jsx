@@ -1736,18 +1736,6 @@ return (
 
           {!unlocked && !isProviderViewer && !isAdminViewer && (
             <div className="mt-3 space-y-2">
-              {watchingNow > 0 && (
-                <div className="flex items-center gap-2 rounded-2xl border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">
-                  <span className="text-base leading-none">🔥</span>
-                  <span className="font-medium">
-                    {t("marketplace.watching_now_cta", {
-                      count: watchingNow,
-                      defaultValue: `Сейчас смотрят: ${watchingNow}`,
-                    })}
-                  </span>
-                </div>
-              )}
-          
               {unlocksCount > 0 && (
                 <div className="flex items-center gap-2 rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
                   <span className="text-base leading-none">✅</span>
