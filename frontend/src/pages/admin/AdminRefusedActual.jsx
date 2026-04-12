@@ -153,6 +153,147 @@ function calcMargin(details) {
   return gross - net;
 }
 
+function isBlank(v) {
+  return v == null || String(v).trim() === "";
+}
+
+function parseFiniteNumber(v) {
+  if (v == null || String(v).trim() === "") return null;
+  const normalized = String(v).replace(",", ".").replace(/[^\d.-]/g, "");
+  if (!normalized || normalized === "-" || normalized === "." || normalized === "-.") return null;
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : null;
+}
+
+function normalizeChatId(v) {
+  const s = String(v ?? "").trim();
+  return s;
+}
+
+function isValidChatId(v) {
+  const s = normalizeChatId(v);
+  return !s || /^-?\d+$/.test(s);
+}
+
+function getProviderTelegramFields(obj = {}) {
+  return {
+    telegram_refused_chat_id: normalizeChatId(obj?.telegram_refused_chat_id),
+    telegram_web_chat_id: normalizeChatId(obj?.telegram_web_chat_id),
+    telegram_chat_id: normalizeChatId(obj?.telegram_chat_id),
+  };
+}
+
+function getEffectiveProviderChatId(obj = {}) {
+  return (
+    normalizeChatId(obj?.telegram_refused_chat_id) ||
+    normalizeChatId(obj?.telegram_web_chat_id) ||
+    normalizeChatId(obj?.telegram_chat_id) ||
+    ""
+  );
+}
+
+function validateEditForm(form) {
+  const result = {
+    valid: true,
+    summary: [],
+    root: {},
+    details: {},
+    provider: {},
+    raw: {},
+  };
+
+  if (!form) return result;
+
+  const add = (bucket, key, msg) => {
+    result[bucket][key] = msg;
+    result.summary.push(msg);
+    result.valid = false;
+  };
+
+  if (isBlank(form.title)) add("root", "title", "Название услуги обязательно.");
+  if (!isBlank(form.price)) {
+    const n = parseFiniteNumber(form.price);
+    if (n === null) add("root", "price", "Цена услуги должна быть числом.");
+    else if (n < 0) add("root", "price", "Цена услуги не может быть отрицательной.");
+  }
+
+  const tg = getProviderTelegramFields(form);
+  for (const [key, label] of [
+    ["telegram_refused_chat_id", "TG refused chat id"],
+    ["telegram_web_chat_id", "TG web chat id"],
+    ["telegram_chat_id", "TG default chat id"],
+  ]) {
+    if (!isValidChatId(tg[key])) add("provider", key, `${label}: только цифры и optional минус спереди.`);
+  }
+
+  const rawDetails = safeJsonParse(form.rawDetailsText || "{}", null);
+  if (!rawDetails || typeof rawDetails !== "object" || Array.isArray(rawDetails)) {
+    add("raw", "details", "Raw details JSON должен быть объектом.");
+  }
+
+  const rawImages = safeJsonParse(form.rawImagesText || "[]", null);
+  if (!Array.isArray(rawImages)) {
+    add("raw", "images", "images JSON должен быть массивом.");
+  }
+
+  const rawAvailability = safeJsonParse(form.rawAvailabilityText || "[]", null);
+  if (!Array.isArray(rawAvailability)) {
+    add("raw", "availability", "availability JSON должен быть массивом.");
+  }
+
+  const details = form.details && typeof form.details === "object" && !Array.isArray(form.details)
+    ? form.details
+    : {};
+
+  for (const key of ["netPrice", "grossPrice", "previousPrice"]) {
+    if (!isBlank(details[key])) {
+      const n = parseFiniteNumber(details[key]);
+      if (n === null) add("details", key, `${key} должен быть числом.`);
+      else if (n < 0) add("details", key, `${key} не может быть отрицательным.`);
+    }
+  }
+
+  const dateKeys = {
+    startDate: "Дата начала",
+    endDate: "Дата конца",
+    departureFlightDate: "Дата вылета",
+    returnFlightDate: "Дата обратно",
+  };
+
+  for (const [key, label] of Object.entries(dateKeys)) {
+    const raw = details[key];
+    if (!isBlank(raw)) {
+      const ts = Date.parse(String(raw));
+      if (!Number.isFinite(ts)) add("details", key, `${label}: неверная дата.`);
+    }
+  }
+
+  const comparePairs = [
+    ["startDate", "endDate", "Дата конца не может быть раньше даты начала."],
+    ["departureFlightDate", "returnFlightDate", "Дата обратно не может быть раньше даты вылета."],
+  ];
+  for (const [leftKey, rightKey, msg] of comparePairs) {
+    const left = details[leftKey];
+    const right = details[rightKey];
+    if (!isBlank(left) && !isBlank(right)) {
+      const l = Date.parse(String(left));
+      const r = Date.parse(String(right));
+      if (Number.isFinite(l) && Number.isFinite(r) && r < l) {
+        add("details", rightKey, msg);
+      }
+    }
+  }
+
+  const net = parseFiniteNumber(details.netPrice);
+  const gross = parseFiniteNumber(details.grossPrice);
+  if (net != null && gross != null && gross < net) {
+    add("details", "grossPrice", "Цена продажи не должна быть меньше цены нетто.");
+  }
+
+  result.summary = Array.from(new Set(result.summary));
+  return result;
+}
+
 function readUrlSort() {
   try {
     const sp = new URLSearchParams(window.location.search || "");
@@ -251,33 +392,49 @@ function Modal({ open, title, onClose, children, footer }) {
   );
 }
 
-function Field({ label, children, hint }) {
+function Field({ label, children, hint, error }) {
   return (
     <div>
       <label className="text-xs font-medium text-gray-600">{label}</label>
       <div className="mt-1">{children}</div>
-      {hint ? <div className="mt-1 text-[11px] text-gray-500">{hint}</div> : null}
+      {error ? (
+        <div className="mt-1 text-[11px] text-red-600">{error}</div>
+      ) : hint ? (
+        <div className="mt-1 text-[11px] text-gray-500">{hint}</div>
+      ) : null}
     </div>
   );
 }
 
-function TextInput({ value, onChange, placeholder, type = "text" }) {
+function TextInput({ value, onChange, placeholder, type = "text", invalid = false, disabled = false }) {
   return (
     <input
       type={type}
-      className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-gray-200"
+      className={classNames(
+        "w-full rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2",
+        invalid
+          ? "border-red-300 bg-red-50/40 focus:ring-red-100"
+          : "border-gray-200 focus:ring-gray-200",
+        disabled ? "bg-gray-50 text-gray-500" : ""
+      )}
       value={value ?? ""}
       onChange={onChange}
       placeholder={placeholder}
+      disabled={disabled}
     />
   );
 }
 
-function TextArea({ value, onChange, rows = 4, placeholder }) {
+function TextArea({ value, onChange, rows = 4, placeholder, invalid = false }) {
   return (
     <textarea
       rows={rows}
-      className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-gray-200"
+      className={classNames(
+        "w-full rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2",
+        invalid
+          ? "border-red-300 bg-red-50/40 focus:ring-red-100"
+          : "border-gray-200 focus:ring-gray-200"
+      )}
       value={value ?? ""}
       onChange={onChange}
       placeholder={placeholder}
@@ -285,12 +442,19 @@ function TextArea({ value, onChange, rows = 4, placeholder }) {
   );
 }
 
-function SelectInput({ value, onChange, options }) {
+function SelectInput({ value, onChange, options, invalid = false, disabled = false }) {
   return (
     <select
-      className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-gray-200"
+      className={classNames(
+        "w-full rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2",
+        invalid
+          ? "border-red-300 bg-red-50/40 focus:ring-red-100"
+          : "border-gray-200 focus:ring-gray-200",
+        disabled ? "bg-gray-50 text-gray-500" : ""
+      )}
       value={value ?? ""}
       onChange={onChange}
+      disabled={disabled}
     >
       {options.map((opt) => (
         <option key={`${opt.value}`} value={opt.value}>
@@ -309,6 +473,7 @@ function CheckboxField({ label, checked, onChange }) {
     </label>
   );
 }
+
 
 function createEditFormFromService(service) {
   const details =
@@ -355,10 +520,14 @@ function createEditFormFromService(service) {
     ? service.availability
     : [];
 
+  const providerTelegram = getProviderTelegramFields(service);
+
   return {
     id: service?.id || null,
-    title: service?.title || "",
+    provider_id: service?.provider_id || null,
+    provider_name: service?.provider_name || service?.provider_company_name || "",
     description: service?.description || "",
+    title: service?.title || "",
     category: service?.category || "",
     price:
       service?.price === null || typeof service?.price === "undefined"
@@ -367,8 +536,11 @@ function createEditFormFromService(service) {
     vehicle_model: service?.vehicle_model || "",
     images,
     availability,
+    rawImagesText: JSON.stringify(images, null, 2),
+    rawAvailabilityText: JSON.stringify(availability, null, 2),
     details,
     rawDetailsText: JSON.stringify(details, null, 2),
+    ...providerTelegram,
   };
 }
 
@@ -385,8 +557,14 @@ function buildEditPayload(form) {
       form?.details && typeof form.details === "object" && !Array.isArray(form.details)
         ? form.details
         : {},
+    providerTelegram: {
+      telegram_refused_chat_id: normalizeChatId(form?.telegram_refused_chat_id),
+      telegram_web_chat_id: normalizeChatId(form?.telegram_web_chat_id),
+      telegram_chat_id: normalizeChatId(form?.telegram_chat_id),
+    },
   };
 }
+
 
 function renderDetailFields(editForm, setEditForm, extra = {}) {
   const category = String(editForm?.category || "").toLowerCase();
@@ -394,6 +572,8 @@ function renderDetailFields(editForm, setEditForm, extra = {}) {
   const hotelOptions = Array.isArray(extra.hotelOptions) ? extra.hotelOptions : [];
   const hotelLoading = !!extra.hotelLoading;
   const onHotelSearch = typeof extra.onHotelSearch === "function" ? extra.onHotelSearch : null;
+  const validation = extra.validation || {};
+  const detailErrors = validation?.details || {};
 
   const updateDetailsField = (key, value) => {
     setEditForm((prev) => {
@@ -422,23 +602,33 @@ function renderDetailFields(editForm, setEditForm, extra = {}) {
   const updateText = (key) => (e) => updateDetailsField(key, e.target.value);
 
   const dateField = (key, label) => (
-    <Field label={label} key={key}>
-      <TextInput type="datetime-local" value={details?.[key] || ""} onChange={updateText(key)} />
+    <Field label={label} key={key} error={detailErrors?.[key]}>
+      <TextInput
+        type="datetime-local"
+        value={details?.[key] || ""}
+        onChange={updateText(key)}
+        invalid={!!detailErrors?.[key]}
+      />
     </Field>
   );
 
   const textField = (key, label, placeholder = "") => (
-    <Field label={label} key={key}>
-      <TextInput value={details?.[key] || ""} onChange={updateText(key)} placeholder={placeholder} />
+    <Field label={label} key={key} error={detailErrors?.[key]}>
+      <TextInput
+        value={details?.[key] || ""}
+        onChange={updateText(key)}
+        placeholder={placeholder}
+        invalid={!!detailErrors?.[key]}
+      />
     </Field>
   );
 
   const hotelField = (key = "hotel", label = "Отель") => (
-    <Field label={label} key={key} hint={hotelLoading ? "Поиск..." : ""}>
+    <Field label={label} key={key} hint={hotelLoading ? "Поиск..." : ""} error={detailErrors?.[key]}>
       <>
         <input
           list="admin-hotel-options"
-          className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-gray-200"
+          className={classNames("w-full rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2", detailErrors?.[key] ? "border-red-300 bg-red-50/40 focus:ring-red-100" : "border-gray-200 focus:ring-gray-200")}
           value={details?.[key] || ""}
           onChange={(e) => {
             updateDetailsField(key, e.target.value);
@@ -480,8 +670,8 @@ function renderDetailFields(editForm, setEditForm, extra = {}) {
         {textField("previousPrice", "Предыдущая цена")}
         {textField("expiration", "Срок актуальности")}
         <div className="md:col-span-3">
-          <Field label="Детали рейса">
-            <TextArea value={details?.flightDetails || ""} onChange={updateText("flightDetails")} rows={3} />
+          <Field label="Детали рейса" error={detailErrors?.flightDetails}>
+            <TextArea value={details?.flightDetails || ""} onChange={updateText("flightDetails")} rows={3} invalid={!!detailErrors?.flightDetails} />
           </Field>
         </div>
         <div className="md:col-span-3 flex flex-wrap gap-2">
@@ -538,8 +728,8 @@ function renderDetailFields(editForm, setEditForm, extra = {}) {
         {textField("previousPrice", "Предыдущая цена")}
         {textField("expiration", "Срок актуальности")}
         <div className="md:col-span-3">
-          <Field label="Детали рейса">
-            <TextArea value={details?.flightDetails || ""} onChange={updateText("flightDetails")} rows={3} />
+          <Field label="Детали рейса" error={detailErrors?.flightDetails}>
+            <TextArea value={details?.flightDetails || ""} onChange={updateText("flightDetails")} rows={3} invalid={!!detailErrors?.flightDetails} />
           </Field>
         </div>
         <div className="md:col-span-3 flex flex-wrap gap-2">
@@ -650,6 +840,8 @@ export default function AdminRefusedActual() {
   const [hotelQuery, setHotelQuery] = useState("");
   const [hotelOptions, setHotelOptions] = useState([]);
   const [hotelLoading, setHotelLoading] = useState(false);
+
+  const editValidation = useMemo(() => validateEditForm(editForm), [editForm]);
 
   const [sendingId, setSendingId] = useState(null);
 
@@ -913,18 +1105,32 @@ export default function AdminRefusedActual() {
     setEditForm((prev) => ({ ...(prev || {}), rawDetailsText: value }));
   }
 
+  function handleRawImagesChange(value) {
+    setEditForm((prev) => ({ ...(prev || {}), rawImagesText: value }));
+  }
+
+  function handleRawAvailabilityChange(value) {
+    setEditForm((prev) => ({ ...(prev || {}), rawAvailabilityText: value }));
+  }
+
   async function saveEdit() {
     if (!editForm?.id) return;
 
+    const validation = validateEditForm(editForm);
+    if (!validation.valid) {
+      setEditError(validation.summary[0] || "Исправь ошибки перед сохранением");
+      return;
+    }
+
     let parsedDetails = {};
+    let parsedImages = [];
+    let parsedAvailability = [];
     try {
-      const parsed = safeJsonParse(editForm.rawDetailsText || "{}", null);
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-        throw new Error("details JSON должен быть объектом");
-      }
-      parsedDetails = parsed;
+      parsedDetails = safeJsonParse(editForm.rawDetailsText || "{}", {});
+      parsedImages = safeJsonParse(editForm.rawImagesText || "[]", []);
+      parsedAvailability = safeJsonParse(editForm.rawAvailabilityText || "[]", []);
     } catch (e) {
-      setEditError(e?.message || "Невалидный details JSON");
+      setEditError(e?.message || "Невалидный JSON");
       return;
     }
 
@@ -935,7 +1141,11 @@ export default function AdminRefusedActual() {
       const nextForm = {
         ...editForm,
         details: parsedDetails,
+        images: Array.isArray(parsedImages) ? parsedImages : [],
+        availability: Array.isArray(parsedAvailability) ? parsedAvailability : [],
         rawDetailsText: JSON.stringify(parsedDetails, null, 2),
+        rawImagesText: JSON.stringify(Array.isArray(parsedImages) ? parsedImages : [], null, 2),
+        rawAvailabilityText: JSON.stringify(Array.isArray(parsedAvailability) ? parsedAvailability : [], null, 2),
       };
       const resp = await http.put(
         apiPath(`/admin/services/${editForm.id}`),
@@ -947,7 +1157,7 @@ export default function AdminRefusedActual() {
         throw new Error(data?.message || "Не удалось сохранить услугу");
       }
 
-      setEditForm(createEditFormFromService(data?.service || nextForm));
+      setEditForm(createEditFormFromService({ ...(data?.service || nextForm), ...buildEditPayload(nextForm).providerTelegram, provider_id: nextForm.provider_id, provider_name: nextForm.provider_name }));
       setEditOpen(false);
       showToast("ok", `✅ Услуга #${editForm.id} сохранена`);
       await loadList(page);
@@ -1889,31 +2099,44 @@ export default function AdminRefusedActual() {
               </div>
             ) : null}
 
+            {!editError && !editValidation.valid ? (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                <div className="font-semibold">Проверь поля перед сохранением</div>
+                <ul className="mt-2 list-disc pl-5">
+                  {editValidation.summary.slice(0, 8).map((msg, idx) => (
+                    <li key={`edit-warning-${idx}`}>{msg}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
             <div className="rounded-2xl border border-gray-200 p-4">
               <div className="text-sm font-semibold text-gray-900">Общие поля услуги</div>
               <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
                 <Field label="ID">
-                  <TextInput value={String(editForm.id || "")} onChange={() => {}} />
+                  <TextInput value={String(editForm.id || "")} onChange={() => {}} disabled />
                 </Field>
 
                 <Field label="Категория">
-                  <TextInput value={editForm.category} onChange={() => {}} />
+                  <TextInput value={editForm.category} onChange={() => {}} disabled />
                 </Field>
 
-                <Field label="Цена (services.price)">
+                <Field label="Цена (services.price)" error={editValidation.root?.price}>
                   <TextInput
                     value={editForm.price}
                     onChange={(e) => updateEditRoot("price", e.target.value)}
                     placeholder="Например: 1200"
+                    invalid={!!editValidation.root?.price}
                   />
                 </Field>
 
                 <div className="md:col-span-3">
-                  <Field label="Название">
+                  <Field label="Название" error={editValidation.root?.title}>
                     <TextInput
                       value={editForm.title}
                       onChange={(e) => updateEditRoot("title", e.target.value)}
                       placeholder="Название услуги"
+                      invalid={!!editValidation.root?.title}
                     />
                   </Field>
                 </div>
@@ -1942,11 +2165,62 @@ export default function AdminRefusedActual() {
             </div>
 
             <div className="rounded-2xl border border-gray-200 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-sm font-semibold text-gray-900">TG / chat id провайдера</div>
+                <div className="text-xs text-gray-500">
+                  Приоритет: <span className="font-mono">telegram_refused_chat_id</span> → <span className="font-mono">telegram_web_chat_id</span> → <span className="font-mono">telegram_chat_id</span>
+                </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+                <Field label="TG refused chat id" error={editValidation.provider?.telegram_refused_chat_id}>
+                  <TextInput
+                    value={editForm.telegram_refused_chat_id || ""}
+                    onChange={(e) => updateEditRoot("telegram_refused_chat_id", e.target.value)}
+                    placeholder="Например: 5267265997"
+                    invalid={!!editValidation.provider?.telegram_refused_chat_id}
+                  />
+                </Field>
+
+                <Field label="TG web chat id" error={editValidation.provider?.telegram_web_chat_id}>
+                  <TextInput
+                    value={editForm.telegram_web_chat_id || ""}
+                    onChange={(e) => updateEditRoot("telegram_web_chat_id", e.target.value)}
+                    placeholder="Например: 5267265997"
+                    invalid={!!editValidation.provider?.telegram_web_chat_id}
+                  />
+                </Field>
+
+                <Field label="TG default chat id" error={editValidation.provider?.telegram_chat_id}>
+                  <TextInput
+                    value={editForm.telegram_chat_id || ""}
+                    onChange={(e) => updateEditRoot("telegram_chat_id", e.target.value)}
+                    placeholder="Например: 5267265997"
+                    invalid={!!editValidation.provider?.telegram_chat_id}
+                  />
+                </Field>
+
+                <div className="md:col-span-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm text-gray-700">
+                  <div>
+                    Provider ID: <span className="font-mono">{editForm.provider_id || "—"}</span>
+                    {editForm.provider_name ? (
+                      <span className="ml-2">• {editForm.provider_name}</span>
+                    ) : null}
+                  </div>
+                  <div className="mt-1">
+                    Effective TG: <span className="font-mono">{getEffectiveProviderChatId(editForm) || "—"}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-gray-200 p-4">
               <div className="flex items-center justify-between gap-3"><div className="text-sm font-semibold text-gray-900">Быстрое редактирование details по категории</div>{hotelQuery ? <div className="text-xs text-gray-500">Поиск отеля: {hotelQuery}</div> : null}</div>
               <div className="mt-4">{renderDetailFields(editForm, setEditForm, {
                 hotelOptions,
                 hotelLoading,
                 onHotelSearch: searchHotels,
+                validation: editValidation,
               })}</div>
 
               {(() => {
@@ -2020,41 +2294,37 @@ export default function AdminRefusedActual() {
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
               <div className="rounded-2xl border border-gray-200 p-4">
                 <div className="text-sm font-semibold text-gray-900">images (JSON array)</div>
-                <div className="mt-3 text-xs text-gray-500">
-                  Пока редактируется как сырой JSON-массив.
+                <div className={classNames("mt-3 text-xs", editValidation.raw?.images ? "text-red-600" : "text-gray-500")}>
+                  {editValidation.raw?.images || "Пока редактируется как сырой JSON-массив."}
                 </div>
                 <textarea
                   rows={10}
-                  className="mt-3 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-xs outline-none focus:ring-2 focus:ring-gray-200"
-                  value={JSON.stringify(Array.isArray(editForm.images) ? editForm.images : [], null, 2)}
-                  onChange={(e) => {
-                    const next = safeJsonParse(e.target.value, null);
-                    if (Array.isArray(next)) {
-                      updateEditRoot("images", next);
-                    } else {
-                      updateEditRoot("images", []);
-                    }
-                  }}
+                  className={classNames(
+                    "mt-3 w-full rounded-xl px-3 py-2 font-mono text-xs outline-none focus:ring-2",
+                    editValidation.raw?.images
+                      ? "border border-red-300 bg-red-50/40 focus:ring-red-100"
+                      : "border border-gray-200 bg-gray-50 focus:ring-gray-200"
+                  )}
+                  value={editForm.rawImagesText || "[]"}
+                  onChange={(e) => handleRawImagesChange(e.target.value)}
                 />
               </div>
 
               <div className="rounded-2xl border border-gray-200 p-4">
                 <div className="text-sm font-semibold text-gray-900">availability (JSON array)</div>
-                <div className="mt-3 text-xs text-gray-500">
-                  Пока редактируется как сырой JSON-массив.
+                <div className={classNames("mt-3 text-xs", editValidation.raw?.availability ? "text-red-600" : "text-gray-500")}>
+                  {editValidation.raw?.availability || "Пока редактируется как сырой JSON-массив."}
                 </div>
                 <textarea
                   rows={10}
-                  className="mt-3 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-xs outline-none focus:ring-2 focus:ring-gray-200"
-                  value={JSON.stringify(Array.isArray(editForm.availability) ? editForm.availability : [], null, 2)}
-                  onChange={(e) => {
-                    const next = safeJsonParse(e.target.value, null);
-                    if (Array.isArray(next)) {
-                      updateEditRoot("availability", next);
-                    } else {
-                      updateEditRoot("availability", []);
-                    }
-                  }}
+                  className={classNames(
+                    "mt-3 w-full rounded-xl px-3 py-2 font-mono text-xs outline-none focus:ring-2",
+                    editValidation.raw?.availability
+                      ? "border border-red-300 bg-red-50/40 focus:ring-red-100"
+                      : "border border-gray-200 bg-gray-50 focus:ring-gray-200"
+                  )}
+                  value={editForm.rawAvailabilityText || "[]"}
+                  onChange={(e) => handleRawAvailabilityChange(e.target.value)}
                 />
               </div>
             </div>
@@ -2071,12 +2341,17 @@ export default function AdminRefusedActual() {
                   Синхронизировать из формы
                 </button>
               </div>
-              <div className="mt-2 text-xs text-gray-500">
-                Здесь можно править любые редкие поля, которых нет в визуальной форме выше.
+              <div className={classNames("mt-2 text-xs", editValidation.raw?.details ? "text-red-600" : "text-gray-500")}>
+                {editValidation.raw?.details || "Здесь можно править любые редкие поля, которых нет в визуальной форме выше."}
               </div>
               <textarea
                 rows={18}
-                className="mt-3 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-xs outline-none focus:ring-2 focus:ring-gray-200"
+                className={classNames(
+                  "mt-3 w-full rounded-xl px-3 py-2 font-mono text-xs outline-none focus:ring-2",
+                  editValidation.raw?.details
+                    ? "border border-red-300 bg-red-50/40 focus:ring-red-100"
+                    : "border border-gray-200 bg-gray-50 focus:ring-gray-200"
+                )}
                 value={editForm.rawDetailsText || "{}"}
                 onChange={(e) => handleRawDetailsChange(e.target.value)}
               />
