@@ -640,6 +640,7 @@
   "unlock_intro_phone": "Ta`minotchining telefoni",
   "unlock_intro_telegram": "Bog‘lanish uchun Telegram",
   "unlock_intro_fast_booking": "Tez bron qilish imkoniyati",
+  "unlock_intro_price_hint": "To`lovdan keyin birdan ochiladi", 
   "unlock_intro_price_label": "Ochish narxi",
   "unlock_intro_price_value": "10 000 so‘m",
   "unlock_intro_cta": "Kontaktlarni ochish",
