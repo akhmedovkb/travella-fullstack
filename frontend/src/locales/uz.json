@@ -647,6 +647,7 @@
   "unlock_intro_fast_booking": "Tez bron qilish imkoniyati",
   "unlock_intro_phone": "Ta`minotchining telefoni",
   "unlock_intro_price_label": "OCHISH NARXI",
+  "unlock_intro_price_hint": "To‘lovdan keyin darhol ochiladi",
   "unlock_intro_price_subhint": "To‘lovdan keyin yetkazib beruvchining telefon va Telegram kontakti shu kartada ochiladi.",
   "unlock_intro_subtitle": "Bu taklifni istalgan payt olib qo‘yishlari mumkin",
   "unlock_intro_telegram": "Bog‘lanish uchun Telegram",
