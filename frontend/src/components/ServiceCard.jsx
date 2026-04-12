@@ -1513,9 +1513,12 @@ return (
                       })}
                     </div>
             
-                    <div className="text-[12px] font-bold text-orange-600">
-                      🔓 {t("marketplace.open_now", { defaultValue: "Открыть" })}
-                    </div>
+                  <button
+                    onClick={openUnlockIntro}
+                    className="px-3 py-1.5 rounded-lg bg-orange-500 text-white text-[12px] font-semibold shadow hover:bg-orange-600 active:scale-95 transition"
+                  >
+                    🔓 {t("marketplace.open_now", { defaultValue: "Открыть" })}
+                  </button>
                   </div>
                 )}
               </div>
