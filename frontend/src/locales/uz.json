@@ -10,7 +10,7 @@
     "quick_request": "Tez so'rov",
     "refresh": "Yangilash",
     "edit": "Tahrirlash",
-    "delete": "O'chirish",
+    "delete": "O'chirish",unlock_contacts_cta_hint
     "confirm": "Tasdiqlash",
     "reject": "Rad etish"
   },
@@ -652,7 +652,7 @@
   "unlock_intro_text": "To‘lovdan keyin siz ta`minotchi bilan vositachisiz bog‘lana olasiz.",
   "unlock_intro_title": "Kontaktlarni ochish",
   "unlock_intro_urgency": "Bunday takliflar juda tez bron qilinadi",
-  "unlock_intro_urgency_hint": "Taklif sizga mos bo‘lsa, ta`minot bilan darhol bog‘langaningiz ma’qul.",
+  "unlock_intro_urgency_hint": "Taklif sizga mos bo‘lsa, ta`minotchi bilan darhol bog‘langaningiz ma’qul.",
   "unlock_intro_urgency_unlocked_title": "Kontaktlarni allaqchon ochishgan",
   "unlock_intro_urgency_watching_title": "Hozir ko`rishmoqda",
   "unlock_intro_whats_inside": "To‘lovdan keyin nimalar ochiladi",
