@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 
 /**
- * Admin tool: shows refused_* services + manual actions
+ * Admin tool: shows refused_* services + manual actions + full edit modal
  *
  * Backend endpoints:
  *  - GET    /api/admin/refused/actual
@@ -12,6 +12,8 @@ import axios from "axios";
  *  - POST   /api/admin/refused/:id/extend
  *  - DELETE /api/admin/refused/:id
  *  - POST   /api/admin/refused/:id/restore
+ *  - GET    /api/admin/services/:id
+ *  - PUT    /api/admin/services/:id
  */
 
 function getAuthToken() {
@@ -111,6 +113,14 @@ function extractAxiosError(e) {
   return { msg, status, contentType, snippet };
 }
 
+function safeJsonParse(input, fallback) {
+  try {
+    return JSON.parse(input);
+  } catch {
+    return fallback;
+  }
+}
+
 function readUrlSort() {
   try {
     const sp = new URLSearchParams(window.location.search || "");
@@ -187,7 +197,7 @@ function Modal({ open, title, onClose, children, footer }) {
         aria-hidden="true"
       />
       <div className="absolute inset-0 flex items-center justify-center p-4">
-        <div className="w-full max-w-4xl overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl">
+        <div className="w-full max-w-6xl overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl">
           <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
             <div className="text-base font-semibold text-gray-900">{title}</div>
             <button
@@ -197,7 +207,7 @@ function Modal({ open, title, onClose, children, footer }) {
               Закрыть
             </button>
           </div>
-          <div className="max-h-[75vh] overflow-auto p-5">{children}</div>
+          <div className="max-h-[78vh] overflow-auto p-5">{children}</div>
           {footer ? (
             <div className="border-t border-gray-200 bg-gray-50 px-5 py-4">
               {footer}
@@ -205,6 +215,260 @@ function Modal({ open, title, onClose, children, footer }) {
           ) : null}
         </div>
       </div>
+    </div>
+  );
+}
+
+function Field({ label, children, hint }) {
+  return (
+    <div>
+      <label className="text-xs font-medium text-gray-600">{label}</label>
+      <div className="mt-1">{children}</div>
+      {hint ? <div className="mt-1 text-[11px] text-gray-500">{hint}</div> : null}
+    </div>
+  );
+}
+
+function TextInput({ value, onChange, placeholder, type = "text" }) {
+  return (
+    <input
+      type={type}
+      className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-gray-200"
+      value={value ?? ""}
+      onChange={onChange}
+      placeholder={placeholder}
+    />
+  );
+}
+
+function TextArea({ value, onChange, rows = 4, placeholder }) {
+  return (
+    <textarea
+      rows={rows}
+      className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-gray-200"
+      value={value ?? ""}
+      onChange={onChange}
+      placeholder={placeholder}
+    />
+  );
+}
+
+function SelectInput({ value, onChange, options }) {
+  return (
+    <select
+      className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-gray-200"
+      value={value ?? ""}
+      onChange={onChange}
+    >
+      {options.map((opt) => (
+        <option key={`${opt.value}`} value={opt.value}>
+          {opt.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function CheckboxField({ label, checked, onChange }) {
+  return (
+    <label className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-800">
+      <input type="checkbox" checked={!!checked} onChange={onChange} />
+      <span>{label}</span>
+    </label>
+  );
+}
+
+function createEditFormFromService(service) {
+  const details =
+    service?.details && typeof service.details === "object" && !Array.isArray(service.details)
+      ? { ...service.details }
+      : {};
+
+  const images = Array.isArray(service?.images) ? service.images : [];
+  const availability = Array.isArray(service?.availability)
+    ? service.availability
+    : [];
+
+  return {
+    id: service?.id || null,
+    title: service?.title || "",
+    description: service?.description || "",
+    category: service?.category || "",
+    price:
+      service?.price === null || typeof service?.price === "undefined"
+        ? ""
+        : String(service.price),
+    vehicle_model: service?.vehicle_model || "",
+    images,
+    availability,
+    details,
+    rawDetailsText: JSON.stringify(details, null, 2),
+  };
+}
+
+function buildEditPayload(form) {
+  return {
+    title: (form?.title || "").trim(),
+    description: form?.description || "",
+    category: form?.category || "",
+    price: form?.price === "" ? null : form?.price,
+    vehicle_model: form?.vehicle_model || "",
+    images: Array.isArray(form?.images) ? form.images : [],
+    availability: Array.isArray(form?.availability) ? form.availability : [],
+    details:
+      form?.details && typeof form.details === "object" && !Array.isArray(form.details)
+        ? form.details
+        : {},
+  };
+}
+
+function renderDetailFields(editForm, setEditForm) {
+  const category = String(editForm?.category || "").toLowerCase();
+  const details = editForm?.details || {};
+
+  const updateDetailsField = (key, value) => {
+    setEditForm((prev) => {
+      const nextDetails = { ...(prev?.details || {}), [key]: value };
+      return {
+        ...prev,
+        details: nextDetails,
+        rawDetailsText: JSON.stringify(nextDetails, null, 2),
+      };
+    });
+  };
+
+  const updateCheckbox = (key) => (e) => updateDetailsField(key, e.target.checked);
+  const updateText = (key) => (e) => updateDetailsField(key, e.target.value);
+
+  const dateField = (key, label) => (
+    <Field label={label} key={key}>
+      <TextInput type="datetime-local" value={details?.[key] || ""} onChange={updateText(key)} />
+    </Field>
+  );
+
+  const textField = (key, label, placeholder = "") => (
+    <Field label={label} key={key}>
+      <TextInput value={details?.[key] || ""} onChange={updateText(key)} placeholder={placeholder} />
+    </Field>
+  );
+
+  if (category === "refused_tour") {
+    return (
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        {textField("directionCountry", "Страна направления")}
+        {textField("directionFrom", "Город вылета")}
+        {textField("directionTo", "Город прибытия")}
+        {dateField("startDate", "Дата начала")}
+        {dateField("endDate", "Дата конца")}
+        {dateField("departureFlightDate", "Дата рейса вылета")}
+        {dateField("returnFlightDate", "Дата рейса обратно")}
+        <div className="md:col-span-3">{textField("hotel", "Отель")}</div>
+        {textField("accommodationCategory", "Категория номера")}
+        {textField("accommodation", "Размещение")}
+        {textField("food", "Питание")}
+        {textField("transfer", "Трансфер")}
+        {textField("netPrice", "Цена нетто")}
+        {textField("grossPrice", "Цена продажи")}
+        {textField("previousPrice", "Предыдущая цена")}
+        {textField("expiration", "Срок актуальности")}
+        <div className="md:col-span-3">
+          <Field label="Детали рейса">
+            <TextArea value={details?.flightDetails || ""} onChange={updateText("flightDetails")} rows={3} />
+          </Field>
+        </div>
+        <div className="md:col-span-3 flex flex-wrap gap-2">
+          <CheckboxField label="Можно менять" checked={details?.changeable} onChange={updateCheckbox("changeable")} />
+          <CheckboxField label="Виза включена" checked={details?.visaIncluded} onChange={updateCheckbox("visaIncluded")} />
+          <CheckboxField label="Страховка включена" checked={details?.insuranceIncluded} onChange={updateCheckbox("insuranceIncluded")} />
+          <CheckboxField label="Раннее заселение" checked={details?.earlyCheckIn} onChange={updateCheckbox("earlyCheckIn")} />
+          <CheckboxField label="Arrival Fast Track" checked={details?.arrivalFastTrack} onChange={updateCheckbox("arrivalFastTrack")} />
+          <CheckboxField label="Актуально" checked={details?.isActive} onChange={updateCheckbox("isActive")} />
+        </div>
+      </div>
+    );
+  }
+
+  if (category === "refused_hotel") {
+    return (
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        {textField("directionCountry", "Страна")}
+        {textField("directionTo", "Город")}
+        {textField("hotel", "Отель")}
+        {dateField("startDate", "Дата заезда")}
+        {dateField("endDate", "Дата выезда")}
+        {textField("roomCategory", "Категория номера")}
+        {textField("accommodation", "Размещение")}
+        {textField("food", "Питание")}
+        {textField("transfer", "Трансфер")}
+        {textField("netPrice", "Цена нетто")}
+        {textField("grossPrice", "Цена продажи")}
+        {textField("previousPrice", "Предыдущая цена")}
+        {textField("expiration", "Срок актуальности")}
+        <div className="md:col-span-3 flex flex-wrap gap-2">
+          <CheckboxField label="Можно менять" checked={details?.changeable} onChange={updateCheckbox("changeable")} />
+          <CheckboxField label="Страховка включена" checked={details?.insuranceIncluded} onChange={updateCheckbox("insuranceIncluded")} />
+          <CheckboxField label="Раннее заселение" checked={details?.earlyCheckIn} onChange={updateCheckbox("earlyCheckIn")} />
+          <CheckboxField label="Arrival Fast Track" checked={details?.arrivalFastTrack} onChange={updateCheckbox("arrivalFastTrack")} />
+          <CheckboxField label="Актуально" checked={details?.isActive} onChange={updateCheckbox("isActive")} />
+        </div>
+      </div>
+    );
+  }
+
+  if (category === "refused_flight") {
+    return (
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        {textField("directionFrom", "Город вылета")}
+        {textField("directionTo", "Город прибытия")}
+        {dateField("departureFlightDate", "Дата вылета")}
+        {dateField("returnFlightDate", "Дата обратно")}
+        {textField("ticketType", "Тип билета")}
+        {textField("fareClass", "Класс тарифа")}
+        {textField("baggage", "Багаж")}
+        {textField("netPrice", "Цена нетто")}
+        {textField("grossPrice", "Цена продажи")}
+        {textField("previousPrice", "Предыдущая цена")}
+        {textField("expiration", "Срок актуальности")}
+        <div className="md:col-span-3">
+          <Field label="Детали рейса">
+            <TextArea value={details?.flightDetails || ""} onChange={updateText("flightDetails")} rows={3} />
+          </Field>
+        </div>
+        <div className="md:col-span-3 flex flex-wrap gap-2">
+          <CheckboxField label="Можно менять" checked={details?.changeable} onChange={updateCheckbox("changeable")} />
+          <CheckboxField label="Страховка включена" checked={details?.insuranceIncluded} onChange={updateCheckbox("insuranceIncluded")} />
+          <CheckboxField label="Arrival Fast Track" checked={details?.arrivalFastTrack} onChange={updateCheckbox("arrivalFastTrack")} />
+          <CheckboxField label="Актуально" checked={details?.isActive} onChange={updateCheckbox("isActive")} />
+        </div>
+      </div>
+    );
+  }
+
+  if (category === "refused_ticket") {
+    return (
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        {textField("eventName", "Название события")}
+        {textField("directionCountry", "Страна")}
+        {textField("directionTo", "Город")}
+        {dateField("startDate", "Дата события")}
+        {textField("ticketType", "Тип билета")}
+        {textField("seatInfo", "Место / сектор")}
+        {textField("netPrice", "Цена нетто")}
+        {textField("grossPrice", "Цена продажи")}
+        {textField("previousPrice", "Предыдущая цена")}
+        {textField("expiration", "Срок актуальности")}
+        <div className="md:col-span-3 flex flex-wrap gap-2">
+          <CheckboxField label="Можно менять" checked={details?.changeable} onChange={updateCheckbox("changeable")} />
+          <CheckboxField label="Актуально" checked={details?.isActive} onChange={updateCheckbox("isActive")} />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-600">
+      Для категории <span className="font-mono">{category || "—"}</span> визуальные поля не настроены.
+      Ниже доступен полный редактор <span className="font-mono">details JSON</span>.
     </div>
   );
 }
@@ -249,7 +513,7 @@ export default function AdminRefusedActual() {
   const [status, setStatus] = useState("");
   const [q, setQ] = useState("");
   const [actuality, setActuality] = useState("actual");
-  const [visibility, setVisibility] = useState("active"); // active | deleted | all
+  const [visibility, setVisibility] = useState("active");
 
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(30);
@@ -269,6 +533,12 @@ export default function AdminRefusedActual() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [detailsItem, setDetailsItem] = useState(null);
+
+  const [editOpen, setEditOpen] = useState(false);
+  const [editLoading, setEditLoading] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState("");
+  const [editForm, setEditForm] = useState(null);
 
   const [sendingId, setSendingId] = useState(null);
 
@@ -330,7 +600,7 @@ export default function AdminRefusedActual() {
     return data;
   }
 
-    async function loadContactUnlockSettings() {
+  async function loadContactUnlockSettings() {
     setUnlockCfgLoading(true);
     try {
       const resp = await http.get(apiPath("/admin/billing/contact-unlock-settings"));
@@ -363,13 +633,10 @@ export default function AdminRefusedActual() {
     setError("");
 
     try {
-      const resp = await http.put(
-        apiPath("/admin/billing/contact-unlock-settings"),
-        {
-          is_paid: unlockIsPaid,
-          price: Math.round(priceNum * 100),
-        }
-      );
+      const resp = await http.put(apiPath("/admin/billing/contact-unlock-settings"), {
+        is_paid: unlockIsPaid,
+        price: Math.round(priceNum * 100),
+      });
 
       const data = ensureJsonOrThrow(resp, "saveContactUnlockSettings");
 
@@ -429,8 +696,7 @@ export default function AdminRefusedActual() {
     setError("");
     try {
       const showDeleted = visibility === "active" ? "0" : "1";
-      const effectiveStatus =
-        visibility === "deleted" ? "deleted" : status || "";
+      const effectiveStatus = visibility === "deleted" ? "deleted" : status || "";
 
       const resp = await http.get(apiPath("/admin/refused/actual"), {
         params: {
@@ -509,23 +775,93 @@ export default function AdminRefusedActual() {
     }
   }
 
+  async function openEdit(id) {
+    setEditOpen(true);
+    setEditLoading(true);
+    setEditError("");
+    setEditForm(null);
+    try {
+      const resp = await http.get(apiPath(`/admin/services/${id}`));
+      const data = ensureJsonOrThrow(resp, "openEdit");
+      setEditForm(createEditFormFromService(data || {}));
+    } catch (e) {
+      const info = extractAxiosError(e);
+      setEditError(info.msg || "Ошибка загрузки услуги для редактирования");
+    } finally {
+      setEditLoading(false);
+    }
+  }
+
+  function updateEditRoot(field, value) {
+    setEditForm((prev) => ({ ...(prev || {}), [field]: value }));
+  }
+
+  function handleRawDetailsChange(value) {
+    setEditForm((prev) => ({ ...(prev || {}), rawDetailsText: value }));
+  }
+
+  async function saveEdit() {
+    if (!editForm?.id) return;
+
+    let parsedDetails = {};
+    try {
+      const parsed = safeJsonParse(editForm.rawDetailsText || "{}", null);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error("details JSON должен быть объектом");
+      }
+      parsedDetails = parsed;
+    } catch (e) {
+      setEditError(e?.message || "Невалидный details JSON");
+      return;
+    }
+
+    setEditSaving(true);
+    setEditError("");
+
+    try {
+      const nextForm = {
+        ...editForm,
+        details: parsedDetails,
+        rawDetailsText: JSON.stringify(parsedDetails, null, 2),
+      };
+      const resp = await http.put(
+        apiPath(`/admin/services/${editForm.id}`),
+        buildEditPayload(nextForm)
+      );
+      const data = ensureJsonOrThrow(resp, "saveEdit");
+
+      if (!data?.ok) {
+        throw new Error(data?.message || "Не удалось сохранить услугу");
+      }
+
+      setEditForm(createEditFormFromService(data?.service || nextForm));
+      setEditOpen(false);
+      showToast("ok", `✅ Услуга #${editForm.id} сохранена`);
+      await loadList(page);
+
+      if (detailsItem?.id === editForm.id) {
+        await openDetails(editForm.id);
+      }
+    } catch (e) {
+      const info = extractAxiosError(e);
+      setEditError(info.msg || "Ошибка сохранения услуги");
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
   async function askActual(id, force = false) {
     setSendingId(id);
     setError("");
     try {
-      const resp = await http.post(
-        apiPath(`/admin/refused/${id}/ask-actual`),
-        null,
-        { params: { force: force ? "1" : "0" } }
-      );
+      const resp = await http.post(apiPath(`/admin/refused/${id}/ask-actual`), null, {
+        params: { force: force ? "1" : "0" },
+      });
 
       const data = ensureJsonOrThrow(resp, "askActual");
       if (!data?.success) {
         if (data?.locked && data?.meta?.lockUntil) {
-          showToast(
-            "warn",
-            `⏳ Заблокировано до ${formatDate(data.meta.lockUntil)}`
-          );
+          showToast("warn", `⏳ Заблокировано до ${formatDate(data.meta.lockUntil)}`);
           return;
         }
         throw new Error(data?.message || "Не удалось отправить");
@@ -674,17 +1010,14 @@ export default function AdminRefusedActual() {
     <div className="p-4 md:p-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">
-            Все отказные услуги
-          </h1>
+          <h1 className="text-xl font-semibold text-gray-900">Все отказные услуги</h1>
           <p className="mt-1 text-sm text-gray-600">
-            Список всех refused_* услуг. Можно фильтровать актуальные,
-            неактуальные и удалённые, вручную спросить актуальность у поставщика,
-            продлить, удалить или восстановить услугу.
+            Список всех refused_* услуг. Можно фильтровать актуальные, неактуальные и удалённые,
+            вручную спросить актуальность у поставщика, продлить, удалить, восстановить и теперь
+            редактировать все поля услуги.
           </p>
           <div className="mt-2 text-xs text-gray-500">
-            API base:{" "}
-            <span className="font-mono">{base ? base : "— (не задан)"}</span>
+            API base: <span className="font-mono">{base ? base : "— (не задан)"}</span>
             {" • "}
             prefix: <span className="font-mono">{apiPrefix || "—"}</span>
           </div>
@@ -694,12 +1027,9 @@ export default function AdminRefusedActual() {
           <div
             className={classNames(
               "rounded-xl border px-4 py-2 text-sm shadow-sm",
-              toast.kind === "ok" &&
-                "border-green-200 bg-green-50 text-green-800",
-              toast.kind === "warn" &&
-                "border-amber-200 bg-amber-50 text-amber-900",
-              toast.kind === "err" &&
-                "border-red-200 bg-red-50 text-red-800"
+              toast.kind === "ok" && "border-green-200 bg-green-50 text-green-800",
+              toast.kind === "warn" && "border-amber-200 bg-amber-50 text-amber-900",
+              toast.kind === "err" && "border-red-200 bg-red-50 text-red-800"
             )}
           >
             {toast.text}
@@ -709,8 +1039,7 @@ export default function AdminRefusedActual() {
 
       {!canUse ? (
         <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-800">
-          Не найден JWT токен в localStorage/sessionStorage. Админ-страница
-          требует авторизацию.
+          Не найден JWT токен в localStorage/sessionStorage. Админ-страница требует авторизацию.
         </div>
       ) : null}
 
@@ -718,13 +1047,9 @@ export default function AdminRefusedActual() {
         <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900">
           <div className="font-semibold">API_BASE не настроен</div>
           <div className="mt-1 text-sm">
-            Сейчас base пустой, а домен не localhost — запросы уйдут на фронтенд
-            и вернут HTML.
+            Сейчас base пустой, а домен не localhost — запросы уйдут на фронтенд и вернут HTML.
             <div className="mt-2">
-              Настрой env:{" "}
-              <span className="font-mono">
-                VITE_API_BASE_URL=https://api.travella.uz
-              </span>
+              Настрой env: <span className="font-mono">VITE_API_BASE_URL=https://api.travella.uz</span>
             </div>
           </div>
         </div>
@@ -733,9 +1058,7 @@ export default function AdminRefusedActual() {
       <div className="mt-5 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
-            <div className="text-sm font-semibold text-gray-900">
-              Открытие контактов
-            </div>
+            <div className="text-sm font-semibold text-gray-900">Открытие контактов</div>
             <div className="mt-1 text-xs text-gray-500">
               Этот переключатель влияет и на сайт, и на Telegram-бот.
               {unlockUpdatedAt ? ` Обновлено: ${formatDate(unlockUpdatedAt)}` : ""}
@@ -757,9 +1080,7 @@ export default function AdminRefusedActual() {
             </div>
 
             <div>
-              <label className="text-xs font-medium text-gray-600">
-                Цена (сум)
-              </label>
+              <label className="text-xs font-medium text-gray-600">Цена (сум)</label>
               <input
                 className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-gray-200 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400"
                 value={unlockPrice}
@@ -793,9 +1114,7 @@ export default function AdminRefusedActual() {
       <div className="mt-5 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-12 md:items-end">
           <div className="md:col-span-3">
-            <label className="text-xs font-medium text-gray-600">
-              Категория
-            </label>
+            <label className="text-xs font-medium text-gray-600">Категория</label>
             <select
               className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-gray-200"
               value={category}
@@ -826,9 +1145,7 @@ export default function AdminRefusedActual() {
           </div>
 
           <div className="md:col-span-3">
-            <label className="text-xs font-medium text-gray-600">
-              Видимость
-            </label>
+            <label className="text-xs font-medium text-gray-600">Видимость</label>
             <select
               className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-gray-200"
               value={visibility}
@@ -843,9 +1160,7 @@ export default function AdminRefusedActual() {
           </div>
 
           <div className="md:col-span-3">
-            <label className="text-xs font-medium text-gray-600">
-              Актуальность
-            </label>
+            <label className="text-xs font-medium text-gray-600">Актуальность</label>
             <select
               className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-gray-200"
               value={actuality}
@@ -923,7 +1238,7 @@ export default function AdminRefusedActual() {
         </div>
 
         <div className="mt-4 overflow-auto rounded-xl border border-gray-200">
-          <table className="min-w-[1080px] w-full text-sm">
+          <table className="min-w-[1180px] w-full text-sm">
             <thead className="sticky top-0 z-10 bg-gray-50 text-gray-700">
               <tr>
                 <th className="px-3 py-2 text-left font-medium">ID</th>
@@ -935,13 +1250,8 @@ export default function AdminRefusedActual() {
                   title="Сортировать по дате создания"
                 >
                   Дата создания
-                  <span className={iconClass("created_at")}>
-                    {sortIcon("created_at")}
-                  </span>
-                  <SortBadge
-                    active={sortBy === "created_at"}
-                    dir={sortOrder}
-                  />
+                  <span className={iconClass("created_at")}>{sortIcon("created_at")}</span>
+                  <SortBadge active={sortBy === "created_at"} dir={sortOrder} />
                 </th>
                 <th
                   className={thClass("sort_date")}
@@ -949,9 +1259,7 @@ export default function AdminRefusedActual() {
                   title="Сортировать по ближайшей дате услуги"
                 >
                   Дата (сорт)
-                  <span className={iconClass("sort_date")}>
-                    {sortIcon("sort_date")}
-                  </span>
+                  <span className={iconClass("sort_date")}>{sortIcon("sort_date")}</span>
                   <SortBadge active={sortBy === "sort_date"} dir={sortOrder} />
                 </th>
                 <th
@@ -960,9 +1268,7 @@ export default function AdminRefusedActual() {
                   title="Сортировать по провайдеру"
                 >
                   Провайдер
-                  <span className={iconClass("provider")}>
-                    {sortIcon("provider")}
-                  </span>
+                  <span className={iconClass("provider")}>{sortIcon("provider")}</span>
                   <SortBadge active={sortBy === "provider"} dir={sortOrder} />
                 </th>
                 <th className="px-3 py-2 text-left font-medium">TG</th>
@@ -983,8 +1289,7 @@ export default function AdminRefusedActual() {
                   const tgOk = !!it?.provider?.chatId;
                   const actual = !!it.isActual;
                   const deleted =
-                    !!it.deletedAt ||
-                    String(it.status || "").toLowerCase() === "deleted";
+                    !!it.deletedAt || String(it.status || "").toLowerCase() === "deleted";
 
                   const meta = it.meta || {};
                   const lockUntil = meta.lockUntil;
@@ -1007,60 +1312,36 @@ export default function AdminRefusedActual() {
 
                   return (
                     <tr key={it.id} className="bg-white hover:bg-gray-50">
-                      <td className="whitespace-nowrap px-3 py-2 text-gray-900">
-                        {it.id}
-                      </td>
+                      <td className="whitespace-nowrap px-3 py-2 text-gray-900">{it.id}</td>
 
                       <td className="whitespace-nowrap px-3 py-2">
                         <Badge tone="blue">{it.category}</Badge>
                         <div className="mt-1 flex flex-wrap gap-1">
-                          <Badge tone={actual ? "green" : "red"}>
-                            {actual ? "actual" : "inactive"}
-                          </Badge>
+                          <Badge tone={actual ? "green" : "red"}>{actual ? "actual" : "inactive"}</Badge>
                           {deleted ? <Badge tone="amber">deleted</Badge> : null}
                         </div>
                       </td>
 
                       <td className="px-3 py-2">
                         <div className="font-medium text-gray-900">
-                          {short(
-                            it.title ||
-                              it.details?.hotel ||
-                              it.details?.hotelName ||
-                              "—",
-                            70
-                          )}
+                          {short(it.title || it.details?.hotel || it.details?.hotelName || "—", 70)}
                         </div>
                         <div className="mt-0.5 text-xs text-gray-600">
                           status: <span className="font-mono">{it.status}</span>
                         </div>
                       </td>
 
-                      <td
-                        className={classNames(
-                          tdClass("created_at"),
-                          "whitespace-nowrap"
-                        )}
-                      >
+                      <td className={classNames(tdClass("created_at"), "whitespace-nowrap")}>
                         {it.createdAt ? (
-                          <div className="text-gray-900">
-                            {formatDate(it.createdAt)}
-                          </div>
+                          <div className="text-gray-900">{formatDate(it.createdAt)}</div>
                         ) : (
                           <div className="text-gray-500">—</div>
                         )}
                       </td>
 
-                      <td
-                        className={classNames(
-                          tdClass("sort_date"),
-                          "whitespace-nowrap"
-                        )}
-                      >
+                      <td className={classNames(tdClass("sort_date"), "whitespace-nowrap")}>
                         {it.startDateForSort ? (
-                          <div className="text-gray-900">
-                            {formatDate(it.startDateForSort)}
-                          </div>
+                          <div className="text-gray-900">{formatDate(it.startDateForSort)}</div>
                         ) : (
                           <div className="text-gray-500">—</div>
                         )}
@@ -1072,29 +1353,21 @@ export default function AdminRefusedActual() {
                         </div>
                         <div className="mt-0.5 text-xs text-gray-600">
                           {it?.provider?.phone ? `📞 ${it.provider.phone}` : ""}
-                          {it?.provider?.telegramUsername
-                            ? ` • @${it.provider.telegramUsername}`
-                            : ""}
+                          {it?.provider?.telegramUsername ? ` • @${it.provider.telegramUsername}` : ""}
                         </div>
                       </td>
 
                       <td className="whitespace-nowrap px-3 py-2">
-                        <Badge tone={tgOk ? "green" : "red"}>
-                          {tgOk ? "chatId OK" : "нет chatId"}
-                        </Badge>
+                        <Badge tone={tgOk ? "green" : "red"}>{tgOk ? "chatId OK" : "нет chatId"}</Badge>
                         {tgOk ? (
-                          <div className="mt-0.5 font-mono text-xs text-gray-600">
-                            {it.provider.chatId}
-                          </div>
+                          <div className="mt-0.5 font-mono text-xs text-gray-600">{it.provider.chatId}</div>
                         ) : null}
                       </td>
 
                       <td className="px-3 py-2">
                         <div className="text-xs text-gray-700">
                           sent:{" "}
-                          <span className="font-mono">
-                            {lastSentAt ? formatDate(lastSentAt) : "—"}
-                          </span>
+                          <span className="font-mono">{lastSentAt ? formatDate(lastSentAt) : "—"}</span>
                           {lastSentAt && sentBadge ? (
                             <span
                               className={classNames(
@@ -1107,16 +1380,10 @@ export default function AdminRefusedActual() {
                           ) : null}
                         </div>
                         <div className="text-xs text-gray-700">
-                          answer:{" "}
-                          <span className="font-mono">
-                            {lastAnswer ? String(lastAnswer) : "—"}
-                          </span>
+                          answer: <span className="font-mono">{lastAnswer ? String(lastAnswer) : "—"}</span>
                         </div>
                         <div className="text-xs text-gray-700">
-                          lock:{" "}
-                          <span className="font-mono">
-                            {lockUntil ? formatDate(lockUntil) : "—"}
-                          </span>
+                          lock: <span className="font-mono">{lockUntil ? formatDate(lockUntil) : "—"}</span>
                         </div>
                       </td>
 
@@ -1127,6 +1394,13 @@ export default function AdminRefusedActual() {
                             className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs hover:bg-gray-50"
                           >
                             Детали
+                          </button>
+
+                          <button
+                            onClick={() => openEdit(it.id)}
+                            className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs text-violet-700 hover:bg-violet-100"
+                          >
+                            Редактировать
                           </button>
 
                           {!deleted ? (
@@ -1140,11 +1414,7 @@ export default function AdminRefusedActual() {
                                     ? "cursor-not-allowed border-gray-200 bg-gray-50 text-gray-400"
                                     : "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
                                 )}
-                                title={
-                                  !tgOk
-                                    ? "У провайдера нет telegram chatId"
-                                    : "Спросить актуальность"
-                                }
+                                title={!tgOk ? "У провайдера нет telegram chatId" : "Спросить актуальность"}
                               >
                                 {sendingId === it.id ? "Отправка…" : "Спросить"}
                               </button>
@@ -1261,11 +1531,7 @@ export default function AdminRefusedActual() {
 
       <Modal
         open={detailsOpen}
-        title={
-          detailsItem
-            ? `Отказ #${detailsItem.id} — ${detailsItem.category}`
-            : "Детали отказа"
-        }
+        title={detailsItem ? `Отказ #${detailsItem.id} — ${detailsItem.category}` : "Детали отказа"}
         onClose={() => setDetailsOpen(false)}
         footer={
           detailsItem ? (
@@ -1273,9 +1539,7 @@ export default function AdminRefusedActual() {
               <div className="text-sm text-gray-600">
                 Провайдер:{" "}
                 <span className="font-medium text-gray-900">
-                  {detailsItem?.provider?.companyName ||
-                    detailsItem?.provider?.name ||
-                    "—"}
+                  {detailsItem?.provider?.companyName || detailsItem?.provider?.name || "—"}
                 </span>
                 {detailsItem?.provider?.chatId ? (
                   <span className="ml-2 font-mono text-xs text-gray-600">
@@ -1284,8 +1548,7 @@ export default function AdminRefusedActual() {
                 ) : null}
               </div>
 
-              {String(detailsItem?.status || "").toLowerCase() === "deleted" ||
-              detailsItem?.deletedAt ? (
+              {String(detailsItem?.status || "").toLowerCase() === "deleted" || detailsItem?.deletedAt ? (
                 <div className="flex flex-wrap gap-2">
                   <button
                     onClick={() => restoreService(detailsItem.id)}
@@ -1298,12 +1561,16 @@ export default function AdminRefusedActual() {
               ) : (
                 <div className="flex flex-wrap gap-2">
                   <button
+                    onClick={() => openEdit(detailsItem.id)}
+                    className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-2 text-sm text-violet-700 hover:bg-violet-100"
+                  >
+                    Редактировать
+                  </button>
+
+                  <button
                     onClick={() => askActual(detailsItem.id, false)}
                     className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-700 hover:bg-blue-100"
-                    disabled={
-                      !detailsItem?.provider?.chatId ||
-                      sendingId === detailsItem.id
-                    }
+                    disabled={!detailsItem?.provider?.chatId || sendingId === detailsItem.id}
                   >
                     Спросить
                   </button>
@@ -1311,10 +1578,7 @@ export default function AdminRefusedActual() {
                   <button
                     onClick={() => askActual(detailsItem.id, true)}
                     className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900 hover:bg-amber-100"
-                    disabled={
-                      !detailsItem?.provider?.chatId ||
-                      sendingId === detailsItem.id
-                    }
+                    disabled={!detailsItem?.provider?.chatId || sendingId === detailsItem.id}
                   >
                     Force
                   </button>
@@ -1363,14 +1627,13 @@ export default function AdminRefusedActual() {
                   <span className="text-gray-600">Удалена:</span>{" "}
                   <Badge
                     tone={
-                      String(detailsItem?.status || "").toLowerCase() ===
-                        "deleted" || detailsItem?.deletedAt
+                      String(detailsItem?.status || "").toLowerCase() === "deleted" ||
+                      detailsItem?.deletedAt
                         ? "amber"
                         : "green"
                     }
                   >
-                    {String(detailsItem?.status || "").toLowerCase() ===
-                      "deleted" || detailsItem?.deletedAt
+                    {String(detailsItem?.status || "").toLowerCase() === "deleted" || detailsItem?.deletedAt
                       ? "да"
                       : "нет"}
                   </Badge>
@@ -1384,9 +1647,7 @@ export default function AdminRefusedActual() {
                 <div>
                   <span className="text-gray-600">Дата (сорт):</span>{" "}
                   <span className="font-mono">
-                    {detailsItem.startDateForSort
-                      ? formatDate(detailsItem.startDateForSort)
-                      : "—"}
+                    {detailsItem.startDateForSort ? formatDate(detailsItem.startDateForSort) : "—"}
                   </span>
                 </div>
                 <div>
@@ -1396,31 +1657,23 @@ export default function AdminRefusedActual() {
                 <div>
                   <span className="text-gray-600">Deleted at:</span>{" "}
                   <span className="font-mono">
-                    {detailsItem.deletedAt
-                      ? formatDate(detailsItem.deletedAt)
-                      : "—"}
+                    {detailsItem.deletedAt ? formatDate(detailsItem.deletedAt) : "—"}
                   </span>
                 </div>
               </div>
 
               <div className="mt-4 border-t border-gray-200 pt-4">
-                <div className="text-sm font-semibold text-gray-900">
-                  Провайдер
-                </div>
+                <div className="text-sm font-semibold text-gray-900">Провайдер</div>
                 <div className="mt-3 space-y-2 text-sm text-gray-800">
                   <div>
                     <span className="text-gray-600">Компания/имя:</span>{" "}
                     <span>
-                      {detailsItem?.provider?.companyName ||
-                        detailsItem?.provider?.name ||
-                        "—"}
+                      {detailsItem?.provider?.companyName || detailsItem?.provider?.name || "—"}
                     </span>
                   </div>
                   <div>
                     <span className="text-gray-600">Телефон:</span>{" "}
-                    <span className="font-mono">
-                      {detailsItem?.provider?.phone || "—"}
-                    </span>
+                    <span className="font-mono">{detailsItem?.provider?.phone || "—"}</span>
                   </div>
                   <div>
                     <span className="text-gray-600">Username:</span>{" "}
@@ -1432,17 +1685,21 @@ export default function AdminRefusedActual() {
                   </div>
                   <div>
                     <span className="text-gray-600">chatId:</span>{" "}
-                    <span className="font-mono">
-                      {detailsItem?.provider?.chatId || "—"}
-                    </span>
+                    <span className="font-mono">{detailsItem?.provider?.chatId || "—"}</span>
                   </div>
                 </div>
               </div>
             </div>
 
             <div className="rounded-2xl border border-gray-200 p-4 md:col-span-7">
-              <div className="text-sm font-semibold text-gray-900">
-                details (JSON)
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-sm font-semibold text-gray-900">details (JSON)</div>
+                <button
+                  onClick={() => openEdit(detailsItem.id)}
+                  className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs text-violet-700 hover:bg-violet-100"
+                >
+                  Открыть редактор
+                </button>
               </div>
               <pre className="mt-3 whitespace-pre-wrap break-words rounded-xl border border-gray-200 bg-gray-50 p-3 text-xs text-gray-800">
                 {JSON.stringify(detailsItem.details || {}, null, 2)}
@@ -1451,6 +1708,178 @@ export default function AdminRefusedActual() {
           </div>
         ) : (
           <div className="text-sm text-gray-600">Нет данных.</div>
+        )}
+      </Modal>
+
+      <Modal
+        open={editOpen}
+        title={editForm ? `Редактирование услуги #${editForm.id}` : "Редактирование услуги"}
+        onClose={() => {
+          if (editSaving) return;
+          setEditOpen(false);
+        }}
+        footer={
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="text-xs text-gray-500">
+              Сохраняются общие поля услуги и весь объект <span className="font-mono">details</span>.
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setEditOpen(false)}
+                disabled={editSaving}
+                className="rounded-xl border border-gray-200 px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-60"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={saveEdit}
+                disabled={editLoading || editSaving || !editForm}
+                className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-2 text-sm text-violet-700 hover:bg-violet-100 disabled:opacity-60"
+              >
+                {editSaving ? "Сохранение…" : "Сохранить изменения"}
+              </button>
+            </div>
+          </div>
+        }
+      >
+        {editLoading ? (
+          <div className="text-sm text-gray-600">Загрузка…</div>
+        ) : editForm ? (
+          <div className="space-y-5">
+            {editError ? (
+              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                {editError}
+              </div>
+            ) : null}
+
+            <div className="rounded-2xl border border-gray-200 p-4">
+              <div className="text-sm font-semibold text-gray-900">Общие поля услуги</div>
+              <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+                <Field label="ID">
+                  <TextInput value={String(editForm.id || "")} onChange={() => {}} />
+                </Field>
+
+                <Field label="Категория">
+                  <SelectInput
+                    value={editForm.category}
+                    onChange={(e) => updateEditRoot("category", e.target.value)}
+                    options={categories.filter((c) => c.value)}
+                  />
+                </Field>
+
+                <Field label="Цена (services.price)">
+                  <TextInput
+                    value={editForm.price}
+                    onChange={(e) => updateEditRoot("price", e.target.value)}
+                    placeholder="Например: 1200"
+                  />
+                </Field>
+
+                <div className="md:col-span-3">
+                  <Field label="Название">
+                    <TextInput
+                      value={editForm.title}
+                      onChange={(e) => updateEditRoot("title", e.target.value)}
+                      placeholder="Название услуги"
+                    />
+                  </Field>
+                </div>
+
+                <div className="md:col-span-3">
+                  <Field label="Описание">
+                    <TextArea
+                      value={editForm.description}
+                      onChange={(e) => updateEditRoot("description", e.target.value)}
+                      rows={4}
+                      placeholder="Описание услуги"
+                    />
+                  </Field>
+                </div>
+
+                <div className="md:col-span-3">
+                  <Field label="Модель транспорта / vehicle_model">
+                    <TextInput
+                      value={editForm.vehicle_model}
+                      onChange={(e) => updateEditRoot("vehicle_model", e.target.value)}
+                      placeholder="Для transport-услуг, если используется"
+                    />
+                  </Field>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-gray-200 p-4">
+              <div className="text-sm font-semibold text-gray-900">Быстрое редактирование details по категории</div>
+              <div className="mt-4">{renderDetailFields(editForm, setEditForm)}</div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+              <div className="rounded-2xl border border-gray-200 p-4">
+                <div className="text-sm font-semibold text-gray-900">images (JSON array)</div>
+                <div className="mt-3 text-xs text-gray-500">
+                  Пока редактируется как сырой JSON-массив.
+                </div>
+                <textarea
+                  rows={10}
+                  className="mt-3 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-xs outline-none focus:ring-2 focus:ring-gray-200"
+                  value={JSON.stringify(Array.isArray(editForm.images) ? editForm.images : [], null, 2)}
+                  onChange={(e) => {
+                    const next = safeJsonParse(e.target.value, null);
+                    if (Array.isArray(next)) {
+                      updateEditRoot("images", next);
+                    } else {
+                      updateEditRoot("images", []);
+                    }
+                  }}
+                />
+              </div>
+
+              <div className="rounded-2xl border border-gray-200 p-4">
+                <div className="text-sm font-semibold text-gray-900">availability (JSON array)</div>
+                <div className="mt-3 text-xs text-gray-500">
+                  Пока редактируется как сырой JSON-массив.
+                </div>
+                <textarea
+                  rows={10}
+                  className="mt-3 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-xs outline-none focus:ring-2 focus:ring-gray-200"
+                  value={JSON.stringify(Array.isArray(editForm.availability) ? editForm.availability : [], null, 2)}
+                  onChange={(e) => {
+                    const next = safeJsonParse(e.target.value, null);
+                    if (Array.isArray(next)) {
+                      updateEditRoot("availability", next);
+                    } else {
+                      updateEditRoot("availability", []);
+                    }
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-gray-200 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-sm font-semibold text-gray-900">Raw details JSON</div>
+                <button
+                  onClick={() =>
+                    handleRawDetailsChange(JSON.stringify(editForm.details || {}, null, 2))
+                  }
+                  className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs hover:bg-gray-50"
+                >
+                  Синхронизировать из формы
+                </button>
+              </div>
+              <div className="mt-2 text-xs text-gray-500">
+                Здесь можно править любые редкие поля, которых нет в визуальной форме выше.
+              </div>
+              <textarea
+                rows={18}
+                className="mt-3 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-xs outline-none focus:ring-2 focus:ring-gray-200"
+                value={editForm.rawDetailsText || "{}"}
+                onChange={(e) => handleRawDetailsChange(e.target.value)}
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="text-sm text-gray-600">Нет данных для редактирования.</div>
         )}
       </Modal>
     </div>
