@@ -642,7 +642,7 @@
   "unlock_contacts_cta_primary": "Unlock phone & Telegram",
   "unlock_intro_benefit_proof": "Verified proof",
   "unlock_intro_dynamic_default": "These offers can become unavailable quickly. It’s best to contact the provider right now.",
-  "unlock_intro_dynamic_watching": "Being viewed now {{watchingNow}}",
+  "unlock_intro_dynamic_watching": "Being viewed now {{count}}",
   "unlock_intro_dynamic_unlocked": "Contacts already opened",
   "unlock_intro_cta": "Unlock contacts",
   "unlock_intro_fast_booking": "Fast booking option",
