@@ -647,6 +647,8 @@
   "unlock_intro_text": "After payment, you will get direct access to the provider and can contact them without посредников.",
   "unlock_intro_title": "Unlock Contacts",
   "unlock_intro_urgency": "These offers are booked very quickly",
+  "unlock_intro_urgency_unlocked_title": "Have already opened contacts",
+  "unlock_intro_urgency_watching_title": "Watching now",
   "unlock_intro_urgency_hint": "If this offer fits you, it is better to contact the provider right away.",
   "unlock_intro_whats_inside": "What unlocks after payment",
   "unlock_success_action_text": "Contact the provider right now while the offer is still available.",
