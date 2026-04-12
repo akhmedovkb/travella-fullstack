@@ -52,7 +52,13 @@ router.get("/services/rejected", authenticateToken, requireAdmin, async (req, re
 // карточка услуги для предпросмотра
 router.get("/services/:id(\\d+)", authenticateToken, requireAdmin, async (req, res) => {
   const q = await pool.query(
-    `SELECT s.*, p.name AS provider_name, p.type AS provider_type
+    `SELECT
+        s.*,
+        p.name AS provider_name,
+        p.type AS provider_type,
+        p.telegram_refused_chat_id,
+        p.telegram_web_chat_id,
+        p.telegram_chat_id
        FROM services s
        JOIN providers p ON p.id = s.provider_id
       WHERE s.id = $1`,
@@ -90,6 +96,16 @@ router.put("/services/:id(\\d+)", authenticateToken, requireAdmin, async (req, r
 
     const row = cur.rows[0];
     const body = req.body || {};
+    const normalizeChatId = (value) => {
+      if (typeof value === "undefined") return undefined;
+      if (value === null) return null;
+      const s = String(value).trim();
+      if (!s) return null;
+      if (!/^-?\d+$/.test(s)) {
+        throw new Error("INVALID_CHAT_ID");
+      }
+      return s;
+    };
 
     let nextImages;
     let nextAvailability;
@@ -116,6 +132,49 @@ router.put("/services/:id(\\d+)", authenticateToken, requireAdmin, async (req, r
         ? row.vehicle_model
         : body.vehicle_model;
 
+    let nextTelegramRefusedChatId;
+    let nextTelegramWebChatId;
+    let nextTelegramChatId;
+
+    try {
+      nextTelegramRefusedChatId = normalizeChatId(body.telegram_refused_chat_id);
+      nextTelegramWebChatId = normalizeChatId(body.telegram_web_chat_id);
+      nextTelegramChatId = normalizeChatId(body.telegram_chat_id);
+    } catch (e) {
+      if (e?.message === "INVALID_CHAT_ID") {
+        return res.status(400).json({ message: "Invalid Telegram chat id" });
+      }
+      throw e;
+    }
+        const providerId = row.provider_id;
+    const providerCur = await pool.query(
+      `SELECT telegram_refused_chat_id, telegram_web_chat_id, telegram_chat_id
+         FROM providers
+        WHERE id = $1`,
+      [providerId]
+    );
+
+    if (!providerCur.rows.length) {
+      return res.status(404).json({ message: "Provider not found" });
+    }
+
+    const providerRow = providerCur.rows[0];
+
+    const finalTelegramRefusedChatId =
+      typeof nextTelegramRefusedChatId === "undefined"
+        ? providerRow.telegram_refused_chat_id
+        : nextTelegramRefusedChatId;
+
+    const finalTelegramWebChatId =
+      typeof nextTelegramWebChatId === "undefined"
+        ? providerRow.telegram_web_chat_id
+        : nextTelegramWebChatId;
+
+    const finalTelegramChatId =
+      typeof nextTelegramChatId === "undefined"
+        ? providerRow.telegram_chat_id
+        : nextTelegramChatId;
+    
     const upd = await pool.query(
       `UPDATE services
           SET title = $2,
@@ -145,8 +204,30 @@ router.put("/services/:id(\\d+)", authenticateToken, requireAdmin, async (req, r
         nextVehicleModel,
       ]
     );
+    await pool.query(
+      `UPDATE providers
+          SET telegram_refused_chat_id = $2,
+              telegram_web_chat_id = $3,
+              telegram_chat_id = $4,
+              updated_at = NOW()
+        WHERE id = $1`,
+      [
+        providerId,
+        finalTelegramRefusedChatId,
+        finalTelegramWebChatId,
+        finalTelegramChatId,
+      ]
+    );
 
-    return res.json({ ok: true, service: upd.rows[0] });
+    return res.json({
+      ok: true,
+      service: {
+        ...upd.rows[0],
+        telegram_refused_chat_id: finalTelegramRefusedChatId,
+        telegram_web_chat_id: finalTelegramWebChatId,
+        telegram_chat_id: finalTelegramChatId,
+      },
+    });
   } catch (e) {
     console.error("[admin update service] error:", e);
     return res.status(500).json({ message: "Internal error" });
