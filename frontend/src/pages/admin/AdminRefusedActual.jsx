@@ -1163,7 +1163,16 @@ export default function AdminRefusedActual() {
         throw new Error(data?.message || "Не удалось сохранить услугу");
       }
 
-      setEditForm(createEditFormFromService({ ...(data?.service || nextForm), ...buildEditPayload(nextForm).providerTelegram, provider_id: nextForm.provider_id, provider_name: nextForm.provider_name }));
+      setEditForm(
+        createEditFormFromService({
+          ...(data?.service || nextForm),
+          telegram_refused_chat_id: nextForm.telegram_refused_chat_id,
+          telegram_web_chat_id: nextForm.telegram_web_chat_id,
+          telegram_chat_id: nextForm.telegram_chat_id,
+          provider_id: nextForm.provider_id,
+          provider_name: nextForm.provider_name,
+        })
+      );
       setEditOpen(false);
       showToast("ok", `✅ Услуга #${editForm.id} сохранена`);
       await loadList(page);
