@@ -1217,13 +1217,11 @@ export default function AdminRefusedActual() {
     setInlineEditId(item?.id || null);
     setInlineError("");
     setInlineForm({
-      telegram_refused_chat_id: normalizeChatId(
-        provider?.telegram_refused_chat_id || ""
+      telegram_refused_chat_id: normalizeChatId(provider?.telegram_refused_chat_id || ""),
+      telegram_web_chat_id: normalizeChatId(provider?.telegram_web_chat_id || ""),
+      telegram_chat_id: normalizeChatId(
+        provider?.telegram_chat_id || provider?.chatId || ""
       ),
-      telegram_web_chat_id: normalizeChatId(
-        provider?.telegram_web_chat_id || ""
-      ),
-      telegram_chat_id: normalizeChatId(provider?.telegram_chat_id || ""),
     });
   }
 
@@ -2101,9 +2099,19 @@ async function saveInlineEdit(item) {
                 <span className="font-medium text-gray-900">
                   {detailsItem?.provider?.companyName || detailsItem?.provider?.name || "—"}
                 </span>
-                {detailsItem?.provider?.chatId ? (
+                {(
+                  detailsItem?.provider?.telegram_refused_chat_id ||
+                  detailsItem?.provider?.telegram_web_chat_id ||
+                  detailsItem?.provider?.telegram_chat_id ||
+                  detailsItem?.provider?.chatId
+                ) ? (
                   <span className="ml-2 font-mono text-xs text-gray-600">
-                    chatId: {detailsItem.provider.chatId}
+                    chatId: {
+                      detailsItem?.provider?.telegram_refused_chat_id ||
+                      detailsItem?.provider?.telegram_web_chat_id ||
+                      detailsItem?.provider?.telegram_chat_id ||
+                      detailsItem?.provider?.chatId
+                    }
                   </span>
                 ) : null}
               </div>
@@ -2130,7 +2138,14 @@ async function saveInlineEdit(item) {
                   <button
                     onClick={() => askActual(detailsItem.id, false)}
                     className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-700 hover:bg-blue-100"
-                    disabled={!detailsItem?.provider?.chatId || sendingId === detailsItem.id}
+                    disabled={
+                      !(
+                        detailsItem?.provider?.telegram_refused_chat_id ||
+                        detailsItem?.provider?.telegram_web_chat_id ||
+                        detailsItem?.provider?.telegram_chat_id ||
+                        detailsItem?.provider?.chatId
+                      ) || sendingId === detailsItem.id
+                    }
                   >
                     Спросить
                   </button>
@@ -2138,7 +2153,14 @@ async function saveInlineEdit(item) {
                   <button
                     onClick={() => askActual(detailsItem.id, true)}
                     className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900 hover:bg-amber-100"
-                    disabled={!detailsItem?.provider?.chatId || sendingId === detailsItem.id}
+                    disabled={
+                      !(
+                        detailsItem?.provider?.telegram_refused_chat_id ||
+                        detailsItem?.provider?.telegram_web_chat_id ||
+                        detailsItem?.provider?.telegram_chat_id ||
+                        detailsItem?.provider?.chatId
+                      ) || sendingId === detailsItem.id
+                    }
                   >
                     Force
                   </button>
@@ -2245,7 +2267,13 @@ async function saveInlineEdit(item) {
                   </div>
                   <div>
                     <span className="text-gray-600">chatId:</span>{" "}
-                    <span className="font-mono">{detailsItem?.provider?.chatId || "—"}</span>
+                    <span className="font-mono">
+                      {detailsItem?.provider?.telegram_refused_chat_id ||
+                        detailsItem?.provider?.telegram_web_chat_id ||
+                        detailsItem?.provider?.telegram_chat_id ||
+                        detailsItem?.provider?.chatId ||
+                        "—"}
+                    </span>
                   </div>
                 </div>
               </div>
