@@ -842,6 +842,14 @@ export default function AdminRefusedActual() {
   const editValidation = useMemo(() => validateEditForm(editForm), [editForm]);
 
   const [sendingId, setSendingId] = useState(null);
+  const [inlineEditId, setInlineEditId] = useState(null);
+  const [inlineSaving, setInlineSaving] = useState(false);
+  const [inlineError, setInlineError] = useState("");
+  const [inlineForm, setInlineForm] = useState({
+    telegram_refused_chat_id: "",
+    telegram_web_chat_id: "",
+    telegram_chat_id: "",
+  });
 
   const pageCount = useMemo(() => {
     const c = Math.ceil((total || 0) / (limit || 1));
@@ -1195,6 +1203,101 @@ export default function AdminRefusedActual() {
     }
   }
 
+   function openInlineEdit(item) {
+    const provider = item?.provider || {};
+    setInlineEditId(item?.id || null);
+    setInlineError("");
+    setInlineForm({
+      telegram_refused_chat_id: normalizeChatId(
+        provider?.telegram_refused_chat_id || ""
+      ),
+      telegram_web_chat_id: normalizeChatId(
+        provider?.telegram_web_chat_id || ""
+      ),
+      telegram_chat_id: normalizeChatId(provider?.telegram_chat_id || ""),
+    });
+  }
+
+  function cancelInlineEdit() {
+    if (inlineSaving) return;
+    setInlineEditId(null);
+    setInlineError("");
+    setInlineForm({
+      telegram_refused_chat_id: "",
+      telegram_web_chat_id: "",
+      telegram_chat_id: "",
+    });
+  }
+
+  function changeInlineField(field, value) {
+    setInlineForm((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  }
+
+async function saveInlineEdit(item) {
+    if (!item?.id) return;
+
+    const tgFields = [
+      ["telegram_refused_chat_id", inlineForm.telegram_refused_chat_id],
+      ["telegram_web_chat_id", inlineForm.telegram_web_chat_id],
+      ["telegram_chat_id", inlineForm.telegram_chat_id],
+    ];
+
+    for (const [field, value] of tgFields) {
+      if (!isValidChatId(value)) {
+        setInlineError(`${field}: только цифры и optional "-" в начале`);
+        return;
+      }
+    }
+
+    setInlineSaving(true);
+    setInlineError("");
+
+    try {
+      const payload = {
+        title: item?.title || "",
+        description: item?.description || "",
+        category: item?.category || "",
+        price:
+          item?.price === null || typeof item?.price === "undefined"
+            ? null
+            : item.price,
+        vehicle_model: item?.vehicle_model || "",
+        images: Array.isArray(item?.images) ? item.images : [],
+        availability: Array.isArray(item?.availability) ? item.availability : [],
+        details:
+          item?.details && typeof item.details === "object" && !Array.isArray(item.details)
+            ? item.details
+            : {},
+        telegram_refused_chat_id: normalizeChatId(inlineForm.telegram_refused_chat_id),
+        telegram_web_chat_id: normalizeChatId(inlineForm.telegram_web_chat_id),
+        telegram_chat_id: normalizeChatId(inlineForm.telegram_chat_id),
+      };
+
+      const resp = await http.put(apiPath(`/admin/services/${item.id}`), payload);
+      const data = ensureJsonOrThrow(resp, "saveInlineEdit");
+
+      if (!data?.ok) {
+        throw new Error(data?.message || "Не удалось сохранить TG");
+      }
+
+      showToast("ok", `✅ TG для услуги #${item.id} сохранён`);
+      setInlineEditId(null);
+      await loadList(page);
+
+      if (detailsItem?.id === item.id) {
+        await openDetails(item.id);
+      }
+    } catch (e) {
+      const info = extractAxiosError(e);
+      setInlineError(info.msg || "Ошибка сохранения TG");
+    } finally {
+      setInlineSaving(false);
+    }
+  }
+  
   async function askActual(id, force = false) {
     setSendingId(id);
     setError("");
@@ -1631,7 +1734,14 @@ export default function AdminRefusedActual() {
                 </tr>
               ) : items.length ? (
                 items.map((it) => {
-                  const tgOk = !!it?.provider?.chatId;
+                  const effectiveTg =
+                    it?.provider?.telegram_refused_chat_id ||
+                    it?.provider?.telegram_web_chat_id ||
+                    it?.provider?.telegram_chat_id ||
+                    it?.provider?.chatId ||
+                    "";
+                  
+                  const tgOk = !!effectiveTg;
                   const actual = !!it.isActual;
                   const deleted =
                     !!it.deletedAt || String(it.status || "").toLowerCase() === "deleted";
@@ -1702,11 +1812,107 @@ export default function AdminRefusedActual() {
                         </div>
                       </td>
 
-                      <td className="whitespace-nowrap px-3 py-2">
-                        <Badge tone={tgOk ? "green" : "red"}>{tgOk ? "chatId OK" : "нет chatId"}</Badge>
-                        {tgOk ? (
-                          <div className="mt-0.5 font-mono text-xs text-gray-600">{it.provider.chatId}</div>
-                        ) : null}
+                      <td className="px-3 py-2 align-top">
+                        {inlineEditId === it.id ? (
+                          <div className="min-w-[320px] space-y-2">
+                            <div>
+                              <div className="text-[11px] text-gray-500">refused</div>
+                              <input
+                                className={classNames(
+                                  "mt-1 w-full rounded-lg border px-2 py-1.5 font-mono text-xs outline-none focus:ring-2",
+                                  !isValidChatId(inlineForm.telegram_refused_chat_id)
+                                    ? "border-red-300 bg-red-50/40 focus:ring-red-100"
+                                    : "border-gray-200 focus:ring-gray-200"
+                                )}
+                                value={inlineForm.telegram_refused_chat_id}
+                                onChange={(e) =>
+                                  changeInlineField("telegram_refused_chat_id", e.target.value)
+                                }
+                                placeholder="telegram_refused_chat_id"
+                                disabled={inlineSaving}
+                              />
+                            </div>
+                      
+                            <div>
+                              <div className="text-[11px] text-gray-500">web</div>
+                              <input
+                                className={classNames(
+                                  "mt-1 w-full rounded-lg border px-2 py-1.5 font-mono text-xs outline-none focus:ring-2",
+                                  !isValidChatId(inlineForm.telegram_web_chat_id)
+                                    ? "border-red-300 bg-red-50/40 focus:ring-red-100"
+                                    : "border-gray-200 focus:ring-gray-200"
+                                )}
+                                value={inlineForm.telegram_web_chat_id}
+                                onChange={(e) =>
+                                  changeInlineField("telegram_web_chat_id", e.target.value)
+                                }
+                                placeholder="telegram_web_chat_id"
+                                disabled={inlineSaving}
+                              />
+                            </div>
+                      
+                            <div>
+                              <div className="text-[11px] text-gray-500">default</div>
+                              <input
+                                className={classNames(
+                                  "mt-1 w-full rounded-lg border px-2 py-1.5 font-mono text-xs outline-none focus:ring-2",
+                                  !isValidChatId(inlineForm.telegram_chat_id)
+                                    ? "border-red-300 bg-red-50/40 focus:ring-red-100"
+                                    : "border-gray-200 focus:ring-gray-200"
+                                )}
+                                value={inlineForm.telegram_chat_id}
+                                onChange={(e) => changeInlineField("telegram_chat_id", e.target.value)}
+                                placeholder="telegram_chat_id"
+                                disabled={inlineSaving}
+                              />
+                            </div>
+                      
+                            <div className="rounded-lg border border-gray-200 bg-gray-50 px-2 py-2 text-[11px] text-gray-700">
+                              Effective:{" "}
+                              <span className="font-mono">
+                                {getEffectiveProviderChatId(inlineForm) || "—"}
+                              </span>
+                            </div>
+                      
+                            {inlineError ? (
+                              <div className="text-[11px] text-red-600">{inlineError}</div>
+                            ) : null}
+                      
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                onClick={() => saveInlineEdit(it)}
+                                disabled={inlineSaving}
+                                className="rounded-lg border border-green-200 bg-green-50 px-2.5 py-1 text-xs text-green-700 hover:bg-green-100 disabled:opacity-60"
+                              >
+                                {inlineSaving ? "..." : "Сохранить"}
+                              </button>
+                              <button
+                                onClick={cancelInlineEdit}
+                                disabled={inlineSaving}
+                                className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs hover:bg-gray-50 disabled:opacity-60"
+                              >
+                                Отмена
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            <Badge tone={tgOk ? "green" : "red"}>
+                              {tgOk ? "chatId OK" : "нет chatId"}
+                            </Badge>
+                      
+                            <div className="mt-1 font-mono text-xs text-gray-600">
+                              {effectiveTg || "—"}
+                            </div>
+                      
+                            <button
+                              onClick={() => openInlineEdit(it)}
+                              className="mt-2 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs text-sky-700 hover:bg-sky-100"
+                            >
+                              TG inline edit
+                            </button>
+                          </div>
+                        )}
                       </td>
 
                       <td className="px-3 py-2">
