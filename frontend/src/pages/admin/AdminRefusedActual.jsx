@@ -557,11 +557,9 @@ function buildEditPayload(form) {
       form?.details && typeof form.details === "object" && !Array.isArray(form.details)
         ? form.details
         : {},
-    providerTelegram: {
-      telegram_refused_chat_id: normalizeChatId(form?.telegram_refused_chat_id),
-      telegram_web_chat_id: normalizeChatId(form?.telegram_web_chat_id),
-      telegram_chat_id: normalizeChatId(form?.telegram_chat_id),
-    },
+    telegram_refused_chat_id: normalizeChatId(form?.telegram_refused_chat_id),
+    telegram_web_chat_id: normalizeChatId(form?.telegram_web_chat_id),
+    telegram_chat_id: normalizeChatId(form?.telegram_chat_id),
   };
 }
 
