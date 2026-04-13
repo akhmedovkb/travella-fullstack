@@ -4995,23 +4995,16 @@ bot.start(async (ctx) => {
           { parse_mode: "Markdown" }
         );
 
-        await ctx.reply(
-          "🔥 <b>Что ищем?</b>\n\n" +
-            "Выберите выгодное предложение 👇\n\n" +
-            "💰 Обычно такие варианты дешевле рынка на 20–40%",
-          {
-            parse_mode: "HTML",
-            reply_markup: {
-              inline_keyboard: [
-                [{ text: "🌴 Отказной тур (пакет)", switch_inline_query_current_chat: "#tour refused_tour" }],
-                [{ text: "🏨 Отказной отель", switch_inline_query_current_chat: "#tour refused_hotel" }],
-                [{ text: "✈️ Отказной авиабилет", switch_inline_query_current_chat: "#tour refused_flight" }],
-                [{ text: "🎫 Билет / мероприятие", switch_inline_query_current_chat: "#tour refused_ticket" }],
-              ],
-            },
-            disable_web_page_preview: true,
-          }
-        );
+        await ctx.reply("🔎 Выберите тип услуги (отправка в текущий чат):", {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "📍 Отказной тур", switch_inline_query_current_chat: "#tour refused_tour" }],
+              [{ text: "🏨 Отказной отель", switch_inline_query_current_chat: "#tour refused_hotel" }],
+              [{ text: "✈️ Отказной авиабилет", switch_inline_query_current_chat: "#tour refused_flight" }],
+              [{ text: "🎫 Отказной билет", switch_inline_query_current_chat: "#tour refused_ticket" }],
+            ],
+          },
+        });
 
         await ctx.reply("🏠 Главное меню:", getMainMenuKeyboard(role));
         return;
@@ -5052,14 +5045,6 @@ bot.action(/^role:(client|provider)$/, async (ctx) => {
     ctx.session.requestedRole = role;
 
     await ctx.answerCbQuery();
-        if (role === "client") {
-      ctx.session.linked = true;
-      ctx.session.pending = false;
-      ctx.session.role = "client";
-    
-      await showClientHome(ctx);
-      return;
-    }
 
     await ctx.reply(
       role === "client"
