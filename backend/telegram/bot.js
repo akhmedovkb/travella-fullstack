@@ -4742,27 +4742,42 @@ async function handlePhoneRegistration(ctx, requestedRole, phone) {
     ctx.session.pendingRole = null;
 
 
-    if (data.existed && data.role === "client") {
+    if (finalRole === "client") {
       await ctx.reply(
-        "✅ Готово!\n\nВаш Telegram привязан к аккаунту *клиента*.",
-        { parse_mode: "Markdown" }
+        "✅ <b>Вы успешно подключены</b>\n\n" +
+          "🔥 <b>Теперь вам доступны выгодные предложения</b>\n" +
+          "(отказные туры и услуги дешевле рынка)\n\n" +
+          "💰 <b>Экономия обычно 20–40%</b>\n" +
+          "⚡ Лучшие варианты быстро разбирают\n\n" +
+          "👀 <b>Сейчас доступны выгодные предложения</b>\n\n" +
+          "👇 <b>Начните поиск прямо сейчас</b>",
+        {
+          parse_mode: "HTML",
+          reply_markup: {
+            keyboard: [
+              [{ text: "🔍 Найти услугу" }, { text: "🔥 Горящие предложения" }],
+              [{ text: "❤️ Избранное" }, { text: "📄 Бронирования" }],
+              [{ text: "📨 Заявки" }, { text: "👤 Профиль" }],
+              [{ text: "🏢 Стать поставщиком" }],
+            ],
+            resize_keyboard: true,
+          },
+        }
       );
-    } else if (data.existed && data.role === "provider") {
+      return;
+    }
+    
+    if (data.existed && data.role === "provider") {
       await ctx.reply(
         "✅ Готово!\n\nВаш Telegram привязан к аккаунту *поставщика*.",
         { parse_mode: "Markdown" }
       );
-
+    
       if (data.requestedRole === "client") {
         await ctx.reply(
           "ℹ️ По этому номеру уже есть аккаунт поставщика.\nЕсли хотите быть клиентом — зарегистрируйтесь на сайте отдельно."
         );
       }
-    } else if (data.created === "client") {
-      await ctx.reply(
-        "🎉 Добро пожаловать!\n\nМы создали для вас *клиентский аккаунт* по этому номеру.",
-        { parse_mode: "Markdown" }
-      );
     } else if (data.created === "provider_lead") {
       await ctx.reply(
         "📝 Заявка принята!\n\nМы зарегистрировали вас как *нового поставщика*.\nПосле модерации менеджер свяжется с вами.\n\n" +
@@ -4772,7 +4787,7 @@ async function handlePhoneRegistration(ctx, requestedRole, phone) {
     } else {
       await ctx.reply("✅ Привязка выполнена.");
     }
-
+    
     await ctx.reply("📌 Готово! Меню доступно ниже 👇", getMainMenuKeyboard(finalRole));
   } catch (e) {
     console.error("[tg-bot] handlePhoneRegistration error:", e?.response?.data || e);
