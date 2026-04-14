@@ -369,8 +369,6 @@ async function createDailySale(req, res) {
     const travellerName = toStr(req.body?.traveller_name);
     const saleAmount = toNum(req.body?.sale_amount);
     const netAmount = toNum(req.body?.net_amount);
-    console.log("[createDailySale] req.body =", req.body);
-    console.log("[createDailySale] saleDate normalized =", saleDate);
 
     if (!Number.isFinite(agentId) || agentId <= 0) {
       return res.status(400).json({ ok: false, message: "agent_id is required" });
@@ -445,8 +443,6 @@ async function createDailySale(req, res) {
       [saleDate, agentId, serviceType, direction, travellerName, saleAmount, netAmount]
     );
 
-    console.log("[createDailySale] row from db =", rows[0]);
-    console.log("[createDailySale] row normalized =", normalizeSaleRow(rows[0]));
     return res.json({
       ok: true,
       row: normalizeSaleRow(rows[0]),
@@ -469,8 +465,6 @@ async function updateDailySale(req, res) {
     const travellerName = toStr(req.body?.traveller_name);
     const saleAmount = toNum(req.body?.sale_amount);
     const netAmount = toNum(req.body?.net_amount);
-    console.log("[updateDailySale] req.body =", req.body);
-    console.log("[updateDailySale] saleDate normalized =", saleDate);
 
     if (!Number.isFinite(id) || id <= 0) {
       return res.status(400).json({ ok: false, message: "Bad id" });
@@ -544,8 +538,6 @@ async function updateDailySale(req, res) {
       return res.status(404).json({ ok: false, message: "Sale not found" });
     }
 
-    console.log("[updateDailySale] row from db =", rows[0]);
-    console.log("[updateDailySale] row normalized =", normalizeSaleRow(rows[0]));
     return res.json({
       ok: true,
       row: normalizeSaleRow(rows[0]),
