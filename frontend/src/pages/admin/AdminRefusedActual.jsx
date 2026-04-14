@@ -476,6 +476,38 @@ function CheckboxField({ label, checked, onChange }) {
   );
 }
 
+async function fileToDataUrl(file) {
+  return await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+    reader.onerror = () => reject(new Error("Не удалось прочитать файл"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function normalizeImagesArray(input) {
+  if (!Array.isArray(input)) return [];
+  return input
+    .map((item) => {
+      if (typeof item === "string") return item.trim();
+      if (item && typeof item === "object") {
+        const candidate = item.url || item.src || item.path || item.location || item.href || "";
+        return String(candidate || "").trim();
+      }
+      return "";
+    })
+    .filter(Boolean)
+    .slice(0, 20);
+}
+
+function syncEditFormImages(prev, nextImages) {
+  const normalized = normalizeImagesArray(nextImages);
+  return {
+    ...(prev || {}),
+    images: normalized,
+    rawImagesText: JSON.stringify(normalized, null, 2),
+  };
+}
 
 function createEditFormFromService(service) {
   const details =
@@ -914,6 +946,8 @@ export default function AdminRefusedActual() {
   const [hotelQuery, setHotelQuery] = useState("");
   const [hotelOptions, setHotelOptions] = useState([]);
   const [hotelLoading, setHotelLoading] = useState(false);
+  const [imageUrlDraft, setImageUrlDraft] = useState("");
+  const [imageUploadBusy, setImageUploadBusy] = useState(false);
 
   const editValidation = useMemo(() => validateEditForm(editForm), [editForm]);
 
@@ -1167,6 +1201,7 @@ export default function AdminRefusedActual() {
     setEditForm(null);
     setHotelQuery("");
     setHotelOptions([]);
+    setImageUrlDraft("");
     try {
       const resp = await http.get(apiPath(`/admin/services/${id}`));
       const data = ensureJsonOrThrow(resp, "openEdit");
@@ -1189,6 +1224,61 @@ export default function AdminRefusedActual() {
 
   function handleRawImagesChange(value) {
     setEditForm((prev) => ({ ...(prev || {}), rawImagesText: value }));
+  }
+
+  function applyImagesToEditForm(nextImages) {
+    setEditForm((prev) => syncEditFormImages(prev, nextImages));
+  }
+
+  function handleRemoveImage(index) {
+    setEditForm((prev) => {
+      const current = normalizeImagesArray(prev?.images || safeJsonParse(prev?.rawImagesText || "[]", []));
+      const nextImages = current.filter((_, idx) => idx !== index);
+      return syncEditFormImages(prev, nextImages);
+    });
+  }
+
+  async function handleAddImagesFromFiles(event) {
+    const files = Array.from(event?.target?.files || []);
+    if (!files.length) return;
+
+    setEditError("");
+    setImageUploadBusy(true);
+
+    try {
+      const dataUrls = [];
+      for (const file of files) {
+        if (!String(file?.type || "").startsWith("image/")) continue;
+        dataUrls.push(await fileToDataUrl(file));
+      }
+
+      if (!dataUrls.length) {
+        throw new Error("Выбери изображения");
+      }
+
+      setEditForm((prev) => {
+        const current = normalizeImagesArray(prev?.images || safeJsonParse(prev?.rawImagesText || "[]", []));
+        const nextImages = [...current, ...dataUrls].slice(0, 20);
+        return syncEditFormImages(prev, nextImages);
+      });
+    } catch (e) {
+      setEditError(e?.message || "Не удалось добавить изображения");
+    } finally {
+      setImageUploadBusy(false);
+      if (event?.target) event.target.value = "";
+    }
+  }
+
+  function handleAddImageByUrl() {
+    const value = String(imageUrlDraft || "").trim();
+    if (!value) return;
+
+    setEditForm((prev) => {
+      const current = normalizeImagesArray(prev?.images || safeJsonParse(prev?.rawImagesText || "[]", []));
+      const nextImages = [...current, value].slice(0, 20);
+      return syncEditFormImages(prev, nextImages);
+    });
+    setImageUrlDraft("");
   }
 
   function handleRawAvailabilityChange(value) {
@@ -2610,21 +2700,90 @@ async function saveInlineEdit(item) {
 
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
               <div className="rounded-2xl border border-gray-200 p-4">
-                <div className="text-sm font-semibold text-gray-900">images (JSON array)</div>
-                <div className={classNames("mt-3 text-xs", editValidation.raw?.images ? "text-red-600" : "text-gray-500")}>
-                  {editValidation.raw?.images || "Пока редактируется как сырой JSON-массив."}
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-gray-900">Изображения услуги</div>
+                    <div className={classNames("mt-1 text-xs", editValidation.raw?.images ? "text-red-600" : "text-gray-500")}>
+                      {editValidation.raw?.images || "Можно удалять текущие изображения, добавлять новые файлы или вставлять ссылку/data URL."}
+                    </div>
+                  </div>
+                  <div className="text-xs text-gray-500">Максимум 20 изображений</div>
                 </div>
-                <textarea
-                  rows={10}
-                  className={classNames(
-                    "mt-3 w-full rounded-xl px-3 py-2 font-mono text-xs outline-none focus:ring-2",
-                    editValidation.raw?.images
-                      ? "border border-red-300 bg-red-50/40 focus:ring-red-100"
-                      : "border border-gray-200 bg-gray-50 focus:ring-gray-200"
-                  )}
-                  value={editForm.rawImagesText || "[]"}
-                  onChange={(e) => handleRawImagesChange(e.target.value)}
-                />
+
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <label className={classNames(
+                    "inline-flex cursor-pointer items-center rounded-xl border px-3 py-2 text-sm",
+                    imageUploadBusy ? "border-gray-200 bg-gray-50 text-gray-400" : "border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100"
+                  )}>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={handleAddImagesFromFiles}
+                      disabled={imageUploadBusy}
+                    />
+                    {imageUploadBusy ? "Загрузка..." : "Добавить файлы"}
+                  </label>
+
+                  <div className="flex min-w-[260px] flex-1 items-center gap-2">
+                    <TextInput
+                      value={imageUrlDraft}
+                      onChange={(e) => setImageUrlDraft(e.target.value)}
+                      placeholder="https://... или data:image/..."
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddImageByUrl}
+                      className="rounded-xl border border-gray-200 px-3 py-2 text-sm hover:bg-gray-50"
+                    >
+                      Добавить ссылку
+                    </button>
+                  </div>
+                </div>
+
+                {Array.isArray(editForm.images) && editForm.images.length ? (
+                  <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
+                    {editForm.images.map((src, idx) => (
+                      <div key={`${idx}-${String(src).slice(0, 30)}`} className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+                        <div className="aspect-[4/3] bg-gray-100">
+                          <img src={src} alt={`service-${idx + 1}`} className="h-full w-full object-cover" />
+                        </div>
+                        <div className="border-t border-gray-100 p-2">
+                          <div className="truncate text-[11px] text-gray-500">
+                            {String(src).startsWith("data:image/") ? `data:image #${idx + 1}` : short(String(src), 48)}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveImage(idx)}
+                            className="mt-2 w-full rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 hover:bg-red-100"
+                          >
+                            Удалить
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-4 rounded-2xl border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-sm text-gray-500">
+                    Пока нет изображений.
+                  </div>
+                )}
+
+                <div className="mt-4">
+                  <div className="text-xs font-medium text-gray-700">images (JSON array)</div>
+                  <textarea
+                    rows={8}
+                    className={classNames(
+                      "mt-2 w-full rounded-xl px-3 py-2 font-mono text-xs outline-none focus:ring-2",
+                      editValidation.raw?.images
+                        ? "border border-red-300 bg-red-50/40 focus:ring-red-100"
+                        : "border border-gray-200 bg-gray-50 focus:ring-gray-200"
+                    )}
+                    value={editForm.rawImagesText || "[]"}
+                    onChange={(e) => handleRawImagesChange(e.target.value)}
+                  />
+                </div>
               </div>
 
               <div className="rounded-2xl border border-gray-200 p-4">
