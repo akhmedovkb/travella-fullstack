@@ -509,6 +509,19 @@ function syncEditFormImages(prev, nextImages) {
   };
 }
 
+function syncEditFormProofImages(prev, nextImages) {
+  const normalized = normalizeImagesArray(nextImages);
+  const nextDetails = {
+    ...((prev && prev.details && typeof prev.details === "object") ? prev.details : {}),
+    proofImages: normalized,
+  };
+  return {
+    ...(prev || {}),
+    details: nextDetails,
+    rawDetailsText: JSON.stringify(nextDetails, null, 2),
+  };
+}
+
 function createEditFormFromService(service) {
   const details =
     service?.details && typeof service.details === "object" && !Array.isArray(service.details)
@@ -948,6 +961,8 @@ export default function AdminRefusedActual() {
   const [hotelLoading, setHotelLoading] = useState(false);
   const [imageUrlDraft, setImageUrlDraft] = useState("");
   const [imageUploadBusy, setImageUploadBusy] = useState(false);
+  const [proofImageUrlDraft, setProofImageUrlDraft] = useState("");
+  const [proofImageUploadBusy, setProofImageUploadBusy] = useState(false);
 
   const editValidation = useMemo(() => validateEditForm(editForm), [editForm]);
 
@@ -1202,6 +1217,7 @@ export default function AdminRefusedActual() {
     setHotelQuery("");
     setHotelOptions([]);
     setImageUrlDraft("");
+    setProofImageUrlDraft("");
     try {
       const resp = await http.get(apiPath(`/admin/services/${id}`));
       const data = ensureJsonOrThrow(resp, "openEdit");
@@ -1223,27 +1239,14 @@ export default function AdminRefusedActual() {
       const next = { ...(prev || {}), rawDetailsText: value };
       const parsed = safeJsonParse(value, null);
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        next.details = {
-          ...parsed,
-          proofImages: normalizeImagesArray(parsed.proofImages || []),
-        };
-        next.rawDetailsText = JSON.stringify(next.details, null, 2);
+        next.details = parsed;
       }
       return next;
     });
   }
 
   function handleRawImagesChange(value) {
-    setEditForm((prev) => {
-      const next = { ...(prev || {}), rawImagesText: value };
-      const parsed = safeJsonParse(value, null);
-      if (Array.isArray(parsed)) {
-        const normalized = normalizeImagesArray(parsed);
-        next.images = normalized;
-        next.rawImagesText = JSON.stringify(normalized, null, 2);
-      }
-      return next;
-    });
+    setEditForm((prev) => ({ ...(prev || {}), rawImagesText: value }));
   }
 
   function applyImagesToEditForm(nextImages) {
@@ -1299,6 +1302,55 @@ export default function AdminRefusedActual() {
       return syncEditFormImages(prev, nextImages);
     });
     setImageUrlDraft("");
+  }
+
+  function handleRemoveProofImage(index) {
+    setEditForm((prev) => {
+      const current = normalizeImagesArray(prev?.details?.proofImages || []);
+      const nextImages = current.filter((_, idx) => idx !== index);
+      return syncEditFormProofImages(prev, nextImages);
+    });
+  }
+
+  async function handleAddProofImagesFromFiles(event) {
+    const files = Array.from(event?.target?.files || []);
+    if (!files.length) return;
+
+    setEditError("");
+    setProofImageUploadBusy(true);
+
+    try {
+      const dataUrls = [];
+      for (const file of files) {
+        if (!String(file?.type || "").startsWith("image/")) continue;
+        dataUrls.push(await fileToDataUrl(file));
+      }
+
+      if (!dataUrls.length) throw new Error("Выбери изображения");
+
+      setEditForm((prev) => {
+        const current = normalizeImagesArray(prev?.details?.proofImages || []);
+        const nextImages = [...current, ...dataUrls].slice(0, 20);
+        return syncEditFormProofImages(prev, nextImages);
+      });
+    } catch (e) {
+      setEditError(e?.message || "Не удалось добавить proof-изображения");
+    } finally {
+      setProofImageUploadBusy(false);
+      if (event?.target) event.target.value = "";
+    }
+  }
+
+  function handleAddProofImageByUrl() {
+    const value = String(proofImageUrlDraft || "").trim();
+    if (!value) return;
+
+    setEditForm((prev) => {
+      const current = normalizeImagesArray(prev?.details?.proofImages || []);
+      const nextImages = [...current, value].slice(0, 20);
+      return syncEditFormProofImages(prev, nextImages);
+    });
+    setProofImageUrlDraft("");
   }
 
   function handleRawAvailabilityChange(value) {
@@ -2823,6 +2875,76 @@ async function saveInlineEdit(item) {
                   onChange={(e) => handleRawAvailabilityChange(e.target.value)}
                 />
               </div>
+            </div>
+
+            <div className="rounded-2xl border border-gray-200 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-gray-900">Изображения пруфа</div>
+                  <div className="mt-1 text-xs text-gray-500">Можно добавлять и удалять proofImages прямо из модалки.</div>
+                </div>
+                <div className="text-xs text-gray-500">Максимум 20 изображений</div>
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <label className={classNames(
+                  "inline-flex cursor-pointer items-center rounded-xl border px-3 py-2 text-sm",
+                  proofImageUploadBusy ? "border-gray-200 bg-gray-50 text-gray-400" : "border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100"
+                )}>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={handleAddProofImagesFromFiles}
+                    disabled={proofImageUploadBusy}
+                  />
+                  {proofImageUploadBusy ? "Загрузка..." : "Добавить файлы"}
+                </label>
+
+                <div className="flex min-w-[260px] flex-1 items-center gap-2">
+                  <TextInput
+                    value={proofImageUrlDraft}
+                    onChange={(e) => setProofImageUrlDraft(e.target.value)}
+                    placeholder="https://... или data:image/..."
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddProofImageByUrl}
+                    className="rounded-xl border border-gray-200 px-3 py-2 text-sm hover:bg-gray-50"
+                  >
+                    Добавить ссылку
+                  </button>
+                </div>
+              </div>
+
+              {Array.isArray(editForm?.details?.proofImages) && editForm.details.proofImages.length ? (
+                <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
+                  {editForm.details.proofImages.map((src, idx) => (
+                    <div key={`proof-${idx}-${String(src).slice(0, 30)}`} className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+                      <div className="aspect-[4/3] bg-gray-100">
+                        <img src={src} alt={`proof-${idx + 1}`} className="h-full w-full object-cover" />
+                      </div>
+                      <div className="border-t border-gray-100 p-2">
+                        <div className="truncate text-[11px] text-gray-500">
+                          {String(src).startsWith("data:image/") ? `proof data:image #${idx + 1}` : short(String(src), 48)}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveProofImage(idx)}
+                          className="mt-2 w-full rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 hover:bg-red-100"
+                        >
+                          Удалить
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-4 rounded-2xl border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-sm text-gray-500">
+                  Пока нет proof-изображений.
+                </div>
+              )}
             </div>
 
             <div className="rounded-2xl border border-gray-200 p-4">
