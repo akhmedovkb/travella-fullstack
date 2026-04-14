@@ -963,6 +963,8 @@ export default function AdminRefusedActual() {
   const [imageUploadBusy, setImageUploadBusy] = useState(false);
   const [proofImageUrlDraft, setProofImageUrlDraft] = useState("");
   const [proofImageUploadBusy, setProofImageUploadBusy] = useState(false);
+  const [previewImageSrc, setPreviewImageSrc] = useState("");
+  const [previewImageTitle, setPreviewImageTitle] = useState("");
 
   const editValidation = useMemo(() => validateEditForm(editForm), [editForm]);
 
@@ -2538,6 +2540,40 @@ async function saveInlineEdit(item) {
       </Modal>
 
       <Modal
+        open={Boolean(previewImageSrc)}
+        title={previewImageTitle || "Просмотр изображения"}
+        onClose={() => {
+          setPreviewImageSrc("");
+          setPreviewImageTitle("");
+        }}
+        widthClassName="max-w-5xl"
+      >
+        <div className="space-y-3">
+          {previewImageSrc ? (
+            <div className="overflow-hidden rounded-2xl border border-gray-200 bg-black/5">
+              <img
+                src={previewImageSrc}
+                alt={previewImageTitle || "preview"}
+                className="max-h-[75vh] w-full object-contain bg-black/5"
+              />
+            </div>
+          ) : null}
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => {
+                setPreviewImageSrc("");
+                setPreviewImageTitle("");
+              }}
+              className="rounded-xl border border-gray-200 px-4 py-2 text-sm hover:bg-gray-50"
+            >
+              Закрыть
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
         open={editOpen}
         title={editForm ? `Редактирование услуги #${editForm.id}` : "Редактирование услуги"}
         onClose={() => {
@@ -2819,7 +2855,16 @@ async function saveInlineEdit(item) {
                     {editForm.images.map((src, idx) => (
                       <div key={`${idx}-${String(src).slice(0, 30)}`} className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
                         <div className="aspect-[4/3] bg-gray-100">
-                          <img src={src} alt={`service-${idx + 1}`} className="h-full w-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPreviewImageSrc(String(src || ""));
+                              setPreviewImageTitle(`Изображение услуги #${idx + 1}`);
+                            }}
+                            className="block h-full w-full cursor-zoom-in"
+                          >
+                            <img src={src} alt={`service-${idx + 1}`} className="h-full w-full object-cover" />
+                          </button>
                         </div>
                         <div className="border-t border-gray-100 p-2">
                           <div className="truncate text-[11px] text-gray-500">
@@ -2923,7 +2968,16 @@ async function saveInlineEdit(item) {
                   {editForm.details.proofImages.map((src, idx) => (
                     <div key={`proof-${idx}-${String(src).slice(0, 30)}`} className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
                       <div className="aspect-[4/3] bg-gray-100">
-                        <img src={src} alt={`proof-${idx + 1}`} className="h-full w-full object-cover" />
+                        <button
+                            type="button"
+                            onClick={() => {
+                              setPreviewImageSrc(String(src || ""));
+                              setPreviewImageTitle(`Изображение пруфа #${idx + 1}`);
+                            }}
+                            className="block h-full w-full cursor-zoom-in"
+                          >
+                            <img src={src} alt={`proof-${idx + 1}`} className="h-full w-full object-cover" />
+                          </button>
                       </div>
                       <div className="border-t border-gray-100 p-2">
                         <div className="truncate text-[11px] text-gray-500">
