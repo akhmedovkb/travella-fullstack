@@ -369,7 +369,8 @@ export default function AdminTravelSales() {
         sale_amount: Number(saleForm.sale_amount || 0),
         net_amount: Number(saleForm.net_amount || 0),
       };
-
+      console.log("[AdminTravelSales] save payload =", payload);
+      
       if (!payload.agent_id) {
         tError("Выбери агента");
         return;
