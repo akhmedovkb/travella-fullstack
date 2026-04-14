@@ -258,6 +258,8 @@ function validateEditForm(form) {
     endDate: "Дата конца",
     departureFlightDate: "Дата вылета",
     returnFlightDate: "Дата обратно",
+    returnDate: "Дата возврата",
+    expiration: "Срок актуальности",
   };
 
   for (const [key, label] of Object.entries(dateKeys)) {
@@ -270,6 +272,7 @@ function validateEditForm(form) {
 
   const comparePairs = [
     ["startDate", "endDate", "Дата конца не может быть раньше даты начала."],
+    ["startDate", "returnDate", "Дата возврата не может быть раньше даты вылета."],
     ["departureFlightDate", "returnFlightDate", "Дата обратно не может быть раньше даты вылета."],
   ];
   for (const [leftKey, rightKey, msg] of comparePairs) {
@@ -287,10 +290,9 @@ function validateEditForm(form) {
   const net = parseFiniteNumber(details.netPrice);
   const gross = parseFiniteNumber(details.grossPrice);
   if (net != null && gross != null && gross < net) {
-    add("details", "grossPrice", "Цена продажи не должна быть меньше цены нетто.");
+    add("details", "grossPrice", "grossPrice не может быть меньше netPrice.");
   }
 
-  result.summary = Array.from(new Set(result.summary));
   return result;
 }
 
@@ -487,32 +489,37 @@ function createEditFormFromService(service) {
     if (!details.departureFlightDate && details.startDate) {
       details.departureFlightDate = details.startDate;
     }
-    if (!details.returnFlightDate && details.endDate) {
-      details.returnFlightDate = details.endDate;
+    if (!details.returnFlightDate && (details.returnDate || details.endDate)) {
+      details.returnFlightDate = details.returnDate || details.endDate;
     }
-    details.departureFlightDate = toDateTimeLocal(details.departureFlightDate);
-    details.returnFlightDate = toDateTimeLocal(details.returnFlightDate);
+    if (!details.startDate && details.departureFlightDate) {
+      details.startDate = details.departureFlightDate;
+    }
+    if (!details.endDate && (details.returnDate || details.returnFlightDate)) {
+      details.endDate = details.returnDate || details.returnFlightDate;
+    }
+
+    details.departureFlightDate = toDateTimeLocal(details.departureFlightDate || details.startDate);
+    details.returnFlightDate = toDateTimeLocal(details.returnFlightDate || details.returnDate || details.endDate);
     details.startDate = toDateTimeLocal(details.startDate || details.departureFlightDate);
-    details.endDate = toDateTimeLocal(details.endDate || details.returnFlightDate);
+    details.endDate = toDateTimeLocal(details.endDate || details.returnDate || details.returnFlightDate);
+    details.returnDate = toDateTimeLocal(details.returnDate || details.returnFlightDate || details.endDate);
+    details.flightType = details.flightType || (details.oneWay === false || details.returnDate ? "round_trip" : "one_way");
+    details.oneWay = details.oneWay ?? (details.flightType !== "round_trip");
     details.netPrice = toNumericString(details.netPrice ?? service?.price);
     details.grossPrice = toNumericString(details.grossPrice ?? service?.price);
   }
 
-  if (
-    category === "refused_tour" ||
-    category === "refused_hotel" ||
-    category === "refused_ticket"
-  ) {
+  if (["refused_tour", "author_tour", "refused_hotel", "refused_ticket", "refused_event_ticket", "visa_support"].includes(category)) {
     if (details.startDate) details.startDate = toDateTimeLocal(details.startDate);
     if (details.endDate) details.endDate = toDateTimeLocal(details.endDate);
-    if (details.departureFlightDate) {
-      details.departureFlightDate = toDateTimeLocal(details.departureFlightDate);
-    }
-    if (details.returnFlightDate) {
-      details.returnFlightDate = toDateTimeLocal(details.returnFlightDate);
-    }
+    if (details.departureFlightDate) details.departureFlightDate = toDateTimeLocal(details.departureFlightDate);
+    if (details.returnFlightDate) details.returnFlightDate = toDateTimeLocal(details.returnFlightDate);
+    if (details.returnDate) details.returnDate = toDateTimeLocal(details.returnDate);
+    if (details.expiration) details.expiration = toDateTimeLocal(details.expiration);
     details.netPrice = toNumericString(details.netPrice ?? service?.price);
     details.grossPrice = toNumericString(details.grossPrice ?? service?.price);
+    details.previousPrice = toNumericString(details.previousPrice);
   }
 
   const images = Array.isArray(service?.images) ? service.images : [];
@@ -544,26 +551,6 @@ function createEditFormFromService(service) {
   };
 }
 
-function buildEditPayload(form) {
-  return {
-    title: (form?.title || "").trim(),
-    description: form?.description || "",
-    category: form?.category || "",
-    price: form?.price === "" ? null : form?.price,
-    vehicle_model: form?.vehicle_model || "",
-    images: Array.isArray(form?.images) ? form.images : [],
-    availability: Array.isArray(form?.availability) ? form.availability : [],
-    details:
-      form?.details && typeof form.details === "object" && !Array.isArray(form.details)
-        ? form.details
-        : {},
-    telegram_refused_chat_id: normalizeChatId(form?.telegram_refused_chat_id),
-    telegram_web_chat_id: normalizeChatId(form?.telegram_web_chat_id),
-    telegram_chat_id: normalizeChatId(form?.telegram_chat_id),
-  };
-}
-
-
 function renderDetailFields(editForm, setEditForm, extra = {}) {
   const category = String(editForm?.category || "").toLowerCase();
   const details = editForm?.details || {};
@@ -587,9 +574,47 @@ function renderDetailFields(editForm, setEditForm, extra = {}) {
         next.price = value;
       }
 
-      if (String(prev?.category || "").toLowerCase() === "refused_flight") {
+      const prevCategory = String(prev?.category || "").toLowerCase();
+
+      if (prevCategory === "refused_flight") {
         if (key === "departureFlightDate") nextDetails.startDate = value;
-        if (key === "returnFlightDate") nextDetails.endDate = value;
+        if (key === "returnFlightDate") {
+          nextDetails.endDate = value;
+          nextDetails.returnDate = value;
+        }
+        if (key === "startDate") nextDetails.departureFlightDate = value;
+        if (key === "returnDate") {
+          nextDetails.returnFlightDate = value;
+          nextDetails.endDate = value;
+        }
+        if (key === "flightType") {
+          const oneWay = value !== "round_trip";
+          nextDetails.oneWay = oneWay;
+          if (oneWay) {
+            nextDetails.returnDate = "";
+            nextDetails.returnFlightDate = "";
+            nextDetails.endDate = "";
+          }
+        }
+        if (key === "oneWay") {
+          nextDetails.flightType = value ? "one_way" : "round_trip";
+          if (value) {
+            nextDetails.returnDate = "";
+            nextDetails.returnFlightDate = "";
+            nextDetails.endDate = "";
+          }
+        }
+      }
+
+      if (["refused_tour", "author_tour"].includes(prevCategory)) {
+        if (key === "hotelName" && !nextDetails.hotel) nextDetails.hotel = value;
+        if (key === "roomCategory") nextDetails.accommodationCategory = value;
+      }
+
+      if (prevCategory === "refused_hotel") {
+        if (key === "accommodationCategory") nextDetails.roomCategory = value;
+        if (key === "roomCategory") nextDetails.accommodationCategory = value;
+        if (key === "hotelName" && !nextDetails.hotel) nextDetails.hotel = value;
       }
 
       return next;
@@ -616,6 +641,17 @@ function renderDetailFields(editForm, setEditForm, extra = {}) {
         value={details?.[key] || ""}
         onChange={updateText(key)}
         placeholder={placeholder}
+        invalid={!!detailErrors?.[key]}
+      />
+    </Field>
+  );
+
+  const selectField = (key, label, options) => (
+    <Field label={label} key={key} error={detailErrors?.[key]}>
+      <SelectInput
+        value={details?.[key] || ""}
+        onChange={updateText(key)}
+        options={options}
         invalid={!!detailErrors?.[key]}
       />
     </Field>
@@ -648,7 +684,7 @@ function renderDetailFields(editForm, setEditForm, extra = {}) {
     </Field>
   );
 
-  if (category === "refused_tour") {
+  if (["refused_tour", "author_tour"].includes(category)) {
     return (
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         {textField("directionCountry", "Страна направления")}
@@ -659,14 +695,16 @@ function renderDetailFields(editForm, setEditForm, extra = {}) {
         {dateField("departureFlightDate", "Дата рейса вылета")}
         {dateField("returnFlightDate", "Дата рейса обратно")}
         <div className="md:col-span-3">{hotelField("hotel", "Отель")}</div>
+        {textField("hotelName", "Hotel name / legacy")}
         {textField("accommodationCategory", "Категория номера")}
+        {textField("roomCategory", "Room category / legacy")}
         {textField("accommodation", "Размещение")}
         {textField("food", "Питание")}
         {textField("transfer", "Трансфер")}
         {textField("netPrice", "Цена нетто")}
         {textField("grossPrice", "Цена продажи")}
         {textField("previousPrice", "Предыдущая цена")}
-        {textField("expiration", "Срок актуальности")}
+        {dateField("expiration", "Срок актуальности")}
         <div className="md:col-span-3">
           <Field label="Детали рейса" error={detailErrors?.flightDetails}>
             <TextArea value={details?.flightDetails || ""} onChange={updateText("flightDetails")} rows={3} invalid={!!detailErrors?.flightDetails} />
@@ -689,17 +727,19 @@ function renderDetailFields(editForm, setEditForm, extra = {}) {
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         {textField("directionCountry", "Страна")}
         {textField("directionTo", "Город")}
-        {hotelField("hotel", "Отель")}
+        <div className="md:col-span-3">{hotelField("hotel", "Отель")}</div>
+        {textField("hotelName", "Hotel name / legacy")}
         {dateField("startDate", "Дата заезда")}
         {dateField("endDate", "Дата выезда")}
-        {textField("roomCategory", "Категория номера")}
+        {textField("accommodationCategory", "Категория номера")}
+        {textField("roomCategory", "Room category / legacy")}
         {textField("accommodation", "Размещение")}
         {textField("food", "Питание")}
         {textField("transfer", "Трансфер")}
         {textField("netPrice", "Цена нетто")}
         {textField("grossPrice", "Цена продажи")}
         {textField("previousPrice", "Предыдущая цена")}
-        {textField("expiration", "Срок актуальности")}
+        {dateField("expiration", "Срок актуальности")}
         <div className="md:col-span-3 flex flex-wrap gap-2">
           <CheckboxField label="Можно менять" checked={details?.changeable} onChange={updateCheckbox("changeable")} />
           <CheckboxField label="Страховка включена" checked={details?.insuranceIncluded} onChange={updateCheckbox("insuranceIncluded")} />
@@ -714,23 +754,33 @@ function renderDetailFields(editForm, setEditForm, extra = {}) {
   if (category === "refused_flight") {
     return (
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        {textField("directionCountry", "Страна направления")}
         {textField("directionFrom", "Город вылета")}
         {textField("directionTo", "Город прибытия")}
-        {dateField("departureFlightDate", "Дата вылета")}
-        {dateField("returnFlightDate", "Дата обратно")}
+        {selectField("flightType", "Тип перелёта", [
+          { value: "", label: "Не выбрано" },
+          { value: "one_way", label: "One way" },
+          { value: "round_trip", label: "Round trip" },
+        ])}
+        {dateField("startDate", "Дата вылета")}
+        {dateField("returnDate", "Дата возврата")}
+        {dateField("departureFlightDate", "Дата вылета / legacy")}
+        {dateField("returnFlightDate", "Дата обратно / legacy")}
+        {textField("airline", "Авиакомпания")}
         {textField("ticketType", "Тип билета")}
         {textField("fareClass", "Класс тарифа")}
         {textField("baggage", "Багаж")}
         {textField("netPrice", "Цена нетто")}
         {textField("grossPrice", "Цена продажи")}
         {textField("previousPrice", "Предыдущая цена")}
-        {textField("expiration", "Срок актуальности")}
+        {dateField("expiration", "Срок актуальности")}
         <div className="md:col-span-3">
           <Field label="Детали рейса" error={detailErrors?.flightDetails}>
             <TextArea value={details?.flightDetails || ""} onChange={updateText("flightDetails")} rows={3} invalid={!!detailErrors?.flightDetails} />
           </Field>
         </div>
         <div className="md:col-span-3 flex flex-wrap gap-2">
+          <CheckboxField label="В одну сторону" checked={details?.oneWay} onChange={updateCheckbox("oneWay")} />
           <CheckboxField label="Можно менять" checked={details?.changeable} onChange={updateCheckbox("changeable")} />
           <CheckboxField label="Страховка включена" checked={details?.insuranceIncluded} onChange={updateCheckbox("insuranceIncluded")} />
           <CheckboxField label="Arrival Fast Track" checked={details?.arrivalFastTrack} onChange={updateCheckbox("arrivalFastTrack")} />
@@ -740,21 +790,46 @@ function renderDetailFields(editForm, setEditForm, extra = {}) {
     );
   }
 
-  if (category === "refused_ticket") {
+  if (["refused_ticket", "refused_event_ticket"].includes(category)) {
     return (
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         {textField("eventName", "Название события")}
+        {textField("eventCategory", "Категория события")}
         {textField("directionCountry", "Страна")}
         {textField("directionTo", "Город")}
+        {textField("location", "Локация")}
         {dateField("startDate", "Дата события")}
         {textField("ticketType", "Тип билета")}
         {textField("seatInfo", "Место / сектор")}
+        {textField("ticketDetails", "Детали билета")}
         {textField("netPrice", "Цена нетто")}
         {textField("grossPrice", "Цена продажи")}
         {textField("previousPrice", "Предыдущая цена")}
-        {textField("expiration", "Срок актуальности")}
+        {dateField("expiration", "Срок актуальности")}
         <div className="md:col-span-3 flex flex-wrap gap-2">
           <CheckboxField label="Можно менять" checked={details?.changeable} onChange={updateCheckbox("changeable")} />
+          <CheckboxField label="Актуально" checked={details?.isActive} onChange={updateCheckbox("isActive")} />
+        </div>
+      </div>
+    );
+  }
+
+  if (category === "visa_support") {
+    return (
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        {textField("visaCountry", "Страна визы")}
+        {textField("visaType", "Тип визы")}
+        {textField("processingTime", "Срок оформления")}
+        {textField("netPrice", "Цена нетто")}
+        {textField("grossPrice", "Цена продажи")}
+        {textField("previousPrice", "Предыдущая цена")}
+        {dateField("expiration", "Срок актуальности")}
+        <div className="md:col-span-3">
+          <Field label="Описание" error={detailErrors?.description}>
+            <TextArea value={details?.description || ""} onChange={updateText("description")} rows={4} invalid={!!detailErrors?.description} />
+          </Field>
+        </div>
+        <div className="md:col-span-3 flex flex-wrap gap-2">
           <CheckboxField label="Актуально" checked={details?.isActive} onChange={updateCheckbox("isActive")} />
         </div>
       </div>
@@ -768,6 +843,7 @@ function renderDetailFields(editForm, setEditForm, extra = {}) {
     </div>
   );
 }
+
 
 export default function AdminRefusedActual() {
   const token = useMemo(() => getAuthToken(), []);
