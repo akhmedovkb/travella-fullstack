@@ -60,7 +60,19 @@ function num(v) {
 
 function iso(v) {
   if (!v) return "";
-  return String(v).slice(0, 10);
+
+  if (typeof v === "string") {
+    const m = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  }
+
+  const d = v instanceof Date ? v : new Date(v);
+  if (Number.isNaN(d.getTime())) return "";
+
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function clsTab(active) {
