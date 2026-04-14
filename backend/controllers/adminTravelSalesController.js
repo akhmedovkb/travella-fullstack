@@ -25,7 +25,41 @@ function validateDate(v) {
 }
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function formatDateOnly(value) {
+  if (!value) return null;
+
+  if (typeof value === "string") {
+    const m = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  }
+
+  const dt = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(dt.getTime())) return null;
+
+  const y = dt.getUTCFullYear();
+  const m = String(dt.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(dt.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function normalizeSaleRow(row) {
+  if (!row) return row;
+  return {
+    ...row,
+    sale_date: formatDateOnly(row.sale_date),
+    payment_date: formatDateOnly(row.payment_date),
+  };
+}
+
+function normalizeSaleRows(rows) {
+  return Array.isArray(rows) ? rows.map(normalizeSaleRow) : [];
 }
 
 function normalizeServiceType(v) {
@@ -314,7 +348,7 @@ async function getDailySales(req, res) {
 
     return res.json({
       ok: true,
-      rows,
+      rows: normalizeSaleRows(rows),
       limit,
       offset,
     });
@@ -411,7 +445,7 @@ async function createDailySale(req, res) {
 
     return res.json({
       ok: true,
-      row: rows[0],
+      row: normalizeSaleRow(rows[0]),
     });
   } catch (e) {
     console.error("createDailySale error:", e);
@@ -506,7 +540,7 @@ async function updateDailySale(req, res) {
 
     return res.json({
       ok: true,
-      row: rows[0],
+      row: normalizeSaleRow(rows[0]),
     });
   } catch (e) {
     console.error("updateDailySale error:", e);
@@ -590,7 +624,7 @@ async function updatePayment(req, res) {
 
     return res.json({
       ok: true,
-      row: rows[0],
+      row: normalizeSaleRow(rows[0]),
     });
   } catch (e) {
     console.error("updatePayment error:", e);
@@ -646,7 +680,7 @@ async function getSalesReport(req, res) {
 
     return res.json({
       ok: true,
-      rows,
+      rows: normalizeSaleRows(rows),
       limit,
       offset,
     });
@@ -726,7 +760,7 @@ async function getAgentBalanceReport(req, res) {
 
     return res.json({
       ok: true,
-      rows,
+      rows: normalizeSaleRows(rows),
       limit,
       offset,
     });
