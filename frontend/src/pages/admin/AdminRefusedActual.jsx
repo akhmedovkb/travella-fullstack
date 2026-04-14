@@ -963,8 +963,14 @@ export default function AdminRefusedActual() {
   const [imageUploadBusy, setImageUploadBusy] = useState(false);
   const [proofImageUrlDraft, setProofImageUrlDraft] = useState("");
   const [proofImageUploadBusy, setProofImageUploadBusy] = useState(false);
-  const [previewImageSrc, setPreviewImageSrc] = useState("");
+  const [previewGallery, setPreviewGallery] = useState([]);
+  const [previewIndex, setPreviewIndex] = useState(-1);
   const [previewImageTitle, setPreviewImageTitle] = useState("");
+
+  const previewImageSrc = useMemo(() => {
+    if (!Array.isArray(previewGallery) || previewIndex < 0 || previewIndex >= previewGallery.length) return "";
+    return String(previewGallery[previewIndex] || "");
+  }, [previewGallery, previewIndex]);
 
   const editValidation = useMemo(() => validateEditForm(editForm), [editForm]);
 
@@ -997,6 +1003,32 @@ export default function AdminRefusedActual() {
     setTimeout(() => {
       setToast((t) => (t?.at === entry.at ? null : t));
     }, 2800);
+  }
+
+  function closePreview() {
+    setPreviewGallery([]);
+    setPreviewIndex(-1);
+    setPreviewImageTitle("");
+  }
+
+  function openPreview(images, index = 0, title = "Просмотр изображения") {
+    const list = Array.isArray(images)
+      ? images.map((x) => String(x || "")).filter(Boolean)
+      : [];
+    if (!list.length) return;
+    const safeIndex = Math.min(Math.max(Number(index) || 0, 0), list.length - 1);
+    setPreviewGallery(list);
+    setPreviewIndex(safeIndex);
+    setPreviewImageTitle(title);
+  }
+
+  function goPreview(step) {
+    setPreviewIndex((prev) => {
+      if (!Array.isArray(previewGallery) || !previewGallery.length) return -1;
+      const next = prev + step;
+      if (next < 0 || next >= previewGallery.length) return prev;
+      return next;
+    });
   }
 
   function ensureJsonOrThrow(resp, where = "") {
@@ -2539,45 +2571,80 @@ async function saveInlineEdit(item) {
         )}
       </Modal>
 
-      <Modal
-        open={Boolean(previewImageSrc)}
-        title={previewImageTitle || "Просмотр изображения"}
-        onClose={() => {
-          setPreviewImageSrc("");
-          setPreviewImageTitle("");
-        }}
-        widthClassName="max-w-5xl"
-      >
-        <div className="space-y-3">
-          {previewImageSrc ? (
-            <div className="overflow-hidden rounded-2xl border border-gray-200 bg-black/5">
-              <img
-                src={previewImageSrc}
-                alt={previewImageTitle || "preview"}
-                className="max-h-[75vh] w-full object-contain bg-black/5"
-              />
+      {Boolean(previewImageSrc) ? (
+        <div className="fixed inset-0 z-[120]">
+          <div className="absolute inset-0 bg-black/75" onClick={closePreview} aria-hidden="true" />
+          <div className="absolute inset-0 flex items-center justify-center p-4">
+            <div className="w-full max-w-6xl overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl">
+              <div className="flex items-center justify-between gap-3 border-b border-gray-200 px-5 py-4">
+                <div>
+                  <div className="text-base font-semibold text-gray-900">{previewImageTitle || "Просмотр изображения"}</div>
+                  <div className="mt-1 text-xs text-gray-500">
+                    {Array.isArray(previewGallery) && previewGallery.length
+                      ? `${previewIndex + 1} из ${previewGallery.length}`
+                      : ""}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={previewImageSrc}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-xl border border-gray-200 px-3 py-2 text-sm hover:bg-gray-50"
+                  >
+                    Открыть в новой вкладке
+                  </a>
+                  <button
+                    type="button"
+                    onClick={closePreview}
+                    className="rounded-xl border border-gray-200 px-3 py-2 text-sm hover:bg-gray-50"
+                  >
+                    Закрыть
+                  </button>
+                </div>
+              </div>
+
+              <div className="relative bg-black/5 p-4">
+                <div className="flex max-h-[78vh] items-center justify-center overflow-hidden rounded-2xl bg-black/5">
+                  <img
+                    src={previewImageSrc}
+                    alt={previewImageTitle || "preview"}
+                    className="max-h-[74vh] w-full object-contain"
+                  />
+                </div>
+
+                {Array.isArray(previewGallery) && previewGallery.length > 1 ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => goPreview(-1)}
+                      disabled={previewIndex <= 0}
+                      className="absolute left-6 top-1/2 -translate-y-1/2 rounded-full border border-gray-200 bg-white/95 px-3 py-2 text-sm shadow disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      ←
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => goPreview(1)}
+                      disabled={previewIndex >= previewGallery.length - 1}
+                      className="absolute right-6 top-1/2 -translate-y-1/2 rounded-full border border-gray-200 bg-white/95 px-3 py-2 text-sm shadow disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      →
+                    </button>
+                  </>
+                ) : null}
+              </div>
             </div>
-          ) : null}
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={() => {
-                setPreviewImageSrc("");
-                setPreviewImageTitle("");
-              }}
-              className="rounded-xl border border-gray-200 px-4 py-2 text-sm hover:bg-gray-50"
-            >
-              Закрыть
-            </button>
           </div>
         </div>
-      </Modal>
+      ) : null}
 
       <Modal
         open={editOpen}
         title={editForm ? `Редактирование услуги #${editForm.id}` : "Редактирование услуги"}
         onClose={() => {
           if (editSaving) return;
+          closePreview();
           setEditOpen(false);
         }}
         footer={
@@ -2587,7 +2654,10 @@ async function saveInlineEdit(item) {
             </div>
             <div className="flex flex-wrap gap-2">
               <button
-                onClick={() => setEditOpen(false)}
+                onClick={() => {
+                  closePreview();
+                  setEditOpen(false);
+                }}
                 disabled={editSaving}
                 className="rounded-xl border border-gray-200 px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-60"
               >
@@ -2858,8 +2928,7 @@ async function saveInlineEdit(item) {
                           <button
                             type="button"
                             onClick={() => {
-                              setPreviewImageSrc(String(src || ""));
-                              setPreviewImageTitle(`Изображение услуги #${idx + 1}`);
+                              openPreview(editForm.images, idx, "Изображения услуги");
                             }}
                             className="block h-full w-full cursor-zoom-in"
                           >
@@ -2971,8 +3040,7 @@ async function saveInlineEdit(item) {
                         <button
                             type="button"
                             onClick={() => {
-                              setPreviewImageSrc(String(src || ""));
-                              setPreviewImageTitle(`Изображение пруфа #${idx + 1}`);
+                              openPreview(editForm?.details?.proofImages || [], idx, "Изображения пруфа");
                             }}
                             className="block h-full w-full cursor-zoom-in"
                           >
