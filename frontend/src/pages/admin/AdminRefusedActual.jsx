@@ -1219,11 +1219,31 @@ export default function AdminRefusedActual() {
   }
 
   function handleRawDetailsChange(value) {
-    setEditForm((prev) => ({ ...(prev || {}), rawDetailsText: value }));
+    setEditForm((prev) => {
+      const next = { ...(prev || {}), rawDetailsText: value };
+      const parsed = safeJsonParse(value, null);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        next.details = {
+          ...parsed,
+          proofImages: normalizeImagesArray(parsed.proofImages || []),
+        };
+        next.rawDetailsText = JSON.stringify(next.details, null, 2);
+      }
+      return next;
+    });
   }
 
   function handleRawImagesChange(value) {
-    setEditForm((prev) => ({ ...(prev || {}), rawImagesText: value }));
+    setEditForm((prev) => {
+      const next = { ...(prev || {}), rawImagesText: value };
+      const parsed = safeJsonParse(value, null);
+      if (Array.isArray(parsed)) {
+        const normalized = normalizeImagesArray(parsed);
+        next.images = normalized;
+        next.rawImagesText = JSON.stringify(normalized, null, 2);
+      }
+      return next;
+    });
   }
 
   function applyImagesToEditForm(nextImages) {
