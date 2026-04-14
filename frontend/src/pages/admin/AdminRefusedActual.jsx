@@ -2774,7 +2774,7 @@ async function saveInlineEdit(item) {
               <div className="rounded-2xl border border-gray-200 p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <div className="text-sm font-semibold text-gray-900">Изображения услуги</div>
+                    <div className="text-sm font-semibold text-gray-900">Изображения услуги <span className="text-xs font-normal text-gray-500">({Array.isArray(editForm.images) ? editForm.images.length : 0})</span></div>
                     <div className={classNames("mt-1 text-xs", editValidation.raw?.images ? "text-red-600" : "text-gray-500")}>
                       {editValidation.raw?.images || "Можно удалять текущие изображения, добавлять новые файлы или вставлять ссылку/data URL."}
                     </div>
@@ -2880,7 +2880,7 @@ async function saveInlineEdit(item) {
             <div className="rounded-2xl border border-gray-200 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-sm font-semibold text-gray-900">Изображения пруфа</div>
+                  <div className="text-sm font-semibold text-gray-900">Изображения пруфа <span className="text-xs font-normal text-gray-500">({Array.isArray(editForm?.details?.proofImages) ? editForm.details.proofImages.length : 0})</span></div>
                   <div className="mt-1 text-xs text-gray-500">Можно добавлять и удалять proofImages прямо из модалки.</div>
                 </div>
                 <div className="text-xs text-gray-500">Максимум 20 изображений</div>
