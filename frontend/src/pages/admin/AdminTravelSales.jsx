@@ -44,6 +44,13 @@ const emptySaleForm = {
   net_amount: "",
 };
 
+const emptyPaymentForm = {
+  payment_date: todayIso,
+  agent_id: "",
+  amount: "",
+  comment: "",
+};
+
 function money(v) {
   const n = Number(v || 0);
   return new Intl.NumberFormat("ru-RU", {
@@ -83,6 +90,13 @@ function clsTab(active) {
 
 function typeLabel(v) {
   return SERVICE_TYPE_LABELS[v] || "—";
+}
+
+function ledgerTypeLabel(v) {
+  if (v === "sale") return "Продажа";
+  if (v === "payment") return "Оплата";
+  if (v === "payment_legacy") return "Оплата (старая)";
+  return "—";
 }
 
 function Card({ title, children, right }) {
@@ -138,6 +152,14 @@ export default function AdminTravelSales() {
   const [dailyDateTo, setDailyDateTo] = useState("");
   const [dailyServiceType, setDailyServiceType] = useState("");
 
+  const [payments, setPayments] = useState([]);
+  const [paymentsLoading, setPaymentsLoading] = useState(false);
+  const [paymentForm, setPaymentForm] = useState(emptyPaymentForm);
+  const [editingPaymentId, setEditingPaymentId] = useState(null);
+  const [paymentsAgentId, setPaymentsAgentId] = useState("");
+  const [paymentsDateFrom, setPaymentsDateFrom] = useState("");
+  const [paymentsDateTo, setPaymentsDateTo] = useState("");
+
   const [salesReport, setSalesReport] = useState([]);
   const [salesReportLoading, setSalesReportLoading] = useState(false);
   const [salesAgentId, setSalesAgentId] = useState("");
@@ -151,10 +173,6 @@ export default function AdminTravelSales() {
   const [balanceDateFrom, setBalanceDateFrom] = useState("");
   const [balanceDateTo, setBalanceDateTo] = useState("");
   const [balanceServiceType, setBalanceServiceType] = useState("");
-  const [paymentDrafts, setPaymentDrafts] = useState({});
-  const [paymentDateDrafts, setPaymentDateDrafts] = useState({});
-  const [commentDrafts, setCommentDrafts] = useState({});
-  const [paymentSavingId, setPaymentSavingId] = useState(null);
 
   async function loadAgents() {
     try {
@@ -193,6 +211,25 @@ export default function AdminTravelSales() {
     }
   }
 
+  async function loadPayments() {
+    try {
+      setPaymentsLoading(true);
+      const q = new URLSearchParams();
+      q.set("limit", "500");
+      if (paymentsAgentId) q.set("agent_id", paymentsAgentId);
+      if (paymentsDateFrom) q.set("date_from", paymentsDateFrom);
+      if (paymentsDateTo) q.set("date_to", paymentsDateTo);
+
+      const res = await apiGet(`/api/admin/travel-sales/payments?${q.toString()}`, "admin");
+      setPayments(Array.isArray(res?.rows) ? res.rows : []);
+    } catch (e) {
+      console.error(e);
+      tError(e?.message || "Не удалось загрузить оплаты");
+    } finally {
+      setPaymentsLoading(false);
+    }
+  }
+
   async function loadSalesReport() {
     try {
       setSalesReportLoading(true);
@@ -228,22 +265,7 @@ export default function AdminTravelSales() {
         "admin"
       );
 
-      const rows = Array.isArray(res?.rows) ? res.rows : [];
-      setBalanceReport(rows);
-
-      const paymentMap = {};
-      const paymentDateMap = {};
-      const commentMap = {};
-
-      rows.forEach((r) => {
-        paymentMap[r.id] = num(r.payment);
-        paymentDateMap[r.id] = iso(r.payment_date) || todayIso;
-        commentMap[r.id] = r.comment || "";
-      });
-
-      setPaymentDrafts(paymentMap);
-      setPaymentDateDrafts(paymentDateMap);
-      setCommentDrafts(commentMap);
+      setBalanceReport(Array.isArray(res?.rows) ? res.rows : []);
     } catch (e) {
       console.error(e);
       tError(e?.message || "Не удалось загрузить баланс агентов");
@@ -261,6 +283,12 @@ export default function AdminTravelSales() {
       loadDailySales();
     }
   }, [tab, dailyFilterAgentId, dailyDateFrom, dailyDateTo, dailyServiceType]);
+
+  useEffect(() => {
+    if (tab === "payments") {
+      loadPayments();
+    }
+  }, [tab, paymentsAgentId, paymentsDateFrom, paymentsDateTo]);
 
   useEffect(() => {
     if (tab === "sales") {
@@ -289,14 +317,28 @@ export default function AdminTravelSales() {
     [salesReport]
   );
 
+  const totalPayments = useMemo(
+    () => payments.reduce((s, r) => s + Number(r.amount || 0), 0),
+    [payments]
+  );
+
   const totalBalance = useMemo(() => {
     const byAgent = new Map();
-  
-    balanceReport.forEach((r) => {
-      if (byAgent.has(r.agent_id)) return;
+
+    const rowsAsc = [...balanceReport].sort((a, b) => {
+      const da = String(a.txn_date || "");
+      const db = String(b.txn_date || "");
+      if (da !== db) return da.localeCompare(db);
+
+      const ka = String(a.row_key || "");
+      const kb = String(b.row_key || "");
+      return ka.localeCompare(kb);
+    });
+
+    rowsAsc.forEach((r) => {
       byAgent.set(r.agent_id, Number(r.balance || 0));
     });
-  
+
     return Array.from(byAgent.values()).reduce((s, n) => s + n, 0);
   }, [balanceReport]);
 
@@ -369,8 +411,7 @@ export default function AdminTravelSales() {
         sale_amount: Number(saleForm.sale_amount || 0),
         net_amount: Number(saleForm.net_amount || 0),
       };
-      console.log("[AdminTravelSales] save payload =", payload);
-      
+
       if (!payload.agent_id) {
         tError("Выбери агента");
         return;
@@ -439,30 +480,72 @@ export default function AdminTravelSales() {
     }
   }
 
-  async function handleSavePayment(rowId) {
+  async function handleSavePayment(e) {
+    e.preventDefault();
     try {
-      setPaymentSavingId(rowId);
-
       const payload = {
-        payment: Number(paymentDrafts[rowId] || 0),
-        payment_date: paymentDateDrafts[rowId] || todayIso,
-        comment: commentDrafts[rowId] || "",
+        payment_date: paymentForm.payment_date,
+        agent_id: Number(paymentForm.agent_id),
+        amount: Number(paymentForm.amount || 0),
+        comment: String(paymentForm.comment || "").trim(),
       };
 
-      await apiPut(
-        `/api/admin/travel-sales/daily-sales/${rowId}/payment`,
-        payload,
-        "admin"
-      );
+      if (!payload.agent_id) {
+        tError("Выбери агента");
+        return;
+      }
+      if (!payload.payment_date) {
+        tError("Укажи дату оплаты");
+        return;
+      }
+      if (payload.amount < 0) {
+        tError("Сумма оплаты не может быть отрицательной");
+        return;
+      }
 
-      tSuccess("Оплата обновлена");
+      if (editingPaymentId) {
+        await apiPut(`/api/admin/travel-sales/payments/${editingPaymentId}`, payload, "admin");
+        tSuccess("Оплата обновлена");
+      } else {
+        await apiPost("/api/admin/travel-sales/payments", payload, "admin");
+        tSuccess("Оплата добавлена");
+      }
+
+      setEditingPaymentId(null);
+      setPaymentForm(emptyPaymentForm);
+      await loadPayments();
       await loadBalanceReport();
-      await loadDailySales();
+    } catch (e2) {
+      console.error(e2);
+      tError(e2?.message || "Ошибка сохранения оплаты");
+    }
+  }
+
+  function startEditPayment(row) {
+    setEditingPaymentId(row.id);
+    setPaymentForm({
+      payment_date: iso(row.payment_date) || todayIso,
+      agent_id: String(row.agent_id || ""),
+      amount: num(row.amount),
+      comment: row.comment || "",
+    });
+    setTab("payments");
+  }
+
+  async function handleDeletePayment(id) {
+    if (!window.confirm("Удалить оплату?")) return;
+    try {
+      await apiDelete(`/api/admin/travel-sales/payments/${id}`, "admin");
+      tSuccess("Оплата удалена");
+      if (editingPaymentId === id) {
+        setEditingPaymentId(null);
+        setPaymentForm(emptyPaymentForm);
+      }
+      await loadPayments();
+      await loadBalanceReport();
     } catch (e) {
       console.error(e);
-      tError(e?.message || "Не удалось обновить оплату");
-    } finally {
-      setPaymentSavingId(null);
+      tError(e?.message || "Не удалось удалить оплату");
     }
   }
 
@@ -498,16 +581,17 @@ export default function AdminTravelSales() {
       `travel-agent-balance-${new Date().toISOString().slice(0, 10)}.xlsx`,
       balanceReport.map((row, idx) => ({
         "№": idx + 1,
-        "Дата": iso(row.sale_date),
+        "Дата операции": iso(row.txn_date),
+        "Тип записи": ledgerTypeLabel(row.entry_type),
         "Агент": row.agent,
         "Тип услуги": typeLabel(row.service_type),
         "Направление": row.direction || "",
         "Name of traveller": row.traveller_name || "",
-        "Сумма продажи": Number(row.sale_amount || 0),
-        "Оплата": Number(row.payment || 0),
-        "Дата оплаты": iso(row.payment_date) || "",
-        "Баланс": Number(row.balance || 0),
+        "Продажа": Number(row.sale_amount || 0),
+        "Оплата": Number(row.payment_amount || 0),
         "Комментарий": row.comment || "",
+        "Дельта": Number(row.delta_amount || 0),
+        "Баланс": Number(row.balance || 0),
       }))
     );
   }
@@ -520,6 +604,9 @@ export default function AdminTravelSales() {
         </button>
         <button className={clsTab(tab === "daily")} onClick={() => setTab("daily")}>
           Дневная продажа
+        </button>
+        <button className={clsTab(tab === "payments")} onClick={() => setTab("payments")}>
+          Оплата агента
         </button>
         <button className={clsTab(tab === "sales")} onClick={() => setTab("sales")}>
           Отчет продаж
@@ -872,20 +959,19 @@ export default function AdminTravelSales() {
                       <th className="px-3 py-2">Name of traveller</th>
                       <th className="px-3 py-2">Продажа</th>
                       <th className="px-3 py-2">Нетто</th>
-                      <th className="px-3 py-2">Оплата</th>
                       <th className="px-3 py-2 w-[180px]">Действия</th>
                     </tr>
                   </thead>
                   <tbody>
                     {dailyLoading ? (
                       <tr>
-                        <td className="px-3 py-6 text-gray-500" colSpan={10}>
+                        <td className="px-3 py-6 text-gray-500" colSpan={9}>
                           Загрузка...
                         </td>
                       </tr>
                     ) : dailySales.length === 0 ? (
                       <tr>
-                        <td className="px-3 py-6 text-gray-500" colSpan={10}>
+                        <td className="px-3 py-6 text-gray-500" colSpan={9}>
                           Нет данных
                         </td>
                       </tr>
@@ -900,7 +986,6 @@ export default function AdminTravelSales() {
                           <td className="px-3 py-2">{row.traveller_name || "—"}</td>
                           <td className="px-3 py-2">{money(row.sale_amount)}</td>
                           <td className="px-3 py-2">{money(row.net_amount)}</td>
-                          <td className="px-3 py-2">{money(row.payment)}</td>
                           <td className="px-3 py-2">
                             <div className="flex flex-wrap gap-2">
                               <button
@@ -912,6 +997,200 @@ export default function AdminTravelSales() {
                               <button
                                 className="px-3 py-1.5 rounded-lg border text-red-600 bg-white"
                                 onClick={() => handleDeleteSale(row.id)}
+                              >
+                                Удалить
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {tab === "payments" && (
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+          <div className="xl:col-span-1">
+            <Card title={editingPaymentId ? "Редактировать оплату" : "Добавить оплату"}>
+              <form onSubmit={handleSavePayment} className="space-y-3">
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Дата оплаты</label>
+                  <input
+                    type="date"
+                    className="w-full border rounded-lg px-3 py-2"
+                    value={paymentForm.payment_date}
+                    onChange={(e) =>
+                      setPaymentForm((p) => ({ ...p, payment_date: e.target.value }))
+                    }
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Агент</label>
+                  <select
+                    className="w-full border rounded-lg px-3 py-2"
+                    value={paymentForm.agent_id}
+                    onChange={(e) =>
+                      setPaymentForm((p) => ({ ...p, agent_id: e.target.value }))
+                    }
+                  >
+                    <option value="">Выберите агента</option>
+                    {agents.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Сумма оплаты</label>
+                  <input
+                    type="number"
+                    className="w-full border rounded-lg px-3 py-2"
+                    value={paymentForm.amount}
+                    onChange={(e) =>
+                      setPaymentForm((p) => ({ ...p, amount: e.target.value }))
+                    }
+                    placeholder="0"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Комментарий</label>
+                  <input
+                    className="w-full border rounded-lg px-3 py-2"
+                    value={paymentForm.comment}
+                    onChange={(e) =>
+                      setPaymentForm((p) => ({ ...p, comment: e.target.value }))
+                    }
+                    placeholder="Комментарий"
+                  />
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="submit"
+                    className="px-4 py-2 rounded-lg bg-black text-white"
+                  >
+                    {editingPaymentId ? "Сохранить" : "Добавить"}
+                  </button>
+
+                  {(editingPaymentId ||
+                    paymentForm.agent_id ||
+                    paymentForm.amount ||
+                    paymentForm.comment) && (
+                    <button
+                      type="button"
+                      className="px-4 py-2 rounded-lg border bg-white"
+                      onClick={() => {
+                        setEditingPaymentId(null);
+                        setPaymentForm(emptyPaymentForm);
+                      }}
+                    >
+                      Сбросить
+                    </button>
+                  )}
+                </div>
+              </form>
+            </Card>
+          </div>
+
+          <div className="xl:col-span-2">
+            <Card
+              title="Список оплат"
+              right={
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    className="border rounded-lg px-3 py-2 text-sm"
+                    value={paymentsAgentId}
+                    onChange={(e) => setPaymentsAgentId(e.target.value)}
+                  >
+                    <option value="">Все агенты</option>
+                    {agents.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  <input
+                    type="date"
+                    className="border rounded-lg px-3 py-2 text-sm"
+                    value={paymentsDateFrom}
+                    onChange={(e) => setPaymentsDateFrom(e.target.value)}
+                  />
+                  <input
+                    type="date"
+                    className="border rounded-lg px-3 py-2 text-sm"
+                    value={paymentsDateTo}
+                    onChange={(e) => setPaymentsDateTo(e.target.value)}
+                  />
+
+                  <button
+                    className="px-3 py-2 rounded-lg border bg-white text-sm"
+                    onClick={loadPayments}
+                    type="button"
+                  >
+                    Фильтр
+                  </button>
+                </div>
+              }
+            >
+              <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <StatCard title="Сумма оплат" value={money(totalPayments)} />
+                <StatCard title="Записей" value={String(payments.length)} />
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="text-left border-b bg-gray-50">
+                      <th className="px-3 py-2">№</th>
+                      <th className="px-3 py-2">Дата оплаты</th>
+                      <th className="px-3 py-2">Агент</th>
+                      <th className="px-3 py-2">Сумма</th>
+                      <th className="px-3 py-2">Комментарий</th>
+                      <th className="px-3 py-2 w-[180px]">Действия</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paymentsLoading ? (
+                      <tr>
+                        <td className="px-3 py-6 text-gray-500" colSpan={6}>
+                          Загрузка...
+                        </td>
+                      </tr>
+                    ) : payments.length === 0 ? (
+                      <tr>
+                        <td className="px-3 py-6 text-gray-500" colSpan={6}>
+                          Нет данных
+                        </td>
+                      </tr>
+                    ) : (
+                      payments.map((row, idx) => (
+                        <tr key={row.id} className="border-b">
+                          <td className="px-3 py-2">{idx + 1}</td>
+                          <td className="px-3 py-2">{iso(row.payment_date)}</td>
+                          <td className="px-3 py-2">{row.agent_name}</td>
+                          <td className="px-3 py-2">{money(row.amount)}</td>
+                          <td className="px-3 py-2">{row.comment || "—"}</td>
+                          <td className="px-3 py-2">
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                className="px-3 py-1.5 rounded-lg border bg-white"
+                                onClick={() => startEditPayment(row)}
+                              >
+                                Изменить
+                              </button>
+                              <button
+                                className="px-3 py-1.5 rounded-lg border text-red-600 bg-white"
+                                onClick={() => handleDeletePayment(row.id)}
                               >
                                 Удалить
                               </button>
@@ -1021,12 +1300,12 @@ export default function AdminTravelSales() {
                       </td>
                     </tr>
                   ) : salesReport.length === 0 ? (
-                      <tr>
-                        <td className="px-3 py-6 text-gray-500" colSpan={9}>
-                          Нет данных
-                        </td>
-                      </tr>
-                    ) : (
+                    <tr>
+                      <td className="px-3 py-6 text-gray-500" colSpan={9}>
+                        Нет данных
+                      </td>
+                    </tr>
+                  ) : (
                     salesReport.map((row, idx) => (
                       <tr key={row.id} className="border-b">
                         <td className="px-3 py-2">{idx + 1}</td>
@@ -1123,68 +1402,44 @@ export default function AdminTravelSales() {
                 <thead>
                   <tr className="text-left border-b bg-gray-50">
                     <th className="px-3 py-2">№</th>
-                    <th className="px-3 py-2">Дата</th>
+                    <th className="px-3 py-2">Дата операции</th>
+                    <th className="px-3 py-2">Тип записи</th>
                     <th className="px-3 py-2">Агент</th>
-                    <th className="px-3 py-2">Тип</th>
+                    <th className="px-3 py-2">Тип услуги</th>
                     <th className="px-3 py-2">Направление</th>
                     <th className="px-3 py-2">Name of traveller</th>
-                    <th className="px-3 py-2">Сумма продажи</th>
+                    <th className="px-3 py-2">Продажа</th>
                     <th className="px-3 py-2">Оплата</th>
-                    <th className="px-3 py-2">Дата оплаты</th>
-                    <th className="px-3 py-2">Баланс</th>
                     <th className="px-3 py-2">Комментарий</th>
-                    <th className="px-3 py-2">Сохранить</th>
+                    <th className="px-3 py-2">Баланс</th>
                   </tr>
                 </thead>
                 <tbody>
                   {balanceLoading ? (
                     <tr>
-                      <td className="px-3 py-6 text-gray-500" colSpan={12}>
+                      <td className="px-3 py-6 text-gray-500" colSpan={11}>
                         Загрузка...
                       </td>
                     </tr>
                   ) : balanceReport.length === 0 ? (
                     <tr>
-                      <td className="px-3 py-6 text-gray-500" colSpan={12}>
+                      <td className="px-3 py-6 text-gray-500" colSpan={11}>
                         Нет данных
                       </td>
                     </tr>
                   ) : (
                     balanceReport.map((row, idx) => (
-                      <tr key={row.id} className="border-b align-top">
+                      <tr key={row.row_key || `${row.entry_type}-${idx}`} className="border-b">
                         <td className="px-3 py-2">{idx + 1}</td>
-                        <td className="px-3 py-2">{iso(row.sale_date)}</td>
+                        <td className="px-3 py-2">{iso(row.txn_date)}</td>
+                        <td className="px-3 py-2">{ledgerTypeLabel(row.entry_type)}</td>
                         <td className="px-3 py-2">{row.agent}</td>
                         <td className="px-3 py-2">{typeLabel(row.service_type)}</td>
                         <td className="px-3 py-2">{row.direction || "—"}</td>
                         <td className="px-3 py-2">{row.traveller_name || "—"}</td>
                         <td className="px-3 py-2">{money(row.sale_amount)}</td>
-                        <td className="px-3 py-2">
-                          <input
-                            type="number"
-                            className="w-28 border rounded-lg px-3 py-2"
-                            value={paymentDrafts[row.id] ?? ""}
-                            onChange={(e) =>
-                              setPaymentDrafts((p) => ({
-                                ...p,
-                                [row.id]: e.target.value,
-                              }))
-                            }
-                          />
-                        </td>
-                        <td className="px-3 py-2">
-                          <input
-                            type="date"
-                            className="w-40 border rounded-lg px-3 py-2"
-                            value={paymentDateDrafts[row.id] || todayIso}
-                            onChange={(e) =>
-                              setPaymentDateDrafts((p) => ({
-                                ...p,
-                                [row.id]: e.target.value,
-                              }))
-                            }
-                          />
-                        </td>
+                        <td className="px-3 py-2">{money(row.payment_amount)}</td>
+                        <td className="px-3 py-2">{row.comment || "—"}</td>
                         <td
                           className={`px-3 py-2 font-semibold ${
                             Number(row.balance || 0) > 0
@@ -1194,29 +1449,6 @@ export default function AdminTravelSales() {
                         >
                           {money(row.balance)}
                         </td>
-                        <td className="px-3 py-2">
-                          <input
-                            type="text"
-                            className="w-52 border rounded-lg px-3 py-2"
-                            value={commentDrafts[row.id] ?? ""}
-                            onChange={(e) =>
-                              setCommentDrafts((p) => ({
-                                ...p,
-                                [row.id]: e.target.value,
-                              }))
-                            }
-                            placeholder="Комментарий"
-                          />
-                        </td>
-                        <td className="px-3 py-2">
-                          <button
-                            className="px-3 py-2 rounded-lg border bg-white disabled:opacity-50"
-                            disabled={paymentSavingId === row.id}
-                            onClick={() => handleSavePayment(row.id)}
-                          >
-                            {paymentSavingId === row.id ? "..." : "Сохранить"}
-                          </button>
-                        </td>
                       </tr>
                     ))
                   )}
@@ -1225,7 +1457,10 @@ export default function AdminTravelSales() {
             </div>
 
             <div className="mt-4 text-sm text-gray-500">
-              Формула: <span className="font-medium">баланс = предыдущий баланс + сумма продажи - оплата</span>
+              Формула:{" "}
+              <span className="font-medium">
+                баланс = предыдущий баланс + продажа - оплата
+              </span>
             </div>
           </Card>
         </div>
