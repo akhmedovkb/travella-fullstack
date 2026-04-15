@@ -1425,9 +1425,31 @@ export default function AdminRefusedActual() {
         rawImagesText: JSON.stringify(Array.isArray(parsedImages) ? parsedImages : [], null, 2),
         rawAvailabilityText: JSON.stringify(Array.isArray(parsedAvailability) ? parsedAvailability : [], null, 2),
       };
+      const payload = {
+        title: nextForm?.title || "",
+        description: nextForm?.description || "",
+        category: nextForm?.category || "",
+        price:
+          nextForm?.price === null || typeof nextForm?.price === "undefined"
+            ? null
+            : nextForm.price,
+        vehicle_model: nextForm?.vehicle_model || "",
+        images: Array.isArray(nextForm?.images) ? nextForm.images : [],
+        availability: Array.isArray(nextForm?.availability) ? nextForm.availability : [],
+        details:
+          nextForm?.details &&
+          typeof nextForm.details === "object" &&
+          !Array.isArray(nextForm.details)
+            ? nextForm.details
+            : {},
+        telegram_refused_chat_id: normalizeChatId(nextForm?.telegram_refused_chat_id),
+        telegram_web_chat_id: normalizeChatId(nextForm?.telegram_web_chat_id),
+        telegram_chat_id: normalizeChatId(nextForm?.telegram_chat_id),
+      };
+
       const resp = await http.put(
         apiPath(`/admin/services/${editForm.id}`),
-        buildEditPayload(nextForm)
+        payload
       );
       const data = ensureJsonOrThrow(resp, "saveEdit");
 
