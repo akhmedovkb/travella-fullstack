@@ -1,5 +1,3 @@
-//backend/controllers/adminTravelSalesController.js
-
 const db = require("../db");
 
 function toStr(v) {
@@ -60,6 +58,32 @@ function normalizeSaleRow(row) {
 
 function normalizeSaleRows(rows) {
   return Array.isArray(rows) ? rows.map(normalizeSaleRow) : [];
+}
+
+function normalizePaymentRow(row) {
+  if (!row) return row;
+  return {
+    ...row,
+    payment_date: formatDateOnly(row.payment_date),
+  };
+}
+
+function normalizePaymentRows(rows) {
+  return Array.isArray(rows) ? rows.map(normalizePaymentRow) : [];
+}
+
+function normalizeLedgerRow(row) {
+  if (!row) return row;
+  return {
+    ...row,
+    txn_date: formatDateOnly(row.txn_date),
+    sale_date: formatDateOnly(row.sale_date),
+    payment_date: formatDateOnly(row.payment_date),
+  };
+}
+
+function normalizeLedgerRows(rows) {
+  return Array.isArray(rows) ? rows.map(normalizeLedgerRow) : [];
 }
 
 function normalizeServiceType(v) {
@@ -131,6 +155,28 @@ async function ensureTables() {
   await db.query(`
     CREATE INDEX IF NOT EXISTS idx_travel_daily_sales_service_type
     ON travel_daily_sales(service_type);
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS travel_agent_payments (
+      id BIGSERIAL PRIMARY KEY,
+      payment_date DATE NOT NULL DEFAULT CURRENT_DATE,
+      agent_id BIGINT NOT NULL REFERENCES travel_agents(id) ON DELETE RESTRICT,
+      amount NUMERIC(14,2) NOT NULL DEFAULT 0,
+      comment TEXT NOT NULL DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS idx_travel_agent_payments_agent_id
+    ON travel_agent_payments(agent_id);
+  `);
+
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS idx_travel_agent_payments_payment_date
+    ON travel_agent_payments(payment_date);
   `);
 }
 
@@ -267,15 +313,27 @@ async function deleteAgent(req, res) {
       return res.status(400).json({ ok: false, message: "Bad id" });
     }
 
-    const usedQ = await db.query(
+    const usedSalesQ = await db.query(
       `SELECT 1 FROM travel_daily_sales WHERE agent_id = $1 LIMIT 1`,
       [id]
     );
 
-    if (usedQ.rows.length) {
+    if (usedSalesQ.rows.length) {
       return res.status(409).json({
         ok: false,
         message: "Agent already used in sales",
+      });
+    }
+
+    const usedPaymentsQ = await db.query(
+      `SELECT 1 FROM travel_agent_payments WHERE agent_id = $1 LIMIT 1`,
+      [id]
+    );
+
+    if (usedPaymentsQ.rows.length) {
+      return res.status(409).json({
+        ok: false,
+        message: "Agent already used in payments",
       });
     }
 
@@ -574,60 +632,210 @@ async function deleteDailySale(req, res) {
   }
 }
 
+/**
+ * ОТДЕЛЬНЫЕ ОПЛАТЫ АГЕНТА
+ */
+
+async function getPayments(req, res) {
+  try {
+    await ensureTables();
+
+    const limit = clampInt(req.query.limit, 500, 1, 5000);
+    const offset = clampInt(req.query.offset, 0, 0, 1000000);
+    const agentId = req.query.agent_id ? Number(req.query.agent_id) : null;
+    const dateFrom = validateDate(req.query.date_from);
+    const dateTo = validateDate(req.query.date_to);
+
+    const { rows } = await db.query(
+      `
+      SELECT
+        p.id,
+        p.payment_date,
+        p.agent_id,
+        a.name AS agent_name,
+        p.amount,
+        p.comment,
+        p.created_at,
+        p.updated_at
+      FROM travel_agent_payments p
+      JOIN travel_agents a ON a.id = p.agent_id
+      WHERE ($1::bigint IS NULL OR p.agent_id = $1)
+        AND ($2::date IS NULL OR p.payment_date >= $2::date)
+        AND ($3::date IS NULL OR p.payment_date <= $3::date)
+      ORDER BY p.payment_date DESC, p.id DESC
+      LIMIT $4 OFFSET $5
+      `,
+      [
+        Number.isFinite(agentId) ? agentId : null,
+        dateFrom,
+        dateTo,
+        limit,
+        offset,
+      ]
+    );
+
+    return res.json({
+      ok: true,
+      rows: normalizePaymentRows(rows),
+      limit,
+      offset,
+    });
+  } catch (e) {
+    console.error("getPayments error:", e);
+    return res.status(500).json({ ok: false, message: "Internal error" });
+  }
+}
+
+async function createPayment(req, res) {
+  try {
+    await ensureTables();
+
+    const paymentDate = validateDate(req.body?.payment_date) || todayIso();
+    const agentId = Number(req.body?.agent_id);
+    const amount = toNum(req.body?.amount);
+    const comment = toStr(req.body?.comment);
+
+    if (!Number.isFinite(agentId) || agentId <= 0) {
+      return res.status(400).json({ ok: false, message: "agent_id is required" });
+    }
+
+    if (!Number.isFinite(amount) || amount < 0) {
+      return res.status(400).json({ ok: false, message: "Bad amount" });
+    }
+
+    const agentQ = await db.query(
+      `SELECT id FROM travel_agents WHERE id = $1 LIMIT 1`,
+      [agentId]
+    );
+
+    if (!agentQ.rows.length) {
+      return res.status(404).json({ ok: false, message: "Agent not found" });
+    }
+
+    const { rows } = await db.query(
+      `
+      INSERT INTO travel_agent_payments (
+        payment_date,
+        agent_id,
+        amount,
+        comment
+      )
+      VALUES ($1::date, $2, $3, $4)
+      RETURNING
+        id,
+        payment_date,
+        agent_id,
+        amount,
+        comment,
+        created_at,
+        updated_at
+      `,
+      [paymentDate, agentId, amount, comment]
+    );
+
+    return res.json({
+      ok: true,
+      row: normalizePaymentRow(rows[0]),
+    });
+  } catch (e) {
+    console.error("createPayment error:", e);
+    return res.status(500).json({ ok: false, message: "Internal error" });
+  }
+}
+
 async function updatePayment(req, res) {
   try {
     await ensureTables();
 
     const id = Number(req.params?.id);
-    const payment = toNum(req.body?.payment);
-    const paymentDate = validateDate(req.body?.payment_date) || todayIso();
+    const paymentDate = validateDate(req.body?.payment_date);
+    const agentId = Number(req.body?.agent_id);
+    const amount = toNum(req.body?.amount);
     const comment = toStr(req.body?.comment);
 
     if (!Number.isFinite(id) || id <= 0) {
       return res.status(400).json({ ok: false, message: "Bad id" });
     }
 
-    if (!Number.isFinite(payment) || payment < 0) {
-      return res.status(400).json({ ok: false, message: "Bad payment" });
+    if (!paymentDate) {
+      return res.status(400).json({ ok: false, message: "payment_date is required" });
+    }
+
+    if (!Number.isFinite(agentId) || agentId <= 0) {
+      return res.status(400).json({ ok: false, message: "agent_id is required" });
+    }
+
+    if (!Number.isFinite(amount) || amount < 0) {
+      return res.status(400).json({ ok: false, message: "Bad amount" });
+    }
+
+    const agentQ = await db.query(
+      `SELECT id FROM travel_agents WHERE id = $1 LIMIT 1`,
+      [agentId]
+    );
+
+    if (!agentQ.rows.length) {
+      return res.status(404).json({ ok: false, message: "Agent not found" });
     }
 
     const { rows } = await db.query(
       `
-      UPDATE travel_daily_sales
+      UPDATE travel_agent_payments
       SET
-        payment = $1,
-        payment_date = $2::date,
-        comment = $3,
+        payment_date = $1::date,
+        agent_id = $2,
+        amount = $3,
+        comment = $4,
         updated_at = NOW()
-      WHERE id = $4
+      WHERE id = $5
       RETURNING
         id,
-        sale_date,
-        agent_id,
-        service_type,
-        direction,
-        traveller_name,
-        sale_amount,
-        net_amount,
-        payment,
         payment_date,
+        agent_id,
+        amount,
         comment,
         created_at,
         updated_at
       `,
-      [payment, paymentDate, comment, id]
+      [paymentDate, agentId, amount, comment, id]
     );
 
     if (!rows.length) {
-      return res.status(404).json({ ok: false, message: "Sale not found" });
+      return res.status(404).json({ ok: false, message: "Payment not found" });
     }
 
     return res.json({
       ok: true,
-      row: normalizeSaleRow(rows[0]),
+      row: normalizePaymentRow(rows[0]),
     });
   } catch (e) {
     console.error("updatePayment error:", e);
+    return res.status(500).json({ ok: false, message: "Internal error" });
+  }
+}
+
+async function deletePayment(req, res) {
+  try {
+    await ensureTables();
+
+    const id = Number(req.params?.id);
+
+    if (!Number.isFinite(id) || id <= 0) {
+      return res.status(400).json({ ok: false, message: "Bad id" });
+    }
+
+    const { rowCount } = await db.query(
+      `DELETE FROM travel_agent_payments WHERE id = $1`,
+      [id]
+    );
+
+    if (!rowCount) {
+      return res.status(404).json({ ok: false, message: "Payment not found" });
+    }
+
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error("deletePayment error:", e);
     return res.status(500).json({ ok: false, message: "Internal error" });
   }
 }
@@ -703,49 +911,128 @@ async function getAgentBalanceReport(req, res) {
 
     const { rows } = await db.query(
       `
-      WITH base AS (
+      WITH ledger_source AS (
         SELECT
-          s.id,
-          s.sale_date,
+          s.id::text AS row_key,
           s.agent_id,
           a.name AS agent,
+          s.sale_date AS txn_date,
+          'sale'::text AS entry_type,
+          s.id AS sale_id,
+          NULL::bigint AS payment_id,
+          s.sale_date,
+          NULL::date AS payment_date,
           s.service_type,
           s.direction,
           s.traveller_name,
           s.sale_amount,
-          s.net_amount,
-          s.payment,
-          s.payment_date,
-          s.comment,
-          SUM(COALESCE(s.sale_amount, 0) - COALESCE(s.payment, 0))
-            OVER (
-              PARTITION BY s.agent_id
-              ORDER BY s.sale_date ASC, s.id ASC
-              ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-            ) AS balance
+          0::numeric(14,2) AS payment_amount,
+          NULL::text AS comment,
+          s.sale_amount::numeric(14,2) AS delta_amount
         FROM travel_daily_sales s
         JOIN travel_agents a ON a.id = s.agent_id
         WHERE ($1::bigint IS NULL OR s.agent_id = $1)
           AND ($2::date IS NULL OR s.sale_date >= $2::date)
           AND ($3::date IS NULL OR s.sale_date <= $3::date)
           AND ($4::text = '' OR s.service_type = $4)
+
+        UNION ALL
+
+        SELECT
+          ('legacy-' || s.id::text) AS row_key,
+          s.agent_id,
+          a.name AS agent,
+          s.payment_date AS txn_date,
+          'payment_legacy'::text AS entry_type,
+          s.id AS sale_id,
+          NULL::bigint AS payment_id,
+          NULL::date AS sale_date,
+          s.payment_date,
+          s.service_type,
+          s.direction,
+          s.traveller_name,
+          0::numeric(14,2) AS sale_amount,
+          s.payment::numeric(14,2) AS payment_amount,
+          s.comment,
+          (0 - s.payment)::numeric(14,2) AS delta_amount
+        FROM travel_daily_sales s
+        JOIN travel_agents a ON a.id = s.agent_id
+        WHERE COALESCE(s.payment, 0) > 0
+          AND ($1::bigint IS NULL OR s.agent_id = $1)
+          AND ($2::date IS NULL OR s.payment_date >= $2::date)
+          AND ($3::date IS NULL OR s.payment_date <= $3::date)
+          AND ($4::text = '' OR s.service_type = $4)
+
+        UNION ALL
+
+        SELECT
+          ('payment-' || p.id::text) AS row_key,
+          p.agent_id,
+          a.name AS agent,
+          p.payment_date AS txn_date,
+          'payment'::text AS entry_type,
+          NULL::bigint AS sale_id,
+          p.id AS payment_id,
+          NULL::date AS sale_date,
+          p.payment_date,
+          ''::text AS service_type,
+          ''::text AS direction,
+          ''::text AS traveller_name,
+          0::numeric(14,2) AS sale_amount,
+          p.amount::numeric(14,2) AS payment_amount,
+          p.comment,
+          (0 - p.amount)::numeric(14,2) AS delta_amount
+        FROM travel_agent_payments p
+        JOIN travel_agents a ON a.id = p.agent_id
+        WHERE ($1::bigint IS NULL OR p.agent_id = $1)
+          AND ($2::date IS NULL OR p.payment_date >= $2::date)
+          AND ($3::date IS NULL OR p.payment_date <= $3::date)
+      ),
+      ledger_with_balance AS (
+        SELECT
+          row_key,
+          agent_id,
+          agent,
+          txn_date,
+          entry_type,
+          sale_id,
+          payment_id,
+          sale_date,
+          payment_date,
+          service_type,
+          direction,
+          traveller_name,
+          sale_amount,
+          payment_amount,
+          comment,
+          delta_amount,
+          SUM(delta_amount) OVER (
+            PARTITION BY agent_id
+            ORDER BY txn_date ASC, row_key ASC
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+          ) AS balance
+        FROM ledger_source
       )
       SELECT
-        id,
-        sale_date,
+        row_key,
         agent_id,
         agent,
+        txn_date,
+        entry_type,
+        sale_id,
+        payment_id,
+        sale_date,
+        payment_date,
         service_type,
         direction,
         traveller_name,
         sale_amount,
-        net_amount,
-        payment,
-        payment_date,
+        payment_amount,
         comment,
+        delta_amount,
         balance
-      FROM base
-      ORDER BY sale_date DESC, id DESC
+      FROM ledger_with_balance
+      ORDER BY txn_date DESC, row_key DESC
       LIMIT $5 OFFSET $6
       `,
       [
@@ -760,7 +1047,7 @@ async function getAgentBalanceReport(req, res) {
 
     return res.json({
       ok: true,
-      rows: normalizeSaleRows(rows),
+      rows: normalizeLedgerRows(rows),
       limit,
       offset,
     });
@@ -780,7 +1067,11 @@ module.exports = {
   createDailySale,
   updateDailySale,
   deleteDailySale,
+
+  getPayments,
+  createPayment,
   updatePayment,
+  deletePayment,
 
   getSalesReport,
   getAgentBalanceReport,
