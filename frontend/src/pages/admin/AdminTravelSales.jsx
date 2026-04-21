@@ -12,6 +12,11 @@ const SERVICE_TYPE_OPTIONS = [
   { value: "tourpackage", label: "Турпакет" },
 ];
 
+const PAYMENT_ENTRY_OPTIONS = [
+  { value: "payment", label: "Оплата" },
+  { value: "refund", label: "Возврат" },
+];
+
 const SERVICE_TYPE_LABELS = {
   airticket: "Авиабилет",
   visa: "Виза",
@@ -47,6 +52,7 @@ const emptySaleForm = {
 const emptyPaymentForm = {
   payment_date: todayIso,
   agent_id: "",
+  entry_type: "payment",
   amount: "",
   comment: "",
 };
@@ -95,6 +101,7 @@ function typeLabel(v) {
 function ledgerTypeLabel(v) {
   if (v === "sale") return "Продажа";
   if (v === "payment") return "Оплата";
+  if (v === "refund") return "Возврат";
   if (v === "payment_legacy") return "Оплата (старая)";
   return "—";
 }
@@ -486,6 +493,7 @@ export default function AdminTravelSales() {
       const payload = {
         payment_date: paymentForm.payment_date,
         agent_id: Number(paymentForm.agent_id),
+        entry_type: paymentForm.entry_type || "payment",
         amount: Number(paymentForm.amount || 0),
         comment: String(paymentForm.comment || "").trim(),
       };
@@ -526,6 +534,7 @@ export default function AdminTravelSales() {
     setPaymentForm({
       payment_date: iso(row.payment_date) || todayIso,
       agent_id: String(row.agent_id || ""),
+      entry_type: row.entry_type || "payment",
       amount: num(row.amount),
       comment: row.comment || "",
     });
@@ -1047,6 +1056,22 @@ export default function AdminTravelSales() {
                     ))}
                   </select>
                 </div>
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Тип записи</label>
+                  <select
+                    className="w-full border rounded-lg px-3 py-2"
+                    value={paymentForm.entry_type}
+                    onChange={(e) =>
+                      setPaymentForm((p) => ({ ...p, entry_type: e.target.value }))
+                    }
+                  >
+                    {PAYMENT_ENTRY_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
                 <div>
                   <label className="block text-sm text-gray-600 mb-1">Сумма оплаты</label>
@@ -1410,6 +1435,7 @@ export default function AdminTravelSales() {
                     <th className="px-3 py-2">Name of traveller</th>
                     <th className="px-3 py-2">Продажа</th>
                     <th className="px-3 py-2">Оплата</th>
+                    <th className="px-3 py-2">Возврат</th>
                     <th className="px-3 py-2">Комментарий</th>
                     <th className="px-3 py-2">Баланс</th>
                   </tr>
@@ -1439,6 +1465,7 @@ export default function AdminTravelSales() {
                         <td className="px-3 py-2">{row.traveller_name || "—"}</td>
                         <td className="px-3 py-2">{money(row.sale_amount)}</td>
                         <td className="px-3 py-2">{money(row.payment_amount)}</td>
+                        <td className="px-3 py-2">{money(row.refund_amount)}</td>
                         <td className="px-3 py-2">{row.comment || "—"}</td>
                         <td
                           className={`px-3 py-2 font-semibold ${
@@ -1459,7 +1486,7 @@ export default function AdminTravelSales() {
             <div className="mt-4 text-sm text-gray-500">
               Формула:{" "}
               <span className="font-medium">
-                баланс = предыдущий баланс + продажа - оплата
+                баланс = предыдущий баланс + продажа - оплата - возврат
               </span>
             </div>
           </Card>
