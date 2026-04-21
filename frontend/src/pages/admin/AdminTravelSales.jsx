@@ -164,6 +164,7 @@ export default function AdminTravelSales() {
   const [paymentForm, setPaymentForm] = useState(emptyPaymentForm);
   const [editingPaymentId, setEditingPaymentId] = useState(null);
   const [paymentsAgentId, setPaymentsAgentId] = useState("");
+  const [paymentsEntryType, setPaymentsEntryType] = useState("");
   const [paymentsDateFrom, setPaymentsDateFrom] = useState("");
   const [paymentsDateTo, setPaymentsDateTo] = useState("");
 
@@ -224,9 +225,10 @@ export default function AdminTravelSales() {
       const q = new URLSearchParams();
       q.set("limit", "500");
       if (paymentsAgentId) q.set("agent_id", paymentsAgentId);
+      if (paymentsEntryType) q.set("entry_type", paymentsEntryType);
       if (paymentsDateFrom) q.set("date_from", paymentsDateFrom);
       if (paymentsDateTo) q.set("date_to", paymentsDateTo);
-
+  
       const res = await apiGet(`/api/admin/travel-sales/payments?${q.toString()}`, "admin");
       setPayments(Array.isArray(res?.rows) ? res.rows : []);
     } catch (e) {
@@ -295,7 +297,7 @@ export default function AdminTravelSales() {
     if (tab === "payments") {
       loadPayments();
     }
-  }, [tab, paymentsAgentId, paymentsDateFrom, paymentsDateTo]);
+  }, [tab, paymentsAgentId, paymentsEntryType, paymentsDateFrom, paymentsDateTo]);
 
   useEffect(() => {
     if (tab === "sales") {
@@ -325,7 +327,28 @@ export default function AdminTravelSales() {
   );
 
   const totalPayments = useMemo(
-    () => payments.reduce((s, r) => s + Number(r.amount || 0), 0),
+    () =>
+      payments.reduce(
+        (s, r) =>
+          s +
+          (String(r.entry_type || "payment") === "payment"
+            ? Number(r.amount || 0)
+            : 0),
+        0
+      ),
+    [payments]
+  );
+  
+  const totalRefunds = useMemo(
+    () =>
+      payments.reduce(
+        (s, r) =>
+          s +
+          (String(r.entry_type || "payment") === "refund"
+            ? Number(r.amount || 0)
+            : 0),
+        0
+      ),
     [payments]
   );
 
@@ -1144,6 +1167,15 @@ export default function AdminTravelSales() {
                       </option>
                     ))}
                   </select>
+                  <select
+                    className="border rounded-lg px-3 py-2 text-sm"
+                    value={paymentsEntryType}
+                    onChange={(e) => setPaymentsEntryType(e.target.value)}
+                  >
+                    <option value="">Все записи</option>
+                    <option value="payment">Только оплаты</option>
+                    <option value="refund">Только возвраты</option>
+                  </select>
 
                   <input
                     type="date"
@@ -1168,8 +1200,9 @@ export default function AdminTravelSales() {
                 </div>
               }
             >
-              <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4">
                 <StatCard title="Сумма оплат" value={money(totalPayments)} />
+                <StatCard title="Сумма возвратов" value={money(totalRefunds)} />
                 <StatCard title="Записей" value={String(payments.length)} />
               </div>
 
@@ -1180,6 +1213,7 @@ export default function AdminTravelSales() {
                       <th className="px-3 py-2">№</th>
                       <th className="px-3 py-2">Дата оплаты</th>
                       <th className="px-3 py-2">Агент</th>
+                      <th className="px-3 py-2">Тип записи</th>
                       <th className="px-3 py-2">Сумма</th>
                       <th className="px-3 py-2">Комментарий</th>
                       <th className="px-3 py-2 w-[180px]">Действия</th>
@@ -1188,13 +1222,13 @@ export default function AdminTravelSales() {
                   <tbody>
                     {paymentsLoading ? (
                       <tr>
-                        <td className="px-3 py-6 text-gray-500" colSpan={6}>
+                        <td className="px-3 py-6 text-gray-500" colSpan={7}>
                           Загрузка...
                         </td>
                       </tr>
                     ) : payments.length === 0 ? (
                       <tr>
-                        <td className="px-3 py-6 text-gray-500" colSpan={6}>
+                        <td className="px-3 py-6 text-gray-500" colSpan={7}>
                           Нет данных
                         </td>
                       </tr>
@@ -1204,6 +1238,7 @@ export default function AdminTravelSales() {
                           <td className="px-3 py-2">{idx + 1}</td>
                           <td className="px-3 py-2">{iso(row.payment_date)}</td>
                           <td className="px-3 py-2">{row.agent_name}</td>
+                          <td className="px-3 py-2">{ledgerTypeLabel(row.entry_type)}</td>
                           <td className="px-3 py-2">{money(row.amount)}</td>
                           <td className="px-3 py-2">{row.comment || "—"}</td>
                           <td className="px-3 py-2">
