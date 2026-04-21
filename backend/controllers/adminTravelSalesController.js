@@ -651,6 +651,12 @@ async function getPayments(req, res) {
     const limit = clampInt(req.query.limit, 500, 1, 5000);
     const offset = clampInt(req.query.offset, 0, 0, 1000000);
     const agentId = req.query.agent_id ? Number(req.query.agent_id) : null;
+    const entryType =
+      req.query.entry_type === "refund"
+        ? "refund"
+        : req.query.entry_type === "payment"
+        ? "payment"
+        : "";
     const dateFrom = validateDate(req.query.date_from);
     const dateTo = validateDate(req.query.date_to);
 
@@ -669,13 +675,15 @@ async function getPayments(req, res) {
       FROM travel_agent_payments p
       JOIN travel_agents a ON a.id = p.agent_id
       WHERE ($1::bigint IS NULL OR p.agent_id = $1)
-        AND ($2::date IS NULL OR p.payment_date >= $2::date)
-        AND ($3::date IS NULL OR p.payment_date <= $3::date)
+        AND ($2::text = '' OR COALESCE(NULLIF(p.entry_type, ''), 'payment') = $2)
+        AND ($3::date IS NULL OR p.payment_date >= $3::date)
+        AND ($4::date IS NULL OR p.payment_date <= $4::date)
       ORDER BY p.payment_date DESC, p.id DESC
-      LIMIT $4 OFFSET $5
+      LIMIT $5 OFFSET $6
       `,
       [
         Number.isFinite(agentId) ? agentId : null,
+        entryType,
         dateFrom,
         dateTo,
         limit,
