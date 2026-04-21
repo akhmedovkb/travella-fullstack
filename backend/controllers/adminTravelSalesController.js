@@ -160,16 +160,22 @@ async function ensureTables() {
   `);
 
   await db.query(`
-    CREATE TABLE IF NOT EXISTS travel_agent_payments (
-      id BIGSERIAL PRIMARY KEY,
-      payment_date DATE NOT NULL DEFAULT CURRENT_DATE,
-      agent_id BIGINT NOT NULL REFERENCES travel_agents(id) ON DELETE RESTRICT,
-      amount NUMERIC(14,2) NOT NULL DEFAULT 0,
-      comment TEXT NOT NULL DEFAULT '',
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-  `);
+  CREATE TABLE IF NOT EXISTS travel_agent_payments (
+    id BIGSERIAL PRIMARY KEY,
+    payment_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    agent_id BIGINT NOT NULL REFERENCES travel_agents(id) ON DELETE RESTRICT,
+    amount NUMERIC(14,2) NOT NULL DEFAULT 0,
+    comment TEXT NOT NULL DEFAULT '',
+    entry_type TEXT NOT NULL DEFAULT 'payment',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+`);
+  
+  await db.query(`
+  ALTER TABLE travel_agent_payments
+  ADD COLUMN IF NOT EXISTS entry_type TEXT NOT NULL DEFAULT 'payment';
+`);
 
   await db.query(`
     CREATE INDEX IF NOT EXISTS idx_travel_agent_payments_agent_id
@@ -650,15 +656,16 @@ async function getPayments(req, res) {
 
     const { rows } = await db.query(
       `
-      SELECT
-        p.id,
-        p.payment_date,
-        p.agent_id,
-        a.name AS agent_name,
-        p.amount,
-        p.comment,
-        p.created_at,
-        p.updated_at
+    SELECT
+      p.id,
+      p.payment_date,
+      p.agent_id,
+      a.name AS agent_name,
+      p.amount,
+      p.comment,
+      COALESCE(NULLIF(p.entry_type, ''), 'payment') AS entry_type,
+      p.created_at,
+      p.updated_at
       FROM travel_agent_payments p
       JOIN travel_agents a ON a.id = p.agent_id
       WHERE ($1::bigint IS NULL OR p.agent_id = $1)
@@ -696,6 +703,7 @@ async function createPayment(req, res) {
     const agentId = Number(req.body?.agent_id);
     const amount = toNum(req.body?.amount);
     const comment = toStr(req.body?.comment);
+    const entryType = req.body?.entry_type === "refund" ? "refund" : "payment";
 
     if (!Number.isFinite(agentId) || agentId <= 0) {
       return res.status(400).json({ ok: false, message: "agent_id is required" });
@@ -716,23 +724,25 @@ async function createPayment(req, res) {
 
     const { rows } = await db.query(
       `
-      INSERT INTO travel_agent_payments (
-        payment_date,
-        agent_id,
-        amount,
-        comment
-      )
-      VALUES ($1::date, $2, $3, $4)
-      RETURNING
-        id,
-        payment_date,
-        agent_id,
-        amount,
-        comment,
-        created_at,
-        updated_at
+    INSERT INTO travel_agent_payments (
+      payment_date,
+      agent_id,
+      amount,
+      comment,
+      entry_type
+    )
+    VALUES ($1::date, $2, $3, $4, $5)
+    RETURNING
+      id,
+      payment_date,
+      agent_id,
+      amount,
+      comment,
+      entry_type,
+      created_at,
+      updated_at
       `,
-      [paymentDate, agentId, amount, comment]
+      [paymentDate, agentId, amount, comment, entryType]
     );
 
     return res.json({
@@ -754,6 +764,7 @@ async function updatePayment(req, res) {
     const agentId = Number(req.body?.agent_id);
     const amount = toNum(req.body?.amount);
     const comment = toStr(req.body?.comment);
+    const entryType = req.body?.entry_type === "refund" ? "refund" : "payment";
 
     if (!Number.isFinite(id) || id <= 0) {
       return res.status(400).json({ ok: false, message: "Bad id" });
@@ -782,24 +793,26 @@ async function updatePayment(req, res) {
 
     const { rows } = await db.query(
       `
-      UPDATE travel_agent_payments
-      SET
-        payment_date = $1::date,
-        agent_id = $2,
-        amount = $3,
-        comment = $4,
-        updated_at = NOW()
-      WHERE id = $5
-      RETURNING
-        id,
-        payment_date,
-        agent_id,
-        amount,
-        comment,
-        created_at,
-        updated_at
+    UPDATE travel_agent_payments
+    SET
+      payment_date = $1::date,
+      agent_id = $2,
+      amount = $3,
+      comment = $4,
+      entry_type = $5,
+      updated_at = NOW()
+    WHERE id = $6
+    RETURNING
+      id,
+      payment_date,
+      agent_id,
+      amount,
+      comment,
+      entry_type,
+      created_at,
+      updated_at
       `,
-      [paymentDate, agentId, amount, comment, id]
+      [paymentDate, agentId, amount, comment, entryType, id]
     );
 
     if (!rows.length) {
@@ -929,6 +942,7 @@ async function getAgentBalanceReport(req, res) {
           s.traveller_name,
           s.sale_amount,
           0::numeric(14,2) AS payment_amount,
+          0::numeric(14,2) AS refund_amount,
           NULL::text AS comment,
           s.sale_amount::numeric(14,2) AS delta_amount
         FROM travel_daily_sales s
@@ -937,9 +951,9 @@ async function getAgentBalanceReport(req, res) {
           AND ($2::date IS NULL OR s.sale_date >= $2::date)
           AND ($3::date IS NULL OR s.sale_date <= $3::date)
           AND ($4::text = '' OR s.service_type = $4)
-
+    
         UNION ALL
-
+    
         SELECT
           ('legacy-' || s.id::text) AS row_key,
           s.agent_id,
@@ -955,6 +969,7 @@ async function getAgentBalanceReport(req, res) {
           s.traveller_name,
           0::numeric(14,2) AS sale_amount,
           s.payment::numeric(14,2) AS payment_amount,
+          0::numeric(14,2) AS refund_amount,
           s.comment,
           (0 - s.payment)::numeric(14,2) AS delta_amount
         FROM travel_daily_sales s
@@ -964,15 +979,15 @@ async function getAgentBalanceReport(req, res) {
           AND ($2::date IS NULL OR s.payment_date >= $2::date)
           AND ($3::date IS NULL OR s.payment_date <= $3::date)
           AND ($4::text = '' OR s.service_type = $4)
-
+    
         UNION ALL
-
+    
         SELECT
           ('payment-' || p.id::text) AS row_key,
           p.agent_id,
           a.name AS agent,
           p.payment_date AS txn_date,
-          'payment'::text AS entry_type,
+          COALESCE(NULLIF(p.entry_type, ''), 'payment')::text AS entry_type,
           NULL::bigint AS sale_id,
           p.id AS payment_id,
           NULL::date AS sale_date,
@@ -981,7 +996,16 @@ async function getAgentBalanceReport(req, res) {
           ''::text AS direction,
           ''::text AS traveller_name,
           0::numeric(14,2) AS sale_amount,
-          p.amount::numeric(14,2) AS payment_amount,
+          CASE
+            WHEN COALESCE(NULLIF(p.entry_type, ''), 'payment') = 'refund'
+              THEN 0::numeric(14,2)
+            ELSE p.amount::numeric(14,2)
+          END AS payment_amount,
+          CASE
+            WHEN COALESCE(NULLIF(p.entry_type, ''), 'payment') = 'refund'
+              THEN p.amount::numeric(14,2)
+            ELSE 0::numeric(14,2)
+          END AS refund_amount,
           p.comment,
           (0 - p.amount)::numeric(14,2) AS delta_amount
         FROM travel_agent_payments p
@@ -1006,6 +1030,7 @@ async function getAgentBalanceReport(req, res) {
           traveller_name,
           sale_amount,
           payment_amount,
+          refund_amount,
           comment,
           delta_amount,
           SUM(delta_amount) OVER (
@@ -1030,6 +1055,7 @@ async function getAgentBalanceReport(req, res) {
         traveller_name,
         sale_amount,
         payment_amount,
+        refund_amount,
         comment,
         delta_amount,
         balance
