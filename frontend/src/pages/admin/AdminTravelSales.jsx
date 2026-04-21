@@ -598,6 +598,7 @@ export default function AdminTravelSales() {
         "Name of traveller": row.traveller_name || "",
         "Продажа": Number(row.sale_amount || 0),
         "Оплата": Number(row.payment_amount || 0),
+        "Возврат": Number(row.refund_amount || 0),
         "Комментарий": row.comment || "",
         "Дельта": Number(row.delta_amount || 0),
         "Баланс": Number(row.balance || 0),
