@@ -1730,6 +1730,7 @@ async function saveInlineEdit(item) {
     { value: "approved", label: "approved" },
     { value: "draft", label: "draft" },
     { value: "rejected", label: "rejected" },
+    { value: "archived", label: "archived" },
   ];
 
   const actualityOptions = [
