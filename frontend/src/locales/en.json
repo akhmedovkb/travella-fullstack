@@ -663,6 +663,7 @@
   "unlock_success_saved_hint": "Contacts are saved and available in this card.",
   "unlock_success_subtitle": "Provider's phone and Telegram are now available",
   "unlock_success_title": "Contacts unlocked",
+  "unlock_supplier_hint": "The supplier is hidden. Unlock contacts to view and connect directly.",
   "unlocking": "Unlocking...",
   "verified_proof": "Verified",
   "watching_now": "Watching now",
