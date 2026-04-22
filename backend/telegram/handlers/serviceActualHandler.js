@@ -205,9 +205,23 @@ async function handleServiceActualCallback(ctxLike) {
   };
 
   // --- YES ---
-  if (action === "yes") {
-    next.isActive = true;
-    await saveDetails(serviceId, next);
+if (action === "yes") {
+  next.isActive = true;
+
+  await db.query(
+    `
+    UPDATE services
+    SET
+      status = 'published',
+      deleted_at = NULL,
+      deleted_by = NULL,
+      expiration_at = COALESCE(expiration_at, NOW()) + interval '7 days',
+      details = $1,
+      updated_at = NOW()
+    WHERE id = $2
+    `,
+    [JSON.stringify(next), serviceId]
+  );
 
     if (callbackQueryId) {
       await tgAnswerCallbackQuery(
@@ -233,9 +247,20 @@ async function handleServiceActualCallback(ctxLike) {
   }
 
   // --- NO ---
-  if (action === "no") {
-    next.isActive = false;
-    await saveDetails(serviceId, next);
+if (action === "no") {
+  next.isActive = false;
+
+  await db.query(
+    `
+    UPDATE services
+    SET
+      status = 'archived',
+      details = $1,
+      updated_at = NOW()
+    WHERE id = $2
+    `,
+    [JSON.stringify(next), serviceId]
+  );
 
     if (callbackQueryId) {
       await tgAnswerCallbackQuery(
