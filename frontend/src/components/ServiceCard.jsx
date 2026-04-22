@@ -1624,8 +1624,8 @@ return (
             </div>
           )}
 
-              {(supplierName || supplierPhone || supplierTg?.label) && (
-            <div className="mt-2 text-sm space-y-2">
+        {(unlocked || isProviderViewer || isAdminViewer) && (supplierName || supplierPhone || supplierTg?.label) && (
+          <div className="mt-2 text-sm space-y-2">
               {supplierName && (
                 <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-3 py-2">
                   <div className="text-[11px] text-gray-500">
