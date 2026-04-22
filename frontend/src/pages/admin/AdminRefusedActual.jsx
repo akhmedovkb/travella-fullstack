@@ -303,7 +303,7 @@ function readUrlSort() {
     const sortOrder =
       (sp.get("sortOrder") || "asc").toLowerCase() === "desc" ? "desc" : "asc";
 
-    const allowed = new Set(["created_at", "provider", "sort_date"]);
+    const allowed = new Set(["created_at", "provider", "sort_date", "id"]);
     return {
       sortBy: allowed.has(sortBy) ? sortBy : "sort_date",
       sortOrder,
@@ -1744,13 +1744,15 @@ async function saveInlineEdit(item) {
     { value: "all", label: "Все" },
   ];
 
-  const sortLabel = useMemo(() => {
-    const name =
-      sortBy === "created_at"
-        ? "Дата создания"
-        : sortBy === "provider"
-        ? "Провайдер"
-        : "Дата (сорт)";
+const sortLabel = useMemo(() => {
+  const name =
+    sortBy === "id"
+      ? "ID"
+      : sortBy === "created_at"
+      ? "Дата создания"
+      : sortBy === "provider"
+      ? "Провайдер"
+      : "Дата (сорт)";
     const arrow = sortOrder === "asc" ? "↑" : "↓";
     return `${name} ${arrow}`;
   }, [sortBy, sortOrder]);
@@ -1990,7 +1992,15 @@ async function saveInlineEdit(item) {
           <table className="min-w-[1180px] w-full text-sm">
             <thead className="sticky top-0 z-10 bg-gray-50 text-gray-700">
               <tr>
-                <th className="px-3 py-2 text-left font-medium">ID</th>
+                <th
+                  className={thClass("id")}
+                  onClick={() => toggleSort("id")}
+                  title="Сортировать по ID"
+                >
+                  ID
+                  <span className={iconClass("id")}>{sortIcon("id")}</span>
+                  <SortBadge active={sortBy === "id"} dir={sortOrder} />
+                </th>
                 <th className="px-3 py-2 text-left font-medium">Категория</th>
                 <th className="px-3 py-2 text-left font-medium">Название</th>
                 <th
