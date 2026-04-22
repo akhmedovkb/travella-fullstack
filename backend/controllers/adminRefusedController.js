@@ -191,7 +191,7 @@ exports.listActualRefused = async (req, res) => {
       showDeleted = "0",
 
       // sorting
-      sortBy: sortByRaw = "sort_date", // created_at | provider | sort_date
+      sortBy: sortByRaw = "sort_date", // created_at | provider | sort_date | id
       sortOrder: sortOrderRaw = "asc", // asc | desc
     } = req.query;
 
@@ -335,6 +335,9 @@ exports.listActualRefused = async (req, res) => {
         const pa = (a.provider?.name || "").toString().toLowerCase();
         const pb = (b.provider?.name || "").toString().toLowerCase();
         return pa.localeCompare(pb, "ru", { sensitivity: "base" }) * dir;
+      }
+      if (sortBy === "id") {
+        return (Number(a.id || 0) - Number(b.id || 0)) * dir;
       }
 
       const da = a.startDateForSort ? new Date(a.startDateForSort) : null;
