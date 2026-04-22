@@ -204,7 +204,7 @@ async function handleServiceActualCallback(ctxLike) {
     },
   };
 
-  // --- YES ---
+// --- YES ---
 if (action === "yes") {
   next.isActive = true;
 
@@ -223,38 +223,38 @@ if (action === "yes") {
     [JSON.stringify(next), serviceId]
   );
 
-    if (callbackQueryId) {
-      await tgAnswerCallbackQuery(
-        callbackQueryId,
-        "Отлично ✅",
-        { show_alert: false },
-        tokenOverride
-      );
-    }
-
-    if (row.telegram_chat_id) {
-      const txt =
-        `✅ Подтверждено: <b>${escapeHtml(row.title || "Услуга")}</b>\n` +
-        `Код: <code>#R${serviceId}</code>\n` +
-        (placeInfo ? `Направление/отель: <b>${escapeHtml(placeInfo)}</b>\n` : "") +
-        (dateInfo ? `Даты: <b>${escapeHtml(dateInfo)}</b>\n` : "") +
-        `— актуально`;
-    
-      await tgSend(
-        row.telegram_chat_id,
-        txt,
-        {
-          parse_mode: "HTML",
-          reply_markup: buildSvcActualKeyboard(serviceId, { isActual: true }), // 👈 ВОТ ЭТО ДОБАВЛЕНО
-        },
-        tokenOverride
-      );
-    }
-
-    return { handled: true };
+  if (callbackQueryId) {
+    await tgAnswerCallbackQuery(
+      callbackQueryId,
+      "Отлично ✅",
+      { show_alert: false },
+      tokenOverride
+    );
   }
 
-  // --- NO ---
+  if (row.telegram_chat_id) {
+    const txt =
+      `✅ Подтверждено: <b>${escapeHtml(row.title || "Услуга")}</b>\n` +
+      `Код: <code>#R${serviceId}</code>\n` +
+      (placeInfo ? `Направление/отель: <b>${escapeHtml(placeInfo)}</b>\n` : "") +
+      (dateInfo ? `Даты: <b>${escapeHtml(dateInfo)}</b>\n` : "") +
+      `— актуально`;
+
+    await tgSend(
+      row.telegram_chat_id,
+      txt,
+      {
+        parse_mode: "HTML",
+        reply_markup: buildSvcActualKeyboard(serviceId, { isActual: true }),
+      },
+      tokenOverride
+    );
+  }
+
+  return { handled: true };
+}
+
+// --- NO ---
 if (action === "no") {
   next.isActive = false;
 
@@ -270,35 +270,35 @@ if (action === "no") {
     [JSON.stringify(next), serviceId]
   );
 
-    if (callbackQueryId) {
-      await tgAnswerCallbackQuery(
-        callbackQueryId,
-        "Снято с актуальности ⛔",
-        { show_alert: false },
-        tokenOverride
-      );
-    }
-
-    if (row.telegram_chat_id) {
-      const txt =
-        `⛔ Снято с актуальности: <b>${escapeHtml(row.title || "Услуга")}</b>\n` +
-        `Код: <code>#R${serviceId}</code>\n` +
-        (placeInfo ? `Направление/отель: <b>${escapeHtml(placeInfo)}</b>\n` : "") +
-        (dateInfo ? `Даты: <b>${escapeHtml(dateInfo)}</b>\n` : "");
-    
-      await tgSend(
-        row.telegram_chat_id,
-        txt,
-        {
-          parse_mode: "HTML",
-          reply_markup: buildSvcActualKeyboard(serviceId, { isActual: false }), // 👈 ВОТ ЭТО
-        },
-        tokenOverride
-      );
-    }
-
-    return { handled: true };
+  if (callbackQueryId) {
+    await tgAnswerCallbackQuery(
+      callbackQueryId,
+      "Снято с актуальности ⛔",
+      { show_alert: false },
+      tokenOverride
+    );
   }
+
+  if (row.telegram_chat_id) {
+    const txt =
+      `⛔ Снято с актуальности: <b>${escapeHtml(row.title || "Услуга")}</b>\n` +
+      `Код: <code>#R${serviceId}</code>\n` +
+      (placeInfo ? `Направление/отель: <b>${escapeHtml(placeInfo)}</b>\n` : "") +
+      (dateInfo ? `Даты: <b>${escapeHtml(dateInfo)}</b>\n` : "");
+
+    await tgSend(
+      row.telegram_chat_id,
+      txt,
+      {
+        parse_mode: "HTML",
+        reply_markup: buildSvcActualKeyboard(serviceId, { isActual: false }),
+      },
+      tokenOverride
+    );
+  }
+
+  return { handled: true };
+}
 
   // --- EXTEND7 ---
   {
