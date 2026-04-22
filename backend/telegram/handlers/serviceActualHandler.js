@@ -239,8 +239,16 @@ if (action === "yes") {
         (placeInfo ? `Направление/отель: <b>${escapeHtml(placeInfo)}</b>\n` : "") +
         (dateInfo ? `Даты: <b>${escapeHtml(dateInfo)}</b>\n` : "") +
         `— актуально`;
-
-      await tgSend(row.telegram_chat_id, txt, { parse_mode: "HTML" }, tokenOverride);
+    
+      await tgSend(
+        row.telegram_chat_id,
+        txt,
+        {
+          parse_mode: "HTML",
+          reply_markup: buildSvcActualKeyboard(serviceId, { isActual: true }), // 👈 ВОТ ЭТО ДОБАВЛЕНО
+        },
+        tokenOverride
+      );
     }
 
     return { handled: true };
@@ -277,8 +285,16 @@ if (action === "no") {
         `Код: <code>#R${serviceId}</code>\n` +
         (placeInfo ? `Направление/отель: <b>${escapeHtml(placeInfo)}</b>\n` : "") +
         (dateInfo ? `Даты: <b>${escapeHtml(dateInfo)}</b>\n` : "");
-
-      await tgSend(row.telegram_chat_id, txt, { parse_mode: "HTML" }, tokenOverride);
+    
+      await tgSend(
+        row.telegram_chat_id,
+        txt,
+        {
+          parse_mode: "HTML",
+          reply_markup: buildSvcActualKeyboard(serviceId, { isActual: false }), // 👈 ВОТ ЭТО
+        },
+        tokenOverride
+      );
     }
 
     return { handled: true };
