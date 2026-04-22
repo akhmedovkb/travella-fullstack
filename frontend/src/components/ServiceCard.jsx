@@ -1624,101 +1624,115 @@ return (
             </div>
           )}
 
-        {(unlocked || isProviderViewer || isAdminViewer) && (supplierName || supplierPhone || supplierTg?.label) && (
-          <div className="mt-2 text-sm space-y-2">
-              {supplierName && (
-                <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-3 py-2">
-                  <div className="text-[11px] text-gray-500">
-                    {t("marketplace.supplier") || "Поставщик"}
-                  </div>
+{(unlocked || isProviderViewer || isAdminViewer) &&
+  (supplierName || supplierPhone || supplierTg?.label) && (
+    <div className="mt-2 text-sm space-y-2">
+      {supplierName && (
+        <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-3 py-2">
+          <div className="text-[11px] text-gray-500">
+            {t("marketplace.supplier") || "Поставщик"}
+          </div>
 
-                  {providerId ? (
-                    <a
-                      href={`/profile/provider/${providerId}`}
-                      onClick={(e) => e.stopPropagation()}
-                      className="max-w-[60%] truncate text-sm font-semibold text-gray-900 hover:underline"
-                    >
-                      {supplierName}
-                    </a>
-                  ) : (
-                    <span className="max-w-[60%] truncate text-sm font-semibold text-gray-900">
-                      {supplierName}
-                    </span>
-                  )}
-                </div>
-              )}
-
-              {unlocked ? (
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  {supplierPhone && (
-                    <a
-                      href={normalizePhoneHref(supplierPhone)}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        postUnlockStep("unlock_phone_clicked", {
-                          source: "card_contacts",
-                          has_phone: true,
-                          has_telegram: Boolean(supplierTg?.href),
-                        });
-                      }}
-                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-green-500 px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition active:scale-[0.98] hover:bg-green-600"
-                      title={supplierPhone}
-                    >
-                      <span>📞</span>
-                      <span>
-                        {t("marketplace.call", { defaultValue: "Позвонить" })}
-                      </span>
-                    </a>
-                  )}
-              
-                  {supplierTg?.href && (
-                    <a
-                      href={supplierTg.href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        postUnlockStep("unlock_telegram_clicked", {
-                          source: "card_contacts",
-                          has_phone: Boolean(supplierPhone),
-                          has_telegram: true,
-                        });
-                      }}
-                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#229ED9] px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition active:scale-[0.98] hover:bg-[#1d8ecf]"
-                      title={supplierTg.label || t("common.telegram", { defaultValue: "Telegram" })}
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        viewBox="0 0 24 24"
-                        width="16"
-                        height="16"
-                        className="shrink-0"
-                        aria-hidden="true"
-                      >
-                        <circle cx="12" cy="12" r="12" fill="white" />
-                        <path
-                          fill="#229ED9"
-                          d="M17.52 7.18 6.98 11.25c-.72.29-.71.69-.13.87l2.7.84 6.24-3.94c.29-.18.56-.08.34.12l-5.05 4.56-.19 2.67c.28 0 .41-.13.56-.28l1.31-1.27 2.73 2.02c.5.28.86.14.98-.46l1.8-8.5c.17-.73-.28-1.06-.82-.7Z"
-                        />
-                      </svg>
-                      <span>
-                        {t("common.telegram", { defaultValue: "Telegram" })}
-                      </span>
-                    </a>
-                  )}
-                </div>
-              ) : (
-                (supplierPhone || supplierTg?.label) && (
-                  <div className="rounded-lg bg-gray-50 border px-3 py-2 text-xs text-gray-600">
-                    {t("marketplace.contacts_locked", {
-                      defaultValue:
-                        "Контакты поставщика скрыты. Откройте контакты, чтобы увидеть телефон и Telegram.",
-                    })}
-                  </div>
-                )
-              )}
-            </div>
+          {providerId ? (
+            <a
+              href={`/profile/provider/${providerId}`}
+              onClick={(e) => e.stopPropagation()}
+              className="max-w-[60%] truncate text-sm font-semibold text-gray-900 hover:underline"
+            >
+              {supplierName}
+            </a>
+          ) : (
+            <span className="max-w-[60%] truncate text-sm font-semibold text-gray-900">
+              {supplierName}
+            </span>
           )}
+        </div>
+      )}
+
+      {unlocked ? (
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          {supplierPhone && (
+            <a
+              href={normalizePhoneHref(supplierPhone)}
+              onClick={(e) => {
+                e.stopPropagation();
+                postUnlockStep("unlock_phone_clicked", {
+                  source: "card_contacts",
+                  has_phone: true,
+                  has_telegram: Boolean(supplierTg?.href),
+                });
+              }}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-green-500 px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition active:scale-[0.98] hover:bg-green-600"
+              title={supplierPhone}
+            >
+              <span>📞</span>
+              <span>
+                {t("marketplace.call", { defaultValue: "Позвонить" })}
+              </span>
+            </a>
+          )}
+
+          {supplierTg?.href && (
+            <a
+              href={supplierTg.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => {
+                e.stopPropagation();
+                postUnlockStep("unlock_telegram_clicked", {
+                  source: "card_contacts",
+                  has_phone: Boolean(supplierPhone),
+                  has_telegram: true,
+                });
+              }}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#229ED9] px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition active:scale-[0.98] hover:bg-[#1d8ecf]"
+              title={
+                supplierTg.label ||
+                t("common.telegram", { defaultValue: "Telegram" })
+              }
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                width="16"
+                height="16"
+                className="shrink-0"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="12" r="12" fill="white" />
+                <path
+                  fill="#229ED9"
+                  d="M17.52 7.18 6.98 11.25c-.72.29-.71.69-.13.87l2.7.84 6.24-3.94c.29-.18.56-.08.34.12l-5.05 4.56-.19 2.67c.28 0 .41-.13.56-.28l1.31-1.27 2.73 2.02c.5.28.86.14.98-.46l1.8-8.5c.17-.73-.28-1.06-.82-.7Z"
+                />
+              </svg>
+              <span>
+                {t("common.telegram", { defaultValue: "Telegram" })}
+              </span>
+            </a>
+          )}
+        </div>
+      ) : (
+        (supplierPhone || supplierTg?.label) && (
+          <div className="rounded-lg bg-gray-50 border px-3 py-2 text-xs text-gray-600">
+            {t("marketplace.contacts_locked", {
+              defaultValue:
+                "Контакты поставщика скрыты. Откройте контакты, чтобы увидеть телефон и Telegram.",
+            })}
+          </div>
+        )
+      )}
+    </div>
+  )}
+
+{!unlocked && !isProviderViewer && !isAdminViewer && (
+  <div className="mt-2 rounded-xl border border-orange-200 bg-orange-50 px-3 py-3 text-sm text-orange-700 font-medium">
+    🔒{" "}
+    {t("marketplace.unlock_supplier_hint", {
+      defaultValue:
+        "Поставщик скрыт. Откройте контакты, чтобы увидеть и связаться напрямую.",
+    })}
+  </div>
+)}
 
           {hasDetailsBlock && (
             <button
