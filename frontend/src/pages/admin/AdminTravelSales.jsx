@@ -1,4 +1,4 @@
-//frontend/src/pages/admin/AdminTravelSales.jsx
+// frontend/src/pages/admin/AdminTravelSales.jsx
 
 import React, { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
@@ -90,8 +90,8 @@ function iso(v) {
 
 function clsTab(active) {
   return active
-    ? "px-3 py-2 rounded-lg bg-black text-white text-sm"
-    : "px-3 py-2 rounded-lg border bg-white text-sm";
+    ? "px-4 py-2.5 rounded-2xl bg-gray-900 text-white text-sm font-medium shadow-sm"
+    : "px-4 py-2.5 rounded-2xl border border-gray-200 bg-white text-sm font-medium text-gray-600 hover:bg-gray-50 transition";
 }
 
 function typeLabel(v) {
@@ -106,25 +106,178 @@ function ledgerTypeLabel(v) {
   return "—";
 }
 
-function Card({ title, children, right }) {
+function badgeClassByLedgerType(v) {
+  if (v === "sale") {
+    return "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200";
+  }
+  if (v === "payment") {
+    return "bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200";
+  }
+  if (v === "refund") {
+    return "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200";
+  }
+  if (v === "payment_legacy") {
+    return "bg-violet-50 text-violet-700 ring-1 ring-inset ring-violet-200";
+  }
+  return "bg-gray-100 text-gray-600 ring-1 ring-inset ring-gray-200";
+}
+
+function badgeClassByServiceType(v) {
+  if (v === "airticket") {
+    return "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200";
+  }
+  if (v === "visa") {
+    return "bg-fuchsia-50 text-fuchsia-700 ring-1 ring-inset ring-fuchsia-200";
+  }
+  if (v === "tourpackage") {
+    return "bg-orange-50 text-orange-700 ring-1 ring-inset ring-orange-200";
+  }
+  return "bg-gray-100 text-gray-600 ring-1 ring-inset ring-gray-200";
+}
+
+function amountClass(v, mode = "default") {
+  const n = Number(v || 0);
+  if (mode === "balance") {
+    return n > 0 ? "text-red-600" : n < 0 ? "text-emerald-700" : "text-gray-900";
+  }
+  if (n > 0) return "text-gray-900";
+  if (n < 0) return "text-red-600";
+  return "text-gray-500";
+}
+
+function Card({ title, subtitle, children, right }) {
   return (
-    <div className="bg-white rounded-2xl shadow-sm border p-4 md:p-5">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
-        <h2 className="text-lg font-semibold">{title}</h2>
+    <section className="rounded-3xl border border-gray-200 bg-white shadow-[0_10px_35px_rgba(17,24,39,0.05)]">
+      <div className="flex flex-col gap-3 border-b border-gray-100 px-5 py-4 md:flex-row md:items-center md:justify-between md:px-6">
+        <div>
+          <h2 className="text-lg font-semibold tracking-tight text-gray-900">{title}</h2>
+          {subtitle ? <p className="mt-1 text-sm text-gray-500">{subtitle}</p> : null}
+        </div>
         {right || null}
       </div>
-      {children}
+      <div className="p-5 md:p-6">{children}</div>
+    </section>
+  );
+}
+
+function StatCard({ title, value, hint, tone = "slate" }) {
+  const toneMap = {
+    slate: "from-slate-50 to-white border-slate-200",
+    emerald: "from-emerald-50 to-white border-emerald-200",
+    blue: "from-blue-50 to-white border-blue-200",
+    amber: "from-amber-50 to-white border-amber-200",
+    violet: "from-violet-50 to-white border-violet-200",
+    rose: "from-rose-50 to-white border-rose-200",
+  };
+
+  return (
+    <div
+      className={`rounded-3xl border bg-gradient-to-br p-4 shadow-sm ${
+        toneMap[tone] || toneMap.slate
+      }`}
+    >
+      <div className="text-sm font-medium text-gray-500">{title}</div>
+      <div className="mt-2 text-2xl font-semibold tracking-tight text-gray-900">{value}</div>
+      {hint ? <div className="mt-1 text-xs text-gray-400">{hint}</div> : null}
     </div>
   );
 }
 
-function StatCard({ title, value, hint }) {
+function Field({ label, children, hint }) {
   return (
-    <div className="bg-white rounded-2xl border shadow-sm p-4">
-      <div className="text-sm text-gray-500">{title}</div>
-      <div className="mt-2 text-2xl font-semibold">{value}</div>
-      {hint ? <div className="mt-1 text-xs text-gray-400">{hint}</div> : null}
+    <div className="space-y-1.5">
+      <label className="block text-sm font-medium text-gray-700">{label}</label>
+      {children}
+      {hint ? <div className="text-xs text-gray-400">{hint}</div> : null}
     </div>
+  );
+}
+
+function inputClassName(extra = "") {
+  return `w-full rounded-2xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-gray-400 focus:ring-2 focus:ring-gray-200 ${extra}`;
+}
+
+function ActionButton({ children, variant = "default", className = "", ...props }) {
+  const variants = {
+    primary:
+      "bg-gray-900 text-white border border-gray-900 hover:bg-black shadow-sm",
+    default:
+      "bg-white text-gray-700 border border-gray-200 hover:bg-gray-50",
+    danger:
+      "bg-white text-red-600 border border-red-200 hover:bg-red-50",
+    ghost:
+      "bg-gray-50 text-gray-700 border border-gray-100 hover:bg-gray-100",
+  };
+
+  return (
+    <button
+      className={`inline-flex items-center justify-center rounded-2xl px-4 py-2.5 text-sm font-medium transition ${
+        variants[variant] || variants.default
+      } ${className}`}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Badge({ children, className = "" }) {
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${className}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+function TableShell({ children }) {
+  return (
+    <div className="overflow-hidden rounded-3xl border border-gray-100 bg-white">
+      <div className="max-w-full overflow-x-auto">{children}</div>
+    </div>
+  );
+}
+
+function Table({ children }) {
+  return <table className="min-w-full text-sm">{children}</table>;
+}
+
+function TableHead({ children }) {
+  return (
+    <thead className="sticky top-0 z-10 bg-gray-50/95 backdrop-blur supports-[backdrop-filter]:bg-gray-50/80">
+      {children}
+    </thead>
+  );
+}
+
+function TH({ children, align = "left", className = "" }) {
+  const alignClass = align === "right" ? "text-right" : "text-left";
+  return (
+    <th
+      className={`whitespace-nowrap border-b border-gray-100 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500 ${alignClass} ${className}`}
+    >
+      {children}
+    </th>
+  );
+}
+
+function TD({ children, align = "left", className = "" }) {
+  const alignClass = align === "right" ? "text-right" : "text-left";
+  return (
+    <td className={`px-4 py-3.5 align-top text-sm text-gray-700 ${alignClass} ${className}`}>
+      {children}
+    </td>
+  );
+}
+
+function EmptyRow({ loading, colSpan }) {
+  return (
+    <tr>
+      <td className="px-4 py-10 text-center text-sm text-gray-500" colSpan={colSpan}>
+        {loading ? "Загрузка..." : "Нет данных"}
+      </td>
+    </tr>
   );
 }
 
@@ -228,7 +381,7 @@ export default function AdminTravelSales() {
       if (paymentsEntryType) q.set("entry_type", paymentsEntryType);
       if (paymentsDateFrom) q.set("date_from", paymentsDateFrom);
       if (paymentsDateTo) q.set("date_to", paymentsDateTo);
-  
+
       const res = await apiGet(`/api/admin/travel-sales/payments?${q.toString()}`, "admin");
       setPayments(Array.isArray(res?.rows) ? res.rows : []);
     } catch (e) {
@@ -338,7 +491,7 @@ export default function AdminTravelSales() {
       ),
     [payments]
   );
-  
+
   const totalRefunds = useMemo(
     () =>
       payments.reduce(
@@ -591,14 +744,14 @@ export default function AdminTravelSales() {
       `travel-sales-report-${new Date().toISOString().slice(0, 10)}.xlsx`,
       salesReport.map((row, idx) => ({
         "№": idx + 1,
-        "Дата": iso(row.sale_date),
-        "Агент": row.agent,
+        Дата: iso(row.sale_date),
+        Агент: row.agent,
         "Тип услуги": typeLabel(row.service_type),
-        "Направление": row.direction || "",
+        Направление: row.direction || "",
         "Name of traveller": row.traveller_name || "",
         "Сумма продажи": Number(row.sale_amount || 0),
         "Сумма нетто": Number(row.net_amount || 0),
-        "Маржа": Number(row.margin || 0),
+        Маржа: Number(row.margin || 0),
       }))
     );
   }
@@ -615,674 +768,678 @@ export default function AdminTravelSales() {
         "№": idx + 1,
         "Дата операции": iso(row.txn_date),
         "Тип записи": ledgerTypeLabel(row.entry_type),
-        "Агент": row.agent,
+        Агент: row.agent,
         "Тип услуги": typeLabel(row.service_type),
-        "Направление": row.direction || "",
+        Направление: row.direction || "",
         "Name of traveller": row.traveller_name || "",
-        "Продажа": Number(row.sale_amount || 0),
-        "Оплата": Number(row.payment_amount || 0),
-        "Возврат": Number(row.refund_amount || 0),
-        "Комментарий": row.comment || "",
-        "Дельта": Number(row.delta_amount || 0),
-        "Баланс": Number(row.balance || 0),
+        Продажа: Number(row.sale_amount || 0),
+        Оплата: Number(row.payment_amount || 0),
+        Возврат: Number(row.refund_amount || 0),
+        Комментарий: row.comment || "",
+        Дельта: Number(row.delta_amount || 0),
+        Баланс: Number(row.balance || 0),
       }))
     );
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <button className={clsTab(tab === "agents")} onClick={() => setTab("agents")}>
-          Все агенты
-        </button>
-        <button className={clsTab(tab === "daily")} onClick={() => setTab("daily")}>
-          Дневная продажа
-        </button>
-        <button className={clsTab(tab === "payments")} onClick={() => setTab("payments")}>
-          Оплата агента
-        </button>
-        <button className={clsTab(tab === "sales")} onClick={() => setTab("sales")}>
-          Отчет продаж
-        </button>
-        <button className={clsTab(tab === "balance")} onClick={() => setTab("balance")}>
-          Баланс агента
-        </button>
+    <div className="space-y-6">
+      <div className="overflow-x-auto pb-1">
+        <div className="flex min-w-max items-center gap-2 rounded-3xl border border-gray-200 bg-white p-2 shadow-sm">
+          <button className={clsTab(tab === "agents")} onClick={() => setTab("agents")}>
+            Все агенты
+          </button>
+          <button className={clsTab(tab === "daily")} onClick={() => setTab("daily")}>
+            Дневная продажа
+          </button>
+          <button className={clsTab(tab === "payments")} onClick={() => setTab("payments")}>
+            Оплата агента
+          </button>
+          <button className={clsTab(tab === "sales")} onClick={() => setTab("sales")}>
+            Отчет продаж
+          </button>
+          <button className={clsTab(tab === "balance")} onClick={() => setTab("balance")}>
+            Баланс агента
+          </button>
+        </div>
       </div>
 
       {tab === "agents" && (
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-          <div className="xl:col-span-1">
-            <Card title={editingAgentId ? "Редактировать агента" : "Добавить агента"}>
-              <form onSubmit={handleSaveAgent} className="space-y-3">
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Наименование</label>
-                  <input
-                    className="w-full border rounded-lg px-3 py-2"
-                    value={agentForm.name}
-                    onChange={(e) =>
-                      setAgentForm((p) => ({ ...p, name: e.target.value }))
-                    }
-                    placeholder="Например: Air Broker"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Контакт</label>
-                  <input
-                    className="w-full border rounded-lg px-3 py-2"
-                    value={agentForm.contact}
-                    onChange={(e) =>
-                      setAgentForm((p) => ({ ...p, contact: e.target.value }))
-                    }
-                    placeholder="+998 ..."
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Адрес</label>
-                  <textarea
-                    className="w-full border rounded-lg px-3 py-2 min-h-[96px]"
-                    value={agentForm.address}
-                    onChange={(e) =>
-                      setAgentForm((p) => ({ ...p, address: e.target.value }))
-                    }
-                    placeholder="Адрес агента"
-                  />
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="submit"
-                    className="px-4 py-2 rounded-lg bg-black text-white"
-                  >
-                    {editingAgentId ? "Сохранить" : "Добавить"}
-                  </button>
-
-                  {(editingAgentId || agentForm.name || agentForm.contact || agentForm.address) && (
-                    <button
-                      type="button"
-                      className="px-4 py-2 rounded-lg border bg-white"
-                      onClick={() => {
-                        setEditingAgentId(null);
-                        setAgentForm(emptyAgentForm);
-                      }}
-                    >
-                      Сбросить
-                    </button>
-                  )}
-                </div>
-              </form>
-            </Card>
+        <>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-4">
+            <StatCard
+              title="Всего агентов"
+              value={String(agents.length)}
+              hint="Отображается с учетом поиска"
+              tone="blue"
+            />
+            <StatCard
+              title="С заполненным контактом"
+              value={String(agents.filter((a) => String(a.contact || "").trim()).length)}
+              hint="Есть телефон или контакт"
+              tone="emerald"
+            />
+            <StatCard
+              title="С указанным адресом"
+              value={String(agents.filter((a) => String(a.address || "").trim()).length)}
+              hint="Для быстрой навигации"
+              tone="amber"
+            />
+            <StatCard
+              title="Режим"
+              value={editingAgentId ? "Редактирование" : "Добавление"}
+              hint={editingAgentId ? "Сейчас открыт существующий агент" : "Создание новой записи"}
+              tone="violet"
+            />
           </div>
 
-          <div className="xl:col-span-2">
-            <Card
-              title="Список агентов"
-              right={
-                <div className="flex items-center gap-2">
-                  <input
-                    className="border rounded-lg px-3 py-2 text-sm"
-                    placeholder="Поиск..."
-                    value={agentQuery}
-                    onChange={(e) => setAgentQuery(e.target.value)}
-                  />
-                  <button
-                    className="px-3 py-2 rounded-lg border bg-white text-sm"
-                    onClick={loadAgents}
-                    type="button"
-                  >
-                    Найти
-                  </button>
-                </div>
-              }
-            >
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead>
-                    <tr className="text-left border-b bg-gray-50">
-                      <th className="px-3 py-2">№</th>
-                      <th className="px-3 py-2">Наименование</th>
-                      <th className="px-3 py-2">Контакт</th>
-                      <th className="px-3 py-2">Адрес</th>
-                      <th className="px-3 py-2 w-[180px]">Действия</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {agentsLoading ? (
-                      <tr>
-                        <td className="px-3 py-6 text-gray-500" colSpan={5}>
-                          Загрузка...
-                        </td>
-                      </tr>
-                    ) : agents.length === 0 ? (
-                      <tr>
-                        <td className="px-3 py-6 text-gray-500" colSpan={5}>
-                          Нет данных
-                        </td>
-                      </tr>
-                    ) : (
-                      agents.map((row, idx) => (
-                        <tr key={row.id} className="border-b">
-                          <td className="px-3 py-2">{idx + 1}</td>
-                          <td className="px-3 py-2 font-medium">{row.name}</td>
-                          <td className="px-3 py-2">{row.contact || "—"}</td>
-                          <td className="px-3 py-2">{row.address || "—"}</td>
-                          <td className="px-3 py-2">
-                            <div className="flex flex-wrap gap-2">
-                              <button
-                                className="px-3 py-1.5 rounded-lg border bg-white"
-                                onClick={() => startEditAgent(row)}
-                              >
-                                Изменить
-                              </button>
-                              <button
-                                className="px-3 py-1.5 rounded-lg border text-red-600 bg-white"
-                                onClick={() => handleDeleteAgent(row.id)}
-                              >
-                                Удалить
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+            <div className="xl:col-span-1">
+              <Card
+                title={editingAgentId ? "Редактировать агента" : "Добавить агента"}
+                subtitle="Чистая форма без лишнего шума"
+              >
+                <form onSubmit={handleSaveAgent} className="space-y-4">
+                  <Field label="Наименование">
+                    <input
+                      className={inputClassName()}
+                      value={agentForm.name}
+                      onChange={(e) => setAgentForm((p) => ({ ...p, name: e.target.value }))}
+                      placeholder="Например: Air Broker"
+                    />
+                  </Field>
+
+                  <Field label="Контакт">
+                    <input
+                      className={inputClassName()}
+                      value={agentForm.contact}
+                      onChange={(e) => setAgentForm((p) => ({ ...p, contact: e.target.value }))}
+                      placeholder="+998 ..."
+                    />
+                  </Field>
+
+                  <Field label="Адрес">
+                    <textarea
+                      className={inputClassName("min-h-[112px] resize-y")}
+                      value={agentForm.address}
+                      onChange={(e) => setAgentForm((p) => ({ ...p, address: e.target.value }))}
+                      placeholder="Адрес агента"
+                    />
+                  </Field>
+
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <ActionButton type="submit" variant="primary">
+                      {editingAgentId ? "Сохранить" : "Добавить"}
+                    </ActionButton>
+
+                    {(editingAgentId || agentForm.name || agentForm.contact || agentForm.address) && (
+                      <ActionButton
+                        type="button"
+                        onClick={() => {
+                          setEditingAgentId(null);
+                          setAgentForm(emptyAgentForm);
+                        }}
+                      >
+                        Сбросить
+                      </ActionButton>
                     )}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
+                  </div>
+                </form>
+              </Card>
+            </div>
+
+            <div className="xl:col-span-2">
+              <Card
+                title="Список агентов"
+                subtitle="Удобнее читать, быстрее искать, приятнее смотреть"
+                right={
+                  <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+                    <input
+                      className={inputClassName("sm:w-64")}
+                      placeholder="Поиск по названию..."
+                      value={agentQuery}
+                      onChange={(e) => setAgentQuery(e.target.value)}
+                    />
+                    <ActionButton onClick={loadAgents} type="button">
+                      Найти
+                    </ActionButton>
+                  </div>
+                }
+              >
+                <TableShell>
+                  <Table>
+                    <TableHead>
+                      <tr>
+                        <TH>№</TH>
+                        <TH>Наименование</TH>
+                        <TH>Контакт</TH>
+                        <TH>Адрес</TH>
+                        <TH className="w-[180px]">Действия</TH>
+                      </tr>
+                    </TableHead>
+                    <tbody>
+                      {agentsLoading || agents.length === 0 ? (
+                        <EmptyRow loading={agentsLoading} colSpan={5} />
+                      ) : (
+                        agents.map((row, idx) => (
+                          <tr key={row.id} className="border-b border-gray-100 transition hover:bg-gray-50/70">
+                            <TD className="text-gray-500">{idx + 1}</TD>
+                            <TD>
+                              <div className="font-semibold text-gray-900">{row.name}</div>
+                            </TD>
+                            <TD>{row.contact || "—"}</TD>
+                            <TD className="max-w-[280px] whitespace-pre-wrap break-words">
+                              {row.address || "—"}
+                            </TD>
+                            <TD>
+                              <div className="flex flex-wrap gap-2">
+                                <ActionButton onClick={() => startEditAgent(row)} type="button">
+                                  Изменить
+                                </ActionButton>
+                                <ActionButton
+                                  variant="danger"
+                                  onClick={() => handleDeleteAgent(row.id)}
+                                  type="button"
+                                >
+                                  Удалить
+                                </ActionButton>
+                              </div>
+                            </TD>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </Table>
+                </TableShell>
+              </Card>
+            </div>
           </div>
-        </div>
+        </>
       )}
 
       {tab === "daily" && (
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-          <div className="xl:col-span-1">
-            <Card title={editingSaleId ? "Редактировать продажу" : "Добавить продажу"}>
-              <form onSubmit={handleSaveSale} className="space-y-3">
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Дата</label>
-                  <input
-                    type="date"
-                    className="w-full border rounded-lg px-3 py-2"
-                    value={saleForm.sale_date}
-                    onChange={(e) =>
-                      setSaleForm((p) => ({ ...p, sale_date: e.target.value }))
-                    }
-                  />
-                </div>
+        <>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-4">
+            <StatCard
+              title="Записей в таблице"
+              value={String(dailySales.length)}
+              hint="С учетом фильтров"
+              tone="blue"
+            />
+            <StatCard
+              title="Сумма продаж"
+              value={money(dailySales.reduce((s, r) => s + Number(r.sale_amount || 0), 0))}
+              hint="По открытой выборке"
+              tone="emerald"
+            />
+            <StatCard
+              title="Сумма нетто"
+              value={money(dailySales.reduce((s, r) => s + Number(r.net_amount || 0), 0))}
+              hint="По открытой выборке"
+              tone="amber"
+            />
+            <StatCard
+              title="Режим"
+              value={editingSaleId ? "Редактирование" : "Новая продажа"}
+              hint={editingSaleId ? "Открыта существующая запись" : "Ввод новой продажи"}
+              tone="violet"
+            />
+          </div>
 
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Агент</label>
-                  <select
-                    className="w-full border rounded-lg px-3 py-2"
-                    value={saleForm.agent_id}
-                    onChange={(e) =>
-                      setSaleForm((p) => ({ ...p, agent_id: e.target.value }))
-                    }
-                  >
-                    <option value="">Выберите агента</option>
-                    {agents.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+            <div className="xl:col-span-1">
+              <Card
+                title={editingSaleId ? "Редактировать продажу" : "Добавить продажу"}
+                subtitle="Форма остается прежней по логике, но выглядит чище"
+              >
+                <form onSubmit={handleSaveSale} className="space-y-4">
+                  <Field label="Дата">
+                    <input
+                      type="date"
+                      className={inputClassName()}
+                      value={saleForm.sale_date}
+                      onChange={(e) => setSaleForm((p) => ({ ...p, sale_date: e.target.value }))}
+                    />
+                  </Field>
 
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Тип услуги</label>
-                  <select
-                    className="w-full border rounded-lg px-3 py-2"
-                    value={saleForm.service_type}
-                    onChange={(e) =>
-                      setSaleForm((p) => ({ ...p, service_type: e.target.value }))
-                    }
-                  >
-                    {SERVICE_TYPE_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Направление</label>
-                  <input
-                    className="w-full border rounded-lg px-3 py-2"
-                    value={saleForm.direction}
-                    onChange={(e) =>
-                      setSaleForm((p) => ({ ...p, direction: e.target.value }))
-                    }
-                    placeholder="Например: Дели / Дубай / Ташкент"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Name of traveller</label>
-                  <input
-                    className="w-full border rounded-lg px-3 py-2"
-                    value={saleForm.traveller_name}
-                    onChange={(e) =>
-                      setSaleForm((p) => ({ ...p, traveller_name: e.target.value }))
-                    }
-                    placeholder="Например: Ali Valiyev"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Сумма продажи</label>
-                  <input
-                    type="number"
-                    className="w-full border rounded-lg px-3 py-2"
-                    value={saleForm.sale_amount}
-                    onChange={(e) =>
-                      setSaleForm((p) => ({ ...p, sale_amount: e.target.value }))
-                    }
-                    placeholder="0"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Сумма нетто</label>
-                  <input
-                    type="number"
-                    className="w-full border rounded-lg px-3 py-2"
-                    value={saleForm.net_amount}
-                    onChange={(e) =>
-                      setSaleForm((p) => ({ ...p, net_amount: e.target.value }))
-                    }
-                    placeholder="0"
-                  />
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="submit"
-                    className="px-4 py-2 rounded-lg bg-black text-white"
-                  >
-                    {editingSaleId ? "Сохранить" : "Добавить"}
-                  </button>
-
-                  {(editingSaleId ||
-                    saleForm.agent_id ||
-                    saleForm.direction ||
-                    saleForm.traveller_name ||
-                    saleForm.sale_amount ||
-                    saleForm.net_amount) && (
-                    <button
-                      type="button"
-                      className="px-4 py-2 rounded-lg border bg-white"
-                      onClick={() => {
-                        setEditingSaleId(null);
-                        setSaleForm(emptySaleForm);
-                      }}
+                  <Field label="Агент">
+                    <select
+                      className={inputClassName()}
+                      value={saleForm.agent_id}
+                      onChange={(e) => setSaleForm((p) => ({ ...p, agent_id: e.target.value }))}
                     >
-                      Сбросить
-                    </button>
-                  )}
-                </div>
-              </form>
-            </Card>
-          </div>
+                      <option value="">Выберите агента</option>
+                      {agents.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
 
-          <div className="xl:col-span-2">
-            <Card
-              title="Список продаж"
-              right={
-                <div className="flex flex-wrap items-center gap-2">
-                  <select
-                    className="border rounded-lg px-3 py-2 text-sm"
-                    value={dailyFilterAgentId}
-                    onChange={(e) => setDailyFilterAgentId(e.target.value)}
-                  >
-                    <option value="">Все агенты</option>
-                    {agents.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name}
-                      </option>
-                    ))}
-                  </select>
+                  <Field label="Тип услуги">
+                    <select
+                      className={inputClassName()}
+                      value={saleForm.service_type}
+                      onChange={(e) => setSaleForm((p) => ({ ...p, service_type: e.target.value }))}
+                    >
+                      {SERVICE_TYPE_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
 
-                  <select
-                    className="border rounded-lg px-3 py-2 text-sm"
-                    value={dailyServiceType}
-                    onChange={(e) => setDailyServiceType(e.target.value)}
-                  >
-                    <option value="">Все типы</option>
-                    {SERVICE_TYPE_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
+                  <Field label="Направление">
+                    <input
+                      className={inputClassName()}
+                      value={saleForm.direction}
+                      onChange={(e) => setSaleForm((p) => ({ ...p, direction: e.target.value }))}
+                      placeholder="Например: Дели / Дубай / Ташкент"
+                    />
+                  </Field>
 
-                  <input
-                    type="date"
-                    className="border rounded-lg px-3 py-2 text-sm"
-                    value={dailyDateFrom}
-                    onChange={(e) => setDailyDateFrom(e.target.value)}
-                  />
-                  <input
-                    type="date"
-                    className="border rounded-lg px-3 py-2 text-sm"
-                    value={dailyDateTo}
-                    onChange={(e) => setDailyDateTo(e.target.value)}
-                  />
+                  <Field label="Name of traveller">
+                    <input
+                      className={inputClassName()}
+                      value={saleForm.traveller_name}
+                      onChange={(e) =>
+                        setSaleForm((p) => ({ ...p, traveller_name: e.target.value }))
+                      }
+                      placeholder="Например: Ali Valiyev"
+                    />
+                  </Field>
 
-                  <button
-                    className="px-3 py-2 rounded-lg border bg-white text-sm"
-                    onClick={loadDailySales}
-                    type="button"
-                  >
-                    Фильтр
-                  </button>
-                </div>
-              }
-            >
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead>
-                    <tr className="text-left border-b bg-gray-50">
-                      <th className="px-3 py-2">№</th>
-                      <th className="px-3 py-2">Дата</th>
-                      <th className="px-3 py-2">Агент</th>
-                      <th className="px-3 py-2">Тип</th>
-                      <th className="px-3 py-2">Направление</th>
-                      <th className="px-3 py-2">Name of traveller</th>
-                      <th className="px-3 py-2">Продажа</th>
-                      <th className="px-3 py-2">Нетто</th>
-                      <th className="px-3 py-2 w-[180px]">Действия</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {dailyLoading ? (
-                      <tr>
-                        <td className="px-3 py-6 text-gray-500" colSpan={9}>
-                          Загрузка...
-                        </td>
-                      </tr>
-                    ) : dailySales.length === 0 ? (
-                      <tr>
-                        <td className="px-3 py-6 text-gray-500" colSpan={9}>
-                          Нет данных
-                        </td>
-                      </tr>
-                    ) : (
-                      dailySales.map((row, idx) => (
-                        <tr key={row.id} className="border-b">
-                          <td className="px-3 py-2">{idx + 1}</td>
-                          <td className="px-3 py-2">{iso(row.sale_date)}</td>
-                          <td className="px-3 py-2">{row.agent_name}</td>
-                          <td className="px-3 py-2">{typeLabel(row.service_type)}</td>
-                          <td className="px-3 py-2">{row.direction}</td>
-                          <td className="px-3 py-2">{row.traveller_name || "—"}</td>
-                          <td className="px-3 py-2">{money(row.sale_amount)}</td>
-                          <td className="px-3 py-2">{money(row.net_amount)}</td>
-                          <td className="px-3 py-2">
-                            <div className="flex flex-wrap gap-2">
-                              <button
-                                className="px-3 py-1.5 rounded-lg border bg-white"
-                                onClick={() => startEditSale(row)}
-                              >
-                                Изменить
-                              </button>
-                              <button
-                                className="px-3 py-1.5 rounded-lg border text-red-600 bg-white"
-                                onClick={() => handleDeleteSale(row.id)}
-                              >
-                                Удалить
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
+                  <Field label="Сумма продажи">
+                    <input
+                      type="number"
+                      className={inputClassName()}
+                      value={saleForm.sale_amount}
+                      onChange={(e) => setSaleForm((p) => ({ ...p, sale_amount: e.target.value }))}
+                      placeholder="0"
+                    />
+                  </Field>
+
+                  <Field label="Сумма нетто">
+                    <input
+                      type="number"
+                      className={inputClassName()}
+                      value={saleForm.net_amount}
+                      onChange={(e) => setSaleForm((p) => ({ ...p, net_amount: e.target.value }))}
+                      placeholder="0"
+                    />
+                  </Field>
+
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <ActionButton type="submit" variant="primary">
+                      {editingSaleId ? "Сохранить" : "Добавить"}
+                    </ActionButton>
+
+                    {(editingSaleId ||
+                      saleForm.agent_id ||
+                      saleForm.direction ||
+                      saleForm.traveller_name ||
+                      saleForm.sale_amount ||
+                      saleForm.net_amount) && (
+                      <ActionButton
+                        type="button"
+                        onClick={() => {
+                          setEditingSaleId(null);
+                          setSaleForm(emptySaleForm);
+                        }}
+                      >
+                        Сбросить
+                      </ActionButton>
                     )}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
+                  </div>
+                </form>
+              </Card>
+            </div>
+
+            <div className="xl:col-span-2">
+              <Card
+                title="Список продаж"
+                subtitle="Более аккуратная таблица с акцентом на важные цифры"
+                right={
+                  <div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:flex-wrap lg:items-center lg:justify-end">
+                    <select
+                      className={inputClassName("lg:w-[180px]")}
+                      value={dailyFilterAgentId}
+                      onChange={(e) => setDailyFilterAgentId(e.target.value)}
+                    >
+                      <option value="">Все агенты</option>
+                      {agents.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name}
+                        </option>
+                      ))}
+                    </select>
+
+                    <select
+                      className={inputClassName("lg:w-[170px]")}
+                      value={dailyServiceType}
+                      onChange={(e) => setDailyServiceType(e.target.value)}
+                    >
+                      <option value="">Все типы</option>
+                      {SERVICE_TYPE_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+
+                    <input
+                      type="date"
+                      className={inputClassName("lg:w-[160px]")}
+                      value={dailyDateFrom}
+                      onChange={(e) => setDailyDateFrom(e.target.value)}
+                    />
+                    <input
+                      type="date"
+                      className={inputClassName("lg:w-[160px]")}
+                      value={dailyDateTo}
+                      onChange={(e) => setDailyDateTo(e.target.value)}
+                    />
+
+                    <ActionButton className="lg:w-auto" onClick={loadDailySales} type="button">
+                      Фильтр
+                    </ActionButton>
+                  </div>
+                }
+              >
+                <TableShell>
+                  <Table>
+                    <TableHead>
+                      <tr>
+                        <TH>№</TH>
+                        <TH>Дата</TH>
+                        <TH>Агент</TH>
+                        <TH>Тип</TH>
+                        <TH>Направление</TH>
+                        <TH>Name of traveller</TH>
+                        <TH align="right">Продажа</TH>
+                        <TH align="right">Нетто</TH>
+                        <TH className="w-[180px]">Действия</TH>
+                      </tr>
+                    </TableHead>
+                    <tbody>
+                      {dailyLoading || dailySales.length === 0 ? (
+                        <EmptyRow loading={dailyLoading} colSpan={9} />
+                      ) : (
+                        dailySales.map((row, idx) => (
+                          <tr key={row.id} className="border-b border-gray-100 transition hover:bg-gray-50/70">
+                            <TD className="text-gray-500">{idx + 1}</TD>
+                            <TD>{iso(row.sale_date)}</TD>
+                            <TD>
+                              <div className="font-medium text-gray-900">{row.agent_name}</div>
+                            </TD>
+                            <TD>
+                              <Badge className={badgeClassByServiceType(row.service_type)}>
+                                {typeLabel(row.service_type)}
+                              </Badge>
+                            </TD>
+                            <TD className="max-w-[200px] whitespace-pre-wrap break-words">
+                              {row.direction}
+                            </TD>
+                            <TD>{row.traveller_name || "—"}</TD>
+                            <TD align="right" className="font-semibold text-gray-900">
+                              {money(row.sale_amount)}
+                            </TD>
+                            <TD align="right" className="font-semibold text-gray-900">
+                              {money(row.net_amount)}
+                            </TD>
+                            <TD>
+                              <div className="flex flex-wrap gap-2">
+                                <ActionButton onClick={() => startEditSale(row)} type="button">
+                                  Изменить
+                                </ActionButton>
+                                <ActionButton
+                                  variant="danger"
+                                  onClick={() => handleDeleteSale(row.id)}
+                                  type="button"
+                                >
+                                  Удалить
+                                </ActionButton>
+                              </div>
+                            </TD>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </Table>
+                </TableShell>
+              </Card>
+            </div>
           </div>
-        </div>
+        </>
       )}
 
       {tab === "payments" && (
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-          <div className="xl:col-span-1">
-            <Card title={editingPaymentId ? "Редактировать оплату" : "Добавить оплату"}>
-              <form onSubmit={handleSavePayment} className="space-y-3">
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Дата оплаты</label>
-                  <input
-                    type="date"
-                    className="w-full border rounded-lg px-3 py-2"
-                    value={paymentForm.payment_date}
-                    onChange={(e) =>
-                      setPaymentForm((p) => ({ ...p, payment_date: e.target.value }))
-                    }
-                  />
-                </div>
+        <>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <StatCard title="Сумма оплат" value={money(totalPayments)} tone="blue" />
+            <StatCard title="Сумма возвратов" value={money(totalRefunds)} tone="amber" />
+            <StatCard title="Чистый эффект" value={money(totalPayments - totalRefunds)} tone="emerald" />
+            <StatCard title="Записей" value={String(payments.length)} tone="violet" />
+          </div>
 
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Агент</label>
-                  <select
-                    className="w-full border rounded-lg px-3 py-2"
-                    value={paymentForm.agent_id}
-                    onChange={(e) =>
-                      setPaymentForm((p) => ({ ...p, agent_id: e.target.value }))
-                    }
-                  >
-                    <option value="">Выберите агента</option>
-                    {agents.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Тип записи</label>
-                  <select
-                    className="w-full border rounded-lg px-3 py-2"
-                    value={paymentForm.entry_type}
-                    onChange={(e) =>
-                      setPaymentForm((p) => ({ ...p, entry_type: e.target.value }))
-                    }
-                  >
-                    {PAYMENT_ENTRY_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+            <div className="xl:col-span-1">
+              <Card
+                title={editingPaymentId ? "Редактировать оплату" : "Добавить оплату"}
+                subtitle="Оплаты и возвраты теперь читаются легче"
+              >
+                <form onSubmit={handleSavePayment} className="space-y-4">
+                  <Field label="Дата оплаты">
+                    <input
+                      type="date"
+                      className={inputClassName()}
+                      value={paymentForm.payment_date}
+                      onChange={(e) =>
+                        setPaymentForm((p) => ({ ...p, payment_date: e.target.value }))
+                      }
+                    />
+                  </Field>
 
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Сумма оплаты</label>
-                  <input
-                    type="number"
-                    className="w-full border rounded-lg px-3 py-2"
-                    value={paymentForm.amount}
-                    onChange={(e) =>
-                      setPaymentForm((p) => ({ ...p, amount: e.target.value }))
-                    }
-                    placeholder="0"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Комментарий</label>
-                  <input
-                    className="w-full border rounded-lg px-3 py-2"
-                    value={paymentForm.comment}
-                    onChange={(e) =>
-                      setPaymentForm((p) => ({ ...p, comment: e.target.value }))
-                    }
-                    placeholder="Комментарий"
-                  />
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="submit"
-                    className="px-4 py-2 rounded-lg bg-black text-white"
-                  >
-                    {editingPaymentId ? "Сохранить" : "Добавить"}
-                  </button>
-
-                  {(editingPaymentId ||
-                    paymentForm.agent_id ||
-                    paymentForm.amount ||
-                    paymentForm.comment) && (
-                    <button
-                      type="button"
-                      className="px-4 py-2 rounded-lg border bg-white"
-                      onClick={() => {
-                        setEditingPaymentId(null);
-                        setPaymentForm(emptyPaymentForm);
-                      }}
+                  <Field label="Агент">
+                    <select
+                      className={inputClassName()}
+                      value={paymentForm.agent_id}
+                      onChange={(e) => setPaymentForm((p) => ({ ...p, agent_id: e.target.value }))}
                     >
-                      Сбросить
-                    </button>
-                  )}
-                </div>
-              </form>
-            </Card>
-          </div>
+                      <option value="">Выберите агента</option>
+                      {agents.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
 
-          <div className="xl:col-span-2">
-            <Card
-              title="Список оплат"
-              right={
-                <div className="flex flex-wrap items-center gap-2">
-                  <select
-                    className="border rounded-lg px-3 py-2 text-sm"
-                    value={paymentsAgentId}
-                    onChange={(e) => setPaymentsAgentId(e.target.value)}
-                  >
-                    <option value="">Все агенты</option>
-                    {agents.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    className="border rounded-lg px-3 py-2 text-sm"
-                    value={paymentsEntryType}
-                    onChange={(e) => setPaymentsEntryType(e.target.value)}
-                  >
-                    <option value="">Все записи</option>
-                    <option value="payment">Только оплаты</option>
-                    <option value="refund">Только возвраты</option>
-                  </select>
+                  <Field label="Тип записи">
+                    <select
+                      className={inputClassName()}
+                      value={paymentForm.entry_type}
+                      onChange={(e) =>
+                        setPaymentForm((p) => ({ ...p, entry_type: e.target.value }))
+                      }
+                    >
+                      {PAYMENT_ENTRY_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
 
-                  <input
-                    type="date"
-                    className="border rounded-lg px-3 py-2 text-sm"
-                    value={paymentsDateFrom}
-                    onChange={(e) => setPaymentsDateFrom(e.target.value)}
-                  />
-                  <input
-                    type="date"
-                    className="border rounded-lg px-3 py-2 text-sm"
-                    value={paymentsDateTo}
-                    onChange={(e) => setPaymentsDateTo(e.target.value)}
-                  />
+                  <Field label="Сумма оплаты">
+                    <input
+                      type="number"
+                      className={inputClassName()}
+                      value={paymentForm.amount}
+                      onChange={(e) => setPaymentForm((p) => ({ ...p, amount: e.target.value }))}
+                      placeholder="0"
+                    />
+                  </Field>
 
-                  <button
-                    className="px-3 py-2 rounded-lg border bg-white text-sm"
-                    onClick={loadPayments}
-                    type="button"
-                  >
-                    Фильтр
-                  </button>
-                </div>
-              }
-            >
-              <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-                <StatCard title="Сумма оплат" value={money(totalPayments)} />
-                <StatCard title="Сумма возвратов" value={money(totalRefunds)} />
-                <StatCard title="Записей" value={String(payments.length)} />
-              </div>
+                  <Field label="Комментарий">
+                    <input
+                      className={inputClassName()}
+                      value={paymentForm.comment}
+                      onChange={(e) => setPaymentForm((p) => ({ ...p, comment: e.target.value }))}
+                      placeholder="Комментарий"
+                    />
+                  </Field>
 
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead>
-                    <tr className="text-left border-b bg-gray-50">
-                      <th className="px-3 py-2">№</th>
-                      <th className="px-3 py-2">Дата оплаты</th>
-                      <th className="px-3 py-2">Агент</th>
-                      <th className="px-3 py-2">Тип записи</th>
-                      <th className="px-3 py-2">Сумма</th>
-                      <th className="px-3 py-2">Комментарий</th>
-                      <th className="px-3 py-2 w-[180px]">Действия</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {paymentsLoading ? (
-                      <tr>
-                        <td className="px-3 py-6 text-gray-500" colSpan={7}>
-                          Загрузка...
-                        </td>
-                      </tr>
-                    ) : payments.length === 0 ? (
-                      <tr>
-                        <td className="px-3 py-6 text-gray-500" colSpan={7}>
-                          Нет данных
-                        </td>
-                      </tr>
-                    ) : (
-                      payments.map((row, idx) => (
-                        <tr key={row.id} className="border-b">
-                          <td className="px-3 py-2">{idx + 1}</td>
-                          <td className="px-3 py-2">{iso(row.payment_date)}</td>
-                          <td className="px-3 py-2">{row.agent_name}</td>
-                          <td className="px-3 py-2">{ledgerTypeLabel(row.entry_type)}</td>
-                          <td className="px-3 py-2">{money(row.amount)}</td>
-                          <td className="px-3 py-2">{row.comment || "—"}</td>
-                          <td className="px-3 py-2">
-                            <div className="flex flex-wrap gap-2">
-                              <button
-                                className="px-3 py-1.5 rounded-lg border bg-white"
-                                onClick={() => startEditPayment(row)}
-                              >
-                                Изменить
-                              </button>
-                              <button
-                                className="px-3 py-1.5 rounded-lg border text-red-600 bg-white"
-                                onClick={() => handleDeletePayment(row.id)}
-                              >
-                                Удалить
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <ActionButton type="submit" variant="primary">
+                      {editingPaymentId ? "Сохранить" : "Добавить"}
+                    </ActionButton>
+
+                    {(editingPaymentId ||
+                      paymentForm.agent_id ||
+                      paymentForm.amount ||
+                      paymentForm.comment) && (
+                      <ActionButton
+                        type="button"
+                        onClick={() => {
+                          setEditingPaymentId(null);
+                          setPaymentForm(emptyPaymentForm);
+                        }}
+                      >
+                        Сбросить
+                      </ActionButton>
                     )}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
+                  </div>
+                </form>
+              </Card>
+            </div>
+
+            <div className="xl:col-span-2">
+              <Card
+                title="Список оплат"
+                subtitle="Суммы и типы операций выделены визуально"
+                right={
+                  <div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:flex-wrap lg:items-center lg:justify-end">
+                    <select
+                      className={inputClassName("lg:w-[180px]")}
+                      value={paymentsAgentId}
+                      onChange={(e) => setPaymentsAgentId(e.target.value)}
+                    >
+                      <option value="">Все агенты</option>
+                      {agents.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      className={inputClassName("lg:w-[170px]")}
+                      value={paymentsEntryType}
+                      onChange={(e) => setPaymentsEntryType(e.target.value)}
+                    >
+                      <option value="">Все записи</option>
+                      <option value="payment">Только оплаты</option>
+                      <option value="refund">Только возвраты</option>
+                    </select>
+
+                    <input
+                      type="date"
+                      className={inputClassName("lg:w-[160px]")}
+                      value={paymentsDateFrom}
+                      onChange={(e) => setPaymentsDateFrom(e.target.value)}
+                    />
+                    <input
+                      type="date"
+                      className={inputClassName("lg:w-[160px]")}
+                      value={paymentsDateTo}
+                      onChange={(e) => setPaymentsDateTo(e.target.value)}
+                    />
+
+                    <ActionButton onClick={loadPayments} type="button">
+                      Фильтр
+                    </ActionButton>
+                  </div>
+                }
+              >
+                <TableShell>
+                  <Table>
+                    <TableHead>
+                      <tr>
+                        <TH>№</TH>
+                        <TH>Дата оплаты</TH>
+                        <TH>Агент</TH>
+                        <TH>Тип записи</TH>
+                        <TH align="right">Сумма</TH>
+                        <TH>Комментарий</TH>
+                        <TH className="w-[180px]">Действия</TH>
+                      </tr>
+                    </TableHead>
+                    <tbody>
+                      {paymentsLoading || payments.length === 0 ? (
+                        <EmptyRow loading={paymentsLoading} colSpan={7} />
+                      ) : (
+                        payments.map((row, idx) => (
+                          <tr key={row.id} className="border-b border-gray-100 transition hover:bg-gray-50/70">
+                            <TD className="text-gray-500">{idx + 1}</TD>
+                            <TD>{iso(row.payment_date)}</TD>
+                            <TD>
+                              <div className="font-medium text-gray-900">{row.agent_name}</div>
+                            </TD>
+                            <TD>
+                              <Badge className={badgeClassByLedgerType(row.entry_type)}>
+                                {ledgerTypeLabel(row.entry_type)}
+                              </Badge>
+                            </TD>
+                            <TD align="right" className="font-semibold text-gray-900">
+                              {money(row.amount)}
+                            </TD>
+                            <TD className="max-w-[320px] whitespace-pre-wrap break-words">
+                              {row.comment || "—"}
+                            </TD>
+                            <TD>
+                              <div className="flex flex-wrap gap-2">
+                                <ActionButton onClick={() => startEditPayment(row)} type="button">
+                                  Изменить
+                                </ActionButton>
+                                <ActionButton
+                                  variant="danger"
+                                  onClick={() => handleDeletePayment(row.id)}
+                                  type="button"
+                                >
+                                  Удалить
+                                </ActionButton>
+                              </div>
+                            </TD>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </Table>
+                </TableShell>
+              </Card>
+            </div>
           </div>
-        </div>
+        </>
       )}
 
       {tab === "sales" && (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-4">
-            <StatCard title="Сумма продаж" value={money(totalSales)} />
-            <StatCard title="Сумма нетто" value={money(totalNet)} />
-            <StatCard title="Маржа" value={money(totalMargin)} />
-            <StatCard title="Записей" value={String(salesReport.length)} />
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <StatCard title="Сумма продаж" value={money(totalSales)} tone="blue" />
+            <StatCard title="Сумма нетто" value={money(totalNet)} tone="amber" />
+            <StatCard title="Маржа" value={money(totalMargin)} tone="emerald" />
+            <StatCard title="Записей" value={String(salesReport.length)} tone="violet" />
           </div>
 
           <Card
             title="Отчет продаж"
+            subtitle="Сильный акцент на деньгах и марже"
             right={
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:flex-wrap lg:items-center lg:justify-end">
                 <select
-                  className="border rounded-lg px-3 py-2 text-sm"
+                  className={inputClassName("lg:w-[180px]")}
                   value={salesAgentId}
                   onChange={(e) => setSalesAgentId(e.target.value)}
                 >
@@ -1295,7 +1452,7 @@ export default function AdminTravelSales() {
                 </select>
 
                 <select
-                  className="border rounded-lg px-3 py-2 text-sm"
+                  className={inputClassName("lg:w-[170px]")}
                   value={salesServiceType}
                   onChange={(e) => setSalesServiceType(e.target.value)}
                 >
@@ -1309,100 +1466,111 @@ export default function AdminTravelSales() {
 
                 <input
                   type="date"
-                  className="border rounded-lg px-3 py-2 text-sm"
+                  className={inputClassName("lg:w-[160px]")}
                   value={salesDateFrom}
                   onChange={(e) => setSalesDateFrom(e.target.value)}
                 />
                 <input
                   type="date"
-                  className="border rounded-lg px-3 py-2 text-sm"
+                  className={inputClassName("lg:w-[160px]")}
                   value={salesDateTo}
                   onChange={(e) => setSalesDateTo(e.target.value)}
                 />
 
-                <button
-                  className="px-3 py-2 rounded-lg border bg-white text-sm"
-                  onClick={loadSalesReport}
-                  type="button"
-                >
+                <ActionButton onClick={loadSalesReport} type="button">
                   Фильтр
-                </button>
+                </ActionButton>
 
-                <button
-                  className="px-3 py-2 rounded-lg bg-black text-white text-sm"
-                  onClick={exportSalesReport}
-                  type="button"
-                >
+                <ActionButton variant="primary" onClick={exportSalesReport} type="button">
                   Excel
-                </button>
+                </ActionButton>
               </div>
             }
           >
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="text-left border-b bg-gray-50">
-                    <th className="px-3 py-2">№</th>
-                    <th className="px-3 py-2">Дата</th>
-                    <th className="px-3 py-2">Агент</th>
-                    <th className="px-3 py-2">Тип</th>
-                    <th className="px-3 py-2">Направление</th>
-                    <th className="px-3 py-2">Name of traveller</th>
-                    <th className="px-3 py-2">Сумма продажи</th>
-                    <th className="px-3 py-2">Сумма нетто</th>
-                    <th className="px-3 py-2">Маржа</th>
+            <TableShell>
+              <Table>
+                <TableHead>
+                  <tr>
+                    <TH>№</TH>
+                    <TH>Дата</TH>
+                    <TH>Агент</TH>
+                    <TH>Тип</TH>
+                    <TH>Направление</TH>
+                    <TH>Name of traveller</TH>
+                    <TH align="right">Сумма продажи</TH>
+                    <TH align="right">Сумма нетто</TH>
+                    <TH align="right">Маржа</TH>
                   </tr>
-                </thead>
+                </TableHead>
                 <tbody>
-                  {salesReportLoading ? (
-                    <tr>
-                      <td className="px-3 py-6 text-gray-500" colSpan={9}>
-                        Загрузка...
-                      </td>
-                    </tr>
-                  ) : salesReport.length === 0 ? (
-                    <tr>
-                      <td className="px-3 py-6 text-gray-500" colSpan={9}>
-                        Нет данных
-                      </td>
-                    </tr>
+                  {salesReportLoading || salesReport.length === 0 ? (
+                    <EmptyRow loading={salesReportLoading} colSpan={9} />
                   ) : (
                     salesReport.map((row, idx) => (
-                      <tr key={row.id} className="border-b">
-                        <td className="px-3 py-2">{idx + 1}</td>
-                        <td className="px-3 py-2">{iso(row.sale_date)}</td>
-                        <td className="px-3 py-2">{row.agent}</td>
-                        <td className="px-3 py-2">{typeLabel(row.service_type)}</td>
-                        <td className="px-3 py-2">{row.direction || "—"}</td>
-                        <td className="px-3 py-2">{row.traveller_name || "—"}</td>
-                        <td className="px-3 py-2">{money(row.sale_amount)}</td>
-                        <td className="px-3 py-2">{money(row.net_amount)}</td>
-                        <td className="px-3 py-2 font-medium text-emerald-700">
+                      <tr key={row.id} className="border-b border-gray-100 transition hover:bg-gray-50/70">
+                        <TD className="text-gray-500">{idx + 1}</TD>
+                        <TD>{iso(row.sale_date)}</TD>
+                        <TD>
+                          <div className="font-medium text-gray-900">{row.agent}</div>
+                        </TD>
+                        <TD>
+                          <Badge className={badgeClassByServiceType(row.service_type)}>
+                            {typeLabel(row.service_type)}
+                          </Badge>
+                        </TD>
+                        <TD className="max-w-[220px] whitespace-pre-wrap break-words">
+                          {row.direction || "—"}
+                        </TD>
+                        <TD>{row.traveller_name || "—"}</TD>
+                        <TD align="right" className="font-semibold text-gray-900">
+                          {money(row.sale_amount)}
+                        </TD>
+                        <TD align="right" className="font-semibold text-gray-900">
+                          {money(row.net_amount)}
+                        </TD>
+                        <TD align="right" className="font-semibold text-emerald-700">
                           {money(row.margin)}
-                        </td>
+                        </TD>
                       </tr>
                     ))
                   )}
                 </tbody>
-              </table>
-            </div>
+              </Table>
+            </TableShell>
           </Card>
         </div>
       )}
 
       {tab === "balance" && (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-            <StatCard title="Общий баланс" value={money(totalBalance)} />
-            <StatCard title="Строк в отчете" value={String(balanceReport.length)} />
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <StatCard title="Общий баланс" value={money(totalBalance)} tone="rose" />
+            <StatCard title="Строк в отчете" value={String(balanceReport.length)} tone="blue" />
+            <StatCard
+              title="Продажи в отчете"
+              value={money(balanceReport.reduce((s, r) => s + Number(r.sale_amount || 0), 0))}
+              tone="emerald"
+            />
+            <StatCard
+              title="Оплаты + возвраты"
+              value={money(
+                balanceReport.reduce(
+                  (s, r) =>
+                    s + Number(r.payment_amount || 0) + Number(r.refund_amount || 0),
+                  0
+                )
+              )}
+              tone="amber"
+            />
           </div>
 
           <Card
             title="Баланс агента"
+            subtitle="Лучше читается последовательность операций и текущий баланс"
             right={
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:flex-wrap lg:items-center lg:justify-end">
                 <select
-                  className="border rounded-lg px-3 py-2 text-sm"
+                  className={inputClassName("lg:w-[180px]")}
                   value={balanceAgentId}
                   onChange={(e) => setBalanceAgentId(e.target.value)}
                 >
@@ -1415,7 +1583,7 @@ export default function AdminTravelSales() {
                 </select>
 
                 <select
-                  className="border rounded-lg px-3 py-2 text-sm"
+                  className={inputClassName("lg:w-[170px]")}
                   value={balanceServiceType}
                   onChange={(e) => setBalanceServiceType(e.target.value)}
                 >
@@ -1429,99 +1597,101 @@ export default function AdminTravelSales() {
 
                 <input
                   type="date"
-                  className="border rounded-lg px-3 py-2 text-sm"
+                  className={inputClassName("lg:w-[160px]")}
                   value={balanceDateFrom}
                   onChange={(e) => setBalanceDateFrom(e.target.value)}
                 />
                 <input
                   type="date"
-                  className="border rounded-lg px-3 py-2 text-sm"
+                  className={inputClassName("lg:w-[160px]")}
                   value={balanceDateTo}
                   onChange={(e) => setBalanceDateTo(e.target.value)}
                 />
 
-                <button
-                  className="px-3 py-2 rounded-lg border bg-white text-sm"
-                  onClick={loadBalanceReport}
-                  type="button"
-                >
+                <ActionButton onClick={loadBalanceReport} type="button">
                   Фильтр
-                </button>
+                </ActionButton>
 
-                <button
-                  className="px-3 py-2 rounded-lg bg-black text-white text-sm"
-                  onClick={exportBalanceReport}
-                  type="button"
-                >
+                <ActionButton variant="primary" onClick={exportBalanceReport} type="button">
                   Excel
-                </button>
+                </ActionButton>
               </div>
             }
           >
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="text-left border-b bg-gray-50">
-                    <th className="px-3 py-2">№</th>
-                    <th className="px-3 py-2">Дата операции</th>
-                    <th className="px-3 py-2">Тип записи</th>
-                    <th className="px-3 py-2">Агент</th>
-                    <th className="px-3 py-2">Тип услуги</th>
-                    <th className="px-3 py-2">Направление</th>
-                    <th className="px-3 py-2">Name of traveller</th>
-                    <th className="px-3 py-2">Продажа</th>
-                    <th className="px-3 py-2">Оплата</th>
-                    <th className="px-3 py-2">Возврат</th>
-                    <th className="px-3 py-2">Комментарий</th>
-                    <th className="px-3 py-2">Баланс</th>
+            <TableShell>
+              <Table>
+                <TableHead>
+                  <tr>
+                    <TH>№</TH>
+                    <TH>Дата операции</TH>
+                    <TH>Тип записи</TH>
+                    <TH>Агент</TH>
+                    <TH>Тип услуги</TH>
+                    <TH>Направление</TH>
+                    <TH>Name of traveller</TH>
+                    <TH align="right">Продажа</TH>
+                    <TH align="right">Оплата</TH>
+                    <TH align="right">Возврат</TH>
+                    <TH>Комментарий</TH>
+                    <TH align="right">Баланс</TH>
                   </tr>
-                </thead>
+                </TableHead>
                 <tbody>
-                  {balanceLoading ? (
-                    <tr>
-                      <td className="px-3 py-6 text-gray-500" colSpan={11}>
-                        Загрузка...
-                      </td>
-                    </tr>
-                  ) : balanceReport.length === 0 ? (
-                    <tr>
-                      <td className="px-3 py-6 text-gray-500" colSpan={11}>
-                        Нет данных
-                      </td>
-                    </tr>
+                  {balanceLoading || balanceReport.length === 0 ? (
+                    <EmptyRow loading={balanceLoading} colSpan={12} />
                   ) : (
                     balanceReport.map((row, idx) => (
-                      <tr key={row.row_key || `${row.entry_type}-${idx}`} className="border-b">
-                        <td className="px-3 py-2">{idx + 1}</td>
-                        <td className="px-3 py-2">{iso(row.txn_date)}</td>
-                        <td className="px-3 py-2">{ledgerTypeLabel(row.entry_type)}</td>
-                        <td className="px-3 py-2">{row.agent}</td>
-                        <td className="px-3 py-2">{typeLabel(row.service_type)}</td>
-                        <td className="px-3 py-2">{row.direction || "—"}</td>
-                        <td className="px-3 py-2">{row.traveller_name || "—"}</td>
-                        <td className="px-3 py-2">{money(row.sale_amount)}</td>
-                        <td className="px-3 py-2">{money(row.payment_amount)}</td>
-                        <td className="px-3 py-2">{money(row.refund_amount)}</td>
-                        <td className="px-3 py-2">{row.comment || "—"}</td>
-                        <td
-                          className={`px-3 py-2 font-semibold ${
-                            Number(row.balance || 0) > 0
-                              ? "text-red-600"
-                              : "text-emerald-700"
-                          }`}
+                      <tr
+                        key={row.row_key || `${row.entry_type}-${idx}`}
+                        className="border-b border-gray-100 transition hover:bg-gray-50/70"
+                      >
+                        <TD className="text-gray-500">{idx + 1}</TD>
+                        <TD>{iso(row.txn_date)}</TD>
+                        <TD>
+                          <Badge className={badgeClassByLedgerType(row.entry_type)}>
+                            {ledgerTypeLabel(row.entry_type)}
+                          </Badge>
+                        </TD>
+                        <TD>
+                          <div className="font-medium text-gray-900">{row.agent}</div>
+                        </TD>
+                        <TD>
+                          <Badge className={badgeClassByServiceType(row.service_type)}>
+                            {typeLabel(row.service_type)}
+                          </Badge>
+                        </TD>
+                        <TD className="max-w-[220px] whitespace-pre-wrap break-words">
+                          {row.direction || "—"}
+                        </TD>
+                        <TD>{row.traveller_name || "—"}</TD>
+                        <TD align="right" className="font-medium text-gray-900">
+                          {money(row.sale_amount)}
+                        </TD>
+                        <TD align="right" className="font-medium text-gray-900">
+                          {money(row.payment_amount)}
+                        </TD>
+                        <TD align="right" className="font-medium text-gray-900">
+                          {money(row.refund_amount)}
+                        </TD>
+                        <TD className="max-w-[320px] whitespace-pre-wrap break-words">
+                          {row.comment || "—"}
+                        </TD>
+                        <TD
+                          align="right"
+                          className={`font-semibold ${amountClass(row.balance, "balance")}`}
                         >
                           {money(row.balance)}
-                        </td>
+                        </TD>
                       </tr>
                     ))
                   )}
                 </tbody>
-              </table>
-            </div>
+              </Table>
+            </TableShell>
 
-            <div className="mt-4 text-sm text-gray-500">
-              Формула:{" "}
-              <span className="font-medium">
+            <div className="mt-4 rounded-2xl bg-gray-50 px-4 py-3 text-sm text-gray-600">
+              Формула:&nbsp;
+              <span className="font-semibold text-gray-900">
                 баланс = предыдущий баланс + продажа - оплата - возврат
               </span>
             </div>
