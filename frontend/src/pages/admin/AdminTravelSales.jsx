@@ -90,8 +90,8 @@ function iso(v) {
 
 function clsTab(active) {
   return active
-    ? "px-4 py-2.5 rounded-2xl bg-gray-900 text-white text-sm font-medium shadow-sm"
-    : "px-4 py-2.5 rounded-2xl border border-gray-200 bg-white text-sm font-medium text-gray-600 hover:bg-gray-50 transition";
+    ? "group inline-flex items-center gap-2 rounded-2xl bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm"
+    : "group inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 transition";
 }
 
 function typeLabel(v) {
@@ -145,6 +145,54 @@ function amountClass(v, mode = "default") {
   return "text-gray-500";
 }
 
+function IconWrap({ tone = "slate", children }) {
+  const toneMap = {
+    slate: "bg-slate-100 text-slate-700 ring-slate-200",
+    emerald: "bg-emerald-100 text-emerald-700 ring-emerald-200",
+    blue: "bg-blue-100 text-blue-700 ring-blue-200",
+    amber: "bg-amber-100 text-amber-700 ring-amber-200",
+    violet: "bg-violet-100 text-violet-700 ring-violet-200",
+    rose: "bg-rose-100 text-rose-700 ring-rose-200",
+  };
+  return (
+    <span className={`inline-flex h-11 w-11 items-center justify-center rounded-2xl ring-1 ring-inset ${toneMap[tone] || toneMap.slate}`}>
+      {children}
+    </span>
+  );
+}
+
+function SvgIcon({ kind = "wallet", className = "h-5 w-5" }) {
+  const common = {
+    className,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "1.9",
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+  };
+
+  if (kind === "wallet") return <svg {...common}><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H18a2 2 0 0 1 2 2v1H5.5A2.5 2.5 0 0 0 3 10.5v-3Z"/><path d="M3 10.5A2.5 2.5 0 0 1 5.5 8H20a1 1 0 0 1 1 1v8a2 2 0 0 1-2 2H5.5A2.5 2.5 0 0 1 3 16.5v-6Z"/><path d="M16 14h2"/></svg>;
+  if (kind === "doc") return <svg {...common}><path d="M8 3.5h6l4 4V20a1 1 0 0 1-1 1H8a2 2 0 0 1-2-2V5.5a2 2 0 0 1 2-2Z"/><path d="M14 3.5V8h4"/><path d="M9 12h6"/><path d="M9 16h6"/></svg>;
+  if (kind === "trend") return <svg {...common}><path d="M4 16 10 10l4 4 6-8"/><path d="M20 6h-5"/><path d="M20 6v5"/></svg>;
+  if (kind === "coin") return <svg {...common}><path d="M12 3c4.418 0 8 1.79 8 4s-3.582 4-8 4-8-1.79-8-4 3.582-4 8-4Z"/><path d="M4 7v5c0 2.21 3.582 4 8 4s8-1.79 8-4V7"/><path d="M4 12v5c0 2.21 3.582 4 8 4s8-1.79 8-4v-5"/></svg>;
+  if (kind === "percent") return <svg {...common}><path d="M19 5 5 19"/><path d="M7.5 8.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"/><path d="M16.5 18.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"/></svg>;
+  if (kind === "users") return <svg {...common}><path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="9.5" cy="7" r="3"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>;
+  if (kind === "calendar") return <svg {...common}><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4"/><path d="M8 3v4"/><path d="M3 10h18"/></svg>;
+  if (kind === "credit") return <svg {...common}><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M2.5 10h19"/><path d="M7 15h2"/></svg>;
+  if (kind === "chart") return <svg {...common}><path d="M4 19V5"/><path d="M10 19v-8"/><path d="M16 19V9"/><path d="M22 19V3"/></svg>;
+  return <svg {...common}><circle cx="12" cy="12" r="9"/></svg>;
+}
+
+function tabIcon(name) {
+  if (name === "agents") return "users";
+  if (name === "daily") return "calendar";
+  if (name === "payments") return "credit";
+  if (name === "sales") return "chart";
+  if (name === "balance") return "wallet";
+  return "doc";
+}
+
 function Card({ title, subtitle, children, right }) {
   return (
     <section className="rounded-3xl border border-gray-200 bg-white shadow-[0_10px_35px_rgba(17,24,39,0.05)]">
@@ -160,25 +208,28 @@ function Card({ title, subtitle, children, right }) {
   );
 }
 
-function StatCard({ title, value, hint, tone = "slate" }) {
+function StatCard({ title, value, hint, tone = "slate", icon = "wallet" }) {
   const toneMap = {
-    slate: "from-slate-50 to-white border-slate-200",
-    emerald: "from-emerald-50 to-white border-emerald-200",
-    blue: "from-blue-50 to-white border-blue-200",
-    amber: "from-amber-50 to-white border-amber-200",
-    violet: "from-violet-50 to-white border-violet-200",
-    rose: "from-rose-50 to-white border-rose-200",
+    slate: "from-slate-50 via-white to-white border-slate-200",
+    emerald: "from-emerald-50 via-white to-white border-emerald-200",
+    blue: "from-blue-50 via-white to-white border-blue-200",
+    amber: "from-amber-50 via-white to-white border-amber-200",
+    violet: "from-violet-50 via-white to-white border-violet-200",
+    rose: "from-rose-50 via-white to-white border-rose-200",
   };
 
   return (
-    <div
-      className={`rounded-3xl border bg-gradient-to-br p-4 shadow-sm ${
-        toneMap[tone] || toneMap.slate
-      }`}
-    >
-      <div className="text-sm font-medium text-gray-500">{title}</div>
-      <div className="mt-2 text-2xl font-semibold tracking-tight text-gray-900">{value}</div>
-      {hint ? <div className="mt-1 text-xs text-gray-400">{hint}</div> : null}
+    <div className={`rounded-3xl border bg-gradient-to-br p-4 shadow-sm ${toneMap[tone] || toneMap.slate}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-sm font-medium text-gray-500">{title}</div>
+          <div className="mt-2 text-2xl font-semibold tracking-tight text-gray-900">{value}</div>
+          {hint ? <div className="mt-1 text-xs text-gray-400">{hint}</div> : null}
+        </div>
+        <IconWrap tone={tone}>
+          <SvgIcon kind={icon} />
+        </IconWrap>
+      </div>
     </div>
   );
 }
@@ -241,6 +292,95 @@ function TableShell({ children }) {
 
 function Table({ children }) {
   return <table className="min-w-full text-sm">{children}</table>;
+}
+
+
+function MiniBar({ label, value, max, tone = "blue" }) {
+  const widths = max > 0 ? Math.max(6, Math.round((Number(value || 0) / max) * 100)) : 0;
+  const toneMap = {
+    blue: "bg-blue-500",
+    emerald: "bg-emerald-500",
+    amber: "bg-amber-500",
+    rose: "bg-rose-500",
+    violet: "bg-violet-500",
+    slate: "bg-slate-500",
+  };
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <span className="truncate text-gray-600">{label}</span>
+        <span className="whitespace-nowrap font-semibold text-gray-900">{money(value)}</span>
+      </div>
+      <div className="h-2.5 rounded-full bg-gray-100">
+        <div
+          className={`h-2.5 rounded-full ${toneMap[tone] || toneMap.blue}`}
+          style={{ width: `${widths}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function MiniTrend({ data = [], lines = [] }) {
+  const width = 560;
+  const height = 220;
+  const pad = 24;
+  const values = [];
+  data.forEach((item) => {
+    lines.forEach((line) => values.push(Number(item?.[line.key] || 0)));
+  });
+  const max = Math.max(...values, 1);
+  const stepX = data.length > 1 ? (width - pad * 2) / (data.length - 1) : 0;
+
+  function buildPath(key) {
+    return data
+      .map((item, idx) => {
+        const x = pad + idx * stepX;
+        const y = height - pad - ((Number(item?.[key] || 0) / max) * (height - pad * 2));
+        return `${idx === 0 ? "M" : "L"}${x},${y}`;
+      })
+      .join(" ");
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-4 text-xs font-medium text-gray-500">
+        {lines.map((line) => (
+          <div key={line.key} className="flex items-center gap-2">
+            <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: line.color }} />
+            <span>{line.label}</span>
+          </div>
+        ))}
+      </div>
+      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-gradient-to-b from-white to-gray-50 px-3 py-3">
+        <svg viewBox={`0 0 ${width} ${height}`} className="h-52 w-full">
+          {[0, 0.25, 0.5, 0.75, 1].map((tick, idx) => {
+            const y = height - pad - tick * (height - pad * 2);
+            return <line key={idx} x1={pad} x2={width - pad} y1={y} y2={y} stroke="#e5e7eb" strokeWidth="1" />;
+          })}
+          {lines.map((line) => (
+            <path
+              key={line.key}
+              d={buildPath(line.key)}
+              fill="none"
+              stroke={line.color}
+              strokeWidth="3"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          ))}
+          {data.map((item, idx) => {
+            const x = pad + idx * stepX;
+            return (
+              <text key={idx} x={x} y={height - 4} textAnchor="middle" fontSize="11" fill="#6b7280">
+                {item.label}
+              </text>
+            );
+          })}
+        </svg>
+      </div>
+    </div>
+  );
 }
 
 function TableHead({ children }) {
@@ -504,6 +644,64 @@ export default function AdminTravelSales() {
       ),
     [payments]
   );
+
+
+
+  const salesTrend = useMemo(() => {
+    const map = new Map();
+    [...salesReport]
+      .sort((a, b) => String(a.sale_date || "").localeCompare(String(b.sale_date || "")))
+      .forEach((row) => {
+        const key = iso(row.sale_date);
+        const current = map.get(key) || { label: key ? key.slice(5).split('-').reverse().join('.') : '—', sales: 0, net: 0, margin: 0 };
+        current.sales += Number(row.sale_amount || 0);
+        current.net += Number(row.net_amount || 0);
+        current.margin += Number(row.margin || 0);
+        map.set(key, current);
+      });
+    return Array.from(map.values()).slice(-7);
+  }, [salesReport]);
+
+  const paymentsTrend = useMemo(() => {
+    const map = new Map();
+    [...payments]
+      .sort((a, b) => String(a.payment_date || "").localeCompare(String(b.payment_date || "")))
+      .forEach((row) => {
+        const key = iso(row.payment_date);
+        const current = map.get(key) || { label: key ? key.slice(5).split('-').reverse().join('.') : '—', payment: 0, refund: 0 };
+        if (String(row.entry_type || 'payment') === 'refund') current.refund += Number(row.amount || 0);
+        else current.payment += Number(row.amount || 0);
+        map.set(key, current);
+      });
+    return Array.from(map.values()).slice(-7);
+  }, [payments]);
+
+  const salesTopAgents = useMemo(() => {
+    const map = new Map();
+    salesReport.forEach((row) => {
+      const key = row.agent || '—';
+      const current = map.get(key) || { agent: key, sales: 0, net: 0, margin: 0 };
+      current.sales += Number(row.sale_amount || 0);
+      current.net += Number(row.net_amount || 0);
+      current.margin += Number(row.margin || 0);
+      map.set(key, current);
+    });
+    return Array.from(map.values()).sort((a, b) => b.sales - a.sales).slice(0, 5);
+  }, [salesReport]);
+
+  const balanceTopAgents = useMemo(() => {
+    const map = new Map();
+    balanceReport.forEach((row) => {
+      const key = row.agent || '—';
+      const current = map.get(key) || { agent: key, sales: 0, payments: 0, refunds: 0, balance: 0 };
+      current.sales += Number(row.sale_amount || 0);
+      current.payments += Number(row.payment_amount || 0);
+      current.refunds += Number(row.refund_amount || 0);
+      current.balance = Number(row.balance || 0);
+      map.set(key, current);
+    });
+    return Array.from(map.values()).sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance)).slice(0, 5);
+  }, [balanceReport]);
 
   const totalBalance = useMemo(() => {
     const byAgent = new Map();
@@ -784,22 +982,60 @@ export default function AdminTravelSales() {
 
   return (
     <div className="space-y-6">
+      <section className="overflow-hidden rounded-[28px] border border-gray-200 bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800 px-5 py-6 text-white shadow-[0_20px_50px_rgba(15,23,42,0.18)] md:px-7">
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+          <div className="max-w-3xl">
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-white/80">
+              <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+              Travel Sales Admin
+            </div>
+            <h1 className="mt-4 text-2xl font-semibold tracking-tight md:text-3xl">Финансы по агентам — аккуратно, ясно и по делу</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300 md:text-base">
+              Улучшенный интерфейс для продаж, оплат, отчетов и баланса агентов без изменения твоей текущей CRUD-логики.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:min-w-[480px]">
+            <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3">
+              <div className="text-[11px] uppercase tracking-wide text-slate-300">Агенты</div>
+              <div className="mt-1 text-xl font-semibold">{agents.length}</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3">
+              <div className="text-[11px] uppercase tracking-wide text-slate-300">Продажи</div>
+              <div className="mt-1 text-xl font-semibold">{money(totalSales)}</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3">
+              <div className="text-[11px] uppercase tracking-wide text-slate-300">Оплаты</div>
+              <div className="mt-1 text-xl font-semibold">{money(totalPayments)}</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3">
+              <div className="text-[11px] uppercase tracking-wide text-slate-300">Баланс</div>
+              <div className="mt-1 text-xl font-semibold">{money(totalBalance)}</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <div className="overflow-x-auto pb-1">
-        <div className="flex min-w-max items-center gap-2 rounded-3xl border border-gray-200 bg-white p-2 shadow-sm">
+        <div className="flex min-w-max items-center gap-2 rounded-3xl border border-gray-200 bg-white/90 p-2 shadow-sm backdrop-blur">
           <button className={clsTab(tab === "agents")} onClick={() => setTab("agents")}>
-            Все агенты
+            <SvgIcon kind={tabIcon("agents")} className="h-4 w-4 opacity-80 group-hover:opacity-100" />
+            <span>Все агенты</span>
           </button>
           <button className={clsTab(tab === "daily")} onClick={() => setTab("daily")}>
-            Дневная продажа
+            <SvgIcon kind={tabIcon("daily")} className="h-4 w-4 opacity-80 group-hover:opacity-100" />
+            <span>Дневная продажа</span>
           </button>
           <button className={clsTab(tab === "payments")} onClick={() => setTab("payments")}>
-            Оплата агента
+            <SvgIcon kind={tabIcon("payments")} className="h-4 w-4 opacity-80 group-hover:opacity-100" />
+            <span>Оплата агента</span>
           </button>
           <button className={clsTab(tab === "sales")} onClick={() => setTab("sales")}>
-            Отчет продаж
+            <SvgIcon kind={tabIcon("sales")} className="h-4 w-4 opacity-80 group-hover:opacity-100" />
+            <span>Отчет продаж</span>
           </button>
           <button className={clsTab(tab === "balance")} onClick={() => setTab("balance")}>
-            Баланс агента
+            <SvgIcon kind={tabIcon("balance")} className="h-4 w-4 opacity-80 group-hover:opacity-100" />
+            <span>Баланс агента</span>
           </button>
         </div>
       </div>
@@ -812,24 +1048,28 @@ export default function AdminTravelSales() {
               value={String(agents.length)}
               hint="Отображается с учетом поиска"
               tone="blue"
+              icon="users"
             />
             <StatCard
               title="С заполненным контактом"
               value={String(agents.filter((a) => String(a.contact || "").trim()).length)}
               hint="Есть телефон или контакт"
               tone="emerald"
+              icon="credit"
             />
             <StatCard
               title="С указанным адресом"
               value={String(agents.filter((a) => String(a.address || "").trim()).length)}
               hint="Для быстрой навигации"
               tone="amber"
+              icon="doc"
             />
             <StatCard
               title="Режим"
               value={editingAgentId ? "Редактирование" : "Добавление"}
               hint={editingAgentId ? "Сейчас открыт существующий агент" : "Создание новой записи"}
               tone="violet"
+              icon="wallet"
             />
           </div>
 
@@ -968,6 +1208,7 @@ export default function AdminTravelSales() {
             />
             <StatCard
               title="Сумма продаж"
+              icon="trend"
               value={money(dailySales.reduce((s, r) => s + Number(r.sale_amount || 0), 0))}
               hint="По открытой выборке"
               tone="emerald"
@@ -1433,6 +1674,62 @@ export default function AdminTravelSales() {
             <StatCard title="Записей" value={String(salesReport.length)} tone="violet" />
           </div>
 
+
+
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+            <Card title="Динамика за период" subtitle="Последние 7 дат по открытой выборке">
+              <MiniTrend
+                data={salesTrend}
+                lines={[
+                  { key: "sales", label: "Продажи", color: "#3b82f6" },
+                  { key: "margin", label: "Маржа", color: "#10b981" },
+                ]}
+              />
+            </Card>
+
+            <Card title="Структура суммы" subtitle="Сравнение продаж, нетто и маржи">
+              <div className="space-y-4">
+                <MiniBar
+                  label="Продажи"
+                  value={totalSales}
+                  max={Math.max(totalSales, totalNet, totalMargin, 1)}
+                  tone="blue"
+                />
+                <MiniBar
+                  label="Нетто"
+                  value={totalNet}
+                  max={Math.max(totalSales, totalNet, totalMargin, 1)}
+                  tone="amber"
+                />
+                <MiniBar
+                  label="Маржа"
+                  value={totalMargin}
+                  max={Math.max(totalSales, totalNet, totalMargin, 1)}
+                  tone="emerald"
+                />
+              </div>
+            </Card>
+
+            <Card title="Топ агентов" subtitle="По обороту в текущем фильтре">
+              <div className="space-y-4">
+                {salesTopAgents.length ? salesTopAgents.map((row) => (
+                  <div key={row.agent} className="rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="truncate font-semibold text-gray-900">{row.agent}</div>
+                        <div className="text-xs text-gray-500">Маржа: {money(row.margin)}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-semibold text-gray-900">{money(row.sales)}</div>
+                        <div className="text-xs text-gray-500">Нетто: {money(row.net)}</div>
+                      </div>
+                    </div>
+                  </div>
+                )) : <div className="text-sm text-gray-500">Нет данных для аналитики</div>}
+              </div>
+            </Card>
+          </div>
+
           <Card
             title="Отчет продаж"
             subtitle="Сильный акцент на деньгах и марже"
@@ -1562,6 +1859,78 @@ export default function AdminTravelSales() {
               )}
               tone="amber"
             />
+          </div>
+
+
+
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+            <Card title="Поток движения" subtitle="Продажи и возвраты по датам">
+              <MiniTrend
+                data={paymentsTrend}
+                lines={[
+                  { key: "payment", label: "Оплаты", color: "#3b82f6" },
+                  { key: "refund", label: "Возвраты", color: "#f59e0b" },
+                ]}
+              />
+            </Card>
+
+            <Card title="Состав баланса" subtitle="Что сильнее влияет на итог">
+              <div className="space-y-4">
+                <MiniBar
+                  label="Продажи"
+                  value={balanceReport.reduce((s, r) => s + Number(r.sale_amount || 0), 0)}
+                  max={Math.max(
+                    balanceReport.reduce((s, r) => s + Number(r.sale_amount || 0), 0),
+                    balanceReport.reduce((s, r) => s + Number(r.payment_amount || 0), 0),
+                    balanceReport.reduce((s, r) => s + Number(r.refund_amount || 0), 0),
+                    1
+                  )}
+                  tone="emerald"
+                />
+                <MiniBar
+                  label="Оплаты"
+                  value={balanceReport.reduce((s, r) => s + Number(r.payment_amount || 0), 0)}
+                  max={Math.max(
+                    balanceReport.reduce((s, r) => s + Number(r.sale_amount || 0), 0),
+                    balanceReport.reduce((s, r) => s + Number(r.payment_amount || 0), 0),
+                    balanceReport.reduce((s, r) => s + Number(r.refund_amount || 0), 0),
+                    1
+                  )}
+                  tone="blue"
+                />
+                <MiniBar
+                  label="Возвраты"
+                  value={balanceReport.reduce((s, r) => s + Number(r.refund_amount || 0), 0)}
+                  max={Math.max(
+                    balanceReport.reduce((s, r) => s + Number(r.sale_amount || 0), 0),
+                    balanceReport.reduce((s, r) => s + Number(r.payment_amount || 0), 0),
+                    balanceReport.reduce((s, r) => s + Number(r.refund_amount || 0), 0),
+                    1
+                  )}
+                  tone="amber"
+                />
+              </div>
+            </Card>
+
+            <Card title="Агенты с самым заметным балансом" subtitle="По модулю остатка">
+              <div className="space-y-4">
+                {balanceTopAgents.length ? balanceTopAgents.map((row) => (
+                  <div key={row.agent} className="rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="truncate font-semibold text-gray-900">{row.agent}</div>
+                        <div className="text-xs text-gray-500">
+                          Продажи: {money(row.sales)} • Оплаты: {money(row.payments)}
+                        </div>
+                      </div>
+                      <div className={`text-right font-semibold ${amountClass(row.balance, "balance")}`}>
+                        {money(row.balance)}
+                      </div>
+                    </div>
+                  </div>
+                )) : <div className="text-sm text-gray-500">Нет данных для аналитики</div>}
+              </div>
+            </Card>
           </div>
 
           <Card
