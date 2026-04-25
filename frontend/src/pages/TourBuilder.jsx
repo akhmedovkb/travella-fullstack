@@ -236,6 +236,72 @@ const pickProgramText = (program = {}, preferredLang = "ru") => {
   return "";
 };
 
+const hasProgramText = (program = {}) =>
+  TB_PROGRAM_LANGS.some((code) => String(program?.[code] || "").trim());
+
+const buildAutoProgramI18n = ({ dayNumber, totalDays, date, city, prevCity, nextCity }) => {
+  const safeCity = String(city || "").trim() || "город по маршруту";
+  const safeCityEn = String(city || "").trim() || "the route city";
+  const safeCityUz = String(city || "").trim() || "yo'nalish shahri";
+  const dayLabel = `D${dayNumber}`;
+  const datePart = date ? ` (${date})` : "";
+  const isFirst = dayNumber === 1;
+  const isLast = dayNumber === totalDays;
+  const hasTransferIn = prevCity && String(prevCity).trim() && String(prevCity).trim() !== safeCity;
+  const hasTransferOut = nextCity && String(nextCity).trim() && String(nextCity).trim() !== safeCity;
+
+  const ruLines = [
+    `${dayLabel}${datePart}. ${safeCity}.`,
+    isFirst
+      ? `Прибытие группы, встреча с гидом/представителем и трансфер по программе.`
+      : hasTransferIn
+      ? `Переезд из ${prevCity} в ${safeCity}, встреча и начало программы дня.`
+      : `Продолжение программы в ${safeCity}.`,
+    `Обзорная программа по ключевым локациям города с учетом выбранных услуг, входных билетов и питания.`,
+    hasTransferOut
+      ? `Во второй половине дня подготовка к переезду в ${nextCity}.`
+      : isLast
+      ? `Завершение программы, свободное время и подготовка к выезду.`
+      : `Свободное время для прогулки, фото и дополнительных активностей.`,
+  ];
+
+  const enLines = [
+    `${dayLabel}${datePart}. ${safeCityEn}.`,
+    isFirst
+      ? `Group arrival, meet-and-greet with the guide/representative and transfer according to the program.`
+      : hasTransferIn
+      ? `Transfer from ${prevCity} to ${safeCityEn}, meeting and start of the day program.`
+      : `Continuation of the program in ${safeCityEn}.`,
+    `Sightseeing program around the key city locations, adjusted to the selected services, entrance tickets and meals.`,
+    hasTransferOut
+      ? `In the second half of the day, preparation for the transfer to ${nextCity}.`
+      : isLast
+      ? `End of the program, free time and preparation for departure.`
+      : `Free time for walking, photos and optional activities.`,
+  ];
+
+  const uzLines = [
+    `${dayLabel}${datePart}. ${safeCityUz}.`,
+    isFirst
+      ? `Guruhning yetib kelishi, gid/vakil bilan kutib olish va dastur bo'yicha transfer.`
+      : hasTransferIn
+      ? `${prevCity} shahridan ${safeCityUz} shahriga yo'l olish, kutib olish va kun dasturini boshlash.`
+      : `${safeCityUz} shahrida dastur davom etadi.`,
+    `Tanlangan xizmatlar, kirish chiptalari va ovqatlanishni hisobga olgan holda shaharning asosiy joylari bo'ylab ekskursiya dasturi.`,
+    hasTransferOut
+      ? `Kunning ikkinchi yarmida ${nextCity} shahriga yo'l olishga tayyorgarlik.`
+      : isLast
+      ? `Dastur yakuni, bo'sh vaqt va jo'nashga tayyorgarlik.`
+      : `Sayr, suratga tushish va qo'shimcha faoliyatlar uchun bo'sh vaqt.`,
+  ];
+
+  return {
+    ru: ruLines.filter(Boolean).join("\n"),
+    en: enLines.filter(Boolean).join("\n"),
+    uz: uzLines.filter(Boolean).join("\n"),
+  };
+};
+
 /* ---------------- fetch helpers ---------------- */
 // заголовки авторизации (безопасно для SSR)
 const authHeaders = () => {
@@ -943,6 +1009,61 @@ export default function TourBuilder() {
    if (!providerId || !serviceId) return false;
    const list = servicesCache[String(providerId)] || [];
    return list.some(s => String(s.id) === String(serviceId));
+ };
+ const generateProgramForDay = (dateKey, { overwrite = true } = {}) => {
+   setByDay((prev) => {
+     const keys = sortedDayKeys(prev);
+     const idx = keys.indexOf(dateKey);
+     if (idx < 0) return prev;
+     const current = prev[dateKey] || {};
+     if (!overwrite && hasProgramText(current.program_i18n || current.program)) return prev;
+     const activeLang = TB_PROGRAM_LANGS.includes(String(i18n.language || "ru").slice(0, 2))
+       ? String(i18n.language || "ru").slice(0, 2)
+       : "ru";
+     return {
+       ...prev,
+       [dateKey]: {
+         ...current,
+         program_i18n: buildAutoProgramI18n({
+           dayNumber: idx + 1,
+           totalDays: keys.length,
+           date: dateKey,
+           city: current.city,
+           prevCity: idx > 0 ? prev[keys[idx - 1]]?.city : "",
+           nextCity: idx < keys.length - 1 ? prev[keys[idx + 1]]?.city : "",
+         }),
+         _programTab: activeLang,
+       },
+     };
+   });
+ };
+
+ const generateProgramForAllDays = ({ overwrite = true } = {}) => {
+   setByDay((prev) => {
+     const keys = sortedDayKeys(prev);
+     if (!keys.length) return prev;
+     const activeLang = TB_PROGRAM_LANGS.includes(String(i18n.language || "ru").slice(0, 2))
+       ? String(i18n.language || "ru").slice(0, 2)
+       : "ru";
+     const next = { ...prev };
+     keys.forEach((dateKey, idx) => {
+       const current = prev[dateKey] || {};
+       if (!overwrite && hasProgramText(current.program_i18n || current.program)) return;
+       next[dateKey] = {
+         ...current,
+         program_i18n: buildAutoProgramI18n({
+           dayNumber: idx + 1,
+           totalDays: keys.length,
+           date: dateKey,
+           city: current.city,
+           prevCity: idx > 0 ? prev[keys[idx - 1]]?.city : "",
+           nextCity: idx < keys.length - 1 ? prev[keys[idx + 1]]?.city : "",
+         }),
+         _programTab: activeLang,
+       };
+     });
+     return next;
+   });
  };
   // автоподбор по конкретному дню
   const autoPickForDay = (dateKey) => {
@@ -1675,7 +1796,21 @@ const makeTransportLoader = (dateKey) => async (input) => {
                     >
                       {t('tb.day_program', { defaultValue: 'Программа дня' })}
                     </label>
-                    <div className="flex gap-1">
+                    <div className="flex flex-wrap justify-end gap-1">
+                      <button
+                        type="button"
+                        className="px-2 py-1 text-xs border rounded bg-white hover:bg-orange-50"
+                        onClick={() => generateProgramForDay(k, { overwrite: true })}
+                      >
+                        {t('tb.generate_day_program', { defaultValue: 'Сгенерировать день' })}
+                      </button>
+                      <button
+                        type="button"
+                        className="px-2 py-1 text-xs border rounded bg-white hover:bg-orange-50"
+                        onClick={() => generateProgramForAllDays({ overwrite: true })}
+                      >
+                        {t('tb.generate_all_program', { defaultValue: 'Сгенерировать все' })}
+                      </button>
                       {TB_PROGRAM_LANGS.map((code) => {
                         const active = (st._programTab || String(i18n.language || 'ru').slice(0, 2) || 'ru') === code;
                         return (
