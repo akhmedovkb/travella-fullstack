@@ -5,6 +5,22 @@ const router = express.Router();
 const pool = require("../db");
 
 // нормализация входных данных
+const cleanProgramI18n = (value = {}) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value)
+      .map(([k, v]) => [String(k || "").slice(0, 8), String(v || "").trim()])
+      .filter(([k, v]) => k && v.length)
+  );
+};
+
+const normDay = (d = {}) => ({
+  city: String(d?.city || "").trim(),
+  program_i18n: cleanProgramI18n(
+    d?.program_i18n || (d?.program ? { ru: String(d.program) } : {})
+  ),
+});
+
 const norm = (t = {}) => {
   const obj = (t.program_i18n && typeof t.program_i18n === 'object') ? t.program_i18n : {};
   const fromFlat = (t.program == null ? {} : { ru: String(t.program).trim() });
@@ -20,7 +36,7 @@ const norm = (t = {}) => {
   id: t.id || null,
   title: String(t.title || "").trim(),
   days: Array.isArray(t.days)
-    ? t.days.map(d => ({ city: String(d?.city || "").trim() })).filter(d => d.city)
+    ? t.days.map(normDay).filter(d => d.city)
     : [],
   is_public: t.is_public !== false,
   program_i18n
