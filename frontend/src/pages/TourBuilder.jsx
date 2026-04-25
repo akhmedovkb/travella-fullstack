@@ -219,6 +219,23 @@ const LANGS = [
   ["Қарақалпақ","kaa"],["Монгол","mn"],
 ];
 
+const TB_PROGRAM_LANGS = ["ru", "en", "uz"];
+const emptyProgramI18n = () => ({ ru: "", en: "", uz: "" });
+const normalizeProgramI18n = (value = {}) => ({
+  ru: String(value?.ru || ""),
+  en: String(value?.en || ""),
+  uz: String(value?.uz || ""),
+});
+const pickProgramText = (program = {}, preferredLang = "ru") => {
+  const lang = String(preferredLang || "ru").slice(0, 2).toLowerCase();
+  const order = Array.from(new Set([lang, "ru", "en", "uz"]));
+  for (const code of order) {
+    const text = String(program?.[code] || "").trim();
+    if (text) return text;
+  }
+  return "";
+};
+
 /* ---------------- fetch helpers ---------------- */
 // заголовки авторизации (безопасно для SSR)
 const authHeaders = () => {
@@ -879,7 +896,9 @@ export default function TourBuilder() {
           guideService: null, transportService: null,   // ⬅️ выбранные услуги
           entrySelected: [],
           transfers: [],
-          meals: [],                  
+          meals: [],
+          program_i18n: emptyProgramI18n(),
+          _programTab: "ru",
         };
       });
       Object.keys(copy).forEach((k) => {
@@ -1154,9 +1173,35 @@ const makeTransportLoader = (dateKey) => async (input) => {
     const pax = Math.max(1, toNum(adt, 0) + toNum(chd, 0));
     return { guide, transport, hotel, entries, transfers, meals, net, perPax: net / pax };
   }, [byDay, adt, chd, residentType, usdRate]);
+  const buildTourProgram = () =>
+    Object.entries(byDay)
+      .sort(([a], [b]) => String(a).localeCompare(String(b)))
+      .map(([date, st], idx) => {
+        const program_i18n = normalizeProgramI18n(st?.program_i18n || st?.program || {});
+        return {
+          day: idx + 1,
+          date,
+          city: String(st?.city || "").trim(),
+          program_i18n,
+          program_text: pickProgramText(program_i18n, lang || i18n.language || "ru"),
+        };
+      })
+      .filter((row) => row.city || row.program_text);
+
+  const buildTourProgramText = (items = buildTourProgram()) =>
+    items
+      .map((row) => {
+        const head = [`D${row.day}`, row.date, row.city].filter(Boolean).join(" • ");
+        return [head, row.program_text].filter(Boolean).join("\n");
+      })
+      .filter(Boolean)
+      .join("\n\n");
+
   // ===== СБОРКА И ОТПРАВКА ЗАПРОСОВ ПРОВАЙДЕРАМ =====
   // схема: на каждого уникального провайдера (guide/transport) — один запрос с массивом дат.
   const buildBookings = () => {
+    const tourProgram = buildTourProgram();
+    const tourProgramText = buildTourProgramText(tourProgram);
     const buckets = new Map(); // key = `${kind}:${provider_id}` → { kind, provider_id, service_id?, dates[] }
     for (const [dateKey, st] of Object.entries(byDay)) {
       if (!st?.city) continue;
@@ -1209,6 +1254,8 @@ const makeTransportLoader = (dateKey) => async (input) => {
           // подсказка для бэка/отчётов: даты как есть из TB
           dates: [...new Set(b.dates)].sort()
         },
+        tour_program: tourProgram,
+        tour_program_text: tourProgramText,
         __needs_group_id: true,
       });
     }
@@ -1256,6 +1303,8 @@ const makeTransportLoader = (dateKey) => async (input) => {
           details: {
             from_city: routeCities.from || "",
             to_city: routeCities.to || "",
+            tour_program: Array.isArray(p.tour_program) ? p.tour_program : [],
+            tour_program_text: p.tour_program_text || "",
           },
           legs,
         };
@@ -1382,6 +1431,10 @@ const makeTransportLoader = (dateKey) => async (input) => {
         entrySelected: [],
         transfers: [],
         meals: [],
+        program_i18n: normalizeProgramI18n(tpl.days[i]?.program_i18n || tpl.program_i18n || {}),
+        _programTab: TB_PROGRAM_LANGS.includes(String(i18n.language || "ru").slice(0, 2))
+          ? String(i18n.language || "ru").slice(0, 2)
+          : "ru",
       };
     }
     setByDay(next);
@@ -1611,6 +1664,64 @@ const makeTransportLoader = (dateKey) => async (input) => {
                   <div className="text-sm" style={{ color: BRAND.primary }}>
                     {k}
                   </div>
+                </div>
+
+                {/* Программа дня */}
+                <div className="border rounded p-3 bg-white/70">
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <label
+                      className="block text-sm font-medium"
+                      style={{ color: BRAND.primary }}
+                    >
+                      {t('tb.day_program', { defaultValue: 'Программа дня' })}
+                    </label>
+                    <div className="flex gap-1">
+                      {TB_PROGRAM_LANGS.map((code) => {
+                        const active = (st._programTab || String(i18n.language || 'ru').slice(0, 2) || 'ru') === code;
+                        return (
+                          <button
+                            key={code}
+                            type="button"
+                            className={`px-2 py-1 text-xs border rounded ${active ? "bg-orange-50 border-orange-300" : "bg-white"}`}
+                            onClick={() =>
+                              setByDay((p) => ({
+                                ...p,
+                                [k]: { ...p[k], _programTab: code },
+                              }))
+                            }
+                          >
+                            {code.toUpperCase()}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  {(() => {
+                    const activeLangRaw = st._programTab || String(i18n.language || 'ru').slice(0, 2) || 'ru';
+                    const activeLang = TB_PROGRAM_LANGS.includes(activeLangRaw) ? activeLangRaw : 'ru';
+                    return (
+                      <textarea
+                        className="w-full border rounded px-3 py-2 text-sm min-h-[90px] bg-white"
+                        placeholder={t('tb.day_program_ph', { defaultValue: 'Описание программы этого дня...' })}
+                        value={st.program_i18n?.[activeLang] || ""}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setByDay((p) => ({
+                            ...p,
+                            [k]: {
+                              ...p[k],
+                              program_i18n: {
+                                ...emptyProgramI18n(),
+                                ...(p[k]?.program_i18n || {}),
+                                [activeLang]: value,
+                              },
+                              _programTab: activeLang,
+                            },
+                          }));
+                        }}
+                      />
+                    );
+                  })()}
                 </div>
 
                 <div className="grid md:grid-cols-2 gap-3">
