@@ -49,6 +49,62 @@ const normalizeProgramI18n = (value = {}) => ({
   uz: String(value?.uz || ""),
 });
 
+const buildAutoProgramI18n = ({ dayNumber, totalDays, city, prevCity, nextCity }) => {
+  const safeCity = String(city || "").trim() || "город по маршруту";
+  const safeCityEn = String(city || "").trim() || "the route city";
+  const safeCityUz = String(city || "").trim() || "yo'nalish shahri";
+  const dayLabel = `D${dayNumber}`;
+  const isFirst = dayNumber === 1;
+  const isLast = dayNumber === totalDays;
+  const hasTransferIn = prevCity && String(prevCity).trim() && String(prevCity).trim() !== safeCity;
+  const hasTransferOut = nextCity && String(nextCity).trim() && String(nextCity).trim() !== safeCity;
+
+  return {
+    ru: [
+      `${dayLabel}. ${safeCity}.`,
+      isFirst
+        ? "Прибытие группы, встреча с гидом/представителем и трансфер по программе."
+        : hasTransferIn
+        ? `Переезд из ${prevCity} в ${safeCity}, встреча и начало программы дня.`
+        : `Продолжение программы в ${safeCity}.`,
+      "Обзорная программа по ключевым локациям города с учетом выбранных услуг, входных билетов и питания.",
+      hasTransferOut
+        ? `Во второй половине дня подготовка к переезду в ${nextCity}.`
+        : isLast
+        ? "Завершение программы, свободное время и подготовка к выезду."
+        : "Свободное время для прогулки, фото и дополнительных активностей.",
+    ].filter(Boolean).join("\n"),
+    en: [
+      `${dayLabel}. ${safeCityEn}.`,
+      isFirst
+        ? "Group arrival, meet-and-greet with the guide/representative and transfer according to the program."
+        : hasTransferIn
+        ? `Transfer from ${prevCity} to ${safeCityEn}, meeting and start of the day program.`
+        : `Continuation of the program in ${safeCityEn}.`,
+      "Sightseeing program around the key city locations, adjusted to the selected services, entrance tickets and meals.",
+      hasTransferOut
+        ? `In the second half of the day, preparation for the transfer to ${nextCity}.`
+        : isLast
+        ? "End of the program, free time and preparation for departure."
+        : "Free time for walking, photos and optional activities.",
+    ].filter(Boolean).join("\n"),
+    uz: [
+      `${dayLabel}. ${safeCityUz}.`,
+      isFirst
+        ? "Guruhning yetib kelishi, gid/vakil bilan kutib olish va dastur bo'yicha transfer."
+        : hasTransferIn
+        ? `${prevCity} shahridan ${safeCityUz} shahriga yo'l olish, kutib olish va kun dasturini boshlash.`
+        : `${safeCityUz} shahrida dastur davom etadi.`,
+      "Tanlangan xizmatlar, kirish chiptalari va ovqatlanishni hisobga olgan holda shaharning asosiy joylari bo'ylab ekskursiya dasturi.",
+      hasTransferOut
+        ? `Kunning ikkinchi yarmida ${nextCity} shahriga yo'l olishga tayyorgarlik.`
+        : isLast
+        ? "Dastur yakuni, bo'sh vaqt va jo'nashga tayyorgarlik."
+        : "Sayr, suratga tushish va qo'shimcha faoliyatlar uchun bo'sh vaqt.",
+    ].filter(Boolean).join("\n"),
+  };
+};
+
 export default function TemplateCreator() {
   const { t } = useTranslation();
   const [items, setItems] = useState(listTemplates());
@@ -115,6 +171,44 @@ export default function TemplateCreator() {
    await syncTemplates();
    setItems(listTemplates());
     if (edit && String(edit.id) === String(id)) setEdit(null);
+  };
+
+  const generateDayProgram = (idx) => {
+    setEdit((p) => {
+      const days = [...(p?.days || [])];
+      if (!days[idx]) return p;
+      const current = days[idx] || {};
+      days[idx] = {
+        ...current,
+        program_i18n: buildAutoProgramI18n({
+          dayNumber: idx + 1,
+          totalDays: days.length,
+          city: current.city,
+          prevCity: idx > 0 ? days[idx - 1]?.city : "",
+          nextCity: idx < days.length - 1 ? days[idx + 1]?.city : "",
+        }),
+        _programTab: current._programTab || "ru",
+      };
+      return { ...p, days };
+    });
+  };
+
+  const generateAllDayPrograms = () => {
+    setEdit((p) => {
+      const src = Array.isArray(p?.days) ? p.days : [];
+      const days = src.map((day, idx) => ({
+        ...day,
+        program_i18n: buildAutoProgramI18n({
+          dayNumber: idx + 1,
+          totalDays: src.length,
+          city: day?.city,
+          prevCity: idx > 0 ? src[idx - 1]?.city : "",
+          nextCity: idx < src.length - 1 ? src[idx + 1]?.city : "",
+        }),
+        _programTab: day?._programTab || "ru",
+      }));
+      return { ...p, days };
+    });
   };
 
 // Для не-админов: страница открыта в режиме просмотра (без CRUD-кнопок)
@@ -213,7 +307,16 @@ export default function TemplateCreator() {
           </div>
 
           <div className="space-y-2">
-            <div className="text-sm font-medium">{t('tpl.days_title')}</div>
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-sm font-medium">{t('tpl.days_title')}</div>
+              <button
+                type="button"
+                className="px-3 py-1 border rounded text-xs bg-white hover:bg-orange-50"
+                onClick={generateAllDayPrograms}
+              >
+                {t('tpl.generate_all_program', { defaultValue: 'Сгенерировать программу для всех дней' })}
+              </button>
+            </div>
             {(edit.days||[]).map((d, idx)=>(
               <div key={idx} className="border rounded p-3 space-y-2 bg-gray-50">
                 <div className="flex gap-2">
@@ -242,7 +345,14 @@ export default function TemplateCreator() {
                     <label className="block text-xs font-medium text-gray-600">
                       {t('tpl.day_program', { defaultValue: 'Программа дня' })}
                     </label>
-                    <div className="flex gap-1">
+                    <div className="flex flex-wrap justify-end gap-1">
+                      <button
+                        type="button"
+                        onClick={() => generateDayProgram(idx)}
+                        className="px-2 py-1 border rounded text-xs bg-white hover:bg-orange-50"
+                      >
+                        {t('tpl.generate_day_program', { defaultValue: 'Сгенерировать день' })}
+                      </button>
                       {TB_PROGRAM_LANGS.map(code => (
                         <button key={code}
                           type="button"
