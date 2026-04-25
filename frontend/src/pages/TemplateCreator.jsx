@@ -41,18 +41,38 @@ const isAdminFromJwt = () => {
   }
 };
 
+const TB_PROGRAM_LANGS = ["ru", "en", "uz"];
+const emptyProgramI18n = () => ({ ru: "", en: "", uz: "" });
+const normalizeProgramI18n = (value = {}) => ({
+  ru: String(value?.ru || ""),
+  en: String(value?.en || ""),
+  uz: String(value?.uz || ""),
+});
+
 export default function TemplateCreator() {
   const { t } = useTranslation();
   const [items, setItems] = useState(listTemplates());
-  const [edit, setEdit] = useState(null); // {id,title,days:[{city}]}
+  const [edit, setEdit] = useState(null); // {id,title,days:[{city,program_i18n}],program_i18n}
   const [isAdmin] = useState(isAdminFromJwt());
 
-  const empty = { id: newId(), title: "", days: [{ city: "" }], program_i18n: { ru:"", en:"", uz:"" } };
+  const empty = {
+    id: newId(),
+    title: "",
+    days: [{ city: "", program_i18n: emptyProgramI18n(), _programTab: "ru" }],
+    program_i18n: emptyProgramI18n(),
+  };
   const startNew = () => setEdit({ ...empty });
   const editTpl = (tpl) => {
-  const p = (tpl.program_i18n || (tpl.program ? { ru: String(tpl.program) } : {}));
-  setEdit({ ...tpl, program_i18n: { ru: p.ru || "", en: p.en || "", uz: p.uz || "" } });
-};
+    const fallbackProgram = normalizeProgramI18n(tpl.program_i18n || (tpl.program ? { ru: String(tpl.program) } : {}));
+    const days = Array.isArray(tpl.days)
+      ? tpl.days.map((d) => ({
+          city: String(d?.city || ""),
+          program_i18n: normalizeProgramI18n(d?.program_i18n || fallbackProgram),
+          _programTab: "ru",
+        }))
+      : [];
+    setEdit({ ...tpl, days, program_i18n: fallbackProgram });
+  };
   const cancel = () => setEdit(null);
       // ⬇️ подтягиваем серверные шаблоны на маунте (и кладём их в localStorage)
     useEffect(() => {
@@ -71,7 +91,10 @@ export default function TemplateCreator() {
        uz: String(edit.program_i18n?.uz || "").trim(),
      },
      days: (edit.days || [])
-       .map(d => ({ city: (d.city || "").trim() }))
+       .map(d => ({
+         city: (d.city || "").trim(),
+         program_i18n: normalizeProgramI18n(d.program_i18n || {}),
+       }))
        .filter(d => d.city),
    };
     if (!clean.title.trim() || !clean.days.length) return alert("Заполните название и хотя бы один день");
@@ -130,7 +153,10 @@ export default function TemplateCreator() {
                   // страховка: days — всегда массив объектов { city }
                   days: Array.isArray(it && it.days)
                     ? it.days
-                        .map((d) => ({ city: String((d && d.city) || "").trim() }))
+                        .map((d) => ({
+                          city: String((d && d.city) || "").trim(),
+                          program_i18n: normalizeProgramI18n(d && d.program_i18n),
+                        }))
                         .filter((d) => d.city)
                     : [],
                 });
@@ -189,28 +215,79 @@ export default function TemplateCreator() {
           <div className="space-y-2">
             <div className="text-sm font-medium">{t('tpl.days_title')}</div>
             {(edit.days||[]).map((d, idx)=>(
-              <div key={idx} className="flex gap-2">
-                <input className="flex-1 border rounded px-3 py-2"
-                       placeholder={`D${idx+1} — ${t('tpl.city_ph')}`}
-                       value={d.city}
-                       onChange={e=>{
-                         const v = e.target.value;
-                         setEdit(p=>{
-                           const copy = {...p};
-                           copy.days = [...(copy.days||[])];
-                           copy.days[idx] = {...copy.days[idx], city: v};
-                           return copy;
-                         });
-                       }} />
-                <button className="px-2 border rounded"
-                        onClick={()=>setEdit(p=>{
-                          const copy = {...p};
-                          copy.days = (copy.days||[]).filter((_,i)=>i!==idx);
-                          return copy;
-                        })}>✕</button>
+              <div key={idx} className="border rounded p-3 space-y-2 bg-gray-50">
+                <div className="flex gap-2">
+                  <input className="flex-1 border rounded px-3 py-2 bg-white"
+                         placeholder={`D${idx+1} — ${t('tpl.city_ph')}`}
+                         value={d.city}
+                         onChange={e=>{
+                           const v = e.target.value;
+                           setEdit(p=>{
+                             const copy = {...p};
+                             copy.days = [...(copy.days||[])];
+                             copy.days[idx] = {...copy.days[idx], city: v};
+                             return copy;
+                           });
+                         }} />
+                  <button className="px-2 border rounded bg-white"
+                          onClick={()=>setEdit(p=>{
+                            const copy = {...p};
+                            copy.days = (copy.days||[]).filter((_,i)=>i!==idx);
+                            return copy;
+                          })}>✕</button>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <label className="block text-xs font-medium text-gray-600">
+                      {t('tpl.day_program', { defaultValue: 'Программа дня' })}
+                    </label>
+                    <div className="flex gap-1">
+                      {TB_PROGRAM_LANGS.map(code => (
+                        <button key={code}
+                          type="button"
+                          onClick={() => setEdit(p => {
+                            const copy = { ...p, days: [...(p.days || [])] };
+                            copy.days[idx] = { ...(copy.days[idx] || {}), _programTab: code };
+                            return copy;
+                          })}
+                          className={`px-2 py-1 border rounded text-xs ${ (d._programTab || "ru")===code ? "bg-orange-50 border-orange-300" : "bg-white"}`}>
+                          {code.toUpperCase()}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {(() => {
+                    const activeLang = TB_PROGRAM_LANGS.includes(d._programTab) ? d._programTab : "ru";
+                    return (
+                      <textarea
+                        className="w-full border rounded px-3 py-2 min-h-[110px] bg-white text-sm"
+                        placeholder={t('tpl.day_program_ph', { defaultValue: 'Описание программы этого дня...' })}
+                        value={d.program_i18n?.[activeLang] || ""}
+                        onChange={e=>{
+                          const value = e.target.value;
+                          setEdit(p=>{
+                            const copy = {...p};
+                            copy.days = [...(copy.days||[])];
+                            copy.days[idx] = {
+                              ...(copy.days[idx] || {}),
+                              program_i18n: {
+                                ...emptyProgramI18n(),
+                                ...(copy.days[idx]?.program_i18n || {}),
+                                [activeLang]: value,
+                              },
+                              _programTab: activeLang,
+                            };
+                            return copy;
+                          });
+                        }}
+                      />
+                    );
+                  })()}
+                </div>
               </div>
             ))}
-            <button className="px-3 py-1 border rounded" onClick={()=>setEdit(p=>({...p, days:[...(p.days||[]), {city:""}]}))}>
+            <button className="px-3 py-1 border rounded" onClick={()=>setEdit(p=>({...p, days:[...(p.days||[]), {city:"", program_i18n: emptyProgramI18n(), _programTab:"ru"}]}))}>
               {t('tpl.btn_add_day')}
             </button>
           </div>
