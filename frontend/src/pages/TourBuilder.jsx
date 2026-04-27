@@ -79,6 +79,11 @@ const ymd = (d) => {
     const day = String(d.getDate()).padStart(2,"0");
     return `${y}-${m}-${day}`;
   };
+const parseYmdLocal = (value) => {
+  const [y, m, d] = String(value || "").split("-").map(Number);
+  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return null;
+  return new Date(y, m - 1, d);
+};
 const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 const addDays     = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
 const daysInclusive = (a, b) => {
@@ -221,6 +226,20 @@ const LANGS = [
 
 const TB_PROGRAM_LANGS = ["ru", "en", "uz"];
 const emptyProgramI18n = () => ({ ru: "", en: "", uz: "" });
+const createEmptyTourDayState = (overrides = {}) => ({
+  city: "",
+  guide: null,
+  transport: null,
+  hotel: null,
+  guideService: null,
+  transportService: null,
+  entrySelected: [],
+  transfers: [],
+  meals: [],
+  program_i18n: emptyProgramI18n(),
+  _programTab: "ru",
+  ...overrides,
+});
 const normalizeProgramI18n = (value = {}) => ({
   ru: String(value?.ru || ""),
   en: String(value?.en || ""),
@@ -1106,16 +1125,7 @@ export default function TourBuilder() {
       const copy = { ...prev };
       days.forEach((d) => {
         const k = ymd(d);
-                if (!copy[k]) copy[k] = {
-          city: "",
-          guide: null, transport: null, hotel: null,
-          guideService: null, transportService: null,   // ⬅️ выбранные услуги
-          entrySelected: [],
-          transfers: [],
-          meals: [],
-          program_i18n: emptyProgramI18n(),
-          _programTab: "ru",
-        };
+                if (!copy[k]) copy[k] = createEmptyTourDayState();
       });
       Object.keys(copy).forEach((k) => {
         if (!days.find((d) => ymd(d) === k)) delete copy[k];
@@ -1219,6 +1229,103 @@ export default function TourBuilder() {
      return next;
    });
  };
+
+ const getActiveProgramTab = () => {
+   const code = String(i18n.language || "ru").slice(0, 2).toLowerCase();
+   return TB_PROGRAM_LANGS.includes(code) ? code : "ru";
+ };
+
+ const resetDayOptionCaches = () => {
+   setEntryQMap({});
+   setEntryOptionsMap({});
+   setHotelOptionsMap({});
+ };
+
+ const addTourDayAtEnd = () => {
+   const today = startOfDay(new Date());
+   if (!range?.from || !range?.to) {
+     const key = ymd(today);
+     setRange({ from: today, to: today });
+     setByDay({ [key]: createEmptyTourDayState({ _programTab: getActiveProgramTab() }) });
+     return;
+   }
+
+   const currentTo = startOfDay(range.to);
+   const nextDate = addDays(currentTo, 1);
+   const nextKey = ymd(nextDate);
+   setRange({ from: startOfDay(range.from), to: nextDate });
+   setByDay((prev) => ({
+     ...prev,
+     [nextKey]: prev[nextKey] || createEmptyTourDayState({ _programTab: getActiveProgramTab() }),
+   }));
+ };
+
+ const insertTourDayAfter = (dateKey) => {
+   if (!range?.from || !range?.to) {
+     addTourDayAtEnd();
+     return;
+   }
+
+   const keys = sortedDayKeys(byDay);
+   if (!keys.length || !keys.includes(dateKey)) {
+     addTourDayAtEnd();
+     return;
+   }
+
+   const baseDate = parseYmdLocal(dateKey);
+   if (!baseDate) return;
+   const insertKey = ymd(addDays(baseDate, 1));
+   const next = {};
+
+   keys.forEach((key) => {
+     const src = byDay[key] || {};
+     if (key <= dateKey) {
+       next[key] = src;
+     } else {
+       const d = parseYmdLocal(key);
+       if (d) next[ymd(addDays(d, 1))] = src;
+     }
+   });
+
+   next[insertKey] = createEmptyTourDayState({ _programTab: getActiveProgramTab() });
+   setByDay(next);
+   setRange({ from: startOfDay(range.from), to: addDays(startOfDay(range.to), 1) });
+   resetDayOptionCaches();
+ };
+
+ const removeTourDay = (dateKey) => {
+   const keys = sortedDayKeys(byDay);
+   if (!keys.includes(dateKey)) return;
+
+   const ask = t("tb.delete_day_confirm", {
+     defaultValue: "Удалить этот день программы? Данные этого дня будут удалены.",
+   });
+   if (typeof window !== "undefined" && !window.confirm(ask)) return;
+
+   if (keys.length <= 1) {
+     setByDay({});
+     setRange(EMPTY_RANGE);
+     resetDayOptionCaches();
+     return;
+   }
+
+   const next = {};
+   keys.forEach((key) => {
+     if (key === dateKey) return;
+     const src = byDay[key] || {};
+     if (key > dateKey) {
+       const d = parseYmdLocal(key);
+       if (d) next[ymd(addDays(d, -1))] = src;
+     } else {
+       next[key] = src;
+     }
+   });
+
+   setByDay(next);
+   setRange({ from: startOfDay(range.from), to: addDays(startOfDay(range.to), -1) });
+   resetDayOptionCaches();
+ };
+
   // автоподбор по конкретному дню
   const autoPickForDay = (dateKey) => {
     setByDay((prev) => {
@@ -1904,6 +2011,32 @@ const makeTransportLoader = (dateKey) => async (input) => {
 
         {/* days */}
         <div className="space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-orange-100 bg-orange-50/50 px-3 py-2">
+            <div className="text-sm text-gray-700">
+              {days.length
+                ? t('tb.days_count_hint', { count: days.length, defaultValue: `Дней в программе: ${days.length}` })
+                : t('tb.no_days_hint', { defaultValue: 'Выберите даты или добавьте первый день программы.' })}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="px-3 py-1.5 text-sm border rounded bg-white hover:bg-orange-50"
+                onClick={addTourDayAtEnd}
+              >
+                {t('tb.add_day', { defaultValue: '+ Добавить день' })}
+              </button>
+              {!!days.length && (
+                <button
+                  type="button"
+                  className="px-3 py-1.5 text-sm border rounded bg-white hover:bg-orange-50"
+                  onClick={() => generateProgramForAllDays({ overwrite: true })}
+                >
+                  {t('tb.generate_all_program', { defaultValue: 'Сгенерировать все' })}
+                </button>
+              )}
+            </div>
+          </div>
+
           {days.map((d, i) => {
             const k = ymd(d);
             const st = byDay[k] || {};
@@ -1917,7 +2050,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                   borderColor: `${BRAND.accent}55`,
                 }}
               >
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
                   <div className="font-semibold" style={{ color: BRAND.primary }}>
                     D{i + 1}
                   </div>
@@ -1939,6 +2072,20 @@ const makeTransportLoader = (dateKey) => async (input) => {
                   <div className="text-sm" style={{ color: BRAND.primary }}>
                     {k}
                   </div>
+                  <button
+                    type="button"
+                    className="px-2 py-1 text-xs border rounded bg-white hover:bg-orange-50"
+                    onClick={() => insertTourDayAfter(k)}
+                  >
+                    {t('tb.insert_day_after', { defaultValue: '+ день после' })}
+                  </button>
+                  <button
+                    type="button"
+                    className="px-2 py-1 text-xs border rounded bg-white text-red-600 hover:bg-red-50"
+                    onClick={() => removeTourDay(k)}
+                  >
+                    {t('tb.delete_day', { defaultValue: 'Удалить день' })}
+                  </button>
                 </div>
 
                 {/* Программа дня */}
