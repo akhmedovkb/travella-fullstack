@@ -446,12 +446,9 @@ const buildAutoProgramI18n = ({
   ];
 
   return {
-    ru: ruLines.filter(Boolean).join("
-"),
-    en: enLines.filter(Boolean).join("
-"),
-    uz: uzLines.filter(Boolean).join("
-"),
+    ru: ruLines.filter(Boolean).join("\n"),
+    en: enLines.filter(Boolean).join("\n"),
+    uz: uzLines.filter(Boolean).join("\n"),
   };
 };
 
