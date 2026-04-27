@@ -239,66 +239,219 @@ const pickProgramText = (program = {}, preferredLang = "ru") => {
 const hasProgramText = (program = {}) =>
   TB_PROGRAM_LANGS.some((code) => String(program?.[code] || "").trim());
 
-const buildAutoProgramI18n = ({ dayNumber, totalDays, date, city, prevCity, nextCity }) => {
-  const safeCity = String(city || "").trim() || "город по маршруту";
-  const safeCityEn = String(city || "").trim() || "the route city";
-  const safeCityUz = String(city || "").trim() || "yo'nalish shahri";
+const firstText = (...vals) => {
+  for (const v of vals) {
+    const str = String(v ?? "").trim();
+    if (str) return str;
+  }
+  return "";
+};
+
+const listText = (items = [], fallback = "") => {
+  const arr = (Array.isArray(items) ? items : [])
+    .map((x) => String(x || "").trim())
+    .filter(Boolean);
+  return arr.length ? arr.join(", ") : fallback;
+};
+
+const entryNameForLang = (entry, lang = "ru") => {
+  const raw = entry?.raw || entry || {};
+  if (lang === "en") return firstText(raw.name_en, raw.title_en, raw.name, raw.name_ru, raw.name_uz, entry?.label);
+  if (lang === "uz") return firstText(raw.name_uz, raw.title_uz, raw.name, raw.name_ru, raw.name_en, entry?.label);
+  return firstText(raw.name_ru, raw.title_ru, raw.name, raw.name_en, raw.name_uz, entry?.label);
+};
+
+const mealLabelForLang = (type, lang = "ru") => {
+  const key = String(type || "").toLowerCase();
+  const dict = {
+    ru: { lunch: "обед", dinner: "ужин", gala: "гала-ужин" },
+    en: { lunch: "lunch", dinner: "dinner", gala: "gala dinner" },
+    uz: { lunch: "tushlik", dinner: "kechki ovqat", gala: "gala-kechki ovqat" },
+  };
+  return dict[lang]?.[key] || dict.ru[key] || key;
+};
+
+const transferTypeForLang = (type, lang = "ru") => {
+  const key = String(type || "car").toLowerCase();
+  const dict = {
+    ru: { car: "комфортабельный автомобиль", train: "поезд", air: "авиаперелёт" },
+    en: { car: "comfortable vehicle", train: "train", air: "flight" },
+    uz: { car: "qulay avtomobil", train: "poyezd", air: "aviaqatnov" },
+  };
+  return dict[lang]?.[key] || dict.ru[key] || key;
+};
+
+const serviceTitle = (svc) => firstText(
+  svc?.title,
+  svc?.raw?.title,
+  CATEGORY_LABELS[svc?.category],
+  CATEGORY_LABELS[svc?.raw?.category]
+);
+
+const hotelName = (st) => firstText(st?.hotel?.name, st?.hotel?.label, st?.hotel?.raw?.name, st?.hotel?.raw?.title);
+const guideName = (st) => firstText(st?.guide?.name, st?.guide?.label, st?.guide?.raw?.name);
+const transportName = (st) => firstText(st?.transport?.name, st?.transport?.label, st?.transport?.raw?.name);
+const vehicleText = (st) => firstText(
+  svcModel(st?.transportService),
+  st?.transportService?.vehicle_model,
+  st?.transportService?.raw?.vehicle_model,
+  st?.transportService?.raw?.details?.vehicle_model
+);
+
+const buildAutoProgramI18n = ({
+  dayNumber,
+  totalDays,
+  date,
+  city,
+  prevCity,
+  nextCity,
+  dayData = {},
+  pax = 1,
+}) => {
+  const safeCity = String(city || dayData?.city || "").trim();
+  const cityRu = safeCity || "город по маршруту";
+  const cityEn = safeCity || "the route city";
+  const cityUz = safeCity || "yo'nalish shahri";
   const dayLabel = `D${dayNumber}`;
   const datePart = date ? ` (${date})` : "";
   const isFirst = dayNumber === 1;
   const isLast = dayNumber === totalDays;
-  const hasTransferIn = prevCity && String(prevCity).trim() && String(prevCity).trim() !== safeCity;
-  const hasTransferOut = nextCity && String(nextCity).trim() && String(nextCity).trim() !== safeCity;
+  const prev = String(prevCity || "").trim();
+  const next = String(nextCity || "").trim();
+  const hasTransferIn = prev && safeCity && prev !== safeCity;
+  const hasTransferOut = next && safeCity && next !== safeCity;
+
+  const gName = guideName(dayData);
+  const gService = serviceTitle(dayData?.guideService);
+  const tName = transportName(dayData);
+  const tService = serviceTitle(dayData?.transportService);
+  const car = vehicleText(dayData);
+  const hName = hotelName(dayData);
+  const entriesRu = (dayData?.entrySelected || []).map((x) => entryNameForLang(x, "ru")).filter(Boolean);
+  const entriesEn = (dayData?.entrySelected || []).map((x) => entryNameForLang(x, "en")).filter(Boolean);
+  const entriesUz = (dayData?.entrySelected || []).map((x) => entryNameForLang(x, "uz")).filter(Boolean);
+  const mealsRu = (dayData?.meals || []).map((x) => mealLabelForLang(x?.type, "ru")).filter(Boolean);
+  const mealsEn = (dayData?.meals || []).map((x) => mealLabelForLang(x?.type, "en")).filter(Boolean);
+  const mealsUz = (dayData?.meals || []).map((x) => mealLabelForLang(x?.type, "uz")).filter(Boolean);
+  const transfers = Array.isArray(dayData?.transfers) ? dayData.transfers : [];
+
+  const transferRu = transfers
+    .map((tr) => {
+      const from = firstText(tr?.from);
+      const to = firstText(tr?.to);
+      if (!from && !to) return "";
+      return `${from || cityRu} → ${to || cityRu} (${transferTypeForLang(tr?.type, "ru")})`;
+    })
+    .filter(Boolean);
+  const transferEn = transfers
+    .map((tr) => {
+      const from = firstText(tr?.from);
+      const to = firstText(tr?.to);
+      if (!from && !to) return "";
+      return `${from || cityEn} → ${to || cityEn} (${transferTypeForLang(tr?.type, "en")})`;
+    })
+    .filter(Boolean);
+  const transferUz = transfers
+    .map((tr) => {
+      const from = firstText(tr?.from);
+      const to = firstText(tr?.to);
+      if (!from && !to) return "";
+      return `${from || cityUz} → ${to || cityUz} (${transferTypeForLang(tr?.type, "uz")})`;
+    })
+    .filter(Boolean);
+
+  const paxTextRu = Number(pax) > 0 ? `Группа: ${pax} чел.` : "";
+  const paxTextEn = Number(pax) > 0 ? `Group size: ${pax} pax.` : "";
+  const paxTextUz = Number(pax) > 0 ? `Guruh: ${pax} kishi.` : "";
 
   const ruLines = [
-    `${dayLabel}${datePart}. ${safeCity}.`,
+    `${dayLabel}${datePart}. ${cityRu}`,
+    paxTextRu,
     isFirst
-      ? `Прибытие группы, встреча с гидом/представителем и трансфер по программе.`
+      ? `Встреча группы, организационный брифинг и комфортное начало маршрута${hName ? ` с размещением в ${hName}` : ""}.`
       : hasTransferIn
-      ? `Переезд из ${prevCity} в ${safeCity}, встреча и начало программы дня.`
-      : `Продолжение программы в ${safeCity}.`,
-    `Обзорная программа по ключевым локациям города с учетом выбранных услуг, входных билетов и питания.`,
+      ? `Переезд из ${prev} в ${cityRu}. По прибытии — плавное включение в программу дня без лишней спешки.`
+      : `День посвящён глубокому и комфортному знакомству с ${cityRu}.`,
+    gName || gService
+      ? `Экскурсионная часть проходит${gName ? ` с гидом ${gName}` : ""}${gService ? `: ${gService}` : ""}. Маршрут выстроен в удобном темпе, с акцентом на атмосферу города, красивые локации и понятную подачу истории.`
+      : `Программа дня выстроена в формате премиального city experience: ключевые локации, фотопаузы, свободное время и спокойный темп без перегруза.`,
+    entriesRu.length
+      ? `В программе предусмотрено посещение: ${listText(entriesRu)}. Время на объектах распределяется так, чтобы группа успела осмотреть главное и сохранить комфортный ритм путешествия.`
+      : "",
+    tName || tService || car
+      ? `Передвижение по маршруту организовано на выбранном транспорте${tName ? ` от ${tName}` : ""}${car ? ` (${car})` : ""}${tService ? ` — ${tService}` : ""}.`
+      : "",
+    transferRu.length ? `Дополнительные трансферы дня: ${listText(transferRu)}.` : "",
+    hName ? `Проживание/отель по программе: ${hName}.` : "",
+    mealsRu.length ? `Питание по программе: ${listText(mealsRu)}.` : "",
     hasTransferOut
-      ? `Во второй половине дня подготовка к переезду в ${nextCity}.`
+      ? `Во второй половине дня — подготовка к дальнейшему маршруту и переезду в ${next}.`
       : isLast
-      ? `Завершение программы, свободное время и подготовка к выезду.`
-      : `Свободное время для прогулки, фото и дополнительных активностей.`,
+      ? `Финальный день программы: свободное время для последних прогулок, покупок и спокойная подготовка к выезду.`
+      : `В завершение дня — свободное время для прогулки, фото, отдыха или дополнительных активностей по желанию группы.`,
   ];
 
   const enLines = [
-    `${dayLabel}${datePart}. ${safeCityEn}.`,
+    `${dayLabel}${datePart}. ${cityEn}`,
+    paxTextEn,
     isFirst
-      ? `Group arrival, meet-and-greet with the guide/representative and transfer according to the program.`
+      ? `Meet-and-greet, short orientation briefing and a smooth start of the journey${hName ? ` with accommodation at ${hName}` : ""}.`
       : hasTransferIn
-      ? `Transfer from ${prevCity} to ${safeCityEn}, meeting and start of the day program.`
-      : `Continuation of the program in ${safeCityEn}.`,
-    `Sightseeing program around the key city locations, adjusted to the selected services, entrance tickets and meals.`,
+      ? `Transfer from ${prev} to ${cityEn}. Upon arrival, the day continues at a relaxed and well-paced rhythm.`
+      : `The day is designed as a refined introduction to ${cityEn}, combining comfort, highlights and a balanced pace.`,
+    gName || gService
+      ? `The sightseeing program is arranged${gName ? ` with guide ${gName}` : ""}${gService ? `: ${gService}` : ""}. The route focuses on the city atmosphere, signature locations and clear storytelling without rushing the group.`
+      : `The program is planned as a premium city experience: key locations, photo stops, free time and a comfortable travel rhythm.`,
+    entriesEn.length
+      ? `Included visits: ${listText(entriesEn)}. The timing is planned to keep the experience informative, elegant and comfortable.`
+      : "",
+    tName || tService || car
+      ? `Transportation is arranged with the selected provider${tName ? ` ${tName}` : ""}${car ? ` (${car})` : ""}${tService ? ` — ${tService}` : ""}.`
+      : "",
+    transferEn.length ? `Additional transfers of the day: ${listText(transferEn)}.` : "",
+    hName ? `Accommodation/program hotel: ${hName}.` : "",
+    mealsEn.length ? `Meals included in the program: ${listText(mealsEn)}.` : "",
     hasTransferOut
-      ? `In the second half of the day, preparation for the transfer to ${nextCity}.`
+      ? `In the second half of the day, preparation for the onward route and transfer to ${next}.`
       : isLast
-      ? `End of the program, free time and preparation for departure.`
-      : `Free time for walking, photos and optional activities.`,
+      ? `Final day of the program: free time for last walks, shopping and relaxed preparation for departure.`
+      : `At the end of the day, free time for walking, photos, rest or optional activities according to the group's preference.`,
   ];
 
   const uzLines = [
-    `${dayLabel}${datePart}. ${safeCityUz}.`,
+    `${dayLabel}${datePart}. ${cityUz}`,
+    paxTextUz,
     isFirst
-      ? `Guruhning yetib kelishi, gid/vakil bilan kutib olish va dastur bo'yicha transfer.`
+      ? `Guruhni kutib olish, qisqa tashkiliy ma'lumot va yo'nalishni qulay boshlash${hName ? `, ${hName} mehmonxonasiga joylashish bilan` : ""}.`
       : hasTransferIn
-      ? `${prevCity} shahridan ${safeCityUz} shahriga yo'l olish, kutib olish va kun dasturini boshlash.`
-      : `${safeCityUz} shahrida dastur davom etadi.`,
-    `Tanlangan xizmatlar, kirish chiptalari va ovqatlanishni hisobga olgan holda shaharning asosiy joylari bo'ylab ekskursiya dasturi.`,
+      ? `${prev} shahridan ${cityUz} shahriga yo'l olish. Yetib kelgach, kun dasturi sokin va qulay ritmda davom etadi.`
+      : `Kun ${cityUz} shahri bilan qulay va mazmunli tanishuvga bag'ishlanadi.`,
+    gName || gService
+      ? `Ekskursiya qismi${gName ? ` gid ${gName} bilan` : ""}${gService ? `: ${gService}` : ""} tashkil etiladi. Marshrut shahar muhitini his qilish, asosiy lokatsiyalar va tushunarli hikoya qilishga qaratilgan.`
+      : `Kun dasturi premium city experience formatida tuzilgan: asosiy joylar, foto-to'xtashlar, bo'sh vaqt va shoshilmasdan sayohat qilish ritmi.`,
+    entriesUz.length
+      ? `Dasturga tashriflar kiritilgan: ${listText(entriesUz)}. Vaqt guruh uchun qulay va mazmunli bo'lishi uchun muvozanatli rejalashtiriladi.`
+      : "",
+    tName || tService || car
+      ? `Yo'nalish bo'ylab harakat tanlangan transport orqali amalga oshiriladi${tName ? `: ${tName}` : ""}${car ? ` (${car})` : ""}${tService ? ` — ${tService}` : ""}.`
+      : "",
+    transferUz.length ? `Kun davomida qo'shimcha transferlar: ${listText(transferUz)}.` : "",
+    hName ? `Dastur bo'yicha mehmonxona: ${hName}.` : "",
+    mealsUz.length ? `Dastur bo'yicha ovqatlanish: ${listText(mealsUz)}.` : "",
     hasTransferOut
-      ? `Kunning ikkinchi yarmida ${nextCity} shahriga yo'l olishga tayyorgarlik.`
+      ? `Kunning ikkinchi yarmida keyingi yo'nalish va ${next} shahriga transferga tayyorgarlik.`
       : isLast
-      ? `Dastur yakuni, bo'sh vaqt va jo'nashga tayyorgarlik.`
-      : `Sayr, suratga tushish va qo'shimcha faoliyatlar uchun bo'sh vaqt.`,
+      ? `Dastur yakuni: oxirgi sayrlar, xaridlar va jo'nashga sokin tayyorgarlik uchun bo'sh vaqt.`
+      : `Kun yakunida sayr, suratga tushish, dam olish yoki guruh xohishiga ko'ra qo'shimcha faoliyatlar uchun bo'sh vaqt.`,
   ];
 
   return {
-    ru: ruLines.filter(Boolean).join("\n"),
-    en: enLines.filter(Boolean).join("\n"),
-    uz: uzLines.filter(Boolean).join("\n"),
+    ru: ruLines.filter(Boolean).join("
+"),
+    en: enLines.filter(Boolean).join("
+"),
+    uz: uzLines.filter(Boolean).join("
+"),
   };
 };
 
@@ -1031,6 +1184,8 @@ export default function TourBuilder() {
            city: current.city,
            prevCity: idx > 0 ? prev[keys[idx - 1]]?.city : "",
            nextCity: idx < keys.length - 1 ? prev[keys[idx + 1]]?.city : "",
+           dayData: current,
+           pax: Math.max(1, toNum(adt, 0) + toNum(chd, 0)),
          }),
          _programTab: activeLang,
        },
@@ -1058,6 +1213,8 @@ export default function TourBuilder() {
            city: current.city,
            prevCity: idx > 0 ? prev[keys[idx - 1]]?.city : "",
            nextCity: idx < keys.length - 1 ? prev[keys[idx + 1]]?.city : "",
+           dayData: current,
+           pax: Math.max(1, toNum(adt, 0) + toNum(chd, 0)),
          }),
          _programTab: activeLang,
        };
