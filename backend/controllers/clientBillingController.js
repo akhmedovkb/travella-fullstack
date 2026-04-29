@@ -93,13 +93,39 @@ async function syncClientBalanceMirror(client, clientId) {
 }
 
 async function ensureTopupOrdersShape(db) {
+  const { rows } = await db.query(`
+    SELECT c.relkind
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'public'
+       AND c.relname = 'topup_orders'
+     LIMIT 1
+  `);
+
+  const topupRelKind = rows[0]?.relkind || null;
+  const target = topupRelKind === "v" ? "payme_topup_orders" : "topup_orders";
+
+  if (topupRelKind === "v") {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS payme_topup_orders (
+        id BIGSERIAL PRIMARY KEY,
+        client_id BIGINT NOT NULL,
+        amount_tiyin BIGINT NOT NULL CHECK (amount_tiyin > 0)
+      )
+    `);
+  }
+
   await db.query(`
-    ALTER TABLE topup_orders
+    ALTER TABLE ${target}
       ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT 'payme',
       ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'new',
       ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ NULL
   `);
+
+  if (topupRelKind === "v") {
+    await db.query(`CREATE OR REPLACE VIEW topup_orders AS SELECT * FROM payme_topup_orders`);
+  }
 }
 
 function buildPaymeCheckoutUrl({

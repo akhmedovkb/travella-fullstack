@@ -1505,7 +1505,7 @@ return (
                   )}
                 </div>
             
-                {!unlocked && (
+                {canShowUnlockButton && (
                   <div className="mt-3 flex items-center justify-between border-t border-orange-100 bg-white/70 px-3 py-2">
                     <div className="text-[11px] text-gray-600">
                       {t("marketplace.contacts_inside_hint", {

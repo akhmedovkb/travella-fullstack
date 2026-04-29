@@ -47,10 +47,17 @@ async function main() {
       id BIGSERIAL PRIMARY KEY,
       client_id BIGINT NOT NULL,
       amount_tiyin BIGINT NOT NULL CHECK (amount_tiyin > 0),
+      provider TEXT NOT NULL DEFAULT 'payme',
       status TEXT NOT NULL DEFAULT 'new',
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       paid_at TIMESTAMPTZ NULL
     );
+
+    ALTER TABLE payme_topup_orders
+      ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT 'payme',
+      ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'new',
+      ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ NULL;
 
     DO $$
     BEGIN
@@ -62,6 +69,25 @@ async function main() {
            AND c.relname = 'topup_orders'
       ) THEN
         CREATE VIEW topup_orders AS SELECT * FROM payme_topup_orders;
+      END IF;
+    END
+    $$;
+
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1
+          FROM pg_class c
+          JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = 'public'
+           AND c.relname = 'topup_orders'
+           AND c.relkind = 'r'
+      ) THEN
+        ALTER TABLE topup_orders
+          ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT 'payme',
+          ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'new',
+          ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ NULL;
       END IF;
     END
     $$;
