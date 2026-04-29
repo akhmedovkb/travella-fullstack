@@ -92,6 +92,16 @@ async function syncClientBalanceMirror(client, clientId) {
   return balance;
 }
 
+async function ensureTopupOrdersShape(db) {
+  await db.query(`
+    ALTER TABLE topup_orders
+      ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT 'payme',
+      ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'new',
+      ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ NULL
+  `);
+}
+
 function buildPaymeCheckoutUrl({
   merchantId,
   checkoutBase,
@@ -276,6 +286,7 @@ async function createTopupOrder(req, res) {
 
   try {
     await db.query("BEGIN");
+    await ensureTopupOrdersShape(db);
 
     const existsQ = await db.query(
       `SELECT id FROM clients WHERE id = $1 LIMIT 1`,
@@ -386,6 +397,7 @@ async function unlockAuto(req, res) {
 
   try {
     await db.query("BEGIN");
+    await ensureTopupOrdersShape(db);
 
     const unlockSettings = await getContactUnlockSettings(db);
     const price = Number(unlockSettings.effective_price || 0);
