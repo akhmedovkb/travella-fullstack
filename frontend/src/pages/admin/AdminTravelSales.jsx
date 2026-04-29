@@ -388,6 +388,32 @@ export default function AdminTravelSales() {
   const agentsWithAddress = useMemo(() => agents.filter((a) => String(a.address || "").trim()).length, [agents]);
   const paymentsNet = totalPayments - totalRefunds;
 
+  const dailySalesGroups = useMemo(() => {
+  const map = new Map();
+
+  dailySales.forEach((row) => {
+    const dateKey = iso(row.sale_date) || "Без даты";
+
+    if (!map.has(dateKey)) {
+      map.set(dateKey, {
+        date: dateKey,
+        items: [],
+        saleTotal: 0,
+        netTotal: 0,
+      });
+    }
+
+    const group = map.get(dateKey);
+    group.items.push(row);
+    group.saleTotal += Number(row.sale_amount || 0);
+    group.netTotal += Number(row.net_amount || 0);
+  });
+
+  return Array.from(map.values()).sort((a, b) =>
+    String(b.date).localeCompare(String(a.date))
+  );
+}, [dailySales]);
+
   const currentTabSummary = useMemo(() => {
     if (tab === "daily") return `Продажи в фокусе • ${dailySales.length} записей`;
     if (tab === "payments") return `Оплаты в фокусе • ${payments.length} записей`;
@@ -709,21 +735,96 @@ export default function AdminTravelSales() {
                 <TableShell>
                   <Table>
                     <TableHead><tr><TH>№</TH><TH>Дата</TH><TH>Агент</TH><TH>Тип</TH><TH>Направление</TH><TH>Name of traveller</TH><TH align="right">Продажа</TH><TH align="right">Нетто</TH><TH className="w-[180px]">Действия</TH></tr></TableHead>
-                    <tbody>
-                      {dailyLoading || dailySales.length === 0 ? <EmptyRow loading={dailyLoading} colSpan={9} /> : dailySales.map((row, idx) => (
-                        <tr key={row.id}>
-                          <TD className="text-gray-500">{idx + 1}</TD>
-                          <TD>{iso(row.sale_date)}</TD>
-                          <TD><div className="font-medium text-gray-900">{row.agent_name || row.agent}</div></TD>
-                          <TD><Badge className={badgeClassByServiceType(row.service_type)}>{typeLabel(row.service_type)}</Badge></TD>
-                          <TD className="max-w-[220px] whitespace-pre-wrap break-words">{row.direction || "—"}</TD>
-                          <TD>{row.traveller_name || "—"}</TD>
-                          <TD align="right" className="font-semibold text-gray-900">{money(row.sale_amount)}</TD>
-                          <TD align="right" className="font-semibold text-gray-900">{money(row.net_amount)}</TD>
-                          <TD><div className="flex flex-wrap gap-3"><button onClick={() => startEditSale(row)} type="button" className="text-sm font-medium text-blue-600 transition hover:text-blue-800 hover:underline">Изменить</button><button onClick={() => handleDeleteSale(row.id)} type="button" className="text-sm font-medium text-red-500 transition hover:text-red-700 hover:underline">Удалить</button></div></TD>
-                        </tr>
-                      ))}
-                    </tbody>
+                      <tbody>
+                        {dailyLoading || dailySales.length === 0 ? (
+                          <EmptyRow loading={dailyLoading} colSpan={9} />
+                        ) : (
+                          dailySalesGroups.flatMap((group) => {
+                            const today = iso(new Date());
+                            const isToday = group.date === today;
+                      
+                            const headerRow = (
+                              <tr key={`group-${group.date}`}>
+                                <td colSpan={9} className="px-3 py-3">
+                                  <div
+                                    className={`flex flex-col gap-2 rounded-2xl border px-4 py-3 md:flex-row md:items-center md:justify-between ${
+                                      isToday
+                                        ? "border-emerald-200 bg-emerald-50"
+                                        : "border-slate-200 bg-slate-50"
+                                    }`}
+                                  >
+                                    <div>
+                                      <div className="text-sm font-semibold text-slate-900">
+                                        {group.date}
+                                        {isToday ? " • сегодня" : ""}
+                                      </div>
+                                      <div className="text-xs text-slate-500">
+                                        Продаж: {group.items.length}
+                                      </div>
+                                    </div>
+                      
+                                    <div className="flex flex-wrap gap-2 text-xs">
+                                      <span className="rounded-full bg-white px-3 py-1 font-semibold text-slate-700 ring-1 ring-slate-200">
+                                        Продажа: {money(group.saleTotal)}
+                                      </span>
+                                      <span className="rounded-full bg-white px-3 py-1 font-semibold text-slate-700 ring-1 ring-slate-200">
+                                        Нетто: {money(group.netTotal)}
+                                      </span>
+                                      <span className="rounded-full bg-white px-3 py-1 font-semibold text-emerald-700 ring-1 ring-emerald-200">
+                                        Маржа: {money(group.saleTotal - group.netTotal)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                      
+                            const itemRows = group.items.map((row, idx) => (
+                              <tr
+                                key={row.id}
+                                className="border-b border-gray-100 transition hover:bg-gray-50/70"
+                              >
+                                <TD className="text-gray-500">{idx + 1}</TD>
+                                <TD>{iso(row.sale_date)}</TD>
+                                <TD>
+                                  <div className="font-medium text-gray-900">{row.agent_name}</div>
+                                </TD>
+                                <TD>
+                                  <Badge className={badgeClassByServiceType(row.service_type)}>
+                                    {typeLabel(row.service_type)}
+                                  </Badge>
+                                </TD>
+                                <TD className="max-w-[200px] whitespace-pre-wrap break-words">
+                                  {row.direction}
+                                </TD>
+                                <TD>{row.traveller_name || "—"}</TD>
+                                <TD align="right" className="font-semibold text-gray-900">
+                                  {money(row.sale_amount)}
+                                </TD>
+                                <TD align="right" className="font-semibold text-gray-900">
+                                  {money(row.net_amount)}
+                                </TD>
+                                <TD>
+                                  <div className="flex flex-wrap gap-2">
+                                    <ActionButton onClick={() => startEditSale(row)} type="button">
+                                      Изменить
+                                    </ActionButton>
+                                    <ActionButton
+                                      variant="danger"
+                                      onClick={() => handleDeleteSale(row.id)}
+                                      type="button"
+                                    >
+                                      Удалить
+                                    </ActionButton>
+                                  </div>
+                                </TD>
+                              </tr>
+                            ));
+                      
+                            return [headerRow, ...itemRows];
+                          })
+                        )}
+                      </tbody>
                   </Table>
                 </TableShell>
               </Card>
