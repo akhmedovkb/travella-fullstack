@@ -241,6 +241,7 @@ export default function AdminTravelSales() {
   const [agentQuery, setAgentQuery] = useState("");
 
   const [dailySales, setDailySales] = useState([]);
+  const [collapsedSaleDays, setCollapsedSaleDays] = useState({});
   const [dailyLoading, setDailyLoading] = useState(false);
   const [saleForm, setSaleForm] = useState(emptySaleForm);
   const [editingSaleId, setEditingSaleId] = useState(null);
@@ -413,6 +414,13 @@ export default function AdminTravelSales() {
     String(b.date).localeCompare(String(a.date))
   );
 }, [dailySales]);
+
+  const toggleSaleDay = (dateKey) => {
+    setCollapsedSaleDays((prev) => ({
+      ...prev,
+      [dateKey]: !prev[dateKey],
+    }));
+  };
 
   const currentTabSummary = useMemo(() => {
     if (tab === "daily") return `Продажи в фокусе • ${dailySales.length} записей`;
@@ -746,19 +754,26 @@ export default function AdminTravelSales() {
                             const headerRow = (
                               <tr key={`group-${group.date}`}>
                                 <td colSpan={9} className="px-3 py-3">
-                                  <div
-                                    className={`flex flex-col gap-2 rounded-2xl border px-4 py-3 md:flex-row md:items-center md:justify-between ${
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleSaleDay(group.date)}
+                                    className={`flex w-full flex-col gap-2 rounded-2xl border px-4 py-3 text-left transition hover:shadow-sm md:flex-row md:items-center md:justify-between ${
                                       isToday
-                                        ? "border-emerald-200 bg-emerald-50"
-                                        : "border-slate-200 bg-slate-50"
+                                        ? "border-emerald-200 bg-emerald-50 hover:bg-emerald-100/60"
+                                        : "border-slate-200 bg-slate-50 hover:bg-slate-100"
                                     }`}
                                   >
                                     <div>
-                                      <div className="text-sm font-semibold text-slate-900">
-                                        {group.date}
-                                        {isToday ? " • сегодня" : ""}
+                                      <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                                        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white text-xs ring-1 ring-slate-200">
+                                          {collapsedSaleDays[group.date] ? "▶" : "▼"}
+                                        </span>
+                                        <span>
+                                          {group.date}
+                                          {isToday ? " • сегодня" : ""}
+                                        </span>
                                       </div>
-                                      <div className="text-xs text-slate-500">
+                                      <div className="mt-1 text-xs text-slate-500">
                                         Продаж: {group.items.length}
                                       </div>
                                     </div>
@@ -774,12 +789,14 @@ export default function AdminTravelSales() {
                                         Маржа: {money(group.saleTotal - group.netTotal)}
                                       </span>
                                     </div>
-                                  </div>
+                                  </button>
                                 </td>
                               </tr>
                             );
                       
-                            const itemRows = group.items.map((row, idx) => (
+                            const itemRows = collapsedSaleDays[group.date]
+                              ? []
+                              : group.items.map((row, idx) => (
                               <tr
                                 key={row.id}
                                 className="border-b border-gray-100 transition hover:bg-gray-50/70"
