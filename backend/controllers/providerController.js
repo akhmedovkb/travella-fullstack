@@ -797,13 +797,15 @@ const addService = async (req, res) => {
     
     normalizedDetailsObj = normalizeIncludedOptions(normalizedDetailsObj);
     
-    if (String(category || "").toLowerCase().startsWith("refused_")) {
+    const isRefused = String(category || "").toLowerCase().startsWith("refused_");
+    if (isRefused) {
       normalizedDetailsObj = normalizeRefusedStartDate(normalizedDetailsObj, category);
     }
 
     const extended = isExtendedCategory(category);
 
-    // ── Business validation: expire_at must not be earlier than start_date
+    // For regular services, expiry is the service end boundary.
+    // For refused deals, expiry is the sales deadline and may be before departure/start.
     const startRaw =
       pickFirst(req.body, ["start_date", "startDate"]) ??
       pickFirst(normalizedDetailsObj, ["startDate", "start_date", "start_at", "begin_date"]);
@@ -818,7 +820,7 @@ const addService = async (req, res) => {
 
     const startDate = parseDateSafe(startRaw);
     const expireDate = parseDateSafe(expireRaw);
-    if (startDate && expireDate && expireDate < startDate) {
+    if (!isRefused && startDate && expireDate && expireDate < startDate) {
       return res.status(400).json({
         code: "EXPIRY_BEFORE_START",
         message: "Expiration must not be earlier than start date",
@@ -952,13 +954,15 @@ const updateService = async (req, res) => {
     
     normalizedDetailsObj = normalizeIncludedOptions(normalizedDetailsObj);
     
-    if (String(category || "").toLowerCase().startsWith("refused_")) {
+    const isRefused = String(category || "").toLowerCase().startsWith("refused_");
+    if (isRefused) {
       normalizedDetailsObj = normalizeRefusedStartDate(normalizedDetailsObj, category);
     }
 
     const extended = isExtendedCategory(category);
 
-    // ── Business validation: expire_at must not be earlier than start_date
+    // For regular services, expiry is the service end boundary.
+    // For refused deals, expiry is the sales deadline and may be before departure/start.
     const startRaw =
       pickFirst(req.body, ["start_date", "startDate"]) ??
       pickFirst(normalizedDetailsObj, ["startDate", "start_date", "start_at", "begin_date"]);
@@ -972,7 +976,7 @@ const updateService = async (req, res) => {
       ]);
     const startDate = parseDateSafe(startRaw);
     const expireDate = parseDateSafe(expireRaw);
-    if (startDate && expireDate && expireDate < startDate) {
+    if (!isRefused && startDate && expireDate && expireDate < startDate) {
       return res.status(400).json({
         code: "EXPIRY_BEFORE_START",
         message: "Expiration must not be earlier than start date",

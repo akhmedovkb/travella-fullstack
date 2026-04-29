@@ -19,6 +19,25 @@ import { tSuccess, tError, tInfo, tWarn } from "../shared/toast";
 
 /** ================= Helpers ================= */
 
+function normalizeLocationList(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item || "").trim()).filter(Boolean);
+  }
+
+  const raw = String(value || "").trim();
+  if (!raw) return [];
+
+  const pgArrayMatch = raw.match(/^\{(.+)\}$/);
+  if (pgArrayMatch) {
+    return pgArrayMatch[1]
+      .split(",")
+      .map((item) => item.replace(/^"|"$/g, "").trim())
+      .filter(Boolean);
+  }
+
+  return [raw];
+}
+
 // data: → blob: (для сертификата)
 function dataUrlToBlobUrl(dataUrl) {
   try {
@@ -372,11 +391,7 @@ const ProviderProfile = () => {
         const p = res.data || {};
         setProfile(p);
 
-        const loc = Array.isArray(p.location)
-          ? p.location
-          : p.location
-          ? [p.location]
-          : [];
+        const loc = normalizeLocationList(p.location);
         setRegions(loc.map((c) => ({ value: c, label: c })));
         setNewSocial(p.social || "");
         setNewPhone(p.phone || "");
@@ -835,10 +850,8 @@ const ProviderProfile = () => {
               />
             ) : (
               <div className="border px-3 py-2 rounded bg-gray-100">
-                {Array.isArray(profile.location)
-                  ? profile.location.join(", ")
-                  : profile.location ||
-                    t("not_specified")}
+                {normalizeLocationList(profile.location).join(", ") ||
+                  t("not_specified")}
               </div>
             )}
           </div>

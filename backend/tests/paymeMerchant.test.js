@@ -1,9 +1,5 @@
 // backend/tests/paymeMerchant.test.js
 process.stdout.write("\n[payme-test] TOP\n");
-setTimeout(() => {
-  process.stdout.write("\n[payme-test] FORCE EXIT (debug)\n");
-  process.exit(99);
-}, 3000);
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -11,9 +7,9 @@ const { spawn } = require("node:child_process");
 const path = require("node:path");
 const pool = require("../db");
 
-const PORT = String(12000 + Math.floor(Math.random() * 2000));
-const BASE = `http://127.0.0.1:${PORT}`;
-const RPC_URL = `${BASE}/api/merchant/payme`;
+let PORT = String(12000 + Math.floor(Math.random() * 2000));
+let BASE = `http://127.0.0.1:${PORT}`;
+let RPC_URL = `${BASE}/api/merchant/payme`;
 
 const PAYME_LOGIN = "sandbox_login_test";
 const PAYME_KEY = "sandbox_key_test";
@@ -247,9 +243,9 @@ test.before(async () => {
   }
   if (!chosen) throw new Error("No free port found for tests");
   
-  const PORT = String(chosen);
-  const BASE = `http://127.0.0.1:${PORT}`;
-  const RPC_URL = `${BASE}/api/merchant/payme`;
+  PORT = String(chosen);
+  BASE = `http://127.0.0.1:${PORT}`;
+  RPC_URL = `${BASE}/api/merchant/payme`;
 
   proc = spawn(process.execPath, ["index.js"], {
     cwd: backendDir,

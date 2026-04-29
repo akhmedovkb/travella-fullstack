@@ -44,6 +44,21 @@ const statusBadgeClass = (status) => {
   }
 };
 
+const FALLBACK_COUNTRY_CITIES = {
+  AE: ["Dubai"],
+  IN: ["Delhi"],
+  TH: ["Bangkok"],
+  TR: ["Istanbul"],
+  UZ: ["Tashkent", "Samarkand", "Bukhara"],
+  VN: ["Ho Chi Minh City", "Hanoi", "Da Nang"],
+};
+
+function pickCityName(item, lang = "en") {
+  if (lang === "ru") return item.name_ru || item.name || item.name_en;
+  if (lang === "uz") return item.name_uz || item.name || item.name_en;
+  return item.name_en || item.name;
+}
+
 
 const EVENT_CATEGORY_OPTIONS = (t) => ([
   { value: "concert",      label: t("event_category_concert") },
@@ -847,29 +862,25 @@ const ASYNC_MENU_PORTAL = {
 const loadCitiesRaw = useCallback(async (inputValue, signal) => {
   if (!inputValue) return [];
   try {
-    const { data } = await axios.get("https://secure.geonames.org/searchJSON", {
+    const lang = pickGeoLang();
+    const { data } = await api.get("/api/geo/airports", {
       params: {
-        name_startsWith: inputValue,      // прямой префиксный поиск
-        q: inputValue,                    // дополнительный полнотекстовый
-        featureClass: "P",
-        maxRows: 10,
-        fuzzy: 0.9,                       // чуть мягче сопоставление
-        style: "FULL",                    // чтобы были альтернативные названия
-        username: import.meta.env.VITE_GEONAMES_USERNAME,
-        lang: pickGeoLang(),              // ru/uz/en – как и было
+        q: inputValue,
+        limit: 10,
+        lang,
       },
       signal,
     });
-    return (data.geonames || []).map((city) => ({
-      value: city.name,
-      label: city.name,
+    return (data.items || []).map((city) => ({
+      value: pickCityName(city, lang),
+      label: pickCityName(city, lang),
     }));
   } catch (error) {
     if (error?.code === "ERR_CANCELED") return [];
     console.error("Ошибка загрузки городов:", error);
     return [];
   }
-}, [pickGeoLang]);
+}, [api, pickGeoLang]);
 
 
 // обёртка с дебаунсом + отменой
@@ -1042,6 +1053,16 @@ useEffect(() => {
     const controller = new AbortController();
     const fetchCities = async () => {
       try {
+        const fallback = FALLBACK_COUNTRY_CITIES[selectedCountry.code] || [];
+        if (!import.meta.env.VITE_GEONAMES_USERNAME) {
+          let cities = fallback.map((city) => ({ value: city, label: city }));
+          if (details?.directionTo && !cities.some((o) => o.value === details.directionTo)) {
+            cities = [{ value: details.directionTo, label: details.directionTo }, ...cities];
+          }
+          setCityOptionsTo(cities);
+          return;
+        }
+
         const response = await axios.get("https://secure.geonames.org/searchJSON", {
           params: {
             country: selectedCountry.code,
