@@ -134,6 +134,43 @@ async function main() {
       client_id BIGINT NOT NULL,
       service_id BIGINT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS contact_balance_ledger (
+      id BIGSERIAL PRIMARY KEY,
+      client_id BIGINT NOT NULL,
+      amount BIGINT NOT NULL,
+      reason TEXT,
+      service_id BIGINT,
+      source TEXT,
+      meta JSONB,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    ALTER TABLE contact_balance_ledger
+      ADD COLUMN IF NOT EXISTS reason TEXT,
+      ADD COLUMN IF NOT EXISTS service_id BIGINT,
+      ADD COLUMN IF NOT EXISTS source TEXT,
+      ADD COLUMN IF NOT EXISTS meta JSONB,
+      ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+    CREATE TABLE IF NOT EXISTS client_service_contact_unlocks (
+      id BIGSERIAL PRIMARY KEY,
+      client_id BIGINT NOT NULL,
+      service_id BIGINT NOT NULL,
+      price_charged BIGINT NOT NULL DEFAULT 0,
+      source TEXT,
+      note TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    ALTER TABLE client_service_contact_unlocks
+      ADD COLUMN IF NOT EXISTS price_charged BIGINT NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS source TEXT,
+      ADD COLUMN IF NOT EXISTS note TEXT,
+      ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_client_service_contact_unlocks_unique
+      ON client_service_contact_unlocks(client_id, service_id);
   `);
 
   console.log("staging Payme schema ok");

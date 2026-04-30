@@ -128,6 +128,50 @@ async function ensureTopupOrdersShape(db) {
   }
 }
 
+async function ensureContactUnlocksShape(db) {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS client_service_contact_unlocks (
+      id BIGSERIAL PRIMARY KEY,
+      client_id BIGINT NOT NULL,
+      service_id BIGINT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
+
+  await db.query(`
+    ALTER TABLE client_service_contact_unlocks
+      ADD COLUMN IF NOT EXISTS price_charged BIGINT NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS source TEXT,
+      ADD COLUMN IF NOT EXISTS note TEXT,
+      ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  `);
+
+  await db.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_client_service_contact_unlocks_unique
+      ON client_service_contact_unlocks(client_id, service_id)
+  `);
+}
+
+async function ensureContactBalanceLedgerShape(db) {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS contact_balance_ledger (
+      id BIGSERIAL PRIMARY KEY,
+      client_id BIGINT NOT NULL,
+      amount BIGINT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
+
+  await db.query(`
+    ALTER TABLE contact_balance_ledger
+      ADD COLUMN IF NOT EXISTS reason TEXT,
+      ADD COLUMN IF NOT EXISTS service_id BIGINT,
+      ADD COLUMN IF NOT EXISTS source TEXT,
+      ADD COLUMN IF NOT EXISTS meta JSONB,
+      ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  `);
+}
+
 function buildPaymeCheckoutUrl({
   merchantId,
   checkoutBase,
@@ -541,6 +585,8 @@ async function unlockContact(req, res) {
 
   try {
     await client.query("BEGIN");
+    await ensureContactBalanceLedgerShape(client);
+    await ensureContactUnlocksShape(client);
 
     const unlockSettings = await getContactUnlockSettings(client);
     const price = Number(unlockSettings.effective_price || 0);
