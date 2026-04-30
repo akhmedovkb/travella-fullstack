@@ -241,6 +241,7 @@ export default function AdminTravelSales() {
   const [agentQuery, setAgentQuery] = useState("");
 
   const [dailySales, setDailySales] = useState([]);
+  const [collapsedSaleDays, setCollapsedSaleDays] = useState({});
   const [dailyLoading, setDailyLoading] = useState(false);
   const [saleForm, setSaleForm] = useState(emptySaleForm);
   const [editingSaleId, setEditingSaleId] = useState(null);
@@ -387,6 +388,39 @@ export default function AdminTravelSales() {
   const agentsWithContact = useMemo(() => agents.filter((a) => String(a.contact || "").trim()).length, [agents]);
   const agentsWithAddress = useMemo(() => agents.filter((a) => String(a.address || "").trim()).length, [agents]);
   const paymentsNet = totalPayments - totalRefunds;
+
+  const dailySalesGroups = useMemo(() => {
+  const map = new Map();
+
+  dailySales.forEach((row) => {
+    const dateKey = iso(row.sale_date) || "Без даты";
+
+    if (!map.has(dateKey)) {
+      map.set(dateKey, {
+        date: dateKey,
+        items: [],
+        saleTotal: 0,
+        netTotal: 0,
+      });
+    }
+
+    const group = map.get(dateKey);
+    group.items.push(row);
+    group.saleTotal += Number(row.sale_amount || 0);
+    group.netTotal += Number(row.net_amount || 0);
+  });
+
+  return Array.from(map.values()).sort((a, b) =>
+    String(b.date).localeCompare(String(a.date))
+  );
+}, [dailySales]);
+
+  const toggleSaleDay = (dateKey) => {
+    setCollapsedSaleDays((prev) => ({
+      ...prev,
+      [dateKey]: !prev[dateKey],
+    }));
+  };
 
   const currentTabSummary = useMemo(() => {
     if (tab === "daily") return `Продажи в фокусе • ${dailySales.length} записей`;
@@ -709,21 +743,105 @@ export default function AdminTravelSales() {
                 <TableShell>
                   <Table>
                     <TableHead><tr><TH>№</TH><TH>Дата</TH><TH>Агент</TH><TH>Тип</TH><TH>Направление</TH><TH>Name of traveller</TH><TH align="right">Продажа</TH><TH align="right">Нетто</TH><TH className="w-[180px]">Действия</TH></tr></TableHead>
-                    <tbody>
-                      {dailyLoading || dailySales.length === 0 ? <EmptyRow loading={dailyLoading} colSpan={9} /> : dailySales.map((row, idx) => (
-                        <tr key={row.id}>
-                          <TD className="text-gray-500">{idx + 1}</TD>
-                          <TD>{iso(row.sale_date)}</TD>
-                          <TD><div className="font-medium text-gray-900">{row.agent_name || row.agent}</div></TD>
-                          <TD><Badge className={badgeClassByServiceType(row.service_type)}>{typeLabel(row.service_type)}</Badge></TD>
-                          <TD className="max-w-[220px] whitespace-pre-wrap break-words">{row.direction || "—"}</TD>
-                          <TD>{row.traveller_name || "—"}</TD>
-                          <TD align="right" className="font-semibold text-gray-900">{money(row.sale_amount)}</TD>
-                          <TD align="right" className="font-semibold text-gray-900">{money(row.net_amount)}</TD>
-                          <TD><div className="flex flex-wrap gap-3"><button onClick={() => startEditSale(row)} type="button" className="text-sm font-medium text-blue-600 transition hover:text-blue-800 hover:underline">Изменить</button><button onClick={() => handleDeleteSale(row.id)} type="button" className="text-sm font-medium text-red-500 transition hover:text-red-700 hover:underline">Удалить</button></div></TD>
-                        </tr>
-                      ))}
-                    </tbody>
+                      <tbody>
+                        {dailyLoading || dailySales.length === 0 ? (
+                          <EmptyRow loading={dailyLoading} colSpan={9} />
+                        ) : (
+                          dailySalesGroups.flatMap((group) => {
+                            const today = iso(new Date());
+                            const isToday = group.date === today;
+                      
+                            const headerRow = (
+                              <tr key={`group-${group.date}`}>
+                                <td colSpan={9} className="px-3 py-3">
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleSaleDay(group.date)}
+                                    className={`flex w-full flex-col gap-2 rounded-2xl border px-4 py-3 text-left transition hover:shadow-sm md:flex-row md:items-center md:justify-between ${
+                                      isToday
+                                        ? "border-emerald-200 bg-emerald-50 hover:bg-emerald-100/60"
+                                        : "border-slate-200 bg-slate-50 hover:bg-slate-100"
+                                    }`}
+                                  >
+                                    <div>
+                                      <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                                        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white text-xs ring-1 ring-slate-200">
+                                          {collapsedSaleDays[group.date] ? "▶" : "▼"}
+                                        </span>
+                                        <span>
+                                          {group.date}
+                                          {isToday ? " • сегодня" : ""}
+                                        </span>
+                                      </div>
+                                      <div className="mt-1 text-xs text-slate-500">
+                                        Продаж: {group.items.length}
+                                      </div>
+                                    </div>
+                      
+                                    <div className="flex flex-wrap gap-2 text-xs">
+                                      <span className="rounded-full bg-white px-3 py-1 font-semibold text-slate-700 ring-1 ring-slate-200">
+                                        Продажа: {money(group.saleTotal)}
+                                      </span>
+                                      <span className="rounded-full bg-white px-3 py-1 font-semibold text-slate-700 ring-1 ring-slate-200">
+                                        Нетто: {money(group.netTotal)}
+                                      </span>
+                                      <span className="rounded-full bg-white px-3 py-1 font-semibold text-emerald-700 ring-1 ring-emerald-200">
+                                        Маржа: {money(group.saleTotal - group.netTotal)}
+                                      </span>
+                                    </div>
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                      
+                            const itemRows = collapsedSaleDays[group.date]
+                              ? []
+                              : group.items.map((row, idx) => (
+                              <tr
+                                key={row.id}
+                                className="border-b border-gray-100 transition hover:bg-gray-50/70"
+                              >
+                                <TD className="text-gray-500">{idx + 1}</TD>
+                                <TD>{iso(row.sale_date)}</TD>
+                                <TD>
+                                  <div className="font-medium text-gray-900">{row.agent_name}</div>
+                                </TD>
+                                <TD>
+                                  <Badge className={badgeClassByServiceType(row.service_type)}>
+                                    {typeLabel(row.service_type)}
+                                  </Badge>
+                                </TD>
+                                <TD className="max-w-[200px] whitespace-pre-wrap break-words">
+                                  {row.direction}
+                                </TD>
+                                <TD>{row.traveller_name || "—"}</TD>
+                                <TD align="right" className="font-semibold text-gray-900">
+                                  {money(row.sale_amount)}
+                                </TD>
+                                <TD align="right" className="font-semibold text-gray-900">
+                                  {money(row.net_amount)}
+                                </TD>
+                                <TD>
+                                  <div className="flex flex-wrap gap-2">
+                                    <ActionButton onClick={() => startEditSale(row)} type="button">
+                                      Изменить
+                                    </ActionButton>
+                                    <ActionButton
+                                      variant="danger"
+                                      onClick={() => handleDeleteSale(row.id)}
+                                      type="button"
+                                    >
+                                      Удалить
+                                    </ActionButton>
+                                  </div>
+                                </TD>
+                              </tr>
+                            ));
+                      
+                            return [headerRow, ...itemRows];
+                          })
+                        )}
+                      </tbody>
                   </Table>
                 </TableShell>
               </Card>
