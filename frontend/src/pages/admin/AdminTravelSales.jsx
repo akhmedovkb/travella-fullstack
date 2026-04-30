@@ -517,6 +517,96 @@ export default function AdminTravelSales() {
     );
   }, [sortedDailySales, dailySort]);
 
+
+  const paymentsGroups = useMemo(() => {
+    const map = new Map();
+
+    sortedPayments.forEach((row) => {
+      const dateKey = iso(row.payment_date) || "Без даты";
+
+      if (!map.has(dateKey)) {
+        map.set(dateKey, {
+          date: dateKey,
+          items: [],
+          paymentTotal: 0,
+          refundTotal: 0,
+        });
+      }
+
+      const group = map.get(dateKey);
+      const amount = Number(row.amount || 0);
+      group.items.push(row);
+      if (String(row.entry_type || "payment") === "refund") group.refundTotal += amount;
+      else group.paymentTotal += amount;
+    });
+
+    return Array.from(map.values()).sort((a, b) =>
+      paymentsSort.key === "payment_date"
+        ? compareValues(a.date, b.date) * (paymentsSort.dir === "asc" ? 1 : -1)
+        : String(b.date).localeCompare(String(a.date))
+    );
+  }, [sortedPayments, paymentsSort]);
+
+  const salesReportGroups = useMemo(() => {
+    const map = new Map();
+
+    sortedSalesReport.forEach((row) => {
+      const dateKey = iso(row.sale_date) || "Без даты";
+
+      if (!map.has(dateKey)) {
+        map.set(dateKey, {
+          date: dateKey,
+          items: [],
+          saleTotal: 0,
+          netTotal: 0,
+          marginTotal: 0,
+        });
+      }
+
+      const group = map.get(dateKey);
+      group.items.push(row);
+      group.saleTotal += Number(row.sale_amount || 0);
+      group.netTotal += Number(row.net_amount || 0);
+      group.marginTotal += Number(row.margin || 0);
+    });
+
+    return Array.from(map.values()).sort((a, b) =>
+      salesSort.key === "sale_date"
+        ? compareValues(a.date, b.date) * (salesSort.dir === "asc" ? 1 : -1)
+        : String(b.date).localeCompare(String(a.date))
+    );
+  }, [sortedSalesReport, salesSort]);
+
+  const balanceReportGroups = useMemo(() => {
+    const map = new Map();
+
+    sortedBalanceReport.forEach((row) => {
+      const dateKey = iso(row.txn_date) || "Без даты";
+
+      if (!map.has(dateKey)) {
+        map.set(dateKey, {
+          date: dateKey,
+          items: [],
+          saleTotal: 0,
+          paymentTotal: 0,
+          refundTotal: 0,
+        });
+      }
+
+      const group = map.get(dateKey);
+      group.items.push(row);
+      group.saleTotal += Number(row.sale_amount || 0);
+      group.paymentTotal += Number(row.payment_amount || 0);
+      group.refundTotal += Number(row.refund_amount || 0);
+    });
+
+    return Array.from(map.values()).sort((a, b) =>
+      balanceSort.key === "txn_date"
+        ? compareValues(a.date, b.date) * (balanceSort.dir === "asc" ? 1 : -1)
+        : String(b.date).localeCompare(String(a.date))
+    );
+  }, [sortedBalanceReport, balanceSort]);
+
   const currentTabSummary = useMemo(() => {
     if (tab === "daily") return `Продажи в фокусе • ${dailySales.length} записей`;
     if (tab === "payments") return `Оплаты в фокусе • ${payments.length} записей`;
@@ -963,17 +1053,43 @@ export default function AdminTravelSales() {
                   <Table>
                     <TableHead><tr><TH>№</TH><SortTH sortKey="payment_date" sort={paymentsSort} onSort={toggleSort(setPaymentsSort)}>Дата оплаты</SortTH><SortTH sortKey="agent" sort={paymentsSort} onSort={toggleSort(setPaymentsSort)}>Агент</SortTH><SortTH sortKey="entry_type" sort={paymentsSort} onSort={toggleSort(setPaymentsSort)}>Тип записи</SortTH><SortTH sortKey="amount" sort={paymentsSort} onSort={toggleSort(setPaymentsSort)} align="right">Сумма</SortTH><SortTH sortKey="comment" sort={paymentsSort} onSort={toggleSort(setPaymentsSort)}>Комментарий</SortTH><TH className="w-[180px]">Действия</TH></tr></TableHead>
                     <tbody>
-                      {paymentsLoading || sortedPayments.length === 0 ? <EmptyRow loading={paymentsLoading} colSpan={7} /> : sortedPayments.map((row, idx) => (
-                        <tr key={row.id}>
-                          <TD className="text-gray-500">{idx + 1}</TD>
-                          <TD>{iso(row.payment_date)}</TD>
-                          <TD><div className="font-medium text-gray-900">{row.agent_name || row.agent}</div></TD>
-                          <TD><Badge className={badgeClassByLedgerType(row.entry_type)}>{ledgerTypeLabel(row.entry_type)}</Badge></TD>
-                          <TD align="right" className="font-semibold text-gray-900">{money(row.amount)}</TD>
-                          <TD className="max-w-[260px] whitespace-pre-wrap break-words">{row.comment || "—"}</TD>
-                          <TD><div className="flex flex-wrap gap-3"><button onClick={() => startEditPayment(row)} type="button" className="text-sm font-medium text-blue-600 transition hover:text-blue-800 hover:underline">Изменить</button><button onClick={() => handleDeletePayment(row.id)} type="button" className="text-sm font-medium text-red-500 transition hover:text-red-700 hover:underline">Удалить</button></div></TD>
-                        </tr>
-                      ))}
+                      {paymentsLoading || sortedPayments.length === 0 ? (
+                        <EmptyRow loading={paymentsLoading} colSpan={7} />
+                      ) : (
+                        paymentsGroups.flatMap((group) => {
+                          const today = iso(new Date());
+                          const isToday = group.date === today;
+                          const headerRow = (
+                            <tr key={`payments-group-${group.date}`}>
+                              <td colSpan={7} className="px-3 py-3">
+                                <div className={`flex flex-col gap-2 rounded-2xl border px-4 py-3 md:flex-row md:items-center md:justify-between ${isToday ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}>
+                                  <div>
+                                    <div className="text-sm font-semibold text-slate-900">{group.date}{isToday ? " • сегодня" : ""}</div>
+                                    <div className="text-xs text-slate-500">Операций: {group.items.length}</div>
+                                  </div>
+                                  <div className="flex flex-wrap gap-2 text-xs">
+                                    <span className="rounded-full bg-white px-3 py-1 font-semibold text-slate-700 ring-1 ring-slate-200">Оплата: {money(group.paymentTotal)}</span>
+                                    <span className="rounded-full bg-white px-3 py-1 font-semibold text-amber-700 ring-1 ring-amber-200">Возврат: {money(group.refundTotal)}</span>
+                                    <span className="rounded-full bg-white px-3 py-1 font-semibold text-emerald-700 ring-1 ring-emerald-200">Чистый эффект: {money(group.paymentTotal - group.refundTotal)}</span>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                          const itemRows = group.items.map((row, idx) => (
+                            <tr key={row.id}>
+                              <TD className="text-gray-500">{idx + 1}</TD>
+                              <TD>{iso(row.payment_date)}</TD>
+                              <TD><div className="font-medium text-gray-900">{row.agent_name || row.agent}</div></TD>
+                              <TD><Badge className={badgeClassByLedgerType(row.entry_type)}>{ledgerTypeLabel(row.entry_type)}</Badge></TD>
+                              <TD align="right" className="font-semibold text-gray-900">{money(row.amount)}</TD>
+                              <TD className="max-w-[260px] whitespace-pre-wrap break-words">{row.comment || "—"}</TD>
+                              <TD><div className="flex flex-wrap gap-3"><button onClick={() => startEditPayment(row)} type="button" className="text-sm font-medium text-blue-600 transition hover:text-blue-800 hover:underline">Изменить</button><button onClick={() => handleDeletePayment(row.id)} type="button" className="text-sm font-medium text-red-500 transition hover:text-red-700 hover:underline">Удалить</button></div></TD>
+                            </tr>
+                          ));
+                          return [headerRow, ...itemRows];
+                        })
+                      )}
                     </tbody>
                   </Table>
                 </TableShell>
@@ -996,19 +1112,45 @@ export default function AdminTravelSales() {
               <Table>
                 <TableHead><tr><TH>№</TH><SortTH sortKey="sale_date" sort={salesSort} onSort={toggleSort(setSalesSort)}>Дата</SortTH><SortTH sortKey="agent" sort={salesSort} onSort={toggleSort(setSalesSort)}>Агент</SortTH><SortTH sortKey="service_type" sort={salesSort} onSort={toggleSort(setSalesSort)}>Тип</SortTH><SortTH sortKey="direction" sort={salesSort} onSort={toggleSort(setSalesSort)}>Направление</SortTH><SortTH sortKey="traveller_name" sort={salesSort} onSort={toggleSort(setSalesSort)}>Name of traveller</SortTH><SortTH sortKey="sale_amount" sort={salesSort} onSort={toggleSort(setSalesSort)} align="right">Сумма продажи</SortTH><SortTH sortKey="net_amount" sort={salesSort} onSort={toggleSort(setSalesSort)} align="right">Сумма нетто</SortTH><SortTH sortKey="margin" sort={salesSort} onSort={toggleSort(setSalesSort)} align="right">Маржа</SortTH></tr></TableHead>
                 <tbody>
-                  {salesReportLoading || sortedSalesReport.length === 0 ? <EmptyRow loading={salesReportLoading} colSpan={9} /> : sortedSalesReport.map((row, idx) => (
-                    <tr key={row.id || `${row.sale_date}-${idx}`}>
-                      <TD className="text-gray-500">{idx + 1}</TD>
-                      <TD>{iso(row.sale_date)}</TD>
-                      <TD><div className="font-medium text-gray-900">{row.agent}</div></TD>
-                      <TD><Badge className={badgeClassByServiceType(row.service_type)}>{typeLabel(row.service_type)}</Badge></TD>
-                      <TD className="max-w-[220px] whitespace-pre-wrap break-words">{row.direction || "—"}</TD>
-                      <TD>{row.traveller_name || "—"}</TD>
-                      <TD align="right" className="font-semibold text-gray-900">{money(row.sale_amount)}</TD>
-                      <TD align="right" className="font-semibold text-gray-900">{money(row.net_amount)}</TD>
-                      <TD align="right" className="font-semibold text-emerald-700">{money(row.margin)}</TD>
-                    </tr>
-                  ))}
+                  {salesReportLoading || sortedSalesReport.length === 0 ? (
+                    <EmptyRow loading={salesReportLoading} colSpan={9} />
+                  ) : (
+                    salesReportGroups.flatMap((group) => {
+                      const today = iso(new Date());
+                      const isToday = group.date === today;
+                      const headerRow = (
+                        <tr key={`sales-report-group-${group.date}`}>
+                          <td colSpan={9} className="px-3 py-3">
+                            <div className={`flex flex-col gap-2 rounded-2xl border px-4 py-3 md:flex-row md:items-center md:justify-between ${isToday ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}>
+                              <div>
+                                <div className="text-sm font-semibold text-slate-900">{group.date}{isToday ? " • сегодня" : ""}</div>
+                                <div className="text-xs text-slate-500">Продаж: {group.items.length}</div>
+                              </div>
+                              <div className="flex flex-wrap gap-2 text-xs">
+                                <span className="rounded-full bg-white px-3 py-1 font-semibold text-slate-700 ring-1 ring-slate-200">Сумма продаж: {money(group.saleTotal)}</span>
+                                <span className="rounded-full bg-white px-3 py-1 font-semibold text-slate-700 ring-1 ring-slate-200">Нетто: {money(group.netTotal)}</span>
+                                <span className="rounded-full bg-white px-3 py-1 font-semibold text-emerald-700 ring-1 ring-emerald-200">Маржа: {money(group.marginTotal)}</span>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                      const itemRows = group.items.map((row, idx) => (
+                        <tr key={row.id || `${row.sale_date}-${idx}`}>
+                          <TD className="text-gray-500">{idx + 1}</TD>
+                          <TD>{iso(row.sale_date)}</TD>
+                          <TD><div className="font-medium text-gray-900">{row.agent}</div></TD>
+                          <TD><Badge className={badgeClassByServiceType(row.service_type)}>{typeLabel(row.service_type)}</Badge></TD>
+                          <TD className="max-w-[220px] whitespace-pre-wrap break-words">{row.direction || "—"}</TD>
+                          <TD>{row.traveller_name || "—"}</TD>
+                          <TD align="right" className="font-semibold text-gray-900">{money(row.sale_amount)}</TD>
+                          <TD align="right" className="font-semibold text-gray-900">{money(row.net_amount)}</TD>
+                          <TD align="right" className="font-semibold text-emerald-700">{money(row.margin)}</TD>
+                        </tr>
+                      ));
+                      return [headerRow, ...itemRows];
+                    })
+                  )}
                 </tbody>
               </Table>
             </TableShell>
@@ -1029,22 +1171,48 @@ export default function AdminTravelSales() {
               <Table>
                 <TableHead><tr><TH>№</TH><SortTH sortKey="txn_date" sort={balanceSort} onSort={toggleSort(setBalanceSort)}>Дата операции</SortTH><SortTH sortKey="entry_type" sort={balanceSort} onSort={toggleSort(setBalanceSort)}>Тип записи</SortTH><SortTH sortKey="agent" sort={balanceSort} onSort={toggleSort(setBalanceSort)}>Агент</SortTH><SortTH sortKey="service_type" sort={balanceSort} onSort={toggleSort(setBalanceSort)}>Тип услуги</SortTH><SortTH sortKey="direction" sort={balanceSort} onSort={toggleSort(setBalanceSort)}>Направление</SortTH><SortTH sortKey="traveller_name" sort={balanceSort} onSort={toggleSort(setBalanceSort)}>Name of traveller</SortTH><SortTH sortKey="sale_amount" sort={balanceSort} onSort={toggleSort(setBalanceSort)} align="right">Продажа</SortTH><SortTH sortKey="payment_amount" sort={balanceSort} onSort={toggleSort(setBalanceSort)} align="right">Оплата</SortTH><SortTH sortKey="refund_amount" sort={balanceSort} onSort={toggleSort(setBalanceSort)} align="right">Возврат</SortTH><SortTH sortKey="comment" sort={balanceSort} onSort={toggleSort(setBalanceSort)}>Комментарий</SortTH><SortTH sortKey="balance" sort={balanceSort} onSort={toggleSort(setBalanceSort)} align="right">Баланс</SortTH></tr></TableHead>
                 <tbody>
-                  {balanceLoading || sortedBalanceReport.length === 0 ? <EmptyRow loading={balanceLoading} colSpan={12} /> : sortedBalanceReport.map((row, idx) => (
-                    <tr key={row.row_key || `${row.entry_type}-${idx}`}>
-                      <TD className="text-gray-500">{idx + 1}</TD>
-                      <TD>{iso(row.txn_date)}</TD>
-                      <TD><Badge className={badgeClassByLedgerType(row.entry_type)}>{ledgerTypeLabel(row.entry_type)}</Badge></TD>
-                      <TD><div className="font-medium text-gray-900">{row.agent}</div></TD>
-                      <TD>{row.service_type ? <Badge className={badgeClassByServiceType(row.service_type)}>{typeLabel(row.service_type)}</Badge> : "—"}</TD>
-                      <TD className="max-w-[220px] whitespace-pre-wrap break-words">{row.direction || "—"}</TD>
-                      <TD>{row.traveller_name || "—"}</TD>
-                      <TD align="right">{Number(row.sale_amount || 0) ? money(row.sale_amount) : "0"}</TD>
-                      <TD align="right">{Number(row.payment_amount || 0) ? money(row.payment_amount) : "0"}</TD>
-                      <TD align="right">{Number(row.refund_amount || 0) ? money(row.refund_amount) : "0"}</TD>
-                      <TD className="max-w-[260px] whitespace-pre-wrap break-words">{row.comment || "—"}</TD>
-                      <TD align="right" className={`font-semibold ${amountClass(row.balance, "balance")}`}>{money(row.balance)}</TD>
-                    </tr>
-                  ))}
+                  {balanceLoading || sortedBalanceReport.length === 0 ? (
+                    <EmptyRow loading={balanceLoading} colSpan={12} />
+                  ) : (
+                    balanceReportGroups.flatMap((group) => {
+                      const today = iso(new Date());
+                      const isToday = group.date === today;
+                      const headerRow = (
+                        <tr key={`balance-report-group-${group.date}`}>
+                          <td colSpan={12} className="px-3 py-3">
+                            <div className={`flex flex-col gap-2 rounded-2xl border px-4 py-3 md:flex-row md:items-center md:justify-between ${isToday ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}>
+                              <div>
+                                <div className="text-sm font-semibold text-slate-900">{group.date}{isToday ? " • сегодня" : ""}</div>
+                                <div className="text-xs text-slate-500">Операций: {group.items.length}</div>
+                              </div>
+                              <div className="flex flex-wrap gap-2 text-xs">
+                                <span className="rounded-full bg-white px-3 py-1 font-semibold text-slate-700 ring-1 ring-slate-200">Продажи: {money(group.saleTotal)}</span>
+                                <span className="rounded-full bg-white px-3 py-1 font-semibold text-slate-700 ring-1 ring-slate-200">Оплаты: {money(group.paymentTotal)}</span>
+                                <span className="rounded-full bg-white px-3 py-1 font-semibold text-amber-700 ring-1 ring-amber-200">Возвраты: {money(group.refundTotal)}</span>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                      const itemRows = group.items.map((row, idx) => (
+                        <tr key={row.row_key || `${row.entry_type}-${idx}`}>
+                          <TD className="text-gray-500">{idx + 1}</TD>
+                          <TD>{iso(row.txn_date)}</TD>
+                          <TD><Badge className={badgeClassByLedgerType(row.entry_type)}>{ledgerTypeLabel(row.entry_type)}</Badge></TD>
+                          <TD><div className="font-medium text-gray-900">{row.agent}</div></TD>
+                          <TD>{row.service_type ? <Badge className={badgeClassByServiceType(row.service_type)}>{typeLabel(row.service_type)}</Badge> : "—"}</TD>
+                          <TD className="max-w-[220px] whitespace-pre-wrap break-words">{row.direction || "—"}</TD>
+                          <TD>{row.traveller_name || "—"}</TD>
+                          <TD align="right">{Number(row.sale_amount || 0) ? money(row.sale_amount) : "0"}</TD>
+                          <TD align="right">{Number(row.payment_amount || 0) ? money(row.payment_amount) : "0"}</TD>
+                          <TD align="right">{Number(row.refund_amount || 0) ? money(row.refund_amount) : "0"}</TD>
+                          <TD className="max-w-[260px] whitespace-pre-wrap break-words">{row.comment || "—"}</TD>
+                          <TD align="right" className={`font-semibold ${amountClass(row.balance, "balance")}`}>{money(row.balance)}</TD>
+                        </tr>
+                      ));
+                      return [headerRow, ...itemRows];
+                    })
+                  )}
                 </tbody>
               </Table>
             </TableShell>
