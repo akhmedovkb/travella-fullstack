@@ -223,6 +223,48 @@ function EmptyRow({ loading, colSpan }) {
   );
 }
 
+
+const collator = new Intl.Collator("ru", { sensitivity: "base", numeric: true });
+
+function agentDisplayName(row) {
+  return String(row?.agent_name || row?.agent || row?.name || "").trim();
+}
+
+function compareValues(a, b) {
+  const av = a ?? "";
+  const bv = b ?? "";
+  const an = Number(av);
+  const bn = Number(bv);
+  if (Number.isFinite(an) && Number.isFinite(bn) && String(av).trim() !== "" && String(bv).trim() !== "") {
+    return an - bn;
+  }
+  return collator.compare(String(av), String(bv));
+}
+
+function sortRows(rows, sort, accessors) {
+  const list = Array.isArray(rows) ? [...rows] : [];
+  if (!sort?.key || !accessors?.[sort.key]) return list;
+  const dir = sort.dir === "asc" ? 1 : -1;
+  return list.sort((a, b) => compareValues(accessors[sort.key](a), accessors[sort.key](b)) * dir);
+}
+
+function SortTH({ children, sortKey, sort, onSort, align = "left", className = "" }) {
+  const active = sort?.key === sortKey;
+  const icon = active ? (sort.dir === "asc" ? "↑" : "↓") : "↕";
+  return (
+    <TH align={align} className={className}>
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={`inline-flex items-center gap-1 whitespace-nowrap font-semibold uppercase tracking-wide ${align === "right" ? "justify-end" : "justify-start"}`}
+      >
+        <span>{children}</span>
+        <span className={active ? "text-slate-900" : "text-slate-300"}>{icon}</span>
+      </button>
+    </TH>
+  );
+}
+
 function exportToExcel(filename, rows) {
   const worksheet = XLSX.utils.json_to_sheet(rows);
   const workbook = XLSX.utils.book_new();
@@ -241,7 +283,6 @@ export default function AdminTravelSales() {
   const [agentQuery, setAgentQuery] = useState("");
 
   const [dailySales, setDailySales] = useState([]);
-  const [collapsedSaleDays, setCollapsedSaleDays] = useState({});
   const [dailyLoading, setDailyLoading] = useState(false);
   const [saleForm, setSaleForm] = useState(emptySaleForm);
   const [editingSaleId, setEditingSaleId] = useState(null);
@@ -249,6 +290,7 @@ export default function AdminTravelSales() {
   const [dailyDateFrom, setDailyDateFrom] = useState("");
   const [dailyDateTo, setDailyDateTo] = useState("");
   const [dailyServiceType, setDailyServiceType] = useState("");
+  const [dailySort, setDailySort] = useState({ key: "sale_date", dir: "desc" });
 
   const [payments, setPayments] = useState([]);
   const [paymentsLoading, setPaymentsLoading] = useState(false);
@@ -258,6 +300,7 @@ export default function AdminTravelSales() {
   const [paymentsEntryType, setPaymentsEntryType] = useState("");
   const [paymentsDateFrom, setPaymentsDateFrom] = useState("");
   const [paymentsDateTo, setPaymentsDateTo] = useState("");
+  const [paymentsSort, setPaymentsSort] = useState({ key: "payment_date", dir: "desc" });
 
   const [salesReport, setSalesReport] = useState([]);
   const [salesReportLoading, setSalesReportLoading] = useState(false);
@@ -265,6 +308,7 @@ export default function AdminTravelSales() {
   const [salesDateFrom, setSalesDateFrom] = useState("");
   const [salesDateTo, setSalesDateTo] = useState("");
   const [salesServiceType, setSalesServiceType] = useState("");
+  const [salesSort, setSalesSort] = useState({ key: "sale_date", dir: "desc" });
 
   const [balanceReport, setBalanceReport] = useState([]);
   const [balanceLoading, setBalanceLoading] = useState(false);
@@ -272,6 +316,19 @@ export default function AdminTravelSales() {
   const [balanceDateFrom, setBalanceDateFrom] = useState("");
   const [balanceDateTo, setBalanceDateTo] = useState("");
   const [balanceServiceType, setBalanceServiceType] = useState("");
+  const [balanceSort, setBalanceSort] = useState({ key: "txn_date", dir: "desc" });
+
+  const sortedAgents = useMemo(
+    () => [...agents].sort((a, b) => collator.compare(String(a.name || ""), String(b.name || ""))),
+    [agents]
+  );
+
+  const toggleSort = (setter) => (key) => {
+    setter((prev) => ({
+      key,
+      dir: prev.key === key && prev.dir === "asc" ? "desc" : "asc",
+    }));
+  };
 
   async function loadAgents() {
     try {
@@ -389,38 +446,166 @@ export default function AdminTravelSales() {
   const agentsWithAddress = useMemo(() => agents.filter((a) => String(a.address || "").trim()).length, [agents]);
   const paymentsNet = totalPayments - totalRefunds;
 
+  const sortedDailySales = useMemo(() => sortRows(dailySales, dailySort, {
+    sale_date: (row) => iso(row.sale_date),
+    agent: (row) => agentDisplayName(row),
+    service_type: (row) => typeLabel(row.service_type),
+    direction: (row) => row.direction || "",
+    traveller_name: (row) => row.traveller_name || "",
+    sale_amount: (row) => Number(row.sale_amount || 0),
+    net_amount: (row) => Number(row.net_amount || 0),
+  }), [dailySales, dailySort]);
+
+  const sortedPayments = useMemo(() => sortRows(payments, paymentsSort, {
+    payment_date: (row) => iso(row.payment_date),
+    agent: (row) => agentDisplayName(row),
+    entry_type: (row) => ledgerTypeLabel(row.entry_type),
+    amount: (row) => Number(row.amount || 0),
+    comment: (row) => row.comment || "",
+  }), [payments, paymentsSort]);
+
+  const sortedSalesReport = useMemo(() => sortRows(salesReport, salesSort, {
+    sale_date: (row) => iso(row.sale_date),
+    agent: (row) => agentDisplayName(row),
+    service_type: (row) => typeLabel(row.service_type),
+    direction: (row) => row.direction || "",
+    traveller_name: (row) => row.traveller_name || "",
+    sale_amount: (row) => Number(row.sale_amount || 0),
+    net_amount: (row) => Number(row.net_amount || 0),
+    margin: (row) => Number(row.margin || 0),
+  }), [salesReport, salesSort]);
+
+  const sortedBalanceReport = useMemo(() => sortRows(balanceReport, balanceSort, {
+    txn_date: (row) => iso(row.txn_date),
+    entry_type: (row) => ledgerTypeLabel(row.entry_type),
+    agent: (row) => agentDisplayName(row),
+    service_type: (row) => typeLabel(row.service_type),
+    direction: (row) => row.direction || "",
+    traveller_name: (row) => row.traveller_name || "",
+    sale_amount: (row) => Number(row.sale_amount || 0),
+    payment_amount: (row) => Number(row.payment_amount || 0),
+    refund_amount: (row) => Number(row.refund_amount || 0),
+    comment: (row) => row.comment || "",
+    balance: (row) => Number(row.balance || 0),
+  }), [balanceReport, balanceSort]);
+
   const dailySalesGroups = useMemo(() => {
-  const map = new Map();
+    const map = new Map();
 
-  dailySales.forEach((row) => {
-    const dateKey = iso(row.sale_date) || "Без даты";
+    sortedDailySales.forEach((row) => {
+      const dateKey = iso(row.sale_date) || "Без даты";
 
-    if (!map.has(dateKey)) {
-      map.set(dateKey, {
-        date: dateKey,
-        items: [],
-        saleTotal: 0,
-        netTotal: 0,
-      });
-    }
+      if (!map.has(dateKey)) {
+        map.set(dateKey, {
+          date: dateKey,
+          items: [],
+          saleTotal: 0,
+          netTotal: 0,
+        });
+      }
 
-    const group = map.get(dateKey);
-    group.items.push(row);
-    group.saleTotal += Number(row.sale_amount || 0);
-    group.netTotal += Number(row.net_amount || 0);
-  });
+      const group = map.get(dateKey);
+      group.items.push(row);
+      group.saleTotal += Number(row.sale_amount || 0);
+      group.netTotal += Number(row.net_amount || 0);
+    });
 
-  return Array.from(map.values()).sort((a, b) =>
-    String(b.date).localeCompare(String(a.date))
-  );
-}, [dailySales]);
+    return Array.from(map.values()).sort((a, b) =>
+      dailySort.key === "sale_date"
+        ? compareValues(a.date, b.date) * (dailySort.dir === "asc" ? 1 : -1)
+        : String(b.date).localeCompare(String(a.date))
+    );
+  }, [sortedDailySales, dailySort]);
 
-  const toggleSaleDay = (dateKey) => {
-    setCollapsedSaleDays((prev) => ({
-      ...prev,
-      [dateKey]: !prev[dateKey],
-    }));
-  };
+
+  const paymentsGroups = useMemo(() => {
+    const map = new Map();
+
+    sortedPayments.forEach((row) => {
+      const dateKey = iso(row.payment_date) || "Без даты";
+
+      if (!map.has(dateKey)) {
+        map.set(dateKey, {
+          date: dateKey,
+          items: [],
+          paymentTotal: 0,
+          refundTotal: 0,
+        });
+      }
+
+      const group = map.get(dateKey);
+      const amount = Number(row.amount || 0);
+      group.items.push(row);
+      if (String(row.entry_type || "payment") === "refund") group.refundTotal += amount;
+      else group.paymentTotal += amount;
+    });
+
+    return Array.from(map.values()).sort((a, b) =>
+      paymentsSort.key === "payment_date"
+        ? compareValues(a.date, b.date) * (paymentsSort.dir === "asc" ? 1 : -1)
+        : String(b.date).localeCompare(String(a.date))
+    );
+  }, [sortedPayments, paymentsSort]);
+
+  const salesReportGroups = useMemo(() => {
+    const map = new Map();
+
+    sortedSalesReport.forEach((row) => {
+      const dateKey = iso(row.sale_date) || "Без даты";
+
+      if (!map.has(dateKey)) {
+        map.set(dateKey, {
+          date: dateKey,
+          items: [],
+          saleTotal: 0,
+          netTotal: 0,
+          marginTotal: 0,
+        });
+      }
+
+      const group = map.get(dateKey);
+      group.items.push(row);
+      group.saleTotal += Number(row.sale_amount || 0);
+      group.netTotal += Number(row.net_amount || 0);
+      group.marginTotal += Number(row.margin || 0);
+    });
+
+    return Array.from(map.values()).sort((a, b) =>
+      salesSort.key === "sale_date"
+        ? compareValues(a.date, b.date) * (salesSort.dir === "asc" ? 1 : -1)
+        : String(b.date).localeCompare(String(a.date))
+    );
+  }, [sortedSalesReport, salesSort]);
+
+  const balanceReportGroups = useMemo(() => {
+    const map = new Map();
+
+    sortedBalanceReport.forEach((row) => {
+      const dateKey = iso(row.txn_date) || "Без даты";
+
+      if (!map.has(dateKey)) {
+        map.set(dateKey, {
+          date: dateKey,
+          items: [],
+          saleTotal: 0,
+          paymentTotal: 0,
+          refundTotal: 0,
+        });
+      }
+
+      const group = map.get(dateKey);
+      group.items.push(row);
+      group.saleTotal += Number(row.sale_amount || 0);
+      group.paymentTotal += Number(row.payment_amount || 0);
+      group.refundTotal += Number(row.refund_amount || 0);
+    });
+
+    return Array.from(map.values()).sort((a, b) =>
+      balanceSort.key === "txn_date"
+        ? compareValues(a.date, b.date) * (balanceSort.dir === "asc" ? 1 : -1)
+        : String(b.date).localeCompare(String(a.date))
+    );
+  }, [sortedBalanceReport, balanceSort]);
 
   const currentTabSummary = useMemo(() => {
     if (tab === "daily") return `Продажи в фокусе • ${dailySales.length} записей`;
@@ -697,7 +882,7 @@ export default function AdminTravelSales() {
                   <Table>
                     <TableHead><tr><TH>№</TH><TH>Наименование</TH><TH>Контакт</TH><TH>Адрес</TH><TH className="w-[180px]">Действия</TH></tr></TableHead>
                     <tbody>
-                      {agentsLoading || agents.length === 0 ? <EmptyRow loading={agentsLoading} colSpan={5} /> : agents.map((row, idx) => (
+                      {agentsLoading || agents.length === 0 ? <EmptyRow loading={agentsLoading} colSpan={5} /> : sortedAgents.map((row, idx) => (
                         <tr key={row.id}>
                           <TD className="text-gray-500">{idx + 1}</TD>
                           <TD><div className="font-semibold text-gray-900">{row.name}</div></TD>
@@ -728,7 +913,7 @@ export default function AdminTravelSales() {
               <Card title={editingSaleId ? "Редактировать продажу" : "Добавить продажу"} subtitle="Форма остается прежней по логике, но выглядит чище">
                 <form onSubmit={handleSaveSale} className="space-y-4">
                   <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Дата</label><input type="date" className={inputClass()} value={saleForm.sale_date} onChange={(e) => setSaleForm((p) => ({ ...p, sale_date: e.target.value }))} /></div>
-                  <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Агент</label><select className={inputClass()} value={saleForm.agent_id} onChange={(e) => setSaleForm((p) => ({ ...p, agent_id: e.target.value }))}><option value="">Выберите агента</option>{agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
+                  <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Агент</label><select className={inputClass()} value={saleForm.agent_id} onChange={(e) => setSaleForm((p) => ({ ...p, agent_id: e.target.value }))}><option value="">Выберите агента</option>{sortedAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
                   <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Тип услуги</label><select className={inputClass()} value={saleForm.service_type} onChange={(e) => setSaleForm((p) => ({ ...p, service_type: e.target.value }))}>{SERVICE_TYPE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select></div>
                   <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Направление</label><input className={inputClass()} value={saleForm.direction} onChange={(e) => setSaleForm((p) => ({ ...p, direction: e.target.value }))} placeholder="Например: Дели / Дубай / Ташкент" /></div>
                   <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Name of traveller</label><input className={inputClass()} value={saleForm.traveller_name} onChange={(e) => setSaleForm((p) => ({ ...p, traveller_name: e.target.value }))} placeholder="Например: Ali Valiyev" /></div>
@@ -739,10 +924,10 @@ export default function AdminTravelSales() {
               </Card>
             </div>
             <div className="xl:col-span-2">
-              <Card title="Список продаж" subtitle="Акцент на важных цифрах" right={<div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:flex-wrap lg:items-center lg:justify-end"><select className={inputClass("lg:w-[180px]")} value={dailyFilterAgentId} onChange={(e) => setDailyFilterAgentId(e.target.value)}><option value="">Все агенты</option>{agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select><select className={inputClass("lg:w-[170px]")} value={dailyServiceType} onChange={(e) => setDailyServiceType(e.target.value)}><option value="">Все типы</option>{SERVICE_TYPE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select><input type="date" className={inputClass("lg:w-[160px]")} value={dailyDateFrom} onChange={(e) => setDailyDateFrom(e.target.value)} /><input type="date" className={inputClass("lg:w-[160px]")} value={dailyDateTo} onChange={(e) => setDailyDateTo(e.target.value)} /><ActionButton className="lg:w-auto" onClick={loadDailySales} type="button">Фильтр</ActionButton></div>}>
+              <Card title="Список продаж" subtitle="Акцент на важных цифрах" right={<div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:flex-wrap lg:items-center lg:justify-end"><select className={inputClass("lg:w-[180px]")} value={dailyFilterAgentId} onChange={(e) => setDailyFilterAgentId(e.target.value)}><option value="">Все агенты</option>{sortedAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select><select className={inputClass("lg:w-[170px]")} value={dailyServiceType} onChange={(e) => setDailyServiceType(e.target.value)}><option value="">Все типы</option>{SERVICE_TYPE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select><input type="date" className={inputClass("lg:w-[160px]")} value={dailyDateFrom} onChange={(e) => setDailyDateFrom(e.target.value)} /><input type="date" className={inputClass("lg:w-[160px]")} value={dailyDateTo} onChange={(e) => setDailyDateTo(e.target.value)} /><ActionButton className="lg:w-auto" onClick={loadDailySales} type="button">Фильтр</ActionButton></div>}>
                 <TableShell>
                   <Table>
-                    <TableHead><tr><TH>№</TH><TH>Дата</TH><TH>Агент</TH><TH>Тип</TH><TH>Направление</TH><TH>Name of traveller</TH><TH align="right">Продажа</TH><TH align="right">Нетто</TH><TH className="w-[180px]">Действия</TH></tr></TableHead>
+                    <TableHead><tr><TH>№</TH><SortTH sortKey="sale_date" sort={dailySort} onSort={toggleSort(setDailySort)}>Дата</SortTH><SortTH sortKey="agent" sort={dailySort} onSort={toggleSort(setDailySort)}>Агент</SortTH><SortTH sortKey="service_type" sort={dailySort} onSort={toggleSort(setDailySort)}>Тип</SortTH><SortTH sortKey="direction" sort={dailySort} onSort={toggleSort(setDailySort)}>Направление</SortTH><SortTH sortKey="traveller_name" sort={dailySort} onSort={toggleSort(setDailySort)}>Name of traveller</SortTH><SortTH sortKey="sale_amount" sort={dailySort} onSort={toggleSort(setDailySort)} align="right">Продажа</SortTH><SortTH sortKey="net_amount" sort={dailySort} onSort={toggleSort(setDailySort)} align="right">Нетто</SortTH><TH className="w-[180px]">Действия</TH></tr></TableHead>
                       <tbody>
                         {dailyLoading || dailySales.length === 0 ? (
                           <EmptyRow loading={dailyLoading} colSpan={9} />
@@ -754,26 +939,19 @@ export default function AdminTravelSales() {
                             const headerRow = (
                               <tr key={`group-${group.date}`}>
                                 <td colSpan={9} className="px-3 py-3">
-                                  <button
-                                    type="button"
-                                    onClick={() => toggleSaleDay(group.date)}
-                                    className={`flex w-full flex-col gap-2 rounded-2xl border px-4 py-3 text-left transition hover:shadow-sm md:flex-row md:items-center md:justify-between ${
+                                  <div
+                                    className={`flex flex-col gap-2 rounded-2xl border px-4 py-3 md:flex-row md:items-center md:justify-between ${
                                       isToday
-                                        ? "border-emerald-200 bg-emerald-50 hover:bg-emerald-100/60"
-                                        : "border-slate-200 bg-slate-50 hover:bg-slate-100"
+                                        ? "border-emerald-200 bg-emerald-50"
+                                        : "border-slate-200 bg-slate-50"
                                     }`}
                                   >
                                     <div>
-                                      <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                                        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white text-xs ring-1 ring-slate-200">
-                                          {collapsedSaleDays[group.date] ? "▶" : "▼"}
-                                        </span>
-                                        <span>
-                                          {group.date}
-                                          {isToday ? " • сегодня" : ""}
-                                        </span>
+                                      <div className="text-sm font-semibold text-slate-900">
+                                        {group.date}
+                                        {isToday ? " • сегодня" : ""}
                                       </div>
-                                      <div className="mt-1 text-xs text-slate-500">
+                                      <div className="text-xs text-slate-500">
                                         Продаж: {group.items.length}
                                       </div>
                                     </div>
@@ -789,14 +967,12 @@ export default function AdminTravelSales() {
                                         Маржа: {money(group.saleTotal - group.netTotal)}
                                       </span>
                                     </div>
-                                  </button>
+                                  </div>
                                 </td>
                               </tr>
                             );
                       
-                            const itemRows = collapsedSaleDays[group.date]
-                              ? []
-                              : group.items.map((row, idx) => (
+                            const itemRows = group.items.map((row, idx) => (
                               <tr
                                 key={row.id}
                                 className="border-b border-gray-100 transition hover:bg-gray-50/70"
@@ -863,7 +1039,7 @@ export default function AdminTravelSales() {
               <Card title={editingPaymentId ? "Редактировать оплату" : "Добавить оплату"} subtitle="Оплаты и возвраты теперь читаются легче">
                 <form onSubmit={handleSavePayment} className="space-y-4">
                   <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Дата оплаты</label><input type="date" className={inputClass()} value={paymentForm.payment_date} onChange={(e) => setPaymentForm((p) => ({ ...p, payment_date: e.target.value }))} /></div>
-                  <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Агент</label><select className={inputClass()} value={paymentForm.agent_id} onChange={(e) => setPaymentForm((p) => ({ ...p, agent_id: e.target.value }))}><option value="">Выберите агента</option>{agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
+                  <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Агент</label><select className={inputClass()} value={paymentForm.agent_id} onChange={(e) => setPaymentForm((p) => ({ ...p, agent_id: e.target.value }))}><option value="">Выберите агента</option>{sortedAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
                   <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Тип записи</label><select className={inputClass()} value={paymentForm.entry_type} onChange={(e) => setPaymentForm((p) => ({ ...p, entry_type: e.target.value }))}>{PAYMENT_ENTRY_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select></div>
                   <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Сумма оплаты</label><input type="number" className={inputClass()} value={paymentForm.amount} onChange={(e) => setPaymentForm((p) => ({ ...p, amount: e.target.value }))} placeholder="0" /></div>
                   <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Комментарий</label><textarea className={inputClass("min-h-[100px] resize-y")} value={paymentForm.comment} onChange={(e) => setPaymentForm((p) => ({ ...p, comment: e.target.value }))} placeholder="Комментарий" /></div>
@@ -872,22 +1048,48 @@ export default function AdminTravelSales() {
               </Card>
             </div>
             <div className="xl:col-span-2">
-              <Card title="Список оплат" subtitle="Суммы и типы операций выделены визуально" right={<div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:flex-wrap lg:items-center lg:justify-end"><select className={inputClass("lg:w-[180px]")} value={paymentsAgentId} onChange={(e) => setPaymentsAgentId(e.target.value)}><option value="">Все агенты</option>{agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select><select className={inputClass("lg:w-[170px]")} value={paymentsEntryType} onChange={(e) => setPaymentsEntryType(e.target.value)}><option value="">Все записи</option>{PAYMENT_ENTRY_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select><input type="date" className={inputClass("lg:w-[160px]")} value={paymentsDateFrom} onChange={(e) => setPaymentsDateFrom(e.target.value)} /><input type="date" className={inputClass("lg:w-[160px]")} value={paymentsDateTo} onChange={(e) => setPaymentsDateTo(e.target.value)} /><ActionButton className="lg:w-auto" onClick={loadPayments} type="button">Фильтр</ActionButton></div>}>
+              <Card title="Список оплат" subtitle="Суммы и типы операций выделены визуально" right={<div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:flex-wrap lg:items-center lg:justify-end"><select className={inputClass("lg:w-[180px]")} value={paymentsAgentId} onChange={(e) => setPaymentsAgentId(e.target.value)}><option value="">Все агенты</option>{sortedAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select><select className={inputClass("lg:w-[170px]")} value={paymentsEntryType} onChange={(e) => setPaymentsEntryType(e.target.value)}><option value="">Все записи</option>{PAYMENT_ENTRY_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select><input type="date" className={inputClass("lg:w-[160px]")} value={paymentsDateFrom} onChange={(e) => setPaymentsDateFrom(e.target.value)} /><input type="date" className={inputClass("lg:w-[160px]")} value={paymentsDateTo} onChange={(e) => setPaymentsDateTo(e.target.value)} /><ActionButton className="lg:w-auto" onClick={loadPayments} type="button">Фильтр</ActionButton></div>}>
                 <TableShell>
                   <Table>
-                    <TableHead><tr><TH>№</TH><TH>Дата оплаты</TH><TH>Агент</TH><TH>Тип записи</TH><TH align="right">Сумма</TH><TH>Комментарий</TH><TH className="w-[180px]">Действия</TH></tr></TableHead>
+                    <TableHead><tr><TH>№</TH><SortTH sortKey="payment_date" sort={paymentsSort} onSort={toggleSort(setPaymentsSort)}>Дата оплаты</SortTH><SortTH sortKey="agent" sort={paymentsSort} onSort={toggleSort(setPaymentsSort)}>Агент</SortTH><SortTH sortKey="entry_type" sort={paymentsSort} onSort={toggleSort(setPaymentsSort)}>Тип записи</SortTH><SortTH sortKey="amount" sort={paymentsSort} onSort={toggleSort(setPaymentsSort)} align="right">Сумма</SortTH><SortTH sortKey="comment" sort={paymentsSort} onSort={toggleSort(setPaymentsSort)}>Комментарий</SortTH><TH className="w-[180px]">Действия</TH></tr></TableHead>
                     <tbody>
-                      {paymentsLoading || payments.length === 0 ? <EmptyRow loading={paymentsLoading} colSpan={7} /> : payments.map((row, idx) => (
-                        <tr key={row.id}>
-                          <TD className="text-gray-500">{idx + 1}</TD>
-                          <TD>{iso(row.payment_date)}</TD>
-                          <TD><div className="font-medium text-gray-900">{row.agent_name || row.agent}</div></TD>
-                          <TD><Badge className={badgeClassByLedgerType(row.entry_type)}>{ledgerTypeLabel(row.entry_type)}</Badge></TD>
-                          <TD align="right" className="font-semibold text-gray-900">{money(row.amount)}</TD>
-                          <TD className="max-w-[260px] whitespace-pre-wrap break-words">{row.comment || "—"}</TD>
-                          <TD><div className="flex flex-wrap gap-3"><button onClick={() => startEditPayment(row)} type="button" className="text-sm font-medium text-blue-600 transition hover:text-blue-800 hover:underline">Изменить</button><button onClick={() => handleDeletePayment(row.id)} type="button" className="text-sm font-medium text-red-500 transition hover:text-red-700 hover:underline">Удалить</button></div></TD>
-                        </tr>
-                      ))}
+                      {paymentsLoading || sortedPayments.length === 0 ? (
+                        <EmptyRow loading={paymentsLoading} colSpan={7} />
+                      ) : (
+                        paymentsGroups.flatMap((group) => {
+                          const today = iso(new Date());
+                          const isToday = group.date === today;
+                          const headerRow = (
+                            <tr key={`payments-group-${group.date}`}>
+                              <td colSpan={7} className="px-3 py-3">
+                                <div className={`flex flex-col gap-2 rounded-2xl border px-4 py-3 md:flex-row md:items-center md:justify-between ${isToday ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}>
+                                  <div>
+                                    <div className="text-sm font-semibold text-slate-900">{group.date}{isToday ? " • сегодня" : ""}</div>
+                                    <div className="text-xs text-slate-500">Операций: {group.items.length}</div>
+                                  </div>
+                                  <div className="flex flex-wrap gap-2 text-xs">
+                                    <span className="rounded-full bg-white px-3 py-1 font-semibold text-slate-700 ring-1 ring-slate-200">Оплата: {money(group.paymentTotal)}</span>
+                                    <span className="rounded-full bg-white px-3 py-1 font-semibold text-amber-700 ring-1 ring-amber-200">Возврат: {money(group.refundTotal)}</span>
+                                    <span className="rounded-full bg-white px-3 py-1 font-semibold text-emerald-700 ring-1 ring-emerald-200">Чистый эффект: {money(group.paymentTotal - group.refundTotal)}</span>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                          const itemRows = group.items.map((row, idx) => (
+                            <tr key={row.id}>
+                              <TD className="text-gray-500">{idx + 1}</TD>
+                              <TD>{iso(row.payment_date)}</TD>
+                              <TD><div className="font-medium text-gray-900">{row.agent_name || row.agent}</div></TD>
+                              <TD><Badge className={badgeClassByLedgerType(row.entry_type)}>{ledgerTypeLabel(row.entry_type)}</Badge></TD>
+                              <TD align="right" className="font-semibold text-gray-900">{money(row.amount)}</TD>
+                              <TD className="max-w-[260px] whitespace-pre-wrap break-words">{row.comment || "—"}</TD>
+                              <TD><div className="flex flex-wrap gap-3"><button onClick={() => startEditPayment(row)} type="button" className="text-sm font-medium text-blue-600 transition hover:text-blue-800 hover:underline">Изменить</button><button onClick={() => handleDeletePayment(row.id)} type="button" className="text-sm font-medium text-red-500 transition hover:text-red-700 hover:underline">Удалить</button></div></TD>
+                            </tr>
+                          ));
+                          return [headerRow, ...itemRows];
+                        })
+                      )}
                     </tbody>
                   </Table>
                 </TableShell>
@@ -905,24 +1107,50 @@ export default function AdminTravelSales() {
             <StatCard title="Маржа" value={money(totalMargin)} hint={`≈ ${moneyCompact(totalMargin)}`} accent="emerald" />
             <StatCard title="Записей" value={String(salesReport.length)} hint="По текущим фильтрам" accent="violet" />
           </div>
-          <Card title="Отчет продаж" subtitle="Сильный акцент на деньгах и марже" right={<div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:flex-wrap lg:items-center lg:justify-end"><select className={inputClass("lg:w-[180px]")} value={salesAgentId} onChange={(e) => setSalesAgentId(e.target.value)}><option value="">Все агенты</option>{agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select><select className={inputClass("lg:w-[170px]")} value={salesServiceType} onChange={(e) => setSalesServiceType(e.target.value)}><option value="">Все типы</option>{SERVICE_TYPE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select><input type="date" className={inputClass("lg:w-[160px]")} value={salesDateFrom} onChange={(e) => setSalesDateFrom(e.target.value)} /><input type="date" className={inputClass("lg:w-[160px]")} value={salesDateTo} onChange={(e) => setSalesDateTo(e.target.value)} /><ActionButton onClick={loadSalesReport} type="button">Фильтр</ActionButton><ActionButton variant="primary" onClick={exportSalesReport} type="button">Excel</ActionButton></div>}>
+          <Card title="Отчет продаж" subtitle="Сильный акцент на деньгах и марже" right={<div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:flex-wrap lg:items-center lg:justify-end"><select className={inputClass("lg:w-[180px]")} value={salesAgentId} onChange={(e) => setSalesAgentId(e.target.value)}><option value="">Все агенты</option>{sortedAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select><select className={inputClass("lg:w-[170px]")} value={salesServiceType} onChange={(e) => setSalesServiceType(e.target.value)}><option value="">Все типы</option>{SERVICE_TYPE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select><input type="date" className={inputClass("lg:w-[160px]")} value={salesDateFrom} onChange={(e) => setSalesDateFrom(e.target.value)} /><input type="date" className={inputClass("lg:w-[160px]")} value={salesDateTo} onChange={(e) => setSalesDateTo(e.target.value)} /><ActionButton onClick={loadSalesReport} type="button">Фильтр</ActionButton><ActionButton variant="primary" onClick={exportSalesReport} type="button">Excel</ActionButton></div>}>
             <TableShell>
               <Table>
-                <TableHead><tr><TH>№</TH><TH>Дата</TH><TH>Агент</TH><TH>Тип</TH><TH>Направление</TH><TH>Name of traveller</TH><TH align="right">Сумма продажи</TH><TH align="right">Сумма нетто</TH><TH align="right">Маржа</TH></tr></TableHead>
+                <TableHead><tr><TH>№</TH><SortTH sortKey="sale_date" sort={salesSort} onSort={toggleSort(setSalesSort)}>Дата</SortTH><SortTH sortKey="agent" sort={salesSort} onSort={toggleSort(setSalesSort)}>Агент</SortTH><SortTH sortKey="service_type" sort={salesSort} onSort={toggleSort(setSalesSort)}>Тип</SortTH><SortTH sortKey="direction" sort={salesSort} onSort={toggleSort(setSalesSort)}>Направление</SortTH><SortTH sortKey="traveller_name" sort={salesSort} onSort={toggleSort(setSalesSort)}>Name of traveller</SortTH><SortTH sortKey="sale_amount" sort={salesSort} onSort={toggleSort(setSalesSort)} align="right">Сумма продажи</SortTH><SortTH sortKey="net_amount" sort={salesSort} onSort={toggleSort(setSalesSort)} align="right">Сумма нетто</SortTH><SortTH sortKey="margin" sort={salesSort} onSort={toggleSort(setSalesSort)} align="right">Маржа</SortTH></tr></TableHead>
                 <tbody>
-                  {salesReportLoading || salesReport.length === 0 ? <EmptyRow loading={salesReportLoading} colSpan={9} /> : salesReport.map((row, idx) => (
-                    <tr key={row.id || `${row.sale_date}-${idx}`}>
-                      <TD className="text-gray-500">{idx + 1}</TD>
-                      <TD>{iso(row.sale_date)}</TD>
-                      <TD><div className="font-medium text-gray-900">{row.agent}</div></TD>
-                      <TD><Badge className={badgeClassByServiceType(row.service_type)}>{typeLabel(row.service_type)}</Badge></TD>
-                      <TD className="max-w-[220px] whitespace-pre-wrap break-words">{row.direction || "—"}</TD>
-                      <TD>{row.traveller_name || "—"}</TD>
-                      <TD align="right" className="font-semibold text-gray-900">{money(row.sale_amount)}</TD>
-                      <TD align="right" className="font-semibold text-gray-900">{money(row.net_amount)}</TD>
-                      <TD align="right" className="font-semibold text-emerald-700">{money(row.margin)}</TD>
-                    </tr>
-                  ))}
+                  {salesReportLoading || sortedSalesReport.length === 0 ? (
+                    <EmptyRow loading={salesReportLoading} colSpan={9} />
+                  ) : (
+                    salesReportGroups.flatMap((group) => {
+                      const today = iso(new Date());
+                      const isToday = group.date === today;
+                      const headerRow = (
+                        <tr key={`sales-report-group-${group.date}`}>
+                          <td colSpan={9} className="px-3 py-3">
+                            <div className={`flex flex-col gap-2 rounded-2xl border px-4 py-3 md:flex-row md:items-center md:justify-between ${isToday ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}>
+                              <div>
+                                <div className="text-sm font-semibold text-slate-900">{group.date}{isToday ? " • сегодня" : ""}</div>
+                                <div className="text-xs text-slate-500">Продаж: {group.items.length}</div>
+                              </div>
+                              <div className="flex flex-wrap gap-2 text-xs">
+                                <span className="rounded-full bg-white px-3 py-1 font-semibold text-slate-700 ring-1 ring-slate-200">Сумма продаж: {money(group.saleTotal)}</span>
+                                <span className="rounded-full bg-white px-3 py-1 font-semibold text-slate-700 ring-1 ring-slate-200">Нетто: {money(group.netTotal)}</span>
+                                <span className="rounded-full bg-white px-3 py-1 font-semibold text-emerald-700 ring-1 ring-emerald-200">Маржа: {money(group.marginTotal)}</span>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                      const itemRows = group.items.map((row, idx) => (
+                        <tr key={row.id || `${row.sale_date}-${idx}`}>
+                          <TD className="text-gray-500">{idx + 1}</TD>
+                          <TD>{iso(row.sale_date)}</TD>
+                          <TD><div className="font-medium text-gray-900">{row.agent}</div></TD>
+                          <TD><Badge className={badgeClassByServiceType(row.service_type)}>{typeLabel(row.service_type)}</Badge></TD>
+                          <TD className="max-w-[220px] whitespace-pre-wrap break-words">{row.direction || "—"}</TD>
+                          <TD>{row.traveller_name || "—"}</TD>
+                          <TD align="right" className="font-semibold text-gray-900">{money(row.sale_amount)}</TD>
+                          <TD align="right" className="font-semibold text-gray-900">{money(row.net_amount)}</TD>
+                          <TD align="right" className="font-semibold text-emerald-700">{money(row.margin)}</TD>
+                        </tr>
+                      ));
+                      return [headerRow, ...itemRows];
+                    })
+                  )}
                 </tbody>
               </Table>
             </TableShell>
@@ -938,27 +1166,53 @@ export default function AdminTravelSales() {
             <StatCard title="Продажи в отчете" value={money(balanceReport.reduce((s, r) => s + Number(r.sale_amount || 0), 0))} hint={`≈ ${moneyCompact(balanceReport.reduce((s, r) => s + Number(r.sale_amount || 0), 0))}`} accent="emerald" />
             <StatCard title="Оплаты + возвраты" value={money(balanceReport.reduce((s, r) => s + Number(r.payment_amount || 0) + Number(r.refund_amount || 0), 0))} hint={`≈ ${moneyCompact(balanceReport.reduce((s, r) => s + Number(r.payment_amount || 0) + Number(r.refund_amount || 0), 0))}`} accent="amber" />
           </div>
-          <Card title="Баланс агента" subtitle="Лучше читается последовательность операций и текущий баланс" right={<div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:flex-wrap lg:items-center lg:justify-end"><select className={inputClass("lg:w-[180px]")} value={balanceAgentId} onChange={(e) => setBalanceAgentId(e.target.value)}><option value="">Все агенты</option>{agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select><select className={inputClass("lg:w-[170px]")} value={balanceServiceType} onChange={(e) => setBalanceServiceType(e.target.value)}><option value="">Все типы</option>{SERVICE_TYPE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select><input type="date" className={inputClass("lg:w-[160px]")} value={balanceDateFrom} onChange={(e) => setBalanceDateFrom(e.target.value)} /><input type="date" className={inputClass("lg:w-[160px]")} value={balanceDateTo} onChange={(e) => setBalanceDateTo(e.target.value)} /><ActionButton onClick={loadBalanceReport} type="button">Фильтр</ActionButton><ActionButton variant="primary" onClick={exportBalanceReport} type="button">Excel</ActionButton></div>}>
+          <Card title="Баланс агента" subtitle="Лучше читается последовательность операций и текущий баланс" right={<div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:flex-wrap lg:items-center lg:justify-end"><select className={inputClass("lg:w-[180px]")} value={balanceAgentId} onChange={(e) => setBalanceAgentId(e.target.value)}><option value="">Все агенты</option>{sortedAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select><select className={inputClass("lg:w-[170px]")} value={balanceServiceType} onChange={(e) => setBalanceServiceType(e.target.value)}><option value="">Все типы</option>{SERVICE_TYPE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select><input type="date" className={inputClass("lg:w-[160px]")} value={balanceDateFrom} onChange={(e) => setBalanceDateFrom(e.target.value)} /><input type="date" className={inputClass("lg:w-[160px]")} value={balanceDateTo} onChange={(e) => setBalanceDateTo(e.target.value)} /><ActionButton onClick={loadBalanceReport} type="button">Фильтр</ActionButton><ActionButton variant="primary" onClick={exportBalanceReport} type="button">Excel</ActionButton></div>}>
             <TableShell>
               <Table>
-                <TableHead><tr><TH>№</TH><TH>Дата операции</TH><TH>Тип записи</TH><TH>Агент</TH><TH>Тип услуги</TH><TH>Направление</TH><TH>Name of traveller</TH><TH align="right">Продажа</TH><TH align="right">Оплата</TH><TH align="right">Возврат</TH><TH>Комментарий</TH><TH align="right">Баланс</TH></tr></TableHead>
+                <TableHead><tr><TH>№</TH><SortTH sortKey="txn_date" sort={balanceSort} onSort={toggleSort(setBalanceSort)}>Дата операции</SortTH><SortTH sortKey="entry_type" sort={balanceSort} onSort={toggleSort(setBalanceSort)}>Тип записи</SortTH><SortTH sortKey="agent" sort={balanceSort} onSort={toggleSort(setBalanceSort)}>Агент</SortTH><SortTH sortKey="service_type" sort={balanceSort} onSort={toggleSort(setBalanceSort)}>Тип услуги</SortTH><SortTH sortKey="direction" sort={balanceSort} onSort={toggleSort(setBalanceSort)}>Направление</SortTH><SortTH sortKey="traveller_name" sort={balanceSort} onSort={toggleSort(setBalanceSort)}>Name of traveller</SortTH><SortTH sortKey="sale_amount" sort={balanceSort} onSort={toggleSort(setBalanceSort)} align="right">Продажа</SortTH><SortTH sortKey="payment_amount" sort={balanceSort} onSort={toggleSort(setBalanceSort)} align="right">Оплата</SortTH><SortTH sortKey="refund_amount" sort={balanceSort} onSort={toggleSort(setBalanceSort)} align="right">Возврат</SortTH><SortTH sortKey="comment" sort={balanceSort} onSort={toggleSort(setBalanceSort)}>Комментарий</SortTH><SortTH sortKey="balance" sort={balanceSort} onSort={toggleSort(setBalanceSort)} align="right">Баланс</SortTH></tr></TableHead>
                 <tbody>
-                  {balanceLoading || balanceReport.length === 0 ? <EmptyRow loading={balanceLoading} colSpan={12} /> : balanceReport.map((row, idx) => (
-                    <tr key={row.row_key || `${row.entry_type}-${idx}`}>
-                      <TD className="text-gray-500">{idx + 1}</TD>
-                      <TD>{iso(row.txn_date)}</TD>
-                      <TD><Badge className={badgeClassByLedgerType(row.entry_type)}>{ledgerTypeLabel(row.entry_type)}</Badge></TD>
-                      <TD><div className="font-medium text-gray-900">{row.agent}</div></TD>
-                      <TD>{row.service_type ? <Badge className={badgeClassByServiceType(row.service_type)}>{typeLabel(row.service_type)}</Badge> : "—"}</TD>
-                      <TD className="max-w-[220px] whitespace-pre-wrap break-words">{row.direction || "—"}</TD>
-                      <TD>{row.traveller_name || "—"}</TD>
-                      <TD align="right">{Number(row.sale_amount || 0) ? money(row.sale_amount) : "0"}</TD>
-                      <TD align="right">{Number(row.payment_amount || 0) ? money(row.payment_amount) : "0"}</TD>
-                      <TD align="right">{Number(row.refund_amount || 0) ? money(row.refund_amount) : "0"}</TD>
-                      <TD className="max-w-[260px] whitespace-pre-wrap break-words">{row.comment || "—"}</TD>
-                      <TD align="right" className={`font-semibold ${amountClass(row.balance, "balance")}`}>{money(row.balance)}</TD>
-                    </tr>
-                  ))}
+                  {balanceLoading || sortedBalanceReport.length === 0 ? (
+                    <EmptyRow loading={balanceLoading} colSpan={12} />
+                  ) : (
+                    balanceReportGroups.flatMap((group) => {
+                      const today = iso(new Date());
+                      const isToday = group.date === today;
+                      const headerRow = (
+                        <tr key={`balance-report-group-${group.date}`}>
+                          <td colSpan={12} className="px-3 py-3">
+                            <div className={`flex flex-col gap-2 rounded-2xl border px-4 py-3 md:flex-row md:items-center md:justify-between ${isToday ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}>
+                              <div>
+                                <div className="text-sm font-semibold text-slate-900">{group.date}{isToday ? " • сегодня" : ""}</div>
+                                <div className="text-xs text-slate-500">Операций: {group.items.length}</div>
+                              </div>
+                              <div className="flex flex-wrap gap-2 text-xs">
+                                <span className="rounded-full bg-white px-3 py-1 font-semibold text-slate-700 ring-1 ring-slate-200">Продажи: {money(group.saleTotal)}</span>
+                                <span className="rounded-full bg-white px-3 py-1 font-semibold text-slate-700 ring-1 ring-slate-200">Оплаты: {money(group.paymentTotal)}</span>
+                                <span className="rounded-full bg-white px-3 py-1 font-semibold text-amber-700 ring-1 ring-amber-200">Возвраты: {money(group.refundTotal)}</span>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                      const itemRows = group.items.map((row, idx) => (
+                        <tr key={row.row_key || `${row.entry_type}-${idx}`}>
+                          <TD className="text-gray-500">{idx + 1}</TD>
+                          <TD>{iso(row.txn_date)}</TD>
+                          <TD><Badge className={badgeClassByLedgerType(row.entry_type)}>{ledgerTypeLabel(row.entry_type)}</Badge></TD>
+                          <TD><div className="font-medium text-gray-900">{row.agent}</div></TD>
+                          <TD>{row.service_type ? <Badge className={badgeClassByServiceType(row.service_type)}>{typeLabel(row.service_type)}</Badge> : "—"}</TD>
+                          <TD className="max-w-[220px] whitespace-pre-wrap break-words">{row.direction || "—"}</TD>
+                          <TD>{row.traveller_name || "—"}</TD>
+                          <TD align="right">{Number(row.sale_amount || 0) ? money(row.sale_amount) : "0"}</TD>
+                          <TD align="right">{Number(row.payment_amount || 0) ? money(row.payment_amount) : "0"}</TD>
+                          <TD align="right">{Number(row.refund_amount || 0) ? money(row.refund_amount) : "0"}</TD>
+                          <TD className="max-w-[260px] whitespace-pre-wrap break-words">{row.comment || "—"}</TD>
+                          <TD align="right" className={`font-semibold ${amountClass(row.balance, "balance")}`}>{money(row.balance)}</TD>
+                        </tr>
+                      ));
+                      return [headerRow, ...itemRows];
+                    })
+                  )}
                 </tbody>
               </Table>
             </TableShell>
