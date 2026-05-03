@@ -133,6 +133,32 @@ function amountClass(v, mode = "default") {
   return n < 0 ? "text-red-600" : "text-gray-900";
 }
 
+function balanceStatus(v) {
+  const n = Number(v || 0);
+  if (n > 0) {
+    return {
+      label: "ДОЛГ",
+      hint: "агент должен",
+      cls: "bg-red-50 text-red-700 ring-red-200",
+      rowCls: "bg-red-50/35 hover:bg-red-50/70",
+    };
+  }
+  if (n < 0) {
+    return {
+      label: "ПЕРЕПЛАТА",
+      hint: "мы должны агенту / аванс",
+      cls: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+      rowCls: "bg-emerald-50/25 hover:bg-emerald-50/60",
+    };
+  }
+  return {
+    label: "ЗАКРЫТО",
+    hint: "баланс закрыт",
+    cls: "bg-gray-100 text-gray-600 ring-gray-200",
+    rowCls: "",
+  };
+}
+
 function clsTab(active) {
   return active
     ? "inline-flex items-center rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm"
@@ -590,6 +616,9 @@ export default function AdminTravelSales() {
           saleTotal: 0,
           paymentTotal: 0,
           refundTotal: 0,
+          debtCount: 0,
+          overpayCount: 0,
+          closedCount: 0,
         });
       }
 
@@ -598,6 +627,10 @@ export default function AdminTravelSales() {
       group.saleTotal += Number(row.sale_amount || 0);
       group.paymentTotal += Number(row.payment_amount || 0);
       group.refundTotal += Number(row.refund_amount || 0);
+      const balance = Number(row.balance || 0);
+      if (balance > 0) group.debtCount += 1;
+      else if (balance < 0) group.overpayCount += 1;
+      else group.closedCount += 1;
     });
 
     return Array.from(map.values()).sort((a, b) =>
@@ -1189,13 +1222,24 @@ export default function AdminTravelSales() {
                                 <span className="rounded-full bg-white px-3 py-1 font-semibold text-slate-700 ring-1 ring-slate-200">Продажи: {money(group.saleTotal)}</span>
                                 <span className="rounded-full bg-white px-3 py-1 font-semibold text-slate-700 ring-1 ring-slate-200">Оплаты: {money(group.paymentTotal)}</span>
                                 <span className="rounded-full bg-white px-3 py-1 font-semibold text-amber-700 ring-1 ring-amber-200">Возвраты: {money(group.refundTotal)}</span>
+                                {group.debtCount > 0 ? (
+                                  <span className="rounded-full bg-red-50 px-3 py-1 font-semibold text-red-700 ring-1 ring-red-200">Долг: {group.debtCount}</span>
+                                ) : null}
+                                {group.overpayCount > 0 ? (
+                                  <span className="rounded-full bg-emerald-50 px-3 py-1 font-semibold text-emerald-700 ring-1 ring-emerald-200">Переплата: {group.overpayCount}</span>
+                                ) : null}
+                                {group.debtCount === 0 && group.overpayCount === 0 ? (
+                                  <span className="rounded-full bg-gray-100 px-3 py-1 font-semibold text-gray-600 ring-1 ring-gray-200">Закрыто</span>
+                                ) : null}
                               </div>
                             </div>
                           </td>
                         </tr>
                       );
-                      const itemRows = group.items.map((row, idx) => (
-                        <tr key={row.row_key || `${row.entry_type}-${idx}`}>
+                      const itemRows = group.items.map((row, idx) => {
+                        const status = balanceStatus(row.balance);
+                        return (
+                        <tr key={row.row_key || `${row.entry_type}-${idx}`} className={status.rowCls}>
                           <TD className="text-gray-500">{idx + 1}</TD>
                           <TD>{iso(row.txn_date)}</TD>
                           <TD><Badge className={badgeClassByLedgerType(row.entry_type)}>{ledgerTypeLabel(row.entry_type)}</Badge></TD>
@@ -1207,9 +1251,19 @@ export default function AdminTravelSales() {
                           <TD align="right">{Number(row.payment_amount || 0) ? money(row.payment_amount) : "0"}</TD>
                           <TD align="right">{Number(row.refund_amount || 0) ? money(row.refund_amount) : "0"}</TD>
                           <TD className="max-w-[260px] whitespace-pre-wrap break-words">{row.comment || "—"}</TD>
-                          <TD align="right" className={`font-semibold ${amountClass(row.balance, "balance")}`}>{money(row.balance)}</TD>
+                          <TD align="right">
+                            <div className="flex items-center justify-end gap-2">
+                              <span className={`font-semibold ${amountClass(row.balance, "balance")}`}>
+                                {money(row.balance)}
+                              </span>
+                              <Badge className={`ring-1 ${status.cls}`} title={status.hint}>
+                                {status.label}
+                              </Badge>
+                            </div>
+                          </TD>
                         </tr>
-                      ));
+                        );
+                      });
                       return [headerRow, ...itemRows];
                     })
                   )}
