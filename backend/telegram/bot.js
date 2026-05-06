@@ -12,6 +12,10 @@ const { buildSvcActualKeyboard } = require("./keyboards/serviceActual");
 const { handleServiceActualCallback } = require("./handlers/serviceActualHandler");
 const { buildServiceMessage } = require("../utils/telegramServiceCard");
 const { getContactUnlockSettings } = require("../utils/contactUnlockSettings");
+const {
+  createProviderSupportDonationOrder,
+  getProviderSupportSettings,
+} = require("../controllers/providerSupportController");
 
 /* ===================== CONFIG ===================== */
 const OFFER_VERSION = process.env.OFFER_VERSION || "v1.0";
@@ -6808,6 +6812,72 @@ bot.action(/^balance:topup:(\d+)$/, async (ctx) => {
   } catch (e) {
     console.error("[tg-bot] balance:topup:amount error:", e?.message || e);
     await safeReply(ctx, "⚠️ Не удалось создать ссылку. Попробуйте позже.");
+  }
+});
+
+
+async function replyProviderSupportPrompt(ctx, serviceId = null) {
+  try {
+    if (!pool) return;
+    const settings = await getProviderSupportSettings(pool);
+    if (!settings?.enabled) return;
+
+    const amounts = Array.isArray(settings.suggested_amounts)
+      ? settings.suggested_amounts
+      : [10000, 25000, 50000, 100000];
+
+    const rows = amounts
+      .map((x) => Math.trunc(Number(x)))
+      .filter((x) => Number.isFinite(x) && x > 0)
+      .slice(0, 8)
+      .map((x) => [{
+        text: `❤️ ${x.toLocaleString("ru-RU")} сум`,
+        callback_data: `support_project:pay:${x}:${Number(serviceId || 0)}`,
+      }]);
+
+    if (!rows.length) return;
+
+    await safeReply(
+      ctx,
+      `${settings.title || "❤️ Поддержка проекта"}\n\n${settings.message || "Если вы хотите поддержать развитие проекта Bot Otkaznyx Turov и Travella — можете отправить любую комфортную для вас сумму."}`,
+      { reply_markup: { inline_keyboard: rows } }
+    );
+  } catch (e) {
+    console.error("[tg-bot] provider support prompt error:", e?.message || e);
+  }
+}
+
+bot.action(/^support_project:pay:(\d+):(\d+)$/, async (ctx) => {
+  try {
+    await safeCb(ctx);
+
+    const amountSum = Number(ctx.match?.[1] || 0);
+    const serviceId = Number(ctx.match?.[2] || 0) || null;
+    const telegramChatId = getActorId(ctx) || ctx.from?.id || null;
+
+    const result = await createProviderSupportDonationOrder({
+      telegramChatId,
+      serviceId,
+      amountSum,
+      source: "telegram_provider_bot",
+      note: serviceId ? `after proof submit service #${serviceId}` : "provider support",
+    });
+
+    await safeReply(
+      ctx,
+      `❤️ Спасибо за готовность поддержать проект.\n\nСумма: ${amountSum.toLocaleString("ru-RU")} сум\nЗаказ: #${result.order.id}\n\nПосле оплаты донат появится в админке в разделе Finance → Support.`,
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "✅ Оплатить через Payme", url: result.pay_url }],
+            [{ text: "📋 Мои услуги", callback_data: "prov_services:list" }],
+          ],
+        },
+      }
+    );
+  } catch (e) {
+    console.error("[tg-bot] support_project:pay error:", e?.message || e);
+    await safeReply(ctx, "⚠️ Не удалось создать ссылку Payme для поддержки проекта. Попробуйте позже.");
   }
 });
 
