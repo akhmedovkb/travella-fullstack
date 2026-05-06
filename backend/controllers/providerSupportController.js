@@ -102,7 +102,7 @@ async function ensureProviderSupportSchema(db = pool) {
   await db.query(`
     CREATE TABLE IF NOT EXISTS payme_topup_orders (
       id BIGSERIAL PRIMARY KEY,
-      client_id BIGINT NOT NULL,
+      client_id BIGINT NULL,
       amount_tiyin BIGINT NOT NULL CHECK (amount_tiyin > 0),
       provider TEXT NOT NULL DEFAULT 'payme',
       status TEXT NOT NULL DEFAULT 'new',
@@ -123,6 +123,8 @@ async function ensureProviderSupportSchema(db = pool) {
       ADD COLUMN IF NOT EXISTS telegram_chat_id BIGINT NULL,
       ADD COLUMN IF NOT EXISTS note TEXT NULL
   `);
+
+  await db.query(`ALTER TABLE ${target} ALTER COLUMN client_id DROP NOT NULL`);
 
   if (topupKind === "v") {
     await db.query(`CREATE OR REPLACE VIEW topup_orders AS SELECT * FROM payme_topup_orders`);
@@ -224,7 +226,7 @@ async function createProviderSupportDonationOrder({ telegramChatId, providerId =
     const orderQ = await db.query(
       `INSERT INTO topup_orders
         (client_id, amount_tiyin, provider, status, purpose, support_donation_id, provider_id, telegram_chat_id, note)
-       VALUES (0, $1, 'payme', 'new', 'provider_support', $2, $3, $4, $5)
+       VALUES (NULL, $1, 'payme', 'new', 'provider_support', $2, $3, $4, $5)
        RETURNING id, amount_tiyin, status, created_at`,
       [amountTiyin, Number(donation.id), resolvedProviderId, intOrNull(telegramChatId), note]
     );
