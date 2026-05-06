@@ -130,7 +130,7 @@ const hasVal = (v) => v !== undefined && v !== null && String(v).trim?.() !== ""
 function MoneyField({ label, value, onChange, placeholder }) {
   return (
     <div className="mb-2">
-      {label ? <label className="block font-medium mb-1">{label}</label> : null}
+      {label ? <label className="block text-sm font-semibold text-gray-700 mb-1.5">{label}</label> : null}
       <input
         inputMode="decimal"
         pattern="[-0-9., ]*"   // ⬅ без \s
@@ -138,7 +138,7 @@ function MoneyField({ label, value, onChange, placeholder }) {
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full border px-3 py-2 rounded"
+        className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
       />
     </div>
   );
@@ -440,9 +440,9 @@ function ImagesEditor({
   t,
 }) {
   return (
-    <div className="mb-4">
-      <div className="flex items-center justify-between mb-2">
-        <h4 className="font-semibold">
+    <div className="mb-5 rounded-3xl border border-gray-200 bg-white p-4 shadow-sm">
+      <div className="flex items-center justify-between mb-3">
+        <h4 className="text-sm font-semibold text-gray-900">
           {t("service_images", { defaultValue: "Фото услуги" })}
         </h4>
         {!!images?.length && (
@@ -465,7 +465,7 @@ function ImagesEditor({
           {images.map((src, idx) => (
             <div
               key={idx}
-              className="relative group border rounded overflow-hidden bg-gray-50"
+              className="relative group overflow-hidden rounded-2xl border border-gray-200 bg-gray-50"
               draggable
               onDragStart={() => (dragItem.current = idx)}
               onDragEnter={() => (dragOverItem.current = idx)}
@@ -476,12 +476,12 @@ function ImagesEditor({
                             <img
                 src={src}
                 alt={t("service_image", { defaultValue: "Изображение услуги" })}
-                className="w-full h-32 object-cover" />
+                className="h-28 w-full object-cover" />
               <div className="absolute top-1 right-1 flex gap-1">
                 {onMakeCover && (
                   <button
                     type="button"
-                    className="bg-white/90 border rounded px-2 py-0.5 text-xs shadow hidden group-hover:block"
+                    className="hidden rounded-full border bg-white/95 px-2 py-1 text-xs shadow group-hover:block"
                     onClick={() => onMakeCover(idx)}
                     title={t("make_cover", { defaultValue: "Сделать обложкой" })}
                     aria-label={t("make_cover", { defaultValue: "Сделать обложкой" })}
@@ -491,7 +491,7 @@ function ImagesEditor({
                 )}
                 <button
                   type="button"
-                  className="bg-white/90 border rounded px-2 py-0.5 text-xs shadow hidden group-hover:block"
+                  className="hidden rounded-full border bg-white/95 px-2 py-1 text-xs shadow group-hover:block"
                   onClick={() => onRemove(idx)}
                   aria-label={t("delete", { defaultValue: "Удалить" })}
                 >
@@ -499,7 +499,7 @@ function ImagesEditor({
                 </button>
               </div>
               {idx === 0 && (
-                <div className="absolute bottom-1 left-1 text-[10px] px-1.5 py-0.5 bg-white/90 rounded shadow">
+                <div className="absolute bottom-2 left-2 rounded-full bg-white/95 px-2 py-1 text-[10px] shadow">
                   {t("cover", { defaultValue: "Обложка" })}
                 </div>
               )}
@@ -507,13 +507,13 @@ function ImagesEditor({
           ))}
         </div>
       ) : (
-        <div className="text-sm text-gray-500 mb-2">
+        <div className="mb-3 rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-5 text-center text-sm text-gray-500">
           {t("no_images_yet", { defaultValue: "Изображений пока нет" })}
         </div>
       )}
 
       <div className="mt-3">
-        <label className="inline-flex items-center gap-2 bg-orange-500 text-white px-4 py-2 rounded cursor-pointer">
+        <label className="inline-flex cursor-pointer items-center gap-2 rounded-2xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-orange-600">
           <input type="file" accept="image/*" multiple onChange={onUpload} className="hidden" />
           {t("choose_files", { defaultValue: "Выбрать файлы" })}
         </label>
@@ -1560,9 +1560,9 @@ useEffect(() => {
           </div>
         </div>
       )}
-      <div className="flex flex-col gap-4 md:gap-6 p-4 md:p-6 bg-gray-50 min-h-[calc(var(--vh,1vh)*100)] pb-[env(safe-area-inset-bottom)]">
+      <div className="flex flex-col gap-4 md:gap-6 p-3 md:p-6 bg-gradient-to-b from-gray-50 to-white min-h-[calc(var(--vh,1vh)*100)] pb-[env(safe-area-inset-bottom)]">
         {/* блок: услуги + входящие/брони */}
-        <div className="w-full max-w-6xl mx-auto bg-white p-6 rounded-xl shadow-md">
+        <div className="w-full max-w-6xl mx-auto rounded-3xl border border-gray-100 bg-white/95 p-4 shadow-sm md:p-6">
             {/* === Отель: прайс и карточка === */}
           {profile?.type === "hotel" && (
             <div className="mb-6">
@@ -1646,7 +1646,7 @@ useEffect(() => {
                 {services.map((s) => (
                   <div
                     key={s.id}
-                    className="border rounded-lg p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition"
+                    className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm cursor-pointer hover:border-orange-200 hover:shadow-md transition"
                     onClick={() => loadServiceToEdit(s)}
                   >
                     <div className="flex items-center gap-3">
@@ -1656,10 +1656,10 @@ useEffect(() => {
                                                     alt={
                             s.title || t("service_image", { defaultValue: "Изображение услуги" })
                           }
-                          className="w-12 h-12 object-cover rounded"
+                          className="h-14 w-14 rounded-2xl object-cover"
                         />
                       ) : (
-                        <div className="w-12 h-12 rounded bg-gray-200" />
+                        <div className="h-14 w-14 rounded-2xl bg-gray-100" />
                       )}
                       <div className="flex-1">
                         <div className="font-bold text-lg">{s.title}</div>
@@ -1789,12 +1789,12 @@ useEffect(() => {
 
               {/* Общие поля для названия */}
               <div className="mb-2">
-                <label className="block font-medium mb-1">{t("title")}</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("title")}</label>
                 <input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder={t("title")}
-                  className="w-full border px-3 py-2 rounded mb-2"
+                  className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100 mb-3"
                 />
               </div>
 
@@ -1882,38 +1882,38 @@ useEffect(() => {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
                     <div className="min-w-0">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">{t("start_flight_date")}</label>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("start_flight_date")}</label>
                       <input
                         type="date"
                         min={todayLocalDate()}
                         value={details.startFlightDate || ""}
                         onChange={(e) => setDetails({ ...details, startFlightDate: e.target.value })}
-                        className="w-full border px-3 py-2 rounded"
+                        className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                       />
                     </div>
                     <div className="min-w-0">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">{t("end_flight_date")}</label>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("end_flight_date")}</label>
                       <input
                         type="date"
                         min={details.startFlightDate || todayLocalDate()}   // конец не раньше начала
                         value={details.endFlightDate || ""}
                         onChange={(e) => setDetails({ ...details, endFlightDate: e.target.value })}
-                        className="w-full border px-3 py-2 rounded"
+                        className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                       />
                     </div>
                   </div>
 
                   <div className="mb-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">{t("flight_details")}</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("flight_details")}</label>
                     <textarea
                       value={details.flightDetails || ""}
                       onChange={(e) => setDetails({ ...details, flightDetails: e.target.value })}
                       placeholder={t("enter_flight_details")}
-                      className="w-full border px-3 py-2 rounded"
+                      className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                     />
                   </div>
 
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("hotel")}</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("hotel")}</label>
                    
                   <HotelSelect
                      t={t}
@@ -1923,30 +1923,30 @@ useEffect(() => {
                    />
 
                   <div className="mb-4">
-                    <label className="block text-sm font-medium mb-1">{t("accommodation_category")}</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("accommodation_category")}</label>
                     <input
                       type="text"
                       value={details.accommodationCategory || ""}
                       onChange={(e) => setDetails({ ...details, accommodationCategory: e.target.value })}
-                      className="w-full border px-3 py-2 rounded mb-2"
+                      className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100 mb-3"
                       placeholder={t("enter_category")}
                     />
-                    <label className="block text-sm font-medium mb-1">{t("accommodation")}</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("accommodation")}</label>
                     <input
                       type="text"
                       value={details.accommodation || ""}
                       onChange={(e) => setDetails({ ...details, accommodation: e.target.value })}
-                      className="w-full border px-3 py-2 rounded mb-2"
+                      className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100 mb-3"
                       placeholder={t("enter_accommodation")}
                     />
                   </div>
 
                   <div className="mb-2">
-                    <label className="block font-medium mb-1">{t("food")}</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("food")}</label>
                     <select
                       value={details.food || ""}
                       onChange={(e) => setDetails({ ...details, food: e.target.value })}
-                      className="w-full border px-3 py-2 rounded"
+                      className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                     >
                       <option value="">{t("food_options.select")}</option>
                       <option value="BB">BB - {t("food_options.bb")}</option>
@@ -1960,18 +1960,18 @@ useEffect(() => {
                         type="checkbox"
                         checked={details.halal || false}
                         onChange={(e) => setDetails({ ...details, halal: e.target.checked })}
-                        className="mr-2"
+                        className="mr-2 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-200"
                       />
                       {t("food_options.halal")}
                     </label>
                   </div>
 
                   <div className="mb-2">
-                    <label className="block font-medium mb-1">{t("transfer")}</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("transfer")}</label>
                     <select
                       value={details.transfer || ""}
                       onChange={(e) => setDetails({ ...details, transfer: e.target.value })}
-                      className="w-full border px-3 py-2 rounded"
+                      className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                     >
                       <option value="">{t("transfer_options.select")}</option>
                       <option value="individual">{t("transfer_options.individual")}</option>
@@ -1985,7 +1985,7 @@ useEffect(() => {
                       type="checkbox"
                       checked={details.visaIncluded || false}
                       onChange={(e) => setDetails({ ...details, visaIncluded: e.target.checked })}
-                      className="mr-2"
+                      className="mr-2 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-200"
                     />
                     {t("visa_included")}
                   </label>
@@ -1995,7 +1995,7 @@ useEffect(() => {
                       type="checkbox"
                       checked={details.changeable || false}
                       onChange={(e) => setDetails({ ...details, changeable: e.target.checked })}
-                      className="mr-2"
+                      className="mr-2 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-200"
                     />
                     {t("changeable")}
                   </label>
@@ -2006,7 +2006,7 @@ useEffect(() => {
                       type="checkbox"
                       checked={details.insuranceIncluded || false}
                       onChange={(e) => setDetails({ ...details, insuranceIncluded: e.target.checked })}
-                      className="mr-2"
+                      className="mr-2 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-200"
                     />
                     {t("insurance_included")}
                   </label>
@@ -2016,7 +2016,7 @@ useEffect(() => {
                       type="checkbox"
                       checked={details.earlyCheckIn || false}
                       onChange={(e) => setDetails({ ...details, earlyCheckIn: e.target.checked })}
-                      className="mr-2"
+                      className="mr-2 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-200"
                     />
                     {t("early_check_in")}
                   </label>
@@ -2026,7 +2026,7 @@ useEffect(() => {
                       type="checkbox"
                       checked={details.arrivalFastTrack || false}
                       onChange={(e) => setDetails({ ...details, arrivalFastTrack: e.target.checked })}
-                      className="mr-2"
+                      className="mr-2 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-200"
                     />
                     {t("arrival_fast_track")}
                   </label>
@@ -2051,14 +2051,14 @@ useEffect(() => {
                     min={todayLocalDateTime()}
                     value={details.expiration || ""}
                     onChange={(e) => setDetails({ ...details, expiration: e.target.value })}
-                    className="w-full border px-3 py-2 rounded mb-2"
+                    className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100 mb-3"
                   />
                   <label className="inline-flex items-center mb-4">
                     <input
                       type="checkbox"
                       checked={details.isActive || false}
                       onChange={(e) => setDetails({ ...details, isActive: e.target.checked })}
-                      className="mr-2"
+                      className="mr-2 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-200"
                     />
                     {t("is_active")}
                   </label>
@@ -2068,7 +2068,7 @@ useEffect(() => {
               {category === "refused_hotel" && profile.type === "agent" && (
                 <>
                   <div className="mb-2">
-                    <label className="block font-medium mb-1">{t("direction_country")}</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("direction_country")}</label>
                     <Select
                       options={countryOptions}
                       value={selectedCountry}
@@ -2087,7 +2087,7 @@ useEffect(() => {
                   </div>
 
                   <div className="mb-2">
-                    <label className="block font-medium mb-1">{t("refused_hotel_city")}</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("refused_hotel_city")}</label>
                     <AsyncSelect
                       cacheOptions
                       loadOptions={loadCitiesTo}
@@ -2104,7 +2104,7 @@ useEffect(() => {
                   </div>
 
                   <div className="mb-2">
-                    <label className="block font-medium mb-1">{t("refused_hotel_name")}</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("refused_hotel_name")}</label>
                       <HotelSelect
                        t={t}
                        loadOptions={loadHotelOptions}
@@ -2115,54 +2115,54 @@ useEffect(() => {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
                     <div className="min-w-0">
-                      <label className="block font-medium mb-1">{t("hotel_check_in")}</label>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("hotel_check_in")}</label>
                       <input
                         type="date"
                         min={todayLocalDate()}
                         value={details.startDate}
                         onChange={(e) => setDetails(d => ({ ...d, startDate: e.target.value }))}
-                        className="w-full border px-3 py-2 rounded"
+                        className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                       />
                     </div>
                     <div className="min-w-0">
-                      <label className="block font-medium mb-1">{t("hotel_check_out")}</label>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("hotel_check_out")}</label>
                       <input
                         type="date"
                         min={details.startDate || todayLocalDate()}
                         value={details.endDate}
                         onChange={(e) => setDetails({ ...details, endDate: e.target.value })}
-                        className="w-full border px-3 py-2 rounded"
+                        className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                       />
                     </div>
                   </div>
 
                   <div className="mb-2">
-                    <label className="block font-medium mb-1">{t("accommodation_category")}</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("accommodation_category")}</label>
                     <input
                       type="text"
                       value={details.accommodationCategory || ""}
                       onChange={(e) => setDetails({ ...details, accommodationCategory: e.target.value })}
-                      className="w-full border px-3 py-2 rounded"
+                      className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                     />
                   </div>
 
                   <div className="mb-2">
-                    <label className="block font-medium mb-1">{tr("accommodation", "Размещение")}</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">{tr("accommodation", "Размещение")}</label>
                     <input
                       type="text"
                       value={details.accommodation || ""}
                       onChange={(e) => setDetails({ ...details, accommodation: e.target.value })}
-                      className="w-full border px-3 py-2 rounded"
+                      className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                       placeholder={tr("enter_accommodation", "Тип размещения")}
                     />
                   </div>
 
                   <div className="mb-2">
-                    <label className="block font-medium mb-1">{t("food")}</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("food")}</label>
                     <select
                       value={details.food || ""}
                       onChange={(e) => setDetails({ ...details, food: e.target.value })}
-                      className="w-full border px-3 py-2 rounded"
+                      className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                     >
                       <option value="">{t("food_options.select")}</option>
                       <option value="BB">{t("food_options.bb")}</option>
@@ -2176,18 +2176,18 @@ useEffect(() => {
                         type="checkbox"
                         checked={details.halal || false}
                         onChange={(e) => setDetails({ ...details, halal: e.target.checked })}
-                        className="mr-2"
+                        className="mr-2 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-200"
                       />
                       {t("food_options.halal")}
                     </label>
                   </div>
 
                   <div className="mb-2">
-                    <label className="block font-medium mb-1">{t("transfer")}</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("transfer")}</label>
                     <select
                       value={details.transfer || ""}
                       onChange={(e) => setDetails({ ...details, transfer: e.target.value })}
-                      className="w-full border px-3 py-2 rounded"
+                      className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                     >
                       <option value="">{t("transfer_options.select")}</option>
                       <option value="individual">{t("transfer_options.individual")}</option>
@@ -2201,7 +2201,7 @@ useEffect(() => {
                       type="checkbox"
                       checked={details.changeable || false}
                       onChange={(e) => setDetails({ ...details, changeable: e.target.checked })}
-                      className="mr-2"
+                      className="mr-2 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-200"
                     />
                     <label>{t("changeable")}</label>
                   </div>
@@ -2211,7 +2211,7 @@ useEffect(() => {
                       type="checkbox"
                       checked={details.insuranceIncluded || false}
                       onChange={(e) => setDetails({ ...details, insuranceIncluded: e.target.checked })}
-                      className="mr-2"
+                      className="mr-2 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-200"
                     />
                     {t("insurance_included")}
                   </label>
@@ -2221,7 +2221,7 @@ useEffect(() => {
                       type="checkbox"
                       checked={details.earlyCheckIn || false}
                       onChange={(e) => setDetails({ ...details, earlyCheckIn: e.target.checked })}
-                      className="mr-2"
+                      className="mr-2 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-200"
                     />
                     {t("early_check_in")}
                   </label>
@@ -2231,7 +2231,7 @@ useEffect(() => {
                       type="checkbox"
                       checked={details.arrivalFastTrack || false}
                       onChange={(e) => setDetails({ ...details, arrivalFastTrack: e.target.checked })}
-                      className="mr-2"
+                      className="mr-2 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-200"
                     />
                     {t("arrival_fast_track")}
                   </label>
@@ -2250,14 +2250,14 @@ useEffect(() => {
                   </div>
 
                   <div className="mb-2">
-                    <label className="block font-medium mb-1">{t("expiration_timer")}</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("expiration_timer")}</label>
                     <input
                       type="datetime-local"
                       step="60"
                       min={todayLocalDateTime()}
                       value={details.expiration || ""}
                       onChange={(e) => setDetails({ ...details, expiration: e.target.value })}
-                      className="w-full border px-3 py-2 rounded"
+                      className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                     />
                   </div>
 
@@ -2266,7 +2266,7 @@ useEffect(() => {
                       type="checkbox"
                       checked={details.isActive || false}
                       onChange={(e) => setDetails({ ...details, isActive: e.target.checked })}
-                      className="mr-2"
+                      className="mr-2 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-200"
                     />
                     <label>{t("is_active")}</label>
                   </div>
@@ -2337,7 +2337,7 @@ useEffect(() => {
                       </div>
 
                       <div className="mb-3">
-                        <label className="block text-sm font-medium mb-1">{t("flight_type")}</label>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("flight_type")}</label>
                         <div className="flex gap-4">
                           <label className="inline-flex items-center">
                             <input
@@ -2346,7 +2346,7 @@ useEffect(() => {
                               onChange={() =>
                                 setDetails({ ...details, flightType: "one_way", oneWay: true, returnDate: "" })
                               }
-                              className="mr-2"
+                              className="mr-2 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-200"
                             />
                             {t("one_way")}
                           </label>
@@ -2357,7 +2357,7 @@ useEffect(() => {
                               onChange={() =>
                                 setDetails({ ...details, flightType: "round_trip", oneWay: false })
                               }
-                              className="mr-2"
+                              className="mr-2 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-200"
                             />
                             {t("round_trip")}
                           </label>
@@ -2366,47 +2366,47 @@ useEffect(() => {
 
                       <div className="flex gap-4 mb-3">
                         <div className="min-w-0">
-                          <label className="block text-sm font-medium mb-1">{t("departure_date")}</label>
+                          <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("departure_date")}</label>
                           <input
                             type="date"
                             min={todayLocalDate()}
                             value={details.startDate || ""}
                             onChange={(e) => setDetails(d => ({ ...d, startDate: e.target.value }))}
-                            className="w-full border px-3 py-2 rounded"
+                            className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                           />
                         </div>
                         {!details.oneWay && (
                           <div className="min-w-0">
-                            <label className="block text-sm font-medium mb-1">{t("return_date")}</label>
+                            <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("return_date")}</label>
                             <input
                               type="date"
                               min={details.startDate || todayLocalDate()}
                               value={details.returnDate || ""}
                               onChange={(e) => setDetails({ ...details, returnDate: e.target.value })}
-                              className="w-full border px-3 py-2 rounded"
+                              className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                             />
                           </div>
                         )}
                       </div>
 
                       <div className="mb-2">
-                        <label className="block text-sm font-medium mb-1">{t("airline")}</label>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("airline")}</label>
                         <input
                           type="text"
                           value={details.airline || ""}
                           onChange={(e) => setDetails({ ...details, airline: e.target.value })}
                           placeholder={t("enter_airline")}
-                          className="w-full border px-3 py-2 rounded"
+                          className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                         />
                       </div>
 
                       <div className="mb-2">
-                        <label className="block text-sm font-medium mb-1">{t("flight_details")}</label>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("flight_details")}</label>
                         <textarea
                           value={details.flightDetails || ""}
                           onChange={(e) => setDetails({ ...details, flightDetails: e.target.value })}
                           placeholder={t("enter_flight_details")}
-                          className="w-full border px-3 py-2 rounded"
+                          className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                         />
                       </div>
 
@@ -2422,14 +2422,14 @@ useEffect(() => {
                          placeholder={t("gross_price")}
                        />
                   <div className="mb-3">
-                        <label className="block text-sm font-medium mb-1">{t("expiration_timer")}</label>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("expiration_timer")}</label>
                         <input
                           type="datetime-local"
                           step="60"
                           min={todayLocalDateTime()}
                           value={details.expiration || ""}
                           onChange={(e) => setDetails({ ...details, expiration: e.target.value })}
-                          className="w-full border px-3 py-2 rounded"
+                          className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                         />
                       </div>
 
@@ -2438,7 +2438,7 @@ useEffect(() => {
                           type="checkbox"
                           checked={details.isActive || false}
                           onChange={(e) => setDetails({ ...details, isActive: e.target.checked })}
-                          className="mr-2"
+                          className="mr-2 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-200"
                         />
                         {t("is_active")}
                       </label>
@@ -2460,7 +2460,7 @@ useEffect(() => {
                     value={details.location || ""}
                     onChange={(e) => setDetails({ ...details, location: e.target.value })}
                     placeholder={t("location")}
-                    className="w-full border px-3 py-2 rounded mb-2"
+                    className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100 mb-3"
                   />
 
                   <input
@@ -2469,7 +2469,7 @@ useEffect(() => {
                     value={details.startDate || ""}
                     onChange={(e) => setDetails(d => ({ ...d, startDate: e.target.value }))}
                     placeholder={t("event_date")}
-                    className="w-full border px-3 py-2 rounded mb-2"
+                    className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100 mb-3"
                   />
 
                   <input
@@ -2477,7 +2477,7 @@ useEffect(() => {
                     value={details.ticketDetails || ""}
                     onChange={(e) => setDetails({ ...details, ticketDetails: e.target.value })}
                     placeholder={t("ticket_details")}
-                    className="w-full border px-3 py-2 rounded mb-2"
+                    className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100 mb-3"
                   />
 
                    <MoneyField
@@ -2496,7 +2496,7 @@ useEffect(() => {
                       type="checkbox"
                       checked={details.isActive || false}
                       onChange={(e) => setDetails({ ...details, isActive: e.target.checked })}
-                      className="mr-2"
+                      className="mr-2 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-200"
                     />
                     {t("is_active")}
                   </label>
@@ -2508,7 +2508,7 @@ useEffect(() => {
                     value={details.expiration || ""}
                     onChange={(e) => setDetails({ ...details, expiration: e.target.value })}
                     placeholder={t("expiration_timer")}
-                    className="w-full border px-3 py-2 rounded mb-4"
+                    className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100 mb-5"
                   />
                 </>
               )}
@@ -2528,7 +2528,7 @@ useEffect(() => {
                     value={details.description}
                     onChange={(e) => setDetails({ ...details, description: e.target.value })}
                     placeholder={t("description")}
-                    className="w-full border px-3 py-2 rounded mb-2"
+                    className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100 mb-3"
                   />
 
                    <MoneyField
@@ -2561,12 +2561,12 @@ useEffect(() => {
                 ) && (
                   <>
                     <div className="mb-2">
-                      <label className="block font-medium mb-1">{t("description")}</label>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("description")}</label>
                       <textarea
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
                         placeholder={t("description")}
-                        className="w-full border px-3 py-2 rounded"
+                        className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                       />
                     </div>
                 
@@ -2590,7 +2590,7 @@ useEffect(() => {
                     {/* только для транспортников */}
                     {profile.type === "transport" && (
                         <div className="mb-2">
-                          <label className="block font-medium mb-1">
+                          <label className="block text-sm font-semibold text-gray-700 mb-1.5">
                             {t("seats") || "Количество мест"}
                           </label>
                           <input
@@ -2602,7 +2602,7 @@ useEffect(() => {
                               setDetails((d) => ({ ...d, seats: e.target.value }))
                             }
                             placeholder={t("seats_placeholder") || "например, 12"}
-                            className="w-full border px-3 py-2 rounded"
+                            className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                           />
                         </div>
                       )}
@@ -2625,21 +2625,23 @@ useEffect(() => {
                 t={t}
               />
 
-              <button className="w-full bg-orange-500 text-white py-2 rounded font-bold mt-2" onClick={handleSaveService}>
-                {t("save_service")}
-              </button>
-              <button
-                className="w-full bg-red-600 text-white py-2 rounded font-bold mt-2 disabled:opacity-60"
-                onClick={() => confirmDeleteService(selectedService.id)}
-                disabled={!selectedService?.id}
-              >
-                {t("delete")}
-              </button>
+              <div className="sticky bottom-0 z-20 -mx-4 mt-6 space-y-3 border-t border-gray-100 bg-white/90 px-4 py-4 backdrop-blur md:-mx-6 md:px-6">
+                <button className="w-full rounded-2xl bg-orange-500 py-3 font-bold text-white shadow-sm transition hover:bg-orange-600 focus:outline-none focus:ring-4 focus:ring-orange-100" onClick={handleSaveService}>
+                  {t("save_service")}
+                </button>
+                <button
+                  className="w-full rounded-2xl bg-red-600 py-3 font-bold text-white shadow-sm transition hover:bg-red-700 focus:outline-none focus:ring-4 focus:ring-red-100 disabled:opacity-60"
+                  onClick={() => confirmDeleteService(selectedService.id)}
+                  disabled={!selectedService?.id}
+                >
+                  {t("delete")}
+                </button>
+              </div>
             </>
           ) : (
             /* ====== Create form ====== */
             <>
-              <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 rounded mb-4">
+              <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                 {t("new_service_tip")}
               </div>
 
@@ -2657,7 +2659,7 @@ useEffect(() => {
                   setImages([]);
                   setDetails(() => ({ ...DEFAULT_DETAILS }));
                 }}
-                className="w-full border px-3 py-2 rounded mb-4 bg-white"
+                className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100 mb-5"
               >
                 <option value="">{t("select_category")}</option>
                 {profile.type === "guide" && (
@@ -2708,7 +2710,7 @@ useEffect(() => {
                         value={title}
                         onChange={(e) => setTitle(e.target.value)}
                         placeholder={t("title")}
-                        className="w-full border px-3 py-2 rounded mb-2"
+                        className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100 mb-3"
                       />
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
@@ -2768,38 +2770,38 @@ useEffect(() => {
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
                         <div className="min-w-0">
-                          <label className="block text-sm font-medium text-gray-700 mb-1">{t("start_flight_date")}</label>
+                          <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("start_flight_date")}</label>
                           <input
                             type="date"
                             min={todayLocalDate()}
                             value={details.startFlightDate || ""}
                             onChange={(e) => setDetails({ ...details, startFlightDate: e.target.value })}
-                            className="w-full border px-3 py-2 rounded"
+                            className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                           />
                         </div>
                         <div className="min-w-0">
-                          <label className="block text-sm font-medium text-gray-700 mb-1">{t("end_flight_date")}</label>
+                          <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("end_flight_date")}</label>
                           <input
                             type="date"
                             min={details.startFlightDate || todayLocalDate()}   // конец не раньше начала
                             value={details.endFlightDate || ""}
                             onChange={(e) => setDetails({ ...details, endFlightDate: e.target.value })}
-                            className="w-full border px-3 py-2 rounded"
+                            className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                           />
                         </div>
                       </div>
 
                       <div className="mb-2">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">{t("flight_details")}</label>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("flight_details")}</label>
                         <textarea
                           value={details.flightDetails || ""}
                           onChange={(e) => setDetails({ ...details, flightDetails: e.target.value })}
                           placeholder={t("enter_flight_details")}
-                          className="w-full border px-3 py-2 rounded"
+                          className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                         />
                       </div>
 
-                      <label className="block text-sm font-medium text-gray-700 mb-1">{t("hotel")}</label>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("hotel")}</label>
                         <HotelSelect
                            t={t}
                            loadOptions={loadHotelOptions}
@@ -2808,31 +2810,31 @@ useEffect(() => {
                          />
 
                       <div className="mb-4">
-                        <label className="block font-medium mb-1">{tr("accommodation_category", "Категория размещения")}</label>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">{tr("accommodation_category", "Категория размещения")}</label>
                           <input
                             type="text"
                             value={details.accommodationCategory || ""}
                             onChange={(e) => setDetails({ ...details, accommodationCategory: e.target.value })}
-                            className="w-full border px-3 py-2 rounded mb-2"
+                            className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100 mb-3"
                             placeholder={tr("enter_category", "Категория размещения")}
                           />
 
-                        <label className="block text-sm font-medium mb-1">{t("accommodation")}</label>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("accommodation")}</label>
                         <input
                           type="text"
                           value={details.accommodation || ""}
                           onChange={(e) => setDetails({ ...details, accommodation: e.target.value })}
-                          className="w-full border px-3 py-2 rounded mb-2"
+                          className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100 mb-3"
                           placeholder={t("enter_accommodation")}
                         />
                       </div>
 
                       <div className="mb-2">
-                        <label className="block font-medium mb-1">{t("food")}</label>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("food")}</label>
                         <select
                           value={details.food || ""}
                           onChange={(e) => setDetails({ ...details, food: e.target.value })}
-                          className="w-full border px-3 py-2 rounded"
+                          className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                         >
                           <option value="">{t("food_options.select")}</option>
                           <option value="BB">BB - {t("food_options.bb")}</option>
@@ -2846,18 +2848,18 @@ useEffect(() => {
                             type="checkbox"
                             checked={details.halal || false}
                             onChange={(e) => setDetails({ ...details, halal: e.target.checked })}
-                            className="mr-2"
+                            className="mr-2 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-200"
                           />
                           {t("food_options.halal")}
                         </label>
                       </div>
 
                       <div className="mb-2">
-                        <label className="block font-medium mb-1">{t("transfer")}</label>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("transfer")}</label>
                         <select
                           value={details.transfer || ""}
                           onChange={(e) => setDetails({ ...details, transfer: e.target.value })}
-                          className="w-full border px-3 py-2 rounded"
+                          className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                         >
                           <option value="">{t("transfer_options.select")}</option>
                           <option value="individual">{t("transfer_options.individual")}</option>
@@ -2871,7 +2873,7 @@ useEffect(() => {
                           type="checkbox"
                           checked={details.visaIncluded || false}
                           onChange={(e) => setDetails({ ...details, visaIncluded: e.target.checked })}
-                          className="mr-2"
+                          className="mr-2 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-200"
                         />
                         {t("visa_included")}
                       </label>
@@ -2881,7 +2883,7 @@ useEffect(() => {
                           type="checkbox"
                           checked={details.changeable || false}
                           onChange={(e) => setDetails({ ...details, changeable: e.target.checked })}
-                          className="mr-2"
+                          className="mr-2 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-200"
                         />
                         {t("changeable")}
                       </label>
@@ -2891,7 +2893,7 @@ useEffect(() => {
                           type="checkbox"
                           checked={details.insuranceIncluded || false}
                           onChange={(e) => setDetails({ ...details, insuranceIncluded: e.target.checked })}
-                          className="mr-2"
+                          className="mr-2 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-200"
                         />
                         {t("insurance_included")}
                       </label>
@@ -2901,7 +2903,7 @@ useEffect(() => {
                           type="checkbox"
                           checked={details.earlyCheckIn || false}
                           onChange={(e) => setDetails({ ...details, earlyCheckIn: e.target.checked })}
-                          className="mr-2"
+                          className="mr-2 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-200"
                         />
                         {t("early_check_in")}
                       </label>
@@ -2911,7 +2913,7 @@ useEffect(() => {
                           type="checkbox"
                           checked={details.arrivalFastTrack || false}
                           onChange={(e) => setDetails({ ...details, arrivalFastTrack: e.target.checked })}
-                          className="mr-2"
+                          className="mr-2 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-200"
                         />
                         {t("arrival_fast_track")}
                       </label>
@@ -2934,14 +2936,14 @@ useEffect(() => {
                         min={todayLocalDateTime()}
                         value={details.expiration || ""}
                         onChange={(e) => setDetails({ ...details, expiration: e.target.value })}
-                        className="w-full border px-3 py-2 rounded mb-2"
+                        className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100 mb-3"
                       />
                       <label className="inline-flex items-center mb-4">
                         <input
                           type="checkbox"
                           checked={details.isActive || false}
                           onChange={(e) => setDetails({ ...details, isActive: e.target.checked })}
-                          className="mr-2"
+                          className="mr-2 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-200"
                         />
                         {t("is_active")}
                       </label>
@@ -2953,11 +2955,11 @@ useEffect(() => {
                         value={title}
                         onChange={(e) => setTitle(e.target.value)}
                         placeholder={t("title")}
-                        className="w-full border px-3 py-2 rounded mb-2"
+                        className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100 mb-3"
                       />
 
                       <div className="mb-2">
-                        <label className="block font-medium mb-1">{t("direction_country")}</label>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("direction_country")}</label>
                         <Select
                           options={countryOptions}
                           value={selectedCountry}
@@ -2975,7 +2977,7 @@ useEffect(() => {
                       </div>
 
                       <div className="mb-2">
-                        <label className="block font-medium mb-1">{t("refused_hotel_city")}</label>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("refused_hotel_city")}</label>
                         <AsyncSelect
                           cacheOptions
                           loadOptions={loadCitiesTo}
@@ -2992,7 +2994,7 @@ useEffect(() => {
                       </div>
 
                       <div className="mb-2">
-                       <label className="block font-medium mb-1">{t("refused_hotel_name")}</label>
+                       <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("refused_hotel_name")}</label>
                           <HotelSelect
                              t={t}
                              loadOptions={loadHotelOptions}
@@ -3003,55 +3005,55 @@ useEffect(() => {
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
                         <div className="min-w-0">
-                          <label className="block font-medium mb-1">{t("hotel_check_in")}</label>
+                          <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("hotel_check_in")}</label>
                           <input
                             type="date"
                             min={todayLocalDate()}
                             value={details.startDate}
                             onChange={(e) => setDetails(d => ({ ...d, startDate: e.target.value }))}
-                            className="w-full border px-3 py-2 rounded"
+                            className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                           />
                         </div>
                         <div className="min-w-0">
-                          <label className="block font-medium mb-1">{t("hotel_check_out")}</label>
+                          <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("hotel_check_out")}</label>
                           <input
                             type="date"
                             min={details.startDate || todayLocalDate()}
                             value={details.endDate}
                             onChange={(e) => setDetails({ ...details, endDate: e.target.value })}
-                            className="w-full border px-3 py-2 rounded"
+                            className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                           />
                         </div>
                       </div>
 
                       <div className="mb-2">
-                        <label className="block font-medium mb-1">{tr("accommodation_category", "Категория размещения")}</label>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">{tr("accommodation_category", "Категория размещения")}</label>
                         <input
                           type="text"
                           value={details.accommodationCategory || ""}
                           onChange={(e) => setDetails({ ...details, accommodationCategory: e.target.value })}
-                          className="w-full border px-3 py-2 rounded mb-2"
+                          className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100 mb-3"
                           placeholder={tr("enter_category", "Категория размещения")}
                         />
                       </div>
 
                       <div className="mb-2">
-                        <label className="block font-medium mb-1">{tr("accommodation", "Размещение")}</label>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">{tr("accommodation", "Размещение")}</label>
                         <input
                           type="text"
                           value={details.accommodation || ""}
                           onChange={(e) => setDetails({ ...details, accommodation: e.target.value })}
-                          className="w-full border px-3 py-2 rounded"
+                          className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                           placeholder={tr("enter_accommodation", "Тип размещения")}
                         />
                       </div>
 
                       <div className="mb-2">
-                        <label className="block font-medium mb-1">{t("food")}</label>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("food")}</label>
                         <select
                           value={details.food || ""}
                           onChange={(e) => setDetails({ ...details, food: e.target.value })}
-                          className="w-full border px-3 py-2 rounded"
+                          className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                         >
                           <option value="">{t("food_options.select")}</option>
                           <option value="BB">{t("food_options.bb")}</option>
@@ -3065,18 +3067,18 @@ useEffect(() => {
                             type="checkbox"
                             checked={details.halal || false}
                             onChange={(e) => setDetails({ ...details, halal: e.target.checked })}
-                            className="mr-2"
+                            className="mr-2 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-200"
                           />
                           {t("food_options.halal")}
                         </label>
                       </div>
 
                       <div className="mb-2">
-                        <label className="block font-medium mb-1">{t("transfer")}</label>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("transfer")}</label>
                         <select
                           value={details.transfer || ""}
                           onChange={(e) => setDetails({ ...details, transfer: e.target.value })}
-                          className="w-full border px-3 py-2 rounded"
+                          className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                         >
                           <option value="">{t("transfer_options.select")}</option>
                           <option value="individual">{t("transfer_options.individual")}</option>
@@ -3090,7 +3092,7 @@ useEffect(() => {
                           type="checkbox"
                           checked={details.changeable || false}
                           onChange={(e) => setDetails({ ...details, changeable: e.target.checked })}
-                          className="mr-2"
+                          className="mr-2 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-200"
                         />
                         <label>{t("changeable")}</label>
                       </div>
@@ -3112,14 +3114,14 @@ useEffect(() => {
                       </div>
 
                       <div className="mb-2">
-                        <label className="block font-medium mb-1">{t("expiration_timer")}</label>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("expiration_timer")}</label>
                         <input
                           type="datetime-local"
                           step="60"
                           min={todayLocalDateTime()}
                           value={details.expiration || ""}
                           onChange={(e) => setDetails({ ...details, expiration: e.target.value })}
-                          className="w-full border px-3 py-2 rounded"
+                          className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                         />
                       </div>
 
@@ -3128,7 +3130,7 @@ useEffect(() => {
                           type="checkbox"
                           checked={details.isActive || false}
                           onChange={(e) => setDetails({ ...details, isActive: e.target.checked })}
-                          className="mr-2"
+                          className="mr-2 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-200"
                         />
                         <label>{t("is_active")}</label>
                       </div>
@@ -3141,7 +3143,7 @@ useEffect(() => {
                         value={title}
                         onChange={(e) => setTitle(e.target.value)}
                         placeholder={t("title")}
-                        className="w-full border px-3 py-2 rounded mb-2"
+                        className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100 mb-3"
                       />
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
@@ -3210,7 +3212,7 @@ useEffect(() => {
                       </div>
 
                       <div className="mb-3">
-                        <label className="block text-sm font-medium mb-1">{t("flight_type")}</label>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("flight_type")}</label>
                         <div className="flex gap-4">
                           <label className="inline-flex items-center">
                             <input
@@ -3219,7 +3221,7 @@ useEffect(() => {
                               onChange={() =>
                                 setDetails({ ...details, flightType: "one_way", oneWay: true, returnDate: "" })
                               }
-                              className="mr-2"
+                              className="mr-2 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-200"
                             />
                             {t("one_way")}
                           </label>
@@ -3230,7 +3232,7 @@ useEffect(() => {
                               onChange={() =>
                                 setDetails({ ...details, flightType: "round_trip", oneWay: false })
                               }
-                              className="mr-2"
+                              className="mr-2 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-200"
                             />
                             {t("round_trip")}
                           </label>
@@ -3239,47 +3241,47 @@ useEffect(() => {
 
                       <div className="flex gap-4 mb-3">
                         <div className="min-w-0">
-                          <label className="block text-sm font-medium mb-1">{t("departure_date")}</label>
+                          <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("departure_date")}</label>
                           <input
                             type="date"
                             min={todayLocalDate()}
                             value={details.startDate || ""}
                             onChange={(e) => setDetails(d => ({ ...d, startDate: e.target.value }))}
-                            className="w-full border px-3 py-2 rounded"
+                            className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                           />
                         </div>
                         {!details.oneWay && (
                           <div className="min-w-0">
-                            <label className="block text-sm font-medium mb-1">{t("return_date")}</label>
+                            <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("return_date")}</label>
                             <input
                               type="date"
                               min={details.startDate || todayLocalDate()}
                               value={details.returnDate || ""}
                               onChange={(e) => setDetails({ ...details, returnDate: e.target.value })}
-                              className="w-full border px-3 py-2 rounded"
+                              className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                             />
                           </div>
                         )}
                       </div>
 
                       <div className="mb-2">
-                        <label className="block text-sm font-medium mb-1">{t("airline")}</label>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("airline")}</label>
                         <input
                           type="text"
                           value={details.airline || ""}
                           onChange={(e) => setDetails({ ...details, airline: e.target.value })}
                           placeholder={t("enter_airline")}
-                          className="w-full border px-3 py-2 rounded"
+                          className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                         />
                       </div>
 
                       <div className="mb-2">
-                        <label className="block text-sm font-medium mb-1">{t("flight_details")}</label>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("flight_details")}</label>
                         <textarea
                           value={details.flightDetails || ""}
                           onChange={(e) => setDetails({ ...details, flightDetails: e.target.value })}
                           placeholder={t("enter_flight_details")}
-                          className="w-full border px-3 py-2 rounded"
+                          className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                         />
                       </div>
 
@@ -3297,14 +3299,14 @@ useEffect(() => {
                            placeholder={t("gross_price")}
                          />
     <div className="mb-3">
-                        <label className="block text-sm font-medium mb-1">{t("expiration_timer")}</label>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("expiration_timer")}</label>
                         <input
                           type="datetime-local"
                           step="60"
                           min={todayLocalDateTime()}
                           value={details.expiration || ""}
                           onChange={(e) => setDetails({ ...details, expiration: e.target.value })}
-                          className="w-full border px-3 py-2 rounded"
+                          className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                         />
                       </div>
 
@@ -3313,7 +3315,7 @@ useEffect(() => {
                           type="checkbox"
                           checked={details.isActive || false}
                           onChange={(e) => setDetails({ ...details, isActive: e.target.checked })}
-                          className="mr-2"
+                          className="mr-2 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-200"
                         />
                         {t("is_active")}
                       </label>
@@ -3326,7 +3328,7 @@ useEffect(() => {
                         value={title}
                         onChange={(e) => setTitle(e.target.value)}
                         placeholder={t("event_name")}
-                        className="w-full border px-3 py-2 rounded mb-2"
+                        className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100 mb-3"
                       />
 
                       <Select
@@ -3342,7 +3344,7 @@ useEffect(() => {
                         value={details.location || ""}
                         onChange={(e) => setDetails({ ...details, location: e.target.value })}
                         placeholder={t("location")}
-                        className="w-full border px-3 py-2 rounded mb-2"
+                        className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100 mb-3"
                       />
 
                       <input
@@ -3351,7 +3353,7 @@ useEffect(() => {
                         value={details.startDate || ""}
                         onChange={(e) => setDetails(d => ({ ...d, startDate: e.target.value }))}
                         placeholder={t("event_date")}
-                        className="w-full border px-3 py-2 rounded mb-2"
+                        className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100 mb-3"
                       />
 
                        <MoneyField
@@ -3374,7 +3376,7 @@ useEffect(() => {
                           type="checkbox"
                           checked={details.isActive || false}
                           onChange={(e) => setDetails({ ...details, isActive: e.target.checked })}
-                          className="mr-2"
+                          className="mr-2 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-200"
                         />
                         {t("is_active")}
                       </label>
@@ -3386,7 +3388,7 @@ useEffect(() => {
                         value={details.expiration || ""}
                         onChange={(e) => setDetails({ ...details, expiration: e.target.value })}
                         placeholder={t("expiration_timer")}
-                        className="w-full border px-3 py-2 rounded mb-4"
+                        className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100 mb-5"
                       />
                     </>
                   ) : category === "visa_support" && profile.type === "agent" ? (
@@ -3398,7 +3400,7 @@ useEffect(() => {
                         value={title}
                         onChange={(e) => setTitle(e.target.value)}
                         placeholder={t("title")}
-                        className="w-full border px-3 py-2 rounded mb-2"
+                        className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100 mb-3"
                       />
 
                       <Select
@@ -3414,7 +3416,7 @@ useEffect(() => {
                         value={details.description}
                         onChange={(e) => setDetails({ ...details, description: e.target.value })}
                         placeholder={t("description")}
-                        className="w-full border px-3 py-2 rounded mb-2"
+                        className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100 mb-3"
                       />
 
                       <MoneyField
@@ -3445,13 +3447,13 @@ useEffect(() => {
                         value={title}
                         onChange={(e) => setTitle(e.target.value)}
                         placeholder={t("title")}
-                        className="w-full border px-3 py-2 rounded mb-2"
+                        className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100 mb-3"
                       />
                       <textarea
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
                         placeholder={t("description")}
-                        className="w-full border px-3 py-2 rounded mb-2"
+                        className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100 mb-3"
                       />
                       <MoneyField
                         label={null}
@@ -3468,7 +3470,7 @@ useEffect(() => {
                       />
                       {profile.type === "transport" && (
                         <div className="mb-2">
-                          <label className="block font-medium mb-1">
+                          <label className="block text-sm font-semibold text-gray-700 mb-1.5">
                             {t("seats") || "Количество мест"}
                           </label>
                           <input
@@ -3480,7 +3482,7 @@ useEffect(() => {
                               setDetails((d) => ({ ...d, seats: e.target.value }))
                             }
                             placeholder={t("seats_placeholder") || "например, 12"}
-                            className="w-full border px-3 py-2 rounded"
+                            className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                           />
                         </div>
                       )}
@@ -3500,13 +3502,13 @@ useEffect(() => {
                     t={t}
                   />
 
-                  <div className="flex gap-4">
-                    <button className="w-full bg-orange-500 text-white py-2 rounded font-bold" onClick={handleSaveService}>
+                  <div className="sticky bottom-0 z-20 -mx-4 mt-6 flex gap-3 border-t border-gray-100 bg-white/90 px-4 py-4 backdrop-blur md:-mx-6 md:px-6">
+                    <button className="w-full rounded-2xl bg-orange-500 py-3 font-bold text-white shadow-sm transition hover:bg-orange-600 focus:outline-none focus:ring-4 focus:ring-orange-100" onClick={handleSaveService}>
                       {t("save_service")}
                     </button>
                     {selectedService?.id && (
                       <button
-                        className="w-full bg-red-600 text-white py-2 rounded font-bold"
+                        className="w-full rounded-2xl bg-red-600 py-3 font-bold text-white shadow-sm transition hover:bg-red-700 focus:outline-none focus:ring-4 focus:ring-red-100"
                         onClick={() => confirmDeleteService(selectedService.id)}
                       >
                         {t("delete")}
