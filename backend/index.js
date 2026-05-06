@@ -39,6 +39,7 @@ const adminPaymePaymentsRoutes = require("./routes/adminPaymePaymentsRoutes");
 const passportRoutes = require("./routes/passportRoutes");
 const adminTravelSalesRoutes = require("./routes/adminTravelSalesRoutes");
 const serviceStatsRoutes = require("./routes/serviceStatsRoutes");
+const providerSupportRoutes = require("./routes/providerSupportRoutes");
 
 dotenv.config();
 const app = express();
@@ -974,6 +975,7 @@ app.use("/api/admin/clients", adminClientsRoutes);
 app.use("/api/admin/unlock-funnel", adminUnlockFunnelRoutes);
 app.use("/api/admin/unlock-nudge", adminUnlockNudgeRoutes);
 app.use("/api/admin/travel-sales", adminTravelSalesRoutes);
+app.use("/api/admin", providerSupportRoutes);
 
 /** ===================== Start (в самом конце) ===================== */
 const PORT = process.env.PORT || 5000;
