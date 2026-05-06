@@ -9342,6 +9342,8 @@ bot.hears(/^(готово|done)$/i, async (ctx) => {
         ],
       },
     });
+
+    await replyProviderSupportPrompt(ctx, serviceId);
   } catch (e) {
     console.error("[tg-bot] proof done error:", e?.response?.data || e);
     await safeReply(
