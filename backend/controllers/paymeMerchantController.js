@@ -142,13 +142,87 @@ async function lockKeyTx(client, keyStr) {
 
 async function getOrderTx(client, orderId) {
   const { rows } = await client.query(
-    `SELECT id, client_id, amount_tiyin, status, paid_at
+    `SELECT id, client_id, amount_tiyin, status, paid_at,
+            COALESCE(purpose, 'client_topup') AS purpose,
+            support_donation_id, provider_id, telegram_chat_id, note
        FROM topup_orders
       WHERE id = $1
       FOR UPDATE`,
     [orderId]
   );
   return rows[0] || null;
+}
+
+async function ensureProviderSupportPaymeShape(client) {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS provider_support_donations (
+      id BIGSERIAL PRIMARY KEY,
+      provider_id BIGINT NULL,
+      telegram_chat_id BIGINT NULL,
+      service_id BIGINT NULL,
+      amount_tiyin BIGINT NOT NULL CHECK (amount_tiyin > 0),
+      payme_order_id BIGINT UNIQUE,
+      payme_id TEXT,
+      status TEXT NOT NULL DEFAULT 'new',
+      source TEXT NOT NULL DEFAULT 'telegram_provider_bot',
+      note TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      paid_at TIMESTAMPTZ NULL,
+      cancelled_at TIMESTAMPTZ NULL
+    )
+  `);
+
+  const { rows } = await client.query(`
+    SELECT c.relkind
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname='public' AND c.relname='topup_orders'
+     LIMIT 1
+  `);
+  const target = rows[0]?.relkind === 'v' ? 'payme_topup_orders' : 'topup_orders';
+
+  await client.query(`
+    ALTER TABLE ${target}
+      ADD COLUMN IF NOT EXISTS purpose TEXT NOT NULL DEFAULT 'client_topup',
+      ADD COLUMN IF NOT EXISTS support_donation_id BIGINT NULL,
+      ADD COLUMN IF NOT EXISTS provider_id BIGINT NULL,
+      ADD COLUMN IF NOT EXISTS telegram_chat_id BIGINT NULL,
+      ADD COLUMN IF NOT EXISTS note TEXT NULL
+  `);
+
+  if (rows[0]?.relkind === 'v') {
+    await client.query(`CREATE OR REPLACE VIEW topup_orders AS SELECT * FROM payme_topup_orders`);
+  }
+}
+
+async function markProviderSupportDonationPaidTx(client, order, paymeId, performTime) {
+  if (String(order?.purpose || '') !== 'provider_support') return false;
+
+  await client.query(
+    `UPDATE provider_support_donations
+        SET status = 'paid',
+            paid_at = COALESCE(paid_at, $2),
+            payme_id = COALESCE(payme_id, $3)
+      WHERE id = $1`,
+    [Number(order.support_donation_id || 0), new Date(performTime), String(paymeId)]
+  );
+
+  return true;
+}
+
+async function markProviderSupportDonationCancelledTx(client, order, paymeId) {
+  if (String(order?.purpose || '') !== 'provider_support') return false;
+
+  await client.query(
+    `UPDATE provider_support_donations
+        SET status = 'cancelled',
+            cancelled_at = COALESCE(cancelled_at, now()),
+            payme_id = COALESCE(payme_id, $2)
+      WHERE id = $1`,
+    [Number(order.support_donation_id || 0), String(paymeId)]
+  );
+
+  return true;
 }
 
 async function getTxForUpdate(client, paymeId) {
@@ -537,6 +611,7 @@ async function paymeMerchantRpc(req, res) {
       let order = null;
       try {
         await client.query("BEGIN");
+        await ensureProviderSupportPaymeShape(client);
         await lockKeyTx(client, `order:${orderId}`);
 
         const { rows } = await client.query(
@@ -596,6 +671,7 @@ async function paymeMerchantRpc(req, res) {
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
+        await ensureProviderSupportPaymeShape(client);
 
         await lockKeyTx(client, `payme:${paymeId}`);
         await lockKeyTx(client, `order:${orderId}`);
@@ -714,6 +790,7 @@ async function paymeMerchantRpc(req, res) {
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
+        await ensureProviderSupportPaymeShape(client);
         await lockKeyTx(client, `payme:${paymeId}`);
 
         logPayme("PerformTransaction.begin", { paymeId });
@@ -792,26 +869,28 @@ async function paymeMerchantRpc(req, res) {
             perform_time: performTime,
           });
 
-          await syncClientBalanceMirror(client, order.client_id);
+          const isProviderSupportPaid = await markProviderSupportDonationPaidTx(client, order, paymeId, performTime);
 
-          // 🔥 FUNNEL: payment_success
-          try {
-            const clientId = Number(order.client_id);
+          if (!isProviderSupportPaid) {
+            await syncClientBalanceMirror(client, order.client_id);
+          }
 
-            await client.query(
-              `
-              INSERT INTO contact_unlock_funnel
-                (client_id, service_id, source, step, status, payme_id, order_id)
-              VALUES ($1, 0, 'web', 'payment_success', 'success', $2, $3)
-              `,
-              [
-                clientId,
-                String(paymeId),
-                String(orderId),
-              ]
-            );
-          } catch (e) {
-            console.error("[funnel] payment_success error:", e?.message || e);
+          if (!isProviderSupportPaid) {
+            // 🔥 FUNNEL: payment_success
+            try {
+              const clientId = Number(order.client_id);
+
+              await client.query(
+                `
+                INSERT INTO contact_unlock_funnel
+                  (client_id, service_id, source, step, status, payme_id, order_id)
+                VALUES ($1, 0, 'web', 'payment_success', 'success', $2, $3)
+                `,
+                [clientId, String(paymeId), String(orderId)]
+              );
+            } catch (e) {
+              console.error("[funnel] payment_success error:", e?.message || e);
+            }
           }
 
           await client.query("COMMIT");
@@ -824,15 +903,6 @@ async function paymeMerchantRpc(req, res) {
           );
         }
 
-        const { rows: cRows } = await client.query(
-          `SELECT id FROM clients WHERE id=$1`,
-          [Number(order.client_id)]
-        );
-        if (!cRows.length) {
-          await client.query("ROLLBACK");
-          return res.status(200).json(rpcError(id, -31050, "Client not found"));
-        }
-
         const performTime = nowMs();
 
         await setTxState(client, paymeId, {
@@ -841,123 +911,134 @@ async function paymeMerchantRpc(req, res) {
         });
         await markOrderStatusTx(client, orderId, "paid", new Date(performTime));
 
-        await creditLedgerOnceTx(client, {
-          clientId: Number(order.client_id),
-          amountTiyin: Number(order.amount_tiyin),
-          orderId,
-          paymeId,
-        });
+        const isProviderSupport = await markProviderSupportDonationPaidTx(client, order, paymeId, performTime);
 
-        await syncClientBalanceMirror(client, order.client_id);
-
-        // 🔥 FUNNEL: payment_success
-        try {
-          const clientId = Number(order.client_id);
-
-          await client.query(
-            `
-            INSERT INTO contact_unlock_funnel
-              (client_id, service_id, source, step, status, payme_id, order_id)
-            VALUES ($1, 0, 'web', 'payment_success', 'success', $2, $3)
-            `,
-            [
-              clientId,
-              String(paymeId),
-              String(orderId),
-            ]
+        if (!isProviderSupport) {
+          const { rows: cRows } = await client.query(
+            `SELECT id FROM clients WHERE id=$1`,
+            [Number(order.client_id)]
           );
-        } catch (e) {
-          console.error("[funnel] payment_success error:", e?.message || e);
+          if (!cRows.length) {
+            await client.query("ROLLBACK");
+            return res.status(200).json(rpcError(id, -31050, "Client not found"));
+          }
+
+          await creditLedgerOnceTx(client, {
+            clientId: Number(order.client_id),
+            amountTiyin: Number(order.amount_tiyin),
+            orderId,
+            paymeId,
+          });
+
+          await syncClientBalanceMirror(client, order.client_id);
         }
 
-        // 🔥 AUTO-RETRY pending unlock after successful topup
-        try {
-          const clientId = Number(order.client_id);
-
-          const pending = await client.query(
-            `
-            SELECT id, service_id
-            FROM client_pending_unlocks
-            WHERE client_id = $1
-            ORDER BY created_at DESC, id DESC
-            LIMIT 1
-            `,
-            [clientId]
-          );
-
-          if (pending.rowCount > 0) {
-            const pendingRow = pending.rows[0];
-            const serviceId = Number(pendingRow.service_id);
-
-            await lockKeyTx(client, `unlock:${clientId}:${serviceId}`);
-
-            const already = await client.query(
-              `
-              SELECT 1
-              FROM client_service_contact_unlocks
-              WHERE client_id = $1 AND service_id = $2
-              LIMIT 1
-              `,
-              [clientId, serviceId]
-            );
-
-            if (!already.rowCount) {
-              const settings = await client.query(
-                `
-                SELECT is_paid, price
-                FROM contact_unlock_settings
-                ORDER BY id ASC
-                LIMIT 1
-                `
-              );
-
-              const isPaid = !!settings.rows[0]?.is_paid;
-              const effectivePrice = isPaid ? Number(settings.rows[0]?.price || 0) : 0;
-              const priceSum = Math.trunc(effectivePrice / 100);
-
-              const balanceAfterTopup = await getLedgerBalance(client, clientId);
-
-              if (balanceAfterTopup >= priceSum && priceSum >= 0) {
-                await client.query(
-                  `
-                  INSERT INTO client_service_contact_unlocks
-                    (client_id, service_id, price_charged, source, note)
-                  VALUES ($1, $2, $3, 'payme_auto', 'auto-retry after Payme topup')
-                  ON CONFLICT DO NOTHING
-                  `,
-                  [clientId, serviceId, priceSum]
-                );
-
-                await client.query(
-                  `
-                  INSERT INTO contact_balance_ledger
-                    (client_id, amount, reason, service_id, source, meta)
-                  VALUES ($1, $2, 'unlock_contact', $3, 'payme_auto', $4::jsonb)
-                  `,
-                  [
-                    clientId,
-                    -priceSum,
-                    serviceId,
-                    JSON.stringify({
-                      service_id: serviceId,
-                      auto_retry: true,
-                      payme_id: String(paymeId),
-                      order_id: String(orderId),
-                    }),
-                  ]
-                );
-
-                await syncClientBalanceMirror(client, clientId);
-              }
-            }
+        if (!isProviderSupport) {
+          // 🔥 FUNNEL: payment_success
+          try {
+            const clientId = Number(order.client_id);
 
             await client.query(
-              `DELETE FROM client_pending_unlocks WHERE id = $1`,
-              [Number(pendingRow.id)]
+              `
+              INSERT INTO contact_unlock_funnel
+                (client_id, service_id, source, step, status, payme_id, order_id)
+              VALUES ($1, 0, 'web', 'payment_success', 'success', $2, $3)
+              `,
+              [clientId, String(paymeId), String(orderId)]
             );
+          } catch (e) {
+            console.error("[funnel] payment_success error:", e?.message || e);
           }
-        } catch (e) {
-          console.error("[payme] auto-retry pending unlock error:", e?.message || e);
+
+          // 🔥 AUTO-RETRY pending unlock after successful topup
+          try {
+            const clientId = Number(order.client_id);
+
+            const pending = await client.query(
+              `
+              SELECT id, service_id
+              FROM client_pending_unlocks
+              WHERE client_id = $1
+              ORDER BY created_at DESC, id DESC
+              LIMIT 1
+              `,
+              [clientId]
+            );
+
+            if (pending.rowCount > 0) {
+              const pendingRow = pending.rows[0];
+              const serviceId = Number(pendingRow.service_id);
+
+              await lockKeyTx(client, `unlock:${clientId}:${serviceId}`);
+
+              const already = await client.query(
+                `
+                SELECT 1
+                FROM client_service_contact_unlocks
+                WHERE client_id = $1 AND service_id = $2
+                LIMIT 1
+                `,
+                [clientId, serviceId]
+              );
+
+              if (!already.rowCount) {
+                const settings = await client.query(
+                  `
+                  SELECT is_paid, price
+                  FROM contact_unlock_settings
+                  ORDER BY id ASC
+                  LIMIT 1
+                  `
+                );
+
+                const isPaid = !!settings.rows[0]?.is_paid;
+                const effectivePrice = isPaid ? Number(settings.rows[0]?.price || 0) : 0;
+                const priceSum = Math.trunc(effectivePrice / 100);
+
+                const balanceAfterTopup = await getLedgerBalance(client, clientId);
+
+                if (balanceAfterTopup >= priceSum && priceSum >= 0) {
+                  await client.query(
+                    `
+                    INSERT INTO client_service_contact_unlocks
+                      (client_id, service_id, price_charged, source, note)
+                    VALUES ($1, $2, $3, 'payme_auto', 'auto-retry after Payme topup')
+                    ON CONFLICT DO NOTHING
+                    `,
+                    [clientId, serviceId, priceSum]
+                  );
+
+                  await client.query(
+                    `
+                    INSERT INTO contact_balance_ledger
+                      (client_id, amount, reason, service_id, source, meta)
+                    VALUES ($1, $2, 'unlock_contact', $3, 'payme_auto', $4::jsonb)
+                    `,
+                    [
+                      clientId,
+                      -priceSum,
+                      serviceId,
+                      JSON.stringify({
+                        service_id: serviceId,
+                        auto_retry: true,
+                        payme_id: String(paymeId),
+                        order_id: String(orderId),
+                      }),
+                    ]
+                  );
+
+                  await syncClientBalanceMirror(client, clientId);
+                }
+              }
+
+              await client.query(
+                `DELETE FROM client_pending_unlocks WHERE id = $1`,
+                [Number(pendingRow.id)]
+              );
+            }
+          } catch (e) {
+            console.error("[payme] auto-retry pending unlock error:", e?.message || e);
+          }
         }
 
         await client.query("COMMIT");
@@ -992,6 +1073,7 @@ async function paymeMerchantRpc(req, res) {
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
+        await ensureProviderSupportPaymeShape(client);
         await lockKeyTx(client, `payme:${paymeId}`);
 
         const tx = await getTxForUpdate(client, paymeId);
@@ -1033,7 +1115,10 @@ async function paymeMerchantRpc(req, res) {
           const order = await getOrderTx(client, orderId);
 
           if (order) {
-            await debitLedgerOnceTx(client, {
+            const isProviderSupportCancel = await markProviderSupportDonationCancelledTx(client, order, paymeId);
+
+            if (!isProviderSupportCancel) {
+              await debitLedgerOnceTx(client, {
               clientId: Number(order.client_id),
               amountTiyin: Number(order.amount_tiyin),
               orderId,
@@ -1061,7 +1146,8 @@ async function paymeMerchantRpc(req, res) {
               console.error("[funnel] payment_canceled error:", e?.message || e);
             }
 
-            await syncClientBalanceMirror(client, order.client_id);
+              await syncClientBalanceMirror(client, order.client_id);
+            }
 
             try {
               await markOrderStatusTx(client, orderId, "cancelled");
