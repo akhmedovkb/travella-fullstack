@@ -716,6 +716,7 @@ const scrollToProfilePart = useCallback((key) => {
   // Services
   const [services, setServices] = useState([]);
   const [selectedService, setSelectedService] = useState(null);
+  const [servicesTab, setServicesTab] = useState("create");
 
   // Common fields
   const [title, setTitle] = useState("");
@@ -1622,8 +1623,44 @@ useEffect(() => {
               )}
             </div>
 
-            {/* Список услуг */}
             {!selectedService && (
+              <div className="mt-5 grid grid-cols-2 gap-2 rounded-2xl border border-gray-200 bg-gray-50 p-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setServicesTab("create");
+                    resetServiceForm();
+                  }}
+                  className={`rounded-xl px-4 py-3 text-sm font-bold transition ${
+                    servicesTab === "create"
+                      ? "bg-white text-orange-600 shadow-sm"
+                      : "text-gray-600 hover:bg-white/70"
+                  }`}
+                >
+                  {t("provider_services_tab_create", { defaultValue: "Создать услугу" })}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedService(null);
+                    setServicesTab("list");
+                  }}
+                  className={`rounded-xl px-4 py-3 text-sm font-bold transition ${
+                    servicesTab === "list"
+                      ? "bg-white text-orange-600 shadow-sm"
+                      : "text-gray-600 hover:bg-white/70"
+                  }`}
+                >
+                  {t("provider_services_tab_created", { defaultValue: "Созданные услуги" })}
+                  <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
+                    {services.length}
+                  </span>
+                </button>
+              </div>
+            )}
+
+            {/* Список услуг */}
+            {!selectedService && servicesTab === "list" && (
               <div className="mt-4 overflow-x-auto -mx-2 px-2">
                 <div className="space-y-2 min-w-[320px]">
                 {services.map((s) => (
@@ -2601,7 +2638,7 @@ useEffect(() => {
                 {t("delete")}
               </button>
             </>
-          ) : (
+          ) : servicesTab === "create" ? (
             /* ====== Create form ====== */
             <>
               <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 rounded mb-4">
@@ -3466,7 +3503,7 @@ useEffect(() => {
                 </>
               )}
             </>
-          )}
+          ) : null}
 
          
         </div>
