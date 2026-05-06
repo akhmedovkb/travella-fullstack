@@ -1,4 +1,5 @@
 // backend/controllers/paymeMerchantController.js
+
 const pool = require("../db");
 const crypto = require("crypto");
 
@@ -189,6 +190,8 @@ async function ensureProviderSupportPaymeShape(client) {
       ADD COLUMN IF NOT EXISTS telegram_chat_id BIGINT NULL,
       ADD COLUMN IF NOT EXISTS note TEXT NULL
   `);
+
+  await client.query(`ALTER TABLE ${target} ALTER COLUMN client_id DROP NOT NULL`);
 
   if (rows[0]?.relkind === 'v') {
     await client.query(`CREATE OR REPLACE VIEW topup_orders AS SELECT * FROM payme_topup_orders`);
