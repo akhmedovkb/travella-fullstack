@@ -44,6 +44,7 @@ import PaymeLab from "./pages/admin/PaymeLab";
 import AdminBilling from "./pages/admin/AdminBilling";
 import AdminFinance from "./pages/admin/AdminFinance";
 import AdminOperations from "./pages/admin/AdminOperations";
+import AdminProviderSupport from "./pages/admin/AdminProviderSupport";
 import PassportParser from "./pages/PassportParser";
 
 // Клиентские
@@ -375,6 +376,16 @@ export default function App() {
                 <PrivateRoute>
                   <AdminRoute>
                     <AdminFinance />
+                  </AdminRoute>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/admin/provider-support"
+              element={
+                <PrivateRoute>
+                  <AdminRoute>
+                    <AdminProviderSupport />
                   </AdminRoute>
                 </PrivateRoute>
               }
