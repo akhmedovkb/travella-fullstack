@@ -709,6 +709,7 @@ const scrollToProfilePart = useCallback((key) => {
   // Services
   const [services, setServices] = useState([]);
   const [selectedService, setSelectedService] = useState(null);
+  const [servicesTab, setServicesTab] = useState("create");
 
   // Common fields
   const [title, setTitle] = useState("");
@@ -1267,6 +1268,7 @@ useEffect(() => {
 
   /** ===== Service helpers ===== */
   const resetServiceForm = () => {
+    setServicesTab("create");
     setSelectedService(null);
     setTitle("");
     setDescription("");
@@ -1280,6 +1282,7 @@ useEffect(() => {
   };
 
   const loadServiceToEdit = (service) => {
+    setServicesTab("create");
     setSelectedService(service);
     setCategory(service.category || "");
     setTitle(service.title || "");
@@ -1627,22 +1630,70 @@ useEffect(() => {
             </div>
           )}
           <div className="mb-6">
-            <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-bold">{t("services_marketplace", { defaultValue: "Услуги для MARKETPLACE" })}</h2>
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h2 className="text-2xl font-bold">{t("services_marketplace", { defaultValue: "Услуги для MARKETPLACE" })}</h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  {t("provider_services_tabs_hint", {
+                    defaultValue: "Отдельно управляйте созданными услугами и формой добавления новой услуги.",
+                  })}
+                </p>
+              </div>
               {selectedService && (
                 <button
                   onClick={resetServiceForm}
-                  className="text-sm text-orange-500 underline"
+                  className="rounded-2xl border border-orange-200 bg-orange-50 px-4 py-2 text-sm font-semibold text-orange-600 transition hover:bg-orange-100"
                 >
                   {t("back")}
                 </button>
               )}
             </div>
 
-            {/* Список услуг */}
             {!selectedService && (
+              <div className="mt-5 grid grid-cols-2 gap-2 rounded-3xl border border-gray-200 bg-gray-50 p-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setServicesTab("create");
+                    resetServiceForm();
+                  }}
+                  className={`rounded-2xl px-4 py-3 text-sm font-bold transition ${
+                    servicesTab === "create"
+                      ? "bg-white text-orange-600 shadow-sm"
+                      : "text-gray-600 hover:bg-white/70"
+                  }`}
+                >
+                  {t("provider_services_tab_create", { defaultValue: "Создать услугу" })}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedService(null);
+                    setServicesTab("list");
+                  }}
+                  className={`rounded-2xl px-4 py-3 text-sm font-bold transition ${
+                    servicesTab === "list"
+                      ? "bg-white text-orange-600 shadow-sm"
+                      : "text-gray-600 hover:bg-white/70"
+                  }`}
+                >
+                  {t("provider_services_tab_created", { defaultValue: "Созданные услуги" })}
+                  <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
+                    {services.length}
+                  </span>
+                </button>
+              </div>
+            )}
+
+            {/* Список услуг */}
+            {!selectedService && servicesTab === "list" && (
               <div className="mt-4 overflow-x-auto -mx-2 px-2">
                 <div className="space-y-2 min-w-[320px]">
+                {services.length === 0 && (
+                  <div className="rounded-3xl border border-dashed border-gray-200 bg-white p-6 text-center text-sm text-gray-500">
+                    {t("provider_services_empty", { defaultValue: "Пока нет созданных услуг." })}
+                  </div>
+                )}
                 {services.map((s) => (
                   <div
                     key={s.id}
@@ -1732,7 +1783,7 @@ useEffect(() => {
           </div>
 
           {/* Форма редактирования/создания */}
-          {selectedService ? (
+          {(selectedService || servicesTab === "create") && (selectedService ? (
             /* ====== Edit form (by category) ====== */
             <>
               <h3 className="text-xl font-semibold mb-2">{t("edit_service")}</h3>
@@ -3569,7 +3620,7 @@ useEffect(() => {
                 </>
               )}
             </>
-          )}
+          ))}
 
          
         </div>
