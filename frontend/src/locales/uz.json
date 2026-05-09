@@ -1,7 +1,6 @@
 {
   "accommodation": "Joylashuv",
   "accommodation_category": "Joylashuv toifasi",
-
   "actions": {
     "book": "Bron qilish",
     "cancel": "Bekor qilish",
@@ -14,7 +13,6 @@
     "confirm": "Tasdiqlash",
     "reject": "Rad etish"
   },
-
   "address": "Manzil",
   "add_error": "Qo‘shishda xatolik",
   "adt": "Kattalar (ADT)",
@@ -22,8 +20,9 @@
   "airline": "Aviakompaniya",
   "authored_tour": "Mualliflik turi",
   "back": "← Orqaga",
-  "badges": { "boosted": "Tavsiya etiladi" },
-  
+  "badges": {
+    "boosted": "Tavsiya etiladi"
+  },
   "booking": {
     "date": "Sana",
     "pax": "Yo'lovchilar",
@@ -46,51 +45,45 @@
     "sent": "Bron so‘rovi yuborildi",
     "error": "Bron yuborilmadi"
   },
-  
-"balance": {
-  "title": "Mijoz balansi",
-  "subtitle": "Payme orqali to‘ldirish va kontaktlarni ochish uchun yechish",
-  "current": "Joriy balans",
-  "unlock_price": "Kontakt ochish narxi",
-  "topup": "Balansni to‘ldirish",
-  "choose_amount": "Summani tanlang yoki o‘zingiz kiriting",
-  "custom_placeholder": "O‘z summangiz, masalan 75000",
-  "creating": "Yaratilmoqda…",
-  "pay": "Payme orqali to‘lash",
-  "history": "Operatsiyalar tarixi",
-  "records": "yozuv",
-  "empty": "Hozircha operatsiyalar yo‘q",
-  "date": "Sana",
-  "amount": "Summa",
-  "reason": "Sabab",
-  "source": "Manba",
-  "load_error": "Balansni yuklab bo‘lmadi",
-  "invalid_amount": "To‘g‘ri summa kiriting",
-  "topup_created": "To‘ldirish buyurtmasi yaratildi: {{amount}} so‘m",
-  "payme_error": "Payme xatosi",
-  "hero_title": "🔓 Kontaktlarni oching",
-  "hero_subtitle": "To‘g‘ridan-to‘g‘ri bog‘laning",
-  "hero_context": "Siz deyarli ochdingiz",
-  
-  "not_enough": "Balans yetarli emas",
-  "need_more": "Yetishmayapti",
-  
-  "can_open": "Ochish mumkin",
-  "contacts": "kontakt",
-  "recommended": "Tavsiya",
-  
-  "pay_cta": "🚀 To‘ldirish va ochish",
-  "instant_unlock": "To‘lovdan keyin ochiladi",
-  "urgency": "Taklifni boshqalar olib qo‘yishi mumkin",
-  
-  "unlocked_success": "Kontaktlar ochildi 🎉",
-  
-  "nudge_title": "Siz deyarli ochdingiz",
-  "nudge_text": "Yana bir qadam — va bog‘lanasiz",
-  "nudge_price": "Tavsiya etilgan summa",
-  "nudge_cta": "Hozir ochish",
-  "nudge_later": "Keyinroq"
-},
+  "balance": {
+    "title": "Mijoz balansi",
+    "subtitle": "Payme orqali to‘ldirish va kontaktlarni ochish uchun yechish",
+    "current": "Joriy balans",
+    "unlock_price": "Kontakt ochish narxi",
+    "topup": "Balansni to‘ldirish",
+    "choose_amount": "Summani tanlang yoki o‘zingiz kiriting",
+    "custom_placeholder": "O‘z summangiz, masalan 75000",
+    "creating": "Yaratilmoqda…",
+    "pay": "Payme orqali to‘lash",
+    "history": "Operatsiyalar tarixi",
+    "records": "yozuv",
+    "empty": "Hozircha operatsiyalar yo‘q",
+    "date": "Sana",
+    "amount": "Summa",
+    "reason": "Sabab",
+    "source": "Manba",
+    "load_error": "Balansni yuklab bo‘lmadi",
+    "invalid_amount": "To‘g‘ri summa kiriting",
+    "topup_created": "To‘ldirish buyurtmasi yaratildi: {{amount}} so‘m",
+    "payme_error": "Payme xatosi",
+    "hero_title": "🔓 Kontaktlarni oching",
+    "hero_subtitle": "To‘g‘ridan-to‘g‘ri bog‘laning",
+    "hero_context": "Siz deyarli ochdingiz",
+    "not_enough": "Balans yetarli emas",
+    "need_more": "Yetishmayapti",
+    "can_open": "Ochish mumkin",
+    "contacts": "kontakt",
+    "recommended": "Tavsiya",
+    "pay_cta": "🚀 To‘ldirish va ochish",
+    "instant_unlock": "To‘lovdan keyin ochiladi",
+    "urgency": "Taklifni boshqalar olib qo‘yishi mumkin",
+    "unlocked_success": "Kontaktlar ochildi 🎉",
+    "nudge_title": "Siz deyarli ochdingiz",
+    "nudge_text": "Yana bir qadam — va bog‘lanasiz",
+    "nudge_price": "Tavsiya etilgan summa",
+    "nudge_cta": "Hozir ochish",
+    "nudge_later": "Keyinroq"
+  },
   "bookings": {
     "provider_cancel_reason": "Bekor qilish sababini ko‘rsating",
     "waiting_for_requester": "Taklif yuborildi. Mijoz tasdig‘i kutilmoqda.",
@@ -127,7 +120,9 @@
         "client": "Bekor qilindi: mijoz tomonidan"
       }
     },
-    "labels": { "client_comment": "Izoh:" },
+    "labels": {
+      "client_comment": "Izoh:"
+    },
     "types": {
       "guide": "Gid",
       "transport": "Transport",
@@ -145,7 +140,9 @@
     "reject_error": "Rad etishda xatolik",
     "dates_label": "Bron qilingan sanalar:",
     "wait_price": "Ta`minotchi narx taklifi yuborishi kutilmoqda",
-    "search": { "placeholder": "Qidiruv: xizmat, ta`minotchi, holat…" },
+    "search": {
+      "placeholder": "Qidiruv: xizmat, ta`minotchi, holat…"
+    },
     "view": {
       "compact": "Kompakt",
       "normal": "Oddiy",
@@ -158,9 +155,7 @@
       "confirmed_at": "tasdiqlangan"
     }
   },
-
   "border_transfer": "Chegara transferi",
-
   "calendar": {
     "title_public": "Bandlik kalendari",
     "blocking_title": "Bandlik kalendari",
@@ -177,10 +172,8 @@
     "save_error": "Sanalarni saqlashda xatolik",
     "saved_successfully": "Sanalar saqlandi"
   },
-
   "cancel": "Bekor qilish",
   "car_fleet": "Mavjud transport",
-
   "category": {
     "author_tour": "Mualliflik turi",
     "border_transfer": "Chegara transferi",
@@ -206,7 +199,6 @@
     "desert_tour_transport": "Cho‘l safari (transport)",
     "safari_tour_transport": "Safari turi (transport)"
   },
-
   "certificate": "Sertifikat",
   "change": "O‘zgartirish",
   "change_password": "Parolni o‘zgartirish",
@@ -216,9 +208,10 @@
   "city_tour": "Shahar turi",
   "clear_all": "Hammasini tozalash",
   "clear_all_images_confirm": "Barcha rasmlar o‘chirilsinmi?",
-
   "client": {
-    "profile": { "title": "Klient" },
+    "profile": {
+      "title": "Klient"
+    },
     "dashboard": {
       "avatarUrl": "Avatar havolasi",
       "changeBtn": "O‘zgartirish",
@@ -251,11 +244,11 @@
       },
       "uploadPhoto": "Rasm yuklash"
     },
-      "header": {
-    "cabinet": "Kabinet",
-    "favorites": "Sevimlilar",
-    "balance": "Balans"
-  },
+    "header": {
+      "cabinet": "Kabinet",
+      "favorites": "Sevimlilar",
+      "balance": "Balans"
+    },
     "login": {
       "loginBtn": "Kirish",
       "noAccount": "Akkaunt yo‘qmi?",
@@ -277,9 +270,7 @@
       "error": "Ro‘yxatdan o‘tishda xatolik"
     }
   },
-
   "comment": "Izoh",
-
   "common": {
     "add_hotel": "O‘z mehmonxonangizni qo‘shing",
     "anonymous": "Anonim",
@@ -315,13 +306,13 @@
     "pros": "Afzalliklar",
     "cons": "Kamchiliklar",
     "features": "Xususiyatlar",
-    "cancel": "Bekor qilish",
     "sum_currency": "so‘m"
   },
-
   "confirm_delete": "Elementni o‘chirasizmi?",
-  "countdown": { "until_end": "Tugashiga qoldi", "expired": "Vaqt tugadi" },
-
+  "countdown": {
+    "until_end": "Tugashiga qoldi",
+    "expired": "Vaqt tugadi"
+  },
   "country_not_chosen": "Mamlakat topilmadi",
   "cover": "Muqova",
   "days": "kun.",
@@ -339,19 +330,16 @@
   "drag_to_reorder": "Tartiblash uchun torting",
   "edit": "Tahrirlash",
   "edit_service": "Xizmatni tahrirlash:",
-
   "empty": {
     "no_bookings": "Hozircha bronlar yo‘q.",
     "no_favorites": "Sevimlilar bo‘sh",
     "no_requests": "Hozircha so‘rovlar yo‘q."
   },
-
   "end_flight_date": "Qaytish reysi sanasi",
   "enter_accommodation": "Joylashuvni kiriting",
   "enter_airline": "Aviakompaniyani kiriting",
   "enter_category": "Joylashuv toifasini kiriting",
   "enter_flight_details": "Reys tafsilotlarini kiriting",
-  
   "errors": {
     "action_failed": "Amal bajarilmadi",
     "auth_required": "Sharh qoldirish uchun tizimga kiring",
@@ -374,7 +362,6 @@
     "already_inspected": "Siz bu mehmonxona uchun inspeksiya qoldirgansiz.",
     "save_failed_generic": "Saqlab bo‘lmadi. Keyinroq urinib ko‘ring."
   },
-
   "event_category_concert": "Konsert",
   "event_category_exhibition": "Ko‘rgazma",
   "event_category_fight": "Jang",
@@ -383,9 +370,7 @@
   "event_category_show": "Shou",
   "event_date": "Tadbir sanasi",
   "event_name": "Tadbir nomi",
-
   "expiration_timer": "Dolzarblik taymeri",
-
   "favorites": {
     "add": "Sevimlilarga qo‘shish",
     "empty": "Bo‘sh",
@@ -398,12 +383,10 @@
     "add_error": "Sevimlilarga qo‘shib bo‘lmadi",
     "remove_error": "Sevimlilardan olib tashlab bo‘lmadi"
   },
-
   "file_chosen": "Fayllar tanlandi",
   "fill_all_fields": "Barcha maydonlarni to‘ldiring va sanalarni tanlang",
   "flight_details": "Reys tafsilotlari",
   "flight_type": "Parvoz turi",
-
   "filter": {
     "all": "Barchasi",
     "pending": "Kutilmoqda",
@@ -411,7 +394,6 @@
     "upcoming": "Yaqinlashmoqda",
     "rejected": "Rad etilgan"
   },
-
   "food": "Ovqatlanish",
   "food_options": {
     "ai": "Hammasi kiritilgan",
@@ -422,10 +404,8 @@
     "select": "Variantni tanlang",
     "uai": "Ultra hammasi kiritilgan"
   },
-
   "guide": "Gid",
   "hall_rent": "Zal ijarasi",
-
   "hotel": "Mehmonxona",
   "hotel_check_in": "Kirish sanasi",
   "hotel_check_out": "Chiqish sanasi",
@@ -433,24 +413,34 @@
   "hotel_transfer": "Mehmonxonaga/undan transfer",
   "hotel.no_options": "Variantlar yo‘q",
   "hotel.search_placeholder": "Mehmonxona nomini kiriting",
-
   "hotels": {
     "title": "Mehmonxonalar",
-    "tabs": { "top": "Top", "popular": "Mashhur", "new": "Yangi", "worst": "Eng yomon" },
+    "tabs": {
+      "top": "Top",
+      "popular": "Mashhur",
+      "new": "Yangi",
+      "worst": "Eng yomon"
+    },
     "emptyHint": "Ro‘yxatni ko‘rish uchun bo‘limni tanlang yoki qidiruv qiling.",
     "emptyAfterAction": "Hech narsa topilmadi. Filtrlarni o‘zgartiring yoki boshqa bo‘limni sinab ko‘ring.",
     "search_by_name": "Nom bo‘yicha qidirish",
     "city_placeholder": "Shahar",
     "find_btn": "Topish",
     "searching": "Qidirilmoqda...",
-    "col": { "name": "Nom", "city": "Shahar", "rating": "Baho" },
+    "col": {
+      "name": "Nom",
+      "city": "Shahar",
+      "rating": "Baho"
+    },
     "empty": "Hech narsa topilmadi",
-
     "inspections": {
       "author_fallback": "provayder",
       "author": "Muallif",
       "hotel_label": "Mehmonxona",
-      "sort": { "top": "Avval ko‘p layk olganlar", "new": "Avval yangilar" },
+      "sort": {
+        "top": "Avval ko‘p layk olganlar",
+        "new": "Avval yangilar"
+      },
       "back_to_hotel": "Mehmonxonaga qaytish",
       "empty": "Hozircha inspeksiyalar yo‘q",
       "new": {
@@ -509,14 +499,12 @@
       "park_m": "Park (m)"
     }
   },
-
   "images_hint": "10 tagacha rasm, har biri ≤ 3 MB",
   "inf": "Chaqaloqlar (INF)",
   "is_active": "Dolzarb",
   "loading": "Yuklanmoqda…",
   "loading_stats": "Statistika yuklanmoqda...",
   "location": "Hudud yoki o‘tkaziladigan joy",
-
   "labels": {
     "client": "Klient",
     "agent": "Turoperator",
@@ -524,7 +512,6 @@
     "transport": "Transport",
     "hotel": "Mehmonxona"
   },
-
   "languages": {
     "heading": "Til bilish darajasi",
     "placeholder": "Tilni kirita boshlang…",
@@ -532,7 +519,6 @@
     "saved": "Tillar saqlandi",
     "save_error": "Tillarni saqlashda xatolik"
   },
-
   "login": {
     "button": "Kirish",
     "email": "Email",
@@ -542,143 +528,149 @@
     "title": "Provayder kirishi",
     "success": "Kirish muvaffaqiyatli"
   },
-
   "logout": "Chiqish",
   "make_cover": "Muqova qilish",
-
-"marketplace": {
-  "accommodation": "Joylashuv",
-  "address": "Manzil",
-  "adults": "Kattalar (12+)",
-  "already_opened": "Allaqachon ochilgan",
-  "balance_modal_title": "Balans yetarli emas",
-  "balance_modal_text": "Kontaktlarni ochish uchun balansda mablag‘ yetarli emas. Balansni to‘ldirib, ushbu kartaga qayting.",
-  "call": "Qo‘ng‘iroq qilish",
-  "call_now": "Hozir qo‘ng‘iroq qilish",
-  "check_authenticity": "Haqiqiyligini tekshirish",
-  "children": "Bolalar (2–11)",
-  "contacts_already_opened": "Kontaktlar avval ochilgan",
-  "contacts_inside_hint": "Kontaktlar to`lovdan keyin birdan ochiladi",
-  "contacts_locked": "Kontaktlar to‘lovgacha yopiq",
-  "contacts_unlocked_success": "💸 {{amount}} so‘m yechildi · Kontaktlar ochildi",
-  "date": "Sana",
-  "dates_label": "Sanalar",
-  "end_date": "Tugash sanasi",
-  "flight": "Rad etilgan aviabilet",
-  "flight_details": "Parvoz tafsilotlari",
-  "go_to_balance": "Balansni to‘ldirish",
-  "go_to_payment": "To‘lovga o‘tish",
-  "guide": "Gid",
-  "hotel": "Rad etilgan mehmonxona",
-  "hotel_label": "Mehmonxona",
-  "hurry_up":"Ulgurib qoling",
-  "infants": "Chaqaloqlar (0–1)",
-  "location": "Lokatsiya",
-  "location_placeholder": "Lokatsiyani kiriting ...",
-  "login_as_client": "Mijoz sifatida kirish",
-  "login_modal_hint_text": "Tizimga kirgandan so‘ng kontaktlarni ochishingiz va ta`minotchi bilan to‘g‘ridan-to‘g‘ri bog‘lanishingiz mumkin.",
-  "login_modal_hint_title": "Keyin nima bo‘ladi",
-  "login_modal_subtitle": "Davom etish uchun mijoz sifatida tizimga kiring",
-  "login_modal_text": "Ta`minotchining telefon raqami va Telegram kontaktini ochish uchun avval mijoz akkauntiga kiring.",
-  "login_modal_title": "Kontaktlarni ochish",
-  "more_details": "Batafsil",
-  "nights_short": "kecha",
-  "no_image": "Rasm yo‘q",
-  "no_results": "Natijalar yo‘q",
-  "not_enough_balance_go_to_balance": "Kontaktlarni ochish uchun mablag‘ yetarli emas.\n\n«Mijoz balansi» sahifasiga o‘tasizmi?",
-  "offer_may_expire_anytime": "Bu taklif istalgan payt olib qo‘yilishi mumkin",
-  "open_now": "Hoziroq ochish",
-  "open_proof_image": "Rasmni ochish",
-  "open_telegram": "Telegramni ochish",
-  "opened_contacts_cta": "Kontaktlar allaqachon ochilgan",
-  "package": "Rad etilgan tur",
-  "pay_modal_amount_label": "TO‘LOV SUMMASI",
-  "pay_modal_hint_text": "To‘lov muvaffaqiyatli yakunlangach, ta`minotchining kontaktlari avtomatik ochiladi va siz shu kartaga qaytasiz.",
-  "pay_modal_hint_title": "To‘lovdan keyin nima bo‘ladi",
-  "pay_modal_order": "Buyurtma",
-  "pay_modal_subtitle": "To‘lovdan oldin to‘ldirish summasini tekshiring",
-  "pay_modal_title": "Kontaktlarni ochish uchun balansni to‘ldirish",
-  "phone": "Telefon",
-  "price": "Narx",
-  "price_currency": "sh.b.",
-  "price_hint": "Foydali taklif",
-  "proof_images": "Haqiqiylik tasdig‘i",
-  "proof_images_count": "foto",
-  "proof_locked_hint": "Tasdiq mavjud. Tekshiruv kontaktlar ochilgandan keyin mavjud bo‘ladi.",
-  "propose_price": "Narx taklif qilish",
-  "refused_event": "Rad etilgan tadbir bileti",
-  "results": "Qidiruv natijalari",
-  "reviews": "Xizmat sharhlari",
-  "route": "Yo‘nalish",
-  "search": "Qidirish",
-  "search_filters": "Qidiruv filtrlari",
-  "search_in": "{{category}} ichida qidirish:",
-  "search_placeholder": "Xizmatlar, mamlakatlar, shaharlar bo‘yicha qidirish…",
-  "searching": "Qidirilmoqda...",
-  "sections": {
-    "top": "Top",
-    "new": "Yangi",
-    "upcoming": "Yaqinlashayotgan"
+  "marketplace": {
+    "accommodation": "Joylashuv",
+    "address": "Manzil",
+    "adults": "Kattalar (12+)",
+    "already_opened": "Allaqachon ochilgan",
+    "balance_modal_title": "Balans yetarli emas",
+    "balance_modal_text": "Kontaktlarni ochish uchun balansda mablag‘ yetarli emas. Balansni to‘ldirib, ushbu kartaga qayting.",
+    "call": "Qo‘ng‘iroq qilish",
+    "call_now": "Hozir qo‘ng‘iroq qilish",
+    "check_authenticity": "Haqiqiyligini tekshirish",
+    "children": "Bolalar (2–11)",
+    "contacts_already_opened": "Kontaktlar avval ochilgan",
+    "contacts_inside_hint": "Kontaktlar to`lovdan keyin birdan ochiladi",
+    "contacts_locked": "Kontaktlar to‘lovgacha yopiq",
+    "contacts_unlocked_success": "💸 {{amount}} so‘m yechildi · Kontaktlar ochildi",
+    "date": "Sana",
+    "dates_label": "Sanalar",
+    "end_date": "Tugash sanasi",
+    "flight": "Rad etilgan aviabilet",
+    "flight_details": "Parvoz tafsilotlari",
+    "go_to_balance": "Balansni to‘ldirish",
+    "go_to_payment": "To‘lovga o‘tish",
+    "guide": "Gid",
+    "hotel": "Rad etilgan mehmonxona",
+    "hotel_label": "Mehmonxona",
+    "hurry_up": "Ulgurib qoling",
+    "infants": "Chaqaloqlar (0–1)",
+    "location": "Lokatsiya",
+    "location_placeholder": "Lokatsiyani kiriting ...",
+    "login_as_client": "Mijoz sifatida kirish",
+    "login_modal_hint_text": "Tizimga kirgandan so‘ng kontaktlarni ochishingiz va ta`minotchi bilan to‘g‘ridan-to‘g‘ri bog‘lanishingiz mumkin.",
+    "login_modal_hint_title": "Keyin nima bo‘ladi",
+    "login_modal_subtitle": "Davom etish uchun mijoz sifatida tizimga kiring",
+    "login_modal_text": "Ta`minotchining telefon raqami va Telegram kontaktini ochish uchun avval mijoz akkauntiga kiring.",
+    "login_modal_title": "Kontaktlarni ochish",
+    "more_details": "Batafsil",
+    "nights_short": "kecha",
+    "no_image": "Rasm yo‘q",
+    "no_results": "Natijalar yo‘q",
+    "not_enough_balance_go_to_balance": "Kontaktlarni ochish uchun mablag‘ yetarli emas.\n\n«Mijoz balansi» sahifasiga o‘tasizmi?",
+    "offer_may_expire_anytime": "Bu taklif istalgan payt olib qo‘yilishi mumkin",
+    "open_now": "Hoziroq ochish",
+    "open_proof_image": "Rasmni ochish",
+    "open_telegram": "Telegramni ochish",
+    "opened_contacts_cta": "Kontaktlar allaqachon ochilgan: {{count}}",
+    "package": "Rad etilgan tur",
+    "pay_modal_amount_label": "To‘lov summasi",
+    "pay_modal_hint_text": "Muvaffaqiyatli to‘lovdan keyin ta’minotchining telefoni va Telegrami avtomatik ochiladi va siz ushbu kartaga qaytasiz.",
+    "pay_modal_hint_title": "To‘lovdan keyin nima bo‘ladi",
+    "pay_modal_order": "Buyurtma",
+    "pay_modal_subtitle": "To‘lovdan keyin kontaktlar avtomatik ochiladi",
+    "pay_modal_title": "To‘g‘ridan-to‘g‘ri kirish uchun to‘ldirish",
+    "phone": "Telefon",
+    "price": "Narx",
+    "price_currency": "sh.b.",
+    "price_hint": "Foydali taklif",
+    "proof_images": "Haqiqiylik tasdig‘i",
+    "proof_images_count": "foto",
+    "proof_locked_hint": "Tasdiq mavjud. Tekshiruv kontaktlar ochilgandan keyin mavjud bo‘ladi.",
+    "propose_price": "Narx taklif qilish",
+    "refused_event": "Rad etilgan tadbir bileti",
+    "results": "Qidiruv natijalari",
+    "reviews": "Xizmat sharhlari",
+    "route": "Yo‘nalish",
+    "search": "Qidirish",
+    "search_filters": "Qidiruv filtrlari",
+    "search_in": "{{category}} ichida qidirish:",
+    "search_placeholder": "Xizmatlar, mamlakatlar, shaharlar bo‘yicha qidirish…",
+    "searching": "Qidirilmoqda...",
+    "sections": {
+      "top": "Top",
+      "new": "Yangi",
+      "upcoming": "Yaqinlashayotgan"
+    },
+    "select_category": "Toifani tanlang",
+    "start_date": "Boshlanish sanasi",
+    "stickers": {
+      "refused_tour": "QAYTARILGAN TUR",
+      "refused_hotel": "QAYTARILGAN MEHMONXONA",
+      "refused_flight": "QAYTARILGAN AVIABILET",
+      "refused_ticket": "QAYTARILGAN BILET"
+    },
+    "success_subtitle": "Endi siz ta`minotch bilan bog‘lanib, darhol bron qilishingiz mumkin",
+    "success_title": "Kontaktlar ochildi",
+    "supplier": "Ta`minotchi",
+    "telegram": "Telegram",
+    "time_expired": "Vaqt tugadi",
+    "time_left": "Qolgan vaqt",
+    "title": "Marketplace vitrinasi",
+    "tour_details": "Tur tafsilotlari",
+    "transport": "Transport",
+    "transfer": "Transfer",
+    "unlock_contacts": "Kontaktlarni ochish",
+    "unlock_contacts_cta_hint": "To‘lovdan keyin darhol kirish",
+    "unlock_contacts_cta_primary": "Ta’minotchi bilan bog‘lanish",
+    "unlock_intro_benefit_proof": "Tekshiruv materiallari / proof",
+    "unlock_intro_dynamic_default": "Qaytarilgan tur istalgan vaqtda dolzarbligini yo‘qotishi mumkin — hozir bog‘langan ma’qul.",
+    "unlock_intro_dynamic_watching": "Taklif hali dolzarb ekan, boshqalardan oldin bog‘laning.",
+    "unlock_intro_dynamic_unlocked": "Boshqa mijozlar ham bu variantga qiziqish bildirgan — bog‘lanishni kechiktirmang.",
+    "unlock_intro_cta": "Kirishni olish",
+    "unlock_intro_fast_booking": "Tez bron qilish imkoniyati",
+    "unlock_intro_phone": "Ta’minotchi telefoni",
+    "unlock_intro_price_label": "Kirish narxi",
+    "unlock_intro_price_hint": "To‘lovdan keyin darhol ochiladi",
+    "unlock_intro_price_subhint": "To‘lovdan keyin ta’minotchining telefoni va Telegrami ushbu kartada ochiladi.",
+    "unlock_intro_subtitle": "Boshqalardan oldin bog‘laning va foydali variantni olib qoling",
+    "unlock_intro_telegram": "Tez bog‘lanish uchun Telegram",
+    "unlock_intro_text": "To‘lovdan keyin siz ta`minotchi bilan vositachisiz bog‘lana olasiz.",
+    "unlock_intro_title": "Ta’minotchiga to‘g‘ridan-to‘g‘ri kirish",
+    "unlock_intro_urgency": "Bunday takliflar ko‘pincha juda tez bron qilinadi",
+    "unlock_intro_urgency_hint": "Taklif sizga mos bo‘lsa, ta`minotchi bilan darhol bog‘langaningiz ma’qul.",
+    "unlock_intro_urgency_unlocked_title": "Kontaktlar allaqachon ochilgan: {{count}}",
+    "unlock_intro_urgency_watching_title": "Hozir ko‘rmoqda: {{count}}",
+    "unlock_intro_whats_inside": "To‘lovdan keyin nimalar ochiladi",
+    "unlock_success_action_text": "Taklif dolzarbligida qolayotgan paytda ta`minotchi bilan hozir bog‘laning.",
+    "unlock_success_saved_hint": "Kontaktlar saqlandi va shu kartada ko‘rinadi.",
+    "unlock_success_subtitle": "Ta`minotchining telefon va Telegram kontakti ochildi",
+    "unlock_success_title": "Kontaktlar ochildi",
+    "unlock_supplier_hint": "Kirishni oling va ta’minotchi bilan telefon yoki Telegram orqali to‘g‘ridan-to‘g‘ri bog‘laning.",
+    "unlocking": "Ochilmoqda...",
+    "verified_proof": "Tasdiqlangan",
+    "watching_now": "Hozir ko‘rmoqda",
+    "watching_now_cta": "Hozir ko‘rmoqda",
+    "website": "Sayt",
+    "unlock_intro_access_currency": "so‘m",
+    "unlock_intro_once": "1 marta",
+    "unlock_intro_no_subscription": "obunasiz",
+    "unlock_intro_trust_no_subs": "Obunasiz",
+    "unlock_intro_trust_instant": "Darhol",
+    "unlock_intro_trust_saved": "Kirish sizda qoladi",
+    "unlock_intro_value_anchor": "Kichik kirish to‘lovi ta’minotchi bilan to‘g‘ridan-to‘g‘ri bog‘lanib, foydali variantni boshqalardan oldin olib qolishga yordam beradi.",
+    "tour_price_label": "Tur narxi",
+    "unlock_supplier_hint_title": "Kontaktlar kirish ochilgandan keyin mavjud bo‘ladi",
+    "proof_after_unlock_short": "Tekshiruv materiallari ochilgandan keyin"
   },
-  "select_category": "Toifani tanlang",
-  "start_date": "Boshlanish sanasi",
-  "stickers": {
-    "refused_tour": "QAYTARILGAN TUR",
-    "refused_hotel": "QAYTARILGAN MEHMONXONA",
-    "refused_flight": "QAYTARILGAN AVIABILET",
-    "refused_ticket": "QAYTARILGAN BILET"
-  },
-  "success_subtitle": "Endi siz ta`minotch bilan bog‘lanib, darhol bron qilishingiz mumkin",
-  "success_title": "Kontaktlar ochildi",
-  "supplier": "Ta`minotchi",
-  "telegram": "Telegram",
-  "time_expired": "Vaqt tugadi",
-  "time_left": "Qolgan vaqt",
-  "title": "Marketplace vitrinasi",
-  "tour_details": "Tur tafsilotlari",
-  "transport": "Transport",
-  "transfer": "Transfer",
-  "unlock_contacts": "Kontaktlarni ochish",
-  "unlock_contacts_cta_hint": "Kontaktlar to‘lovdan keyin darhol ochiladi",
-  "unlock_contacts_cta_primary": "Telefon va Telegramni ochish",
-  "unlock_intro_benefit_proof": "Tekshirilganlikning isboti",
-  "unlock_intro_dynamic_default": "Bunday variantlar tezda noaktual bo‘lib qolishi mumkin, eng yaxshisi yetkazib beruvchi bilan hozir bog‘lanish.",
-  "unlock_intro_dynamic_watching": "Hozir korishmoqda {{count}}",
-  "unlock_intro_dynamic_unlocked": "Kontaktlarni allaqchon ochishgan",
-  "unlock_intro_cta": "Kontaktlarni ochish",
-  "unlock_intro_fast_booking": "Tez bron qilish imkoniyati",
-  "unlock_intro_phone": "Ta`minotchining telefoni",
-  "unlock_intro_price_label": "OCHISH NARXI",
-  "unlock_intro_price_hint": "To‘lovdan keyin darhol ochiladi",
-  "unlock_intro_price_subhint": "To‘lovdan keyin yetkazib beruvchining telefon va Telegram kontakti shu kartada ochiladi.",
-  "unlock_intro_subtitle": "Bu taklifni istalgan payt olib qo‘yishlari mumkin",
-  "unlock_intro_telegram": "Bog‘lanish uchun Telegram",
-  "unlock_intro_text": "To‘lovdan keyin siz ta`minotchi bilan vositachisiz bog‘lana olasiz.",
-  "unlock_intro_title": "Kontaktlarni ochish",
-  "unlock_intro_urgency": "Bunday takliflar juda tez bron qilinadi",
-  "unlock_intro_urgency_hint": "Taklif sizga mos bo‘lsa, ta`minotchi bilan darhol bog‘langaningiz ma’qul.",
-  "unlock_intro_urgency_unlocked_title": "Kontaktlarni allaqchon ochishgan",
-  "unlock_intro_urgency_watching_title": "Hozir ko`rishmoqda",
-  "unlock_intro_whats_inside": "To‘lovdan keyin nimalar ochiladi",
-  "unlock_success_action_text": "Taklif dolzarbligida qolayotgan paytda ta`minotchi bilan hozir bog‘laning.",
-  "unlock_success_saved_hint": "Kontaktlar saqlandi va shu kartada ko‘rinadi.",
-  "unlock_success_subtitle": "Ta`minotchining telefon va Telegram kontakti ochildi",
-  "unlock_success_title": "Kontaktlar ochildi",
-  "unlock_supplier_hint": "Ta’minotchi yashirilgan. Kontaktlarni ochib, bevosita bog‘lanishingiz mumkin.",
-  "unlocking": "Ochilmoqda...",
-  "verified_proof": "Tasdiqlangan",
-  "watching_now": "Hozir ko‘rmoqda",
-  "watching_now_cta": "Hozir ko‘rmoqda",
-  "website": "Sayt"
-},
-
   "messages": {
     "booking_created": "Bron yaratildi",
     "favorite_removed": "Sevimlilardan olib tashlandi",
     "profile_saved": "Profil saqlandi",
     "request_sent": "So‘rov yuborildi"
   },
-
   "moderation": {
     "title": "Xizmatlar moderatsiyasi",
     "service_status": {
@@ -690,7 +682,6 @@
     },
     "send_to_review": "Moderatsiyaga yuborish",
     "submitted_toast": "Moderatsiyaga yuborildi",
-    "title": "Xizmatlar moderatsiyasi",
     "no_title": "(sarlavhasiz)",
     "supplier": "Ta`minotchi",
     "direction": "Yo‘nalish",
@@ -714,52 +705,41 @@
     "unpublish_error": "Nashrdan olishda xatolik",
     "forbidden": "Faqat administrator uchun",
     "empty": "Elementlar yo‘q",
-    "tabs": { "pending": "Kutilmoqda", "rejected": "Rad etilganlar" }
+    "tabs": {
+      "pending": "Kutilmoqda",
+      "rejected": "Rad etilganlar"
+    }
   },
-
   "mountain_tour": "Tog‘ turi",
   "my_requests": "Mening so‘rovlarim",
-
   "name": "Nom",
   "name_placeholder": "Ismingiz",
-
   "nav": {
     "ops": "Operatsionka",
     "products": "Mahsulotlar",
     "admin": "Admin",
-
     "services_tab": "Xizmatlar",
     "services_tourbuilder": "Tour Builder uchun xizmatlar",
     "services_marketplace": "MARKETPLACE uchun xizmatlar",
     "provider_calendar": "Kalendar",
-
-    "requests": "So'rovlar",
+    "requests": "So‘rovlar",
     "favorites": "Sevimlilar",
     "bookings": "Bronlar",
     "profile": "Profil",
-
     "tour_builder": "Tour Builder",
     "hotels": "Mehmonxonalar",
-
     "providers_admin": "Provayderlar",
     "entry_fees_admin": "Entry fees",
     "hotels_admin": "Mehmonxonalar (admin)",
     "cms_pages": "Pastki qism",
-    "bookings": "Bronlar",
-    "dashboard": "Kabinet",
-    "requests": "So‘rovlar",
-    "favorites": "Sevimlilar",
-    "hotels": "Mehmonxonalar",
-    "hotels_admin": "Mehmonxonalar (admin)"
+    "dashboard": "Kabinet"
   },
-
   "insurance_included": "Sug'urta kiritilgan",
   "early_check_in": "Erta joylashish",
   "arrival_fast_track": "Kelishda Fast Track",
   "net_price": "Netto narx",
   "current_password": "Eski parol",
   "new_password": "Yangi parol",
-
   "new_refused_airtkt": "Yangi rad etilgan aviachiptani qo‘shish:",
   "new_refused_event_ticket": "Rad etilgan tadbir chiptasi",
   "new_refused_hotel": "Yangi rad etilgan mehmonxonani qo‘shish:",
@@ -768,29 +748,26 @@
   "new_service_tip": "Yangi xizmat yaratish uchun quyidagi barcha maydonlarni to‘ldiring va «Xizmatni saqlash» tugmasini bosing.",
   "new_visa_service": "Viza qo‘llab-quvvatlash xizmati qo‘shish:",
   "new_visa_support": "Viza qo‘llab-quvvatlash",
-
   "no_changes": "Saqlash uchun o‘zgarishlar yo‘q",
   "no_file_chosen": "Fayl tanlanmagan",
   "no_files_selected": "Fayllar tanlanmagan",
   "no_images_yet": "Hozircha rasmlar yo‘q",
   "not_specified": "Ko‘rsatilmagan",
-
   "ok": "OK",
   "one_way": "Bir tomonga",
   "one_way_transfer": "Bir tomonga transfer",
-
-  "pagination": { "next": "Oldinga", "prev": "Orqaga" },
-
+  "pagination": {
+    "next": "Oldinga",
+    "prev": "Orqaga"
+  },
   "password_change": "Parolni o‘zgartirish",
   "password_changed": "Parol yangilandi",
   "password_error": "Parolni o‘zgartirishda xatolik",
   "password_too_short": "Parol kamida 6 ta belgidan iborat bo‘lishi kerak",
-
   "phone": "Telefon",
   "photo": "Foto",
   "pick_dates": "Boshlanish va tugash sanalarini tanlang",
   "price": "Narx",
-
   "profile": {
     "city": "Shahar",
     "languages": "Tillar",
@@ -817,7 +794,6 @@
   },
   "profile_load_error": "Profilni yuklab bo‘lmadi",
   "profile_updated": "Profil yangilandi",
-
   "provider": {
     "type": "Provayder turi",
     "region": "Provayder hududi",
@@ -864,23 +840,19 @@
       "confirm_delete": "Arizani o‘chirasizmi?"
     }
   },
-
   "ps": {
     "title": "Tour Builder uchun xizmatlar",
-
     "btn": {
       "refresh": "Yangilash",
       "generate_from_profile": "Profil asosida yaratish",
       "generating": "Yaratilmoqda…",
       "generate_hint": "Profilingizdagi shaharlar va avtomobillar bo‘yicha avto-yaratish"
     },
-
     "grp": {
       "guide": "GID",
       "guide_transport": "GID+TRANSPORT",
       "transport": "TRANSPORT"
     },
-
     "form": {
       "category": "Kategoriya",
       "category_ph": "— kategoriyani tanlang —",
@@ -892,7 +864,6 @@
       "currency": "Valyuta",
       "add": "Qo‘shish"
     },
-
     "table": {
       "category": "Kategoriya",
       "name": "Nom",
@@ -902,29 +873,24 @@
       "status": "Holat",
       "actions": "Amallar"
     },
-
     "row": {
       "name_ph": "Nom…",
       "enable": "Yoqish",
       "disable": "O‘chirish",
       "delete": "O‘chirish"
     },
-
     "status": {
       "enabled": "Yoqilgan",
       "disabled": "O‘chirilgan"
     },
-
     "empty": "Xizmatlar topilmadi. Hech bo‘lmasa bittasini qo‘shing.",
     "hint": {
       "zero_price": "Maslahat: narxi 0 bo‘lgan xizmatlarni TourBuilder ko‘rsatmaydi. Narxlarni kiriting — va ular darhol konstruktorda paydo bo‘ladi."
     },
-
     "confirm": {
       "delete": "Xizmatni o‘chirasizmi?",
       "bulk": "Xizmatlarni paket tarzda qo‘shishni tasdiqlang."
     },
-
     "error": {
       "delete": "O‘chirib bo‘lmadi: ",
       "no_cities": "Avval profilga «Faoliyat hududi»ni to‘ldiring.",
@@ -932,7 +898,6 @@
       "bulk": "Paket yaratishda xatolik: "
     }
   },
-
   "requests": {
     "afterAcceptNote": "Klient taklifni qabul qilgach (status = accepted), u bronni rasmiylashtira oladi.",
     "messagePlaceholder": "Klientga xabar…",
@@ -942,10 +907,12 @@
     "sendProposal": "Taklif yuborish",
     "title": "So‘rovlar (Provayder)"
   },
-
   "provider_profile": "Provayder profili",
-  "providerProfile": { "type": "Provayder turi", "region": "Provayder hududi", "address": "Manzil" },
-
+  "providerProfile": {
+    "type": "Provayder turi",
+    "region": "Provayder hududi",
+    "address": "Manzil"
+  },
   "refused_hotel": "Rad etilgan mehmonxona",
   "refused_hotel_city": "Shahar",
   "refused_hotel_name": "Rad etilgan mehmonxona nomi",
@@ -953,7 +920,6 @@
   "refused_hotel_select_city": "Shaharni kiriting",
   "refused_ticket": "Rad etilgan aviachiptasi",
   "refused_tour": "Rad etilgan tur",
-
   "register": {
     "errors": {
       "email_taken": "Ushbu e-mail allaqachon ro‘yxatdan o‘tgan",
@@ -979,10 +945,8 @@
     "title": "Provayder ro‘yxatdan o‘tishi",
     "type": "Provayder turi"
   },
-
   "requests.tabs.incoming": "Kiruvchi",
   "requests.tabs.outgoing": "Chiquvchi",
-
   "requests_list": {
     "empty": "Hozircha so‘rovlar yo‘q.",
     "error": "So‘rov yuborilmadi",
@@ -990,9 +954,7 @@
     "note_prompt": "So‘rovga izoh (ixtiyoriy):",
     "sent": "So‘rov yuborildi"
   },
-
   "return_date": "Qaytish sanasi",
-
   "reviews": {
     "already_left": "Siz allaqachon sharh qoldirgansiz",
     "count": "sharh(lar)",
@@ -1015,9 +977,11 @@
     "title_service": "Xizmat sharhlari",
     "your_rating": "Sizning bahoingiz"
   },
-
-  "roles": { "client": "Klient", "provider": "Provayder", "admin": "Admin" },
-
+  "roles": {
+    "client": "Klient",
+    "provider": "Provayder",
+    "admin": "Admin"
+  },
   "room_rent": "Xona ijarasi",
   "round_trip": "Borib-qaytish",
   "save": "Saqlash",
@@ -1027,7 +991,6 @@
   "select_event_category": "Tadbir kategoriyasini tanlang",
   "select_files": "Fayllarni tanlash",
   "select_hotel": "Mehmonxonani tanlang",
-
   "service": "Xizmat",
   "service_added": "Xizmat qo‘shildi",
   "service_deleted": "Xizmat o‘chirildi",
@@ -1035,10 +998,8 @@
   "service_updated": "Xizmat yangilandi",
   "services_marketplace": "MARKETPLACE uchun xizmatlar",
   "services_load_error": "Xizmatlarni yuklab bo‘lmadi",
-
   "social": "Telegram username",
   "start_flight_date": "Uchish reysi sanasi",
-
   "stats": {
     "bonus_progress": "Bonus progress",
     "bookings_total": "Bronlar (jami)",
@@ -1051,7 +1012,6 @@
     "tier": "Daraja",
     "tier_label": "Daraja"
   },
-
   "status": {
     "new": "yangi",
     "processed": "ko‘rib chiqilgan",
@@ -1061,15 +1021,13 @@
     "accepted": "qabul qilingan",
     "not_actual": "dolzarb emas"
   },
-
   "sum": "Summa",
-
   "tabs": {
     "favorites": "Sevimlilar",
     "my_bookings": "Mening bronlarim",
     "my_requests": "Mening so‘rovlarim"
   },
-    "tb": {
+  "tb": {
     "tpl_apply_title": "Shablonni qo‘llash",
     "tpl_select": "Shablon",
     "tpl_select_placeholder": "Shablonni tanlang…",
@@ -1128,41 +1086,34 @@
     "tariffs_for": "Tariflar",
     "residents": "Rezidentlar",
     "nonresidents": "Nerezidentlar",
-
     "speaking_lang": "Tur o‘tkaziladigan til",
     "city_ph": "Shahar (masalan, Tashkent)",
     "pick_city_first": "Avval shaharni ko‘rsating",
-
     "guide": "Gid",
     "pick_guide": "Gidni tanlang",
     "pick_guide_service_ph": "Gid xizmatini tanlang…",
     "no_services_for_guide": "Bu gid uchun xizmatlar topilmadi. Dashboard → Services bo‘limida to‘ldiring.",
     "no_providers": "Mavjud provayderlar yo‘q",
-
     "transport": "Transport",
     "pick_transport": "Transportni tanlang",
     "pick_transport_service_ph": "Transport xizmatini tanlang…",
     "no_services_for_transport": "Bu tashuvchi uchun xizmatlar topilmadi. Dashboard → Services bo‘limida to‘ldiring.",
-
     "hotel": "Mehmonxona (kecha uchun, netto)",
     "hotel_short": "Mehmonxona",
     "pick_hotel": "Mehmonxonani tanlang",
     "no_hotels": "Variantlar yo‘q",
     "loading_hotel": "Fond va mavsumlarni yuklayapmiz…",
-
     "entry_fees": "Kirish chiptalari (obyektlar)",
     "entry_ph": "Obyekt nomini kirita boshlang…",
     "pick_sites": "Obyektlarni tanlang",
     "nothing_found": "Hech narsa topilmadi",
     "entry_for_day": "Ushbu kun uchun",
     "entry_hint_suffix": "ADT/CHD va rezidentlik holati hisobga olingan",
-
     "price_per_day": "Narx/kun",
     "price_per_night": "Narx/kecha",
     "day_total": "Kun bo‘yicha jami",
     "rooms_and_meals": "Xonalar va ovqatlanish",
     "calc_day_hint": "Ushbu kun uchun: {{amount}} (ADT/CHD va rezidentlik hisobga olingan)",
-
     "totals": {
       "guide": "Gid (netto)",
       "transfers": "Transferlar",
@@ -1171,13 +1122,11 @@
       "entry": "Entry fees (netto)",
       "total": "JAMI"
     },
-
     "title": "Tur konstruktori",
     "dates": "Tur sanalari",
     "pick_dates": "Boshlanish va tugash sanalarini tanlang",
     "dates_span": "{{from}} — {{to}} • {{days}} kun",
     "pax": "Mehmonlar (PAX)",
-
     "load_draft": "Qoralamani yuklash",
     "save_draft": "Qoralamani saqlash",
     "draft_saved": "Qoralama saqlandi",
@@ -1185,22 +1134,18 @@
     "draft_loaded": "Qoralama yuklandi",
     "draft_loaded_local": "Qoralama brauzerdan yuklandi",
     "no_drafts": "Qoralamalar topilmadi",
-
     "loop_route": "marshrutni yopish",
     "loop": "takror",
     "override_by_day": "Kunlar bo‘yicha qayta belgilash",
     "use_default": "Standart bo‘yicha",
-
     "guides_suggest": "Tanlangan sanalarda mavjud gidlar",
     "no_guides": "Mos gidlar yo‘q",
     "transports_suggest": "Tanlangan sanalarda mavjud transport",
     "no_transports": "Mos transport yo‘q",
-
     "hotels_nights": "Tunashlar (mehmonxonalar qo‘lda qo‘shiladi)",
     "net": "Netto",
     "notes": "Eslatma",
     "extra_beds_qty": "Qo‘sh. krovat soni",
-
     "pricing": "Narx belgilash",
     "currency": "Valyuta",
     "markup": "Ustama, %",
@@ -1208,7 +1153,6 @@
     "hotels_cost": "Mehmonxonalar (netto)",
     "providers_cost": "Gid/Transport (netto)",
     "total": "Jami",
-
     "meals": "Ovqatlanish",
     "meal_types": {
       "lunch": "Tushlik",
@@ -1219,7 +1163,6 @@
     "add_meal": " Ovqatlanish qo‘shish",
     "meals_day_sum": "Kun bo‘yicha ovqatlanish summasi"
   },
-
   "tpl": {
     "program": "Tur dasturi",
     "program_ph": "Dastur tavsifini yozing (ko‘p qatorli matn, har band yangi qatordan)…",
@@ -1237,16 +1180,13 @@
     "btn_save": "Saqlash",
     "btn_cancel": "Bekor qilish"
   },
-
   "ticket_details": "Chipta tafsilotlari (qator, o‘rin va h.k.)",
   "title": "Nom",
-
   "toast": {
     "addedToFav": "Sevimlilarga qo‘shildi",
     "favoriteError": "Sevimlilarni o‘zgartirib bo‘lmadi",
     "removedFromFav": "Sevimlilardan olib tashlandi"
   },
-
   "transfer": "Transfer",
   "transfer_options": {
     "group": "Guruhli",
@@ -1254,7 +1194,6 @@
     "none": "Mavjud emas",
     "select": "Transferni tanlang"
   },
-
   "transport": "Transport",
   "type": "Provayder turi",
   "update_error": "Yangilash xatosi",
@@ -1262,27 +1201,22 @@
   "view_certificate": "Sertifikatni ko‘rish",
   "visa_included": "Viza kiritilgan",
   "visa_support": "Viza qo‘llab-quvvatlash",
-
   "tooltips": {
     "favorite_add": "Sevimlilarga",
     "favorite_remove": "Sevimlilardan olib tashlash"
   },
-
   "gross_price": "Klient uchun narx (brutto)",
   "expired": "Muddati tugagan",
-
   "form": {
     "required": "Bu maydonni to‘ldiring.",
     "email_invalid": "To‘g‘ri e-mail kiriting.",
     "password_short": "Parolning minimal uzunligi — 6 ta belgi."
   },
-
   "enter_current_password": "Joriy parolni kiriting",
   "hotels_load_error": "Mehmonxonalarni yuklab bo‘lmadi",
   "country_not_found": "Mamlakat topilmadi",
   "direction_from_not_found": "Uchish shahri topilmadi",
   "direction_to_not_found": "Kelish shahri topilmadi",
-
   "auth": {
     "login": "Kirish",
     "login_client": "Klient sifatida kirish",
@@ -1290,7 +1224,6 @@
     "login_required": "Davom etish uchun kiring",
     "provider_login_required": "Provayder sifatida kiring"
   },
-
   "rooms_and_prices": "Xonalar fondi va narxlar",
   "room_category": "Xona kategoriyasi",
   "count_short": "Soni",
@@ -1304,8 +1237,9 @@
   "tourism_fee_resident": "Turistik yig‘im (rezidentlar), so‘m/kecha",
   "tourism_fee_nonresident": "Turistik yig‘im (nerezidentlar), so‘m/kecha",
   "extra_bed_cost": "Qo‘sh. joy, so‘m/kecha",
-
-  "admin": { "new_hotel_title": "Yangi mehmonxona" },
+  "admin": {
+    "new_hotel_title": "Yangi mehmonxona"
+  },
   "hotel_name": "Nom",
   "enter_hotel_name": "Mehmonxona nomini kiriting",
   "enter_address": "Manzilni ko‘rsating",
@@ -1314,26 +1248,20 @@
   "country": "Mamlakat",
   "city": "Shahar",
   "currency": "Valyuta",
-
   "resident": "Rezidentlar uchun",
   "non_resident": "Nerezidentlar uchun",
-
   "room_type_name": "Tur nomi",
   "add_custom_room_type_ph": "O‘z xona turini qo‘shing (masalan, Deluxe…)",
   "add_type": "Tur qo‘shish",
   "extra_bed_price": "Qo‘sh. joy narxi (bir kishi/kecha)",
-
   "taxes_and_fees": "Soliqlar va yig‘imlar",
   "vat_included": "Narxlar QQS bilan",
   "vat_rate": "QQS stavkasi, %",
-
   "amenities": "Qulayliklar",
   "add_amenity": "Qulaylik qo‘shish…",
   "add_service": "Xizmat qo‘shish…",
   "add": "Qo‘shish",
-
   "images": "Rasmlar",
-
   "select_city": "Shaharni tanlang",
   "select_country": "Mamlakatni tanlang",
   "select": {
@@ -1341,7 +1269,6 @@
     "no_options": "Hech narsa topilmadi",
     "loading": "Yuklanmoqda…"
   },
-
   "tourBuilder": {
     "result_success_title": "Bronlar yaratildi",
     "result_partial_title": "Bronlar qisman yaratildi",
@@ -1377,547 +1304,652 @@
     "programText": "Matnli dastur"
   },
   "landing": {
-  "ayurveda": {
-    "badge": "Hindistonda Ayurveda",
-    "h1": "An’anaviy ayurveda orqali to‘liq tiklanish",
-    "sub": "Hindistonning yetakchi klinikalaridan sog‘lomlashtirish dasturlari: detoks, tiklanish, surunkali holatlarni davolash va stress-menejment.",
-    "cta_primary": "Konsultatsiya olish",
-    "cta_secondary": "Klinikalarni ko‘rish",
-
-    "stats": {
-      "days": "Dasturlar davomiyligi",
-      "doctors": "Litsenziyalangan shifokorlar",
-      "support": "Kurator yordami"
+    "ayurveda": {
+      "badge": "Hindistonda Ayurveda",
+      "h1": "An’anaviy ayurveda orqali to‘liq tiklanish",
+      "sub": "Hindistonning yetakchi klinikalaridan sog‘lomlashtirish dasturlari: detoks, tiklanish, surunkali holatlarni davolash va stress-menejment.",
+      "cta_primary": "Konsultatsiya olish",
+      "cta_secondary": "Klinikalarni ko‘rish",
+      "stats": {
+        "days": "Dasturlar davomiyligi",
+        "doctors": "Litsenziyalangan shifokorlar",
+        "support": "Kurator yordami"
+      },
+      "benefits": {
+        "title": "Nega aynan Hindistonda Ayurveda?",
+        "sub": "Tabiiy davolash usullari, ovqatlanish, massajlar va organizmni to‘liq yangilashni uyg‘unlashtirgan noyob an’ana.",
+        "items": [
+          {
+            "title": "Detoks va yoshartirish",
+            "text": "Individual sxemalar bo‘yicha organizmni kompleks tozalash."
+          },
+          {
+            "title": "Stressni kamaytirish",
+            "text": "Asab tizimini tiklash amaliyotlari, yoga va nafas mashqlari."
+          },
+          {
+            "title": "Surunkali holatlar",
+            "text": "Uyqusizlik, migren, OVQAT HAZM tizimi, gormonal fon bilan ishlash."
+          },
+          {
+            "title": "Ekologik ozish",
+            "text": "Organizmga stresssiz, yumshoq vazn kamaytirish."
+          }
+        ]
+      },
+      "programs": {
+        "title": "Ommabop dasturlar",
+        "sub": "Hindistonning yetakchi ayurveda shifokorlari tomonidan ishlab chiqilgan.",
+        "items": [
+          {
+            "title": "Panchakarma",
+            "text": "Tana va ongni chuqur tozalashning klassik dasturi.",
+            "duration": "14–21 kun",
+            "format": "Intensiv"
+          },
+          {
+            "title": "Stress Relief",
+            "text": "Surunkali charchoq, uyqusizlik va xavotir bilan ishlash.",
+            "duration": "7–14 kun",
+            "format": "Yumshoq format"
+          },
+          {
+            "title": "Slim & Fit",
+            "text": "Ovqatlanish va muolajalar tanlovi bilan tabiiy vazn korreksiyasi.",
+            "duration": "10–14 kun",
+            "format": "Standart"
+          }
+        ]
+      },
+      "steps": {
+        "title": "Dastur qanday o‘tadi",
+        "step": "{{num}}-qadam",
+        "items": [
+          {
+            "title": "Onlayn diagnostika",
+            "text": "Shifokor holatni tahlil qiladi va dastur tanlaydi."
+          },
+          {
+            "title": "Klinika tanlash",
+            "text": "Biz byudjetni hisobga olgan holda eng maqbul joyni taklif qilamiz."
+          },
+          {
+            "title": "Davolash dasturi",
+            "text": "Muolajalar, ovqatlanish, massajlar, yoga, shifokor nazorati."
+          },
+          {
+            "title": "Natijalar",
+            "text": "Siz tavsiyalar va post-dastur olasiz."
+          }
+        ]
+      },
+      "clinics": {
+        "title": "Hindistonning eng yaxshi ayurveda klinikalari",
+        "sub": "Kerala, Goa, Dehli va Himachal-Pradeshdagi ishonchli hamkorlar.",
+        "btn": "Klinikalar katalogi",
+        "btn2": "Kurator bilan bog‘lanish"
+      },
+      "faq": {
+        "title": "Tez-tez so‘raladigan savollar",
+        "items": [
+          {
+            "q": "Dasturlar qancha davom etadi?",
+            "a": "Maqsadga qarab 7 kundan 21 kungacha."
+          },
+          {
+            "q": "Tayyorlovsiz kelish mumkinmi?",
+            "a": "Ha, shifokor hammasini joyida tanlaydi."
+          },
+          {
+            "q": "Butun oila bilan borish mumkinmi?",
+            "a": "Ha, ko‘pchilik klinikalar barcha yosh guruhlarini qabul qiladi."
+          },
+          {
+            "q": "Dastur narxi qancha?",
+            "a": "Bir hafta uchun klinika va darajaga qarab $500–$1200 dan."
+          }
+        ]
+      },
+      "final": {
+        "title": "Bugun tiklanish yo‘lini boshlang",
+        "sub": "Travella kuratoridan bepul konsultatsiya oling.",
+        "btn": "Konsultatsiya olish"
+      }
     },
-
-    "benefits": {
-      "title": "Nega aynan Hindistonda Ayurveda?",
-      "sub": "Tabiiy davolash usullari, ovqatlanish, massajlar va organizmni to‘liq yangilashni uyg‘unlashtirgan noyob an’ana.",
-      "items": [
-        { "title": "Detoks va yoshartirish", "text": "Individual sxemalar bo‘yicha organizmni kompleks tozalash." },
-        { "title": "Stressni kamaytirish", "text": "Asab tizimini tiklash amaliyotlari, yoga va nafas mashqlari." },
-        { "title": "Surunkali holatlar", "text": "Uyqusizlik, migren, OVQAT HAZM tizimi, gormonal fon bilan ishlash." },
-        { "title": "Ekologik ozish", "text": "Organizmga stresssiz, yumshoq vazn kamaytirish." }
-      ]
+    "checkup": {
+      "badge": "Hindiston Check-up",
+      "h1": "Hindistonda 1–3 kunda to‘liq sog‘liq diagnostikasi",
+      "sub": "Dehlining eng yaxshi klinikalarida bazaviy va kengaytirilgan tekshiruv paketlari. Hamrohlik, tarjima va 24/7 kurator yordami.",
+      "cta_primary": "Konsultatsiya olish",
+      "cta_secondary": "Klinikalarni ko‘rish",
+      "stats": {
+        "days": "Dastur davomiyligi (kun)",
+        "tests": "Tahlillar va tekshiruvlar",
+        "support": "Kurator yordami"
+      },
+      "benefits": {
+        "title": "Nega Hindistonda Check-up o‘tish kerak?",
+        "sub": "Vaqt tejaladi, aniq diagnostika va isbotlangan tibbiyot.",
+        "items": [
+          {
+            "title": "Tez va tizimli",
+            "text": "Barcha tekshiruvlar 1–3 kunda bitta joyda o‘tadi."
+          },
+          {
+            "title": "Zamonaviy texnologiyalar",
+            "text": "MRT, KT, PET, endoskopiya, genetik testlar."
+          },
+          {
+            "title": "Aniq xulosalar",
+            "text": "Shifokorlar konsiliumi va yakuniy hisobot."
+          },
+          {
+            "title": "Foydali",
+            "text": "Xizmat darajasi yuqori bo‘lsa-da, narx pastroq."
+          }
+        ]
+      },
+      "programs": {
+        "title": "Ommabop paketlar",
+        "sub": "Yosh, maqsad va sog‘liq tarixiga mos paketni tanlaymiz.",
+        "items": [
+          {
+            "title": "Bazaviy Check-up",
+            "text": "Umumiy qon tahlili, biokimyo, UZI, EKG, terapevt.",
+            "duration": "1 kun",
+            "forWhom": "Hamma uchun"
+          },
+          {
+            "title": "Kardio Check-up",
+            "text": "EhoKG, sutkalik monitoring, stress-test, kardiolog konsultatsiyasi.",
+            "duration": "1–2 kun",
+            "forWhom": "Yurak/tomirlar"
+          },
+          {
+            "title": "Onko-skrining",
+            "text": "Xavflarni va erta aniqlashni kengaytirilgan diagnostika qilish.",
+            "duration": "2–3 kun",
+            "forWhom": "40+ / ko‘rsatma bo‘yicha"
+          }
+        ]
+      },
+      "steps": {
+        "title": "Diagnostika qanday o‘tadi",
+        "step": "{{num}}-qadam",
+        "items": [
+          {
+            "title": "Ma’lumot yig‘ish",
+            "text": "Qisqa anketani to‘ldirasiz va hujjatlarni yuborasiz."
+          },
+          {
+            "title": "Klinika tanlash",
+            "text": "Kurator vazifa va byudjetga ko‘ra 2–3 variant taklif qiladi."
+          },
+          {
+            "title": "Hindistonda Check-up",
+            "text": "Tekshiruvlarni o‘tkazamiz, tarjima qilamiz va hamrohlik qilamiz."
+          },
+          {
+            "title": "Yakuniy hisobot",
+            "text": "Rus/ozbek tilida xulosa va tavsiyalar olasiz."
+          }
+        ]
+      },
+      "clinics": {
+        "title": "Dehlining ishonchli klinikalari",
+        "sub": "Faqat akkreditatsiyadan o‘tgan shifoxona va shifokorlar bilan ishlaymiz.",
+        "btn": "Klinikalar katalogini ochish",
+        "btn2": "Kuratorga murojaat qilish"
+      },
+      "faq": {
+        "title": "Tez-tez so‘raladigan savollar",
+        "items": [
+          {
+            "q": "Check-up necha kun oladi?",
+            "a": "Paketga qarab 1 kundan 3 kungacha."
+          },
+          {
+            "q": "Tibbiy kartalarni olib kelish kerakmi?",
+            "a": "Ha, ma’qul. Oldindan ham yuborish mumkin."
+          },
+          {
+            "q": "Tarjimon bormi?",
+            "a": "Ha, kurator barcha bosqichlarda yordam beradi."
+          },
+          {
+            "q": "Narxi qancha?",
+            "a": "Bazaviy paket $250 dan. Aniq narx tahlillar to‘plamiga bog‘liq."
+          }
+        ]
+      },
+      "final": {
+        "title": "Ortiqcha kutishsiz diagnostikadan o‘ting",
+        "sub": "Ariza qoldiring — paket va klinikani tanlab beramiz.",
+        "btn": "Konsultatsiya olish"
+      }
     },
-
-    "programs": {
-      "title": "Ommabop dasturlar",
-      "sub": "Hindistonning yetakchi ayurveda shifokorlari tomonidan ishlab chiqilgan.",
-      "items": [
-        {
-          "title": "Panchakarma",
-          "text": "Tana va ongni chuqur tozalashning klassik dasturi.",
-          "duration": "14–21 kun",
-          "format": "Intensiv"
-        },
-        {
-          "title": "Stress Relief",
-          "text": "Surunkali charchoq, uyqusizlik va xavotir bilan ishlash.",
-          "duration": "7–14 kun",
-          "format": "Yumshoq format"
-        },
-        {
-          "title": "Slim & Fit",
-          "text": "Ovqatlanish va muolajalar tanlovi bilan tabiiy vazn korreksiyasi.",
-          "duration": "10–14 kun",
-          "format": "Standart"
-        }
-      ]
+    "treatment": {
+      "badge": "Hindistonda davolanish",
+      "h1": "Hindistonning yetakchi klinikalarida zamonaviy davolash",
+      "sub": "Top mutaxassislar, akkreditatsiyalangan shifoxonalar, shaffof narxlar va bemorni to‘liq kuzatib borish.",
+      "cta_primary": "Konsultatsiya olish",
+      "cta_secondary": "Klinikalarni ko‘rish",
+      "stats": {
+        "specialties": "Tibbiy yo‘nalishlar",
+        "prices": "BAA/Yevropa bilan solishtirganda tejamkorlik",
+        "jci": "Xalqaro akkreditatsiya"
+      },
+      "benefits": {
+        "title": "Nega bemorlar Hindistonni tanlaydi?",
+        "sub": "Yuqori texnologiyalar, tajribali shifokorlar va hamyonbop narxlar.",
+        "items": [
+          {
+            "title": "Kuchli shifokorlar",
+            "text": "Onkologiya, kardiologiya, transplantatsiya, ortopediya — hammasi jahon standartida."
+          },
+          {
+            "title": "Zamonaviy uskunalar",
+            "text": "Robotlashtirilgan jarrohlik, neyronavigatsiya, yuqori aniqlikdagi PET-KT."
+          },
+          {
+            "title": "Shaffof narxlar",
+            "text": "Davolash narxi 40–70% arzon."
+          },
+          {
+            "title": "24/7 hamrohlik",
+            "text": "Kurator, tarjima, barcha logistikani tashkil etish."
+          }
+        ]
+      },
+      "programs": {
+        "title": "Asosiy davolash yo‘nalishlari",
+        "sub": "Faqat tekshirilgan shifoxonalar bilan ishlaymiz.",
+        "items": [
+          {
+            "title": "Onkologiya",
+            "text": "Diagnostika, jarrohlik, kimyo- va radioterapiya, target terapiya.",
+            "time": "5 kundan",
+            "level": "Yuqori texnologiyali"
+          },
+          {
+            "title": "Kardiologiya va kardiojarrohlik",
+            "text": "Koronarografiya, stentlash, AKSh, klapan operatsiyalari.",
+            "time": "3 kundan",
+            "level": "Murakkab operatsiyalar"
+          },
+          {
+            "title": "Ortopediya va neyrojarrohlik",
+            "text": "Bo‘g‘imlarni almashtirish, umurtqa operatsiyalari, artroskopiya.",
+            "time": "4 kundan",
+            "level": "Top mutaxassislar"
+          }
+        ]
+      },
+      "steps": {
+        "title": "Davolash qanday o‘tadi",
+        "step": "{{num}}-qadam",
+        "items": [
+          {
+            "title": "Konsultatsiya",
+            "text": "Hujjatlarni yuborasiz — shifokor o‘rganib, davolash rejasini taklif qiladi."
+          },
+          {
+            "title": "Klinika tanlash",
+            "text": "Variantlar, narxlar, muddatlar va shifokorlarni solishtiramiz."
+          },
+          {
+            "title": "Hindistonda davolash",
+            "text": "Kutib olamiz, tarjima qilamiz, hamrohlik qilamiz va barcha masalalarni hal qilamiz."
+          },
+          {
+            "title": "Chiqishdan keyingi qo‘llab-quvvatlash",
+            "text": "Tahlillar nazorati, shifokor bilan aloqa, tavsiyalar."
+          }
+        ]
+      },
+      "faq": {
+        "title": "Tez-tez so‘raladigan savollar",
+        "items": [
+          {
+            "q": "Qaysi klinikalar mavjud?",
+            "a": "Faqat JCI/NABH akkreditatsiyalangan shifoxonalar bilan ishlaymiz."
+          },
+          {
+            "q": "Shoshilinch kelish mumkinmi?",
+            "a": "Ha, shoshilinch so‘rovlarni qabul qilamiz."
+          },
+          {
+            "q": "Viza bilan yordam berasizmi?",
+            "a": "Ha, tibbiy vizani rasmiylashtiramiz."
+          },
+          {
+            "q": "Narxlar qanday?",
+            "a": "BAA/Yevropaga nisbatan 2–3 baravar arzon."
+          }
+        ]
+      },
+      "final": {
+        "title": "24 soatda davolash rejasini oling",
+        "sub": "Tibbiy hujjatlarni yuboring — ularni shifokorlarga yetkazamiz.",
+        "btn": "Konsultatsiya olish"
+      }
     },
-
-    "steps": {
-      "title": "Dastur qanday o‘tadi",
-      "step": "{{num}}-qadam",
-      "items": [
-        { "title": "Onlayn diagnostika", "text": "Shifokor holatni tahlil qiladi va dastur tanlaydi." },
-        { "title": "Klinika tanlash", "text": "Biz byudjetni hisobga olgan holda eng maqbul joyni taklif qilamiz." },
-        { "title": "Davolash dasturi", "text": "Muolajalar, ovqatlanish, massajlar, yoga, shifokor nazorati." },
-        { "title": "Natijalar", "text": "Siz tavsiyalar va post-dastur olasiz." }
-      ]
-    },
-
     "clinics": {
-      "title": "Hindistonning eng yaxshi ayurveda klinikalari",
-      "sub": "Kerala, Goa, Dehli va Himachal-Pradeshdagi ishonchli hamkorlar.",
-      "btn": "Klinikalar katalogi",
-      "btn2": "Kurator bilan bog‘lanish"
-    },
-
-    "faq": {
-      "title": "Tez-tez so‘raladigan savollar",
-      "items": [
-        { "q": "Dasturlar qancha davom etadi?", "a": "Maqsadga qarab 7 kundan 21 kungacha." },
-        { "q": "Tayyorlovsiz kelish mumkinmi?", "a": "Ha, shifokor hammasini joyida tanlaydi." },
-        { "q": "Butun oila bilan borish mumkinmi?", "a": "Ha, ko‘pchilik klinikalar barcha yosh guruhlarini qabul qiladi." },
-        { "q": "Dastur narxi qancha?", "a": "Bir hafta uchun klinika va darajaga qarab $500–$1200 dan." }
-      ]
-    },
-
-    "final": {
-      "title": "Bugun tiklanish yo‘lini boshlang",
-      "sub": "Travella kuratoridan bepul konsultatsiya oling.",
-      "btn": "Konsultatsiya olish"
-    }
-  },
-
-  "checkup": {
-    "badge": "Hindiston Check-up",
-    "h1": "Hindistonda 1–3 kunda to‘liq sog‘liq diagnostikasi",
-    "sub": "Dehlining eng yaxshi klinikalarida bazaviy va kengaytirilgan tekshiruv paketlari. Hamrohlik, tarjima va 24/7 kurator yordami.",
-    "cta_primary": "Konsultatsiya olish",
-    "cta_secondary": "Klinikalarni ko‘rish",
-
-    "stats": {
-      "days": "Dastur davomiyligi (kun)",
-      "tests": "Tahlillar va tekshiruvlar",
-      "support": "Kurator yordami"
-    },
-
-    "benefits": {
-      "title": "Nega Hindistonda Check-up o‘tish kerak?",
-      "sub": "Vaqt tejaladi, aniq diagnostika va isbotlangan tibbiyot.",
-      "items": [
-        { "title": "Tez va tizimli", "text": "Barcha tekshiruvlar 1–3 kunda bitta joyda o‘tadi." },
-        { "title": "Zamonaviy texnologiyalar", "text": "MRT, KT, PET, endoskopiya, genetik testlar." },
-        { "title": "Aniq xulosalar", "text": "Shifokorlar konsiliumi va yakuniy hisobot." },
-        { "title": "Foydali", "text": "Xizmat darajasi yuqori bo‘lsa-da, narx pastroq." }
-      ]
-    },
-
-    "programs": {
-      "title": "Ommabop paketlar",
-      "sub": "Yosh, maqsad va sog‘liq tarixiga mos paketni tanlaymiz.",
-      "items": [
-        {
-          "title": "Bazaviy Check-up",
-          "text": "Umumiy qon tahlili, biokimyo, UZI, EKG, terapevt.",
-          "duration": "1 kun",
-          "forWhom": "Hamma uchun"
-        },
-        {
-          "title": "Kardio Check-up",
-          "text": "EhoKG, sutkalik monitoring, stress-test, kardiolog konsultatsiyasi.",
-          "duration": "1–2 kun",
-          "forWhom": "Yurak/tomirlar"
-        },
-        {
-          "title": "Onko-skrining",
-          "text": "Xavflarni va erta aniqlashni kengaytirilgan diagnostika qilish.",
-          "duration": "2–3 kun",
-          "forWhom": "40+ / ko‘rsatma bo‘yicha"
-        }
-      ]
-    },
-
-    "steps": {
-      "title": "Diagnostika qanday o‘tadi",
-      "step": "{{num}}-qadam",
-      "items": [
-        { "title": "Ma’lumot yig‘ish", "text": "Qisqa anketani to‘ldirasiz va hujjatlarni yuborasiz." },
-        { "title": "Klinika tanlash", "text": "Kurator vazifa va byudjetga ko‘ra 2–3 variant taklif qiladi." },
-        { "title": "Hindistonda Check-up", "text": "Tekshiruvlarni o‘tkazamiz, tarjima qilamiz va hamrohlik qilamiz." },
-        { "title": "Yakuniy hisobot", "text": "Rus/ozbek tilida xulosa va tavsiyalar olasiz." }
-      ]
-    },
-
-    "clinics": {
-      "title": "Dehlining ishonchli klinikalari",
-      "sub": "Faqat akkreditatsiyadan o‘tgan shifoxona va shifokorlar bilan ishlaymiz.",
-      "btn": "Klinikalar katalogini ochish",
-      "btn2": "Kuratorga murojaat qilish"
-    },
-
-    "faq": {
-      "title": "Tez-tez so‘raladigan savollar",
-      "items": [
-        { "q": "Check-up necha kun oladi?", "a": "Paketga qarab 1 kundan 3 kungacha." },
-        { "q": "Tibbiy kartalarni olib kelish kerakmi?", "a": "Ha, ma’qul. Oldindan ham yuborish mumkin." },
-        { "q": "Tarjimon bormi?", "a": "Ha, kurator barcha bosqichlarda yordam beradi." },
-        { "q": "Narxi qancha?", "a": "Bazaviy paket $250 dan. Aniq narx tahlillar to‘plamiga bog‘liq." }
-      ]
-    },
-
-    "final": {
-      "title": "Ortiqcha kutishsiz diagnostikadan o‘ting",
-      "sub": "Ariza qoldiring — paket va klinikani tanlab beramiz.",
-      "btn": "Konsultatsiya olish"
-    }
-  },
-
-  "treatment": {
-    "badge": "Hindistonda davolanish",
-    "h1": "Hindistonning yetakchi klinikalarida zamonaviy davolash",
-    "sub": "Top mutaxassislar, akkreditatsiyalangan shifoxonalar, shaffof narxlar va bemorni to‘liq kuzatib borish.",
-
-    "cta_primary": "Konsultatsiya olish",
-    "cta_secondary": "Klinikalarni ko‘rish",
-
-    "stats": {
-      "specialties": "Tibbiy yo‘nalishlar",
-      "prices": "BAA/Yevropa bilan solishtirganda tejamkorlik",
-      "jci": "Xalqaro akkreditatsiya"
-    },
-
-    "benefits": {
-      "title": "Nega bemorlar Hindistonni tanlaydi?",
-      "sub": "Yuqori texnologiyalar, tajribali shifokorlar va hamyonbop narxlar.",
-      "items": [
-        { "title": "Kuchli shifokorlar", "text": "Onkologiya, kardiologiya, transplantatsiya, ortopediya — hammasi jahon standartida." },
-        { "title": "Zamonaviy uskunalar", "text": "Robotlashtirilgan jarrohlik, neyronavigatsiya, yuqori aniqlikdagi PET-KT." },
-        { "title": "Shaffof narxlar", "text": "Davolash narxi 40–70% arzon." },
-        { "title": "24/7 hamrohlik", "text": "Kurator, tarjima, barcha logistikani tashkil etish." }
-      ]
-    },
-
-    "programs": {
-      "title": "Asosiy davolash yo‘nalishlari",
-      "sub": "Faqat tekshirilgan shifoxonalar bilan ishlaymiz.",
-      "items": [
+      "badge": "Hindiston klinikalari",
+      "h1": "Dehlining diagnostika va davolash bo‘yicha eng yaxshi klinikalari",
+      "sub": "Onkologiya, kardiologiya, neyrojarrohlik, ortopediya va boshqa yo‘nalishlar. Hamyonbop, zamonaviy va ishonchli.",
+      "cta_primary": "Konsultatsiya olish",
+      "categories_title": "Asosiy yo‘nalishlar",
+      "categories_sub": "Tekshirilgan bo‘limlar va yetakchi mutaxassislar.",
+      "categories": [
         {
           "title": "Onkologiya",
-          "text": "Diagnostika, jarrohlik, kimyo- va radioterapiya, target terapiya.",
-          "time": "5 kundan",
-          "level": "Yuqori texnologiyali"
+          "text": "Zamonaviy diagnostika, jarrohlik va terapiya."
         },
         {
-          "title": "Kardiologiya va kardiojarrohlik",
-          "text": "Koronarografiya, stentlash, AKSh, klapan operatsiyalari.",
-          "time": "3 kundan",
-          "level": "Murakkab operatsiyalar"
+          "title": "Kardiologiya",
+          "text": "Stentlash, koronarografiya, yurak operatsiyalari."
         },
         {
-          "title": "Ortopediya va neyrojarrohlik",
-          "text": "Bo‘g‘imlarni almashtirish, umurtqa operatsiyalari, artroskopiya.",
-          "time": "4 kundan",
-          "level": "Top mutaxassislar"
+          "title": "Ortopediya",
+          "text": "Bo‘g‘imlarni almashtirish, artroskopiya, umurtqa operatsiyalari."
+        },
+        {
+          "title": "Neyrojarrohlik",
+          "text": "Miya va umurtqa operatsiyalari, minimal invaziv usullar."
+        }
+      ],
+      "list_title": "Ishonchli klinikalar",
+      "list_sub": "Faqat JCI/NABH akkreditatsiyalangan shifoxonalar bilan ishlaymiz.",
+      "items": [
+        {
+          "name": "Sarvodaya Hospital",
+          "city": "Faridobod",
+          "specialization": "Onkologiya • Ortopediya • Neyrojarrohlik",
+          "img": "/sarvodaya.jpg"
+        },
+        {
+          "name": "Fortis Escorts",
+          "city": "Dehli",
+          "specialization": "Kardiologiya • Kardiojarrohlik",
+          "img": "/fortis.jpg"
+        },
+        {
+          "name": "Max Super Specialty Hospital",
+          "city": "Saket, Dehli",
+          "specialization": "Onkologiya • Neyrojarrohlik • Transplantatsiya",
+          "img": "/max.jpg"
+        },
+        {
+          "name": "Medanta Hospital",
+          "city": "Gurgaon",
+          "specialization": "Onkologiya • Neyrojarrohlik • Ortopediya",
+          "img": "/medanta.jpg"
+        }
+      ],
+      "why_title": "Nega Hindiston?",
+      "why": {
+        "items": [
+          {
+            "title": "Top mutaxassislar",
+            "text": "Jahon standartlari bo‘yicha ishlaydigan tajribali shifokorlar."
+          },
+          {
+            "title": "Zamonaviy texnologiyalar",
+            "text": "PET-CT, Da Vinci roboti, neyronavigatsiya."
+          },
+          {
+            "title": "Hamyonbop narxlar",
+            "text": "BAA/Yevropaga nisbatan 40–70% arzon."
+          },
+          {
+            "title": "To‘liq hamrohlik",
+            "text": "Kurator, tarjima, viza yordami."
+          }
+        ]
+      },
+      "final_title": "Klinika tanlashda yordam kerakmi?",
+      "final_sub": "Ariza qoldiring — vazifangizga mos eng yaxshi variantni topib beramiz.",
+      "final_btn": "Konsultatsiya olish"
+    },
+    "b2b": {
+      "badge": "Agentliklar uchun B2B",
+      "h1": "Hindiston bo‘yicha Travella hamkoriga aylaning",
+      "sub": "Tayyor yechimlarni beramiz: davolash, check-up, Ayurveda, turlar va konsultatsiyalar. Siz sotasiz — biz hammasini to‘liq tashkil qilamiz.",
+      "cta": "Hamkor bo‘lish",
+      "benefits": {
+        "title": "Nega agentliklar bizni tanlaydi",
+        "sub": "Biz bilan ishlash qulay va sotish foydali.",
+        "items": [
+          {
+            "title": "Yuqori komissiyalar",
+            "text": "Tibbiy dasturlar va turlarga 20% gacha."
+          },
+          {
+            "title": "To‘liq hamrohlik",
+            "text": "Tashkiliy ishlar, hujjatlar, klinikalar va kuratorlarni biz o‘z zimmamizga olamiz."
+          },
+          {
+            "title": "Ishonchli klinikalar",
+            "text": "Faqat JCI/NABH shifoxonalari bilan ishlaymiz."
+          },
+          {
+            "title": "Tezkorlik",
+            "text": "Hisob va davolash rejasi — 6–24 soatda."
+          }
+        ]
+      },
+      "formats": {
+        "title": "Hamkorlik formatlari",
+        "sub": "Kompaniyangiz uchun qulay formatni tanlang.",
+        "items": [
+          {
+            "title": "Tibbiy turizm",
+            "text": "Davolash, operatsiyalar, Ayurveda, Check-up. Hammasini “kalit topshirish” shaklida qilamiz.",
+            "note": "Har qanday ko‘lamdagi agentliklar uchun mos."
+          },
+          {
+            "title": "Viza yordami",
+            "text": "Medical Visa, e-Medical rasmiylashtirish, statusni kuzatish.",
+            "note": "Tez ishlaymiz, rad etishlarsiz."
+          },
+          {
+            "title": "Individual turlar",
+            "text": "Ayurveda, yoga turlari, retreatlar, mualliflik marshrutlari.",
+            "note": "Paketni tayyorlaymiz + hammasini o‘zimiz bron qilamiz."
+          }
+        ]
+      },
+      "steps": {
+        "title": "Hamkorlik qanday ishlaydi",
+        "step": "{{num}}-qadam",
+        "items": [
+          {
+            "title": "Ariza",
+            "text": "Kontaktlaringizni va yo‘nalishni qoldirasiz."
+          },
+          {
+            "title": "Ulanish",
+            "text": "Materiallar, narxlar va yo‘riqnomalarni beramiz."
+          },
+          {
+            "title": "Mijozlar so‘rovlari",
+            "text": "So‘rovlarni yuborasiz — biz darhol ishlov beramiz."
+          },
+          {
+            "title": "To‘lovlar",
+            "text": "Mijoz to‘lagach komissiya olasiz."
+          }
+        ]
+      },
+      "faq": {
+        "title": "Tez-tez so‘raladigan savollar",
+        "items": [
+          {
+            "q": "Komissiyani qanday olaman?",
+            "a": "Hisobot beramiz va kartaga/rekvizitga o‘tkazamiz."
+          },
+          {
+            "q": "Minimal savdo hajmi bormi?",
+            "a": "Yo‘q, bitta arizadan ham boshlash mumkin."
+          },
+          {
+            "q": "Jismoniy shaxslar bilan ishlaysizmi?",
+            "a": "Ha, lekin hamkorlar uchun bonus stavkalar bor."
+          },
+          {
+            "q": "O‘z brendim ostida sotish mumkinmi?",
+            "a": "Ha, white-label mumkin."
+          }
+        ]
+      },
+      "final": {
+        "title": "Hamkorlikni boshlashga tayyormisiz?",
+        "sub": "Ariza qoldiring — sizni bir kun ichida ulaymiz.",
+        "btn": "Hamkor bo‘lish"
+      }
+    },
+    "menu": {
+      "tours": "Turlar",
+      "indiaInside": "India Inside",
+      "ayurveda": "Ayurveda",
+      "checkup": "Check-up",
+      "treatment": "Davolash",
+      "clinics": "Klinikalar",
+      "b2b": "Agentlar uchun B2B",
+      "contacts": "Kontaktlar"
+    },
+    "home": {
+      "h1": "Hindistonga sayohat va davolanish — to‘liq “kalit topshirish”",
+      "sub": "Turlar, Ayurveda, Check-up, Dehli klinikalari. 24/7 yordam.",
+      "cta": "Tanlab berishni olish",
+      "whatsapp": "WhatsApp"
+    },
+    "form": {
+      "name": "Ism",
+      "phone": "Telefon",
+      "comment": "Izoh",
+      "service": "Xizmat",
+      "send": "Arizani yuborish",
+      "sent": "Ariza yuborildi. Siz bilan bog‘lanamiz.",
+      "error": "Xatolik. Keyinroq urinib ko‘ring.",
+      "tour": "Tur tanlash",
+      "checkup": "Check-up",
+      "ayurveda": "Ayurveda",
+      "treatment": "Davolash",
+      "pax": "Odamlar soni",
+      "dates": "Sanalar / davomiylik",
+      "destination": "Shahar / sanalar",
+      "program": "Dastur",
+      "programs": {
+        "base": "Bazaviy",
+        "cardio": "Kardio",
+        "onco": "Onko",
+        "female": "Ayollar",
+        "male": "Erkaklar"
+      }
+    },
+    "tours": {
+      "h1": "Hindistonga turlar",
+      "sub": "Goa, Kerala, Dehli, Mumbay, Oltin uchburchak. Paketlar va mualliflik dasturlari.",
+      "from": "{{price}} dan",
+      "cta": "Batafsil",
+      "nights": "{{count}} tun",
+      "nights_plural_2": "{{count}} tun",
+      "nights_plural_5": "{{count}} tun",
+      "program": {
+        "badge": "TRAVELLA × INDIA",
+        "title": "India Inside — Hindiston bo‘yicha Guru bo‘ling",
+        "desc": "4 sayohat: Golden Triangle · Rajasthan · Mumbai+Goa · Kerala. Yo‘lni bosib o‘ting va India Guru maqomini oling.",
+        "trailer": "Treylorni ko‘rish",
+        "cta": "Dasturga o‘tish"
+      },
+      "offers": [
+        {
+          "id": "golden-triangle",
+          "title": "Oltin uchburchak",
+          "desc": "Dehli — Agra — Jaypur. Tarix, qal’alar va dunyo mo‘jizasi.",
+          "priceFrom": 590,
+          "currency": "USD",
+          "nights": 6,
+          "slug": "/india/tours/golden-triangle",
+          "image": "/gti.jpeg",
+          "tag": "India Inside"
+        },
+        {
+          "id": "rajasthan",
+          "title": "Rajasthandagi sarguzashtlar",
+          "desc": "Tar cho‘li, maharaajalar saroylari va ko‘k shaharlar.",
+          "priceFrom": 790,
+          "currency": "USD",
+          "nights": 8,
+          "slug": "/india/tours/rajasthan",
+          "image": "/rj_01.jpg",
+          "tag": "India Inside"
+        },
+        {
+          "id": "mumbai-goa",
+          "title": "Mumbay + Goa = eng yaxshi xotiralar",
+          "desc": "Katta shahar, Bollivud va okean bo‘yida dam.",
+          "priceFrom": 350,
+          "currency": "USD",
+          "nights": 7,
+          "slug": "/india/tours/mumbai-goa",
+          "image": "/mg.jpg",
+          "tag": "India Inside"
+        },
+        {
+          "id": "kerala",
+          "title": "Kerala: Yer yuzidagi jannat",
+          "desc": "Ayurveda, hausbotlar va Munnar choy plantatsiyalari.",
+          "priceFrom": 690,
+          "currency": "USD",
+          "nights": 9,
+          "slug": "/india/tours/kerala",
+          "image": "/kerala_01.jpg",
+          "tag": "India Inside"
         }
       ]
     },
-
-    "steps": {
-      "title": "Davolash qanday o‘tadi",
-      "step": "{{num}}-qadam",
-      "items": [
-        { "title": "Konsultatsiya", "text": "Hujjatlarni yuborasiz — shifokor o‘rganib, davolash rejasini taklif qiladi." },
-        { "title": "Klinika tanlash", "text": "Variantlar, narxlar, muddatlar va shifokorlarni solishtiramiz." },
-        { "title": "Hindistonda davolash", "text": "Kutib olamiz, tarjima qilamiz, hamrohlik qilamiz va barcha masalalarni hal qilamiz." },
-        { "title": "Chiqishdan keyingi qo‘llab-quvvatlash", "text": "Tahlillar nazorati, shifokor bilan aloqa, tavsiyalar." }
-      ]
+    "auth": {
+      "login_required": "Qayta kiring va urinib ko‘ring"
     },
-
-    "faq": {
-      "title": "Tez-tez so‘raladigan savollar",
-      "items": [
-        { "q": "Qaysi klinikalar mavjud?", "a": "Faqat JCI/NABH akkreditatsiyalangan shifoxonalar bilan ishlaymiz." },
-        { "q": "Shoshilinch kelish mumkinmi?", "a": "Ha, shoshilinch so‘rovlarni qabul qilamiz." },
-        { "q": "Viza bilan yordam berasizmi?", "a": "Ha, tibbiy vizani rasmiylashtiramiz." },
-        { "q": "Narxlar qanday?", "a": "BAA/Yevropaga nisbatan 2–3 baravar arzon." }
-      ]
-    },
-
-    "final": {
-      "title": "24 soatda davolash rejasini oling",
-      "sub": "Tibbiy hujjatlarni yuboring — ularni shifokorlarga yetkazamiz.",
-      "btn": "Konsultatsiya olish"
-    }
-  },
-
-  "clinics": {
-    "badge": "Hindiston klinikalari",
-    "h1": "Dehlining diagnostika va davolash bo‘yicha eng yaxshi klinikalari",
-    "sub": "Onkologiya, kardiologiya, neyrojarrohlik, ortopediya va boshqa yo‘nalishlar. Hamyonbop, zamonaviy va ishonchli.",
-    "cta_primary": "Konsultatsiya olish",
-
-    "categories_title": "Asosiy yo‘nalishlar",
-    "categories_sub": "Tekshirilgan bo‘limlar va yetakchi mutaxassislar.",
-    "categories": [
-      { "title": "Onkologiya", "text": "Zamonaviy diagnostika, jarrohlik va terapiya." },
-      { "title": "Kardiologiya", "text": "Stentlash, koronarografiya, yurak operatsiyalari." },
-      { "title": "Ortopediya", "text": "Bo‘g‘imlarni almashtirish, artroskopiya, umurtqa operatsiyalari." },
-      { "title": "Neyrojarrohlik", "text": "Miya va umurtqa operatsiyalari, minimal invaziv usullar." }
-    ],
-
-    "list_title": "Ishonchli klinikalar",
-    "list_sub": "Faqat JCI/NABH akkreditatsiyalangan shifoxonalar bilan ishlaymiz.",
-    "items": [
-      {
-        "name": "BLK-Max Hospital",
-        "city": "Nyu-Dehli",
-        "specialization": "Onkologiya • Kardiologiya • Transplantatsiya",
-        "img": "https://images.unsplash.com/photo-1586773860418-d37222d8fce3?q=80"
+    "inside": {
+      "my": {
+        "title": "Mening dasturim",
+        "chapters_title": "Boblar",
+        "chapters_hint": "Bobni bosib dastur va sanalarni ko‘ring.",
+        "chapter_label": "{{num}}-bob",
+        "details_toggle": "Tanlangan bob bo‘yicha tafsilotlar",
+        "selected_title": "Tanlangan bob",
+        "program_by_days": "Kunlar bo‘yicha dastur",
+        "dates_title": "Tur sanalari",
+        "tour_dates": "Tur sanasi",
+        "places_title": "Bob bo‘yicha joylar",
+        "limit": "Limit",
+        "enrolled": "Qabul qilinganlar",
+        "free": "Bo‘sh",
+        "enrolment_start": "Qabul boshlanishi",
+        "request_title": "Ishtirok etish so‘rovi",
+        "request_hint": "Ariza tasdiqlangach, turpaketni to‘lash va hujjatlarni olish uchun vaqt cheklangan bo‘ladi.",
+        "btn_request": "Ishtirok etish so‘rovi",
+        "btn_requested": "Ariza yuborildi",
+        "btn_approved": "Ishtirok tasdiqlandi",
+        "approved_hint": "Ishtirok tasdiqlandi. Turpaket hujjatlarini olish uchun 24 soat ichida to‘lang.",
+        "btn_pay": "To‘lash",
+        "btn_contact_curator": "Kurator bilan bog‘lanish"
       },
-      {
-        "name": "Fortis Escorts",
-        "city": "Dehli",
-        "specialization": "Kardiologiya • Kardiojarrohlik",
-        "img": "https://images.unsplash.com/photo-1580281657525-5c4b8a1e9a8a?q=80"
+      "errors": {
+        "request_failed": "Yakunlash so‘rovini yuborib bo‘lmadi",
+        "ask_open_telegram": "Telegramda kurator chatini ochasizmi?"
       },
-      {
-        "name": "Medanta Hospital",
-        "city": "Gurgaon",
-        "specialization": "Onkologiya • Neyrojarrohlik • Ortopediya",
-        "img": "https://images.unsplash.com/photo-1583912372067-1f77adf46f31?q=80"
-      }
-    ],
-
-    "why_title": "Nega Hindiston?",
-    "why": {
-      "items": [
-        { "title": "Top mutaxassislar", "text": "Jahon standartlari bo‘yicha ishlaydigan tajribali shifokorlar." },
-        { "title": "Zamonaviy texnologiyalar", "text": "PET-CT, Da Vinci roboti, neyronavigatsiya." },
-        { "title": "Hamyonbop narxlar", "text": "BAA/Yevropaga nisbatan 40–70% arzon." },
-        { "title": "To‘liq hamrohlik", "text": "Kurator, tarjima, viza yordami." }
-      ]
-    },
-
-    "final_title": "Klinika tanlashda yordam kerakmi?",
-    "final_sub": "Ariza qoldiring — vazifangizga mos eng yaxshi variantni topib beramiz.",
-    "final_btn": "Konsultatsiya olish",
-    
-"final_btn": "Konsultatsiya olish",
-  "items": [
-  {
-    "name": "Sarvodaya Hospital",
-    "city": "Faridobod",
-    "specialization": "Onkologiya • Ortopediya • Neyrojarrohlik",
-    "img": "/sarvodaya.jpg"
-  },
-  {
-    "name": "Fortis Escorts",
-    "city": "Dehli",
-    "specialization": "Kardiologiya • Kardiojarrohlik",
-    "img": "/fortis.jpg"
-  },
-  {
-    "name": "Max Super Specialty Hospital",
-    "city": "Saket, Dehli",
-    "specialization": "Onkologiya • Neyrojarrohlik • Transplantatsiya",
-    "img": "/max.jpg"
-  },
-  {
-    "name": "Medanta Hospital",
-    "city": "Gurgaon",
-    "specialization": "Onkologiya • Neyrojarrohlik • Ortopediya",
-    "img": "/medanta.jpg"
-  }
-]
-},
-"b2b": {
-  "badge": "Agentliklar uchun B2B",
-  "h1": "Hindiston bo‘yicha Travella hamkoriga aylaning",
-  "sub": "Tayyor yechimlarni beramiz: davolash, check-up, Ayurveda, turlar va konsultatsiyalar. Siz sotasiz — biz hammasini to‘liq tashkil qilamiz.",
-
-  "cta": "Hamkor bo‘lish",
-
-  "benefits": {
-    "title": "Nega agentliklar bizni tanlaydi",
-    "sub": "Biz bilan ishlash qulay va sotish foydali.",
-    "items": [
-      { "title": "Yuqori komissiyalar", "text": "Tibbiy dasturlar va turlarga 20% gacha." },
-      { "title": "To‘liq hamrohlik", "text": "Tashkiliy ishlar, hujjatlar, klinikalar va kuratorlarni biz o‘z zimmamizga olamiz." },
-      { "title": "Ishonchli klinikalar", "text": "Faqat JCI/NABH shifoxonalari bilan ishlaymiz." },
-      { "title": "Tezkorlik", "text": "Hisob va davolash rejasi — 6–24 soatda." }
-    ]
-  },
-
-  "formats": {
-    "title": "Hamkorlik formatlari",
-    "sub": "Kompaniyangiz uchun qulay formatni tanlang.",
-    "items": [
-      {
-        "title": "Tibbiy turizm",
-        "text": "Davolash, operatsiyalar, Ayurveda, Check-up. Hammasini “kalit topshirish” shaklida qilamiz.",
-        "note": "Har qanday ko‘lamdagi agentliklar uchun mos."
-      },
-      {
-        "title": "Viza yordami",
-        "text": "Medical Visa, e-Medical rasmiylashtirish, statusni kuzatish.",
-        "note": "Tez ishlaymiz, rad etishlarsiz."
-      },
-      {
-        "title": "Individual turlar",
-        "text": "Ayurveda, yoga turlari, retreatlar, mualliflik marshrutlari.",
-        "note": "Paketni tayyorlaymiz + hammasini o‘zimiz bron qilamiz."
-      }
-    ]
-  },
-
-  "steps": {
-    "title": "Hamkorlik qanday ishlaydi",
-    "step": "{{num}}-qadam",
-    "items": [
-      { "title": "Ariza", "text": "Kontaktlaringizni va yo‘nalishni qoldirasiz." },
-      { "title": "Ulanish", "text": "Materiallar, narxlar va yo‘riqnomalarni beramiz." },
-      { "title": "Mijozlar so‘rovlari", "text": "So‘rovlarni yuborasiz — biz darhol ishlov beramiz." },
-      { "title": "To‘lovlar", "text": "Mijoz to‘lagach komissiya olasiz." }
-    ]
-  },
-
-  "faq": {
-    "title": "Tez-tez so‘raladigan savollar",
-    "items": [
-      { "q": "Komissiyani qanday olaman?", "a": "Hisobot beramiz va kartaga/rekvizitga o‘tkazamiz." },
-      { "q": "Minimal savdo hajmi bormi?", "a": "Yo‘q, bitta arizadan ham boshlash mumkin." },
-      { "q": "Jismoniy shaxslar bilan ishlaysizmi?", "a": "Ha, lekin hamkorlar uchun bonus stavkalar bor." },
-      { "q": "O‘z brendim ostida sotish mumkinmi?", "a": "Ha, white-label mumkin." }
-    ]
-  },
-
-  "final": {
-    "title": "Hamkorlikni boshlashga tayyormisiz?",
-    "sub": "Ariza qoldiring — sizni bir kun ichida ulaymiz.",
-    "btn": "Hamkor bo‘lish"
-  }
-},
-  "menu": {
-    "tours": "Turlar",
-    "indiaInside": "India Inside",
-    "ayurveda": "Ayurveda",
-    "checkup": "Check-up",
-    "treatment": "Davolash",
-    "clinics": "Klinikalar",
-    "b2b": "Agentlar uchun B2B",
-    "contacts": "Kontaktlar"
-  },
-
-  "home": {
-    "h1": "Hindistonga sayohat va davolanish — to‘liq “kalit topshirish”",
-    "sub": "Turlar, Ayurveda, Check-up, Dehli klinikalari. 24/7 yordam.",
-    "cta": "Tanlab berishni olish",
-    "whatsapp": "WhatsApp"
-  },
-
-  "form": {
-    "name": "Ism",
-    "phone": "Telefon",
-    "comment": "Izoh",
-    "service": "Xizmat",
-    "send": "Arizani yuborish",
-    "sent": "Ariza yuborildi. Siz bilan bog‘lanamiz.",
-    "error": "Xatolik. Keyinroq urinib ko‘ring.",
-    "tour": "Tur tanlash",
-    "checkup": "Check-up",
-    "ayurveda": "Ayurveda",
-    "treatment": "Davolash",
-    "pax": "Odamlar soni",
-    "dates": "Sanalar / davomiylik",
-    "destination": "Shahar / sanalar",
-    "program": "Dastur",
-    "programs": { "base": "Bazaviy", "cardio": "Kardio", "onco": "Onko", "female": "Ayollar", "male": "Erkaklar" }
-  },
-
-  "tours": {
-    "h1": "Hindistonga turlar",
-    "sub": "Goa, Kerala, Dehli, Mumbay, Oltin uchburchak. Paketlar va mualliflik dasturlari.",
-    "from": "{{price}} dan",
-    "cta": "Batafsil",
-    "nights": "{{count}} tun",
-    "nights_plural_2": "{{count}} tun",
-    "nights_plural_5": "{{count}} tun",
-
-    "program": {
-      "badge": "TRAVELLA × INDIA",
-      "title": "India Inside — Hindiston bo‘yicha Guru bo‘ling",
-      "desc": "4 sayohat: Golden Triangle · Rajasthan · Mumbai+Goa · Kerala. Yo‘lni bosib o‘ting va India Guru maqomini oling.",
-      "trailer": "Treylorni ko‘rish",
-      "cta": "Dasturga o‘tish"
-    },
-
-    "offers": [
-      {
-        "id": "golden-triangle",
-        "title": "Oltin uchburchak",
-        "desc": "Dehli — Agra — Jaypur. Tarix, qal’alar va dunyo mo‘jizasi.",
-        "priceFrom": 590,
-        "currency": "USD",
-        "nights": 6,
-        "slug": "/india/tours/golden-triangle",
-        "image": "/gti.jpeg",
-        "tag": "India Inside"
-      },
-      {
-        "id": "rajasthan",
-        "title": "Rajasthandagi sarguzashtlar",
-        "desc": "Tar cho‘li, maharaajalar saroylari va ko‘k shaharlar.",
-        "priceFrom": 790,
-        "currency": "USD",
-        "nights": 8,
-        "slug": "/india/tours/rajasthan",
-        "image": "/rj_01.jpg",
-        "tag": "India Inside"
-      },
-      {
-        "id": "mumbai-goa",
-        "title": "Mumbay + Goa = eng yaxshi xotiralar",
-        "desc": "Katta shahar, Bollivud va okean bo‘yida dam.",
-        "priceFrom": 350,
-        "currency": "USD",
-        "nights": 7,
-        "slug": "/india/tours/mumbai-goa",
-        "image": "/mg.jpg",
-        "tag": "India Inside"
-      },
-      {
-        "id": "kerala",
-        "title": "Kerala: Yer yuzidagi jannat",
-        "desc": "Ayurveda, hausbotlar va Munnar choy plantatsiyalari.",
-        "priceFrom": 690,
-        "currency": "USD",
-        "nights": 9,
-        "slug": "/india/tours/kerala",
-        "image": "/kerala_01.jpg",
-        "tag": "India Inside"
-      }
-    ]
-  },
-"auth": { "login_required": "Qayta kiring va urinib ko‘ring" },
-"inside": {
-    "my": {
-    "title": "Mening dasturim",
-    "chapters_title": "Boblar",
-    "chapters_hint": "Bobni bosib dastur va sanalarni ko‘ring.",
-    "chapter_label": "{{num}}-bob",
-
-    "details_toggle": "Tanlangan bob bo‘yicha tafsilotlar",
-
-    "selected_title": "Tanlangan bob",
-    "program_by_days": "Kunlar bo‘yicha dastur",
-
-    "dates_title": "Tur sanalari",
-    "tour_dates": "Tur sanasi",
-    "places_title": "Bob bo‘yicha joylar",
-    "limit": "Limit",
-    "enrolled": "Qabul qilinganlar",
-    "free": "Bo‘sh",
-    "enrolment_start": "Qabul boshlanishi",
-
-    "request_title": "Ishtirok etish so‘rovi",
-    "request_hint": "Ariza tasdiqlangach, turpaketni to‘lash va hujjatlarni olish uchun vaqt cheklangan bo‘ladi.",
-    "btn_request": "Ishtirok etish so‘rovi",
-    "btn_requested": "Ariza yuborildi",
-    "btn_approved": "Ishtirok tasdiqlandi",
-    "approved_hint": "Ishtirok tasdiqlandi. Turpaket hujjatlarini olish uchun 24 soat ichida to‘lang.",
-    "btn_pay": "To‘lash",
-    "btn_contact_curator": "Kurator bilan bog‘lanish"
-  },
-    "errors": {
-      "request_failed": "Yakunlash so‘rovini yuborib bo‘lmadi",
-      "ask_open_telegram": "Telegramda kurator chatini ochasizmi?"
-    },
-
       "toast": {
-      "requested": "Bo‘limni yakunlash so‘rovi yuborildi",
-      "joined": "Siz India Inside dasturiga qo‘shildingiz!",
-      "join_failed": "Qo‘shilish muvaffaqiyatsiz tugadi"
-    },
-      "toast": {
-      "requested": "Yakunlash so‘rovi yuborildi",
-      "joined": "Siz India Inside’ga qo‘shildingiz!",
-      "join_failed": "Qo‘shilib bo‘lmadi"
-    },
-      "steps_title": "Qanday ishtirokchi bo‘lish mumkin",
-      "steps_sub": "To‘rtta oddiy qadam — kurator har birida sizni boshqaradi.",
+        "requested": "Yakunlash so‘rovi yuborildi",
+        "joined": "Siz India Inside’ga qo‘shildingiz!",
+        "join_failed": "Qo‘shilib bo‘lmadi"
+      },
+      "steps_title": "India Inside boblari",
+      "steps_sub": "O‘z bobingizni tanlang — biz xususiy marshrut tuzamiz.",
       "steps": {
         "apply": {
           "title": "Ariza qoldiring",
@@ -1938,24 +1970,24 @@
       },
       "chapters_title": "India Inside boblari",
       "experience": {
-        "title": "Sizni nimalar kutadi",
-        "sub": "Xususiy marshrutlar, yopiq marosimlar va har qadamda yumshoq servis.",
+        "title": "India Inside bilan sizni nimalar kutadi",
+        "sub": "Hindiston, uning madaniyati, odamlari va go‘zalligiga mehr bilan yaratilgan nozik marshrutlar.",
         "cards": {
           "palaces": {
             "title": "Saroylar va meros",
-            "desc": "Rajasthan, hunarmandchilik, arxitektura va qirollik hikoyalari."
+            "desc": "Heritage-mehmonxonalarda yashash, sahna orti kirish, xususiy maydonlar, o‘tgan davrlar ruhi."
           },
           "rituals": {
-            "title": "Marosimlar va rituallar",
-            "desc": "Xususiy amaliyotlar va noyob joylarga kirish."
+            "title": "Rituallar va an’analar",
+            "desc": "Autentik marosimlar, donishmandlar va bilim tashuvchilar bilan chuqur tajriba."
           },
           "wellness": {
-            "title": "Wellness va Ayurveda",
-            "desc": "Tekshirilgan shifokorlar bilan shaxsiy tiklanish dasturlari."
+            "title": "Wellness & Ayurveda",
+            "desc": "Individual tiklanish dasturlari, qadimiy amaliyotlar va master-terapevtlar."
           },
           "yacht": {
-            "title": "Yaxtalar va quyosh botishi",
-            "desc": "Dengiz sayrlari va Arab dengizi sohilida kechki ovqatlar."
+            "title": "Yaxta va gastro-kecha",
+            "desc": "Quyosh botishi, kamer muhit, yuqori oshxona va yaqin doirada unutilmas lahzalar."
           }
         }
       },
@@ -1975,95 +2007,102 @@
           "four": "Shaxsiy hamrohlik"
         },
         "disclaimer": "Bu tur emas. Bu madaniy loyiha."
-          },
-  "badge": "TRAVELLA • INDIA",
-  "title": "India Inside — hashamatli sayohat",
-  "sub": "Xususiy dasturlar, maharaajalar saroylari, yopiq rituallar va Himolaylar sukunati.",
-  "cta_trailer": "Treylorni ko‘rish",
-  "cta_join": "Dastur so‘rash",
-
-  "steps_title": "India Inside boblari",
-  "steps_sub": "O‘z bobingizni tanlang — biz xususiy marshrut tuzamiz.",
-  "view": "Dastur so‘rash",
-
-  "chapters": {
-  "royal": {
-    "title": "Oltin uchburchak",
-    "desc": "Dehli — Agra — Jaypur",
-    "days": "7–8 kun",
-    "from": "$699 dan"
-  },
-  "silence": {
+      },
+      "badge": "TRAVELLA • INDIA",
+      "title": "India Inside — hashamatli sayohat",
+      "sub": "Xususiy dasturlar, maharaajalar saroylari, yopiq rituallar va Himolaylar sukunati.",
+      "cta_trailer": "Treylorni ko‘rish",
+      "cta_join": "Dastur so‘rash",
+      "view": "Dastur so‘rash",
+      "chapters": {
+        "royal": {
+          "title": "Oltin uchburchak",
+          "desc": "Dehli — Agra — Jaypur",
+          "days": "7–8 kun",
+          "from": "$699 dan"
+        },
+        "silence": {
           "title": "Rajasthandagi sarguzashtlar",
           "desc": "Udaipur — Jodhpur — Jaisalmer",
           "days": "8–9 kun",
           "from": "$890 dan"
-  },
-  "modern": {
-    "title": "Mumbay + Goa — eng yaxshi xotiralar",
-    "desc": "Katta shahar va okean bo‘yida dam",
-    "days": "7 kun",
-    "from": "$490 dan"
-  },
-  "kerala": {
-    "title": "Kerala: Yer yuzidagi jannat",
-    "desc": "Ayurveda, choy tepaliklari, hausbot",
-    "days": "8–9 kun",
-    "from": "$790 dan"
-  }
-},
-
-  "guru": {
-    "title": "Hindiston bo‘yicha Guru dasturi",
-    "lead": "India Inside’ning 4 bobini o‘ting va shaxsiy “India Inside: Guru” maqomini oling.",
-    "bullets": {
-      "one": "Shaxsiy marshrutlar va shaxsiy kurator",
-      "two": "Xususiy marosimlar va yopiq lokatsiyalar",
-      "three": "“Hindiston bo‘yicha Guru” sertifikati va Travella klubi",
-      "four": "Faqat ariza orqali"
-    },
-    "certificate_label": "Sertifikat",
-    "certificate_meta": "Egasi ismi • Sana • Dastur identifikatori",
-    "cta_apply": "Ishtirokni so‘rash",
-    "cta_chapters": "Dastur boblarini ko‘rish"
-  },
-  "exp": {
-  "title": "Inside tajribasi — qanday o‘tadi",
-  "sub": "5 kunlik dasturning qisqa taymlayni.",
-  "day": "Kun",
-  "d1": "Dehlida tanishuv. Xususiy transfer. Kechki tanishuv-briefing.",
-  "d2": "Agra: tongda Taj-Mahal, Agra forti. Dehliga qaytish.",
-  "d3": "Jaypur: Shamollar saroyi, Amber forti, xususiy marosim.",
-  "d4": "Dehli: zamonaviy Hindiston — san’at, moda, gastronomiya.",
-  "d5": "Final: wellness seans/ayurveda. Uchib ketish.",
-  "cards": {
-    "palace":   { "title": "Saroylar va meros", "desc": "Xususiy lokatsiyalar, yopiq marosimlar, kurator." },
-    "ritual":   { "title": "Rituallar va an’analar", "desc": "Olomonsiz autentik amaliyotlar, tarjima bilan." },
-    "wellness": { "title": "Wellness & Ayurveda", "desc": "Shaxsiy tiklanish dasturlari." },
-    "yacht":    { "title": "Yaxta / gala-kechki ovqat", "desc": "Dastur finali — uslub va atmosfera." }
-  },
-  "cta": "Batafsil dasturini ko‘rish"
-},
-"modal": {
-  "title": "5 kunlik dastur namunasi",
-  "d1": "1-kun — Dehli: uchib kelish, transfer, tanishuv kechki ovqati.",
-  "d2": "2-kun — Agra: Taj-Mahal, fort, qaytish.",
-  "d3": "3-kun — Jaypur: saroylar, marosimlar.",
-  "d4": "4-kun — Zamonaviy Hindiston: art/moda/gastro.",
-  "d5": "5-kun — Wellness/Ayurveda. Uchib ketish.",
-  "close": "Yopish"
-},
-"program": {
-      "royal": {
-        "d1": "Dehli: uchib kelish, transfer, kechki briefing",
-        "d2": "Agra: tongda Taj-Mahal, Agra forti",
-        "d3": "Jaypur: Amber forti, Shamollar saroyi",
-        "d4": "Jaypur: shahar bo‘ylab tur, hunarmandchilik",
-        "d5": "Dehli: zamonaviy Hindiston — art/moda/gastro",
-        "d6": "Bo‘sh kun / qo‘shimcha variantlar",
-        "d7": "Uchib ketish"
+        },
+        "modern": {
+          "title": "Mumbay + Goa — eng yaxshi xotiralar",
+          "desc": "Katta shahar va okean bo‘yida dam",
+          "days": "7 kun",
+          "from": "$490 dan"
+        },
+        "kerala": {
+          "title": "Kerala: Yer yuzidagi jannat",
+          "desc": "Ayurveda, choy tepaliklari, hausbot",
+          "days": "8–9 kun",
+          "from": "$790 dan"
+        }
       },
-      "rajasthan": {
+      "guru": {
+        "title": "Hindiston bo‘yicha Guru dasturi",
+        "lead": "India Inside’ning 4 bobini o‘ting va shaxsiy “India Inside: Guru” maqomini oling.",
+        "bullets": {
+          "one": "Shaxsiy marshrutlar va shaxsiy kurator",
+          "two": "Xususiy marosimlar va yopiq lokatsiyalar",
+          "three": "“Hindiston bo‘yicha Guru” sertifikati va Travella klubi",
+          "four": "Faqat ariza orqali"
+        },
+        "certificate_label": "Sertifikat",
+        "certificate_meta": "Egasi ismi • Sana • Dastur identifikatori",
+        "cta_apply": "Ishtirokni so‘rash",
+        "cta_chapters": "Dastur boblarini ko‘rish"
+      },
+      "exp": {
+        "title": "Inside tajribasi — qanday o‘tadi",
+        "sub": "5 kunlik dasturning qisqa taymlayni.",
+        "day": "Kun",
+        "d1": "Dehlida tanishuv. Xususiy transfer. Kechki tanishuv-briefing.",
+        "d2": "Agra: tongda Taj-Mahal, Agra forti. Dehliga qaytish.",
+        "d3": "Jaypur: Shamollar saroyi, Amber forti, xususiy marosim.",
+        "d4": "Dehli: zamonaviy Hindiston — san’at, moda, gastronomiya.",
+        "d5": "Final: wellness seans/ayurveda. Uchib ketish.",
+        "cards": {
+          "palace": {
+            "title": "Saroylar va meros",
+            "desc": "Xususiy lokatsiyalar, yopiq marosimlar, kurator."
+          },
+          "ritual": {
+            "title": "Rituallar va an’analar",
+            "desc": "Olomonsiz autentik amaliyotlar, tarjima bilan."
+          },
+          "wellness": {
+            "title": "Wellness & Ayurveda",
+            "desc": "Shaxsiy tiklanish dasturlari."
+          },
+          "yacht": {
+            "title": "Yaxta / gala-kechki ovqat",
+            "desc": "Dastur finali — uslub va atmosfera."
+          }
+        },
+        "cta": "Batafsil dasturini ko‘rish"
+      },
+      "modal": {
+        "title": "5 kunlik dastur namunasi",
+        "d1": "1-kun — Dehli: uchib kelish, transfer, tanishuv kechki ovqati.",
+        "d2": "2-kun — Agra: Taj-Mahal, fort, qaytish.",
+        "d3": "3-kun — Jaypur: saroylar, marosimlar.",
+        "d4": "4-kun — Zamonaviy Hindiston: art/moda/gastro.",
+        "d5": "5-kun — Wellness/Ayurveda. Uchib ketish.",
+        "close": "Yopish"
+      },
+      "program": {
+        "royal": {
+          "d1": "Dehli: uchib kelish, transfer, kechki briefing",
+          "d2": "Agra: tongda Taj-Mahal, Agra forti",
+          "d3": "Jaypur: Amber forti, Shamollar saroyi",
+          "d4": "Jaypur: shahar bo‘ylab tur, hunarmandchilik",
+          "d5": "Dehli: zamonaviy Hindiston — art/moda/gastro",
+          "d6": "Bo‘sh kun / qo‘shimcha variantlar",
+          "d7": "Uchib ketish"
+        },
+        "rajasthan": {
           "d1": "Udaipur: uchib kelish, Pichola ko‘li, City Palace",
           "d2": "Udaipur: Jagdish/Eklingji ibodatxonalari, hunarmandchilik, kechki kruiz",
           "d3": "Jodhpurga yo‘l, “ko‘k” eski shahar bo‘ylab sayr",
@@ -2072,51 +2111,27 @@
           "d6": "Tar cho‘li: dyunalarda safari, gulxon yonida kechki ovqat",
           "d7": "Zaxira/dam olish yoki master-klass",
           "d8": "Uchib ketish"
-      },
-      "mumbaiGoa": {
-        "d1": "Mumbay: yarim kunlik tur, kechqurun sohil bo‘yida sayr",
-        "d2": "Bollivud studiyalari / art-kvartallar",
-        "d3": "Goaga parvoz, okean",
-        "d4": "Plyajlar, eski Goa, portugal merosi",
-        "d5": "Yaxta/quyosh botishi, gastronomik kecha",
-        "d6": "Bo‘sh kun / wellness",
-        "d7": "Uchib ketish"
-      },
-      "kerala": {
-        "d1": "Kochi: shahar, xitoy to‘rlari, kolonial qism",
-        "d2": "Munnar: choy plantatsiyalari, viewpoints",
-        "d3": "Munnar: treking / foto-kun",
-        "d4": "Alleppey: hausbotga joylashish",
-        "d5": "Backwaters, qishloqlar, mahalliy oshxona",
-        "d6": "Ayurveda markazi, individual dastur",
-        "d7": "Bo‘sh kun / dengiz",
-        "d8": "Uchib ketish"
+        },
+        "mumbaiGoa": {
+          "d1": "Mumbay: yarim kunlik tur, kechqurun sohil bo‘yida sayr",
+          "d2": "Bollivud studiyalari / art-kvartallar",
+          "d3": "Goaga parvoz, okean",
+          "d4": "Plyajlar, eski Goa, portugal merosi",
+          "d5": "Yaxta/quyosh botishi, gastronomik kecha",
+          "d6": "Bo‘sh kun / wellness",
+          "d7": "Uchib ketish"
+        },
+        "kerala": {
+          "d1": "Kochi: shahar, xitoy to‘rlari, kolonial qism",
+          "d2": "Munnar: choy plantatsiyalari, viewpoints",
+          "d3": "Munnar: treking / foto-kun",
+          "d4": "Alleppey: hausbotga joylashish",
+          "d5": "Backwaters, qishloqlar, mahalliy oshxona",
+          "d6": "Ayurveda markazi, individual dastur",
+          "d7": "Bo‘sh kun / dengiz",
+          "d8": "Uchib ketish"
+        }
       }
-    },
-"experience": {
-  "title": "India Inside bilan sizni nimalar kutadi",
-  "sub": "Hindiston, uning madaniyati, odamlari va go‘zalligiga mehr bilan yaratilgan nozik marshrutlar.",
-  "cards": {
-    "palaces": {
-      "title": "Saroylar va meros",
-      "desc": "Heritage-mehmonxonalarda yashash, sahna orti kirish, xususiy maydonlar, o‘tgan davrlar ruhi."
-    },
-    "rituals": {
-      "title": "Rituallar va an’analar",
-      "desc": "Autentik marosimlar, donishmandlar va bilim tashuvchilar bilan chuqur tajriba."
-    },
-    "wellness": {
-      "title": "Wellness & Ayurveda",
-      "desc": "Individual tiklanish dasturlari, qadimiy amaliyotlar va master-terapevtlar."
-    },
-    "yacht": {
-      "title": "Yaxta va gastro-kecha",
-      "desc": "Quyosh botishi, kamer muhit, yuqori oshxona va yaqin doirada unutilmas lahzalar."
     }
-   }
   }
- }
 }
-}
-
-
