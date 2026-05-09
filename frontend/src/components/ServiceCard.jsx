@@ -1546,7 +1546,7 @@ return (
                 e.stopPropagation();
                 setDetailsOpen(true);
               }}
-              className="mt-2.5 flex w-full items-center justify-between gap-2 rounded-xl bg-white px-0.5 py-1 text-left text-emerald-800"
+              className="mt-2 flex w-full items-center justify-between gap-2 rounded-xl bg-white px-0.5 py-0.5 text-left text-emerald-800 transition hover:bg-emerald-50/40"
             >
               <span className="min-w-0 inline-flex items-center gap-1.5 text-[11px] font-black leading-4">
                 <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-[11px] ring-1 ring-emerald-100">✔</span>
@@ -1557,7 +1557,7 @@ return (
                 <span className="truncate text-emerald-700/75">
                   {canViewProof
                     ? t("marketplace.check_authenticity", { defaultValue: "Проверить" })
-                    : t("marketplace.proof_after_unlock_short", { defaultValue: "proof после открытия" })}
+                    : t("marketplace.proof_after_unlock_short", { defaultValue: "Материалы проверки после открытия" })}
                 </span>
               </span>
 
@@ -1592,7 +1592,7 @@ return (
           )}
 
           {/* Contact / paywall area */}
-          <div className="mt-auto pt-3.5 space-y-2">
+          <div className="mt-auto pt-3 space-y-2">
             {(unlocked || isProviderViewer || isAdminViewer) &&
               (supplierName || supplierPhone || supplierTg?.label) && (
                 <div className="space-y-1.5 border-t border-gray-100 pt-2.5">
@@ -1681,7 +1681,7 @@ return (
                       <div className="rounded-xl bg-gray-50 px-2.5 py-1.5 text-[11px] font-medium leading-4 text-gray-500 ring-1 ring-gray-100">
                         {t("marketplace.contacts_locked", {
                           defaultValue:
-                            "Контакты поставщика скрыты. Откройте контакты, чтобы увидеть телефон и Telegram.",
+                            "Контакты скрыты. Откройте доступ для связи.",
                         })}
                       </div>
                     )
@@ -1690,19 +1690,19 @@ return (
               )}
 
             {!unlocked && !isProviderViewer && !isAdminViewer && (
-              <div className="rounded-xl bg-orange-50/75 px-2.5 py-2 text-[11px] leading-4 text-orange-800 ring-1 ring-orange-100">
+              <div className="rounded-2xl bg-gradient-to-br from-amber-50 to-orange-50/70 px-3 py-2 text-[11px] leading-4 text-orange-800 ring-1 ring-orange-100/80">
                 <div className="flex items-start gap-2">
                   <span className="mt-0.5">🔒</span>
                   <div>
                     <div className="font-black">
                       {t("marketplace.unlock_supplier_hint_title", {
-                        defaultValue: "Поставщик скрыт",
+                        defaultValue: "Контакты поставщика скрыты",
                       })}
                     </div>
                     <div className="mt-0.5 font-medium text-orange-700/90 line-clamp-2">
                       {t("marketplace.unlock_supplier_hint", {
                         defaultValue:
-                          "Откройте контакты, чтобы увидеть телефон и Telegram поставщика.",
+                          "Откройте доступ, чтобы сразу связаться по телефону или Telegram.",
                       })}
                     </div>
                   </div>
@@ -1713,7 +1713,7 @@ return (
             {!unlocked && !isProviderViewer && !isAdminViewer && (unlocksCount > 0 || (expireAt && !isExpired)) && (
               <div className="space-y-1.5">
                 {unlocksCount > 0 && (
-                  <div className="flex items-center gap-1.5 rounded-xl bg-emerald-50/70 px-2.5 py-1.5 text-[11px] font-bold text-emerald-700 ring-1 ring-emerald-100">
+                  <div className="flex items-center gap-1.5 rounded-xl bg-emerald-50/60 px-2.5 py-1.5 text-[11px] font-bold text-emerald-700 ring-1 ring-emerald-100/80">
                     <span className="text-base leading-none">✅</span>
                     <span>
                       {t("marketplace.opened_contacts_cta", {
@@ -1725,7 +1725,7 @@ return (
                 )}
 
                 {expireAt && !isExpired && (
-                  <div className="flex items-center gap-1.5 rounded-xl bg-amber-50/75 px-2.5 py-1.5 text-[11px] font-bold text-amber-700 ring-1 ring-amber-100">
+                  <div className="flex items-center gap-1.5 rounded-xl bg-amber-50/70 px-2.5 py-1.5 text-[11px] font-bold text-amber-700 ring-1 ring-amber-100/80">
                     <span className="text-base leading-none">⏳</span>
                     <span>
                       {t("marketplace.offer_may_expire_anytime", {
@@ -1743,7 +1743,7 @@ return (
                   type="button"
                   onClick={openUnlockIntro}
                   disabled={unlockLoading || unlockIntroLoading}
-                  className="w-full rounded-2xl bg-gradient-to-r from-orange-500 via-orange-500 to-red-500 px-4 py-3 text-sm font-black text-white shadow-md shadow-orange-200/70 transition disabled:cursor-not-allowed disabled:opacity-60 active:scale-[0.99] hover:from-orange-600 hover:via-orange-600 hover:to-red-600"
+                  className="w-full rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 px-4 py-3 text-sm font-black text-white shadow-lg shadow-orange-200/60 transition hover:-translate-y-0.5 hover:shadow-orange-300/70 disabled:cursor-not-allowed disabled:opacity-60 active:translate-y-0 active:scale-[0.99]"
                 >
                   {unlockLoading || unlockIntroLoading ? (
                     t("marketplace.unlocking", { defaultValue: "Открытие..." })
@@ -1752,7 +1752,7 @@ return (
                       <span>🔓</span>
                       <span>
                         {t("marketplace.unlock_contacts_cta_primary", {
-                          defaultValue: "Открыть телефон и Telegram",
+                          defaultValue: "Получить контакты поставщика",
                         })}
                       </span>
                     </span>
@@ -1761,7 +1761,7 @@ return (
 
                 <p className="text-center text-[11px] font-medium leading-4 text-gray-500">
                   {t("marketplace.unlock_contacts_cta_hint", {
-                    defaultValue: "Контакты откроются сразу после оплаты",
+                    defaultValue: "Мгновенный доступ после оплаты",
                   })}
                 </p>
               </>
@@ -1772,7 +1772,7 @@ return (
                 <button
                   ref={detailsBtnRef}
                   type="button"
-                  className="inline-flex items-center justify-center rounded-xl border border-gray-200/80 bg-white px-2.5 py-2 text-[12px] font-bold text-gray-500 transition hover:border-gray-300 hover:bg-gray-50"
+                  className="inline-flex items-center justify-center rounded-xl border border-gray-200/70 bg-white px-2.5 py-2 text-[12px] font-bold text-gray-500 transition hover:border-gray-300 hover:bg-gray-50 hover:text-gray-700"
                   onClick={(e) => {
                     e.stopPropagation();
                     setDetailsOpen(true);
@@ -1785,7 +1785,7 @@ return (
               {showBookButton ? (
                 <a
                   href={`/profile/provider/${providerId}?service=${id}#book`}
-                  className="w-full inline-flex items-center justify-center rounded-xl border border-orange-100 bg-white px-2.5 py-2 text-[12px] font-bold text-orange-700 transition hover:bg-orange-50"
+                  className="w-full inline-flex items-center justify-center rounded-xl border border-orange-100 bg-white px-2.5 py-2 text-[12px] font-bold text-orange-700 transition hover:bg-orange-50 hover:border-orange-200"
                   onClick={(e) => e.stopPropagation()}
                 >
                   {t("actions.book", { defaultValue: "Бронировать" })}
@@ -1793,7 +1793,7 @@ return (
               ) : (
                 <button
                   onClick={() => onQuickRequest?.(id, providerId, title)}
-                  className="w-full rounded-xl border border-orange-100 bg-white px-2.5 py-2 text-[12px] font-bold text-orange-700 transition hover:bg-orange-50"
+                  className="w-full rounded-xl border border-orange-100 bg-white px-2.5 py-2 text-[12px] font-bold text-orange-700 transition hover:bg-orange-50 hover:border-orange-200"
                 >
                   {t("actions.quick_request", { defaultValue: "Быстрый запрос" })}
                 </button>
