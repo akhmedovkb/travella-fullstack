@@ -1793,10 +1793,47 @@ return (
                 </a>
               ) : (
                 <button
-                  onClick={() => onQuickRequest?.(id, providerId, title)}
-                  className="w-full rounded-xl border border-orange-100 bg-white/80 px-2.5 py-1.5 text-[12px] font-bold text-orange-700 transition hover:bg-orange-50 hover:border-orange-200 hover:shadow-sm"
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+
+                    if (!unlocked && !isProviderViewer && !isAdminViewer) {
+                      postUnlockStep("quick_request_locked_clicked", {
+                        source: "card_footer",
+                        has_pay_url: Boolean(unlockPayModal?.payUrl),
+                      });
+                      openUnlockIntro();
+                      return;
+                    }
+
+                    onQuickRequest?.(id, providerId, title);
+                  }}
+                  className={[
+                    "w-full rounded-xl border px-2.5 py-1.5 text-[12px] font-bold transition hover:shadow-sm",
+                    !unlocked && !isProviderViewer && !isAdminViewer
+                      ? "border-orange-200 bg-orange-50/70 text-orange-700 hover:bg-orange-100/70 hover:border-orange-300"
+                      : "border-orange-100 bg-white/80 text-orange-700 hover:bg-orange-50 hover:border-orange-200",
+                  ].join(" ")}
+                  title={
+                    !unlocked && !isProviderViewer && !isAdminViewer
+                      ? t("marketplace.quick_request_after_access_hint", {
+                          defaultValue: "Быстрый запрос доступен после открытия доступа",
+                        })
+                      : t("actions.quick_request", { defaultValue: "Быстрый запрос" })
+                  }
                 >
-                  {t("actions.quick_request", { defaultValue: "Быстрый запрос" })}
+                  {!unlocked && !isProviderViewer && !isAdminViewer ? (
+                    <span className="inline-flex items-center justify-center gap-1.5">
+                      <span>🔒</span>
+                      <span>
+                        {t("marketplace.quick_request_after_access", {
+                          defaultValue: "Быстрый запрос",
+                        })}
+                      </span>
+                    </span>
+                  ) : (
+                    t("actions.quick_request", { defaultValue: "Быстрый запрос" })
+                  )}
                 </button>
               )}
             </div>
@@ -1963,12 +2000,12 @@ return (
                   <div className="min-w-0">
                     <h3 className="text-lg font-black leading-tight tracking-[-0.02em]">
                       {t("marketplace.unlock_intro_title", {
-                        defaultValue: "Прямой доступ к поставщику",
+                        defaultValue: "Свяжитесь с поставщиком напрямую",
                       })}
                     </h3>
                     <p className="mt-0.5 text-sm font-medium leading-snug text-white/90">
                       {t("marketplace.unlock_intro_subtitle", {
-                        defaultValue: "Свяжитесь напрямую и заберите выгодный вариант раньше других",
+                        defaultValue: "Выгодные отказные туры могут быстро уйти",
                       })}
                     </p>
                   </div>
@@ -2019,7 +2056,7 @@ return (
                 <div className="mt-4 rounded-2xl border border-gray-200 bg-gradient-to-br from-slate-50 to-white px-4 py-4 shadow-sm">
                   <div className="text-sm font-black text-gray-950">
                     {t("marketplace.unlock_intro_whats_inside", {
-                      defaultValue: "Что откроется после оплаты",
+                      defaultValue: "После открытия вы получите:",
                     })}
                   </div>
 
@@ -2028,7 +2065,7 @@ return (
                       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-base ring-1 ring-emerald-100">📞</span>
                       <span>
                         {t("marketplace.unlock_intro_phone", {
-                          defaultValue: "Телефон поставщика",
+                          defaultValue: "Прямой номер поставщика",
                         })}
                       </span>
                     </div>
@@ -2046,7 +2083,16 @@ return (
                       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-orange-50 text-base ring-1 ring-orange-100">⚡</span>
                       <span>
                         {t("marketplace.unlock_intro_fast_booking", {
-                          defaultValue: "Возможность быстро забронировать",
+                          defaultValue: "Возможность сразу обсудить бронь",
+                        })}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2.5">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-base ring-1 ring-amber-100">💬</span>
+                      <span>
+                        {t("marketplace.unlock_intro_quick_request", {
+                          defaultValue: "Быстрый запрос поставщику",
                         })}
                       </span>
                     </div>
@@ -2072,15 +2118,15 @@ return (
                         {watchingNow > 0
                           ? t("marketplace.unlock_intro_urgency_watching_title", {
                               count: watchingNow,
-                              defaultValue: `Сейчас смотрят: ${watchingNow}`,
+                              defaultValue: `Сейчас этот тур рассматривают ${watchingNow} чел.`,
                             })
                           : unlocksCount > 0
                           ? t("marketplace.unlock_intro_urgency_unlocked_title", {
                               count: unlocksCount,
-                              defaultValue: `Контакты уже открывали: ${unlocksCount}`,
+                              defaultValue: `Контакты уже открывали ${unlocksCount} раз`,
                             })
                           : t("marketplace.unlock_intro_urgency", {
-                              defaultValue: "Такие варианты часто бронируют очень быстро",
+                              defaultValue: "Выгодные варианты долго не держатся",
                             })}
                       </div>
 
@@ -2088,12 +2134,12 @@ return (
                         {watchingNow > 0
                           ? t("marketplace.unlock_intro_dynamic_watching", {
                               count: watchingNow,
-                              defaultValue: "Пока предложение актуально, лучше связаться раньше других.",
+                              defaultValue: "Свяжитесь раньше других, пока предложение актуально.",
                             })
                           : unlocksCount > 0
                           ? t("marketplace.unlock_intro_dynamic_unlocked", {
                               count: unlocksCount,
-                              defaultValue: "Другие клиенты уже проявляли интерес — не откладывайте связь.",
+                              defaultValue: "Другие клиенты уже проявляли интерес к этому варианту.",
                             })
                           : t("marketplace.unlock_intro_dynamic_default", {
                               defaultValue:
@@ -2110,7 +2156,7 @@ return (
                       <div className="min-w-0">
                         <div className="text-[11px] font-black uppercase tracking-[0.12em] text-orange-700/70">
                           {t("marketplace.unlock_intro_price_label", {
-                            defaultValue: "Стоимость доступа",
+                            defaultValue: "Доступ к контактам",
                           })}
                         </div>
 
@@ -2127,13 +2173,13 @@ return (
                         </div>
                       </div>
 
-                      <div className="shrink-0 rounded-2xl bg-orange-100 px-3 py-2 text-center text-orange-700 shadow-[0_8px_20px_rgba(249,115,22,0.12)] ring-1 ring-orange-200/80">
+                      <div className="shrink-0 rounded-2xl bg-orange-500 px-3 py-2 text-center text-white shadow-[0_10px_24px_rgba(249,115,22,0.22)]">
                         <div className="text-[10px] font-black uppercase leading-none">
                           {t("marketplace.unlock_intro_once", {
                             defaultValue: "1 раз",
                           })}
                         </div>
-                        <div className="mt-1 text-[10px] font-semibold leading-none text-orange-700/75">
+                        <div className="mt-1 text-[10px] font-semibold leading-none text-white/85">
                           {t("marketplace.unlock_intro_no_subscription", {
                             defaultValue: "без подписки",
                           })}
@@ -2156,14 +2202,14 @@ return (
                     <div className="mt-3 rounded-xl bg-white/80 px-3 py-2 text-[11px] font-medium leading-snug text-gray-600 ring-1 ring-orange-100">
                       {t("marketplace.unlock_intro_value_anchor", {
                         defaultValue:
-                          "Небольшая стоимость доступа к прямому контакту может помочь забрать выгодный вариант раньше других.",
+                          "Это небольшая стоимость полного доступа к поставщику: телефон, Telegram и быстрый запрос без лишних шагов.",
                       })}
                     </div>
                   </div>
 
                   <div className="border-t border-orange-100 bg-white px-4 py-2 text-[11px] font-medium text-gray-500">
                     {t("marketplace.unlock_intro_price_subhint", {
-                      defaultValue: "После оплаты телефон и Telegram поставщика откроются в этой карточке.",
+                      defaultValue: "После оплаты телефон, Telegram и быстрый запрос станут доступны в этой карточке.",
                     })}
                   </div>
                 </div>
@@ -2442,12 +2488,12 @@ return (
                   <div>
                     <h3 className="text-lg font-bold leading-tight">
                       {t("marketplace.pay_modal_title", {
-                        defaultValue: "Пополнение для прямого доступа",
+                        defaultValue: "Пополнение для открытия контактов",
                       })}
                     </h3>
                     <p className="text-sm text-white/90">
                       {t("marketplace.pay_modal_subtitle", {
-                        defaultValue: "Контакты откроются автоматически после оплаты",
+                        defaultValue: "Перед оплатой проверьте сумму пополнения",
                       })}
                     </p>
                   </div>
@@ -2458,7 +2504,7 @@ return (
                 <div className="rounded-2xl border border-orange-100 bg-orange-50 px-4 py-4">
                   <div className="text-xs font-medium uppercase tracking-wide text-orange-700/80">
                   {t("marketplace.pay_modal_amount_label", {
-                    defaultValue: "Сумма к оплате",
+                    defaultValue: "Сумма для мгновенного открытия контактов",
                   })}
                   </div>
                   <div className="mt-1 text-3xl font-bold tracking-tight text-gray-900">
@@ -2476,7 +2522,7 @@ return (
                   )}
                 </div>
 
-                <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50/60 px-4 py-3">
+                <div className="mt-4 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
                   <div className="flex items-start gap-3">
                     <div className="mt-0.5 text-lg">✨</div>
                     <div>
@@ -2488,7 +2534,7 @@ return (
                       <p className="mt-1 text-sm leading-6 text-gray-600">
                         {t("marketplace.pay_modal_hint_text", {
                           defaultValue:
-                            "После успешной оплаты телефон и Telegram поставщика откроются автоматически, и вы вернётесь к этой карточке.",
+                            "После успешной оплаты контакты и быстрый запрос откроются автоматически, и вы вернётесь к этой карточке.",
                         })}
                       </p>
                     </div>
