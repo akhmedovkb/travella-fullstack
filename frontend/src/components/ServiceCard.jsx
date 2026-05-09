@@ -1426,7 +1426,7 @@ return (
         {/* BODY */}
         <div className="p-3.5 flex-1 flex flex-col bg-white">
           {/* Primary information */}
-          <div className="space-y-2.5">
+          <div className="space-y-3">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <div className="text-[15px] sm:text-[16px] font-black leading-snug text-gray-950 line-clamp-2 tracking-[-0.01em]">
@@ -1434,15 +1434,15 @@ return (
                 </div>
 
                 {(direction || dates) && (
-                  <div className="mt-2 space-y-1.5">
+                  <div className="mt-2.5 space-y-1.5">
                     {direction && (
-                      <div className="flex items-center gap-1.5 text-[12px] font-semibold leading-4 text-gray-600 line-clamp-1">
+                      <div className="flex items-center gap-1.5 text-[12px] font-bold leading-4 text-gray-700 line-clamp-1">
                         <span className="text-gray-400">✈️</span>
                         <span className="truncate">{direction}</span>
                       </div>
                     )}
                     {dates && (
-                      <div className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-gray-100 px-2.5 py-1 text-[12px] font-bold leading-4 text-gray-800">
+                      <div className="inline-flex max-w-full items-center gap-1.5 rounded-xl bg-gray-950/5 px-2.5 py-1.5 text-[12px] font-black leading-4 text-gray-900 ring-1 ring-gray-200/70">
                         <span className="text-gray-500">🗓</span>
                         <span className="truncate">{dates}</span>
                       </div>
@@ -1490,14 +1490,14 @@ return (
 
           {/* Price as hero block */}
           {prettyPrice && (
-            <div className="mt-3 rounded-2xl bg-gray-950 px-3.5 py-3 text-white shadow-sm">
+            <div className="mt-3 rounded-2xl bg-gray-950 px-3.5 py-2.5 text-white shadow-sm">
               <div className="flex items-end justify-between gap-3">
                 <div className="min-w-0">
                   <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/55">
                     {t("marketplace.price", { defaultValue: "Цена" })}
                   </div>
                   <div className="mt-1 flex items-end gap-2">
-                    <div className="truncate text-[27px] sm:text-[30px] font-black leading-none tracking-tight">
+                    <div className="truncate text-[28px] sm:text-[31px] font-black leading-none tracking-tight">
                       {prettyPrice}
                     </div>
                     <div className="mb-1 text-[12px] font-bold text-orange-300">
@@ -1538,86 +1538,67 @@ return (
             </div>
           )}
 
-          {/* Proof signal: compact trust row */}
+          {/* Proof signal: premium compact trust row */}
           {hasProof && (
-            <div className="mt-2.5 flex items-center justify-between gap-2 rounded-2xl bg-emerald-50/55 px-2.5 py-2 text-emerald-800 ring-1 ring-emerald-100">
-              <button
-                type="button"
-                className="min-w-0 flex flex-1 items-center gap-2 text-left"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setDetailsOpen(true);
-                }}
-              >
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-white text-[13px] ring-1 ring-emerald-100">
-                  🛡
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setDetailsOpen(true);
+              }}
+              className="mt-2.5 flex w-full items-center justify-between gap-2 rounded-xl bg-white px-0.5 py-1 text-left text-emerald-800"
+            >
+              <span className="min-w-0 inline-flex items-center gap-1.5 text-[11px] font-black leading-4">
+                <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-[11px] ring-1 ring-emerald-100">✔</span>
+                <span className="truncate">
+                  {t("marketplace.verified_proof", { defaultValue: "Проверено" })}
                 </span>
-                <span className="min-w-0">
-                  <span className="block truncate text-[11px] font-black leading-4">
-                    {t("marketplace.proof_images", {
-                      defaultValue: "Подтверждение подлинности",
-                    })}
-                  </span>
-                  <span className="block truncate text-[10px] font-bold leading-3 text-emerald-700/80">
-                    {canViewProof
-                      ? t("marketplace.check_authenticity", {
-                          defaultValue: "Проверить подлинность",
-                        })
-                      : t("marketplace.proof_available_after_unlock", {
-                          defaultValue: "Proof после открытия контактов",
-                        })}
-                  </span>
+                <span className="text-emerald-700/60">·</span>
+                <span className="truncate text-emerald-700/75">
+                  {canViewProof
+                    ? t("marketplace.check_authenticity", { defaultValue: "Проверить" })
+                    : t("marketplace.proof_after_unlock_short", { defaultValue: "proof после открытия" })}
                 </span>
-              </button>
+              </span>
 
-              <div className="flex shrink-0 items-center -space-x-1.5">
+              <span className="flex shrink-0 items-center -space-x-1.5">
                 {canViewProof ? (
                   proofImages.slice(0, 2).map((img, i) => (
-                    <button
-                      key={`${id}-proof-${i}`}
-                      type="button"
+                    <span
+                      key={`${id}-proof-mini-${i}`}
                       onClick={(e) => {
                         e.stopPropagation();
                         setSelectedProofImage(img);
                       }}
-                      className="relative h-8 w-8 overflow-hidden rounded-lg border-2 border-white bg-white shadow-sm hover:opacity-90"
-                      title={t("marketplace.open_proof_image", {
-                        defaultValue: "Открыть изображение",
-                      })}
+                      className="relative h-6 w-6 overflow-hidden rounded-md border-2 border-white bg-white shadow-sm hover:opacity-90"
+                      title={t("marketplace.open_proof_image", { defaultValue: "Открыть изображение" })}
                     >
                       <img src={img} alt="" className="h-full w-full object-cover" />
-                    </button>
+                    </span>
                   ))
                 ) : (
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-emerald-100 bg-white text-sm">
+                  <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-emerald-50 text-[11px] ring-1 ring-emerald-100">
                     🔒
-                  </div>
+                  </span>
                 )}
 
                 {proofImages.length > 2 && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDetailsOpen(true);
-                    }}
-                    className="relative h-8 w-8 rounded-lg border-2 border-white bg-emerald-700 text-[10px] font-black text-white shadow-sm"
-                  >
+                  <span className="relative inline-flex h-6 w-6 items-center justify-center rounded-md border-2 border-white bg-emerald-700 text-[9px] font-black text-white shadow-sm">
                     +{proofImages.length - 2}
-                  </button>
+                  </span>
                 )}
-              </div>
-            </div>
+              </span>
+            </button>
           )}
 
           {/* Contact / paywall area */}
-          <div className="mt-auto pt-3 space-y-2">
+          <div className="mt-auto pt-3.5 space-y-2">
             {(unlocked || isProviderViewer || isAdminViewer) &&
               (supplierName || supplierPhone || supplierTg?.label) && (
-                <div className="space-y-1.5 rounded-2xl bg-gray-50 px-2.5 py-2 ring-1 ring-gray-100">
+                <div className="space-y-1.5 border-t border-gray-100 pt-2.5">
                   {supplierName && (
                     <div className="flex items-center justify-between gap-3">
-                      <div className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
+                      <div className="text-[10px] font-black uppercase tracking-wide text-gray-400">
                         {t("marketplace.supplier", { defaultValue: "Поставщик" })}
                       </div>
 
@@ -1638,7 +1619,7 @@ return (
                   )}
 
                   {unlocked ? (
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-1.5">
                       {supplierPhone && (
                         <a
                           href={normalizePhoneHref(supplierPhone)}
@@ -1650,7 +1631,7 @@ return (
                               has_telegram: Boolean(supplierTg?.href),
                             });
                           }}
-                          className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-2.5 py-2 text-[12px] font-bold text-white shadow-sm transition active:scale-[0.98] hover:bg-emerald-700"
+                          className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-2.5 py-2 text-[12px] font-black text-white shadow-sm transition active:scale-[0.98] hover:bg-emerald-700"
                           title={supplierPhone}
                         >
                           <span>📞</span>
@@ -1671,7 +1652,7 @@ return (
                               has_telegram: true,
                             });
                           }}
-                          className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#229ED9] px-2.5 py-2 text-[12px] font-bold text-white shadow-sm transition active:scale-[0.98] hover:bg-[#1d8ecf]"
+                          className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#229ED9] px-2.5 py-2 text-[12px] font-black text-white shadow-sm transition active:scale-[0.98] hover:bg-[#1d8ecf]"
                           title={
                             supplierTg.label ||
                             t("common.telegram", { defaultValue: "Telegram" })
@@ -1697,7 +1678,7 @@ return (
                     </div>
                   ) : (
                     (supplierPhone || supplierTg?.label) && (
-                      <div className="rounded-xl bg-white px-2.5 py-1.5 text-[11px] font-medium leading-4 text-gray-600 ring-1 ring-gray-100">
+                      <div className="rounded-xl bg-gray-50 px-2.5 py-1.5 text-[11px] font-medium leading-4 text-gray-500 ring-1 ring-gray-100">
                         {t("marketplace.contacts_locked", {
                           defaultValue:
                             "Контакты поставщика скрыты. Откройте контакты, чтобы увидеть телефон и Telegram.",
@@ -1709,7 +1690,7 @@ return (
               )}
 
             {!unlocked && !isProviderViewer && !isAdminViewer && (
-              <div className="rounded-2xl border border-orange-100 bg-orange-50/70 px-2.5 py-2 text-[11px] leading-4 text-orange-800">
+              <div className="rounded-xl bg-orange-50/75 px-2.5 py-2 text-[11px] leading-4 text-orange-800 ring-1 ring-orange-100">
                 <div className="flex items-start gap-2">
                   <span className="mt-0.5">🔒</span>
                   <div>
@@ -1732,7 +1713,7 @@ return (
             {!unlocked && !isProviderViewer && !isAdminViewer && (unlocksCount > 0 || (expireAt && !isExpired)) && (
               <div className="space-y-1.5">
                 {unlocksCount > 0 && (
-                  <div className="flex items-center gap-1.5 rounded-xl bg-emerald-50 px-2.5 py-1.5 text-[11px] font-bold text-emerald-700 ring-1 ring-emerald-100">
+                  <div className="flex items-center gap-1.5 rounded-xl bg-emerald-50/70 px-2.5 py-1.5 text-[11px] font-bold text-emerald-700 ring-1 ring-emerald-100">
                     <span className="text-base leading-none">✅</span>
                     <span>
                       {t("marketplace.opened_contacts_cta", {
@@ -1744,7 +1725,7 @@ return (
                 )}
 
                 {expireAt && !isExpired && (
-                  <div className="flex items-center gap-1.5 rounded-xl bg-amber-50 px-2.5 py-1.5 text-[11px] font-bold text-amber-700 ring-1 ring-amber-100">
+                  <div className="flex items-center gap-1.5 rounded-xl bg-amber-50/75 px-2.5 py-1.5 text-[11px] font-bold text-amber-700 ring-1 ring-amber-100">
                     <span className="text-base leading-none">⏳</span>
                     <span>
                       {t("marketplace.offer_may_expire_anytime", {
@@ -1786,12 +1767,12 @@ return (
               </>
             )}
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-1.5">
               {hasDetailsBlock && (
                 <button
                   ref={detailsBtnRef}
                   type="button"
-                  className="inline-flex items-center justify-center rounded-xl border border-gray-200 bg-white px-2.5 py-2 text-[12px] font-bold text-gray-600 transition hover:bg-gray-50"
+                  className="inline-flex items-center justify-center rounded-xl border border-gray-200/80 bg-white px-2.5 py-2 text-[12px] font-bold text-gray-500 transition hover:border-gray-300 hover:bg-gray-50"
                   onClick={(e) => {
                     e.stopPropagation();
                     setDetailsOpen(true);
@@ -1804,7 +1785,7 @@ return (
               {showBookButton ? (
                 <a
                   href={`/profile/provider/${providerId}?service=${id}#book`}
-                  className="w-full inline-flex items-center justify-center rounded-xl border border-orange-100 bg-orange-50 px-2.5 py-2 text-[12px] font-bold text-orange-700 transition hover:bg-orange-100"
+                  className="w-full inline-flex items-center justify-center rounded-xl border border-orange-100 bg-white px-2.5 py-2 text-[12px] font-bold text-orange-700 transition hover:bg-orange-50"
                   onClick={(e) => e.stopPropagation()}
                 >
                   {t("actions.book", { defaultValue: "Бронировать" })}
@@ -1812,7 +1793,7 @@ return (
               ) : (
                 <button
                   onClick={() => onQuickRequest?.(id, providerId, title)}
-                  className="w-full rounded-xl border border-orange-100 bg-orange-50 px-2.5 py-2 text-[12px] font-bold text-orange-700 transition hover:bg-orange-100"
+                  className="w-full rounded-xl border border-orange-100 bg-white px-2.5 py-2 text-[12px] font-bold text-orange-700 transition hover:bg-orange-50"
                 >
                   {t("actions.quick_request", { defaultValue: "Быстрый запрос" })}
                 </button>
@@ -1920,7 +1901,7 @@ return (
             </div>
 
             {canViewProof ? (
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-1.5">
                 {proofImages.map((img, i) => (
                   <button
                     key={`${id}-proof-popup-${i}`}
