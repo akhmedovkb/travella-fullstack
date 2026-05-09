@@ -1248,17 +1248,17 @@ return (
       <div
         ref={cardRef}
         className={[
-          "group relative overflow-hidden rounded-[28px] border flex flex-col bg-white shadow-[0_18px_45px_rgba(15,23,42,0.08)] transition-all duration-500 ease-out hover:-translate-y-1 hover:border-orange-200 hover:shadow-[0_26px_70px_rgba(15,23,42,0.14)] sm:rounded-[30px]",
+          "group relative overflow-hidden rounded-[1.65rem] border shadow-sm flex flex-col transition-all duration-500 ease-out hover:-translate-y-1 hover:shadow-[0_24px_55px_rgba(15,23,42,0.15)]",
           unlocked
-            ? "border-slate-200/90 opacity-95"
-            : "border-slate-200/80",
+            ? "bg-gray-50 border-gray-200 opacity-95"
+            : "bg-white border-gray-100/90 hover:border-orange-100",
           highlighted ? "ring-2 ring-orange-400 shadow-xl" : "",
           className,
         ].join(" ")}
         >
         {/* IMAGES */}
         <div
-          className="relative h-[150px] select-none overflow-hidden bg-gradient-to-br from-slate-100 via-slate-50 to-orange-50 sm:h-[170px]"
+          className="h-44 sm:h-48 bg-gray-100 relative select-none overflow-hidden"
           onTouchStart={onTouchStart}
           onTouchEnd={onTouchEnd}
         >
@@ -1268,11 +1268,11 @@ return (
                 key={images[idx]}
                 src={images[idx]}
                 alt={title || t("marketplace.no_image")}
-                className="h-full w-full object-cover saturate-[1.08] contrast-[1.03] transition-transform duration-700 ease-out group-hover:scale-[1.035]"
+                className="w-full h-full object-cover saturate-[1.04] contrast-[1.02] transition-transform duration-700 ease-out group-hover:scale-[1.045]"
                 onError={onImgError}
                 draggable={false}
               />
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/30 to-transparent opacity-80 transition-opacity duration-500 group-hover:opacity-100" />
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-black/5 to-black/10 opacity-45 transition-opacity duration-500 group-hover:opacity-65" />
 
               {images.length > 1 && (
                 <>
@@ -1337,13 +1337,10 @@ return (
               )}
             </>
           ) : (
-            <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-slate-400">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/85 text-xl shadow-sm ring-1 ring-slate-200/70">
-                🏝️
-              </div>
-              <div className="text-xs font-bold tracking-tight text-slate-400">
-                {t("marketplace.photo_coming_soon", { defaultValue: "Фото появится позже" })}
-              </div>
+            <div className="w-full h-full flex items-center justify-center text-gray-400">
+              <span className="text-sm">
+                {t("marketplace.no_image") || "Нет изображения"}
+              </span>
             </div>
           )}
 
@@ -1428,7 +1425,7 @@ return (
         )}
 
         {/* BODY */}
-        <div className="flex flex-1 flex-col bg-gradient-to-b from-white via-white to-slate-50/35 px-3.5 pb-3.5 pt-3 sm:px-4 sm:pb-4 sm:pt-3.5">
+        <div className="p-3.5 flex-1 flex flex-col bg-gradient-to-b from-white via-white to-gray-50/35">
           {/* Primary information */}
           <div className="space-y-3">
             <div className="flex items-start justify-between gap-3">
@@ -1472,7 +1469,7 @@ return (
                 )}
 
                 {watchingNow > 0 && (
-                  <span className="inline-flex max-w-full items-center rounded-full bg-orange-50 px-2.5 py-1 font-extrabold text-orange-700 ring-1 ring-orange-100">
+                  <span className="inline-flex max-w-full items-center rounded-full bg-red-50 px-2 py-1 font-bold text-red-600 ring-1 ring-red-100">
                     <span className="mr-1">⚡</span>
                     <span className="truncate">
                       {watchingNow} {t("marketplace.watching_now", { defaultValue: "рассматривают сейчас" })}
@@ -1494,14 +1491,14 @@ return (
 
           {/* Price as hero block */}
           {prettyPrice && (
-            <div className="mt-2.5 rounded-[18px] bg-[radial-gradient(circle_at_top_left,_rgba(251,146,60,0.16),_transparent_34%),linear-gradient(135deg,#080e1a,#111827)] px-3.5 py-3 text-white shadow-[0_18px_35px_rgba(15,23,42,0.22)] ring-1 ring-white/10 sm:rounded-[20px] sm:px-4">
+            <div className="mt-2.5 rounded-[1.15rem] bg-[radial-gradient(circle_at_top_left,_rgba(251,146,60,0.15),_transparent_34%),linear-gradient(135deg,#080e1a,#111827)] px-3.5 py-2.5 text-white shadow-[0_14px_30px_rgba(15,23,42,0.19)] ring-1 ring-white/10">
               <div className="flex items-end justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="text-[10px] font-black uppercase tracking-[0.12em] text-white/45">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/55">
                     {t("marketplace.price", { defaultValue: "Цена" })}
                   </div>
-                  <div className="mt-0.5 flex items-end gap-1.5">
-                    <div className="truncate text-[28px] font-black leading-none tracking-[-0.05em] drop-shadow-sm sm:text-[32px]">
+                  <div className="mt-1 flex items-end gap-2">
+                    <div className="truncate text-[29px] sm:text-[32px] font-black leading-none tracking-[-0.035em] drop-shadow-sm">
                       {prettyPrice}
                     </div>
                     <div className="mb-1 text-[12px] font-bold text-orange-300">
@@ -1596,7 +1593,7 @@ return (
           )}
 
           {/* Contact / paywall area */}
-          <div className="mt-auto space-y-1.5 pt-2.5">
+          <div className="mt-auto pt-2.5 space-y-1.5">
             {(unlocked || isProviderViewer || isAdminViewer) &&
               (supplierName || supplierPhone || supplierTg?.label) && (
                 <div className="space-y-1 border-t border-gray-100/80 pt-2">
@@ -1947,217 +1944,265 @@ return (
       {showUnlockIntroModal &&
         createPortal(
           <div
-            className="fixed inset-0 z-[3940] flex items-center justify-center bg-black/50 px-4 animate-[fadeIn_.18s_ease-out]"
+            className="fixed inset-0 z-[3940] flex items-center justify-center bg-black/55 px-4 py-5 backdrop-blur-sm animate-[fadeIn_.18s_ease-out]"
             onClick={async () => {
               await postUnlockStep("unlock_intro_closed");
               setShowUnlockIntroModal(false);
             }}
           >
             <div
-              className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl border border-gray-200 animate-[scaleIn_.18s_ease-out]"
+              className="w-full max-w-md overflow-hidden rounded-[28px] bg-white shadow-[0_30px_90px_rgba(15,23,42,0.35)] border border-white/70 animate-[scaleIn_.18s_ease-out]"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="bg-gradient-to-r from-orange-500 to-amber-400 px-6 py-5 text-white">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/20 text-2xl">
+              <div className="relative overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.38),_transparent_34%),linear-gradient(135deg,#ff7a18,#f6b311)] px-5 py-5 text-white">
+                <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-white/15 blur-2xl" />
+                <div className="relative flex items-center gap-3">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-2xl shadow-inner ring-1 ring-white/25">
                     ⚡
                   </div>
-                  <div>
-                    <h3 className="text-lg font-bold leading-tight">
+                  <div className="min-w-0">
+                    <h3 className="text-lg font-black leading-tight tracking-[-0.02em]">
                       {t("marketplace.unlock_intro_title", {
-                        defaultValue: "Открытие контактов",
+                        defaultValue: "Свяжитесь с поставщиком напрямую",
                       })}
                     </h3>
-                    <p className="text-sm text-white/90">
+                    <p className="mt-0.5 text-sm font-medium leading-snug text-white/90">
                       {t("marketplace.unlock_intro_subtitle", {
-                        defaultValue: "Этот вариант могут забрать в любой момент",
+                        defaultValue: "Выгодные отказные туры могут быстро уйти",
                       })}
                     </p>
                   </div>
                 </div>
               </div>
-      
-              <div className="px-6 py-5">
-                <div className="rounded-2xl border border-orange-100 bg-orange-50 px-4 py-4">
+
+              <div className="max-h-[78vh] overflow-y-auto px-5 py-5">
+                <div className="rounded-2xl border border-orange-100 bg-gradient-to-br from-orange-50 via-white to-amber-50 px-4 py-4 shadow-[0_10px_26px_rgba(249,115,22,0.08)]">
                   {title && (
-                    <div className="text-base font-bold text-gray-900 leading-snug">
+                    <div className="text-base font-black leading-snug tracking-[-0.01em] text-gray-950">
                       {title}
                     </div>
                   )}
-      
+
                   {direction && (
-                    <div className="mt-1 text-sm text-gray-600">
-                      {direction}
+                    <div className="mt-1.5 flex items-center gap-1.5 text-sm font-semibold text-gray-600">
+                      <span>✈️</span>
+                      <span className="truncate">{direction}</span>
                     </div>
                   )}
-      
+
                   {dates && (
-                    <div className="mt-1 text-sm text-gray-600">
-                      {t("marketplace.dates_label", { defaultValue: "Даты" })}: {dates}
+                    <div className="mt-1.5 inline-flex max-w-full items-center gap-1.5 rounded-full bg-white/80 px-2.5 py-1 text-xs font-bold text-gray-700 ring-1 ring-orange-100">
+                      <span>🗓</span>
+                      <span className="truncate">
+                        {t("marketplace.dates_label", { defaultValue: "Даты" })}: {dates}
+                      </span>
                     </div>
                   )}
-      
+
                   {prettyPrice && (
-                    <div className="mt-3">
-                      <div className="text-xs font-medium uppercase tracking-wide text-orange-700/80">
-                        {t("marketplace.price", { defaultValue: "Цена" })}
+                    <div className="mt-3 rounded-2xl bg-white/80 px-3 py-2.5 ring-1 ring-orange-100">
+                      <div className="text-[10px] font-black uppercase tracking-[0.14em] text-orange-600/70">
+                        {t("marketplace.tour_price_label", { defaultValue: "Стоимость тура" })}
                       </div>
-                      <div className="text-2xl font-bold text-gray-900">
-                        {prettyPrice}
+                      <div className="mt-0.5 flex items-end gap-1.5">
+                        <div className="text-2xl font-black leading-none tracking-[-0.04em] text-gray-950">
+                          {prettyPrice}
+                        </div>
+                        <div className="pb-0.5 text-xs font-black text-orange-600">
+                          {t("marketplace.price_currency", { defaultValue: "у.е." })}
+                        </div>
                       </div>
                     </div>
                   )}
                 </div>
-      
-                <div className="mt-4 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4">
-                  <div className="text-sm font-semibold text-gray-900">
+
+                <div className="mt-4 rounded-2xl border border-gray-200 bg-gradient-to-br from-slate-50 to-white px-4 py-4 shadow-sm">
+                  <div className="text-sm font-black text-gray-950">
                     {t("marketplace.unlock_intro_whats_inside", {
-                      defaultValue: "Что откроется после оплаты",
+                      defaultValue: "После открытия вы получите:",
                     })}
                   </div>
-      
-              <div className="mt-3 space-y-2 text-sm text-gray-700">
-  <div className="flex items-center gap-2">
-    <span className="text-base">📞</span>
-    <span>
-      {t("marketplace.unlock_intro_phone", {
-        defaultValue: "Телефон поставщика",
-      })}
-    </span>
-  </div>
 
-  <div className="flex items-center gap-2">
-    <span className="text-base">✈️</span>
-    <span>
-      {t("marketplace.unlock_intro_fast_booking", {
-        defaultValue: "Быстрая связь для бронирования",
-      })}
-    </span>
-  </div>
-
-  <div className="flex items-center gap-2">
-    <span className="text-base">💬</span>
-    <span>
-      {t("marketplace.unlock_intro_telegram", {
-        defaultValue: "Telegram поставщика",
-      })}
-    </span>
-  </div>
-
-  {hasProof && (
-    <div className="flex items-center gap-2">
-      <span className="text-base">🛡️</span>
-      <span>
-        {t("marketplace.unlock_intro_benefit_proof", {
-          defaultValue: "Подтверждение / proof",
-        })}
-      </span>
-    </div>
-  )}
-</div>              </div>
-      
-                <div className="mt-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-3">
-                  <div className="text-sm font-semibold text-red-700">
-                    {watchingNow > 0
-                      ? t("marketplace.unlock_intro_urgency_watching_title", {
-                          count: watchingNow,
-                          defaultValue: `Сейчас смотрят: ${watchingNow}`,
-                        })
-                      : unlocksCount > 0
-                      ? t("marketplace.unlock_intro_urgency_unlocked_title", {
-                          count: unlocksCount,
-                          defaultValue: `Уже открыли контакты: ${unlocksCount}`,
-                        })
-                      : t("marketplace.unlock_intro_urgency", {
-                          defaultValue: "Такие варианты часто бронируют очень быстро",
+                  <div className="mt-3 space-y-2.5 text-sm font-medium text-gray-700">
+                    <div className="flex items-center gap-2.5">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-base ring-1 ring-emerald-100">📞</span>
+                      <span>
+                        {t("marketplace.unlock_intro_phone", {
+                          defaultValue: "Прямой номер поставщика",
                         })}
-                  </div>
-                
-                  <div className="mt-1 text-xs text-red-600">
-                    {watchingNow > 0
-                      ? t("marketplace.unlock_intro_dynamic_watching", {
-                          count: watchingNow,
-                          defaultValue: `Сейчас эту услугу смотрят ${watchingNow} чел.`,
-                        })
-                      : unlocksCount > 0
-                      ? t("marketplace.unlock_intro_dynamic_unlocked", {
-                          count: unlocksCount,
-                          defaultValue: `Контакты уже открывали ${unlocksCount} раз`,
-                        })
-                      : t("marketplace.unlock_intro_dynamic_default", {
-                          defaultValue:
-                            "Такие варианты могут быстро стать неактуальными, лучше связаться с поставщиком сразу.",
-                        })}
-                  </div>
-                </div>
-      
-                <div className="mt-4 overflow-hidden rounded-2xl border border-orange-200 bg-gradient-to-br from-orange-50 via-white to-amber-50 shadow-sm">
-                  <div className="px-4 py-4">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-orange-700/70">
-                      {t("marketplace.unlock_intro_price_label", {
-                        defaultValue: "Стоимость открытия",
-                      })}
+                      </span>
                     </div>
-                
-                    <div className="mt-2 flex items-end gap-2">
-                      <div className="text-4xl font-black tracking-tight leading-none text-gray-900">
-                        {Number(unlockIntroPriceSum || unlockPayModal.shortfallSum || 0).toLocaleString("ru-RU")}
+
+                    <div className="flex items-center gap-2.5">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-base ring-1 ring-sky-100">✈️</span>
+                      <span>
+                        {t("marketplace.unlock_intro_telegram", {
+                          defaultValue: "Telegram для быстрой связи",
+                        })}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2.5">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-orange-50 text-base ring-1 ring-orange-100">⚡</span>
+                      <span>
+                        {t("marketplace.unlock_intro_fast_booking", {
+                          defaultValue: "Возможность сразу обсудить бронь",
+                        })}
+                      </span>
+                    </div>
+
+                    {hasProof && (
+                      <div className="flex items-center gap-2.5">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-base ring-1 ring-violet-100">🛡️</span>
+                        <span>
+                          {t("marketplace.unlock_intro_benefit_proof", {
+                            defaultValue: "Материалы проверки / proof",
+                          })}
+                        </span>
                       </div>
-                
-                    <div className="mb-1 text-base font-semibold text-orange-700/80">
-                      {t("marketplace.price_currency", { defaultValue: "у.е." })}
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-4 rounded-2xl border border-amber-100 bg-gradient-to-br from-amber-50 via-orange-50 to-white px-4 py-3">
+                  <div className="flex items-start gap-2.5">
+                    <span className="mt-0.5 text-lg">🔥</span>
+                    <div>
+                      <div className="text-sm font-black text-amber-900">
+                        {watchingNow > 0
+                          ? t("marketplace.unlock_intro_urgency_watching_title", {
+                              count: watchingNow,
+                              defaultValue: `Сейчас этот тур рассматривают ${watchingNow} чел.`,
+                            })
+                          : unlocksCount > 0
+                          ? t("marketplace.unlock_intro_urgency_unlocked_title", {
+                              count: unlocksCount,
+                              defaultValue: `Контакты уже открывали ${unlocksCount} раз`,
+                            })
+                          : t("marketplace.unlock_intro_urgency", {
+                              defaultValue: "Выгодные варианты долго не держатся",
+                            })}
+                      </div>
+
+                      <div className="mt-1 text-xs font-medium leading-snug text-amber-800/85">
+                        {watchingNow > 0
+                          ? t("marketplace.unlock_intro_dynamic_watching", {
+                              count: watchingNow,
+                              defaultValue: "Свяжитесь раньше других, пока предложение актуально.",
+                            })
+                          : unlocksCount > 0
+                          ? t("marketplace.unlock_intro_dynamic_unlocked", {
+                              count: unlocksCount,
+                              defaultValue: "Другие клиенты уже проявляли интерес к этому варианту.",
+                            })
+                          : t("marketplace.unlock_intro_dynamic_default", {
+                              defaultValue:
+                                "Отказной тур может стать неактуальным в любой момент — лучше связаться сразу.",
+                            })}
+                      </div>
                     </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 overflow-hidden rounded-2xl border border-orange-200 bg-white shadow-[0_16px_36px_rgba(249,115,22,0.12)]">
+                  <div className="bg-gradient-to-br from-white via-orange-50/70 to-amber-50 px-4 py-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-[11px] font-black uppercase tracking-[0.12em] text-orange-700/70">
+                          {t("marketplace.unlock_intro_price_label", {
+                            defaultValue: "Доступ к контактам",
+                          })}
+                        </div>
+
+                        <div className="mt-1.5 flex items-end gap-2">
+                          <div className="text-[34px] font-black leading-none tracking-[-0.05em] text-gray-950">
+                            {Number(unlockIntroPriceSum || unlockPayModal.shortfallSum || 0).toLocaleString("ru-RU")}
+                          </div>
+
+                          <div className="mb-1 text-base font-black text-orange-700">
+                            {t("marketplace.unlock_intro_access_currency", {
+                              defaultValue: "сум",
+                            })}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 rounded-2xl bg-orange-500 px-3 py-2 text-center text-white shadow-[0_10px_24px_rgba(249,115,22,0.22)]">
+                        <div className="text-[10px] font-black uppercase leading-none">
+                          {t("marketplace.unlock_intro_once", {
+                            defaultValue: "1 раз",
+                          })}
+                        </div>
+                        <div className="mt-1 text-[10px] font-semibold leading-none text-white/85">
+                          {t("marketplace.unlock_intro_no_subscription", {
+                            defaultValue: "без подписки",
+                          })}
+                        </div>
+                      </div>
                     </div>
-                
-                    <div className="mt-2 inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-red-600 animate-pulse">
-                      🔥 {t("marketplace.unlock_intro_price_hint", {
-                        defaultValue: "Открывается сразу после оплаты",
+
+                    <div className="mt-3 grid grid-cols-3 gap-1.5 text-center text-[10px] font-bold text-gray-600">
+                      <div className="rounded-xl bg-white/80 px-2 py-2 ring-1 ring-orange-100">
+                        🔒 {t("marketplace.unlock_intro_trust_no_subs", { defaultValue: "Без подписок" })}
+                      </div>
+                      <div className="rounded-xl bg-white/80 px-2 py-2 ring-1 ring-orange-100">
+                        ⚡ {t("marketplace.unlock_intro_trust_instant", { defaultValue: "Сразу" })}
+                      </div>
+                      <div className="rounded-xl bg-white/80 px-2 py-2 ring-1 ring-orange-100">
+                        🛡 {t("marketplace.unlock_intro_trust_saved", { defaultValue: "Доступ ваш" })}
+                      </div>
+                    </div>
+
+                    <div className="mt-3 rounded-xl bg-white/80 px-3 py-2 text-[11px] font-medium leading-snug text-gray-600 ring-1 ring-orange-100">
+                      {t("marketplace.unlock_intro_value_anchor", {
+                        defaultValue:
+                          "Это небольшая стоимость доступа к прямому контакту поставщика, чтобы быстрее забрать выгодный вариант.",
                       })}
                     </div>
                   </div>
-                
-                  <div className="border-t border-orange-100 bg-white/70 px-4 py-2 text-[11px] text-gray-600">
+
+                  <div className="border-t border-orange-100 bg-white px-4 py-2 text-[11px] font-medium text-gray-500">
                     {t("marketplace.unlock_intro_price_subhint", {
-                      defaultValue: "После оплаты телефон и Telegram поставщика станут доступны в этой карточке.",
+                      defaultValue: "После оплаты телефон и Telegram станут доступны в этой карточке.",
                     })}
                   </div>
                 </div>
-      
-                <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+
+                <div className="mt-5 flex flex-col gap-2.5 sm:flex-row">
                   <button
                     type="button"
                     onClick={async () => {
                       await postUnlockStep("unlock_intro_closed");
                       setShowUnlockIntroModal(false);
                     }}
-                    className="inline-flex w-full items-center justify-center rounded-2xl border border-gray-200 px-4 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+                    className="inline-flex w-full items-center justify-center rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-bold text-gray-700 transition hover:bg-gray-50"
                   >
                     {t("common.cancel", { defaultValue: "Отмена" })}
                   </button>
-      
+
                   <button
                     type="button"
                     onClick={async () => {
                       setShowUnlockIntroModal(false);
-                    
+
                       await postUnlockStep("unlock_intro_continue_clicked", {
                         shortfall_sum: Number(unlockIntroPriceSum || unlockPayModal.shortfallSum || 0),
                         pay_url_exists: Boolean(unlockPayModal?.payUrl),
                       });
-                    
+
                       if (unlockPayModal?.payUrl) {
                         setUnlockPayModal((prev) => ({ ...prev, open: true }));
                         return;
                       }
-                    
+
                       setShowBalancePrompt(true);
                     }}
-                    className="inline-flex w-full items-center justify-center rounded-2xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-orange-200 transition hover:bg-orange-600"
+                    className="inline-flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 px-4 py-3 text-sm font-black text-white shadow-[0_16px_34px_rgba(249,115,22,0.30)] transition hover:-translate-y-0.5 hover:shadow-[0_20px_44px_rgba(249,115,22,0.38)] active:translate-y-0"
                   >
                     {unlockLoading
                       ? t("marketplace.unlocking", { defaultValue: "Открытие..." })
                       : t("marketplace.unlock_intro_cta", {
-                          defaultValue: "Продолжить",
+                          defaultValue: "Получить доступ",
                         })}
                   </button>
                 </div>
@@ -2166,6 +2211,7 @@ return (
           </div>,
           document.body
         )}
+
         {showUnlockSuccessModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
             <div className="bg-white rounded-2xl shadow-2xl w-[95%] max-w-md p-6 animate-[scaleIn_0.25s_ease]">
