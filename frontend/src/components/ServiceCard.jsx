@@ -1248,17 +1248,17 @@ return (
       <div
         ref={cardRef}
         className={[
-          "group relative overflow-hidden rounded-[1.65rem] border shadow-sm flex flex-col transition-all duration-500 ease-out hover:-translate-y-1 hover:shadow-[0_24px_55px_rgba(15,23,42,0.15)]",
+          "group relative overflow-hidden rounded-[28px] border flex flex-col bg-white shadow-[0_18px_45px_rgba(15,23,42,0.08)] transition-all duration-500 ease-out hover:-translate-y-1 hover:border-orange-200 hover:shadow-[0_26px_70px_rgba(15,23,42,0.14)] sm:rounded-[30px]",
           unlocked
-            ? "bg-gray-50 border-gray-200 opacity-95"
-            : "bg-white border-gray-100/90 hover:border-orange-100",
+            ? "border-slate-200/90 opacity-95"
+            : "border-slate-200/80",
           highlighted ? "ring-2 ring-orange-400 shadow-xl" : "",
           className,
         ].join(" ")}
         >
         {/* IMAGES */}
         <div
-          className="h-44 sm:h-48 bg-gray-100 relative select-none overflow-hidden"
+          className="relative h-[150px] select-none overflow-hidden bg-gradient-to-br from-slate-100 via-slate-50 to-orange-50 sm:h-[170px]"
           onTouchStart={onTouchStart}
           onTouchEnd={onTouchEnd}
         >
@@ -1268,11 +1268,11 @@ return (
                 key={images[idx]}
                 src={images[idx]}
                 alt={title || t("marketplace.no_image")}
-                className="w-full h-full object-cover saturate-[1.04] contrast-[1.02] transition-transform duration-700 ease-out group-hover:scale-[1.045]"
+                className="h-full w-full object-cover saturate-[1.08] contrast-[1.03] transition-transform duration-700 ease-out group-hover:scale-[1.035]"
                 onError={onImgError}
                 draggable={false}
               />
-              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-black/5 to-black/10 opacity-45 transition-opacity duration-500 group-hover:opacity-65" />
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/30 to-transparent opacity-80 transition-opacity duration-500 group-hover:opacity-100" />
 
               {images.length > 1 && (
                 <>
@@ -1337,10 +1337,13 @@ return (
               )}
             </>
           ) : (
-            <div className="w-full h-full flex items-center justify-center text-gray-400">
-              <span className="text-sm">
-                {t("marketplace.no_image") || "Нет изображения"}
-              </span>
+            <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-slate-400">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/85 text-xl shadow-sm ring-1 ring-slate-200/70">
+                🏝️
+              </div>
+              <div className="text-xs font-bold tracking-tight text-slate-400">
+                {t("marketplace.photo_coming_soon", { defaultValue: "Фото появится позже" })}
+              </div>
             </div>
           )}
 
@@ -1425,7 +1428,7 @@ return (
         )}
 
         {/* BODY */}
-        <div className="p-3.5 flex-1 flex flex-col bg-gradient-to-b from-white via-white to-gray-50/35">
+        <div className="flex flex-1 flex-col bg-gradient-to-b from-white via-white to-slate-50/35 px-3.5 pb-3.5 pt-3 sm:px-4 sm:pb-4 sm:pt-3.5">
           {/* Primary information */}
           <div className="space-y-3">
             <div className="flex items-start justify-between gap-3">
@@ -1469,7 +1472,7 @@ return (
                 )}
 
                 {watchingNow > 0 && (
-                  <span className="inline-flex max-w-full items-center rounded-full bg-red-50 px-2 py-1 font-bold text-red-600 ring-1 ring-red-100">
+                  <span className="inline-flex max-w-full items-center rounded-full bg-orange-50 px-2.5 py-1 font-extrabold text-orange-700 ring-1 ring-orange-100">
                     <span className="mr-1">⚡</span>
                     <span className="truncate">
                       {watchingNow} {t("marketplace.watching_now", { defaultValue: "рассматривают сейчас" })}
@@ -1491,14 +1494,14 @@ return (
 
           {/* Price as hero block */}
           {prettyPrice && (
-            <div className="mt-2.5 rounded-[1.15rem] bg-[radial-gradient(circle_at_top_left,_rgba(251,146,60,0.15),_transparent_34%),linear-gradient(135deg,#080e1a,#111827)] px-3.5 py-2.5 text-white shadow-[0_14px_30px_rgba(15,23,42,0.19)] ring-1 ring-white/10">
+            <div className="mt-2.5 rounded-[18px] bg-[radial-gradient(circle_at_top_left,_rgba(251,146,60,0.16),_transparent_34%),linear-gradient(135deg,#080e1a,#111827)] px-3.5 py-3 text-white shadow-[0_18px_35px_rgba(15,23,42,0.22)] ring-1 ring-white/10 sm:rounded-[20px] sm:px-4">
               <div className="flex items-end justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/55">
+                  <div className="text-[10px] font-black uppercase tracking-[0.12em] text-white/45">
                     {t("marketplace.price", { defaultValue: "Цена" })}
                   </div>
-                  <div className="mt-1 flex items-end gap-2">
-                    <div className="truncate text-[29px] sm:text-[32px] font-black leading-none tracking-[-0.035em] drop-shadow-sm">
+                  <div className="mt-0.5 flex items-end gap-1.5">
+                    <div className="truncate text-[28px] font-black leading-none tracking-[-0.05em] drop-shadow-sm sm:text-[32px]">
                       {prettyPrice}
                     </div>
                     <div className="mb-1 text-[12px] font-bold text-orange-300">
@@ -1593,7 +1596,7 @@ return (
           )}
 
           {/* Contact / paywall area */}
-          <div className="mt-auto pt-2.5 space-y-1.5">
+          <div className="mt-auto space-y-1.5 pt-2.5">
             {(unlocked || isProviderViewer || isAdminViewer) &&
               (supplierName || supplierPhone || supplierTg?.label) && (
                 <div className="space-y-1 border-t border-gray-100/80 pt-2">
