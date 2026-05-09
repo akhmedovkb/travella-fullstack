@@ -1424,124 +1424,136 @@ return (
         )}
 
         {/* BODY */}
-        <div className="p-3.5 flex-1 flex flex-col">
-          <div className="flex items-start gap-2">
-            <div className="min-h-[42px] text-[15px] font-extrabold leading-snug text-gray-900 line-clamp-2">{title}</div>
-
-            {unlocked && isClientViewer && (
-              <span className="shrink-0 inline-flex items-center rounded-full bg-emerald-100 text-emerald-700 px-2 py-0.5 text-[11px] font-semibold">
-                {t("marketplace.already_opened", { defaultValue: "Уже открыто" })}
-              </span>
-            )}
-          </div>
-
-          {(direction || dates) && (
-            <div className="mt-2 rounded-2xl border border-gray-100 bg-gray-50 px-3 py-2">
-              {direction && (
-                <div className="text-[12px] font-semibold leading-4 text-gray-700 line-clamp-1">
-                  {direction}
+        <div className="p-4 flex-1 flex flex-col bg-white">
+          {/* Primary information */}
+          <div className="space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="text-[16px] sm:text-[17px] font-black leading-snug text-gray-950 line-clamp-2 tracking-[-0.01em]">
+                  {title}
                 </div>
-              )}
-              {dates && (
-                <div className="mt-0.5 text-[11px] leading-4 text-gray-500">
-                  {t("marketplace.dates_label", { defaultValue: "Даты" })}: {dates}
-                </div>
-              )}
-            </div>
-          )}
 
-            <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] sm:text-[11px] text-gray-500">
-              {viewsCount > 0 && (
-                <span className="inline-flex max-w-full items-center rounded-full border border-gray-200 bg-white px-2 py-0.5 text-gray-600">
-                  <span className="mr-1">👁</span>
-                  <span>{viewsCount}</span>
-                </span>
-              )}
-            
-              {watchingNow > 0 && (
-                <span className="inline-flex max-w-full items-center rounded-full border border-red-200 bg-red-50 px-2 py-0.5 font-semibold text-red-600 animate-pulse">
-                  <span className="mr-1">⚡</span>
-                  <span className="truncate">
-                    {watchingNow} {t("marketplace.watching_now", { defaultValue: "смотрят сейчас" })}
-                  </span>
-                </span>
-              )}
-            
-              {unlocksCount > 0 && (
-                <span className="inline-flex max-w-full items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700">
-                  <span className="mr-1">🔓</span>
-                  <span className="truncate">
-                    {unlocksCount} {t("marketplace.opened_contacts_count", { defaultValue: "открыли контакты" })}
-                  </span>
-                </span>
-              )}
-            </div>
-          
-            {prettyPrice && (
-              <div className="mt-3 overflow-hidden rounded-2xl border border-orange-200 bg-gradient-to-br from-orange-50 via-white to-amber-50 shadow-sm">
-                <div className="px-3 py-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-orange-700/70">
-                        {t("marketplace.price") || "Цена"}
+                {(direction || dates) && (
+                  <div className="mt-2 space-y-1.5">
+                    {direction && (
+                      <div className="flex items-center gap-1.5 text-[12px] font-semibold leading-4 text-gray-600 line-clamp-1">
+                        <span className="text-gray-400">✈️</span>
+                        <span className="truncate">{direction}</span>
                       </div>
-            
-                      <div className="mt-1 flex items-end gap-1.5">
-                        <div className="text-[28px] sm:text-3xl font-black leading-none text-gray-900 tracking-tight">
-                          {prettyPrice}
-                        </div>
-                      
-                        <div className="mb-0.5 text-[11px] font-semibold text-orange-700/80">
-                          {t("marketplace.price_currency", { defaultValue: "у.е." })}
-                        </div>
-                      </div>
-                    </div>
-            
-                    {!isExpired && expireAt && (
-                      <div className="shrink-0 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-red-600 animate-pulse">
-                        {t("marketplace.hurry_up", { defaultValue: "Успейте" })}
+                    )}
+                    {dates && (
+                      <div className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-gray-100 px-2.5 py-1 text-[12px] font-bold leading-4 text-gray-800">
+                        <span className="text-gray-500">🗓</span>
+                        <span className="truncate">{dates}</span>
                       </div>
                     )}
                   </div>
-            
-                </div>
+                )}
+              </div>
+
+              {unlocked && isClientViewer && (
+                <span className="shrink-0 inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100 px-2.5 py-1 text-[11px] font-bold">
+                  {t("marketplace.already_opened", { defaultValue: "Уже открыто" })}
+                </span>
+              )}
+            </div>
+
+            {(viewsCount > 0 || watchingNow > 0 || unlocksCount > 0) && (
+              <div className="flex flex-wrap items-center gap-1.5 text-[10px] sm:text-[11px] text-gray-500">
+                {viewsCount > 0 && (
+                  <span className="inline-flex max-w-full items-center rounded-full bg-gray-50 px-2 py-1 text-gray-600 ring-1 ring-gray-100">
+                    <span className="mr-1">👁</span>
+                    <span>{viewsCount}</span>
+                  </span>
+                )}
+
+                {watchingNow > 0 && (
+                  <span className="inline-flex max-w-full items-center rounded-full bg-red-50 px-2 py-1 font-bold text-red-600 ring-1 ring-red-100">
+                    <span className="mr-1">⚡</span>
+                    <span className="truncate">
+                      {watchingNow} {t("marketplace.watching_now", { defaultValue: "смотрят сейчас" })}
+                    </span>
+                  </span>
+                )}
+
+                {unlocksCount > 0 && (
+                  <span className="inline-flex max-w-full items-center rounded-full bg-emerald-50 px-2 py-1 font-semibold text-emerald-700 ring-1 ring-emerald-100">
+                    <span className="mr-1">🔓</span>
+                    <span className="truncate">
+                      {unlocksCount} {t("marketplace.opened_contacts_count", { defaultValue: "открыли контакты" })}
+                    </span>
+                  </span>
+                )}
               </div>
             )}
-          
+          </div>
+
+          {/* Price as hero block */}
+          {prettyPrice && (
+            <div className="mt-4 rounded-3xl border border-gray-100 bg-gray-950 px-4 py-3.5 text-white shadow-sm">
+              <div className="flex items-end justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/55">
+                    {t("marketplace.price", { defaultValue: "Цена" })}
+                  </div>
+                  <div className="mt-1 flex items-end gap-2">
+                    <div className="truncate text-[30px] sm:text-[34px] font-black leading-none tracking-tight">
+                      {prettyPrice}
+                    </div>
+                    <div className="mb-1 text-[12px] font-bold text-orange-300">
+                      {t("marketplace.price_currency", { defaultValue: "у.е." })}
+                    </div>
+                  </div>
+                </div>
+
+                {!isExpired && expireAt && (
+                  <div className="shrink-0 rounded-full bg-orange-400/15 px-2.5 py-1 text-[11px] font-bold text-orange-200 ring-1 ring-orange-300/20">
+                    {t("marketplace.hurry_up", { defaultValue: "Успейте" })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Included / value chips */}
           {(details.insuranceIncluded || details.earlyCheckIn || details.arrivalFastTrack) && (
-            <div className="mt-2 flex flex-wrap gap-1.5">
+            <div className="mt-3 flex flex-wrap gap-1.5">
               {details.insuranceIncluded && (
-                <span className="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 text-[10px] font-semibold">
-                  🛡 {t("insurance_included")}
+                <span className="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100 px-2.5 py-1 text-[11px] font-bold">
+                  🛡 {t("insurance_included", { defaultValue: "Страховка" })}
                 </span>
               )}
-          
+
               {details.earlyCheckIn && (
-                <span className="inline-flex items-center rounded-full bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 text-[10px] font-semibold">
-                  🏨 {t("early_check_in")}
+                <span className="inline-flex items-center rounded-full bg-blue-50 text-blue-700 ring-1 ring-blue-100 px-2.5 py-1 text-[11px] font-bold">
+                  🏨 {t("early_check_in", { defaultValue: "Раннее заселение" })}
                 </span>
               )}
-          
+
               {details.arrivalFastTrack && (
-                <span className="inline-flex items-center rounded-full bg-violet-50 text-violet-700 border border-violet-200 px-2 py-0.5 text-[10px] font-semibold">
-                  🛬 {t("arrival_fast_track")}
+                <span className="inline-flex items-center rounded-full bg-violet-50 text-violet-700 ring-1 ring-violet-100 px-2.5 py-1 text-[11px] font-bold">
+                  🛬 {t("arrival_fast_track", { defaultValue: "Fast Track" })}
                 </span>
               )}
             </div>
           )}
 
+          {/* Proof block: calmer trust signal */}
           {hasProof && (
-            <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50/70 px-3 py-2.5 shadow-sm">
+            <div className="mt-3 rounded-3xl border border-emerald-100 bg-emerald-50/60 px-3 py-3">
               <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white text-base ring-1 ring-emerald-100">
+                  🛡
+                </div>
                 <div className="min-w-0 flex-1">
-                  <div className="text-[12px] font-bold leading-4 text-emerald-700">
+                  <div className="text-[12px] font-black leading-4 text-emerald-800">
                     {t("marketplace.proof_images", {
                       defaultValue: "Подтверждение подлинности",
                     })}
                   </div>
                   <button
                     type="button"
-                    className="mt-1 text-[11px] font-semibold text-emerald-700 underline underline-offset-2 hover:text-emerald-800"
+                    className="mt-0.5 text-[11px] font-bold text-emerald-700 underline underline-offset-2 hover:text-emerald-800"
                     onClick={(e) => {
                       e.stopPropagation();
                       setDetailsOpen(true);
@@ -1563,7 +1575,7 @@ return (
                           e.stopPropagation();
                           setSelectedProofImage(img);
                         }}
-                        className="relative h-12 w-12 overflow-hidden rounded-xl border-2 border-white bg-white shadow-sm hover:opacity-90"
+                        className="relative h-10 w-10 overflow-hidden rounded-xl border-2 border-white bg-white shadow-sm hover:opacity-90"
                         title={t("marketplace.open_proof_image", {
                           defaultValue: "Открыть изображение",
                         })}
@@ -1572,7 +1584,7 @@ return (
                       </button>
                     ))
                   ) : (
-                    <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-emerald-200 bg-white text-lg">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-emerald-100 bg-white text-base">
                       🔒
                     </div>
                   )}
@@ -1584,7 +1596,7 @@ return (
                         e.stopPropagation();
                         setDetailsOpen(true);
                       }}
-                      className="relative h-12 w-12 rounded-xl border-2 border-white bg-emerald-700 text-[12px] font-bold text-white shadow-sm"
+                      className="relative h-10 w-10 rounded-xl border-2 border-white bg-emerald-700 text-[11px] font-black text-white shadow-sm"
                     >
                       +{proofImages.length - 3}
                     </button>
@@ -1594,211 +1606,216 @@ return (
             </div>
           )}
 
-{(unlocked || isProviderViewer || isAdminViewer) &&
-  (supplierName || supplierPhone || supplierTg?.label) && (
-    <div className="mt-3 text-sm space-y-2">
-      {supplierName && (
-        <div className="flex items-center justify-between rounded-2xl border border-gray-100 bg-gray-50 px-3 py-2">
-          <div className="text-[11px] text-gray-500">
-            {t("marketplace.supplier") || "Поставщик"}
-          </div>
+          {/* Contact / paywall area */}
+          <div className="mt-auto pt-4 space-y-2.5">
+            {(unlocked || isProviderViewer || isAdminViewer) &&
+              (supplierName || supplierPhone || supplierTg?.label) && (
+                <div className="space-y-2 rounded-3xl border border-gray-100 bg-gray-50 px-3 py-3">
+                  {supplierName && (
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                        {t("marketplace.supplier", { defaultValue: "Поставщик" })}
+                      </div>
 
-          {providerId ? (
-            <a
-              href={`/profile/provider/${providerId}`}
-              onClick={(e) => e.stopPropagation()}
-              className="max-w-[60%] truncate text-sm font-semibold text-gray-900 hover:underline"
-            >
-              {supplierName}
-            </a>
-          ) : (
-            <span className="max-w-[60%] truncate text-sm font-semibold text-gray-900">
-              {supplierName}
-            </span>
-          )}
-        </div>
-      )}
+                      {providerId ? (
+                        <a
+                          href={`/profile/provider/${providerId}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="min-w-0 max-w-[68%] truncate text-sm font-black text-gray-900 hover:underline"
+                        >
+                          {supplierName}
+                        </a>
+                      ) : (
+                        <span className="min-w-0 max-w-[68%] truncate text-sm font-black text-gray-900">
+                          {supplierName}
+                        </span>
+                      )}
+                    </div>
+                  )}
 
-      {unlocked ? (
-        <div className="mt-2 grid grid-cols-2 gap-2">
-          {supplierPhone && (
-            <a
-              href={normalizePhoneHref(supplierPhone)}
-              onClick={(e) => {
-                e.stopPropagation();
-                postUnlockStep("unlock_phone_clicked", {
-                  source: "card_contacts",
-                  has_phone: true,
-                  has_telegram: Boolean(supplierTg?.href),
-                });
-              }}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-green-500 px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition active:scale-[0.98] hover:bg-green-600"
-              title={supplierPhone}
-            >
-              <span>📞</span>
-              <span>
-                {t("marketplace.call", { defaultValue: "Позвонить" })}
-              </span>
-            </a>
-          )}
+                  {unlocked ? (
+                    <div className="grid grid-cols-2 gap-2">
+                      {supplierPhone && (
+                        <a
+                          href={normalizePhoneHref(supplierPhone)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            postUnlockStep("unlock_phone_clicked", {
+                              source: "card_contacts",
+                              has_phone: true,
+                              has_telegram: Boolean(supplierTg?.href),
+                            });
+                          }}
+                          className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-3 py-2.5 text-sm font-bold text-white shadow-sm transition active:scale-[0.98] hover:bg-emerald-700"
+                          title={supplierPhone}
+                        >
+                          <span>📞</span>
+                          <span>{t("marketplace.call", { defaultValue: "Позвонить" })}</span>
+                        </a>
+                      )}
 
-          {supplierTg?.href && (
-            <a
-              href={supplierTg.href}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => {
-                e.stopPropagation();
-                postUnlockStep("unlock_telegram_clicked", {
-                  source: "card_contacts",
-                  has_phone: Boolean(supplierPhone),
-                  has_telegram: true,
-                });
-              }}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#229ED9] px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition active:scale-[0.98] hover:bg-[#1d8ecf]"
-              title={
-                supplierTg.label ||
-                t("common.telegram", { defaultValue: "Telegram" })
-              }
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                width="16"
-                height="16"
-                className="shrink-0"
-                aria-hidden="true"
-              >
-                <circle cx="12" cy="12" r="12" fill="white" />
-                <path
-                  fill="#229ED9"
-                  d="M17.52 7.18 6.98 11.25c-.72.29-.71.69-.13.87l2.7.84 6.24-3.94c.29-.18.56-.08.34.12l-5.05 4.56-.19 2.67c.28 0 .41-.13.56-.28l1.31-1.27 2.73 2.02c.5.28.86.14.98-.46l1.8-8.5c.17-.73-.28-1.06-.82-.7Z"
-                />
-              </svg>
-              <span>
-                {t("common.telegram", { defaultValue: "Telegram" })}
-              </span>
-            </a>
-          )}
-        </div>
-      ) : (
-        (supplierPhone || supplierTg?.label) && (
-          <div className="rounded-lg bg-gray-50 border px-3 py-2 text-xs text-gray-600">
-            {t("marketplace.contacts_locked", {
-              defaultValue:
-                "Контакты поставщика скрыты. Откройте контакты, чтобы увидеть телефон и Telegram.",
-            })}
-          </div>
-        )
-      )}
-    </div>
-  )}
-
-{!unlocked && !isProviderViewer && !isAdminViewer && (
-  <div className="mt-3 rounded-2xl border border-orange-200 bg-orange-50 px-3 py-2.5 text-[12px] leading-5 text-orange-700 font-semibold">
-    🔒{" "}
-    {t("marketplace.unlock_supplier_hint", {
-      defaultValue:
-        "Поставщик скрыт. Откройте контакты, чтобы увидеть и связаться напрямую.",
-    })}
-  </div>
-)}
-
-          {hasDetailsBlock && (
-            <button
-              ref={detailsBtnRef}
-              type="button"
-              className="mt-3 inline-flex items-center justify-center rounded-xl border border-orange-100 bg-orange-50 px-3 py-2 text-xs font-bold text-orange-700 hover:bg-orange-100"
-              onClick={(e) => {
-                e.stopPropagation();
-                setDetailsOpen(true);
-              }}
-            >
-              {t("marketplace.more_details") || "Подробнее о туре"}
-            </button>
-          )}
-
-          {!unlocked && !isProviderViewer && !isAdminViewer && (
-            <div className="mt-3 space-y-2">
-              {unlocksCount > 0 && (
-                <div className="flex items-center gap-2 rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-                  <span className="text-base leading-none">✅</span>
-                  <span className="font-medium">
-                    {t("marketplace.opened_contacts_cta", {
-                      count: unlocksCount,
-                      defaultValue: `Уже открыли контакты: ${unlocksCount}`,
-                    })}
-                  </span>
+                      {supplierTg?.href && (
+                        <a
+                          href={supplierTg.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            postUnlockStep("unlock_telegram_clicked", {
+                              source: "card_contacts",
+                              has_phone: Boolean(supplierPhone),
+                              has_telegram: true,
+                            });
+                          }}
+                          className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#229ED9] px-3 py-2.5 text-sm font-bold text-white shadow-sm transition active:scale-[0.98] hover:bg-[#1d8ecf]"
+                          title={
+                            supplierTg.label ||
+                            t("common.telegram", { defaultValue: "Telegram" })
+                          }
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 24 24"
+                            width="16"
+                            height="16"
+                            className="shrink-0"
+                            aria-hidden="true"
+                          >
+                            <circle cx="12" cy="12" r="12" fill="white" />
+                            <path
+                              fill="#229ED9"
+                              d="M17.52 7.18 6.98 11.25c-.72.29-.71.69-.13.87l2.7.84 6.24-3.94c.29-.18.56-.08.34.12l-5.05 4.56-.19 2.67c.28 0 .41-.13.56-.28l1.31-1.27 2.73 2.02c.5.28.86.14.98-.46l1.8-8.5c.17-.73-.28-1.06-.82-.7Z"
+                            />
+                          </svg>
+                          <span>{t("common.telegram", { defaultValue: "Telegram" })}</span>
+                        </a>
+                      )}
+                    </div>
+                  ) : (
+                    (supplierPhone || supplierTg?.label) && (
+                      <div className="rounded-2xl bg-white px-3 py-2 text-xs font-medium text-gray-600 ring-1 ring-gray-100">
+                        {t("marketplace.contacts_locked", {
+                          defaultValue:
+                            "Контакты поставщика скрыты. Откройте контакты, чтобы увидеть телефон и Telegram.",
+                        })}
+                      </div>
+                    )
+                  )}
                 </div>
               )}
-          
-              {expireAt && !isExpired && (
-                <div className="flex items-center gap-2 rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-700">
-                  <span className="text-base leading-none">⏳</span>
-                  <span className="font-medium">
-                    {t("marketplace.offer_may_expire_anytime", {
-                      defaultValue: "Предложение может стать неактуальным в любой момент",
-                    })}
-                  </span>
+
+            {!unlocked && !isProviderViewer && !isAdminViewer && (
+              <div className="rounded-3xl border border-orange-100 bg-orange-50/80 px-3 py-3 text-[12px] leading-5 text-orange-800">
+                <div className="flex items-start gap-2">
+                  <span className="mt-0.5">🔒</span>
+                  <div>
+                    <div className="font-black">
+                      {t("marketplace.unlock_supplier_hint_title", {
+                        defaultValue: "Поставщик скрыт",
+                      })}
+                    </div>
+                    <div className="mt-0.5 font-medium text-orange-700/90">
+                      {t("marketplace.unlock_supplier_hint", {
+                        defaultValue:
+                          "Откройте контакты, чтобы увидеть телефон и Telegram поставщика.",
+                      })}
+                    </div>
+                  </div>
                 </div>
-              )}
-            </div>
-          )}
-          <div className="mt-auto pt-3 space-y-2">
-              {canShowUnlockButton && (
-                <>
-                  <button
-                    type="button"
-                    onClick={openUnlockIntro}
-                    disabled={unlockLoading || unlockIntroLoading}
-                    className={[
-                      "w-full rounded-2xl px-4 py-3.5 text-sm font-semibold text-white transition disabled:opacity-60 disabled:cursor-not-allowed active:scale-[0.99]",
-                      !isExpired && expireAt
-                        ? "bg-gradient-to-r from-orange-500 via-orange-500 to-red-500 shadow-lg shadow-orange-200 hover:from-orange-600 hover:via-orange-600 hover:to-red-600"
-                        : "bg-black hover:bg-gray-900",
-                    ].join(" ")}
-                  >
-                    {unlockLoading || unlockIntroLoading ? (
-                      t("marketplace.unlocking", { defaultValue: "Открытие..." })
-                    ) : (
-                      <span className="inline-flex items-center justify-center gap-2">
-                        <span>🔓</span>
-                        <span>
+              </div>
+            )}
+
+            {!unlocked && !isProviderViewer && !isAdminViewer && (unlocksCount > 0 || (expireAt && !isExpired)) && (
+              <div className="space-y-1.5">
+                {unlocksCount > 0 && (
+                  <div className="flex items-center gap-2 rounded-2xl bg-emerald-50 px-3 py-2 text-[12px] font-bold text-emerald-700 ring-1 ring-emerald-100">
+                    <span className="text-base leading-none">✅</span>
+                    <span>
+                      {t("marketplace.opened_contacts_cta", {
+                        count: unlocksCount,
+                        defaultValue: `Уже открыли контакты: ${unlocksCount}`,
+                      })}
+                    </span>
+                  </div>
+                )}
+
+                {expireAt && !isExpired && (
+                  <div className="flex items-center gap-2 rounded-2xl bg-amber-50 px-3 py-2 text-[12px] font-bold text-amber-700 ring-1 ring-amber-100">
+                    <span className="text-base leading-none">⏳</span>
+                    <span>
+                      {t("marketplace.offer_may_expire_anytime", {
+                        defaultValue: "Предложение может стать неактуальным в любой момент",
+                      })}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {canShowUnlockButton && (
+              <>
+                <button
+                  type="button"
+                  onClick={openUnlockIntro}
+                  disabled={unlockLoading || unlockIntroLoading}
+                  className="w-full rounded-3xl bg-gradient-to-r from-orange-500 via-orange-500 to-red-500 px-4 py-3.5 text-sm font-black text-white shadow-lg shadow-orange-200/80 transition disabled:cursor-not-allowed disabled:opacity-60 active:scale-[0.99] hover:from-orange-600 hover:via-orange-600 hover:to-red-600"
+                >
+                  {unlockLoading || unlockIntroLoading ? (
+                    t("marketplace.unlocking", { defaultValue: "Открытие..." })
+                  ) : (
+                    <span className="inline-flex items-center justify-center gap-2">
+                      <span>🔓</span>
+                      <span>
                         {t("marketplace.unlock_contacts_cta_primary", {
                           defaultValue: "Открыть телефон и Telegram",
                         })}
-                        </span>
                       </span>
-                    )}
-                  </button>
-              
-                  <p className="text-[12px] leading-5 text-gray-500">
-                    {t("marketplace.unlock_contacts_cta_hint", {
-                      defaultValue: "Контакты откроются сразу после оплаты",
-                    })}
-                  </p>
-                </>
+                    </span>
+                  )}
+                </button>
+
+                <p className="text-center text-[11px] font-medium leading-4 text-gray-500">
+                  {t("marketplace.unlock_contacts_cta_hint", {
+                    defaultValue: "Контакты откроются сразу после оплаты",
+                  })}
+                </p>
+              </>
+            )}
+
+            <div className="grid grid-cols-1 gap-2">
+              {hasDetailsBlock && (
+                <button
+                  ref={detailsBtnRef}
+                  type="button"
+                  className="inline-flex items-center justify-center rounded-2xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-bold text-gray-700 transition hover:bg-gray-50"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDetailsOpen(true);
+                  }}
+                >
+                  {t("marketplace.more_details", { defaultValue: "Подробнее о туре" })}
+                </button>
               )}
 
               {showBookButton ? (
                 <a
                   href={`/profile/provider/${providerId}?service=${id}#book`}
-                  className="w-full inline-flex items-center justify-center rounded-2xl border border-orange-200 bg-orange-50 px-3 py-2.5 text-sm font-bold text-orange-700 transition hover:bg-orange-100"
+                  className="w-full inline-flex items-center justify-center rounded-2xl border border-orange-100 bg-orange-50 px-3 py-2.5 text-sm font-bold text-orange-700 transition hover:bg-orange-100"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {t("actions.book") || "Бронировать"}
+                  {t("actions.book", { defaultValue: "Бронировать" })}
                 </a>
               ) : (
-              <button
-                onClick={() => onQuickRequest?.(id, providerId, title)}
-                className="w-full rounded-2xl border border-orange-200 bg-orange-50 px-3 py-2.5 text-sm font-bold text-orange-700 transition hover:bg-orange-100"
-              >
-                {t("actions.quick_request") || "Быстрый запрос"}
-              </button>
-            )}
+                <button
+                  onClick={() => onQuickRequest?.(id, providerId, title)}
+                  className="w-full rounded-2xl border border-orange-100 bg-orange-50 px-3 py-2.5 text-sm font-bold text-orange-700 transition hover:bg-orange-100"
+                >
+                  {t("actions.quick_request", { defaultValue: "Быстрый запрос" })}
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-      </div>
+        </div>      </div>
 
       <DetailsPopup
         open={detailsOpen}
