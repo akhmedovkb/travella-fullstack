@@ -1248,10 +1248,10 @@ return (
       <div
         ref={cardRef}
         className={[
-          "group relative overflow-hidden rounded-3xl border shadow-sm flex flex-col transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl",
+          "group relative overflow-hidden rounded-[1.65rem] border shadow-sm flex flex-col transition-all duration-500 ease-out hover:-translate-y-1 hover:shadow-[0_20px_45px_rgba(15,23,42,0.13)]",
           unlocked
             ? "bg-gray-50 border-gray-200 opacity-95"
-            : "bg-white border-gray-100",
+            : "bg-white border-gray-100/90 hover:border-orange-100",
           highlighted ? "ring-2 ring-orange-400 shadow-xl" : "",
           className,
         ].join(" ")}
@@ -1268,10 +1268,11 @@ return (
                 key={images[idx]}
                 src={images[idx]}
                 alt={title || t("marketplace.no_image")}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.035]"
                 onError={onImgError}
                 draggable={false}
               />
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/10 via-transparent to-black/5 opacity-70 transition-opacity duration-500 group-hover:opacity-90" />
 
               {images.length > 1 && (
                 <>
@@ -1349,7 +1350,7 @@ return (
               {categorySticker && (
                 <span
                   className={[
-                    "pointer-events-auto inline-flex items-center rounded-full px-2.5 py-1 text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wide shadow-lg backdrop-blur-md",
+                    "pointer-events-auto inline-flex items-center rounded-full px-2.5 py-1 text-[10px] sm:text-[11px] font-black uppercase tracking-[0.03em] shadow-[0_8px_18px_rgba(15,23,42,0.16)] backdrop-blur-md",
                     categorySticker.className,
                   ].join(" ")}
                 >
@@ -1377,7 +1378,7 @@ return (
                 </span>
               )}
               {hasProof && (
-                <span className="pointer-events-auto inline-flex items-center gap-1 rounded-full bg-emerald-600/95 text-white text-xs px-2 py-0.5 ring-1 ring-white/20 backdrop-blur-md">
+                <span className="pointer-events-auto inline-flex items-center gap-1 rounded-full bg-emerald-600/90 text-white text-[11px] px-2 py-0.5 shadow-[0_8px_18px_rgba(5,150,105,0.22)] ring-1 ring-white/25 backdrop-blur-md">
                   ✔ {t("marketplace.verified_proof", { defaultValue: "Проверено" })}
                 </span>
               )}
@@ -1424,7 +1425,7 @@ return (
         )}
 
         {/* BODY */}
-        <div className="p-3.5 flex-1 flex flex-col bg-white">
+        <div className="p-3.5 flex-1 flex flex-col bg-gradient-to-b from-white via-white to-gray-50/35">
           {/* Primary information */}
           <div className="space-y-3">
             <div className="flex items-start justify-between gap-3">
@@ -1471,7 +1472,7 @@ return (
                   <span className="inline-flex max-w-full items-center rounded-full bg-red-50 px-2 py-1 font-bold text-red-600 ring-1 ring-red-100">
                     <span className="mr-1">⚡</span>
                     <span className="truncate">
-                      {watchingNow} {t("marketplace.watching_now", { defaultValue: "смотрят сейчас" })}
+                      {watchingNow} {t("marketplace.watching_now", { defaultValue: "рассматривают сейчас" })}
                     </span>
                   </span>
                 )}
@@ -1490,14 +1491,14 @@ return (
 
           {/* Price as hero block */}
           {prettyPrice && (
-            <div className="mt-3 rounded-2xl bg-gray-950 px-3.5 py-2.5 text-white shadow-sm">
+            <div className="mt-3 rounded-[1.2rem] bg-[radial-gradient(circle_at_top_left,_rgba(251,146,60,0.16),_transparent_34%),linear-gradient(135deg,#090f1d,#111827)] px-3.5 py-2.5 text-white shadow-[0_12px_26px_rgba(15,23,42,0.18)] ring-1 ring-white/10">
               <div className="flex items-end justify-between gap-3">
                 <div className="min-w-0">
                   <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/55">
                     {t("marketplace.price", { defaultValue: "Цена" })}
                   </div>
                   <div className="mt-1 flex items-end gap-2">
-                    <div className="truncate text-[28px] sm:text-[31px] font-black leading-none tracking-tight">
+                    <div className="truncate text-[29px] sm:text-[32px] font-black leading-none tracking-[-0.035em] drop-shadow-sm">
                       {prettyPrice}
                     </div>
                     <div className="mb-1 text-[12px] font-bold text-orange-300">
@@ -1519,19 +1520,19 @@ return (
           {(details.insuranceIncluded || details.earlyCheckIn || details.arrivalFastTrack) && (
             <div className="mt-2.5 flex flex-wrap gap-1.5">
               {details.insuranceIncluded && (
-                <span className="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100 px-2 py-0.5 text-[10px] font-bold">
+                <span className="inline-flex items-center rounded-full bg-emerald-50/70 text-emerald-700 ring-1 ring-emerald-100/80 px-2 py-0.5 text-[10px] font-bold">
                   🛡 {t("insurance_included", { defaultValue: "Страховка" })}
                 </span>
               )}
 
               {details.earlyCheckIn && (
-                <span className="inline-flex items-center rounded-full bg-blue-50 text-blue-700 ring-1 ring-blue-100 px-2 py-0.5 text-[10px] font-bold">
+                <span className="inline-flex items-center rounded-full bg-blue-50/70 text-blue-700 ring-1 ring-blue-100/80 px-2 py-0.5 text-[10px] font-bold">
                   🏨 {t("early_check_in", { defaultValue: "Раннее заселение" })}
                 </span>
               )}
 
               {details.arrivalFastTrack && (
-                <span className="inline-flex items-center rounded-full bg-violet-50 text-violet-700 ring-1 ring-violet-100 px-2 py-0.5 text-[10px] font-bold">
+                <span className="inline-flex items-center rounded-full bg-violet-50/70 text-violet-700 ring-1 ring-violet-100/80 px-2 py-0.5 text-[10px] font-bold">
                   🛬 {t("arrival_fast_track", { defaultValue: "Fast Track" })}
                 </span>
               )}
@@ -1546,7 +1547,7 @@ return (
                 e.stopPropagation();
                 setDetailsOpen(true);
               }}
-              className="mt-2 flex w-full items-center justify-between gap-2 rounded-xl bg-white px-0.5 py-0.5 text-left text-emerald-800 transition hover:bg-emerald-50/40"
+              className="mt-2 flex w-full items-center justify-between gap-2 rounded-xl bg-transparent px-0.5 py-0.5 text-left text-emerald-800/85 transition hover:text-emerald-900"
             >
               <span className="min-w-0 inline-flex items-center gap-1.5 text-[11px] font-black leading-4">
                 <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-[11px] ring-1 ring-emerald-100">✔</span>
@@ -1690,7 +1691,7 @@ return (
               )}
 
             {!unlocked && !isProviderViewer && !isAdminViewer && (
-              <div className="rounded-2xl bg-gradient-to-br from-amber-50 to-orange-50/70 px-3 py-2 text-[11px] leading-4 text-orange-800 ring-1 ring-orange-100/80">
+              <div className="rounded-2xl bg-gradient-to-br from-orange-50/90 via-amber-50/70 to-white px-3 py-2 text-[11px] leading-4 text-orange-800 ring-1 ring-orange-100/80 shadow-[0_8px_20px_rgba(251,146,60,0.08)]">
                 <div className="flex items-start gap-2">
                   <span className="mt-0.5">🔒</span>
                   <div>
@@ -1743,7 +1744,7 @@ return (
                   type="button"
                   onClick={openUnlockIntro}
                   disabled={unlockLoading || unlockIntroLoading}
-                  className="w-full rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 px-4 py-3 text-sm font-black text-white shadow-lg shadow-orange-200/60 transition hover:-translate-y-0.5 hover:shadow-orange-300/70 disabled:cursor-not-allowed disabled:opacity-60 active:translate-y-0 active:scale-[0.99]"
+                  className="w-full rounded-2xl bg-gradient-to-r from-orange-500 via-orange-500 to-amber-500 px-4 py-3 text-sm font-black text-white shadow-[0_14px_28px_rgba(249,115,22,0.26)] ring-1 ring-orange-300/40 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_18px_36px_rgba(249,115,22,0.34)] hover:saturate-110 disabled:cursor-not-allowed disabled:opacity-60 active:translate-y-0 active:scale-[0.99]"
                 >
                   {unlockLoading || unlockIntroLoading ? (
                     t("marketplace.unlocking", { defaultValue: "Открытие..." })
@@ -1752,7 +1753,7 @@ return (
                       <span>🔓</span>
                       <span>
                         {t("marketplace.unlock_contacts_cta_primary", {
-                          defaultValue: "Получить контакты поставщика",
+                          defaultValue: "Связаться с поставщиком",
                         })}
                       </span>
                     </span>
@@ -1761,7 +1762,7 @@ return (
 
                 <p className="text-center text-[11px] font-medium leading-4 text-gray-500">
                   {t("marketplace.unlock_contacts_cta_hint", {
-                    defaultValue: "Мгновенный доступ после оплаты",
+                    defaultValue: "Доступ к контактам откроется сразу",
                   })}
                 </p>
               </>
@@ -1772,7 +1773,7 @@ return (
                 <button
                   ref={detailsBtnRef}
                   type="button"
-                  className="inline-flex items-center justify-center rounded-xl border border-gray-200/70 bg-white px-2.5 py-2 text-[12px] font-bold text-gray-500 transition hover:border-gray-300 hover:bg-gray-50 hover:text-gray-700"
+                  className="inline-flex items-center justify-center rounded-xl border border-gray-200/70 bg-white/80 px-2.5 py-2 text-[12px] font-bold text-gray-500 transition hover:border-gray-300 hover:bg-white hover:text-gray-700 hover:shadow-sm"
                   onClick={(e) => {
                     e.stopPropagation();
                     setDetailsOpen(true);
@@ -1785,7 +1786,7 @@ return (
               {showBookButton ? (
                 <a
                   href={`/profile/provider/${providerId}?service=${id}#book`}
-                  className="w-full inline-flex items-center justify-center rounded-xl border border-orange-100 bg-white px-2.5 py-2 text-[12px] font-bold text-orange-700 transition hover:bg-orange-50 hover:border-orange-200"
+                  className="w-full inline-flex items-center justify-center rounded-xl border border-orange-100 bg-white/80 px-2.5 py-2 text-[12px] font-bold text-orange-700 transition hover:bg-orange-50 hover:border-orange-200 hover:shadow-sm"
                   onClick={(e) => e.stopPropagation()}
                 >
                   {t("actions.book", { defaultValue: "Бронировать" })}
@@ -1793,7 +1794,7 @@ return (
               ) : (
                 <button
                   onClick={() => onQuickRequest?.(id, providerId, title)}
-                  className="w-full rounded-xl border border-orange-100 bg-white px-2.5 py-2 text-[12px] font-bold text-orange-700 transition hover:bg-orange-50 hover:border-orange-200"
+                  className="w-full rounded-xl border border-orange-100 bg-white/80 px-2.5 py-2 text-[12px] font-bold text-orange-700 transition hover:bg-orange-50 hover:border-orange-200 hover:shadow-sm"
                 >
                   {t("actions.quick_request", { defaultValue: "Быстрый запрос" })}
                 </button>
