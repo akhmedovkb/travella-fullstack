@@ -1248,7 +1248,7 @@ return (
       <div
         ref={cardRef}
         className={[
-          "group relative overflow-hidden rounded-[1.65rem] border shadow-sm flex flex-col transition-all duration-500 ease-out hover:-translate-y-1 hover:shadow-[0_20px_45px_rgba(15,23,42,0.13)]",
+          "group relative overflow-hidden rounded-[1.65rem] border shadow-sm flex flex-col transition-all duration-500 ease-out hover:-translate-y-1 hover:shadow-[0_24px_55px_rgba(15,23,42,0.15)]",
           unlocked
             ? "bg-gray-50 border-gray-200 opacity-95"
             : "bg-white border-gray-100/90 hover:border-orange-100",
@@ -1268,11 +1268,11 @@ return (
                 key={images[idx]}
                 src={images[idx]}
                 alt={title || t("marketplace.no_image")}
-                className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.035]"
+                className="w-full h-full object-cover saturate-[1.04] contrast-[1.02] transition-transform duration-700 ease-out group-hover:scale-[1.045]"
                 onError={onImgError}
                 draggable={false}
               />
-              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/10 via-transparent to-black/5 opacity-70 transition-opacity duration-500 group-hover:opacity-90" />
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-black/5 to-black/10 opacity-45 transition-opacity duration-500 group-hover:opacity-65" />
 
               {images.length > 1 && (
                 <>
@@ -1491,7 +1491,7 @@ return (
 
           {/* Price as hero block */}
           {prettyPrice && (
-            <div className="mt-3 rounded-[1.2rem] bg-[radial-gradient(circle_at_top_left,_rgba(251,146,60,0.16),_transparent_34%),linear-gradient(135deg,#090f1d,#111827)] px-3.5 py-2.5 text-white shadow-[0_12px_26px_rgba(15,23,42,0.18)] ring-1 ring-white/10">
+            <div className="mt-2.5 rounded-[1.15rem] bg-[radial-gradient(circle_at_top_left,_rgba(251,146,60,0.15),_transparent_34%),linear-gradient(135deg,#080e1a,#111827)] px-3.5 py-2.5 text-white shadow-[0_14px_30px_rgba(15,23,42,0.19)] ring-1 ring-white/10">
               <div className="flex items-end justify-between gap-3">
                 <div className="min-w-0">
                   <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/55">
@@ -1593,10 +1593,10 @@ return (
           )}
 
           {/* Contact / paywall area */}
-          <div className="mt-auto pt-3 space-y-2">
+          <div className="mt-auto pt-2.5 space-y-1.5">
             {(unlocked || isProviderViewer || isAdminViewer) &&
               (supplierName || supplierPhone || supplierTg?.label) && (
-                <div className="space-y-1.5 border-t border-gray-100 pt-2.5">
+                <div className="space-y-1 border-t border-gray-100/80 pt-2">
                   {supplierName && (
                     <div className="flex items-center justify-between gap-3">
                       <div className="text-[10px] font-black uppercase tracking-wide text-gray-400">
@@ -1620,7 +1620,7 @@ return (
                   )}
 
                   {unlocked ? (
-                    <div className="grid grid-cols-2 gap-1.5">
+                    <div className="grid grid-cols-2 gap-1.5 pt-0.5">
                       {supplierPhone && (
                         <a
                           href={normalizePhoneHref(supplierPhone)}
@@ -1691,19 +1691,19 @@ return (
               )}
 
             {!unlocked && !isProviderViewer && !isAdminViewer && (
-              <div className="rounded-2xl bg-gradient-to-br from-orange-50/90 via-amber-50/70 to-white px-3 py-2 text-[11px] leading-4 text-orange-800 ring-1 ring-orange-100/80 shadow-[0_8px_20px_rgba(251,146,60,0.08)]">
+              <div className="rounded-2xl bg-gradient-to-br from-orange-50/80 via-amber-50/55 to-white px-3 py-1.5 text-[11px] leading-4 text-orange-800 ring-1 ring-orange-100/70 shadow-[0_8px_18px_rgba(251,146,60,0.07)]">
                 <div className="flex items-start gap-2">
                   <span className="mt-0.5">🔒</span>
                   <div>
                     <div className="font-black">
                       {t("marketplace.unlock_supplier_hint_title", {
-                        defaultValue: "Контакты поставщика скрыты",
+                        defaultValue: "Контакты доступны после открытия доступа",
                       })}
                     </div>
                     <div className="mt-0.5 font-medium text-orange-700/90 line-clamp-2">
                       {t("marketplace.unlock_supplier_hint", {
                         defaultValue:
-                          "Откройте доступ, чтобы сразу связаться по телефону или Telegram.",
+                          "Получите доступ и свяжитесь напрямую по телефону или Telegram.",
                       })}
                     </div>
                   </div>
@@ -1744,7 +1744,7 @@ return (
                   type="button"
                   onClick={openUnlockIntro}
                   disabled={unlockLoading || unlockIntroLoading}
-                  className="w-full rounded-2xl bg-gradient-to-r from-orange-500 via-orange-500 to-amber-500 px-4 py-3 text-sm font-black text-white shadow-[0_14px_28px_rgba(249,115,22,0.26)] ring-1 ring-orange-300/40 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_18px_36px_rgba(249,115,22,0.34)] hover:saturate-110 disabled:cursor-not-allowed disabled:opacity-60 active:translate-y-0 active:scale-[0.99]"
+                  className="w-full rounded-2xl bg-gradient-to-r from-orange-500 via-amber-500 to-orange-400 px-4 py-2.5 text-sm font-black text-white shadow-[0_12px_26px_rgba(249,115,22,0.24)] ring-1 ring-orange-200/60 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_18px_38px_rgba(249,115,22,0.33)] hover:saturate-110 disabled:cursor-not-allowed disabled:opacity-60 active:translate-y-0 active:scale-[0.99]"
                 >
                   {unlockLoading || unlockIntroLoading ? (
                     t("marketplace.unlocking", { defaultValue: "Открытие..." })
@@ -1762,18 +1762,18 @@ return (
 
                 <p className="text-center text-[11px] font-medium leading-4 text-gray-500">
                   {t("marketplace.unlock_contacts_cta_hint", {
-                    defaultValue: "Доступ к контактам откроется сразу",
+                    defaultValue: "Мгновенный доступ после оплаты",
                   })}
                 </p>
               </>
             )}
 
-            <div className="grid grid-cols-2 gap-1.5">
+            <div className="grid grid-cols-2 gap-1.5 pt-0.5">
               {hasDetailsBlock && (
                 <button
                   ref={detailsBtnRef}
                   type="button"
-                  className="inline-flex items-center justify-center rounded-xl border border-gray-200/70 bg-white/80 px-2.5 py-2 text-[12px] font-bold text-gray-500 transition hover:border-gray-300 hover:bg-white hover:text-gray-700 hover:shadow-sm"
+                  className="inline-flex items-center justify-center rounded-xl border border-gray-200/70 bg-white/80 px-2.5 py-1.5 text-[12px] font-bold text-gray-500 transition hover:border-gray-300 hover:bg-white hover:text-gray-700 hover:shadow-sm"
                   onClick={(e) => {
                     e.stopPropagation();
                     setDetailsOpen(true);
@@ -1786,7 +1786,7 @@ return (
               {showBookButton ? (
                 <a
                   href={`/profile/provider/${providerId}?service=${id}#book`}
-                  className="w-full inline-flex items-center justify-center rounded-xl border border-orange-100 bg-white/80 px-2.5 py-2 text-[12px] font-bold text-orange-700 transition hover:bg-orange-50 hover:border-orange-200 hover:shadow-sm"
+                  className="w-full inline-flex items-center justify-center rounded-xl border border-orange-100 bg-white/80 px-2.5 py-1.5 text-[12px] font-bold text-orange-700 transition hover:bg-orange-50 hover:border-orange-200 hover:shadow-sm"
                   onClick={(e) => e.stopPropagation()}
                 >
                   {t("actions.book", { defaultValue: "Бронировать" })}
@@ -1794,7 +1794,7 @@ return (
               ) : (
                 <button
                   onClick={() => onQuickRequest?.(id, providerId, title)}
-                  className="w-full rounded-xl border border-orange-100 bg-white/80 px-2.5 py-2 text-[12px] font-bold text-orange-700 transition hover:bg-orange-50 hover:border-orange-200 hover:shadow-sm"
+                  className="w-full rounded-xl border border-orange-100 bg-white/80 px-2.5 py-1.5 text-[12px] font-bold text-orange-700 transition hover:bg-orange-50 hover:border-orange-200 hover:shadow-sm"
                 >
                   {t("actions.quick_request", { defaultValue: "Быстрый запрос" })}
                 </button>
@@ -1902,7 +1902,7 @@ return (
             </div>
 
             {canViewProof ? (
-              <div className="grid grid-cols-2 gap-1.5">
+              <div className="grid grid-cols-2 gap-1.5 pt-0.5">
                 {proofImages.map((img, i) => (
                   <button
                     key={`${id}-proof-popup-${i}`}
