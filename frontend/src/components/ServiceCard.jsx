@@ -1963,12 +1963,12 @@ return (
                   <div className="min-w-0">
                     <h3 className="text-lg font-black leading-tight tracking-[-0.02em]">
                       {t("marketplace.unlock_intro_title", {
-                        defaultValue: "Свяжитесь с поставщиком напрямую",
+                        defaultValue: "Прямой доступ к поставщику",
                       })}
                     </h3>
                     <p className="mt-0.5 text-sm font-medium leading-snug text-white/90">
                       {t("marketplace.unlock_intro_subtitle", {
-                        defaultValue: "Выгодные отказные туры могут быстро уйти",
+                        defaultValue: "Свяжитесь напрямую и заберите выгодный вариант раньше других",
                       })}
                     </p>
                   </div>
@@ -2019,7 +2019,7 @@ return (
                 <div className="mt-4 rounded-2xl border border-gray-200 bg-gradient-to-br from-slate-50 to-white px-4 py-4 shadow-sm">
                   <div className="text-sm font-black text-gray-950">
                     {t("marketplace.unlock_intro_whats_inside", {
-                      defaultValue: "После открытия вы получите:",
+                      defaultValue: "Что откроется после оплаты",
                     })}
                   </div>
 
@@ -2028,7 +2028,7 @@ return (
                       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-base ring-1 ring-emerald-100">📞</span>
                       <span>
                         {t("marketplace.unlock_intro_phone", {
-                          defaultValue: "Прямой номер поставщика",
+                          defaultValue: "Телефон поставщика",
                         })}
                       </span>
                     </div>
@@ -2046,7 +2046,7 @@ return (
                       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-orange-50 text-base ring-1 ring-orange-100">⚡</span>
                       <span>
                         {t("marketplace.unlock_intro_fast_booking", {
-                          defaultValue: "Возможность сразу обсудить бронь",
+                          defaultValue: "Возможность быстро забронировать",
                         })}
                       </span>
                     </div>
@@ -2072,15 +2072,15 @@ return (
                         {watchingNow > 0
                           ? t("marketplace.unlock_intro_urgency_watching_title", {
                               count: watchingNow,
-                              defaultValue: `Сейчас этот тур рассматривают ${watchingNow} чел.`,
+                              defaultValue: `Сейчас смотрят: ${watchingNow}`,
                             })
                           : unlocksCount > 0
                           ? t("marketplace.unlock_intro_urgency_unlocked_title", {
                               count: unlocksCount,
-                              defaultValue: `Контакты уже открывали ${unlocksCount} раз`,
+                              defaultValue: `Контакты уже открывали: ${unlocksCount}`,
                             })
                           : t("marketplace.unlock_intro_urgency", {
-                              defaultValue: "Выгодные варианты долго не держатся",
+                              defaultValue: "Такие варианты часто бронируют очень быстро",
                             })}
                       </div>
 
@@ -2088,12 +2088,12 @@ return (
                         {watchingNow > 0
                           ? t("marketplace.unlock_intro_dynamic_watching", {
                               count: watchingNow,
-                              defaultValue: "Свяжитесь раньше других, пока предложение актуально.",
+                              defaultValue: "Пока предложение актуально, лучше связаться раньше других.",
                             })
                           : unlocksCount > 0
                           ? t("marketplace.unlock_intro_dynamic_unlocked", {
                               count: unlocksCount,
-                              defaultValue: "Другие клиенты уже проявляли интерес к этому варианту.",
+                              defaultValue: "Другие клиенты уже проявляли интерес — не откладывайте связь.",
                             })
                           : t("marketplace.unlock_intro_dynamic_default", {
                               defaultValue:
@@ -2110,7 +2110,7 @@ return (
                       <div className="min-w-0">
                         <div className="text-[11px] font-black uppercase tracking-[0.12em] text-orange-700/70">
                           {t("marketplace.unlock_intro_price_label", {
-                            defaultValue: "Доступ к контактам",
+                            defaultValue: "Стоимость доступа",
                           })}
                         </div>
 
@@ -2127,13 +2127,13 @@ return (
                         </div>
                       </div>
 
-                      <div className="shrink-0 rounded-2xl bg-orange-500 px-3 py-2 text-center text-white shadow-[0_10px_24px_rgba(249,115,22,0.22)]">
+                      <div className="shrink-0 rounded-2xl bg-orange-100 px-3 py-2 text-center text-orange-700 shadow-[0_8px_20px_rgba(249,115,22,0.12)] ring-1 ring-orange-200/80">
                         <div className="text-[10px] font-black uppercase leading-none">
                           {t("marketplace.unlock_intro_once", {
                             defaultValue: "1 раз",
                           })}
                         </div>
-                        <div className="mt-1 text-[10px] font-semibold leading-none text-white/85">
+                        <div className="mt-1 text-[10px] font-semibold leading-none text-orange-700/75">
                           {t("marketplace.unlock_intro_no_subscription", {
                             defaultValue: "без подписки",
                           })}
@@ -2156,14 +2156,14 @@ return (
                     <div className="mt-3 rounded-xl bg-white/80 px-3 py-2 text-[11px] font-medium leading-snug text-gray-600 ring-1 ring-orange-100">
                       {t("marketplace.unlock_intro_value_anchor", {
                         defaultValue:
-                          "Это небольшая стоимость доступа к прямому контакту поставщика, чтобы быстрее забрать выгодный вариант.",
+                          "Небольшая стоимость доступа к прямому контакту может помочь забрать выгодный вариант раньше других.",
                       })}
                     </div>
                   </div>
 
                   <div className="border-t border-orange-100 bg-white px-4 py-2 text-[11px] font-medium text-gray-500">
                     {t("marketplace.unlock_intro_price_subhint", {
-                      defaultValue: "После оплаты телефон и Telegram станут доступны в этой карточке.",
+                      defaultValue: "После оплаты телефон и Telegram поставщика откроются в этой карточке.",
                     })}
                   </div>
                 </div>
@@ -2442,12 +2442,12 @@ return (
                   <div>
                     <h3 className="text-lg font-bold leading-tight">
                       {t("marketplace.pay_modal_title", {
-                        defaultValue: "Пополнение для открытия контактов",
+                        defaultValue: "Пополнение для прямого доступа",
                       })}
                     </h3>
                     <p className="text-sm text-white/90">
                       {t("marketplace.pay_modal_subtitle", {
-                        defaultValue: "Перед оплатой проверьте сумму пополнения",
+                        defaultValue: "Контакты откроются автоматически после оплаты",
                       })}
                     </p>
                   </div>
@@ -2458,7 +2458,7 @@ return (
                 <div className="rounded-2xl border border-orange-100 bg-orange-50 px-4 py-4">
                   <div className="text-xs font-medium uppercase tracking-wide text-orange-700/80">
                   {t("marketplace.pay_modal_amount_label", {
-                    defaultValue: "Сумма для мгновенного открытия контактов",
+                    defaultValue: "Сумма к оплате",
                   })}
                   </div>
                   <div className="mt-1 text-3xl font-bold tracking-tight text-gray-900">
@@ -2476,7 +2476,7 @@ return (
                   )}
                 </div>
 
-                <div className="mt-4 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
+                <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50/60 px-4 py-3">
                   <div className="flex items-start gap-3">
                     <div className="mt-0.5 text-lg">✨</div>
                     <div>
@@ -2488,7 +2488,7 @@ return (
                       <p className="mt-1 text-sm leading-6 text-gray-600">
                         {t("marketplace.pay_modal_hint_text", {
                           defaultValue:
-                            "После успешной оплаты контакты поставщика откроются автоматически, и вы вернётесь к этой карточке.",
+                            "После успешной оплаты телефон и Telegram поставщика откроются автоматически, и вы вернётесь к этой карточке.",
                         })}
                       </p>
                     </div>
