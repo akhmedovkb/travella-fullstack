@@ -797,12 +797,20 @@ async function unlockContact(req, res) {
 }
 
 module.exports = {
+  // старые имена, которые уже ждёт clientBillingRoutes.js
+  clientBalance: getClientBalance,
+  clientBalanceLedger: getClientBalanceLedger,
+
+  // новые/совместимые имена
   getClientBalance,
   getClientBalanceLedger,
+
   createTopupOrder,
   createTopupOrderForBalance: createTopupOrder,
   topupOrder: createTopupOrder,
+
   autoUnlockAfterTopup,
   unlockAuto: autoUnlockAfterTopup,
+
   unlockContact,
 };
