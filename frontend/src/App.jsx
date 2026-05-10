@@ -59,7 +59,7 @@ import ProviderBookings from "./pages/ProviderBookings";
 
 // 🔹 Новые провайдерские страницы «услуг» + календарь
 import ProviderServicesTourBuilder from "./pages/ProviderServicesTourBuilder";
-import ProviderServicesMarketplace from "./pages/ProviderServicesMarketplace";
+import DashboardServices from "./pages/DashboardServices";
 import ProviderCalendar from "./components/ProviderCalendar";
 
 import Header from "./components/Header";
@@ -238,7 +238,7 @@ export default function App() {
               path="/dashboard/services/marketplace"
               element={
                 <PrivateRoute>
-                  <ProviderServicesMarketplace />
+                  <DashboardServices />
                 </PrivateRoute>
               }
             />
