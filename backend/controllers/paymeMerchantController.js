@@ -1,1376 +1,1192 @@
 // backend/controllers/paymeMerchantController.js
 
-const pool = require("../db");
 const crypto = require("crypto");
+const pool = require("../db");
+const { unlockContactSafe } = require("../utils/contactUnlock");
 
-// ✅ Self-contained: Payme Events logger is optional.
-// Если ../utils/paymeEvents отсутствует или временно сломан, процессинг НЕ должен падать.
-let recordPaymeEvent = async () => {};
-try {
-  // eslint-disable-next-line global-require
-  ({ recordPaymeEvent } = require("../utils/paymeEvents"));
-} catch {
-  // no-op
-}
+const PAYME_STATE = {
+  CREATED: 1,
+  COMPLETED: 2,
+  CANCELED_AFTER_COMPLETE: -2,
+  CANCELED: -1,
+};
 
-function getPaymeCreds() {
-  const mode = String(process.env.PAYME_MODE || "").trim().toLowerCase();
-
-  // sandbox/test mode
-  if (mode === "sandbox" || mode === "test" || mode === "dev") {
-    return {
-      login:
-        process.env.PAYME_MERCHANT_LOGIN_SANDBOX ||
-        process.env.PAYME_MERCHANT_LOGIN ||
-        "",
-      key:
-        process.env.PAYME_MERCHANT_KEY_SANDBOX ||
-        process.env.PAYME_MERCHANT_KEY ||
-        "",
-    };
-  }
-
-  // prod/default
-  return {
-    login: process.env.PAYME_MERCHANT_LOGIN || "",
-    key: process.env.PAYME_MERCHANT_KEY || "",
-  };
-}
-
-/**
- * Payme Merchant API (Paycom): JSON-RPC 2.0 via HTTP POST
- * Auth: Basic base64(login:password)
- *
- * ENV:
- *   PAYME_MODE=live|sandbox
- *   PAYME_MERCHANT_LOGIN / PAYME_MERCHANT_KEY
- *   PAYME_MERCHANT_LOGIN_SANDBOX / PAYME_MERCHANT_KEY_SANDBOX
- */
-
-const TX_TIMEOUT_MS = 12 * 60 * 60 * 1000; // 12h
-const ORDER_TTL_MS = Math.max(1, Number(process.env.PAYME_ORDER_TTL_HOURS || 12)) * 60 * 60 * 1000;
-
-function isFinalOrderStatus(status) {
-  return ["paid", "cancelled", "expired"].includes(String(status || "").toLowerCase());
-}
-
-function isOrderExpired(order, now = Date.now()) {
-  if (!order || isFinalOrderStatus(order.status)) return false;
-  const createdAt = order.created_at ? new Date(order.created_at).getTime() : 0;
-  return Number.isFinite(createdAt) && createdAt > 0 && now - createdAt > ORDER_TTL_MS;
-}
-
-function logPayme(event, extra = {}) {
-  try {
-    console.log(
-      JSON.stringify({
-        tag: "payme",
-        ts: new Date().toISOString(),
-        event,
-        ...extra,
-      })
-    );
-  } catch {}
-}
-
-function ok(id, result) {
-  return { jsonrpc: "2.0", id, result };
-}
-
-function rpcError(id, code, message, data) {
-  const e = { code, message };
-  if (data !== undefined) e.data = data;
-  return { jsonrpc: "2.0", id, error: e };
-}
+const PAYME_ERROR = {
+  INVALID_AMOUNT: -31001,
+  TRANSACTION_NOT_FOUND: -31003,
+  ORDER_NOT_FOUND: -31050,
+  CANNOT_PERFORM: -31008,
+  INVALID_ACCOUNT: -31050,
+  INTERNAL: -32400,
+};
 
 function nowMs() {
   return Date.now();
 }
 
-function toIntAmountTiyin(x) {
-  const n = Number(x);
-  if (!Number.isFinite(n)) return null;
-  const i = Math.trunc(n);
-  if (i <= 0) return null;
-  if (i !== n) return null;
-  return i;
+function toNumber(v, fallback = 0) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
 }
 
-/** ===== auth ===== */
-function parseBasicAuth(req) {
-  const h = String(req.headers.authorization || "");
-  const m = h.match(/^Basic\s+(.+)$/i);
-  if (!m) return null;
+function normalizePhone(v = "") {
+  return String(v || "").replace(/\D/g, "");
+}
+
+function tiyinToSum(v) {
+  return Number((toNumber(v) / 100).toFixed(2));
+}
+
+function sumToTiyin(v) {
+  return Math.round(toNumber(v) * 100);
+}
+
+function success(id, result) {
+  return {
+    jsonrpc: "2.0",
+    id,
+    result,
+  };
+}
+
+function error(id, code, message, data = null) {
+  return {
+    jsonrpc: "2.0",
+    id,
+    error: {
+      code,
+      message,
+      data,
+    },
+  };
+}
+
+function extractCredentials(req) {
+  const auth = req.headers.authorization || "";
+  if (!auth.startsWith("Basic ")) return null;
+
   try {
-    const raw = Buffer.from(m[1], "base64").toString("utf8");
-    const idx = raw.indexOf(":");
-    if (idx < 0) return null;
-    return { login: raw.slice(0, idx), key: raw.slice(idx + 1) };
+    const decoded = Buffer.from(auth.slice(6), "base64")
+      .toString("utf8")
+      .trim();
+
+    const idx = decoded.indexOf(":");
+    if (idx === -1) return null;
+
+    return {
+      login: decoded.slice(0, idx),
+      key: decoded.slice(idx + 1),
+    };
   } catch {
     return null;
   }
 }
 
-function safeEq(a, b) {
-  const aa = Buffer.from(String(a || ""));
-  const bb = Buffer.from(String(b || ""));
-  if (aa.length !== bb.length) return false;
-  return crypto.timingSafeEqual(aa, bb);
-}
+function validateAuth(req) {
+  const creds = extractCredentials(req);
 
-function requireAuth(req) {
-  const { login: expLogin, key: expKey } = getPaymeCreds();
-  const got = parseBasicAuth(req);
+  if (!creds) return false;
 
-  if (!expLogin || !expKey) return false;
+  const allowedLogin =
+    process.env.PAYME_MERCHANT_LOGIN ||
+    process.env.PAYME_LOGIN ||
+    "";
 
-  return !!got && safeEq(got.login, expLogin) && safeEq(got.key, expKey);
-}
+  const allowedKey =
+    process.env.PAYME_MERCHANT_KEY ||
+    process.env.PAYME_KEY ||
+    "";
 
-/** ===== normalization ===== */
-function normalizePaymeId(x) {
-  const s = String(x ?? "")
-    .replace(/\u0000/g, "")
-    .trim();
-
-  return s.replace(/\s+/g, " ");
-}
-
-/** ===== Payme account ===== */
-function extractOrderId(params) {
-  const oid = params?.account?.order_id ?? params?.account?.["order_id"];
-  const n = Number(oid);
-  return Number.isFinite(n) && n > 0 ? n : null;
-}
-
-/** ===== advisory locks ===== */
-async function lockKeyTx(client, keyStr) {
-  await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [
-    String(keyStr),
-  ]);
-}
-
-/** ===== DB helpers ===== */
-
-async function getOrderTx(client, orderId) {
-  const { rows } = await client.query(
-    `SELECT id, client_id, amount_tiyin, status, paid_at, created_at,
-            COALESCE(purpose, 'client_topup') AS purpose,
-            support_donation_id, provider_id, telegram_chat_id, note
-       FROM topup_orders
-      WHERE id = $1
-      FOR UPDATE`,
-    [orderId]
+  return (
+    creds.login === allowedLogin &&
+    creds.key === allowedKey
   );
-  return rows[0] || null;
 }
 
-async function ensureProviderSupportPaymeShape(client) {
+async function ensureSchema(client) {
   await client.query(`
-    CREATE TABLE IF NOT EXISTS provider_support_donations (
+    CREATE TABLE IF NOT EXISTS payme_transactions (
       id BIGSERIAL PRIMARY KEY,
-      provider_id BIGINT NULL,
-      telegram_chat_id BIGINT NULL,
-      service_id BIGINT NULL,
-      amount_tiyin BIGINT NOT NULL CHECK (amount_tiyin > 0),
-      payme_order_id BIGINT UNIQUE,
-      payme_id TEXT,
-      status TEXT NOT NULL DEFAULT 'new',
-      source TEXT NOT NULL DEFAULT 'telegram_provider_bot',
-      note TEXT,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-      paid_at TIMESTAMPTZ NULL,
-      cancelled_at TIMESTAMPTZ NULL
+      payme_id TEXT UNIQUE,
+      order_id BIGINT,
+      order_type TEXT,
+      amount BIGINT NOT NULL DEFAULT 0,
+      state INTEGER NOT NULL DEFAULT 1,
+      create_time BIGINT,
+      perform_time BIGINT,
+      cancel_time BIGINT,
+      reason INTEGER,
+      raw JSONB,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
     )
   `);
 
-  const { rows } = await client.query(`
-    SELECT c.relkind
-      FROM pg_class c
-      JOIN pg_namespace n ON n.oid = c.relnamespace
-     WHERE n.nspname='public' AND c.relname='topup_orders'
-     LIMIT 1
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS payme_ledger_effects (
+      id BIGSERIAL PRIMARY KEY,
+      effect_key TEXT UNIQUE NOT NULL,
+      effect_type TEXT NOT NULL,
+      order_id BIGINT,
+      transaction_id TEXT,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
   `);
-  const target = rows[0]?.relkind === 'v' ? 'payme_topup_orders' : 'topup_orders';
 
   await client.query(`
-    ALTER TABLE ${target}
-      ADD COLUMN IF NOT EXISTS purpose TEXT NOT NULL DEFAULT 'client_topup',
-      ADD COLUMN IF NOT EXISTS support_donation_id BIGINT NULL,
-      ADD COLUMN IF NOT EXISTS provider_id BIGINT NULL,
-      ADD COLUMN IF NOT EXISTS telegram_chat_id BIGINT NULL,
-      ADD COLUMN IF NOT EXISTS note TEXT NULL
+    ALTER TABLE payme_transactions
+    ADD COLUMN IF NOT EXISTS performed BOOLEAN DEFAULT FALSE
   `);
 
-  await client.query(`ALTER TABLE ${target} ALTER COLUMN client_id DROP NOT NULL`);
+  await client.query(`
+    ALTER TABLE payme_transactions
+    ADD COLUMN IF NOT EXISTS canceled BOOLEAN DEFAULT FALSE
+  `);
 
-  if (rows[0]?.relkind === 'v') {
-    await client.query(`CREATE OR REPLACE VIEW topup_orders AS SELECT * FROM payme_topup_orders`);
-  }
+  await client.query(`
+    ALTER TABLE payme_transactions
+    ADD COLUMN IF NOT EXISTS refunded BOOLEAN DEFAULT FALSE
+  `);
+
+  await client.query(`
+    ALTER TABLE payme_transactions
+    ADD COLUMN IF NOT EXISTS last_callback_hash TEXT
+  `);
+
+  await client.query(`
+    ALTER TABLE topup_orders
+    ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP
+  `);
+
+  await client.query(`
+    ALTER TABLE topup_orders
+    ADD COLUMN IF NOT EXISTS paid_at TIMESTAMP
+  `);
+
+  await client.query(`
+    ALTER TABLE topup_orders
+    ADD COLUMN IF NOT EXISTS canceled_at TIMESTAMP
+  `);
+
+  await client.query(`
+    ALTER TABLE topup_orders
+    ADD COLUMN IF NOT EXISTS failed_at TIMESTAMP
+  `);
+
+  await client.query(`
+    ALTER TABLE topup_orders
+    ADD COLUMN IF NOT EXISTS redirect_url TEXT
+  `);
 }
 
-async function markProviderSupportDonationPaidTx(client, order, paymeId, performTime) {
-  if (String(order?.purpose || '') !== 'provider_support') return false;
+async function advisoryLock(client, key) {
+  const hash = crypto
+    .createHash("sha256")
+    .update(String(key))
+    .digest("hex");
+
+  const bigint = BigInt("0x" + hash.slice(0, 15));
 
   await client.query(
-    `UPDATE provider_support_donations
-        SET status = 'paid',
-            paid_at = COALESCE(paid_at, $2),
-            payme_id = COALESCE(payme_id, $3)
-      WHERE id = $1`,
-    [Number(order.support_donation_id || 0), new Date(performTime), String(paymeId)]
+    `SELECT pg_advisory_xact_lock($1)`,
+    [bigint.toString()]
   );
-
-  return true;
 }
 
-async function markProviderSupportDonationCancelledTx(client, order, paymeId) {
-  if (String(order?.purpose || '') !== 'provider_support') return false;
-
-  await client.query(
-    `UPDATE provider_support_donations
-        SET status = 'cancelled',
-            cancelled_at = COALESCE(cancelled_at, now()),
-            payme_id = COALESCE(payme_id, $2)
-      WHERE id = $1`,
-    [Number(order.support_donation_id || 0), String(paymeId)]
-  );
-
-  return true;
-}
-
-async function getTxForUpdate(client, paymeId) {
+async function getTransactionByPaymeId(client, paymeId) {
   const { rows } = await client.query(
-    `SELECT payme_id, order_id, amount_tiyin, state, create_time, perform_time, cancel_time, reason
-       FROM payme_transactions
+    `
+      SELECT *
+      FROM payme_transactions
       WHERE payme_id = $1
-      FOR UPDATE`,
+      LIMIT 1
+    `,
     [paymeId]
   );
+
   return rows[0] || null;
 }
 
-async function insertTxIfAbsent(client, { paymeId, orderId, amount, createTime }) {
+async function getTopupOrder(client, orderId) {
   const { rows } = await client.query(
-    `INSERT INTO payme_transactions
-      (payme_id, order_id, amount_tiyin, state, create_time, updated_at)
-     VALUES ($1,$2,$3,1,$4,now())
-     ON CONFLICT (payme_id) DO NOTHING
-     RETURNING payme_id, order_id, amount_tiyin, state, create_time, perform_time, cancel_time, reason`,
-    [paymeId, orderId, amount, createTime]
+    `
+      SELECT *
+      FROM topup_orders
+      WHERE id = $1
+      LIMIT 1
+    `,
+    [orderId]
   );
+
   return rows[0] || null;
 }
 
-async function setTxState(client, paymeId, patch) {
-  const state = Number.isFinite(patch?.state) ? patch.state : null;
-  const perform_time = Number.isFinite(patch?.perform_time)
-    ? patch.perform_time
-    : null;
-  const cancel_time = Number.isFinite(patch?.cancel_time)
-    ? patch.cancel_time
-    : null;
-  const reason =
-    patch && Object.prototype.hasOwnProperty.call(patch, "reason")
-      ? patch.reason
-      : null;
-
-  const { rows } = await client.query(
-    `UPDATE payme_transactions
-        SET state = COALESCE($2, state),
-            perform_time = COALESCE($3, perform_time),
-            cancel_time = COALESCE($4, cancel_time),
-            reason = COALESCE($5, reason),
-            updated_at = now()
-      WHERE payme_id = $1
-      RETURNING payme_id, order_id, amount_tiyin, state, create_time, perform_time, cancel_time, reason`,
-    [paymeId, state, perform_time, cancel_time, reason]
-  );
-  return rows[0] || null;
-}
-
-async function markOrderStatusTx(client, orderId, status, paidAt = null) {
+async function markOrderExpired(client, orderId) {
   await client.query(
-    `UPDATE topup_orders
-        SET status = $2,
-            paid_at = COALESCE($3, paid_at)
-      WHERE id = $1`,
-    [orderId, status, paidAt]
+    `
+      UPDATE topup_orders
+      SET
+        status = 'expired',
+        failed_at = NOW()
+      WHERE id = $1
+        AND status IN ('created', 'pending')
+    `,
+    [orderId]
   );
 }
 
-// ===== contact_balance_ledger helpers =====
-const _ledgerColsCache = { cols: null };
+function isExpired(order) {
+  if (!order?.expires_at) return false;
 
-async function getLedgerCols(client) {
-  if (_ledgerColsCache.cols) return _ledgerColsCache.cols;
+  const ts = new Date(order.expires_at).getTime();
+
+  if (!Number.isFinite(ts)) return false;
+
+  return ts < Date.now();
+}
+
+async function insertLedgerEffect(
+  client,
+  effectKey,
+  effectType,
+  orderId,
+  transactionId
+) {
+  const res = await client.query(
+    `
+      INSERT INTO payme_ledger_effects (
+        effect_key,
+        effect_type,
+        order_id,
+        transaction_id
+      )
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (effect_key)
+      DO NOTHING
+      RETURNING id
+    `,
+    [
+      effectKey,
+      effectType,
+      orderId,
+      transactionId,
+    ]
+  );
+
+  return !!res.rows[0];
+}
+
+async function creditClientBalance({
+  client,
+  clientId,
+  amountTiyin,
+  orderId,
+  transactionId,
+}) {
+  const effectKey = `topup_credit:${transactionId}`;
+
+  const inserted = await insertLedgerEffect(
+    client,
+    effectKey,
+    "topup_credit",
+    orderId,
+    transactionId
+  );
+
+  if (!inserted) {
+    return {
+      duplicated: true,
+    };
+  }
+
+  await client.query(
+    `
+      INSERT INTO contact_balance_ledger (
+        client_id,
+        amount,
+        type,
+        note,
+        created_at
+      )
+      VALUES (
+        $1,
+        $2,
+        'topup',
+        $3,
+        NOW()
+      )
+    `,
+    [
+      clientId,
+      amountTiyin,
+      `Payme topup #${transactionId}`,
+    ]
+  );
+
+  return {
+    duplicated: false,
+  };
+}
+
+async function debitRefund({
+  client,
+  clientId,
+  amountTiyin,
+  orderId,
+  transactionId,
+}) {
+  const effectKey = `refund_debit:${transactionId}`;
+
+  const inserted = await insertLedgerEffect(
+    client,
+    effectKey,
+    "refund_debit",
+    orderId,
+    transactionId
+  );
+
+  if (!inserted) {
+    return {
+      duplicated: true,
+    };
+  }
+
+  await client.query(
+    `
+      INSERT INTO contact_balance_ledger (
+        client_id,
+        amount,
+        type,
+        note,
+        created_at
+      )
+      VALUES (
+        $1,
+        $2,
+        'refund',
+        $3,
+        NOW()
+      )
+    `,
+    [
+      clientId,
+      -Math.abs(amountTiyin),
+      `Refund for Payme transaction ${transactionId}`,
+    ]
+  );
+
+  return {
+    duplicated: false,
+  };
+}
+
+async function processAutoUnlock({
+  client,
+  order,
+  transactionId,
+}) {
+  if (
+    order.order_type !== "unlock_contact" ||
+    !order.service_id ||
+    !order.client_id
+  ) {
+    return;
+  }
+
+  const effectKey =
+    `unlock_after_pay:${transactionId}`;
+
+  const inserted = await insertLedgerEffect(
+    client,
+    effectKey,
+    "unlock_after_pay",
+    order.id,
+    transactionId
+  );
+
+  if (!inserted) {
+    return;
+  }
+
+  await unlockContactSafe({
+    client,
+    clientId: order.client_id,
+    serviceId: order.service_id,
+    source: "payme_auto_unlock",
+    skipBalanceDeduction: true,
+  });
+}
+
+async function createTransaction({
+  client,
+  paymeId,
+  orderId,
+  orderType,
+  amount,
+  raw,
+}) {
+  const createTime = nowMs();
 
   const { rows } = await client.query(
     `
-    SELECT column_name
-    FROM information_schema.columns
-    WHERE table_schema='public' AND table_name='contact_balance_ledger'
-  `
+      INSERT INTO payme_transactions (
+        payme_id,
+        order_id,
+        order_type,
+        amount,
+        state,
+        create_time,
+        raw
+      )
+      VALUES (
+        $1,
+        $2,
+        $3,
+        $4,
+        $5,
+        $6,
+        $7
+      )
+      RETURNING *
+    `,
+    [
+      paymeId,
+      orderId,
+      orderType,
+      amount,
+      PAYME_STATE.CREATED,
+      createTime,
+      raw,
+    ]
   );
 
-  const set = new Set(rows.map((r) => r.column_name));
-  _ledgerColsCache.cols = set;
-  return set;
+  return rows[0];
 }
 
-function buildInsert(table, data, conflictCols) {
-  const cols = Object.keys(data);
-  const vals = cols.map((_, i) => `$${i + 1}`);
-  const sql =
-    `INSERT INTO ${table} (${cols.join(", ")}) VALUES (${vals.join(", ")}) ` +
-    (conflictCols?.length
-      ? `ON CONFLICT (${conflictCols.join(", ")}) DO NOTHING`
-      : "");
-  const args = cols.map((c) => data[c]);
-  return { sql, args };
-}
+async function performTransaction({
+  client,
+  transaction,
+  order,
+}) {
+  if (
+    transaction.state === PAYME_STATE.COMPLETED
+  ) {
+    return transaction;
+  }
 
-// ===== schema-aware helpers =====
-const _schemaCache = {
-  cols: new Map(),
-  balanceCol: null,
-};
+  const amount = toNumber(transaction.amount);
 
-async function getColumns(client, table, schema = "public") {
-  const key = `${schema}.${table}`;
-  if (_schemaCache.cols.has(key)) return _schemaCache.cols.get(key);
+  if (amount <= 0) {
+    throw new Error("INVALID_AMOUNT");
+  }
+
+  if (isExpired(order)) {
+    await markOrderExpired(client, order.id);
+
+    throw new Error("ORDER_EXPIRED");
+  }
+
+  if (order.status === "paid") {
+    const { rows } = await client.query(
+      `
+        UPDATE payme_transactions
+        SET
+          state = $2,
+          performed = TRUE,
+          perform_time = COALESCE(
+            perform_time,
+            $3
+          ),
+          updated_at = NOW()
+        WHERE id = $1
+        RETURNING *
+      `,
+      [
+        transaction.id,
+        PAYME_STATE.COMPLETED,
+        nowMs(),
+      ]
+    );
+
+    return rows[0];
+  }
+
+  const effectKey =
+    `perform_credit:${transaction.payme_id}`;
+
+  const alreadyCredited =
+    !(await insertLedgerEffect(
+      client,
+      effectKey,
+      "perform_guard",
+      order.id,
+      transaction.payme_id
+    ));
+
+  if (!alreadyCredited) {
+    await creditClientBalance({
+      client,
+      clientId: order.client_id,
+      amountTiyin: amount,
+      orderId: order.id,
+      transactionId: transaction.payme_id,
+    });
+  }
+
+  await client.query(
+    `
+      UPDATE topup_orders
+      SET
+        status = 'paid',
+        paid_at = NOW()
+      WHERE id = $1
+    `,
+    [order.id]
+  );
+
+  await processAutoUnlock({
+    client,
+    order,
+    transactionId: transaction.payme_id,
+  });
 
   const { rows } = await client.query(
     `
-    SELECT column_name
-    FROM information_schema.columns
-    WHERE table_schema = $1 AND table_name = $2
-  `,
-    [schema, table]
+      UPDATE payme_transactions
+      SET
+        state = $2,
+        performed = TRUE,
+        perform_time = COALESCE(
+          perform_time,
+          $3
+        ),
+        updated_at = NOW()
+      WHERE id = $1
+      RETURNING *
+    `,
+    [
+      transaction.id,
+      PAYME_STATE.COMPLETED,
+      nowMs(),
+    ]
   );
 
-  const set = new Set(rows.map((r) => r.column_name));
-  _schemaCache.cols.set(key, set);
-  return set;
+  return rows[0];
 }
 
-async function pickClientsBalanceColumn(client) {
-  if (_schemaCache.balanceCol !== null) return _schemaCache.balanceCol;
+async function cancelTransaction({
+  client,
+  transaction,
+  order,
+  reason,
+}) {
+  const now = nowMs();
 
-  const cols = await getColumns(client, "clients");
-  const candidates = [
-    "contact_balance",
-    "contact_balance_tiyin",
-    "balance_tiyin",
-    "balance",
-  ];
-  const found = candidates.find((c) => cols.has(c)) || null;
+  if (
+    transaction.state === PAYME_STATE.CANCELED ||
+    transaction.state === PAYME_STATE.CANCELED_AFTER_COMPLETE
+  ) {
+    return transaction;
+  }
 
-  _schemaCache.balanceCol = found;
-  return found;
-}
+  let nextState = PAYME_STATE.CANCELED;
 
-async function getLedgerBalance(client, clientId) {
-  const { rows } = await client.query(
-    `
-    SELECT COALESCE(SUM(amount), 0)::bigint AS balance
-    FROM contact_balance_ledger
-    WHERE client_id = $1
-  `,
-    [Number(clientId)]
-  );
-  return Number(rows[0]?.balance || 0);
-}
+  if (transaction.state === PAYME_STATE.COMPLETED) {
+    nextState = PAYME_STATE.CANCELED_AFTER_COMPLETE;
 
-async function syncClientBalanceMirror(client, clientId) {
-  const col = await pickClientsBalanceColumn(client);
-  const cid = Number(clientId);
-  if (!Number.isFinite(cid) || cid <= 0) return 0;
+    if (order?.client_id) {
+      await debitRefund({
+        client,
+        clientId: order.client_id,
+        amountTiyin: transaction.amount,
+        orderId: order.id,
+        transactionId: transaction.payme_id,
+      });
+    }
+  }
 
-  const balance = await getLedgerBalance(client, cid);
-
-  if (col) {
+  if (order?.id) {
     await client.query(
-      `UPDATE clients
-          SET ${col} = $2
-        WHERE id = $1`,
-      [cid, balance]
+      `
+        UPDATE topup_orders
+        SET
+          status = CASE
+            WHEN status = 'paid' THEN 'refunded'
+            ELSE 'canceled'
+          END,
+          canceled_at = COALESCE(canceled_at, NOW()),
+          failed_at = CASE
+            WHEN status IN ('created', 'pending')
+            THEN COALESCE(failed_at, NOW())
+            ELSE failed_at
+          END
+        WHERE id = $1
+      `,
+      [order.id]
     );
   }
 
-  return balance;
+  const { rows } = await client.query(
+    `
+      UPDATE payme_transactions
+      SET
+        state = $2,
+        canceled = TRUE,
+        cancel_time = COALESCE(cancel_time, $3),
+        reason = COALESCE(reason, $4),
+        updated_at = NOW()
+      WHERE id = $1
+      RETURNING *
+    `,
+    [
+      transaction.id,
+      nextState,
+      now,
+      reason || null,
+    ]
+  );
+
+  return rows[0];
 }
 
-async function creditLedgerOnceTx(client, { clientId, amountTiyin, orderId, paymeId }) {
-  const amt = Number(amountTiyin);
-  if (!Number.isFinite(amt) || amt <= 0) {
-    throw new Error("creditLedgerOnceTx: bad amountTiyin");
-  }
+function accountOrderId(account = {}) {
+  return (
+    account.order_id ||
+    account.orderId ||
+    account.id ||
+    account.topup_order_id ||
+    account.topupOrderId
+  );
+}
 
-  const cols = await getLedgerCols(client);
+function paymeResultTransaction(tx) {
+  return {
+    transaction: String(tx.payme_id),
+    state: Number(tx.state),
+    create_time: Number(tx.create_time || 0),
+    perform_time: Number(tx.perform_time || 0),
+    cancel_time: Number(tx.cancel_time || 0),
+    reason: tx.reason || null,
+  };
+}
 
-  const row = {};
-  if (cols.has("client_id")) row.client_id = Number(clientId);
-  if (cols.has("amount")) row.amount = amt;
-  if (cols.has("reason")) row.reason = "topup";
-  if (cols.has("source")) row.source = "payme";
-  if (cols.has("service_id")) row.service_id = null;
-
-  if (cols.has("meta")) {
-    row.meta = {
-      payme_id: String(paymeId),
-      order_id: String(orderId),
-      kind: "topup",
-    };
-  }
+async function CheckPerformTransaction(req, res, id, params) {
+  const client = await pool.connect();
 
   try {
-    const { sql, args } = buildInsert("contact_balance_ledger", row, null);
-    await client.query(sql, args);
-    return { inserted: true };
-  } catch (e) {
-    if (String(e?.code || "") === "23505") {
-      return { inserted: false };
+    await ensureSchema(client);
+
+    const amount = toNumber(params.amount);
+    const orderId = accountOrderId(params.account);
+
+    if (!orderId) {
+      return res.json(
+        error(
+          id,
+          PAYME_ERROR.INVALID_ACCOUNT,
+          "Order id is required"
+        )
+      );
     }
-    throw e;
-  }
-}
 
-async function debitLedgerOnceTx(client, { clientId, amountTiyin, orderId, paymeId, reasonCode }) {
-  const amt = Number(amountTiyin);
-  if (!Number.isFinite(amt) || amt <= 0) {
-    throw new Error("debitLedgerOnceTx: bad amountTiyin");
-  }
+    await client.query("BEGIN");
+    await advisoryLock(client, `order:${orderId}`);
 
-  const cols = await getLedgerCols(client);
+    const order = await getTopupOrder(client, orderId);
 
-  const row = {};
-  if (cols.has("client_id")) row.client_id = Number(clientId);
-  if (cols.has("amount")) row.amount = -amt;
-  if (cols.has("reason")) row.reason = "refund";
-  if (cols.has("source")) row.source = "payme_refund";
-  if (cols.has("service_id")) row.service_id = null;
-
-  if (cols.has("meta")) {
-    row.meta = {
-      payme_id: `${String(paymeId)}_refund`,
-      original_payme_id: String(paymeId),
-      order_id: String(orderId),
-      kind: "refund",
-      reason_code: Number.isFinite(Number(reasonCode)) ? Number(reasonCode) : 0,
-    };
-  }
-
-  try {
-    const { sql, args } = buildInsert("contact_balance_ledger", row, null);
-    await client.query(sql, args);
-    return { inserted: true };
-  } catch (e) {
-    if (String(e?.code || "") === "23505") {
-      return { inserted: false };
+    if (!order) {
+      await client.query("ROLLBACK");
+      return res.json(
+        error(
+          id,
+          PAYME_ERROR.ORDER_NOT_FOUND,
+          "Order not found"
+        )
+      );
     }
-    throw e;
+
+    if (isExpired(order)) {
+      await markOrderExpired(client, order.id);
+      await client.query("COMMIT");
+
+      return res.json(
+        error(
+          id,
+          PAYME_ERROR.CANNOT_PERFORM,
+          "Order expired"
+        )
+      );
+    }
+
+    if (!["created", "pending"].includes(order.status)) {
+      await client.query("ROLLBACK");
+
+      return res.json(
+        error(
+          id,
+          PAYME_ERROR.CANNOT_PERFORM,
+          "Order cannot be paid"
+        )
+      );
+    }
+
+    if (toNumber(order.amount) !== amount) {
+      await client.query("ROLLBACK");
+
+      return res.json(
+        error(
+          id,
+          PAYME_ERROR.INVALID_AMOUNT,
+          "Invalid amount"
+        )
+      );
+    }
+
+    await client.query("COMMIT");
+
+    return res.json(
+      success(id, {
+        allow: true,
+      })
+    );
+  } catch (e) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {}
+
+    console.error("[payme] CheckPerformTransaction error:", e);
+
+    return res.json(
+      error(
+        id,
+        PAYME_ERROR.INTERNAL,
+        "Internal error"
+      )
+    );
+  } finally {
+    client.release();
   }
 }
 
-/** ===== rpc validation ===== */
-
-function validateRpc(body) {
-  const jsonrpc = body?.jsonrpc;
-  const id = body?.id;
-  const method = body?.method;
-  const params = body?.params;
-
-  if (jsonrpc !== "2.0") {
-    return {
-      ok: false,
-      id: id ?? null,
-      err: rpcError(id ?? null, -32600, "Invalid Request"),
-    };
-  }
-  if (typeof method !== "string" || !method) {
-    return {
-      ok: false,
-      id: id ?? null,
-      err: rpcError(id ?? null, -32600, "Invalid Request"),
-    };
-  }
-  if (params !== undefined && (typeof params !== "object" || params === null)) {
-    return {
-      ok: false,
-      id: id ?? null,
-      err: rpcError(id ?? null, -32602, "Invalid params"),
-    };
-  }
-  return { ok: true, id, method, params: params || {} };
-}
-
-/** ===== main handler ===== */
-
-async function paymeMerchantRpc(req, res) {
-  const __paymeStart = Date.now();
-  const __paymeIp =
-    req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.ip || null;
-  const __paymeUa = req.headers["user-agent"] || null;
-
-  const __paymeBody = req.body || {};
-  
-  console.log("====================================");
-  console.log("[PAYME RAW REQUEST]");
-  console.log(JSON.stringify(__paymeBody, null, 2));
-  console.log("====================================");
-  
-  const __paymeRpcId = __paymeBody?.id ?? null;
-  const __paymeMethod = __paymeBody?.method ?? null;
-
-  const __paymeOrderId =
-    (__paymeBody?.params?.account?.order_id ??
-      __paymeBody?.params?.account?.["order_id"]) ?? null;
-
-  const __paymePaymeId =
-    __paymeBody?.params?.id ??
-    __paymeBody?.params?.transaction ??
-    __paymeBody?.id ??
-    null;
+async function CreateTransaction(req, res, id, params) {
+  const client = await pool.connect();
 
   try {
-    await recordPaymeEvent({
-      method: __paymeMethod ? String(__paymeMethod) : null,
-      stage: "begin",
-      payme_id: __paymePaymeId ? String(__paymePaymeId) : null,
-      order_id: __paymeOrderId ? Number(__paymeOrderId) : null,
-      rpc_id:
-        __paymeRpcId !== undefined && __paymeRpcId !== null
-          ? String(__paymeRpcId)
-          : null,
-      ip: __paymeIp ? String(__paymeIp) : null,
-      user_agent: __paymeUa ? String(__paymeUa) : null,
-      req_json: __paymeBody,
+    await ensureSchema(client);
+
+    const paymeId = params.id;
+    const amount = toNumber(params.amount);
+    const orderId = accountOrderId(params.account);
+
+    if (!paymeId || !orderId) {
+      return res.json(
+        error(
+          id,
+          PAYME_ERROR.INVALID_ACCOUNT,
+          "Invalid transaction/account"
+        )
+      );
+    }
+
+    await client.query("BEGIN");
+    await advisoryLock(client, `payme:${paymeId}`);
+    await advisoryLock(client, `order:${orderId}`);
+
+    let tx = await getTransactionByPaymeId(client, paymeId);
+
+    if (tx) {
+      await client.query("COMMIT");
+
+      return res.json(
+        success(id, paymeResultTransaction(tx))
+      );
+    }
+
+    const order = await getTopupOrder(client, orderId);
+
+    if (!order) {
+      await client.query("ROLLBACK");
+
+      return res.json(
+        error(
+          id,
+          PAYME_ERROR.ORDER_NOT_FOUND,
+          "Order not found"
+        )
+      );
+    }
+
+    if (isExpired(order)) {
+      await markOrderExpired(client, order.id);
+      await client.query("COMMIT");
+
+      return res.json(
+        error(
+          id,
+          PAYME_ERROR.CANNOT_PERFORM,
+          "Order expired"
+        )
+      );
+    }
+
+    if (!["created", "pending"].includes(order.status)) {
+      await client.query("ROLLBACK");
+
+      return res.json(
+        error(
+          id,
+          PAYME_ERROR.CANNOT_PERFORM,
+          "Order cannot be paid"
+        )
+      );
+    }
+
+    if (toNumber(order.amount) !== amount) {
+      await client.query("ROLLBACK");
+
+      return res.json(
+        error(
+          id,
+          PAYME_ERROR.INVALID_AMOUNT,
+          "Invalid amount"
+        )
+      );
+    }
+
+    tx = await createTransaction({
+      client,
+      paymeId,
+      orderId: order.id,
+      orderType: order.order_type || "topup",
+      amount,
+      raw: params,
     });
-  } catch {}
 
-  const __origStatus = res.status.bind(res);
-  const __origJson = res.json.bind(res);
+    await client.query(
+      `
+        UPDATE topup_orders
+        SET status = 'pending'
+        WHERE id = $1
+          AND status = 'created'
+      `,
+      [order.id]
+    );
 
-  let __httpStatus = 200;
-  res.status = (code) => {
-    __httpStatus = Number(code) || __httpStatus;
-    return __origStatus(code);
-  };
+    await client.query("COMMIT");
 
-  res.json = (payload) => {
-    console.log("[PAYME RAW RESPONSE]");
-    console.log(JSON.stringify(payload, null, 2));
-    console.log("====================================");
-    
-    (async () => {
-      try {
-        const errCode =
-          payload?.error?.code !== undefined && payload?.error?.code !== null
-            ? Number(payload.error.code)
-            : null;
-        const errMsg =
-          payload?.error?.message !== undefined &&
-          payload?.error?.message !== null
-            ? String(payload.error.message)
-            : null;
+    return res.json(
+      success(id, paymeResultTransaction(tx))
+    );
+  } catch (e) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {}
 
-        await recordPaymeEvent({
-          method: __paymeMethod ? String(__paymeMethod) : null,
-          stage: errCode ? "error" : "end",
-          payme_id: __paymePaymeId ? String(__paymePaymeId) : null,
-          order_id: __paymeOrderId ? Number(__paymeOrderId) : null,
-          rpc_id:
-            __paymeRpcId !== undefined && __paymeRpcId !== null
-              ? String(__paymeRpcId)
-              : null,
-          http_status: __httpStatus,
-          error_code: Number.isFinite(errCode) ? errCode : null,
-          error_message: errMsg || null,
-          duration_ms: Date.now() - __paymeStart,
-          res_json: payload,
-        });
-      } catch {}
-    })();
+    console.error("[payme] CreateTransaction error:", e);
 
-    return __origJson(payload);
-  };
+    return res.json(
+      error(
+        id,
+        PAYME_ERROR.INTERNAL,
+        "Internal error"
+      )
+    );
+  } finally {
+    client.release();
+  }
+}
+
+async function PerformTransaction(req, res, id, params) {
+  const client = await pool.connect();
 
   try {
-    if (!requireAuth(req)) {
-      const reqId = req?.body?.id ?? null;
-      return res.status(200).json(rpcError(reqId, -32504, "Unauthorized"));
-    }
-
-    const v = validateRpc(req.body || {});
-    if (!v.ok) return res.status(200).json(v.err);
-
-    const { id, method, params } = v;
-
-    /** ---- CheckPerformTransaction ---- */
-    if (method === "CheckPerformTransaction") {
-      const orderId = extractOrderId(params);
-      const amount = toIntAmountTiyin(params.amount);
-
-      if (!orderId) {
-        return res.status(200).json(rpcError(id, -31050, "Invalid account"));
-      }
-      if (!Number.isFinite(amount) || amount <= 0) {
-        return res
-          .status(200)
-          .json(rpcError(id, -32602, "Invalid params.amount"));
-      }
-
-      const client = await pool.connect();
-      let order = null;
-      try {
-        await client.query("BEGIN");
-        await ensureProviderSupportPaymeShape(client);
-        await lockKeyTx(client, `order:${orderId}`);
-
-        const { rows } = await client.query(
-          `SELECT id, amount_tiyin, status, created_at
-             FROM topup_orders
-            WHERE id = $1`,
-          [orderId]
-        );
-        order = rows[0] || null;
-        await client.query("COMMIT");
-      } catch (e) {
-        try {
-          await client.query("ROLLBACK");
-        } catch {}
-        console.error("[payme] CheckPerformTransaction error:", e?.message || e);
-        return res.status(200).json(rpcError(id, -32400, "Internal error"));
-      } finally {
-        client.release();
-      }
-
-      if (!order) {
-        return res.status(200).json(rpcError(id, -31050, "Order not found"));
-      }
-      if (Number(order.amount_tiyin) !== amount) {
-        return res.status(200).json(rpcError(id, -31001, "Incorrect amount"));
-      }
-      if (order.status === "paid") {
-        return res.status(200).json(rpcError(id, -31008, "Already paid"));
-      }
-      if (order.status === "cancelled" || order.status === "expired") {
-        return res.status(200).json(rpcError(id, -31008, order.status === "expired" ? "Order expired" : "Order cancelled"));
-      }
-      if (isOrderExpired(order)) {
-        return res.status(200).json(rpcError(id, -31008, "Order expired"));
-      }
-
-      return res.status(200).json(ok(id, { allow: true }));
-    }
-
-    /** ---- CreateTransaction ---- */
-    if (method === "CreateTransaction") {
-      const orderId = extractOrderId(params);
-      const amount = toIntAmountTiyin(params.amount);
-      const paymeIdRaw = params.id;
-      const paymeId = normalizePaymeId(paymeIdRaw);
-      const time = Number(params.time);
-
-      if (!paymeId) {
-        return res.status(200).json(rpcError(id, -32602, "Missing params.id"));
-      }
-      if (!orderId) {
-        return res.status(200).json(rpcError(id, -31050, "Invalid account"));
-      }
-      if (!Number.isFinite(amount) || amount <= 0) {
-        return res
-          .status(200)
-          .json(rpcError(id, -32602, "Invalid params.amount"));
-      }
-
-      const client = await pool.connect();
-      try {
-        await client.query("BEGIN");
-        await ensureProviderSupportPaymeShape(client);
-
-        await lockKeyTx(client, `payme:${paymeId}`);
-        await lockKeyTx(client, `order:${orderId}`);
-
-        logPayme("CreateTransaction.begin", { paymeId, orderId, amount });
-
-        const { rows: orderTxRows } = await client.query(
-          `SELECT payme_id, state
-             FROM payme_transactions
-            WHERE order_id = $1
-              AND state IN (1,2)
-            LIMIT 1
-            FOR UPDATE`,
-          [orderId]
-        );
-        const activeForOrder = orderTxRows[0] || null;
-
-        const existing = await getTxForUpdate(client, paymeId);
-        if (existing) {
-          if (Number(existing.order_id) !== Number(orderId)) {
-            await client.query("ROLLBACK");
-            return res
-              .status(200)
-              .json(rpcError(id, -31099, "Transaction conflict (order mismatch)"));
-          }
-          if (Number(existing.amount_tiyin) !== Number(amount)) {
-            await client.query("ROLLBACK");
-            return res.status(200).json(rpcError(id, -31001, "Incorrect amount"));
-          }
-
-          await client.query("COMMIT");
-          return res.status(200).json(
-            ok(id, {
-              create_time:
-                Number(existing.create_time) ||
-                (Number.isFinite(time) ? time : nowMs()),
-              transaction: paymeId,
-              state: Number(existing.state),
-              receivers: null,
-            })
-          );
-        }
-
-        if (activeForOrder && String(activeForOrder.payme_id) !== String(paymeId)) {
-          await client.query("ROLLBACK");
-          return res
-            .status(200)
-            .json(rpcError(id, -31099, "Transaction conflict (another active tx for order)"));
-        }
-
-        const order = await getOrderTx(client, orderId);
-        if (!order) {
-          await client.query("ROLLBACK");
-          return res.status(200).json(rpcError(id, -31050, "Order not found"));
-        }
-        if (Number(order.amount_tiyin) !== amount) {
-          await client.query("ROLLBACK");
-          return res.status(200).json(rpcError(id, -31001, "Incorrect amount"));
-        }
-        if (order.status === "paid") {
-          await client.query("ROLLBACK");
-          return res.status(200).json(rpcError(id, -31008, "Already paid"));
-        }
-        if (order.status === "cancelled" || order.status === "expired") {
-          await client.query("ROLLBACK");
-          return res.status(200).json(rpcError(id, -31008, order.status === "expired" ? "Order expired" : "Order cancelled"));
-        }
-        if (isOrderExpired(order)) {
-          await markOrderStatusTx(client, orderId, "expired");
-          await client.query("COMMIT");
-          return res.status(200).json(rpcError(id, -31008, "Order expired"));
-        }
-
-        const createTime = Number.isFinite(time) && time > 0 ? time : nowMs();
-
-        if (nowMs() - createTime > TX_TIMEOUT_MS) {
-          await client.query("ROLLBACK");
-          return res.status(200).json(rpcError(id, -31008, "Transaction expired"));
-        }
-
-        await insertTxIfAbsent(client, {
-          paymeId,
-          orderId,
-          amount,
-          createTime,
-        });
-
-        if (order.status === "new" || order.status === "created" || !order.status) {
-          await markOrderStatusTx(client, orderId, "created");
-        }
-
-        await client.query("COMMIT");
-
-        return res.status(200).json(
-          ok(id, {
-            create_time: createTime,
-            transaction: paymeId,
-            state: 1,
-            receivers: null,
-          })
-        );
-      } catch (e) {
-        try {
-          await client.query("ROLLBACK");
-        } catch {}
-        console.error("[payme] CreateTransaction error:", e?.message || e);
-        return res.status(200).json(rpcError(id, -32400, "Internal error"));
-      } finally {
-        client.release();
-      }
-    }
-
-    /** ---- PerformTransaction ---- */
-    if (method === "PerformTransaction") {
-      const paymeId = normalizePaymeId(params.id);
-
-      if (!paymeId) {
-        return res.status(200).json(rpcError(id, -32602, "Missing params.id"));
-      }
-
-      const client = await pool.connect();
-      try {
-        await client.query("BEGIN");
-        await ensureProviderSupportPaymeShape(client);
-        await lockKeyTx(client, `payme:${paymeId}`);
-
-        logPayme("PerformTransaction.begin", { paymeId });
-
-        const tx = await getTxForUpdate(client, paymeId);
-        if (!tx) {
-          await client.query("ROLLBACK");
-          const raw = String(params.id ?? "");
-          const hex = Buffer.from(raw, "utf8").toString("hex").slice(0, 80);
-          logPayme("PerformTransaction.not_found", {
-            paymeId_norm: paymeId,
-            paymeId_raw_len: raw.length,
-            paymeId_raw_hex_prefix: hex,
-          });
-          return res.status(200).json(rpcError(id, -31003, "Transaction not found"));
-        }
-
-        if (tx?.order_id) {
-          await lockKeyTx(client, `order:${tx.order_id}`);
-        }
-
-        if (Number(tx.state) === -1 || Number(tx.state) === -2) {
-          await client.query("COMMIT");
-          return res.status(200).json(rpcError(id, -31008, "Transaction cancelled"));
-        }
-
-        const ct = Number(tx.create_time) || 0;
-        if (ct && nowMs() - ct > TX_TIMEOUT_MS) {
-          const cancelTime = nowMs();
-          await setTxState(client, paymeId, {
-            state: -1,
-            cancel_time: cancelTime,
-            reason: 4,
-          });
-          await client.query("COMMIT");
-          return res.status(200).json(rpcError(id, -31008, "Transaction expired"));
-        }
-
-        if (Number(tx.state) === 2) {
-          const pt = Number(tx.perform_time) || 0;
-          await client.query("COMMIT");
-          return res.status(200).json(
-            ok(id, {
-              transaction: paymeId,
-              perform_time: pt,
-              state: 2,
-            })
-          );
-        }
-
-        const orderId = Number(tx.order_id);
-        const order = await getOrderTx(client, orderId);
-        if (!order) {
-          await client.query("ROLLBACK");
-          return res.status(200).json(rpcError(id, -31050, "Order not found"));
-        }
-
-        if (order.status === "cancelled" || order.status === "expired") {
-          const cancelTime = nowMs();
-          await setTxState(client, paymeId, {
-            state: -1,
-            cancel_time: cancelTime,
-            reason: 4,
-          });
-          await client.query("COMMIT");
-          return res.status(200).json(rpcError(id, -31008, order.status === "expired" ? "Order expired" : "Order cancelled"));
-        }
-        if (isOrderExpired(order)) {
-          const cancelTime = nowMs();
-          await setTxState(client, paymeId, {
-            state: -1,
-            cancel_time: cancelTime,
-            reason: 4,
-          });
-          await markOrderStatusTx(client, orderId, "expired");
-          await client.query("COMMIT");
-          return res.status(200).json(rpcError(id, -31008, "Order expired"));
-        }
-
-        if (order.status === "paid") {
-          const performTime = order.paid_at
-            ? new Date(order.paid_at).getTime()
-            : nowMs();
-
-          await setTxState(client, paymeId, {
-            state: 2,
-            perform_time: performTime,
-          });
-
-          const isProviderSupportPaid = await markProviderSupportDonationPaidTx(client, order, paymeId, performTime);
-
-          if (!isProviderSupportPaid) {
-            await syncClientBalanceMirror(client, order.client_id);
-          }
-
-          if (!isProviderSupportPaid) {
-            // 🔥 FUNNEL: payment_success
-            try {
-              const clientId = Number(order.client_id);
-
-              await client.query(
-                `
-                INSERT INTO contact_unlock_funnel
-                  (client_id, service_id, source, step, status, payme_id, order_id)
-                VALUES ($1, 0, 'web', 'payment_success', 'success', $2, $3)
-                `,
-                [clientId, String(paymeId), String(orderId)]
-              );
-            } catch (e) {
-              console.error("[funnel] payment_success error:", e?.message || e);
-            }
-          }
-
-          await client.query("COMMIT");
-          return res.status(200).json(
-            ok(id, {
-              transaction: paymeId,
-              perform_time: performTime,
-              state: 2,
-            })
-          );
-        }
-
-        const performTime = nowMs();
-
-        await setTxState(client, paymeId, {
-          state: 2,
-          perform_time: performTime,
-        });
-        await markOrderStatusTx(client, orderId, "paid", new Date(performTime));
-
-        const isProviderSupport = await markProviderSupportDonationPaidTx(client, order, paymeId, performTime);
-
-        if (!isProviderSupport) {
-          const { rows: cRows } = await client.query(
-            `SELECT id FROM clients WHERE id=$1`,
-            [Number(order.client_id)]
-          );
-          if (!cRows.length) {
-            await client.query("ROLLBACK");
-            return res.status(200).json(rpcError(id, -31050, "Client not found"));
-          }
-
-          await creditLedgerOnceTx(client, {
-            clientId: Number(order.client_id),
-            amountTiyin: Number(order.amount_tiyin),
-            orderId,
-            paymeId,
-          });
-
-          await syncClientBalanceMirror(client, order.client_id);
-        }
-
-        if (!isProviderSupport) {
-          // 🔥 FUNNEL: payment_success
-          try {
-            const clientId = Number(order.client_id);
-
-            await client.query(
-              `
-              INSERT INTO contact_unlock_funnel
-                (client_id, service_id, source, step, status, payme_id, order_id)
-              VALUES ($1, 0, 'web', 'payment_success', 'success', $2, $3)
-              `,
-              [clientId, String(paymeId), String(orderId)]
-            );
-          } catch (e) {
-            console.error("[funnel] payment_success error:", e?.message || e);
-          }
-
-          // 🔥 AUTO-RETRY pending unlock after successful topup
-          try {
-            const clientId = Number(order.client_id);
-
-            const pending = await client.query(
-              `
-              SELECT id, service_id
-              FROM client_pending_unlocks
-              WHERE client_id = $1
-              ORDER BY created_at DESC, id DESC
-              LIMIT 1
-              `,
-              [clientId]
-            );
-
-            if (pending.rowCount > 0) {
-              const pendingRow = pending.rows[0];
-              const serviceId = Number(pendingRow.service_id);
-
-              await lockKeyTx(client, `unlock:${clientId}:${serviceId}`);
-
-              const already = await client.query(
-                `
-                SELECT 1
-                FROM client_service_contact_unlocks
-                WHERE client_id = $1 AND service_id = $2
-                LIMIT 1
-                `,
-                [clientId, serviceId]
-              );
-
-              if (!already.rowCount) {
-                const settings = await client.query(
-                  `
-                  SELECT is_paid, price
-                  FROM contact_unlock_settings
-                  ORDER BY id ASC
-                  LIMIT 1
-                  `
-                );
-
-                const isPaid = !!settings.rows[0]?.is_paid;
-                // contact_unlock_settings.price is stored in tiyin, the same unit as contact_balance_ledger.amount.
-                // Do NOT divide by 100 here: otherwise auto-unlock undercharges 100x after Payme top-up.
-                const priceTiyin = isPaid ? Math.trunc(Number(settings.rows[0]?.price || 0)) : 0;
-
-                const balanceAfterTopup = await getLedgerBalance(client, clientId);
-
-                if (balanceAfterTopup >= priceTiyin && priceTiyin >= 0) {
-                  await client.query(
-                    `
-                    INSERT INTO client_service_contact_unlocks
-                      (client_id, service_id, price_charged, source, note)
-                    VALUES ($1, $2, $3, 'payme_auto', 'auto-retry after Payme topup')
-                    ON CONFLICT DO NOTHING
-                    `,
-                    [clientId, serviceId, priceTiyin]
-                  );
-
-                  await client.query(
-                    `
-                    INSERT INTO contact_balance_ledger
-                      (client_id, amount, reason, service_id, source, meta)
-                    VALUES ($1, $2, 'unlock_contact', $3, 'payme_auto', $4::jsonb)
-                    `,
-                    [
-                      clientId,
-                      -priceTiyin,
-                      serviceId,
-                      JSON.stringify({
-                        service_id: serviceId,
-                        auto_retry: true,
-                        payme_id: String(paymeId),
-                        order_id: String(orderId),
-                      }),
-                    ]
-                  );
-
-                  await syncClientBalanceMirror(client, clientId);
-                }
-              }
-
-              await client.query(
-                `DELETE FROM client_pending_unlocks WHERE id = $1`,
-                [Number(pendingRow.id)]
-              );
-            }
-          } catch (e) {
-            console.error("[payme] auto-retry pending unlock error:", e?.message || e);
-          }
-        }
-
-        await client.query("COMMIT");
-
-        return res.status(200).json(
-          ok(id, {
-            transaction: paymeId,
-            perform_time: performTime,
-            state: 2,
-          })
-        );
-      } catch (e) {
-        try {
-          await client.query("ROLLBACK");
-        } catch {}
-        console.error("[payme] PerformTransaction error:", e?.message || e);
-        return res.status(200).json(rpcError(id, -32400, "Internal error"));
-      } finally {
-        client.release();
-      }
-    }
-
-    /** ---- CancelTransaction ---- */
-    if (method === "CancelTransaction") {
-      const paymeId = normalizePaymeId(params.id);
-      const reason = Number(params.reason);
-
-      if (!paymeId) {
-        return res.status(200).json(rpcError(id, -32602, "Missing params.id"));
-      }
-
-      const client = await pool.connect();
-      try {
-        await client.query("BEGIN");
-        await ensureProviderSupportPaymeShape(client);
-        await lockKeyTx(client, `payme:${paymeId}`);
-
-        const tx = await getTxForUpdate(client, paymeId);
-        if (!tx) {
-          await client.query("ROLLBACK");
-          return res.status(200).json(rpcError(id, -31003, "Transaction not found"));
-        }
-
-        if (tx?.order_id) {
-          await lockKeyTx(client, `order:${tx.order_id}`);
-        }
-
-        if (Number(tx.state) === -1 || Number(tx.state) === -2) {
-          await client.query("COMMIT");
-          return res.status(200).json(
-            ok(id, {
-              transaction: paymeId,
-              cancel_time: Number(tx.cancel_time) || nowMs(),
-              state: Number(tx.state),
-              reason: tx.reason ?? null,
-            })
-          );
-        }
-
-        const cancelTime = nowMs();
-        const newState = Number(tx.state) === 2 ? -2 : -1;
-
-        const updated = await setTxState(client, paymeId, {
-          state: newState,
-          cancel_time: cancelTime,
-          reason: Number.isFinite(reason) ? reason : null,
-        });
-
-        const prevState = Number(tx.state);
-        const newStateDb = Number(updated?.state ?? newState);
-
-        const orderId = Number(tx.order_id);
-        const order = Number.isFinite(orderId) && orderId > 0 ? await getOrderTx(client, orderId) : null;
-
-        if (order) {
-          const isProviderSupportCancel = await markProviderSupportDonationCancelledTx(client, order, paymeId);
-
-          // If Payme cancels a created-but-not-performed transaction, close the order too.
-          // Without this, topup_orders can stay in status='created' forever after failed/abandoned payments.
-          if (prevState === 1 && newStateDb === -1) {
-            try {
-              await markOrderStatusTx(client, orderId, "cancelled");
-            } catch (e2) {
-              console.error(
-                "[payme] CancelTransaction: cannot set created order status=cancelled:",
-                e2?.message || e2
-              );
-            }
-          }
-
-          // If Payme cancels an already performed transaction, reverse ledger exactly once.
-          if (prevState === 2 && newStateDb === -2) {
-            if (!isProviderSupportCancel) {
-              await debitLedgerOnceTx(client, {
-                clientId: Number(order.client_id),
-                amountTiyin: Number(order.amount_tiyin),
-                orderId,
-                paymeId,
-                reasonCode: Number.isFinite(reason) ? reason : null,
-              });
-
-              // 🔥 FUNNEL: payment_canceled
-              try {
-                const clientId = Number(order.client_id);
-
-                await client.query(
-                  `
-                  INSERT INTO contact_unlock_funnel
-                    (client_id, service_id, source, step, status, payme_id, order_id)
-                  VALUES ($1, 0, 'web', 'payment_canceled', 'error', $2, $3)
-                  `,
-                  [clientId, String(paymeId), String(orderId)]
-                );
-              } catch (e) {
-                console.error("[funnel] payment_canceled error:", e?.message || e);
-              }
-
-              await syncClientBalanceMirror(client, order.client_id);
-            }
-
-            try {
-              await markOrderStatusTx(client, orderId, "cancelled");
-            } catch (e2) {
-              console.error(
-                "[payme] CancelTransaction: cannot set paid order status=cancelled:",
-                e2?.message || e2
-              );
-            }
-          }
-        }
-
-        await client.query("COMMIT");
-
-        return res.status(200).json(
-          ok(id, {
-            transaction: paymeId,
-            cancel_time: cancelTime,
-            state: Number(updated?.state ?? newState),
-            reason: updated?.reason ?? (Number.isFinite(reason) ? reason : null),
-          })
-        );
-      } catch (e) {
-        try {
-          await client.query("ROLLBACK");
-        } catch {}
-        console.error("[payme] CancelTransaction error:", e?.message || e);
-        return res.status(200).json(rpcError(id, -32400, "Internal error"));
-      } finally {
-        client.release();
-      }
-    }
-
-    /** ---- CheckTransaction ---- */
-    if (method === "CheckTransaction") {
-      const paymeId = normalizePaymeId(params.id);
-      if (!paymeId) {
-        return res.status(200).json(rpcError(id, -32602, "Missing params.id"));
-      }
-
-      const { rows } = await pool.query(
-        `SELECT payme_id, order_id, state, create_time, perform_time, cancel_time, reason
-           FROM payme_transactions
-          WHERE payme_id = $1`,
-        [paymeId]
-      );
-      const tx = rows[0];
-      if (!tx) {
-        return res.status(200).json(rpcError(id, -31003, "Transaction not found"));
-      }
-
-      return res.status(200).json(
-        ok(id, {
-          create_time: Number(tx.create_time) || 0,
-          perform_time: Number(tx.perform_time) || 0,
-          cancel_time: Number(tx.cancel_time) || 0,
-          transaction: String(tx.payme_id),
-          state: Number(tx.state),
-          reason: tx.reason ?? null,
-        })
+    await ensureSchema(client);
+
+    const paymeId = params.id;
+
+    if (!paymeId) {
+      return res.json(
+        error(
+          id,
+          PAYME_ERROR.TRANSACTION_NOT_FOUND,
+          "Transaction id is required"
+        )
       );
     }
 
-    /** ---- GetStatement ---- */
-    if (method === "GetStatement") {
-      const from = Number(params.from);
-      const to = Number(params.to);
+    await client.query("BEGIN");
+    await advisoryLock(client, `payme:${paymeId}`);
 
-      const { rows } = await pool.query(
-        `
-        SELECT payme_id, order_id, amount_tiyin, state, create_time, perform_time, cancel_time, reason
-          FROM payme_transactions
-         WHERE ($1::bigint IS NULL OR create_time >= $1)
-           AND ($2::bigint IS NULL OR create_time <= $2)
-         ORDER BY create_time ASC
-         LIMIT 5000
-        `,
-        [Number.isFinite(from) ? from : null, Number.isFinite(to) ? to : null]
+    const tx = await getTransactionByPaymeId(client, paymeId);
+
+    if (!tx) {
+      await client.query("ROLLBACK");
+
+      return res.json(
+        error(
+          id,
+          PAYME_ERROR.TRANSACTION_NOT_FOUND,
+          "Transaction not found"
+        )
       );
-
-      const result = rows.map((r) => ({
-        id: String(r.payme_id),
-        time: Number(r.create_time) || 0,
-        amount: Number(r.amount_tiyin) || 0,
-        account: { order_id: String(r.order_id) },
-        create_time: Number(r.create_time) || 0,
-        perform_time: Number(r.perform_time) || 0,
-        cancel_time: Number(r.cancel_time) || 0,
-        transaction: String(r.payme_id),
-        state: Number(r.state),
-        reason: r.reason ?? null,
-      }));
-
-      return res.status(200).json(ok(id, { transactions: result }));
     }
 
-    /** ---- SetFiscalData ---- */
-    if (method === "SetFiscalData") {
-      const paymeId = normalizePaymeId(params?.id);
-      const fiscalData = params?.fiscal_data || null;
+    await advisoryLock(client, `order:${tx.order_id}`);
 
-      if (!paymeId) {
-        return res.status(200).json(rpcError(id, -32602, "Missing params.id"));
-      }
+    const order = await getTopupOrder(client, tx.order_id);
 
-      const client = await pool.connect();
-      try {
-        await client.query("BEGIN");
-        await lockKeyTx(client, `payme:${paymeId}`);
+    if (!order) {
+      await client.query("ROLLBACK");
 
-        const { rows } = await client.query(
-          `SELECT payme_id, state, fiscal_receipt_id
-             FROM payme_transactions
-            WHERE payme_id = $1
-            FOR UPDATE`,
-          [paymeId]
-        );
-
-        const tx = rows[0] || null;
-
-        if (!tx) {
-          await client.query("ROLLBACK");
-          return res
-            .status(200)
-            .json(rpcError(id, -31003, "Transaction not found"));
-        }
-
-        if (tx.fiscal_receipt_id) {
-          await client.query("COMMIT");
-          return res.status(200).json(ok(id, { success: true }));
-        }
-
-        const receiptId =
-          fiscalData && typeof fiscalData === "object"
-            ? String(fiscalData.receipt_id ?? "")
-            : "";
-        const fiscalSign =
-          fiscalData && typeof fiscalData === "object"
-            ? String(fiscalData.fiscal_sign ?? "")
-            : "";
-        const terminalId =
-          fiscalData && typeof fiscalData === "object"
-            ? String(fiscalData.terminal_id ?? "")
-            : "";
-
-        await client.query(
-          `UPDATE payme_transactions
-              SET fiscal_data = $2,
-                  fiscal_receipt_id = NULLIF($3, ''),
-                  fiscal_sign = NULLIF($4, ''),
-                  fiscal_terminal_id = NULLIF($5, ''),
-                  fiscal_received_at = now(),
-                  updated_at = now()
-            WHERE payme_id = $1`,
-          [paymeId, fiscalData, receiptId, fiscalSign, terminalId]
-        );
-
-        await client.query("COMMIT");
-
-        return res.status(200).json(ok(id, { success: true }));
-      } catch (e) {
-        try {
-          await client.query("ROLLBACK");
-        } catch {}
-
-        console.error("[payme] SetFiscalData error:", e?.message || e);
-        return res.status(200).json(rpcError(id, -32400, "Internal error"));
-      } finally {
-        client.release();
-      }
+      return res.json(
+        error(
+          id,
+          PAYME_ERROR.ORDER_NOT_FOUND,
+          "Order not found"
+        )
+      );
     }
 
-    return res.status(200).json(rpcError(id, -32601, "Method not found"));
+    const performed = await performTransaction({
+      client,
+      transaction: tx,
+      order,
+    });
+
+    await client.query("COMMIT");
+
+    return res.json(
+      success(id, paymeResultTransaction(performed))
+    );
   } catch (e) {
-    console.error("[payme] handler fatal:", e?.message || e);
-    return res.status(200).json(rpcError(null, -32400, "Internal error"));
+    try {
+      await client.query("ROLLBACK");
+    } catch {}
+
+    if (e.message === "ORDER_EXPIRED") {
+      return res.json(
+        error(
+          id,
+          PAYME_ERROR.CANNOT_PERFORM,
+          "Order expired"
+        )
+      );
+    }
+
+    console.error("[payme] PerformTransaction error:", e);
+
+    return res.json(
+      error(
+        id,
+        PAYME_ERROR.INTERNAL,
+        "Internal error"
+      )
+    );
+  } finally {
+    client.release();
+  }
+}
+
+async function CancelTransaction(req, res, id, params) {
+  const client = await pool.connect();
+
+  try {
+    await ensureSchema(client);
+
+    const paymeId = params.id;
+
+    if (!paymeId) {
+      return res.json(
+        error(
+          id,
+          PAYME_ERROR.TRANSACTION_NOT_FOUND,
+          "Transaction id is required"
+        )
+      );
+    }
+
+    await client.query("BEGIN");
+    await advisoryLock(client, `payme:${paymeId}`);
+
+    const tx = await getTransactionByPaymeId(client, paymeId);
+
+    if (!tx) {
+      await client.query("ROLLBACK");
+
+      return res.json(
+        error(
+          id,
+          PAYME_ERROR.TRANSACTION_NOT_FOUND,
+          "Transaction not found"
+        )
+      );
+    }
+
+    if (tx.order_id) {
+      await advisoryLock(client, `order:${tx.order_id}`);
+    }
+
+    const order = tx.order_id
+      ? await getTopupOrder(client, tx.order_id)
+      : null;
+
+    const canceled = await cancelTransaction({
+      client,
+      transaction: tx,
+      order,
+      reason: params.reason,
+    });
+
+    await client.query("COMMIT");
+
+    return res.json(
+      success(id, paymeResultTransaction(canceled))
+    );
+  } catch (e) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {}
+
+    console.error("[payme] CancelTransaction error:", e);
+
+    return res.json(
+      error(
+        id,
+        PAYME_ERROR.INTERNAL,
+        "Internal error"
+      )
+    );
+  } finally {
+    client.release();
+  }
+}
+
+async function CheckTransaction(req, res, id, params) {
+  const client = await pool.connect();
+
+  try {
+    await ensureSchema(client);
+
+    const paymeId = params.id;
+
+    const tx = await getTransactionByPaymeId(client, paymeId);
+
+    if (!tx) {
+      return res.json(
+        error(
+          id,
+          PAYME_ERROR.TRANSACTION_NOT_FOUND,
+          "Transaction not found"
+        )
+      );
+    }
+
+    return res.json(
+      success(id, paymeResultTransaction(tx))
+    );
+  } catch (e) {
+    console.error("[payme] CheckTransaction error:", e);
+
+    return res.json(
+      error(
+        id,
+        PAYME_ERROR.INTERNAL,
+        "Internal error"
+      )
+    );
+  } finally {
+    client.release();
+  }
+}
+
+async function GetStatement(req, res, id, params) {
+  const client = await pool.connect();
+
+  try {
+    await ensureSchema(client);
+
+    const from = toNumber(params.from, 0);
+    const to = toNumber(params.to, nowMs());
+
+    const { rows } = await client.query(
+      `
+        SELECT *
+        FROM payme_transactions
+        WHERE create_time BETWEEN $1 AND $2
+        ORDER BY create_time ASC
+      `,
+      [from, to]
+    );
+
+    return res.json(
+      success(id, {
+        transactions: rows.map(paymeResultTransaction),
+      })
+    );
+  } catch (e) {
+    console.error("[payme] GetStatement error:", e);
+
+    return res.json(
+      error(
+        id,
+        PAYME_ERROR.INTERNAL,
+        "Internal error"
+      )
+    );
+  } finally {
+    client.release();
+  }
+}
+
+async function handlePaymeMerchant(req, res) {
+  const { id, method, params = {} } = req.body || {};
+
+  if (!validateAuth(req)) {
+    return res.json(
+      error(
+        id || null,
+        -32504,
+        "Unauthorized"
+      )
+    );
+  }
+
+  switch (method) {
+    case "CheckPerformTransaction":
+      return CheckPerformTransaction(req, res, id, params);
+
+    case "CreateTransaction":
+      return CreateTransaction(req, res, id, params);
+
+    case "PerformTransaction":
+      return PerformTransaction(req, res, id, params);
+
+    case "CancelTransaction":
+      return CancelTransaction(req, res, id, params);
+
+    case "CheckTransaction":
+      return CheckTransaction(req, res, id, params);
+
+    case "GetStatement":
+      return GetStatement(req, res, id, params);
+
+    default:
+      return res.json(
+        error(
+          id || null,
+          -32601,
+          "Method not found"
+        )
+      );
   }
 }
 
 module.exports = {
-  paymeMerchantRpc,
+  handlePaymeMerchant,
+  CheckPerformTransaction,
+  CreateTransaction,
+  PerformTransaction,
+  CancelTransaction,
+  CheckTransaction,
+  GetStatement,
 };
