@@ -1,10 +1,11 @@
 // frontend/src/pages/Register.jsx
-import React, { useEffect, useRef, useState } from "react";
+
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
-import { toast } from "../ui/toast"; // реэкспорт react-hot-toast
+import { toast } from "../ui/toast";
 
 // --- утилиты ---------------------------------------------------------
 const normalizePhone = (raw = "") =>
@@ -19,29 +20,24 @@ const parseErrorMessage = (err, t) => {
     err?.message ??
     "";
 
-  // Если сервер прислал ключ локали — просто переводим
   if (typeof raw === "string" && raw.startsWith("register.")) {
     return t(raw);
   }
 
   const s = String(raw).toLowerCase();
 
-  // Email занят — ловим англ/рус/уз вариант
   if (/email/.test(s) && /(exist|used|taken|занят|использ|mavjud|ishlatilgan)/.test(s)) {
     return t("register.errors.email_taken");
   }
 
-  // Телефон некорректный
   if (/(phone|телефон|raqam)/.test(s) && /(invalid|format|неверн|noto‘g‘ri|noto'g'ri)/.test(s)) {
     return t("register.errors.phone_invalid");
   }
 
-  // Поля не заполнены / обязательны
   if (/(required|must|обязат|требует|пуст|kerak|bo‘sh|bo'sh|empty)/.test(s)) {
     return t("register.errors.required");
   }
 
-  // Фоллбек
   return t("register.error");
 };
 
@@ -50,6 +46,12 @@ const parseErrorMessage = (err, t) => {
 const Register = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+
+  const providerBotUsername = useMemo(() => {
+    return String(import.meta.env.VITE_TELEGRAM_PROVIDER_BOT_USERNAME || "")
+      .replace(/^@/, "")
+      .trim();
+  }, []);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -64,62 +66,73 @@ const Register = () => {
 
   const [locationSuggestions, setLocationSuggestions] = useState([]);
   const [submitting, setSubmitting] = useState(false);
+  const [telegramError, setTelegramError] = useState("");
+
   useEffect(() => {
-  window.onTelegramProviderRegister = async (user) => {
-    try {
-      const response = await axios.post(
-        `${import.meta.env.VITE_API_BASE_URL}/api/providers/telegram-login`,
-        user
-      );
+    window.onTelegramProviderRegister = async (user) => {
+      try {
+        setTelegramError("");
 
-      if (response.data?.token) {
-        localStorage.setItem("token", response.data.token);
-        navigate("/dashboard");
+        const response = await axios.post(
+          `${import.meta.env.VITE_API_BASE_URL}/api/providers/telegram-login`,
+          user
+        );
+
+        if (response.data?.token) {
+          localStorage.setItem("token", response.data.token);
+          navigate("/dashboard");
+          return;
+        }
+
+        setTelegramError(
+          t("telegram_provider_auth.error", {
+            defaultValue: "Telegram authorization failed",
+          })
+        );
+      } catch (err) {
+        console.error("[provider telegram register/login] error:", err);
+        setTelegramError(
+          err?.response?.data?.message ||
+            t("telegram_provider_auth.error", {
+              defaultValue: "Telegram authorization failed",
+            })
+        );
       }
-    } catch (err) {
-      console.error(err);
-    }
-  };
+    };
 
-  return () => {
-    delete window.onTelegramProviderRegister;
-  };
-}, [navigate]);
+    return () => {
+      delete window.onTelegramProviderRegister;
+    };
+  }, [navigate, t]);
 
-useEffect(() => {
-  const existing = document.getElementById("telegram-provider-register");
+  useEffect(() => {
+    const container = document.getElementById("telegram-register-container");
+    if (!container) return;
 
-  if (existing) existing.remove();
-
-  const script = document.createElement("script");
-
-  script.src = "https://telegram.org/js/telegram-widget.js?22";
-  script.async = true;
-  script.id = "telegram-provider-register";
-
-  script.setAttribute(
-    "data-telegram-login",
-    import.meta.env.VITE_TELEGRAM_BOT_USERNAME
-  );
-
-  script.setAttribute("data-size", "large");
-
-  script.setAttribute(
-    "data-onauth",
-    "onTelegramProviderRegister(user)"
-  );
-
-  script.setAttribute("data-request-access", "write");
-
-  const container = document.getElementById(
-    "telegram-register-container"
-  );
-
-  if (container) {
     container.innerHTML = "";
+
+    if (!providerBotUsername) {
+      container.innerHTML = `<div style="font-size:13px;color:#dc2626;">${t(
+        "telegram_provider_auth.bot_not_configured",
+        { defaultValue: "Provider Telegram bot is not configured" }
+      )}</div>`;
+      return;
+    }
+
+    const existing = document.getElementById("telegram-provider-register");
+    if (existing) existing.remove();
+
+    const script = document.createElement("script");
+    script.src = "https://telegram.org/js/telegram-widget.js?22";
+    script.async = true;
+    script.id = "telegram-provider-register";
+    script.setAttribute("data-telegram-login", providerBotUsername);
+    script.setAttribute("data-size", "large");
+    script.setAttribute("data-onauth", "onTelegramProviderRegister(user)");
+    script.setAttribute("data-request-access", "write");
+
     container.appendChild(script);
-  }
-}, []);
+  }, [providerBotUsername, t]);
 
   // debounce для автоподсказки городов
   const debounceRef = useRef(null);
@@ -131,6 +144,7 @@ useEffect(() => {
       setLocationSuggestions([]);
       return;
     }
+
     try {
       const resp = await axios.get("https://wft-geo-db.p.rapidapi.com/v1/geo/cities", {
         params: { namePrefix: q, limit: 5, sort: "-population", countryIds: "UZ" },
@@ -139,15 +153,14 @@ useEffect(() => {
           "X-RapidAPI-Host": "wft-geo-db.p.rapidapi.com",
         },
       });
+
       const cities = (resp.data?.data || []).map((c) => c.city);
       setLocationSuggestions(cities);
     } catch {
-      // 429/сеть — без тостов
       setLocationSuggestions([]);
     }
   };
 
-  // единый onChange
   const handleChange = (e) => {
     const { name, value, files } = e.target;
 
@@ -174,14 +187,12 @@ useEffect(() => {
     setLocationSuggestions([]);
   };
 
-  // required-подсказка (одинаковая во всех языках, но берётся из i18n)
   const requiredTitle = t("register.errors.required");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (submitting) return;
 
-    // локальные проверки перед отправкой
     if (!formData.name || !formData.location || !formData.social) {
       toast.error(t("register.errors.required"));
       return;
@@ -196,11 +207,12 @@ useEffect(() => {
     const payload = {
       ...formData,
       phone: phoneNormalized,
-      location: [formData.location], // бэк ждёт массив
+      location: [formData.location],
     };
 
     try {
       setSubmitting(true);
+
       await toast.promise(
         axios.post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/register`, payload, {
           headers: { "Content-Type": "application/json" },
@@ -222,19 +234,37 @@ useEffect(() => {
 
   return (
     <div className="flex justify-center items-center min-h-screen bg-gray-100 p-6">
-      <form onSubmit={handleSubmit} className="bg-white p-10 rounded-lg shadow-lg w-full max-w-4xl">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-bold text-orange-600">{t("register.title")}</h2>
-          <div className="mt-4 mb-6">
+      <form
+        onSubmit={handleSubmit}
+        className="bg-white p-10 rounded-lg shadow-lg w-full max-w-4xl"
+      >
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold text-orange-600">
+            {t("register.title")}
+          </h2>
+
+          <div className="mt-4 rounded-2xl border border-gray-200 bg-gray-50 p-4">
             <div className="text-sm font-semibold text-gray-600 mb-3">
               {t("telegram_provider_auth.register", {
-                defaultValue: "Register via Telegram",
+                defaultValue: "Register / login via Telegram",
               })}
             </div>
-          
+
             <div id="telegram-register-container" />
+
+            {telegramError && (
+              <div className="mt-2 text-sm text-red-600">
+                {telegramError}
+              </div>
+            )}
+
+            <div className="mt-2 text-xs text-gray-500">
+              {t("telegram_provider_auth.register_hint", {
+                defaultValue:
+                  "If you are already approved as a provider in the bot, Telegram login will open the same dashboard.",
+              })}
+            </div>
           </div>
-          
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -274,6 +304,7 @@ useEffect(() => {
               placeholder={t("register.location_placeholder")}
               className="w-full border p-2 mb-1"
             />
+
             {locationSuggestions.length > 0 && (
               <ul className="bg-white border -mt-0.5 max-h-40 overflow-y-auto z-10 relative">
                 {locationSuggestions.map((city, i) => (
