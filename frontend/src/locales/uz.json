@@ -2186,7 +2186,17 @@
     "ph_gross_price": "Masalan: 2750",
     "expiration_hint": "Bu vaqtdan keyin taklif dolzarbligi pasayadi.",
     "flight_format_example": "15MAY HH-9911 TASDXB 18:00 21:00\n22MAY HH-9912 DXBTAS 22:00 05:00\n\n23KG/8KG",
-    "flight_details_placeholder": "15MAY HH-9911 TASDXB 18:00 21:00\n22MAY HH-9912 DXBTAS 22:00 05:00\n\n23KG/8KG"
+    "flight_details_placeholder": "15MAY HH-9911 TASDXB 18:00 21:00\n22MAY HH-9912 DXBTAS 22:00 05:00\n\n23KG/8KG",
+    "main_info": "Asosiy maʼlumotlar",
+    "main_info_hint": "Yo‘nalish, sanalar va turning asosiy maʼlumotlarini kiriting.",
+    "flight_section": "Parvoz",
+    "flight_section_hint": "Reys sanalari va muhim parvoz tafsilotlari.",
+    "conditions_section": "Tur shartlari",
+    "conditions_section_hint": "Taklifga nimalar kiritilganini belgilang.",
+    "price_actuality_section": "Narx va dolzarblik",
+    "price_actuality_section_hint": "Yetkazib beruvchi narxi, mijoz narxi va taklifning amal qilish muddati.",
+    "hotel_stay_section": "Mehmonxonada joylashish",
+    "hotel_stay_section_hint": "Mehmonxona, xona toifasi, sanalar va joylashuv."
   },
   "provider_services_tourbuilder_title": "TourBuilder uchun narxlar ro‘yxati",
   "provider_services_tab_create": "Xizmat yaratish",
@@ -2201,6 +2211,25 @@
   "visa_country": "Viza mamlakati",
   "validation": {
     "gross_positive": "To‘g‘ri narx kiriting",
-    "gross_ge_net": "Mijoz uchun narx netto narxdan past bo‘lishi mumkin emas"
-  }
+    "gross_ge_net": "Mijoz uchun narx netto narxdan past bo‘lishi mumkin emas",
+    "dates_range": "Tugash sanasi boshlanish sanasidan oldin bo‘lishi mumkin emas",
+    "net_required": "To‘g‘ri netto narxni kiriting",
+    "net_positive": "Netto narx 0 dan katta bo‘lishi kerak",
+    "net_invalid_chars": "Netto narx: faqat raqam, nuqta yoki vergul mumkin",
+    "gross_required": "Mijoz uchun to‘g‘ri narxni kiriting",
+    "gross_invalid_chars": "Mijoz narxi: faqat raqam, nuqta yoki vergul mumkin",
+    "gross_high": "Mijoz narxi netto narxdan ancha yuqori — ustamani tekshiring"
+  },
+  "provider_services_tabs_hint": "Marketplace xizmatlarini yarating va mavjud takliflarni boshqaring.",
+  "confirm_delete_title": "Xizmat o‘chirilsinmi?",
+  "confirm_delete_desc": "Bu amalni ortga qaytarib bo‘lmaydi.",
+  "rejected_reason": "Rad etish sababi",
+  "rejected_reason_empty": "Sabab ko‘rsatilmagan",
+  "service_image": "Xizmat rasmi",
+  "image_too_big": "\"{{name}}\" fayli siqilgandan keyin ham 3 MB dan katta — o‘tkazib yuborildi",
+  "seats": "O‘rindiqlar soni",
+  "seats_placeholder": "Masalan: 4 joy",
+  "direction.country": "Boriladigan mamlakat",
+  "direction.from": "Uchish shahri",
+  "direction.to": "Kelish shahri"
 }
