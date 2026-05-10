@@ -1,9 +1,14 @@
-//backend/controllers/clientBillingController.js
+// backend/controllers/clientBillingController.js
 
 const pool = require("../db");
 
 const { getContactUnlockSettings } = require("../utils/contactUnlockSettings");
 const { logUnlockFunnel } = require("../utils/contactUnlockFunnel");
+const {
+  unlockContactTx,
+  getBalanceFromLedger,
+  syncClientBalanceMirror,
+} = require("../utils/contactUnlock");
 
 let _clientsBalanceColumn = null;
 
@@ -23,12 +28,36 @@ function getSessionKey(req) {
   return req.headers["x-session-key"] || null;
 }
 
+function sumToTiyin(sum) {
+  return Math.round(Number(sum || 0) * 100);
+}
+
+function tiyinToSum(tiyin) {
+  return Math.trunc(Number(tiyin || 0) / 100);
+}
+
+function normalizePositiveTiyin(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.trunc(n));
+}
+
+function getOrderExpiryDate(minutes = 30) {
+  const ttl = Number(process.env.PAYME_ORDER_TTL_MINUTES || minutes);
+  const safeTtl = Number.isFinite(ttl) && ttl > 0 ? ttl : minutes;
+  return new Date(Date.now() + safeTtl * 60 * 1000);
+}
+
 async function safeLogUnlockFunnel(dbOrPayload, maybePayload = null) {
   try {
     await logUnlockFunnel(dbOrPayload, maybePayload);
   } catch (e) {
     console.error("[unlock-funnel] log error:", e?.message || e);
   }
+}
+
+async function advisoryLock(db, key) {
+  await db.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [String(key)]);
 }
 
 async function getClientsBalanceColumn(client) {
@@ -61,71 +90,40 @@ async function getClientsBalanceColumn(client) {
   return null;
 }
 
-async function getBalanceFromLedger(client, clientId) {
-  const { rows } = await client.query(
-    `
-    SELECT COALESCE(SUM(amount),0)::bigint AS balance
-    FROM contact_balance_ledger
-    WHERE client_id=$1
-  `,
-    [clientId]
-  );
-
-  return Number(rows[0]?.balance || 0);
-}
-
-async function syncClientBalanceMirror(client, clientId) {
+async function syncClientBalanceMirrorLocal(client, clientId) {
   const col = await getClientsBalanceColumn(client);
   const balance = await getBalanceFromLedger(client, clientId);
 
   if (col) {
-    await client.query(
-      `
-      UPDATE clients
-      SET ${col}=$2
-      WHERE id=$1
-      `,
-      [clientId, balance]
-    );
+    await client.query(`UPDATE clients SET ${col}=$2 WHERE id=$1`, [
+      clientId,
+      balance,
+    ]);
   }
 
   return balance;
 }
 
-async function ensureTopupOrdersShape(db) {
-  const { rows } = await db.query(`
-    SELECT c.relkind
-      FROM pg_class c
-      JOIN pg_namespace n ON n.oid = c.relnamespace
-     WHERE n.nspname = 'public'
-       AND c.relname = 'topup_orders'
-     LIMIT 1
+async function ensureContactBalanceLedgerShape(db) {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS contact_balance_ledger (
+      id BIGSERIAL PRIMARY KEY,
+      client_id BIGINT NOT NULL,
+      amount BIGINT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
   `);
-
-  const topupRelKind = rows[0]?.relkind || null;
-  const target = topupRelKind === "v" ? "payme_topup_orders" : "topup_orders";
-
-  if (topupRelKind === "v") {
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS payme_topup_orders (
-        id BIGSERIAL PRIMARY KEY,
-        client_id BIGINT NOT NULL,
-        amount_tiyin BIGINT NOT NULL CHECK (amount_tiyin > 0)
-      )
-    `);
-  }
 
   await db.query(`
-    ALTER TABLE ${target}
-      ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT 'payme',
-      ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'new',
-      ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-      ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ NULL
+    ALTER TABLE contact_balance_ledger
+      ADD COLUMN IF NOT EXISTS reason TEXT,
+      ADD COLUMN IF NOT EXISTS type TEXT,
+      ADD COLUMN IF NOT EXISTS note TEXT,
+      ADD COLUMN IF NOT EXISTS service_id BIGINT,
+      ADD COLUMN IF NOT EXISTS source TEXT,
+      ADD COLUMN IF NOT EXISTS meta JSONB,
+      ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   `);
-
-  if (topupRelKind === "v") {
-    await db.query(`CREATE OR REPLACE VIEW topup_orders AS SELECT * FROM payme_topup_orders`);
-  }
 }
 
 async function ensureContactUnlocksShape(db) {
@@ -151,670 +149,660 @@ async function ensureContactUnlocksShape(db) {
       ON client_service_contact_unlocks(client_id, service_id)
   `);
 }
-
-async function ensureContactBalanceLedgerShape(db) {
+async function ensureTopupOrdersShape(db) {
   await db.query(`
-    CREATE TABLE IF NOT EXISTS contact_balance_ledger (
+    CREATE TABLE IF NOT EXISTS topup_orders (
       id BIGSERIAL PRIMARY KEY,
       client_id BIGINT NOT NULL,
       amount BIGINT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'created',
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `);
 
   await db.query(`
-    ALTER TABLE contact_balance_ledger
-      ADD COLUMN IF NOT EXISTS reason TEXT,
+    ALTER TABLE topup_orders
+      ADD COLUMN IF NOT EXISTS order_type TEXT NOT NULL DEFAULT 'balance_topup',
       ADD COLUMN IF NOT EXISTS service_id BIGINT,
-      ADD COLUMN IF NOT EXISTS source TEXT,
-      ADD COLUMN IF NOT EXISTS meta JSONB,
-      ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      ADD COLUMN IF NOT EXISTS provider_id BIGINT,
+      ADD COLUMN IF NOT EXISTS payme_transaction_id TEXT,
+      ADD COLUMN IF NOT EXISTS pay_url TEXT,
+      ADD COLUMN IF NOT EXISTS redirect_url TEXT,
+      ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS canceled_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS failed_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS meta JSONB
+  `);
+
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS idx_topup_orders_client_status
+      ON topup_orders(client_id, status)
+  `);
+
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS idx_topup_orders_service_status
+      ON topup_orders(service_id, status)
   `);
 }
 
-function buildPaymeCheckoutUrl({
-  merchantId,
-  checkoutBase,
-  orderId,
-  amountTiyin,
-  lang,
-  callbackUrl,
-}) {
-  const parts = [
-    `m=${merchantId}`,
-    `ac.order_id=${orderId}`,
-    `a=${amountTiyin}`,
-    `l=${lang || "ru"}`,
-  ];
-
-  if (callbackUrl) {
-    parts.push(`c=${callbackUrl}`);
-  }
-
-  const params = parts.join(";");
-  const encoded = Buffer.from(params, "utf8").toString("base64");
-
-  return `${String(checkoutBase || "https://checkout.paycom.uz").replace(/\/+$/, "")}/${encoded}`;
+async function ensureBillingShape(db) {
+  await ensureContactBalanceLedgerShape(db);
+  await ensureContactUnlocksShape(db);
+  await ensureTopupOrdersShape(db);
 }
 
-function buildBalanceCallbackUrl(sitePublic, orderId, serviceId = null) {
-  const base = `${String(sitePublic || "").replace(/\/+$/, "")}/client/balance`;
-  const params = new URLSearchParams();
-  params.set("order_id", String(orderId));
-  if (serviceId && Number(serviceId) > 0) {
-    params.set("service_id", String(serviceId));
+async function expireOldOrders(db, clientId = null) {
+  const params = [];
+  let clientFilter = "";
+
+  if (clientId) {
+    params.push(clientId);
+    clientFilter = `AND client_id = $${params.length}`;
   }
-  return `${base}?${params.toString()}`;
+
+  await db.query(
+    `
+      UPDATE topup_orders
+      SET
+        status = 'expired',
+        failed_at = COALESCE(failed_at, now())
+      WHERE status IN ('created', 'pending')
+        AND expires_at IS NOT NULL
+        AND expires_at < now()
+        ${clientFilter}
+    `,
+    params
+  );
 }
 
-async function clientBalance(req, res) {
-  const clientId = req.user?.id;
-  console.log("[clientBalance] req.user =", req.user);
+async function findClientId(req) {
+  if (req.user?.role === "client" && req.user?.id) {
+    return req.user.id;
+  }
+
+  if (req.user?.clientId) return req.user.clientId;
+  if (req.user?.client_id) return req.user.client_id;
+
+  return null;
+}
+
+async function getClientBalance(req, res) {
+  const clientId = await findClientId(req);
 
   if (!clientId) {
-    return res.status(401).json({ ok: false, message: "Unauthorized" });
-  }
-
-  try {
-    const client = await pool.connect();
-
-    try {
-      const balance = await getBalanceFromLedger(client, clientId);
-      console.log("[clientBalance] ledger balance for", clientId, "=", balance);
-
-      const who = await client.query(`
-        SELECT
-          current_database() AS db,
-          current_user AS db_user,
-          inet_server_addr()::text AS server_addr,
-          inet_server_port() AS server_port
-      `);
-      console.log("[clientBalance] db info =", who.rows[0]);
-      console.log("[clientBalance] DATABASE_URL =", process.env.DATABASE_URL);
-
-      const unlockSettings = await getContactUnlockSettings(client);
-
-      return res.json({
-        ok: true,
-        balance,
-        unlock_price: unlockSettings.effective_price,
-        unlock_is_paid: unlockSettings.is_paid,
-        unlock_base_price: unlockSettings.price,
-      });
-    } finally {
-      client.release();
-    }
-  } catch (e) {
-    console.error("clientBalance error:", e);
-    return res.status(500).json({ ok: false });
-  }
-}
-
-async function clientBalanceLedger(req, res) {
-  const clientId = req.user?.id;
-
-  if (!clientId) {
-    return res.status(401).json({ ok: false, message: "Unauthorized" });
-  }
-
-  const limit = clampInt(req.query.limit, 50, 1, 200);
-  const offset = clampInt(req.query.offset, 0, 0, 1000000);
-
-  try {
-    const { rows } = await pool.query(
-      `
-      SELECT
-        l.id,
-        l.client_id,
-        l.amount,
-        l.reason,
-        l.source,
-        l.service_id,
-        l.meta,
-        l.created_at,
-
-        pt.payme_id,
-        pt.state AS payme_state,
-        pt.amount_tiyin,
-        pt.perform_time,
-        pt.fiscal_receipt_id,
-        pt.fiscal_sign,
-        pt.fiscal_terminal_id,
-        pt.fiscal_received_at
-
-      FROM contact_balance_ledger l
-      LEFT JOIN payme_transactions pt
-        ON pt.payme_id = l.meta->>'payme_id'
-      WHERE l.client_id = $1
-      ORDER BY l.created_at DESC, l.id DESC
-      LIMIT $2 OFFSET $3
-      `,
-      [clientId, limit, offset]
-    );
-
-    const payload = await (async () => {
-      const client = await pool.connect();
-      try {
-        const balance = await getBalanceFromLedger(client, clientId);
-        const unlockSettings = await getContactUnlockSettings(client);
-
-        return {
-          balance,
-          unlock_price: unlockSettings.effective_price,
-          unlock_is_paid: unlockSettings.is_paid,
-          unlock_base_price: unlockSettings.price,
-        };
-      } finally {
-        client.release();
-      }
-    })();
-
-    return res.json({
-      ok: true,
-      rows,
-      limit,
-      offset,
-      balance: payload.balance,
-      unlock_price: payload.unlock_price,
-      unlock_is_paid: payload.unlock_is_paid,
-      unlock_base_price: payload.unlock_base_price,
-    });
-  } catch (e) {
-    console.error("clientBalanceLedger error:", e);
-    return res.status(500).json({ ok: false, message: "Internal error" });
-  }
-}
-
-async function createTopupOrder(req, res) {
-  const clientId = req.user?.id;
-
-  if (!clientId) {
-    return res.status(401).json({ ok: false, message: "Unauthorized" });
-  }
-
-  const amountSum = Math.trunc(Number(req.body?.amount));
-  if (!Number.isFinite(amountSum) || amountSum <= 0) {
-    return res.status(400).json({ ok: false, message: "Bad amount" });
-  }
-
-  const amountTiyin = amountSum * 100;
-
-  const MERCHANT_ID = process.env.PAYME_MERCHANT_ID || "";
-  const CHECKOUT_URL =
-    process.env.PAYME_CHECKOUT_URL || "https://checkout.paycom.uz";
-  const SITE_PUBLIC =
-    process.env.SITE_PUBLIC_URL || process.env.SITE_URL || "";
-
-  if (!MERCHANT_ID || !SITE_PUBLIC) {
-    return res.status(500).json({
+    return res.status(401).json({
       ok: false,
-      message: "Payme is not configured",
+      error: "client_auth_required",
     });
   }
 
   const db = await pool.connect();
 
   try {
-    await db.query("BEGIN");
-    await ensureTopupOrdersShape(db);
+    await ensureBillingShape(db);
+    await expireOldOrders(db, clientId);
 
-    const existsQ = await db.query(
-      `SELECT id FROM clients WHERE id = $1 LIMIT 1`,
-      [clientId]
-    );
-
-    if (!existsQ.rows.length) {
-      await db.query("ROLLBACK");
-      return res.status(404).json({ ok: false, message: "Client not found" });
-    }
-
-    const ins = await db.query(
-      `
-      INSERT INTO topup_orders (client_id, amount_tiyin, provider, status)
-      VALUES ($1, $2, 'payme', 'new')
-      RETURNING id, client_id, amount_tiyin, status, created_at
-      `,
-      [clientId, amountTiyin]
-    );
-
-    const order = ins.rows[0];
-
-    const rawServiceId = toIntOrNull(req.body?.service_id);
-    if (rawServiceId && rawServiceId > 0) {
-      await safeLogUnlockFunnel(db, {
-        clientId,
-        serviceId: rawServiceId,
-        source: "web",
-        step: "topup_order_created",
-        status: "info",
-        priceTiyin: amountTiyin,
-        orderId: Number(order.id),
-        sessionKey: getSessionKey(req),
-        meta: {
-          flow: "client_balance_topup",
-          provider: "payme",
-          callback_path: "/client/balance",
-        },
-      });
-    }
-
-    const callbackUrl = buildBalanceCallbackUrl(
-      SITE_PUBLIC,
-      order.id,
-      rawServiceId
-    );
-
-    const pay_url = buildPaymeCheckoutUrl({
-      merchantId: MERCHANT_ID,
-      checkoutBase: CHECKOUT_URL,
-      orderId: order.id,
-      amountTiyin,
-      lang: "ru",
-      callbackUrl,
-    });
-
-    await db.query("COMMIT");
+    const settings = await getContactUnlockSettings();
+    const balance = await syncClientBalanceMirrorLocal(db, clientId);
 
     return res.json({
       ok: true,
-      order: {
-        id: Number(order.id),
-        client_id: Number(order.client_id),
-        amount_tiyin: Number(order.amount_tiyin),
-        amount_sum: Math.trunc(Number(order.amount_tiyin) / 100),
-        status: order.status,
-        created_at: order.created_at,
-      },
-      pay_url,
+      balance,
+      balance_sum: tiyinToSum(balance),
+      balance_tiyin: balance,
+      unlock_price: settings.unlockPriceTiyin,
+      unlock_price_sum: tiyinToSum(settings.unlockPriceTiyin),
+      unlock_is_paid: settings.unlockIsPaid,
+      unlock_base_price: settings.unlockBasePrice,
     });
   } catch (e) {
-    try {
-      await db.query("ROLLBACK");
-    } catch {}
-    console.error("createTopupOrder error:", e);
-    return res.status(500).json({ ok: false, message: "Internal error" });
+    console.error("[client-billing] getClientBalance:", e);
+    return res.status(500).json({
+      ok: false,
+      error: "balance_failed",
+    });
   } finally {
     db.release();
   }
 }
 
-async function unlockAuto(req, res) {
-  const clientId = req.user?.id;
-  const serviceId = Number(req.body?.service_id);
+async function getClientBalanceLedger(req, res) {
+  const clientId = await findClientId(req);
 
   if (!clientId) {
-    return res.status(401).json({ ok: false, message: "Unauthorized" });
+    return res.status(401).json({
+      ok: false,
+      error: "client_auth_required",
+    });
   }
 
-  if (!serviceId || !Number.isFinite(serviceId)) {
-    return res.status(400).json({ ok: false, message: "Bad service_id" });
-  }
+  const limit = clampInt(req.query.limit, 50, 1, 200);
 
-  const MERCHANT_ID = process.env.PAYME_MERCHANT_ID || "";
-  const CHECKOUT_URL =
-    process.env.PAYME_CHECKOUT_URL || "https://checkout.paycom.uz";
-  const SITE_PUBLIC =
-    process.env.SITE_PUBLIC_URL || process.env.SITE_URL || "";
+  const db = await pool.connect();
 
-  if (!MERCHANT_ID || !SITE_PUBLIC) {
+  try {
+    await ensureBillingShape(db);
+    await expireOldOrders(db, clientId);
+
+    const { rows } = await db.query(
+      `
+        SELECT
+          id,
+          client_id,
+          amount,
+          amount AS amount_tiyin,
+          FLOOR(amount / 100.0)::BIGINT AS amount_sum,
+          COALESCE(type, reason) AS type,
+          reason,
+          note,
+          service_id,
+          source,
+          meta,
+          created_at
+        FROM contact_balance_ledger
+        WHERE client_id = $1
+        ORDER BY created_at DESC, id DESC
+        LIMIT $2
+      `,
+      [clientId, limit]
+    );
+
+    return res.json({
+      ok: true,
+      items: rows,
+    });
+  } catch (e) {
+    console.error("[client-billing] getClientBalanceLedger:", e);
     return res.status(500).json({
       ok: false,
-      message: "Payme is not configured",
+      error: "ledger_failed",
+    });
+  } finally {
+    db.release();
+  }
+}
+async function createTopupOrder(req, res) {
+  const clientId = await findClientId(req);
+
+  if (!clientId) {
+    return res.status(401).json({
+      ok: false,
+      error: "client_auth_required",
+    });
+  }
+
+  const amountInput =
+    req.body?.amount_tiyin ??
+    req.body?.amount ??
+    req.body?.sum;
+
+  let amountTiyin = normalizePositiveTiyin(amountInput);
+
+  // backward compatibility:
+  // если пришла маленькая сумма — считаем что это SUM а не TIYIN
+  if (amountTiyin > 0 && amountTiyin < 1000) {
+    amountTiyin = sumToTiyin(amountTiyin);
+  }
+
+  const MIN_TOPUP =
+    normalizePositiveTiyin(
+      process.env.MIN_TOPUP_TIIYIN || 1000
+    );
+
+  if (amountTiyin < MIN_TOPUP) {
+    return res.status(400).json({
+      ok: false,
+      error: "invalid_amount",
     });
   }
 
   const db = await pool.connect();
 
   try {
+    await ensureBillingShape(db);
+
     await db.query("BEGIN");
-    await ensureTopupOrdersShape(db);
 
-    const unlockSettings = await getContactUnlockSettings(db);
-    const price = Number(unlockSettings.effective_price || 0);
+    await advisoryLock(
+      db,
+      `topup:create:${clientId}`
+    );
 
-    const balance = await getBalanceFromLedger(db, clientId);
+    await expireOldOrders(db, clientId);
 
-    await safeLogUnlockFunnel(db, {
-      clientId,
-      serviceId,
-      source: "web",
-      step: "unlock_auto_clicked",
-      status: "info",
-      priceTiyin: price,
-      balanceBefore: balance,
-      balanceAfter: balance,
-      sessionKey: getSessionKey(req),
-      meta: {
-        channel: "web",
-        route: "/api/client/unlock-auto",
-      },
-    });
+    const existingPending = await db.query(
+      `
+        SELECT *
+        FROM topup_orders
+        WHERE client_id = $1
+          AND order_type = 'balance_topup'
+          AND amount = $2
+          AND status IN ('created', 'pending')
+          AND expires_at > now()
+        ORDER BY id DESC
+        LIMIT 1
+      `,
+      [clientId, amountTiyin]
+    );
 
-    if (price <= 0 || balance >= price) {
+    if (existingPending.rows[0]) {
       await db.query("COMMIT");
-      return unlockContact(req, res);
+
+      return res.json({
+        ok: true,
+        reused: true,
+        order: existingPending.rows[0],
+      });
     }
 
-    const needTiyin = price - balance;
+    const expiresAt = getOrderExpiryDate();
 
-    const ins = await db.query(
+    const redirectUrl =
+      req.body?.redirect_url ||
+      req.body?.redirectUrl ||
+      `${process.env.SITE_URL || ""}/client/balance`;
+
+    const { rows } = await db.query(
       `
-      INSERT INTO topup_orders (client_id, amount_tiyin, provider, status)
-      VALUES ($1, $2, 'payme', 'new')
-      RETURNING id, client_id, amount_tiyin, status, created_at
+        INSERT INTO topup_orders (
+          client_id,
+          amount,
+          status,
+          order_type,
+          redirect_url,
+          expires_at,
+          meta
+        )
+        VALUES (
+          $1,
+          $2,
+          'created',
+          'balance_topup',
+          $3,
+          $4,
+          $5
+        )
+        RETURNING *
       `,
-      [clientId, needTiyin]
+      [
+        clientId,
+        amountTiyin,
+        redirectUrl,
+        expiresAt,
+        {
+          session_key: getSessionKey(req),
+          ip: req.ip,
+          ua: req.headers["user-agent"] || null,
+        },
+      ]
     );
 
-    const order = ins.rows[0];
+    const order = rows[0];
 
-    await safeLogUnlockFunnel(db, {
-      clientId,
-      serviceId,
-      source: "web",
-      step: "unlock_auto_topup_created",
-      status: "info",
-      priceTiyin: price,
-      orderId: Number(order.id),
-      balanceBefore: balance,
-      balanceAfter: balance,
-      sessionKey: getSessionKey(req),
-      meta: {
-        channel: "web",
-        shortfall: needTiyin,
-      },
-    });
+    const merchantId =
+      process.env.PAYME_MERCHANT_ID ||
+      process.env.PAYME_CHECKOUT_ID ||
+      "";
 
-    const callbackUrl = buildBalanceCallbackUrl(
-      SITE_PUBLIC,
-      order.id,
-      serviceId
+    const account = {
+      order_id: order.id,
+    };
+
+    const encoded = Buffer.from(
+      JSON.stringify({
+        m: merchantId,
+        ac: account,
+        a: amountTiyin,
+      })
+    ).toString("base64");
+
+    const payUrl =
+      `https://checkout.paycom.uz/${encoded}`;
+
+    await db.query(
+      `
+        UPDATE topup_orders
+        SET pay_url = $2
+        WHERE id = $1
+      `,
+      [order.id, payUrl]
     );
-
-    const pay_url = buildPaymeCheckoutUrl({
-      merchantId: MERCHANT_ID,
-      checkoutBase: CHECKOUT_URL,
-      orderId: order.id,
-      amountTiyin: needTiyin,
-      lang: "ru",
-      callbackUrl,
-    });
 
     await db.query("COMMIT");
 
     return res.json({
       ok: true,
-      unlocked: false,
-      need_pay: true,
-      shortfall_tiyin: needTiyin,
-      shortfall_sum: Math.trunc(needTiyin / 100),
-      pay_url,
-      order: {
-        id: Number(order.id),
-        client_id: Number(order.client_id),
-        amount_tiyin: Number(order.amount_tiyin),
-        amount_sum: Math.trunc(Number(order.amount_tiyin) / 100),
-        status: order.status,
-        created_at: order.created_at,
-      },
+      order_id: order.id,
+      amount_tiyin: amountTiyin,
+      amount_sum: tiyinToSum(amountTiyin),
+      pay_url: payUrl,
+      redirect_url: redirectUrl,
+      expires_at: expiresAt,
     });
   } catch (e) {
     try {
       await db.query("ROLLBACK");
     } catch {}
-    console.error("unlockAuto error:", e);
-    return res.status(500).json({ ok: false, message: "Internal error" });
+
+    console.error("[client-billing] createTopupOrder:", e);
+
+    return res.status(500).json({
+      ok: false,
+      error: "topup_create_failed",
+    });
+  } finally {
+    db.release();
+  }
+}
+
+async function autoUnlockAfterTopup(req, res) {
+  const clientId = await findClientId(req);
+
+  if (!clientId) {
+    return res.status(401).json({
+      ok: false,
+      error: "client_auth_required",
+    });
+  }
+
+  const serviceId = toIntOrNull(
+    req.body?.service_id ||
+      req.body?.serviceId
+  );
+
+  if (!serviceId) {
+    return res.status(400).json({
+      ok: false,
+      error: "service_required",
+    });
+  }
+
+  const db = await pool.connect();
+
+  try {
+    await ensureBillingShape(db);
+
+    const settings = await getContactUnlockSettings();
+
+    const unlockPrice =
+      normalizePositiveTiyin(
+        settings.unlockPriceTiyin
+      );
+
+    await db.query("BEGIN");
+
+    await advisoryLock(
+      db,
+      `unlock:auto:${clientId}:${serviceId}`
+    );
+
+    await expireOldOrders(db, clientId);
+
+    const alreadyUnlocked = await db.query(
+      `
+        SELECT id
+        FROM client_service_contact_unlocks
+        WHERE client_id = $1
+          AND service_id = $2
+        LIMIT 1
+      `,
+      [clientId, serviceId]
+    );
+
+    if (alreadyUnlocked.rows[0]) {
+      await db.query("COMMIT");
+
+      return res.json({
+        ok: true,
+        already_unlocked: true,
+      });
+    }
+
+    const existingPending = await db.query(
+      `
+        SELECT *
+        FROM topup_orders
+        WHERE client_id = $1
+          AND service_id = $2
+          AND order_type = 'unlock_contact'
+          AND status IN ('created', 'pending')
+          AND expires_at > now()
+        ORDER BY id DESC
+        LIMIT 1
+      `,
+      [clientId, serviceId]
+    );
+
+    if (existingPending.rows[0]) {
+      await db.query("COMMIT");
+
+      return res.json({
+        ok: true,
+        reused: true,
+        order: existingPending.rows[0],
+        pay_url: existingPending.rows[0].pay_url,
+      });
+    }
+        const balance = await getBalanceFromLedger(db, clientId);
+
+    if (!settings.unlockIsPaid || balance >= unlockPrice) {
+      const result = await unlockContactTx(db, {
+        clientId,
+        serviceId,
+        source: "web_auto_unlock",
+      });
+
+      await syncClientBalanceMirrorLocal(db, clientId);
+
+      await db.query("COMMIT");
+
+      await safeLogUnlockFunnel(pool, {
+        clientId,
+        serviceId,
+        source: "web_auto_unlock",
+        step: "unlocked_without_payme_redirect",
+      });
+
+      return res.json({
+        ok: true,
+        unlocked: true,
+        result,
+      });
+    }
+
+    const expiresAt = getOrderExpiryDate();
+
+    const redirectUrl =
+      req.body?.redirect_url ||
+      req.body?.redirectUrl ||
+      `${process.env.SITE_URL || ""}/client/balance?service_id=${serviceId}`;
+
+    const { rows } = await db.query(
+      `
+        INSERT INTO topup_orders (
+          client_id,
+          amount,
+          status,
+          order_type,
+          service_id,
+          redirect_url,
+          expires_at,
+          meta
+        )
+        VALUES (
+          $1,
+          $2,
+          'created',
+          'unlock_contact',
+          $3,
+          $4,
+          $5,
+          $6
+        )
+        RETURNING *
+      `,
+      [
+        clientId,
+        unlockPrice,
+        serviceId,
+        redirectUrl,
+        expiresAt,
+        {
+          session_key: getSessionKey(req),
+          source: "web_unlock_auto",
+          ip: req.ip,
+          ua: req.headers["user-agent"] || null,
+        },
+      ]
+    );
+
+    const order = rows[0];
+
+    const merchantId =
+      process.env.PAYME_MERCHANT_ID ||
+      process.env.PAYME_CHECKOUT_ID ||
+      "";
+
+    const encoded = Buffer.from(
+      JSON.stringify({
+        m: merchantId,
+        ac: {
+          order_id: order.id,
+        },
+        a: unlockPrice,
+      })
+    ).toString("base64");
+
+    const payUrl =
+      `https://checkout.paycom.uz/${encoded}`;
+
+    await db.query(
+      `
+        UPDATE topup_orders
+        SET pay_url = $2
+        WHERE id = $1
+      `,
+      [order.id, payUrl]
+    );
+
+    await db.query("COMMIT");
+
+    await safeLogUnlockFunnel(pool, {
+      clientId,
+      serviceId,
+      source: "web_unlock_auto",
+      step: "payme_redirect_created",
+    });
+
+    return res.json({
+      ok: true,
+      requires_payment: true,
+      order_id: order.id,
+      amount_tiyin: unlockPrice,
+      amount_sum: tiyinToSum(unlockPrice),
+      pay_url: payUrl,
+      redirect_url: redirectUrl,
+      expires_at: expiresAt,
+    });
+  } catch (e) {
+    try {
+      await db.query("ROLLBACK");
+    } catch {}
+
+    console.error("[client-billing] autoUnlockAfterTopup:", e);
+
+    return res.status(500).json({
+      ok: false,
+      error: "auto_unlock_failed",
+    });
   } finally {
     db.release();
   }
 }
 
 async function unlockContact(req, res) {
-  const clientId = req.user?.id;
-  const serviceId = Number(req.body?.service_id);
+  const clientId = await findClientId(req);
 
   if (!clientId) {
-    return res.status(401).json({ ok: false, message: "Unauthorized" });
+    return res.status(401).json({
+      ok: false,
+      error: "client_auth_required",
+    });
   }
+
+  const serviceId = toIntOrNull(
+    req.body?.service_id ||
+      req.body?.serviceId
+  );
 
   if (!serviceId) {
-    return res.status(400).json({ ok: false, message: "Bad service_id" });
+    return res.status(400).json({
+      ok: false,
+      error: "service_required",
+    });
   }
 
-  const client = await pool.connect();
+  const db = await pool.connect();
 
   try {
-    await client.query("BEGIN");
-    await ensureContactBalanceLedgerShape(client);
-    await ensureContactUnlocksShape(client);
+    await ensureBillingShape(db);
 
-    const unlockSettings = await getContactUnlockSettings(client);
-    const price = Number(unlockSettings.effective_price || 0);
+    await db.query("BEGIN");
 
-    await safeLogUnlockFunnel(client, {
-      clientId,
-      serviceId,
-      source: "web",
-      step: "unlock_clicked",
-      status: "info",
-      priceTiyin: price,
-      sessionKey: getSessionKey(req),
-      meta: {
-        channel: "web",
-        route: "/api/client/unlock-contact",
-      },
-    });
-
-    await client.query(`SELECT id FROM clients WHERE id=$1 FOR UPDATE`, [clientId]);
-
-    const existing = await client.query(
-      `
-      SELECT id
-      FROM client_service_contact_unlocks
-      WHERE client_id=$1
-      AND service_id=$2
-      LIMIT 1
-      `,
-      [clientId, serviceId]
+    await advisoryLock(
+      db,
+      `unlock:manual:${clientId}:${serviceId}`
     );
 
-    if (existing.rows.length) {
-      const balance = await getBalanceFromLedger(client, clientId);
+    await expireOldOrders(db, clientId);
 
-      await safeLogUnlockFunnel(client, {
-        clientId,
-        serviceId,
-        source: "web",
-        step: "unlock_already_opened",
-        status: "success",
-        priceTiyin: price,
-        balanceBefore: balance,
-        balanceAfter: balance,
-        sessionKey: getSessionKey(req),
-        meta: {
-          channel: "web",
-          already: true,
-        },
-      });
-
-      await client.query("COMMIT");
-
-      return res.json({
-        ok: true,
-        already: true,
-        unlocked: true,
-        charged: 0,
-        charged_sum: 0,
-        balance,
-        unlock_price: price,
-        unlock_price_sum: Math.round(Number(price || 0) / 100),
-        unlock_is_paid: unlockSettings.is_paid,
-      });
-    }
-
-    const balance = await getBalanceFromLedger(client, clientId);
-
-    if (price > 0 && balance < price) {
-      await safeLogUnlockFunnel(client, {
-        clientId,
-        serviceId,
-        source: "web",
-        step: "unlock_no_balance",
-        status: "fail",
-        priceTiyin: price,
-        balanceBefore: balance,
-        balanceAfter: balance,
-        sessionKey: getSessionKey(req),
-        meta: {
-          channel: "web",
-          need: price,
-          shortfall: Math.max(0, price - balance),
-        },
-      });
-
-      await client.query("ROLLBACK");
-
-      return res.status(400).json({
-        ok: false,
-        error: "not_enough_balance",
-        balance,
-        need: price,
-      });
-    }
-
-    const unlockInsert = await client.query(
-      `
-      INSERT INTO client_service_contact_unlocks
-      (client_id, service_id, price_charged)
-      VALUES ($1,$2,$3)
-      ON CONFLICT (client_id, service_id) DO NOTHING
-      RETURNING id
-      `,
-      [clientId, serviceId, price]
-    );
-
-    if (!unlockInsert.rows.length) {
-      const newBalance = await getBalanceFromLedger(client, clientId);
-
-      await safeLogUnlockFunnel(client, {
-        clientId,
-        serviceId,
-        source: "web",
-        step: "unlock_already_opened",
-        status: "success",
-        priceTiyin: price,
-        balanceBefore: newBalance,
-        balanceAfter: newBalance,
-        sessionKey: getSessionKey(req),
-        meta: {
-          channel: "web",
-          conflict_after_insert: true,
-        },
-      });
-
-      await client.query("COMMIT");
-
-      return res.json({
-        ok: true,
-        already: true,
-        unlocked: true,
-        charged: 0,
-        charged_sum: 0,
-        balance: newBalance,
-        unlock_price: price,
-        unlock_price_sum: Math.round(Number(price || 0) / 100),
-        unlock_is_paid: unlockSettings.is_paid,
-      });
-    }
-
-    if (price > 0) {
-      await client.query(
-        `
-        INSERT INTO contact_balance_ledger
-        (client_id, amount, reason, service_id, source, meta)
-        VALUES ($1,$2,'unlock_contact',$3,'web',$4::jsonb)
-        `,
-        [
-          clientId,
-          -price,
-          serviceId,
-          JSON.stringify({
-            service_id: serviceId,
-            unlock_id: unlockInsert.rows[0].id,
-            channel: "web",
-          }),
-        ]
-      );
-    }
-
-    const newBalance =
-      price > 0
-        ? await syncClientBalanceMirror(client, clientId)
-        : await getBalanceFromLedger(client, clientId);
-
-    await safeLogUnlockFunnel(client, {
+    const result = await unlockContactTx(db, {
       clientId,
       serviceId,
-      source: "web",
-      step: "unlock_success",
-      status: "success",
-      priceTiyin: price,
-      balanceBefore: balance,
-      balanceAfter: newBalance,
-      sessionKey: getSessionKey(req),
-      meta: {
-        channel: "web",
-        charged: price,
-        unlock_id: unlockInsert.rows[0]?.id || null,
-        is_paid_mode: !!unlockSettings.is_paid,
-      },
+      source: "web_manual_unlock",
     });
 
-    await client.query("COMMIT");
+    await syncClientBalanceMirrorLocal(db, clientId);
+
+    await db.query("COMMIT");
+
+    await safeLogUnlockFunnel(pool, {
+      clientId,
+      serviceId,
+      source: "web_manual_unlock",
+      step: result?.alreadyUnlocked
+        ? "already_unlocked"
+        : "unlocked",
+    });
 
     return res.json({
       ok: true,
-      unlocked: true,
-      already: false,
-      charged: price,
-      charged_sum: Math.round(Number(price || 0) / 100),
-      balance: newBalance,
-      unlock_price: price,
-      unlock_price_sum: Math.round(Number(price || 0) / 100),
-      unlock_is_paid: unlockSettings.is_paid,
+      ...result,
     });
   } catch (e) {
     try {
-      await client.query("ROLLBACK");
+      await db.query("ROLLBACK");
     } catch {}
 
-    try {
-      await safeLogUnlockFunnel({
-        clientId,
-        serviceId,
-        source: "web",
-        step: "unlock_error",
-        status: "fail",
-        priceTiyin: 0,
-        sessionKey: getSessionKey(req),
-        meta: {
-          channel: "web",
-          error: e?.message || String(e),
-        },
-      });
-    } catch {}
+    console.error("[client-billing] unlockContact:", e);
 
-    console.error("unlockContact error:", e);
-    return res.status(500).json({ ok: false });
+    return res.status(400).json({
+      ok: false,
+      error: e?.message || "unlock_failed",
+    });
   } finally {
-    client.release();
+    db.release();
   }
 }
 
 module.exports = {
-  clientBalance,
-  clientBalanceLedger,
+  getClientBalance,
+  getClientBalanceLedger,
   createTopupOrder,
-  unlockAuto,
+  createTopupOrderForBalance: createTopupOrder,
+  topupOrder: createTopupOrder,
+  autoUnlockAfterTopup,
+  unlockAuto: autoUnlockAfterTopup,
   unlockContact,
 };
