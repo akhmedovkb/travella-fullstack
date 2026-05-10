@@ -657,20 +657,7 @@
     "quick_request_after_access": "Quick request",
     "quick_request_after_access_hint": "Quick request is available after unlocking access",
     "unlock_intro_quick_request": "Quick request to the provider",
-    "unlock_intro_value_anchor": "This is a small fee for full provider access: phone, Telegram, and quick request without extra steps.",
-    "photo_coming_soon": "Photo coming soon",
-    "details_dates_title": "Trip dates",
-    "details_trip_summary": "What is included",
-    "details_trip_summary_hint": "Key details for a quick decision",
-    "included": "Included",
-    "details_proof_available": "You can open and verify the materials",
-    "details_proof_locked": "Verification materials are available after unlocking access",
-    "details_proof_unlock_cta": "Unlock access to verify",
-    "views": "views",
-    "considering_now": "now",
-    "unlocked_count_short": "opened",
-    "details_unlock_value_anchor": "After unlocking, you can contact directly, send a quick request and verify the materials.",
-    "details_unlock_cta": "Get provider access"
+    "unlock_intro_value_anchor": "This is a small fee for full provider access: phone, Telegram, and quick request without extra steps."
   },
   "messages": {
     "booking_created": "Booking created",
@@ -2141,5 +2128,35 @@
         }
       }
     }
+  },
+  "service_form": {
+    "studio_badge": "Creation studio",
+    "studio_title": "Create a service clients want to open",
+    "studio_hint": "Fill it in by blocks: route, details, value, price and proof. The clearer the card is, the higher the chance that a client unlocks contacts.",
+    "creator_quality": "Card quality",
+    "creator_quality_hint": "Move through the steps and check the preview before saving.",
+    "creator_category_first": "Choose a service category first.",
+    "step": "Step",
+    "step_main": "Basics",
+    "step_main_hint": "Route, dates, title",
+    "step_details": "Details",
+    "step_details_hint": "Hotel, flight, accommodation",
+    "step_value": "Value",
+    "step_value_hint": "Included items and proof",
+    "step_price": "Price",
+    "step_price_hint": "Price and actuality",
+    "step_preview": "Preview",
+    "step_preview_hint": "Client-facing view",
+    "prev_step": "Back",
+    "next_step": "Next step",
+    "preview_price_empty": "Price will appear here",
+    "preview_dates_empty": "Dates will appear here",
+    "preview_photo_hint": "Photo will appear here",
+    "preview_category": "Category",
+    "preview_title_empty": "Service title",
+    "preview_route_empty": "Route will appear here",
+    "preview_tip": "This is how a client will perceive your service. Add proof and photos to increase trust.",
+    "proof_trust_title": "Proof increases trust",
+    "proof_trust_hint": "Confirmation screenshots help clients decide faster to unlock provider contacts."
   }
 }
