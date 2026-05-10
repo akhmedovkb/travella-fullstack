@@ -848,8 +848,8 @@
       "transport": "TRANSPORT"
     },
     "form": {
-      "category": "Kategoriya",
-      "category_ph": "— kategoriyani tanlang —",
+      "category": "Toifa",
+      "category_ph": "— toifani tanlang —",
       "name_opt": "Nom (ixt.)",
       "name_optional_ph": "masalan, 4 soat yoki avtomobil modeli",
       "seats": "O‘rinlar",
@@ -859,7 +859,7 @@
       "add": "Qo‘shish"
     },
     "table": {
-      "category": "Kategoriya",
+      "category": "Toifa",
       "name": "Nom",
       "seats": "O‘rinlar",
       "price": "Narx",
@@ -981,8 +981,8 @@
   "save": "Saqlash",
   "save_service": "Xizmatni saqlash",
   "saving": "Saqlayapman...",
-  "select_category": "Kategoriyani tanlang",
-  "select_event_category": "Tadbir kategoriyasini tanlang",
+  "select_category": "Toifani tanlang",
+  "select_event_category": "Tadbir toifasini tanlang",
   "select_files": "Fayllarni tanlash",
   "select_hotel": "Mehmonxonani tanlang",
   "service": "Xizmat",
@@ -1036,7 +1036,7 @@
       "invalid_date": "Noto‘g‘ri sana.",
       "past_forbidden": "Boshlanish sanasi o‘tgan bo‘lishi mumkin emas."
     },
-    "hotel_category": "Mehmonxonalar kategoriyasi",
+    "hotel_category": "Mehmonxonalar toifasi",
     "any": "Istalgan",
     "route": "Marshrut",
     "templates": "Shablonlar",
@@ -1219,7 +1219,7 @@
     "provider_login_required": "Provayder sifatida kiring"
   },
   "rooms_and_prices": "Xonalar fondi va narxlar",
-  "room_category": "Xona kategoriyasi",
+  "room_category": "Xona toifasi",
   "count_short": "Soni",
   "price_per_night": "Narx/kecha",
   "low_season": "Past mavsum",
