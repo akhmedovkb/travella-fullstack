@@ -48,7 +48,17 @@ function getPaymeCreds() {
  */
 
 const TX_TIMEOUT_MS = 12 * 60 * 60 * 1000; // 12h
-const TOPUP_ORDER_TTL_MS = Number(process.env.PAYME_TOPUP_ORDER_TTL_MS || TX_TIMEOUT_MS);
+const ORDER_TTL_MS = Math.max(1, Number(process.env.PAYME_ORDER_TTL_HOURS || 12)) * 60 * 60 * 1000;
+
+function isFinalOrderStatus(status) {
+  return ["paid", "cancelled", "expired"].includes(String(status || "").toLowerCase());
+}
+
+function isOrderExpired(order, now = Date.now()) {
+  if (!order || isFinalOrderStatus(order.status)) return false;
+  const createdAt = order.created_at ? new Date(order.created_at).getTime() : 0;
+  return Number.isFinite(createdAt) && createdAt > 0 && now - createdAt > ORDER_TTL_MS;
+}
 
 function logPayme(event, extra = {}) {
   try {
@@ -144,9 +154,8 @@ async function lockKeyTx(client, keyStr) {
 
 async function getOrderTx(client, orderId) {
   const { rows } = await client.query(
-    `SELECT id, client_id, amount_tiyin, status, paid_at,
+    `SELECT id, client_id, amount_tiyin, status, paid_at, created_at,
             COALESCE(purpose, 'client_topup') AS purpose,
-            created_at,
             support_donation_id, provider_id, telegram_chat_id, note
        FROM topup_orders
       WHERE id = $1
@@ -290,42 +299,6 @@ async function markOrderStatusTx(client, orderId, status, paidAt = null) {
   );
 }
 
-function isOrderExpired(order) {
-  if (!order?.created_at) return false;
-  const created = new Date(order.created_at).getTime();
-  return Number.isFinite(created) && TOPUP_ORDER_TTL_MS > 0 && nowMs() - created > TOPUP_ORDER_TTL_MS;
-}
-
-async function markOrderExpiredTx(client, orderId) {
-  await client.query(
-    `UPDATE topup_orders
-        SET status = 'expired'
-      WHERE id = $1
-        AND status IN ('new','created')`,
-    [orderId]
-  );
-}
-
-async function ensureContactBalanceLedgerShapeTx(client) {
-  await client.query(`
-    CREATE TABLE IF NOT EXISTS contact_balance_ledger (
-      id BIGSERIAL PRIMARY KEY,
-      client_id BIGINT NOT NULL,
-      amount BIGINT NOT NULL,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-    )
-  `);
-
-  await client.query(`
-    ALTER TABLE contact_balance_ledger
-      ADD COLUMN IF NOT EXISTS reason TEXT,
-      ADD COLUMN IF NOT EXISTS service_id BIGINT,
-      ADD COLUMN IF NOT EXISTS source TEXT,
-      ADD COLUMN IF NOT EXISTS meta JSONB,
-      ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-  `);
-}
-
 // ===== contact_balance_ledger helpers =====
 const _ledgerColsCache = { cols: null };
 
@@ -434,16 +407,7 @@ async function creditLedgerOnceTx(client, { clientId, amountTiyin, orderId, paym
     throw new Error("creditLedgerOnceTx: bad amountTiyin");
   }
 
-  await ensureContactBalanceLedgerShapeTx(client);
   const cols = await getLedgerCols(client);
-
-  if (cols.has("meta")) {
-    const existing = await client.query(
-      `SELECT id FROM contact_balance_ledger WHERE meta->>'payme_id' = $1 LIMIT 1`,
-      [String(paymeId)]
-    );
-    if (existing.rowCount > 0) return { inserted: false };
-  }
 
   const row = {};
   if (cols.has("client_id")) row.client_id = Number(clientId);
@@ -478,17 +442,7 @@ async function debitLedgerOnceTx(client, { clientId, amountTiyin, orderId, payme
     throw new Error("debitLedgerOnceTx: bad amountTiyin");
   }
 
-  await ensureContactBalanceLedgerShapeTx(client);
   const cols = await getLedgerCols(client);
-
-  const refundLedgerId = `${String(paymeId)}_refund`;
-  if (cols.has("meta")) {
-    const existing = await client.query(
-      `SELECT id FROM contact_balance_ledger WHERE meta->>'payme_id' = $1 LIMIT 1`,
-      [refundLedgerId]
-    );
-    if (existing.rowCount > 0) return { inserted: false };
-  }
 
   const row = {};
   if (cols.has("client_id")) row.client_id = Number(clientId);
@@ -499,7 +453,7 @@ async function debitLedgerOnceTx(client, { clientId, amountTiyin, orderId, payme
 
   if (cols.has("meta")) {
     row.meta = {
-      payme_id: refundLedgerId,
+      payme_id: `${String(paymeId)}_refund`,
       original_payme_id: String(paymeId),
       order_id: String(orderId),
       kind: "refund",
@@ -701,21 +655,10 @@ async function paymeMerchantRpc(req, res) {
       if (order.status === "paid") {
         return res.status(200).json(rpcError(id, -31008, "Already paid"));
       }
-      if (order.status === "cancelled" || order.status === "expired") {
+      if (order.status === "cancelled") {
         return res.status(200).json(rpcError(id, -31008, "Order cancelled"));
       }
       if (isOrderExpired(order)) {
-        const client = await pool.connect();
-        try {
-          await client.query("BEGIN");
-          await lockKeyTx(client, `order:${orderId}`);
-          await markOrderExpiredTx(client, orderId);
-          await client.query("COMMIT");
-        } catch (e) {
-          try { await client.query("ROLLBACK"); } catch {}
-        } finally {
-          client.release();
-        }
         return res.status(200).json(rpcError(id, -31008, "Order expired"));
       }
 
@@ -809,12 +752,12 @@ async function paymeMerchantRpc(req, res) {
           await client.query("ROLLBACK");
           return res.status(200).json(rpcError(id, -31008, "Already paid"));
         }
-        if (order.status === "cancelled" || order.status === "expired") {
+        if (order.status === "cancelled") {
           await client.query("ROLLBACK");
           return res.status(200).json(rpcError(id, -31008, "Order cancelled"));
         }
         if (isOrderExpired(order)) {
-          await markOrderExpiredTx(client, orderId);
+          await markOrderStatusTx(client, orderId, "expired");
           await client.query("COMMIT");
           return res.status(200).json(rpcError(id, -31008, "Order expired"));
         }
@@ -927,7 +870,7 @@ async function paymeMerchantRpc(req, res) {
           return res.status(200).json(rpcError(id, -31050, "Order not found"));
         }
 
-        if (order.status === "cancelled" || order.status === "expired") {
+        if (order.status === "cancelled") {
           const cancelTime = nowMs();
           await setTxState(client, paymeId, {
             state: -1,
@@ -937,7 +880,6 @@ async function paymeMerchantRpc(req, res) {
           await client.query("COMMIT");
           return res.status(200).json(rpcError(id, -31008, "Order cancelled"));
         }
-
         if (isOrderExpired(order)) {
           const cancelTime = nowMs();
           await setTxState(client, paymeId, {
@@ -945,7 +887,7 @@ async function paymeMerchantRpc(req, res) {
             cancel_time: cancelTime,
             reason: 4,
           });
-          await markOrderExpiredTx(client, orderId);
+          await markOrderStatusTx(client, orderId, "expired");
           await client.query("COMMIT");
           return res.status(200).json(rpcError(id, -31008, "Order expired"));
         }
@@ -1083,65 +1025,50 @@ async function paymeMerchantRpc(req, res) {
                 );
 
                 const isPaid = !!settings.rows[0]?.is_paid;
-                // contact_unlock_settings.price is stored in tiyin, same as ledger.amount.
-                // Do NOT divide by 100 here, otherwise auto-unlock charges 100x less.
-                const unlockPriceTiyin = isPaid
-                  ? Math.max(0, Math.trunc(Number(settings.rows[0]?.price || 0)))
-                  : 0;
+                // contact_unlock_settings.price is stored in tiyin, the same unit as contact_balance_ledger.amount.
+                // Do NOT divide by 100 here: otherwise auto-unlock undercharges 100x after Payme top-up.
+                const priceTiyin = isPaid ? Math.trunc(Number(settings.rows[0]?.price || 0)) : 0;
 
                 const balanceAfterTopup = await getLedgerBalance(client, clientId);
-                let autoUnlocked = false;
 
-                if (balanceAfterTopup >= unlockPriceTiyin && unlockPriceTiyin >= 0) {
-                  const insUnlock = await client.query(
+                if (balanceAfterTopup >= priceTiyin && priceTiyin >= 0) {
+                  await client.query(
                     `
                     INSERT INTO client_service_contact_unlocks
                       (client_id, service_id, price_charged, source, note)
                     VALUES ($1, $2, $3, 'payme_auto', 'auto-retry after Payme topup')
                     ON CONFLICT DO NOTHING
-                    RETURNING id
                     `,
-                    [clientId, serviceId, unlockPriceTiyin]
+                    [clientId, serviceId, priceTiyin]
                   );
 
-                  if (insUnlock.rowCount > 0 && unlockPriceTiyin > 0) {
-                    await ensureContactBalanceLedgerShapeTx(client);
-                    await client.query(
-                      `
-                      INSERT INTO contact_balance_ledger
-                        (client_id, amount, reason, service_id, source, meta)
-                      VALUES ($1, $2, 'unlock_contact', $3, 'payme_auto', $4::jsonb)
-                      `,
-                      [
-                        clientId,
-                        -unlockPriceTiyin,
-                        serviceId,
-                        JSON.stringify({
-                          service_id: serviceId,
-                          auto_retry: true,
-                          payme_id: String(paymeId),
-                          order_id: String(orderId),
-                        }),
-                      ]
-                    );
-                  }
+                  await client.query(
+                    `
+                    INSERT INTO contact_balance_ledger
+                      (client_id, amount, reason, service_id, source, meta)
+                    VALUES ($1, $2, 'unlock_contact', $3, 'payme_auto', $4::jsonb)
+                    `,
+                    [
+                      clientId,
+                      -priceTiyin,
+                      serviceId,
+                      JSON.stringify({
+                        service_id: serviceId,
+                        auto_retry: true,
+                        payme_id: String(paymeId),
+                        order_id: String(orderId),
+                      }),
+                    ]
+                  );
 
                   await syncClientBalanceMirror(client, clientId);
-                  autoUnlocked = true;
                 }
-
-                if (autoUnlocked) {
-                  await client.query(
-                    `DELETE FROM client_pending_unlocks WHERE id = $1`,
-                    [Number(pendingRow.id)]
-                  );
-                }
-              } else {
-                await client.query(
-                  `DELETE FROM client_pending_unlocks WHERE id = $1`,
-                  [Number(pendingRow.id)]
-                );
               }
+
+              await client.query(
+                `DELETE FROM client_pending_unlocks WHERE id = $1`,
+                [Number(pendingRow.id)]
+              );
             }
           } catch (e) {
             console.error("[payme] auto-retry pending unlock error:", e?.message || e);
@@ -1216,22 +1143,11 @@ async function paymeMerchantRpc(req, res) {
 
         const prevState = Number(tx.state);
         const newStateDb = Number(updated?.state ?? newState);
-        const orderId = Number(tx.order_id);
-        const order = Number.isFinite(orderId) ? await getOrderTx(client, orderId) : null;
-
-        if (order && newStateDb === -1) {
-          await markProviderSupportDonationCancelledTx(client, order, paymeId);
-          try {
-            await markOrderStatusTx(client, orderId, "cancelled");
-          } catch (e2) {
-            console.error(
-              "[payme] CancelTransaction: cannot set pending order status=cancelled:",
-              e2?.message || e2
-            );
-          }
-        }
 
         if (prevState === 2 && newStateDb === -2) {
+          const orderId = Number(tx.order_id);
+          const order = await getOrderTx(client, orderId);
+
           if (order) {
             const isProviderSupportCancel = await markProviderSupportDonationCancelledTx(client, order, paymeId);
 
