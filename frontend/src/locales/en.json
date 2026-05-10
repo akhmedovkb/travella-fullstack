@@ -2239,7 +2239,10 @@
     "register": "Register / login via Telegram",
     "error": "Telegram authorization failed. Please make sure your Telegram is linked to an approved provider account.",
     "checking": "Checking Telegram authorization...",
-    "bot_username_missing": "Telegram bot username is not configured. Add VITE_TELEGRAM_BOT_USERNAME or VITE_TG_BOT_USERNAME.",
-    "not_approved": "This Telegram account is not linked to an approved provider yet. Please pass moderation first."
+    "bot_username_missing": "Provider Telegram bot username is not configured. Add VITE_TELEGRAM_PROVIDER_BOT_USERNAME.",
+    "not_approved": "This Telegram account is not linked to an approved provider yet. Please pass moderation first.",
+    "register_hint": "If you are already approved as a provider in the bot, Telegram login will open the same dashboard.",
+    "domain_hint": "If the button does not load, check BotFather domain and provider bot env.",
+    "bot_not_configured": "Provider Telegram bot is not configured."
   }
 }
