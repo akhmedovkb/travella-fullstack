@@ -40,6 +40,10 @@ const {
   purgeProviderService,
 } = require("../controllers/providerController");
 
+const {
+  loginProviderWithTelegram,
+} = require("../controllers/providerTelegramAuthController");
+
 const { notifyModerationNew } = require("../utils/telegram");
 
 function requireProvider(req, res, next) {
@@ -61,6 +65,7 @@ router.get("/available", availableProvidersPublic);
 
 router.post("/register", registerProvider);
 router.post("/login", loginProvider);
+router.post("/telegram-login", loginProviderWithTelegram);
 
 router.get("/profile", authenticateToken, requireProvider, getProviderProfile);
 router.put("/profile", authenticateToken, requireProvider, updateProviderProfile);
