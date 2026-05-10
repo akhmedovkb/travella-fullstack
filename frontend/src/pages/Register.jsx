@@ -64,6 +64,62 @@ const Register = () => {
 
   const [locationSuggestions, setLocationSuggestions] = useState([]);
   const [submitting, setSubmitting] = useState(false);
+  useEffect(() => {
+  window.onTelegramProviderRegister = async (user) => {
+    try {
+      const response = await axios.post(
+        `${import.meta.env.VITE_API_BASE_URL}/api/providers/telegram-login`,
+        user
+      );
+
+      if (response.data?.token) {
+        localStorage.setItem("token", response.data.token);
+        navigate("/dashboard");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  return () => {
+    delete window.onTelegramProviderRegister;
+  };
+}, [navigate]);
+
+useEffect(() => {
+  const existing = document.getElementById("telegram-provider-register");
+
+  if (existing) existing.remove();
+
+  const script = document.createElement("script");
+
+  script.src = "https://telegram.org/js/telegram-widget.js?22";
+  script.async = true;
+  script.id = "telegram-provider-register";
+
+  script.setAttribute(
+    "data-telegram-login",
+    import.meta.env.VITE_TELEGRAM_BOT_USERNAME
+  );
+
+  script.setAttribute("data-size", "large");
+
+  script.setAttribute(
+    "data-onauth",
+    "onTelegramProviderRegister(user)"
+  );
+
+  script.setAttribute("data-request-access", "write");
+
+  const container = document.getElementById(
+    "telegram-register-container"
+  );
+
+  if (container) {
+    container.innerHTML = "";
+    container.appendChild(script);
+  }
+}, []);
 
   // debounce для автоподсказки городов
   const debounceRef = useRef(null);
@@ -169,6 +225,15 @@ const Register = () => {
       <form onSubmit={handleSubmit} className="bg-white p-10 rounded-lg shadow-lg w-full max-w-4xl">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-2xl font-bold text-orange-600">{t("register.title")}</h2>
+          <div className="mt-4 mb-6">
+            <div className="text-sm font-semibold text-gray-600 mb-3">
+              {t("telegram_provider_auth.register", {
+                defaultValue: "Register via Telegram",
+              })}
+            </div>
+          
+            <div id="telegram-register-container" />
+          </div>
           
         </div>
 
