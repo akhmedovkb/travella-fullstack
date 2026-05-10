@@ -270,54 +270,46 @@ function TooltipPortal({ visible, x, y, children }) {
   );
 }
 
-/* ======== всплывающее окно с деталями тура (за карточкой) ======== */
-function DetailsPopup({ open, anchorRef, onClose, children }) {
-  const [pos, setPos] = useState({ x: 0, y: 0 });
-
+/* ======== premium popup с деталями тура / mobile sheet ======== */
+function DetailsPopup({ open, onClose, children }) {
   useEffect(() => {
     if (!open) return;
 
-    const update = () => {
-      if (!anchorRef?.current) return;
-      const r = anchorRef.current.getBoundingClientRect();
-      const margin = 12;
-      const width = 320;
-
-      const x = Math.min(
-        Math.max(margin, r.left),
-        window.innerWidth - width - margin
-      );
-      const y = Math.min(
-        window.innerHeight - margin,
-        Math.max(margin, r.bottom + 4)
-      );
-      setPos({ x, y });
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") onClose?.();
     };
 
-    update();
-    window.addEventListener("scroll", update, true);
-    window.addEventListener("resize", update);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKeyDown);
+
     return () => {
-      window.removeEventListener("scroll", update, true);
-      window.removeEventListener("resize", update);
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
     };
-  }, [open, anchorRef]);
+  }, [open, onClose]);
 
   if (!open) return null;
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[2600]"
-      onClick={() => {
-        onClose?.();
-      }}
+      className="fixed inset-0 z-[2600] flex items-end justify-center bg-slate-950/55 px-0 pt-8 backdrop-blur-sm sm:items-center sm:px-4 sm:py-8"
+      onClick={() => onClose?.()}
     >
       <div
-        className="absolute pointer-events-auto"
-        style={{ top: pos.y, left: pos.x }}
+        className="relative flex max-h-[92vh] w-full max-w-[760px] flex-col overflow-hidden rounded-t-[2rem] border border-white/40 bg-white shadow-[0_28px_90px_rgba(15,23,42,0.30)] sm:max-h-[88vh] sm:rounded-[2rem]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="w-[320px] max-w-[95vw] rounded-2xl bg-white shadow-2xl border border-gray-200 p-3 text-xs sm:text-sm max-h-[80vh] overflow-y-auto">
+        <button
+          type="button"
+          onClick={() => onClose?.()}
+          className="absolute right-3 top-3 z-30 inline-flex h-9 w-9 items-center justify-center rounded-full bg-black/35 text-lg font-black text-white shadow-lg ring-1 ring-white/20 backdrop-blur-md transition hover:bg-black/50"
+          aria-label="Close"
+        >
+          ×
+        </button>
+
+        <div className="min-h-0 flex-1 overflow-y-auto">
           {children}
         </div>
       </div>
@@ -1845,137 +1837,261 @@ return (
         anchorRef={detailsBtnRef}
         onClose={() => setDetailsOpen(false)}
       >
-        <div className="font-semibold mb-1">
-          {t("marketplace.tour_details") || "Детали тура"}
-        </div>
-
-        {direction && (
-          <div className="text-xs sm:text-sm mb-1">
-            <span className="text-gray-500">
-              {t("marketplace.route", { defaultValue: "Маршрут" })}:{" "}
-            </span>
-            <span className="font-medium">{direction}</span>
-          </div>
-        )}
-        {dates && (
-          <div className="text-xs sm:text-sm mb-1">
-            <span className="text-gray-500">
-              {t("marketplace.dates_label", { defaultValue: "Даты" })}:{" "}
-            </span>
-            <span className="font-medium">{dates}</span>
-          </div>
-        )}
-        {hotel && (
-          <div className="text-xs sm:text-sm mb-1">
-            <span className="text-gray-500">
-              {t("marketplace.hotel_label", { defaultValue: "Отель" })}:{" "}
-            </span>
-            <span className="font-medium">{hotel}</span>
-          </div>
-        )}
-        {accommodation && (
-          <div className="text-xs sm:text-sm mb-1">
-            <span className="text-gray-500">
-              {t("marketplace.accommodation", { defaultValue: "Размещение" })}:{" "}
-            </span>
-            <span className="font-medium">{accommodation}</span>
-          </div>
-        )}
-        {transfer && (
-          <div className="text-xs sm:text-sm mb-1">
-            <span className="text-gray-500">
-              {t("marketplace.transfer", { defaultValue: "Трансфер" })}:{" "}
-            </span>
-            <span className="font-medium">{transfer}</span>
-          </div>
-        )}
-        {details.insuranceIncluded && (
-          <div className="text-xs sm:text-sm mb-1">
-            <span className="text-gray-500">
-              {t("insurance_included")}:{" "}
-            </span>
-            <span className="font-medium">✓</span>
-          </div>
-        )}
-        {details.earlyCheckIn && (
-          <div className="text-xs sm:text-sm mb-1">
-            <span className="text-gray-500">
-              {t("early_check_in")}:{" "}
-            </span>
-            <span className="font-medium">✓</span>
-          </div>
-        )}
-        {details.arrivalFastTrack && (
-          <div className="text-xs sm:text-sm mb-1">
-            <span className="text-gray-500">
-              {t("arrival_fast_track")}:{" "}
-            </span>
-            <span className="font-medium">✓</span>
-          </div>
-        )}
-        {prettyPrice && (
-          <div className="text-xs sm:text-sm mb-2">
-            <span className="text-gray-500">
-              {t("marketplace.price") || "Цена"}:{" "}
-            </span>
-            <span className="font-semibold">{prettyPrice}</span>
-          </div>
-        )}
-
-        {hasProof && (
-          <div className="mt-3 mb-2 rounded-xl border border-emerald-200 bg-emerald-50/60 p-3">
-            <div className="flex items-center justify-between gap-2 mb-2">
-              <div className="font-semibold text-emerald-700">
-                {t("marketplace.proof_images", {
-                  defaultValue: "Подтверждение подлинности",
-                })}
+        <div className="relative">
+          {/* Premium hero */}
+          <div className="relative h-56 overflow-hidden bg-gradient-to-br from-slate-100 via-orange-50 to-amber-50 sm:h-64">
+            {images.length ? (
+              <img
+                src={images[idx]}
+                alt={title || t("marketplace.no_image", { defaultValue: "Нет изображения" })}
+                className="h-full w-full object-cover saturate-[1.08] contrast-[1.03]"
+                onError={onImgError}
+                draggable={false}
+              />
+            ) : (
+              <div className="flex h-full w-full flex-col items-center justify-center gap-3 text-slate-400">
+                <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-white/80 text-3xl shadow-sm ring-1 ring-slate-200/70">
+                  🏝️
+                </div>
+                <div className="text-sm font-black text-slate-500">
+                  {t("marketplace.photo_coming_soon", { defaultValue: "Фото появится позже" })}
+                </div>
               </div>
-              <div className="text-[11px] text-emerald-700/80">
-                {proofImages.length}{" "}
-                {t("marketplace.proof_images_count", {
-                  defaultValue: "фото",
-                })}
+            )}
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/20 to-transparent" />
+            <div className="absolute bottom-0 left-0 right-0 p-5 text-white sm:p-6">
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                {categorySticker && (
+                  <span className="inline-flex rounded-full bg-white/18 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-white ring-1 ring-white/25 backdrop-blur-md">
+                    {categorySticker.label}
+                  </span>
+                )}
+                {hasProof && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/90 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-white ring-1 ring-white/25 backdrop-blur-md">
+                    ✔ {t("marketplace.verified_proof", { defaultValue: "Проверено" })}
+                  </span>
+                )}
+                {expireAt && !isExpired && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-black/35 px-2.5 py-1 text-[10px] font-black text-white ring-1 ring-white/20 backdrop-blur-md">
+                    ⏳ {formatLeft(leftMs, dayShort)}
+                  </span>
+                )}
               </div>
+
+              <h2 className="line-clamp-2 text-2xl font-black leading-tight tracking-[-0.04em] drop-shadow-sm sm:text-3xl">
+                {hotel || title}
+              </h2>
+              {hotel && title && hotel !== title && (
+                <div className="mt-1 line-clamp-1 text-sm font-bold text-white/80">
+                  {title}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-4 p-4 pb-5 sm:p-6 sm:pb-6">
+            {/* Decision summary */}
+            <div className="grid gap-3 sm:grid-cols-3">
+              {dates && (
+                <div className="rounded-2xl bg-slate-950 px-4 py-3 text-white shadow-[0_16px_34px_rgba(15,23,42,0.18)] sm:col-span-2">
+                  <div className="text-[10px] font-black uppercase tracking-[0.14em] text-white/45">
+                    {t("marketplace.details_dates_title", { defaultValue: "Даты поездки" })}
+                  </div>
+                  <div className="mt-1 flex items-center gap-2 text-lg font-black leading-tight tracking-[-0.03em]">
+                    <span>🗓</span>
+                    <span>{dates}</span>
+                  </div>
+                </div>
+              )}
+
+              {prettyPrice && (
+                <div className="rounded-2xl bg-gradient-to-br from-orange-500 to-amber-400 px-4 py-3 text-white shadow-[0_16px_34px_rgba(249,115,22,0.24)]">
+                  <div className="text-[10px] font-black uppercase tracking-[0.14em] text-white/70">
+                    {t("marketplace.price", { defaultValue: "Цена" })}
+                  </div>
+                  <div className="mt-1 text-2xl font-black leading-none tracking-[-0.05em]">
+                    {prettyPrice}
+                  </div>
+                  <div className="mt-0.5 text-xs font-black text-white/85">
+                    {t("marketplace.price_currency", { defaultValue: "у.е." })}
+                  </div>
+                </div>
+              )}
             </div>
 
-            {canViewProof ? (
-              <div className="grid grid-cols-2 gap-1.5 pt-0.5">
-                {proofImages.map((img, i) => (
-                  <button
-                    key={`${id}-proof-popup-${i}`}
-                    type="button"
-                    className="rounded-xl overflow-hidden border border-emerald-200 bg-white hover:opacity-90"
-                    onClick={() => setSelectedProofImage(img)}
-                  >
-                    <img
-                      src={img}
-                      alt=""
-                      className="w-full h-24 object-cover"
-                    />
-                  </button>
-                ))}
+            {(direction || accommodation || transfer || details.insuranceIncluded || details.earlyCheckIn || details.arrivalFastTrack) && (
+              <div className="rounded-3xl border border-slate-200/80 bg-white p-4 shadow-[0_16px_40px_rgba(15,23,42,0.06)]">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-black text-slate-950">
+                      {t("marketplace.details_trip_summary", { defaultValue: "Что входит в предложение" })}
+                    </div>
+                    <div className="text-xs font-medium text-slate-500">
+                      {t("marketplace.details_trip_summary_hint", { defaultValue: "Ключевые детали для быстрого решения" })}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {direction && (
+                    <div className="rounded-2xl bg-slate-50 px-3 py-2.5 ring-1 ring-slate-100">
+                      <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                        {t("marketplace.route", { defaultValue: "Маршрут" })}
+                      </div>
+                      <div className="mt-1 text-sm font-black text-slate-900">✈️ {direction}</div>
+                    </div>
+                  )}
+                  {accommodation && (
+                    <div className="rounded-2xl bg-slate-50 px-3 py-2.5 ring-1 ring-slate-100">
+                      <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                        {t("marketplace.accommodation", { defaultValue: "Размещение" })}
+                      </div>
+                      <div className="mt-1 text-sm font-black text-slate-900">🛏 {accommodation}</div>
+                    </div>
+                  )}
+                  {transfer && (
+                    <div className="rounded-2xl bg-slate-50 px-3 py-2.5 ring-1 ring-slate-100">
+                      <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                        {t("marketplace.transfer", { defaultValue: "Трансфер" })}
+                      </div>
+                      <div className="mt-1 text-sm font-black text-slate-900">🚐 {transfer}</div>
+                    </div>
+                  )}
+                  {details.insuranceIncluded && (
+                    <div className="rounded-2xl bg-emerald-50 px-3 py-2.5 text-emerald-800 ring-1 ring-emerald-100">
+                      <div className="text-[10px] font-black uppercase tracking-wide text-emerald-600/70">
+                        {t("insurance_included", { defaultValue: "Страховка" })}
+                      </div>
+                      <div className="mt-1 text-sm font-black">🛡 {t("marketplace.included", { defaultValue: "Включено" })}</div>
+                    </div>
+                  )}
+                  {details.earlyCheckIn && (
+                    <div className="rounded-2xl bg-blue-50 px-3 py-2.5 text-blue-800 ring-1 ring-blue-100">
+                      <div className="text-[10px] font-black uppercase tracking-wide text-blue-600/70">
+                        {t("early_check_in", { defaultValue: "Раннее заселение" })}
+                      </div>
+                      <div className="mt-1 text-sm font-black">🏨 {t("marketplace.included", { defaultValue: "Включено" })}</div>
+                    </div>
+                  )}
+                  {details.arrivalFastTrack && (
+                    <div className="rounded-2xl bg-violet-50 px-3 py-2.5 text-violet-800 ring-1 ring-violet-100">
+                      <div className="text-[10px] font-black uppercase tracking-wide text-violet-600/70">
+                        {t("arrival_fast_track", { defaultValue: "Fast Track" })}
+                      </div>
+                      <div className="mt-1 text-sm font-black">🛬 {t("marketplace.included", { defaultValue: "Включено" })}</div>
+                    </div>
+                  )}
+                </div>
               </div>
-            ) : (
-              <div className="rounded-lg bg-white/80 border border-emerald-100 px-3 py-2 text-xs text-gray-700">
-                {t("marketplace.proof_locked_hint", {
-                  defaultValue:
-                    "Подтверждение есть. Проверка доступна после открытия контактов.",
-                })}
+            )}
+
+            {flightDetails && (
+              <div className="rounded-3xl border border-sky-100 bg-gradient-to-br from-sky-50 to-white p-4 shadow-[0_16px_40px_rgba(14,165,233,0.08)]">
+                <div className="mb-2 flex items-center gap-2 text-sm font-black text-slate-950">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-2xl bg-sky-500 text-white shadow-sm">✈️</span>
+                  {t("marketplace.flight_details", { defaultValue: "Детали рейса" })}
+                </div>
+                <div className="whitespace-pre-wrap rounded-2xl bg-white/80 p-3 text-sm font-semibold leading-relaxed text-slate-700 ring-1 ring-sky-100">
+                  {String(flightDetails || "").replace(/\r\n/g, "\n")}
+                </div>
+              </div>
+            )}
+
+            {hasProof && (
+              <div className="rounded-3xl border border-emerald-100 bg-gradient-to-br from-emerald-50 to-white p-4 shadow-[0_16px_40px_rgba(16,185,129,0.08)]">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-black text-emerald-900">
+                      {t("marketplace.proof_images", { defaultValue: "Подтверждение подлинности" })}
+                    </div>
+                    <div className="text-xs font-semibold text-emerald-700/75">
+                      {canViewProof
+                        ? t("marketplace.details_proof_available", { defaultValue: "Можно открыть и проверить материалы" })
+                        : t("marketplace.details_proof_locked", { defaultValue: "Материалы проверки доступны после открытия доступа" })}
+                    </div>
+                  </div>
+                  <span className="rounded-full bg-emerald-600 px-2.5 py-1 text-[10px] font-black text-white shadow-sm">
+                    {proofImages.length} {t("marketplace.proof_images_count", { defaultValue: "фото" })}
+                  </span>
+                </div>
+
+                {canViewProof ? (
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {proofImages.map((img, i) => (
+                      <button
+                        key={`${id}-proof-popup-${i}`}
+                        type="button"
+                        className="group/proof relative h-24 overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md sm:h-28"
+                        onClick={() => setSelectedProofImage(img)}
+                      >
+                        <img src={img} alt="" className="h-full w-full object-cover transition duration-500 group-hover/proof:scale-105" />
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="relative overflow-hidden rounded-2xl border border-emerald-100 bg-white p-3">
+                    <div className="grid grid-cols-3 gap-2 opacity-55 blur-[1.5px]">
+                      {proofImages.slice(0, 3).map((img, i) => (
+                        <div key={`${id}-proof-blur-${i}`} className="h-20 overflow-hidden rounded-xl bg-emerald-50">
+                          <img src={img} alt="" className="h-full w-full object-cover" />
+                        </div>
+                      ))}
+                    </div>
+                    <div className="absolute inset-0 flex items-center justify-center bg-white/50 backdrop-blur-[1px]">
+                      <div className="rounded-2xl bg-white px-4 py-3 text-center shadow-lg ring-1 ring-emerald-100">
+                        <div className="text-xl">🔒</div>
+                        <div className="text-xs font-black text-emerald-900">
+                          {t("marketplace.details_proof_unlock_cta", { defaultValue: "Откройте доступ, чтобы проверить" })}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {(viewsCount > 0 || watchingNow > 0 || unlocksCount > 0) && (
+              <div className="grid grid-cols-3 gap-2">
+                <div className="rounded-2xl bg-slate-50 px-3 py-2 text-center ring-1 ring-slate-100">
+                  <div className="text-lg font-black text-slate-900">{viewsCount || 0}</div>
+                  <div className="text-[10px] font-bold text-slate-400">{t("marketplace.views", { defaultValue: "просмотров" })}</div>
+                </div>
+                <div className="rounded-2xl bg-orange-50 px-3 py-2 text-center ring-1 ring-orange-100">
+                  <div className="text-lg font-black text-orange-700">{watchingNow || 0}</div>
+                  <div className="text-[10px] font-bold text-orange-500">{t("marketplace.considering_now", { defaultValue: "сейчас" })}</div>
+                </div>
+                <div className="rounded-2xl bg-emerald-50 px-3 py-2 text-center ring-1 ring-emerald-100">
+                  <div className="text-lg font-black text-emerald-700">{unlocksCount || 0}</div>
+                  <div className="text-[10px] font-bold text-emerald-500">{t("marketplace.unlocked_count_short", { defaultValue: "открыли" })}</div>
+                </div>
               </div>
             )}
           </div>
-        )}
 
-        {flightDetails && (
-          <div className="mt-2 text-xs sm:text-sm text-gray-800 bg-gray-50 rounded-lg p-2 whitespace-pre-wrap leading-snug">
-            <div className="font-semibold mb-1">
-              {t("marketplace.flight_details", {
-                defaultValue: "Детали рейса",
-              })}
+          {canShowUnlockButton && (
+            <div className="sticky bottom-0 z-20 border-t border-slate-200/80 bg-white/92 p-4 shadow-[0_-18px_42px_rgba(15,23,42,0.10)] backdrop-blur-xl sm:p-5">
+              <div className="mb-3 rounded-2xl bg-orange-50 px-3 py-2 text-xs font-bold text-orange-800 ring-1 ring-orange-100">
+                ⚡ {t("marketplace.details_unlock_value_anchor", { defaultValue: "После открытия вы сможете связаться напрямую, отправить быстрый запрос и проверить материалы." })}
+              </div>
+              <button
+                type="button"
+                onClick={openUnlockIntro}
+                disabled={unlockLoading || unlockIntroLoading}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-orange-500 via-amber-500 to-orange-400 px-5 py-3.5 text-sm font-black text-white shadow-[0_18px_42px_rgba(249,115,22,0.28)] ring-1 ring-orange-200/70 transition hover:-translate-y-0.5 hover:shadow-[0_22px_52px_rgba(249,115,22,0.38)] disabled:cursor-not-allowed disabled:opacity-60 active:translate-y-0"
+              >
+                <span>🔓</span>
+                <span>
+                  {unlockLoading || unlockIntroLoading
+                    ? t("marketplace.unlocking", { defaultValue: "Открытие..." })
+                    : t("marketplace.details_unlock_cta", { defaultValue: "Получить доступ к поставщику" })}
+                </span>
+              </button>
+              <div className="mt-2 text-center text-[11px] font-semibold text-slate-400">
+                {t("marketplace.unlock_contacts_cta_hint", { defaultValue: "Мгновенный доступ после оплаты" })}
+              </div>
             </div>
-            {String(flightDetails || "").replace(/\r\n/g, "\n")}
-          </div>
-        )}
+          )}
+        </div>
       </DetailsPopup>
       
       {showUnlockIntroModal &&
