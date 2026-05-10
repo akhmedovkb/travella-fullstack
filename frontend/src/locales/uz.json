@@ -306,7 +306,8 @@
     "pros": "Afzalliklar",
     "cons": "Kamchiliklar",
     "features": "Xususiyatlar",
-    "sum_currency": "so‘m"
+    "sum_currency": "so‘m",
+    "or": "YOKI"
   },
   "confirm_delete": "Elementni o‘chirasizmi?",
   "countdown": {
@@ -2231,5 +2232,13 @@
   "seats_placeholder": "Masalan: 4 joy",
   "direction.country": "Boriladigan mamlakat",
   "direction.from": "Uchish shahri",
-  "direction.to": "Kelish shahri"
+  "direction.to": "Kelish shahri",
+  "telegram_provider_auth": {
+    "login": "Telegram orqali kirish",
+    "register": "Telegram orqali ro'yxatdan o'tish / kirish",
+    "error": "Telegram avtorizatsiyasida xatolik. Telegram akkauntingiz tasdiqlangan provayderga bog'langanini tekshiring.",
+    "checking": "Telegram avtorizatsiyasi tekshirilmoqda...",
+    "bot_username_missing": "Telegram bot username sozlanmagan. VITE_TELEGRAM_BOT_USERNAME yoki VITE_TG_BOT_USERNAME qo'shing.",
+    "not_approved": "Bu Telegram akkaunt hali tasdiqlangan provayderga bog'lanmagan. Avval moderatsiyadan o'ting."
+  }
 }
