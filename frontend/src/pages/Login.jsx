@@ -113,9 +113,6 @@ const Login = () => {
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center p-6">
       <div className="w-full max-w-md bg-white p-8 rounded-2xl shadow-lg">
-        <div className="flex justify-end mb-4">
-          <LanguageSelector />
-        </div>
 
         <h2 className="text-3xl font-black text-center mb-6 text-orange-500">
           {t("login.title")}
