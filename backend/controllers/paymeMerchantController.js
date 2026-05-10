@@ -655,8 +655,8 @@ async function paymeMerchantRpc(req, res) {
       if (order.status === "paid") {
         return res.status(200).json(rpcError(id, -31008, "Already paid"));
       }
-      if (order.status === "cancelled") {
-        return res.status(200).json(rpcError(id, -31008, "Order cancelled"));
+      if (order.status === "cancelled" || order.status === "expired") {
+        return res.status(200).json(rpcError(id, -31008, order.status === "expired" ? "Order expired" : "Order cancelled"));
       }
       if (isOrderExpired(order)) {
         return res.status(200).json(rpcError(id, -31008, "Order expired"));
@@ -752,9 +752,9 @@ async function paymeMerchantRpc(req, res) {
           await client.query("ROLLBACK");
           return res.status(200).json(rpcError(id, -31008, "Already paid"));
         }
-        if (order.status === "cancelled") {
+        if (order.status === "cancelled" || order.status === "expired") {
           await client.query("ROLLBACK");
-          return res.status(200).json(rpcError(id, -31008, "Order cancelled"));
+          return res.status(200).json(rpcError(id, -31008, order.status === "expired" ? "Order expired" : "Order cancelled"));
         }
         if (isOrderExpired(order)) {
           await markOrderStatusTx(client, orderId, "expired");
@@ -870,7 +870,7 @@ async function paymeMerchantRpc(req, res) {
           return res.status(200).json(rpcError(id, -31050, "Order not found"));
         }
 
-        if (order.status === "cancelled") {
+        if (order.status === "cancelled" || order.status === "expired") {
           const cancelTime = nowMs();
           await setTxState(client, paymeId, {
             state: -1,
@@ -878,7 +878,7 @@ async function paymeMerchantRpc(req, res) {
             reason: 4,
           });
           await client.query("COMMIT");
-          return res.status(200).json(rpcError(id, -31008, "Order cancelled"));
+          return res.status(200).json(rpcError(id, -31008, order.status === "expired" ? "Order expired" : "Order cancelled"));
         }
         if (isOrderExpired(order)) {
           const cancelTime = nowMs();
@@ -1144,41 +1144,51 @@ async function paymeMerchantRpc(req, res) {
         const prevState = Number(tx.state);
         const newStateDb = Number(updated?.state ?? newState);
 
-        if (prevState === 2 && newStateDb === -2) {
-          const orderId = Number(tx.order_id);
-          const order = await getOrderTx(client, orderId);
+        const orderId = Number(tx.order_id);
+        const order = Number.isFinite(orderId) && orderId > 0 ? await getOrderTx(client, orderId) : null;
 
-          if (order) {
-            const isProviderSupportCancel = await markProviderSupportDonationCancelledTx(client, order, paymeId);
+        if (order) {
+          const isProviderSupportCancel = await markProviderSupportDonationCancelledTx(client, order, paymeId);
 
+          // If Payme cancels a created-but-not-performed transaction, close the order too.
+          // Without this, topup_orders can stay in status='created' forever after failed/abandoned payments.
+          if (prevState === 1 && newStateDb === -1) {
+            try {
+              await markOrderStatusTx(client, orderId, "cancelled");
+            } catch (e2) {
+              console.error(
+                "[payme] CancelTransaction: cannot set created order status=cancelled:",
+                e2?.message || e2
+              );
+            }
+          }
+
+          // If Payme cancels an already performed transaction, reverse ledger exactly once.
+          if (prevState === 2 && newStateDb === -2) {
             if (!isProviderSupportCancel) {
               await debitLedgerOnceTx(client, {
-              clientId: Number(order.client_id),
-              amountTiyin: Number(order.amount_tiyin),
-              orderId,
-              paymeId,
-              reasonCode: Number.isFinite(reason) ? reason : null,
-            });
+                clientId: Number(order.client_id),
+                amountTiyin: Number(order.amount_tiyin),
+                orderId,
+                paymeId,
+                reasonCode: Number.isFinite(reason) ? reason : null,
+              });
 
-            // 🔥 FUNNEL: payment_canceled
-            try {
-              const clientId = Number(order.client_id);
+              // 🔥 FUNNEL: payment_canceled
+              try {
+                const clientId = Number(order.client_id);
 
-              await client.query(
-                `
-                INSERT INTO contact_unlock_funnel
-                  (client_id, service_id, source, step, status, payme_id, order_id)
-                VALUES ($1, 0, 'web', 'payment_canceled', 'error', $2, $3)
-                `,
-                [
-                  clientId,
-                  String(paymeId),
-                  String(orderId),
-                ]
-              );
-            } catch (e) {
-              console.error("[funnel] payment_canceled error:", e?.message || e);
-            }
+                await client.query(
+                  `
+                  INSERT INTO contact_unlock_funnel
+                    (client_id, service_id, source, step, status, payme_id, order_id)
+                  VALUES ($1, 0, 'web', 'payment_canceled', 'error', $2, $3)
+                  `,
+                  [clientId, String(paymeId), String(orderId)]
+                );
+              } catch (e) {
+                console.error("[funnel] payment_canceled error:", e?.message || e);
+              }
 
               await syncClientBalanceMirror(client, order.client_id);
             }
@@ -1187,7 +1197,7 @@ async function paymeMerchantRpc(req, res) {
               await markOrderStatusTx(client, orderId, "cancelled");
             } catch (e2) {
               console.error(
-                "[payme] CancelTransaction: cannot set order status=cancelled:",
+                "[payme] CancelTransaction: cannot set paid order status=cancelled:",
                 e2?.message || e2
               );
             }
