@@ -988,7 +988,7 @@
   "service": "Xizmat",
   "service_added": "Xizmat qo‘shildi",
   "service_deleted": "Xizmat o‘chirildi",
-  "service_images": "Xizmat fotosuratlari",
+  "service_images": "Xizmat rasmlari",
   "service_updated": "Xizmat yangilandi",
   "services_marketplace": "MARKETPLACE uchun xizmatlar",
   "services_load_error": "Xizmatlarni yuklab bo‘lmadi",
@@ -1199,7 +1199,7 @@
     "favorite_add": "Sevimlilarga",
     "favorite_remove": "Sevimlilardan olib tashlash"
   },
-  "gross_price": "Klient uchun narx (brutto)",
+  "gross_price": "Mijoz uchun narx",
   "expired": "Muddati tugagan",
   "form": {
     "required": "Bu maydonni to‘ldiring.",
@@ -2131,7 +2131,7 @@
   "service_form": {
     "studio_badge": "Yaratish studiyasi",
     "studio_title": "Mijoz ochishni xohlaydigan xizmat yarating",
-    "studio_hint": "Bloklar bo‘yicha to‘ldiring: yo‘nalish, tafsilotlar, qiymat, narx va proof. Kartochka qanchalik tushunarli bo‘lsa, mijoz kontaktlarni ochish ehtimoli shunchalik yuqori bo‘ladi.",
+    "studio_hint": "Xizmatlarni bloklar bo‘yicha to‘ldiring: yo‘nalish, tafsilotlar, qiymat, narx va proof. Kartochka qanchalik tushunarli bo‘lsa, mijoz kontaktlarni ochish ehtimoli shunchalik yuqori bo‘ladi.",
     "creator_quality": "Kartochka sifati",
     "creator_quality_hint": "Qadamlar bo‘yicha yuring va saqlashdan oldin oldindan ko‘rinishni tekshiring.",
     "creator_category_first": "Avval xizmat toifasini tanlang.",
@@ -2154,76 +2154,51 @@
     "preview_category": "Toifa",
     "preview_title_empty": "Xizmat nomi",
     "preview_route_empty": "Yo‘nalish shu yerda chiqadi",
-    "preview_tip": "Mijoz xizmatingizni taxminan shunday ko‘radi. Ishonchni oshirish uchun proof va fotolar qo‘shing.",
-    "proof_trust_title": "Proof ishonchni oshiradi",
-    "proof_trust_hint": "Tasdiqlovchi skrinshotlar mijozga kontaktlarni tezroq ochishga yordam beradi."
+    "preview_tip": "Mijoz xizmatingizni taxminan shunday ko‘radi. Foto va proof ishonchni oshiradi.",
+    "proof_trust_title": "Haqiqiylik tasdig‘i",
+    "proof_trust_hint": "Tasdiqlovchi skrinshotlar mijoz ishonchini oshiradi va kontaktlarni tezroq ochishga yordam beradi.",
+    "hint_title": "Qisqa va tushunarli yozing, masalan: “Nha Trangga qaytarilgan tur”.",
+    "ph_title": "Masalan: Nha Trangga qaytarilgan tur",
+    "hint_country": "Dam olish yoki borish mamlakati.",
+    "ph_country": "Masalan: Vyetnam",
+    "hint_from": "Safar qaysi shahardan boshlanadi.",
+    "ph_from": "Masalan: Toshkent",
+    "hint_to": "Turist qaysi shaharga yetib boradi.",
+    "ph_to": "Masalan: Nha Trang",
+    "hint_start_date": "Tur boshlanishi yoki uchish sanasi.",
+    "hint_end_date": "Qaytish sanasi yoki xizmat tugash sanasi.",
+    "hint_hotel": "Mehmonxona nomini mijoz ko‘radigan tarzda yozing.",
+    "ph_hotel": "Masalan: Rixos Radamis Sharm El Sheikh 5*",
+    "hint_room": "Xona yoki joylashuv kategoriyasi.",
+    "ph_room": "Masalan: Deluxe Sea View",
+    "hint_accommodation": "Yo‘lovchilar tarkibi: kattalar, bolalar, chaqaloqlar.",
+    "ph_accommodation": "Masalan: 2ADT+1CHD",
+    "hint_food": "Voucher yoki so‘rovdagi ovqatlanish turini tanlang.",
+    "flight_details_format_hint": "Qat’iy format: 15MAY HH-9911 TASDXB 18:00 21:00 / 22MAY HH-9912 DXBTAS 22:00 05:00 / 23KG/8KG",
+    "flight_details_format_error": "Reys tafsilotlarini qat’iy shu formatda kiriting: 15MAY HH-9911 TASDXB 18:00 21:00 / 22MAY HH-9912 DXBTAS 22:00 05:00 / 23KG/8KG",
+    "flight_details_required": "Bu maydon qaytarilgan tur va aviachiptalar uchun majburiy.",
+    "insert_flight_example": "Format namunasini qo‘yish",
+    "hint_airline": "Aviakompaniya kodi yoki nomi.",
+    "ph_airline": "Masalan: HH",
+    "hint_net_price": "Ta’minotchining ichki narxi. Mijoz buni ko‘rmaydi.",
+    "ph_net_price": "Masalan: 2500",
+    "hint_gross_price": "Mijoz marketplace’da ko‘radigan narx.",
+    "ph_gross_price": "Masalan: 2750",
+    "expiration_hint": "Shu vaqtdan keyin taklif dolzarbligi pasayadi."
   },
-  "dashboardServices": {
-    "supplierStudio": {
-      "flightDetails": {
-        "label": "Reys tafsilotlari",
-        "title": "Reys tafsilotlari",
-        "subtitle": "Reys segmentlarini xizmat kartasida qanday ko‘rinishi kerak bo‘lsa, shunday kiriting.",
-        "hint": "Har bir reys segmentini alohida qatorda kiriting. Format: sana, reys raqami, yo‘nalish, uchish vaqti, qo‘nish vaqti. Bagajni alohida qatorda yozing.",
-        "hintShort": "Har bir segment alohida qatorda. Bagajni alohida qatorda yozish mumkin.",
-        "placeholder": "15MAY HH-9911 TASDXB 18:00 21:00\n22MAY HH-9912 DXBTAS 22:00 05:00\n\n23KG/8KG",
-        "insertExample": "Namunani qo‘yish",
-        "clearExample": "Namunani tozalash",
-        "formatTitle": "Reys formati namunasi",
-        "formatExample": "15MAY HH-9911 TASDXB 18:00 21:00\n22MAY HH-9912 DXBTAS 22:00 05:00\n\n23KG/8KG",
-        "formatHelp": "Format: 15MAY HH-9911 TASDXB 18:00 21:00. Yo‘nalish aeroport kodlari bilan bo‘sh joysiz yoziladi, masalan TASDXB.",
-        "lineFormat": "DDMMM REYS YO‘NALISH UCHISH_VAQTI QO‘NISH_VAQTI",
-        "baggageTitle": "Bagaj formati",
-        "baggageExample": "23KG/8KG",
-        "baggageHelp": "Ro‘yxatdan o‘tadigan bagaj / qo‘l yuki, masalan 23KG/8KG.",
-        "examples": {
-          "outbound": "15MAY HH-9911 TASDXB 18:00 21:00",
-          "return": "22MAY HH-9912 DXBTAS 22:00 05:00",
-          "baggage": "23KG/8KG"
-        },
-        "placeholders": {
-          "textarea": "15MAY HH-9911 TASDXB 18:00 21:00\n22MAY HH-9912 DXBTAS 22:00 05:00\n\n23KG/8KG",
-          "singleLine": "15MAY HH-9911 TASDXB 18:00 21:00",
-          "baggage": "23KG/8KG"
-        },
-        "validation": {
-          "required": "Reys tafsilotlari majburiy.",
-          "empty": "Kamida bitta reys segmentini kiriting.",
-          "invalidFormat": "Reys tafsilotlari formati noto‘g‘ri. Namuna: 15MAY HH-9911 TASDXB 18:00 21:00",
-          "invalidLine": "{{line}}-qatorda reys formati noto‘g‘ri.",
-          "invalidDate": "Reys sanasi 15MAY kabi yozilishi kerak.",
-          "invalidFlightNumber": "Reys raqami HH-9911 kabi yozilishi kerak.",
-          "invalidRoute": "Yo‘nalish aeroport kodlari bilan yozilishi kerak, masalan TASDXB yoki DXBTAS.",
-          "invalidTime": "Vaqt 24 soatlik formatda yozilishi kerak, masalan 18:00.",
-          "invalidBaggage": "Bagaj 23KG/8KG kabi yozilishi kerak.",
-          "tooLong": "Reys tafsilotlari juda uzun. Faqat muhim reys va bagaj ma’lumotlarini qoldiring."
-        }
-      }
-    },
-    "flightDetails": {
-      "label": "Reys tafsilotlari",
-      "hint": "Har bir reys segmentini alohida qatorda kiriting. Format: sana, reys raqami, yo‘nalish, uchish vaqti, qo‘nish vaqti. Zarur bo‘lsa, bagajni alohida qatorda yozing.",
-      "hintShort": "Har bir reys segmenti alohida qatorda. Bagajni alohida qatorda yozing.",
-      "placeholder": "15MAY HH-9911 TASDXB 18:00 21:00\n22MAY HH-9912 DXBTAS 22:00 05:00\n\n23KG/8KG",
-      "insertExample": "Namunani qo‘yish",
-      "formatTitle": "Reys formati namunasi",
-      "formatExample": "15MAY HH-9911 TASDXB 18:00 21:00\n22MAY HH-9912 DXBTAS 22:00 05:00\n\n23KG/8KG",
-      "validation": {
-        "required": "Reys tafsilotlari majburiy.",
-        "invalidFormat": "Reys tafsilotlari formati noto‘g‘ri. Namuna: 15MAY HH-9911 TASDXB 18:00 21:00"
-      }
-    }
-  },
-  "_travellaFlightDetailsUsage": {
-    "recommendedTKeys": {
-      "label": "dashboardServices.supplierStudio.flightDetails.label",
-      "hint": "dashboardServices.supplierStudio.flightDetails.hint",
-      "placeholder": "dashboardServices.supplierStudio.flightDetails.placeholder",
-      "insertExample": "dashboardServices.supplierStudio.flightDetails.insertExample",
-      "formatExample": "dashboardServices.supplierStudio.flightDetails.formatExample",
-      "validationRequired": "dashboardServices.supplierStudio.flightDetails.validation.required",
-      "validationInvalidFormat": "dashboardServices.supplierStudio.flightDetails.validation.invalidFormat"
-    },
-    "regexHint": "Flight line: ^\\d{2}[A-Z]{3}\\s+[A-Z0-9]{2}-?\\d{2,5}\\s+[A-Z]{6}\\s+\\d{2}:\\d{2}\\s+\\d{2}:\\d{2}$ ; baggage: ^\\d{1,2}KG/\\d{1,2}KG$"
+  "provider_services_tourbuilder_title": "TourBuilder uchun narxlar ro‘yxati",
+  "provider_services_tab_create": "Xizmat yaratish",
+  "provider_services_tab_created": "Yaratilgan xizmatlar",
+  "provider_services_empty": "Hozircha yaratilgan xizmatlar yo‘q.",
+  "new_service": "Yangi xizmat",
+  "submit_error": "Moderatsiyaga yuborib bo‘lmadi",
+  "title_required": "Nomini kiriting",
+  "start_date": "Boshlanish sanasi",
+  "end_date": "Tugash sanasi",
+  "ticketDetails": "Bilet tafsilotlari",
+  "visa_country": "Viza mamlakati",
+  "validation": {
+    "gross_positive": "To‘g‘ri narx kiriting",
+    "gross_ge_net": "Mijoz uchun narx netto narxdan past bo‘lishi mumkin emas"
   }
 }
