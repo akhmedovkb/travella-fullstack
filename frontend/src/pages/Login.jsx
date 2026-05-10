@@ -1,6 +1,6 @@
-//frontend/src/pages/Login.jsx
+// frontend/src/pages/Login.jsx
 
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -15,9 +15,17 @@ const Login = () => {
 
   const navigate = useNavigate();
 
+  const providerBotUsername = useMemo(() => {
+    return String(import.meta.env.VITE_TELEGRAM_PROVIDER_BOT_USERNAME || "")
+      .replace(/^@/, "")
+      .trim();
+  }, []);
+
   useEffect(() => {
-    window.onTelegramAuth = async (user) => {
+    window.onTelegramProviderLogin = async (user) => {
       try {
+        setError("");
+
         const response = await axios.post(
           `${import.meta.env.VITE_API_BASE_URL}/api/providers/telegram-login`,
           user
@@ -26,54 +34,65 @@ const Login = () => {
         if (response.data?.token) {
           localStorage.setItem("token", response.data.token);
           navigate("/dashboard");
+          return;
         }
-      } catch (err) {
-        console.error(err);
+
         setError(
           t("telegram_provider_auth.error", {
-            defaultValue: "Telegram login failed",
+            defaultValue: "Telegram authorization failed",
           })
+        );
+      } catch (err) {
+        console.error("[provider telegram login] error:", err);
+        setError(
+          err?.response?.data?.message ||
+            t("telegram_provider_auth.error", {
+              defaultValue: "Telegram authorization failed",
+            })
         );
       }
     };
 
     return () => {
-      delete window.onTelegramAuth;
+      delete window.onTelegramProviderLogin;
     };
   }, [navigate, t]);
 
   useEffect(() => {
-    const existing = document.getElementById("telegram-provider-login");
+    const container = document.getElementById("telegram-login-container");
+    if (!container) return;
 
+    container.innerHTML = "";
+
+    if (!providerBotUsername) {
+      container.innerHTML = `<div style="font-size:13px;color:#dc2626;text-align:center;">${t(
+        "telegram_provider_auth.bot_not_configured",
+        { defaultValue: "Provider Telegram bot is not configured" }
+      )}</div>`;
+      return;
+    }
+
+    const existing = document.getElementById("telegram-provider-login");
     if (existing) existing.remove();
 
     const script = document.createElement("script");
-
     script.src = "https://telegram.org/js/telegram-widget.js?22";
     script.async = true;
     script.id = "telegram-provider-login";
-
-    script.setAttribute(
-      "data-telegram-login",
-      import.meta.env.VITE_TELEGRAM_BOT_USERNAME
-    );
-
+    script.setAttribute("data-telegram-login", providerBotUsername);
     script.setAttribute("data-size", "large");
-    script.setAttribute("data-onauth", "onTelegramAuth(user)");
+    script.setAttribute("data-onauth", "onTelegramProviderLogin(user)");
     script.setAttribute("data-request-access", "write");
 
-    const container = document.getElementById("telegram-login-container");
-
-    if (container) {
-      container.innerHTML = "";
-      container.appendChild(script);
-    }
-  }, []);
+    container.appendChild(script);
+  }, [providerBotUsername, t]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
 
     try {
+      setError("");
+
       const payload = {
         email: String(email).trim().toLowerCase(),
         password,
@@ -85,7 +104,6 @@ const Login = () => {
       );
 
       localStorage.setItem("token", response.data.token);
-
       navigate("/dashboard");
     } catch (err) {
       setError(t("login.error"));
@@ -114,6 +132,7 @@ const Login = () => {
               className="w-full border border-gray-300 px-4 py-3 rounded-xl focus:outline-none focus:ring-4 focus:ring-orange-100 focus:border-orange-400"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
             />
           </div>
 
@@ -127,14 +146,11 @@ const Login = () => {
               className="w-full border border-gray-300 px-4 py-3 rounded-xl focus:outline-none focus:ring-4 focus:ring-orange-100 focus:border-orange-400"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
             />
           </div>
 
-          {error && (
-            <p className="text-red-500 text-sm mb-3">
-              {error}
-            </p>
-          )}
+          {error && <p className="text-red-500 text-sm mb-3">{error}</p>}
 
           <button
             type="submit"
@@ -159,10 +175,14 @@ const Login = () => {
             })}
           </div>
 
-          <div
-            id="telegram-login-container"
-            className="flex justify-center"
-          />
+          <div id="telegram-login-container" className="flex justify-center" />
+
+          <div className="mt-3 text-center text-xs text-gray-400">
+            {t("telegram_provider_auth.domain_hint", {
+              defaultValue:
+                "If the button does not load, check BotFather domain and provider bot env.",
+            })}
+          </div>
         </div>
 
         <p className="mt-4 text-center text-sm text-red-600">
