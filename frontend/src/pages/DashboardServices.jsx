@@ -56,6 +56,35 @@ const EXTENDED_AGENT_CATEGORIES = [
 const foodOptions = ["BB", "HB", "FB", "AI", "UAI", "HALAL"];
 const transferOptions = ["group", "individual", "none"];
 
+const FLIGHT_DETAILS_EXAMPLE =
+  "15MAY HH-9911 TASDXB 18:00 21:00\n22MAY HH-9912 DXBTAS 22:00 05:00\n\n23KG/8KG";
+
+function normalizeFlightDetails(value) {
+  return String(value || "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\t/g, " ")
+    .split("\n")
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .join("\n")
+    .trim();
+}
+
+function validateFlightDetailsFormat(value) {
+  const normalized = normalizeFlightDetails(value);
+  if (!normalized) return false;
+
+  const lines = normalized.split("\n").map((line) => line.trim()).filter(Boolean);
+  if (lines.length < 2) return false;
+
+  const baggageLine = lines[lines.length - 1];
+  const flightLines = lines.slice(0, -1);
+
+  const flightLineRe = /^\d{2}[A-Z]{3}\s+[A-Z0-9]{2,3}-?\d{2,5}\s+[A-Z]{6}\s+\d{2}:\d{2}\s+\d{2}:\d{2}$/i;
+  const baggageRe = /^\d{1,2}\s*KG\s*\/\s*\d{1,2}\s*KG$/i;
+
+  return flightLines.every((line) => flightLineRe.test(line)) && baggageRe.test(baggageLine);
+}
+
 function cx(...classes) {
   return classes.filter(Boolean).join(" ");
 }
@@ -337,10 +366,10 @@ export default function DashboardServices() {
     }
     if (isExtended) {
       const requiredByCategory = {
-        refused_tour: [details.directionFrom, details.directionTo, details.netPrice, details.grossPrice],
-        author_tour: [details.directionFrom, details.directionTo, details.netPrice, details.grossPrice],
+        refused_tour: [details.directionFrom, details.directionTo, details.flightDetails, details.netPrice, details.grossPrice],
+        author_tour: [details.directionFrom, details.directionTo, details.flightDetails, details.netPrice, details.grossPrice],
         refused_hotel: [details.directionCountry, details.directionTo, details.startDate, details.endDate, details.netPrice, details.grossPrice],
-        refused_flight: [details.directionFrom, details.directionTo, details.startDate, details.airline, details.netPrice, details.grossPrice],
+        refused_flight: [details.directionFrom, details.directionTo, details.startDate, details.airline, details.flightDetails, details.netPrice, details.grossPrice],
         refused_event_ticket: [details.location, details.startDate, details.netPrice, details.grossPrice],
         visa_support: [details.description, details.netPrice, details.grossPrice],
       };
@@ -348,6 +377,20 @@ export default function DashboardServices() {
         tWarn(t("fill_all_fields", { defaultValue: "Заполните обязательные поля" }));
         return false;
       }
+
+      if (
+        ["refused_tour", "author_tour", "refused_flight"].includes(category) &&
+        !validateFlightDetailsFormat(details.flightDetails)
+      ) {
+        tWarn(
+          t("service_form.flight_details_format_error", {
+            defaultValue:
+              "Заполните детали рейса строго в формате: 15MAY HH-9911 TASDXB 18:00 21:00 / 22MAY HH-9912 DXBTAS 22:00 05:00 / 23KG/8KG",
+          })
+        );
+        return false;
+      }
+
       const net = parseMoney(details.netPrice);
       const gross = parseMoney(details.grossPrice);
       if (!Number.isFinite(net) || net <= 0 || !Number.isFinite(gross) || gross <= 0) {
@@ -385,6 +428,7 @@ export default function DashboardServices() {
         details: isExtended
           ? {
               ...details,
+              flightDetails: normalizeFlightDetails(details.flightDetails),
               netPrice: net,
               grossPrice: gross,
               proofImages: details.proofImages || [],
@@ -606,12 +650,60 @@ export default function DashboardServices() {
                             <div className="text-sm font-medium text-slate-500">{t("service_form.step_main_hint", { defaultValue: "Название, направление и даты" })}</div>
                           </div>
                           <div className="grid gap-4 sm:grid-cols-2">
-                            <div className="sm:col-span-2"><Field label={t("title", { defaultValue: "Название" })}><TextInput value={title} onChange={(e) => setTitle(e.target.value)} /></Field></div>
-                            <Field label={t("direction_country", { defaultValue: "Страна назначения" })}><TextInput value={details.directionCountry} onChange={(e) => patchDetails({ directionCountry: e.target.value })} /></Field>
-                            <Field label={t("direction_from", { defaultValue: "Город вылета" })}><TextInput value={details.directionFrom} onChange={(e) => patchDetails({ directionFrom: e.target.value })} /></Field>
-                            <Field label={t("direction_to", { defaultValue: "Город прибытия" })}><TextInput value={details.directionTo} onChange={(e) => patchDetails({ directionTo: e.target.value })} /></Field>
-                            <Field label={category === "refused_flight" ? t("departure_date", { defaultValue: "Дата вылета" }) : t("start_date", { defaultValue: "Дата начала" })}><TextInput type="date" value={details.startDate || details.startFlightDate || ""} onChange={(e) => patchDetails({ startDate: e.target.value, startFlightDate: e.target.value })} /></Field>
-                            <Field label={t("end_date", { defaultValue: "Дата окончания" })}><TextInput type="date" value={details.endDate || details.endFlightDate || ""} onChange={(e) => patchDetails({ endDate: e.target.value, endFlightDate: e.target.value })} /></Field>
+                            <div className="sm:col-span-2">
+                              <Field
+                                label={t("title", { defaultValue: "Название" })}
+                                hint={t("service_form.hint_title", { defaultValue: "Коротко и понятно: например, «Отказной тур в Нячанг»." })}
+                              >
+                                <TextInput
+                                  value={title}
+                                  onChange={(e) => setTitle(e.target.value)}
+                                  placeholder={t("service_form.ph_title", { defaultValue: "Например: Отказной тур в Нячанг" })}
+                                />
+                              </Field>
+                            </div>
+                            <Field
+                              label={t("direction_country", { defaultValue: "Страна назначения" })}
+                              hint={t("service_form.hint_country", { defaultValue: "Страна отдыха или назначения." })}
+                            >
+                              <TextInput
+                                value={details.directionCountry}
+                                onChange={(e) => patchDetails({ directionCountry: e.target.value })}
+                                placeholder={t("service_form.ph_country", { defaultValue: "Например: Вьетнам" })}
+                              />
+                            </Field>
+                            <Field
+                              label={t("direction_from", { defaultValue: "Город вылета" })}
+                              hint={t("service_form.hint_from", { defaultValue: "Откуда начинается поездка." })}
+                            >
+                              <TextInput
+                                value={details.directionFrom}
+                                onChange={(e) => patchDetails({ directionFrom: e.target.value })}
+                                placeholder={t("service_form.ph_from", { defaultValue: "Например: Ташкент" })}
+                              />
+                            </Field>
+                            <Field
+                              label={t("direction_to", { defaultValue: "Город прибытия" })}
+                              hint={t("service_form.hint_to", { defaultValue: "Куда прилетает турист." })}
+                            >
+                              <TextInput
+                                value={details.directionTo}
+                                onChange={(e) => patchDetails({ directionTo: e.target.value })}
+                                placeholder={t("service_form.ph_to", { defaultValue: "Например: Нячанг" })}
+                              />
+                            </Field>
+                            <Field
+                              label={category === "refused_flight" ? t("departure_date", { defaultValue: "Дата вылета" }) : t("start_date", { defaultValue: "Дата начала" })}
+                              hint={t("service_form.hint_start_date", { defaultValue: "Дата начала тура или вылета." })}
+                            >
+                              <TextInput type="date" value={details.startDate || details.startFlightDate || ""} onChange={(e) => patchDetails({ startDate: e.target.value, startFlightDate: e.target.value })} />
+                            </Field>
+                            <Field
+                              label={t("end_date", { defaultValue: "Дата окончания" })}
+                              hint={t("service_form.hint_end_date", { defaultValue: "Дата возвращения или окончания услуги." })}
+                            >
+                              <TextInput type="date" value={details.endDate || details.endFlightDate || ""} onChange={(e) => patchDetails({ endDate: e.target.value, endFlightDate: e.target.value })} />
+                            </Field>
                           </div>
                         </div>
                       )}
@@ -625,21 +717,78 @@ export default function DashboardServices() {
                           <div className="grid gap-4 sm:grid-cols-2">
                             {category !== "visa_support" && category !== "refused_event_ticket" && (
                               <>
-                                <Field label={t("hotel", { defaultValue: "Отель" })}><TextInput value={details.hotel} onChange={(e) => patchDetails({ hotel: e.target.value })} /></Field>
-                                <Field label={t("accommodation_category", { defaultValue: "Категория размещения" })}><TextInput value={details.accommodationCategory} onChange={(e) => patchDetails({ accommodationCategory: e.target.value })} /></Field>
-                                <Field label={t("accommodation", { defaultValue: "Размещение" })}><TextInput value={details.accommodation} onChange={(e) => patchDetails({ accommodation: e.target.value })} /></Field>
-                                <Field label={t("food", { defaultValue: "Питание" })}>
+                                <Field
+                                  label={t("hotel", { defaultValue: "Отель" })}
+                                  hint={t("service_form.hint_hotel", { defaultValue: "Название отеля так, как его увидит клиент." })}
+                                >
+                                  <TextInput
+                                    value={details.hotel}
+                                    onChange={(e) => patchDetails({ hotel: e.target.value })}
+                                    placeholder={t("service_form.ph_hotel", { defaultValue: "Например: Rixos Radamis Sharm El Sheikh 5*" })}
+                                  />
+                                </Field>
+                                <Field
+                                  label={t("accommodation_category", { defaultValue: "Категория размещения" })}
+                                  hint={t("service_form.hint_room", { defaultValue: "Категория номера или комнаты." })}
+                                >
+                                  <TextInput
+                                    value={details.accommodationCategory}
+                                    onChange={(e) => patchDetails({ accommodationCategory: e.target.value })}
+                                    placeholder={t("service_form.ph_room", { defaultValue: "Например: Deluxe Sea View" })}
+                                  />
+                                </Field>
+                                <Field
+                                  label={t("accommodation", { defaultValue: "Размещение" })}
+                                  hint={t("service_form.hint_accommodation", { defaultValue: "Состав туристов: взрослые, дети, младенцы." })}
+                                >
+                                  <TextInput
+                                    value={details.accommodation}
+                                    onChange={(e) => patchDetails({ accommodation: e.target.value })}
+                                    placeholder={t("service_form.ph_accommodation", { defaultValue: "Например: 2ADL+1CHD" })}
+                                  />
+                                </Field>
+                                <Field
+                                  label={t("food", { defaultValue: "Питание" })}
+                                  hint={t("service_form.hint_food", { defaultValue: "Выберите тип питания из ваучера или заявки." })}
+                                >
                                   <SelectInput value={details.food} onChange={(e) => patchDetails({ food: e.target.value })}>
                                     <option value="">{t("food_options.select", { defaultValue: "Выберите вариант" })}</option>
                                     {foodOptions.map((x) => <option key={x} value={x}>{x}</option>)}
                                   </SelectInput>
                                 </Field>
-                                <Field label={t("flight_details", { defaultValue: "Детали рейса" })}><TextArea value={details.flightDetails} onChange={(e) => patchDetails({ flightDetails: e.target.value })} /></Field>
+                                <div className="sm:col-span-2">
+                                  <Field
+                                    label={t("flight_details", { defaultValue: "Детали рейса" })}
+                                    hint={t("service_form.flight_details_format_hint", {
+                                      defaultValue:
+                                        "Строгий формат: 15MAY HH-9911 TASDXB 18:00 21:00 / 22MAY HH-9912 DXBTAS 22:00 05:00 / 23KG/8KG",
+                                    })}
+                                  >
+                                    <TextArea
+                                      value={details.flightDetails}
+                                      onChange={(e) => patchDetails({ flightDetails: e.target.value.toUpperCase() })}
+                                      placeholder={FLIGHT_DETAILS_EXAMPLE}
+                                      className="min-h-[132px] font-mono text-[13px] leading-6"
+                                    />
+                                  </Field>
+                                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => patchDetails({ flightDetails: FLIGHT_DETAILS_EXAMPLE })}
+                                      className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-black text-white transition hover:bg-slate-800"
+                                    >
+                                      {t("service_form.insert_flight_example", { defaultValue: "Вставить пример формата" })}
+                                    </button>
+                                    <span className="text-xs font-semibold text-slate-500">
+                                      {t("service_form.flight_details_required", { defaultValue: "Это поле обязательно для отказного тура и авиабилета." })}
+                                    </span>
+                                  </div>
+                                </div>
                               </>
                             )}
                             {category === "refused_flight" && (
                               <>
-                                <Field label={t("airline", { defaultValue: "Авиакомпания" })}><TextInput value={details.airline} onChange={(e) => patchDetails({ airline: e.target.value })} /></Field>
+                                <Field label={t("airline", { defaultValue: "Авиакомпания" })} hint={t("service_form.hint_airline", { defaultValue: "Код или название авиакомпании." })}><TextInput value={details.airline} onChange={(e) => patchDetails({ airline: e.target.value.toUpperCase() })} placeholder={t("service_form.ph_airline", { defaultValue: "Например: HH" })} /></Field>
                                 <Field label={t("flight_type", { defaultValue: "Тип рейса" })}>
                                   <SelectInput value={details.flightType} onChange={(e) => patchDetails({ flightType: e.target.value })}>
                                     <option value="one_way">{t("one_way", { defaultValue: "В одну сторону" })}</option>
@@ -704,8 +853,8 @@ export default function DashboardServices() {
                             <div className="text-sm font-medium text-slate-500">{t("service_form.step_price_hint", { defaultValue: "Стоимость и актуальность" })}</div>
                           </div>
                           <div className="grid gap-4 sm:grid-cols-2">
-                            <Field label={t("net_price", { defaultValue: "Цена нетто" })}><TextInput inputMode="decimal" value={details.netPrice} onChange={(e) => patchDetails({ netPrice: e.target.value })} /></Field>
-                            <Field label={t("gross_price", { defaultValue: "Цена для клиента" })}><TextInput inputMode="decimal" value={details.grossPrice} onChange={(e) => patchDetails({ grossPrice: e.target.value })} /></Field>
+                            <Field label={t("net_price", { defaultValue: "Цена нетто" })} hint={t("service_form.hint_net_price", { defaultValue: "Внутренняя цена поставщика. Клиент её не видит." })}><TextInput inputMode="decimal" value={details.netPrice} onChange={(e) => patchDetails({ netPrice: e.target.value })} placeholder={t("service_form.ph_net_price", { defaultValue: "Например: 2500" })} /></Field>
+                            <Field label={t("gross_price", { defaultValue: "Цена для клиента" })} hint={t("service_form.hint_gross_price", { defaultValue: "Цена, которую клиент увидит в маркетплейсе." })}><TextInput inputMode="decimal" value={details.grossPrice} onChange={(e) => patchDetails({ grossPrice: e.target.value })} placeholder={t("service_form.ph_gross_price", { defaultValue: "Например: 2750" })} /></Field>
                             <Field label={t("expiration_timer", { defaultValue: "Таймер актуальности" })} hint={t("service_form.expiration_hint", { defaultValue: "После этого времени предложение станет менее актуальным." })}>
                               <TextInput type="datetime-local" value={details.expiration} onChange={(e) => patchDetails({ expiration: e.target.value })} />
                             </Field>
