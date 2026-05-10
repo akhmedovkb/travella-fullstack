@@ -2879,56 +2879,36 @@ useEffect(() => {
                           />
 
                           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-                            <Select
-                              options={countryOptions}
-                              value={selectedCountry}
-                              onChange={(val) => {
-                                setSelectedCountry(val);
-                                setDetails(d => ({ ...d, directionCountry: val?.code || val?.value || "" }))
+                            <input
+                              type="text"
+                              value={details.directionCountry || ""}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setSelectedCountry(null);
+                                setDetails((prev) => ({ ...prev, directionCountry: value }));
                               }}
-                              placeholder={tr(["direction_country","direction.country"], "Страна направления")}
-                              noOptionsMessage={() => tr("country_not_chosen", "Страна не выбрана")}
-                              className="min-w-0"
+                              placeholder={tr(["service_form.ph_country", "direction_country", "direction.country"], "Страна направления")}
+                              className="min-w-0 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                             />
 
-                            <AsyncSelect
-                              cacheOptions
-                              defaultOptions
-                              {...ASYNC_MENU_PORTAL}
-                              loadOptions={loadCities}
-                              noOptionsMessage={ASYNC_I18N.noOptionsMessage}
-                              loadingMessage={ASYNC_I18N.loadingMessage}
-                              value={
-                                departureCity
-                                  || (details.directionFrom
-                                        ? { value: details.directionFrom, label: details.directionFrom }
-                                        : null)
-                              }
-                              onChange={(selected) => {
-                                setDepartureCity(selected);
-                                setDetails((prev) => ({ ...prev, directionFrom: selected?.value || "" }));
+                            <input
+                              type="text"
+                              value={details.directionFrom || ""}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setDepartureCity(null);
+                                setDetails((prev) => ({ ...prev, directionFrom: value }));
                               }}
-                              placeholder={tr(["direction_from","direction.from"], "Город вылета")}
-                              className="min-w-0"
+                              placeholder={tr(["service_form.ph_from", "direction_from", "direction.from"], "Город вылета")}
+                              className="min-w-0 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                             />
 
-                            <AsyncSelect
-                              cacheOptions
-                              defaultOptions
-                              {...ASYNC_MENU_PORTAL}
-                              loadOptions={loadCitiesTo}
-                              noOptionsMessage={ASYNC_I18N.noOptionsMessage}
-                              loadingMessage={ASYNC_I18N.loadingMessage}
-                              value={
-                                details.directionTo
-                                  ? { value: details.directionTo, label: details.directionTo }
-                                  : null
-                              }
-                              onChange={(selected) => {
-                                setDetails((prev) => ({ ...prev, directionTo: selected?.value || "" }));
-                              }}
-                              placeholder={tr(["direction_to","direction.to"], "Город прибытия")}
-                              className="min-w-0"
+                            <input
+                              type="text"
+                              value={details.directionTo || ""}
+                              onChange={(e) => setDetails((prev) => ({ ...prev, directionTo: e.target.value }))}
+                              placeholder={tr(["service_form.ph_to", "direction_to", "direction.to"], "Город прибытия")}
+                              className="min-w-0 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                             />
                           </div>
                         </div>
@@ -3162,36 +3142,27 @@ useEffect(() => {
 
                       <div className="mb-2">
                         <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("direction_country")}</label>
-                        <Select
-                          options={countryOptions}
-                          value={selectedCountry}
-                          onChange={(selected) => {
-                            setSelectedCountry(selected);
+                        <input
+                          type="text"
+                          value={details.directionCountry || ""}
+                          onChange={(e) => {
+                            setSelectedCountry(null);
                             setDepartureCity(null);
-                            setDetails((d) => ({
-                              ...d,
-                              directionCountry: selected?.value || "",
-                              directionTo: "",
-                            }));
+                            setDetails((d) => ({ ...d, directionCountry: e.target.value }));
                           }}
-                          placeholder={t("direction_country")}
+                          placeholder={tr(["service_form.ph_country", "direction_country"], "Страна направления")}
+                          className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                         />
                       </div>
 
                       <div className="mb-2">
                         <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("refused_hotel_city")}</label>
-                        <AsyncSelect
-                          cacheOptions
-                          loadOptions={loadCitiesTo}
-                          defaultOptions
-                          {...ASYNC_MENU_PORTAL}
-                          value={details.directionTo ? { label: details.directionTo, value: details.directionTo } : null}
-                          onChange={(selected) => {
-                            setDetails((d) => ({ ...d, directionTo: selected?.value || "" }));
-                          }}
-                          noOptionsMessage={ASYNC_I18N.noOptionsMessage}
-                          loadingMessage={ASYNC_I18N.loadingMessage}
-                          placeholder={t("select_city")}
+                        <input
+                          type="text"
+                          value={details.directionTo || ""}
+                          onChange={(e) => setDetails((d) => ({ ...d, directionTo: e.target.value }))}
+                          placeholder={tr(["service_form.ph_to", "select_city"], "Город")}
+                          className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                         />
                       </div>
 
@@ -3349,67 +3320,50 @@ useEffect(() => {
                       />
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
-                        <Select
-                          options={countryOptions}
-                          value={selectedCountry}
-                          onChange={(value) => {
-                            setSelectedCountry(value);
+                        <input
+                          type="text"
+                          value={details.directionCountry || ""}
+                          onChange={(e) => {
+                            const country = e.target.value;
+                            setSelectedCountry(null);
                             setDetails((prev) => ({
                               ...prev,
-                              directionCountry: value?.value || "",
-                              direction: `${value?.label || ""} — ${departureCity?.label || ""} → ${details.directionTo || ""}`,
+                              directionCountry: country,
+                              direction: `${country || ""} — ${prev.directionFrom || ""} → ${prev.directionTo || ""}`,
                             }));
                           }}
                           placeholder={t("direction_country")}
-                          noOptionsMessage={() => t("country_not_found")}
-                          className="min-w-0"
+                          className="min-w-0 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                         />
 
-                        <AsyncSelect
-                          cacheOptions
-                          defaultOptions
-                          {...ASYNC_MENU_PORTAL}
-                          loadOptions={loadCities}
-                          noOptionsMessage={ASYNC_I18N.noOptionsMessage}
-                          loadingMessage={ASYNC_I18N.loadingMessage}
-                          value={
-                            departureCity
-                              || (details.directionFrom
-                                    ? { value: details.directionFrom, label: details.directionFrom }
-                                    : null)
-                          }
-                          onChange={(selected) => {
-                            setDepartureCity(selected);
+                        <input
+                          type="text"
+                          value={details.directionFrom || ""}
+                          onChange={(e) => {
+                            const from = e.target.value;
+                            setDepartureCity(null);
                             setDetails((prev) => ({
                               ...prev,
-                              directionFrom: selected?.value || "",
-                              direction: `${selectedCountry?.label || ""} — ${selected?.label || ""} → ${details.directionTo || ""}`,
+                              directionFrom: from,
+                              direction: `${prev.directionCountry || ""} — ${from || ""} → ${prev.directionTo || ""}`,
                             }));
                           }}
                           placeholder={t("direction_from")}
-                          className="min-w-0"
+                          className="min-w-0 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                         />
-                        <AsyncSelect
-                          cacheOptions
-                          defaultOptions
-                          {...ASYNC_MENU_PORTAL}
-                          loadOptions={loadCitiesTo}
-                          noOptionsMessage={ASYNC_I18N.noOptionsMessage}
-                          loadingMessage={ASYNC_I18N.loadingMessage}
-                          value={
-                            details.directionTo
-                              ? { value: details.directionTo, label: details.directionTo }
-                              : null
-                          }
-                          onChange={(selected) => {
+                        <input
+                          type="text"
+                          value={details.directionTo || ""}
+                          onChange={(e) => {
+                            const to = e.target.value;
                             setDetails((prev) => ({
                               ...prev,
-                              directionTo: selected?.value || "",
-                              direction: `${selectedCountry?.label || ""} — ${departureCity?.label || ""} → ${selected?.label || ""}`,
+                              directionTo: to,
+                              direction: `${prev.directionCountry || ""} — ${prev.directionFrom || ""} → ${to || ""}`,
                             }));
                           }}
                           placeholder={t("direction_to")}
-                          className="min-w-0"
+                          className="min-w-0 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                         />
                       </div>
 
