@@ -657,7 +657,20 @@
     "quick_request_after_access": "Tez so‘rov",
     "quick_request_after_access_hint": "Tez so‘rov kirish ochilgandan keyin mavjud bo‘ladi",
     "unlock_intro_quick_request": "Ta’minotchiga tez so‘rov yuborish",
-    "unlock_intro_value_anchor": "Bu ta’minotchiga to‘liq kirish uchun kichik to‘lov: telefon, Telegram va ortiqcha qadamlarsiz tez so‘rov."
+    "unlock_intro_value_anchor": "Bu ta’minotchiga to‘liq kirish uchun kichik to‘lov: telefon, Telegram va ortiqcha qadamlarsiz tez so‘rov.",
+    "photo_coming_soon": "Rasm keyinroq qo‘shiladi",
+    "details_dates_title": "Safar sanalari",
+    "details_trip_summary": "Taklifga nimalar kiradi",
+    "details_trip_summary_hint": "Tez qaror qilish uchun asosiy tafsilotlar",
+    "included": "Kiritilgan",
+    "details_proof_available": "Materiallarni ochib tekshirishingiz mumkin",
+    "details_proof_locked": "Tekshiruv materiallari kirish ochilgandan keyin mavjud bo‘ladi",
+    "details_proof_unlock_cta": "Tekshirish uchun kirishni oching",
+    "views": "ko‘rishlar",
+    "considering_now": "hozir",
+    "unlocked_count_short": "ochildi",
+    "details_unlock_value_anchor": "Kirish ochilgandan keyin bevosita bog‘lanish, tez so‘rov yuborish va materiallarni tekshirish mumkin bo‘ladi.",
+    "details_unlock_cta": "Ta’minotchiga kirish olish"
   },
   "messages": {
     "booking_created": "Bron yaratildi",
