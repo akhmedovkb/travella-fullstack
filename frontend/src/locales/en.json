@@ -306,7 +306,8 @@
     "pros": "Pros",
     "cons": "Cons",
     "features": "Features",
-    "sum_currency": "UZS"
+    "sum_currency": "UZS",
+    "or": "OR"
   },
   "confirm_delete": "Delete item?",
   "countdown": {
@@ -2232,5 +2233,13 @@
   "seats_placeholder": "Example: 4 seats",
   "direction.country": "Destination country",
   "direction.from": "Departure city",
-  "direction.to": "Arrival city"
+  "direction.to": "Arrival city",
+  "telegram_provider_auth": {
+    "login": "Login via Telegram",
+    "register": "Register / login via Telegram",
+    "error": "Telegram authorization failed. Please make sure your Telegram is linked to an approved provider account.",
+    "checking": "Checking Telegram authorization...",
+    "bot_username_missing": "Telegram bot username is not configured. Add VITE_TELEGRAM_BOT_USERNAME or VITE_TG_BOT_USERNAME.",
+    "not_approved": "This Telegram account is not linked to an approved provider yet. Please pass moderation first."
+  }
 }
