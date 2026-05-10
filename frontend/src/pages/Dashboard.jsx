@@ -2720,7 +2720,7 @@ useEffect(() => {
               />
 
               <div className="sticky bottom-0 z-20 -mx-4 mt-6 space-y-3 border-t border-gray-100 bg-white/90 px-4 py-4 backdrop-blur md:-mx-6 md:px-6">
-                <button className="w-full rounded-2xl bg-orange-500 py-3 font-bold text-white shadow-sm transition hover:bg-orange-600 focus:outline-none focus:ring-4 focus:ring-orange-100" onClick={handleSaveService}>
+                <button className="w-full rounded-2xl bg-orange-500 py-3.5 font-black text-white shadow-[0_14px_35px_rgba(249,115,22,0.22)] transition hover:bg-orange-600 focus:outline-none focus:ring-4 focus:ring-orange-100" onClick={handleSaveService}>
                   {t("save_service")}
                 </button>
                 <button
@@ -2824,17 +2824,17 @@ useEffect(() => {
               </select>
 
               {category && isAgentExtendedCreator && (
-                <div className="mb-5 rounded-[1.75rem] border border-gray-200 bg-white p-2 shadow-sm">
+                <div className="mb-5 rounded-[2rem] border border-gray-200/70 bg-white/90 p-2 shadow-[0_14px_45px_rgba(15,23,42,0.06)] backdrop-blur">
                   <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
                     {createSteps.map((step) => (
                       <button
                         key={step.id}
                         type="button"
                         onClick={() => setCreateStep(step.id)}
-                        className={`rounded-2xl px-3 py-3 text-left transition ${
+                        className={`rounded-3xl px-4 py-4 text-left transition-all duration-200 ${
                           createStep === step.id
-                            ? "bg-gray-950 text-white shadow-[0_12px_28px_rgba(15,23,42,0.18)]"
-                            : "bg-gray-50 text-gray-600 hover:bg-orange-50 hover:text-orange-700"
+                            ? "bg-gray-950 text-white shadow-[0_18px_38px_rgba(15,23,42,0.22)] scale-[1.01]"
+                            : "bg-white text-gray-600 ring-1 ring-gray-100 hover:bg-orange-50 hover:text-orange-700 hover:ring-orange-200"
                         }`}
                       >
                         <div className="text-[11px] font-black uppercase tracking-wide opacity-70">
@@ -2852,12 +2852,12 @@ useEffect(() => {
 
               {/* Форма для выбранной категории */}
               {category && (
-                <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+                <div className="grid gap-7 xl:grid-cols-[minmax(0,1fr)_400px]">
                   <div className="min-w-0">
                   {/* Agent categories */}
                   {(category === "refused_tour" || category === "author_tour") && profile.type === "agent" ? (
                     <div className="space-y-5">
-                      <div className="rounded-3xl border border-orange-100 bg-gradient-to-br from-orange-50 via-white to-white p-5 shadow-sm">
+                      <div className="rounded-[2rem] border border-orange-200/70 bg-gradient-to-br from-orange-50 via-white to-white p-6 shadow-[0_14px_44px_rgba(249,115,22,0.10)]">
                         <div className="mb-4 flex flex-col gap-1">
                           <div className="text-xs font-bold uppercase tracking-[0.18em] text-orange-500">
                             {category === "author_tour" ? t("category.author_tour") : t("category.refused_tour")}
@@ -2914,7 +2914,7 @@ useEffect(() => {
                         </div>
                       </div>
 
-                      <div className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
+                      <div className="rounded-[2rem] border border-sky-200/80 bg-gradient-to-br from-sky-50 via-white to-white p-6 shadow-[0_14px_44px_rgba(14,165,233,0.10)]">
                         <div className="mb-4 flex items-start justify-between gap-3">
                           <div>
                             <h3 className="text-lg font-bold text-gray-900">
@@ -2961,7 +2961,7 @@ useEffect(() => {
                         </div>
                       </div>
 
-                      <div className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
+                      <div className="rounded-[2rem] border border-gray-200/70 bg-white/95 p-6 shadow-[0_12px_42px_rgba(15,23,42,0.06)] backdrop-blur">
                         <div className="mb-4">
                           <h3 className="text-lg font-bold text-gray-900">
                             {tr("service_form.hotel_stay_section", "Отель и размещение")}
@@ -3021,7 +3021,7 @@ useEffect(() => {
                                 <option value="UAI">UAI - {t("food_options.uai")}</option>
                               </select>
                             </div>
-                            <label className="inline-flex items-center rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+                            <label className="inline-flex items-center rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-black text-emerald-700 shadow-sm">
                               <input
                                 type="checkbox"
                                 checked={details.halal || false}
@@ -3034,7 +3034,7 @@ useEffect(() => {
                         </div>
                       </div>
 
-                      <div className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
+                      <div className="rounded-[2rem] border border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-white to-white p-6 shadow-[0_14px_44px_rgba(16,185,129,0.10)]">
                         <div className="mb-4">
                           <h3 className="text-lg font-bold text-gray-900">
                             {tr("service_form.conditions_section", "Условия тура")}
@@ -3067,7 +3067,7 @@ useEffect(() => {
                               ["earlyCheckIn", t("early_check_in")],
                               ["arrivalFastTrack", t("arrival_fast_track")],
                             ].map(([key, label]) => (
-                              <label key={key} className="inline-flex items-center rounded-2xl border border-gray-100 bg-gray-50 px-4 py-2.5 text-sm font-semibold text-gray-700">
+                              <label key={key} className="inline-flex items-center rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-bold text-gray-700 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50">
                                 <input
                                   type="checkbox"
                                   checked={details[key] || false}
@@ -3081,7 +3081,7 @@ useEffect(() => {
                         </div>
                       </div>
 
-                      <div className="rounded-3xl border border-orange-200 bg-orange-50/60 p-5 shadow-sm">
+                      <div className="rounded-[2rem] border border-amber-200/80 bg-gradient-to-br from-amber-50 via-orange-50/60 to-white p-6 shadow-[0_14px_44px_rgba(245,158,11,0.12)]">
                         <div className="mb-4">
                           <h3 className="text-lg font-bold text-gray-900">
                             {tr("service_form.price_actuality_section", "Цена и актуальность")}
@@ -3118,7 +3118,7 @@ useEffect(() => {
                               className="w-full rounded-2xl border border-orange-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                             />
                           </div>
-                          <label className="inline-flex items-center rounded-2xl border border-green-200 bg-white px-4 py-3 text-sm font-bold text-green-700">
+                          <label className="inline-flex items-center rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-black text-emerald-700 shadow-sm">
                             <input
                               type="checkbox"
                               checked={details.isActive || false}
@@ -3658,7 +3658,7 @@ useEffect(() => {
                     t={t}
                   />
 
-                  <div className="sticky bottom-0 z-20 -mx-4 mt-6 flex gap-3 border-t border-gray-100 bg-white/90 px-4 py-4 backdrop-blur md:-mx-6 md:px-6">
+                  <div className="sticky bottom-4 z-20 -mx-4 mt-6 flex gap-3 rounded-[2rem] border border-gray-200 bg-white/92 px-4 py-4 shadow-[0_18px_55px_rgba(15,23,42,0.14)] backdrop-blur md:-mx-6 md:px-6">
                     {isAgentExtendedCreator && (
                       <button
                         type="button"
@@ -3673,12 +3673,12 @@ useEffect(() => {
                       <button
                         type="button"
                         onClick={() => goCreatorStep(1)}
-                        className="w-full rounded-2xl bg-gray-950 py-3 font-black text-white shadow-sm transition hover:bg-gray-800 focus:outline-none focus:ring-4 focus:ring-gray-200"
+                        className="w-full rounded-2xl bg-gray-950 py-3.5 font-black text-white shadow-[0_14px_35px_rgba(15,23,42,0.18)] transition hover:bg-gray-800 focus:outline-none focus:ring-4 focus:ring-gray-200"
                       >
                         {tr("service_form.next_step", "Следующий шаг")}
                       </button>
                     ) : (
-                      <button className="w-full rounded-2xl bg-orange-500 py-3 font-bold text-white shadow-sm transition hover:bg-orange-600 focus:outline-none focus:ring-4 focus:ring-orange-100" onClick={handleSaveService}>
+                      <button className="w-full rounded-2xl bg-orange-500 py-3.5 font-black text-white shadow-[0_14px_35px_rgba(249,115,22,0.22)] transition hover:bg-orange-600 focus:outline-none focus:ring-4 focus:ring-orange-100" onClick={handleSaveService}>
                         {t("save_service")}
                       </button>
                     )}
@@ -3694,14 +3694,14 @@ useEffect(() => {
                   </div>
 
                   <aside className="hidden xl:block">
-                    <div className="sticky top-5 space-y-4">
-                      <div className="overflow-hidden rounded-[2rem] border border-gray-200 bg-white shadow-[0_20px_50px_rgba(15,23,42,0.08)]">
-                        <div className="relative h-40 bg-gradient-to-br from-orange-100 via-amber-50 to-sky-50">
+                    <div className="sticky top-24 space-y-4">
+                      <div className="overflow-hidden rounded-[2.2rem] border border-gray-200 bg-white shadow-[0_26px_70px_rgba(15,23,42,0.12)]">
+                        <div className="relative h-56 bg-gradient-to-br from-slate-100 via-orange-50 to-sky-100">
                           {images?.[0] ? (
                             <img src={images[0]} alt="" className="h-full w-full object-cover" />
                           ) : (
                             <div className="flex h-full flex-col items-center justify-center gap-2 text-gray-400">
-                              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/80 text-2xl shadow-sm">🏝️</div>
+                              <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-white/90 text-4xl shadow-sm">🏝️</div>
                               <div className="text-xs font-bold">{tr("service_form.preview_photo_hint", "Фото появится здесь")}</div>
                             </div>
                           )}
@@ -3721,9 +3721,9 @@ useEffect(() => {
                               <div className="inline-flex rounded-full bg-gray-100 px-2 py-1 text-gray-800">🗓 {previewDateText}</div>
                             </div>
                           </div>
-                          <div className="rounded-2xl bg-gray-950 p-3 text-white">
+                          <div className="rounded-3xl bg-[#050816] p-5 text-white shadow-[0_18px_42px_rgba(5,8,22,0.22)]">
                             <div className="text-[10px] font-black uppercase tracking-[0.16em] text-white/45">{t("price", { defaultValue: "Цена" })}</div>
-                            <div className="mt-1 text-2xl font-black tracking-[-0.04em]">{previewPriceText}</div>
+                            <div className="mt-1 text-3xl font-black tracking-[-0.05em]">{previewPriceText}</div>
                           </div>
                           {includedPreview.length > 0 && (
                             <div className="flex flex-wrap gap-1.5">
@@ -3738,7 +3738,7 @@ useEffect(() => {
                         </div>
                       </div>
 
-                      <div className="rounded-[1.5rem] border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-800">
+                      <div className="rounded-[2rem] border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-5 text-sm text-emerald-800 shadow-[0_14px_38px_rgba(16,185,129,0.10)]">
                         <div className="font-black">🛡 {tr("service_form.proof_trust_title", "Proof повышает доверие")}</div>
                         <p className="mt-1 text-xs leading-5 text-emerald-700/85">
                           {tr("service_form.proof_trust_hint", "Скриншоты подтверждения помогают клиенту быстрее решиться открыть контакты поставщика.")}
