@@ -657,7 +657,20 @@
     "quick_request_after_access": "Quick request",
     "quick_request_after_access_hint": "Quick request is available after unlocking access",
     "unlock_intro_quick_request": "Quick request to the provider",
-    "unlock_intro_value_anchor": "This is a small fee for full provider access: phone, Telegram, and quick request without extra steps."
+    "unlock_intro_value_anchor": "This is a small fee for full provider access: phone, Telegram, and quick request without extra steps.",
+    "photo_coming_soon": "Photo coming soon",
+    "details_dates_title": "Trip dates",
+    "details_trip_summary": "What is included",
+    "details_trip_summary_hint": "Key details for a quick decision",
+    "included": "Included",
+    "details_proof_available": "You can open and verify the materials",
+    "details_proof_locked": "Verification materials are available after unlocking access",
+    "details_proof_unlock_cta": "Unlock access to verify",
+    "views": "views",
+    "considering_now": "now",
+    "unlocked_count_short": "opened",
+    "details_unlock_value_anchor": "After unlocking, you can contact directly, send a quick request and verify the materials.",
+    "details_unlock_cta": "Get provider access"
   },
   "messages": {
     "booking_created": "Booking created",
