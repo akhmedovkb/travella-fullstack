@@ -710,6 +710,7 @@ const scrollToProfilePart = useCallback((key) => {
   const [services, setServices] = useState([]);
   const [selectedService, setSelectedService] = useState(null);
   const [servicesTab, setServicesTab] = useState("create");
+  const [createStep, setCreateStep] = useState(1);
 
   // Common fields
   const [title, setTitle] = useState("");
@@ -1540,6 +1541,48 @@ useEffect(() => {
   const right = toLabel ? ` → ${toLabel}` : "";
   return (left + mid + right).trim();
 };
+
+  const isAgentExtendedCreator =
+    profile?.type === "agent" &&
+    ["refused_tour", "author_tour", "refused_hotel", "refused_flight", "refused_event_ticket", "visa_support"].includes(category);
+
+  const createSteps = useMemo(() => [
+    { id: 1, label: tr("service_form.step_main", "Основное"), hint: tr("service_form.step_main_hint", "Направление, даты, название") },
+    { id: 2, label: tr("service_form.step_details", "Детали"), hint: tr("service_form.step_details_hint", "Отель, рейс, размещение") },
+    { id: 3, label: tr("service_form.step_value", "Ценность"), hint: tr("service_form.step_value_hint", "Что включено и proof") },
+    { id: 4, label: tr("service_form.step_price", "Цена"), hint: tr("service_form.step_price_hint", "Стоимость и актуальность") },
+    { id: 5, label: tr("service_form.step_preview", "Предпросмотр"), hint: tr("service_form.step_preview_hint", "Как увидит клиент") },
+  ], [tr]);
+
+  const creatorProgress = category ? Math.max(1, Math.min(createStep, createSteps.length)) : 0;
+
+  const previewRoute = buildDirection(
+    selectedCountry?.label || details.directionCountry,
+    departureCity?.label || details.directionFrom,
+    details.directionTo
+  );
+
+  const previewPrice = firstNonEmpty(details.grossPrice, details.netPrice, price);
+  const previewPriceText = previewPrice
+    ? formatMoney(previewPrice, currency || "USD")
+    : tr("service_form.preview_price_empty", "Цена появится здесь");
+
+  const previewDateText = details.startDate && details.endDate
+    ? `${details.startDate} → ${details.endDate}`
+    : tr("service_form.preview_dates_empty", "Даты будут показаны здесь");
+
+  const includedPreview = [
+    details.insuranceIncluded ? tr("insurance_included", "Страховка") : null,
+    details.earlyCheckIn ? tr("early_check_in", "Раннее заселение") : null,
+    details.arrivalFastTrack ? tr("arrival_fast_track", "Fast Track") : null,
+    details.visaIncluded ? tr("visa_included", "Виза") : null,
+    details.transfer ? tr("transfer", "Трансфер") : null,
+  ].filter(Boolean);
+
+  const goCreatorStep = (delta) => {
+    setCreateStep((v) => Math.max(1, Math.min(createSteps.length, Number(v || 1) + delta)));
+  };
+
   /** ===== Render ===== */
   return (
     <>
@@ -2692,8 +2735,36 @@ useEffect(() => {
           ) : (
             /* ====== Create form ====== */
             <>
-              <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                {t("new_service_tip")}
+              <div className="mb-5 overflow-hidden rounded-[2rem] border border-orange-100 bg-gradient-to-br from-orange-50 via-white to-amber-50 shadow-sm">
+                <div className="grid gap-4 p-4 sm:p-5 lg:grid-cols-[1.25fr_.75fr] lg:items-center">
+                  <div>
+                    <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-orange-600 ring-1 ring-orange-100">
+                      ✨ {tr("service_form.studio_badge", "Студия создания")}
+                    </div>
+                    <h3 className="mt-3 text-xl font-black tracking-[-0.02em] text-gray-950 sm:text-2xl">
+                      {tr("service_form.studio_title", "Создайте услугу, которую хочется открыть")}
+                    </h3>
+                    <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-600">
+                      {tr("service_form.studio_hint", "Заполняйте блоками: направление, детали, ценность, цена и proof. Чем понятнее карточка, тем выше шанс открытия контактов клиентом.")}
+                    </p>
+                  </div>
+                  <div className="rounded-3xl bg-white/80 p-3 ring-1 ring-orange-100">
+                    <div className="text-xs font-black uppercase tracking-wide text-gray-400">
+                      {tr("service_form.creator_quality", "Качество карточки")}
+                    </div>
+                    <div className="mt-2 h-2 overflow-hidden rounded-full bg-gray-100">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-orange-500 to-amber-400 transition-all"
+                        style={{ width: `${category ? Math.min(100, (creatorProgress / createSteps.length) * 100) : 12}%` }}
+                      />
+                    </div>
+                    <p className="mt-2 text-xs font-semibold text-gray-500">
+                      {category
+                        ? tr("service_form.creator_quality_hint", "Продвигайтесь по шагам и проверьте предпросмотр перед сохранением.")
+                        : tr("service_form.creator_category_first", "Сначала выберите категорию услуги.")}
+                    </p>
+                  </div>
+                </div>
               </div>
 
               {/* Выбор категории */}
@@ -2708,6 +2779,7 @@ useEffect(() => {
                   setPrice("");
                   setAvailability([]);
                   setImages([]);
+                  setCreateStep(1);
                   setDetails(() => ({ ...DEFAULT_DETAILS }));
                 }}
                 className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100 mb-5"
@@ -2751,9 +2823,37 @@ useEffect(() => {
                 )}
               </select>
 
+              {category && isAgentExtendedCreator && (
+                <div className="mb-5 rounded-[1.75rem] border border-gray-200 bg-white p-2 shadow-sm">
+                  <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+                    {createSteps.map((step) => (
+                      <button
+                        key={step.id}
+                        type="button"
+                        onClick={() => setCreateStep(step.id)}
+                        className={`rounded-2xl px-3 py-3 text-left transition ${
+                          createStep === step.id
+                            ? "bg-gray-950 text-white shadow-[0_12px_28px_rgba(15,23,42,0.18)]"
+                            : "bg-gray-50 text-gray-600 hover:bg-orange-50 hover:text-orange-700"
+                        }`}
+                      >
+                        <div className="text-[11px] font-black uppercase tracking-wide opacity-70">
+                          {tr("service_form.step", "Шаг")} {step.id}
+                        </div>
+                        <div className="mt-1 text-sm font-black">{step.label}</div>
+                        <div className="mt-0.5 line-clamp-1 text-[11px] font-medium opacity-70">
+                          {step.hint}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Форма для выбранной категории */}
               {category && (
-                <>
+                <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+                  <div className="min-w-0">
                   {/* Agent categories */}
                   {(category === "refused_tour" || category === "author_tour") && profile.type === "agent" ? (
                     <div className="space-y-5">
@@ -3605,9 +3705,29 @@ useEffect(() => {
                   />
 
                   <div className="sticky bottom-0 z-20 -mx-4 mt-6 flex gap-3 border-t border-gray-100 bg-white/90 px-4 py-4 backdrop-blur md:-mx-6 md:px-6">
-                    <button className="w-full rounded-2xl bg-orange-500 py-3 font-bold text-white shadow-sm transition hover:bg-orange-600 focus:outline-none focus:ring-4 focus:ring-orange-100" onClick={handleSaveService}>
-                      {t("save_service")}
-                    </button>
+                    {isAgentExtendedCreator && (
+                      <button
+                        type="button"
+                        onClick={() => goCreatorStep(-1)}
+                        disabled={createStep <= 1}
+                        className="hidden rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-black text-gray-600 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 sm:inline-flex"
+                      >
+                        {tr("service_form.prev_step", "Назад")}
+                      </button>
+                    )}
+                    {isAgentExtendedCreator && createStep < createSteps.length ? (
+                      <button
+                        type="button"
+                        onClick={() => goCreatorStep(1)}
+                        className="w-full rounded-2xl bg-gray-950 py-3 font-black text-white shadow-sm transition hover:bg-gray-800 focus:outline-none focus:ring-4 focus:ring-gray-200"
+                      >
+                        {tr("service_form.next_step", "Следующий шаг")}
+                      </button>
+                    ) : (
+                      <button className="w-full rounded-2xl bg-orange-500 py-3 font-bold text-white shadow-sm transition hover:bg-orange-600 focus:outline-none focus:ring-4 focus:ring-orange-100" onClick={handleSaveService}>
+                        {t("save_service")}
+                      </button>
+                    )}
                     {selectedService?.id && (
                       <button
                         className="w-full rounded-2xl bg-red-600 py-3 font-bold text-white shadow-sm transition hover:bg-red-700 focus:outline-none focus:ring-4 focus:ring-red-100"
@@ -3617,7 +3737,62 @@ useEffect(() => {
                       </button>
                     )}
                   </div>
-                </>
+                  </div>
+
+                  <aside className="hidden xl:block">
+                    <div className="sticky top-5 space-y-4">
+                      <div className="overflow-hidden rounded-[2rem] border border-gray-200 bg-white shadow-[0_20px_50px_rgba(15,23,42,0.08)]">
+                        <div className="relative h-40 bg-gradient-to-br from-orange-100 via-amber-50 to-sky-50">
+                          {images?.[0] ? (
+                            <img src={images[0]} alt="" className="h-full w-full object-cover" />
+                          ) : (
+                            <div className="flex h-full flex-col items-center justify-center gap-2 text-gray-400">
+                              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/80 text-2xl shadow-sm">🏝️</div>
+                              <div className="text-xs font-bold">{tr("service_form.preview_photo_hint", "Фото появится здесь")}</div>
+                            </div>
+                          )}
+                          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/40 to-transparent p-4">
+                            <div className="inline-flex rounded-full bg-white/90 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-orange-600">
+                              {category ? t(`category.${category}`, { defaultValue: category }) : tr("service_form.preview_category", "Категория")}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="space-y-3 p-4">
+                          <div>
+                            <h4 className="line-clamp-2 text-lg font-black leading-snug text-gray-950">
+                              {title || tr("service_form.preview_title_empty", "Название услуги")}
+                            </h4>
+                            <div className="mt-2 space-y-1 text-xs font-bold text-gray-600">
+                              <div className="truncate">✈️ {previewRoute || tr("service_form.preview_route_empty", "Маршрут будет показан здесь")}</div>
+                              <div className="inline-flex rounded-full bg-gray-100 px-2 py-1 text-gray-800">🗓 {previewDateText}</div>
+                            </div>
+                          </div>
+                          <div className="rounded-2xl bg-gray-950 p-3 text-white">
+                            <div className="text-[10px] font-black uppercase tracking-[0.16em] text-white/45">{t("price", { defaultValue: "Цена" })}</div>
+                            <div className="mt-1 text-2xl font-black tracking-[-0.04em]">{previewPriceText}</div>
+                          </div>
+                          {includedPreview.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5">
+                              {includedPreview.slice(0, 5).map((x) => (
+                                <span key={x} className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-700 ring-1 ring-emerald-100">{x}</span>
+                              ))}
+                            </div>
+                          )}
+                          <div className="rounded-2xl bg-orange-50 p-3 text-xs font-semibold leading-5 text-orange-800 ring-1 ring-orange-100">
+                            {tr("service_form.preview_tip", "Так клиент будет воспринимать вашу услугу. Заполните proof и фото, чтобы повысить доверие.")}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="rounded-[1.5rem] border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-800">
+                        <div className="font-black">🛡 {tr("service_form.proof_trust_title", "Proof повышает доверие")}</div>
+                        <p className="mt-1 text-xs leading-5 text-emerald-700/85">
+                          {tr("service_form.proof_trust_hint", "Скриншоты подтверждения помогают клиенту быстрее решиться открыть контакты поставщика.")}
+                        </p>
+                      </div>
+                    </div>
+                  </aside>
+                </div>
               )}
             </>
           ))}
