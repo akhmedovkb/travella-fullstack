@@ -2238,7 +2238,10 @@
     "register": "Telegram orqali ro'yxatdan o'tish / kirish",
     "error": "Telegram avtorizatsiyasida xatolik. Telegram akkauntingiz tasdiqlangan provayderga bog'langanini tekshiring.",
     "checking": "Telegram avtorizatsiyasi tekshirilmoqda...",
-    "bot_username_missing": "Telegram bot username sozlanmagan. VITE_TELEGRAM_BOT_USERNAME yoki VITE_TG_BOT_USERNAME qo'shing.",
-    "not_approved": "Bu Telegram akkaunt hali tasdiqlangan provayderga bog'lanmagan. Avval moderatsiyadan o'ting."
+    "bot_username_missing": "Provayder Telegram bot username sozlanmagan. VITE_TELEGRAM_PROVIDER_BOT_USERNAME qo'shing.",
+    "not_approved": "Bu Telegram akkaunt hali tasdiqlangan provayderga bog'lanmagan. Avval moderatsiyadan o'ting.",
+    "register_hint": "Agar siz botda provayder sifatida allaqachon tasdiqlangan bo'lsangiz, Telegram orqali kirish aynan shu kabinetni ochadi.",
+    "domain_hint": "Agar tugma yuklanmasa, BotFather domenini va provayder bot env sozlamasini tekshiring.",
+    "bot_not_configured": "Provayder Telegram boti sozlanmagan."
   }
 }
