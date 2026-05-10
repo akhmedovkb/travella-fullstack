@@ -2157,5 +2157,73 @@
     "preview_tip": "Mijoz xizmatingizni taxminan shunday ko‘radi. Ishonchni oshirish uchun proof va fotolar qo‘shing.",
     "proof_trust_title": "Proof ishonchni oshiradi",
     "proof_trust_hint": "Tasdiqlovchi skrinshotlar mijozga kontaktlarni tezroq ochishga yordam beradi."
+  },
+  "dashboardServices": {
+    "supplierStudio": {
+      "flightDetails": {
+        "label": "Reys tafsilotlari",
+        "title": "Reys tafsilotlari",
+        "subtitle": "Reys segmentlarini xizmat kartasida qanday ko‘rinishi kerak bo‘lsa, shunday kiriting.",
+        "hint": "Har bir reys segmentini alohida qatorda kiriting. Format: sana, reys raqami, yo‘nalish, uchish vaqti, qo‘nish vaqti. Bagajni alohida qatorda yozing.",
+        "hintShort": "Har bir segment alohida qatorda. Bagajni alohida qatorda yozish mumkin.",
+        "placeholder": "15MAY HH-9911 TASDXB 18:00 21:00\n22MAY HH-9912 DXBTAS 22:00 05:00\n\n23KG/8KG",
+        "insertExample": "Namunani qo‘yish",
+        "clearExample": "Namunani tozalash",
+        "formatTitle": "Reys formati namunasi",
+        "formatExample": "15MAY HH-9911 TASDXB 18:00 21:00\n22MAY HH-9912 DXBTAS 22:00 05:00\n\n23KG/8KG",
+        "formatHelp": "Format: 15MAY HH-9911 TASDXB 18:00 21:00. Yo‘nalish aeroport kodlari bilan bo‘sh joysiz yoziladi, masalan TASDXB.",
+        "lineFormat": "DDMMM REYS YO‘NALISH UCHISH_VAQTI QO‘NISH_VAQTI",
+        "baggageTitle": "Bagaj formati",
+        "baggageExample": "23KG/8KG",
+        "baggageHelp": "Ro‘yxatdan o‘tadigan bagaj / qo‘l yuki, masalan 23KG/8KG.",
+        "examples": {
+          "outbound": "15MAY HH-9911 TASDXB 18:00 21:00",
+          "return": "22MAY HH-9912 DXBTAS 22:00 05:00",
+          "baggage": "23KG/8KG"
+        },
+        "placeholders": {
+          "textarea": "15MAY HH-9911 TASDXB 18:00 21:00\n22MAY HH-9912 DXBTAS 22:00 05:00\n\n23KG/8KG",
+          "singleLine": "15MAY HH-9911 TASDXB 18:00 21:00",
+          "baggage": "23KG/8KG"
+        },
+        "validation": {
+          "required": "Reys tafsilotlari majburiy.",
+          "empty": "Kamida bitta reys segmentini kiriting.",
+          "invalidFormat": "Reys tafsilotlari formati noto‘g‘ri. Namuna: 15MAY HH-9911 TASDXB 18:00 21:00",
+          "invalidLine": "{{line}}-qatorda reys formati noto‘g‘ri.",
+          "invalidDate": "Reys sanasi 15MAY kabi yozilishi kerak.",
+          "invalidFlightNumber": "Reys raqami HH-9911 kabi yozilishi kerak.",
+          "invalidRoute": "Yo‘nalish aeroport kodlari bilan yozilishi kerak, masalan TASDXB yoki DXBTAS.",
+          "invalidTime": "Vaqt 24 soatlik formatda yozilishi kerak, masalan 18:00.",
+          "invalidBaggage": "Bagaj 23KG/8KG kabi yozilishi kerak.",
+          "tooLong": "Reys tafsilotlari juda uzun. Faqat muhim reys va bagaj ma’lumotlarini qoldiring."
+        }
+      }
+    },
+    "flightDetails": {
+      "label": "Reys tafsilotlari",
+      "hint": "Har bir reys segmentini alohida qatorda kiriting. Format: sana, reys raqami, yo‘nalish, uchish vaqti, qo‘nish vaqti. Zarur bo‘lsa, bagajni alohida qatorda yozing.",
+      "hintShort": "Har bir reys segmenti alohida qatorda. Bagajni alohida qatorda yozing.",
+      "placeholder": "15MAY HH-9911 TASDXB 18:00 21:00\n22MAY HH-9912 DXBTAS 22:00 05:00\n\n23KG/8KG",
+      "insertExample": "Namunani qo‘yish",
+      "formatTitle": "Reys formati namunasi",
+      "formatExample": "15MAY HH-9911 TASDXB 18:00 21:00\n22MAY HH-9912 DXBTAS 22:00 05:00\n\n23KG/8KG",
+      "validation": {
+        "required": "Reys tafsilotlari majburiy.",
+        "invalidFormat": "Reys tafsilotlari formati noto‘g‘ri. Namuna: 15MAY HH-9911 TASDXB 18:00 21:00"
+      }
+    }
+  },
+  "_travellaFlightDetailsUsage": {
+    "recommendedTKeys": {
+      "label": "dashboardServices.supplierStudio.flightDetails.label",
+      "hint": "dashboardServices.supplierStudio.flightDetails.hint",
+      "placeholder": "dashboardServices.supplierStudio.flightDetails.placeholder",
+      "insertExample": "dashboardServices.supplierStudio.flightDetails.insertExample",
+      "formatExample": "dashboardServices.supplierStudio.flightDetails.formatExample",
+      "validationRequired": "dashboardServices.supplierStudio.flightDetails.validation.required",
+      "validationInvalidFormat": "dashboardServices.supplierStudio.flightDetails.validation.invalidFormat"
+    },
+    "regexHint": "Flight line: ^\\d{2}[A-Z]{3}\\s+[A-Z0-9]{2}-?\\d{2,5}\\s+[A-Z]{6}\\s+\\d{2}:\\d{2}\\s+\\d{2}:\\d{2}$ ; baggage: ^\\d{1,2}KG/\\d{1,2}KG$"
   }
 }
