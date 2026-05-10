@@ -657,20 +657,7 @@
     "quick_request_after_access": "Tez so‘rov",
     "quick_request_after_access_hint": "Tez so‘rov kirish ochilgandan keyin mavjud bo‘ladi",
     "unlock_intro_quick_request": "Ta’minotchiga tez so‘rov yuborish",
-    "unlock_intro_value_anchor": "Bu ta’minotchiga to‘liq kirish uchun kichik to‘lov: telefon, Telegram va ortiqcha qadamlarsiz tez so‘rov.",
-    "photo_coming_soon": "Rasm keyinroq qo‘shiladi",
-    "details_dates_title": "Safar sanalari",
-    "details_trip_summary": "Taklifga nimalar kiradi",
-    "details_trip_summary_hint": "Tez qaror qilish uchun asosiy tafsilotlar",
-    "included": "Kiritilgan",
-    "details_proof_available": "Materiallarni ochib tekshirishingiz mumkin",
-    "details_proof_locked": "Tekshiruv materiallari kirish ochilgandan keyin mavjud bo‘ladi",
-    "details_proof_unlock_cta": "Tekshirish uchun kirishni oching",
-    "views": "ko‘rishlar",
-    "considering_now": "hozir",
-    "unlocked_count_short": "ochildi",
-    "details_unlock_value_anchor": "Kirish ochilgandan keyin bevosita bog‘lanish, tez so‘rov yuborish va materiallarni tekshirish mumkin bo‘ladi.",
-    "details_unlock_cta": "Ta’minotchiga kirish olish"
+    "unlock_intro_value_anchor": "Bu ta’minotchiga to‘liq kirish uchun kichik to‘lov: telefon, Telegram va ortiqcha qadamlarsiz tez so‘rov."
   },
   "messages": {
     "booking_created": "Bron yaratildi",
@@ -2140,5 +2127,35 @@
         }
       }
     }
+  },
+  "service_form": {
+    "studio_badge": "Yaratish studiyasi",
+    "studio_title": "Mijoz ochishni xohlaydigan xizmat yarating",
+    "studio_hint": "Bloklar bo‘yicha to‘ldiring: yo‘nalish, tafsilotlar, qiymat, narx va proof. Kartochka qanchalik tushunarli bo‘lsa, mijoz kontaktlarni ochish ehtimoli shunchalik yuqori bo‘ladi.",
+    "creator_quality": "Kartochka sifati",
+    "creator_quality_hint": "Qadamlar bo‘yicha yuring va saqlashdan oldin oldindan ko‘rinishni tekshiring.",
+    "creator_category_first": "Avval xizmat toifasini tanlang.",
+    "step": "Qadam",
+    "step_main": "Asosiy",
+    "step_main_hint": "Yo‘nalish, sanalar, nom",
+    "step_details": "Tafsilotlar",
+    "step_details_hint": "Mehmonxona, reys, joylashuv",
+    "step_value": "Qiymat",
+    "step_value_hint": "Nimalar kiritilgan va proof",
+    "step_price": "Narx",
+    "step_price_hint": "Narx va dolzarblik",
+    "step_preview": "Oldindan ko‘rish",
+    "step_preview_hint": "Mijoz ko‘radigan ko‘rinish",
+    "prev_step": "Orqaga",
+    "next_step": "Keyingi qadam",
+    "preview_price_empty": "Narx shu yerda chiqadi",
+    "preview_dates_empty": "Sanalar shu yerda chiqadi",
+    "preview_photo_hint": "Foto shu yerda chiqadi",
+    "preview_category": "Toifa",
+    "preview_title_empty": "Xizmat nomi",
+    "preview_route_empty": "Yo‘nalish shu yerda chiqadi",
+    "preview_tip": "Mijoz xizmatingizni taxminan shunday ko‘radi. Ishonchni oshirish uchun proof va fotolar qo‘shing.",
+    "proof_trust_title": "Proof ishonchni oshiradi",
+    "proof_trust_hint": "Tasdiqlovchi skrinshotlar mijozga kontaktlarni tezroq ochishga yordam beradi."
   }
 }
