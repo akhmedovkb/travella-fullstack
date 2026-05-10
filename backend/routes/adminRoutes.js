@@ -125,8 +125,22 @@ router.put("/services/:id(\\d+)", authenticateToken, requireAdmin, async (req, r
       typeof body.description === "undefined" ? row.description : body.description;
     const nextCategory =
       typeof body.category === "undefined" ? row.category : body.category;
-    const nextPrice =
-      typeof body.price === "undefined" ? row.price : body.price;
+    const normalizePrice = (value, fallback) => {
+      if (typeof value === "undefined") return fallback;
+      if (value === null) return null;
+
+      const s = String(value).trim();
+      if (!s) return null;
+
+      const n = Number(s.replace(",", "."));
+      if (!Number.isFinite(n)) {
+        throw new Error("INVALID_PRICE");
+      }
+
+      return n;
+    };
+
+    const nextPrice = normalizePrice(body.price, row.price);
     const nextVehicleModel =
       typeof body.vehicle_model === "undefined"
         ? row.vehicle_model
@@ -229,6 +243,10 @@ router.put("/services/:id(\\d+)", authenticateToken, requireAdmin, async (req, r
       },
     });
   } catch (e) {
+    if (e?.message === "INVALID_PRICE") {
+      return res.status(400).json({ message: "Invalid price" });
+    }
+
     console.error("[admin update service] error:", e);
     return res.status(500).json({ message: "Internal error" });
   }
