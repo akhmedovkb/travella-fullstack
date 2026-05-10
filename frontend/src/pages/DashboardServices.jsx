@@ -676,7 +676,7 @@ export default function DashboardServices() {
                             <div className="grid gap-3 sm:grid-cols-2">
                               <Field label={t("transfer", { defaultValue: "Трансфер" })}>
                                 <SelectInput value={details.transfer} onChange={(e) => patchDetails({ transfer: e.target.value })}>
-                                  <option value="">{t("select", { defaultValue: "Выберите" })}</option>
+                                  <option value="">{t("food_options.select", { defaultValue: "Выберите вариант" })}</option>
                                   {transferOptions.map((x) => <option key={x} value={x}>{x}</option>)}
                                 </SelectInput>
                               </Field>
