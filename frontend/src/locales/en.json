@@ -2187,7 +2187,17 @@
     "ph_gross_price": "Example: 2750",
     "expiration_hint": "After this time, the offer becomes less relevant.",
     "flight_format_example": "15MAY HH-9911 TASDXB 18:00 21:00\n22MAY HH-9912 DXBTAS 22:00 05:00\n\n23KG/8KG",
-    "flight_details_placeholder": "15MAY HH-9911 TASDXB 18:00 21:00\n22MAY HH-9912 DXBTAS 22:00 05:00\n\n23KG/8KG"
+    "flight_details_placeholder": "15MAY HH-9911 TASDXB 18:00 21:00\n22MAY HH-9912 DXBTAS 22:00 05:00\n\n23KG/8KG",
+    "main_info": "Core information",
+    "main_info_hint": "Fill in the route, dates and base tour data.",
+    "flight_section": "Flight",
+    "flight_section_hint": "Flight dates and important transfer details.",
+    "conditions_section": "Tour conditions",
+    "conditions_section_hint": "Mark what is included in the offer.",
+    "price_actuality_section": "Price & validity",
+    "price_actuality_section_hint": "Supplier price, client price and offer validity period.",
+    "hotel_stay_section": "Hotel stay",
+    "hotel_stay_section_hint": "Hotel, room category, dates and accommodation."
   },
   "provider_services_tourbuilder_title": "Price list for TourBuilder",
   "provider_services_tab_create": "Create service",
@@ -2202,6 +2212,25 @@
   "visa_country": "Visa country",
   "validation": {
     "gross_positive": "Enter a valid price",
-    "gross_ge_net": "Client price cannot be lower than net price"
-  }
+    "gross_ge_net": "Client price cannot be lower than net price",
+    "dates_range": "End date cannot be earlier than start date",
+    "net_required": "Enter a valid net price",
+    "net_positive": "Net price must be greater than 0",
+    "net_invalid_chars": "Net price: only digits, dot or comma are allowed",
+    "gross_required": "Enter a valid client price",
+    "gross_invalid_chars": "Client price: only digits, dot or comma are allowed",
+    "gross_high": "Client price is much higher than net price — check the markup"
+  },
+  "provider_services_tabs_hint": "Create marketplace services and manage already created offers.",
+  "confirm_delete_title": "Delete service?",
+  "confirm_delete_desc": "This action cannot be undone.",
+  "rejected_reason": "Rejection reason",
+  "rejected_reason_empty": "Reason not specified",
+  "service_image": "Service image",
+  "image_too_big": "File \"{{name}}\" is larger than 3 MB after compression and was skipped",
+  "seats": "Seats",
+  "seats_placeholder": "Example: 4 seats",
+  "direction.country": "Destination country",
+  "direction.from": "Departure city",
+  "direction.to": "Arrival city"
 }
