@@ -2158,5 +2158,73 @@
     "preview_tip": "This is how a client will perceive your service. Add proof and photos to increase trust.",
     "proof_trust_title": "Proof increases trust",
     "proof_trust_hint": "Confirmation screenshots help clients decide faster to unlock provider contacts."
+  },
+  "dashboardServices": {
+    "supplierStudio": {
+      "flightDetails": {
+        "label": "Flight details",
+        "title": "Flight details",
+        "subtitle": "Add flight segments exactly as they should appear in the service card.",
+        "hint": "Enter each flight segment on a separate line. Use: date, flight number, route, departure time, arrival time. Add baggage on a separate line.",
+        "hintShort": "One segment per line. Baggage can be written on a separate line.",
+        "placeholder": "15MAY HH-9911 TASDXB 18:00 21:00\n22MAY HH-9912 DXBTAS 22:00 05:00\n\n23KG/8KG",
+        "insertExample": "Insert example",
+        "clearExample": "Clear example",
+        "formatTitle": "Flight format example",
+        "formatExample": "15MAY HH-9911 TASDXB 18:00 21:00\n22MAY HH-9912 DXBTAS 22:00 05:00\n\n23KG/8KG",
+        "formatHelp": "Format: 15MAY HH-9911 TASDXB 18:00 21:00. Route is written as airport codes without spaces, for example TASDXB.",
+        "lineFormat": "DDMMM FLIGHT ROUTE DEP_TIME ARR_TIME",
+        "baggageTitle": "Baggage format",
+        "baggageExample": "23KG/8KG",
+        "baggageHelp": "Checked baggage / hand luggage, for example 23KG/8KG.",
+        "examples": {
+          "outbound": "15MAY HH-9911 TASDXB 18:00 21:00",
+          "return": "22MAY HH-9912 DXBTAS 22:00 05:00",
+          "baggage": "23KG/8KG"
+        },
+        "placeholders": {
+          "textarea": "15MAY HH-9911 TASDXB 18:00 21:00\n22MAY HH-9912 DXBTAS 22:00 05:00\n\n23KG/8KG",
+          "singleLine": "15MAY HH-9911 TASDXB 18:00 21:00",
+          "baggage": "23KG/8KG"
+        },
+        "validation": {
+          "required": "Flight details are required.",
+          "empty": "Add at least one flight segment.",
+          "invalidFormat": "Flight details format is incorrect. Use: 15MAY HH-9911 TASDXB 18:00 21:00",
+          "invalidLine": "Line {{line}} has an incorrect flight format.",
+          "invalidDate": "Flight date must be written like 15MAY.",
+          "invalidFlightNumber": "Flight number must be written like HH-9911.",
+          "invalidRoute": "Route must be written with airport codes, for example TASDXB or DXBTAS.",
+          "invalidTime": "Time must be written in 24-hour format, for example 18:00.",
+          "invalidBaggage": "Baggage must be written like 23KG/8KG.",
+          "tooLong": "Flight details are too long. Keep only the important flight and baggage information."
+        }
+      }
+    },
+    "flightDetails": {
+      "label": "Flight details",
+      "hint": "Enter each flight segment on a separate line. Use: date, flight number, route, departure time, arrival time. Add baggage allowance on a separate line if needed.",
+      "hintShort": "One flight segment per line. Add baggage on a separate line.",
+      "placeholder": "15MAY HH-9911 TASDXB 18:00 21:00\n22MAY HH-9912 DXBTAS 22:00 05:00\n\n23KG/8KG",
+      "insertExample": "Insert example",
+      "formatTitle": "Flight format example",
+      "formatExample": "15MAY HH-9911 TASDXB 18:00 21:00\n22MAY HH-9912 DXBTAS 22:00 05:00\n\n23KG/8KG",
+      "validation": {
+        "required": "Flight details are required.",
+        "invalidFormat": "Flight details format is incorrect. Use: 15MAY HH-9911 TASDXB 18:00 21:00"
+      }
+    }
+  },
+  "_travellaFlightDetailsUsage": {
+    "recommendedTKeys": {
+      "label": "dashboardServices.supplierStudio.flightDetails.label",
+      "hint": "dashboardServices.supplierStudio.flightDetails.hint",
+      "placeholder": "dashboardServices.supplierStudio.flightDetails.placeholder",
+      "insertExample": "dashboardServices.supplierStudio.flightDetails.insertExample",
+      "formatExample": "dashboardServices.supplierStudio.flightDetails.formatExample",
+      "validationRequired": "dashboardServices.supplierStudio.flightDetails.validation.required",
+      "validationInvalidFormat": "dashboardServices.supplierStudio.flightDetails.validation.invalidFormat"
+    },
+    "regexHint": "Flight line: ^\\d{2}[A-Z]{3}\\s+[A-Z0-9]{2}-?\\d{2,5}\\s+[A-Z]{6}\\s+\\d{2}:\\d{2}\\s+\\d{2}:\\d{2}$ ; baggage: ^\\d{1,2}KG/\\d{1,2}KG$"
   }
 }
