@@ -29,18 +29,6 @@ function toNumber(v, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
-function normalizePhone(v = "") {
-  return String(v || "").replace(/\D/g, "");
-}
-
-function tiyinToSum(v) {
-  return Number((toNumber(v) / 100).toFixed(2));
-}
-
-function sumToTiyin(v) {
-  return Math.round(toNumber(v) * 100);
-}
-
 function success(id, result) {
   return {
     jsonrpc: "2.0",
@@ -84,7 +72,6 @@ function extractCredentials(req) {
 
 function validateAuth(req) {
   const creds = extractCredentials(req);
-
   if (!creds) return false;
 
   const allowedLogin =
@@ -97,10 +84,7 @@ function validateAuth(req) {
     process.env.PAYME_KEY ||
     "";
 
-  return (
-    creds.login === allowedLogin &&
-    creds.key === allowedKey
-  );
+  return creds.login === allowedLogin && creds.key === allowedKey;
 }
 
 async function ensureSchema(client) {
@@ -177,6 +161,16 @@ async function ensureSchema(client) {
     ALTER TABLE topup_orders
     ADD COLUMN IF NOT EXISTS redirect_url TEXT
   `);
+
+  await client.query(`
+    ALTER TABLE topup_orders
+    ADD COLUMN IF NOT EXISTS purpose TEXT
+  `);
+
+  await client.query(`
+    ALTER TABLE topup_orders
+    ADD COLUMN IF NOT EXISTS support_donation_id BIGINT
+  `);
 }
 
 async function advisoryLock(client, key) {
@@ -187,9 +181,92 @@ async function advisoryLock(client, key) {
 
   const bigint = BigInt("0x" + hash.slice(0, 15));
 
+  await client.query(`SELECT pg_advisory_xact_lock($1)`, [
+    bigint.toString(),
+  ]);
+}
+
+async function relationExists(client, relationName) {
+  const { rows } = await client.query(
+    `SELECT to_regclass($1) AS reg`,
+    [`public.${relationName}`]
+  );
+
+  return !!rows[0]?.reg;
+}
+
+function isProviderSupportOrder(order) {
+  return (
+    order?.order_type === "provider_support" ||
+    order?.purpose === "provider_support" ||
+    !!order?.support_donation_id
+  );
+}
+
+async function syncProviderSupportPaid({
+  client,
+  order,
+  transactionId,
+}) {
+  if (!isProviderSupportOrder(order)) return;
+
+  const exists = await relationExists(client, "provider_support_donations");
+  if (!exists) return;
+
   await client.query(
-    `SELECT pg_advisory_xact_lock($1)`,
-    [bigint.toString()]
+    `
+      UPDATE provider_support_donations
+      SET
+        status = 'paid',
+        paid_at = COALESCE(paid_at, NOW()),
+        payme_id = COALESCE(payme_id, $2),
+        updated_at = NOW()
+      WHERE id = $1
+         OR payme_order_id = $3
+    `,
+    [
+      order.support_donation_id || null,
+      transactionId,
+      order.id,
+    ]
+  );
+}
+
+async function syncProviderSupportCanceled({
+  client,
+  order,
+  transactionId,
+  refunded = false,
+}) {
+  if (!isProviderSupportOrder(order)) return;
+
+  const exists = await relationExists(client, "provider_support_donations");
+  if (!exists) return;
+
+  await client.query(
+    `
+      UPDATE provider_support_donations
+      SET
+        status = CASE
+          WHEN $4::boolean THEN 'refunded'
+          ELSE 'canceled'
+        END,
+        cancelled_at = COALESCE(cancelled_at, NOW()),
+        failed_at = CASE
+          WHEN $4::boolean THEN failed_at
+          ELSE COALESCE(failed_at, NOW())
+        END,
+        payme_id = COALESCE(payme_id, $2),
+        updated_at = NOW()
+      WHERE id = $1
+         OR payme_order_id = $3
+    `,
+    [
+      order.support_donation_id || null,
+      transactionId,
+      order.id,
+      refunded,
+    ]
   );
 }
 
@@ -239,7 +316,6 @@ function isExpired(order) {
   if (!order?.expires_at) return false;
 
   const ts = new Date(order.expires_at).getTime();
-
   if (!Number.isFinite(ts)) return false;
 
   return ts < Date.now();
@@ -265,12 +341,7 @@ async function insertLedgerEffect(
       DO NOTHING
       RETURNING id
     `,
-    [
-      effectKey,
-      effectType,
-      orderId,
-      transactionId,
-    ]
+    [effectKey, effectType, orderId, transactionId]
   );
 
   return !!res.rows[0];
@@ -393,8 +464,7 @@ async function processAutoUnlock({
     return;
   }
 
-  const effectKey =
-    `unlock_after_pay:${transactionId}`;
+  const effectKey = `unlock_after_pay:${transactionId}`;
 
   const inserted = await insertLedgerEffect(
     client,
@@ -404,9 +474,7 @@ async function processAutoUnlock({
     transactionId
   );
 
-  if (!inserted) {
-    return;
-  }
+  if (!inserted) return;
 
   await unlockContactSafe({
     client,
@@ -468,9 +536,15 @@ async function performTransaction({
   transaction,
   order,
 }) {
-  if (
-    transaction.state === PAYME_STATE.COMPLETED
-  ) {
+  if (transaction.state === PAYME_STATE.COMPLETED) {
+    if (isProviderSupportOrder(order)) {
+      await syncProviderSupportPaid({
+        client,
+        order,
+        transactionId: transaction.payme_id,
+      });
+    }
+
     return transaction;
   }
 
@@ -482,21 +556,25 @@ async function performTransaction({
 
   if (isExpired(order)) {
     await markOrderExpired(client, order.id);
-
     throw new Error("ORDER_EXPIRED");
   }
 
   if (order.status === "paid") {
+    if (isProviderSupportOrder(order)) {
+      await syncProviderSupportPaid({
+        client,
+        order,
+        transactionId: transaction.payme_id,
+      });
+    }
+
     const { rows } = await client.query(
       `
         UPDATE payme_transactions
         SET
           state = $2,
           performed = TRUE,
-          perform_time = COALESCE(
-            perform_time,
-            $3
-          ),
+          perform_time = COALESCE(perform_time, $3),
           updated_at = NOW()
         WHERE id = $1
         RETURNING *
@@ -511,10 +589,9 @@ async function performTransaction({
     return rows[0];
   }
 
-  const effectKey =
-    `perform_credit:${transaction.payme_id}`;
+  const effectKey = `perform_credit:${transaction.payme_id}`;
 
-  const alreadyCredited =
+  const alreadyPerformed =
     !(await insertLedgerEffect(
       client,
       effectKey,
@@ -523,7 +600,11 @@ async function performTransaction({
       transaction.payme_id
     ));
 
-  if (!alreadyCredited) {
+  if (!alreadyPerformed && !isProviderSupportOrder(order)) {
+    if (!order.client_id) {
+      throw new Error("CLIENT_ID_REQUIRED_FOR_TOPUP");
+    }
+
     await creditClientBalance({
       client,
       clientId: order.client_id,
@@ -533,12 +614,20 @@ async function performTransaction({
     });
   }
 
+  if (isProviderSupportOrder(order)) {
+    await syncProviderSupportPaid({
+      client,
+      order,
+      transactionId: transaction.payme_id,
+    });
+  }
+
   await client.query(
     `
       UPDATE topup_orders
       SET
         status = 'paid',
-        paid_at = NOW()
+        paid_at = COALESCE(paid_at, NOW())
       WHERE id = $1
     `,
     [order.id]
@@ -556,10 +645,7 @@ async function performTransaction({
       SET
         state = $2,
         performed = TRUE,
-        perform_time = COALESCE(
-          perform_time,
-          $3
-        ),
+        perform_time = COALESCE(perform_time, $3),
         updated_at = NOW()
       WHERE id = $1
       RETURNING *
@@ -586,6 +672,15 @@ async function cancelTransaction({
     transaction.state === PAYME_STATE.CANCELED ||
     transaction.state === PAYME_STATE.CANCELED_AFTER_COMPLETE
   ) {
+    if (order && isProviderSupportOrder(order)) {
+      await syncProviderSupportCanceled({
+        client,
+        order,
+        transactionId: transaction.payme_id,
+        refunded: transaction.state === PAYME_STATE.CANCELED_AFTER_COMPLETE,
+      });
+    }
+
     return transaction;
   }
 
@@ -594,13 +689,22 @@ async function cancelTransaction({
   if (transaction.state === PAYME_STATE.COMPLETED) {
     nextState = PAYME_STATE.CANCELED_AFTER_COMPLETE;
 
-    if (order?.client_id) {
+    if (order?.client_id && !isProviderSupportOrder(order)) {
       await debitRefund({
         client,
         clientId: order.client_id,
         amountTiyin: transaction.amount,
         orderId: order.id,
         transactionId: transaction.payme_id,
+      });
+    }
+
+    if (order && isProviderSupportOrder(order)) {
+      await syncProviderSupportCanceled({
+        client,
+        order,
+        transactionId: transaction.payme_id,
+        refunded: true,
       });
     }
   }
@@ -624,6 +728,18 @@ async function cancelTransaction({
       `,
       [order.id]
     );
+
+    if (
+      isProviderSupportOrder(order) &&
+      transaction.state !== PAYME_STATE.COMPLETED
+    ) {
+      await syncProviderSupportCanceled({
+        client,
+        order,
+        transactionId: transaction.payme_id,
+        refunded: false,
+      });
+    }
   }
 
   const { rows } = await client.query(
