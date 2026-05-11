@@ -105,7 +105,21 @@ async function ensureSchema(client) {
       updated_at TIMESTAMP DEFAULT NOW()
     )
   `);
-
+  
+  await client.query(`
+    ALTER TABLE payme_transactions
+      ADD COLUMN IF NOT EXISTS order_type TEXT,
+      ADD COLUMN IF NOT EXISTS amount BIGINT NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS state INTEGER NOT NULL DEFAULT 1,
+      ADD COLUMN IF NOT EXISTS create_time BIGINT,
+      ADD COLUMN IF NOT EXISTS perform_time BIGINT,
+      ADD COLUMN IF NOT EXISTS cancel_time BIGINT,
+      ADD COLUMN IF NOT EXISTS reason INTEGER,
+      ADD COLUMN IF NOT EXISTS raw JSONB,
+      ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW(),
+      ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()
+  `);
+  
   await client.query(`
     CREATE TABLE IF NOT EXISTS payme_ledger_effects (
       id BIGSERIAL PRIMARY KEY,
