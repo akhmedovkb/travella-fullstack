@@ -685,7 +685,6 @@ async function performTransaction({
   return rows[0];
 }
 
-```js
 async function cancelTransaction({
   client,
   transaction,
