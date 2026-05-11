@@ -358,7 +358,7 @@ async function insertLedgerEffect(
       VALUES ($1, $2, $3, $4)
       ON CONFLICT (effect_key)
       DO NOTHING
-      RETURNING id
+      RETURNING effect_key
     `,
     [effectKey, effectType, orderId, transactionId]
   );
