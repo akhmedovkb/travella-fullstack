@@ -7,7 +7,6 @@ const { logUnlockFunnel } = require("../utils/contactUnlockFunnel");
 const {
   unlockContactTx,
   getBalanceFromLedger,
-  syncClientBalanceMirror,
 } = require("../utils/contactUnlock");
 
 let _clientsBalanceColumn = null;
@@ -42,10 +41,33 @@ function normalizePositiveTiyin(value) {
   return Math.max(0, Math.trunc(n));
 }
 
+function normalizeTopupAmountTiyin(body = {}) {
+  if (body.amount_tiyin !== undefined && body.amount_tiyin !== null) {
+    return normalizePositiveTiyin(body.amount_tiyin);
+  }
+
+  const sumValue = body.amount ?? body.sum;
+  return sumToTiyin(sumValue);
+}
+
 function getOrderExpiryDate(minutes = 30) {
   const ttl = Number(process.env.PAYME_ORDER_TTL_MINUTES || minutes);
   const safeTtl = Number.isFinite(ttl) && ttl > 0 ? ttl : minutes;
   return new Date(Date.now() + safeTtl * 60 * 1000);
+}
+
+function buildPaymeCheckoutUrl({ merchantId, orderId, amountTiyin, redirectUrl }) {
+  const checkoutBase = String(process.env.PAYME_CHECKOUT_URL || "https://checkout.paycom.uz").replace(/\/+$/, "");
+
+  const raw = [
+    `m=${merchantId}`,
+    `ac.order_id=${orderId}`,
+    `a=${amountTiyin}`,
+    redirectUrl ? `c=${redirectUrl}` : "",
+  ].filter(Boolean).join(";");
+
+  const encoded = Buffer.from(raw, "utf8").toString("base64");
+  return `${checkoutBase}/${encoded}`;
 }
 
 async function safeLogUnlockFunnel(dbOrPayload, maybePayload = null) {
@@ -149,19 +171,27 @@ async function ensureContactUnlocksShape(db) {
       ON client_service_contact_unlocks(client_id, service_id)
   `);
 }
+
 async function ensureTopupOrdersShape(db) {
   await db.query(`
     CREATE TABLE IF NOT EXISTS topup_orders (
       id BIGSERIAL PRIMARY KEY,
       client_id BIGINT NOT NULL,
-      amount BIGINT NOT NULL,
+      amount BIGINT NOT NULL DEFAULT 0,
+      amount_tiyin BIGINT NOT NULL DEFAULT 0,
+      provider TEXT NOT NULL DEFAULT 'payme',
       status TEXT NOT NULL DEFAULT 'created',
+      purpose TEXT NOT NULL DEFAULT 'client_topup',
+      order_type TEXT NOT NULL DEFAULT 'balance_topup',
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `);
 
   await db.query(`
     ALTER TABLE topup_orders
+      ADD COLUMN IF NOT EXISTS amount_tiyin BIGINT NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT 'payme',
+      ADD COLUMN IF NOT EXISTS purpose TEXT NOT NULL DEFAULT 'client_topup',
       ADD COLUMN IF NOT EXISTS order_type TEXT NOT NULL DEFAULT 'balance_topup',
       ADD COLUMN IF NOT EXISTS service_id BIGINT,
       ADD COLUMN IF NOT EXISTS provider_id BIGINT,
@@ -173,6 +203,28 @@ async function ensureTopupOrdersShape(db) {
       ADD COLUMN IF NOT EXISTS canceled_at TIMESTAMPTZ,
       ADD COLUMN IF NOT EXISTS failed_at TIMESTAMPTZ,
       ADD COLUMN IF NOT EXISTS meta JSONB
+  `);
+
+  await db.query(`
+    UPDATE topup_orders
+       SET amount_tiyin = amount
+     WHERE COALESCE(amount_tiyin, 0) = 0
+       AND COALESCE(amount, 0) > 0
+  `);
+
+  await db.query(`
+    UPDATE topup_orders
+       SET provider = 'payme'
+     WHERE provider IS NULL OR TRIM(provider) = ''
+  `);
+
+  await db.query(`
+    UPDATE topup_orders
+       SET purpose = CASE
+         WHEN order_type = 'unlock_contact' THEN 'unlock_contact'
+         ELSE 'client_topup'
+       END
+     WHERE purpose IS NULL OR TRIM(purpose) = ''
   `);
 
   await db.query(`
@@ -217,13 +269,9 @@ async function expireOldOrders(db, clientId = null) {
 }
 
 async function findClientId(req) {
-  if (req.user?.role === "client" && req.user?.id) {
-    return req.user.id;
-  }
-
+  if (req.user?.role === "client" && req.user?.id) return req.user.id;
   if (req.user?.clientId) return req.user.clientId;
   if (req.user?.client_id) return req.user.client_id;
-
   return null;
 }
 
@@ -231,10 +279,7 @@ async function getClientBalance(req, res) {
   const clientId = await findClientId(req);
 
   if (!clientId) {
-    return res.status(401).json({
-      ok: false,
-      error: "client_auth_required",
-    });
+    return res.status(401).json({ ok: false, error: "client_auth_required" });
   }
 
   const db = await pool.connect();
@@ -243,7 +288,7 @@ async function getClientBalance(req, res) {
     await ensureBillingShape(db);
     await expireOldOrders(db, clientId);
 
-    const settings = await getContactUnlockSettings();
+    const settings = await getContactUnlockSettings(db);
     const balance = await syncClientBalanceMirrorLocal(db, clientId);
 
     return res.json({
@@ -252,16 +297,14 @@ async function getClientBalance(req, res) {
       balance_sum: tiyinToSum(balance),
       balance_tiyin: balance,
       unlock_price: settings.unlockPriceTiyin,
+      unlock_price_tiyin: settings.unlockPriceTiyin,
       unlock_price_sum: tiyinToSum(settings.unlockPriceTiyin),
       unlock_is_paid: settings.unlockIsPaid,
       unlock_base_price: settings.unlockBasePrice,
     });
   } catch (e) {
     console.error("[client-billing] getClientBalance:", e);
-    return res.status(500).json({
-      ok: false,
-      error: "balance_failed",
-    });
+    return res.status(500).json({ ok: false, error: "balance_failed" });
   } finally {
     db.release();
   }
@@ -271,14 +314,10 @@ async function getClientBalanceLedger(req, res) {
   const clientId = await findClientId(req);
 
   if (!clientId) {
-    return res.status(401).json({
-      ok: false,
-      error: "client_auth_required",
-    });
+    return res.status(401).json({ ok: false, error: "client_auth_required" });
   }
 
   const limit = clampInt(req.query.limit, 50, 1, 200);
-
   const db = await pool.connect();
 
   try {
@@ -308,67 +347,38 @@ async function getClientBalanceLedger(req, res) {
       [clientId, limit]
     );
 
-    return res.json({
-      ok: true,
-      items: rows,
-    });
+    return res.json({ ok: true, items: rows, rows });
   } catch (e) {
     console.error("[client-billing] getClientBalanceLedger:", e);
-    return res.status(500).json({
-      ok: false,
-      error: "ledger_failed",
-    });
+    return res.status(500).json({ ok: false, error: "ledger_failed" });
   } finally {
     db.release();
   }
 }
+
 async function createTopupOrder(req, res) {
   const clientId = await findClientId(req);
 
   if (!clientId) {
-    return res.status(401).json({
-      ok: false,
-      error: "client_auth_required",
-    });
+    return res.status(401).json({ ok: false, error: "client_auth_required" });
   }
 
-  const amountInput =
-    req.body?.amount_tiyin ??
-    req.body?.amount ??
-    req.body?.sum;
-
-  let amountTiyin = normalizePositiveTiyin(amountInput);
-
-  // backward compatibility:
-  // если пришла маленькая сумма — считаем что это SUM а не TIYIN
-  if (amountTiyin > 0 && amountTiyin < 1000) {
-    amountTiyin = sumToTiyin(amountTiyin);
-  }
-
-  const MIN_TOPUP =
-    normalizePositiveTiyin(
-      process.env.MIN_TOPUP_TIYIN || process.env.MIN_TOPUP_TIIYIN || 1000
-    );
+  const amountTiyin = normalizeTopupAmountTiyin(req.body || {});
+  const MIN_TOPUP = normalizePositiveTiyin(
+    process.env.MIN_TOPUP_TIYIN || process.env.MIN_TOPUP_TIIYIN || 1000
+  );
 
   if (amountTiyin < MIN_TOPUP) {
-    return res.status(400).json({
-      ok: false,
-      error: "invalid_amount",
-    });
+    return res.status(400).json({ ok: false, error: "invalid_amount" });
   }
 
   const db = await pool.connect();
 
   try {
     await ensureBillingShape(db);
-
     await db.query("BEGIN");
 
-    await advisoryLock(
-      db,
-      `topup:create:${clientId}`
-    );
-
+    await advisoryLock(db, `topup:create:${clientId}`);
     await expireOldOrders(db, clientId);
 
     const existingPending = await db.query(
@@ -393,11 +403,16 @@ async function createTopupOrder(req, res) {
         ok: true,
         reused: true,
         order: existingPending.rows[0],
+        order_id: existingPending.rows[0].id,
+        amount_tiyin: Number(existingPending.rows[0].amount_tiyin || existingPending.rows[0].amount || 0),
+        amount_sum: tiyinToSum(existingPending.rows[0].amount_tiyin || existingPending.rows[0].amount || 0),
+        pay_url: existingPending.rows[0].pay_url,
+        redirect_url: existingPending.rows[0].redirect_url,
+        expires_at: existingPending.rows[0].expires_at,
       });
     }
 
     const expiresAt = getOrderExpiryDate();
-
     const redirectUrl =
       req.body?.redirect_url ||
       req.body?.redirectUrl ||
@@ -411,6 +426,7 @@ async function createTopupOrder(req, res) {
           amount_tiyin,
           provider,
           status,
+          purpose,
           order_type,
           redirect_url,
           expires_at,
@@ -420,8 +436,9 @@ async function createTopupOrder(req, res) {
           $1,
           $2,
           $2,
-          'created',
           'payme',
+          'created',
+          'client_topup',
           'balance_topup',
           $3,
           $4,
@@ -443,33 +460,21 @@ async function createTopupOrder(req, res) {
     );
 
     const order = rows[0];
+    const merchantId = process.env.PAYME_MERCHANT_ID || process.env.PAYME_CHECKOUT_ID || "";
 
-    const merchantId =
-      process.env.PAYME_MERCHANT_ID ||
-      process.env.PAYME_CHECKOUT_ID ||
-      "";
+    if (!merchantId) {
+      throw new Error("PAYME_MERCHANT_ID_MISSING");
+    }
 
-    const account = {
-      order_id: order.id,
-    };
-
-    const encoded = Buffer.from(
-      JSON.stringify({
-        m: merchantId,
-        ac: account,
-        a: amountTiyin,
-      })
-    ).toString("base64");
-
-    const payUrl =
-      `https://checkout.paycom.uz/${encoded}`;
+    const payUrl = buildPaymeCheckoutUrl({
+      merchantId,
+      orderId: order.id,
+      amountTiyin,
+      redirectUrl,
+    });
 
     await db.query(
-      `
-        UPDATE topup_orders
-        SET pay_url = $2
-        WHERE id = $1
-      `,
+      `UPDATE topup_orders SET pay_url = $2 WHERE id = $1`,
       [order.id, payUrl]
     );
 
@@ -490,11 +495,7 @@ async function createTopupOrder(req, res) {
     } catch {}
 
     console.error("[client-billing] createTopupOrder:", e);
-
-    return res.status(500).json({
-      ok: false,
-      error: "topup_create_failed",
-    });
+    return res.status(500).json({ ok: false, error: "topup_create_failed" });
   } finally {
     db.release();
   }
@@ -504,43 +505,25 @@ async function autoUnlockAfterTopup(req, res) {
   const clientId = await findClientId(req);
 
   if (!clientId) {
-    return res.status(401).json({
-      ok: false,
-      error: "client_auth_required",
-    });
+    return res.status(401).json({ ok: false, error: "client_auth_required" });
   }
 
-  const serviceId = toIntOrNull(
-    req.body?.service_id ||
-      req.body?.serviceId
-  );
+  const serviceId = toIntOrNull(req.body?.service_id || req.body?.serviceId);
 
   if (!serviceId) {
-    return res.status(400).json({
-      ok: false,
-      error: "service_required",
-    });
+    return res.status(400).json({ ok: false, error: "service_required" });
   }
 
   const db = await pool.connect();
 
   try {
     await ensureBillingShape(db);
-
-    const settings = await getContactUnlockSettings();
-
-    const unlockPrice =
-      normalizePositiveTiyin(
-        settings.unlockPriceTiyin
-      );
+    const settings = await getContactUnlockSettings(db);
+    const unlockPrice = normalizePositiveTiyin(settings.unlockPriceTiyin);
 
     await db.query("BEGIN");
 
-    await advisoryLock(
-      db,
-      `unlock:auto:${clientId}:${serviceId}`
-    );
-
+    await advisoryLock(db, `unlock:auto:${clientId}:${serviceId}`);
     await expireOldOrders(db, clientId);
 
     const alreadyUnlocked = await db.query(
@@ -556,11 +539,7 @@ async function autoUnlockAfterTopup(req, res) {
 
     if (alreadyUnlocked.rows[0]) {
       await db.query("COMMIT");
-
-      return res.json({
-        ok: true,
-        already_unlocked: true,
-      });
+      return res.json({ ok: true, already_unlocked: true, alreadyUnlocked: true });
     }
 
     const existingPending = await db.query(
@@ -585,10 +564,16 @@ async function autoUnlockAfterTopup(req, res) {
         ok: true,
         reused: true,
         order: existingPending.rows[0],
+        order_id: existingPending.rows[0].id,
+        amount_tiyin: Number(existingPending.rows[0].amount_tiyin || existingPending.rows[0].amount || 0),
+        amount_sum: tiyinToSum(existingPending.rows[0].amount_tiyin || existingPending.rows[0].amount || 0),
         pay_url: existingPending.rows[0].pay_url,
+        redirect_url: existingPending.rows[0].redirect_url,
+        expires_at: existingPending.rows[0].expires_at,
       });
     }
-        const balance = await getBalanceFromLedger(db, clientId);
+
+    const balance = await getBalanceFromLedger(db, clientId);
 
     if (!settings.unlockIsPaid || balance >= unlockPrice) {
       const result = await unlockContactTx(db, {
@@ -598,7 +583,6 @@ async function autoUnlockAfterTopup(req, res) {
       });
 
       await syncClientBalanceMirrorLocal(db, clientId);
-
       await db.query("COMMIT");
 
       await safeLogUnlockFunnel(pool, {
@@ -611,12 +595,12 @@ async function autoUnlockAfterTopup(req, res) {
       return res.json({
         ok: true,
         unlocked: true,
+        alreadyUnlocked: !!result?.alreadyUnlocked,
         result,
       });
     }
 
     const expiresAt = getOrderExpiryDate();
-
     const redirectUrl =
       req.body?.redirect_url ||
       req.body?.redirectUrl ||
@@ -630,6 +614,7 @@ async function autoUnlockAfterTopup(req, res) {
           amount_tiyin,
           provider,
           status,
+          purpose,
           order_type,
           service_id,
           redirect_url,
@@ -642,6 +627,7 @@ async function autoUnlockAfterTopup(req, res) {
           $2,
           'payme',
           'created',
+          'unlock_contact',
           'unlock_contact',
           $3,
           $4,
@@ -666,31 +652,21 @@ async function autoUnlockAfterTopup(req, res) {
     );
 
     const order = rows[0];
+    const merchantId = process.env.PAYME_MERCHANT_ID || process.env.PAYME_CHECKOUT_ID || "";
 
-    const merchantId =
-      process.env.PAYME_MERCHANT_ID ||
-      process.env.PAYME_CHECKOUT_ID ||
-      "";
+    if (!merchantId) {
+      throw new Error("PAYME_MERCHANT_ID_MISSING");
+    }
 
-    const encoded = Buffer.from(
-      JSON.stringify({
-        m: merchantId,
-        ac: {
-          order_id: order.id,
-        },
-        a: unlockPrice,
-      })
-    ).toString("base64");
-
-    const payUrl =
-      `https://checkout.paycom.uz/${encoded}`;
+    const payUrl = buildPaymeCheckoutUrl({
+      merchantId,
+      orderId: order.id,
+      amountTiyin: unlockPrice,
+      redirectUrl,
+    });
 
     await db.query(
-      `
-        UPDATE topup_orders
-        SET pay_url = $2
-        WHERE id = $1
-      `,
+      `UPDATE topup_orders SET pay_url = $2 WHERE id = $1`,
       [order.id, payUrl]
     );
 
@@ -719,11 +695,7 @@ async function autoUnlockAfterTopup(req, res) {
     } catch {}
 
     console.error("[client-billing] autoUnlockAfterTopup:", e);
-
-    return res.status(500).json({
-      ok: false,
-      error: "auto_unlock_failed",
-    });
+    return res.status(500).json({ ok: false, error: "auto_unlock_failed" });
   } finally {
     db.release();
   }
@@ -733,36 +705,22 @@ async function unlockContact(req, res) {
   const clientId = await findClientId(req);
 
   if (!clientId) {
-    return res.status(401).json({
-      ok: false,
-      error: "client_auth_required",
-    });
+    return res.status(401).json({ ok: false, error: "client_auth_required" });
   }
 
-  const serviceId = toIntOrNull(
-    req.body?.service_id ||
-      req.body?.serviceId
-  );
+  const serviceId = toIntOrNull(req.body?.service_id || req.body?.serviceId);
 
   if (!serviceId) {
-    return res.status(400).json({
-      ok: false,
-      error: "service_required",
-    });
+    return res.status(400).json({ ok: false, error: "service_required" });
   }
 
   const db = await pool.connect();
 
   try {
     await ensureBillingShape(db);
-
     await db.query("BEGIN");
 
-    await advisoryLock(
-      db,
-      `unlock:manual:${clientId}:${serviceId}`
-    );
-
+    await advisoryLock(db, `unlock:manual:${clientId}:${serviceId}`);
     await expireOldOrders(db, clientId);
 
     const result = await unlockContactTx(db, {
@@ -772,22 +730,16 @@ async function unlockContact(req, res) {
     });
 
     await syncClientBalanceMirrorLocal(db, clientId);
-
     await db.query("COMMIT");
 
     await safeLogUnlockFunnel(pool, {
       clientId,
       serviceId,
       source: "web_manual_unlock",
-      step: result?.alreadyUnlocked
-        ? "already_unlocked"
-        : "unlocked",
+      step: result?.alreadyUnlocked ? "already_unlocked" : "unlocked",
     });
 
-    return res.json({
-      ok: true,
-      ...result,
-    });
+    return res.json({ ok: true, ...result });
   } catch (e) {
     try {
       await db.query("ROLLBACK");
@@ -805,11 +757,9 @@ async function unlockContact(req, res) {
 }
 
 module.exports = {
-  // старые имена, которые уже ждёт clientBillingRoutes.js
   clientBalance: getClientBalance,
   clientBalanceLedger: getClientBalanceLedger,
 
-  // новые/совместимые имена
   getClientBalance,
   getClientBalanceLedger,
 
