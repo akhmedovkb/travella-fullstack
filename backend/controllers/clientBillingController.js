@@ -408,6 +408,7 @@ async function createTopupOrder(req, res) {
         INSERT INTO topup_orders (
           client_id,
           amount,
+          amount_tiyin,
           status,
           order_type,
           redirect_url,
