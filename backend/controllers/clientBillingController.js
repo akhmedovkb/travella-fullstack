@@ -57,14 +57,18 @@ function getOrderExpiryDate(minutes = 30) {
 }
 
 function buildPaymeCheckoutUrl({ merchantId, orderId, amountTiyin, redirectUrl }) {
-  const checkoutBase = String(process.env.PAYME_CHECKOUT_URL || "https://checkout.paycom.uz").replace(/\/+$/, "");
+  const checkoutBase = String(
+    process.env.PAYME_CHECKOUT_URL || "https://checkout.paycom.uz"
+  ).replace(/\/+$/, "");
 
   const raw = [
     `m=${merchantId}`,
     `ac.order_id=${orderId}`,
     `a=${amountTiyin}`,
     redirectUrl ? `c=${redirectUrl}` : "",
-  ].filter(Boolean).join(";");
+  ]
+    .filter(Boolean)
+    .join(";");
 
   const encoded = Buffer.from(raw, "utf8").toString("base64");
   return `${checkoutBase}/${encoded}`;
@@ -601,7 +605,7 @@ async function autoUnlockAfterTopup(req, res) {
     }
 
     const expiresAt = getOrderExpiryDate();
-    const redirectUrl =
+    const initialRedirectUrl =
       req.body?.redirect_url ||
       req.body?.redirectUrl ||
       `${process.env.SITE_URL || ""}/client/balance?service_id=${serviceId}`;
@@ -640,7 +644,7 @@ async function autoUnlockAfterTopup(req, res) {
         clientId,
         unlockPrice,
         serviceId,
-        redirectUrl,
+        initialRedirectUrl,
         expiresAt,
         {
           session_key: getSessionKey(req),
@@ -658,16 +662,25 @@ async function autoUnlockAfterTopup(req, res) {
       throw new Error("PAYME_MERCHANT_ID_MISSING");
     }
 
+    const finalRedirectUrl =
+      `${process.env.SITE_URL || ""}/client/balance?service_id=${serviceId}&order_id=${order.id}`;
+
     const payUrl = buildPaymeCheckoutUrl({
       merchantId,
       orderId: order.id,
       amountTiyin: unlockPrice,
-      redirectUrl,
+      redirectUrl: finalRedirectUrl,
     });
 
     await db.query(
-      `UPDATE topup_orders SET pay_url = $2 WHERE id = $1`,
-      [order.id, payUrl]
+      `
+        UPDATE topup_orders
+        SET
+          pay_url = $2,
+          redirect_url = $3
+        WHERE id = $1
+      `,
+      [order.id, payUrl, finalRedirectUrl]
     );
 
     await db.query("COMMIT");
@@ -686,7 +699,7 @@ async function autoUnlockAfterTopup(req, res) {
       amount_tiyin: unlockPrice,
       amount_sum: tiyinToSum(unlockPrice),
       pay_url: payUrl,
-      redirect_url: redirectUrl,
+      redirect_url: finalRedirectUrl,
       expires_at: expiresAt,
     });
   } catch (e) {
