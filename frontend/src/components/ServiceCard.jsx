@@ -1113,109 +1113,105 @@ async function openUnlockIntro() {
       "client"
     );
 
-    if (res?.ok && (res?.unlocked || res?.already)) {
+    if (
+      res?.ok &&
+      (res?.unlocked ||
+        res?.already ||
+        res?.already_unlocked ||
+        res?.alreadyUnlocked)
+    ) {
       if (typeof window !== "undefined" && unlockStorageKey) {
         window.localStorage.setItem(unlockStorageKey, "1");
       }
 
       setUnlocked(true);
       setShowUnlockSuccessModal(true);
+
       await postUnlockStep("unlock_success_modal_opened", {
-        already: Boolean(res?.already),
+        already: Boolean(
+          res?.already || res?.already_unlocked || res?.alreadyUnlocked
+        ),
       });
 
       window.dispatchEvent(new Event("client:balance:changed"));
 
-      const chargedSum = Number(res?.charged_sum || 0);
-
-      if (res?.already) {
-        tSuccess(
-          t("marketplace.contacts_already_opened", {
-            defaultValue: "Контакты уже были открыты",
-          })
-        );
-      } else {
-        tSuccess(
-          t("marketplace.contacts_unlocked_success", {
-            amount: chargedSum.toLocaleString("ru-RU"),
-            defaultValue: `💸 Списано ${chargedSum.toLocaleString("ru-RU")} сум · Контакты разблокированы`,
-          })
-        );
-      }
+      tSuccess(
+        t("marketplace.contacts_unlocked_success", {
+          defaultValue: "Контакты разблокированы",
+        })
+      );
 
       return;
     }
 
-      if (res?.ok && (res?.need_pay || res?.requires_payment)) {
-      const nextShortfallSum = Number(
-        res?.shortfall_sum || res?.amount_sum || res?.order?.amount_sum || 0
+    const payUrl = String(res?.pay_url || res?.order?.pay_url || "").trim();
+
+    if (res?.ok && payUrl) {
+      const amountSum = Number(
+        res?.shortfall_sum ||
+          res?.amount_sum ||
+          res?.order?.amount_sum ||
+          0
       );
 
-      setUnlockIntroPriceSum(nextShortfallSum);
+      const amountTiyin = Number(
+        res?.shortfall_tiyin ||
+          res?.amount_tiyin ||
+          res?.order?.amount_tiyin ||
+          0
+      );
+
+      const orderId = Number(res?.order_id || res?.order?.id || 0) || null;
+
+      setUnlockIntroPriceSum(amountSum);
 
       setUnlockPayModal({
-        open: false,
-        shortfallSum: nextShortfallSum,
-        shortfallTiyin: Number(
-          res?.shortfall_tiyin || res?.amount_tiyin || res?.order?.amount_tiyin || 0
-        ),
-        payUrl: String(res?.pay_url || ""),
-        orderId: Number(res?.order_id || res?.order?.id || 0) || null,
+        open: true,
+        shortfallSum: amountSum,
+        shortfallTiyin: amountTiyin,
+        payUrl,
+        orderId,
         serviceId: Number(res?.service_id || id) || Number(id) || null,
       });
 
-      setShowUnlockIntroModal(true);
-      await postUnlockStep("unlock_intro_opened", {
-        shortfall_sum: nextShortfallSum,
-        pay_url_exists: Boolean(res?.pay_url),
+      await postUnlockStep("unlock_pay_modal_opened", {
+        order_id: orderId,
+        shortfall_sum: amountSum,
+        pay_url_exists: true,
+        requires_payment: Boolean(res?.requires_payment || res?.need_pay),
+        reused: Boolean(res?.reused),
       });
-      return;
-    }
 
-    if (res?.need_pay) {
-      const nextShortfallSum = Number(
-        res?.shortfall_sum || res?.order?.amount_sum || 0
-      );
-
-      setUnlockIntroPriceSum(nextShortfallSum);
-      setShowUnlockIntroModal(true);
-      await postUnlockStep("unlock_intro_opened", {
-        shortfall_sum: nextShortfallSum,
-        pay_url_exists: Boolean(res?.pay_url),
-      });
       return;
     }
 
     throw new Error("unlock_failed");
   } catch (err) {
     const data = err?.response?.data || err?.data || {};
-    const code = data?.code || data?.error || err?.code;
+    const payUrl = String(data?.pay_url || data?.order?.pay_url || "").trim();
 
-    if (
-      data?.need_pay ||
-      code === "INSUFFICIENT_BALANCE" ||
-      code === "not_enough_balance"
-    ) {
-      const shortfallSum = Number(data?.shortfall_sum || data?.order?.amount_sum || 0);
-
-      setUnlockIntroPriceSum(shortfallSum || 0);
+    if (payUrl) {
+      const amountSum = Number(
+        data?.shortfall_sum ||
+          data?.amount_sum ||
+          data?.order?.amount_sum ||
+          0
+      );
 
       setUnlockPayModal({
-        open: false,
-        shortfallSum,
+        open: true,
+        shortfallSum: amountSum,
         shortfallTiyin: Number(
-          data?.shortfall_tiyin || data?.order?.amount_tiyin || 0
+          data?.shortfall_tiyin ||
+            data?.amount_tiyin ||
+            data?.order?.amount_tiyin ||
+            0
         ),
-        payUrl: String(data?.pay_url || ""),
+        payUrl,
         orderId: Number(data?.order_id || data?.order?.id || 0) || null,
         serviceId: Number(data?.service_id || id) || Number(id) || null,
       });
 
-      setShowUnlockIntroModal(true);
-      await postUnlockStep("unlock_intro_opened", {
-        shortfall_sum: shortfallSum,
-        pay_url_exists: Boolean(data?.pay_url),
-      });
       return;
     }
 
