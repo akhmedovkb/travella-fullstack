@@ -206,49 +206,86 @@ export default function ClientBalance() {
       })
     );
 
-    try {
-      await loadAll();
+try {
+  await loadAll();
 
-      const result = await apiPost(
-        "/api/client/unlock-contact",
-        { service_id: serviceIdFromUrl },
-        "client"
+  const maxAttempts = 8;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const result = await apiPost(
+      "/api/client/unlock-auto",
+      {
+        service_id: serviceIdFromUrl,
+        order_id: orderIdFromUrl || undefined,
+      },
+      "client"
+    );
+
+    if (
+      result?.ok &&
+      (
+        result?.unlocked ||
+        result?.already ||
+        result?.alreadyUnlocked ||
+        result?.already_unlocked
+      )
+    ) {
+      sessionStorage.setItem(returnKey, "done");
+
+      localStorage.setItem(
+        `marketplace:unlocked:${serviceIdFromUrl}`,
+        "1"
       );
 
-      if (result?.ok && (result?.unlocked || result?.already || result?.alreadyUnlocked)) {
-        sessionStorage.setItem(returnKey, "done");
-        localStorage.setItem(`marketplace:unlocked:${serviceIdFromUrl}`, "1");
-
-        tSuccess(
-          t("balance.unlocked_success", {
-            defaultValue: "Контакты открыты 🎉",
-          })
-        );
-
-        window.dispatchEvent(new Event("client:balance:changed"));
-
-        setReturnStatus(
-          t("balance.return_success", {
-            defaultValue: "Готово. Возвращаем вас к объявлению…",
-          })
-        );
-
-        redirectTimerRef.current = window.setTimeout(() => {
-          window.location.href = `/marketplace?opened=${serviceIdFromUrl}`;
-        }, 700);
-
-        return true;
-      }
-
-      setReturnStatus(
-        t("balance.return_pending", {
-          defaultValue:
-            "Оплата ещё подтверждается. Обновите страницу через несколько секунд.",
+      tSuccess(
+        t("balance.unlocked_success", {
+          defaultValue: "Контакты открыты 🎉",
         })
       );
 
-      return false;
-    } catch (e) {
+      window.dispatchEvent(
+        new Event("client:balance:changed")
+      );
+
+      setReturnStatus(
+        t("balance.return_success", {
+          defaultValue:
+            "Готово. Возвращаем вас к объявлению…",
+        })
+      );
+
+      redirectTimerRef.current = window.setTimeout(() => {
+        window.location.href =
+          `/marketplace?opened=${serviceIdFromUrl}&unlock=success`;
+      }, 700);
+
+      return true;
+    }
+
+    if (attempt < maxAttempts) {
+      setReturnStatus(
+        t("balance.return_checking_attempt", {
+          attempt,
+          defaultValue:
+            `Проверяем оплату… попытка ${attempt}/${maxAttempts}`,
+        })
+      );
+
+      await new Promise((resolve) =>
+        window.setTimeout(resolve, 1200)
+      );
+    }
+  }
+
+  setReturnStatus(
+    t("balance.return_pending", {
+      defaultValue:
+        "Оплата ещё подтверждается. Обновите страницу через несколько секунд.",
+    })
+  );
+
+  return false;
+} catch (e) {
       console.error("[ClientBalance] tryUnlockAfterReturn error:", e);
 
       setReturnStatus(
