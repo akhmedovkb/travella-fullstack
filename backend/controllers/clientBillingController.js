@@ -513,6 +513,7 @@ async function autoUnlockAfterTopup(req, res) {
   }
 
   const serviceId = toIntOrNull(req.body?.service_id || req.body?.serviceId);
+  const orderId = toIntOrNull(req.body?.order_id || req.body?.orderId);
 
   if (!serviceId) {
     return res.status(400).json({ ok: false, error: "service_required" });
@@ -546,6 +547,58 @@ async function autoUnlockAfterTopup(req, res) {
       return res.json({ ok: true, already_unlocked: true, alreadyUnlocked: true });
     }
 
+    const paidOrderParams = [clientId, serviceId];
+    let paidOrderIdFilter = "";
+    
+    if (orderId) {
+      paidOrderParams.push(orderId);
+      paidOrderIdFilter = `AND id = $${paidOrderParams.length}`;
+    }
+    
+    const paidUnlockOrder = await db.query(
+      `
+        SELECT *
+        FROM topup_orders
+        WHERE client_id = $1
+          AND service_id = $2
+          AND order_type = 'unlock_contact'
+          AND status = 'paid'
+          ${paidOrderIdFilter}
+        ORDER BY paid_at DESC NULLS LAST, id DESC
+        LIMIT 1
+      `,
+      paidOrderParams
+    );
+    
+    if (paidUnlockOrder.rows[0]) {
+      const result = await unlockContactTx(db, {
+        clientId,
+        serviceId,
+        source: "web_return_paid_order",
+        skipBalanceDeduction: true,
+        note: `Auto unlock after paid Payme order #${paidUnlockOrder.rows[0].id}`,
+      });
+    
+      await syncClientBalanceMirrorLocal(db, clientId);
+      await db.query("COMMIT");
+    
+      await safeLogUnlockFunnel(pool, {
+        clientId,
+        serviceId,
+        source: "web_return_paid_order",
+        step: result?.alreadyUnlocked
+          ? "already_unlocked_after_paid_order"
+          : "unlocked_after_paid_order",
+      });
+    
+      return res.json({
+        ok: true,
+        unlocked: true,
+        alreadyUnlocked: !!result?.alreadyUnlocked,
+        paid_order_id: paidUnlockOrder.rows[0].id,
+        result,
+      });
+    }
     const existingPending = await db.query(
       `
         SELECT *
