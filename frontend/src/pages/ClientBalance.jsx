@@ -1,6 +1,6 @@
 // frontend/src/pages/ClientBalance.jsx
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { apiGet, apiPost } from "../api";
 import { tError, tSuccess } from "../shared/toast";
 import { useTranslation } from "react-i18next";
@@ -24,16 +24,47 @@ function formatMoney(value, lang = "ru", fromTiyin = false) {
 
 function fmtTs(x, lang = "ru") {
   if (!x) return "—";
+
   try {
     const locale =
       lang === "uz" ? "uz-UZ" :
       lang === "en" ? "en-US" :
       "ru-RU";
 
-    return new Date(x).toLocaleString(locale, { timeZone: "Asia/Tashkent" });
+    return new Date(x).toLocaleString(locale, {
+      timeZone: "Asia/Tashkent",
+    });
   } catch {
     return String(x);
   }
+}
+
+function getLedgerRows(payload) {
+  if (Array.isArray(payload?.items)) return payload.items;
+  if (Array.isArray(payload?.rows)) return payload.rows;
+  if (Array.isArray(payload?.ledger)) return payload.ledger;
+  return [];
+}
+
+function getBalanceTiyin(payload) {
+  return Number(
+    payload?.balance_tiyin ??
+      payload?.balance ??
+      0
+  );
+}
+
+function getUnlockPriceTiyin(payload) {
+  return Number(
+    payload?.unlock_price_tiyin ??
+      payload?.unlock_price ??
+      payload?.unlockPriceTiyin ??
+      10000
+  );
+}
+
+function cleanNumericInput(value) {
+  return String(value || "").replace(/[^\d]/g, "");
 }
 
 const PRESET_AMOUNTS_SUM = [10000, 25000, 50000, 100000];
@@ -41,8 +72,11 @@ const PRESET_AMOUNTS_SUM = [10000, 25000, 50000, 100000];
 export default function ClientBalance() {
   const { t, i18n } = useTranslation();
 
-  const [balance, setBalance] = useState(0); // tiyin
-  const [unlockPrice, setUnlockPrice] = useState(10000); // tiyin
+  const didInitialFlowRef = useRef(false);
+  const redirectTimerRef = useRef(null);
+
+  const [balance, setBalance] = useState(0);
+  const [unlockPrice, setUnlockPrice] = useState(10000);
   const [ledger, setLedger] = useState([]);
   const [loading, setLoading] = useState(false);
   const [topupLoading, setTopupLoading] = useState(false);
@@ -52,26 +86,34 @@ export default function ClientBalance() {
   const [showAutoPayModal, setShowAutoPayModal] = useState(false);
   const [autoPayPromptSeen, setAutoPayPromptSeen] = useState(false);
   const [returnUnlockLoading, setReturnUnlockLoading] = useState(false);
+  const [returnStatus, setReturnStatus] = useState("");
 
   async function loadAll() {
     setLoading(true);
+
     try {
       const [bal, led] = await Promise.all([
         apiGet("/api/client/balance", "client"),
         apiGet("/api/client/balance/ledger?limit=50", "client"),
       ]);
 
-      setBalance(Number(bal?.balance || 0));
-      setUnlockPrice(Number(bal?.unlock_price || 10000));
-      setLedger(Array.isArray(led?.rows) ? led.rows : []);
+      setBalance(getBalanceTiyin(bal));
+      setUnlockPrice(getUnlockPriceTiyin(bal));
+      setLedger(getLedgerRows(led));
+
       window.dispatchEvent(new Event("client:balance:changed"));
+
+      return { balancePayload: bal, ledgerPayload: led };
     } catch (e) {
       console.error("[ClientBalance] loadAll error:", e);
+
       tError(
         t("balance.load_error", {
           defaultValue: "Не удалось загрузить баланс",
         })
       );
+
+      return null;
     } finally {
       setLoading(false);
     }
@@ -79,6 +121,7 @@ export default function ClientBalance() {
 
   async function doTopup(amountSumInput) {
     const sum = Math.trunc(Number(amountSumInput || 0));
+
     if (!Number.isFinite(sum) || sum <= 0) {
       return tError(
         t("balance.invalid_amount", {
@@ -88,15 +131,38 @@ export default function ClientBalance() {
     }
 
     setTopupLoading(true);
-    try {
-      const payload = { amount: sum };
-      if (serviceId) payload.service_id = serviceId;
 
-      const data = await apiPost(
-        "/api/client/balance/topup-order",
-        payload,
-        "client"
-      );
+    try {
+      const payload = {
+        amount: sum,
+      };
+
+      if (serviceId) {
+        payload.service_id = serviceId;
+        payload.redirect_url = `${window.location.origin}/client/balance?service_id=${serviceId}`;
+      } else {
+        payload.redirect_url = `${window.location.origin}/client/balance`;
+      }
+
+      const endpoint = serviceId
+        ? "/api/client/unlock-auto"
+        : "/api/client/balance/topup-order";
+
+      const data = await apiPost(endpoint, payload, "client");
+
+      if (data?.ok && (data?.unlocked || data?.already_unlocked || data?.alreadyUnlocked)) {
+        localStorage.setItem(`marketplace:unlocked:${serviceId}`, "1");
+        window.dispatchEvent(new Event("client:balance:changed"));
+
+        tSuccess(
+          t("balance.unlocked_success", {
+            defaultValue: "Контакты открыты 🎉",
+          })
+        );
+
+        window.location.href = `/marketplace?opened=${serviceId}`;
+        return;
+      }
 
       if (!data?.pay_url) {
         throw new Error("pay_url not returned");
@@ -105,13 +171,14 @@ export default function ClientBalance() {
       tSuccess(
         t("balance.topup_created", {
           amount: formatMoney(sum, i18n.language),
-          defaultValue: `Заказ на пополнение создан: ${formatMoney(sum, i18n.language)}`,
+          defaultValue: `Заказ на оплату создан: ${formatMoney(sum, i18n.language)}`,
         })
       );
 
       window.location.href = data.pay_url;
     } catch (e) {
       console.error("[ClientBalance] doTopup error:", e);
+
       tError(
         e?.message ||
           t("balance.payme_error", {
@@ -123,36 +190,74 @@ export default function ClientBalance() {
     }
   }
 
-  async function tryUnlockAfterReturn(serviceIdFromUrl) {
+  async function tryUnlockAfterReturn(serviceIdFromUrl, orderIdFromUrl) {
     if (!serviceIdFromUrl) return false;
 
+    const returnKey = `client_balance:return_unlock:${serviceIdFromUrl}:${orderIdFromUrl || "no_order"}`;
+
+    if (sessionStorage.getItem(returnKey) === "done") {
+      return true;
+    }
+
     setReturnUnlockLoading(true);
+    setReturnStatus(
+      t("balance.return_checking", {
+        defaultValue: "Проверяем оплату и открываем контакты…",
+      })
+    );
+
     try {
+      await loadAll();
+
       const result = await apiPost(
         "/api/client/unlock-contact",
         { service_id: serviceIdFromUrl },
         "client"
       );
 
-      if (result?.ok && (result?.unlocked || result?.already)) {
+      if (result?.ok && (result?.unlocked || result?.already || result?.alreadyUnlocked)) {
+        sessionStorage.setItem(returnKey, "done");
         localStorage.setItem(`marketplace:unlocked:${serviceIdFromUrl}`, "1");
+
         tSuccess(
           t("balance.unlocked_success", {
             defaultValue: "Контакты открыты 🎉",
           })
         );
+
         window.dispatchEvent(new Event("client:balance:changed"));
 
-        setTimeout(() => {
+        setReturnStatus(
+          t("balance.return_success", {
+            defaultValue: "Готово. Возвращаем вас к объявлению…",
+          })
+        );
+
+        redirectTimerRef.current = window.setTimeout(() => {
           window.location.href = `/marketplace?opened=${serviceIdFromUrl}`;
         }, 700);
 
         return true;
       }
 
+      setReturnStatus(
+        t("balance.return_pending", {
+          defaultValue:
+            "Оплата ещё подтверждается. Обновите страницу через несколько секунд.",
+        })
+      );
+
       return false;
     } catch (e) {
       console.error("[ClientBalance] tryUnlockAfterReturn error:", e);
+
+      setReturnStatus(
+        t("balance.return_failed", {
+          defaultValue:
+            "Не удалось автоматически открыть контакты. Если оплата прошла, попробуйте ещё раз через несколько секунд.",
+        })
+      );
+
       return false;
     } finally {
       setReturnUnlockLoading(false);
@@ -160,25 +265,35 @@ export default function ClientBalance() {
   }
 
   useEffect(() => {
+    if (didInitialFlowRef.current) return;
+    didInitialFlowRef.current = true;
+
     const params = new URLSearchParams(window.location.search);
-    const sid = Number(params.get("service_id"));
+    const sidRaw = params.get("service_id");
     const orderId = params.get("order_id");
+
+    const sid = Number(sidRaw);
 
     if (sid && Number.isFinite(sid)) {
       setServiceId(sid);
     }
 
     loadAll().then(async () => {
-      if (sid && orderId) {
-        const unlocked = await tryUnlockAfterReturn(sid);
+      if (sid && Number.isFinite(sid) && orderId) {
+        const unlocked = await tryUnlockAfterReturn(sid, orderId);
 
         if (!unlocked) {
-          // если unlock пока не прошёл, просто обновим баланс/ledger и оставим пользователя на странице
           await loadAll();
         }
       }
     });
-  }, [t]);
+
+    return () => {
+      if (redirectTimerRef.current) {
+        window.clearTimeout(redirectTimerRef.current);
+      }
+    };
+  }, []);
 
   const {
     balanceTiyin,
@@ -190,16 +305,14 @@ export default function ClientBalance() {
   } = useMemo(() => {
     const balanceTiyinLocal = Number(balance || 0);
     const unlockPriceTiyinLocal = Number(unlockPrice || 0);
-
     const unlockPriceSumLocal = Math.round(unlockPriceTiyinLocal / 100);
-
     const needTiyinLocal = Math.max(unlockPriceTiyinLocal - balanceTiyinLocal, 0);
     const needSumLocal = Math.round(needTiyinLocal / 100);
 
     const recommendedAmountLocal =
       needSumLocal > 0
         ? Math.ceil(needSumLocal / 10000) * 10000
-        : unlockPriceSumLocal;
+        : unlockPriceSumLocal || PRESET_AMOUNTS_SUM[0];
 
     return {
       balanceTiyin: balanceTiyinLocal,
@@ -214,13 +327,21 @@ export default function ClientBalance() {
   useEffect(() => {
     if (!serviceId) return;
     if (topupLoading) return;
+    if (returnUnlockLoading) return;
     if (needTiyin <= 0) return;
     if (autoPayPromptSeen) return;
 
     setCustomAmount(String(recommendedAmount));
     setShowAutoPayModal(true);
     setAutoPayPromptSeen(true);
-  }, [serviceId, needTiyin, recommendedAmount, topupLoading, autoPayPromptSeen]);
+  }, [
+    serviceId,
+    needTiyin,
+    recommendedAmount,
+    topupLoading,
+    returnUnlockLoading,
+    autoPayPromptSeen,
+  ]);
 
   const effectivePayAmount =
     Math.trunc(Number(customAmount || 0)) > 0
@@ -252,9 +373,9 @@ export default function ClientBalance() {
         )}
       </div>
 
-      {(loading || returnUnlockLoading) && (
+      {(loading || returnUnlockLoading || returnStatus) && (
         <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-700">
-          {t("common.loading", { defaultValue: "Загрузка…" })}
+          {returnStatus || t("common.loading", { defaultValue: "Загрузка…" })}
         </div>
       )}
 
@@ -265,6 +386,7 @@ export default function ClientBalance() {
               defaultValue: "Текущий баланс",
             })}
           </div>
+
           <div className="text-2xl font-bold">
             {formatMoney(balanceTiyin, i18n.language, true)}
           </div>
@@ -276,19 +398,21 @@ export default function ClientBalance() {
               defaultValue: "Цена открытия контактов",
             })}
           </div>
+
           <div className="text-2xl font-bold">
             {formatMoney(unlockPriceTiyin, i18n.language, true)}
           </div>
         </div>
       </div>
 
-      {needTiyin > 0 && (
+      {needTiyin > 0 && serviceId && (
         <div className="bg-red-50 border border-red-200 p-4 rounded-xl">
           <b>
             {t("balance.not_enough", {
               defaultValue: "Недостаточно средств",
             })}
           </b>
+
           <div>
             {t("balance.need_more", {
               defaultValue: "Не хватает",
@@ -314,7 +438,7 @@ export default function ClientBalance() {
             type="button"
             onClick={() => setCustomAmount(String(v))}
             className={`p-4 rounded-xl border transition ${
-              v === recommendedAmount
+              v === effectivePayAmount
                 ? "border-orange-500 bg-orange-50"
                 : "border-gray-200 bg-white hover:border-orange-300"
             }`}
@@ -344,7 +468,7 @@ export default function ClientBalance() {
       <input
         className="w-full border rounded-xl px-4 py-3"
         value={customAmount}
-        onChange={(e) => setCustomAmount(e.target.value.replace(/[^\d]/g, ""))}
+        onChange={(e) => setCustomAmount(cleanNumericInput(e.target.value))}
         placeholder={t("balance.custom_placeholder", {
           defaultValue: "Своя сумма, например 75000",
         })}
@@ -354,22 +478,30 @@ export default function ClientBalance() {
       <button
         type="button"
         onClick={() => doTopup(effectivePayAmount)}
-        disabled={topupLoading}
+        disabled={topupLoading || returnUnlockLoading}
         className="w-full py-4 bg-black text-white rounded-xl font-semibold text-lg disabled:opacity-60"
       >
         {topupLoading
           ? t("balance.creating", {
               defaultValue: "Создание…",
             })
+          : serviceId
+          ? t("balance.pay_cta_unlock", {
+              defaultValue: "🚀 Оплатить и открыть контакты",
+            })
           : t("balance.pay_cta", {
-              defaultValue: "🚀 Пополнить и открыть",
+              defaultValue: "🚀 Пополнить баланс",
             })}
       </button>
 
       <div className="text-xs text-gray-500 text-center">
-        {t("balance.instant_unlock", {
-          defaultValue: "Контакты откроются автоматически после оплаты",
-        })}
+        {serviceId
+          ? t("balance.instant_unlock", {
+              defaultValue: "Контакты откроются автоматически после оплаты",
+            })
+          : t("balance.instant_topup", {
+              defaultValue: "Баланс обновится автоматически после оплаты",
+            })}
       </div>
 
       {serviceId && (
@@ -402,7 +534,13 @@ export default function ClientBalance() {
                 className="flex items-center justify-between gap-3 text-sm border-b py-2"
               >
                 <div className="min-w-0 text-gray-600">
-                  {fmtTs(row.created_at, i18n.language)}
+                  <div>{fmtTs(row.created_at, i18n.language)}</div>
+
+                  {(row.type || row.reason || row.note) && (
+                    <div className="text-xs text-gray-400 truncate max-w-[220px]">
+                      {row.note || row.type || row.reason}
+                    </div>
+                  )}
                 </div>
 
                 <div
@@ -435,12 +573,14 @@ export default function ClientBalance() {
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/20 text-2xl">
                   ⚡
                 </div>
+
                 <div>
                   <h3 className="text-lg font-bold leading-tight">
                     {t("balance.autopay_title", {
                       defaultValue: "Вы почти открыли контакты",
                     })}
                   </h3>
+
                   <p className="text-sm text-white/90">
                     {t("balance.autopay_subtitle", {
                       defaultValue: "Остался один шаг до прямого контакта",
@@ -454,17 +594,22 @@ export default function ClientBalance() {
               <div className="rounded-2xl border border-orange-100 bg-orange-50 px-4 py-3">
                 <div className="text-sm text-gray-700">
                   {t("balance.autopay_amount_label", {
-                    defaultValue: "Рекомендуем пополнить",
+                    defaultValue: "Рекомендуем оплатить",
                   })}
                 </div>
+
                 <div className="mt-1 text-2xl font-bold text-gray-900">
                   {formatMoney(recommendedAmount, i18n.language)}
                 </div>
+
                 <div className="mt-1 text-xs text-gray-500">
                   {unlockPriceSum > 0
-                    ? `${Math.floor(recommendedAmount / unlockPriceSum)} ${t("balance.contacts", {
-                        defaultValue: "контактов",
-                      })}`
+                    ? `${Math.floor(recommendedAmount / unlockPriceSum)} ${t(
+                        "balance.contacts",
+                        {
+                          defaultValue: "контактов",
+                        }
+                      )}`
                     : null}
                 </div>
               </div>
