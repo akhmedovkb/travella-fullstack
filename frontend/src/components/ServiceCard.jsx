@@ -1146,9 +1146,9 @@ async function openUnlockIntro() {
       return;
     }
 
-    if (res?.ok && res?.need_pay) {
+      if (res?.ok && (res?.need_pay || res?.requires_payment)) {
       const nextShortfallSum = Number(
-        res?.shortfall_sum || res?.order?.amount_sum || 0
+        res?.shortfall_sum || res?.amount_sum || res?.order?.amount_sum || 0
       );
 
       setUnlockIntroPriceSum(nextShortfallSum);
@@ -1157,7 +1157,7 @@ async function openUnlockIntro() {
         open: false,
         shortfallSum: nextShortfallSum,
         shortfallTiyin: Number(
-          res?.shortfall_tiyin || res?.order?.amount_tiyin || 0
+          res?.shortfall_tiyin || res?.amount_tiyin || res?.order?.amount_tiyin || 0
         ),
         payUrl: String(res?.pay_url || ""),
         orderId: Number(res?.order_id || res?.order?.id || 0) || null,
