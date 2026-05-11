@@ -1014,11 +1014,25 @@ const normalizeTelegramHref = (tg) => {
   
 useEffect(() => {
   const params = new URLSearchParams(window.location.search);
+
   const openedId = Number(params.get("opened"));
+  const unlockSuccess = params.get("unlock") === "success";
 
   if (!openedId || Number(openedId) !== Number(id)) return;
 
   setHighlighted(true);
+
+  // автоматически считаем карточку открытой
+  setUnlocked(true);
+
+  if (typeof window !== "undefined" && unlockStorageKey) {
+    window.localStorage.setItem(unlockStorageKey, "1");
+  }
+
+  // success modal
+  if (unlockSuccess) {
+    setShowUnlockSuccessModal(true);
+  }
 
   setTimeout(() => {
     cardRef.current?.scrollIntoView({
@@ -1032,7 +1046,7 @@ useEffect(() => {
   }, 2500);
 
   return () => clearTimeout(timer);
-}, [id]);
+}, [id, unlockStorageKey]);
   
 useEffect(() => {
   if (!id) return;
