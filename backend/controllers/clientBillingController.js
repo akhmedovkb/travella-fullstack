@@ -347,7 +347,7 @@ async function createTopupOrder(req, res) {
 
   const MIN_TOPUP =
     normalizePositiveTiyin(
-      process.env.MIN_TOPUP_TIIYIN || 1000
+      process.env.MIN_TOPUP_TIYIN || process.env.MIN_TOPUP_TIIYIN || 1000
     );
 
   if (amountTiyin < MIN_TOPUP) {
