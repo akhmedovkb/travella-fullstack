@@ -597,11 +597,11 @@ async function performTransaction({
           performed = TRUE,
           perform_time = COALESCE(perform_time, $3),
           updated_at = NOW()
-        WHERE id = $1
+        WHERE payme_id = $1
         RETURNING *
       `,
       [
-        transaction.id,
+        transaction.payme_id,
         PAYME_STATE.COMPLETED,
         nowMs(),
       ]
@@ -672,11 +672,11 @@ async function performTransaction({
         performed = TRUE,
         perform_time = COALESCE(perform_time, $3),
         updated_at = NOW()
-      WHERE id = $1
+      WHERE payme_id = $1
       RETURNING *
     `,
     [
-      transaction.id,
+      transaction.payme_id,
       PAYME_STATE.COMPLETED,
       nowMs(),
     ]
@@ -685,6 +685,7 @@ async function performTransaction({
   return rows[0];
 }
 
+```js
 async function cancelTransaction({
   client,
   transaction,
@@ -702,7 +703,8 @@ async function cancelTransaction({
         client,
         order,
         transactionId: transaction.payme_id,
-        refunded: transaction.state === PAYME_STATE.CANCELED_AFTER_COMPLETE,
+        refunded:
+          transaction.state === PAYME_STATE.CANCELED_AFTER_COMPLETE,
       });
     }
 
@@ -776,11 +778,11 @@ async function cancelTransaction({
         cancel_time = COALESCE(cancel_time, $3),
         reason = COALESCE(reason, $4),
         updated_at = NOW()
-      WHERE id = $1
+      WHERE payme_id = $1
       RETURNING *
     `,
     [
-      transaction.id,
+      transaction.payme_id,
       nextState,
       now,
       reason || null,
