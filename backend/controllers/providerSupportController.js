@@ -1,9 +1,18 @@
 // backend/controllers/providerSupportController.js
 const pool = require("../db");
 
+const DEFAULT_SUGGESTED_AMOUNTS = [10000, 25000, 50000, 100000];
+const DEFAULT_MIN_AMOUNT_SUM = 1000;
+
 function intOrNull(v) {
   const n = Number(v);
   return Number.isFinite(n) ? Math.trunc(n) : null;
+}
+
+function positiveInt(v, fallback = 0) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(0, Math.trunc(n));
 }
 
 function clampInt(v, def, min, max) {
@@ -16,18 +25,32 @@ function cleanText(v, max = 5000) {
   return String(v ?? "").trim().slice(0, max);
 }
 
+function sumToTiyin(sum) {
+  return Math.round(Number(sum || 0) * 100);
+}
+
+function tiyinToSum(tiyin) {
+  return Math.trunc(Number(tiyin || 0) / 100);
+}
+
 function normalizeSuggestedAmounts(v) {
-  const arr = Array.isArray(v) ? v : String(v || "")
-    .split(/[\s,;]+/)
-    .map((x) => x.trim())
-    .filter(Boolean);
+  const arr = Array.isArray(v)
+    ? v
+    : String(v || "")
+        .split(/[\s,;]+/)
+        .map((x) => x.trim())
+        .filter(Boolean);
 
   const nums = arr
     .map((x) => Math.trunc(Number(x)))
     .filter((x) => Number.isFinite(x) && x > 0)
     .slice(0, 12);
 
-  return nums.length ? nums : [10000, 25000, 50000, 100000];
+  return nums.length ? nums : DEFAULT_SUGGESTED_AMOUNTS;
+}
+
+async function advisoryLock(db, key) {
+  await db.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [String(key)]);
 }
 
 async function relationKind(db, relName) {
@@ -35,11 +58,29 @@ async function relationKind(db, relName) {
     `SELECT c.relkind
        FROM pg_class c
        JOIN pg_namespace n ON n.oid = c.relnamespace
-      WHERE n.nspname='public' AND c.relname=$1
+      WHERE n.nspname = 'public'
+        AND c.relname = $1
       LIMIT 1`,
     [relName]
   );
+
   return rows[0]?.relkind || null;
+}
+
+async function columnExists(db, tableName, columnName) {
+  const { rows } = await db.query(
+    `
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = $1
+        AND column_name = $2
+      LIMIT 1
+    `,
+    [tableName, columnName]
+  );
+
+  return !!rows[0];
 }
 
 async function ensureProviderSupportSchema(db = pool) {
@@ -50,9 +91,9 @@ async function ensureProviderSupportSchema(db = pool) {
       title TEXT NOT NULL DEFAULT '❤️ Поддержка проекта',
       message TEXT NOT NULL DEFAULT 'Если вы хотите поддержать развитие проекта Bot Otkaznyx Turov и Travella — можете отправить любую комфортную для вас сумму.',
       suggested_amounts JSONB NOT NULL DEFAULT '[10000,25000,50000,100000]'::jsonb,
-      min_amount_sum INTEGER NOT NULL DEFAULT 1000,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      min_amount_sum INTEGER NOT NULL DEFAULT ${DEFAULT_MIN_AMOUNT_SUM},
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       CONSTRAINT provider_support_settings_singleton CHECK (id = 1)
     )
   `);
@@ -72,13 +113,35 @@ async function ensureProviderSupportSchema(db = pool) {
       amount_tiyin BIGINT NOT NULL CHECK (amount_tiyin > 0),
       payme_order_id BIGINT UNIQUE,
       payme_id TEXT,
-      status TEXT NOT NULL DEFAULT 'new',
+      status TEXT NOT NULL DEFAULT 'created',
       source TEXT NOT NULL DEFAULT 'telegram_provider_bot',
       note TEXT,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       paid_at TIMESTAMPTZ NULL,
-      cancelled_at TIMESTAMPTZ NULL
+      cancelled_at TIMESTAMPTZ NULL,
+      failed_at TIMESTAMPTZ NULL,
+      expires_at TIMESTAMPTZ NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
+  `);
+
+  await db.query(`
+    ALTER TABLE provider_support_donations
+      ADD COLUMN IF NOT EXISTS provider_id BIGINT NULL,
+      ADD COLUMN IF NOT EXISTS telegram_chat_id BIGINT NULL,
+      ADD COLUMN IF NOT EXISTS service_id BIGINT NULL,
+      ADD COLUMN IF NOT EXISTS amount_tiyin BIGINT,
+      ADD COLUMN IF NOT EXISTS payme_order_id BIGINT UNIQUE,
+      ADD COLUMN IF NOT EXISTS payme_id TEXT,
+      ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'created',
+      ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'telegram_provider_bot',
+      ADD COLUMN IF NOT EXISTS note TEXT,
+      ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ NULL,
+      ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ NULL,
+      ADD COLUMN IF NOT EXISTS failed_at TIMESTAMPTZ NULL,
+      ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ NULL,
+      ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   `);
 
   await db.query(`
@@ -96,6 +159,11 @@ async function ensureProviderSupportSchema(db = pool) {
       ON provider_support_donations(created_at DESC)
   `);
 
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS idx_provider_support_donations_order
+      ON provider_support_donations(payme_order_id)
+  `);
+
   const topupKind = await relationKind(db, "topup_orders");
   const target = topupKind === "v" ? "payme_topup_orders" : "topup_orders";
 
@@ -103,43 +171,136 @@ async function ensureProviderSupportSchema(db = pool) {
     CREATE TABLE IF NOT EXISTS payme_topup_orders (
       id BIGSERIAL PRIMARY KEY,
       client_id BIGINT NULL,
-      amount_tiyin BIGINT NOT NULL CHECK (amount_tiyin > 0),
+      amount BIGINT NOT NULL DEFAULT 0,
+      amount_tiyin BIGINT NOT NULL DEFAULT 0,
       provider TEXT NOT NULL DEFAULT 'payme',
-      status TEXT NOT NULL DEFAULT 'new',
-      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-      paid_at TIMESTAMPTZ NULL
+      status TEXT NOT NULL DEFAULT 'created',
+      order_type TEXT NOT NULL DEFAULT 'balance_topup',
+      purpose TEXT NOT NULL DEFAULT 'client_topup',
+      support_donation_id BIGINT NULL,
+      provider_id BIGINT NULL,
+      telegram_chat_id BIGINT NULL,
+      service_id BIGINT NULL,
+      pay_url TEXT NULL,
+      redirect_url TEXT NULL,
+      expires_at TIMESTAMPTZ NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      paid_at TIMESTAMPTZ NULL,
+      canceled_at TIMESTAMPTZ NULL,
+      failed_at TIMESTAMPTZ NULL,
+      note TEXT NULL,
+      meta JSONB NULL
     )
   `);
 
+  if (topupKind !== "v") {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS topup_orders (
+        id BIGSERIAL PRIMARY KEY,
+        client_id BIGINT NULL,
+        amount BIGINT NOT NULL DEFAULT 0,
+        amount_tiyin BIGINT NOT NULL DEFAULT 0,
+        provider TEXT NOT NULL DEFAULT 'payme',
+        status TEXT NOT NULL DEFAULT 'created',
+        order_type TEXT NOT NULL DEFAULT 'balance_topup',
+        purpose TEXT NOT NULL DEFAULT 'client_topup',
+        support_donation_id BIGINT NULL,
+        provider_id BIGINT NULL,
+        telegram_chat_id BIGINT NULL,
+        service_id BIGINT NULL,
+        pay_url TEXT NULL,
+        redirect_url TEXT NULL,
+        expires_at TIMESTAMPTZ NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        paid_at TIMESTAMPTZ NULL,
+        canceled_at TIMESTAMPTZ NULL,
+        failed_at TIMESTAMPTZ NULL,
+        note TEXT NULL,
+        meta JSONB NULL
+      )
+    `);
+  }
+
   await db.query(`
     ALTER TABLE ${target}
+      ADD COLUMN IF NOT EXISTS client_id BIGINT NULL,
+      ADD COLUMN IF NOT EXISTS amount BIGINT NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS amount_tiyin BIGINT NOT NULL DEFAULT 0,
       ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT 'payme',
-      ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'new',
-      ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-      ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ NULL,
+      ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'created',
+      ADD COLUMN IF NOT EXISTS order_type TEXT NOT NULL DEFAULT 'balance_topup',
       ADD COLUMN IF NOT EXISTS purpose TEXT NOT NULL DEFAULT 'client_topup',
       ADD COLUMN IF NOT EXISTS support_donation_id BIGINT NULL,
       ADD COLUMN IF NOT EXISTS provider_id BIGINT NULL,
       ADD COLUMN IF NOT EXISTS telegram_chat_id BIGINT NULL,
-      ADD COLUMN IF NOT EXISTS note TEXT NULL
+      ADD COLUMN IF NOT EXISTS service_id BIGINT NULL,
+      ADD COLUMN IF NOT EXISTS pay_url TEXT NULL,
+      ADD COLUMN IF NOT EXISTS redirect_url TEXT NULL,
+      ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ NULL,
+      ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ NULL,
+      ADD COLUMN IF NOT EXISTS canceled_at TIMESTAMPTZ NULL,
+      ADD COLUMN IF NOT EXISTS failed_at TIMESTAMPTZ NULL,
+      ADD COLUMN IF NOT EXISTS note TEXT NULL,
+      ADD COLUMN IF NOT EXISTS meta JSONB NULL
   `);
 
-  await db.query(`ALTER TABLE ${target} ALTER COLUMN client_id DROP NOT NULL`);
+  try {
+    await db.query(`ALTER TABLE ${target} ALTER COLUMN client_id DROP NOT NULL`);
+  } catch (e) {
+    console.warn("[providerSupport] client_id DROP NOT NULL skipped:", e?.message || e);
+  }
+
+  await db.query(`
+    UPDATE ${target}
+       SET amount = amount_tiyin
+     WHERE COALESCE(amount, 0) = 0
+       AND COALESCE(amount_tiyin, 0) > 0
+  `);
+
+  await db.query(`
+    UPDATE ${target}
+       SET amount_tiyin = amount
+     WHERE COALESCE(amount_tiyin, 0) = 0
+       AND COALESCE(amount, 0) > 0
+  `);
+
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS idx_topup_orders_support_donation_id
+      ON ${target}(support_donation_id)
+  `);
+
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS idx_topup_orders_order_type_status
+      ON ${target}(order_type, status)
+  `);
 
   if (topupKind === "v") {
     await db.query(`CREATE OR REPLACE VIEW topup_orders AS SELECT * FROM payme_topup_orders`);
   }
 }
 
-function buildPaymeCheckoutUrl({ merchantId, checkoutBase, orderId, amountTiyin, lang, callbackUrl }) {
-  const parts = [
-    `m=${merchantId}`,
-    `ac.order_id=${orderId}`,
-    `a=${amountTiyin}`,
-    `l=${lang || "ru"}`,
-  ];
-  if (callbackUrl) parts.push(`c=${callbackUrl}`);
-  const encoded = Buffer.from(parts.join(";"), "utf8").toString("base64");
+function buildPaymeCheckoutUrl({
+  merchantId,
+  checkoutBase,
+  orderId,
+  amountTiyin,
+  lang,
+  callbackUrl,
+}) {
+  const encoded = Buffer.from(
+    [
+      `m=${merchantId}`,
+      `ac.order_id=${orderId}`,
+      `a=${amountTiyin}`,
+      `l=${lang || "ru"}`,
+      callbackUrl ? `c=${callbackUrl}` : "",
+    ]
+      .filter(Boolean)
+      .join(";"),
+    "utf8"
+  ).toString("base64");
+
   return `${String(checkoutBase || "https://checkout.paycom.uz").replace(/\/+$/, "")}/${encoded}`;
 }
 
@@ -148,38 +309,166 @@ async function getProviderByTelegramChatId(db, telegramChatId) {
   if (!chat) return null;
 
   const { rows } = await db.query(
-    `SELECT id, name, phone, type, telegram_chat_id, telegram_refused_chat_id
-       FROM providers
+    `
+      SELECT
+        id,
+        name,
+        phone,
+        type,
+        telegram_chat_id,
+        telegram_refused_chat_id,
+        telegram_web_chat_id
+      FROM providers
       WHERE telegram_chat_id::text = $1
          OR telegram_refused_chat_id::text = $1
+         OR telegram_web_chat_id::text = $1
       ORDER BY id DESC
-      LIMIT 1`,
+      LIMIT 1
+    `,
     [chat]
   );
+
   return rows[0] || null;
 }
 
 async function getProviderSupportSettings(db = pool) {
   await ensureProviderSupportSchema(db);
+
   const { rows } = await db.query(
-    `SELECT id, enabled, title, message, suggested_amounts, min_amount_sum, updated_at
-       FROM provider_support_settings
-      WHERE id = 1`
+    `
+      SELECT
+        id,
+        enabled,
+        title,
+        message,
+        suggested_amounts,
+        min_amount_sum,
+        updated_at
+      FROM provider_support_settings
+      WHERE id = 1
+      LIMIT 1
+    `
   );
+
   return rows[0] || null;
 }
 
-async function createProviderSupportDonationOrder({ telegramChatId, providerId = null, serviceId = null, amountSum, source = "telegram_provider_bot", note = null }) {
-  const amount = Math.trunc(Number(amountSum));
-  if (!Number.isFinite(amount) || amount <= 0) {
+async function expireOldProviderSupportOrders(db = pool) {
+  await ensureProviderSupportSchema(db);
+
+  const topupKind = await relationKind(db, "topup_orders");
+  const target = topupKind === "v" ? "payme_topup_orders" : "topup_orders";
+
+  await db.query(`
+    UPDATE ${target}
+       SET status = 'expired',
+           failed_at = COALESCE(failed_at, NOW())
+     WHERE order_type = 'provider_support'
+       AND status IN ('new', 'created', 'pending')
+       AND expires_at IS NOT NULL
+       AND expires_at < NOW()
+  `);
+
+  await db.query(`
+    UPDATE provider_support_donations d
+       SET status = 'expired',
+           failed_at = COALESCE(d.failed_at, NOW()),
+           updated_at = NOW()
+      FROM ${target} o
+     WHERE o.support_donation_id = d.id
+       AND o.order_type = 'provider_support'
+       AND o.status = 'expired'
+       AND d.status IN ('new', 'created', 'pending')
+  `);
+}
+
+async function syncProviderSupportDonationStatuses(db = pool) {
+  await ensureProviderSupportSchema(db);
+  await expireOldProviderSupportOrders(db);
+
+  const topupKind = await relationKind(db, "topup_orders");
+  const target = topupKind === "v" ? "payme_topup_orders" : "topup_orders";
+
+  const hasPaymeTransactions =
+    (await relationKind(db, "payme_transactions")) !== null;
+
+  if (hasPaymeTransactions) {
+    await db.query(`
+      UPDATE provider_support_donations d
+         SET status = 'paid',
+             paid_at = COALESCE(d.paid_at, to_timestamp(pt.perform_time / 1000.0), NOW()),
+             payme_id = COALESCE(d.payme_id, pt.payme_id),
+             updated_at = NOW()
+        FROM payme_transactions pt
+       WHERE pt.order_id = d.payme_order_id
+         AND pt.state = 2
+         AND d.status <> 'paid'
+    `);
+
+    await db.query(`
+      UPDATE provider_support_donations d
+         SET status = CASE
+              WHEN pt.state = -2 THEN 'refunded'
+              ELSE 'canceled'
+             END,
+             cancelled_at = COALESCE(d.cancelled_at, to_timestamp(pt.cancel_time / 1000.0), NOW()),
+             payme_id = COALESCE(d.payme_id, pt.payme_id),
+             updated_at = NOW()
+        FROM payme_transactions pt
+       WHERE pt.order_id = d.payme_order_id
+         AND pt.state IN (-1, -2)
+         AND d.status <> 'paid'
+    `);
+  }
+
+  await db.query(`
+    UPDATE provider_support_donations d
+       SET status = 'paid',
+           paid_at = COALESCE(d.paid_at, o.paid_at, NOW()),
+           updated_at = NOW()
+      FROM ${target} o
+     WHERE o.support_donation_id = d.id
+       AND o.order_type = 'provider_support'
+       AND o.status = 'paid'
+       AND d.status <> 'paid'
+  `);
+
+  await db.query(`
+    UPDATE provider_support_donations d
+       SET status = 'canceled',
+           cancelled_at = COALESCE(d.cancelled_at, o.canceled_at, NOW()),
+           updated_at = NOW()
+      FROM ${target} o
+     WHERE o.support_donation_id = d.id
+       AND o.order_type = 'provider_support'
+       AND o.status IN ('canceled', 'cancelled')
+       AND d.status IN ('new', 'created', 'pending')
+  `);
+}
+
+async function createProviderSupportDonationOrder({
+  telegramChatId,
+  providerId = null,
+  serviceId = null,
+  amountSum,
+  source = "telegram_provider_bot",
+  note = null,
+}) {
+  const amountSumInt = positiveInt(amountSum, 0);
+
+  if (!amountSumInt) {
     const e = new Error("Bad support amount");
     e.status = 400;
     throw e;
   }
 
-  const merchantId = process.env.PAYME_MERCHANT_ID || "";
+  const merchantId = process.env.PAYME_MERCHANT_ID || process.env.PAYME_CHECKOUT_ID || "";
   const checkoutBase = process.env.PAYME_CHECKOUT_URL || "https://checkout.paycom.uz";
-  const sitePublic = process.env.SITE_PUBLIC_URL || process.env.SITE_URL || "https://travella.uz";
+  const sitePublic =
+    process.env.SITE_PUBLIC_URL ||
+    process.env.SITE_URL ||
+    process.env.FRONTEND_URL ||
+    "https://travella.uz";
 
   if (!merchantId || !sitePublic) {
     const e = new Error("Payme is not configured");
@@ -188,59 +477,189 @@ async function createProviderSupportDonationOrder({ telegramChatId, providerId =
   }
 
   const db = await pool.connect();
+
   try {
     await db.query("BEGIN");
     await ensureProviderSupportSchema(db);
 
+    await advisoryLock(
+      db,
+      `provider-support:${providerId || ""}:${telegramChatId || ""}:${serviceId || ""}:${amountSumInt}`
+    );
+
+    await expireOldProviderSupportOrders(db);
+
     const settings = await getProviderSupportSettings(db);
+
     if (!settings?.enabled) {
       const e = new Error("Provider support is disabled");
       e.status = 403;
       throw e;
     }
 
-    const minAmount = Math.trunc(Number(settings.min_amount_sum || 0));
-    if (minAmount > 0 && amount < minAmount) {
+    const minAmount = positiveInt(settings.min_amount_sum, DEFAULT_MIN_AMOUNT_SUM);
+
+    if (minAmount > 0 && amountSumInt < minAmount) {
       const e = new Error(`Minimum support amount is ${minAmount}`);
       e.status = 400;
       throw e;
     }
 
     let resolvedProviderId = intOrNull(providerId);
+
     if (!resolvedProviderId && telegramChatId) {
       const provider = await getProviderByTelegramChatId(db, telegramChatId);
       resolvedProviderId = provider?.id ? Number(provider.id) : null;
     }
 
-    const amountTiyin = amount * 100;
+    const tgChatId = intOrNull(telegramChatId);
+    const svcId = intOrNull(serviceId);
+    const amountTiyin = sumToTiyin(amountSumInt);
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
+
+    const topupKind = await relationKind(db, "topup_orders");
+    const target = topupKind === "v" ? "payme_topup_orders" : "topup_orders";
+
+    const existing = await db.query(
+      `
+        SELECT
+          d.*,
+          o.id AS order_id,
+          o.pay_url,
+          o.status AS order_status,
+          o.expires_at AS order_expires_at
+        FROM provider_support_donations d
+        JOIN ${target} o ON o.support_donation_id = d.id
+        WHERE d.amount_tiyin = $1
+          AND COALESCE(d.provider_id, 0) = COALESCE($2, 0)
+          AND COALESCE(d.telegram_chat_id, 0) = COALESCE($3, 0)
+          AND COALESCE(d.service_id, 0) = COALESCE($4, 0)
+          AND d.status IN ('new', 'created', 'pending')
+          AND o.status IN ('new', 'created', 'pending')
+          AND o.order_type = 'provider_support'
+          AND o.expires_at IS NOT NULL
+          AND o.expires_at > NOW()
+        ORDER BY d.id DESC
+        LIMIT 1
+      `,
+      [amountTiyin, resolvedProviderId, tgChatId, svcId]
+    );
+
+    if (existing.rows[0]?.pay_url) {
+      await db.query("COMMIT");
+
+      return {
+        ok: true,
+        reused: true,
+        donation: {
+          id: Number(existing.rows[0].id),
+          provider_id: resolvedProviderId,
+          telegram_chat_id: tgChatId,
+          service_id: svcId,
+          amount_tiyin: amountTiyin,
+          amount_sum: amountSumInt,
+          status: existing.rows[0].status,
+          expires_at: existing.rows[0].order_expires_at,
+        },
+        order: {
+          id: Number(existing.rows[0].order_id),
+          amount_tiyin: amountTiyin,
+          amount_sum: amountSumInt,
+          status: existing.rows[0].order_status,
+          expires_at: existing.rows[0].order_expires_at,
+        },
+        pay_url: existing.rows[0].pay_url,
+      };
+    }
 
     const donationQ = await db.query(
-      `INSERT INTO provider_support_donations
-        (provider_id, telegram_chat_id, service_id, amount_tiyin, status, source, note)
-       VALUES ($1,$2,$3,$4,'new',$5,$6)
-       RETURNING *`,
-      [resolvedProviderId, intOrNull(telegramChatId), intOrNull(serviceId), amountTiyin, source, note]
+      `
+        INSERT INTO provider_support_donations (
+          provider_id,
+          telegram_chat_id,
+          service_id,
+          amount_tiyin,
+          status,
+          source,
+          note,
+          expires_at
+        )
+        VALUES ($1, $2, $3, $4, 'created', $5, $6, $7)
+        RETURNING *
+      `,
+      [
+        resolvedProviderId,
+        tgChatId,
+        svcId,
+        amountTiyin,
+        cleanText(source, 120) || "telegram_provider_bot",
+        cleanText(note, 1000) || null,
+        expiresAt,
+      ]
     );
+
     const donation = donationQ.rows[0];
 
     const orderQ = await db.query(
-      `INSERT INTO topup_orders
-        (client_id, amount_tiyin, provider, status, purpose, support_donation_id, provider_id, telegram_chat_id, note)
-       VALUES (NULL, $1, 'payme', 'new', 'provider_support', $2, $3, $4, $5)
-       RETURNING id, amount_tiyin, status, created_at`,
-      [amountTiyin, Number(donation.id), resolvedProviderId, intOrNull(telegramChatId), note]
+      `
+        INSERT INTO ${target} (
+          client_id,
+          amount,
+          amount_tiyin,
+          provider,
+          status,
+          order_type,
+          purpose,
+          support_donation_id,
+          provider_id,
+          telegram_chat_id,
+          service_id,
+          redirect_url,
+          expires_at,
+          note,
+          meta
+        )
+        VALUES (
+          NULL,
+          $1,
+          $1,
+          'payme',
+          'created',
+          'provider_support',
+          'provider_support',
+          $2,
+          $3,
+          $4,
+          $5,
+          $6,
+          $7,
+          $8,
+          $9
+        )
+        RETURNING id, amount, amount_tiyin, status, created_at, expires_at
+      `,
+      [
+        amountTiyin,
+        Number(donation.id),
+        resolvedProviderId,
+        tgChatId,
+        svcId,
+        `${String(sitePublic).replace(/\/+$/, "")}/support/success?donation_id=${donation.id}`,
+        expiresAt,
+        cleanText(note, 1000) || null,
+        JSON.stringify({
+          source: cleanText(source, 120) || "telegram_provider_bot",
+          donation_id: Number(donation.id),
+          amount_sum: amountSumInt,
+        }),
+      ]
     );
+
     const order = orderQ.rows[0];
 
-    await db.query(
-      `UPDATE provider_support_donations
-          SET payme_order_id = $2
-        WHERE id = $1`,
-      [Number(donation.id), Number(order.id)]
-    );
-
     const callbackUrl = `${String(sitePublic).replace(/\/+$/, "")}/support/success?donation_id=${donation.id}&order_id=${order.id}`;
-    const pay_url = buildPaymeCheckoutUrl({
+
+    const payUrl = buildPaymeCheckoutUrl({
       merchantId,
       checkoutBase,
       orderId: Number(order.id),
@@ -249,29 +668,56 @@ async function createProviderSupportDonationOrder({ telegramChatId, providerId =
       callbackUrl,
     });
 
+    await db.query(
+      `
+        UPDATE ${target}
+           SET pay_url = $2,
+               redirect_url = $3
+         WHERE id = $1
+      `,
+      [Number(order.id), payUrl, callbackUrl]
+    );
+
+    await db.query(
+      `
+        UPDATE provider_support_donations
+           SET payme_order_id = $2,
+               status = 'created',
+               updated_at = NOW()
+         WHERE id = $1
+      `,
+      [Number(donation.id), Number(order.id)]
+    );
+
     await db.query("COMMIT");
 
     return {
       ok: true,
+      reused: false,
       donation: {
         id: Number(donation.id),
         provider_id: resolvedProviderId,
-        telegram_chat_id: intOrNull(telegramChatId),
-        service_id: intOrNull(serviceId),
+        telegram_chat_id: tgChatId,
+        service_id: svcId,
         amount_tiyin: amountTiyin,
-        amount_sum: amount,
-        status: "new",
+        amount_sum: amountSumInt,
+        status: "created",
+        expires_at: expiresAt,
       },
       order: {
         id: Number(order.id),
         amount_tiyin: amountTiyin,
-        amount_sum: amount,
+        amount_sum: amountSumInt,
         status: order.status,
+        expires_at: expiresAt,
       },
-      pay_url,
+      pay_url: payUrl,
     };
   } catch (e) {
-    try { await db.query("ROLLBACK"); } catch {}
+    try {
+      await db.query("ROLLBACK");
+    } catch {}
+
     throw e;
   } finally {
     db.release();
@@ -291,22 +737,39 @@ async function adminSupportSettings(req, res) {
 async function adminUpdateSupportSettings(req, res) {
   try {
     await ensureProviderSupportSchema(pool);
+
     const enabled = req.body?.enabled !== false;
     const title = cleanText(req.body?.title, 300) || "❤️ Поддержка проекта";
-    const message = cleanText(req.body?.message, 2000) || "Если вы хотите поддержать развитие проекта Bot Otkaznyx Turov и Travella — можете отправить любую комфортную для вас сумму.";
+    const message =
+      cleanText(req.body?.message, 2000) ||
+      "Если вы хотите поддержать развитие проекта Bot Otkaznyx Turov и Travella — можете отправить любую комфортную для вас сумму.";
     const suggestedAmounts = normalizeSuggestedAmounts(req.body?.suggested_amounts);
-    const minAmount = clampInt(req.body?.min_amount_sum, 1000, 1, 100000000);
+    const minAmount = clampInt(
+      req.body?.min_amount_sum,
+      DEFAULT_MIN_AMOUNT_SUM,
+      1,
+      100000000
+    );
 
     const { rows } = await pool.query(
-      `UPDATE provider_support_settings
-          SET enabled = $1,
-              title = $2,
-              message = $3,
-              suggested_amounts = $4::jsonb,
-              min_amount_sum = $5,
-              updated_at = now()
-        WHERE id = 1
-        RETURNING id, enabled, title, message, suggested_amounts, min_amount_sum, updated_at`,
+      `
+        UPDATE provider_support_settings
+           SET enabled = $1,
+               title = $2,
+               message = $3,
+               suggested_amounts = $4::jsonb,
+               min_amount_sum = $5,
+               updated_at = NOW()
+         WHERE id = 1
+         RETURNING
+           id,
+           enabled,
+           title,
+           message,
+           suggested_amounts,
+           min_amount_sum,
+           updated_at
+      `,
       [enabled, title, message, JSON.stringify(suggestedAmounts), minAmount]
     );
 
@@ -320,6 +783,7 @@ async function adminUpdateSupportSettings(req, res) {
 async function adminSupportDonations(req, res) {
   try {
     await ensureProviderSupportSchema(pool);
+    await syncProviderSupportDonationStatuses(pool);
 
     const limit = clampInt(req.query.limit, 100, 1, 500);
     const offset = clampInt(req.query.offset, 0, 0, 1000000);
@@ -350,56 +814,82 @@ async function adminSupportDonations(req, res) {
 
     const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
+    const hasPaymeTransactions =
+      (await relationKind(pool, "payme_transactions")) !== null;
+
+    const paymeJoin = hasPaymeTransactions
+      ? `LEFT JOIN payme_transactions pt ON pt.order_id = d.payme_order_id`
+      : `LEFT JOIN LATERAL (
+           SELECT NULL::text AS payme_id,
+                  NULL::int AS state,
+                  NULL::bigint AS create_time,
+                  NULL::bigint AS perform_time,
+                  NULL::bigint AS cancel_time
+         ) pt ON TRUE`;
+
     const totalsQ = await pool.query(
-      `SELECT
-         COUNT(*)::int AS count,
-         COALESCE(SUM(CASE WHEN d.status='paid' THEN d.amount_tiyin ELSE 0 END),0)::bigint AS paid_tiyin,
-         COALESCE(SUM(CASE WHEN d.status IN ('new','created') THEN d.amount_tiyin ELSE 0 END),0)::bigint AS pending_tiyin
-       FROM provider_support_donations d
-       LEFT JOIN providers p ON p.id = d.provider_id
-       ${whereSql}`,
+      `
+        SELECT
+          COUNT(*)::int AS count,
+          COALESCE(SUM(CASE WHEN d.status = 'paid' THEN d.amount_tiyin ELSE 0 END), 0)::bigint AS paid_tiyin,
+          COALESCE(SUM(CASE WHEN d.status IN ('new', 'created', 'pending') THEN d.amount_tiyin ELSE 0 END), 0)::bigint AS pending_tiyin,
+          COALESCE(SUM(CASE WHEN d.status IN ('expired', 'canceled', 'cancelled') THEN d.amount_tiyin ELSE 0 END), 0)::bigint AS failed_tiyin
+        FROM provider_support_donations d
+        LEFT JOIN providers p ON p.id = d.provider_id
+        ${whereSql}
+      `,
       args
     );
 
     const rowsQ = await pool.query(
-      `SELECT
-         d.id,
-         d.provider_id,
-         p.name AS provider_name,
-         p.phone AS provider_phone,
-         d.telegram_chat_id,
-         d.service_id,
-         d.amount_tiyin,
-         FLOOR(d.amount_tiyin / 100)::bigint AS amount_sum,
-         d.payme_order_id,
-         d.payme_id,
-         d.status,
-         d.source,
-         d.note,
-         d.created_at,
-         d.paid_at,
-         d.cancelled_at,
-         pt.state AS payme_state,
-         pt.create_time,
-         pt.perform_time,
-         pt.cancel_time
-       FROM provider_support_donations d
-       LEFT JOIN providers p ON p.id = d.provider_id
-       LEFT JOIN payme_transactions pt ON pt.order_id = d.payme_order_id
-       ${whereSql}
-       ORDER BY d.created_at DESC, d.id DESC
-       LIMIT $${i++} OFFSET $${i++}`,
+      `
+        SELECT
+          d.id,
+          d.provider_id,
+          p.name AS provider_name,
+          p.phone AS provider_phone,
+          d.telegram_chat_id,
+          d.service_id,
+          d.amount_tiyin,
+          FLOOR(d.amount_tiyin / 100)::bigint AS amount_sum,
+          d.payme_order_id,
+          COALESCE(d.payme_id, pt.payme_id) AS payme_id,
+          d.status,
+          d.source,
+          d.note,
+          d.created_at,
+          d.paid_at,
+          d.cancelled_at,
+          d.failed_at,
+          d.expires_at,
+          pt.state AS payme_state,
+          pt.create_time,
+          pt.perform_time,
+          pt.cancel_time
+        FROM provider_support_donations d
+        LEFT JOIN providers p ON p.id = d.provider_id
+        ${paymeJoin}
+        ${whereSql}
+        ORDER BY d.created_at DESC, d.id DESC
+        LIMIT $${i++} OFFSET $${i++}
+      `,
       [...args, limit, offset]
     );
+
+    const paidTiyin = Number(totalsQ.rows[0]?.paid_tiyin || 0);
+    const pendingTiyin = Number(totalsQ.rows[0]?.pending_tiyin || 0);
+    const failedTiyin = Number(totalsQ.rows[0]?.failed_tiyin || 0);
 
     return res.json({
       ok: true,
       totals: {
         count: Number(totalsQ.rows[0]?.count || 0),
-        paid_tiyin: Number(totalsQ.rows[0]?.paid_tiyin || 0),
-        paid_sum: Math.trunc(Number(totalsQ.rows[0]?.paid_tiyin || 0) / 100),
-        pending_tiyin: Number(totalsQ.rows[0]?.pending_tiyin || 0),
-        pending_sum: Math.trunc(Number(totalsQ.rows[0]?.pending_tiyin || 0) / 100),
+        paid_tiyin: paidTiyin,
+        paid_sum: tiyinToSum(paidTiyin),
+        pending_tiyin: pendingTiyin,
+        pending_sum: tiyinToSum(pendingTiyin),
+        failed_tiyin: failedTiyin,
+        failed_sum: tiyinToSum(failedTiyin),
       },
       rows: rowsQ.rows,
       limit,
@@ -415,6 +905,8 @@ module.exports = {
   ensureProviderSupportSchema,
   getProviderSupportSettings,
   createProviderSupportDonationOrder,
+  expireOldProviderSupportOrders,
+  syncProviderSupportDonationStatuses,
   adminSupportSettings,
   adminUpdateSupportSettings,
   adminSupportDonations,
