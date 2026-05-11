@@ -612,16 +612,17 @@ async function performTransaction({
 
   const effectKey = `perform_credit:${transaction.payme_id}`;
 
-  const alreadyPerformed =
-    !(await insertLedgerEffect(
+  const alreadyPerformed = !(
+    await insertLedgerEffect(
       client,
       effectKey,
       "perform_guard",
       order.id,
       transaction.payme_id
-    ));
-
-    if (
+    )
+  );
+  
+  if (
     !alreadyPerformed &&
     !isProviderSupportOrder(order) &&
     !isUnlockContactOrder(order)
@@ -629,7 +630,7 @@ async function performTransaction({
     if (!order.client_id) {
       throw new Error("CLIENT_ID_REQUIRED_FOR_TOPUP");
     }
-
+  
     await creditClientBalance({
       client,
       clientId: order.client_id,
