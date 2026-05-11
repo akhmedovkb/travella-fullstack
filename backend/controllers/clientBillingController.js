@@ -418,6 +418,7 @@ async function createTopupOrder(req, res) {
         VALUES (
           $1,
           $2,
+          $2,
           'created',
           'balance_topup',
           $3,
@@ -624,6 +625,7 @@ async function autoUnlockAfterTopup(req, res) {
         INSERT INTO topup_orders (
           client_id,
           amount,
+          amount_tiyin,
           status,
           order_type,
           service_id,
@@ -633,6 +635,7 @@ async function autoUnlockAfterTopup(req, res) {
         )
         VALUES (
           $1,
+          $2,
           $2,
           'created',
           'unlock_contact',
