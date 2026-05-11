@@ -110,6 +110,7 @@ async function ensureSchema(client) {
     ALTER TABLE payme_transactions
       ADD COLUMN IF NOT EXISTS order_type TEXT,
       ADD COLUMN IF NOT EXISTS amount BIGINT NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS amount_tiyin BIGINT NOT NULL DEFAULT 0,
       ADD COLUMN IF NOT EXISTS state INTEGER NOT NULL DEFAULT 1,
       ADD COLUMN IF NOT EXISTS create_time BIGINT,
       ADD COLUMN IF NOT EXISTS perform_time BIGINT,
@@ -520,6 +521,7 @@ async function createTransaction({
         order_id,
         order_type,
         amount,
+        amount_tiyin,
         state,
         create_time,
         raw
@@ -528,6 +530,7 @@ async function createTransaction({
         $1,
         $2,
         $3,
+        $4,
         $4,
         $5,
         $6,
