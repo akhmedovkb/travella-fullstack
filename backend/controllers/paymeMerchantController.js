@@ -203,6 +203,10 @@ function isProviderSupportOrder(order) {
   );
 }
 
+function isUnlockContactOrder(order) {
+  return order?.order_type === "unlock_contact";
+}
+
 async function syncProviderSupportPaid({
   client,
   order,
@@ -600,7 +604,11 @@ async function performTransaction({
       transaction.payme_id
     ));
 
-  if (!alreadyPerformed && !isProviderSupportOrder(order)) {
+    if (
+    !alreadyPerformed &&
+    !isProviderSupportOrder(order) &&
+    !isUnlockContactOrder(order)
+  ) {
     if (!order.client_id) {
       throw new Error("CLIENT_ID_REQUIRED_FOR_TOPUP");
     }
