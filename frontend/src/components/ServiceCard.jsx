@@ -2523,8 +2523,8 @@ return (
             >
               <div className="bg-gradient-to-r from-orange-500 to-amber-400 px-6 py-5 text-white">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/20 text-2xl">
-                    🔓
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/20 text-2xl shadow-sm ring-1 ring-white/20">
+                    💬
                   </div>
                   <div>
                     <h3 className="text-lg font-bold leading-tight">
@@ -2608,8 +2608,8 @@ return (
             >
               <div className="bg-gradient-to-r from-orange-500 to-amber-400 px-6 py-5 text-white">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/20 text-2xl">
-                    🔓
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/20 text-2xl shadow-sm ring-1 ring-white/20">
+                    💬
                   </div>
                   <div>
                     <h3 className="text-lg font-bold leading-tight">
@@ -2654,49 +2654,51 @@ return (
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold text-gray-900">
                         {t("marketplace.pay_modal_hint_title", {
-                          defaultValue: "Что откроется",
+                          defaultValue: "Что откроется для вас",
                         })}
                       </p>
 
                       <div className="mt-3 grid grid-cols-1 gap-2 text-sm text-gray-700 sm:grid-cols-2">
-                        <div className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 border border-gray-100">
-                          <span>✅</span>
+                        <div className="flex items-center gap-2 rounded-xl border border-gray-100 bg-white px-3 py-2 shadow-sm">
+                          <span className="text-base">📞</span>
                           <span>{t("marketplace.pay_modal_phone", { defaultValue: "Телефон" })}</span>
                         </div>
-                        <div className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 border border-gray-100">
-                          <span>✅</span>
+                        <div className="flex items-center gap-2 rounded-xl border border-sky-100 bg-sky-50 px-3 py-2 text-sky-800 shadow-sm">
+                          <span className="text-base">✈️</span>
                           <span>{t("marketplace.pay_modal_telegram", { defaultValue: "Telegram" })}</span>
                         </div>
-                        <div className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 border border-gray-100">
-                          <span>✅</span>
+                        <div className="flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-emerald-800 shadow-sm">
+                          <span className="text-base">💬</span>
                           <span>{t("marketplace.pay_modal_whatsapp", { defaultValue: "WhatsApp" })}</span>
                         </div>
-                        <div className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 border border-gray-100">
-                          <span>✅</span>
+                        <div className="flex items-center gap-2 rounded-xl border border-orange-100 bg-orange-50 px-3 py-2 text-orange-800 shadow-sm">
+                          <span className="text-base">🤝</span>
                           <span>{t("marketplace.pay_modal_direct", { defaultValue: "Прямой контакт" })}</span>
                         </div>
                       </div>
 
-                      <p className="mt-3 text-sm leading-6 text-gray-600">
+                      <p className="mt-3 rounded-xl bg-white/80 px-3 py-2 text-sm font-semibold leading-5 text-gray-700 ring-1 ring-gray-100">
                         {t("marketplace.pay_modal_hint_text", {
                           defaultValue:
-                            "Контакты откроются сразу после оплаты. Повторная оплата по этой карточке не потребуется.",
+                            "После открытия вы сможете напрямую связаться с поставщиком без посредников.",
                         })}
                       </p>
                     </div>
                   </div>
                 </div>
 
-                <div className="mt-4 grid grid-cols-1 gap-2 text-xs font-medium text-gray-600 sm:grid-cols-2">
-                  <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-emerald-700">
-                    {t("marketplace.pay_modal_trust_instant", {
-                      defaultValue: "Мгновенное открытие после оплаты",
-                    })}
+                <div className="mt-4 grid grid-cols-1 gap-2 text-xs font-bold text-emerald-800 sm:grid-cols-2">
+                  <div className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-100/80 px-2.5 py-2">
+                    <span>✅</span>
+                    <span>{t("marketplace.pay_modal_trust_instant", {
+                      defaultValue: "Откроется сразу после оплаты",
+                    })}</span>
                   </div>
-                  <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-emerald-700">
-                    {t("marketplace.pay_modal_trust_forever", {
-                      defaultValue: "Доступ сохранится без повторной оплаты",
-                    })}
+                  <div className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-100/80 px-2.5 py-2">
+                    <span>🔒</span>
+                    <span>{t("marketplace.pay_modal_trust_forever", {
+                      defaultValue: "Повторная оплата не нужна",
+                    })}</span>
                   </div>
                 </div>
 
