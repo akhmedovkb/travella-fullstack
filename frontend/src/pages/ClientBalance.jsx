@@ -604,78 +604,126 @@ try {
 
       {showAutoPayModal && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 px-4 py-6 backdrop-blur-sm"
           onClick={() => setShowAutoPayModal(false)}
         >
           <div
-            className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl"
+            className="w-full max-w-md overflow-hidden rounded-[28px] bg-white shadow-2xl ring-1 ring-black/5"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="bg-gradient-to-r from-orange-500 to-amber-400 px-6 py-5 text-white">
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/20 text-2xl">
-                  ⚡
+            <div className="relative overflow-hidden bg-gradient-to-r from-orange-500 via-orange-400 to-amber-400 px-6 py-5 text-white">
+              <div className="pointer-events-none absolute -right-10 -top-12 h-36 w-36 rounded-full bg-white/15" />
+              <div className="pointer-events-none absolute -bottom-16 left-16 h-32 w-32 rounded-full bg-white/10" />
+
+              <div className="relative flex items-start gap-3">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-2xl shadow-inner">
+                  🔐
                 </div>
 
-                <div>
-                  <h3 className="text-lg font-bold leading-tight">
-                    {t("balance.autopay_title", {
-                      defaultValue: "Вы почти открыли контакты",
+                <div className="min-w-0">
+                  <h3 className="text-lg font-extrabold leading-tight tracking-tight">
+                    {t("balance.unlock_paywall_title_v2", {
+                      defaultValue: "Открытие контактов поставщика",
                     })}
                   </h3>
 
-                  <p className="text-sm text-white/90">
-                    {t("balance.autopay_subtitle", {
-                      defaultValue: "Остался один шаг до прямого контакта",
+                  <p className="mt-1 text-sm leading-5 text-white/95">
+                    {t("balance.unlock_paywall_subtitle_v2", {
+                      defaultValue: "Оплатите один раз — контакты откроются сразу и останутся доступны.",
                     })}
                   </p>
                 </div>
               </div>
             </div>
 
-            <div className="px-6 py-5">
-              <div className="rounded-2xl border border-orange-100 bg-orange-50 px-4 py-3">
-                <div className="text-sm text-gray-700">
-                  {t("balance.autopay_amount_label", {
-                    defaultValue: "Рекомендуем оплатить",
+            <div className="space-y-4 px-6 py-5">
+              <div className="rounded-3xl border border-orange-100 bg-gradient-to-br from-orange-50 to-amber-50 px-4 py-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-[11px] font-bold uppercase tracking-wide text-orange-600">
+                      {t("balance.unlock_paywall_amount_label_v2", {
+                        defaultValue: "Стоимость доступа",
+                      })}
+                    </div>
+
+                    <div className="mt-1 text-4xl font-black leading-none tracking-tight text-gray-950">
+                      {formatMoney(effectivePayAmount, i18n.language)}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl bg-white px-3 py-2 text-right shadow-sm ring-1 ring-orange-100">
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                      {t("balance.unlock_paywall_order_label_v2", {
+                        defaultValue: "Заказ",
+                      })}
+                    </div>
+                    <div className="text-sm font-bold text-gray-800">
+                      #{serviceId || "—"}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-3 text-xs font-medium text-gray-500">
+                  {t("balance.unlock_paywall_no_repeat_v2", {
+                    defaultValue: "Без повторной оплаты за эту услугу",
                   })}
-                </div>
-
-                <div className="mt-1 text-2xl font-bold text-gray-900">
-                  {formatMoney(effectivePayAmount, i18n.language)}
-                </div>
-
-                <div className="mt-1 text-xs text-gray-500">
-                  {isServiceUnlockFlow
-                    ? t("balance.one_service_unlock", {
-                        defaultValue: "Открытие контактов по одной выбранной услуге",
-                      })
-                    : unlockPriceSum > 0
-                    ? `${Math.floor(effectivePayAmount / unlockPriceSum)} ${t(
-                        "balance.contacts",
-                        {
-                          defaultValue: "контактов",
-                        }
-                      )}`
-                    : null}
                 </div>
               </div>
 
-              <p className="mt-4 text-sm leading-6 text-gray-600">
-                {t("balance.autopay_text", {
-                  defaultValue:
-                    "После оплаты контакты откроются автоматически, и вы вернётесь к объявлению.",
-                })}
-              </p>
+              <div className="rounded-3xl border border-gray-200 bg-gray-50 px-4 py-4">
+                <div className="mb-3 flex items-center gap-2 text-sm font-bold text-gray-900">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-white text-base shadow-sm">
+                    ✨
+                  </span>
+                  {t("balance.unlock_paywall_after_title_v2", {
+                    defaultValue: "Что откроется после оплаты",
+                  })}
+                </div>
 
-              <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+                <div className="grid grid-cols-1 gap-2 text-sm text-gray-700">
+                  <div className="flex items-center gap-2">
+                    <span className="text-green-600">✅</span>
+                    <span>
+                      {t("balance.unlock_paywall_phone_v2", {
+                        defaultValue: "Телефон поставщика",
+                      })}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-green-600">✅</span>
+                    <span>
+                      {t("balance.unlock_paywall_messengers_v2", {
+                        defaultValue: "Telegram / WhatsApp, если они указаны",
+                      })}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-green-600">✅</span>
+                    <span>
+                      {t("balance.unlock_paywall_direct_v2", {
+                        defaultValue: "Прямой контакт без посредников",
+                      })}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="mt-3 rounded-2xl bg-white px-3 py-2 text-xs font-medium leading-5 text-gray-500 ring-1 ring-gray-100">
+                  {t("balance.unlock_paywall_auto_v2", {
+                    defaultValue: "Контакты откроются автоматически сразу после успешной оплаты.",
+                  })}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3 sm:flex-row">
                 <button
                   type="button"
                   onClick={() => setShowAutoPayModal(false)}
-                  className="inline-flex w-full items-center justify-center rounded-2xl border border-gray-200 px-4 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+                  className="inline-flex w-full items-center justify-center rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-bold text-gray-700 transition hover:bg-gray-50"
                 >
-                  {t("balance.autopay_later", {
-                    defaultValue: "Позже",
+                  {t("balance.unlock_paywall_cancel_v2", {
+                    defaultValue: "Отмена",
                   })}
                 </button>
 
@@ -685,11 +733,16 @@ try {
                     setShowAutoPayModal(false);
                     doTopup(effectivePayAmount);
                   }}
-                  className="inline-flex w-full items-center justify-center rounded-2xl bg-black px-4 py-3 text-sm font-semibold text-white shadow-lg transition hover:opacity-90"
+                  className="inline-flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-orange-500 to-orange-600 px-4 py-3 text-sm font-extrabold text-white shadow-lg shadow-orange-500/25 transition hover:from-orange-600 hover:to-orange-700 disabled:opacity-60"
+                  disabled={topupLoading || returnUnlockLoading}
                 >
-                  {t("balance.autopay_cta", {
-                    defaultValue: "Перейти к оплате",
-                  })}
+                  {topupLoading
+                    ? t("balance.creating", {
+                        defaultValue: "Создание…",
+                      })
+                    : t("balance.unlock_paywall_cta_v2", {
+                        defaultValue: "Оплатить и открыть",
+                      })}
                 </button>
               </div>
             </div>
