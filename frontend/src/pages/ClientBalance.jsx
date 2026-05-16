@@ -361,27 +361,29 @@ try {
     };
   }, [balance, unlockPrice]);
 
+  const isServiceUnlockFlow = !!serviceId;
+  const directUnlockAmount = unlockPriceSum || Math.round(Number(unlockPrice || 0) / 100) || 0;
+
   useEffect(() => {
     if (!serviceId) return;
     if (topupLoading) return;
     if (returnUnlockLoading) return;
-    if (needTiyin <= 0) return;
+    if (directUnlockAmount <= 0) return;
     if (autoPayPromptSeen) return;
 
-    setCustomAmount(String(recommendedAmount));
     setShowAutoPayModal(true);
     setAutoPayPromptSeen(true);
   }, [
     serviceId,
-    needTiyin,
-    recommendedAmount,
+    directUnlockAmount,
     topupLoading,
     returnUnlockLoading,
     autoPayPromptSeen,
   ]);
 
-  const effectivePayAmount =
-    Math.trunc(Number(customAmount || 0)) > 0
+  const effectivePayAmount = isServiceUnlockFlow
+    ? directUnlockAmount
+    : Math.trunc(Number(customAmount || 0)) > 0
       ? Math.trunc(Number(customAmount || 0))
       : recommendedAmount;
 
@@ -442,24 +444,24 @@ try {
         </div>
       </div>
 
-      {needTiyin > 0 && serviceId && (
-        <div className="bg-red-50 border border-red-200 p-4 rounded-xl">
+      {isServiceUnlockFlow && (
+        <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl text-sm text-emerald-800">
           <b>
-            {t("balance.not_enough", {
-              defaultValue: "Недостаточно средств",
+            {t("balance.direct_unlock_title", {
+              defaultValue: "Прямая оплата открытия контактов",
             })}
           </b>
 
-          <div>
-            {t("balance.need_more", {
-              defaultValue: "Не хватает",
+          <div className="mt-1">
+            {t("balance.direct_unlock_text", {
+              defaultValue:
+                "Оплатите фиксированную стоимость открытия контактов. После оплаты контакты откроются автоматически, и вы вернётесь к карточке.",
             })}
-            : {formatMoney(needSum, i18n.language)}
           </div>
         </div>
       )}
 
-      {balanceTiyin > 0 && unlockPriceTiyin > 0 && (
+      {!isServiceUnlockFlow && balanceTiyin > 0 && unlockPriceTiyin > 0 && (
         <div className="bg-green-50 border border-green-200 p-4 rounded-xl">
           {t("balance.can_open", {
             defaultValue: "Можно открыть контактов",
@@ -468,8 +470,9 @@ try {
         </div>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {PRESET_AMOUNTS_SUM.map((v) => (
+      {!isServiceUnlockFlow && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {PRESET_AMOUNTS_SUM.map((v) => (
           <button
             key={v}
             type="button"
@@ -499,18 +502,21 @@ try {
               </div>
             )}
           </button>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
-      <input
-        className="w-full border rounded-xl px-4 py-3"
-        value={customAmount}
-        onChange={(e) => setCustomAmount(cleanNumericInput(e.target.value))}
-        placeholder={t("balance.custom_placeholder", {
-          defaultValue: "Своя сумма, например 75000",
-        })}
-        inputMode="numeric"
-      />
+      {!isServiceUnlockFlow && (
+        <input
+          className="w-full border rounded-xl px-4 py-3"
+          value={customAmount}
+          onChange={(e) => setCustomAmount(cleanNumericInput(e.target.value))}
+          placeholder={t("balance.custom_placeholder", {
+            defaultValue: "Своя сумма, например 75000",
+          })}
+          inputMode="numeric"
+        />
+      )}
 
       <button
         type="button"
@@ -636,12 +642,16 @@ try {
                 </div>
 
                 <div className="mt-1 text-2xl font-bold text-gray-900">
-                  {formatMoney(recommendedAmount, i18n.language)}
+                  {formatMoney(effectivePayAmount, i18n.language)}
                 </div>
 
                 <div className="mt-1 text-xs text-gray-500">
-                  {unlockPriceSum > 0
-                    ? `${Math.floor(recommendedAmount / unlockPriceSum)} ${t(
+                  {isServiceUnlockFlow
+                    ? t("balance.one_service_unlock", {
+                        defaultValue: "Открытие контактов по одной выбранной услуге",
+                      })
+                    : unlockPriceSum > 0
+                    ? `${Math.floor(effectivePayAmount / unlockPriceSum)} ${t(
                         "balance.contacts",
                         {
                           defaultValue: "контактов",
@@ -673,7 +683,7 @@ try {
                   type="button"
                   onClick={() => {
                     setShowAutoPayModal(false);
-                    doTopup(recommendedAmount);
+                    doTopup(effectivePayAmount);
                   }}
                   className="inline-flex w-full items-center justify-center rounded-2xl bg-black px-4 py-3 text-sm font-semibold text-white shadow-lg transition hover:opacity-90"
                 >
