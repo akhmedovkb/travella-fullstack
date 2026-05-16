@@ -306,6 +306,52 @@ function parseQueryForProvider(q) {
 
   return { type_q, loc_patterns, lang_syn: [...new Set(lang_syn)] };
 }
+
+/* -------------------- GET ONE SERVICE BY ID -------------------- */
+module.exports.getById = async (req, res, next) => {
+  try {
+    const tr = mkTracer(req, "MP:getById");
+    tr.attach(res);
+
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) {
+      return res.status(400).json({ ok: false, error: "invalid_service_id" });
+    }
+
+    const sql = `
+      SELECT
+        s.id, s.provider_id, s.title, s.description, s.category, s.price, s.images, s.availability,
+        s.created_at, s.status, s.details, s.expiration_at,
+        row_to_json(pv) AS provider
+      FROM services s
+      LEFT JOIN providers pv ON pv.id = s.provider_id
+      WHERE s.id = $1
+        AND s.deleted_at IS NULL
+        AND (s.status IS NULL OR lower(s.status) IN ('published','active','approved'))
+      LIMIT 1
+    `;
+
+    const { rows } = await tr.wrapQuery(sql, [id], "serviceById");
+    const row = rows[0];
+
+    if (!row) {
+      return res.status(404).json({ ok: false, error: "service_not_found" });
+    }
+
+    if (!isServiceActual(row.details, row)) {
+      return res.status(404).json({ ok: false, error: "service_not_actual" });
+    }
+
+    const viewer = getOptionalUserFromReq(req);
+    const safeRow = await redactMarketplaceRow(row, viewer);
+
+    return res.json({ ok: true, item: safeRow });
+  } catch (err) {
+    console.error("[MP:getById ERR]", err?.message || err);
+    next(err);
+  }
+};
+
 /* -------------------- SEARCH -------------------- */
 module.exports.search = async (req, res, next) => {
   try {
