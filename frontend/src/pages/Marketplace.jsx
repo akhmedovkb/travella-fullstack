@@ -697,6 +697,13 @@ export default function Marketplace() {
     [q, category]
   );
 
+  const openedParams = useMemo(() => new URLSearchParams(window.location.search), []);
+  const openedServiceId = openedParams.get("opened");
+  const openedUnlockSuccess = openedParams.get("unlock") === "success";
+  const [openedService, setOpenedService] = useState(null);
+  const [openedServiceLoading, setOpenedServiceLoading] = useState(false);
+  const [openedServiceError, setOpenedServiceError] = useState(null);
+
 // --- normalize & transliterate helpers ---
 const norm = (s) =>
   String(s ?? "")
@@ -856,6 +863,53 @@ const matchQuery = (query, it) => {
     const svc = it?.service || it || {};
     return svc.id ?? it?.id ?? svc._id ?? it?._id ?? null;
   };
+
+  useEffect(() => {
+    const sid = Number(openedServiceId);
+
+    if (!sid || !Number.isFinite(sid)) {
+      setOpenedService(null);
+      setOpenedServiceError(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadOpenedService() {
+      setOpenedServiceLoading(true);
+      setOpenedServiceError(null);
+
+      try {
+        const res = await apiGet(`/api/marketplace/services/${sid}`, true);
+        const item = res?.item || res?.service || res?.data || res;
+
+        if (!cancelled) {
+          setOpenedService(item || null);
+        }
+      } catch (e) {
+        console.error("[Marketplace] opened service load error:", e);
+
+        if (!cancelled) {
+          setOpenedService(null);
+          setOpenedServiceError(
+            t("marketplace.opened_service_not_found", {
+              defaultValue: "Открытая услуга не найдена или уже неактуальна",
+            })
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setOpenedServiceLoading(false);
+        }
+      }
+    }
+
+    loadOpenedService();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [openedServiceId, t]);
 
   /* ---------- авто-категория из текста запроса ---------- */
 const CATEGORY_KEYWORDS = {
@@ -1173,6 +1227,72 @@ const search = async (opts = {}) => {
     { value: "visa_support", label: t("category.visa_support") || "Визовая поддержка" },
   ];
 
+        // ====== Рендер открытой после оплаты услуги ======
+  const renderOpenedServiceBlock = () => {
+    if (!openedServiceId) return null;
+
+    const sid = getServiceId(openedService);
+
+    return (
+      <section className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
+        <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-base font-bold text-emerald-900">
+              {openedUnlockSuccess
+                ? t("marketplace.opened_contacts_title", {
+                    defaultValue: "Контакты открыты по этой услуге",
+                  })
+                : t("marketplace.opened_service_title", {
+                    defaultValue: "Открытая услуга",
+                  })}
+            </h2>
+            <p className="text-sm text-emerald-800">
+              {t("marketplace.opened_contacts_hint", {
+                defaultValue:
+                  "Карточка загружена отдельно, чтобы пользователь сразу видел результат после оплаты.",
+              })}
+            </p>
+          </div>
+
+          <a
+            href={`/marketplace?opened=${encodeURIComponent(openedServiceId)}&unlock=success`}
+            className="text-sm font-semibold text-emerald-900 underline underline-offset-4"
+          >
+            #{openedServiceId}
+          </a>
+        </div>
+
+        {openedServiceLoading && (
+          <div className="rounded-xl border border-emerald-100 bg-white px-4 py-3 text-sm text-emerald-800">
+            {t("common.loading", { defaultValue: "Загрузка…" })}
+          </div>
+        )}
+
+        {!openedServiceLoading && openedServiceError && (
+          <div className="rounded-xl border border-red-200 bg-white px-4 py-3 text-sm text-red-600">
+            {openedServiceError}
+          </div>
+        )}
+
+        {!openedServiceLoading && !openedServiceError && openedService && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            <ServiceCard
+              key={sid || openedServiceId}
+              item={openedService}
+              now={now}
+              viewerRole={role}
+              isFav={sid ? favIds.has(String(sid)) : false}
+              onToggleFavorite={() => sid && toggleFavorite(sid)}
+              onQuickRequest={(serviceId, providerId, title) =>
+                openQuickRequest(serviceId ?? sid, providerId, title)
+              }
+            />
+          </div>
+        )}
+      </section>
+    );
+  };
+
         // ====== Рендер блока секции (как отдельная карточка) ======
   const renderSectionBlock = (key) => {
     const meta = SECTIONS.find((s) => s.key === key) || { labelKey: key, fallback: key };
@@ -1382,6 +1502,8 @@ const search = async (opts = {}) => {
         </button>
       </div>
     </div>
+
+      {renderOpenedServiceBlock()}
 
             {/* Список / секции */}
       {searchMode ? (
