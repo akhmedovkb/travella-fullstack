@@ -2609,17 +2609,17 @@ return (
               <div className="bg-gradient-to-r from-orange-500 to-amber-400 px-6 py-5 text-white">
                 <div className="flex items-center gap-3">
                   <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/20 text-2xl">
-                    💳
+                    🔓
                   </div>
                   <div>
                     <h3 className="text-lg font-bold leading-tight">
                       {t("marketplace.pay_modal_title", {
-                        defaultValue: "Пополнение для открытия контактов",
+                        defaultValue: "Открытие контактов поставщика",
                       })}
                     </h3>
                     <p className="text-sm text-white/90">
                       {t("marketplace.pay_modal_subtitle", {
-                        defaultValue: "Перед оплатой проверьте сумму пополнения",
+                        defaultValue: "После оплаты контакты откроются автоматически",
                       })}
                     </p>
                   </div>
@@ -2628,14 +2628,14 @@ return (
 
               <div className="px-6 py-5">
                 <div className="rounded-2xl border border-orange-100 bg-orange-50 px-4 py-4">
-                  <div className="text-xs font-medium uppercase tracking-wide text-orange-700/80">
-                  {t("marketplace.pay_modal_amount_label", {
-                    defaultValue: "Сумма для мгновенного открытия контактов",
-                  })}
+                  <div className="text-xs font-semibold uppercase tracking-wide text-orange-700/80">
+                    {t("marketplace.pay_modal_amount_label", {
+                      defaultValue: "ФИКСИРОВАННАЯ СТОИМОСТЬ ОТКРЫТИЯ",
+                    })}
                   </div>
-                  <div className="mt-1 text-3xl font-bold tracking-tight text-gray-900">
-                    {Number(unlockPayModal.shortfallSum || 0).toLocaleString("ru-RU")} 
-                    <span className="text-xl font-semibold text-gray-700">
+                  <div className="mt-1 text-4xl font-extrabold tracking-tight text-gray-950">
+                    {Number(unlockPayModal.shortfallSum || 0).toLocaleString("ru-RU")}
+                    <span className="ml-1 align-baseline text-xl font-bold text-gray-700">
                       {t("common.sum_currency", { defaultValue: "сум" })}
                     </span>
                   </div>
@@ -2648,22 +2648,55 @@ return (
                   )}
                 </div>
 
-                <div className="mt-4 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
+                <div className="mt-4 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4">
                   <div className="flex items-start gap-3">
                     <div className="mt-0.5 text-lg">✨</div>
-                    <div>
+                    <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold text-gray-900">
                         {t("marketplace.pay_modal_hint_title", {
-                          defaultValue: "Что будет после оплаты",
+                          defaultValue: "Что откроется",
                         })}
                       </p>
-                      <p className="mt-1 text-sm leading-6 text-gray-600">
+
+                      <div className="mt-3 grid grid-cols-1 gap-2 text-sm text-gray-700 sm:grid-cols-2">
+                        <div className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 border border-gray-100">
+                          <span>✅</span>
+                          <span>{t("marketplace.pay_modal_phone", { defaultValue: "Телефон" })}</span>
+                        </div>
+                        <div className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 border border-gray-100">
+                          <span>✅</span>
+                          <span>{t("marketplace.pay_modal_telegram", { defaultValue: "Telegram" })}</span>
+                        </div>
+                        <div className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 border border-gray-100">
+                          <span>✅</span>
+                          <span>{t("marketplace.pay_modal_whatsapp", { defaultValue: "WhatsApp" })}</span>
+                        </div>
+                        <div className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 border border-gray-100">
+                          <span>✅</span>
+                          <span>{t("marketplace.pay_modal_direct", { defaultValue: "Прямой контакт" })}</span>
+                        </div>
+                      </div>
+
+                      <p className="mt-3 text-sm leading-6 text-gray-600">
                         {t("marketplace.pay_modal_hint_text", {
                           defaultValue:
-                            "После успешной оплаты контакты и быстрый запрос откроются автоматически, и вы вернётесь к этой карточке.",
+                            "Контакты откроются сразу после оплаты. Повторная оплата по этой карточке не потребуется.",
                         })}
                       </p>
                     </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid grid-cols-1 gap-2 text-xs font-medium text-gray-600 sm:grid-cols-2">
+                  <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-emerald-700">
+                    {t("marketplace.pay_modal_trust_instant", {
+                      defaultValue: "Мгновенное открытие после оплаты",
+                    })}
+                  </div>
+                  <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-emerald-700">
+                    {t("marketplace.pay_modal_trust_forever", {
+                      defaultValue: "Доступ сохранится без повторной оплаты",
+                    })}
                   </div>
                 </div>
 
@@ -2681,18 +2714,18 @@ return (
                     onClick={async () => {
                       const url = String(unlockPayModal.payUrl || "").trim();
                       if (!url) return;
-                    
+
                       await postUnlockStep("unlock_pay_modal_continue_clicked", {
                         order_id: unlockPayModal.orderId || null,
                         shortfall_sum: Number(unlockPayModal.shortfallSum || 0),
                       });
-                    
+
                       window.location.href = url;
                     }}
                     className="inline-flex w-full items-center justify-center rounded-2xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-orange-200 transition hover:bg-orange-600"
                   >
                     {t("marketplace.go_to_payment", {
-                      defaultValue: "Перейти к оплате",
+                      defaultValue: "Оплатить и открыть",
                     })}
                   </button>
                 </div>
