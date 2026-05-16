@@ -568,8 +568,8 @@
     "pay_modal_subtitle": "После оплаты контакты откроются автоматически",
     "pay_modal_amount_label": "ФИКСИРОВАННАЯ СТОИМОСТЬ ОТКРЫТИЯ",
     "pay_modal_order": "Заказ",
-    "pay_modal_hint_title": "Что откроется",
-    "pay_modal_hint_text": "Контакты откроются сразу после оплаты. Повторная оплата по этой карточке не потребуется.",
+    "pay_modal_hint_title": "Что откроется для вас",
+    "pay_modal_hint_text": "После открытия вы сможете напрямую связаться с поставщиком без посредников.",
     "go_to_payment": "Оплатить и открыть",
     "phone": "Телефон",
     "price": "Цена",
@@ -631,8 +631,8 @@
     "pay_modal_telegram": "Telegram",
     "pay_modal_whatsapp": "WhatsApp",
     "pay_modal_direct": "Прямой контакт",
-    "pay_modal_trust_instant": "Мгновенное открытие после оплаты",
-    "pay_modal_trust_forever": "Доступ сохранится без повторной оплаты"
+    "pay_modal_trust_instant": "Откроется сразу после оплаты",
+    "pay_modal_trust_forever": "Повторная оплата не нужна"
   },
   "messages": {
     "booking_created": "Бронирование создано",
