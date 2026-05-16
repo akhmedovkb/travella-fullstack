@@ -578,8 +578,8 @@
     "opened_contacts_cta": "Contacts already opened",
     "package": "Refused tour",
     "pay_modal_amount_label": "FIXED UNLOCK PRICE",
-    "pay_modal_hint_text": "Contacts will open immediately after payment. You will not need to pay again for this card.",
-    "pay_modal_hint_title": "What you will get",
+    "pay_modal_hint_text": "After unlocking, you can contact the supplier directly with no intermediaries.",
+    "pay_modal_hint_title": "What you will receive",
     "pay_modal_order": "Order",
     "pay_modal_subtitle": "Contacts will open automatically after payment",
     "pay_modal_title": "Unlock provider contacts",
@@ -663,8 +663,8 @@
     "pay_modal_telegram": "Telegram",
     "pay_modal_whatsapp": "WhatsApp",
     "pay_modal_direct": "Direct contact",
-    "pay_modal_trust_instant": "Instant unlock after payment",
-    "pay_modal_trust_forever": "Access stays open without repeat payment"
+    "pay_modal_trust_instant": "Opens right after payment",
+    "pay_modal_trust_forever": "No repeat payment needed"
   },
   "messages": {
     "booking_created": "Booking created",
