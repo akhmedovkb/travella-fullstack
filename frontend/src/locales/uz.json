@@ -578,8 +578,8 @@
     "opened_contacts_cta": "Kontaktlar allaqachon ochilgan",
     "package": "Qaytarilgan tur",
     "pay_modal_amount_label": "OCHISH UCHUN BELGILANGAN NARX",
-    "pay_modal_hint_text": "Kontaktlar to‘lovdan so‘ng darhol ochiladi. Bu kartochka uchun qayta to‘lov talab qilinmaydi.",
-    "pay_modal_hint_title": "Nimalar ochiladi",
+    "pay_modal_hint_text": "Ochilgandan so‘ng yetkazib beruvchi bilan vositachilarsiz to‘g‘ridan-to‘g‘ri bog‘lanasiz.",
+    "pay_modal_hint_title": "Sizga nima ochiladi",
     "pay_modal_order": "Buyurtma",
     "pay_modal_subtitle": "To‘lovdan keyin kontaktlar avtomatik ochiladi",
     "pay_modal_title": "Ta’minotchi kontaktlarini ochish",
@@ -664,7 +664,7 @@
     "pay_modal_whatsapp": "WhatsApp",
     "pay_modal_direct": "To‘g‘ridan-to‘g‘ri kontakt",
     "pay_modal_trust_instant": "To‘lovdan keyin darhol ochiladi",
-    "pay_modal_trust_forever": "Kirish qayta to‘lovsiz saqlanadi"
+    "pay_modal_trust_forever": "Qayta to‘lov talab qilinmaydi"
   },
   "messages": {
     "booking_created": "Bron yaratildi",
