@@ -1550,7 +1550,7 @@ return (
             </div>
           )}
 
-          {/* Proof signal: premium compact trust row */}
+          {/* Proof signal: compact materials row */}
           {hasProof && (
             <button
               type="button"
@@ -1558,44 +1558,64 @@ return (
                 e.stopPropagation();
                 setDetailsOpen(true);
               }}
-              className="mt-2 flex w-full items-center gap-2 rounded-xl bg-emerald-50/45 px-2 py-1 text-left text-emerald-800/85 ring-1 ring-emerald-100/60 transition hover:bg-emerald-50 hover:text-emerald-900"
+              className="
+                mt-2
+                flex
+                w-full
+                items-center
+                gap-2
+                rounded-xl
+                bg-emerald-50/45
+                px-2
+                py-1
+                text-left
+                text-emerald-800/85
+                ring-1
+                ring-emerald-100/60
+                transition
+                hover:bg-emerald-50
+              "
             >
-              <span className="min-w-0 inline-flex items-center gap-1.5 text-[11px] font-black leading-4">
-                <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-[11px] ring-1 ring-emerald-100">✔</span>
-                <span className="truncate">
-                  {t("marketplace.verified_proof", { defaultValue: "Проверено" })}
-                </span>
-                <span className="text-emerald-700/60">·</span>
-                <span
-                  className="truncate text-emerald-700/75"
-                  title={
-                    canViewProof
-                      ? t(
-                          "marketplace.proof_materials_tooltip",
-                          {
-                            defaultValue:
-                              "Ta’minotchi ma’lumotlari va materiallari tekshiruvdan o‘tgan",
-                          }
-                        )
-                      : undefined
-                  }
-                >
-                  {canViewProof
+              <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-[11px] ring-1 ring-emerald-100">
+                📄
+              </span>
+          
+              <span
+                className="truncate text-[11px] font-semibold text-emerald-700"
+                title={
+                  canViewProof
                     ? t(
-                        "marketplace.proof_materials_provided",
+                        "marketplace.details_proof_available_tooltip",
                         {
-                          defaultValue: "Tekshiruvdan o‘tgan",
+                          defaultValue:
+                            "Материалы проверки доступны для просмотра",
                         }
                       )
                     : t(
-                        "marketplace.proof_after_unlock_short",
+                        "marketplace.details_proof_locked_tooltip",
                         {
-                          defaultValue: "Ochilgandan keyin ko‘rinadi",
+                          defaultValue:
+                            "Материалы проверки откроются после получения доступа",
                         }
-                      )}
-                </span>
+                      )
+                }
+              >
+                {canViewProof
+                  ? t(
+                      "marketplace.details_proof_available",
+                      {
+                        defaultValue:
+                          "Материалы проверки доступны",
+                      }
+                    )
+                  : t(
+                      "marketplace.proof_after_unlock_short",
+                      {
+                        defaultValue:
+                          "Материалы доступны после открытия",
+                      }
+                    )}
               </span>
-
             </button>
           )}
 
