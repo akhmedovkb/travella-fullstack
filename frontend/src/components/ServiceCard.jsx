@@ -1558,7 +1558,7 @@ return (
                 e.stopPropagation();
                 setDetailsOpen(true);
               }}
-              className="mt-2 flex w-full items-center justify-between gap-2 rounded-xl bg-transparent px-0.5 py-0.5 text-left text-emerald-800/85 transition hover:text-emerald-900"
+              className="mt-2 flex w-full items-center gap-2 rounded-xl bg-transparent px-0.5 py-0.5 text-left text-emerald-800/85 transition hover:text-emerald-900"
             >
               <span className="min-w-0 inline-flex items-center gap-1.5 text-[11px] font-black leading-4">
                 <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-[11px] ring-1 ring-emerald-100">✔</span>
@@ -1573,11 +1573,6 @@ return (
                 </span>
               </span>
 
-              {!canViewProof && (
-                <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-[12px] text-amber-600 ring-1 ring-amber-100">
-                  🔒
-                </span>
-              )}
             </button>
           )}
 
@@ -1700,32 +1695,6 @@ return (
               </div>
             )}
 
-            {!unlocked && !isProviderViewer && !isAdminViewer && (unlocksCount > 0 || (expireAt && !isExpired)) && (
-              <div className="space-y-1.5">
-                {unlocksCount > 0 && (
-                  <div className="flex items-center gap-1.5 rounded-xl bg-emerald-50/60 px-2.5 py-1.5 text-[11px] font-bold text-emerald-700 ring-1 ring-emerald-100/80">
-                    <span className="text-base leading-none">✅</span>
-                    <span>
-                      {t("marketplace.opened_contacts_cta", {
-                        count: unlocksCount,
-                        defaultValue: `Уже открыли контакты: ${unlocksCount}`,
-                      })}
-                    </span>
-                  </div>
-                )}
-
-                {expireAt && !isExpired && (
-                  <div className="flex items-center gap-1.5 rounded-xl bg-amber-50/70 px-2.5 py-1.5 text-[11px] font-bold text-amber-700 ring-1 ring-amber-100/80">
-                    <span className="text-base leading-none">⏳</span>
-                    <span>
-                      {t("marketplace.offer_may_expire_anytime", {
-                        defaultValue: "Предложение может стать неактуальным в любой момент",
-                      })}
-                    </span>
-                  </div>
-                )}
-              </div>
-            )}
 
             {canShowUnlockButton && (
               <>
@@ -1743,7 +1712,7 @@ return (
                       <span>🔓</span>
                       <span>
                         {t("marketplace.unlock_contacts_cta_primary", {
-                          defaultValue: "Связаться с поставщиком",
+                          defaultValue: "Открыть контакты",
                         })}
                       </span>
                     </span>
@@ -2728,25 +2697,18 @@ return (
                   </div>
                 </div>
 
-                <div className="mt-4 grid grid-cols-1 gap-2 text-xs font-bold text-emerald-800 sm:grid-cols-3">
-                  <div className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-100/80 px-2.5 py-2">
-                    <span>✅</span>
-                    <span>{t("marketplace.pay_modal_trust_instant", {
-                      defaultValue: "Откроется сразу после оплаты",
-                    })}</span>
-                  </div>
-                  <div className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-100/80 px-2.5 py-2">
-                    <span>🔒</span>
-                    <span>{t("marketplace.pay_modal_trust_forever", {
-                      defaultValue: "Повторная оплата не нужна",
-                    })}</span>
-                  </div>
-                  <div className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-orange-200 bg-orange-50 px-2.5 py-2 text-orange-800">
-                    <span>💾</span>
-                    <span>{t("marketplace.pay_modal_trust_saved", {
-                      defaultValue: "Доступ сохранится",
-                    })}</span>
-                  </div>
+                <div className="mt-4 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center text-[11px] font-semibold leading-4 text-emerald-800">
+                  <span>✓ {t("marketplace.pay_modal_trust_instant", {
+                    defaultValue: "Откроется сразу после оплаты",
+                  })}</span>
+                  <span className="text-gray-300">•</span>
+                  <span>✓ {t("marketplace.pay_modal_trust_forever", {
+                    defaultValue: "Повторная оплата не нужна",
+                  })}</span>
+                  <span className="text-gray-300">•</span>
+                  <span>✓ {t("marketplace.pay_modal_trust_saved", {
+                    defaultValue: "Доступ сохранится",
+                  })}</span>
                 </div>
 
                 <div className="mt-6 flex flex-col gap-3 sm:flex-row">
