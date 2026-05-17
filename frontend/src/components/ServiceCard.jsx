@@ -1471,10 +1471,10 @@ return (
                 )}
 
                 {watchingNow > 0 && (
-                  <span className="inline-flex max-w-full items-center rounded-full bg-red-50 px-2 py-1 font-bold text-red-600 ring-1 ring-red-100">
+                  <span className="inline-flex max-w-full items-center rounded-full bg-red-50 px-2 py-1 font-bold text-red-600 ring-1 ring-red-100 animate-[pulse_2.8s_ease-in-out_infinite]">
                     <span className="mr-1">⚡</span>
                     <span className="truncate">
-                      {watchingNow} {t("marketplace.watching_now", { defaultValue: "рассматривают сейчас" })}
+                      {watchingNow} {t("marketplace.watching_now_short", { defaultValue: "сейчас" })}
                     </span>
                   </span>
                 )}
@@ -1483,7 +1483,7 @@ return (
                   <span className="inline-flex max-w-full items-center rounded-full bg-emerald-50 px-2 py-1 font-semibold text-emerald-700 ring-1 ring-emerald-100">
                     <span className="mr-1">🔓</span>
                     <span className="truncate">
-                      {unlocksCount} {t("marketplace.opened_contacts_count", { defaultValue: "открыли контакты" })}
+                      {unlocksCount} {t("marketplace.opened_contacts_count_short", { defaultValue: "открыли" })}
                     </span>
                   </span>
                 )}
@@ -1769,37 +1769,13 @@ return (
                   })}
                 </p>
 
-                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
-                  <div className="inline-flex items-center justify-center gap-1 rounded-xl bg-emerald-50 px-2 py-1.5 text-[10px] font-black text-emerald-700 ring-1 ring-emerald-100">
-                    <span>✓</span>
-                    <span>{t("marketplace.unlock_trust_auto", { defaultValue: "Откроется автоматически" })}</span>
-                  </div>
-                  <div className="inline-flex items-center justify-center gap-1 rounded-xl bg-emerald-50 px-2 py-1.5 text-[10px] font-black text-emerald-700 ring-1 ring-emerald-100">
-                    <span>✓</span>
-                    <span>{t("marketplace.unlock_trust_no_repeat", { defaultValue: "Без повторной оплаты" })}</span>
-                  </div>
-                  <div className="inline-flex items-center justify-center gap-1 rounded-xl bg-orange-50 px-2 py-1.5 text-[10px] font-black text-orange-700 ring-1 ring-orange-100">
-                    <span>✓</span>
-                    <span>{t("marketplace.unlock_trust_saved", { defaultValue: "Доступ сохранится" })}</span>
-                  </div>
+                <div className="mt-0.5 flex flex-wrap items-center justify-center gap-1 text-[10px] font-semibold leading-4 text-gray-500">
+                  <span>{t("marketplace.unlock_trust_auto_short", { defaultValue: "✓ Авто" })}</span>
+                  <span className="text-gray-300">•</span>
+                  <span>{t("marketplace.unlock_trust_no_repeat", { defaultValue: "✓ Без повторной оплаты" })}</span>
+                  <span className="text-gray-300">•</span>
+                  <span>{t("marketplace.unlock_trust_saved", { defaultValue: "✓ Доступ сохраняется" })}</span>
                 </div>
-
-                {(watchingNow > 0 || unlocksCount > 0) && (
-                  <div className="flex flex-wrap items-center justify-center gap-1.5 text-[10px] font-black">
-                    {unlocksCount > 0 && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-700 ring-1 ring-emerald-100 animate-[pulse_2.8s_ease-in-out_infinite]">
-                        <span>🔥</span>
-                        <span>{t("marketplace.unlocks_micro_fomo", { count: unlocksCount, defaultValue: `Уже открывали: ${unlocksCount}` })}</span>
-                      </span>
-                    )}
-                    {watchingNow > 0 && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-red-600 ring-1 ring-red-100 animate-[pulse_2.4s_ease-in-out_infinite]">
-                        <span>⚡</span>
-                        <span>{t("marketplace.watching_micro_fomo", { count: watchingNow, defaultValue: `Сейчас смотрят: ${watchingNow}` })}</span>
-                      </span>
-                    )}
-                  </div>
-                )}
               </>
             )}
 
