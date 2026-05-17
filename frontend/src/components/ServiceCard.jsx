@@ -1566,10 +1566,33 @@ return (
                   {t("marketplace.verified_proof", { defaultValue: "Проверено" })}
                 </span>
                 <span className="text-emerald-700/60">·</span>
-                <span className="truncate text-emerald-700/75">
+                <span
+                  className="truncate text-emerald-700/75"
+                  title={
+                    canViewProof
+                      ? t(
+                          "marketplace.proof_materials_tooltip",
+                          {
+                            defaultValue:
+                              "Ta’minotchi ma’lumotlari va materiallari tekshiruvdan o‘tgan",
+                          }
+                        )
+                      : undefined
+                  }
+                >
                   {canViewProof
-                    ? t("marketplace.proof_materials_provided", { defaultValue: "Материалы проверки предоставлены" })
-                    : t("marketplace.proof_after_unlock_short", { defaultValue: "Материалы проверки после открытия" })}
+                    ? t(
+                        "marketplace.proof_materials_provided",
+                        {
+                          defaultValue: "Tekshiruvdan o‘tgan",
+                        }
+                      )
+                    : t(
+                        "marketplace.proof_after_unlock_short",
+                        {
+                          defaultValue: "Ochilgandan keyin ko‘rinadi",
+                        }
+                      )}
                 </span>
               </span>
 
