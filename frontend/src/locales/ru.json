@@ -631,8 +631,20 @@
     "pay_modal_telegram": "Telegram",
     "pay_modal_whatsapp": "WhatsApp",
     "pay_modal_direct": "Прямой контакт",
-    "pay_modal_trust_instant": "Откроется сразу после оплаты",
-    "pay_modal_trust_forever": "Повторная оплата не нужна"
+    "pay_modal_trust_instant": "Откроется после оплаты",
+    "pay_modal_trust_forever": "Без повторной оплаты",
+    "unlock_contacts_cta_primary": "Открыть контакты",
+    "unlock_contacts_cta_hint": "Контакты откроются автоматически после оплаты",
+    "proof_materials_provided": "Материалы проверки предоставлены",
+    "proof_after_unlock_short": "Материалы проверки после открытия",
+    "unlock_supplier_hint_title": "Контакты видны после открытия",
+    "unlock_supplier_hint": "Откройте доступ и свяжитесь с поставщиком напрямую по телефону или Telegram.",
+    "stats_views_tooltip": "Просмотры этого предложения за последние 24 часа",
+    "stats_watching_tooltip": "Пользователи, которые сейчас смотрят это предложение",
+    "stats_unlocks_tooltip": "Пользователи, которые уже открыли контакты поставщика",
+    "watching_now_short": "сейчас",
+    "opened_contacts_count_short": "открыли",
+    "pay_modal_trust_saved": "Доступ сохранится"
   },
   "messages": {
     "booking_created": "Бронирование создано",
