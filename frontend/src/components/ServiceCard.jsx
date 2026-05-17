@@ -1558,7 +1558,7 @@ return (
                 e.stopPropagation();
                 setDetailsOpen(true);
               }}
-              className="mt-2 flex w-full items-center gap-2 rounded-xl bg-transparent px-0.5 py-0.5 text-left text-emerald-800/85 transition hover:text-emerald-900"
+              className="mt-2 flex w-full items-center gap-2 rounded-xl bg-emerald-50/45 px-2 py-1 text-left text-emerald-800/85 ring-1 ring-emerald-100/60 transition hover:bg-emerald-50 hover:text-emerald-900"
             >
               <span className="min-w-0 inline-flex items-center gap-1.5 text-[11px] font-black leading-4">
                 <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-[11px] ring-1 ring-emerald-100">✔</span>
@@ -1681,13 +1681,13 @@ return (
                   <div>
                     <div className="font-black">
                       {t("marketplace.unlock_supplier_hint_title", {
-                        defaultValue: "Контакты доступны после открытия доступа",
+                        defaultValue: "Контакты закрыты",
                       })}
                     </div>
                     <div className="mt-0.5 font-medium text-orange-700/90 line-clamp-2">
                       {t("marketplace.unlock_supplier_hint", {
                         defaultValue:
-                          "Получите доступ и свяжитесь напрямую по телефону или Telegram.",
+                          "После открытия вы сможете связаться с поставщиком.",
                       })}
                     </div>
                   </div>
@@ -1708,18 +1708,15 @@ return (
                   {unlockLoading || unlockIntroLoading ? (
                     <span className="relative z-10">{t("marketplace.unlocking", { defaultValue: "Открытие..." })}</span>
                   ) : (
-                    <span className="relative z-10 inline-flex items-center justify-center gap-2">
-                      <span>🔓</span>
-                      <span>
-                        {t("marketplace.unlock_contacts_cta_primary", {
-                          defaultValue: "Открыть контакты",
-                        })}
-                      </span>
+                    <span className="relative z-10 inline-flex items-center justify-center">
+                      {t("marketplace.unlock_contacts_cta_primary", {
+                        defaultValue: "Открыть контакты",
+                      })}
                     </span>
                   )}
                 </button>
 
-                <p className="mt-1 text-center text-[11px] font-medium leading-4 text-gray-400">
+                <p className="mt-1 text-center text-[10px] font-medium leading-4 text-gray-400/85">
                   {t("marketplace.unlock_contacts_cta_hint", {
                     defaultValue: "После оплаты контакты откроются автоматически",
                   })}
@@ -2697,7 +2694,7 @@ return (
                   </div>
                 </div>
 
-                <div className="mt-4 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center text-[11px] font-semibold leading-4 text-emerald-800">
+                <div className="mt-4 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center text-[11px] font-semibold leading-4 text-gray-500">
                   <span>✓ {t("marketplace.pay_modal_trust_instant", {
                     defaultValue: "Откроется сразу после оплаты",
                   })}</span>
