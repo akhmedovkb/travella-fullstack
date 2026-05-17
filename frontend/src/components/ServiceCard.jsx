@@ -1464,14 +1464,20 @@ return (
             {(viewsCount > 0 || watchingNow > 0 || unlocksCount > 0) && (
               <div className="flex flex-wrap items-center gap-1.5 text-[10px] sm:text-[11px] text-gray-500">
                 {viewsCount > 0 && (
-                  <span className="inline-flex max-w-full items-center rounded-full bg-gray-50 px-2 py-1 text-gray-600 ring-1 ring-gray-100">
+                  <span
+                    className="inline-flex max-w-full items-center rounded-full bg-gray-50 px-2 py-1 text-gray-600 ring-1 ring-gray-100"
+                    title={t("marketplace.stats_views_tooltip", { defaultValue: "Просмотры этого тура за последние 24 часа" })}
+                  >
                     <span className="mr-1">👁</span>
                     <span>{viewsCount}</span>
                   </span>
                 )}
 
                 {watchingNow > 0 && (
-                  <span className="inline-flex max-w-full items-center rounded-full bg-red-50 px-2 py-1 font-bold text-red-600 ring-1 ring-red-100 animate-[pulse_2.8s_ease-in-out_infinite]">
+                  <span
+                    className="inline-flex max-w-full items-center rounded-full bg-red-50 px-2 py-1 font-bold text-red-600 ring-1 ring-red-100 animate-[pulse_2.8s_ease-in-out_infinite]"
+                    title={t("marketplace.stats_watching_tooltip", { defaultValue: "Пользователи, которые сейчас рассматривают этот тур" })}
+                  >
                     <span className="mr-1">⚡</span>
                     <span className="truncate">
                       {watchingNow} {t("marketplace.watching_now_short", { defaultValue: "сейчас" })}
@@ -1480,7 +1486,10 @@ return (
                 )}
 
                 {unlocksCount > 0 && (
-                  <span className="inline-flex max-w-full items-center rounded-full bg-emerald-50 px-2 py-1 font-semibold text-emerald-700 ring-1 ring-emerald-100">
+                  <span
+                    className="inline-flex max-w-full items-center rounded-full bg-emerald-50 px-2 py-1 font-semibold text-emerald-700 ring-1 ring-emerald-100"
+                    title={t("marketplace.stats_unlocks_tooltip", { defaultValue: "Количество пользователей, которые уже открыли контакты поставщика" })}
+                  >
                     <span className="mr-1">🔓</span>
                     <span className="truncate">
                       {unlocksCount} {t("marketplace.opened_contacts_count_short", { defaultValue: "открыли" })}
@@ -1559,38 +1568,16 @@ return (
                 <span className="text-emerald-700/60">·</span>
                 <span className="truncate text-emerald-700/75">
                   {canViewProof
-                    ? t("marketplace.check_authenticity", { defaultValue: "Проверить" })
+                    ? t("marketplace.proof_materials_provided", { defaultValue: "Материалы проверки предоставлены" })
                     : t("marketplace.proof_after_unlock_short", { defaultValue: "Материалы проверки после открытия" })}
                 </span>
               </span>
 
-              <span className="flex shrink-0 items-center -space-x-1.5">
-                {canViewProof ? (
-                  proofImages.slice(0, 2).map((img, i) => (
-                    <span
-                      key={`${id}-proof-mini-${i}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedProofImage(img);
-                      }}
-                      className="relative h-6 w-6 overflow-hidden rounded-md border-2 border-white bg-white shadow-sm hover:opacity-90"
-                      title={t("marketplace.open_proof_image", { defaultValue: "Открыть изображение" })}
-                    >
-                      <img src={img} alt="" className="h-full w-full object-cover" />
-                    </span>
-                  ))
-                ) : (
-                  <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-emerald-50 text-[11px] ring-1 ring-emerald-100">
-                    🔒
-                  </span>
-                )}
-
-                {proofImages.length > 2 && (
-                  <span className="relative inline-flex h-6 w-6 items-center justify-center rounded-md border-2 border-white bg-emerald-700 text-[9px] font-black text-white shadow-sm">
-                    +{proofImages.length - 2}
-                  </span>
-                )}
-              </span>
+              {!canViewProof && (
+                <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-[12px] text-amber-600 ring-1 ring-amber-100">
+                  🔒
+                </span>
+              )}
             </button>
           )}
 
@@ -1763,19 +1750,11 @@ return (
                   )}
                 </button>
 
-                <p className="text-center text-[11px] font-medium leading-4 text-gray-500">
+                <p className="mt-1 text-center text-[11px] font-medium leading-4 text-gray-400">
                   {t("marketplace.unlock_contacts_cta_hint", {
-                    defaultValue: "Мгновенный доступ после оплаты",
+                    defaultValue: "После оплаты контакты откроются автоматически",
                   })}
                 </p>
-
-                <div className="mt-0.5 flex flex-wrap items-center justify-center gap-1 text-[10px] font-semibold leading-4 text-gray-500">
-                  <span>{t("marketplace.unlock_trust_auto_short", { defaultValue: "✓ Авто" })}</span>
-                  <span className="text-gray-300">•</span>
-                  <span>{t("marketplace.unlock_trust_no_repeat", { defaultValue: "✓ Без повторной оплаты" })}</span>
-                  <span className="text-gray-300">•</span>
-                  <span>{t("marketplace.unlock_trust_saved", { defaultValue: "✓ Доступ сохраняется" })}</span>
-                </div>
               </>
             )}
 
@@ -2106,7 +2085,7 @@ return (
                 </span>
               </button>
               <div className="mt-2 text-center text-[11px] font-semibold text-slate-400">
-                {t("marketplace.unlock_contacts_cta_hint", { defaultValue: "Мгновенный доступ после оплаты" })}
+                {t("marketplace.unlock_contacts_cta_hint", { defaultValue: "После оплаты контакты откроются автоматически" })}
               </div>
             </div>
           )}
