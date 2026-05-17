@@ -1254,7 +1254,7 @@ return (
           unlocked
             ? "bg-gray-50 border-gray-200 opacity-95"
             : "bg-white border-gray-100/90 hover:border-orange-100",
-          highlighted ? "ring-2 ring-orange-400 shadow-xl" : "",
+          highlighted ? "ring-2 ring-orange-400 shadow-[0_0_0_6px_rgba(251,146,60,0.16),0_24px_60px_rgba(249,115,22,0.30)] animate-[pulse_1.8s_ease-in-out_2]" : "",
           className,
         ].join(" ")}
         >
@@ -1746,12 +1746,13 @@ return (
                   type="button"
                   onClick={openUnlockIntro}
                   disabled={unlockLoading || unlockIntroLoading}
-                  className="w-full rounded-2xl bg-gradient-to-r from-orange-500 via-amber-500 to-orange-400 px-4 py-2.5 text-sm font-black text-white shadow-[0_12px_26px_rgba(249,115,22,0.24)] ring-1 ring-orange-200/60 transition-all duration-300 hover:-translate-y-0.5 hover:scale-[1.02] hover:shadow-[0_20px_44px_rgba(249,115,22,0.38)] hover:saturate-110 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100 active:translate-y-0 active:scale-[0.99] animate-[pulse_2.4s_ease-in-out_infinite]"
+                  className="group/cta relative w-full overflow-hidden rounded-2xl bg-gradient-to-r from-orange-500 via-amber-500 to-orange-400 px-4 py-2.5 text-sm font-black text-white shadow-[0_12px_26px_rgba(249,115,22,0.24)] ring-1 ring-orange-200/60 transition-all duration-300 hover:-translate-y-0.5 hover:scale-[1.03] hover:shadow-[0_20px_44px_rgba(249,115,22,0.42)] hover:saturate-110 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100 active:translate-y-0 active:scale-[0.98] animate-[pulse_2.4s_ease-in-out_infinite]"
                 >
+                  <span className="pointer-events-none absolute inset-0 bg-orange-200/25 opacity-0 blur-xl transition-opacity duration-300 group-hover/cta:opacity-100" />
                   {unlockLoading || unlockIntroLoading ? (
-                    t("marketplace.unlocking", { defaultValue: "Открытие..." })
+                    <span className="relative z-10">{t("marketplace.unlocking", { defaultValue: "Открытие..." })}</span>
                   ) : (
-                    <span className="inline-flex items-center justify-center gap-2">
+                    <span className="relative z-10 inline-flex items-center justify-center gap-2">
                       <span>🔓</span>
                       <span>
                         {t("marketplace.unlock_contacts_cta_primary", {
@@ -1767,6 +1768,38 @@ return (
                     defaultValue: "Мгновенный доступ после оплаты",
                   })}
                 </p>
+
+                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
+                  <div className="inline-flex items-center justify-center gap-1 rounded-xl bg-emerald-50 px-2 py-1.5 text-[10px] font-black text-emerald-700 ring-1 ring-emerald-100">
+                    <span>✓</span>
+                    <span>{t("marketplace.unlock_trust_auto", { defaultValue: "Откроется автоматически" })}</span>
+                  </div>
+                  <div className="inline-flex items-center justify-center gap-1 rounded-xl bg-emerald-50 px-2 py-1.5 text-[10px] font-black text-emerald-700 ring-1 ring-emerald-100">
+                    <span>✓</span>
+                    <span>{t("marketplace.unlock_trust_no_repeat", { defaultValue: "Без повторной оплаты" })}</span>
+                  </div>
+                  <div className="inline-flex items-center justify-center gap-1 rounded-xl bg-orange-50 px-2 py-1.5 text-[10px] font-black text-orange-700 ring-1 ring-orange-100">
+                    <span>✓</span>
+                    <span>{t("marketplace.unlock_trust_saved", { defaultValue: "Доступ сохранится" })}</span>
+                  </div>
+                </div>
+
+                {(watchingNow > 0 || unlocksCount > 0) && (
+                  <div className="flex flex-wrap items-center justify-center gap-1.5 text-[10px] font-black">
+                    {unlocksCount > 0 && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-700 ring-1 ring-emerald-100 animate-[pulse_2.8s_ease-in-out_infinite]">
+                        <span>🔥</span>
+                        <span>{t("marketplace.unlocks_micro_fomo", { count: unlocksCount, defaultValue: `Уже открывали: ${unlocksCount}` })}</span>
+                      </span>
+                    )}
+                    {watchingNow > 0 && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-red-600 ring-1 ring-red-100 animate-[pulse_2.4s_ease-in-out_infinite]">
+                        <span>⚡</span>
+                        <span>{t("marketplace.watching_micro_fomo", { count: watchingNow, defaultValue: `Сейчас смотрят: ${watchingNow}` })}</span>
+                      </span>
+                    )}
+                  </div>
+                )}
               </>
             )}
 
@@ -2391,17 +2424,22 @@ return (
             onClick={() => setShowUnlockSuccessModal(false)}
           >
             <div
-              className="w-full max-w-md overflow-hidden rounded-[28px] border border-white/70 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.35)] animate-[scaleIn_.22s_ease-out]"
+              className="relative w-full max-w-md overflow-hidden rounded-[28px] border border-white/70 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.35)] animate-[scaleIn_.22s_ease-out]"
               onClick={(e) => e.stopPropagation()}
             >
+              <div className="pointer-events-none absolute -left-12 -top-12 h-36 w-36 rounded-full bg-emerald-300/25 blur-3xl" />
+              <div className="pointer-events-none absolute -right-14 top-32 h-32 w-32 rounded-full bg-orange-300/20 blur-3xl" />
               <div className="relative overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.42),_transparent_34%),linear-gradient(135deg,#10b981,#22c55e)] px-6 py-6 text-white">
                 <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-white/15 blur-2xl" />
                 <div className="relative flex flex-col items-center text-center">
-                  <div className="relative mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-white/20 shadow-inner ring-1 ring-white/30">
+                  <div className="relative mb-3 flex h-20 w-20 items-center justify-center rounded-full bg-white/20 shadow-inner ring-1 ring-white/30">
                     <span className="absolute inline-flex h-full w-full rounded-full bg-white/25 animate-ping" />
-                    <span className="relative flex h-12 w-12 items-center justify-center rounded-full bg-white text-3xl text-emerald-600 shadow-lg animate-[scaleIn_.28s_ease-out]">
+                    <span className="absolute inline-flex h-14 w-14 rounded-full bg-emerald-200/35 animate-[ping_1.1s_ease-in-out_1]" />
+                    <span className="relative flex h-14 w-14 items-center justify-center rounded-full bg-white text-4xl text-emerald-600 shadow-lg animate-[bounce_.75s_ease-in-out_1]">
                       ✓
                     </span>
+                    <span className="absolute -left-5 top-1 text-lg animate-[bounce_1.1s_ease-in-out_1]">✨</span>
+                    <span className="absolute -right-4 top-5 text-base animate-[bounce_1.25s_ease-in-out_1]">🎉</span>
                   </div>
 
                   <h2 className="text-xl font-black leading-tight tracking-[-0.02em]">
@@ -2418,7 +2456,22 @@ return (
                 </div>
               </div>
 
-              <div className="px-5 py-5">
+              <div className="relative px-5 py-5">
+                <div className="mb-3 grid grid-cols-1 gap-1.5 sm:grid-cols-3">
+                  <div className="inline-flex items-center justify-center gap-1 rounded-xl bg-emerald-50 px-2 py-1.5 text-[10px] font-black text-emerald-700 ring-1 ring-emerald-100">
+                    <span>✓</span>
+                    <span>{t("marketplace.unlock_success_trust_saved", { defaultValue: "Доступ сохранён" })}</span>
+                  </div>
+                  <div className="inline-flex items-center justify-center gap-1 rounded-xl bg-sky-50 px-2 py-1.5 text-[10px] font-black text-sky-700 ring-1 ring-sky-100">
+                    <span>☎</span>
+                    <span>{t("marketplace.unlock_success_trust_direct", { defaultValue: "Связь напрямую" })}</span>
+                  </div>
+                  <div className="inline-flex items-center justify-center gap-1 rounded-xl bg-orange-50 px-2 py-1.5 text-[10px] font-black text-orange-700 ring-1 ring-orange-100">
+                    <span>🔒</span>
+                    <span>{t("marketplace.unlock_success_trust_no_repeat", { defaultValue: "Без повторной оплаты" })}</span>
+                  </div>
+                </div>
+
                 {supplierName && (
                   <div className="mb-3 rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3">
                     <div className="text-[10px] font-black uppercase tracking-[0.14em] text-gray-400">
@@ -2432,7 +2485,7 @@ return (
 
                 <div className="space-y-2.5">
                   {supplierPhone && (
-                    <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-white px-3 py-3 shadow-sm">
+                    <div className="rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-white px-3 py-3 shadow-sm transition-all duration-300 hover:scale-[1.01] hover:shadow-md">
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0 flex items-center gap-2.5">
                           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm">📞</span>
@@ -2474,7 +2527,7 @@ return (
                   )}
 
                   {supplierTg?.label && (
-                    <div className="rounded-2xl border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-white px-3 py-3 shadow-sm">
+                    <div className="rounded-2xl border border-sky-200 bg-gradient-to-br from-sky-50 via-white to-white px-3 py-3 shadow-sm transition-all duration-300 hover:scale-[1.01] hover:shadow-md">
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0 flex items-center gap-2.5">
                           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#229ED9] text-white shadow-sm">✈️</span>
@@ -2556,7 +2609,7 @@ return (
             >
               <div className="bg-gradient-to-r from-orange-500 to-amber-400 px-6 py-5 text-white">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/20 text-2xl shadow-sm ring-1 ring-white/20">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 text-3xl shadow-[0_14px_34px_rgba(255,255,255,0.18)] ring-1 ring-white/25 backdrop-blur-sm">
                     💬
                   </div>
                   <div>
@@ -2641,7 +2694,7 @@ return (
             >
               <div className="bg-gradient-to-r from-orange-500 to-amber-400 px-6 py-5 text-white">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/20 text-2xl shadow-sm ring-1 ring-white/20">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 text-3xl shadow-[0_14px_34px_rgba(255,255,255,0.18)] ring-1 ring-white/25 backdrop-blur-sm">
                     💬
                   </div>
                   <div>
@@ -2720,7 +2773,7 @@ return (
                   </div>
                 </div>
 
-                <div className="mt-4 grid grid-cols-1 gap-2 text-xs font-bold text-emerald-800 sm:grid-cols-2">
+                <div className="mt-4 grid grid-cols-1 gap-2 text-xs font-bold text-emerald-800 sm:grid-cols-3">
                   <div className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-100/80 px-2.5 py-2">
                     <span>✅</span>
                     <span>{t("marketplace.pay_modal_trust_instant", {
@@ -2731,6 +2784,12 @@ return (
                     <span>🔒</span>
                     <span>{t("marketplace.pay_modal_trust_forever", {
                       defaultValue: "Повторная оплата не нужна",
+                    })}</span>
+                  </div>
+                  <div className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-orange-200 bg-orange-50 px-2.5 py-2 text-orange-800">
+                    <span>💾</span>
+                    <span>{t("marketplace.pay_modal_trust_saved", {
+                      defaultValue: "Доступ сохранится",
                     })}</span>
                   </div>
                 </div>
@@ -2757,11 +2816,14 @@ return (
 
                       window.location.href = url;
                     }}
-                    className="inline-flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-orange-500 via-amber-500 to-orange-400 px-4 py-3 text-sm font-black text-white shadow-[0_16px_36px_rgba(249,115,22,0.32)] ring-1 ring-orange-200/70 transition-all duration-300 hover:-translate-y-0.5 hover:scale-[1.02] hover:shadow-[0_24px_54px_rgba(249,115,22,0.44)] active:translate-y-0 active:scale-[0.99] animate-[pulse_2.4s_ease-in-out_infinite]"
+                    className="group/pay relative inline-flex w-full overflow-hidden items-center justify-center rounded-2xl bg-gradient-to-r from-orange-500 via-amber-500 to-orange-400 px-4 py-3 text-sm font-black text-white shadow-[0_16px_36px_rgba(249,115,22,0.32)] ring-1 ring-orange-200/70 transition-all duration-300 hover:-translate-y-0.5 hover:scale-[1.03] hover:shadow-[0_24px_54px_rgba(249,115,22,0.48)] active:translate-y-0 active:scale-[0.98] animate-[pulse_2.4s_ease-in-out_infinite]"
                   >
-                    {t("marketplace.go_to_payment", {
-                      defaultValue: "Оплатить и открыть",
-                    })}
+                    <span className="pointer-events-none absolute inset-0 bg-orange-200/25 opacity-0 blur-xl transition-opacity duration-300 group-hover/pay:opacity-100" />
+                    <span className="relative z-10">
+                      {t("marketplace.go_to_payment", {
+                        defaultValue: "Оплатить и открыть",
+                      })}
+                    </span>
                   </button>
                 </div>
               </div>
