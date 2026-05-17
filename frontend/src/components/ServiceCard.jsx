@@ -1746,7 +1746,7 @@ return (
                   type="button"
                   onClick={openUnlockIntro}
                   disabled={unlockLoading || unlockIntroLoading}
-                  className="w-full rounded-2xl bg-gradient-to-r from-orange-500 via-amber-500 to-orange-400 px-4 py-2.5 text-sm font-black text-white shadow-[0_12px_26px_rgba(249,115,22,0.24)] ring-1 ring-orange-200/60 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_18px_38px_rgba(249,115,22,0.33)] hover:saturate-110 disabled:cursor-not-allowed disabled:opacity-60 active:translate-y-0 active:scale-[0.99]"
+                  className="w-full rounded-2xl bg-gradient-to-r from-orange-500 via-amber-500 to-orange-400 px-4 py-2.5 text-sm font-black text-white shadow-[0_12px_26px_rgba(249,115,22,0.24)] ring-1 ring-orange-200/60 transition-all duration-300 hover:-translate-y-0.5 hover:scale-[1.02] hover:shadow-[0_20px_44px_rgba(249,115,22,0.38)] hover:saturate-110 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100 active:translate-y-0 active:scale-[0.99] animate-[pulse_2.4s_ease-in-out_infinite]"
                 >
                   {unlockLoading || unlockIntroLoading ? (
                     t("marketplace.unlocking", { defaultValue: "Открытие..." })
@@ -2087,7 +2087,7 @@ return (
                 type="button"
                 onClick={openUnlockIntro}
                 disabled={unlockLoading || unlockIntroLoading}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-orange-500 via-amber-500 to-orange-400 px-5 py-3.5 text-sm font-black text-white shadow-[0_18px_42px_rgba(249,115,22,0.28)] ring-1 ring-orange-200/70 transition hover:-translate-y-0.5 hover:shadow-[0_22px_52px_rgba(249,115,22,0.38)] disabled:cursor-not-allowed disabled:opacity-60 active:translate-y-0"
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-orange-500 via-amber-500 to-orange-400 px-5 py-3.5 text-sm font-black text-white shadow-[0_18px_42px_rgba(249,115,22,0.28)] ring-1 ring-orange-200/70 transition-all duration-300 hover:-translate-y-0.5 hover:scale-[1.015] hover:shadow-[0_24px_56px_rgba(249,115,22,0.42)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100 active:translate-y-0 active:scale-[0.99] animate-[pulse_2.6s_ease-in-out_infinite]"
               >
                 <span>🔓</span>
                 <span>
@@ -2120,8 +2120,9 @@ return (
               <div className="relative overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.38),_transparent_34%),linear-gradient(135deg,#ff7a18,#f6b311)] px-5 py-5 text-white">
                 <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-white/15 blur-2xl" />
                 <div className="relative flex items-center gap-3">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-2xl shadow-inner ring-1 ring-white/25">
-                    ⚡
+                  <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-2xl shadow-inner ring-1 ring-white/25">
+                    <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-white text-[11px] shadow-sm">📞</span>
+                    <span aria-hidden="true">🛡️</span>
                   </div>
                   <div className="min-w-0">
                     <h3 className="text-lg font-black leading-tight tracking-[-0.02em]">
@@ -2369,7 +2370,7 @@ return (
 
                       setShowBalancePrompt(true);
                     }}
-                    className="inline-flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 px-4 py-3 text-sm font-black text-white shadow-[0_16px_34px_rgba(249,115,22,0.30)] transition hover:-translate-y-0.5 hover:shadow-[0_20px_44px_rgba(249,115,22,0.38)] active:translate-y-0"
+                    className="inline-flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-orange-500 via-amber-500 to-orange-400 px-4 py-3 text-sm font-black text-white shadow-[0_16px_34px_rgba(249,115,22,0.30)] ring-1 ring-orange-200/70 transition-all duration-300 hover:-translate-y-0.5 hover:scale-[1.02] hover:shadow-[0_24px_54px_rgba(249,115,22,0.42)] active:translate-y-0 active:scale-[0.99] animate-[pulse_2.5s_ease-in-out_infinite]"
                   >
                     {unlockLoading
                       ? t("marketplace.unlocking", { defaultValue: "Открытие..." })
@@ -2385,129 +2386,161 @@ return (
         )}
 
         {showUnlockSuccessModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-            <div className="bg-white rounded-2xl shadow-2xl w-[95%] max-w-md p-6 animate-[scaleIn_0.25s_ease]">
-        
-              {/* HEADER */}
-              <div className="flex flex-col items-center text-center mb-4">
-                <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center mb-3 animate-pulse">
-                  <span className="text-green-600 text-2xl">✔</span>
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-5 backdrop-blur-sm animate-[fadeIn_.18s_ease-out]"
+            onClick={() => setShowUnlockSuccessModal(false)}
+          >
+            <div
+              className="w-full max-w-md overflow-hidden rounded-[28px] border border-white/70 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.35)] animate-[scaleIn_.22s_ease-out]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="relative overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.42),_transparent_34%),linear-gradient(135deg,#10b981,#22c55e)] px-6 py-6 text-white">
+                <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-white/15 blur-2xl" />
+                <div className="relative flex flex-col items-center text-center">
+                  <div className="relative mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-white/20 shadow-inner ring-1 ring-white/30">
+                    <span className="absolute inline-flex h-full w-full rounded-full bg-white/25 animate-ping" />
+                    <span className="relative flex h-12 w-12 items-center justify-center rounded-full bg-white text-3xl text-emerald-600 shadow-lg animate-[scaleIn_.28s_ease-out]">
+                      ✓
+                    </span>
+                  </div>
+
+                  <h2 className="text-xl font-black leading-tight tracking-[-0.02em]">
+                    {t("marketplace.unlock_success_title", {
+                      defaultValue: "Контакты открыты",
+                    })}
+                  </h2>
+
+                  <p className="mt-1 text-sm font-medium leading-snug text-white/90">
+                    {t("marketplace.unlock_success_subtitle", {
+                      defaultValue: "Можно сразу связаться с поставщиком",
+                    })}
+                  </p>
                 </div>
-        
-                <h2 className="text-lg font-semibold">
-                  {t("marketplace.unlock_success_title", {
-                    defaultValue: "Контакты открыты",
-                  })}
-                </h2>
-        
-                <p className="text-sm text-gray-500">
-                  {t("marketplace.unlock_success_subtitle", {
-                    defaultValue: "Можно сразу связаться с поставщиком",
-                  })}
-                </p>
               </div>
-        
-              {/* CONTACTS */}
-              <div className="space-y-2.5">
-        
-                {/* NAME */}
+
+              <div className="px-5 py-5">
                 {supplierName && (
-                  <div className="text-sm text-gray-800 font-medium">
-                    {supplierName}
-                  </div>
-                )}
-        
-                {/* PHONE */}
-                {supplierPhone && (
-                  <div className="flex items-center justify-between bg-gray-50 rounded-xl px-3 py-2">
-                    <span className="text-sm">{supplierPhone}</span>
-        
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => copyTextSafe(supplierPhone, "phone")}
-                        className="text-xs px-2 py-1 bg-gray-200 rounded-lg"
-                      >
-                        {copiedPhone
-                          ? t("common.copied", { defaultValue: "Скопировано" })
-                          : t("common.copy", { defaultValue: "Копировать" })}
-                      </button>
-        
-                      <a
-                        href={normalizePhoneHref(supplierPhone)}
-                        onClick={() =>
-                          postUnlockStep("unlock_phone_clicked", {
-                            has_phone: true,
-                            has_telegram: Boolean(supplierTg?.href),
-                          })
-                        }
-                        className="text-xs px-2 py-1 bg-green-500 text-white rounded-lg"
-                      >
-                        {t("marketplace.call", { defaultValue: "Позвонить" })}
-                      </a>
+                  <div className="mb-3 rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3">
+                    <div className="text-[10px] font-black uppercase tracking-[0.14em] text-gray-400">
+                      {t("marketplace.supplier", { defaultValue: "Поставщик" })}
+                    </div>
+                    <div className="mt-1 truncate text-sm font-black text-gray-950">
+                      {supplierName}
                     </div>
                   </div>
                 )}
-        
-                {/* TELEGRAM */}
-                {supplierTg?.label && (
-                  <div className="flex items-center justify-between bg-gray-50 rounded-xl px-3 py-2">
-                    <span className="text-sm">{supplierTg.label}</span>
-        
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => copyTextSafe(supplierTg.label, "tg")}
-                        className="text-xs px-2 py-1 bg-gray-200 rounded-lg"
-                      >
-                        {copiedTelegram
-                          ? t("common.copied", { defaultValue: "Скопировано" })
-                          : t("common.copy", { defaultValue: "Копировать" })}
-                      </button>
-        
-                      {supplierTg.href && (
-                        <a
-                          href={supplierTg.href}
-                          onClick={() =>
-                            postUnlockStep("unlock_telegram_clicked", {
-                              has_phone: Boolean(supplierPhone),
-                              has_telegram: true,
-                            })
-                          }
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-xs px-2 py-1 bg-blue-500 text-white rounded-lg"
-                        >
-                          {t("common.telegram", { defaultValue: "Telegram" })}
-                        </a>
-                      )}
+
+                <div className="space-y-2.5">
+                  {supplierPhone && (
+                    <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-white px-3 py-3 shadow-sm">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0 flex items-center gap-2.5">
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm">📞</span>
+                          <div className="min-w-0">
+                            <div className="text-[10px] font-black uppercase tracking-[0.12em] text-emerald-700/70">
+                              {t("marketplace.pay_modal_phone", { defaultValue: "Телефон" })}
+                            </div>
+                            <div className="truncate text-sm font-black text-gray-950">{supplierPhone}</div>
+                          </div>
+                        </div>
+
+                        <div className="flex shrink-0 gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => copyTextSafe(supplierPhone, "phone")}
+                            className="rounded-xl bg-white px-2.5 py-2 text-[11px] font-black text-gray-700 ring-1 ring-gray-200 transition hover:bg-gray-50 active:scale-[0.98]"
+                          >
+                            {copiedPhone
+                              ? t("common.copied", { defaultValue: "Скопировано" })
+                              : t("common.copy", { defaultValue: "Копировать" })}
+                          </button>
+
+                          <a
+                            href={normalizePhoneHref(supplierPhone)}
+                            onClick={() =>
+                              postUnlockStep("unlock_phone_clicked", {
+                                source: "success_modal",
+                                has_phone: true,
+                                has_telegram: Boolean(supplierTg?.href),
+                              })
+                            }
+                            className="rounded-xl bg-emerald-600 px-2.5 py-2 text-[11px] font-black text-white shadow-sm transition hover:bg-emerald-700 active:scale-[0.98]"
+                          >
+                            {t("marketplace.call", { defaultValue: "Позвонить" })}
+                          </a>
+                        </div>
+                      </div>
                     </div>
+                  )}
+
+                  {supplierTg?.label && (
+                    <div className="rounded-2xl border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-white px-3 py-3 shadow-sm">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0 flex items-center gap-2.5">
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#229ED9] text-white shadow-sm">✈️</span>
+                          <div className="min-w-0">
+                            <div className="text-[10px] font-black uppercase tracking-[0.12em] text-sky-700/70">
+                              {t("common.telegram", { defaultValue: "Telegram" })}
+                            </div>
+                            <div className="truncate text-sm font-black text-gray-950">{supplierTg.label}</div>
+                          </div>
+                        </div>
+
+                        <div className="flex shrink-0 gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => copyTextSafe(supplierTg.label, "tg")}
+                            className="rounded-xl bg-white px-2.5 py-2 text-[11px] font-black text-gray-700 ring-1 ring-gray-200 transition hover:bg-gray-50 active:scale-[0.98]"
+                          >
+                            {copiedTelegram
+                              ? t("common.copied", { defaultValue: "Скопировано" })
+                              : t("common.copy", { defaultValue: "Копировать" })}
+                          </button>
+
+                          {supplierTg.href && (
+                            <a
+                              href={supplierTg.href}
+                              onClick={() =>
+                                postUnlockStep("unlock_telegram_clicked", {
+                                  source: "success_modal",
+                                  has_phone: Boolean(supplierPhone),
+                                  has_telegram: true,
+                                })
+                              }
+                              target="_blank"
+                              rel="noreferrer"
+                              className="rounded-xl bg-[#229ED9] px-2.5 py-2 text-[11px] font-black text-white shadow-sm transition hover:bg-[#1d8ecf] active:scale-[0.98]"
+                            >
+                              {t("common.telegram", { defaultValue: "Telegram" })}
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-4 rounded-2xl border border-amber-100 bg-gradient-to-br from-amber-50 via-orange-50 to-white px-4 py-3 text-center">
+                  <p className="text-sm font-bold leading-6 text-amber-900">
+                    {t("marketplace.unlock_success_action_text", {
+                      defaultValue: "Свяжитесь сейчас, пока предложение ещё актуально.",
+                    })}
+                  </p>
+                  <div className="mt-1 text-[11px] font-medium leading-4 text-amber-800/75">
+                    {t("marketplace.unlock_success_saved_hint", {
+                      defaultValue: "Контакты получены после успешной оплаты и уже сохранены в этой карточке",
+                    })}
                   </div>
-                )}
-        
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowUnlockSuccessModal(false)}
+                  className="mt-5 w-full rounded-2xl bg-gray-950 px-4 py-3 text-sm font-black text-white shadow-[0_14px_32px_rgba(15,23,42,0.22)] transition-all duration-300 hover:-translate-y-0.5 hover:scale-[1.01] hover:bg-black active:translate-y-0 active:scale-[0.99]"
+                >
+                  {t("common.close", { defaultValue: "Закрыть" })}
+                </button>
               </div>
-        
-              <p className="mt-4 text-sm leading-6 text-gray-600 text-center">
-                {t("marketplace.unlock_success_action_text", {
-                  defaultValue: "Свяжитесь сейчас, пока предложение ещё актуально.",
-                })}
-              </p>
-        
-              <div className="mt-3 text-xs text-gray-500 text-center">
-                {t("marketplace.unlock_success_saved_hint", {
-                  defaultValue: "Контакты получены после успешной оплаты и уже сохранены в этой карточке",
-                })}
-              </div>
-        
-              {/* ACTION */}
-              <button
-                type="button"
-                onClick={() => setShowUnlockSuccessModal(false)}
-                className="mt-5 w-full bg-black text-white py-2 rounded-xl font-medium"
-              >
-                {t("common.close", { defaultValue: "Закрыть" })}
-              </button>
-        
             </div>
           </div>
         )}
@@ -2583,7 +2616,7 @@ return (
                       setShowLoginModal(false);
                       navigate("/client/login");
                     }}
-                    className="inline-flex w-full items-center justify-center rounded-2xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-orange-200 transition hover:bg-orange-600"
+                    className="inline-flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-orange-500 via-amber-500 to-orange-400 px-4 py-3 text-sm font-black text-white shadow-[0_16px_36px_rgba(249,115,22,0.32)] ring-1 ring-orange-200/70 transition-all duration-300 hover:-translate-y-0.5 hover:scale-[1.02] hover:shadow-[0_24px_54px_rgba(249,115,22,0.44)] active:translate-y-0 active:scale-[0.99] animate-[pulse_2.4s_ease-in-out_infinite]"
                   >
                     {t("marketplace.login_as_client", {
                       defaultValue: "Войти как клиент",
@@ -2667,11 +2700,11 @@ return (
                           <span className="text-base">✈️</span>
                           <span>{t("marketplace.pay_modal_telegram", { defaultValue: "Telegram" })}</span>
                         </div>
-                        <div className="flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-emerald-800 shadow-sm">
+                        <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-gradient-to-br from-green-50 to-emerald-100 px-3 py-2 font-semibold text-green-800 shadow-sm">
                           <span className="text-base">💬</span>
                           <span>{t("marketplace.pay_modal_whatsapp", { defaultValue: "WhatsApp" })}</span>
                         </div>
-                        <div className="flex items-center gap-2 rounded-xl border border-orange-100 bg-orange-50 px-3 py-2 text-orange-800 shadow-sm">
+                        <div className="flex items-center gap-2 rounded-xl border border-orange-200 bg-gradient-to-br from-orange-50 via-amber-50 to-white px-3 py-2 font-semibold text-orange-800 shadow-sm">
                           <span className="text-base">🤝</span>
                           <span>{t("marketplace.pay_modal_direct", { defaultValue: "Прямой контакт" })}</span>
                         </div>
@@ -2724,7 +2757,7 @@ return (
 
                       window.location.href = url;
                     }}
-                    className="inline-flex w-full items-center justify-center rounded-2xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-orange-200 transition hover:bg-orange-600"
+                    className="inline-flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-orange-500 via-amber-500 to-orange-400 px-4 py-3 text-sm font-black text-white shadow-[0_16px_36px_rgba(249,115,22,0.32)] ring-1 ring-orange-200/70 transition-all duration-300 hover:-translate-y-0.5 hover:scale-[1.02] hover:shadow-[0_24px_54px_rgba(249,115,22,0.44)] active:translate-y-0 active:scale-[0.99] animate-[pulse_2.4s_ease-in-out_infinite]"
                   >
                     {t("marketplace.go_to_payment", {
                       defaultValue: "Оплатить и открыть",
