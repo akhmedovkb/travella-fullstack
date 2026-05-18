@@ -781,12 +781,46 @@ export default function DashboardServices() {
     if (!window.confirm(t("confirm_delete_service_full", { defaultValue: `Удалить #R${service.id}? Услуга уйдет из активных. Восстановить сможет только админ.` }))) return;
     try {
       await api.delete(`/api/providers/services/${service.id}`);
-      setServices((prev) => prev.filter((s) => s.id !== service.id));
-      if (selectedService?.id === service.id) resetForm();
+      setServices((prev) =>
+        prev.map((s) =>
+          s.id === service.id
+            ? { ...s, status: "deleted", deleted_at: new Date().toISOString() }
+            : s
+        )
+      );
+      if (selectedService?.id === service.id) {
+        setSelectedService((prev) =>
+          prev ? { ...prev, status: "deleted", deleted_at: new Date().toISOString() } : prev
+        );
+      }
       tSuccess(t("service_deleted", { defaultValue: "Услуга удалена" }));
     } catch (err) {
       console.error(err);
       tError(t("delete_error", { defaultValue: "Ошибка удаления" }));
+    }
+  };
+
+  const restoreServiceFromTrash = async (service, event) => {
+    event?.stopPropagation?.();
+    if (!service?.id) return;
+
+    if (!window.confirm(t("confirm_restore_service", { defaultValue: `Восстановить #R${service.id} в черновики?` }))) return;
+
+    try {
+      const res = await api.post(`/api/providers/services/${service.id}/restore`, {});
+      const restored = res.data || { ...service, status: "draft", moderation_status: "draft", deleted_at: null };
+
+      setServices((prev) => prev.map((s) => (s.id === service.id ? restored : s)));
+
+      if (selectedService?.id === service.id) {
+        loadServiceToEdit(restored);
+      }
+
+      setServiceListFilter("draft");
+      tSuccess(t("service_restored", { defaultValue: "Услуга восстановлена в черновики" }));
+    } catch (err) {
+      console.error(err);
+      tError(err?.response?.data?.message || t("restore_error", { defaultValue: "Не удалось восстановить услугу" }));
     }
   };
 
@@ -1120,6 +1154,18 @@ export default function DashboardServices() {
                               </div>
                             </div>
                           </button>
+
+                          {isDeletedService(service) && (
+                            <div className="border-t border-slate-100 bg-slate-50 px-3 py-2">
+                              <button
+                                type="button"
+                                onClick={(e) => restoreServiceFromTrash(service, e)}
+                                className="w-full rounded-2xl bg-emerald-600 px-3 py-2 text-xs font-black text-white shadow-sm transition hover:bg-emerald-700"
+                              >
+                                {t("restore_service", { defaultValue: "Восстановить" })}
+                              </button>
+                            </div>
+                          )}
 
                           {canSubmit && !isTrashOrArchive && (
                             <div className="border-t border-slate-100 bg-slate-50 px-3 py-2">
