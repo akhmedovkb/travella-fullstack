@@ -1929,6 +1929,104 @@ function escapeHtml(s) {
 // ===== "Живая корзина" в одном сообщении =====
 const TRASH_MSG_BY_CHAT = new Map(); // chatId -> { chatId, messageId }
 const TRASH_ITEMS_BY_CHAT = new Map(); // chatId -> items[]
+const ARCHIVE_MSG_BY_CHAT = new Map(); // chatId -> { chatId, messageId }
+const ARCHIVE_ITEMS_BY_CHAT = new Map(); // chatId -> items[]
+
+
+function getArchiveReason(s) {
+  const d = pickDetails(s);
+  if (String(s?.status || "") === "archived") return "архивировано";
+  if (s?.expiration_at) {
+    const dt = new Date(s.expiration_at);
+    if (!Number.isNaN(dt.getTime()) && dt.getTime() <= Date.now()) return "срок актуальности истёк";
+  }
+  if (d && d.isActive === false) return "снято с публикации";
+  return "неактуально";
+}
+
+function buildArchiveListText(items) {
+  if (!items.length) {
+    return `🗄 <b>Архив отказных услуг</b>\n\nАрхив пуст. Здесь будут просроченные, снятые и архивные отказы.`;
+  }
+
+  const lines = items.slice(0, 20).map((s, idx) => {
+    const id = s.id;
+    const title = escapeHtml(s.title || pickDetails(s).title || "Услуга");
+    const cat = escapeHtml(CATEGORY_LABELS?.[s.category] || s.category || "");
+    const reason = escapeHtml(getArchiveReason(s));
+    const exp = s.expiration_at ? new Date(s.expiration_at).toLocaleString("ru-RU") : "";
+    return (
+      `${idx + 1}) <code>#${id}</code> — <b>${title}</b>` +
+      (cat ? `\n   📌 <i>${cat}</i>` : "") +
+      `\n   🗄 <i>${reason}</i>` +
+      (exp ? `\n   ⏳ <i>${escapeHtml(exp)}</i>` : "")
+    );
+  });
+
+  return (
+    `🗄 <b>Архив отказных услуг</b>\n\n` +
+    `Здесь собраны просроченные, снятые и архивные отказы.\n` +
+    `Нажмите на услугу ниже 👇\n\n` +
+    lines.join("\n\n") +
+    (items.length > 20 ? `\n\n…и ещё ${items.length - 20} шт.` : "")
+  );
+}
+
+function buildArchiveListKeyboard(items) {
+  const buttons = items.slice(0, 20).map((s) => ({
+    text: `#${s.id}`,
+    callback_data: `archive:item:${s.id}`,
+  }));
+
+  const rows = [];
+  for (let i = 0; i < buttons.length; i += 2) rows.push(buttons.slice(i, i + 2));
+
+  rows.push([{ text: "🔄 Обновить", callback_data: "archive:open" }]);
+  rows.push([{ text: "⬅️ В меню", callback_data: "prov_services:list" }]);
+  return { inline_keyboard: rows };
+}
+
+async function fetchArchiveItems(ctx) {
+  const actorId = getActorId(ctx);
+  const r = await axios.get(`/api/telegram/provider/${actorId}/services/archive`);
+  return r?.data?.services || r?.data?.items || [];
+}
+
+async function renderArchive(ctx) {
+  const chatId = ctx.chat?.id || ctx.update?.callback_query?.message?.chat?.id;
+  const items = await fetchArchiveItems(ctx);
+  ARCHIVE_ITEMS_BY_CHAT.set(String(chatId), items);
+
+  const text = buildArchiveListText(items);
+  const reply_markup = buildArchiveListKeyboard(items);
+  const canEditFromCallback = Boolean(ctx.update?.callback_query?.message?.message_id);
+  const saved = ARCHIVE_MSG_BY_CHAT.get(String(chatId));
+  const messageIdToEdit = saved?.messageId;
+
+  if (canEditFromCallback) {
+    try {
+      await ctx.editMessageText(text, { parse_mode: "HTML", reply_markup });
+      const mid = ctx.update.callback_query.message.message_id;
+      ARCHIVE_MSG_BY_CHAT.set(String(chatId), { chatId, messageId: mid });
+      return;
+    } catch {}
+  }
+
+  if (messageIdToEdit) {
+    try {
+      await ctx.telegram.editMessageText(chatId, messageIdToEdit, undefined, text, {
+        parse_mode: "HTML",
+        reply_markup,
+      });
+      return;
+    } catch {
+      ARCHIVE_MSG_BY_CHAT.delete(String(chatId));
+    }
+  }
+
+  const sent = await ctx.reply(text, { parse_mode: "HTML", reply_markup });
+  if (sent?.message_id) ARCHIVE_MSG_BY_CHAT.set(String(chatId), { chatId, messageId: sent.message_id });
+}
 
 function buildTrashListText(items) {
   if (!items.length) {
@@ -5282,11 +5380,22 @@ await ctx.reply("🧳 Выберите действие:", {
     inline_keyboard: [
       [{ text: "📤 Выбрать мою услугу", switch_inline_query_current_chat: "#my refused_tour" }],
       [{ text: "🖼 Карточками", callback_data: "prov_services:list_cards" }],
+      [{ text: "🗄 Архив", callback_data: "archive:open" }, { text: "🧺 Корзина", callback_data: "trash:open" }],
       [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
       [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
     ],
   },
 });
+});
+
+
+bot.hears("🗄 Архив", async (ctx) => {
+  try {
+    await renderArchive(ctx);
+  } catch (e) {
+    console.error("[bot] archive hears error:", e?.message || e);
+    return ctx.reply("❌ Не удалось загрузить архив. Попробуйте позже.");
+  }
 });
 
 bot.hears("🧺 Корзина", async (ctx) => {
@@ -5434,6 +5543,7 @@ bot.action("prov_services:list", async (ctx) => {
         inline_keyboard: [
           [{ text: "📤 Выбрать мою услугу", switch_inline_query_current_chat: "#my refused_tour" }],
           [{ text: "🖼 Карточками", callback_data: "prov_services:list_cards" }],
+          [{ text: "🗄 Архив", callback_data: "archive:open" }, { text: "🧺 Корзина", callback_data: "trash:open" }],
           [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
           [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
         ],
@@ -5520,7 +5630,7 @@ bot.action("prov_services:list_cards", async (ctx) => {
       const category = svc.category || svc.type || "refused_tour";
       const details = parseDetailsAny(svc.details);
 
-      const { text, photoUrl } = buildServiceMessage(svc, category, "provider");
+      const { text, photoUrl } = buildServiceMessage(svc, category, "provider", { forceRefused: true });
       const status = svc.status || "draft";
       const isActive = isServiceActual(details, svc); // ТОЛЬКО для подписи
       const expirationRaw = details.expiration || svc.expiration || null;
@@ -5648,9 +5758,29 @@ bot.action(/^svc_unpublish:(\d+)$/, async (ctx) => {
     );
 
     await safeReply(ctx, "⛔ Услуга снята с публикации.");
+
+    await replyProviderSupportPrompt(ctx, serviceId);
   } catch (e) {
     console.error("[tg-bot] svc_unpublish error:", e?.response?.data || e);
     await safeReply(ctx, "⚠️ Не удалось снять услугу.");
+  }
+});
+
+
+bot.action(/^svc_restore_archive:(\d+)$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery("♻️ Возвращаю…");
+    const serviceId = Number(ctx.match[1]);
+    const actorId = getActorId(ctx);
+
+    await axios.post(
+      `/api/telegram/provider/${actorId}/services/${serviceId}/restore-archive`
+    );
+
+    await safeReply(ctx, "♻️ Услуга возвращена в активные и продлена на 7 дней.");
+  } catch (e) {
+    console.error("[tg-bot] svc_restore_archive error:", e?.response?.data || e);
+    await safeReply(ctx, "⚠️ Не удалось вернуть услугу в активные.");
   }
 });
 
@@ -5665,6 +5795,8 @@ bot.action(/^svc_archive:(\d+)$/, async (ctx) => {
     );
 
     await safeReply(ctx, "🗄 Услуга архивирована.");
+
+    await replyProviderSupportPrompt(ctx, serviceId);
   } catch (e) {
     console.error("[tg-bot] svc_archive error:", e?.response?.data || e);
     await safeReply(ctx, "⚠️ Не удалось архивировать услугу.");
@@ -5800,6 +5932,59 @@ bot.action(/^svc_purge:(\d+)$/, async (ctx) => {
       },
     }
   );
+});
+
+
+bot.action(/^archive:open$/, async (ctx) => {
+  await ctx.answerCbQuery();
+  try {
+    await renderArchive(ctx);
+  } catch (e) {
+    console.error("[bot] archive:open error:", e?.message || e);
+    return ctx.reply("❌ Не удалось обновить архив.");
+  }
+});
+
+bot.action(/^archive:item:(\d+)$/, async (ctx) => {
+  await ctx.answerCbQuery();
+  const serviceId = Number(ctx.match[1]);
+
+  const chatId = ctx.update?.callback_query?.message?.chat?.id;
+  const items = ARCHIVE_ITEMS_BY_CHAT.get(String(chatId)) || [];
+  const s = items.find((x) => Number(x.id) === serviceId);
+
+  let text = `🗄 <b>Выбрана архивная услуга</b>\n\n🧾 <b>ID:</b> <code>#${serviceId}</code>\n\nЧто сделать?`;
+  if (s) {
+    const d = pickDetails(s);
+    text =
+      `🗄 <b>Архивная услуга</b>\n\n` +
+      `🧾 <b>ID:</b> <code>#${serviceId}</code>\n` +
+      `📌 <b>Категория:</b> ${escapeHtml(CATEGORY_LABELS?.[s.category] || s.category || "—")}\n` +
+      `🧳 <b>${escapeHtml(s.title || d.title || "Услуга")}</b>\n` +
+      `ℹ️ <b>Причина:</b> ${escapeHtml(getArchiveReason(s))}\n` +
+      (s.expiration_at ? `⏳ <b>Актуально до:</b> ${escapeHtml(new Date(s.expiration_at).toLocaleString("ru-RU"))}\n` : "") +
+      `\nМожно продлить услугу и снова вернуть её в работу.`;
+  }
+
+  const reply_markup = {
+    inline_keyboard: [
+      [
+        { text: "⏳ Продлить на 7 дней", callback_data: `svc_extend:${serviceId}` },
+        { text: "♻️ Вернуть в активные", callback_data: `svc_restore_archive:${serviceId}` },
+      ],
+      [
+        { text: "✏️ Редактировать", callback_data: `svc_edit_start:${serviceId}` },
+        { text: "🗑 Удалить", callback_data: `svc_delete:${serviceId}` },
+      ],
+      [{ text: "⬅️ В архив", callback_data: "archive:open" }],
+    ],
+  };
+
+  try {
+    await ctx.editMessageText(text, { parse_mode: "HTML", reply_markup });
+  } catch (e) {
+    console.error("[bot] archive:item edit error:", e?.message || e);
+  }
 });
 
 bot.action(/^trash:open$/, async (ctx) => {
