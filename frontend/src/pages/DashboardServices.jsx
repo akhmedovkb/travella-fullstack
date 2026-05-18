@@ -1099,13 +1099,21 @@ export default function DashboardServices() {
                                   <span className={cx("rounded-full px-2 py-0.5 text-[10px] font-black ring-1", proofCount ? "bg-emerald-50 text-emerald-700 ring-emerald-100" : "bg-rose-50 text-rose-700 ring-rose-100")}>
                                     {proofCount ? `Proof: ${proofCount}` : t("service_form.proof_missing_short", { defaultValue: "No proof" })}
                                   </span>
-                                  {d.isActive === false ? (
+                                  {String(service.status) === "deleted" ? (
+                                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-600 ring-1 ring-slate-200">
+                                      В корзине
+                                    </span>
+                                  ) : String(service.status) === "archived" ? (
+                                    <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-700 ring-1 ring-blue-100">
+                                      Архив
+                                    </span>
+                                  ) : d.isActive === false ? (
                                     <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-black text-rose-700 ring-1 ring-rose-100">
-                                      {t("inactive", { defaultValue: "Неактуально" })}
+                                      Неактуально
                                     </span>
                                   ) : (
                                     <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-700 ring-1 ring-emerald-100">
-                                      {t("is_active", { defaultValue: "Актуально" })}
+                                      Актуально
                                     </span>
                                   )}
                                 </div>
