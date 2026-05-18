@@ -112,6 +112,71 @@ function compactDeep(value) {
   return value;
 }
 
+function asDetails(service) {
+  return service?.details && typeof service.details === "object" ? service.details : {};
+}
+
+function firstText(...values) {
+  for (const value of values) {
+    if (value !== undefined && value !== null && String(value).trim() !== "") return String(value).trim();
+  }
+  return "";
+}
+
+function formatServiceDateRange(details) {
+  const start = firstText(details.startDate, details.start_date, details.startFlightDate, details.departureFlightDate, details.eventDate);
+  const end = firstText(details.endDate, details.end_date, details.endFlightDate, details.returnFlightDate, details.returnDate);
+  if (start && end && start !== end) return `${start} → ${end}`;
+  return start || end || "";
+}
+
+function getServiceRouteText(service, fallback = "—") {
+  const d = asDetails(service);
+  const category = String(service?.category || "").toLowerCase();
+
+  if (category === "refused_hotel") {
+    return [firstText(d.directionCountry, d.country), firstText(d.directionTo, d.city, d.location), firstText(d.hotel)]
+      .filter(Boolean)
+      .join(" / ") || fallback;
+  }
+
+  if (category === "refused_event_ticket") {
+    return [firstText(d.eventName, service?.title), firstText(d.location, d.directionTo, d.city), firstText(d.ticketDetails)]
+      .filter(Boolean)
+      .join(" / ") || fallback;
+  }
+
+  if (category === "visa_support") {
+    return firstText(d.visaCountry, d.directionCountry, d.description, fallback);
+  }
+
+  return [firstText(d.directionFrom, d.fromCity), firstText(d.directionTo, d.toCity), firstText(d.hotel)]
+    .filter(Boolean)
+    .join(" → ") || firstText(d.directionCountry, fallback);
+}
+
+function getServicePriceText(service, fallback = "—") {
+  const d = asDetails(service);
+  const price = firstText(d.grossPrice, d.priceGross, d.netPrice, d.priceNet, service?.price);
+  if (!price) return fallback;
+  const currency = firstText(d.currency, service?.price_currency, service?.currency, "USD");
+  return `${price} ${currency}`;
+}
+
+function getStatusTone(status) {
+  const s = String(status || "draft").toLowerCase();
+  if (s === "published" || s === "approved") return "bg-emerald-50 text-emerald-700 ring-emerald-100";
+  if (s === "pending") return "bg-blue-50 text-blue-700 ring-blue-100";
+  if (s === "rejected") return "bg-rose-50 text-rose-700 ring-rose-100";
+  return "bg-slate-100 text-slate-700 ring-slate-200";
+}
+
+function serviceHasProof(service) {
+  const d = asDetails(service);
+  const proof = Array.isArray(d.proofImages) ? d.proofImages : Array.isArray(d.proof_images) ? d.proof_images : [];
+  return proof.filter(Boolean).length;
+}
+
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -483,7 +548,11 @@ export default function DashboardServices() {
     }
   };
 
-  const routeText = [details.directionFrom, details.directionTo].filter(Boolean).join(" → ") || details.directionCountry || t("service_form.preview_route_empty", { defaultValue: "Маршрут будет показан здесь" });
+  const routeText = getServiceRouteText(
+    { category, title, price, details: { ...details } },
+    t("service_form.preview_route_empty", { defaultValue: "Маршрут будет показан здесь" })
+  );
+  const dateRangeText = formatServiceDateRange(details);
   const priceText = isExtended ? details.grossPrice || details.netPrice : price;
   const includedPreview = [
     details.insuranceIncluded ? t("insurance_included", { defaultValue: "Страховка" }) : null,
@@ -556,49 +625,147 @@ export default function DashboardServices() {
                 {t("provider_services_empty", { defaultValue: "Пока нет созданных услуг." })}
               </div>
             ) : (
-              <div className="grid gap-3">
-                {services.map((service) => (
-                  <button
-                    type="button"
-                    key={service.id}
-                    onClick={() => loadServiceToEdit(service)}
-                    className="group rounded-[1.5rem] border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-orange-200 hover:shadow-lg"
-                  >
-                    <div className="flex gap-3">
-                      {service.images?.[0] ? (
-                        <img src={service.images[0]} alt="" className="h-16 w-16 rounded-2xl object-cover" />
-                      ) : (
-                        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-orange-50 text-2xl">🏝️</div>
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-base font-black text-slate-950">{service.title || t("not_specified", { defaultValue: "Не указано" })}</div>
-                        <div className="mt-1 text-xs font-bold text-slate-500">{t(`category.${service.category}`, { defaultValue: service.category })}</div>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-black text-slate-600">{service.status || "draft"}</span>
-                          {(service.status === "draft" || service.status === "rejected") && (
-                            <span onClick={(e) => submitForModeration(service, e)} className="rounded-full bg-blue-600 px-2 py-1 text-[11px] font-black text-white">
-                              {t("moderation.send_to_review", { defaultValue: "На модерацию" })}
+              <div className="grid gap-4">
+                {services.map((service) => {
+                  const d = asDetails(service);
+                  const proofCount = serviceHasProof(service);
+                  const dateText = formatServiceDateRange(d);
+                  const route = getServiceRouteText(service, t("not_specified", { defaultValue: "Не указано" }));
+                  const canSubmit = (service.status === "draft" || service.status === "rejected" || !service.status);
+                  const needsProof = String(service.category || "").startsWith("refused_") && proofCount === 0;
+
+                  return (
+                    <article
+                      key={service.id}
+                      className="group overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-orange-200 hover:shadow-xl"
+                    >
+                      <button type="button" onClick={() => loadServiceToEdit(service)} className="w-full p-4 text-left">
+                        <div className="flex flex-col gap-4 md:flex-row md:items-stretch">
+                          <div className="relative h-36 w-full overflow-hidden rounded-[1.35rem] bg-orange-50 md:h-auto md:w-40 md:shrink-0">
+                            {service.images?.[0] ? (
+                              <img src={service.images[0]} alt="" className="h-full w-full object-cover" />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center text-4xl">🏝️</div>
+                            )}
+                            <span className="absolute left-2 top-2 rounded-full bg-white/90 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-orange-700 shadow-sm">
+                              #{service.id}
                             </span>
-                          )}
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="truncate text-lg font-black text-slate-950">
+                                  {service.title || t("not_specified", { defaultValue: "Не указано" })}
+                                </div>
+                                <div className="mt-1 text-xs font-black uppercase tracking-wide text-orange-600">
+                                  {t(`category.${service.category}`, { defaultValue: service.category })}
+                                </div>
+                              </div>
+                              <span className={cx("rounded-full px-2.5 py-1 text-[11px] font-black ring-1", getStatusTone(service.status))}>
+                                {service.status || "draft"}
+                              </span>
+                            </div>
+
+                            <div className="mt-3 grid gap-2 text-sm font-semibold text-slate-700 md:grid-cols-2">
+                              <div className="rounded-2xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
+                                <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">{t("route", { defaultValue: "Маршрут" })}</div>
+                                <div className="mt-0.5 line-clamp-1">{route}</div>
+                              </div>
+                              <div className="rounded-2xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
+                                <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">{t("dates", { defaultValue: "Даты" })}</div>
+                                <div className="mt-0.5">{dateText || "—"}</div>
+                              </div>
+                              <div className="rounded-2xl bg-slate-950 px-3 py-2 text-white">
+                                <div className="text-[10px] font-black uppercase tracking-wide text-white/45">{t("gross_price", { defaultValue: "Цена для клиента" })}</div>
+                                <div className="mt-0.5 text-base font-black">{getServicePriceText(service)}</div>
+                              </div>
+                              <div className="rounded-2xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
+                                <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">{t("service_form.proof_trust_title", { defaultValue: "Подтверждение" })}</div>
+                                <div className={cx("mt-0.5 font-black", proofCount ? "text-emerald-700" : "text-rose-600")}>
+                                  {proofCount
+                                    ? t("service_form.proof_count", { count: proofCount, defaultValue: `Proof: ${proofCount}` })
+                                    : t("service_form.proof_missing", { defaultValue: "Proof не загружен" })}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="mt-3 flex flex-wrap items-center gap-2">
+                              {d.isActive === false ? (
+                                <span className="rounded-full bg-rose-50 px-2.5 py-1 text-[11px] font-black text-rose-700 ring-1 ring-rose-100">
+                                  {t("inactive", { defaultValue: "Неактуально" })}
+                                </span>
+                              ) : (
+                                <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-black text-emerald-700 ring-1 ring-emerald-100">
+                                  {t("is_active", { defaultValue: "Актуально" })}
+                                </span>
+                              )}
+                              {needsProof && (
+                                <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-black text-amber-700 ring-1 ring-amber-100">
+                                  {t("service_form.proof_required_short", { defaultValue: "Для модерации нужен proof" })}
+                                </span>
+                              )}
+                              <span className="ml-auto hidden rounded-2xl bg-orange-50 px-3 py-2 text-xs font-black text-orange-700 group-hover:inline-flex">
+                                {t("edit", { defaultValue: "Редактировать" })}
+                              </span>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                      <span className="hidden rounded-2xl bg-orange-50 px-3 py-2 text-xs font-black text-orange-700 group-hover:block">
-                        {t("edit", { defaultValue: "Редактировать" })}
-                      </span>
-                    </div>
-                  </button>
-                ))}
+                      </button>
+
+                      {canSubmit && (
+                        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/70 px-4 py-3">
+                          <div className="text-xs font-semibold text-slate-500">
+                            {needsProof
+                              ? t("service_form.upload_proof_before_submit", { defaultValue: "Загрузите подтверждающие скриншоты перед отправкой на модерацию." })
+                              : t("service_form.ready_to_submit", { defaultValue: "После проверки можно отправить услугу на модерацию." })}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => submitForModeration(service, e)}
+                            disabled={needsProof}
+                            className="rounded-2xl bg-blue-600 px-4 py-2.5 text-xs font-black text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                          >
+                            {t("moderation.send_to_review", { defaultValue: "На модерацию" })}
+                          </button>
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
               </div>
             )}
           </div>
         ) : (
           <div className="p-4 sm:p-6">
             {selectedService && (
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-200">
-                <div className="text-sm font-black text-slate-800">{t("edit_service", { defaultValue: "Редактирование услуги" })}</div>
-                <button type="button" onClick={resetForm} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-orange-600 shadow-sm">
-                  {t("new_service", { defaultValue: "Новая услуга" })}
-                </button>
+              <div className="mb-5 overflow-hidden rounded-[1.75rem] border border-orange-100 bg-gradient-to-br from-orange-50 via-white to-slate-50 shadow-sm">
+                <div className="flex flex-col gap-4 p-4 md:flex-row md:items-center">
+                  <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-orange-100">
+                    {images?.[0] ? <img src={images[0]} alt="" className="h-full w-full object-cover" /> : <span className="text-3xl">🏝️</span>}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-black text-orange-700 ring-1 ring-orange-100">#{selectedService.id}</span>
+                      <span className={cx("rounded-full px-2.5 py-1 text-[11px] font-black ring-1", getStatusTone(selectedService.status))}>{selectedService.status || "draft"}</span>
+                      <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-black text-slate-600 ring-1 ring-slate-100">
+                        {t(`category.${category}`, { defaultValue: category })}
+                      </span>
+                    </div>
+                    <div className="mt-2 truncate text-lg font-black text-slate-950">
+                      {title || t("edit_service", { defaultValue: "Редактирование услуги" })}
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-2 text-xs font-bold text-slate-500">
+                      <span>📍 {routeText}</span>
+                      <span>🗓 {dateRangeText || "—"}</span>
+                      <span>💰 {priceText || "—"}</span>
+                      <span>{serviceHasProof({ details }) ? "✅ Proof" : "⚠️ Proof"}</span>
+                    </div>
+                  </div>
+                  <button type="button" onClick={resetForm} className="rounded-2xl bg-white px-4 py-3 text-xs font-black text-orange-600 shadow-sm ring-1 ring-orange-100 transition hover:bg-orange-50">
+                    {t("new_service", { defaultValue: "Новая услуга" })}
+                  </button>
+                </div>
               </div>
             )}
 
