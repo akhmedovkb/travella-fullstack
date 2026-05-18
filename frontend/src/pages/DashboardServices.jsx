@@ -53,6 +53,14 @@ const EXTENDED_AGENT_CATEGORIES = [
   "visa_support",
 ];
 
+const HISTORICAL_REFUSED_CATEGORIES = [
+  "refused_tour",
+  "author_tour",
+  "refused_hotel",
+  "refused_flight",
+  "refused_event_ticket",
+];
+
 const foodOptions = ["BB", "HB", "FB", "AI", "UAI", "HALAL"];
 const transferOptions = ["group", "individual", "none"];
 
@@ -123,6 +131,37 @@ function firstText(...values) {
   return "";
 }
 
+function parseServiceDateMs(value, endOfDay = true) {
+  if (value === undefined || value === null || String(value).trim() === "") return NaN;
+
+  if (typeof value === "number") {
+    const ms = value > 9999999999 ? value : value * 1000;
+    return Number.isFinite(ms) ? ms : NaN;
+  }
+
+  const raw = String(value).trim();
+
+  if (/^\d+$/.test(raw)) {
+    const n = Number(raw);
+    const ms = n > 9999999999 ? n : n * 1000;
+    return Number.isFinite(ms) ? ms : NaN;
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const suffix = endOfDay ? "T23:59:59" : "T00:00:00";
+    const ms = new Date(`${raw}${suffix}`).getTime();
+    return Number.isFinite(ms) ? ms : NaN;
+  }
+
+  const ms = new Date(raw).getTime();
+  return Number.isFinite(ms) ? ms : NaN;
+}
+
+function isPastServiceDate(value, now = Date.now()) {
+  const ms = parseServiceDateMs(value, true);
+  return Number.isFinite(ms) && ms < now;
+}
+
 function formatServiceDateRange(details) {
   const start = firstText(details.startDate, details.start_date, details.startFlightDate, details.departureFlightDate, details.eventDate);
   const end = firstText(details.endDate, details.end_date, details.endFlightDate, details.returnFlightDate, details.returnDate);
@@ -167,6 +206,8 @@ function getStatusTone(status) {
   const s = String(status || "draft").toLowerCase();
   if (s === "published" || s === "approved") return "bg-emerald-50 text-emerald-700 ring-emerald-100";
   if (s === "pending") return "bg-blue-50 text-blue-700 ring-blue-100";
+  if (s === "archived") return "bg-blue-50 text-blue-700 ring-blue-100";
+  if (s === "deleted") return "bg-slate-100 text-slate-600 ring-slate-200";
   if (s === "rejected") return "bg-rose-50 text-rose-700 ring-rose-100";
   return "bg-slate-100 text-slate-700 ring-slate-200";
 }
@@ -185,8 +226,51 @@ function isDeletedService(service) {
   return Boolean(service?.deleted_at || service?.deletedAt || getServiceStatus(service) === "deleted");
 }
 
+function isHistoricalRefusedService(service) {
+  if (!service || isDeletedService(service)) return false;
+
+  const category = String(service?.category || "").toLowerCase();
+  if (!HISTORICAL_REFUSED_CATEGORIES.includes(category)) return false;
+
+  const status = getServiceStatus(service);
+  if (status !== "published" && status !== "approved") return false;
+
+  const d = asDetails(service);
+
+  const expirationValues = [
+    service?.expiration_at,
+    service?.expires_at,
+    d.expiration_at,
+    d.expiration,
+    d.expiration_ts,
+  ];
+
+  if (expirationValues.some((value) => isPastServiceDate(value))) return true;
+
+  const endValues = [
+    service?.end_date,
+    service?.endDate,
+    d.endDate,
+    d.end_date,
+    d.returnDate,
+    d.returnFlightDate,
+    d.endFlightDate,
+    d.checkoutDate,
+  ];
+
+  if (endValues.some((value) => isPastServiceDate(value))) return true;
+
+  if (category === "refused_event_ticket" || category === "refused_flight") {
+    return [d.eventDate, d.startDate, d.start_date, d.startFlightDate, d.departureFlightDate].some((value) =>
+      isPastServiceDate(value)
+    );
+  }
+
+  return false;
+}
+
 function isArchivedService(service) {
-  return !isDeletedService(service) && getServiceStatus(service) === "archived";
+  return !isDeletedService(service) && (getServiceStatus(service) === "archived" || isHistoricalRefusedService(service));
 }
 
 function isPendingService(service) {
@@ -216,6 +300,14 @@ function getServiceListBucket(service) {
   if (isPublishedService(service)) return "published";
   if (isRejectedService(service)) return "rejected";
   return "draft";
+}
+
+function getArchiveReasonLabel(service, t) {
+  if (getServiceStatus(service) === "archived") {
+    return t("service_archive.reason_archived", { defaultValue: "Архив" });
+  }
+
+  return t("service_archive.reason_completed", { defaultValue: "Завершено" });
 }
 
 function hasFilled(value) {
@@ -985,11 +1077,11 @@ export default function DashboardServices() {
                   <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">{t("service_list_filter.active", { defaultValue: "Активные" })}</div>
                 </div>
                 <div className="rounded-2xl bg-blue-50 px-3 py-2 ring-1 ring-blue-100">
-                  <div className="text-lg font-black text-blue-700">{services.filter((s) => String(s.status || "draft") === "pending").length}</div>
+                  <div className="text-lg font-black text-blue-700">{serviceListStats.pending}</div>
                   <div className="text-[10px] font-black uppercase tracking-wide text-blue-400">Pending</div>
                 </div>
                 <div className="rounded-2xl bg-emerald-50 px-3 py-2 ring-1 ring-emerald-100">
-                  <div className="text-lg font-black text-emerald-700">{services.filter((s) => String(s.status || "") === "published" || String(s.status || "") === "approved").length}</div>
+                  <div className="text-lg font-black text-emerald-700">{serviceListStats.published}</div>
                   <div className="text-[10px] font-black uppercase tracking-wide text-emerald-500">Live</div>
                 </div>
               </div>
@@ -1046,6 +1138,15 @@ export default function DashboardServices() {
             </div>
 
             <div className="max-h-[calc(100vh-238px)] space-y-4 overflow-y-auto p-3">
+              {serviceListFilter === "archive" && (
+                <div className="rounded-[1.5rem] border border-blue-100 bg-blue-50/70 p-3 text-xs font-semibold leading-5 text-blue-800">
+                  {t("service_archive.hint", {
+                    defaultValue:
+                      "В архив автоматически попадают опубликованные отказные услуги, у которых закончились даты поездки, мероприятия, рейса или истёк срок актуальности. Это история, а не корзина.",
+                  })}
+                </div>
+              )}
+
               {services.length === 0 ? (
                 <div className="rounded-[1.5rem] border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm font-semibold text-slate-500">
                   {t("provider_services_empty", { defaultValue: "Пока нет созданных услуг." })}
@@ -1133,21 +1234,21 @@ export default function DashboardServices() {
                                   <span className={cx("rounded-full px-2 py-0.5 text-[10px] font-black ring-1", proofCount ? "bg-emerald-50 text-emerald-700 ring-emerald-100" : "bg-rose-50 text-rose-700 ring-rose-100")}>
                                     {proofCount ? `Proof: ${proofCount}` : t("service_form.proof_missing_short", { defaultValue: "No proof" })}
                                   </span>
-                                  {String(service.status) === "deleted" ? (
+                                  {isDeletedService(service) ? (
                                     <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-600 ring-1 ring-slate-200">
-                                      В корзине
+                                      {t("service_status.in_trash", { defaultValue: "В корзине" })}
                                     </span>
-                                  ) : String(service.status) === "archived" ? (
+                                  ) : isArchivedService(service) ? (
                                     <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-700 ring-1 ring-blue-100">
-                                      Архив
+                                      {getArchiveReasonLabel(service, t)}
                                     </span>
                                   ) : d.isActive === false ? (
                                     <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-black text-rose-700 ring-1 ring-rose-100">
-                                      Неактуально
+                                      {t("inactive", { defaultValue: "Неактуально" })}
                                     </span>
                                   ) : (
                                     <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-700 ring-1 ring-emerald-100">
-                                      Актуально
+                                      {t("is_active", { defaultValue: "Актуально" })}
                                     </span>
                                   )}
                                 </div>
