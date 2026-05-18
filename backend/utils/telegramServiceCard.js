@@ -786,15 +786,27 @@ const priceKind =
     if (parts.length && parts[parts.length - 1] !== "") parts.push("");
   };
 
+  const refusedHeading = (label) => {
+    const cleanLabel = escapeHtml(String(label || "ОТКАЗНОЙ ПАКЕТ"));
+    if (newBadge) {
+      return `🆕 <b>НОВЫЙ ${cleanLabel}</b>\n📍 <code>#R${serviceId}</code>`;
+    }
+    return `🔥 <b>ГОРЯЩИЙ ${cleanLabel}</b>\n📍 <code>#R${serviceId}</code>`;
+  };
+
+  const pushRefusedUrgency = (parts) => {
+    parts.push("🔥 <b>ОТКАЗНОЙ ПАКЕТ</b>");
+    parts.push("⚡ Обычно такие варианты уходят быстро");
+    parts.push("⏳ Актуальность ограничена");
+  };
+
   /* ===================== SPECIAL TEMPLATES ===================== */
 
   if ((role !== "provider" || options?.forceRefused === true) && String(category) === "refused_tour") {
     const parts = [];
 
     if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
-    parts.push(
-      `${newBadge ? "🆕 <b>НОВЫЙ</b>" : "📍"} <b>ОТКАЗНОЙ ТУР</b> <code>#R${serviceId}</code>`
-    );
+    parts.push(refusedHeading("ОТКАЗНОЙ ТУР"));
 
     const tl = titleLine("generic");
     if (tl) parts.push(tl);
@@ -845,7 +857,7 @@ const priceKind =
     if (d.changeable === true) parts.push(labelLine("🔁", "Изменения", "Можно вносить изменения"));
     else parts.push(labelLine("✅", "Фикс-пакет", "Без замен (отель/даты/размещение)"));
     
-    parts.push(labelLine("⚡", "Горящее", "Такие варианты уходят быстро"));
+    pushRefusedUrgency(parts);
 
     pushDivider(parts);
     if (shouldShowProviderContacts(role, unlocked)) {
@@ -870,9 +882,7 @@ const priceKind =
     const parts = [];
     if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
 
-    parts.push(
-      `${newBadge ? "🆕 <b>НОВЫЙ</b>" : "📍"} <b>ОТКАЗНОЙ ОТЕЛЬ</b> <code>#R${serviceId}</code>`
-    );
+    parts.push(refusedHeading("ОТКАЗНОЙ ОТЕЛЬ"));
 
     const tl = titleLine("hotel");
     if (tl) parts.push(tl);
@@ -926,7 +936,7 @@ const priceKind =
     }
     if (badgeClean) parts.push(labelLine("⏳", "Срок", badgeClean, false));
 
-    parts.push(labelLine("⚡", "Горящее", "Такие варианты уходят быстро"));
+    pushRefusedUrgency(parts);
 
     pushDivider(parts);
     if (shouldShowProviderContacts(role, unlocked)) {
@@ -951,9 +961,7 @@ const priceKind =
     const parts = [];
     if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
 
-    parts.push(
-      `${newBadge ? "🆕 <b>НОВЫЙ</b>" : "📍"} <b>ОТКАЗНОЙ АВИАБИЛЕТ</b> <code>#R${serviceId}</code>`
-    );
+    parts.push(refusedHeading("ОТКАЗНОЙ АВИАБИЛЕТ"));
 
     const tl = titleLine("flight");
     if (tl) parts.push(tl);
@@ -981,7 +989,7 @@ const priceKind =
     }
     if (badgeClean) parts.push(labelLine("⏳", "Срок", badgeClean, false));
 
-    parts.push(labelLine("⚡", "Горящее", "Такие варианты уходят быстро"));
+    pushRefusedUrgency(parts);
 
     pushDivider(parts);
     if (shouldShowProviderContacts(role, unlocked)) {
@@ -1010,9 +1018,7 @@ const priceKind =
     if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
 
     const evEmoji = ticketEmoji(d.eventCategory || d.ticketType || d.type);
-    parts.push(
-      `${newBadge ? "🆕 <b>НОВЫЙ</b>" : "📍"} <b>ОТКАЗНОЙ БИЛЕТ НА МЕРОПРИЯТИЕ</b> ${evEmoji} <code>#R${serviceId}</code>`
-    );
+    parts.push(refusedHeading(`ОТКАЗНОЙ БИЛЕТ ${evEmoji}`));
 
     const tl = titleLine("ticket");
     if (tl) parts.push(tl);
@@ -1036,7 +1042,7 @@ const priceKind =
     }
     if (badgeClean) parts.push(labelLine("⏳", "Срок", badgeClean, false));
 
-    parts.push(labelLine("⚡", "Горящее", "Такие варианты уходят быстро"));
+    pushRefusedUrgency(parts);
 
     pushDivider(parts);
     if (shouldShowProviderContacts(role, unlocked)) {
