@@ -778,7 +778,8 @@
     "entry_fees_admin": "Entry fees",
     "hotels_admin": "Mehmonxonalar (admin)",
     "cms_pages": "Pastki qism",
-    "dashboard": "Kabinet"
+    "dashboard": "Kabinet",
+    "service_audit": "Ta’minotchilar harakatlari"
   },
   "insurance_included": "Sug'urta kiritilgan",
   "early_check_in": "Erta joylashish",
