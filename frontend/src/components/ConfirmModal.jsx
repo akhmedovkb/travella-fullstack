@@ -1,12 +1,13 @@
-//frontend/src/components/ConfirmModal.jsx
-  
+// frontend/src/components/ConfirmModal.jsx
+
 import React, { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 
 /**
- * Универсальная модалка подтверждения.
- * Поддерживает режим одной кнопки (hideCancel), когда показываем только ОК.
+ * Универсальная модалка подтверждения Travella
+ * Поддерживает режим одной кнопки (hideCancel)
  */
+
 export default function ConfirmModal({
   open,
   title,
@@ -17,17 +18,22 @@ export default function ConfirmModal({
   busy = false,
   onConfirm,
   onClose,
-  hideCancel = false, // <— если true, показываем только кнопку ОК
+  hideCancel = false,
 }) {
   const { t } = useTranslation();
   const confirmRef = useRef(null);
 
-  const tt = (k, d) => t(k, { defaultValue: d });
+  const tt = (k, d) =>
+    t(k, {
+      defaultValue: d,
+    });
 
   useEffect(() => {
     if (open && confirmRef.current) {
-      // небольшой таймаут, чтобы фокус сработал после mount
-      const id = setTimeout(() => confirmRef.current?.focus(), 10);
+      const id = setTimeout(() => {
+        confirmRef.current?.focus();
+      }, 10);
+
       return () => clearTimeout(id);
     }
   }, [open]);
@@ -36,49 +42,95 @@ export default function ConfirmModal({
 
   return (
     <div
-      className="fixed inset-0 z-[1000] flex items-center justify-center"
+      className="fixed inset-0 z-[1000] flex items-center justify-center p-4"
       aria-modal="true"
       role="dialog"
     >
-      {/* backdrop */}
+      {/* Backdrop */}
+
       <div
-        className="absolute inset-0 bg-black/40"
+        className="absolute inset-0 bg-slate-950/45 backdrop-blur-sm"
         onClick={onClose}
         aria-hidden="true"
       />
-      {/* modal */}
-      <div className="relative max-w-lg w-[92vw] bg-white rounded-2xl shadow-xl p-5 md:p-6">
-        {title && <div className="text-lg font-semibold mb-2">{title}</div>}
 
-        {typeof message === "string" ? (
-          <div className="text-gray-700">{message}</div>
-        ) : (
-          message
-        )}
+      {/* Modal */}
 
-        <div className="mt-4 flex gap-2 justify-end">
+      <div className="relative w-[92vw] max-w-md overflow-hidden rounded-[2rem] bg-white shadow-[0_30px_80px_rgba(15,23,42,0.25)]">
+
+        {/* Header */}
+
+        <div className="border-b border-orange-100 bg-gradient-to-r from-orange-50 via-white to-orange-50 px-6 py-5">
+
+          <div className="inline-flex rounded-full bg-orange-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-orange-600 ring-1 ring-orange-100">
+            TRAVELLA.UZ
+          </div>
+
+          {title && (
+            <div className="mt-3 text-xl font-black text-slate-950">
+              {title}
+            </div>
+          )}
+
+          <div className="mt-2 text-sm font-medium leading-6 text-slate-600">
+
+            {typeof message === "string"
+              ? message
+              : message}
+
+          </div>
+
+        </div>
+
+        {/* Footer */}
+
+        <div className="flex gap-3 p-5">
+
           {!hideCancel && (
             <button
               type="button"
               onClick={onClose}
-              className="px-3 py-2 rounded-xl border hover:bg-gray-50"
+              className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50"
             >
-              {cancelLabel ?? tt("actions.cancel", "Отмена")}
+              {cancelLabel ??
+                tt(
+                  "actions.cancel",
+                  "Отмена"
+                )}
             </button>
           )}
+
           <button
             ref={confirmRef}
             type="button"
             disabled={busy}
             onClick={onConfirm ?? onClose}
-            className={`px-3 py-2 rounded-xl font-semibold text-white ${
-              danger ? "bg-red-600 hover:bg-red-700" : "bg-gray-900 hover:bg-black"
-            } disabled:opacity-60`}
+            className={`flex-1 rounded-2xl px-4 py-3 text-sm font-black text-white transition disabled:opacity-60 ${
+              danger
+                ? "bg-rose-600 hover:bg-rose-700"
+                : "bg-slate-950 hover:bg-slate-800"
+            }`}
           >
-            {busy ? tt("common.sending", "Отправка…") : (confirmLabel ?? tt("actions.ok", "ОК"))}
+
+            {busy
+              ? tt(
+                  "common.sending",
+                  "Отправка..."
+                )
+              : (
+                  confirmLabel ??
+                  tt(
+                    "actions.ok",
+                    "ОК"
+                  )
+                )}
+
           </button>
+
         </div>
+
       </div>
+
     </div>
   );
 }
