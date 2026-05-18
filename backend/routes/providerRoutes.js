@@ -46,6 +46,7 @@ const {
 } = require("../controllers/providerTelegramAuthController");
 
 const { notifyModerationNew } = require("../utils/telegram");
+const { logProviderServiceAction } = require("../utils/serviceAuditLog");
 
 function requireProvider(req, res, next) {
   if (!req.user || !req.user.id) {
@@ -216,7 +217,7 @@ router.post(
 
       const checkRes = await pool.query(
         `
-          SELECT id, category, details, status, moderation_status
+          SELECT *
             FROM services
            WHERE id = $1
              AND provider_id = $2
@@ -277,6 +278,16 @@ router.post(
             "Service must be in draft/rejected (or empty status) to submit",
         });
       }
+
+      await logProviderServiceAction({
+        req,
+        action: "service_submitted",
+        providerId: req.user.id,
+        serviceId: rows[0].id,
+        oldService: svc,
+        newService: rows[0],
+        meta: { submitted_to_moderation: true },
+      });
 
       try {
         await notifyModerationNew({ service: rows[0].id });
