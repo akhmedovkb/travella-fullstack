@@ -172,138 +172,151 @@ export default function AdminServiceAudit({ embedded = false }) {
       </div>
 
       <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1.4fr)_220px_200px_170px_170px_120px]">
+
           <input
-            className="rounded-2xl border border-slate-200 px-3 py-2 text-sm font-semibold outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
-            placeholder="Поиск: #ID, поставщик, телефон, название, категория..."
+            className="rounded-2xl border border-slate-200 px-3 py-2 text-sm font-semibold"
+            placeholder="Поиск..."
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
-          <select className="rounded-2xl border border-slate-200 px-3 py-2 text-sm font-semibold" value={action} onChange={(e) => setAction(e.target.value)}>
-            <option value="">Все действия</option>
+
+          <select
+            className="rounded-2xl border border-slate-200 px-3 py-2 text-sm font-semibold"
+            value={action}
+            onChange={(e) => setAction(e.target.value)}
+          >
+            <option value="">
+              Все действия
+            </option>
+
             {actions.map((x) => (
-              <option key={x.action} value={x.action}>{actionLabel(x.action)} ({x.count})</option>
+              <option
+                key={x.action}
+                value={x.action}
+              >
+                {actionLabel(x.action)} ({x.count})
+              </option>
             ))}
           </select>
-          <select className="rounded-2xl border border-slate-200 px-3 py-2 text-sm font-semibold" value={category} onChange={(e) => setCategory(e.target.value)}>
-            <option value="">Все категории</option>
-            <option value="refused_tour">Отказной тур</option>
-            <option value="refused_hotel">Отказной отель</option>
-            <option value="refused_flight">Отказной авиабилет</option>
-            <option value="refused_event_ticket">Отказной билет</option>
-            <option value="author_tour">Авторский тур</option>
-            <option value="visa_support">Виза</option>
-          </select>
-          <input
-            className="rounded-2xl border border-slate-200 px-3 py-2 text-sm font-semibold"
-            placeholder="Service ID"
-            value={serviceId}
-            onChange={(e) => setServiceId(e.target.value.replace(/\D/g, ""))}
-          />
-          <input
-            className="rounded-2xl border border-slate-200 px-3 py-2 text-sm font-semibold"
-            placeholder="Provider ID"
-            value={providerId}
-            onChange={(e) => setProviderId(e.target.value.replace(/\D/g, ""))}
-          />
-          <select className="rounded-2xl border border-slate-200 px-3 py-2 text-sm font-semibold" value={limit} onChange={(e) => setLimit(e.target.value)}>
-            <option value="50">50</option>
-            <option value="100">100</option>
-            <option value="200">200</option>
-            <option value="500">500</option>
-          </select>
+
         </div>
+
       </div>
 
-      <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-100 px-4 py-3 text-sm font-bold text-slate-500">
-          Найдено: {total}
-        </div>
+      <div className="rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-100 text-sm">
-            <thead className="bg-slate-50 text-left text-xs font-black uppercase tracking-wide text-slate-500">
+
+          <table className="min-w-full text-sm">
+
+            <thead className="bg-slate-50">
+
               <tr>
-                <th className="px-4 py-3">Дата</th>
-                <th className="px-4 py-3">Действие</th>
-                <th className="px-4 py-3">Услуга</th>
-                <th className="px-4 py-3">Поставщик</th>
-                <th className="px-4 py-3">Статус</th>
-                <th className="px-4 py-3">Источник</th>
-                <th className="px-4 py-3"></th>
+
+                <th className="px-4 py-3 text-left">
+                  Дата
+                </th>
+
+                <th className="px-4 py-3 text-left">
+                  Действие
+                </th>
+
+                <th className="px-4 py-3 text-left">
+                  Услуга
+                </th>
+
+                <th className="px-4 py-3 text-left">
+                  Поставщик
+                </th>
+
+                <th className="px-4 py-3 text-left">
+                  Статус
+                </th>
+
               </tr>
+
             </thead>
-            <tbody className="divide-y divide-slate-100">
-              {rows.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-sm font-semibold text-slate-400">
-                    {loading ? "Загрузка…" : "Записей пока нет"}
-                  </td>
-                </tr>
-              ) : rows.map((row) => (
-                <tr key={row.id} className="hover:bg-orange-50/40">
-                  <td className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600">{fmtDate(row.created_at)}</td>
+
+            <tbody>
+
+              {rows.map((row) => (
+
+                <tr
+                  key={row.id}
+                  className="border-t"
+                >
+
                   <td className="px-4 py-3">
-                    <span className={`inline-flex rounded-full px-2 py-1 text-[11px] font-black ring-1 ${actionTone(row.action)}`}>
+                    {fmtDate(row.created_at)}
+                  </td>
+
+                  <td className="px-4 py-3">
+
+                    <span
+                      className={`inline-flex rounded-full px-2 py-1 text-xs font-bold ring-1 ${actionTone(row.action)}`}
+                    >
                       {actionLabel(row.action)}
                     </span>
+
                   </td>
+
                   <td className="px-4 py-3">
-                    <div className="font-black text-slate-900">#R{row.service_id || "—"}</div>
-                    <div className="max-w-[360px] truncate text-xs font-semibold text-slate-500">{row.title || "—"}</div>
-                    <div className="mt-1 text-[11px] font-black uppercase text-orange-600">{row.category || "—"}</div>
+
+                    <div className="font-semibold">
+                      {row.service_title || "—"}
+                    </div>
+
+                    <div className="text-xs text-slate-500">
+                      #{row.service_id}
+                    </div>
+
                   </td>
+
                   <td className="px-4 py-3">
-                    <div className="font-bold text-slate-800">{getProviderName(row)}</div>
-                    <div className="text-xs text-slate-500">ID: {row.provider_id || "—"}</div>
+                    {getProviderName(row)}
                   </td>
-                  <td className="px-4 py-3 text-xs font-semibold text-slate-600">
-                    {statusLabel(row.old_status)} → <span className="font-black text-slate-950">{statusLabel(row.new_status)}</span>
+
+                  <td className="px-4 py-3">
+                    {statusLabel(row.service_status)}
                   </td>
-                  <td className="px-4 py-3 text-xs font-bold text-slate-500">{row.source || "web"}</td>
-                  <td className="px-4 py-3 text-right">
-                    <button
-                      type="button"
-                      onClick={() => setSelected(row)}
-                      className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-black text-slate-700 hover:bg-slate-50"
-                    >
-                      Детали
-                    </button>
-                  </td>
+
                 </tr>
+
               ))}
+
             </tbody>
+
           </table>
+
         </div>
+
       </div>
 
-      {selected && (
-        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm" onClick={() => setSelected(null)}>
-          <div className="max-h-[90vh] w-full max-w-5xl overflow-hidden rounded-3xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-start justify-between gap-3 border-b border-slate-100 bg-gradient-to-r from-orange-50 via-white to-orange-50 p-5">
-              <div>
-                <div className="inline-flex rounded-full bg-orange-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-orange-600 ring-1 ring-orange-100">
-                  Audit log #{selected.id}
-                </div>
-                <h2 className="mt-3 text-xl font-black text-slate-950">
-                  {actionLabel(selected.action)} · #R{selected.service_id}
-                </h2>
-                <p className="mt-1 text-sm font-semibold text-slate-500">{fmtDate(selected.created_at)} · {getProviderName(selected)}</p>
-              </div>
-              <button className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-black" onClick={() => setSelected(null)}>Закрыть</button>
-            </div>
-            <div className="grid max-h-[72vh] gap-4 overflow-auto p-5 lg:grid-cols-2">
-              <div>
-                <h3 className="mb-2 text-sm font-black uppercase text-slate-500">До</h3>
-                <pre className="max-h-[520px] overflow-auto rounded-2xl bg-slate-950 p-4 text-xs leading-5 text-slate-100">{shortJson(selected.old_snapshot)}</pre>
-              </div>
-              <div>
-                <h3 className="mb-2 text-sm font-black uppercase text-slate-500">После</h3>
-                <pre className="max-h-[520px] overflow-auto rounded-2xl bg-slate-950 p-4 text-xs leading-5 text-slate-100">{shortJson(selected.new_snapshot)}</pre>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
+
+function StatCard({
+  title,
+  value,
+}) {
+  return (
+    <div className="rounded-2xl border bg-white p-4">
+
+      <div className="text-xs font-bold uppercase text-slate-400">
+        {title}
+      </div>
+
+      <div className="mt-1 text-2xl font-black">
+        {Number(value || 0)}
+      </div>
+
+    </div>
+  );
+}
+
+export {
+  StatCard,
+};
