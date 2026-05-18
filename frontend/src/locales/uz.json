@@ -723,7 +723,8 @@
       "archived": "Arxiv",
       "deleted": "Savatda",
       "completed": "Yakunlangan",
-      "in_trash": "Savatda"
+      "in_trash": "Savatda",
+      "approved": "E’lon qilingan"
     },
     "send_to_review": "Moderatsiyaga yuborish",
     "submitted_toast": "Moderatsiyaga yuborildi",
@@ -2382,7 +2383,15 @@
   "restore_service": "Tiklash",
   "service_restored": "Xizmat qoralamalarga tiklandi",
   "service_status": {
-    "in_trash": "Savatda"
+    "in_trash": "Savatda",
+    "draft": "Qoralama",
+    "pending": "Moderatsiyada",
+    "published": "E’lon qilingan",
+    "approved": "E’lon qilingan",
+    "rejected": "Rad etilgan",
+    "archived": "Arxiv",
+    "deleted": "Savatda",
+    "completed": "Yakunlangan"
   },
   "service_archive": {
     "hint": "Yakunlangan yoki muddati tugagan qaytarilgan xizmatlar tarix sifatida shu yerda saqlanadi.",
