@@ -2,6 +2,7 @@
 const pool = require("../db");
 const axiosBase = require("axios");
 const { tgSend, notifyModerationNew } = require("../utils/telegram");
+const { logProviderServiceAction } = require("../utils/serviceAuditLog");
 const MAX_TITLE_LEN = 100;
 const {
   extractPrices,
@@ -105,6 +106,63 @@ function normalizeDetails(details) {
     }
   }
   return typeof details === "object" ? details : {};
+}
+
+function normalizeServiceSnapshot(row) {
+  if (!row || typeof row !== "object") return row || null;
+  return {
+    ...row,
+    details: normalizeDetails(row.details),
+    images: Array.isArray(row.images)
+      ? row.images
+      : (() => {
+          try {
+            return typeof row.images === "string" ? JSON.parse(row.images) : row.images || [];
+          } catch {
+            return [];
+          }
+        })(),
+  };
+}
+
+async function fetchProviderServiceSnapshot(serviceId, providerId) {
+  const r = await pool.query(
+    `
+    SELECT
+      id,
+      provider_id,
+      category,
+      title,
+      price,
+      status,
+      moderation_status,
+      details,
+      images,
+      expiration_at,
+      deleted_at,
+      created_at,
+      updated_at
+    FROM services
+    WHERE id = $1 AND provider_id = $2
+    LIMIT 1
+    `,
+    [serviceId, providerId]
+  );
+  return normalizeServiceSnapshot(r.rows[0] || null);
+}
+
+async function logBotServiceAudit({ req, action, providerId, serviceId, oldService, newService, meta = {} }) {
+  await logProviderServiceAction({
+    req,
+    action,
+    source: "telegram_bot",
+    actorRole: "provider",
+    providerId,
+    serviceId,
+    oldService: normalizeServiceSnapshot(oldService),
+    newService: normalizeServiceSnapshot(newService),
+    meta,
+  });
 }
 
 function isTruthyActive(value) {
@@ -775,7 +833,7 @@ async function serviceActionFromBot(req, res, action) {
     const providerId = providerRes.rows[0].id;
 
     const svcRes = await pool.query(
-      `SELECT id, status, details, expiration_at
+      `SELECT id, provider_id, category, title, price, status, moderation_status, details, images, expiration_at, deleted_at, created_at, updated_at
          FROM services
         WHERE id = $1 AND provider_id = $2
         LIMIT 1`,
@@ -787,6 +845,7 @@ async function serviceActionFromBot(req, res, action) {
         .json({ success: false, error: "SERVICE_NOT_FOUND" });
     }
 
+    const oldService = normalizeServiceSnapshot(svcRes.rows[0]);
     let updated;
 
     if (action === "unpublish") {
@@ -804,7 +863,7 @@ async function serviceActionFromBot(req, res, action) {
                expiration_at = NOW()
            WHERE id = $1
              AND provider_id = $2
-           RETURNING id, status, details, expiration_at
+           RETURNING id, provider_id, category, title, price, status, moderation_status, details, images, expiration_at, deleted_at, created_at, updated_at
         `,
         [svcId, providerId]
       );
@@ -830,7 +889,7 @@ async function serviceActionFromBot(req, res, action) {
            )
        WHERE id = $1
          AND provider_id = $2
-       RETURNING id, status, details, expiration_at
+       RETURNING id, provider_id, category, title, price, status, moderation_status, details, images, expiration_at, deleted_at, created_at, updated_at
     `,
         [svcId, providerId]
       );
@@ -850,7 +909,7 @@ async function serviceActionFromBot(req, res, action) {
                )
            WHERE id = $1
              AND provider_id = $2
-           RETURNING id, status, details, expiration_at
+           RETURNING id, provider_id, category, title, price, status, moderation_status, details, images, expiration_at, deleted_at, created_at, updated_at
         `,
         [svcId, providerId]
       );
@@ -860,6 +919,22 @@ async function serviceActionFromBot(req, res, action) {
         .status(400)
         .json({ success: false, error: "UNKNOWN_ACTION" });
     }
+
+    const botActionMap = {
+      unpublish: "bot_service_unpublished",
+      extend7: "bot_service_extended",
+      archive: "bot_service_archived",
+    };
+
+    await logBotServiceAudit({
+      req,
+      action: botActionMap[action] || `bot_service_${action}`,
+      providerId,
+      serviceId: svcId,
+      oldService,
+      newService: updated,
+      meta: { bot_action: action },
+    });
 
     return res.json({ success: true, service: updated });
   } catch (err) {
@@ -1000,6 +1075,15 @@ async function createServiceFromBot(req, res) {
       console.error("[telegram] notifyModerationNew failed:", e?.message || e);
     }
 
+    await logBotServiceAudit({
+      req,
+      action: "bot_service_created",
+      providerId,
+      serviceId: insertRes.rows[0].id,
+      oldService: null,
+      newService: insertRes.rows[0],
+    });
+
     return res.json({
       success: true,
       service: insertRes.rows[0],
@@ -1101,6 +1185,8 @@ async function deleteServiceFromBot(req, res) {
 
     const providerId = provRes.rows[0].id;
 
+    const oldService = await fetchProviderServiceSnapshot(serviceId, providerId);
+
     const upd = await pool.query(
       `
       UPDATE services
@@ -1111,7 +1197,7 @@ async function deleteServiceFromBot(req, res) {
        WHERE id = $1
          AND provider_id = $2
          AND deleted_at IS NULL
-       RETURNING id, status, deleted_at
+       RETURNING id, provider_id, category, title, price, status, moderation_status, details, images, expiration_at, deleted_at, created_at, updated_at
       `,
       [serviceId, providerId]
     );
@@ -1148,6 +1234,15 @@ async function deleteServiceFromBot(req, res) {
         .json({ success: false, error: "DELETE_FAILED" });
     }
 
+    await logBotServiceAudit({
+      req,
+      action: "bot_service_deleted",
+      providerId,
+      serviceId,
+      oldService,
+      newService: upd.rows[0],
+    });
+
     return res.json({
       success: true,
       item: upd.rows[0],
@@ -1181,6 +1276,8 @@ async function restoreServiceFromBot(req, res) {
 
     const providerId = provRes.rows[0].id;
 
+    const oldService = await fetchProviderServiceSnapshot(serviceId, providerId);
+
     const upd = await pool.query(
       `
       UPDATE services
@@ -1191,7 +1288,7 @@ async function restoreServiceFromBot(req, res) {
        WHERE id = $1
          AND provider_id = $2
          AND deleted_at IS NOT NULL
-       RETURNING id, status, deleted_at
+       RETURNING id, provider_id, category, title, price, status, moderation_status, details, images, expiration_at, deleted_at, created_at, updated_at
       `,
       [serviceId, providerId]
     );
@@ -1227,6 +1324,15 @@ async function restoreServiceFromBot(req, res) {
         .status(409)
         .json({ success: false, error: "RESTORE_FAILED" });
     }
+
+    await logBotServiceAudit({
+      req,
+      action: "bot_service_restored",
+      providerId,
+      serviceId,
+      oldService,
+      newService: upd.rows[0],
+    });
 
     return res.json({
       success: true,
@@ -1267,7 +1373,7 @@ async function purgeServiceFromBot(req, res) {
 
     const svcRes = await pool.query(
       `
-      SELECT id, provider_id, deleted_at
+      SELECT id, provider_id, category, title, price, status, moderation_status, details, images, expiration_at, deleted_at, created_at, updated_at
       FROM services
       WHERE id = $1
       LIMIT 1
@@ -1367,6 +1473,15 @@ async function purgeServiceFromBot(req, res) {
       });
     }
 
+    await logBotServiceAudit({
+      req,
+      action: "bot_service_purged",
+      providerId,
+      serviceId,
+      oldService: svc,
+      newService: null,
+    });
+
     return res.json({
       success: true,
       purgedId: del.rows[0].id,
@@ -1412,7 +1527,7 @@ async function updateServiceFromBot(req, res) {
     const providerId = providerRes.rows[0].id;
 
     const svcRes = await pool.query(
-      `SELECT id, category, title, price, details, images, expiration_at
+      `SELECT id, provider_id, category, title, price, status, moderation_status, details, images, expiration_at, deleted_at, created_at, updated_at
          FROM services
         WHERE id = $1 AND provider_id = $2
         LIMIT 1`,
@@ -1539,7 +1654,7 @@ async function updateServiceFromBot(req, res) {
            submitted_at = NOW(),
            updated_at = NOW()
        WHERE id = $1 AND provider_id = $2
-       RETURNING id, title, price, category, status, details, images, expiration_at
+       RETURNING id, provider_id, title, price, category, status, moderation_status, details, images, expiration_at, deleted_at, created_at, updated_at
       `,
       [
         svcId,
@@ -1563,6 +1678,15 @@ async function updateServiceFromBot(req, res) {
     } catch (e) {
       console.error("[price drop] broadcast failed (bot):", e?.message || e);
     }
+
+    await logBotServiceAudit({
+      req,
+      action: "bot_service_updated",
+      providerId,
+      serviceId: svcId,
+      oldService: existing,
+      newService: updRes.rows[0],
+    });
 
     try {
       await notifyModerationNew({ service: updRes.rows[0].id });
@@ -1611,7 +1735,7 @@ async function submitServiceFromBot(req, res) {
     const providerId = providerRes.rows[0].id;
 
     const svcRes = await pool.query(
-      `SELECT id, category, details, status
+      `SELECT id, provider_id, category, title, price, status, moderation_status, details, images, expiration_at, deleted_at, created_at, updated_at
          FROM services
         WHERE id = $1 AND provider_id = $2
         LIMIT 1`,
@@ -1649,10 +1773,19 @@ async function submitServiceFromBot(req, res) {
              submitted_at = NOW(),
              updated_at = NOW()
        WHERE id = $1 AND provider_id = $2
-       RETURNING id, status, moderation_status
+       RETURNING id, provider_id, category, title, price, status, moderation_status, details, images, expiration_at, deleted_at, created_at, updated_at
       `,
       [svcId, providerId]
     );
+
+    await logBotServiceAudit({
+      req,
+      action: "bot_service_submitted",
+      providerId,
+      serviceId: svcId,
+      oldService: svc,
+      newService: upd.rows[0],
+    });
 
     try {
       await notifyModerationNew({ service: svcId });
