@@ -44,6 +44,138 @@ function publicBase() {
   return SITE_PUBLIC_URL || API_PUBLIC_URL || "https://travella.uz";
 }
 
+function safeParseDate(val, endOfDay = false) {
+  if (val === undefined || val === null || val === "") return null;
+
+  if (val instanceof Date) {
+    const d = new Date(val.getTime());
+    if (!Number.isFinite(d.getTime())) return null;
+    if (endOfDay) d.setHours(23, 59, 59, 999);
+    return d;
+  }
+
+  if (typeof val === "number") {
+    const ms = val > 9999999999 ? val : val * 1000;
+    const d = new Date(ms);
+    return Number.isFinite(d.getTime()) ? d : null;
+  }
+
+  const raw = String(val || "").trim();
+  if (!raw) return null;
+
+  if (/^\d+$/.test(raw)) {
+    const n = Number(raw);
+    const ms = n > 9999999999 ? n : n * 1000;
+    const d = new Date(ms);
+    return Number.isFinite(d.getTime()) ? d : null;
+  }
+
+  const m = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) {
+    let [, y, a, b] = m;
+    let mm = Number(a);
+    let dd = Number(b);
+    if (mm > 12 && dd <= 12) [mm, dd] = [dd, mm];
+    if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
+
+    const d = new Date(Number(y), mm - 1, dd, endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0);
+    return Number.isFinite(d.getTime()) ? d : null;
+  }
+
+  const d = new Date(raw);
+  return Number.isFinite(d.getTime()) ? d : null;
+}
+
+function firstDate(...values) {
+  for (const value of values) {
+    const parsed = safeParseDate(value, false);
+    if (parsed) return parsed;
+  }
+  return null;
+}
+
+function normalizeDetails(details) {
+  if (!details) return {};
+  if (typeof details === "string") {
+    try {
+      const parsed = JSON.parse(details);
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return typeof details === "object" ? details : {};
+}
+
+function isTruthyActive(value) {
+  if (value === undefined || value === null || value === "") return true;
+  if (typeof value === "boolean") return value;
+  const s = String(value).trim().toLowerCase();
+  return !(s === "false" || s === "0" || s === "no" || s === "inactive" || s === "неактуально");
+}
+
+function getRefusedActualityDate(details = {}, service = {}) {
+  const category = String(service.category || details.category || "").toLowerCase();
+
+  if (category === "refused_hotel") {
+    return firstDate(
+      details.checkIn,
+      details.check_in,
+      details.checkInDate,
+      details.check_in_date,
+      details.startDate,
+      details.start_date,
+      service.start_date
+    );
+  }
+
+  if (category === "refused_event_ticket" || category === "refused_ticket") {
+    return firstDate(
+      details.eventDate,
+      details.event_date,
+      details.startDate,
+      details.start_date,
+      service.start_date
+    );
+  }
+
+  return firstDate(
+    details.startFlightDate,
+    details.departureFlightDate,
+    details.departureDate,
+    details.departure_date,
+    details.startDate,
+    details.start_date,
+    service.start_date
+  );
+}
+
+function isRefusedServiceActual(service, today = new Date()) {
+  const details = normalizeDetails(service?.details);
+  const category = String(service?.category || details.category || "").toLowerCase();
+  const isRefused = category.startsWith("refused_") || category === "author_tour";
+
+  if (!isRefused) return true;
+  if (!isTruthyActive(details.isActive ?? details.is_active)) return false;
+
+  const expiration = firstDate(
+    service?.expiration_at,
+    service?.expiration,
+    service?.expires_at,
+    details.expiration_at,
+    details.expiration,
+    details.expiration_ts
+  );
+  if (expiration && expiration < new Date()) return false;
+
+  const actualDate = getRefusedActualityDate(details, service);
+  if (!actualDate) return true;
+
+  const floor = new Date(today);
+  floor.setHours(0, 0, 0, 0);
+  return actualDate >= floor;
+}
+
 // ---------- helpers ----------
 function guessMimeByPath(path) {
   const p = String(path || "").toLowerCase();
@@ -388,7 +520,9 @@ async function getProviderServices(req, res) {
         s.price,
         s.details,
         s.images,
-        s.expiration_at AS expiration,
+        s.expiration_at,
+        s.start_date,
+        s.end_date,
         s.created_at,
         p.name   AS provider_name,
         p.social AS provider_telegram
@@ -574,8 +708,22 @@ async function searchPublicServices(req, res) {
       FROM services s
       LEFT JOIN providers p ON p.id = s.provider_id
       WHERE s.category = $1
+        AND s.deleted_at IS NULL
         AND (
-          s.status = 'approved'
+          s.details IS NULL
+          OR (s.details::jsonb->>'isActive') IS NULL
+          OR LOWER(s.details::jsonb->>'isActive') = 'true'
+        )
+        AND (
+          s.expiration_at IS NULL
+          OR s.expiration_at > NOW()
+        )
+        AND (
+          (s.details::jsonb->>'expiration') IS NULL
+          OR NULLIF(s.details::jsonb->>'expiration', '')::timestamp > NOW()
+        )
+        AND (
+          s.status IN ('approved', 'published', 'active')
           OR (
             $2::int IS NOT NULL
             AND s.provider_id = $2
@@ -583,12 +731,15 @@ async function searchPublicServices(req, res) {
           )
         )
       ORDER BY s.created_at DESC
-      LIMIT 100
+      LIMIT 200
     `;
 
     const { rows } = await pool.query(q, [category, providerId]);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const items = (rows || []).filter((row) => isRefusedServiceActual(row, today));
 
-    return res.json({ success: true, items: rows || [] });
+    return res.json({ success: true, items });
   } catch (err) {
     console.error("[telegram] searchPublicServices error:", err);
     return res.status(500).json({ success: false, error: "SERVER_ERROR" });
