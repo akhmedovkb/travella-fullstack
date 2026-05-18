@@ -655,11 +655,14 @@
   },
   "moderation": {
     "service_status": {
-      "draft": "Черновик",
-      "pending": "Отправлено на модерацию",
-      "published": "Одобрено модератором",
-      "rejected": "Отклонено",
-      "archived": "Снято с публикации"
+    "draft": "Черновик",
+    "pending": "На модерации",
+    "published": "Опубликовано",
+    "rejected": "Отклонено",
+    "archived": "Архив",
+    "deleted": "В корзине",
+    "completed": "Завершено",
+    "in_trash": "В корзине"
     },
     "send_to_review": "Отправить на модерацию",
     "submitted_toast": "Отправлено на модерацию",
