@@ -512,8 +512,9 @@ export default function DashboardServices() {
         return [...prev, saved];
       });
       tSuccess(selectedService ? t("service_updated", { defaultValue: "Услуга обновлена" }) : t("service_added", { defaultValue: "Услуга добавлена" }));
-      resetForm();
-      setTab("list");
+      if (saved?.id) {
+        loadServiceToEdit(saved);
+      }
     } catch (err) {
       console.error(err);
       tError(err?.response?.data?.message || t("add_error", { defaultValue: "Ошибка сохранения" }));
@@ -540,7 +541,10 @@ export default function DashboardServices() {
     event?.stopPropagation?.();
     try {
       await api.post(`/api/providers/services/${service.id}/submit`, {});
-      setServices((prev) => prev.map((s) => (s.id === service.id ? { ...s, status: "pending" } : s)));
+      setServices((prev) => prev.map((s) => (s.id === service.id ? { ...s, status: "pending", moderation_status: "pending" } : s)));
+      if (selectedService?.id === service.id) {
+        setSelectedService((prev) => prev ? { ...prev, status: "pending", moderation_status: "pending" } : prev);
+      }
       tSuccess(t("moderation.submitted_toast", { defaultValue: "Отправлено на модерацию" }));
     } catch (err) {
       console.error(err);
@@ -595,149 +599,179 @@ export default function DashboardServices() {
                 {t("service_form.studio_hint", { defaultValue: "Создавайте отказные услуги блоками: направление, детали, ценность, цена и proof. Чем понятнее карточка, тем выше шанс открытия контактов." })}
               </p>
             </div>
-            <div className="grid grid-cols-2 gap-2 rounded-3xl border border-slate-200 bg-white/80 p-1.5 shadow-sm lg:min-w-[360px]">
+            <div className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white/80 p-2 shadow-sm lg:min-w-[340px]">
               <button
                 type="button"
-                onClick={() => {
-                  resetForm();
-                  setTab("create");
-                }}
-                className={cx("rounded-2xl px-4 py-3 text-sm font-black transition", tab === "create" ? "bg-slate-950 text-white shadow" : "text-slate-600 hover:bg-orange-50")}
+                onClick={resetForm}
+                className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-black text-white shadow transition hover:bg-slate-800"
               >
-                {t("provider_services_tab_create", { defaultValue: "Создать услугу" })}
+                + {t("provider_services_tab_create", { defaultValue: "Создать услугу" })}
               </button>
-              <button
-                type="button"
-                onClick={() => setTab("list")}
-                className={cx("rounded-2xl px-4 py-3 text-sm font-black transition", tab === "list" ? "bg-slate-950 text-white shadow" : "text-slate-600 hover:bg-orange-50")}
-              >
-                {t("provider_services_tab_created", { defaultValue: "Созданные услуги" })}
-                <span className="ml-2 rounded-full bg-white/30 px-2 py-0.5 text-xs">{services.length}</span>
-              </button>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="rounded-2xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
+                  <div className="text-lg font-black text-slate-950">{services.length}</div>
+                  <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">{t("services", { defaultValue: "Услуги" })}</div>
+                </div>
+                <div className="rounded-2xl bg-blue-50 px-3 py-2 ring-1 ring-blue-100">
+                  <div className="text-lg font-black text-blue-700">{services.filter((s) => String(s.status || "draft") === "pending").length}</div>
+                  <div className="text-[10px] font-black uppercase tracking-wide text-blue-400">Pending</div>
+                </div>
+                <div className="rounded-2xl bg-emerald-50 px-3 py-2 ring-1 ring-emerald-100">
+                  <div className="text-lg font-black text-emerald-700">{services.filter((s) => String(s.status || "") === "published" || String(s.status || "") === "approved").length}</div>
+                  <div className="text-[10px] font-black uppercase tracking-wide text-emerald-500">Live</div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
-        {tab === "list" ? (
-          <div className="p-4 sm:p-6">
-            {services.length === 0 ? (
-              <div className="rounded-[1.5rem] border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-sm font-semibold text-slate-500">
-                {t("provider_services_empty", { defaultValue: "Пока нет созданных услуг." })}
+        <div className="grid min-h-[760px] gap-0 bg-slate-50/70 lg:grid-cols-[390px_minmax(0,1fr)]">
+          <aside className="border-b border-slate-200 bg-white lg:border-b-0 lg:border-r">
+            <div className="sticky top-0 z-10 border-b border-slate-100 bg-white/95 p-4 backdrop-blur">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-lg font-black tracking-[-0.02em] text-slate-950">
+                    {t("provider_services_tab_created", { defaultValue: "Мои услуги" })}
+                  </div>
+                  <div className="mt-0.5 text-xs font-semibold text-slate-500">
+                    {t("service_form.two_panel_hint", { defaultValue: "Выберите услугу слева — редактор откроется справа." })}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  className="shrink-0 rounded-2xl bg-orange-500 px-3 py-2 text-xs font-black text-white shadow-sm transition hover:bg-orange-600"
+                >
+                  + {t("new_service", { defaultValue: "Новая" })}
+                </button>
               </div>
-            ) : (
-              <div className="grid gap-4">
-                {services.map((service) => {
+            </div>
+
+            <div className="max-h-[calc(100vh-180px)] space-y-3 overflow-y-auto p-3">
+              {services.length === 0 ? (
+                <div className="rounded-[1.5rem] border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm font-semibold text-slate-500">
+                  {t("provider_services_empty", { defaultValue: "Пока нет созданных услуг." })}
+                </div>
+              ) : (
+                services.map((service) => {
                   const d = asDetails(service);
                   const proofCount = serviceHasProof(service);
                   const dateText = formatServiceDateRange(d);
                   const route = getServiceRouteText(service, t("not_specified", { defaultValue: "Не указано" }));
-                  const canSubmit = (service.status === "draft" || service.status === "rejected" || !service.status);
+                  const canSubmit = service.status === "draft" || service.status === "rejected" || !service.status;
                   const needsProof = String(service.category || "").startsWith("refused_") && proofCount === 0;
+                  const isSelected = selectedService?.id === service.id;
 
                   return (
                     <article
                       key={service.id}
-                      className="group overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-orange-200 hover:shadow-xl"
+                      className={cx(
+                        "group overflow-hidden rounded-[1.5rem] border bg-white shadow-sm transition",
+                        isSelected
+                          ? "border-orange-300 ring-4 ring-orange-100"
+                          : "border-slate-200 hover:border-orange-200 hover:shadow-md"
+                      )}
                     >
-                      <button type="button" onClick={() => loadServiceToEdit(service)} className="w-full p-4 text-left">
-                        <div className="flex flex-col gap-4 md:flex-row md:items-stretch">
-                          <div className="relative h-36 w-full overflow-hidden rounded-[1.35rem] bg-orange-50 md:h-auto md:w-40 md:shrink-0">
+                      <button type="button" onClick={() => loadServiceToEdit(service)} className="w-full p-3 text-left">
+                        <div className="flex gap-3">
+                          <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-orange-50">
                             {service.images?.[0] ? (
                               <img src={service.images[0]} alt="" className="h-full w-full object-cover" />
                             ) : (
-                              <div className="flex h-full w-full items-center justify-center text-4xl">🏝️</div>
+                              <div className="flex h-full w-full items-center justify-center text-2xl">🏝️</div>
                             )}
-                            <span className="absolute left-2 top-2 rounded-full bg-white/90 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-orange-700 shadow-sm">
+                            <span className="absolute left-1.5 top-1.5 rounded-full bg-white/90 px-1.5 py-0.5 text-[9px] font-black text-orange-700 shadow-sm">
                               #{service.id}
                             </span>
                           </div>
 
                           <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0">
-                                <div className="truncate text-lg font-black text-slate-950">
+                                <div className="truncate text-sm font-black leading-5 text-slate-950">
                                   {service.title || t("not_specified", { defaultValue: "Не указано" })}
                                 </div>
-                                <div className="mt-1 text-xs font-black uppercase tracking-wide text-orange-600">
+                                <div className="mt-0.5 truncate text-[10px] font-black uppercase tracking-wide text-orange-600">
                                   {t(`category.${service.category}`, { defaultValue: service.category })}
                                 </div>
                               </div>
-                              <span className={cx("rounded-full px-2.5 py-1 text-[11px] font-black ring-1", getStatusTone(service.status))}>
+                              <span className={cx("shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ring-1", getStatusTone(service.status))}>
                                 {service.status || "draft"}
                               </span>
                             </div>
 
-                            <div className="mt-3 grid gap-2 text-sm font-semibold text-slate-700 md:grid-cols-2">
-                              <div className="rounded-2xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
-                                <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">{t("route", { defaultValue: "Маршрут" })}</div>
-                                <div className="mt-0.5 line-clamp-1">{route}</div>
-                              </div>
-                              <div className="rounded-2xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
-                                <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">{t("dates", { defaultValue: "Даты" })}</div>
-                                <div className="mt-0.5">{dateText || "—"}</div>
-                              </div>
-                              <div className="rounded-2xl bg-slate-950 px-3 py-2 text-white">
-                                <div className="text-[10px] font-black uppercase tracking-wide text-white/45">{t("gross_price", { defaultValue: "Цена для клиента" })}</div>
-                                <div className="mt-0.5 text-base font-black">{getServicePriceText(service)}</div>
-                              </div>
-                              <div className="rounded-2xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
-                                <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">{t("service_form.proof_trust_title", { defaultValue: "Подтверждение" })}</div>
-                                <div className={cx("mt-0.5 font-black", proofCount ? "text-emerald-700" : "text-rose-600")}>
-                                  {proofCount
-                                    ? t("service_form.proof_count", { count: proofCount, defaultValue: `Proof: ${proofCount}` })
-                                    : t("service_form.proof_missing", { defaultValue: "Proof не загружен" })}
-                                </div>
-                              </div>
+                            <div className="mt-2 space-y-1 text-xs font-semibold text-slate-600">
+                              <div className="truncate">📍 {route}</div>
+                              <div className="truncate">🗓 {dateText || "—"}</div>
+                              <div className="truncate">💰 {getServicePriceText(service)}</div>
                             </div>
 
-                            <div className="mt-3 flex flex-wrap items-center gap-2">
+                            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                              <span className={cx("rounded-full px-2 py-0.5 text-[10px] font-black ring-1", proofCount ? "bg-emerald-50 text-emerald-700 ring-emerald-100" : "bg-rose-50 text-rose-700 ring-rose-100")}>
+                                {proofCount ? `Proof: ${proofCount}` : t("service_form.proof_missing_short", { defaultValue: "No proof" })}
+                              </span>
                               {d.isActive === false ? (
-                                <span className="rounded-full bg-rose-50 px-2.5 py-1 text-[11px] font-black text-rose-700 ring-1 ring-rose-100">
+                                <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-black text-rose-700 ring-1 ring-rose-100">
                                   {t("inactive", { defaultValue: "Неактуально" })}
                                 </span>
                               ) : (
-                                <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-black text-emerald-700 ring-1 ring-emerald-100">
+                                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-700 ring-1 ring-emerald-100">
                                   {t("is_active", { defaultValue: "Актуально" })}
                                 </span>
                               )}
-                              {needsProof && (
-                                <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-black text-amber-700 ring-1 ring-amber-100">
-                                  {t("service_form.proof_required_short", { defaultValue: "Для модерации нужен proof" })}
-                                </span>
-                              )}
-                              <span className="ml-auto hidden rounded-2xl bg-orange-50 px-3 py-2 text-xs font-black text-orange-700 group-hover:inline-flex">
-                                {t("edit", { defaultValue: "Редактировать" })}
-                              </span>
                             </div>
                           </div>
                         </div>
                       </button>
 
                       {canSubmit && (
-                        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/70 px-4 py-3">
-                          <div className="text-xs font-semibold text-slate-500">
-                            {needsProof
-                              ? t("service_form.upload_proof_before_submit", { defaultValue: "Загрузите подтверждающие скриншоты перед отправкой на модерацию." })
-                              : t("service_form.ready_to_submit", { defaultValue: "После проверки можно отправить услугу на модерацию." })}
-                          </div>
+                        <div className="border-t border-slate-100 bg-slate-50 px-3 py-2">
                           <button
                             type="button"
                             onClick={(e) => submitForModeration(service, e)}
                             disabled={needsProof}
-                            className="rounded-2xl bg-blue-600 px-4 py-2.5 text-xs font-black text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                            className="w-full rounded-2xl bg-blue-600 px-3 py-2 text-xs font-black text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                            title={needsProof ? t("service_form.upload_proof_before_submit", { defaultValue: "Загрузите proof перед отправкой на модерацию." }) : undefined}
                           >
-                            {t("moderation.send_to_review", { defaultValue: "На модерацию" })}
+                            {needsProof
+                              ? t("service_form.proof_required_short", { defaultValue: "Нужен proof" })
+                              : t("moderation.send_to_review", { defaultValue: "На модерацию" })}
                           </button>
                         </div>
                       )}
                     </article>
                   );
-                })}
+                })
+              )}
+            </div>
+          </aside>
+
+          <section className="min-w-0 bg-slate-50/70 p-4 sm:p-6">
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="text-xl font-black tracking-[-0.03em] text-slate-950">
+                  {selectedService
+                    ? t("edit_service", { defaultValue: "Редактирование услуги" })
+                    : t("provider_services_tab_create", { defaultValue: "Создать услугу" })}
+                </div>
+                <div className="mt-1 text-sm font-semibold text-slate-500">
+                  {selectedService
+                    ? t("service_form.editing_selected_hint", { defaultValue: "Вы редактируете выбранную услугу из списка слева." })
+                    : t("service_form.create_new_hint", { defaultValue: "Заполните форму и сохраните черновик. После proof отправьте на модерацию." })}
+                </div>
               </div>
-            )}
-          </div>
-        ) : (
-          <div className="p-4 sm:p-6">
+              {selectedService?.id && (
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-black text-slate-700 shadow-sm transition hover:bg-orange-50 hover:text-orange-700"
+                >
+                  + {t("new_service", { defaultValue: "Новая услуга" })}
+                </button>
+              )}
+            </div>
+
+            <div className="space-y-5">
             {selectedService && (
               <div className="mb-5 overflow-hidden rounded-[1.75rem] border border-orange-100 bg-gradient-to-br from-orange-50 via-white to-slate-50 shadow-sm">
                 <div className="flex flex-col gap-4 p-4 md:flex-row md:items-center">
@@ -1096,8 +1130,9 @@ export default function DashboardServices() {
                 </aside>
               </div>
             )}
-          </div>
-        )}
+            </div>
+          </section>
+        </div>
       </div>
     </div>
   );
