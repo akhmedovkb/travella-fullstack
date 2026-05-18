@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
 import ProviderServicesCard from "../components/ProviderServicesCard";
+import ConfirmModal from "../components/ConfirmModal";
 import { tSuccess, tError, tWarn } from "../shared/toast";
 
 const DEFAULT_DETAILS = {
@@ -539,6 +540,7 @@ function MarketplacePreviewCard({ category, title, routeText, dateRangeText, pri
           {proofCount ? t("service_form.preview_trust_with_proof", { defaultValue: "Proof добавлен: карточка выглядит надежнее для клиента и модерации." }) : t("service_form.preview_trust_without_proof", { defaultValue: "Добавьте proof: клиенту и админу будет проще понять подлинность предложения." })}
         </div>
       </div>
+
     </div>
   );
 }
@@ -698,6 +700,8 @@ export default function DashboardServices() {
   const [saving, setSaving] = useState(false);
   const [selectedService, setSelectedService] = useState(null);
   const [serviceListFilter, setServiceListFilter] = useState("active");
+  const [confirmModal, setConfirmModal] = useState(null);
+  const [confirmBusy, setConfirmBusy] = useState(false);
 
   const [category, setCategory] = useState("");
   const [title, setTitle] = useState("");
@@ -868,35 +872,46 @@ export default function DashboardServices() {
     }
   };
 
-  const deleteService = async (service) => {
+  const deleteService = (service, event) => {
+    event?.stopPropagation?.();
     if (!service?.id) return;
-    if (!window.confirm(t("confirm_delete_service_full", { defaultValue: `Удалить #R${service.id}? Услуга уйдет из активных. Восстановить сможет только админ.` }))) return;
+    setConfirmModal({ type: "delete", service });
+  };
+
+  const performDeleteService = async (service) => {
+    if (!service?.id) return;
     try {
       await api.delete(`/api/providers/services/${service.id}`);
+      const deletedAt = new Date().toISOString();
       setServices((prev) =>
         prev.map((s) =>
           s.id === service.id
-            ? { ...s, status: "deleted", deleted_at: new Date().toISOString() }
+            ? { ...s, status: "deleted", deleted_at: deletedAt }
             : s
         )
       );
       if (selectedService?.id === service.id) {
         setSelectedService((prev) =>
-          prev ? { ...prev, status: "deleted", deleted_at: new Date().toISOString() } : prev
+          prev ? { ...prev, status: "deleted", deleted_at: deletedAt } : prev
         );
       }
+      setServiceListFilter("trash");
       tSuccess(t("service_deleted", { defaultValue: "Услуга удалена" }));
     } catch (err) {
       console.error(err);
       tError(t("delete_error", { defaultValue: "Ошибка удаления" }));
+      throw err;
     }
   };
 
-  const restoreServiceFromTrash = async (service, event) => {
+  const restoreServiceFromTrash = (service, event) => {
     event?.stopPropagation?.();
     if (!service?.id) return;
+    setConfirmModal({ type: "restore", service });
+  };
 
-    if (!window.confirm(t("confirm_restore_service", { defaultValue: `Восстановить #R${service.id} в черновики?` }))) return;
+  const performRestoreServiceFromTrash = async (service) => {
+    if (!service?.id) return;
 
     try {
       const res = await api.post(`/api/providers/services/${service.id}/restore`, {});
@@ -913,6 +928,23 @@ export default function DashboardServices() {
     } catch (err) {
       console.error(err);
       tError(err?.response?.data?.message || t("restore_error", { defaultValue: "Не удалось восстановить услугу" }));
+      throw err;
+    }
+  };
+
+  const handleConfirmModalConfirm = async () => {
+    if (!confirmModal?.service) return;
+    try {
+      setConfirmBusy(true);
+      if (confirmModal.type === "delete") {
+        await performDeleteService(confirmModal.service);
+      }
+      if (confirmModal.type === "restore") {
+        await performRestoreServiceFromTrash(confirmModal.service);
+      }
+      setConfirmModal(null);
+    } finally {
+      setConfirmBusy(false);
     }
   };
 
@@ -1820,6 +1852,36 @@ export default function DashboardServices() {
           </section>
         </div>
       </div>
+
+      <ConfirmModal
+        open={!!confirmModal}
+        danger={confirmModal?.type === "delete"}
+        busy={confirmBusy}
+        title={
+          confirmModal?.type === "delete"
+            ? t("confirm_delete_service_title", { defaultValue: "Удалить услугу" })
+            : t("confirm_restore_service_title", { defaultValue: "Восстановить услугу" })
+        }
+        message={
+          confirmModal?.type === "delete"
+            ? t("confirm_delete_service_full", {
+                defaultValue: `Удалить #R${confirmModal?.service?.id || ""}? Услуга уйдет в корзину и будет скрыта из активных.`,
+              })
+            : t("confirm_restore_service", {
+                defaultValue: `Восстановить #R${confirmModal?.service?.id || ""} в черновики?`,
+              })
+        }
+        confirmLabel={
+          confirmModal?.type === "delete"
+            ? t("delete", { defaultValue: "Удалить" })
+            : t("restore_service", { defaultValue: "Восстановить" })
+        }
+        cancelLabel={t("actions.cancel", { defaultValue: "Отмена" })}
+        onClose={() => {
+          if (!confirmBusy) setConfirmModal(null);
+        }}
+        onConfirm={handleConfirmModalConfirm}
+      />
     </div>
   );
 }
