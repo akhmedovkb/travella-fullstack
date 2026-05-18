@@ -145,6 +145,7 @@ export default function AdminServiceAudit({ embedded = false }) {
           >
             {loading ? "Загрузка…" : "Обновить"}
           </button>
+          </div>
         </div>
       )}
 
