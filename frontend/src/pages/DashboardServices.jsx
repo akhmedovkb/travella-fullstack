@@ -177,6 +177,47 @@ function serviceHasProof(service) {
   return proof.filter(Boolean).length;
 }
 
+function getServiceStatus(service) {
+  return String(service?.status || service?.moderation_status || "draft").toLowerCase();
+}
+
+function isDeletedService(service) {
+  return Boolean(service?.deleted_at || service?.deletedAt || getServiceStatus(service) === "deleted");
+}
+
+function isArchivedService(service) {
+  return !isDeletedService(service) && getServiceStatus(service) === "archived";
+}
+
+function isPendingService(service) {
+  const status = getServiceStatus(service);
+  const moderation = String(service?.moderation_status || "").toLowerCase();
+  return !isDeletedService(service) && !isArchivedService(service) && (status === "pending" || moderation === "pending");
+}
+
+function isPublishedService(service) {
+  const status = getServiceStatus(service);
+  return !isDeletedService(service) && !isArchivedService(service) && (status === "published" || status === "approved");
+}
+
+function isDraftService(service) {
+  const status = getServiceStatus(service);
+  return !isDeletedService(service) && !isArchivedService(service) && (status === "draft" || !status);
+}
+
+function isRejectedService(service) {
+  return !isDeletedService(service) && !isArchivedService(service) && getServiceStatus(service) === "rejected";
+}
+
+function getServiceListBucket(service) {
+  if (isDeletedService(service)) return "trash";
+  if (isArchivedService(service)) return "archive";
+  if (isPendingService(service)) return "pending";
+  if (isPublishedService(service)) return "published";
+  if (isRejectedService(service)) return "rejected";
+  return "draft";
+}
+
 function hasFilled(value) {
   return value !== undefined && value !== null && String(value).trim() !== "";
 }
@@ -564,6 +605,7 @@ export default function DashboardServices() {
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
   const [selectedService, setSelectedService] = useState(null);
+  const [serviceListFilter, setServiceListFilter] = useState("active");
 
   const [category, setCategory] = useState("");
   const [title, setTitle] = useState("");
@@ -805,6 +847,63 @@ export default function DashboardServices() {
   const readinessDone = readinessItems.filter((item) => item.ok).length;
   const readinessAllDone = readinessItems.length > 0 && readinessItems.every((item) => item.ok);
 
+  const serviceListStats = useMemo(() => {
+    const stats = {
+      all: services.length,
+      active: 0,
+      draft: 0,
+      pending: 0,
+      published: 0,
+      rejected: 0,
+      archive: 0,
+      trash: 0,
+    };
+
+    for (const service of services) {
+      const bucket = getServiceListBucket(service);
+      stats[bucket] += 1;
+      if (bucket !== "archive" && bucket !== "trash") stats.active += 1;
+    }
+
+    return stats;
+  }, [services]);
+
+  const serviceListTabs = useMemo(
+    () => [
+      { id: "active", label: t("service_list_filter.active", { defaultValue: "Активные" }), count: serviceListStats.active },
+      { id: "draft", label: t("service_list_filter.draft", { defaultValue: "Черновики" }), count: serviceListStats.draft },
+      { id: "pending", label: t("service_list_filter.pending", { defaultValue: "На модерации" }), count: serviceListStats.pending },
+      { id: "published", label: t("service_list_filter.published", { defaultValue: "Опубликованные" }), count: serviceListStats.published },
+      { id: "rejected", label: t("service_list_filter.rejected", { defaultValue: "Отклонённые" }), count: serviceListStats.rejected },
+      { id: "archive", label: t("service_list_filter.archive", { defaultValue: "Архив" }), count: serviceListStats.archive },
+      { id: "trash", label: t("service_list_filter.trash", { defaultValue: "Корзина" }), count: serviceListStats.trash },
+    ],
+    [serviceListStats, t]
+  );
+
+  const filteredServiceSections = useMemo(() => {
+    const labels = {
+      draft: t("service_group.draft", { defaultValue: "Черновики" }),
+      pending: t("service_group.pending", { defaultValue: "На модерации" }),
+      published: t("service_group.published", { defaultValue: "Опубликованные" }),
+      rejected: t("service_group.rejected", { defaultValue: "Отклонённые" }),
+      archive: t("service_group.archive", { defaultValue: "Архив" }),
+      trash: t("service_group.trash", { defaultValue: "Корзина" }),
+    };
+
+    const order = serviceListFilter === "active" ? ["draft", "pending", "published", "rejected"] : [serviceListFilter];
+
+    return order
+      .map((bucket) => ({
+        id: bucket,
+        label: labels[bucket] || bucket,
+        items: services.filter((service) => getServiceListBucket(service) === bucket),
+      }))
+      .filter((section) => section.items.length > 0);
+  }, [services, serviceListFilter, t]);
+
+  const filteredServicesCount = filteredServiceSections.reduce((sum, section) => sum + section.items.length, 0);
+
   if (loading) {
     return <div className="rounded-3xl bg-white p-6 text-sm font-semibold text-slate-500 shadow-sm">{t("loading", { defaultValue: "Загрузка…" })}</div>;
   }
@@ -848,8 +947,8 @@ export default function DashboardServices() {
               </button>
               <div className="grid grid-cols-3 gap-2 text-center">
                 <div className="rounded-2xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
-                  <div className="text-lg font-black text-slate-950">{services.length}</div>
-                  <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">{t("services", { defaultValue: "Услуги" })}</div>
+                  <div className="text-lg font-black text-slate-950">{serviceListStats.active}</div>
+                  <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">{t("service_list_filter.active", { defaultValue: "Активные" })}</div>
                 </div>
                 <div className="rounded-2xl bg-blue-50 px-3 py-2 ring-1 ring-blue-100">
                   <div className="text-lg font-black text-blue-700">{services.filter((s) => String(s.status || "draft") === "pending").length}</div>
@@ -886,115 +985,157 @@ export default function DashboardServices() {
               </div>
             </div>
 
-            <div className="max-h-[calc(100vh-180px)] space-y-3 overflow-y-auto p-3">
+            <div className="border-b border-slate-100 bg-white px-3 py-3">
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {serviceListTabs.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setServiceListFilter(item.id)}
+                    className={cx(
+                      "shrink-0 rounded-2xl px-3 py-2 text-[11px] font-black transition ring-1",
+                      serviceListFilter === item.id
+                        ? "bg-slate-950 text-white ring-slate-950"
+                        : "bg-slate-50 text-slate-600 ring-slate-200 hover:bg-orange-50 hover:text-orange-700 hover:ring-orange-100"
+                    )}
+                  >
+                    {item.label}
+                    <span className={cx(
+                      "ml-1 rounded-full px-1.5 py-0.5 text-[10px]",
+                      serviceListFilter === item.id ? "bg-white/15 text-white" : "bg-white text-slate-500"
+                    )}>
+                      {item.count}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="max-h-[calc(100vh-238px)] space-y-4 overflow-y-auto p-3">
               {services.length === 0 ? (
                 <div className="rounded-[1.5rem] border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm font-semibold text-slate-500">
                   {t("provider_services_empty", { defaultValue: "Пока нет созданных услуг." })}
                 </div>
+              ) : filteredServicesCount === 0 ? (
+                <div className="rounded-[1.5rem] border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm font-semibold text-slate-500">
+                  {t("service_list_filter.empty", { defaultValue: "В этом разделе пока нет услуг." })}
+                </div>
               ) : (
-                services.map((service) => {
-                  const d = asDetails(service);
-                  const proofCount = serviceHasProof(service);
-                  const dateText = formatServiceDateRange(d);
-                  const route = getServiceRouteText(service, t("not_specified", { defaultValue: "Не указано" }));
-                  const canSubmit = service.status === "draft" || service.status === "rejected" || !service.status;
-                  const serviceDetails = { ...DEFAULT_DETAILS, ...d, proofImages: Array.isArray(d.proofImages || d.proof_images) ? (d.proofImages || d.proof_images) : [] };
-                  const serviceSubmitIssues = buildValidationIssues({
-                    category: service.category,
-                    title: service.title,
-                    description: service.description || d.description || "",
-                    price: service.price,
-                    images: Array.isArray(service.images) ? service.images : [],
-                    details: serviceDetails,
-                    isExtended: profile?.type === "agent" && EXTENDED_AGENT_CATEGORIES.includes(service.category),
-                    t,
-                    requireProof: String(service.category || "").startsWith("refused_"),
-                  });
-                  const isSubmitReady = serviceSubmitIssues.length === 0;
-                  const isSelected = selectedService?.id === service.id;
+                filteredServiceSections.map((section) => (
+                  <div key={section.id} className="space-y-3">
+                    <div className="sticky top-0 z-[1] -mx-1 flex items-center justify-between rounded-2xl bg-white/95 px-3 py-2 text-xs font-black uppercase tracking-wide text-slate-500 shadow-sm ring-1 ring-slate-100 backdrop-blur">
+                      <span>{section.label}</span>
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600">{section.items.length}</span>
+                    </div>
 
-                  return (
-                    <article
-                      key={service.id}
-                      className={cx(
-                        "group overflow-hidden rounded-[1.5rem] border bg-white shadow-sm transition",
-                        isSelected
-                          ? "border-orange-300 ring-4 ring-orange-100"
-                          : "border-slate-200 hover:border-orange-200 hover:shadow-md"
-                      )}
-                    >
-                      <button type="button" onClick={() => loadServiceToEdit(service)} className="w-full p-3 text-left">
-                        <div className="flex gap-3">
-                          <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-orange-50">
-                            {service.images?.[0] ? (
-                              <img src={service.images[0]} alt="" className="h-full w-full object-cover" />
-                            ) : (
-                              <div className="flex h-full w-full items-center justify-center text-2xl">🏝️</div>
-                            )}
-                            <span className="absolute left-1.5 top-1.5 rounded-full bg-white/90 px-1.5 py-0.5 text-[9px] font-black text-orange-700 shadow-sm">
-                              #{service.id}
-                            </span>
-                          </div>
+                    {section.items.map((service) => {
+                      const d = asDetails(service);
+                      const proofCount = serviceHasProof(service);
+                      const dateText = formatServiceDateRange(d);
+                      const route = getServiceRouteText(service, t("not_specified", { defaultValue: "Не указано" }));
+                      const canSubmit = service.status === "draft" || service.status === "rejected" || !service.status;
+                      const serviceDetails = { ...DEFAULT_DETAILS, ...d, proofImages: Array.isArray(d.proofImages || d.proof_images) ? (d.proofImages || d.proof_images) : [] };
+                      const serviceSubmitIssues = buildValidationIssues({
+                        category: service.category,
+                        title: service.title,
+                        description: service.description || d.description || "",
+                        price: service.price,
+                        images: Array.isArray(service.images) ? service.images : [],
+                        details: serviceDetails,
+                        isExtended: profile?.type === "agent" && EXTENDED_AGENT_CATEGORIES.includes(service.category),
+                        t,
+                        requireProof: String(service.category || "").startsWith("refused_"),
+                      });
+                      const isSubmitReady = serviceSubmitIssues.length === 0;
+                      const isSelected = selectedService?.id === service.id;
+                      const isTrashOrArchive = isDeletedService(service) || isArchivedService(service);
 
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="min-w-0">
-                                <div className="truncate text-sm font-black leading-5 text-slate-950">
-                                  {service.title || t("not_specified", { defaultValue: "Не указано" })}
+                      return (
+                        <article
+                          key={service.id}
+                          className={cx(
+                            "group overflow-hidden rounded-[1.5rem] border bg-white shadow-sm transition",
+                            isSelected
+                              ? "border-orange-300 ring-4 ring-orange-100"
+                              : "border-slate-200 hover:border-orange-200 hover:shadow-md",
+                            isTrashOrArchive && "opacity-75"
+                          )}
+                        >
+                          <button type="button" onClick={() => loadServiceToEdit(service)} className="w-full p-3 text-left">
+                            <div className="flex gap-3">
+                              <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-orange-50">
+                                {service.images?.[0] ? (
+                                  <img src={service.images[0]} alt="" className="h-full w-full object-cover" />
+                                ) : (
+                                  <div className="flex h-full w-full items-center justify-center text-2xl">🏝️</div>
+                                )}
+                                <span className="absolute left-1.5 top-1.5 rounded-full bg-white/90 px-1.5 py-0.5 text-[9px] font-black text-orange-700 shadow-sm">
+                                  #{service.id}
+                                </span>
+                              </div>
+
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <div className="truncate text-sm font-black leading-5 text-slate-950">
+                                      {service.title || t("not_specified", { defaultValue: "Не указано" })}
+                                    </div>
+                                    <div className="mt-0.5 truncate text-[10px] font-black uppercase tracking-wide text-orange-600">
+                                      {t(`category.${service.category}`, { defaultValue: service.category })}
+                                    </div>
+                                  </div>
+                                  <span className={cx("shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ring-1", getStatusTone(service.status))}>
+                                    {service.status || "draft"}
+                                  </span>
                                 </div>
-                                <div className="mt-0.5 truncate text-[10px] font-black uppercase tracking-wide text-orange-600">
-                                  {t(`category.${service.category}`, { defaultValue: service.category })}
+
+                                <div className="mt-2 space-y-1 text-xs font-semibold text-slate-600">
+                                  <div className="truncate">📍 {route}</div>
+                                  <div className="truncate">🗓 {dateText || "—"}</div>
+                                  <div className="truncate">💰 {getServicePriceText(service)}</div>
+                                </div>
+
+                                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                                  <span className={cx("rounded-full px-2 py-0.5 text-[10px] font-black ring-1", proofCount ? "bg-emerald-50 text-emerald-700 ring-emerald-100" : "bg-rose-50 text-rose-700 ring-rose-100")}>
+                                    {proofCount ? `Proof: ${proofCount}` : t("service_form.proof_missing_short", { defaultValue: "No proof" })}
+                                  </span>
+                                  {d.isActive === false ? (
+                                    <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-black text-rose-700 ring-1 ring-rose-100">
+                                      {t("inactive", { defaultValue: "Неактуально" })}
+                                    </span>
+                                  ) : (
+                                    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-700 ring-1 ring-emerald-100">
+                                      {t("is_active", { defaultValue: "Актуально" })}
+                                    </span>
+                                  )}
                                 </div>
                               </div>
-                              <span className={cx("shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ring-1", getStatusTone(service.status))}>
-                                {service.status || "draft"}
-                              </span>
                             </div>
-
-                            <div className="mt-2 space-y-1 text-xs font-semibold text-slate-600">
-                              <div className="truncate">📍 {route}</div>
-                              <div className="truncate">🗓 {dateText || "—"}</div>
-                              <div className="truncate">💰 {getServicePriceText(service)}</div>
-                            </div>
-
-                            <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                              <span className={cx("rounded-full px-2 py-0.5 text-[10px] font-black ring-1", proofCount ? "bg-emerald-50 text-emerald-700 ring-emerald-100" : "bg-rose-50 text-rose-700 ring-rose-100")}>
-                                {proofCount ? `Proof: ${proofCount}` : t("service_form.proof_missing_short", { defaultValue: "No proof" })}
-                              </span>
-                              {d.isActive === false ? (
-                                <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-black text-rose-700 ring-1 ring-rose-100">
-                                  {t("inactive", { defaultValue: "Неактуально" })}
-                                </span>
-                              ) : (
-                                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-700 ring-1 ring-emerald-100">
-                                  {t("is_active", { defaultValue: "Актуально" })}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </button>
-
-                      {canSubmit && (
-                        <div className="border-t border-slate-100 bg-slate-50 px-3 py-2">
-                          <button
-                            type="button"
-                            onClick={(e) => submitForModeration(service, e)}
-                            disabled={!isSubmitReady}
-                            className="w-full rounded-2xl bg-blue-600 px-3 py-2 text-xs font-black text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-                            title={!isSubmitReady ? serviceSubmitIssues[0] : undefined}
-                          >
-                            {isSubmitReady
-                              ? t("moderation.send_to_review", { defaultValue: "На модерацию" })
-                              : t("service_form.fix_before_submit", { defaultValue: "Доработать" })}
                           </button>
-                        </div>
-                      )}
-                    </article>
-                  );
-                })
+
+                          {canSubmit && !isTrashOrArchive && (
+                            <div className="border-t border-slate-100 bg-slate-50 px-3 py-2">
+                              <button
+                                type="button"
+                                onClick={(e) => submitForModeration(service, e)}
+                                disabled={!isSubmitReady}
+                                className="w-full rounded-2xl bg-blue-600 px-3 py-2 text-xs font-black text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                                title={!isSubmitReady ? serviceSubmitIssues[0] : undefined}
+                              >
+                                {isSubmitReady
+                                  ? t("moderation.send_to_review", { defaultValue: "На модерацию" })
+                                  : t("service_form.fix_before_submit", { defaultValue: "Доработать" })}
+                              </button>
+                            </div>
+                          )}
+                        </article>
+                      );
+                    })}
+                  </div>
+                ))
               )}
             </div>
+
           </aside>
 
           <section className="min-w-0 bg-slate-50/70 p-4 sm:p-6">
