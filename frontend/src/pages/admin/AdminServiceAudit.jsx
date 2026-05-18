@@ -296,3 +296,7 @@ export default function AdminServiceAudit() {
     </div>
   );
 }
+
+export default function AdminServiceAudit({
+ embedded=false
+})
