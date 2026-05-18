@@ -1072,6 +1072,44 @@ const deleteService = async (req, res) => {
   }
 };
 
+const restoreService = async (req, res) => {
+  try {
+    const providerId = req.user.id;
+    const serviceId = req.params.id;
+
+    const restored = await pool.query(
+      `
+      UPDATE services
+         SET
+           status = 'draft',
+           moderation_status = 'draft',
+           deleted_at = NULL,
+           deleted_by = NULL,
+           submitted_at = NULL,
+           published_at = NULL,
+           approved_at = NULL,
+           rejected_at = NULL,
+           rejected_reason = NULL,
+           updated_at = NOW()
+       WHERE id = $1
+         AND provider_id = $2
+         AND deleted_at IS NOT NULL
+      RETURNING *
+      `,
+      [serviceId, providerId]
+    );
+
+    if (!restored.rowCount) {
+      return res.status(404).json({ message: "Услуга не найдена в корзине" });
+    }
+
+    return res.json(restored.rows[0]);
+  } catch (err) {
+    console.error("❌ Ошибка восстановления услуги:", err);
+    return res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
 // Только обновление картинок
 const updateServiceImagesOnly = async (req, res) => {
   try {
@@ -1830,6 +1868,7 @@ module.exports = {
   getServices,
   updateService,
   deleteService,
+  restoreService,
   updateServiceImagesOnly,
   getProviderPublicById,
   // календарь
