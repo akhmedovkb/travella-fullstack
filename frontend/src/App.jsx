@@ -45,6 +45,7 @@ import AdminBilling from "./pages/admin/AdminBilling";
 import AdminFinance from "./pages/admin/AdminFinance";
 import AdminOperations from "./pages/admin/AdminOperations";
 import AdminProviderSupport from "./pages/admin/AdminProviderSupport";
+import AdminServiceAudit from "./pages/admin/AdminServiceAudit";
 import PassportParser from "./pages/PassportParser";
 
 // Клиентские
@@ -386,6 +387,16 @@ export default function App() {
                 <PrivateRoute>
                   <AdminRoute>
                     <AdminProviderSupport />
+                  </AdminRoute>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/admin/service-audit"
+              element={
+                <PrivateRoute>
+                  <AdminRoute>
+                    <AdminServiceAudit />
                   </AdminRoute>
                 </PrivateRoute>
               }
