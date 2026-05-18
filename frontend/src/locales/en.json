@@ -717,10 +717,13 @@
     "title": "Service moderation",
     "service_status": {
       "draft": "Draft",
-      "pending": "Sent for moderation",
-      "published": "Approved by moderator",
+      "pending": "Under moderation",
+      "published": "Published",
       "rejected": "Rejected",
-      "archived": "Unpublished"
+      "archived": "Archive",
+      "deleted": "Trash",
+      "completed": "Completed",
+      "in_trash": "In trash"
     },
     "send_to_review": "Send for moderation",
     "submitted_toast": "Submitted for moderation",
