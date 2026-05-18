@@ -392,16 +392,6 @@ export default function App() {
               }
             />
             <Route
-              path="/admin/service-audit"
-              element={
-                <PrivateRoute>
-                  <AdminRoute>
-                    <AdminServiceAudit />
-                  </AdminRoute>
-                </PrivateRoute>
-              }
-            />
-            <Route
               path="/admin/refused-actual"
               element={
                 <PrivateRoute>
