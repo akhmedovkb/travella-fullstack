@@ -225,6 +225,191 @@ function buildReadinessItems({ category, title, images, details, isExtended, t }
   ];
 }
 
+
+function buildValidationIssues({ category, title, description, price, images, details, isExtended, t, requireProof = false }) {
+  const issues = [];
+  const add = (ok, label) => {
+    if (!ok) issues.push(label);
+  };
+
+  add(hasFilled(category), t("validation.category_required", { defaultValue: "Выберите категорию" }));
+  add(hasFilled(title), t("validation.title_required", { defaultValue: "Укажите название услуги" }));
+
+  if (!isExtended) {
+    const simplePrice = parseMoney(price);
+    add(hasFilled(description), t("validation.description_required", { defaultValue: "Добавьте описание" }));
+    add(Number.isFinite(simplePrice) && simplePrice > 0, t("validation.price_positive", { defaultValue: "Укажите корректную цену" }));
+    add(Array.isArray(images) && images.length > 0, t("validation.photo_required", { defaultValue: "Добавьте хотя бы одно фото" }));
+    return issues;
+  }
+
+  const net = parseMoney(details.netPrice);
+  const gross = parseMoney(details.grossPrice);
+  const proofCount = Array.isArray(details.proofImages) ? details.proofImages.filter(Boolean).length : 0;
+
+  if (category === "refused_tour" || category === "author_tour") {
+    add(hasFilled(details.directionCountry), t("validation.country_required", { defaultValue: "Укажите страну направления" }));
+    add(hasFilled(details.directionFrom), t("validation.from_required", { defaultValue: "Укажите город вылета" }));
+    add(hasFilled(details.directionTo), t("validation.to_required", { defaultValue: "Укажите город прибытия" }));
+    add(hasFilled(details.startDate), t("validation.start_date_required", { defaultValue: "Укажите дату начала" }));
+    add(hasFilled(details.endDate), t("validation.end_date_required", { defaultValue: "Укажите дату окончания" }));
+    add(hasFilled(details.hotel), t("validation.hotel_required", { defaultValue: "Укажите отель" }));
+    add(validateFlightDetailsFormat(details.flightDetails), t("validation.flight_details_format", { defaultValue: "Заполните детали рейса в правильном формате" }));
+  }
+
+  if (category === "refused_hotel") {
+    add(hasFilled(details.directionCountry), t("validation.country_required", { defaultValue: "Укажите страну" }));
+    add(hasFilled(details.directionTo), t("validation.city_required", { defaultValue: "Укажите город/курорт" }));
+    add(hasFilled(details.hotel), t("validation.hotel_required", { defaultValue: "Укажите отель" }));
+    add(hasFilled(details.startDate), t("validation.checkin_required", { defaultValue: "Укажите дату заезда" }));
+    add(hasFilled(details.endDate), t("validation.checkout_required", { defaultValue: "Укажите дату выезда" }));
+    add(hasFilled(details.accommodationCategory) || hasFilled(details.accommodation), t("validation.room_required", { defaultValue: "Укажите номер или размещение" }));
+  }
+
+  if (category === "refused_flight") {
+    add(hasFilled(details.directionFrom), t("validation.from_required", { defaultValue: "Укажите город вылета" }));
+    add(hasFilled(details.directionTo), t("validation.to_required", { defaultValue: "Укажите город прибытия" }));
+    add(hasFilled(details.startDate) || hasFilled(details.startFlightDate), t("validation.departure_date_required", { defaultValue: "Укажите дату вылета" }));
+    add(hasFilled(details.airline), t("validation.airline_required", { defaultValue: "Укажите авиакомпанию" }));
+    add(validateFlightDetailsFormat(details.flightDetails), t("validation.flight_details_format", { defaultValue: "Заполните детали рейса в правильном формате" }));
+  }
+
+  if (category === "refused_event_ticket") {
+    add(hasFilled(details.eventName || title), t("validation.event_name_required", { defaultValue: "Укажите название мероприятия" }));
+    add(hasFilled(details.location), t("validation.location_required", { defaultValue: "Укажите локацию мероприятия" }));
+    add(hasFilled(details.startDate), t("validation.event_date_required", { defaultValue: "Укажите дату мероприятия" }));
+    add(hasFilled(details.ticketDetails) || hasFilled(details.eventCategory), t("validation.ticket_details_required", { defaultValue: "Укажите детали билета" }));
+  }
+
+  if (category === "visa_support") {
+    add(hasFilled(details.visaCountry) || hasFilled(details.description), t("validation.visa_country_required", { defaultValue: "Укажите страну визы или описание" }));
+  }
+
+  add(Number.isFinite(net) && net > 0, t("validation.net_positive", { defaultValue: "Укажите корректную цену нетто" }));
+  add(Number.isFinite(gross) && gross > 0, t("validation.gross_positive", { defaultValue: "Укажите корректную цену для клиента" }));
+  add(!Number.isFinite(net) || !Number.isFinite(gross) || gross >= net, t("validation.gross_ge_net", { defaultValue: "Цена для клиента не может быть меньше нетто" }));
+  add(Array.isArray(images) && images.length > 0, t("validation.photo_required", { defaultValue: "Добавьте хотя бы одно фото" }));
+  if (requireProof) add(proofCount > 0, t("validation.proof_required", { defaultValue: "Добавьте proof перед отправкой на модерацию" }));
+
+  return issues;
+}
+
+function formatDateShort(value) {
+  if (!value) return "";
+  const parts = String(value).slice(0, 10).split("-");
+  if (parts.length === 3) return `${parts[2]}.${parts[1]}`;
+  return String(value);
+}
+
+function categoryStickerText(category, t) {
+  const map = {
+    refused_tour: t("category.refused_tour", { defaultValue: "ОТКАЗНОЙ ТУР" }),
+    author_tour: t("category.author_tour", { defaultValue: "АВТОРСКИЙ ТУР" }),
+    refused_hotel: t("category.refused_hotel", { defaultValue: "ОТКАЗНОЙ ОТЕЛЬ" }),
+    refused_flight: t("category.refused_flight", { defaultValue: "ОТКАЗНОЙ АВИАБИЛЕТ" }),
+    refused_event_ticket: t("category.refused_event_ticket", { defaultValue: "ОТКАЗНОЙ БИЛЕТ НА МЕРОПРИЯТИЕ" }),
+    visa_support: t("category.visa_support", { defaultValue: "ВИЗОВАЯ ПОДДЕРЖКА" }),
+  };
+  return map[category] || t(`category.${category}`, { defaultValue: category || "Категория" });
+}
+
+function buildAutoTitle({ category, details, t }) {
+  const from = firstText(details.directionFrom);
+  const to = firstText(details.directionTo, details.location);
+  const country = firstText(details.directionCountry, details.visaCountry);
+  const hotel = firstText(details.hotel);
+  const eventName = firstText(details.eventName);
+  const dates = [formatDateShort(details.startDate || details.startFlightDate), formatDateShort(details.endDate || details.returnDate || details.endFlightDate)].filter(Boolean).join("–");
+
+  if (category === "refused_tour") return ["Отказной тур", from && to ? `${from} → ${to}` : country, hotel, dates].filter(Boolean).join(" · ");
+  if (category === "author_tour") return ["Авторский тур", from && to ? `${from} → ${to}` : country, hotel, dates].filter(Boolean).join(" · ");
+  if (category === "refused_hotel") return ["Отказной отель", hotel, to || country, dates].filter(Boolean).join(" · ");
+  if (category === "refused_flight") return ["Отказной авиабилет", from && to ? `${from} → ${to}` : "", dates].filter(Boolean).join(" · ");
+  if (category === "refused_event_ticket") return ["Отказной билет", eventName, to, dates].filter(Boolean).join(" · ");
+  if (category === "visa_support") return ["Визовая поддержка", country].filter(Boolean).join(" · ");
+  return t("service_form.auto_title_fallback", { defaultValue: "Новая услуга" });
+}
+
+function buildAutoDescription({ category, details, t }) {
+  const lines = [];
+  const push = (label, value) => {
+    if (hasFilled(value)) lines.push(`${label}: ${value}`);
+  };
+
+  if (category === "refused_tour" || category === "author_tour") {
+    lines.push(category === "author_tour" ? "Авторский тур" : "Отказной тур");
+    push("Маршрут", [details.directionFrom, details.directionTo].filter(Boolean).join(" → "));
+    push("Страна", details.directionCountry);
+    push("Даты", [details.startDate, details.endDate].filter(Boolean).join(" → "));
+    push("Отель", details.hotel);
+    push("Размещение", details.accommodation || details.accommodationCategory);
+    push("Питание", details.food);
+    push("Детали рейса", normalizeFlightDetails(details.flightDetails));
+  } else if (category === "refused_hotel") {
+    lines.push("Отказной отель");
+    push("Направление", [details.directionCountry, details.directionTo].filter(Boolean).join(" / "));
+    push("Отель", details.hotel);
+    push("Даты", [details.startDate, details.endDate].filter(Boolean).join(" → "));
+    push("Номер/размещение", details.accommodationCategory || details.accommodation);
+    push("Питание", details.food);
+  } else if (category === "refused_flight") {
+    lines.push("Отказной авиабилет");
+    push("Маршрут", [details.directionFrom, details.directionTo].filter(Boolean).join(" → "));
+    push("Дата вылета", details.startDate || details.startFlightDate);
+    push("Дата обратно", details.returnDate || details.endDate);
+    push("Авиакомпания", details.airline);
+    push("Детали рейса", normalizeFlightDetails(details.flightDetails));
+  } else if (category === "refused_event_ticket") {
+    lines.push("Отказной билет на мероприятие");
+    push("Событие", details.eventName);
+    push("Локация", details.location);
+    push("Дата", details.startDate);
+    push("Детали билета", details.ticketDetails || details.eventCategory);
+  } else if (category === "visa_support") {
+    lines.push("Визовая поддержка");
+    push("Страна", details.visaCountry);
+    push("Описание", details.description);
+  }
+
+  const included = [
+    details.transfer ? "трансфер" : null,
+    details.visaIncluded ? "виза включена" : null,
+    details.insuranceIncluded ? "страховка включена" : null,
+    details.earlyCheckIn ? "раннее заселение" : null,
+    details.arrivalFastTrack ? "Fast Track" : null,
+  ].filter(Boolean);
+  if (included.length) push("Дополнительно", included.join(", "));
+  return lines.filter(Boolean).join("\n").trim() || t("service_form.auto_description_fallback", { defaultValue: "Описание будет сформировано после заполнения полей." });
+}
+
+function MarketplacePreviewCard({ category, title, routeText, dateRangeText, priceText, images, details, includedPreview, t }) {
+  const proofCount = Array.isArray(details.proofImages) ? details.proofImages.filter(Boolean).length : 0;
+  return (
+    <div className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-[0_20px_55px_rgba(15,23,42,0.10)]">
+      <div className="relative h-48 bg-gradient-to-br from-orange-100 via-amber-50 to-sky-50">
+        {images?.[0] ? <img src={images[0]} alt="" className="h-full w-full object-cover" /> : <div className="flex h-full flex-col items-center justify-center gap-2 text-slate-400"><div className="text-4xl">🏝️</div><div className="text-xs font-black">{t("service_form.preview_photo_hint", { defaultValue: "Фото появится здесь" })}</div></div>}
+        <div className="absolute left-3 top-3 rounded-full bg-white/95 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-orange-700 shadow ring-1 ring-orange-100">{categoryStickerText(category, t)}</div>
+        <div className="absolute right-3 top-3 rounded-full bg-slate-950/85 px-3 py-1 text-[10px] font-black text-white shadow">{proofCount ? `Proof ${proofCount}` : t("service_form.no_proof", { defaultValue: "No proof" })}</div>
+      </div>
+      <div className="space-y-3 p-4">
+        <h3 className="line-clamp-2 text-lg font-black leading-snug text-slate-950">{title || t("service_form.preview_title_empty", { defaultValue: "Название услуги" })}</h3>
+        <div className="rounded-2xl bg-slate-50 p-3 text-sm font-bold leading-6 text-slate-700 ring-1 ring-slate-100">
+          <div>📍 {routeText || t("service_form.preview_route_empty", { defaultValue: "Маршрут будет показан здесь" })}</div>
+          <div>🗓 {dateRangeText || t("not_specified", { defaultValue: "Не указано" })}</div>
+        </div>
+        <div className="rounded-2xl bg-slate-950 p-4 text-white">
+          <div className="text-[10px] font-black uppercase tracking-[0.16em] text-white/45">{t("price", { defaultValue: "Цена" })}</div>
+          <div className="mt-1 text-3xl font-black tracking-[-0.04em]">{priceText || t("service_form.preview_price_empty", { defaultValue: "Цена появится здесь" })}</div>
+        </div>
+        {includedPreview.length > 0 && <div className="flex flex-wrap gap-1.5">{includedPreview.map((x) => <span key={x} className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-black text-emerald-700 ring-1 ring-emerald-100">{x}</span>)}</div>}
+        <div className="rounded-2xl bg-orange-50 p-3 text-xs font-semibold leading-5 text-orange-800 ring-1 ring-orange-100">
+          {proofCount ? t("service_form.preview_trust_with_proof", { defaultValue: "Proof добавлен: карточка выглядит надежнее для клиента и модерации." }) : t("service_form.preview_trust_without_proof", { defaultValue: "Добавьте proof: клиенту и админу будет проще понять подлинность предложения." })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -468,60 +653,38 @@ export default function DashboardServices() {
     setTab("create");
   };
 
+  const currentValidationIssues = useMemo(
+    () => buildValidationIssues({ category, title, description, price, images, details, isExtended, t, requireProof: false }),
+    [category, title, description, price, images, details, isExtended, t]
+  );
+
+  const moderationValidationIssues = useMemo(
+    () => buildValidationIssues({ category, title, description, price, images, details, isExtended, t, requireProof: true }),
+    [category, title, description, price, images, details, isExtended, t]
+  );
+
   const validate = () => {
-    if (!category) {
-      tWarn(t("select_category", { defaultValue: "Выберите категорию" }));
+    if (currentValidationIssues.length > 0) {
+      tWarn(currentValidationIssues[0]);
       return false;
-    }
-    if (!title.trim()) {
-      tWarn(t("title_required", { defaultValue: "Укажите название" }));
-      return false;
-    }
-    if (isExtended) {
-      const requiredByCategory = {
-        refused_tour: [details.directionFrom, details.directionTo, details.flightDetails, details.netPrice, details.grossPrice],
-        author_tour: [details.directionFrom, details.directionTo, details.flightDetails, details.netPrice, details.grossPrice],
-        refused_hotel: [details.directionCountry, details.directionTo, details.hotel, details.startDate, details.endDate, details.netPrice, details.grossPrice],
-        refused_flight: [details.directionFrom, details.directionTo, details.startDate, details.airline, details.flightDetails, details.netPrice, details.grossPrice],
-        refused_event_ticket: [details.eventName || title, details.location, details.startDate, details.netPrice, details.grossPrice],
-        visa_support: [details.description, details.netPrice, details.grossPrice],
-      };
-      if ((requiredByCategory[category] || []).some((v) => v === undefined || v === null || String(v).trim() === "")) {
-        tWarn(t("fill_all_fields", { defaultValue: "Заполните обязательные поля" }));
-        return false;
-      }
-
-      if (
-        ["refused_tour", "author_tour", "refused_flight"].includes(category) &&
-        !validateFlightDetailsFormat(details.flightDetails)
-      ) {
-        tWarn(
-          t("service_form.flight_details_format_error", {
-            defaultValue:
-              "Заполните детали рейса строго в формате: 15MAY HH-9911 TASDXB 18:00 21:00 / 22MAY HH-9912 DXBTAS 22:00 05:00 / 23KG/8KG",
-          })
-        );
-        return false;
-      }
-
-      const net = parseMoney(details.netPrice);
-      const gross = parseMoney(details.grossPrice);
-      if (!Number.isFinite(net) || net <= 0 || !Number.isFinite(gross) || gross <= 0) {
-        tWarn(t("validation.gross_positive", { defaultValue: "Укажите корректную цену" }));
-        return false;
-      }
-      if (gross < net) {
-        tWarn(t("validation.gross_ge_net", { defaultValue: "Цена для клиента не может быть меньше нетто" }));
-        return false;
-      }
-    } else {
-      const p = parseMoney(price);
-      if (!description.trim() || !Number.isFinite(p) || p <= 0) {
-        tWarn(t("fill_all_fields", { defaultValue: "Заполните обязательные поля" }));
-        return false;
-      }
     }
     return true;
+  };
+
+  const applyAutoTitle = () => {
+    const nextTitle = buildAutoTitle({ category, details, t });
+    setTitle(nextTitle);
+    tSuccess(t("service_form.auto_title_applied", { defaultValue: "Название сформировано" }));
+  };
+
+  const applyAutoDescription = () => {
+    const nextDescription = buildAutoDescription({ category, details, t });
+    if (isExtended) {
+      patchDetails({ description: nextDescription });
+    } else {
+      setDescription(nextDescription);
+    }
+    tSuccess(t("service_form.auto_description_applied", { defaultValue: "Описание сформировано" }));
   };
 
   const saveService = async () => {
@@ -587,6 +750,29 @@ export default function DashboardServices() {
 
   const submitForModeration = async (service, event) => {
     event?.stopPropagation?.();
+    if (!service?.id) return;
+
+    const serviceDetails = asDetails(service);
+    const serviceIsExtended = profile?.type === "agent" && EXTENDED_AGENT_CATEGORIES.includes(service.category);
+    const issues = buildValidationIssues({
+      category: service.category,
+      title: service.title,
+      description: service.description || serviceDetails.description || "",
+      price: service.price,
+      images: Array.isArray(service.images) ? service.images : [],
+      details: { ...DEFAULT_DETAILS, ...serviceDetails, proofImages: Array.isArray(serviceDetails.proofImages || serviceDetails.proof_images) ? (serviceDetails.proofImages || serviceDetails.proof_images) : [] },
+      isExtended: serviceIsExtended,
+      t,
+      requireProof: String(service.category || "").startsWith("refused_"),
+    });
+
+    if (issues.length > 0) {
+      tWarn(issues[0]);
+      if (selectedService?.id !== service.id) loadServiceToEdit(service);
+      setStep(5);
+      return;
+    }
+
     try {
       await api.post(`/api/providers/services/${service.id}/submit`, {});
       setServices((prev) => prev.map((s) => (s.id === service.id ? { ...s, status: "pending", moderation_status: "pending" } : s)));
@@ -596,7 +782,7 @@ export default function DashboardServices() {
       tSuccess(t("moderation.submitted_toast", { defaultValue: "Отправлено на модерацию" }));
     } catch (err) {
       console.error(err);
-      tError(t("submit_error", { defaultValue: "Не удалось отправить на модерацию" }));
+      tError(err?.response?.data?.message || t("submit_error", { defaultValue: "Не удалось отправить на модерацию" }));
     }
   };
 
@@ -605,7 +791,8 @@ export default function DashboardServices() {
     t("service_form.preview_route_empty", { defaultValue: "Маршрут будет показан здесь" })
   );
   const dateRangeText = formatServiceDateRange(details);
-  const priceText = isExtended ? details.grossPrice || details.netPrice : price;
+  const rawPreviewPrice = isExtended ? details.grossPrice || details.netPrice : price;
+  const priceText = rawPreviewPrice ? `${rawPreviewPrice} ${firstText(details.currency, profile?.currency, "USD")}` : "";
   const includedPreview = [
     details.insuranceIncluded ? t("insurance_included", { defaultValue: "Страховка" }) : null,
     details.earlyCheckIn ? t("early_check_in", { defaultValue: "Раннее заселение" }) : null,
@@ -711,7 +898,19 @@ export default function DashboardServices() {
                   const dateText = formatServiceDateRange(d);
                   const route = getServiceRouteText(service, t("not_specified", { defaultValue: "Не указано" }));
                   const canSubmit = service.status === "draft" || service.status === "rejected" || !service.status;
-                  const needsProof = String(service.category || "").startsWith("refused_") && proofCount === 0;
+                  const serviceDetails = { ...DEFAULT_DETAILS, ...d, proofImages: Array.isArray(d.proofImages || d.proof_images) ? (d.proofImages || d.proof_images) : [] };
+                  const serviceSubmitIssues = buildValidationIssues({
+                    category: service.category,
+                    title: service.title,
+                    description: service.description || d.description || "",
+                    price: service.price,
+                    images: Array.isArray(service.images) ? service.images : [],
+                    details: serviceDetails,
+                    isExtended: profile?.type === "agent" && EXTENDED_AGENT_CATEGORIES.includes(service.category),
+                    t,
+                    requireProof: String(service.category || "").startsWith("refused_"),
+                  });
+                  const isSubmitReady = serviceSubmitIssues.length === 0;
                   const isSelected = selectedService?.id === service.id;
 
                   return (
@@ -781,13 +980,13 @@ export default function DashboardServices() {
                           <button
                             type="button"
                             onClick={(e) => submitForModeration(service, e)}
-                            disabled={needsProof}
+                            disabled={!isSubmitReady}
                             className="w-full rounded-2xl bg-blue-600 px-3 py-2 text-xs font-black text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-                            title={needsProof ? t("service_form.upload_proof_before_submit", { defaultValue: "Загрузите proof перед отправкой на модерацию." }) : undefined}
+                            title={!isSubmitReady ? serviceSubmitIssues[0] : undefined}
                           >
-                            {needsProof
-                              ? t("service_form.proof_required_short", { defaultValue: "Нужен proof" })
-                              : t("moderation.send_to_review", { defaultValue: "На модерацию" })}
+                            {isSubmitReady
+                              ? t("moderation.send_to_review", { defaultValue: "На модерацию" })
+                              : t("service_form.fix_before_submit", { defaultValue: "Доработать" })}
                           </button>
                         </div>
                       )}
@@ -929,6 +1128,14 @@ export default function DashboardServices() {
                                           : t("service_form.ph_title", { defaultValue: "Например: Отказной тур в Нячанг" })
                                   }
                                 />
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  <button type="button" onClick={applyAutoTitle} className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-black text-white transition hover:bg-slate-800">
+                                    {t("service_form.auto_title", { defaultValue: "Сформировать название" })}
+                                  </button>
+                                  <button type="button" onClick={applyAutoDescription} className="rounded-xl bg-orange-50 px-3 py-2 text-xs font-black text-orange-700 ring-1 ring-orange-100 transition hover:bg-orange-100">
+                                    {t("service_form.auto_description", { defaultValue: "Сформировать описание" })}
+                                  </button>
+                                </div>
                               </Field>
                             </div>
 
@@ -1161,6 +1368,28 @@ export default function DashboardServices() {
                             onChange={(next) => patchDetails({ proofImages: next })}
                             max={6}
                           />
+                          <div className={cx("rounded-[1.5rem] border p-4", (details.proofImages || []).filter(Boolean).length ? "border-emerald-100 bg-emerald-50 text-emerald-800" : "border-amber-100 bg-amber-50 text-amber-800")}>
+                            <div className="flex items-start gap-3">
+                              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white text-lg shadow-sm">
+                                {(details.proofImages || []).filter(Boolean).length ? "✅" : "⚠️"}
+                              </span>
+                              <div>
+                                <div className="text-sm font-black">
+                                  {(details.proofImages || []).filter(Boolean).length
+                                    ? t("service_form.proof_ok_title", { defaultValue: "Proof добавлен" })
+                                    : t("service_form.proof_missing_title", { defaultValue: "Без proof нельзя отправить отказную услугу на модерацию" })}
+                                </div>
+                                <div className="mt-1 text-xs font-semibold leading-5 opacity-80">
+                                  {(details.proofImages || []).filter(Boolean).length
+                                    ? t("service_form.proof_ok_hint", { defaultValue: "Админ увидит подтверждение, а карточка будет выглядеть надежнее для клиента." })
+                                    : t("service_form.proof_missing_hint", { defaultValue: "Загрузите скрин/ваучер/подтверждение брони. Это защищает маркетплейс от фейковых отказов." })}
+                                </div>
+                                <div className="mt-2 text-xs font-black">
+                                  {t("service_form.proof_count", { defaultValue: "Proof-файлов" })}: {(details.proofImages || []).filter(Boolean).length}/6
+                                </div>
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       )}
 
@@ -1210,17 +1439,28 @@ export default function DashboardServices() {
                             )}
                           </div>
 
-                          <div className="mt-4 rounded-[1.5rem] border border-white bg-white p-4 shadow-sm">
-                            <div className="text-base font-black text-slate-950">{title || t("service_form.preview_title_empty", { defaultValue: "Название услуги" })}</div>
-                            <div className="mt-2 text-sm font-bold text-slate-600">✈️ {routeText}</div>
-                            <div className="mt-2 inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-800">🗓 {details.startDate || details.startFlightDate || "—"} {details.endDate ? `→ ${details.endDate}` : ""}</div>
-                            <div className="mt-4 rounded-2xl bg-slate-950 p-4 text-white">
-                              <div className="text-[10px] font-black uppercase tracking-[0.16em] text-white/45">{t("price", { defaultValue: "Цена" })}</div>
-                              <div className="mt-1 text-3xl font-black tracking-[-0.04em]">{priceText || t("service_form.preview_price_empty", { defaultValue: "Цена появится здесь" })}</div>
-                            </div>
-                            {includedPreview.length > 0 && <div className="mt-3 flex flex-wrap gap-1.5">{includedPreview.map((x) => <span key={x} className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-black text-emerald-700 ring-1 ring-emerald-100">{x}</span>)}</div>}
+                          <div className="mt-4">
+                            <MarketplacePreviewCard
+                              category={category}
+                              title={title}
+                              routeText={routeText}
+                              dateRangeText={dateRangeText}
+                              priceText={priceText}
+                              images={images}
+                              details={details}
+                              includedPreview={includedPreview}
+                              t={t}
+                            />
                           </div>
-                        </div>
+
+                          {moderationValidationIssues.length > 0 && (
+                            <div className="mt-4 rounded-[1.5rem] border border-rose-100 bg-rose-50 p-4 text-rose-800">
+                              <div className="text-sm font-black">{t("service_form.cannot_submit_yet", { defaultValue: "Пока нельзя отправить на модерацию" })}</div>
+                              <ul className="mt-2 list-disc space-y-1 pl-5 text-xs font-semibold leading-5">
+                                {moderationValidationIssues.slice(0, 8).map((issue) => <li key={issue}>{issue}</li>)}
+                              </ul>
+                            </div>
+                          )}                        </div>
                       )}
                     </>
                   )}
@@ -1248,25 +1488,19 @@ export default function DashboardServices() {
 
                 <aside className="hidden xl:block">
                   <div className="sticky top-5 space-y-4">
-                    <div className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-[0_20px_50px_rgba(15,23,42,0.08)]">
-                      <div className="relative h-40 bg-gradient-to-br from-orange-100 via-amber-50 to-sky-50">
-                        {images?.[0] ? <img src={images[0]} alt="" className="h-full w-full object-cover" /> : <div className="flex h-full flex-col items-center justify-center gap-2 text-slate-400"><div className="text-3xl">🏝️</div><div className="text-xs font-black">{t("service_form.preview_photo_hint", { defaultValue: "Фото появится здесь" })}</div></div>}
-                        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/45 to-transparent p-4">
-                          <span className="rounded-full bg-white/90 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-orange-600">{category ? t(`category.${category}`, { defaultValue: category }) : t("service_form.preview_category", { defaultValue: "Категория" })}</span>
-                        </div>
-                      </div>
-                      <div className="space-y-3 p-4">
-                        <div className="line-clamp-2 text-lg font-black leading-snug text-slate-950">{title || t("service_form.preview_title_empty", { defaultValue: "Название услуги" })}</div>
-                        <div className="text-xs font-bold text-slate-600">✈️ {routeText}</div>
-                        <div className="inline-flex rounded-full bg-slate-100 px-2 py-1 text-xs font-black text-slate-800">🗓 {details.startDate || details.startFlightDate || "—"}</div>
-                        <div className="rounded-2xl bg-slate-950 p-3 text-white">
-                          <div className="text-[10px] font-black uppercase tracking-[0.16em] text-white/45">{t("price", { defaultValue: "Цена" })}</div>
-                          <div className="mt-1 text-2xl font-black tracking-[-0.04em]">{priceText || t("service_form.preview_price_empty", { defaultValue: "Цена появится здесь" })}</div>
-                        </div>
-                        <div className="rounded-2xl bg-orange-50 p-3 text-xs font-semibold leading-5 text-orange-800 ring-1 ring-orange-100">
-                          {t("service_form.preview_tip", { defaultValue: "Так клиент будет воспринимать вашу услугу. Фото и proof повышают доверие." })}
-                        </div>
-                      </div>
+                    <MarketplacePreviewCard
+                      category={category}
+                      title={title}
+                      routeText={routeText}
+                      dateRangeText={dateRangeText}
+                      priceText={priceText}
+                      images={images}
+                      details={details}
+                      includedPreview={includedPreview}
+                      t={t}
+                    />
+                    <div className="rounded-2xl bg-orange-50 p-3 text-xs font-semibold leading-5 text-orange-800 ring-1 ring-orange-100">
+                      {t("service_form.preview_tip", { defaultValue: "Так клиент будет воспринимать вашу услугу. Фото и proof повышают доверие." })}
                     </div>
                   </div>
                 </aside>
