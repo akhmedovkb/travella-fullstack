@@ -833,7 +833,7 @@ const addService = async (req, res) => {
         status, moderation_status, submitted_at, updated_at)
      VALUES
        ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8::jsonb,$9,
-        'pending','pending', NOW(), NOW())
+        'draft','draft', NULL, NOW())
      RETURNING *`,
       [
         providerId,
@@ -848,13 +848,9 @@ const addService = async (req, res) => {
       ]
     );
 
-    // ✅ уведомление админу (не ломаем создание, если телега упала)
-    try {
-      await notifyModerationNew({ service: ins.rows[0].id });
-    } catch (e) {
-      console.error("[tg] notifyModerationNew failed:", e?.message || e);
-    }
-
+    // Создание из веб-кабинета сохраняет черновик.
+    // На модерацию услуга отправляется только отдельным действием
+    // POST /api/providers/services/:id/submit, где проверяется proof.
     res.status(201).json(ins.rows[0]);
   } catch (err) {
     console.error("❌ Ошибка добавления услуги:", err);
