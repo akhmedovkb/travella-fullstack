@@ -779,7 +779,8 @@
     "entry_fees_admin": "Entry fees",
     "hotels_admin": "Hotels (admin)",
     "cms_pages": "Footer",
-    "dashboard": "Cabinet"
+    "dashboard": "Cabinet",
+    "service_audit": "Provider actions"
   },
   "insurance_included": "Insurance included",
   "early_check_in": "Early check-in",
