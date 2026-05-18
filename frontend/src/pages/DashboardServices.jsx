@@ -1064,9 +1064,6 @@ export default function DashboardServices() {
                       <span>{serviceHasProof({ details }) ? "✅ Proof" : "⚠️ Proof"}</span>
                     </div>
                   </div>
-                  <button type="button" onClick={resetForm} className="rounded-2xl bg-white px-4 py-3 text-xs font-black text-orange-600 shadow-sm ring-1 ring-orange-100 transition hover:bg-orange-50">
-                    {t("new_service", { defaultValue: "Новая услуга" })}
-                  </button>
                 </div>
               </div>
             )}
