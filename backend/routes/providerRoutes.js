@@ -15,6 +15,7 @@ const {
   getServices,
   updateService,
   deleteService,
+  restoreService,
   updateServiceImagesOnly,
   getBookedDates,
   getBlockedDates,
@@ -77,6 +78,7 @@ router.get("/services", authenticateToken, requireProvider, getServices);
 router.post("/services", authenticateToken, requireProvider, addService);
 router.put("/services/:id", authenticateToken, requireProvider, updateService);
 router.delete("/services/:id", authenticateToken, requireProvider, deleteService);
+router.post("/services/:id/restore", authenticateToken, requireProvider, restoreService);
 router.patch("/services/:id/images", authenticateToken, requireProvider, updateServiceImagesOnly);
 
 /* -------------------- PROVIDER SERVICES (каскад в профиле) -------------------- */
