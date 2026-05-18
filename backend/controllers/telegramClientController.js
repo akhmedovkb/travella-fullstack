@@ -29,25 +29,139 @@ const TELEGRAM_DUMMY_PASSWORD_HASH =
   "$2b$10$N9qo8uLOickgx2ZMRZo5i.Ul5cW93vGN9VOGQsv5nPVnrwJknhkAu";
 
 // 🔐 SAFE DATE PARSER (never throws)
-function safeParseDate(val) {
-  if (!val || typeof val !== "string") return null;
+// Поддерживает YYYY-MM-DD, ISO datetime, timestamp seconds/milliseconds.
+function safeParseDate(val, endOfDay = false) {
+  if (val === undefined || val === null || val === "") return null;
 
-  // expected YYYY-MM-DD
-  const m = val.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!m) return null;
-
-  let [, y, a, b] = m;
-  let mm = Number(a);
-  let dd = Number(b);
-
-  // 🔁 swap if month > 12 (e.g. 2026-16-01)
-  if (mm > 12 && dd <= 12) {
-    [mm, dd] = [dd, mm];
+  if (val instanceof Date) {
+    const d = new Date(val.getTime());
+    if (!Number.isFinite(d.getTime())) return null;
+    if (endOfDay) d.setHours(23, 59, 59, 999);
+    return d;
   }
 
-  if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
+  if (typeof val === "number") {
+    const ms = val > 9999999999 ? val : val * 1000;
+    const d = new Date(ms);
+    return Number.isFinite(d.getTime()) ? d : null;
+  }
 
-  return new Date(`${y}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`);
+  const raw = String(val || "").trim();
+  if (!raw) return null;
+
+  if (/^\d+$/.test(raw)) {
+    const n = Number(raw);
+    const ms = n > 9999999999 ? n : n * 1000;
+    const d = new Date(ms);
+    return Number.isFinite(d.getTime()) ? d : null;
+  }
+
+  const m = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) {
+    let [, y, a, b] = m;
+    let mm = Number(a);
+    let dd = Number(b);
+
+    // 🔁 swap if month > 12 (e.g. 2026-16-01)
+    if (mm > 12 && dd <= 12) [mm, dd] = [dd, mm];
+    if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
+
+    const d = new Date(Number(y), mm - 1, dd, endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0);
+    return Number.isFinite(d.getTime()) ? d : null;
+  }
+
+  const d = new Date(raw);
+  return Number.isFinite(d.getTime()) ? d : null;
+}
+
+function firstDate(...values) {
+  for (const value of values) {
+    const parsed = safeParseDate(value, false);
+    if (parsed) return parsed;
+  }
+  return null;
+}
+
+function normalizeDetails(details) {
+  if (!details) return {};
+  if (typeof details === "string") {
+    try {
+      const parsed = JSON.parse(details);
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return typeof details === "object" ? details : {};
+}
+
+function isTruthyActive(value) {
+  if (value === undefined || value === null || value === "") return true;
+  if (typeof value === "boolean") return value;
+  const s = String(value).trim().toLowerCase();
+  return !(s === "false" || s === "0" || s === "no" || s === "inactive" || s === "неактуально");
+}
+
+function getRefusedActualityDate(details = {}, service = {}) {
+  const category = String(service.category || details.category || "").toLowerCase();
+
+  if (category === "refused_hotel") {
+    return firstDate(
+      details.checkIn,
+      details.check_in,
+      details.checkInDate,
+      details.check_in_date,
+      details.startDate,
+      details.start_date,
+      service.start_date
+    );
+  }
+
+  if (category === "refused_event_ticket" || category === "refused_ticket") {
+    return firstDate(
+      details.eventDate,
+      details.event_date,
+      details.startDate,
+      details.start_date,
+      service.start_date
+    );
+  }
+
+  return firstDate(
+    details.startFlightDate,
+    details.departureFlightDate,
+    details.departureDate,
+    details.departure_date,
+    details.startDate,
+    details.start_date,
+    service.start_date
+  );
+}
+
+function isRefusedServiceActual(service, today = new Date()) {
+  const details = normalizeDetails(service?.details);
+  const category = String(service?.category || details.category || "").toLowerCase();
+  const isRefused = category.startsWith("refused_") || category === "author_tour";
+
+  if (!isRefused) return true;
+  if (!isTruthyActive(details.isActive ?? details.is_active)) return false;
+
+  const expiration = firstDate(
+    service?.expiration_at,
+    service?.expiration,
+    service?.expires_at,
+    details.expiration_at,
+    details.expiration,
+    details.expiration_ts
+  );
+  if (expiration && expiration < new Date()) return false;
+
+  const actualDate = getRefusedActualityDate(details, service);
+  if (!actualDate) return true;
+
+  const floor = new Date(today);
+  floor.setHours(0, 0, 0, 0);
+  return actualDate >= floor;
 }
 
 /** Нормализация телефона: только цифры */
@@ -678,35 +792,7 @@ async function searchClientServices(req, res) {
     const PLACEHOLDER = `${base}/api/telegram/placeholder.png`;
 
     const normalized = items
-      .filter((row) => {
-        const det = row.details || {};
-
-        const cat = String(row.category || "").toLowerCase();
-        const isRefused = cat.startsWith("refused_") || cat === "author_tour";
-
-        const start =
-          safeParseDate(det.departureFlightDate) ||
-          safeParseDate(det.departureDate) ||
-          safeParseDate(det.startFlightDate) ||
-          safeParseDate(det.startDate) ||
-          safeParseDate(det.checkInDate) ||
-          safeParseDate(det.eventDate);
-
-        const end =
-          safeParseDate(det.returnFlightDate) ||
-          safeParseDate(det.endFlightDate) ||
-          safeParseDate(det.endDate) ||
-          safeParseDate(det.checkOutDate);
-
-        if (isRefused) {
-          if (start) return start >= today;
-          if (end) return end >= today;
-          return true;
-        }
-
-        if (!end) return true;
-        return end >= today;
-      })
+      .filter((row) => isRefusedServiceActual(row, today))
       .map((row) => {
         let imgs = row.images;
 
