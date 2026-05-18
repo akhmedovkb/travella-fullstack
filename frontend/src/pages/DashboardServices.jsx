@@ -1252,7 +1252,12 @@ export default function DashboardServices() {
                                     </div>
                                   </div>
                                   <span className={cx("shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ring-1", getStatusTone(service.status))}>
-                                    {service.status || "draft"}
+                                    {t(
+                                      `service_status.${service.status || "draft"}`,
+                                      {
+                                        defaultValue: service.status || "draft",
+                                      }
+                                    )}
                                   </span>
                                 </div>
 
