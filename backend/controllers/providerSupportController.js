@@ -83,6 +83,68 @@ async function columnExists(db, tableName, columnName) {
   return !!rows[0];
 }
 
+
+async function columnDataType(db, tableName, columnName) {
+  const { rows } = await db.query(
+    `
+      SELECT data_type, udt_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = $1
+        AND column_name = $2
+      LIMIT 1
+    `,
+    [tableName, columnName]
+  );
+
+  return rows[0] || null;
+}
+
+async function ensureBigIntColumn(db, tableName, columnName) {
+  if (!(await columnExists(db, tableName, columnName))) return;
+
+  const info = await columnDataType(db, tableName, columnName);
+  const udt = String(info?.udt_name || "").toLowerCase();
+
+  if (udt === "int8") return;
+
+  await db.query(
+    `ALTER TABLE ${tableName}
+       ALTER COLUMN ${columnName} TYPE BIGINT
+       USING NULLIF(${columnName}::text, '')::BIGINT`
+  );
+}
+
+async function ensureProviderSupportBigIntColumns(db, target = "topup_orders") {
+  const donationKind = await relationKind(db, "provider_support_donations");
+  if (donationKind === "r" || donationKind === "p") {
+    for (const column of [
+      "provider_id",
+      "telegram_chat_id",
+      "service_id",
+      "amount_tiyin",
+      "payme_order_id",
+    ]) {
+      await ensureBigIntColumn(db, "provider_support_donations", column);
+    }
+  }
+
+  const targetKind = await relationKind(db, target);
+  if (targetKind === "r" || targetKind === "p") {
+    for (const column of [
+      "client_id",
+      "amount",
+      "amount_tiyin",
+      "support_donation_id",
+      "provider_id",
+      "telegram_chat_id",
+      "service_id",
+    ]) {
+      await ensureBigIntColumn(db, target, column);
+    }
+  }
+}
+
 async function ensureProviderSupportSchema(db = pool) {
   await db.query(`
     CREATE TABLE IF NOT EXISTS provider_support_settings (
@@ -143,6 +205,8 @@ async function ensureProviderSupportSchema(db = pool) {
       ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ NULL,
       ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   `);
+
+  await ensureProviderSupportBigIntColumns(db, "provider_support_donations");
 
   await db.query(`
     CREATE INDEX IF NOT EXISTS idx_provider_support_donations_status
@@ -244,6 +308,8 @@ async function ensureProviderSupportSchema(db = pool) {
       ADD COLUMN IF NOT EXISTS note TEXT NULL,
       ADD COLUMN IF NOT EXISTS meta JSONB NULL
   `);
+
+  await ensureProviderSupportBigIntColumns(db, target);
 
   try {
     await db.query(`ALTER TABLE ${target} ALTER COLUMN client_id DROP NOT NULL`);
