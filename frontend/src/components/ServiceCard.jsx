@@ -143,6 +143,15 @@ const getMarketplaceSticker = (rawCategory, t) => {
           "bg-emerald-600/95 text-white ring-1 ring-white/20",
       };
 
+    case "refused_event_ticket":
+      return {
+        label: t("marketplace.stickers.refused_event_ticket", {
+          defaultValue: "ОТКАЗНОЙ БИЛЕТ НА МЕРОПРИЯТИЕ",
+        }),
+        className:
+          "bg-fuchsia-600/95 text-white ring-1 ring-white/20",
+      };
+
     default:
       return null;
   }
