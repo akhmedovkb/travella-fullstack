@@ -38,6 +38,7 @@ const adminUnlockFunnelRoutes = require("./routes/adminUnlockFunnelRoutes");
 const adminPaymePaymentsRoutes = require("./routes/adminPaymePaymentsRoutes");
 const passportRoutes = require("./routes/passportRoutes");
 const adminTravelSalesRoutes = require("./routes/adminTravelSalesRoutes");
+const adminServiceAuditRoutes = require("./routes/adminServiceAuditRoutes");
 const serviceStatsRoutes = require("./routes/serviceStatsRoutes");
 const providerSupportRoutes = require("./routes/providerSupportRoutes");
 
@@ -975,6 +976,7 @@ app.use("/api/admin/clients", adminClientsRoutes);
 app.use("/api/admin/unlock-funnel", adminUnlockFunnelRoutes);
 app.use("/api/admin/unlock-nudge", adminUnlockNudgeRoutes);
 app.use("/api/admin/travel-sales", adminTravelSalesRoutes);
+app.use("/api/admin", adminServiceAuditRoutes);
 app.use("/api/admin", providerSupportRoutes);
 
 /** ===================== Start (в самом конце) ===================== */
