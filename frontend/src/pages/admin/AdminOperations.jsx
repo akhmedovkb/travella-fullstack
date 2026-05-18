@@ -6,6 +6,7 @@ import AdminLeads from "./Leads";
 import AdminRefusedActual from "./AdminRefusedActual";
 import AdminProviders from "./AdminProviders";
 import AdminClients from "./AdminClients";
+import AdminServiceAudit from "./AdminServiceAudit";
 
 const TABS = [
   {
@@ -32,6 +33,10 @@ const TABS = [
     id: "clients",
     label: "Клиенты",
     hint: "Поиск, просмотр и контроль зарегистрированных клиентов.",
+  },
+  {
+ id:"provider_actions",
+ label:"Действия поставщиков"
   },
 ];
 
