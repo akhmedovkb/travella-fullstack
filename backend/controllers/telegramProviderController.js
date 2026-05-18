@@ -647,6 +647,11 @@ async function getProviderServicesAll(req, res) {
       WHERE s.provider_id = $1
         AND s.deleted_at IS NULL
         AND s.status != 'archived'
+        AND (
+          s.expiration_at IS NULL
+          OR s.expiration_at > NOW()
+        )
+        AND COALESCE((s.details::jsonb ->> 'isActive')::boolean, true) = true
       ORDER BY s.created_at DESC
       `,
       [providerId]
@@ -658,6 +663,56 @@ async function getProviderServicesAll(req, res) {
     });
   } catch (e) {
     console.error("[tg] getProviderServicesAll error:", e);
+    return res.status(500).json({ success: false });
+  }
+}
+
+
+async function getProviderArchiveServices(req, res) {
+  try {
+    const { chatId } = req.params;
+
+    const provRes = await pool.query(
+      `SELECT id
+         FROM providers
+        WHERE telegram_chat_id::text = $1
+           OR tg_chat_id::text = $1
+           OR telegram_web_chat_id::text = $1
+           OR telegram_refused_chat_id::text = $1
+        LIMIT 1`,
+      [chatId]
+    );
+
+    if (!provRes.rowCount) {
+      return res.status(403).json({ success: false });
+    }
+
+    const providerId = provRes.rows[0].id;
+
+    const q = await pool.query(
+      `
+      SELECT
+        s.*,
+        p.name   AS provider_name,
+        p.social AS provider_telegram
+      FROM services s
+      LEFT JOIN providers p ON p.id = s.provider_id
+      WHERE s.provider_id = $1
+        AND s.deleted_at IS NULL
+        AND (
+          s.status = 'archived'
+          OR s.expiration_at <= NOW()
+          OR COALESCE((s.details::jsonb ->> 'isActive')::boolean, true) = false
+        )
+      ORDER BY COALESCE(s.expiration_at, s.updated_at, s.created_at) DESC
+      LIMIT 100
+      `,
+      [providerId]
+    );
+
+    return res.json({ success: true, items: q.rows });
+  } catch (e) {
+    console.error("[tg] getProviderArchiveServices error:", e);
     return res.status(500).json({ success: false });
   }
 }
@@ -914,6 +969,35 @@ async function serviceActionFromBot(req, res, action) {
         [svcId, providerId]
       );
       updated = updRes.rows[0];
+    } else if (action === "restore_active") {
+      const updRes = await pool.query(
+        `
+          UPDATE services
+             SET
+               status = CASE
+                 WHEN COALESCE(moderation_status, '') = 'approved' THEN 'published'
+                 WHEN status = 'archived' THEN 'published'
+                 ELSE status
+               END,
+               expiration_at = NOW() + interval '7 days',
+               details = jsonb_set(
+                 jsonb_set(
+                   COALESCE(details::jsonb, '{}'::jsonb),
+                   '{isActive}',
+                   'true'::jsonb,
+                   true
+                 ),
+                 '{expiration}',
+                 to_jsonb((NOW() + interval '7 days')::timestamp)::jsonb,
+                 true
+               )
+           WHERE id = $1
+             AND provider_id = $2
+           RETURNING id, provider_id, category, title, price, status, moderation_status, details, images, expiration_at, deleted_at, created_at, updated_at
+        `,
+        [svcId, providerId]
+      );
+      updated = updRes.rows[0];
     } else {
       return res
         .status(400)
@@ -924,6 +1008,7 @@ async function serviceActionFromBot(req, res, action) {
       unpublish: "bot_service_unpublished",
       extend7: "bot_service_extended",
       archive: "bot_service_archived",
+      restore_active: "bot_service_restored_from_archive",
     };
 
     await logBotServiceAudit({
@@ -953,6 +1038,9 @@ async function extendService7FromBot(req, res) {
 }
 async function archiveServiceFromBot(req, res) {
   return serviceActionFromBot(req, res, "archive");
+}
+async function restoreArchivedServiceFromBot(req, res) {
+  return serviceActionFromBot(req, res, "restore_active");
 }
 
 /**
@@ -1810,6 +1898,7 @@ module.exports = {
   getProviderServices,
   getProviderServicesAll,
   getProviderDeletedServices,
+  getProviderArchiveServices,
   deleteServiceFromBot,
   restoreServiceFromBot,
   purgeServiceFromBot,
@@ -1819,6 +1908,7 @@ module.exports = {
   unpublishServiceFromBot,
   extendService7FromBot,
   archiveServiceFromBot,
+  restoreArchivedServiceFromBot,
   createServiceFromBot,
   submitServiceFromBot,
 };
