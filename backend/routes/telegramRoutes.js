@@ -666,6 +666,13 @@ router.get(
 //услуги поставщика (ВСЕ услуги) — для кнопки "🖼 Карточками" в telegram боте
 router.get("/provider/:chatId/services/all", telegramProviderController.getProviderServicesAll);
 
+
+// архив просроченных/архивных отказов поставщика
+router.get(
+  "/provider/:chatId/services/archive",
+  telegramProviderController.getProviderArchiveServices
+);
+
 // корзина удалённых услуг поставщика
 router.get(
   "/provider/:chatId/services/deleted",
@@ -715,6 +722,13 @@ router.post(
   "/provider/:chatId/services/:serviceId/archive",
   telegramProviderController.archiveServiceFromBot
 );
+
+
+router.post(
+  "/provider/:chatId/services/:serviceId/restore-archive",
+  telegramProviderController.restoreArchivedServiceFromBot
+);
+
 
 // удаление услуги через МОИ КАРТОЧКИ в боте
 router.post(
