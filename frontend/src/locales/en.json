@@ -723,7 +723,8 @@
       "archived": "Archive",
       "deleted": "Trash",
       "completed": "Completed",
-      "in_trash": "In trash"
+      "in_trash": "In trash",
+      "approved": "Published"
     },
     "send_to_review": "Send for moderation",
     "submitted_toast": "Submitted for moderation",
@@ -2383,7 +2384,15 @@
   "restore_service": "Restore",
   "service_restored": "Service restored to drafts",
   "service_status": {
-    "in_trash": "In trash"
+    "in_trash": "In trash",
+    "draft": "Draft",
+    "pending": "Under moderation",
+    "published": "Published",
+    "approved": "Published",
+    "rejected": "Rejected",
+    "archived": "Archive",
+    "deleted": "Trash",
+    "completed": "Completed"
   },
   "service_archive": {
     "hint": "Completed or expired refused services are kept here as history.",
