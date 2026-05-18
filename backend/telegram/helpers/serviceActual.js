@@ -130,61 +130,76 @@ function extractPrimaryStartField(details, svc = {}) {
   const d = toObj(details);
   const cat = String(svc.category || d.category || "").toLowerCase();
 
-  // 1) Новый единый стандарт для всех refused_* услуг
-  const unified = firstNonEmpty(d.startDate, d.start_date);
-  if (unified) return unified;
-
-  // 2) Обратная совместимость со старыми записями
-  if (cat === "refused_flight") {
-    return firstNonEmpty(
-      d.departureFlightDate,
-      d.departureDate,
-      d.departure_date,
-      d.flightDate,
-      d.flight_date,
-      d.dateFrom,
-      d.date_from,
-      d.date
-    );
-  }
-
+  // Для отказных продаж актуальность определяется НЕ датой окончания,
+  // а начальной датой продажи: вылет / check-in / дата мероприятия.
+  // Если эта дата прошла — услугу уже нельзя показывать в inline-выдаче.
   if (cat === "refused_hotel") {
     return firstNonEmpty(
+      d.checkIn,
+      d.check_in,
       d.checkinDate,
       d.checkInDate,
-      d.check_in,
       d.check_in_date,
+      d.arrivalDate,
+      d.arrival_date,
+      d.startDate,
+      d.start_date,
+      svc.start_date,
       d.dateFrom,
       d.date_from,
       d.date
     );
   }
 
-  if (cat === "refused_ticket") {
+  if (cat === "refused_ticket" || cat === "refused_event_ticket") {
     return firstNonEmpty(
       d.eventDate,
       d.event_date,
+      d.startDate,
+      d.start_date,
+      svc.start_date,
       d.date,
       d.dateFrom,
       d.date_from
     );
   }
 
-  // refused_tour и общий fallback для старых данных
+  if (cat === "refused_flight" || cat === "refused_tour" || cat === "author_tour") {
+    return firstNonEmpty(
+      d.startFlightDate,
+      d.start_flight_date,
+      d.departureFlightDate,
+      d.departureDate,
+      d.departure_date,
+      d.flightDate,
+      d.flight_date,
+      d.startDate,
+      d.start_date,
+      svc.start_date,
+      d.dateFrom,
+      d.date_from,
+      d.date
+    );
+  }
+
   return firstNonEmpty(
-    d.dateFrom,
-    d.date_from,
+    d.startFlightDate,
+    d.start_flight_date,
     d.departureFlightDate,
     d.departureDate,
     d.departure_date,
-    d.flightDate,
-    d.flight_date,
+    d.startDate,
+    d.start_date,
+    svc.start_date,
+    d.checkIn,
+    d.check_in,
     d.checkinDate,
     d.checkInDate,
-    d.check_in,
     d.check_in_date,
     d.eventDate,
     d.event_date,
+    d.dateFrom,
+    d.date_from,
     d.date
   );
 }
