@@ -1006,20 +1006,37 @@ export default function DashboardServices() {
                     : t("provider_services_tab_create", { defaultValue: "Создать услугу" })}
                 </div>
                 <div className="mt-1 text-sm font-semibold text-slate-500">
-                  {selectedService
-                    ? t("service_form.editing_selected_hint", { defaultValue: "Вы редактируете выбранную услугу из списка слева." })
-                    : t("service_form.create_new_hint", { defaultValue: "Заполните форму и сохраните черновик. После proof отправьте на модерацию." })}
+                  {selectedService ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-orange-50 px-2 py-1 text-[11px] font-black text-orange-700 ring-1 ring-orange-100">
+                        #{selectedService.id}
+                      </span>
+                
+                      <span
+                        className={cx(
+                          "rounded-full px-2 py-1 text-[11px] font-black ring-1",
+                          getStatusTone(selectedService.status)
+                        )}
+                      >
+                        {selectedService.status || "draft"}
+                      </span>
+                
+                      <span className="rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-black text-emerald-700 ring-1 ring-emerald-100">
+                        Proof {serviceHasProof({ details })}
+                      </span>
+                
+                      <span className="font-bold text-slate-500">
+                        {priceText || "—"}
+                      </span>
+                    </div>
+                  ) : (
+                    t("service_form.create_new_hint", {
+                      defaultValue:
+                        "Заполните форму и сохраните черновик. После proof отправьте на модерацию.",
+                    })
+                  )}
                 </div>
               </div>
-              {selectedService?.id && (
-                <button
-                  type="button"
-                  onClick={resetForm}
-                  className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-black text-slate-700 shadow-sm transition hover:bg-orange-50 hover:text-orange-700"
-                >
-                  + {t("new_service", { defaultValue: "Новая услуга" })}
-                </button>
-              )}
             </div>
 
             <div className="space-y-5">
