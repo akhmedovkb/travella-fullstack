@@ -1946,27 +1946,33 @@ function getArchiveReason(s) {
 
 function buildArchiveListText(items) {
   if (!items.length) {
-    return `🗄 <b>Архив отказных услуг</b>\n\nАрхив пуст. Здесь будут просроченные, снятые и архивные отказы.`;
+    return (
+      `🗄 <b>Архив отказов</b>\n\n` +
+      `Пока пусто. Здесь будут просроченные, снятые вручную и архивные отказы.`
+    );
   }
 
-  const lines = items.slice(0, 20).map((s, idx) => {
+  const lines = items.slice(0, 20).map((s) => {
     const id = s.id;
-    const title = escapeHtml(s.title || pickDetails(s).title || "Услуга");
+    const d = pickDetails(s);
+    const title = escapeHtml(s.title || d.title || "Услуга");
     const cat = escapeHtml(CATEGORY_LABELS?.[s.category] || s.category || "");
     const reason = escapeHtml(getArchiveReason(s));
-    const exp = s.expiration_at ? new Date(s.expiration_at).toLocaleString("ru-RU") : "";
+    const country = escapeHtml(d.directionCountry || d.country || d.locationCountry || "");
+    const city = escapeHtml(d.directionTo || d.toCity || d.city || d.locationCity || "");
+    const direction = [country, city].filter(Boolean).join(" / ");
     return (
-      `${idx + 1}) <code>#${id}</code> — <b>${title}</b>` +
-      (cat ? `\n   📌 <i>${cat}</i>` : "") +
-      `\n   🗄 <i>${reason}</i>` +
-      (exp ? `\n   ⏳ <i>${escapeHtml(exp)}</i>` : "")
+      `<code>#R${id}</code> <b>${title}</b>` +
+      (cat ? `\n📌 ${cat}` : "") +
+      (direction ? `\n🌍 ${direction}` : "") +
+      `\n⛔ ${reason}`
     );
   });
 
   return (
-    `🗄 <b>Архив отказных услуг</b>\n\n` +
-    `Здесь собраны просроченные, снятые и архивные отказы.\n` +
-    `Нажмите на услугу ниже 👇\n\n` +
+    `🗄 <b>Архив отказов</b>\n\n` +
+    `Здесь собраны просроченные, снятые вручную и архивные отказы.\n` +
+    `Нажмите на номер услуги ниже, чтобы восстановить, продлить или удалить.\n\n` +
     lines.join("\n\n") +
     (items.length > 20 ? `\n\n…и ещё ${items.length - 20} шт.` : "")
   );
@@ -1990,6 +1996,44 @@ async function fetchArchiveItems(ctx) {
   const actorId = getActorId(ctx);
   const r = await axios.get(`/api/telegram/provider/${actorId}/services/archive`);
   return r?.data?.services || r?.data?.items || [];
+}
+
+async function fetchProviderServiceCounters(ctx) {
+  try {
+    const actorId = getActorId(ctx);
+    if (!actorId) return { archive: 0, trash: 0 };
+
+    const [archiveRes, trashRes] = await Promise.allSettled([
+      axios.get(`/api/telegram/provider/${actorId}/services/archive`),
+      axios.get(`/api/telegram/provider/${actorId}/services/deleted`),
+    ]);
+
+    const archiveItems =
+      archiveRes.status === "fulfilled"
+        ? archiveRes.value?.data?.services || archiveRes.value?.data?.items || []
+        : [];
+    const trashItems =
+      trashRes.status === "fulfilled"
+        ? trashRes.value?.data?.services || trashRes.value?.data?.items || []
+        : [];
+
+    return {
+      archive: Array.isArray(archiveItems) ? archiveItems.length : 0,
+      trash: Array.isArray(trashItems) ? trashItems.length : 0,
+    };
+  } catch {
+    return { archive: 0, trash: 0 };
+  }
+}
+
+function archiveButtonLabel(count = 0) {
+  const n = Number(count || 0);
+  return n > 0 ? `🗄 Архив (${n})` : "🗄 Архив";
+}
+
+function trashButtonLabel(count = 0) {
+  const n = Number(count || 0);
+  return n > 0 ? `🧺 Корзина (${n})` : "🧺 Корзина";
 }
 
 async function renderArchive(ctx) {
@@ -5375,12 +5419,17 @@ bot.hears(/🧳 Мои услуги/i, async (ctx) => {
     return;
   }
 
+const counters = await fetchProviderServiceCounters(ctx);
+
 await ctx.reply("🧳 Выберите действие:", {
   reply_markup: {
     inline_keyboard: [
       [{ text: "📤 Выбрать мою услугу", switch_inline_query_current_chat: "#my refused_tour" }],
       [{ text: "🖼 Карточками", callback_data: "prov_services:list_cards" }],
-      [{ text: "🗄 Архив", callback_data: "archive:open" }, { text: "🧺 Корзина", callback_data: "trash:open" }],
+      [
+        { text: archiveButtonLabel(counters.archive), callback_data: "archive:open" },
+        { text: trashButtonLabel(counters.trash), callback_data: "trash:open" },
+      ],
       [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
       [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
     ],
@@ -5534,7 +5583,8 @@ bot.action("prov_services:list", async (ctx) => {
   // 🔴 принудительно закрываем wizard
   forceCloseEditWizard(ctx);
 
-  // просто переиспользуем существующую логику
+  const counters = await fetchProviderServiceCounters(ctx);
+
   return ctx.telegram.sendMessage(
     ctx.chat.id,
     "🧳 Выберите действие:",
@@ -5543,7 +5593,10 @@ bot.action("prov_services:list", async (ctx) => {
         inline_keyboard: [
           [{ text: "📤 Выбрать мою услугу", switch_inline_query_current_chat: "#my refused_tour" }],
           [{ text: "🖼 Карточками", callback_data: "prov_services:list_cards" }],
-          [{ text: "🗄 Архив", callback_data: "archive:open" }, { text: "🧺 Корзина", callback_data: "trash:open" }],
+          [
+            { text: archiveButtonLabel(counters.archive), callback_data: "archive:open" },
+            { text: trashButtonLabel(counters.trash), callback_data: "trash:open" },
+          ],
           [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
           [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
         ],
@@ -5969,8 +6022,8 @@ bot.action(/^archive:item:(\d+)$/, async (ctx) => {
   const reply_markup = {
     inline_keyboard: [
       [
-        { text: "⏳ Продлить на 7 дней", callback_data: `svc_extend:${serviceId}` },
-        { text: "♻️ Вернуть в активные", callback_data: `svc_restore_archive:${serviceId}` },
+        { text: "♻️ Вернуть", callback_data: `svc_restore_archive:${serviceId}` },
+        { text: "⏳ Продлить 7 дней", callback_data: `svc_extend:${serviceId}` },
       ],
       [
         { text: "✏️ Редактировать", callback_data: `svc_edit_start:${serviceId}` },
@@ -7016,17 +7069,24 @@ async function replyProviderSupportPrompt(ctx, serviceId = null) {
       .filter((x) => Number.isFinite(x) && x > 0)
       .slice(0, 8)
       .map((x) => [{
-        text: `❤️ ${x.toLocaleString("ru-RU")} сум`,
+        text: `✅ Поддержать: ${x.toLocaleString("ru-RU")} сум`,
         callback_data: `support_project:pay:${x}:${Number(serviceId || 0)}`,
       }]);
 
     if (!rows.length) return;
+    rows.push([{ text: "📋 Мои услуги", callback_data: "prov_services:list" }]);
 
-    await safeReply(
-      ctx,
-      `${settings.title || "❤️ Поддержка проекта"}\n\n${settings.message || "Если вы хотите поддержать развитие проекта Bot Otkaznyx Turov и Travella — можете отправить любую комфортную для вас сумму."}`,
-      { reply_markup: { inline_keyboard: rows } }
-    );
+    const text =
+      `❤️ <b>Спасибо, что обновляете актуальность отказов.</b>\n\n` +
+      `Ваш вклад помогает развивать <b>Bot Otkaznyx Turov</b>:\n` +
+      `• улучшение поиска\n` +
+      `• продвижение отказных\n` +
+      `• новые функции`;
+
+    await safeReply(ctx, text, {
+      parse_mode: "HTML",
+      reply_markup: { inline_keyboard: rows },
+    });
   } catch (e) {
     console.error("[tg-bot] provider support prompt error:", e?.message || e);
   }
@@ -7045,17 +7105,24 @@ bot.action(/^support_project:pay:(\d+):(\d+)$/, async (ctx) => {
       serviceId,
       amountSum,
       source: "telegram_provider_bot",
-      note: serviceId ? `after proof submit service #${serviceId}` : "provider support",
+      note: serviceId ? `provider support after service action #${serviceId}` : "provider support",
     });
 
     await safeReply(
       ctx,
-      `❤️ Спасибо за готовность поддержать проект.\n\nСумма: ${amountSum.toLocaleString("ru-RU")} сум\nЗаказ: #${result.order.id}\n\nПосле оплаты донат появится в админке в разделе Finance → Support.`,
+      `❤️ <b>Спасибо за поддержку проекта.</b>\n\n` +
+        `Ваш вклад помогает развивать <b>Bot Otkaznyx Turov</b>.\n\n` +
+        `Сумма: <b>${amountSum.toLocaleString("ru-RU")} сум</b>\n` +
+        `Заказ: <code>#${result.order.id}</code>`,
       {
+        parse_mode: "HTML",
         reply_markup: {
           inline_keyboard: [
-            [{ text: "✅ Оплатить через Payme", url: result.pay_url }],
-            [{ text: "📋 Мои услуги", callback_data: "prov_services:list" }],
+            [{ text: "✅ Поддержать проект", url: result.pay_url }],
+            [
+              { text: "📋 Мои услуги", callback_data: "prov_services:list" },
+              { text: "➕ Создать услугу", callback_data: "prov_services:create" },
+            ],
           ],
         },
       }
