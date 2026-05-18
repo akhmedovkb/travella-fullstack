@@ -707,7 +707,8 @@
     "requests": "Запросы",
     "favorites": "Избранное",
     "hotels": "Отели",
-    "hotels_admin": "Отели (админ)"
+    "hotels_admin": "Отели (админ)",
+    "service_audit": "Действия поставщиков"
   },
   "insurance_included": "Страховка включена",
   "early_check_in": "Раннее заселение",
