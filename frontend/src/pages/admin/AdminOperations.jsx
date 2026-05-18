@@ -92,6 +92,7 @@ export default function AdminOperations() {
       {activeTab === "refused" && <AdminRefusedActual />}
       {activeTab === "providers" && <AdminProviders />}
       {activeTab === "clients" && <AdminClients />}
+      {activeTab==="provider_actions" && (<AdminServiceAudit embedded />)}
     </div>
   );
 }
