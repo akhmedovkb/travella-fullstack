@@ -78,12 +78,13 @@ export default function AdminOperations() {
           <p className="text-sm text-gray-500">{activeMeta.hint}</p>
         </div>
   
-        <div className="grid w-full grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5">
+        <div className="grid w-full grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
           <TabBtn id="moderation">Модерация услуг</TabBtn>
           <TabBtn id="leads">Leads</TabBtn>
           <TabBtn id="refused">Все отказные услуги</TabBtn>
           <TabBtn id="providers">Провайдеры</TabBtn>
           <TabBtn id="clients">Клиенты</TabBtn>
+          <TabBtn id="provider_actions">Действия поставщиков</TabBtn>
         </div>
       </div>
   
