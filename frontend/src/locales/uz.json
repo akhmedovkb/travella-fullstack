@@ -717,10 +717,13 @@
     "title": "Xizmatlar moderatsiyasi",
     "service_status": {
       "draft": "Qoralama",
-      "pending": "Moderatsiyaga yuborildi",
-      "published": "Moderator tomonidan tasdiqlandi",
-      "rejected": "Rad etildi",
-      "archived": "Nashrdan olib tashlandi"
+      "pending": "Moderatsiyada",
+      "published": "E'lon qilingan",
+      "rejected": "Rad etilgan",
+      "archived": "Arxiv",
+      "deleted": "Savatda",
+      "completed": "Yakunlangan",
+      "in_trash": "Savatda"
     },
     "send_to_review": "Moderatsiyaga yuborish",
     "submitted_toast": "Moderatsiyaga yuborildi",
