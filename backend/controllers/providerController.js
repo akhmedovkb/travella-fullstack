@@ -13,6 +13,7 @@ const {
 } = require("../utils/refusedPriceDropBroadcast");
 
 const { getContactUnlockSettings } = require("../utils/contactUnlockSettings");
+const { logProviderServiceAction } = require("../utils/serviceAuditLog");
 
 require("../utils/refusedPriceDropBroadcast");
 
@@ -851,6 +852,15 @@ const addService = async (req, res) => {
     // Создание из веб-кабинета сохраняет черновик.
     // На модерацию услуга отправляется только отдельным действием
     // POST /api/providers/services/:id/submit, где проверяется proof.
+    await logProviderServiceAction({
+      req,
+      action: "service_created",
+      providerId,
+      serviceId: ins.rows[0]?.id,
+      newService: ins.rows[0],
+      meta: { note: "created_from_provider_dashboard" },
+    });
+
     res.status(201).json(ins.rows[0]);
   } catch (err) {
     console.error("❌ Ошибка добавления услуги:", err);
@@ -893,7 +903,7 @@ const updateService = async (req, res) => {
 
     // 1) Узнаём текущий статус и владение
     const cur = await pool.query(
-      `SELECT id, status, category, price, details
+      `SELECT *
          FROM services
         WHERE id=$1 AND provider_id=$2`,
       [serviceId, providerId]
@@ -916,7 +926,7 @@ const updateService = async (req, res) => {
     }
 
     if (currentStatus === "published" || currentStatus === "rejected") {
-      await pool.query(
+      const resetRes = await pool.query(
         `UPDATE services
             SET status='draft',
                 submitted_at=NULL,
@@ -924,9 +934,20 @@ const updateService = async (req, res) => {
                 approved_at=NULL,
                 rejected_at=NULL,
                 rejected_reason=NULL
-          WHERE id=$1 AND provider_id=$2`,
+          WHERE id=$1 AND provider_id=$2
+          RETURNING *`,
         [serviceId, providerId]
       );
+
+      await logProviderServiceAction({
+        req,
+        action: "service_status_reset_to_draft",
+        providerId,
+        serviceId,
+        oldService: prevSvcRow,
+        newService: resetRes.rows[0] || { ...prevSvcRow, status: "draft" },
+        meta: { reason: "provider_started_editing_published_or_rejected_service" },
+      });
     }
 
     // 3) Нормализуем вход
@@ -1011,6 +1032,15 @@ const updateService = async (req, res) => {
       return res.status(404).json({ message: "Услуга не найдена" });
     }
 
+    await logProviderServiceAction({
+      req,
+      action: "service_updated",
+      providerId,
+      serviceId,
+      oldService: prevSvcRow,
+      newService: upd.rows[0],
+    });
+
     // ✅ PRICE DROP BROADCAST (если цена снижена)
     try {
       const nextSvcRow = upd.rows[0];
@@ -1052,6 +1082,12 @@ const deleteService = async (req, res) => {
   try {
     const providerId = req.user.id;
     const serviceId = req.params.id;
+
+    const before = await pool.query(
+      `SELECT * FROM services WHERE id=$1 AND provider_id=$2 LIMIT 1`,
+      [serviceId, providerId]
+    );
+
     const del = await pool.query(
       `
       UPDATE services
@@ -1061,10 +1097,22 @@ const deleteService = async (req, res) => {
            deleted_by = $2,
            updated_at = NOW()
        WHERE id = $1 AND provider_id = $2
+       RETURNING *
       `,
       [serviceId, providerId]
     );
     if (!del.rowCount) return res.status(404).json({ message: "Услуга не найдена" });
+
+    await logProviderServiceAction({
+      req,
+      action: "service_deleted",
+      providerId,
+      serviceId,
+      oldService: before.rows[0] || null,
+      newService: del.rows[0],
+      meta: { deleted_by_provider: true },
+    });
+
     res.json({ message: "Удалено" });
   } catch (err) {
     console.error("❌ Ошибка удаления услуги:", err);
@@ -1076,6 +1124,11 @@ const restoreService = async (req, res) => {
   try {
     const providerId = req.user.id;
     const serviceId = req.params.id;
+
+    const before = await pool.query(
+      `SELECT * FROM services WHERE id=$1 AND provider_id=$2 LIMIT 1`,
+      [serviceId, providerId]
+    );
 
     const restored = await pool.query(
       `
@@ -1102,6 +1155,16 @@ const restoreService = async (req, res) => {
     if (!restored.rowCount) {
       return res.status(404).json({ message: "Услуга не найдена в корзине" });
     }
+
+    await logProviderServiceAction({
+      req,
+      action: "service_restored",
+      providerId,
+      serviceId,
+      oldService: before.rows[0] || null,
+      newService: restored.rows[0],
+      meta: { restored_to: "draft" },
+    });
 
     return res.json(restored.rows[0]);
   } catch (err) {
