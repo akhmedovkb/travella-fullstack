@@ -213,6 +213,17 @@ function getStatusTone(status) {
   return "bg-slate-100 text-slate-700 ring-slate-200";
 }
 
+function getServiceStatusLabel(status, t) {
+  const raw = String(status || "draft").toLowerCase();
+  const key = raw === "approved" ? "published" : raw;
+
+  return t(`service_status.${key}`, {
+    defaultValue: t(`moderation.service_status.${key}`, {
+      defaultValue: status || "draft",
+    }),
+  });
+}
+
 function serviceHasProof(service) {
   const d = asDetails(service);
   const proof = Array.isArray(d.proofImages) ? d.proofImages : Array.isArray(d.proof_images) ? d.proof_images : [];
@@ -1252,12 +1263,7 @@ export default function DashboardServices() {
                                     </div>
                                   </div>
                                   <span className={cx("shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ring-1", getStatusTone(service.status))}>
-                                    {t(
-                                      `service_status.${service.status || "draft"}`,
-                                      {
-                                        defaultValue: service.status || "draft",
-                                      }
-                                    )}
+                                    {getServiceStatusLabel(service.status || service.moderation_status || "draft", t)}
                                   </span>
                                 </div>
 
@@ -1351,7 +1357,7 @@ export default function DashboardServices() {
                           getStatusTone(selectedService.status)
                         )}
                       >
-                        {selectedService.status || "draft"}
+                        {getServiceStatusLabel(selectedService.status || selectedService.moderation_status || "draft", t)}
                       </span>
                 
                       <span className="rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-black text-emerald-700 ring-1 ring-emerald-100">
@@ -1382,7 +1388,7 @@ export default function DashboardServices() {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-black text-orange-700 ring-1 ring-orange-100">#{selectedService.id}</span>
-                      <span className={cx("rounded-full px-2.5 py-1 text-[11px] font-black ring-1", getStatusTone(selectedService.status))}>{selectedService.status || "draft"}</span>
+                      <span className={cx("rounded-full px-2.5 py-1 text-[11px] font-black ring-1", getStatusTone(selectedService.status))}>{getServiceStatusLabel(selectedService.status || selectedService.moderation_status || "draft", t)}</span>
                       <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-black text-slate-600 ring-1 ring-slate-100">
                         {t(`category.${category}`, { defaultValue: category })}
                       </span>
