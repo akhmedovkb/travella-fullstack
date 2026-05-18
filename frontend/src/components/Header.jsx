@@ -513,8 +513,7 @@ export default function Header() {
                     <DropdownItem to="/admin/entry-fees" label={t("nav.entry_fees_admin", "Entry fees")} icon={<IconTicket />} />
                     <DropdownItem to="/admin/hotels" label={t("nav.hotels_admin", "Отели (админ)")} icon={<IconHotel />} />
                     <DropdownItem to="/admin/pages" label={t("nav.cms_pages", "Подвал")} icon={<IconDoc />} />
-                    <DropdownItem to="/admin/service-audit" label={t("nav.service_audit", "Действия поставщиков")} icon={<IconChecklist />} />
-
+                    
                     {/* ✅ DONA'S DOSAS — компактное подменю */}
                     <button
                       type="button"
@@ -763,7 +762,6 @@ export default function Header() {
                 <NavItemMobileDark to="/admin/leads" label={t("nav.leads", "Leads")} icon={<IconUsers />} />
                 <NavItemMobileDark to="/admin/finance" label={t("nav.finance_admin", "Finance")} icon={<IconDoc />} />
                 <NavItemMobileDark to="/admin/refused-actual" label={t("nav.refused_actual", "Актуальные отказы")} icon={<IconChecklist />} />
-                <NavItemMobileDark to="/admin/service-audit" label={t("nav.service_audit", "Действия поставщиков")} icon={<IconChecklist />} />
                 <NavItemMobileDark to="/admin/inside-requests" label={t("nav.inside_requests", "Inside заявки")} icon={<IconChecklist />} />
                 <NavItemMobileDark to="/admin/providers" label={t("nav.providers_admin", "Провайдеры")} icon={<IconUsers />} />
                 <NavItemMobileDark to="/admin/entry-fees" label={t("nav.entry_fees_admin", "Entry fees")} icon={<IconTicket />} />
