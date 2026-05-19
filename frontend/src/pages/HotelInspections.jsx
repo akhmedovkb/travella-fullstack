@@ -4,6 +4,7 @@ import { useParams, Link, useSearchParams, useNavigate } from "react-router-dom"
 import { getHotel, listInspections, likeInspection, createInspection } from "../api/hotels";
 import { apiGet } from "../api";
 import { useTranslation } from "react-i18next";
+import { tSuccess } from "../shared/toast";
 
 function toInt(v) {
   const n = Number(v);
@@ -234,6 +235,14 @@ function Card({ item, onLike }) {
     <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
+          {(item.hotel_name || item.hotel_city) && (
+            <Link
+              to={`/hotels/${item.hotel_id}`}
+              className="mb-2 inline-flex rounded-full bg-orange-50 px-3 py-1 text-xs font-black text-orange-700 ring-1 ring-orange-100 hover:bg-orange-100"
+            >
+              🏨 {[item.hotel_name, item.hotel_city].filter(Boolean).join(" · ")}
+            </Link>
+          )}
           <AuthorLink item={item} />
           {item.title && <div className="mt-1 text-lg font-black text-slate-950">{item.title}</div>}
         </div>
@@ -633,68 +642,87 @@ export default function HotelInspections() {
   const [hotel, setHotel] = useState(null);
   const [items, setItems] = useState([]);
   const [sort, setSort] = useState("top");
+  const [cityFilter, setCityFilter] = useState("");
+  const [monthFilter, setMonthFilter] = useState("");
+  const [audienceFilter, setAudienceFilter] = useState("");
 
-useEffect(() => {
-  if (globalMode) {
-    setHotel({
-      name: "Hotel Passport",
-    });
-    return;
-  }
-
-  (async () => {
-    try {
-      setHotel(await getHotel(hotelId));
-    } catch {
-      setHotel(null);
-    }
-  })();
-}, [hotelId, globalMode]);
-
-const load = async () => {
-  try {
-    let res;
-
+  useEffect(() => {
     if (globalMode) {
-      res = await apiGet(`/api/hotels/inspections?sort=${sort}`);
-    } else {
-      res = await listInspections(hotelId, { sort });
+      setHotel({ name: "Hotel Passport" });
+      return;
     }
 
-    const norm = (res.items || []).map((x) => ({
-      ...x,
-      media:
-        Array.isArray(x.media)
-          ? x.media
-          : typeof x.media === "string"
-            ? JSON.parse(x.media || "[]")
-            : [],
+    (async () => {
+      try {
+        setHotel(await getHotel(hotelId));
+      } catch {
+        setHotel(null);
+      }
+    })();
+  }, [hotelId, globalMode]);
 
-      section_media:
-        Array.isArray(x.section_media)
-          ? x.section_media
-          : [],
+  const load = async () => {
+    try {
+      let res;
 
-      audience_keys:
-        Array.isArray(x.audience_keys)
-          ? x.audience_keys
-          : [],
+      if (globalMode) {
+        res = await apiGet(`/api/hotels/inspections?sort=${sort}`);
+      } else {
+        res = await listInspections(hotelId, { sort });
+      }
 
-      con_keys:
-        Array.isArray(x.con_keys)
-          ? x.con_keys
-          : [],
-    }));
+      const norm = (res.items || []).map((x) => ({
+        ...x,
+        media: Array.isArray(x.media) ? x.media : typeof x.media === "string" ? JSON.parse(x.media || "[]") : [],
+        section_media: Array.isArray(x.section_media) ? x.section_media : [],
+        audience_keys: Array.isArray(x.audience_keys) ? x.audience_keys : [],
+        con_keys: Array.isArray(x.con_keys) ? x.con_keys : [],
+      }));
 
-    setItems(norm);
-  } catch {
-    setItems([]);
-  }
-};
+      setItems(norm);
+    } catch {
+      setItems([]);
+    }
+  };
 
   useEffect(() => {
     if (!isNew) load();
   }, [hotelId, sort, isNew, globalMode]);
+
+  const cityOptions = useMemo(() => {
+    const set = new Set();
+    items.forEach((item) => {
+      const city = String(item.hotel_city || item.city || "").trim();
+      if (city) set.add(city);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [items]);
+
+  const visibleItems = useMemo(() => {
+    return items.filter((item) => {
+      if (cityFilter) {
+        const city = String(item.hotel_city || item.city || "").toLowerCase();
+        if (city !== cityFilter.toLowerCase()) return false;
+      }
+
+      if (monthFilter) {
+        if (Number(item.travel_month) !== Number(monthFilter)) return false;
+      }
+
+      if (audienceFilter) {
+        const audience = Array.isArray(item.audience_keys) ? item.audience_keys : [];
+        if (!audience.includes(audienceFilter)) return false;
+      }
+
+      return true;
+    });
+  }, [items, cityFilter, monthFilter, audienceFilter]);
+
+  const resetFilters = () => {
+    setCityFilter("");
+    setMonthFilter("");
+    setAudienceFilter("");
+  };
 
   const onLike = async (item) => {
     try {
@@ -703,25 +731,24 @@ const load = async () => {
     } catch {}
   };
 
+  const handleCreated = () => {
+    tSuccess(t("hotels.inspections.created_toast", "Инспекция добавлена"));
+    navigate(`/hotels/${hotelId}/inspections`);
+  };
+
   return (
     <div className="mx-auto max-w-6xl p-4">
       <div className="mb-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <div className="inline-flex rounded-full bg-orange-50 px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-orange-600 ring-1 ring-orange-100">
-              Hotel Passport
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-500">
+              {globalMode ? "Hotel Passport" : t("hotels.inspections.hotel_label", "Отель")}
             </div>
-
-            <div className="mt-3 text-xs font-semibold text-slate-500">
-              {globalMode ? "Все инспекции отелей" : t("hotels.inspections.hotel_label", "Отель")}
-            </div>
-
             <div className="mt-1 text-2xl font-black tracking-[-0.03em] text-slate-950">
               {hotel?.name || "…"}
             </div>
-
             {(hotel?.city || hotel?.country) && (
-              <div className="mt-1 text-sm text-slate-500">
+              <div className="mt-1 text-sm font-semibold text-slate-500">
                 {[hotel?.city, hotel?.country].filter(Boolean).join(", ")}
               </div>
             )}
@@ -730,23 +757,19 @@ const load = async () => {
           <div className="flex flex-wrap items-center gap-2">
             {!isNew && (
               <select
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none transition focus:border-orange-300 focus:ring-4 focus:ring-orange-50"
                 value={sort}
                 onChange={(e) => setSort(e.target.value)}
               >
-                <option value="top">
-                  {t("hotels.inspections.sort.topOption", "Сначала с большим числом лайков")}
-                </option>
-                <option value="new">
-                  {t("hotels.inspections.sort.newOption", "Сначала новые")}
-                </option>
+                <option value="top">{t("hotels.inspections.sort.topOption", "Сначала с большим числом лайков")}</option>
+                <option value="new">{t("hotels.inspections.sort.newOption", "Сначала новые")}</option>
               </select>
             )}
 
             {!isNew && !globalMode && (
               <Link
                 to={`/hotels/${hotelId}/inspections?new=1`}
-                className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-bold text-white hover:bg-orange-600"
+                className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-orange-600"
               >
                 ➕ Добавить обзор
               </Link>
@@ -755,40 +778,74 @@ const load = async () => {
             {!isNew && globalMode && (
               <Link
                 to="/hotels"
-                className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-bold text-white hover:bg-orange-600"
+                className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-orange-600"
               >
                 ➕ Выбрать отель
-              </Link>
-            )}
-
-            {isNew && !globalMode && (
-              <Link
-                to={`/hotels/${hotelId}/inspections`}
-                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
-              >
-                ← К инспекциям
               </Link>
             )}
 
             {!globalMode && (
               <Link
                 to={`/hotels/${hotelId}`}
-                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
               >
-                🏨 К отелю
+                Назад к отелю
               </Link>
             )}
           </div>
         </div>
       </div>
 
+      {!isNew && (
+        <div className="mb-4 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+            {globalMode && (
+              <select
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none transition focus:border-orange-300 focus:ring-4 focus:ring-orange-50"
+                value={cityFilter}
+                onChange={(e) => setCityFilter(e.target.value)}
+              >
+                <option value="">Все города</option>
+                {cityOptions.map((city) => <option key={city} value={city}>{city}</option>)}
+              </select>
+            )}
+
+            <select
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none transition focus:border-orange-300 focus:ring-4 focus:ring-orange-50"
+              value={monthFilter}
+              onChange={(e) => setMonthFilter(e.target.value)}
+            >
+              <option value="">Все месяцы</option>
+              {MONTHS.map((month, idx) => <option key={month} value={idx + 1}>{month}</option>)}
+            </select>
+
+            <select
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none transition focus:border-orange-300 focus:ring-4 focus:ring-orange-50"
+              value={audienceFilter}
+              onChange={(e) => setAudienceFilter(e.target.value)}
+            >
+              <option value="">Для кого подходит</option>
+              {AUDIENCE_OPTIONS.map((item) => <option key={item.key} value={item.key}>{item.icon} {item.label}</option>)}
+            </select>
+
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
+            >
+              Сбросить фильтры
+            </button>
+          </div>
+        </div>
+      )}
+
       {isNew ? (
-        <NewInspectionForm hotelId={hotelId} onCancel={() => navigate(`/hotels/${hotelId}/inspections`)} onCreated={() => navigate(`/hotels/${hotelId}/inspections`)} />
+        <NewInspectionForm hotelId={hotelId} onCancel={() => navigate(`/hotels/${hotelId}/inspections`)} onCreated={handleCreated} />
       ) : (
         <div className="space-y-4">
-          {items.map((it) => <Card key={it.id} item={it} onLike={onLike} />)}
+          {visibleItems.map((it) => <Card key={it.id} item={it} onLike={onLike} />)}
 
-          {items.length === 0 && (
+          {visibleItems.length === 0 && (
             <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center shadow-sm">
               <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-50 text-2xl">
                 🏨
@@ -799,9 +856,11 @@ const load = async () => {
               </div>
 
               <div className="mt-1 text-sm font-medium text-slate-500">
-                {globalMode
-                  ? "Пока никто не оставил обзор отеля. Выберите отель и добавьте первую инспекцию."
-                  : "Будьте первым, кто оставит подробный обзор этого отеля."}
+                {items.length > 0
+                  ? "По выбранным фильтрам ничего не найдено. Сбросьте фильтры или выберите другие значения."
+                  : globalMode
+                    ? "Пока никто не оставил обзор отеля. Выберите отель и добавьте первую инспекцию."
+                    : "Будьте первым, кто оставит подробный обзор этого отеля."}
               </div>
             </div>
           )}
