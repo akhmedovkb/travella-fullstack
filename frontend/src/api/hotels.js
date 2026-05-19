@@ -1,4 +1,5 @@
 // frontend/src/api/hotels.js
+
 import { apiGet, apiPost, apiPut, buildUrl, getAuthHeaders } from "../api";
 
 export async function listRanked({ type = "top", limit = 20 } = {}) {
@@ -8,34 +9,42 @@ export async function listRanked({ type = "top", limit = 20 } = {}) {
 /** Публичный поиск отелей */
 export async function searchHotels({ name = "", city = "", country = "", page = 1, limit = 50 } = {}) {
   const qs = new URLSearchParams();
+
   if (name) qs.set("name", name);
   if (city) qs.set("city", city);
   if (country) qs.set("country", country);
+
   qs.set("page", String(page));
   qs.set("limit", String(limit));
-  qs.set("ext", "0");              // ← только локальная БД
+
+  qs.set("ext", "0");
+
   return apiGet(`/api/hotels/search?${qs.toString()}`, false);
 }
 
-
-/** Карточка отеля (публично) */
+/** Карточка отеля */
 export function getHotel(hotelId) {
   return apiGet(`/api/hotels/${encodeURIComponent(hotelId)}`, false);
 }
 
-/** Создать отель (провайдер/админ) */
+/** Создать отель */
 export function createHotel(payload) {
   return apiPost(`/api/hotels`, payload, "provider");
 }
 
-/** Обновить отель (провайдер/админ) */
+/** Обновить отель */
 export function updateHotel(hotelId, payload) {
-  return apiPut(`/api/hotels/${encodeURIComponent(hotelId)}`, payload, "provider");
+  return apiPut(
+    `/api/hotels/${encodeURIComponent(hotelId)}`,
+    payload,
+    "provider"
+  );
 }
 
-/** Создать обзор/инспекцию отеля. Поддерживает JSON и FormData с фото/видео. */
+/** Создать обзор / Hotel Passport */
 export async function createInspection(hotelId, payload) {
-  const url = `/api/hotels/${encodeURIComponent(hotelId)}/inspections`;
+  const url =
+    `/api/hotel-inspections/hotel/${encodeURIComponent(hotelId)}`;
 
   if (payload instanceof FormData) {
     const res = await fetch(buildUrl(url), {
@@ -44,29 +53,58 @@ export async function createInspection(hotelId, payload) {
       body: payload,
       credentials: "include",
     });
+
     const text = await res.text();
+
     let data = null;
-    try { data = text ? JSON.parse(text) : null; } catch { data = null; }
+
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = null;
+    }
+
     if (!res.ok) {
-      const err = new Error((data && (data.error || data.message)) || res.statusText || `HTTP ${res.status}`);
+      const err = new Error(
+        (data &&
+          (data.error ||
+            data.message)) ||
+          res.statusText ||
+          `HTTP ${res.status}`
+      );
+
       err.status = res.status;
       err.data = data || {};
-      err.code = data?.error || data?.code;
+      err.code =
+        data?.error ||
+        data?.code;
+
       throw err;
     }
+
     return data || {};
   }
 
-  return apiPost(url, payload, true);
+  return apiPost(
+    url,
+    payload,
+    true
+  );
 }
 
-/** Список инспекций (публично). sort: "top" | "new" */
-export function listInspections(hotelId, { sort = "top" } = {}) {
-  return apiGet(`/api/hotels/${encodeURIComponent(hotelId)}/inspections?sort=${encodeURIComponent(sort)}`, false);
+/** Список обзоров */
+export function listInspections(hotelId) {
+  return apiGet(
+    `/api/hotel-inspections/hotel/${encodeURIComponent(hotelId)}`,
+    false
+  );
 }
 
-/** Лайк инспекции (auto-роль: подойдёт любой доступный токен) */
+/** Лайк */
 export function likeInspection(inspectionId) {
-  // withAuthOrRole=true — возьмётся любой доступный токен (client/provider)
-  return apiPost(`/api/hotel-inspections/${encodeURIComponent(inspectionId)}/like`, {}, true);
+  return apiPost(
+    `/api/hotel-inspections/${encodeURIComponent(inspectionId)}/like`,
+    {},
+    true
+  );
 }
