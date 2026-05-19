@@ -114,7 +114,7 @@ async function handleWebhook(req, res) {
         let prov = null;
         try {
           const r = await pool.query(
-            ` id, name FROM providers WHERE telegram_chat_id = $1 LIMIT 1`,
+            ` SELECT id, name FROM providers WHERE telegram_chat_id = $1 LIMIT 1`,
             [who]
           );
           prov = r.rows[0] || null;
