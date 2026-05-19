@@ -1,19 +1,71 @@
 //backend/routes/hotelInspectionRoutes.js
 
-const router = require("express").Router();
-const authenticateToken = require("../middleware/authenticateToken");
-const { likeInspection } = require("../controllers/hotelsController");
+const router =
+  require("express").Router();
 
-function tryAuth(req, res, next) {
-  const hdr = req.headers?.authorization || "";
-  if (!hdr) return next();
-  authenticateToken(req, res, () => next());
+const authenticateToken =
+  require(
+    "../middleware/authenticateToken"
+  );
+
+const {
+  upload,
+
+  createInspection,
+
+  listInspections,
+
+  likeInspection,
+
+} = require(
+  "../controllers/hotelInspectionController"
+);
+
+function tryAuth(
+  req,
+  res,
+  next
+) {
+  const hdr =
+    req.headers
+      ?.authorization;
+
+  if (!hdr)
+    return next();
+
+  authenticateToken(
+    req,
+    res,
+    next
+  );
 }
 
-// Лайк конкретной инспекции. Поддерживает старый путь frontend: /api/hotel-inspections/:inspectionId/like
-router.post("/:inspectionId/like", tryAuth, (req, res, next) => {
-  req.params.id = req.params.inspectionId;
-  return likeInspection(req, res, next);
-});
+router.get(
+  "/hotel/:hotelId",
 
-module.exports = router;
+  listInspections
+);
+
+router.post(
+  "/hotel/:hotelId",
+
+  tryAuth,
+
+  upload.array(
+    "files",
+    80
+  ),
+
+  createInspection
+);
+
+router.post(
+  "/:inspectionId/like",
+
+  tryAuth,
+
+  likeInspection
+);
+
+module.exports =
+  router;
