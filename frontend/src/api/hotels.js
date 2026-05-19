@@ -1,6 +1,17 @@
 // frontend/src/api/hotels.js
 import { apiGet, apiPost, apiPut, buildUrl, getAuthHeaders } from "../api";
 
+function appendInspectionFilters(qs, filters = {}) {
+  if (filters.sort) qs.set("sort", filters.sort);
+  if (filters.city) qs.set("city", filters.city);
+  if (filters.month) qs.set("month", String(filters.month));
+  if (filters.audience) qs.set("audience", filters.audience);
+  if (filters.visit_type || filters.visitType) qs.set("visit_type", filters.visit_type || filters.visitType);
+  if (filters.min_score || filters.minScore) qs.set("min_score", String(filters.min_score || filters.minScore));
+  if (filters.has_media || filters.hasMedia) qs.set("has_media", "1");
+  return qs;
+}
+
 export async function listRanked({ type = "top", limit = 20 } = {}) {
   return apiGet(`/api/hotels/ranked?type=${encodeURIComponent(type)}&limit=${limit}`, false);
 }
@@ -67,12 +78,31 @@ export async function createInspection(hotelId, payload) {
   return apiPost(url, payload, true);
 }
 
-/** Список инспекций (публично). sort: "top" | "new" */
-export function listInspections(hotelId, { sort = "top" } = {}) {
-  return apiGet(`/api/hotels/${encodeURIComponent(hotelId)}/inspections?sort=${encodeURIComponent(sort)}`, false);
+/** Список инспекций конкретного отеля. sort: "top" | "new" | "score" */
+export function listInspections(hotelId, filters = {}) {
+  const qs = appendInspectionFilters(new URLSearchParams(), filters);
+  if (!qs.has("sort")) qs.set("sort", "top");
+  return apiGet(`/api/hotels/${encodeURIComponent(hotelId)}/inspections?${qs.toString()}`, false);
+}
+
+/** Общая лента инспекций по всем отелям с фильтрами. */
+export function listAllInspections(filters = {}) {
+  const qs = appendInspectionFilters(new URLSearchParams(), filters);
+  if (!qs.has("sort")) qs.set("sort", "top");
+  return apiGet(`/api/hotels/inspections?${qs.toString()}`, false);
 }
 
 /** Лайк инспекции (auto-роль: подойдёт любой доступный токен) */
 export function likeInspection(inspectionId) {
   return apiPost(`/api/hotels/inspections/${encodeURIComponent(inspectionId)}/like`, {}, true);
+}
+
+/** Комментарии к инспекции. */
+export function listInspectionComments(inspectionId) {
+  return apiGet(`/api/hotels/inspections/${encodeURIComponent(inspectionId)}/comments`, false);
+}
+
+/** Добавить комментарий к инспекции. */
+export function createInspectionComment(inspectionId, text) {
+  return apiPost(`/api/hotels/inspections/${encodeURIComponent(inspectionId)}/comments`, { text }, true);
 }
