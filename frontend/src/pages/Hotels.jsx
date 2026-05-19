@@ -1,6 +1,6 @@
 // frontend/src/pages/Hotels.jsx
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, Link } from "react-router-dom";
 import { listRanked, searchHotels } from "../api/hotels";
 import { useTranslation } from "react-i18next";
 
@@ -153,11 +153,27 @@ export default function HotelsPage() {
           </h1>
           {/* Табы показываем только залогиненным */}
           {role && (
-            <div className="flex gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <TabBtn value="top">{t("hotels.tabs.top", { defaultValue: "Топ" })}</TabBtn>
-              <TabBtn value="popular">{t("hotels.tabs.popular", { defaultValue: "Популярные" })}</TabBtn>
-              <TabBtn value="new">{t("hotels.tabs.new", { defaultValue: "Новые" })}</TabBtn>
-              <TabBtn value="worst">{t("hotels.tabs.worst", { defaultValue: "Худшие" })}</TabBtn>
+          
+              <TabBtn value="popular">
+                {t("hotels.tabs.popular", { defaultValue: "Популярные" })}
+              </TabBtn>
+          
+              <TabBtn value="new">
+                {t("hotels.tabs.new", { defaultValue: "Новые" })}
+              </TabBtn>
+          
+              <TabBtn value="worst">
+                {t("hotels.tabs.worst", { defaultValue: "Худшие" })}
+              </TabBtn>
+          
+              <Link
+                to="/hotels/inspections"
+                className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800 transition hover:bg-amber-100"
+              >
+                🏨 {t("hotels.passport", { defaultValue: "Hotel Passport" })}
+              </Link>
             </div>
           )}
         </div>
