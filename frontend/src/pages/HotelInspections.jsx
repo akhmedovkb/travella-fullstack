@@ -930,31 +930,29 @@ export default function HotelInspections() {
                 </div>
               </div>
             )}
+
+            {isNew && !globalMode && (
+              <div className="flex shrink-0 flex-wrap items-start gap-2 pt-1">
+                <Link
+                  to={`/hotels/${hotelId}/inspections`}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+                >
+                  ← К инспекциям
+                </Link>
+
+                <Link
+                  to={`/hotels/${hotelId}`}
+                  className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-orange-600"
+                >
+                  🏨 К отелю
+                </Link>
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="p-4">
-          {isNew ? (
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              {!globalMode && (
-                <>
-                  <Link
-                    to={`/hotels/${hotelId}/inspections`}
-                    className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
-                  >
-                    ← К инспекциям
-                  </Link>
-
-                  <Link
-                    to={`/hotels/${hotelId}`}
-                    className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-orange-600"
-                  >
-                    🏨 К отелю
-                  </Link>
-                </>
-              )}
-            </div>
-          ) : (
+        {!isNew && (
+          <div className="p-4">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex flex-wrap items-center gap-2">
                 <select
@@ -1033,8 +1031,8 @@ export default function HotelInspections() {
                 )}
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {isNew ? (
