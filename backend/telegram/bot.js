@@ -1979,17 +1979,88 @@ function buildArchiveListText(items) {
 }
 
 function buildArchiveListKeyboard(items) {
-  const buttons = items.slice(0, 20).map((s) => ({
-    text: `#${s.id}`,
-    callback_data: `archive:item:${s.id}`,
-  }));
+  const buttons = items.slice(0, 20).map((s) => {
+    const d = pickDetails(s);
+    const title = String(s.title || d.title || d.hotel || d.hotelName || "").trim();
+    const shortTitle = title ? ` · ${title.slice(0, 18)}${title.length > 18 ? "…" : ""}` : "";
+    return {
+      text: `#R${s.id}${shortTitle}`,
+      callback_data: `archive:item:${s.id}`,
+    };
+  });
 
   const rows = [];
-  for (let i = 0; i < buttons.length; i += 2) rows.push(buttons.slice(i, i + 2));
+  for (let i = 0; i < buttons.length; i += 1) rows.push(buttons.slice(i, i + 1));
 
-  rows.push([{ text: "🔄 Обновить", callback_data: "archive:open" }]);
-  rows.push([{ text: "⬅️ В меню", callback_data: "prov_services:list" }]);
+  rows.push([{ text: "🔄 Обновить архив", callback_data: "archive:open" }]);
+  rows.push([{ text: "⬅️ В меню услуг", callback_data: "prov_services:list" }]);
   return { inline_keyboard: rows };
+}
+
+function buildProviderServiceHeaderHtml(svc, category, details = {}) {
+  const status = String(svc?.status || "draft");
+  const isPending = status === "pending" || svc?.moderation_status === "pending";
+  const isRejected = status === "rejected" || svc?.moderation_status === "rejected";
+  const isActual = isServiceActual(details, svc);
+  const moderationComment = svc?.moderation_comment || svc?.moderationComment || null;
+  const expirationRaw = details.expiration || svc?.expiration || svc?.expiration_at || null;
+
+  let stateLine = "🟢 Активна";
+  if (isPending) stateLine = "⏳ На модерации";
+  else if (isRejected) stateLine = "❌ Отклонена";
+  else if (!isActual) stateLine = "⛔ Неактуальна";
+  else if (status === "archived") stateLine = "🗄 В архиве";
+  else if (status === "draft") stateLine = "📝 Черновик";
+
+  let html =
+    `🧭 <b>Управление услугой</b> <code>#R${escapeHtml(svc?.id || "")}</code>
+` +
+    `📌 <b>${escapeHtml(CATEGORY_LABELS?.[category] || category || "Услуга")}</b>
+` +
+    `${escapeHtml(stateLine)}`;
+
+  if (expirationRaw) {
+    html += `
+⏳ <b>Актуально до:</b> ${escapeHtml(prettyDateTime(expirationRaw))}`;
+  }
+
+  if (isRejected && moderationComment) {
+    html += `
+📝 <b>Причина:</b> ${escapeHtml(moderationComment)}`;
+  }
+
+  html +=
+    `
+
+💡 <b>Действия:</b> можно редактировать, продлить срок, снять с публикации, отправить в архив или удалить.`;
+
+  return html;
+}
+
+function buildArchiveItemIntroHtml(svc, serviceId) {
+  const d = pickDetails(svc || {});
+  const category = svc?.category || svc?.type || "refused_tour";
+  const reason = svc ? getArchiveReason(svc) : "архив";
+
+  let html =
+    `🗄 <b>Архивная услуга</b> <code>#R${escapeHtml(serviceId)}</code>
+` +
+    `📌 <b>${escapeHtml(CATEGORY_LABELS?.[category] || category || "Услуга")}</b>
+` +
+    `ℹ️ <b>Почему в архиве:</b> ${escapeHtml(reason)}`;
+
+  const expirationRaw = d.expiration || svc?.expiration || svc?.expiration_at || null;
+  if (expirationRaw) {
+    html += `
+⏳ <b>Было актуально до:</b> ${escapeHtml(prettyDateTime(expirationRaw))}`;
+  }
+
+  html +=
+    `
+
+♻️ Чтобы снова показать услугу клиентам, нажмите <b>Вернуть</b> или сначала отредактируйте данные.`;
+
+  return html;
 }
 
 async function fetchArchiveItems(ctx) {
@@ -5684,33 +5755,8 @@ bot.action("prov_services:list_cards", async (ctx) => {
       const details = parseDetailsAny(svc.details);
 
       const { text, photoUrl } = buildServiceMessage(svc, category, "provider", { forceRefused: true });
-      const status = svc.status || "draft";
-      const isActive = isServiceActual(details, svc); // ТОЛЬКО для подписи
-      const expirationRaw = details.expiration || svc.expiration || null;
+      const headerHtml = buildProviderServiceHeaderHtml(svc, category, details);
 
-      const isPending = svc.status === "pending" || svc.moderation_status === "pending";
-      const isRejected = svc.status === "rejected" || svc.moderation_status === "rejected";
-      
-      const moderationComment = svc.moderation_comment || svc.moderationComment || null;
-      
-      let statusLabel = status;
-      
-      if (isPending) statusLabel = "⏳ На модерации";
-      else if (isRejected) statusLabel = "❌ Отклонено";
-      else if (!isActive) statusLabel += " · ⛔ неактуально";
-      
-      const titleLine = `#${svc.id} · ${CATEGORY_LABELS[category] || "Услуга"}`;
-      const statusLine = `Статус: ${statusLabel}${!isPending && !isRejected && !isActive ? " (неактуально)" : ""}`;
-      
-      let headerHtml = `<b>${escapeHtml(titleLine)}</b>\n${escapeHtml(statusLine)}`;
-      
-      if (isRejected && moderationComment) {
-        headerHtml += `\n<b>Причина:</b> ${escapeHtml(moderationComment)}`;
-      }
-      if (expirationRaw) {
-        headerHtml += `\n<b>Актуально до:</b> ${escapeHtml(prettyDateTime(expirationRaw))}`;
-      }
-      
       // ⚠️ text уже HTML из buildServiceMessage
       const msg = headerHtml + "\n\n" + text;
       const manageUrl = `${SITE_URL}/dashboard?from=tg&service=${svc.id}`;
@@ -6004,39 +6050,77 @@ bot.action(/^archive:item:(\d+)$/, async (ctx) => {
 
   const chatId = ctx.update?.callback_query?.message?.chat?.id;
   const items = ARCHIVE_ITEMS_BY_CHAT.get(String(chatId)) || [];
-  const s = items.find((x) => Number(x.id) === serviceId);
+  let svc = items.find((x) => Number(x.id) === serviceId);
 
-  let text = `🗄 <b>Выбрана архивная услуга</b>\n\n🧾 <b>ID:</b> <code>#${serviceId}</code>\n\nЧто сделать?`;
-  if (s) {
-    const d = pickDetails(s);
-    text =
-      `🗄 <b>Архивная услуга</b>\n\n` +
-      `🧾 <b>ID:</b> <code>#${serviceId}</code>\n` +
-      `📌 <b>Категория:</b> ${escapeHtml(CATEGORY_LABELS?.[s.category] || s.category || "—")}\n` +
-      `🧳 <b>${escapeHtml(s.title || d.title || "Услуга")}</b>\n` +
-      `ℹ️ <b>Причина:</b> ${escapeHtml(getArchiveReason(s))}\n` +
-      (s.expiration_at ? `⏳ <b>Актуально до:</b> ${escapeHtml(new Date(s.expiration_at).toLocaleString("ru-RU"))}\n` : "") +
-      `\nМожно продлить услугу и снова вернуть её в работу.`;
+  if (!svc) {
+    try {
+      const actorId = getActorId(ctx);
+      const { data } = await axios.get(`/api/telegram/provider/${actorId}/services/archive`);
+      const freshItems = data?.services || data?.items || [];
+      if (Array.isArray(freshItems)) {
+        ARCHIVE_ITEMS_BY_CHAT.set(String(chatId), freshItems);
+        svc = freshItems.find((x) => Number(x.id) === serviceId);
+      }
+    } catch (e) {
+      console.error("[bot] archive:item refetch error:", e?.response?.data || e?.message || e);
+    }
   }
 
   const reply_markup = {
     inline_keyboard: [
       [
-        { text: "♻️ Вернуть", callback_data: `svc_restore_archive:${serviceId}` },
+        { text: "♻️ Вернуть в активные", callback_data: `svc_restore_archive:${serviceId}` },
         { text: "⏳ Продлить 7 дней", callback_data: `svc_extend:${serviceId}` },
       ],
       [
         { text: "✏️ Редактировать", callback_data: `svc_edit_start:${serviceId}` },
         { text: "🗑 Удалить", callback_data: `svc_delete:${serviceId}` },
       ],
-      [{ text: "⬅️ В архив", callback_data: "archive:open" }],
+      [{ text: "⬅️ Назад в архив", callback_data: "archive:open" }],
     ],
   };
 
   try {
-    await ctx.editMessageText(text, { parse_mode: "HTML", reply_markup });
+    if (!svc) {
+      await ctx.reply(
+        `🗄 <b>Архивная услуга</b> <code>#R${serviceId}</code>\n\nНе удалось загрузить подробности, но действия доступны ниже.`,
+        { parse_mode: "HTML", reply_markup, disable_web_page_preview: true }
+      );
+      return;
+    }
+
+    const category = svc.category || svc.type || "refused_tour";
+    const built = buildServiceMessage(svc, category, "provider", { forceRefused: true });
+    const introHtml = buildArchiveItemIntroHtml(svc, serviceId);
+    const msg = `${introHtml}\n\n${built.text}`;
+
+    try {
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+    } catch {}
+
+    if (built.photoUrl) {
+      const photo = String(built.photoUrl).startsWith("tgfile:")
+        ? String(built.photoUrl).replace(/^tgfile:/, "").trim()
+        : built.photoUrl;
+
+      await safeReplyWithPhoto(ctx, photo, msg, {
+        parse_mode: "HTML",
+        reply_markup,
+      });
+      return;
+    }
+
+    await ctx.reply(msg, {
+      parse_mode: "HTML",
+      reply_markup,
+      disable_web_page_preview: true,
+    });
   } catch (e) {
-    console.error("[bot] archive:item edit error:", e?.message || e);
+    console.error("[bot] archive:item render error:", e?.response?.data || e?.message || e);
+    await ctx.reply(
+      `🗄 <b>Архивная услуга</b> <code>#R${serviceId}</code>\n\nЧто сделать?`,
+      { parse_mode: "HTML", reply_markup, disable_web_page_preview: true }
+    );
   }
 });
 
@@ -7075,13 +7159,16 @@ async function replyProviderSupportPrompt(ctx, serviceId = null) {
 
     if (!rows.length) return;
     rows.push([{ text: "📋 Мои услуги", callback_data: "prov_services:list" }]);
+    rows.push([{ text: "🗄 Архив", callback_data: "archive:open" }]);
 
     const text =
-      `❤️ <b>Спасибо, что обновляете актуальность отказов.</b>\n\n` +
-      `Ваш вклад помогает развивать <b>Bot Otkaznyx Turov</b>:\n` +
-      `• улучшение поиска\n` +
-      `• продвижение отказных\n` +
-      `• новые функции`;
+      `❤️ <b>Спасибо, что помогаете держать базу отказов актуальной.</b>\n\n` +
+      `Поддержка проекта — добровольная. Если бот помог вам быстрее снять, обновить или продвинуть отказ, можете отправить любую удобную сумму.\n\n` +
+      `Средства идут на развитие <b>Bot Otkaznyx Turov</b>:\n` +
+      `• улучшение поиска и карточек\n` +
+      `• продвижение отказных предложений\n` +
+      `• поддержку Telegram-бота и веб-кабинета\n\n` +
+      `Выберите сумму ниже или просто продолжайте работу с услугами.`;
 
     await safeReply(ctx, text, {
       parse_mode: "HTML",
