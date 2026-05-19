@@ -914,6 +914,106 @@ async function ensureHotelsAggregates(hotelId) {
   );
 }
 
+// GET /api/hotels/inspections?sort=top|new
+async function listAllHotelInspections(req, res) {
+  try {
+    await ensureInspectionsTable();
+    await ensureInspectionLikesTable();
+
+    const { actorType, actorId, fp } = getActorFromReq(req);
+
+    const sort = String(req.query.sort || "top").toLowerCase();
+    const order =
+      sort === "new"
+        ? `i.created_at DESC, i.id DESC`
+        : `COALESCE(i.likes,0) DESC, i.created_at DESC, i.id DESC`;
+
+    const params = [];
+    let idx = 0;
+
+    params.push(actorId);
+    const actorIdIdx = ++idx;
+
+    params.push(actorType);
+    const actorTypeIdx = ++idx;
+
+    params.push(fp);
+    const fpIdx = ++idx;
+
+    const sql = `
+      SELECT
+        i.id, i.hotel_id, h.name AS hotel_name, COALESCE(h.city, h.location) AS hotel_city,
+        i.author_name, i.author_type, i.author_provider_id, i.author_client_id,
+        i.title, i.visit_type, i.trip_type, i.travel_month, i.recommendation_score,
+        i.review, i.pros, i.cons, i.features,
+        i.media, i.scores, i.amenities, i.nearby,
+        i.likes, i.created_at,
+        COALESCE(media.media_items, '[]'::jsonb) AS section_media,
+        COALESCE(aud.audience_keys, '[]'::jsonb) AS audience_keys,
+        COALESCE(cns.con_keys, '[]'::jsonb) AS con_keys,
+        (liked.id IS NOT NULL) AS liked_by_me
+      FROM inspections i
+      LEFT JOIN hotels h ON h.id = i.hotel_id
+      LEFT JOIN LATERAL (
+        SELECT jsonb_agg(
+          jsonb_build_object(
+            'id', m.id,
+            'media_type', m.media_type,
+            'section_key', m.section_key,
+            'caption', m.caption,
+            'tags', COALESCE(m.tags, '[]'::jsonb),
+            'url', m.url,
+            'public_id', m.public_id,
+            'thumbnail_url', m.thumbnail_url,
+            'width', m.width,
+            'height', m.height,
+            'duration_seconds', m.duration_seconds,
+            'sort_order', m.sort_order
+          ) ORDER BY m.section_key, m.sort_order, m.id
+        ) AS media_items
+        FROM hotel_inspection_media m
+        WHERE m.inspection_id = i.id
+      ) media ON true
+      LEFT JOIN LATERAL (
+        SELECT jsonb_agg(DISTINCT a.audience_key) AS audience_keys
+        FROM hotel_inspection_audience a
+        WHERE a.inspection_id = i.id
+      ) aud ON true
+      LEFT JOIN LATERAL (
+        SELECT jsonb_agg(DISTINCT c.con_key) AS con_keys
+        FROM hotel_inspection_cons c
+        WHERE c.inspection_id = i.id
+      ) cns ON true
+      LEFT JOIN inspection_likes liked
+        ON liked.inspection_id = i.id
+       AND (
+            ($${actorIdIdx}::int IS NOT NULL AND liked.actor_type = $${actorTypeIdx}::text AND liked.actor_id = $${actorIdIdx}::int)
+            OR ($${fpIdx}::text IS NOT NULL AND liked.fp = $${fpIdx}::text)
+       )
+      ORDER BY ${order}
+      LIMIT 200
+    `;
+
+    const { rows } = await db.query(sql, params);
+
+    const items = (rows || []).map((r) => ({
+      ...r,
+      media: typeof r.media === "string"
+        ? JSON.parse(r.media || "[]")
+        : (Array.isArray(r.media) ? r.media : (r.media || [])),
+      section_media: Array.isArray(r.section_media) ? r.section_media : (r.section_media || []),
+      audience_keys: Array.isArray(r.audience_keys) ? r.audience_keys : (r.audience_keys || []),
+      con_keys: Array.isArray(r.con_keys) ? r.con_keys : (r.con_keys || []),
+      author_profile_url: r.author_provider_id ? `/profile/provider/${r.author_provider_id}` : null,
+    }));
+
+    return res.json({ items });
+  } catch (e) {
+    console.error("listAllHotelInspections error", e);
+    return res.status(500).json({ items: [] });
+  }
+}
+
 // GET /api/hotels/:id/inspections?sort=top|new
 async function listHotelInspections(req, res) {
   const hotelId = parseIntSafe(req.params.id);
@@ -1277,6 +1377,7 @@ module.exports = {
   listHotelsByCity,
   // инспекции + лайки
   listHotelInspections,
+  listAllHotelInspections,
   createHotelInspection,
   likeInspection,
 };
