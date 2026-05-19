@@ -1,71 +1,48 @@
-//backend/routes/hotelInspectionRoutes.js
+// backend/routes/hotelInspectionRoutes.js
+// Legacy compatibility layer. New frontend uses /api/hotels/:id/inspections.
+// These routes delegate to hotelsController so all reviews stay in one inspections table.
 
-const router =
-  require("express").Router();
-
-const authenticateToken =
-  require(
-    "../middleware/authenticateToken"
-  );
-
+const router = require("express").Router();
+const multer = require("multer");
+const authenticateToken = require("../middleware/authenticateToken");
 const {
-  upload,
-
-  createInspection,
-
-  listInspections,
-
+  createHotelInspection,
+  listHotelInspections,
   likeInspection,
+} = require("../controllers/hotelsController");
 
-} = require(
-  "../controllers/hotelInspectionController"
-);
-
-function tryAuth(
-  req,
-  res,
-  next
-) {
-  const hdr =
-    req.headers
-      ?.authorization;
-
-  if (!hdr)
-    return next();
-
-  authenticateToken(
-    req,
-    res,
-    next
-  );
+function tryAuth(req, res, next) {
+  const hdr = req.headers?.authorization || "";
+  if (!hdr) return next();
+  authenticateToken(req, res, () => next());
 }
 
-router.get(
-  "/hotel/:hotelId",
+const inspectionUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    files: 13,
+    fileSize: 100 * 1024 * 1024,
+  },
+  fileFilter: (req, file, cb) => {
+    const mimetype = String(file.mimetype || "").toLowerCase();
+    if (mimetype.startsWith("image/") || mimetype.startsWith("video/")) return cb(null, true);
+    return cb(new Error("unsupported_media_type"));
+  },
+});
 
-  listInspections
-);
+router.get("/hotel/:hotelId", tryAuth, (req, res, next) => {
+  req.params.id = req.params.hotelId;
+  return listHotelInspections(req, res, next);
+});
 
-router.post(
-  "/hotel/:hotelId",
+router.post("/hotel/:hotelId", tryAuth, inspectionUpload.array("files", 13), (req, res, next) => {
+  req.params.id = req.params.hotelId;
+  return createHotelInspection(req, res, next);
+});
 
-  tryAuth,
+router.post("/:inspectionId/like", tryAuth, (req, res, next) => {
+  req.params.id = req.params.inspectionId;
+  return likeInspection(req, res, next);
+});
 
-  upload.array(
-    "files",
-    80
-  ),
-
-  createInspection
-);
-
-router.post(
-  "/:inspectionId/like",
-
-  tryAuth,
-
-  likeInspection
-);
-
-module.exports =
-  router;
+module.exports = router;
