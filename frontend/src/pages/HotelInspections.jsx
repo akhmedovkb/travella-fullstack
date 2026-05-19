@@ -593,6 +593,7 @@ function AddInspectionWizard({ hotel, hotelId, onCreated }) {
   const [features, setFeatures] = useState("");
   const [visitType, setVisitType] = useState("agent_inspection");
   const [travelMonth, setTravelMonth] = useState("");
+  const [travelDate, setTravelDate] = useState("");
   const [recommendationScore, setRecommendationScore] = useState(5);
   const [audienceKeys, setAudienceKeys] = useState([]);
   const [conKeys, setConKeys] = useState([]);
