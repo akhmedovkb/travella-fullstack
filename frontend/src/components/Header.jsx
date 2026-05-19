@@ -198,6 +198,8 @@ export default function Header() {
 
   const [servicesOpen, setServicesOpen] = useState(false);
   const servicesRef = useRef(null);
+  const [workspaceOpen, setWorkspaceOpen] = useState(false);
+  const workspaceRef = useRef(null);
   const [toolsOpen, setToolsOpen] = useState(false);
   const toolsRef = useRef(null);
 
@@ -239,6 +241,7 @@ export default function Header() {
     const onDoc = (e) => {
       if (adminRef.current && !adminRef.current.contains(e.target)) setAdminOpen(false);
       if (servicesRef.current && !servicesRef.current.contains(e.target)) setServicesOpen(false);
+      if (workspaceRef.current && !workspaceRef.current.contains(e.target)) setWorkspaceOpen(false);
       if (toolsRef.current && !toolsRef.current.contains(e.target)) setToolsOpen(false);
     };
     document.addEventListener("mousedown", onDoc);
@@ -374,6 +377,7 @@ export default function Header() {
     setMobileOpen(false);
     setAdminOpen(false);
     setServicesOpen(false);
+    setWorkspaceOpen(false);
     setToolsOpen(false);
     setDonasOpen(false);
     setDonasMobileOpen(false);
@@ -458,9 +462,38 @@ export default function Header() {
                   )}
                 </div>
 
-                <NavBadgeDark to="/dashboard/requests" label={t("nav.requests", "Запросы")} icon={<IconRequests />} value={providerRequests} loading={loading} />
-                <NavBadgeDark to="/dashboard/favorites" label={t("nav.favorites", "Избранное")} icon={<IconHeart />} value={favCount} />
-                <NavBadgeDark to="/dashboard/bookings" label={t("nav.bookings", "Брони")} icon={<IconBookings />} value={bookingsBadge} loading={loading} />
+                <div className="relative" ref={workspaceRef}>
+                  <MenuButton
+                    active={workspaceOpen}
+                    open={workspaceOpen}
+                    icon={<IconDashboard />}
+                    label={t("nav.workspace", "Кабинет")}
+                    onClick={() => setWorkspaceOpen((v) => !v)}
+                  />
+                  {workspaceOpen && (
+                    <DropdownPanel align="right" width="w-72">
+                      <DropdownCaption title={t("nav.workspace", "Кабинет")} />
+                      <DropdownItem
+                        to="/dashboard/requests"
+                        label={t("nav.requests", "Запросы")}
+                        description={`${loading ? "…" : providerRequests} активных`}
+                        icon={<IconRequests />}
+                      />
+                      <DropdownItem
+                        to="/dashboard/favorites"
+                        label={t("nav.favorites", "Избранное")}
+                        description={`${favCount} услуг`}
+                        icon={<IconHeart />}
+                      />
+                      <DropdownItem
+                        to="/dashboard/bookings"
+                        label={t("nav.bookings", "Брони")}
+                        description={`${loading ? "…" : bookingsBadge} бронирований`}
+                        icon={<IconBookings />}
+                      />
+                    </DropdownPanel>
+                  )}
+                </div>
 
                 <div className="relative" ref={toolsRef}>
                   <MenuButton
