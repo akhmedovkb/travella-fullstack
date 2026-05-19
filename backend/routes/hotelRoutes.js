@@ -16,6 +16,7 @@ const {
   listHotelInspections,
   createHotelInspection,
   likeInspection,
+  listAllHotelInspections,
   listMyHotels,
 } = require("../controllers/hotelsController");
 
@@ -88,6 +89,7 @@ router.get("/mine", providerOnly, listMyHotels);
 /* --- лайки инспекций (авторизация обязательна) --- */
 // ставим выше, чтобы не конфликтовало с "/:id/inspections"
 router.post("/inspections/:id/like", canLike, likeInspection);
+router.get("/inspections", tryAuth, listAllHotelInspections);
 
 /* --- инспекции отелей --- */
 // просмотр — публичный, но с tryAuth (если есть токен, «мои» поднимутся выше и будет liked_by_me)
