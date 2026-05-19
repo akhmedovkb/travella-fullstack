@@ -1,5 +1,5 @@
 // frontend/src/components/Header.jsx
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, Link, useLocation } from "react-router-dom";
 import LanguageSelector from "./LanguageSelector";
 import { apiGet } from "../api";
@@ -51,6 +51,7 @@ const IconHeart = (p) => (
     />
   </svg>
 );
+
 const IconWallet = (p) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
     <path
@@ -61,6 +62,7 @@ const IconWallet = (p) => (
     <circle cx="16.5" cy="11.5" r="1" fill="currentColor" />
   </svg>
 );
+
 const IconUsers = (p) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
     <path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="currentColor" strokeWidth="2" />
@@ -113,7 +115,6 @@ const IconChevron = (p) => (
   </svg>
 );
 
-// иконка Профиля
 const IconProfile = (p) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
     <circle cx="12" cy="8" r="3" stroke="currentColor" strokeWidth="2" />
@@ -175,17 +176,8 @@ function detectAdminFromJwt() {
 
 function formatHeaderBalance(value, lang = "ru") {
   const amount = Number(value || 0) / 100;
-
-  const locale =
-    lang === "uz" ? "uz-UZ" :
-    lang === "en" ? "en-US" :
-    "ru-RU";
-
-  const currency =
-    lang === "uz" ? "so'm" :
-    lang === "en" ? "sum" :
-    "сум";
-
+  const locale = lang === "uz" ? "uz-UZ" : lang === "en" ? "en-US" : "ru-RU";
+  const currency = lang === "uz" ? "so'm" : lang === "en" ? "sum" : "сум";
   return `${Math.round(amount).toLocaleString(locale)} ${currency}`;
 }
 
@@ -218,7 +210,6 @@ export default function Header() {
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0);
 
-  // Admin detect
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -244,26 +235,18 @@ export default function Header() {
     };
   }, [role]);
 
-  // close dropdowns on outside click
   useEffect(() => {
     const onDoc = (e) => {
-      if (adminRef.current && !adminRef.current.contains(e.target)) {
-        setAdminOpen(false);
-      }
-      if (servicesRef.current && !servicesRef.current.contains(e.target)) {
-        setServicesOpen(false);
-      }
-      if (toolsRef.current && !toolsRef.current.contains(e.target)) {
-        setToolsOpen(false);
-      }
+      if (adminRef.current && !adminRef.current.contains(e.target)) setAdminOpen(false);
+      if (servicesRef.current && !servicesRef.current.contains(e.target)) setServicesOpen(false);
+      if (toolsRef.current && !toolsRef.current.contains(e.target)) setToolsOpen(false);
     };
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
 
-  // Favorites (provider)
   useEffect(() => {
-    if (role !== "provider") return;
+    if (role !== "provider") return undefined;
     let alive = true;
     const load = async () => {
       try {
@@ -282,42 +265,36 @@ export default function Header() {
     };
   }, [role]);
 
-    useEffect(() => {
+  useEffect(() => {
     if (role !== "client") {
       setClientBalance(0);
-      return;
+      return undefined;
     }
-  
+
     let alive = true;
-  
     const loadBalance = async () => {
       try {
         setBalanceLoading(true);
         const res = await apiGet("/api/client/balance", "client");
-        if (!alive) return;
-        setClientBalance(Number(res?.balance || 0));
+        if (alive) setClientBalance(Number(res?.balance || 0));
       } catch {
-        if (!alive) return;
-        setClientBalance(0);
+        if (alive) setClientBalance(0);
       } finally {
         if (alive) setBalanceLoading(false);
       }
     };
-  
+
     loadBalance();
-  
     const onChanged = () => loadBalance();
     window.addEventListener("client:balance:changed", onChanged);
-  
     return () => {
       alive = false;
       window.removeEventListener("client:balance:changed", onChanged);
     };
   }, [role, refreshTick]);
 
-  // Counters (provider)
   useEffect(() => {
-    if (role !== "provider") return;
+    if (role !== "provider") return undefined;
     let cancelled = false;
     const fetchCounts = async () => {
       setLoading(true);
@@ -327,7 +304,6 @@ export default function Header() {
 
         let bookingsPending = 0;
         let bookingsTotal = 0;
-
         try {
           const bs = await apiGet("/api/providers/stats", role);
           bookingsTotal = Number(bs?.bookings_total ?? bs?.total ?? 0);
@@ -364,7 +340,6 @@ export default function Header() {
     };
   }, [role, refreshTick]);
 
-  // External events
   useEffect(() => {
     const bump = () => setRefreshTick((x) => x + 1);
     window.addEventListener("provider:counts:refresh", bump);
@@ -375,9 +350,8 @@ export default function Header() {
     };
   }, []);
 
-  // Client favorites
   useEffect(() => {
-    if (role !== "client") return;
+    if (role !== "client") return undefined;
     const fetchFavs = async () => {
       try {
         const res = await apiGet("/api/wishlist", true);
@@ -390,14 +364,12 @@ export default function Header() {
     fetchFavs();
     const onFavChanged = () => fetchFavs();
     window.addEventListener("wishlist:changed", onFavChanged);
-    fetchFavs(location.pathname + location.search);
     return () => window.removeEventListener("wishlist:changed", onFavChanged);
-  }, [role, location]);
+  }, [role, location.pathname, location.search]);
 
   const providerRequests = (counts?.requests_open || 0) + (counts?.requests_accepted || 0);
   const bookingsBadge = (counts?.bookings_pending ?? counts?.bookings_total ?? 0) || 0;
 
-  // close mobile & s on route change
   useEffect(() => {
     setMobileOpen(false);
     setAdminOpen(false);
@@ -407,33 +379,28 @@ export default function Header() {
     setDonasMobileOpen(false);
   }, [location]);
 
-  // активен ли блок "Услуги"
-  const servicesActive =
-    location.pathname.startsWith("/dashboard/services/") || location.pathname === "/dashboard/calendar";
+  const servicesActive = location.pathname.startsWith("/dashboard/services/") || location.pathname === "/dashboard/calendar";
   const toolsActive = location.pathname.startsWith("/dashboard/passport-parser");
-
-  // активен ли DONA'S DOSAS
   const donasActive = location.pathname.startsWith("/admin/donas-dosas/");
 
+  const providerLabel = useMemo(() => t("nav.provider_workspace", "Кабинет поставщика"), [t]);
+  const clientLabel = useMemo(() => t("nav.client_workspace", "Кабинет клиента"), [t]);
+
   return (
-    <header className="sticky top-0 z-40 bg-[#111] text-white border-b border-black/40">
+    <header className="sticky top-0 z-40 border-b border-black/40 bg-[#111] text-white shadow-[0_8px_24px_rgba(0,0,0,0.18)]">
       <div className="mx-auto max-w-7xl px-2 sm:px-3">
-        {/* One-row header */}
-        <div className="relative z-10 h-14 flex items-center justify-between gap-2">
-          {/* Left group */}
-          <div className="flex items-center gap-2">
-            {/* Бургер */}
+        <div className="relative z-10 flex min-h-14 items-center justify-between gap-2 py-1.5">
+          <div className="flex min-w-0 items-center gap-2">
             <button
               type="button"
               onClick={() => setMobileOpen((v) => !v)}
-              className="relative z-20 md:hidden inline-flex items-center justify-center w-9 h-9 rounded-full border border-white/30 bg-white/5 text-white hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-orange-400"
+              className="relative z-20 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/30 bg-white/5 text-white transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-orange-400 md:hidden"
               aria-label="Menu"
             >
               {mobileOpen ? <IconClose /> : <IconBurger />}
             </button>
 
-            {/* ЛОГО */}
-            <Link to="/" className="inline-flex items-center mr-2" aria-label="Travella Home">
+            <Link to="/" className="inline-flex shrink-0 items-center" aria-label="Travella Home">
               <img
                 src="/logo1.jpg"
                 alt="Travella"
@@ -445,199 +412,92 @@ export default function Header() {
               />
             </Link>
 
-            {/* Продукты */}
-            <nav className="hidden md:flex items-center gap-2 lg:gap-3">
+            <nav className="hidden min-w-0 items-center gap-1 lg:gap-2 md:flex">
               <NavItemDark to="/" label="MARKETPLACE" end />
-              {role === "provider" && (
-                <NavItemDark
-                  to="/tour-builder"
-                  label={t("nav.tour_builder", "Tour Builder")}
-                />
-              )}
+              {role === "provider" && <NavItemDark to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />}
+              <NavItemDark to="/hotels" label={t("nav.hotels", "Отели")} icon={<IconHotel />} />
+            </nav>
+          </div>
 
-              {role === "provider" && (
+          <div className="hidden min-w-0 flex-1 items-center justify-end gap-1 md:flex">
+            {role === "provider" && (
+              <>
+                <DesktopSectionLabel label={providerLabel} />
+                <NavItemDark to="/dashboard/profile" label={t("nav.profile", "Профиль")} icon={<IconProfile />} />
+
+                <div className="relative" ref={servicesRef}>
+                  <MenuButton
+                    active={servicesOpen || servicesActive}
+                    open={servicesOpen}
+                    icon={<IconChecklist />}
+                    label={t("nav.services_tab", "Услуги")}
+                    onClick={() => setServicesOpen((v) => !v)}
+                  />
+                  {servicesOpen && (
+                    <DropdownPanel align="right" width="w-80">
+                      <DropdownCaption title={t("nav.services_group", "Управление услугами")} />
+                      <DropdownItem
+                        to="/dashboard/services/marketplace"
+                        label={t("nav.services_marketplace_short", "Маркетплейс")}
+                        description={t("nav.services_marketplace_desc", "Отказные туры, отели, авиабилеты и другие услуги")}
+                        icon={<IconChecklist />}
+                      />
+                      <DropdownItem
+                        to="/dashboard/services/tourbuilder"
+                        label={t("nav.services_tourbuilder_short", "Tour Builder")}
+                        description={t("nav.services_tourbuilder_desc", "Услуги для конструктора туров")}
+                        icon={<IconChecklist />}
+                      />
+                      <DropdownItem
+                        to="/dashboard/calendar"
+                        label={t("nav.provider_calendar", "Календарь")}
+                        description={t("nav.provider_calendar_desc", "Занятость, блокировки и бронирования")}
+                        icon={<IconBookings />}
+                      />
+                    </DropdownPanel>
+                  )}
+                </div>
+
+                <NavBadgeDark to="/dashboard/requests" label={t("nav.requests", "Запросы")} icon={<IconRequests />} value={providerRequests} loading={loading} />
+                <NavBadgeDark to="/dashboard/favorites" label={t("nav.favorites", "Избранное")} icon={<IconHeart />} value={favCount} />
+                <NavBadgeDark to="/dashboard/bookings" label={t("nav.bookings", "Брони")} icon={<IconBookings />} value={bookingsBadge} loading={loading} />
+
                 <div className="relative" ref={toolsRef}>
-                  <button
-                    type="button"
+                  <MenuButton
+                    active={toolsOpen || toolsActive}
+                    open={toolsOpen}
+                    icon={<IconDoc />}
+                    label={t("nav.tools", "Инструменты")}
                     onClick={() => setToolsOpen((v) => !v)}
-                    className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full text-sm transition ${
-                      toolsOpen || toolsActive
-                        ? "bg-white/10 text-white"
-                        : "text-white/80 hover:text-white hover:bg-white/10"
-                    }`}
-                  >
-                    <IconDoc />
-                    <span>Инструменты</span>
-                    <IconChevron className={`transition ${toolsOpen ? "rotate-180" : ""}`} />
-                  </button>
-
+                  />
                   {toolsOpen && (
-                    <div className="absolute left-0 mt-2 w-64 rounded-2xl bg-[#171717] ring-1 ring-white/10 shadow-xl overflow-hidden z-30">
+                    <DropdownPanel align="right" width="w-72">
                       <DropdownItem
                         to="/dashboard/passport-parser"
                         label="Passport Parser"
+                        description={t("nav.passport_parser_desc", "Распознавание паспортных данных")}
                         icon={<IconDoc />}
                       />
-                    </div>
+                    </DropdownPanel>
                   )}
                 </div>
-              )}
-
-              <NavItemDark
-                to="/hotels"
-                label={t("nav.hotels", "Отели")}
-                icon={<IconHotel />}
-              />
-            </nav>
-
-            {/* Admin Desktop */}
-            {isAdmin && (
-              <div className="hidden md:block relative ml-1" ref={adminRef}>
-                <button
-                  type="button"
-                  onClick={() => setAdminOpen((v) => !v)}
-                  className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full text-sm transition
-                    ${adminOpen ? "bg-white/10 text-white" : "text-white/80 hover:text-white hover:bg-white/10"}`}
-                >
-                  <IconModeration className="opacity-90" />
-                  <span>{t("nav.admin", "Админ")}</span>
-                  <IconChevron className={`transition ${adminOpen ? "rotate-180" : ""}`} />
-                </button>
-
-                {adminOpen && (
-                  <div className="absolute left-0 mt-2 w-64 rounded-2xl bg-[#171717] ring-1 ring-white/10 shadow-xl overflow-hidden">
-                    <DropdownItem to="/admin/operations" label="Operations" icon={<IconModeration />} />
-                    <DropdownItem to="/admin/finance" label={t("nav.finance_admin", "Finance")} icon={<IconDoc />} />
-                    <DropdownItem to="/admin/broadcast" label={t("nav.broadcast", "Рассылка")} icon={<IconDoc />} />
-                    <DropdownItem to="/admin/inside-requests" label={t("nav.inside_requests", "Inside заявки")} icon={<IconChecklist />} />
-                    <DropdownItem to="/admin/entry-fees" label={t("nav.entry_fees_admin", "Entry fees")} icon={<IconTicket />} />
-                    <DropdownItem to="/admin/hotels" label={t("nav.hotels_admin", "Отели (админ)")} icon={<IconHotel />} />
-                    <DropdownItem to="/admin/pages" label={t("nav.cms_pages", "Подвал")} icon={<IconDoc />} />
-                    
-                    {/* ✅ DONA'S DOSAS — компактное подменю */}
-                    <button
-                      type="button"
-                      onClick={() => setDonasOpen((v) => !v)}
-                      className={[
-                        "w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors",
-                        donasActive ? "bg-white/10 text-white" : "text-white/80 hover:bg-white/10 hover:text-white",
-                      ].join(" ")}
-                    >
-                      <div className="w-5 h-5">
-                        <IconBurger />
-                      </div>
-                      <div className="flex-1 text-left">DONA’S DOSAS</div>
-                      <IconChevron className={`transition ${donasOpen ? "rotate-180" : ""}`} />
-                    </button>
-
-                    {donasOpen && (
-                      <div className="bg-black/20">
-                        <DropdownItem to="/admin/donas-dosas/finance" label="Finance" icon={<IconDoc />} />
-                        <DropdownItem to="/admin/donas-dosas/inventory" label="Inventory" icon={<IconDoc />} />
-                        {/* позже включим */}
-                        {/* <DropdownItem to="/admin/donas-dosas/hr" label="HR" icon={<IconDoc />} /> */}
-                        <DropdownItem to="/admin/donas-dosas/menu" label="Menu" icon={<IconDoc />} />
-                      </div>
-                    )}
-
-                    <div className="border-t border-white/10 p-2">
-                      <AdminQuickTools />
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Right group */}
-          <div className="hidden md:flex items-center gap-1">
-            {role === "provider" && (
-              <>
-                {/* Услуги */}
-                <div className="relative" ref={servicesRef}>
-                  <button
-                    type="button"
-                    onClick={() => setServicesOpen((v) => !v)}
-                    className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full text-sm transition 
-                      ${
-                        servicesOpen || servicesActive
-                          ? "bg-white/10 text-white"
-                          : "text:white/80 hover:text-white hover:bg-white/10"
-                      }`}
-                  >
-                    <IconChecklist />
-                    <span>{t("nav.services_tab", "Услуги")}</span>
-                    <IconChevron className={`transition ${servicesOpen ? "rotate-180" : ""}`} />
-                  </button>
-
-                  {servicesOpen && (
-                    <div className="absolute right-0 mt-2 w-72 rounded-2xl bg-[#171717] ring-1 ring-white/10 shadow-xl overflow-hidden z-30">
-                      <DropdownItem
-                        to="/dashboard/services/tourbuilder"
-                        label={t("nav.services_tourbuilder", "Услуги для Tour Builder")}
-                        icon={<IconChecklist />}
-                      />
-                      <DropdownItem
-                        to="/dashboard/services/marketplace"
-                        label={t("nav.services_marketplace", "Услуги для MARKETPLACE")}
-                        icon={<IconChecklist />}
-                      />
-                      <DropdownItem to="/dashboard/calendar" label={t("nav.provider_calendar", "Календарь")} icon={<IconBookings />} />
-                    </div>
-                  )}
-                </div>
-
-                <NavBadgeDark
-                  to="/dashboard/requests"
-                  label={t("nav.requests")}
-                  icon={<IconRequests />}
-                  value={providerRequests}
-                  loading={loading}
-                />
-                <NavBadgeDark
-                  to="/dashboard/favorites"
-                  label={t("nav.favorites") || "Избранное"}
-                  icon={<IconHeart />}
-                  value={favCount}
-                />
-                <NavBadgeDark
-                  to="/dashboard/bookings"
-                  label={t("nav.bookings")}
-                  icon={<IconBookings />}
-                  value={bookingsBadge}
-                  loading={loading}
-                />
-                <NavItemDark to="/dashboard/profile" label={t("nav.profile", "Профиль")} icon={<IconProfile />} />
               </>
             )}
 
             {role === "client" && (
               <>
-                <NavBadgeDark
-                  to="/client/dashboard"
-                  label={t("client.header.cabinet", { defaultValue: "Кабинет" })}
-                  icon={<IconDashboard />}
-                />
-            
+                <DesktopSectionLabel label={clientLabel} />
+                <NavItemDark to="/client/dashboard" label={t("client.header.cabinet", { defaultValue: "Кабинет" })} icon={<IconDashboard />} />
                 <NavLink
                   to="/client/balance"
-                  className={({ isActive }) =>
-                    [
-                      "relative shrink-0 inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full transition-colors whitespace-nowrap",
-                      "text-sm",
-                      isActive
-                        ? "bg-white/10 text-white font-semibold after:content-[''] after:absolute after:left-3 after:right-3 after:-bottom-1 after:h-[2px] after:bg-orange-400 after:rounded-full"
-                        : "text-white/80 hover:text-white hover:bg-white/10",
-                    ].join(" ")
-                  }
+                  className={({ isActive }) => navPillClass(isActive)}
                 >
                   <IconWallet />
                   <span>{t("client.header.balance", { defaultValue: "Баланс" })}</span>
-                  <span className="ml-1 rounded-full bg-orange-500 text-white text-[11px] px-2 py-0.5 leading-none">
+                  <span className="ml-1 rounded-full bg-orange-500 px-2 py-0.5 text-[11px] leading-none text-white">
                     {balanceLoading ? "…" : formatHeaderBalance(clientBalance, i18n.language)}
                   </span>
                 </NavLink>
-            
                 <NavBadgeDark
                   to="/client/dashboard?tab=favorites"
                   label={t("client.header.favorites", { defaultValue: "Избранное" })}
@@ -647,140 +507,134 @@ export default function Header() {
               </>
             )}
 
-            <div className="ml-2 pl-2 border-l border-white/10">
+            {isAdmin && (
+              <div className="relative" ref={adminRef}>
+                <MenuButton
+                  active={adminOpen || location.pathname.startsWith("/admin/")}
+                  open={adminOpen}
+                  icon={<IconModeration />}
+                  label={t("nav.admin", "Админ")}
+                  onClick={() => setAdminOpen((v) => !v)}
+                />
+                {adminOpen && (
+                  <DropdownPanel align="right" width="w-80">
+                    <DropdownCaption title={t("nav.admin_core", "Администрирование")} />
+                    <DropdownItem to="/admin/operations" label="Operations" description="Контроль отказных и настроек" icon={<IconModeration />} />
+                    <DropdownItem to="/admin/refused-actual" label={t("nav.refused_actual", "Актуальные отказы")} description="Проверка актуальности услуг" icon={<IconChecklist />} />
+                    <DropdownItem to="/admin/leads" label={t("nav.leads", "Leads")} description="Лиды и Telegram-привязки" icon={<IconUsers />} />
+                    <DropdownItem to="/admin/providers" label={t("nav.providers_admin", "Провайдеры")} description="Поставщики и доступы" icon={<IconUsers />} />
+                    <DropdownItem to="/admin/finance" label={t("nav.finance_admin", "Finance")} description="Финансы платформы" icon={<IconDoc />} />
+                    <DropdownItem to="/admin/billing" label={t("nav.billing_admin", "Billing")} description="Биллинг и открытия контактов" icon={<IconWallet />} />
+                    <DropdownItem to="/admin/broadcast" label={t("nav.broadcast", "Рассылка")} description="Telegram/платформенные рассылки" icon={<IconDoc />} />
+                    <DropdownItem to="/admin/inside-requests" label={t("nav.inside_requests", "Inside заявки")} description="Заявки India Inside" icon={<IconChecklist />} />
+                    <DropdownItem to="/admin/entry-fees" label={t("nav.entry_fees_admin", "Entry fees")} icon={<IconTicket />} />
+                    <DropdownItem to="/admin/hotels" label={t("nav.hotels_admin", "Отели (админ)")} icon={<IconHotel />} />
+                    <DropdownItem to="/admin/pages" label={t("nav.cms_pages", "Подвал")} icon={<IconDoc />} />
+
+                    <button
+                      type="button"
+                      onClick={() => setDonasOpen((v) => !v)}
+                      className={[
+                        "flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors",
+                        donasActive ? "bg-white/10 text-white" : "text-white/80 hover:bg-white/10 hover:text-white",
+                      ].join(" ")}
+                    >
+                      <span className="flex h-5 w-5 items-center justify-center"><IconBurger /></span>
+                      <span className="flex-1 text-left font-semibold">DONA’S DOSAS</span>
+                      <IconChevron className={`transition ${donasOpen ? "rotate-180" : ""}`} />
+                    </button>
+
+                    {donasOpen && (
+                      <div className="bg-black/20">
+                        <DropdownItem to="/admin/donas-dosas/finance" label="Finance" icon={<IconDoc />} />
+                        <DropdownItem to="/admin/donas-dosas/inventory" label="Inventory" icon={<IconDoc />} />
+                        <DropdownItem to="/admin/donas-dosas/menu" label="Menu" icon={<IconDoc />} />
+                      </div>
+                    )}
+
+                    <div className="border-t border-white/10 p-2">
+                      <AdminQuickTools />
+                    </div>
+                  </DropdownPanel>
+                )}
+              </div>
+            )}
+
+            <div className="ml-1 border-l border-white/10 pl-2">
               <LanguageSelector />
             </div>
           </div>
 
-          {/* Mobile lang */}
-          <div className="md:hidden flex items-center">
+          <div className="flex items-center gap-2 md:hidden">
+            {role === "client" && (
+              <Link to="/client/balance" className="rounded-full bg-white/10 px-2.5 py-1 text-xs font-semibold text-white">
+                {balanceLoading ? "…" : formatHeaderBalance(clientBalance, i18n.language)}
+              </Link>
+            )}
             <LanguageSelector />
           </div>
         </div>
 
-        {/* ===== Mobile drawer ===== */}
         <div
-          className={`md:hidden overflow-hidden transition-[max-height] duration-300 ${mobileOpen ? "max-h-[80vh]" : "max-h-0"}`}
+          className={`md:hidden overflow-hidden transition-[max-height] duration-300 ${mobileOpen ? "max-h-[82vh]" : "max-h-0"}`}
           aria-hidden={!mobileOpen}
         >
-          <nav className="pb-3 -mx-1">
-            {role && (
-              <RowGroupDark title={t("nav.ops", "Операционка")}>
-                {role === "provider" && (
-                  <>
-                    <NavItemMobileDark
-                      to="/dashboard/services/tourbuilder"
-                      label={t("nav.services_tourbuilder", "Услуги для Tour Builder")}
-                      icon={<IconChecklist />}
-                    />
-                    <NavItemMobileDark
-                      to="/dashboard/services/marketplace"
-                      label={t("nav.services_marketplace", "Услуги для MARKETPLACE")}
-                      icon={<IconChecklist />}
-                    />
-                    <NavItemMobileDark to="/dashboard/calendar" label={t("nav.provider_calendar", "Календарь")} icon={<IconBookings />} />
-                    <NavItemMobileDark to="/admin/broadcast" label={t("nav.broadcast", "Рассылка")} icon={<IconDoc />} />
-                    <NavItemMobileDark
-                      to="/dashboard/requests"
-                      label={t("nav.requests")}
-                      icon={<IconRequests />}
-                      badge={providerRequests}
-                      loading={loading}
-                    />
-                    <NavItemMobileDark
-                      to="/dashboard/favorites"
-                      label={t("nav.favorites") || "Избранное"}
-                      icon={<IconHeart />}
-                      badge={favCount}
-                    />
-                    <NavItemMobileDark
-                      to="/dashboard/bookings"
-                      label={t("nav.bookings")}
-                      icon={<IconBookings />}
-                      badge={bookingsBadge}
-                      loading={loading}
-                    />
-                    <NavItemMobileDark to="/dashboard/profile" label={t("nav.profile", "Профиль")} icon={<IconProfile />} />
-                  </>
-                )}
+          <nav className="space-y-2 pb-3">
+            <RowGroupDark title={t("nav.products", "Продукты")}>
+              <NavItemMobileDark to="/" label="MARKETPLACE" end />
+              {role === "provider" && <NavItemMobileDark to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />}
+              <NavItemMobileDark to="/hotels" label={t("nav.hotels", "Отели")} icon={<IconHotel />} />
+            </RowGroupDark>
 
-              {role === "client" && (
-                <>
-                  <NavItemMobileDark
-                    to="/client/dashboard"
-                    label={t("client.header.cabinet", { defaultValue: "Кабинет" })}
-                    icon={<IconDashboard />}
-                  />
-              
-                  <NavItemMobileDark
-                    to="/client/balance"
-                    label={`${t("client.header.balance", { defaultValue: "Баланс" })} · ${
-                      balanceLoading ? "…" : formatHeaderBalance(clientBalance, i18n.language)
-                    }`}
-                    icon={<IconWallet />}
-                  />
-              
-                  <NavItemMobileDark
-                    to="/client/dashboard?tab=favorites"
-                    label={t("client.header.favorites", { defaultValue: "Избранное" })}
-                    icon={<IconHeart />}
-                    badge={favCount}
-                  />
-                </>
-              )}
+            {role === "provider" && (
+              <RowGroupDark title={providerLabel}>
+                <NavItemMobileDark to="/dashboard/profile" label={t("nav.profile", "Профиль")} icon={<IconProfile />} />
+                <NavItemMobileDark to="/dashboard/services/marketplace" label={t("nav.services_marketplace_short", "Маркетплейс")} icon={<IconChecklist />} />
+                <NavItemMobileDark to="/dashboard/services/tourbuilder" label={t("nav.services_tourbuilder_short", "Tour Builder")} icon={<IconChecklist />} />
+                <NavItemMobileDark to="/dashboard/calendar" label={t("nav.provider_calendar", "Календарь")} icon={<IconBookings />} />
+                <NavItemMobileDark to="/dashboard/requests" label={t("nav.requests", "Запросы")} icon={<IconRequests />} badge={providerRequests} loading={loading} />
+                <NavItemMobileDark to="/dashboard/favorites" label={t("nav.favorites", "Избранное")} icon={<IconHeart />} badge={favCount} />
+                <NavItemMobileDark to="/dashboard/bookings" label={t("nav.bookings", "Брони")} icon={<IconBookings />} badge={bookingsBadge} loading={loading} />
+                <NavItemMobileDark to="/dashboard/passport-parser" label="Passport Parser" icon={<IconDoc />} />
               </RowGroupDark>
             )}
 
-            <RowGroupDark title={t("nav.products", "Продукты")}>
-              <NavItemMobileDark to="/marketplace" label="MARKETPLACE" />
-
-              {role === "provider" && (
+            {role === "client" && (
+              <RowGroupDark title={clientLabel}>
+                <NavItemMobileDark to="/client/dashboard" label={t("client.header.cabinet", { defaultValue: "Кабинет" })} icon={<IconDashboard />} />
                 <NavItemMobileDark
-                  to="/tour-builder"
-                  label={t("nav.tour_builder", "Tour Builder")}
+                  to="/client/balance"
+                  label={`${t("client.header.balance", { defaultValue: "Баланс" })} · ${balanceLoading ? "…" : formatHeaderBalance(clientBalance, i18n.language)}`}
+                  icon={<IconWallet />}
                 />
-              )}
-
-              {role === "provider" && (
-                <NavItemMobileDark
-                  to="/dashboard/passport-parser"
-                  label="Pasport Parser"
-                  icon={<IconDoc />}
-                />
-              )}
-
-              <NavItemMobileDark
-                to="/hotels"
-                label={t("nav.hotels", "Отели")}
-                icon={<IconHotel />}
-              />
-            </RowGroupDark>
+                <NavItemMobileDark to="/client/dashboard?tab=favorites" label={t("client.header.favorites", { defaultValue: "Избранное" })} icon={<IconHeart />} badge={favCount} />
+              </RowGroupDark>
+            )}
 
             {isAdmin && (
               <RowGroupDark title={t("nav.admin", "Админ")}>
-                <NavItemMobileDark to="/admin/moderation" label={t("moderation.title", "Модерация")} icon={<IconModeration />} />
-                <NavItemMobileDark to="/admin/leads" label={t("nav.leads", "Leads")} icon={<IconUsers />} />
-                <NavItemMobileDark to="/admin/finance" label={t("nav.finance_admin", "Finance")} icon={<IconDoc />} />
+                <NavItemMobileDark to="/admin/operations" label="Operations" icon={<IconModeration />} />
                 <NavItemMobileDark to="/admin/refused-actual" label={t("nav.refused_actual", "Актуальные отказы")} icon={<IconChecklist />} />
-                <NavItemMobileDark to="/admin/inside-requests" label={t("nav.inside_requests", "Inside заявки")} icon={<IconChecklist />} />
+                <NavItemMobileDark to="/admin/leads" label={t("nav.leads", "Leads")} icon={<IconUsers />} />
                 <NavItemMobileDark to="/admin/providers" label={t("nav.providers_admin", "Провайдеры")} icon={<IconUsers />} />
+                <NavItemMobileDark to="/admin/finance" label={t("nav.finance_admin", "Finance")} icon={<IconDoc />} />
+                <NavItemMobileDark to="/admin/billing" label={t("nav.billing_admin", "Billing")} icon={<IconWallet />} />
+                <NavItemMobileDark to="/admin/broadcast" label={t("nav.broadcast", "Рассылка")} icon={<IconDoc />} />
+                <NavItemMobileDark to="/admin/inside-requests" label={t("nav.inside_requests", "Inside заявки")} icon={<IconChecklist />} />
                 <NavItemMobileDark to="/admin/entry-fees" label={t("nav.entry_fees_admin", "Entry fees")} icon={<IconTicket />} />
                 <NavItemMobileDark to="/admin/hotels" label={t("nav.hotels_admin", "Отели (админ)")} icon={<IconHotel />} />
                 <NavItemMobileDark to="/admin/pages" label={t("nav.cms_pages", "Подвал")} icon={<IconDoc />} />
 
-                {/* ✅ DONA'S DOSAS — компактное подменю */}
                 <button
                   type="button"
                   onClick={() => setDonasMobileOpen((v) => !v)}
                   className={[
-                    "w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors",
+                    "flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors",
                     donasActive ? "bg-white/10 text-white" : "text-white/80 hover:bg-white/10 hover:text-white",
                   ].join(" ")}
                 >
-                  <div className="w-5 h-5">
-                    <IconBurger />
-                  </div>
-                  <div className="flex-1 text-left">DONA’S DOSAS</div>
+                  <span className="flex h-5 w-5 items-center justify-center"><IconBurger /></span>
+                  <span className="flex-1 text-left font-semibold">DONA’S DOSAS</span>
                   <IconChevron className={`transition ${donasMobileOpen ? "rotate-180" : ""}`} />
                 </button>
 
@@ -802,30 +656,52 @@ export default function Header() {
 
 /* ---------- Subcomponents ---------- */
 
+function navPillClass(isActive) {
+  return [
+    "relative inline-flex shrink-0 items-center gap-2 rounded-full px-2.5 py-1.5 text-sm whitespace-nowrap transition-colors",
+    isActive
+      ? "bg-white/10 text-white font-semibold after:absolute after:-bottom-1 after:left-3 after:right-3 after:h-[2px] after:rounded-full after:bg-orange-400 after:content-['']"
+      : "text-white/80 hover:bg-white/10 hover:text-white",
+  ].join(" ");
+}
+
 function RowGroupDark({ title, children }) {
   return (
-    <div className="mb-2 rounded-xl ring-1 ring-white/10 bg-[#171717] overflow-hidden text-white">
-      <div className="px-3 py-2 text-[13px] font-semibold text-white/70 bg-black/20">{title}</div>
+    <div className="overflow-hidden rounded-xl bg-[#171717] text-white ring-1 ring-white/10">
+      <div className="bg-black/20 px-3 py-2 text-[13px] font-semibold text-white/70">{title}</div>
       <div className="flex flex-col">{children}</div>
     </div>
   );
 }
 
+function DesktopSectionLabel({ label }) {
+  return (
+    <span className="hidden rounded-full border border-white/10 bg-white/[0.03] px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/45 xl:inline-flex">
+      {label}
+    </span>
+  );
+}
+
+function MenuButton({ active, open, icon, label, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        "inline-flex shrink-0 items-center gap-2 rounded-full px-2.5 py-1.5 text-sm whitespace-nowrap transition-colors",
+        active ? "bg-white/10 text-white font-semibold" : "text-white/80 hover:bg-white/10 hover:text-white",
+      ].join(" ")}
+    >
+      {icon}
+      <span>{label}</span>
+      <IconChevron className={`transition ${open ? "rotate-180" : ""}`} />
+    </button>
+  );
+}
+
 function NavItemDark({ to, label, icon, end }) {
   return (
-    <NavLink
-      to={to}
-      end={end}
-      className={({ isActive }) =>
-        [
-          "relative shrink-0 inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full transition-colors whitespace-nowrap",
-          "text-sm",
-          isActive
-            ? "bg-white/10 text-white font-semibold after:content-[''] after:absolute after:left-3 after:right-3 after:-bottom-1 after:h-[2px] after:bg-orange-400 after:rounded-full"
-            : "text-white/80 hover:text-white hover:bg:white/10",
-        ].join(" ")
-      }
-    >
+    <NavLink to={to} end={end} className={({ isActive }) => navPillClass(isActive)}>
       {icon}
       <span>{label}</span>
     </NavLink>
@@ -835,24 +711,13 @@ function NavItemDark({ to, label, icon, end }) {
 function NavBadgeDark({ to, label, value, loading, icon }) {
   const show = Number.isFinite(value) && value > 0;
   return (
-    <NavLink
-      to={to}
-      className={({ isActive }) =>
-        [
-          "relative shrink-0 inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full transition-colors whitespace-nowrap",
-          "text-sm",
-          isActive
-            ? "bg-white/10 text-white font-semibold after:content-[''] after:absolute after:left-3 after:right-3 after:-bottom-1 after:h-[2px] after:bg-orange-400 after:rounded-full"
-            : "text-white/80 hover:text-white hover:bg-white/10",
-        ].join(" ")
-      }
-    >
+    <NavLink to={to} className={({ isActive }) => navPillClass(isActive)}>
       {icon}
       <span>{label}</span>
       <span
         className={[
-          "ml-1 min-w-[20px] h-[20px] px-1 rounded-full text-[11px] leading-none flex items-center justify:center transition-colors",
-          show ? "bg-orange-500 text-white" : "bg:white/10 text-white/70",
+          "ml-1 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] leading-none transition-colors",
+          show ? "bg-orange-500 text-white" : "bg-white/10 text-white/70",
         ].join(" ")}
       >
         {loading ? "…" : show ? value : 0}
@@ -861,19 +726,40 @@ function NavBadgeDark({ to, label, value, loading, icon }) {
   );
 }
 
-function DropdownItem({ to, label, icon }) {
+function DropdownPanel({ align = "left", width = "w-72", children }) {
+  return (
+    <div
+      className={[
+        "absolute z-30 mt-2 overflow-hidden rounded-2xl bg-[#171717] shadow-xl ring-1 ring-white/10",
+        align === "right" ? "right-0" : "left-0",
+        width,
+      ].join(" ")}
+    >
+      {children}
+    </div>
+  );
+}
+
+function DropdownCaption({ title }) {
+  return <div className="border-b border-white/10 px-3 py-2 text-[11px] font-black uppercase tracking-[0.14em] text-white/45">{title}</div>;
+}
+
+function DropdownItem({ to, label, description, icon }) {
   return (
     <NavLink
       to={to}
       className={({ isActive }) =>
         [
-          "flex items:center gap-2 px-3 py-2 text-sm transition-colors",
-          isActive ? "bg:white/10 text-white" : "text-white/80 hover:bg:white/10 hover:text-white",
+          "flex items-start gap-2 px-3 py-2.5 text-sm transition-colors",
+          isActive ? "bg-white/10 text-white" : "text-white/80 hover:bg-white/10 hover:text-white",
         ].join(" ")
       }
     >
-      <div className="w-5 h-5">{icon}</div>
-      <div className="flex-1">{label}</div>
+      <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center">{icon}</div>
+      <div className="min-w-0 flex-1">
+        <div className="font-semibold leading-5">{label}</div>
+        {description && <div className="mt-0.5 line-clamp-2 text-xs leading-4 text-white/45">{description}</div>}
+      </div>
     </NavLink>
   );
 }
@@ -886,18 +772,18 @@ function NavItemMobileDark({ to, label, icon, end, badge, loading }) {
       end={end}
       className={({ isActive }) =>
         [
-          "flex items:center gap-2 px-3 py-2 text-sm transition-colors",
-          isActive ? "bg:white/10 text:white" : "text:white/80 hover:bg:white/10 hover:text-white",
+          "flex items-center gap-2 px-3 py-2 text-sm transition-colors",
+          isActive ? "bg-white/10 text-white" : "text-white/80 hover:bg-white/10 hover:text-white",
         ].join(" ")
       }
     >
-      <div className="w-5 h-5">{icon}</div>
-      <div className="flex-1">{label}</div>
+      <div className="flex h-5 w-5 shrink-0 items-center justify-center">{icon}</div>
+      <div className="min-w-0 flex-1 truncate">{label}</div>
       {badge != null && (
         <span
           className={[
-            "min-w-[20px] h-[20px] px-1 rounded-full text:[11px] leading-none flex items:center justify:center",
-            show ? "bg-orange-500 text:white" : "bg:white/10 text:white/70",
+            "flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] leading-none",
+            show ? "bg-orange-500 text-white" : "bg-white/10 text-white/70",
           ].join(" ")}
         >
           {loading ? "…" : show ? badge : 0}
