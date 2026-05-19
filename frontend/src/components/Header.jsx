@@ -394,7 +394,7 @@ export default function Header() {
             <button
               type="button"
               onClick={() => setMobileOpen((v) => !v)}
-              className="relative z-20 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/30 bg-white/5 text-white transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-orange-400 md:hidden"
+              className="relative z-20 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/30 bg-white/5 text-white transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-orange-400 xl:hidden"
               aria-label="Menu"
             >
               {mobileOpen ? <IconClose /> : <IconBurger />}
@@ -412,14 +412,14 @@ export default function Header() {
               />
             </Link>
 
-            <nav className="hidden min-w-0 items-center gap-1 lg:gap-2 md:flex">
+            <nav className="hidden min-w-0 items-center gap-1 lg:gap-2 xl:flex">
               <NavItemDark to="/" label="MARKETPLACE" end />
               {role === "provider" && <NavItemDark to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />}
               <NavItemDark to="/hotels" label={t("nav.hotels", "Отели")} icon={<IconHotel />} />
             </nav>
           </div>
 
-          <div className="hidden min-w-0 flex-1 items-center justify-end gap-1 md:flex">
+          <div className="hidden min-w-0 flex-1 items-center justify-end gap-1 xl:flex">
             {role === "provider" && (
               <>
                 <DesktopSectionLabel label={providerLabel} />
@@ -565,7 +565,7 @@ export default function Header() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 md:hidden">
+          <div className="flex items-center gap-2 xl:hidden">
             {role === "client" && (
               <Link to="/client/balance" className="rounded-full bg-white/10 px-2.5 py-1 text-xs font-semibold text-white">
                 {balanceLoading ? "…" : formatHeaderBalance(clientBalance, i18n.language)}
