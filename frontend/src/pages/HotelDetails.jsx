@@ -59,16 +59,17 @@ function getAggregatedStats(hotel) {
 function PassportScore({ hotel }) {
   const stats = getAggregatedStats(hotel);
   const hasScore = Number.isFinite(stats.score);
+  const scoreLabel = hasScore ? stats.score.toFixed(1) : "—";
 
   return (
-    <div className="rounded-3xl border border-orange-100 bg-gradient-to-br from-orange-50 to-white p-4 shadow-sm">
+    <div className="h-full rounded-3xl border border-orange-100 bg-gradient-to-br from-orange-50 to-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-[11px] font-black uppercase tracking-[0.16em] text-orange-600">Hotel Passport</div>
           <div className="mt-1 text-sm font-bold text-slate-600">Инспекции и живые обзоры</div>
         </div>
         <div className="rounded-2xl bg-white px-3 py-2 text-right shadow-sm ring-1 ring-orange-100">
-          <div className="text-2xl font-black text-slate-950">{hasScore ? stats.score.toFixed(1) : "—"}</div>
+          <div className="text-2xl font-black text-slate-950">{scoreLabel}</div>
           <div className="text-[11px] font-black text-slate-400">из 5</div>
         </div>
       </div>
@@ -82,13 +83,30 @@ function PassportScore({ hotel }) {
           <div className="text-slate-400">Удобств</div>
           <div className="mt-1 text-lg font-black text-slate-950">{stats.amenities.length}</div>
         </div>
+        <div className="rounded-2xl bg-white p-3 ring-1 ring-orange-100">
+          <div className="text-slate-400">Рейтинг</div>
+          <div className="mt-1 text-lg font-black text-slate-950">{scoreLabel}</div>
+        </div>
+        <div className="rounded-2xl bg-white p-3 ring-1 ring-orange-100">
+          <div className="text-slate-400">Статус</div>
+          <div className="mt-1 text-lg font-black text-slate-950">{stats.count ? "Есть" : "Нет"}</div>
+        </div>
       </div>
 
-      {!stats.count && (
-        <div className="mt-3 rounded-2xl bg-white/70 p-3 text-xs font-semibold leading-5 text-slate-500 ring-1 ring-orange-100">
-          По этому отелю пока нет инспекций. Можно добавить первую и помочь другим агентам и туристам.
-        </div>
-      )}
+      <div className="mt-3 rounded-2xl bg-white/75 p-3 text-xs font-semibold leading-5 text-slate-500 ring-1 ring-orange-100">
+        {stats.count
+          ? "Hotel Passport уже содержит живые заметки по этому отелю. Откройте инспекции, чтобы увидеть детали."
+          : "По этому отелю пока нет инспекций. Можно добавить первую и помочь другим агентам и туристам."}
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <Link to={`/hotels/${hotel.id}/inspections`} className="rounded-xl border border-orange-100 bg-white px-3 py-2 text-center text-xs font-black text-slate-700 transition hover:bg-orange-50">
+          🏨 Инспекции
+        </Link>
+        <Link to={`/hotels/${hotel.id}/inspections?new=1`} className="rounded-xl bg-orange-500 px-3 py-2 text-center text-xs font-black text-white transition hover:bg-orange-600">
+          ➕ Оставить
+        </Link>
+      </div>
     </div>
   );
 }
@@ -168,24 +186,24 @@ export default function HotelDetails() {
   return (
     <div className="mx-auto max-w-6xl p-4 md:p-6">
       <div className="rounded-3xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-100 p-5">
+        <div className="border-b border-slate-100 bg-gradient-to-br from-white via-white to-orange-50/50 p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
+            <div className="min-w-0">
               <div className="inline-flex rounded-full bg-orange-50 px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-orange-600 ring-1 ring-orange-100">
-                Hotel card
+                Hotel Passport
               </div>
-              <h1 className="mt-3 text-2xl font-black tracking-[-0.03em] text-slate-950">{hotel.name}</h1>
+              <h1 className="mt-3 truncate text-3xl font-black tracking-[-0.04em] text-slate-950">{hotel.name}</h1>
               <div className="mt-1 text-sm font-semibold text-slate-500">
                 {[hotel.city || hotel.location, hotel.country].filter(Boolean).join(", ") || "—"}
               </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <Link to={`/hotels/${hotel.id}/inspections`} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-black text-slate-700 transition hover:bg-slate-50">
-                🏨 Смотреть инспекции
+              <Link to={`/hotels/${hotel.id}/inspections`} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700 transition hover:bg-slate-50">
+                🏨 Инспекции
               </Link>
               <Link to={`/hotels/${hotel.id}/inspections?new=1`} className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-black text-white transition hover:bg-orange-600">
-                ➕ Оставить инспекцию
+                ➕ Оставить
               </Link>
             </div>
           </div>
