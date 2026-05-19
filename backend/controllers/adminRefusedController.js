@@ -65,7 +65,14 @@ function parseDateSafe(val) {
 
 // взять chatId провайдера
 function pickProviderChatId(p) {
-  return p.telegram_refused_chat_id || null;
+  return (
+    p?.telegram_refused_chat_id ||
+    p?.telegram_web_chat_id ||
+    p?.telegram_chat_id ||
+    p?.tg_chat_id ||
+    p?.chatId ||
+    null
+  );
 }
 
 // дата для сортировки/отображения
@@ -266,7 +273,10 @@ exports.listActualRefused = async (req, res) => {
         p.name AS p_name,
         p.phone AS p_phone,
         p.social AS p_social,
-        p.telegram_refused_chat_id
+        p.telegram_refused_chat_id,
+        p.telegram_web_chat_id,
+        p.telegram_chat_id,
+        p.tg_chat_id
 
       FROM services s
       JOIN providers p ON p.id = s.provider_id
@@ -300,6 +310,10 @@ exports.listActualRefused = async (req, res) => {
           name: r.p_name,
           phone: r.p_phone,
           telegramUsername: r.p_social,
+          telegram_refused_chat_id: r.telegram_refused_chat_id || null,
+          telegram_web_chat_id: r.telegram_web_chat_id || null,
+          telegram_chat_id: r.telegram_chat_id || null,
+          tg_chat_id: r.tg_chat_id || null,
           chatId,
         },
         details: detailsObj,
@@ -383,7 +397,10 @@ exports.getRefusedById = async (req, res) => {
         p.name AS p_name,
         p.phone AS p_phone,
         p.social AS p_social,
-        p.telegram_refused_chat_id
+        p.telegram_refused_chat_id,
+        p.telegram_web_chat_id,
+        p.telegram_chat_id,
+        p.tg_chat_id
       FROM services s
       JOIN providers p ON p.id = s.provider_id
       WHERE s.id = $1
@@ -430,6 +447,10 @@ exports.getRefusedById = async (req, res) => {
           name: row.p_name,
           phone: row.p_phone,
           telegramUsername: row.p_social,
+          telegram_refused_chat_id: row.telegram_refused_chat_id || null,
+          telegram_web_chat_id: row.telegram_web_chat_id || null,
+          telegram_chat_id: row.telegram_chat_id || null,
+          tg_chat_id: row.tg_chat_id || null,
           chatId,
         },
         isActual: isServiceActual(detailsObj, svcForActual),
@@ -456,6 +477,9 @@ exports.askActualNow = async (req, res) => {
       SELECT
         s.id, s.category, s.status, s.title, s.details, s.provider_id,
         p.telegram_refused_chat_id,
+        p.telegram_web_chat_id,
+        p.telegram_chat_id,
+        p.tg_chat_id,
         p.social, p.phone, p.name
       FROM services s
       JOIN providers p ON p.id = s.provider_id
@@ -473,7 +497,8 @@ exports.askActualNow = async (req, res) => {
     if (!chatId) {
       return res.json({
         success: false,
-        message: "Provider has no telegram chat id",
+        code: "NO_PROVIDER_CHAT_ID",
+        message: "У провайдера нет Telegram chatId. Попросите поставщика открыть Telegram-бота и нажать /start, либо внесите chatId вручную через TG inline edit.",
       });
     }
 
