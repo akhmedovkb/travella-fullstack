@@ -387,9 +387,6 @@ export default function Header() {
   const toolsActive = location.pathname.startsWith("/dashboard/passport-parser");
   const donasActive = location.pathname.startsWith("/admin/donas-dosas/");
 
-  const providerLabel = useMemo(() => t("nav.provider_workspace", "Кабинет поставщика"), [t]);
-  const clientLabel = useMemo(() => t("nav.client_workspace", "Кабинет клиента"), [t]);
-
   return (
     <header className="sticky top-0 z-40 border-b border-black/40 bg-[#111] text-white shadow-[0_8px_24px_rgba(0,0,0,0.18)]">
       <div className="mx-auto max-w-7xl px-2 sm:px-3">
@@ -426,7 +423,6 @@ export default function Header() {
           <div className="hidden min-w-0 flex-1 items-center justify-end gap-1 2xl:flex">
             {role === "provider" && (
               <>
-                <DesktopSectionLabel label={providerLabel} />
                 <NavItemDark to="/dashboard/profile" label={t("nav.profile", "Профиль")} icon={<IconProfile />} />
 
                 <div className="relative" ref={servicesRef}>
@@ -467,30 +463,50 @@ export default function Header() {
                     active={workspaceOpen}
                     open={workspaceOpen}
                     icon={<IconDashboard />}
-                    label={t("nav.workspace", "Кабинет")}
+                    label={t("nav.activity", "Активность")}
                     onClick={() => setWorkspaceOpen((v) => !v)}
                   />
+                  
                   {workspaceOpen && (
-                    <DropdownPanel align="right" width="w-72">
-                      <DropdownCaption title={t("nav.workspace", "Кабинет")} />
+                    <DropdownPanel align="right" width="w-80">
+                  
+                      <DropdownCaption
+                        title={t(
+                          "nav.activity",
+                          "АКТИВНОСТЬ"
+                        )}
+                      />
+                  
                       <DropdownItem
                         to="/dashboard/requests"
-                        label={t("nav.requests", "Запросы")}
+                        label={t(
+                          "nav.requests",
+                          "Запросы"
+                        )}
                         description={`${loading ? "…" : providerRequests} активных`}
                         icon={<IconRequests />}
                       />
+                  
                       <DropdownItem
                         to="/dashboard/favorites"
-                        label={t("nav.favorites", "Избранное")}
+                        label={t(
+                          "nav.favorites",
+                          "Избранное"
+                        )}
                         description={`${favCount} услуг`}
                         icon={<IconHeart />}
                       />
+                  
                       <DropdownItem
                         to="/dashboard/bookings"
-                        label={t("nav.bookings", "Брони")}
+                        label={t(
+                          "nav.bookings",
+                          "Брони"
+                        )}
                         description={`${loading ? "…" : bookingsBadge} бронирований`}
                         icon={<IconBookings />}
                       />
+                  
                     </DropdownPanel>
                   )}
                 </div>
@@ -519,7 +535,6 @@ export default function Header() {
 
             {role === "client" && (
               <>
-                <DesktopSectionLabel label={clientLabel} />
                 <NavItemDark to="/client/dashboard" label={t("client.header.cabinet", { defaultValue: "Кабинет" })} icon={<IconDashboard />} />
                 <NavLink
                   to="/client/balance"
@@ -620,7 +635,7 @@ export default function Header() {
             </RowGroupDark>
 
             {role === "provider" && (
-              <RowGroupDark title={providerLabel}>
+              <RowGroupDark title={t("nav.activity", "Активность")}>
                 <NavItemMobileDark to="/dashboard/profile" label={t("nav.profile", "Профиль")} icon={<IconProfile />} />
                 <NavItemMobileDark to="/dashboard/services/marketplace" label={t("nav.services_marketplace_short", "Маркетплейс")} icon={<IconChecklist />} />
                 <NavItemMobileDark to="/dashboard/services/tourbuilder" label={t("nav.services_tourbuilder_short", "Tour Builder")} icon={<IconChecklist />} />
