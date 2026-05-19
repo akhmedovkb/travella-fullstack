@@ -20,6 +20,7 @@ const {
 } = require("../controllers/hotelsController");
 
 const authenticateToken = require("../middleware/authenticateToken");
+const multer = require("multer");
 
 /** Мягкая авторизация: если есть Authorization — парсим токен; если нет — не блокируем запрос */
 function tryAuth(req, res, next) {
@@ -54,6 +55,20 @@ const providerOrAdmin = allowRoles("provider", "tour_agent", "agency", "supplier
 
 // Создание инспекции — только для провайдера/турагента/агентства/поставщика
 const providerOnly    = allowRoles("provider", "tour_agent", "agency", "supplier", "hotel");
+const reviewerOnly    = allowRoles("provider", "tour_agent", "agency", "supplier", "hotel", "client", "user");
+
+const inspectionUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    files: 13,
+    fileSize: 100 * 1024 * 1024,
+  },
+  fileFilter: (req, file, cb) => {
+    const mimetype = String(file.mimetype || "").toLowerCase();
+    if (mimetype.startsWith("image/") || mimetype.startsWith("video/")) return cb(null, true);
+    return cb(new Error("unsupported_media_type"));
+  },
+});
 
 // Лайк — авторизованный toggle (уникальность на пользователя)
 // Разрешаем: провайдер/агент/агентство/поставщик/клиент/юзер
@@ -77,8 +92,8 @@ router.post("/inspections/:id/like", canLike, likeInspection);
 /* --- инспекции отелей --- */
 // просмотр — публичный, но с tryAuth (если есть токен, «мои» поднимутся выше и будет liked_by_me)
 router.get("/:id/inspections", tryAuth, listHotelInspections);
-// создание — только для провайдера/турагента/агентства/поставщика
-router.post("/:id/inspections", providerOnly, createHotelInspection);
+// создание обзора — провайдеры и клиенты; поддерживает JSON и multipart/form-data с полем files
+router.post("/:id/inspections", reviewerOnly, inspectionUpload.array("files", 13), createHotelInspection);
 
 /* === "бриф" отеля для конструктора === */
 router.get("/:id/brief", getHotelBrief);   // /api/hotels/:id/brief
