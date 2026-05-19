@@ -432,7 +432,7 @@ function NewInspectionForm({ hotelId, onCancel, onCreated }) {
       const code = e?.code || e?.data?.error || e?.response?.data?.error;
       if (st === 401 || st === 403) setError(t("errors.only_authorized", "Нужно войти как клиент или поставщик"));
       else if (st === 409 && code === "already_inspected") setError(t("errors.already_inspected", "Вы уже оставляли инспекцию этого отеля"));
-      else if (code === "cloudinary_not_configured") setError("Cloudinary не настроен на backend. Добавьте CLOUDINARY_* в .env.");
+      else if (code === "r2_upload_failed" ) setError("Ошибка загрузки в R2 storage");
       else setError(t("errors.save_failed", "Не удалось сохранить"));
     } finally {
       setSaving(false);
