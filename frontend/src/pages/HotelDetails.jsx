@@ -140,27 +140,35 @@ export default function HotelDetails() {
     <div className="max-w-5xl mx-auto p-6">
       <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
         {/* Шапка */}
-        <div className="p-5 border-b">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div className="border-b border-slate-200 bg-white p-5">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <h1 className="text-2xl font-semibold">{hotel.name}</h1>
-              <div className="text-gray-500">
-                {hotel.city || hotel.location || "—"}
-                {hotel.country ? `, ${hotel.country}` : ""}
+              <div className="inline-flex rounded-full bg-orange-50 px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-orange-600 ring-1 ring-orange-100">
+                Hotel Passport
+              </div>
+
+              <h1 className="mt-3 text-2xl font-black tracking-[-0.03em] text-slate-950">
+                {hotel.name}
+              </h1>
+
+              <div className="mt-1 text-sm font-medium text-slate-500">
+                {[hotel.city || hotel.location, hotel.country].filter(Boolean).join(", ") || "—"}
               </div>
             </div>
-            <div className="flex items-center gap-2">
+
+            <div className="flex flex-wrap items-center gap-2">
               <Link
                 to={`/hotels/${hotel.id}/inspections`}
-                className="px-3 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white"
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
               >
                 Смотреть инспекции
               </Link>
+
               <Link
                 to={`/hotels/${hotel.id}/inspections?new=1`}
-                className="px-3 py-2 rounded bg-gray-900 hover:bg-black text-white"
+                className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-bold text-white hover:bg-orange-600"
               >
-                Оставить свою инспекцию
+                ➕ Оставить инспекцию
               </Link>
             </div>
           </div>
