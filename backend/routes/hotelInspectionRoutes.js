@@ -9,6 +9,8 @@ const {
   createHotelInspection,
   listHotelInspections,
   likeInspection,
+  listInspectionComments,
+  createInspectionComment,
 } = require("../controllers/hotelsController");
 
 function tryAuth(req, res, next) {
@@ -43,6 +45,16 @@ router.post("/hotel/:hotelId", tryAuth, inspectionUpload.array("files", 13), (re
 router.post("/:inspectionId/like", tryAuth, (req, res, next) => {
   req.params.id = req.params.inspectionId;
   return likeInspection(req, res, next);
+});
+
+router.get("/:inspectionId/comments", tryAuth, (req, res, next) => {
+  req.params.id = req.params.inspectionId;
+  return listInspectionComments(req, res, next);
+});
+
+router.post("/:inspectionId/comments", tryAuth, (req, res, next) => {
+  req.params.id = req.params.inspectionId;
+  return createInspectionComment(req, res, next);
 });
 
 module.exports = router;
