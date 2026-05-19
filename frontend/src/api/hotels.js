@@ -69,10 +69,7 @@ export async function createInspection(hotelId, payload) {
 
 /** Список инспекций (публично). sort: "top" | "new" */
 export function listInspections(hotelId, { sort = "top" } = {}) {
-  return apiGet(
-    `/api/hotels/${encodeURIComponent(hotelId)}/inspections?sort=${encodeURIComponent(sort)}`,
-    false
-  );
+  return apiGet(`/api/hotels/${encodeURIComponent(hotelId)}/inspections?sort=${encodeURIComponent(sort)}`, false);
 }
 
 /** Лайк инспекции (auto-роль: подойдёт любой доступный токен) */
