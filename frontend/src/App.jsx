@@ -561,6 +561,7 @@ export default function App() {
 
             {/* Отели (публичные) */}
             <Route path="/hotels" element={<Hotels />} />
+            <Route path="/hotels/inspections" element={<HotelInspections />} />
             <Route path="/hotels/:hotelId" element={<HotelDetails />} />
             <Route path="/hotels/:hotelId/inspections" element={<HotelInspections />} />
 
