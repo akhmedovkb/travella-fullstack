@@ -752,12 +752,14 @@ const load = async () => {
               </div>
 
               <div className="mt-4 flex flex-col items-center justify-center gap-3 sm:flex-row">
-                <Link
-                  to={`/hotels/${hotelId}/inspections?new=1`}
-                  className="rounded-xl bg-orange-500 px-4 py-2 font-semibold text-white hover:bg-orange-600"
-                >
-                  ➕ Добавить обзор
-                </Link>
+                {!globalMode && (
+                  <Link
+                    to={`/hotels/${hotelId}/inspections?new=1`}
+                    className="rounded-xl bg-orange-500 px-4 py-2 font-semibold text-white hover:bg-orange-600"
+                  >
+                    ➕ Добавить обзор
+                  </Link>
+                )}
 
                 {!globalMode && (
                   <Link
