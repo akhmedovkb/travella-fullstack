@@ -626,6 +626,7 @@ function CheckGroup({ title, options, value, onToggle, danger = false }) {
 export default function HotelInspections() {
   const { t } = useTranslation();
   const { hotelId } = useParams();
+  const globalMode = !hotelId;
   const [search] = useSearchParams();
   const navigate = useNavigate();
   const isNew = search.get("new") === "1";
@@ -633,27 +634,67 @@ export default function HotelInspections() {
   const [items, setItems] = useState([]);
   const [sort, setSort] = useState("top");
 
-  useEffect(() => {
-    (async () => {
-      try { setHotel(await getHotel(hotelId)); } catch { setHotel(null); }
-    })();
-  }, [hotelId]);
+useEffect(() => {
+  if (globalMode) {
+    setHotel({
+      name: "Hotel Passport",
+    });
+    return;
+  }
 
-  const load = async () => {
+  (async () => {
     try {
-      const res = await listInspections(hotelId, { sort });
-      const norm = (res.items || []).map((x) => ({
-        ...x,
-        media: Array.isArray(x.media) ? x.media : typeof x.media === "string" ? JSON.parse(x.media || "[]") : [],
-        section_media: Array.isArray(x.section_media) ? x.section_media : [],
-        audience_keys: Array.isArray(x.audience_keys) ? x.audience_keys : [],
-        con_keys: Array.isArray(x.con_keys) ? x.con_keys : [],
-      }));
-      setItems(norm);
-    } catch { setItems([]); }
-  };
+      setHotel(await getHotel(hotelId));
+    } catch {
+      setHotel(null);
+    }
+  })();
+}, [hotelId, globalMode]);
 
-  useEffect(() => { if (!isNew) load(); }, [hotelId, sort, isNew]); // eslint-disable-line react-hooks/exhaustive-deps
+const load = async () => {
+  try {
+    let res;
+
+    if (globalMode) {
+      res = await apiGet(`/api/hotels/inspections?sort=${sort}`);
+    } else {
+      res = await listInspections(hotelId, { sort });
+    }
+
+    const norm = (res.items || []).map((x) => ({
+      ...x,
+      media:
+        Array.isArray(x.media)
+          ? x.media
+          : typeof x.media === "string"
+            ? JSON.parse(x.media || "[]")
+            : [],
+
+      section_media:
+        Array.isArray(x.section_media)
+          ? x.section_media
+          : [],
+
+      audience_keys:
+        Array.isArray(x.audience_keys)
+          ? x.audience_keys
+          : [],
+
+      con_keys:
+        Array.isArray(x.con_keys)
+          ? x.con_keys
+          : [],
+    }));
+
+    setItems(norm);
+  } catch {
+    setItems([]);
+  }
+};
+
+  useEffect(() => {
+    if (!isNew) load();
+  }, [hotelId, sort, isNew, globalMode]);
 
   const onLike = async (item) => {
     try {
@@ -676,7 +717,7 @@ export default function HotelInspections() {
               <option value="new">{t("hotels.inspections.sort.newOption", "Сначала новые")}</option>
             </select>
           )}
-          {!isNew && (
+          {!isNew && !globalMode && (
             <Link
               to={`/hotels/${hotelId}/inspections?new=1`}
               className="rounded-xl bg-orange-500 px-3 py-1.5 text-sm font-bold text-white hover:bg-orange-600"
@@ -684,7 +725,17 @@ export default function HotelInspections() {
               ➕ Добавить обзор
             </Link>
           )}
-          <Link to={`/hotels/${hotelId}`} className="text-sm text-blue-700 hover:underline">{t("hotels.inspections.back_to_hotel", "Назад к отелю")}</Link>
+          {!globalMode && (
+            <Link
+              to={`/hotels/${hotelId}`}
+              className="text-sm text-blue-700 hover:underline"
+            >
+              {t(
+                "hotels.inspections.back_to_hotel",
+                "Назад к отелю"
+              )}
+            </Link>
+          )}
         </div>
       </div>
 
@@ -708,12 +759,14 @@ export default function HotelInspections() {
                   ➕ Добавить обзор
                 </Link>
 
-                <Link
-                  to={`/hotels/${hotelId}`}
-                  className="rounded-xl border px-4 py-2 font-semibold text-slate-700 hover:bg-slate-50"
-                >
-                  Назад к отелю
-                </Link>
+                {!globalMode && (
+                  <Link
+                    to={`/hotels/${hotelId}`}
+                    className="rounded-xl border px-4 py-2 font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    Назад к отелю
+                  </Link>
+                )}
               </div>
             </div>
           )}
