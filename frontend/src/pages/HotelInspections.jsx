@@ -671,7 +671,29 @@ function AddInspectionWizard({ hotel, hotelId, onCreated }) {
             <div className="grid gap-3">
               <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Заголовок обзора" className="rounded-2xl border border-slate-200 px-3 py-3 text-sm font-semibold outline-none focus:border-orange-300" />
               <select value={visitType} onChange={(e) => setVisitType(e.target.value)} className="rounded-2xl border border-slate-200 px-3 py-3 text-sm font-semibold outline-none focus:border-orange-300">{VISIT_TYPES.map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}</select>
-              <select value={travelMonth} onChange={(e) => setTravelMonth(e.target.value)} className="rounded-2xl border border-slate-200 px-3 py-3 text-sm font-semibold outline-none focus:border-orange-300"><option value="">Месяц поездки / инспекции</option>{MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}</select>
+              <div className="grid gap-2">
+                <label className="text-sm font-black text-slate-700">
+                  Дата поездки / инспекции
+                </label>
+              
+                <input
+                  type="date"
+                  value={travelDate || ""}
+                  onChange={(e) => {
+                    const v = e.target.value;
+              
+                    setTravelDate(v);
+              
+                    if (v) {
+                      const month = new Date(v).getMonth() + 1;
+                      setTravelMonth(month);
+                    } else {
+                      setTravelMonth("");
+                    }
+                  }}
+                  className="rounded-2xl border border-slate-200 px-3 py-3 text-sm font-semibold outline-none focus:border-orange-300 focus:ring-4 focus:ring-orange-100"
+                />
+              </div>
               <textarea value={review} onChange={(e) => setReview(e.target.value)} placeholder="Общее впечатление: что важно знать агенту или туристу?" className="min-h-[120px] rounded-2xl border border-slate-200 px-3 py-3 text-sm font-semibold outline-none focus:border-orange-300" />
               <div className="grid gap-3 md:grid-cols-2"><textarea value={pros} onChange={(e) => setPros(e.target.value)} placeholder="Главные плюсы" className="min-h-[90px] rounded-2xl border border-emerald-100 bg-emerald-50/40 px-3 py-3 text-sm font-semibold outline-none" /><textarea value={cons} onChange={(e) => setCons(e.target.value)} placeholder="Минусы / предупреждения" className="min-h-[90px] rounded-2xl border border-amber-100 bg-amber-50/40 px-3 py-3 text-sm font-semibold outline-none" /></div>
               <textarea value={features} onChange={(e) => setFeatures(e.target.value)} placeholder="Особенности: фишки, нюансы, кому продавать осторожно" className="min-h-[80px] rounded-2xl border border-slate-200 px-3 py-3 text-sm font-semibold outline-none focus:border-orange-300" />
