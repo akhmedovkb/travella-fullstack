@@ -648,7 +648,7 @@ export default function Header() {
             )}
 
             {role === "client" && (
-              <RowGroupDark title={clientLabel}>
+              <RowGroupDark title={t("nav.client_workspace", "Клиент")}>
                 <NavItemMobileDark to="/client/dashboard" label={t("client.header.cabinet", { defaultValue: "Кабинет" })} icon={<IconDashboard />} />
                 <NavItemMobileDark
                   to="/client/balance"
