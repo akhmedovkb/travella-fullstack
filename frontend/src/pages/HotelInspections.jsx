@@ -705,45 +705,80 @@ const load = async () => {
 
   return (
     <div className="mx-auto max-w-6xl p-4">
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <div className="text-xs text-gray-500">{t("hotels.inspections.hotel_label", "Отель")}</div>
-          <div className="text-xl font-semibold">{hotel?.name || "…"}</div>
-        </div>
-        <div className="flex items-center gap-2">
-          {!isNew && (
-            <select className="rounded border px-2 py-1 text-sm" value={sort} onChange={(e) => setSort(e.target.value)}>
-              <option value="top">{t("hotels.inspections.sort.topOption", "Сначала с большим числом лайков")}</option>
-              <option value="new">{t("hotels.inspections.sort.newOption", "Сначала новые")}</option>
-            </select>
-          )}
-          {!isNew && !globalMode && (
-            <Link
-              to={`/hotels/${hotelId}/inspections?new=1`}
-              className="rounded-xl bg-orange-500 px-3 py-1.5 text-sm font-bold text-white hover:bg-orange-600"
-            >
-              ➕ Добавить обзор
-            </Link>
-          )}
-          {!isNew && globalMode && (
-            <Link
-              to="/hotels"
-              className="rounded-xl bg-orange-500 px-3 py-1.5 text-sm font-bold text-white hover:bg-orange-600"
-            >
-              ➕ Добавить обзор
-            </Link>
-          )}
-          {!globalMode && (
-            <Link
-              to={`/hotels/${hotelId}`}
-              className="text-sm text-blue-700 hover:underline"
-            >
-              {t(
-                "hotels.inspections.back_to_hotel",
-                "Назад к отелю"
-              )}
-            </Link>
-          )}
+      <div className="mb-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <div className="inline-flex rounded-full bg-orange-50 px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-orange-600 ring-1 ring-orange-100">
+              Hotel Passport
+            </div>
+
+            <div className="mt-3 text-xs font-semibold text-slate-500">
+              {globalMode ? "Все инспекции отелей" : t("hotels.inspections.hotel_label", "Отель")}
+            </div>
+
+            <div className="mt-1 text-2xl font-black tracking-[-0.03em] text-slate-950">
+              {hotel?.name || "…"}
+            </div>
+
+            {(hotel?.city || hotel?.country) && (
+              <div className="mt-1 text-sm text-slate-500">
+                {[hotel?.city, hotel?.country].filter(Boolean).join(", ")}
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {!isNew && (
+              <select
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
+                value={sort}
+                onChange={(e) => setSort(e.target.value)}
+              >
+                <option value="top">
+                  {t("hotels.inspections.sort.topOption", "Сначала с большим числом лайков")}
+                </option>
+                <option value="new">
+                  {t("hotels.inspections.sort.newOption", "Сначала новые")}
+                </option>
+              </select>
+            )}
+
+            {!isNew && !globalMode && (
+              <Link
+                to={`/hotels/${hotelId}/inspections?new=1`}
+                className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-bold text-white hover:bg-orange-600"
+              >
+                ➕ Добавить обзор
+              </Link>
+            )}
+
+            {!isNew && globalMode && (
+              <Link
+                to="/hotels"
+                className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-bold text-white hover:bg-orange-600"
+              >
+                ➕ Выбрать отель
+              </Link>
+            )}
+
+            {isNew && !globalMode && (
+              <Link
+                to={`/hotels/${hotelId}/inspections`}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+              >
+                ← К инспекциям
+              </Link>
+            )}
+
+            {!globalMode && (
+              <Link
+                to={`/hotels/${hotelId}`}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+              >
+                🏨 К отелю
+              </Link>
+            )}
+          </div>
         </div>
       </div>
 
@@ -754,29 +789,19 @@ const load = async () => {
           {items.map((it) => <Card key={it.id} item={it} onLike={onLike} />)}
 
           {items.length === 0 && (
-            <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-6 text-center shadow-sm">
-              <div className="text-sm font-semibold text-gray-500">
-                {t("hotels.inspections.empty", "Обзоров пока нет")}
+            <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center shadow-sm">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-50 text-2xl">
+                🏨
               </div>
 
-              <div className="mt-4 flex flex-col items-center justify-center gap-3 sm:flex-row">
-                {!globalMode && (
-                  <Link
-                    to={`/hotels/${hotelId}/inspections?new=1`}
-                    className="rounded-xl bg-orange-500 px-4 py-2 font-semibold text-white hover:bg-orange-600"
-                  >
-                    ➕ Добавить обзор
-                  </Link>
-                )}
+              <div className="mt-3 text-base font-black text-slate-900">
+                {t("hotels.inspections.empty", "Инспекций пока нет")}
+              </div>
 
-                {!globalMode && (
-                  <Link
-                    to={`/hotels/${hotelId}`}
-                    className="rounded-xl border px-4 py-2 font-semibold text-slate-700 hover:bg-slate-50"
-                  >
-                    Назад к отелю
-                  </Link>
-                )}
+              <div className="mt-1 text-sm font-medium text-slate-500">
+                {globalMode
+                  ? "Пока никто не оставил обзор отеля. Выберите отель и добавьте первую инспекцию."
+                  : "Будьте первым, кто оставит подробный обзор этого отеля."}
               </div>
             </div>
           )}
