@@ -89,7 +89,7 @@ const AUDIENCE_OPTIONS = [
 const CON_OPTIONS = [
   { key: "noise", icon: "🔊", label: "Шумно" },
   { key: "old_renovation", icon: "🧱", label: "Старый ремонт" },
-  { key: "weak_wifi", icon: "📶", label: "Слабый Wi‑Fi" },
+  { key: "weak_wifi", icon: "📶", label: "Слабый Wi-Fi" },
   { key: "queues", icon: "🚶", label: "Очереди" },
   { key: "few_sunbeds", icon: "🪑", label: "Мало лежаков" },
   { key: "construction", icon: "🏗", label: "Стройка рядом" },
@@ -152,7 +152,7 @@ function AuthorLink({ item }) {
 
   return (
     <div className="text-sm text-gray-500">
-      {t("hotels.inspections.author", "Автор")}: {" "}
+      {t("hotels.inspections.author", "Автор")}:{" "}
       {url ? (
         <Link to={url} className="text-blue-700 hover:underline" onClick={(e) => e.stopPropagation()}>
           {name}
@@ -432,7 +432,7 @@ function NewInspectionForm({ hotelId, onCancel, onCreated }) {
       const code = e?.code || e?.data?.error || e?.response?.data?.error;
       if (st === 401 || st === 403) setError(t("errors.only_authorized", "Нужно войти как клиент или поставщик"));
       else if (st === 409 && code === "already_inspected") setError(t("errors.already_inspected", "Вы уже оставляли инспекцию этого отеля"));
-      else if (code === "r2_upload_failed" ) setError("Ошибка загрузки в R2 storage");
+      else if (code === "r2_upload_failed") setError("Ошибка загрузки в R2 storage");
       else setError(t("errors.save_failed", "Не удалось сохранить"));
     } finally {
       setSaving(false);
@@ -454,7 +454,7 @@ function NewInspectionForm({ hotelId, onCancel, onCreated }) {
       <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
         <label className="md:col-span-2">
           <div className="mb-1 text-sm font-semibold text-slate-600">Заголовок</div>
-          <input className="w-full rounded-xl border px-3 py-2" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Например: Хороший семейный отель, но слабый Wi‑Fi" />
+          <input className="w-full rounded-xl border px-3 py-2" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Например: Хороший семейный отель, но слабый Wi-Fi" />
         </label>
         <label>
           <div className="mb-1 text-sm font-semibold text-slate-600">Месяц поездки</div>
@@ -676,6 +676,14 @@ export default function HotelInspections() {
               <option value="new">{t("hotels.inspections.sort.newOption", "Сначала новые")}</option>
             </select>
           )}
+          {!isNew && (
+            <Link
+              to={`/hotels/${hotelId}/inspections?new=1`}
+              className="rounded-xl bg-orange-500 px-3 py-1.5 text-sm font-bold text-white hover:bg-orange-600"
+            >
+              ➕ Добавить обзор
+            </Link>
+          )}
           <Link to={`/hotels/${hotelId}`} className="text-sm text-blue-700 hover:underline">{t("hotels.inspections.back_to_hotel", "Назад к отелю")}</Link>
         </div>
       </div>
@@ -685,7 +693,30 @@ export default function HotelInspections() {
       ) : (
         <div className="space-y-4">
           {items.map((it) => <Card key={it.id} item={it} onLike={onLike} />)}
-          {items.length === 0 && <div className="text-sm text-gray-500">{t("hotels.inspections.empty", "Обзоров пока нет")}</div>}
+
+          {items.length === 0 && (
+            <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-6 text-center shadow-sm">
+              <div className="text-sm font-semibold text-gray-500">
+                {t("hotels.inspections.empty", "Обзоров пока нет")}
+              </div>
+
+              <div className="mt-4 flex flex-col items-center justify-center gap-3 sm:flex-row">
+                <Link
+                  to={`/hotels/${hotelId}/inspections?new=1`}
+                  className="rounded-xl bg-orange-500 px-4 py-2 font-semibold text-white hover:bg-orange-600"
+                >
+                  ➕ Добавить обзор
+                </Link>
+
+                <Link
+                  to={`/hotels/${hotelId}`}
+                  className="rounded-xl border px-4 py-2 font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Назад к отелю
+                </Link>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
