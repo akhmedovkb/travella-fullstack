@@ -725,6 +725,14 @@ const load = async () => {
               ➕ Добавить обзор
             </Link>
           )}
+          {!isNew && globalMode && (
+            <Link
+              to="/hotels"
+              className="rounded-xl bg-orange-500 px-3 py-1.5 text-sm font-bold text-white hover:bg-orange-600"
+            >
+              ➕ Добавить обзор
+            </Link>
+          )}
           {!globalMode && (
             <Link
               to={`/hotels/${hotelId}`}
