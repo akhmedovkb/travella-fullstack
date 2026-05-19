@@ -718,6 +718,43 @@ export default function HotelInspections() {
     });
   }, [items, cityFilter, monthFilter, audienceFilter]);
 
+  const passportStats = useMemo(() => {
+    const rated = items
+      .map((item) => Number(item.recommendation_score))
+      .filter((n) => Number.isFinite(n) && n > 0);
+
+    const avg = rated.length
+      ? (rated.reduce((sum, n) => sum + n, 0) / rated.length).toFixed(1)
+      : null;
+
+    const audienceCount = {};
+    items.forEach((item) => {
+      (Array.isArray(item.audience_keys) ? item.audience_keys : []).forEach((key) => {
+        audienceCount[key] = (audienceCount[key] || 0) + 1;
+      });
+    });
+
+    const topAudienceKey = Object.entries(audienceCount).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+
+    const latestMonth = items
+      .map((item) => Number(item.travel_month))
+      .filter((n) => Number.isFinite(n) && n >= 1 && n <= 12)
+      .sort((a, b) => b - a)[0] || null;
+
+    const mediaCount = items.reduce((sum, item) => {
+      const sectionMedia = Array.isArray(item.section_media) ? item.section_media.length : 0;
+      const legacyMedia = Array.isArray(item.media) ? item.media.length : 0;
+      return sum + sectionMedia + legacyMedia;
+    }, 0);
+
+    return {
+      avg,
+      topAudience: topAudienceKey ? `${optionIcon(AUDIENCE_OPTIONS, topAudienceKey)} ${optionLabel(AUDIENCE_OPTIONS, topAudienceKey)}` : "—",
+      latestVisit: latestMonth ? MONTHS[latestMonth - 1] : "—",
+      mediaCount,
+    };
+  }, [items]);
+
   const resetFilters = () => {
     setCityFilter("");
     setMonthFilter("");
@@ -738,106 +775,188 @@ export default function HotelInspections() {
 
   return (
     <div className="mx-auto max-w-6xl p-4">
-      <div className="mb-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-500">
-              {globalMode ? "Hotel Passport" : t("hotels.inspections.hotel_label", "Отель")}
+      <div className="mb-5 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-100 bg-gradient-to-br from-white via-white to-orange-50/60 p-6">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <div className="inline-flex rounded-full bg-orange-50 px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-orange-600 ring-1 ring-orange-100">
+                HOTEL PASSPORT
+              </div>
+
+              <div className="mt-3 text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                {globalMode ? "Все инспекции отелей" : t("hotels.inspections.hotel_label", "Отель")}
+              </div>
+
+              <div className="mt-1 truncate text-3xl font-black tracking-[-0.04em] text-slate-950">
+                {hotel?.name || "…"}
+              </div>
+
+              {(hotel?.city || hotel?.country) && (
+                <div className="mt-1 text-sm font-semibold text-slate-500">
+                  {[hotel?.city, hotel?.country].filter(Boolean).join(", ")}
+                </div>
+              )}
+
+              {!isNew && (
+                <div className="mt-4 flex flex-wrap gap-2 text-xs font-bold text-slate-600">
+                  <span className="rounded-full bg-white px-3 py-1 ring-1 ring-slate-200">
+                    🏨 {items.length} инспекций
+                  </span>
+                  <span className="rounded-full bg-white px-3 py-1 ring-1 ring-slate-200">
+                    ⭐ {passportStats.avg ? `${passportStats.avg}/5` : "нет рейтинга"}
+                  </span>
+                  <span className="rounded-full bg-white px-3 py-1 ring-1 ring-slate-200">
+                    📸 {passportStats.mediaCount} медиа
+                  </span>
+                </div>
+              )}
             </div>
-            <div className="mt-1 text-2xl font-black tracking-[-0.03em] text-slate-950">
-              {hotel?.name || "…"}
-            </div>
-            {(hotel?.city || hotel?.country) && (
-              <div className="mt-1 text-sm font-semibold text-slate-500">
-                {[hotel?.city, hotel?.country].filter(Boolean).join(", ")}
+
+            {!isNew && (
+              <div className="grid w-full grid-cols-2 gap-3 sm:grid-cols-4 lg:w-auto">
+                <div className="rounded-2xl border border-orange-100 bg-white/90 p-3 shadow-sm">
+                  <div className="text-[11px] font-black uppercase tracking-[0.12em] text-orange-500">
+                    Инспекций
+                  </div>
+                  <div className="mt-2 text-2xl font-black text-slate-950">
+                    {items.length}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white/90 p-3 shadow-sm">
+                  <div className="text-[11px] font-black uppercase tracking-[0.12em] text-slate-500">
+                    Рейтинг
+                  </div>
+                  <div className="mt-2 text-2xl font-black text-slate-950">
+                    {passportStats.avg ? passportStats.avg : "—"}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white/90 p-3 shadow-sm">
+                  <div className="text-[11px] font-black uppercase tracking-[0.12em] text-slate-500">
+                    Аудитория
+                  </div>
+                  <div className="mt-2 truncate text-sm font-black text-slate-950">
+                    {passportStats.topAudience}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white/90 p-3 shadow-sm">
+                  <div className="text-[11px] font-black uppercase tracking-[0.12em] text-slate-500">
+                    Последний визит
+                  </div>
+                  <div className="mt-2 truncate text-sm font-black text-slate-950">
+                    {passportStats.latestVisit}
+                  </div>
+                </div>
               </div>
             )}
           </div>
+        </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {!isNew && (
-              <select
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none transition focus:border-orange-300 focus:ring-4 focus:ring-orange-50"
-                value={sort}
-                onChange={(e) => setSort(e.target.value)}
-              >
-                <option value="top">{t("hotels.inspections.sort.topOption", "Сначала с большим числом лайков")}</option>
-                <option value="new">{t("hotels.inspections.sort.newOption", "Сначала новые")}</option>
-              </select>
-            )}
+        <div className="p-4">
+          {isNew ? (
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {!globalMode && (
+                <>
+                  <Link
+                    to={`/hotels/${hotelId}/inspections`}
+                    className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+                  >
+                    ← К инспекциям
+                  </Link>
 
-            {!isNew && !globalMode && (
-              <Link
-                to={`/hotels/${hotelId}/inspections?new=1`}
-                className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-orange-600"
-              >
-                ➕ Добавить обзор
-              </Link>
-            )}
+                  <Link
+                    to={`/hotels/${hotelId}`}
+                    className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-orange-600"
+                  >
+                    🏨 К отелю
+                  </Link>
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none transition focus:border-orange-300 focus:ring-4 focus:ring-orange-50"
+                  value={sort}
+                  onChange={(e) => setSort(e.target.value)}
+                >
+                  <option value="top">{t("hotels.inspections.sort.topOption", "Сначала с большим числом лайков")}</option>
+                  <option value="new">{t("hotels.inspections.sort.newOption", "Сначала новые")}</option>
+                </select>
 
-            {!isNew && globalMode && (
-              <Link
-                to="/hotels"
-                className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-orange-600"
-              >
-                ➕ Выбрать отель
-              </Link>
-            )}
+                {globalMode && (
+                  <select
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none transition focus:border-orange-300 focus:ring-4 focus:ring-orange-50"
+                    value={cityFilter}
+                    onChange={(e) => setCityFilter(e.target.value)}
+                  >
+                    <option value="">Все города</option>
+                    {cityOptions.map((city) => <option key={city} value={city}>{city}</option>)}
+                  </select>
+                )}
 
-            {!globalMode && (
-              <Link
-                to={`/hotels/${hotelId}`}
-                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
-              >
-                Назад к отелю
-              </Link>
-            )}
-          </div>
+                <select
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none transition focus:border-orange-300 focus:ring-4 focus:ring-orange-50"
+                  value={monthFilter}
+                  onChange={(e) => setMonthFilter(e.target.value)}
+                >
+                  <option value="">Все месяцы</option>
+                  {MONTHS.map((month, idx) => <option key={month} value={idx + 1}>{month}</option>)}
+                </select>
+
+                <select
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none transition focus:border-orange-300 focus:ring-4 focus:ring-orange-50"
+                  value={audienceFilter}
+                  onChange={(e) => setAudienceFilter(e.target.value)}
+                >
+                  <option value="">Для кого подходит</option>
+                  {AUDIENCE_OPTIONS.map((item) => <option key={item.key} value={item.key}>{item.icon} {item.label}</option>)}
+                </select>
+
+                <button
+                  type="button"
+                  onClick={resetFilters}
+                  className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
+                >
+                  Сбросить
+                </button>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {!globalMode && (
+                  <Link
+                    to={`/hotels/${hotelId}/inspections?new=1`}
+                    className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-orange-600"
+                  >
+                    ➕ Добавить обзор
+                  </Link>
+                )}
+
+                {globalMode && (
+                  <Link
+                    to="/hotels"
+                    className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-orange-600"
+                  >
+                    ➕ Выбрать отель
+                  </Link>
+                )}
+
+                {!globalMode && (
+                  <Link
+                    to={`/hotels/${hotelId}`}
+                    className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+                  >
+                    Назад к отелю
+                  </Link>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
-
-      {!isNew && (
-        <div className="mb-4 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-            {globalMode && (
-              <select
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none transition focus:border-orange-300 focus:ring-4 focus:ring-orange-50"
-                value={cityFilter}
-                onChange={(e) => setCityFilter(e.target.value)}
-              >
-                <option value="">Все города</option>
-                {cityOptions.map((city) => <option key={city} value={city}>{city}</option>)}
-              </select>
-            )}
-
-            <select
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none transition focus:border-orange-300 focus:ring-4 focus:ring-orange-50"
-              value={monthFilter}
-              onChange={(e) => setMonthFilter(e.target.value)}
-            >
-              <option value="">Все месяцы</option>
-              {MONTHS.map((month, idx) => <option key={month} value={idx + 1}>{month}</option>)}
-            </select>
-
-            <select
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none transition focus:border-orange-300 focus:ring-4 focus:ring-orange-50"
-              value={audienceFilter}
-              onChange={(e) => setAudienceFilter(e.target.value)}
-            >
-              <option value="">Для кого подходит</option>
-              {AUDIENCE_OPTIONS.map((item) => <option key={item.key} value={item.key}>{item.icon} {item.label}</option>)}
-            </select>
-
-            <button
-              type="button"
-              onClick={resetFilters}
-              className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
-            >
-              Сбросить фильтры
-            </button>
-          </div>
-        </div>
-      )}
 
       {isNew ? (
         <NewInspectionForm hotelId={hotelId} onCancel={() => navigate(`/hotels/${hotelId}/inspections`)} onCreated={handleCreated} />
@@ -846,21 +965,47 @@ export default function HotelInspections() {
           {visibleItems.map((it) => <Card key={it.id} item={it} onLike={onLike} />)}
 
           {visibleItems.length === 0 && (
-            <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center shadow-sm">
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-50 text-2xl">
+            <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center shadow-sm">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-orange-50 text-3xl ring-1 ring-orange-100">
                 🏨
               </div>
 
-              <div className="mt-3 text-base font-black text-slate-900">
-                {t("hotels.inspections.empty", "Инспекций пока нет")}
+              <div className="mt-5 text-2xl font-black text-slate-950">
+                {items.length > 0 ? "По фильтрам ничего не найдено" : t("hotels.inspections.empty", "Инспекций пока нет")}
               </div>
 
-              <div className="mt-1 text-sm font-medium text-slate-500">
+              <div className="mx-auto mt-2 max-w-xl text-sm font-medium text-slate-500">
                 {items.length > 0
-                  ? "По выбранным фильтрам ничего не найдено. Сбросьте фильтры или выберите другие значения."
+                  ? "Сбросьте фильтры или выберите другие значения."
                   : globalMode
                     ? "Пока никто не оставил обзор отеля. Выберите отель и добавьте первую инспекцию."
-                    : "Будьте первым, кто оставит подробный обзор этого отеля."}
+                    : "Первый обзор поможет туристам, агентам и поставщикам лучше понять реальное состояние этого отеля."}
+              </div>
+
+              <div className="mt-6 flex flex-wrap justify-center gap-2">
+                {items.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={resetFilters}
+                    className="rounded-xl border border-slate-200 px-5 py-3 font-bold text-slate-700 transition hover:bg-slate-50"
+                  >
+                    Сбросить фильтры
+                  </button>
+                ) : globalMode ? (
+                  <Link
+                    to="/hotels"
+                    className="rounded-xl bg-orange-500 px-6 py-3 font-bold text-white transition hover:bg-orange-600"
+                  >
+                    ➕ Выбрать отель
+                  </Link>
+                ) : (
+                  <Link
+                    to={`/hotels/${hotelId}/inspections?new=1`}
+                    className="rounded-xl bg-orange-500 px-6 py-3 font-bold text-white transition hover:bg-orange-600"
+                  >
+                    ➕ Добавить обзор
+                  </Link>
+                )}
               </div>
             </div>
           )}
