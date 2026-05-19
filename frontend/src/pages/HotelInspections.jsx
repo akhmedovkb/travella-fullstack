@@ -480,7 +480,7 @@ function NewInspectionForm({ hotelId, onCancel, onCreated }) {
             <p className="mt-1 max-w-2xl text-sm font-medium leading-6 text-slate-500">Фото, видео, оценки и заметки разделены по шагам, чтобы обзор было проще заполнить и читать.</p>
           </div>
 
-          <div className="grid grid-cols-3 gap-2 text-xs font-bold text-slate-600">
+          <div className="grid grid-cols-3 gap-2 self-start text-xs font-bold text-slate-600">
             <div className="rounded-2xl bg-white px-3 py-2 text-center ring-1 ring-slate-200">
               <div className="text-slate-400">Медиа</div>
               <div className="mt-1 text-lg font-black text-slate-950">{mediaCount}</div>
@@ -1036,7 +1036,7 @@ export default function HotelInspections() {
       </div>
 
       {isNew ? (
-        <div className="px-6">
+        <div className="px-6 -mt-2">
           <NewInspectionForm
             hotelId={hotelId}
             onCancel={() => navigate(`/hotels/${hotelId}/inspections`)}
