@@ -4,6 +4,7 @@
 const axios = require("axios");
 const crypto = require("crypto");
 const { Pool } = require("pg");
+const { uploadBufferToCloudinary } = require("../utils/cloudinary");
 
 // /api/hotels/:id/brief
 async function getHotelBrief(req, res) {
@@ -572,17 +573,85 @@ async function ensureInspectionsTable() {
     )
   `);
   await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS author_provider_id INTEGER`);
+  await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS author_client_id INTEGER`);
+  await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS author_type TEXT`);
+  await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS title TEXT`);
+  await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS visit_type TEXT`);
+  await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS trip_type TEXT`);
+  await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS travel_month INTEGER`);
+  await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS recommendation_score INTEGER`);
   await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS scores JSONB`);
   await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS amenities JSONB`);
   await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS nearby JSONB`);
   await db.query(`CREATE INDEX IF NOT EXISTS idx_inspections_hotel ON inspections(hotel_id)`);
   await db.query(`CREATE INDEX IF NOT EXISTS idx_inspections_author ON inspections(author_provider_id)`);
-  // уникальность: один провайдер — одна инспекция на отель
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_inspections_client ON inspections(author_client_id)`);
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_inspections_author_type ON inspections(author_type)`);
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_inspections_travel_month ON inspections(travel_month)`);
+  // уникальность: один провайдер — одна инспекция на отель. Клиентские обзоры не блокируем этим индексом.
   await db.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS uniq_inspections_hotel_author
       ON inspections(hotel_id, author_provider_id)
       WHERE author_provider_id IS NOT NULL
   `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS hotel_inspection_media (
+      id SERIAL PRIMARY KEY,
+      inspection_id INTEGER NOT NULL REFERENCES inspections(id) ON DELETE CASCADE,
+      media_type TEXT NOT NULL CHECK (media_type IN ('photo','video')),
+      section_key TEXT NOT NULL,
+      caption TEXT,
+      tags JSONB DEFAULT '[]'::jsonb,
+      url TEXT NOT NULL,
+      public_id TEXT,
+      thumbnail_url TEXT,
+      width INTEGER,
+      height INTEGER,
+      duration_seconds INTEGER,
+      sort_order INTEGER DEFAULT 0,
+      created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW()
+    )
+  `);
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_hotel_inspection_media_inspection ON hotel_inspection_media(inspection_id)`);
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_hotel_inspection_media_section ON hotel_inspection_media(section_key)`);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS hotel_inspection_audience (
+      id SERIAL PRIMARY KEY,
+      inspection_id INTEGER NOT NULL REFERENCES inspections(id) ON DELETE CASCADE,
+      audience_key TEXT NOT NULL,
+      created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW()
+    )
+  `);
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_hotel_inspection_audience_inspection ON hotel_inspection_audience(inspection_id)`);
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_hotel_inspection_audience_key ON hotel_inspection_audience(audience_key)`);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS hotel_inspection_cons (
+      id SERIAL PRIMARY KEY,
+      inspection_id INTEGER NOT NULL REFERENCES inspections(id) ON DELETE CASCADE,
+      con_key TEXT NOT NULL,
+      created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW()
+    )
+  `);
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_hotel_inspection_cons_inspection ON hotel_inspection_cons(inspection_id)`);
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_hotel_inspection_cons_key ON hotel_inspection_cons(con_key)`);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS hotel_inspection_comments (
+      id SERIAL PRIMARY KEY,
+      inspection_id INTEGER NOT NULL REFERENCES inspections(id) ON DELETE CASCADE,
+      author_type TEXT,
+      author_id INTEGER,
+      author_name TEXT,
+      text TEXT NOT NULL,
+      likes INTEGER DEFAULT 0,
+      created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+      deleted_at TIMESTAMP WITHOUT TIME ZONE
+    )
+  `);
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_hotel_inspection_comments_inspection ON hotel_inspection_comments(inspection_id)`);
 }
 
 // таблица уникальных лайков (toggle)
@@ -612,6 +681,130 @@ async function ensureInspectionLikesTable() {
 }
 
 // actor из токена/заголовков (fallback для гостей: ip+ua)
+
+const HOTEL_REVIEW_MEDIA_SECTIONS = new Set([
+  "room",
+  "food",
+  "beach",
+  "pool",
+  "territory",
+  "kids",
+  "entertainment",
+  "service",
+  "location",
+  "spa",
+  "sport",
+  "view",
+  "warning",
+]);
+
+const HOTEL_REVIEW_AUDIENCE_KEYS = new Set([
+  "youth",
+  "families",
+  "couples",
+  "seniors",
+  "business",
+  "solo",
+  "luxury",
+  "budget",
+  "quiet",
+  "active",
+]);
+
+const HOTEL_REVIEW_CON_KEYS = new Set([
+  "noise",
+  "old_renovation",
+  "weak_wifi",
+  "queues",
+  "few_sunbeds",
+  "construction",
+  "far_sea",
+  "monotone_food",
+  "small_beach",
+  "crowded",
+]);
+
+function safeJson(v, fallback = null) {
+  if (v == null || v === "") return fallback;
+  if (typeof v === "object") return v;
+  try { return JSON.parse(String(v)); } catch { return fallback; }
+}
+
+function normalizeKey(v, allowed, fallback = null) {
+  const k = String(v || "").trim().toLowerCase();
+  return allowed.has(k) ? k : fallback;
+}
+
+function normalizeStringArray(v, allowed = null, limit = 20) {
+  const raw = Array.isArray(v) ? v : safeJson(v, []);
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  for (const item of raw) {
+    const k = String(item || "").trim().toLowerCase();
+    if (!k) continue;
+    if (allowed && !allowed.has(k)) continue;
+    if (!out.includes(k)) out.push(k);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+function clampInt(v, lo, hi) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  return Math.min(hi, Math.max(lo, Math.round(n)));
+}
+
+function inferUploadedMediaType(file = {}) {
+  const m = String(file.mimetype || "").toLowerCase();
+  if (m.startsWith("video/")) return "video";
+  return "photo";
+}
+
+function buildUploadMeta(req) {
+  const body = req.body || {};
+  const raw = safeJson(body.mediaMeta || body.media_meta, []);
+  return Array.isArray(raw) ? raw : [];
+}
+
+async function insertHotelInspectionRelations(client, inspectionId, { audienceKeys = [], conKeys = [], mediaRows = [] }) {
+  for (const audienceKey of audienceKeys) {
+    await client.query(
+      `INSERT INTO hotel_inspection_audience (inspection_id, audience_key) VALUES ($1,$2)`,
+      [inspectionId, audienceKey]
+    );
+  }
+
+  for (const conKey of conKeys) {
+    await client.query(
+      `INSERT INTO hotel_inspection_cons (inspection_id, con_key) VALUES ($1,$2)`,
+      [inspectionId, conKey]
+    );
+  }
+
+  for (const m of mediaRows) {
+    await client.query(
+      `INSERT INTO hotel_inspection_media
+         (inspection_id, media_type, section_key, caption, tags, url, public_id, thumbnail_url, width, height, duration_seconds, sort_order)
+       VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10,$11,$12)`,
+      [
+        inspectionId,
+        m.media_type,
+        m.section_key || "room",
+        m.caption || null,
+        JSON.stringify(Array.isArray(m.tags) ? m.tags : []),
+        m.url,
+        m.public_id || null,
+        m.thumbnail_url || null,
+        m.width || null,
+        m.height || null,
+        m.duration_seconds || null,
+        Number.isFinite(Number(m.sort_order)) ? Number(m.sort_order) : 0,
+      ]
+    );
+  }
+}
+
 function getActorFromReq(req) {
   const u = req.user || {};
   const role = (u.role || u.type || "").toString().toLowerCase();
@@ -730,9 +923,9 @@ async function listHotelInspections(req, res) {
     await ensureInspectionsTable();
     await ensureInspectionLikesTable();
 
-    // кто смотрит (для liked_by_me и "мои сверху")
     const { actorType, actorId, fp } = getActorFromReq(req);
     const myProviderId = (actorType === "provider") ? actorId : null;
+    const myClientId = (actorType === "client") ? actorId : null;
 
     const sort = String(req.query.sort || "top").toLowerCase();
     const baseOrder =
@@ -740,31 +933,66 @@ async function listHotelInspections(req, res) {
         ? `i.created_at DESC, i.id DESC`
         : `COALESCE(i.likes,0) DESC, i.created_at DESC`;
 
-        // динамически собираем параметры и их индексы
     const params = [hotelId];
     let idx = 1;
-    
+
     let myOrder = ``;
-    let myProvIdx = null;
     if (myProviderId != null) {
       params.push(myProviderId);
-      myProvIdx = ++idx;
+      const myProvIdx = ++idx;
       myOrder = `CASE WHEN i.author_provider_id = $${myProvIdx}::int THEN 0 ELSE 1 END, `;
+    } else if (myClientId != null) {
+      params.push(myClientId);
+      const myClientIdx = ++idx;
+      myOrder = `CASE WHEN i.author_client_id = $${myClientIdx}::int THEN 0 ELSE 1 END, `;
     }
-    
-    // актор для liked_by_me
+
     params.push(actorId);      const actorIdIdx   = ++idx;
     params.push(actorType);    const actorTypeIdx = ++idx;
     params.push(fp);           const fpIdx        = ++idx;
-    
+
     const sql = `
       SELECT
-        i.id, i.hotel_id, i.author_name, i.author_provider_id,
+        i.id, i.hotel_id, i.author_name, i.author_type, i.author_provider_id, i.author_client_id,
+        i.title, i.visit_type, i.trip_type, i.travel_month, i.recommendation_score,
         i.review, i.pros, i.cons, i.features,
         i.media, i.scores, i.amenities, i.nearby,
         i.likes, i.created_at,
+        COALESCE(media.media_items, '[]'::jsonb) AS section_media,
+        COALESCE(aud.audience_keys, '[]'::jsonb) AS audience_keys,
+        COALESCE(cns.con_keys, '[]'::jsonb) AS con_keys,
         (liked.id IS NOT NULL) AS liked_by_me
       FROM inspections i
+      LEFT JOIN LATERAL (
+        SELECT jsonb_agg(
+          jsonb_build_object(
+            'id', m.id,
+            'media_type', m.media_type,
+            'section_key', m.section_key,
+            'caption', m.caption,
+            'tags', COALESCE(m.tags, '[]'::jsonb),
+            'url', m.url,
+            'public_id', m.public_id,
+            'thumbnail_url', m.thumbnail_url,
+            'width', m.width,
+            'height', m.height,
+            'duration_seconds', m.duration_seconds,
+            'sort_order', m.sort_order
+          ) ORDER BY m.section_key, m.sort_order, m.id
+        ) AS media_items
+        FROM hotel_inspection_media m
+        WHERE m.inspection_id = i.id
+      ) media ON true
+      LEFT JOIN LATERAL (
+        SELECT jsonb_agg(DISTINCT a.audience_key) AS audience_keys
+        FROM hotel_inspection_audience a
+        WHERE a.inspection_id = i.id
+      ) aud ON true
+      LEFT JOIN LATERAL (
+        SELECT jsonb_agg(DISTINCT c.con_key) AS con_keys
+        FROM hotel_inspection_cons c
+        WHERE c.inspection_id = i.id
+      ) cns ON true
       LEFT JOIN inspection_likes liked
         ON liked.inspection_id = i.id
        AND (
@@ -775,7 +1003,7 @@ async function listHotelInspections(req, res) {
       ORDER BY ${myOrder}${baseOrder}
       LIMIT 200
     `;
-    
+
     const { rows } = await db.query(sql, params);
 
     const items = (rows || []).map((r) => ({
@@ -783,6 +1011,9 @@ async function listHotelInspections(req, res) {
       media: typeof r.media === "string"
         ? JSON.parse(r.media || "[]")
         : (Array.isArray(r.media) ? r.media : (r.media || [])),
+      section_media: Array.isArray(r.section_media) ? r.section_media : (r.section_media || []),
+      audience_keys: Array.isArray(r.audience_keys) ? r.audience_keys : (r.audience_keys || []),
+      con_keys: Array.isArray(r.con_keys) ? r.con_keys : (r.con_keys || []),
       author_profile_url: r.author_provider_id ? `/profile/provider/${r.author_provider_id}` : null,
     }));
 
@@ -793,7 +1024,7 @@ async function listHotelInspections(req, res) {
   }
 }
 
-// POST /api/hotels/:id/inspections  (+ запрет повторной инспекции)
+// POST /api/hotels/:id/inspections  (+ запрет повторной инспекции для провайдера)
 async function createHotelInspection(req, res) {
   const hotelId = parseIntSafe(req.params.id);
   if (!hotelId) return res.status(400).json({ error: "bad_hotel_id" });
@@ -812,68 +1043,161 @@ async function createHotelInspection(req, res) {
       parseIntSafe(u.companyId) ??
       (role === "provider" ? parseIntSafe(u.id) : null);
 
+    const clientIdFromToken =
+      parseIntSafe(u.client_id) ??
+      parseIntSafe(u.clientId) ??
+      (role === "client" ? parseIntSafe(u.id) : null);
+
     const authorProviderId =
       parseIntSafe(p.author_provider_id) ??
       parseIntSafe(p.provider_id) ??
       parseIntSafe(p.providerId) ??
-      parseIntSafe(p.author_id) ??
-      parseIntSafe(p.authorId) ??
       providerIdFromToken ??
       null;
 
-    if (!authorProviderId) {
-      return res.status(403).json({ error: "provider_required" });
+    const authorClientId =
+      parseIntSafe(p.author_client_id) ??
+      parseIntSafe(p.client_id) ??
+      parseIntSafe(p.clientId) ??
+      clientIdFromToken ??
+      null;
+
+    const authorType = authorProviderId ? "provider" : (authorClientId ? "client" : (role || "user"));
+
+    if (!authorProviderId && !authorClientId && !isAdminLike(u)) {
+      return res.status(403).json({ error: "auth_required" });
     }
 
-    // запрет: один провайдер == одна инспекция на отель
-    const dup = await db.query(
-      `SELECT 1 FROM inspections WHERE hotel_id=$1 AND author_provider_id=$2 LIMIT 1`,
-      [hotelId, authorProviderId]
-    );
-    if (dup.rowCount) {
-      return res.status(409).json({ error: "already_inspected" });
+    // запрет: один провайдер == одна инспекция на отель. Клиентские обзоры не блокируем.
+    if (authorProviderId) {
+      const dup = await db.query(
+        `SELECT 1 FROM inspections WHERE hotel_id=$1 AND author_provider_id=$2 LIMIT 1`,
+        [hotelId, authorProviderId]
+      );
+      if (dup.rowCount) {
+        return res.status(409).json({ error: "already_inspected" });
+      }
     }
 
     const nameFinal =
       first(p.author_name) ||
-      first(u.company_name, u.provider_name, u.name, u.companyName, u.display_name) ||
-      "провайдер";
+      first(u.company_name, u.provider_name, u.name, u.full_name, u.companyName, u.display_name) ||
+      (authorType === "client" ? "клиент Travella" : "провайдер");
 
-    const mediaArr  = Array.isArray(p.media) ? p.media.slice(0, 12) : [];
-    const scores    = (p.scores && typeof p.scores === "object") ? p.scores : null;
-    const amenities = Array.isArray(p.amenities) ? p.amenities : null;
-    const nearby    = (p.nearby && typeof p.nearby === "object") ? p.nearby : null;
+    const legacyMediaArr = Array.isArray(p.media) ? p.media.slice(0, 20) : safeJson(p.media, []);
+    const scores    = (p.scores && typeof p.scores === "object") ? p.scores : safeJson(p.scores, null);
+    const amenities = Array.isArray(p.amenities) ? p.amenities : safeJson(p.amenities, null);
+    const nearby    = (p.nearby && typeof p.nearby === "object") ? p.nearby : safeJson(p.nearby, null);
 
-    const { rows } = await db.query(
-      `INSERT INTO inspections
-         (hotel_id, author_name, author_provider_id,
-          review, pros, cons, features,
-          media, scores, amenities, nearby, likes)
-       VALUES
-         ($1, $2, $3,
-          $4, $5, $6, $7,
-          $8::jsonb, $9::jsonb, $10::jsonb, $11::jsonb, 0)
-       RETURNING id`,
-      [
-        hotelId,
-        nameFinal || null,
-        authorProviderId,
-        p.review || null,
-        p.pros || null,
-        p.cons || null,
-        p.features || null,
-        JSON.stringify(mediaArr),
-        scores ? JSON.stringify(scores) : null,
-        amenities ? JSON.stringify(amenities) : null,
-        nearby ? JSON.stringify(nearby) : null,
-      ]
-    );
+    const audienceKeys = normalizeStringArray(p.audience_keys || p.audienceKeys, HOTEL_REVIEW_AUDIENCE_KEYS, 12);
+    const conKeys = normalizeStringArray(p.con_keys || p.conKeys, HOTEL_REVIEW_CON_KEYS, 12);
 
-    await ensureHotelsAggregates(hotelId);
+    const travelMonth = clampInt(p.travel_month || p.travelMonth, 1, 12);
+    const recommendationScore = clampInt(p.recommendation_score || p.recommendationScore, 1, 5);
 
-    res.json({ id: rows[0].id });
+    const mediaMeta = buildUploadMeta(req);
+    const uploadFiles = Array.isArray(req.files) ? req.files : [];
+    const mediaRows = [];
+
+    for (let i = 0; i < uploadFiles.length; i += 1) {
+      const file = uploadFiles[i];
+      const meta = mediaMeta[i] || {};
+      const sectionKey = normalizeKey(meta.section_key || meta.sectionKey || p.section_key, HOTEL_REVIEW_MEDIA_SECTIONS, "room");
+      const tags = normalizeStringArray(meta.tags, null, 16);
+      const uploaded = await uploadBufferToCloudinary(file, {
+        public_prefix: `hotel-${hotelId}-${sectionKey}`,
+      });
+      mediaRows.push({
+        media_type: inferUploadedMediaType(file),
+        section_key: sectionKey,
+        caption: first(meta.caption, meta.label),
+        tags,
+        url: uploaded.url,
+        public_id: uploaded.public_id,
+        thumbnail_url: uploaded.thumbnail_url,
+        width: uploaded.width,
+        height: uploaded.height,
+        duration_seconds: uploaded.duration_seconds,
+        sort_order: i,
+      });
+    }
+
+    // Legacy URLs/dataURL are preserved in inspections.media for old UI compatibility.
+    // If frontend sends structured URL media, also persist it in section table.
+    const structuredUrlMedia = safeJson(p.section_media || p.sectionMedia, []);
+    if (Array.isArray(structuredUrlMedia)) {
+      for (let i = 0; i < structuredUrlMedia.length; i += 1) {
+        const m = structuredUrlMedia[i] || {};
+        const url = first(m.url, m.src);
+        if (!url) continue;
+        mediaRows.push({
+          media_type: String(m.media_type || m.mediaType || "photo").toLowerCase() === "video" ? "video" : "photo",
+          section_key: normalizeKey(m.section_key || m.sectionKey, HOTEL_REVIEW_MEDIA_SECTIONS, "room"),
+          caption: first(m.caption, m.label),
+          tags: normalizeStringArray(m.tags, null, 16),
+          url,
+          public_id: m.public_id || m.publicId || null,
+          thumbnail_url: m.thumbnail_url || m.thumbnailUrl || url,
+          sort_order: Number.isFinite(Number(m.sort_order)) ? Number(m.sort_order) : i,
+        });
+      }
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const { rows } = await client.query(
+        `INSERT INTO inspections
+           (hotel_id, author_name, author_type, author_provider_id, author_client_id,
+            title, visit_type, trip_type, travel_month, recommendation_score,
+            review, pros, cons, features,
+            media, scores, amenities, nearby, likes)
+         VALUES
+           ($1, $2, $3, $4, $5,
+            $6, $7, $8, $9, $10,
+            $11, $12, $13, $14,
+            $15::jsonb, $16::jsonb, $17::jsonb, $18::jsonb, 0)
+         RETURNING id`,
+        [
+          hotelId,
+          nameFinal || null,
+          authorType,
+          authorProviderId,
+          authorClientId,
+          p.title || null,
+          p.visit_type || p.visitType || null,
+          p.trip_type || p.tripType || null,
+          travelMonth,
+          recommendationScore,
+          p.review || null,
+          p.pros || null,
+          p.cons || null,
+          p.features || null,
+          JSON.stringify(Array.isArray(legacyMediaArr) ? legacyMediaArr.slice(0, 20) : []),
+          scores ? JSON.stringify(scores) : null,
+          amenities ? JSON.stringify(amenities) : null,
+          nearby ? JSON.stringify(nearby) : null,
+        ]
+      );
+
+      const inspectionId = rows[0].id;
+      await insertHotelInspectionRelations(client, inspectionId, { audienceKeys, conKeys, mediaRows });
+      await client.query("COMMIT");
+
+      await ensureHotelsAggregates(hotelId);
+
+      return res.json({ id: inspectionId, media: mediaRows });
+    } catch (txErr) {
+      await client.query("ROLLBACK");
+      throw txErr;
+    } finally {
+      client.release();
+    }
   } catch (e) {
     console.error("createHotelInspection error", e);
+    if (e?.code === "cloudinary_not_configured") {
+      return res.status(500).json({ error: "cloudinary_not_configured" });
+    }
     res.status(500).json({ error: "create_failed" });
   }
 }
