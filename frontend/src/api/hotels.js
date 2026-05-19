@@ -34,7 +34,7 @@ export function updateHotel(hotelId, payload) {
 
 /** Создать обзор/инспекцию отеля. Поддерживает JSON и FormData с фото/видео. */
 export async function createInspection(hotelId, payload) {
-  const url = `/api/hotel-inspections/hotel/${encodeURIComponent(hotelId)}`;
+  const url = `/api/hotels/${encodeURIComponent(hotelId)}/inspections`;
 
   if (payload instanceof FormData) {
     const res = await fetch(buildUrl(url), {
@@ -70,12 +70,12 @@ export async function createInspection(hotelId, payload) {
 /** Список инспекций (публично). sort: "top" | "new" */
 export function listInspections(hotelId, { sort = "top" } = {}) {
   return apiGet(
-    `/api/hotel-inspections/hotel/${encodeURIComponent(hotelId)}?sort=${encodeURIComponent(sort)}`,
+    `/api/hotels/${encodeURIComponent(hotelId)}/inspections?sort=${encodeURIComponent(sort)}`,
     false
   );
 }
 
 /** Лайк инспекции (auto-роль: подойдёт любой доступный токен) */
 export function likeInspection(inspectionId) {
-  return apiPost(`/api/hotel-inspections/${encodeURIComponent(inspectionId)}/like`, {}, true);
+  return apiPost(`/api/hotels/inspections/${encodeURIComponent(inspectionId)}/like`, {}, true);
 }
