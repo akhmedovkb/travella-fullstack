@@ -751,6 +751,19 @@ function clampInt(v, lo, hi) {
   return Math.min(hi, Math.max(lo, Math.round(n)));
 }
 
+function normalizeVisitType(v) {
+  const value = String(v || "").trim().toLowerCase();
+  const allowed = new Set(["stayed", "agent_inspection", "fam_trip", "site_visit", "client_review", "other"]);
+  return allowed.has(value) ? value : null;
+}
+
+function normalizeInspectionSort(v) {
+  const value = String(v || "top").trim().toLowerCase();
+  if (value === "new" || value === "recent") return "new";
+  if (value === "score") return "score";
+  return "top";
+}
+
 function inferUploadedMediaType(file = {}) {
   const m = String(file.mimetype || "").toLowerCase();
   if (m.startsWith("video/")) return "video";
@@ -918,14 +931,51 @@ async function listAllHotelInspections(req, res) {
 
     const { actorType, actorId, fp } = getActorFromReq(req);
 
-    const sort = String(req.query.sort || "top").toLowerCase();
+    const sort = normalizeInspectionSort(req.query.sort);
     const order =
       sort === "new"
         ? `i.created_at DESC, i.id DESC`
-        : `COALESCE(i.likes,0) DESC, i.created_at DESC, i.id DESC`;
+        : sort === "score"
+          ? `COALESCE(i.recommendation_score,0) DESC, COALESCE(i.likes,0) DESC, i.created_at DESC, i.id DESC`
+          : `COALESCE(i.likes,0) DESC, i.created_at DESC, i.id DESC`;
 
     const params = [];
     let idx = 0;
+    const where = [];
+
+    const city = String(req.query.city || "").trim();
+    if (city) {
+      params.push(`%${city}%`);
+      where.push(`COALESCE(h.city, h.location, '') ILIKE $${++idx}`);
+    }
+
+    const month = clampInt(req.query.month || req.query.travel_month, 1, 12);
+    if (month) {
+      params.push(month);
+      where.push(`i.travel_month = $${++idx}`);
+    }
+
+    const audience = normalizeKey(req.query.audience || req.query.audience_key, HOTEL_REVIEW_AUDIENCE_KEYS, null);
+    if (audience) {
+      params.push(audience);
+      where.push(`EXISTS (SELECT 1 FROM hotel_inspection_audience fa WHERE fa.inspection_id = i.id AND fa.audience_key = $${++idx})`);
+    }
+
+    const visitType = normalizeVisitType(req.query.visit_type || req.query.visitType);
+    if (visitType) {
+      params.push(visitType);
+      where.push(`i.visit_type = $${++idx}`);
+    }
+
+    const minScore = clampInt(req.query.min_score || req.query.minScore, 1, 5);
+    if (minScore) {
+      params.push(minScore);
+      where.push(`COALESCE(i.recommendation_score,0) >= $${++idx}`);
+    }
+
+    if (String(req.query.has_media || req.query.hasMedia || "").toLowerCase() === "1" || String(req.query.has_media || req.query.hasMedia || "").toLowerCase() === "true") {
+      where.push(`EXISTS (SELECT 1 FROM hotel_inspection_media fm WHERE fm.inspection_id = i.id)`);
+    }
 
     params.push(actorId);
     const actorIdIdx = ++idx;
@@ -947,6 +997,7 @@ async function listAllHotelInspections(req, res) {
         COALESCE(media.media_items, '[]'::jsonb) AS section_media,
         COALESCE(aud.audience_keys, '[]'::jsonb) AS audience_keys,
         COALESCE(cns.con_keys, '[]'::jsonb) AS con_keys,
+        COALESCE(cmt.comment_count, 0)::int AS comment_count,
         (liked.id IS NOT NULL) AS liked_by_me
       FROM inspections i
       LEFT JOIN hotels h ON h.id = i.hotel_id
@@ -980,12 +1031,18 @@ async function listAllHotelInspections(req, res) {
         FROM hotel_inspection_cons c
         WHERE c.inspection_id = i.id
       ) cns ON true
+      LEFT JOIN LATERAL (
+        SELECT COUNT(*)::int AS comment_count
+        FROM hotel_inspection_comments hc
+        WHERE hc.inspection_id = i.id AND hc.deleted_at IS NULL
+      ) cmt ON true
       LEFT JOIN inspection_likes liked
         ON liked.inspection_id = i.id
        AND (
             ($${actorIdIdx}::int IS NOT NULL AND liked.actor_type = $${actorTypeIdx}::text AND liked.actor_id = $${actorIdIdx}::int)
             OR ($${fpIdx}::text IS NOT NULL AND liked.fp = $${fpIdx}::text)
        )
+      ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
       ORDER BY ${order}
       LIMIT 200
     `;
@@ -1031,6 +1088,35 @@ async function listHotelInspections(req, res) {
 
     const params = [hotelId];
     let idx = 1;
+    const where = [`i.hotel_id = $1`];
+
+    const month = clampInt(req.query.month || req.query.travel_month, 1, 12);
+    if (month) {
+      params.push(month);
+      where.push(`i.travel_month = $${++idx}`);
+    }
+
+    const audience = normalizeKey(req.query.audience || req.query.audience_key, HOTEL_REVIEW_AUDIENCE_KEYS, null);
+    if (audience) {
+      params.push(audience);
+      where.push(`EXISTS (SELECT 1 FROM hotel_inspection_audience fa WHERE fa.inspection_id = i.id AND fa.audience_key = $${++idx})`);
+    }
+
+    const visitType = normalizeVisitType(req.query.visit_type || req.query.visitType);
+    if (visitType) {
+      params.push(visitType);
+      where.push(`i.visit_type = $${++idx}`);
+    }
+
+    const minScore = clampInt(req.query.min_score || req.query.minScore, 1, 5);
+    if (minScore) {
+      params.push(minScore);
+      where.push(`COALESCE(i.recommendation_score,0) >= $${++idx}`);
+    }
+
+    if (String(req.query.has_media || req.query.hasMedia || "").toLowerCase() === "1" || String(req.query.has_media || req.query.hasMedia || "").toLowerCase() === "true") {
+      where.push(`EXISTS (SELECT 1 FROM hotel_inspection_media fm WHERE fm.inspection_id = i.id)`);
+    }
 
     let myOrder = ``;
     if (myProviderId != null) {
@@ -1057,6 +1143,7 @@ async function listHotelInspections(req, res) {
         COALESCE(media.media_items, '[]'::jsonb) AS section_media,
         COALESCE(aud.audience_keys, '[]'::jsonb) AS audience_keys,
         COALESCE(cns.con_keys, '[]'::jsonb) AS con_keys,
+        COALESCE(cmt.comment_count, 0)::int AS comment_count,
         (liked.id IS NOT NULL) AS liked_by_me
       FROM inspections i
       LEFT JOIN LATERAL (
@@ -1089,13 +1176,18 @@ async function listHotelInspections(req, res) {
         FROM hotel_inspection_cons c
         WHERE c.inspection_id = i.id
       ) cns ON true
+      LEFT JOIN LATERAL (
+        SELECT COUNT(*)::int AS comment_count
+        FROM hotel_inspection_comments hc
+        WHERE hc.inspection_id = i.id AND hc.deleted_at IS NULL
+      ) cmt ON true
       LEFT JOIN inspection_likes liked
         ON liked.inspection_id = i.id
        AND (
             ($${actorIdIdx}::int IS NOT NULL AND liked.actor_type = $${actorTypeIdx}::text AND liked.actor_id = $${actorIdIdx}::int)
             OR ($${fpIdx}::text IS NOT NULL AND liked.fp = $${fpIdx}::text)
        )
-      WHERE i.hotel_id = $1
+      WHERE ${where.join(" AND ")}
       ORDER BY ${myOrder}${baseOrder}
       LIMIT 200
     `;
@@ -1298,6 +1390,66 @@ async function createHotelInspection(req, res) {
   }
 }
 
+
+// GET /api/hotels/inspections/:id/comments
+async function listInspectionComments(req, res) {
+  const inspectionId = parseIntSafe(req.params.id);
+  if (!inspectionId) return res.status(400).json({ items: [] });
+
+  try {
+    await ensureInspectionsTable();
+    const { rows } = await db.query(
+      `SELECT id, inspection_id, author_type, author_id, author_name, text, likes, created_at
+         FROM hotel_inspection_comments
+        WHERE inspection_id = $1 AND deleted_at IS NULL
+        ORDER BY created_at ASC, id ASC
+        LIMIT 200`,
+      [inspectionId]
+    );
+    return res.json({ items: rows || [] });
+  } catch (e) {
+    console.error("listInspectionComments error", e);
+    return res.status(500).json({ items: [] });
+  }
+}
+
+// POST /api/hotels/inspections/:id/comments
+async function createInspectionComment(req, res) {
+  const inspectionId = parseIntSafe(req.params.id);
+  if (!inspectionId) return res.status(400).json({ error: "bad_id" });
+
+  const text = String(req.body?.text || "").trim();
+  if (text.length < 2) return res.status(400).json({ error: "comment_too_short" });
+  if (text.length > 2000) return res.status(400).json({ error: "comment_too_long" });
+
+  try {
+    await ensureInspectionsTable();
+
+    const exists = await db.query(`SELECT id FROM inspections WHERE id = $1 LIMIT 1`, [inspectionId]);
+    if (!exists.rowCount) return res.status(404).json({ error: "inspection_not_found" });
+
+    const u = req.user || {};
+    const { actorType, actorId } = getActorFromReq(req);
+    if (!actorId && !isAdminLike(u)) return res.status(401).json({ error: "auth_required" });
+
+    const authorName =
+      first(req.body?.author_name, u.company_name, u.provider_name, u.name, u.full_name, u.companyName, u.display_name) ||
+      (actorType === "client" ? "клиент Travella" : "пользователь Travella");
+
+    const { rows } = await db.query(
+      `INSERT INTO hotel_inspection_comments (inspection_id, author_type, author_id, author_name, text)
+       VALUES ($1,$2,$3,$4,$5)
+       RETURNING id, inspection_id, author_type, author_id, author_name, text, likes, created_at`,
+      [inspectionId, actorType || (isAdminLike(u) ? "admin" : "user"), actorId || parseIntSafe(u.id) || null, authorName, text]
+    );
+
+    return res.status(201).json({ item: rows[0] });
+  } catch (e) {
+    console.error("createInspectionComment error", e);
+    return res.status(500).json({ error: "comment_failed" });
+  }
+}
+
 // POST /api/hotels/inspections/:id/like  (или /api/inspections/:id/like)
 // Лайк уникален и работает как toggle. likes пересчитываем из таблицы лайков.
 async function likeInspection(req, res) {
@@ -1375,5 +1527,7 @@ module.exports = {
   listHotelInspections,
   listAllHotelInspections,
   createHotelInspection,
+  listInspectionComments,
+  createInspectionComment,
   likeInspection,
 };
