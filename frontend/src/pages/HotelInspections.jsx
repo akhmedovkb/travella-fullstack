@@ -336,6 +336,7 @@ function InfoBlock({ title, text }) {
 
 function NewInspectionForm({ hotelId, onCancel, onCreated }) {
   const { t } = useTranslation();
+  const [activeTab, setActiveTab] = useState("review");
   const [title, setTitle] = useState("");
   const [review, setReview] = useState("");
   const [pros, setPros] = useState("");
@@ -354,6 +355,13 @@ function NewInspectionForm({ hotelId, onCancel, onCreated }) {
   const [sectionMedia, setSectionMedia] = useState([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  const tabs = [
+    { key: "review", label: "Обзор", icon: "✍️" },
+    { key: "media", label: "Фото и видео", icon: "📸" },
+    { key: "scores", label: "Оценки", icon: "⭐" },
+    { key: "extras", label: "Дополнительно", icon: "🧩" },
+  ];
 
   const toggleAmenity = (k) => setAmenities((prev) => (prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]));
 
@@ -382,14 +390,23 @@ function NewInspectionForm({ hotelId, onCancel, onCreated }) {
     if (!Number.isFinite(n)) return undefined;
     return Math.min(hi, Math.max(lo, n));
   };
+
   const normalizeScores = (obj) => Object.fromEntries(Object.entries(obj || {}).map(([k, v]) => [k, clamp(v, 0, 5)]).filter(([, v]) => v !== undefined));
   const normalizeNearby = (obj) => Object.fromEntries(Object.entries(obj || {}).map(([k, v]) => [k, Math.max(0, parseInt(v, 10) || 0)]).filter(([, v]) => Number.isFinite(v)));
   const nonEmpty = (v) => Array.isArray(v) ? (v.length ? v : undefined) : v && typeof v === "object" ? (Object.keys(v).length ? v : undefined) : v || undefined;
 
+  const goToFirstErrorTab = () => {
+    if (!review.trim()) {
+      setActiveTab("review");
+      return true;
+    }
+    return false;
+  };
+
   const submit = async (e) => {
     e.preventDefault();
     setError("");
-    if (!review.trim()) {
+    if (goToFirstErrorTab()) {
       setError(t("errors.write_review", "Напишите общий отзыв"));
       return;
     }
@@ -448,158 +465,220 @@ function NewInspectionForm({ hotelId, onCancel, onCreated }) {
     }
   };
 
+  const mediaCount = sectionMedia.length;
+  const filledScores = Object.values(scores).filter((v) => Number(v) > 0).length;
+
   return (
-    <form onSubmit={submit} className="max-w-5xl rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="mb-4">
-        <div className="inline-flex rounded-full bg-orange-50 px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-orange-600 ring-1 ring-orange-100">
-          Hotel Passport
+    <form onSubmit={submit} className="max-w-5xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+      <div className="border-b border-slate-100 bg-gradient-to-br from-white via-white to-orange-50/40 p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="inline-flex rounded-full bg-orange-50 px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-orange-600 ring-1 ring-orange-100">
+              Hotel Passport
+            </div>
+            <h2 className="mt-2 text-2xl font-black tracking-[-0.03em] text-slate-950">{t("hotels.inspections.new.title", "Новая инспекция")}</h2>
+            <p className="mt-1 max-w-2xl text-sm font-medium leading-6 text-slate-500">Фото, видео, оценки и заметки разделены по шагам, чтобы обзор было проще заполнить и читать.</p>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2 text-xs font-bold text-slate-600">
+            <div className="rounded-2xl bg-white px-3 py-2 text-center ring-1 ring-slate-200">
+              <div className="text-slate-400">Медиа</div>
+              <div className="mt-1 text-lg font-black text-slate-950">{mediaCount}</div>
+            </div>
+            <div className="rounded-2xl bg-white px-3 py-2 text-center ring-1 ring-slate-200">
+              <div className="text-slate-400">Оценки</div>
+              <div className="mt-1 text-lg font-black text-slate-950">{filledScores}</div>
+            </div>
+            <div className="rounded-2xl bg-white px-3 py-2 text-center ring-1 ring-slate-200">
+              <div className="text-slate-400">Выбрано</div>
+              <div className="mt-1 text-lg font-black text-slate-950">{audienceKeys.length + conKeys.length}</div>
+            </div>
+          </div>
         </div>
-        <h2 className="mt-2 text-2xl font-black tracking-[-0.03em] text-slate-950">{t("hotels.inspections.new.title", "Новый обзор отеля")}</h2>
-        <p className="mt-1 text-sm text-slate-500">Фото и видео можно прикреплять по конкретным зонам: номера, питание, пляж, бассейн, дети, минусы.</p>
+
+        <div className="mt-5 flex flex-wrap gap-2">
+          {tabs.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setActiveTab(tab.key)}
+              className={`rounded-2xl px-4 py-2 text-sm font-black transition ${activeTab === tab.key ? "bg-slate-950 text-white shadow-sm" : "bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50"}`}
+            >
+              {tab.icon} {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {error && <div className="mb-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>}
+      <div className="p-5">
+        {error && <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-bold text-rose-700">{error}</div>}
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-        <label className="md:col-span-2">
-          <div className="mb-1 text-sm font-semibold text-slate-600">Заголовок</div>
-          <input className="w-full rounded-xl border px-3 py-2" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Например: Хороший семейный отель, но слабый Wi-Fi" />
-        </label>
-        <label>
-          <div className="mb-1 text-sm font-semibold text-slate-600">Месяц поездки</div>
-          <select className="w-full rounded-xl border px-3 py-2" value={travelMonth} onChange={(e) => setTravelMonth(e.target.value)}>
-            <option value="">Не указано</option>
-            {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
-          </select>
-        </label>
-        <label>
-          <div className="mb-1 text-sm font-semibold text-slate-600">Рекомендация</div>
-          <select className="w-full rounded-xl border px-3 py-2" value={recommendationScore} onChange={(e) => setRecommendationScore(e.target.value)}>
-            <option value="1">⭐ Не рекомендую</option>
-            <option value="2">⭐⭐ Сомнительно</option>
-            <option value="3">⭐⭐⭐ Нормально</option>
-            <option value="4">⭐⭐⭐⭐ Рекомендую</option>
-            <option value="5">⭐⭐⭐⭐⭐ Обязательно вернусь</option>
-          </select>
-        </label>
-      </div>
+        {activeTab === "review" && (
+          <div className="space-y-5">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+              <label className="md:col-span-2">
+                <div className="mb-1 text-sm font-semibold text-slate-600">Заголовок</div>
+                <input className="w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-orange-300 focus:ring-4 focus:ring-orange-50" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Например: Хороший семейный отель, но слабый Wi-Fi" />
+              </label>
+              <label>
+                <div className="mb-1 text-sm font-semibold text-slate-600">Месяц поездки</div>
+                <select className="w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-orange-300 focus:ring-4 focus:ring-orange-50" value={travelMonth} onChange={(e) => setTravelMonth(e.target.value)}>
+                  <option value="">Не указано</option>
+                  {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+                </select>
+              </label>
+              <label>
+                <div className="mb-1 text-sm font-semibold text-slate-600">Рекомендация</div>
+                <select className="w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-orange-300 focus:ring-4 focus:ring-orange-50" value={recommendationScore} onChange={(e) => setRecommendationScore(e.target.value)}>
+                  <option value="1">⭐ Не рекомендую</option>
+                  <option value="2">⭐⭐ Сомнительно</option>
+                  <option value="3">⭐⭐⭐ Нормально</option>
+                  <option value="4">⭐⭐⭐⭐ Рекомендую</option>
+                  <option value="5">⭐⭐⭐⭐⭐ Обязательно вернусь</option>
+                </select>
+              </label>
+            </div>
 
-      <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-        <label>
-          <div className="mb-1 text-sm font-semibold text-slate-600">Тип визита</div>
-          <select className="w-full rounded-xl border px-3 py-2" value={visitType} onChange={(e) => setVisitType(e.target.value)}>
-            <option value="">Не указано</option>
-            <option value="stayed">Жил в отеле</option>
-            <option value="inspection">Осмотр / inspection</option>
-            <option value="fam_trip">Рекламный тур</option>
-          </select>
-        </label>
-        <label>
-          <div className="mb-1 text-sm font-semibold text-slate-600">Тип поездки</div>
-          <select className="w-full rounded-xl border px-3 py-2" value={tripType} onChange={(e) => setTripType(e.target.value)}>
-            <option value="">Не указано</option>
-            <option value="family">Семья</option>
-            <option value="couple">Пара</option>
-            <option value="honeymoon">Медовый месяц</option>
-            <option value="business">Бизнес</option>
-            <option value="solo">Solo</option>
-            <option value="agent_inspection">Инфотур / рекламник</option>
-          </select>
-        </label>
-      </div>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <label>
+                <div className="mb-1 text-sm font-semibold text-slate-600">Тип визита</div>
+                <select className="w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-orange-300 focus:ring-4 focus:ring-orange-50" value={visitType} onChange={(e) => setVisitType(e.target.value)}>
+                  <option value="">Не указано</option>
+                  <option value="stayed">Жил в отеле</option>
+                  <option value="inspection">Осмотр / inspection</option>
+                  <option value="fam_trip">Рекламный тур</option>
+                </select>
+              </label>
+              <label>
+                <div className="mb-1 text-sm font-semibold text-slate-600">Тип поездки</div>
+                <select className="w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-orange-300 focus:ring-4 focus:ring-orange-50" value={tripType} onChange={(e) => setTripType(e.target.value)}>
+                  <option value="">Не указано</option>
+                  <option value="family">Семья</option>
+                  <option value="couple">Пара</option>
+                  <option value="honeymoon">Медовый месяц</option>
+                  <option value="business">Бизнес</option>
+                  <option value="solo">Solo</option>
+                  <option value="agent_inspection">Инфотур / рекламник</option>
+                </select>
+              </label>
+            </div>
 
-      <div className="mt-4">
-        <label className="mb-1 block text-sm font-semibold text-slate-600">{t("hotels.inspections.new.review_label", "Общий отзыв")} *</label>
-        <textarea className="min-h-[130px] w-full rounded-xl border px-3 py-2" value={review} onChange={(e) => setReview(e.target.value)} />
-      </div>
+            <div>
+              <label className="mb-1 block text-sm font-semibold text-slate-600">{t("hotels.inspections.new.review_label", "Общий отзыв")} *</label>
+              <textarea className="min-h-[130px] w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-orange-300 focus:ring-4 focus:ring-orange-50" value={review} onChange={(e) => setReview(e.target.value)} />
+            </div>
 
-      <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
-        <TextAreaBlock label={t("hotels.inspections.new.pros", "Плюсы")} value={pros} onChange={setPros} />
-        <TextAreaBlock label={t("hotels.inspections.new.cons", "Минусы")} value={cons} onChange={setCons} />
-        <TextAreaBlock label={t("hotels.inspections.new.features", "Фишки/советы")} value={features} onChange={setFeatures} />
-      </div>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <TextAreaBlock label={t("hotels.inspections.new.pros", "Плюсы")} value={pros} onChange={setPros} />
+              <TextAreaBlock label={t("hotels.inspections.new.cons", "Минусы")} value={cons} onChange={setCons} />
+              <TextAreaBlock label={t("hotels.inspections.new.features", "Фишки/советы")} value={features} onChange={setFeatures} />
+            </div>
 
-      <CheckGroup title="Кому подходит этот отель" options={AUDIENCE_OPTIONS} value={audienceKeys} onToggle={(k) => toggleInArray(setAudienceKeys, k)} />
-      <CheckGroup title="Минусы / предупреждения" options={CON_OPTIONS} value={conKeys} onToggle={(k) => toggleInArray(setConKeys, k)} danger />
+            <CheckGroup title="Кому подходит этот отель" options={AUDIENCE_OPTIONS} value={audienceKeys} onToggle={(k) => toggleInArray(setAudienceKeys, k)} />
+            <CheckGroup title="Минусы / предупреждения" options={CON_OPTIONS} value={conKeys} onToggle={(k) => toggleInArray(setConKeys, k)} danger />
+          </div>
+        )}
 
-      <div className="mt-5">
-        <div className="mb-2 text-base font-black text-slate-950">Фото и видео по зонам отеля</div>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          {MEDIA_SECTIONS.map((section) => (
-            <div key={section.key} className="rounded-2xl border border-slate-200 p-3">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="font-black text-slate-900">{section.icon} {section.label}</div>
-                  <div className="mt-1 text-xs text-slate-500">{section.hints.join(" · ")}</div>
-                </div>
-                <label className="shrink-0 cursor-pointer rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white">
-                  Загрузить
-                  <input type="file" multiple accept="image/*,video/*" className="sr-only" onChange={(e) => { addFilesForSection(section.key, e.target.files); e.target.value = ""; }} />
-                </label>
-              </div>
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                {sectionMedia.filter((m) => m.section_key === section.key).map((m) => (
-                  <div key={m.id} className="rounded-xl border bg-slate-50 p-2">
-                    {m.media_type === "video" ? <video src={m.preview} className="h-28 w-full rounded-lg object-cover" controls /> : <img src={m.preview} alt="" className="h-28 w-full rounded-lg object-cover" />}
-                    <input className="mt-2 w-full rounded-lg border px-2 py-1 text-xs" value={m.caption} onChange={(e) => updateMedia(m.id, { caption: e.target.value })} placeholder="Подпись: Standard DBL, завтрак, песок..." />
-                    <input className="mt-1 w-full rounded-lg border px-2 py-1 text-xs" value={m.tagsText} onChange={(e) => updateMedia(m.id, { tagsText: e.target.value })} placeholder="Теги через запятую" />
-                    <button type="button" onClick={() => removeMedia(m.id)} className="mt-1 text-xs font-bold text-rose-600">Удалить</button>
+        {activeTab === "media" && (
+          <div>
+            <div className="mb-4 rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-100">
+              <div className="text-base font-black text-slate-950">Фото и видео по зонам отеля</div>
+              <div className="mt-1 text-sm font-medium text-slate-500">Загружайте материалы отдельно по зонам: номера, питание, пляж, бассейн, SPA и минусы. Так инспекция будет полезнее.</div>
+            </div>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              {MEDIA_SECTIONS.map((section) => (
+                <div key={section.key} className="rounded-2xl border border-slate-200 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="font-black text-slate-900">{section.icon} {section.label}</div>
+                      <div className="mt-1 text-xs text-slate-500">{section.hints.join(" · ")}</div>
+                    </div>
+                    <label className="shrink-0 cursor-pointer rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white">
+                      Загрузить
+                      <input type="file" multiple accept="image/*,video/*" className="sr-only" onChange={(e) => { addFilesForSection(section.key, e.target.files); e.target.value = ""; }} />
+                    </label>
                   </div>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    {sectionMedia.filter((m) => m.section_key === section.key).map((m) => (
+                      <div key={m.id} className="rounded-xl border bg-slate-50 p-2">
+                        {m.media_type === "video" ? <video src={m.preview} className="h-28 w-full rounded-lg object-cover" controls /> : <img src={m.preview} alt="" className="h-28 w-full rounded-lg object-cover" />}
+                        <input className="mt-2 w-full rounded-lg border px-2 py-1 text-xs" value={m.caption} onChange={(e) => updateMedia(m.id, { caption: e.target.value })} placeholder="Подпись: Standard DBL, завтрак, песок..." />
+                        <input className="mt-1 w-full rounded-lg border px-2 py-1 text-xs" value={m.tagsText} onChange={(e) => updateMedia(m.id, { tagsText: e.target.value })} placeholder="Теги через запятую" />
+                        <button type="button" onClick={() => removeMedia(m.id)} className="mt-1 text-xs font-bold text-rose-600">Удалить</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === "scores" && (
+          <div>
+            <div className="mb-4 rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-100">
+              <div className="text-base font-black text-slate-950">Оценки (0–5)</div>
+              <div className="mt-1 text-sm font-medium text-slate-500">Оценки помогают быстро понять, кому реально подходит отель.</div>
+            </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              {SCORE_FIELDS.map((f) => (
+                <label key={f.key} className="block rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-100">
+                  <div className="mb-1 flex items-center justify-between gap-3 text-sm font-semibold text-slate-600">
+                    <span>{t(f.labelKey, f.fallback)}</span>
+                    <span className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-slate-700 ring-1 ring-slate-200">{scores[f.key] ?? 0}</span>
+                  </div>
+                  <input type="range" min="0" max="5" step="0.5" value={scores[f.key] ?? 0} onChange={(e) => setScores((s) => ({ ...s, [f.key]: Number(e.target.value) }))} className="w-full" />
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === "extras" && (
+          <div className="space-y-5">
+            <div>
+              <div className="text-base font-black text-slate-950">{t("hotels.inspections.new.amenities_title", "Удобства")}</div>
+              <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-3">
+                {AMENITIES.map((a) => (
+                  <label key={a.key} className="inline-flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-100">
+                    <input type="checkbox" checked={amenities.includes(a.key)} onChange={() => toggleAmenity(a.key)} />
+                    <span>{t(a.labelKey, a.fallback)}</span>
+                  </label>
                 ))}
               </div>
             </div>
-          ))}
+
+            <div>
+              <div className="text-base font-black text-slate-950">{t("hotels.inspections.new.nearby_title", "Рядом (дистанции)")}</div>
+              <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                {NEARBY_FIELDS.map((n) => (
+                  <label key={n.key} className="block">
+                    <div className="mb-1 text-sm font-semibold text-slate-600">{t(n.labelKey, n.fallback)}</div>
+                    <input type="number" min="0" step="10" value={nearby[n.key] ?? ""} onChange={(e) => setNearby((v) => ({ ...v, [n.key]: e.target.value === "" ? null : Number(e.target.value) }))} className="w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-orange-300 focus:ring-4 focus:ring-orange-50" placeholder="м" />
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-semibold text-slate-600">{t("hotels.inspections.new.video_label", "Видео (ссылка на YouTube)")}</label>
+              <input type="url" inputMode="url" placeholder="https://youtu.be/…" className="w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-orange-300 focus:ring-4 focus:ring-orange-50" value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} />
+              {!!videoUrl && !isYoutubeUrl(videoUrl) && <div className="mt-1 text-xs font-bold text-rose-700">{t("hotels.inspections.new.video_invalid", "Похоже, это не ссылка на YouTube")}</div>}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 bg-white/95 p-4 backdrop-blur">
+        <div className="text-xs font-semibold text-slate-500">
+          Минимум: общий отзыв. Остальное можно заполнить для более полезного Hotel Passport.
         </div>
-      </div>
-
-      <div className="mt-5">
-        <div className="text-base font-black text-slate-950">{t("hotels.inspections.new.scores_title", "Оценки (0–5)")}</div>
-        <div className="mt-2 grid grid-cols-1 gap-4 md:grid-cols-2">
-          {SCORE_FIELDS.map((f) => (
-            <label key={f.key} className="block rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-100">
-              <div className="mb-1 text-sm font-semibold text-slate-600">{t(f.labelKey, f.fallback)}</div>
-              <input type="range" min="0" max="5" step="0.5" value={scores[f.key] ?? 0} onChange={(e) => setScores((s) => ({ ...s, [f.key]: Number(e.target.value) }))} className="w-full" />
-              <div className="text-xs text-slate-500">{scores[f.key] ?? 0}</div>
-            </label>
-          ))}
+        <div className="flex gap-2">
+          <button type="button" onClick={onCancel} className="rounded-xl border border-slate-200 px-4 py-2 font-bold text-slate-700 hover:bg-slate-50">{t("common.cancel", "Отмена")}</button>
+          <button type="submit" disabled={saving} className={`rounded-xl px-5 py-2 font-bold text-white ${saving ? "bg-gray-400" : "bg-orange-600 hover:bg-orange-700"}`}>
+            {saving ? t("hotels.inspections.new.saving", "Сохранение…") : t("hotels.inspections.new.save", "Сохранить")}
+          </button>
         </div>
-      </div>
-
-      <div className="mt-5">
-        <div className="text-base font-black text-slate-950">{t("hotels.inspections.new.amenities_title", "Удобства")}</div>
-        <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-3">
-          {AMENITIES.map((a) => (
-            <label key={a.key} className="inline-flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={amenities.includes(a.key)} onChange={() => toggleAmenity(a.key)} />
-              <span>{t(a.labelKey, a.fallback)}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-
-      <div className="mt-5">
-        <div className="text-base font-black text-slate-950">{t("hotels.inspections.new.nearby_title", "Рядом (дистанции)")}</div>
-        <div className="mt-2 grid grid-cols-1 gap-3 md:grid-cols-2">
-          {NEARBY_FIELDS.map((n) => (
-            <label key={n.key} className="block">
-              <div className="mb-1 text-sm font-semibold text-slate-600">{t(n.labelKey, n.fallback)}</div>
-              <input type="number" min="0" step="10" value={nearby[n.key] ?? ""} onChange={(e) => setNearby((v) => ({ ...v, [n.key]: e.target.value === "" ? null : Number(e.target.value) }))} className="w-full rounded-xl border px-3 py-2" placeholder="м" />
-            </label>
-          ))}
-        </div>
-      </div>
-
-      <div className="mt-5">
-        <label className="mb-1 block text-sm font-semibold text-slate-600">{t("hotels.inspections.new.video_label", "Видео (ссылка на YouTube)")}</label>
-        <input type="url" inputMode="url" placeholder="https://youtu.be/…" className="w-full rounded-xl border px-3 py-2" value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} />
-        {!!videoUrl && !isYoutubeUrl(videoUrl) && <div className="mt-1 text-xs text-rose-700">{t("hotels.inspections.new.video_invalid", "Похоже, это не ссылка на YouTube")}</div>}
-      </div>
-
-      <div className="mt-5 flex gap-2">
-        <button type="submit" disabled={saving} className={`rounded-xl px-4 py-2 font-bold text-white ${saving ? "bg-gray-400" : "bg-orange-600 hover:bg-orange-700"}`}>
-          {saving ? t("hotels.inspections.new.saving", "Сохранение…") : t("hotels.inspections.new.save", "Сохранить")}
-        </button>
-        <button type="button" onClick={onCancel} className="rounded-xl border px-4 py-2 font-bold">{t("common.cancel", "Отмена")}</button>
       </div>
     </form>
   );
