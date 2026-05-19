@@ -424,27 +424,23 @@ async function createHotel(req, res) {
 async function getHotel(req, res) {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: "bad_id" });
+
   try {
-    await assertCanTouchHotel(req, id);
     const { rows } = await db.query(`SELECT * FROM hotels WHERE id = $1`, [id]);
     if (!rows.length) return res.status(404).json({ error: "not_found" });
 
     tableHasColumns("hotels", ["views","view_count","popularity","seen","hits"]).then(async (c) => {
       try {
-        if (c.views)            await db.query(`UPDATE hotels SET views = COALESCE(views,0)+1 WHERE id=$1`, [id]);
-        else if (c.view_count)  await db.query(`UPDATE hotels SET view_count = COALESCE(view_count,0)+1 WHERE id=$1`, [id]);
-        else if (c.popularity)  await db.query(`UPDATE hotels SET popularity = COALESCE(popularity,0)+1 WHERE id=$1`, [id]);
-        else if (c.seen)        await db.query(`UPDATE hotels SET seen = COALESCE(seen,0)+1 WHERE id=$1`, [id]);
-        else if (c.hits)        await db.query(`UPDATE hotels SET hits = COALESCE(hits,0)+1 WHERE id=$1`, [id]);
+        if (c.views) await db.query(`UPDATE hotels SET views = COALESCE(views,0)+1 WHERE id=$1`, [id]);
+        else if (c.view_count) await db.query(`UPDATE hotels SET view_count = COALESCE(view_count,0)+1 WHERE id=$1`, [id]);
+        else if (c.popularity) await db.query(`UPDATE hotels SET popularity = COALESCE(popularity,0)+1 WHERE id=$1`, [id]);
+        else if (c.seen) await db.query(`UPDATE hotels SET seen = COALESCE(seen,0)+1 WHERE id=$1`, [id]);
+        else if (c.hits) await db.query(`UPDATE hotels SET hits = COALESCE(hits,0)+1 WHERE id=$1`, [id]);
       } catch (_) {}
     });
 
     return res.json(rows[0]);
   } catch (e) {
-    if (e && e.status === 403) {
-      // правильный статус вместо 500
-      return res.status(403).json({ error: "forbidden" });
-    }
     console.error("hotels.get error:", e);
     return res.status(500).json({ error: "read_failed" });
   }
