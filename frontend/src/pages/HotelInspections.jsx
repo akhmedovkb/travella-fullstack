@@ -469,7 +469,7 @@ function NewInspectionForm({ hotelId, onCancel, onCreated }) {
   const filledScores = Object.values(scores).filter((v) => Number(v) > 0).length;
 
   return (
-    <form onSubmit={submit} className="max-w-5xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+    <form onSubmit={submit} className="w-full overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
       <div className="border-b border-slate-100 bg-gradient-to-br from-white via-white to-orange-50/40 p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
@@ -1036,7 +1036,13 @@ export default function HotelInspections() {
       </div>
 
       {isNew ? (
-        <NewInspectionForm hotelId={hotelId} onCancel={() => navigate(`/hotels/${hotelId}/inspections`)} onCreated={handleCreated} />
+        <div className="px-6">
+          <NewInspectionForm
+            hotelId={hotelId}
+            onCancel={() => navigate(`/hotels/${hotelId}/inspections`)}
+            onCreated={handleCreated}
+          />
+        </div>
       ) : (
         <div className="space-y-4">
           {visibleItems.map((it) => <Card key={it.id} item={it} onLike={onLike} />)}
