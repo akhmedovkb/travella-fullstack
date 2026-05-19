@@ -99,14 +99,6 @@ function PassportScore({ hotel }) {
           : "По этому отелю пока нет инспекций. Можно добавить первую и помочь другим агентам и туристам."}
       </div>
 
-      <div className="mt-3 grid grid-cols-2 gap-2">
-        <Link to={`/hotels/${hotel.id}/inspections`} className="rounded-xl border border-orange-100 bg-white px-3 py-2 text-center text-xs font-black text-slate-700 transition hover:bg-orange-50">
-          🏨 Инспекции
-        </Link>
-        <Link to={`/hotels/${hotel.id}/inspections?new=1`} className="rounded-xl bg-orange-500 px-3 py-2 text-center text-xs font-black text-white transition hover:bg-orange-600">
-          ➕ Оставить
-        </Link>
-      </div>
     </div>
   );
 }
