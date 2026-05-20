@@ -977,6 +977,7 @@ app.use("/api/admin/unlock-funnel", adminUnlockFunnelRoutes);
 app.use("/api/admin/unlock-nudge", adminUnlockNudgeRoutes);
 app.use("/api/admin/travel-sales", adminTravelSalesRoutes);
 app.use("/api/admin", adminServiceAuditRoutes);
+app.use("/api", providerSupportRoutes);
 app.use("/api/admin", providerSupportRoutes);
 
 /** ===================== Start (в самом конце) ===================== */
