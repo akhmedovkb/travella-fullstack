@@ -579,8 +579,21 @@ async function getProviderServices(req, res) {
         s.details,
         s.images,
         s.expiration_at,
-        s.start_date,
-        s.end_date,
+        COALESCE(
+          s.details::jsonb ->> 'startDate',
+          s.details::jsonb ->> 'start_date',
+          s.details::jsonb ->> 'departureFlightDate',
+          s.details::jsonb ->> 'departureDate',
+          s.details::jsonb ->> 'checkIn',
+          s.details::jsonb ->> 'eventDate'
+        ) AS start_date,
+        COALESCE(
+          s.details::jsonb ->> 'endDate',
+          s.details::jsonb ->> 'end_date',
+          s.details::jsonb ->> 'returnFlightDate',
+          s.details::jsonb ->> 'returnDate',
+          s.details::jsonb ->> 'checkOut'
+        ) AS end_date,
         s.created_at,
         p.name   AS provider_name,
         p.social AS provider_telegram
