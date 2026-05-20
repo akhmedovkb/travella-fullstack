@@ -1500,6 +1500,43 @@ bot.use(
   })
 );
 
+// ===================== PERSISTENT PROVIDER SERVICE DRAFTS =====================
+// Railway redeploy restarts the Node process, so Telegraf session can be lost.
+// This middleware keeps the provider creation wizard in PostgreSQL and restores it safely.
+bot.use(async (ctx, next) => {
+  try {
+    if (!ctx.session) ctx.session = {};
+
+    const data = String(ctx.callbackQuery?.data || "");
+    if (data === "tg_draft:continue" || data === "tg_draft:delete") {
+      return next();
+    }
+
+    const isPrivate = !ctx.chat?.type || ctx.chat.type === "private";
+    const hasLiveCreateWizard =
+      isCreateWizardState(ctx.session.state) && !!ctx.session.serviceDraft;
+
+    if (isPrivate && !hasLiveCreateWizard && !ctx.session.__draftRestoreOffered) {
+      const activeDraft = await getActiveProviderServiceDraft(ctx);
+      if (activeDraft) {
+        ctx.session.__draftRestoreOffered = true;
+        await replyProviderDraftResumePrompt(ctx, activeDraft);
+        return;
+      }
+    }
+
+    await next();
+
+    if (isCreateWizardState(ctx.session?.state) && ctx.session?.serviceDraft) {
+      await saveProviderServiceDraft(ctx);
+    }
+  } catch (e) {
+    console.error("[tg-bot] provider draft persistence middleware error:", e?.message || e);
+    return next();
+  }
+});
+
+
 // ===================== HARD MODERATION GUARD (IRONCLAD) =====================
 // Блокирует ЛЮБЫЕ действия, пока аккаунт в pending (модерация не пройдена).
 // Разрешает только: /start, выбор роли role:*, отправку номера (contact или текстом в режиме привязки).
@@ -4313,6 +4350,284 @@ function resetServiceWizard(ctx) {
   ctx.session.wizardStack = null;
 }
 
+function isCreateWizardState(state) {
+  const s = String(state || "");
+  return (
+    s === "svc_create_choose_category" ||
+    s.startsWith("svc_create_") ||
+    s.startsWith("svc_hotel_")
+  );
+}
+
+let _providerDraftsReady = false;
+
+async function ensureProviderServiceDraftsTable() {
+  if (!pool || _providerDraftsReady) return;
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS telegram_provider_service_drafts (
+      id BIGSERIAL PRIMARY KEY,
+      chat_id BIGINT NOT NULL,
+      provider_id BIGINT,
+      category TEXT,
+      step TEXT NOT NULL DEFAULT 'category',
+      payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+      images JSONB NOT NULL DEFAULT '[]'::jsonb,
+      wizard_stack JSONB NOT NULL DEFAULT '[]'::jsonb,
+      status TEXT NOT NULL DEFAULT 'draft',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      submitted_at TIMESTAMPTZ,
+      canceled_at TIMESTAMPTZ
+    )
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_tg_provider_service_drafts_chat_status
+      ON telegram_provider_service_drafts(chat_id, status, updated_at DESC)
+  `);
+
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS ux_tg_provider_service_drafts_one_active
+      ON telegram_provider_service_drafts(chat_id)
+      WHERE status = 'draft'
+  `);
+
+  _providerDraftsReady = true;
+}
+
+async function resolveProviderIdByTelegramChatId(chatId) {
+  if (!pool || !chatId) return null;
+  try {
+    const r = await pool.query(
+      `
+      SELECT id
+        FROM providers
+       WHERE telegram_chat_id::text = $1
+          OR tg_chat_id::text = $1
+          OR telegram_refused_chat_id::text = $1
+          OR telegram_web_chat_id::text = $1
+       LIMIT 1
+      `,
+      [String(chatId)]
+    );
+    return r.rows?.[0]?.id ? Number(r.rows[0].id) : null;
+  } catch (e) {
+    console.error("[tg-bot] resolveProviderIdByTelegramChatId error:", e?.message || e);
+    return null;
+  }
+}
+
+async function getActiveProviderServiceDraft(ctx) {
+  if (!pool) return null;
+  const chatId = getActorId(ctx) || ctx.from?.id || ctx.chat?.id || null;
+  if (!chatId) return null;
+
+  try {
+    await ensureProviderServiceDraftsTable();
+
+    const r = await pool.query(
+      `
+      SELECT *
+        FROM telegram_provider_service_drafts
+       WHERE chat_id = $1
+         AND status = 'draft'
+       ORDER BY updated_at DESC
+       LIMIT 1
+      `,
+      [Number(chatId)]
+    );
+
+    return r.rows?.[0] || null;
+  } catch (e) {
+    console.error("[tg-bot] getActiveProviderServiceDraft error:", e?.message || e);
+    return null;
+  }
+}
+
+function hydrateProviderDraftSession(ctx, row) {
+  if (!row || !ctx) return false;
+  if (!ctx.session) ctx.session = {};
+
+  const payload =
+    row.payload && typeof row.payload === "object" && !Array.isArray(row.payload)
+      ? row.payload
+      : {};
+
+  const images =
+    Array.isArray(row.images)
+      ? row.images
+      : Array.isArray(payload.images)
+        ? payload.images
+        : [];
+
+  const wizardStack = Array.isArray(row.wizard_stack) ? row.wizard_stack : [];
+
+  ctx.session.serviceDraft = {
+    ...payload,
+    category: row.category || payload.category || null,
+    images,
+  };
+  ctx.session.wizardStack = wizardStack;
+  ctx.session.state = row.step || "svc_create_choose_category";
+  ctx.session.editWiz = null;
+  ctx.session.editDraft = null;
+  ctx.session.editingServiceId = null;
+  ctx.session.__draftRestoreOffered = false;
+
+  return true;
+}
+
+function providerDraftCategoryLabel(category) {
+  const c = String(category || "").toLowerCase();
+  if (c === "refused_hotel") return "Отказной отель";
+  if (c === "refused_flight") return "Отказной авиабилет";
+  if (c === "refused_ticket" || c === "refused_event_ticket") return "Отказной билет";
+  if (c === "refused_tour") return "Отказной тур";
+  return "Категория ещё не выбрана";
+}
+
+function providerDraftFilledCount(payload = {}) {
+  if (!payload || typeof payload !== "object") return 0;
+  const ignored = new Set(["images", "telegramPhotoFileId"]);
+  return Object.entries(payload).filter(([key, value]) => {
+    if (ignored.has(key)) return false;
+    if (value === null || value === undefined || value === "") return false;
+    if (Array.isArray(value)) return value.length > 0;
+    return true;
+  }).length;
+}
+
+async function replyProviderDraftResumePrompt(ctx, row) {
+  const payload =
+    row?.payload && typeof row.payload === "object" && !Array.isArray(row.payload)
+      ? row.payload
+      : {};
+  const category = row?.category || payload.category || "";
+  const filled = providerDraftFilledCount(payload);
+  const updatedAt = row?.updated_at
+    ? new Date(row.updated_at).toLocaleString("ru-RU", {
+        timeZone: "Asia/Tashkent",
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "";
+
+  await safeReply(
+    ctx,
+    `⚠️ <b>Создание услуги было прервано из-за обновления бота.</b>\n\n` +
+      `Мы сохранили ваш черновик.\n` +
+      `📌 Категория: <b>${escapeHtml(providerDraftCategoryLabel(category))}</b>\n` +
+      `📝 Заполнено полей: <b>${filled}</b>\n` +
+      (updatedAt ? `🕒 Последнее сохранение: <b>${escapeHtml(updatedAt)}</b>\n\n` : "\n") +
+      `Хотите продолжить создание?`,
+    {
+      parse_mode: "HTML",
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "▶️ Продолжить создание", callback_data: "tg_draft:continue" }],
+          [{ text: "🗑 Удалить черновик", callback_data: "tg_draft:delete" }],
+          [{ text: "🏠 В меню", callback_data: "prov_services:back" }],
+        ],
+      },
+    }
+  );
+}
+
+async function saveProviderServiceDraft(ctx) {
+  if (!pool) return false;
+  const chatId = getActorId(ctx) || ctx.from?.id || ctx.chat?.id || null;
+  if (!chatId) return false;
+
+  const state = String(ctx.session?.state || "");
+  const payload = ctx.session?.serviceDraft || {};
+  if (!isCreateWizardState(state) || !payload) return false;
+
+  try {
+    await ensureProviderServiceDraftsTable();
+
+    const providerId = await resolveProviderIdByTelegramChatId(chatId);
+    const category = payload.category || null;
+    const images = Array.isArray(payload.images) ? payload.images : [];
+    const wizardStack = Array.isArray(ctx.session?.wizardStack) ? ctx.session.wizardStack : [];
+
+    await pool.query(
+      `
+      INSERT INTO telegram_provider_service_drafts (
+        chat_id,
+        provider_id,
+        category,
+        step,
+        payload,
+        images,
+        wizard_stack,
+        status,
+        updated_at
+      )
+      VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,'draft',NOW())
+      ON CONFLICT (chat_id) WHERE status = 'draft'
+      DO UPDATE SET
+        provider_id = EXCLUDED.provider_id,
+        category = EXCLUDED.category,
+        step = EXCLUDED.step,
+        payload = EXCLUDED.payload,
+        images = EXCLUDED.images,
+        wizard_stack = EXCLUDED.wizard_stack,
+        updated_at = NOW()
+      `,
+      [
+        Number(chatId),
+        providerId,
+        category,
+        state,
+        JSON.stringify(payload || {}),
+        JSON.stringify(images),
+        JSON.stringify(wizardStack),
+      ]
+    );
+
+    return true;
+  } catch (e) {
+    console.error("[tg-bot] saveProviderServiceDraft error:", e?.message || e);
+    return false;
+  }
+}
+
+async function finishProviderServiceDraft(ctx, status = "submitted") {
+  if (!pool) return false;
+  const chatId = getActorId(ctx) || ctx.from?.id || ctx.chat?.id || null;
+  if (!chatId) return false;
+
+  try {
+    await ensureProviderServiceDraftsTable();
+
+    await pool.query(
+      `
+      UPDATE telegram_provider_service_drafts
+         SET status = $2,
+             updated_at = NOW(),
+             submitted_at = CASE WHEN $2 = 'submitted' THEN COALESCE(submitted_at, NOW()) ELSE submitted_at END,
+             canceled_at = CASE WHEN $2 = 'canceled' THEN COALESCE(canceled_at, NOW()) ELSE canceled_at END
+       WHERE chat_id = $1
+         AND status = 'draft'
+      `,
+      [Number(chatId), String(status || "submitted")]
+    );
+
+    return true;
+  } catch (e) {
+    console.error("[tg-bot] finishProviderServiceDraft error:", e?.message || e);
+    return false;
+  }
+}
+
+async function clearProviderServiceDraft(ctx) {
+  return finishProviderServiceDraft(ctx, "canceled");
+}
+
+
 function forceCloseEditWizard(ctx) {
   if (!ctx?.session) return;
 
@@ -4981,6 +5296,8 @@ async function finishCreateServiceFromWizard(ctx) {
     }
 
     const createdServiceId = data?.service?.id;
+
+    await finishProviderServiceDraft(ctx, "submitted");
 
     const refusedCategories = [
       "refused_tour",
@@ -6485,11 +6802,80 @@ bot.action(/^noop:\d+$/, async (ctx) => {
   await ctx.answerCbQuery();
 });
 
+
+/* ===================== PERSISTENT DRAFT ACTIONS ===================== */
+
+bot.action("tg_draft:continue", async (ctx) => {
+  try {
+    await safeCb(ctx);
+
+    const row = await getActiveProviderServiceDraft(ctx);
+    if (!row) {
+      await safeReply(ctx, "ℹ️ Активный черновик не найден. Можно начать новую услугу.", {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
+            [{ text: "📋 Мои услуги", callback_data: "prov_services:list" }],
+          ],
+        },
+      });
+      return;
+    }
+
+    hydrateProviderDraftSession(ctx, row);
+
+    const state = String(ctx.session?.state || "");
+    if (state === "svc_create_choose_category" || !ctx.session?.serviceDraft?.category) {
+      await safeReply(ctx, "▶️ Продолжаем черновик. Выберите категорию отказной услуги:", {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "📍 Отказной тур", callback_data: "svc_new_cat:refused_tour" }],
+            [{ text: "🏨 Отказной отель", callback_data: "svc_new_cat:refused_hotel" }],
+            [{ text: "✈️ Отказной авиабилет", callback_data: "svc_new_cat:refused_flight" }],
+            [{ text: "🎫 Отказной билет", callback_data: "svc_new_cat:refused_ticket" }],
+            [{ text: "⬅️ Назад", callback_data: "prov_services:list" }],
+          ],
+        },
+      });
+      return;
+    }
+
+    await safeReply(ctx, "▶️ Продолжаем сохранённый черновик.");
+    await promptWizardState(ctx, state);
+  } catch (e) {
+    console.error("[tg-bot] tg_draft:continue error:", e?.message || e);
+    await safeReply(ctx, "⚠️ Не удалось открыть черновик. Попробуйте начать создание заново.");
+  }
+});
+
+bot.action("tg_draft:delete", async (ctx) => {
+  try {
+    await safeCb(ctx);
+    await clearProviderServiceDraft(ctx);
+    resetServiceWizard(ctx);
+    if (!ctx.session) ctx.session = {};
+    ctx.session.__draftRestoreOffered = false;
+
+    await safeReply(ctx, "🗑 Черновик удалён.", {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
+          [{ text: "📋 Мои услуги", callback_data: "prov_services:list" }],
+        ],
+      },
+    });
+  } catch (e) {
+    console.error("[tg-bot] tg_draft:delete error:", e?.message || e);
+    await safeReply(ctx, "⚠️ Не удалось удалить черновик.");
+  }
+});
+
 /* ===================== WIZARD: CANCEL/BACK ===================== */
 
 bot.action("svc_wiz:cancel", async (ctx) => {
   try {
     await ctx.answerCbQuery();
+    await clearProviderServiceDraft(ctx);
     resetServiceWizard(ctx);
     await safeReply(ctx, "❌ Создание услуги отменено.", {
       reply_markup: {
@@ -8964,6 +9350,7 @@ bot.on("text", async (ctx, next) => {
       const text = ctx.message.text.trim();
 
       if (text.toLowerCase() === "отмена") {
+        await clearProviderServiceDraft(ctx);
         resetServiceWizard(ctx);
         await ctx.reply("❌ Создание услуги отменено.");
         await ctx.reply("🧳 Выберите действие:", {
