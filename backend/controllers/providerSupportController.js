@@ -597,9 +597,9 @@ async function createProviderSupportDonationOrder({
         FROM provider_support_donations d
         JOIN ${target} o ON o.support_donation_id = d.id
         WHERE d.amount_tiyin = $1
-          AND COALESCE(d.provider_id, 0) = COALESCE($2, 0)
-          AND COALESCE(d.telegram_chat_id, 0) = COALESCE($3, 0)
-          AND COALESCE(d.service_id, 0) = COALESCE($4, 0)
+          AND COALESCE(d.provider_id, 0::bigint) = COALESCE($2::bigint, 0::bigint)
+          AND COALESCE(d.telegram_chat_id, 0::bigint) = COALESCE($3::bigint, 0::bigint)
+          AND COALESCE(d.service_id, 0::bigint) = COALESCE($4::bigint, 0::bigint)
           AND d.status IN ('new', 'created', 'pending')
           AND o.status IN ('new', 'created', 'pending')
           AND o.order_type = 'provider_support'
