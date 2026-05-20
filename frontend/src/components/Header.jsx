@@ -568,8 +568,6 @@ export default function Header() {
                   <DropdownPanel align="right" width="w-80">
                     <DropdownCaption title={t("nav.admin_core", "Администрирование")} />
                     <DropdownItem to="/admin/operations" label="Operations" description="Контроль отказных и настроек" icon={<IconModeration />} />
-                    <DropdownItem to="/admin/refused-actual" label={t("nav.refused_actual", "Актуальные отказы")} description="Проверка актуальности услуг" icon={<IconChecklist />} />
-                    <DropdownItem to="/admin/leads" label={t("nav.leads", "Leads")} description="Лиды и Telegram-привязки" icon={<IconUsers />} />
                     <DropdownItem to="/admin/finance" label={t("nav.finance_admin", "Finance")} description="Финансы платформы" icon={<IconDoc />} />
                     <DropdownItem to="/admin/billing" label={t("nav.billing_admin", "Billing")} description="Биллинг и открытия контактов" icon={<IconWallet />} />
                     <DropdownItem to="/admin/broadcast" label={t("nav.broadcast", "Рассылка")} description="Telegram/платформенные рассылки" icon={<IconDoc />} />
@@ -661,8 +659,6 @@ export default function Header() {
             {isAdmin && (
               <RowGroupDark title={t("nav.admin", "Админ")}>
                 <NavItemMobileDark to="/admin/operations" label="Operations" icon={<IconModeration />} />
-                <NavItemMobileDark to="/admin/refused-actual" label={t("nav.refused_actual", "Актуальные отказы")} icon={<IconChecklist />} />
-                <NavItemMobileDark to="/admin/leads" label={t("nav.leads", "Leads")} icon={<IconUsers />} />
                 <NavItemMobileDark to="/admin/finance" label={t("nav.finance_admin", "Finance")} icon={<IconDoc />} />
                 <NavItemMobileDark to="/admin/billing" label={t("nav.billing_admin", "Billing")} icon={<IconWallet />} />
                 <NavItemMobileDark to="/admin/broadcast" label={t("nav.broadcast", "Рассылка")} icon={<IconDoc />} />
