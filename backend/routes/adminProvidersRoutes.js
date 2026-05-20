@@ -4,6 +4,7 @@ const express = require("express");
 const router = express.Router();
 const pool = require("../db");
 const authenticateToken = require("../middleware/authenticateToken");
+const bcrypt = require("bcryptjs");
 
 function requireAdmin(req, res, next) {
   try {
@@ -265,7 +266,17 @@ router.get("/providers-table", authenticateToken, requireAdmin, async (req, res)
         p.updated_at,
         p.city_slugs,
         p.telegram_chat_id,
-        p.photo
+        p.tg_chat_id,
+        p.telegram_web_chat_id,
+        p.telegram_refused_chat_id,
+        p.address,
+        p.photo,
+        p.certificate,
+        p.hotel_id,
+        p.car_fleet,
+        p.account_status,
+        p.password,
+        NULL::text AS password_hash
       FROM providers p
       ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
       ORDER BY p.created_at DESC, p.id DESC
@@ -393,8 +404,16 @@ router.get("/clients-table", authenticateToken, requireAdmin, async (req, res) =
         c.email,
         c.phone,
         c.telegram,
+        c.tg_username,
         c.telegram_chat_id,
+        c.tg_chat_id,
+        c.languages,
+        c.location,
         c.avatar_url,
+        c.account_status,
+        c.source,
+        NULL::text AS password,
+        c.password_hash,
         c.created_at,
         c.updated_at
       FROM clients c
@@ -491,6 +510,282 @@ router.delete(
       db.release();
     }
   }
+);
+
+
+/* =========================
+   ADMIN EDIT HELPERS
+========================= */
+
+const TABLE_EDIT_CONFIG = {
+  providers: {
+    table: "providers",
+    allowed: [
+      "name",
+      "type",
+      "email",
+      "phone",
+      "social",
+      "address",
+      "location",
+      "languages",
+      "city_slugs",
+      "telegram_chat_id",
+      "tg_chat_id",
+      "telegram_web_chat_id",
+      "telegram_refused_chat_id",
+      "photo",
+      "certificate",
+      "hotel_id",
+      "car_fleet",
+      "account_status",
+    ],
+    select: [
+      "id",
+      "name",
+      "type",
+      "email",
+      "phone",
+      "location",
+      "languages",
+      "social",
+      "address",
+      "city_slugs",
+      "telegram_chat_id",
+      "tg_chat_id",
+      "telegram_web_chat_id",
+      "telegram_refused_chat_id",
+      "photo",
+      "certificate",
+      "hotel_id",
+      "car_fleet",
+      "account_status",
+      "password",
+      "password_hash",
+      "created_at",
+      "updated_at",
+    ],
+  },
+  clients: {
+    table: "clients",
+    allowed: [
+      "name",
+      "email",
+      "phone",
+      "telegram",
+      "tg_username",
+      "telegram_chat_id",
+      "tg_chat_id",
+      "languages",
+      "location",
+      "avatar_url",
+      "account_status",
+      "source",
+    ],
+    select: [
+      "id",
+      "name",
+      "email",
+      "phone",
+      "telegram",
+      "tg_username",
+      "telegram_chat_id",
+      "tg_chat_id",
+      "languages",
+      "location",
+      "avatar_url",
+      "account_status",
+      "source",
+      "password",
+      "password_hash",
+      "created_at",
+      "updated_at",
+    ],
+  },
+};
+
+const editColumnCache = new Map();
+async function getTableColumns(table) {
+  const key = `public.${table}`;
+  if (editColumnCache.has(key)) return editColumnCache.get(key);
+  const { rows } = await pool.query(
+    `SELECT column_name, data_type, udt_name
+       FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = $1`,
+    [table]
+  );
+  const map = new Map(rows.map((r) => [r.column_name, r]));
+  editColumnCache.set(key, map);
+  return map;
+}
+
+function normalizeAdminEditValue(value, col) {
+  if (value === undefined) return { skip: true };
+  if (value === "") return { value: null };
+  const udt = String(col?.udt_name || "").toLowerCase();
+  const dtype = String(col?.data_type || "").toLowerCase();
+
+  if (udt === "int8" || udt === "int4" || dtype.includes("integer") || dtype === "bigint") {
+    if (value === null) return { value: null };
+    const n = Number(value);
+    if (!Number.isFinite(n)) return { value: null };
+    return { value: Math.trunc(n) };
+  }
+
+  if (udt === "bool" || dtype === "boolean") {
+    if (value === null) return { value: null };
+    if (typeof value === "boolean") return { value };
+    const s = String(value).trim().toLowerCase();
+    if (["true", "1", "yes", "да"].includes(s)) return { value: true };
+    if (["false", "0", "no", "нет"].includes(s)) return { value: false };
+    return { value: null };
+  }
+
+  if (udt.startsWith("_") || dtype === "ARRAY") {
+    if (Array.isArray(value)) return { value };
+    const arr = String(value || "")
+      .split(/[\n,]/)
+      .map((x) => x.trim())
+      .filter(Boolean);
+    return { value: arr };
+  }
+
+  if (udt === "jsonb" || udt === "json" || dtype === "jsonb" || dtype === "json") {
+    if (value === null || typeof value === "object") return { value: value || null };
+    try {
+      return { value: JSON.parse(String(value)) };
+    } catch {
+      return { value: String(value || "") };
+    }
+  }
+
+  return { value: value === null ? null : String(value) };
+}
+
+function generateTempPassword() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+  let out = "";
+  for (let i = 0; i < 12; i += 1) out += alphabet[Math.floor(Math.random() * alphabet.length)];
+  return `${out.slice(0, 4)}-${out.slice(4, 8)}-${out.slice(8)}`;
+}
+
+async function selectAdminEditableRow(table, id, config) {
+  const cols = await getTableColumns(table);
+  const selectParts = config.select.map((c) => (cols.has(c) ? `${qi(c)}` : `NULL AS ${qi(c)}`));
+  const { rows } = await pool.query(
+    `SELECT ${selectParts.join(", ")} FROM public.${qi(table)} WHERE id = $1 LIMIT 1`,
+    [id]
+  );
+  return rows[0] || null;
+}
+
+async function updateEditableEntity(req, res, configKey) {
+  const config = TABLE_EDIT_CONFIG[configKey];
+  const id = Number(req.params.id);
+  if (!config || !Number.isFinite(id) || id <= 0) {
+    return res.status(400).json({ ok: false, error: "Bad id" });
+  }
+
+  try {
+    const cols = await getTableColumns(config.table);
+    const body = req.body || {};
+    const set = [];
+    const params = [];
+    let idx = 1;
+
+    for (const field of config.allowed) {
+      if (!Object.prototype.hasOwnProperty.call(body, field)) continue;
+      if (!cols.has(field)) continue;
+      const normalized = normalizeAdminEditValue(body[field], cols.get(field));
+      if (normalized.skip) continue;
+      set.push(`${qi(field)} = $${idx}`);
+      params.push(normalized.value);
+      idx += 1;
+    }
+
+    if (!set.length) {
+      const row = await selectAdminEditableRow(config.table, id, config);
+      return res.json({ ok: true, row, unchanged: true });
+    }
+
+    if (cols.has("updated_at")) set.push(`updated_at = NOW()`);
+
+    params.push(id);
+    const selectParts = config.select.map((c) => (cols.has(c) ? `${qi(c)}` : `NULL AS ${qi(c)}`));
+    const sql = `
+      UPDATE public.${qi(config.table)}
+         SET ${set.join(", ")}
+       WHERE id = $${idx}
+       RETURNING ${selectParts.join(", ")}
+    `;
+    const { rows } = await pool.query(sql, params);
+    if (!rows.length) return res.status(404).json({ ok: false, error: "Not found" });
+    return res.json({ ok: true, row: rows[0] });
+  } catch (e) {
+    console.error(`PUT admin ${configKey} error:`, e);
+    return res.status(500).json({ ok: false, error: "Failed to update", detail: e?.message || null });
+  }
+}
+
+async function resetEntityPassword(req, res, configKey) {
+  const config = TABLE_EDIT_CONFIG[configKey];
+  const id = Number(req.params.id);
+  if (!config || !Number.isFinite(id) || id <= 0) {
+    return res.status(400).json({ ok: false, error: "Bad id" });
+  }
+
+  try {
+    const cols = await getTableColumns(config.table);
+    const password = generateTempPassword();
+    const hash = await bcrypt.hash(password, 10);
+
+    const set = [];
+    const params = [];
+    let idx = 1;
+
+    if (cols.has("password_hash")) {
+      set.push(`password_hash = $${idx}`);
+      params.push(hash);
+      idx += 1;
+    } else if (cols.has("password")) {
+      set.push(`password = $${idx}`);
+      params.push(hash);
+      idx += 1;
+    } else {
+      return res.status(400).json({ ok: false, error: "Password column not found" });
+    }
+
+    if (cols.has("updated_at")) set.push(`updated_at = NOW()`);
+    params.push(id);
+
+    const { rows } = await pool.query(
+      `UPDATE public.${qi(config.table)} SET ${set.join(", ")} WHERE id = $${idx} RETURNING id`,
+      params
+    );
+    if (!rows.length) return res.status(404).json({ ok: false, error: "Not found" });
+
+    return res.json({ ok: true, temporary_password: password });
+  } catch (e) {
+    console.error(`reset password ${configKey} error:`, e);
+    return res.status(500).json({ ok: false, error: "Failed to reset password" });
+  }
+}
+
+router.put("/providers-table/:id", authenticateToken, requireAdmin, (req, res) =>
+  updateEditableEntity(req, res, "providers")
+);
+
+router.post("/providers-table/:id/reset-password", authenticateToken, requireAdmin, (req, res) =>
+  resetEntityPassword(req, res, "providers")
+);
+
+router.put("/clients-table/:id", authenticateToken, requireAdmin, (req, res) =>
+  updateEditableEntity(req, res, "clients")
+);
+
+router.post("/clients-table/:id/reset-password", authenticateToken, requireAdmin, (req, res) =>
+  resetEntityPassword(req, res, "clients")
 );
 
 module.exports = router;
