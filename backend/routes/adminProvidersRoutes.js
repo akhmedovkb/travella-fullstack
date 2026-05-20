@@ -516,7 +516,7 @@ const CLIENT_EDIT_FIELDS = [
 async function getTableColumns(tableName) {
   const { rows } = await pool.query(
     `
-      SELECT column_name, data_type, udt_name
+      SELECT column_name, data_type, udt_name, is_nullable, column_default
       FROM information_schema.columns
       WHERE table_schema = 'public'
         AND table_name = $1
@@ -526,6 +526,42 @@ async function getTableColumns(tableName) {
   const map = new Map();
   for (const row of rows || []) map.set(row.column_name, row);
   return map;
+}
+
+
+function defaultValueForColumn(field, col) {
+  const isNullable = String(col?.is_nullable || "YES").toUpperCase() === "YES";
+  const dataType = String(col?.data_type || "").toLowerCase();
+  const udtName = String(col?.udt_name || "").toLowerCase();
+  const isArray = dataType === "array" || udtName.startsWith("_");
+  const isJson = dataType === "json" || dataType === "jsonb";
+
+  if (isNullable) return null;
+  if (isJson) return "{}";
+  if (isArray) return [];
+  if (dataType === "boolean") return false;
+  if (["integer", "bigint", "numeric", "double precision", "real", "smallint"].includes(dataType)) return 0;
+  return "";
+}
+
+function normalizeJsonValue(value, field, col) {
+  const fallback = defaultValueForColumn(field, col);
+
+  if (value === null || value === undefined || value === "") {
+    return fallback === null ? null : JSON.stringify(fallback === "{}" ? {} : fallback);
+  }
+
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      if (parsed === null) return fallback === null ? null : JSON.stringify(fallback === "{}" ? {} : fallback);
+      return JSON.stringify(parsed);
+    } catch {
+      return JSON.stringify(value);
+    }
+  }
+
+  return JSON.stringify(value);
 }
 
 function normalizeArrayValue(value) {
@@ -565,18 +601,7 @@ function buildUpdateParts({ body, columns, allowedFields }) {
       values.push(normalizeArrayValue(body[field]));
     } else if (isJson) {
       sets.push(`${qi(field)} = $${idx}::${col.data_type}`);
-      const raw = body[field];
-      if (raw === null || raw === undefined || raw === "") values.push(null);
-      else if (typeof raw === "string") {
-        try {
-          JSON.parse(raw);
-          values.push(raw);
-        } catch {
-          values.push(JSON.stringify(raw));
-        }
-      } else {
-        values.push(JSON.stringify(raw));
-      }
+      values.push(normalizeJsonValue(body[field], field, col));
     } else if (isBigInt || isInteger) {
       const raw = body[field];
       sets.push(`${qi(field)} = NULLIF($${idx}::text, '')::${isBigInt ? "bigint" : "integer"}`);
