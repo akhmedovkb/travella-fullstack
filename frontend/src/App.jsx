@@ -47,6 +47,8 @@ import AdminOperations from "./pages/admin/AdminOperations";
 import AdminProviderSupport from "./pages/admin/AdminProviderSupport";
 import AdminServiceAudit from "./pages/admin/AdminServiceAudit";
 import PassportParser from "./pages/PassportParser";
+import SupportSuccess from "./pages/SupportSuccess";
+import SupportProject from "./pages/SupportProject";
 
 // Клиентские
 import ClientRegister from "./pages/ClientRegister";
@@ -152,6 +154,17 @@ export default function App() {
           <Routes>
             {/* --- Главная: сразу MARKETPLACE --- */}
             <Route path="/" element={<Marketplace />} />
+
+
+            <Route path="/support/success" element={<SupportSuccess />} />
+            <Route
+              path="/support/project"
+              element={
+                <PrivateRoute>
+                  <SupportProject />
+                </PrivateRoute>
+              }
+            />
 
             {/* Старый лендинг, если понадобится отдельно */}
             <Route path="/landing" element={<LandingHome />} />
