@@ -790,6 +790,149 @@ async function createProviderSupportDonationOrder({
   }
 }
 
+
+async function publicSupportStatus(req, res) {
+  try {
+    await ensureProviderSupportSchema(pool);
+    await syncProviderSupportDonationStatuses(pool);
+
+    const donationId = intOrNull(req.query?.donation_id || req.query?.donationId);
+    const orderId = intOrNull(req.query?.order_id || req.query?.orderId);
+
+    if (!donationId && !orderId) {
+      return res.status(400).json({ ok: false, message: "donation_id or order_id is required" });
+    }
+
+    const topupKind = await relationKind(pool, "topup_orders");
+    const target = topupKind === "v" ? "payme_topup_orders" : "topup_orders";
+    const hasPaymeTransactions = (await relationKind(pool, "payme_transactions")) !== null;
+
+    const paymeJoin = hasPaymeTransactions
+      ? `LEFT JOIN payme_transactions pt ON pt.order_id = o.id`
+      : `LEFT JOIN LATERAL (
+           SELECT NULL::text AS payme_id,
+                  NULL::int AS state,
+                  NULL::bigint AS create_time,
+                  NULL::bigint AS perform_time,
+                  NULL::bigint AS cancel_time
+         ) pt ON TRUE`;
+
+    const args = [];
+    const where = [];
+    let i = 1;
+
+    if (donationId) {
+      where.push(`d.id = $${i++}`);
+      args.push(donationId);
+    }
+    if (orderId) {
+      where.push(`o.id = $${i++}`);
+      args.push(orderId);
+    }
+
+    const { rows } = await pool.query(
+      `
+        SELECT
+          d.id AS donation_id,
+          d.status AS donation_status,
+          d.amount_tiyin,
+          FLOOR(d.amount_tiyin / 100)::bigint AS amount_sum,
+          d.provider_id,
+          d.service_id,
+          d.source,
+          d.created_at,
+          d.paid_at,
+          d.cancelled_at,
+          d.failed_at,
+          d.expires_at,
+          o.id AS order_id,
+          o.status AS order_status,
+          o.pay_url,
+          o.expires_at AS order_expires_at,
+          COALESCE(d.payme_id, pt.payme_id) AS payme_id,
+          pt.state AS payme_state,
+          pt.perform_time,
+          pt.cancel_time
+        FROM provider_support_donations d
+        LEFT JOIN ${target} o ON o.support_donation_id = d.id
+        ${paymeJoin}
+        WHERE ${where.join(" AND ")}
+        ORDER BY d.id DESC
+        LIMIT 1
+      `,
+      args
+    );
+
+    const row = rows[0];
+    if (!row) {
+      return res.status(404).json({ ok: false, message: "Support payment not found" });
+    }
+
+    return res.json({
+      ok: true,
+      donation: {
+        id: Number(row.donation_id),
+        status: row.donation_status,
+        amount_tiyin: Number(row.amount_tiyin || 0),
+        amount_sum: Number(row.amount_sum || 0),
+        provider_id: row.provider_id ? Number(row.provider_id) : null,
+        service_id: row.service_id ? Number(row.service_id) : null,
+        source: row.source || null,
+        created_at: row.created_at,
+        paid_at: row.paid_at,
+        cancelled_at: row.cancelled_at,
+        failed_at: row.failed_at,
+        expires_at: row.expires_at,
+      },
+      order: {
+        id: row.order_id ? Number(row.order_id) : null,
+        status: row.order_status || null,
+        pay_url: row.pay_url || null,
+        expires_at: row.order_expires_at,
+      },
+      payme: {
+        id: row.payme_id || null,
+        state: row.payme_state,
+        perform_time: row.perform_time,
+        cancel_time: row.cancel_time,
+      },
+    });
+  } catch (e) {
+    console.error("publicSupportStatus error:", e);
+    return res.status(500).json({ ok: false, message: "Internal error" });
+  }
+}
+
+async function providerCreateSupportDonation(req, res) {
+  try {
+    if (String(req.user?.role || "").toLowerCase() !== "provider" && !req.user?.is_admin) {
+      return res.status(403).json({ ok: false, message: "Provider access required" });
+    }
+
+    const providerId = intOrNull(req.user?.id);
+    if (!providerId) {
+      return res.status(401).json({ ok: false, message: "Provider is not identified" });
+    }
+
+    const amountSum = positiveInt(req.body?.amount_sum || req.body?.amount || req.body?.sum, 0);
+    const serviceId = intOrNull(req.body?.service_id || req.body?.serviceId);
+    const note = cleanText(req.body?.note, 1000) || "Web provider support";
+
+    const result = await createProviderSupportDonationOrder({
+      providerId,
+      serviceId,
+      amountSum,
+      source: "provider_web",
+      note,
+    });
+
+    return res.json(result);
+  } catch (e) {
+    console.error("providerCreateSupportDonation error:", e);
+    return res.status(e.status || 500).json({ ok: false, message: e.message || "Internal error" });
+  }
+}
+
 async function adminSupportSettings(req, res) {
   try {
     const settings = await getProviderSupportSettings(pool);
@@ -973,6 +1116,8 @@ module.exports = {
   createProviderSupportDonationOrder,
   expireOldProviderSupportOrders,
   syncProviderSupportDonationStatuses,
+  publicSupportStatus,
+  providerCreateSupportDonation,
   adminSupportSettings,
   adminUpdateSupportSettings,
   adminSupportDonations,
