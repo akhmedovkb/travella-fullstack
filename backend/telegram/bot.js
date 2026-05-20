@@ -62,6 +62,7 @@ const REFUSED_CATEGORIES = [
   "refused_hotel",
   "refused_flight",
   "refused_ticket",
+  "refused_event_ticket",
 ];
 
 const API_BASE = (
@@ -2037,6 +2038,111 @@ function buildProviderServiceHeaderHtml(svc, category, details = {}) {
   return html;
 }
 
+
+function firstNonEmptyValue(...values) {
+  for (const value of values) {
+    if (value === undefined || value === null) continue;
+    const s = String(value).trim();
+    if (s) return s;
+  }
+  return "";
+}
+
+function buildProviderCompactManageCardHtml(svc, category, details = {}) {
+  const status = String(svc?.status || "draft").toLowerCase();
+  const isPending = status === "pending" || svc?.moderation_status === "pending";
+  const isRejected = status === "rejected" || svc?.moderation_status === "rejected";
+  const isActual = isServiceActual(details, svc);
+
+  let stateLine = "🟢 Активна";
+  if (isPending) stateLine = "⏳ На модерации";
+  else if (isRejected) stateLine = "❌ Отклонена";
+  else if (!isActual) stateLine = "⛔ Неактуальна";
+  else if (status === "archived") stateLine = "🗄 В архиве";
+  else if (status === "draft") stateLine = "📝 Черновик";
+
+  const title = firstNonEmptyValue(
+    svc?.title,
+    details.title,
+    details.hotelName,
+    details.hotel,
+    CATEGORY_LABELS?.[category],
+    category,
+    "Услуга"
+  );
+
+  const country = firstNonEmptyValue(
+    details.directionCountry,
+    details.country,
+    details.locationCountry,
+    details.toCountry
+  );
+
+  const city = firstNonEmptyValue(
+    details.directionTo,
+    details.toCity,
+    details.city,
+    details.locationCity,
+    details.directionCity
+  );
+
+  const start = firstNonEmptyValue(
+    details.startDate,
+    details.start_date,
+    details.checkIn,
+    details.checkInDate,
+    details.checkinDate,
+    details.departureFlightDate,
+    details.eventDate,
+    svc?.start_date
+  );
+
+  const end = firstNonEmptyValue(
+    details.endDate,
+    details.end_date,
+    details.checkOut,
+    details.checkOutDate,
+    details.checkoutDate,
+    details.returnFlightDate,
+    svc?.end_date
+  );
+
+  const nights = firstNonEmptyValue(details.nights, details.nightCount);
+  const price = pickPrice(details, svc, "provider");
+  const currency = firstNonEmptyValue(
+    details.currency,
+    details.priceCurrency,
+    details.price_currency,
+    svc?.price_currency,
+    PRICE_CURRENCY
+  );
+
+  const lines = [
+    `🧭 <b>Управление услугой</b> <code>#R${escapeHtml(svc?.id || "")}</code>`,
+    `📌 <b>${escapeHtml(CATEGORY_LABELS?.[category] || category || "Услуга")}</b>`,
+    `${escapeHtml(stateLine)}`,
+    "",
+    `📝 <b>${escapeHtml(title)}</b>`,
+  ];
+
+  const direction = [country, city].filter(Boolean).join(" / ");
+  if (direction) lines.push(`🌍 ${escapeHtml(direction)}`);
+
+  if (start || end) {
+    lines.push(`🗓 ${escapeHtml(prettyDateTime(start || "—"))} → ${escapeHtml(prettyDateTime(end || "—"))}`);
+  }
+
+  if (nights) lines.push(`🌙 ${escapeHtml(nights)} ноч.`);
+  if (price !== null && price !== undefined && String(price).trim() !== "") {
+    lines.push(`💰 ${escapeHtml(price)} ${escapeHtml(currency)}`);
+  }
+
+  lines.push("", "💡 Выберите действие ниже.");
+
+  return lines.join("\n");
+}
+
+
 function buildArchiveItemIntroHtml(svc, serviceId) {
   const d = pickDetails(svc || {});
   const category = svc?.category || svc?.type || "refused_tour";
@@ -2342,8 +2448,37 @@ async function safeReply(ctx, text, extra) {
 }
 
 // Если фото не отправилось — падаем в текст.
+function stripTelegramHtml(input) {
+  return String(input || "")
+    .replace(/<br\s*\/?\s*>/gi, "\n")
+    .replace(/<\/p\s*>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, "\"")
+    .replace(/&#39;/g, "'")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function compactTelegramCaption(input, maxLen = 950) {
+  const raw = String(input || "").trim();
+  if (raw.length <= maxLen) return raw;
+
+  const cut = raw.slice(0, maxLen);
+  const lastNl = cut.lastIndexOf("\n");
+  const safeCut = lastNl > 250 ? cut.slice(0, lastNl) : cut;
+
+  return `${safeCut.trim()}\n\n👁 Нажмите «Подробнее» или откройте в кабинете.`;
+}
+
+// Если фото не отправилось — падаем в текст.
+// ВАЖНО: Telegram caption ограничен 1024 символами.
+// Нельзя резать HTML на 1024 вслепую: можно разорвать <b>/<a>/<code> и получить raw HTML в чате.
 async function safeReplyWithPhoto(ctx, photo, caption, extra = {}) {
-  const cap = String(caption || "").slice(0, 1024);
+  const cap = compactTelegramCaption(caption, 950);
 
   const send = async (opts) => {
     // ВАЖНО: не используем ctx.replyWithPhoto (middleware глотает ошибки).
@@ -2366,7 +2501,10 @@ async function safeReplyWithPhoto(ctx, photo, caption, extra = {}) {
 
     if (isEntities) {
       try {
-        const opts2 = { caption: cap, ...extra };
+        const opts2 = {
+          ...extra,
+          caption: stripTelegramHtml(cap).slice(0, 950),
+        };
         delete opts2.parse_mode;
         return await send(opts2);
       } catch (e2) {
@@ -2382,7 +2520,7 @@ async function safeReplyWithPhoto(ctx, photo, caption, extra = {}) {
 
     const textExtra = { ...extra };
     delete textExtra.parse_mode;
-    return await safeReply(ctx, cap || "(фото)", textExtra);
+    return await safeReply(ctx, stripTelegramHtml(cap) || "(фото)", textExtra);
   }
 }
 
@@ -5725,11 +5863,11 @@ bot.action("prov_services:list_cards", async (ctx) => {
       return;
     }
 
+    const PAGE_SIZE = 5;
     await safeReply(
       ctx,
-      `✅ Найдено услуг: ${data.items.length}.\nПоказываю первые 10 (по ближайшей дате).`
+      `✅ Найдено услуг: ${data.items.length}.\nПоказываю первые ${PAGE_SIZE} (по ближайшей дате).`
     );
-    const PAGE_SIZE = 5;
     const offset = Number(ctx.session?.cardsOffset || 0);
     
     const itemsSorted = [...data.items].sort((a, b) => {
@@ -5754,12 +5892,10 @@ bot.action("prov_services:list_cards", async (ctx) => {
       const category = svc.category || svc.type || "refused_tour";
       const details = parseDetailsAny(svc.details);
 
-      const { text, photoUrl } = buildServiceMessage(svc, category, "provider", { forceRefused: true });
-      const headerHtml = buildProviderServiceHeaderHtml(svc, category, details);
-
-      // ⚠️ text уже HTML из buildServiceMessage
-      const msg = headerHtml + "\n\n" + text;
+      const { photoUrl, serviceUrl } = buildServiceMessage(svc, category, "provider", { forceRefused: true });
+      const msg = buildProviderCompactManageCardHtml(svc, category, details);
       const manageUrl = `${SITE_URL}/dashboard?from=tg&service=${svc.id}`;
+      const detailsUrl = serviceUrl || buildServiceUrl(svc.id);
 
       const keyboard = {
         inline_keyboard: [
@@ -5772,6 +5908,7 @@ bot.action("prov_services:list_cards", async (ctx) => {
             { text: "🗄 Архивировать", callback_data: `svc_archive:${svc.id}` },
             { text: "🗑 Удалить", callback_data: `svc_delete:${svc.id}` },
           ],
+          [{ text: "👁 Подробнее", url: detailsUrl }],
           [{ text: "🌐 Открыть в кабинете", url: manageUrl }],
         ],
       };
@@ -5924,7 +6061,7 @@ bot.action(/^svc_delete:(\d+)$/, async (ctx) => {
               { text: "↩️ Отмена", callback_data: "prov_services:list" },
               { text: "🗑 Удалить", callback_data: `svc_delete_confirm:${serviceId}` },
             ],
-            [{ text: "🖼 Мои карточки", callback_data: "prov_services:list_cards" }],
+            [{ text: "📢 Актуальные", callback_data: "prov_services:list_cards" }],
           ],
         },
       }
@@ -5962,7 +6099,7 @@ bot.action(/^svc_delete_confirm:(\d+)$/, async (ctx) => {
             inline_keyboard: [
               [
                 { text: "🧺 Открыть корзину", callback_data: "trash:open" },
-                { text: "🖼 Мои карточки", callback_data: "prov_services:list_cards" },
+                { text: "📢 Актуальные", callback_data: "prov_services:list_cards" },
               ],
               [{ text: "📋 Мои услуги", callback_data: "prov_services:list" }],
             ],
@@ -6184,7 +6321,7 @@ bot.action(/^trash:restore:(\d+)$/, async (ctx) => {
           inline_keyboard: [
             [
               { text: "🧺 Обновить корзину", callback_data: "trash:open" },
-              { text: "🖼 Мои карточки", callback_data: "prov_services:list_cards" },
+              { text: "📢 Актуальные", callback_data: "prov_services:list_cards" },
             ],
           ],
         },
