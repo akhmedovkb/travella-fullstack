@@ -7,11 +7,33 @@ import { apiDelete, apiGet, apiPost, apiPut } from "../../api";
 const LS_KEY = "admin.providers.lastSeenISO";
 
 const PROVIDER_TYPES = [
-  ["guide", "Гид"],
-  ["transport", "Транспорт"],
-  ["agent", "Турагент"],
-  ["hotel", "Отель"],
+  ["client", "👤 Клиент"],
+  ["agent", "🧳 Турагент"],
+  ["guide", "🧭 Гид"],
+  ["transport", "🚗 Транспорт"],
+  ["hotel", "🏨 Отель"],
 ];
+
+const ACCOUNT_STATUSES = [
+  ["pending", "🟡 Новый"],
+  ["active", "🟢 Активен"],
+  ["blocked", "🔴 Заблокирован"],
+  ["draft", "⚪ Не завершил профиль"],
+  ["rejected", "❌ Отклонён"],
+];
+
+function typeMeta(value) {
+  const raw = String(value || "").trim();
+  const found = PROVIDER_TYPES.find(([v]) => v === raw);
+  return { raw, label: found?.[1] || (raw ? raw : "—") };
+}
+
+function statusMeta(value) {
+  const raw = String(value || "pending").trim();
+  const found = ACCOUNT_STATUSES.find(([v]) => v === raw);
+  if (found) return { raw, label: found[1] };
+  return { raw, label: raw || "—" };
+}
 
 const TEXT_FIELDS = [
   "name",
@@ -362,10 +384,34 @@ export default function AdminProviders() {
                   <td className="px-3 py-3 font-mono text-slate-700">#{p.id}</td>
                   <td className="px-3 py-3">{newBadge ? <span className="rounded-full bg-green-600 px-2 py-0.5 text-[10px] font-black text-white">NEW</span> : <span className="text-slate-300">—</span>}</td>
                   <td className="px-3 py-3"><CellText className="font-bold text-slate-950" title={p.name}>{p.name || "—"}</CellText><CellText className="mt-0.5 text-[11px] text-slate-500" title={p.email}>{p.email || "—"}</CellText></td>
-                  <td className="px-3 py-3"><span className="rounded-full bg-slate-100 px-2 py-1 font-semibold text-slate-700">{p.type || "—"}</span></td>
+                  <td className="px-3 py-3">
+                    <span
+                      className={`rounded-full px-2 py-1 font-semibold ${
+                        String(p.type || "") === "client"
+                          ? "bg-amber-50 text-amber-700 ring-1 ring-amber-100"
+                          : "bg-slate-100 text-slate-700"
+                      }`}
+                      title={String(p.type || "")}
+                    >
+                      {typeMeta(p.type).label}
+                    </span>
+                  </td>
                   <td className="px-3 py-3"><CellText title={p.phone}>{p.phone || "—"}</CellText></td>
                   <td className="px-3 py-3"><CellText title={p.telegram_chat_id || p.tg_chat_id || p.telegram_refused_chat_id}>{p.telegram_chat_id || p.tg_chat_id || p.telegram_refused_chat_id || "—"}</CellText></td>
-                  <td className="px-3 py-3"><CellText title={p.account_status}>{p.account_status || "active"}</CellText></td>
+                  <td className="px-3 py-3">
+                    <span
+                      className={`rounded-full px-2 py-1 font-semibold ${
+                        String(p.account_status || "pending") === "active"
+                          ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100"
+                          : String(p.account_status || "pending") === "blocked"
+                            ? "bg-red-50 text-red-700 ring-1 ring-red-100"
+                            : "bg-amber-50 text-amber-700 ring-1 ring-amber-100"
+                      }`}
+                      title={String(p.account_status || "pending")}
+                    >
+                      {statusMeta(p.account_status).label}
+                    </span>
+                  </td>
                   <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
                     <div className="flex gap-1">
                       <button type="button" onClick={() => openDrawer(p)} className="rounded-lg bg-slate-900 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-black">Править</button>
@@ -416,10 +462,37 @@ export default function AdminProviders() {
                 <h3 className="mb-3 text-sm font-black uppercase tracking-wide text-slate-700">Основное</h3>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <Field label="Имя"><TextInput value={edit.name} onChange={(v) => setField("name", v)} /></Field>
-                  <Field label="Тип"><select value={edit.type || ""} onChange={(e) => setField("type", e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"><option value="">—</option>{PROVIDER_TYPES.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
+                  <Field label="Тип профиля">
+                    <select
+                      value={edit.type || ""}
+                      onChange={(e) => setField("type", e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                    >
+                      <option value="">—</option>
+                      {PROVIDER_TYPES.map(([value, label]) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
+                    </select>
+                    {String(edit.type || "") === "client" && (
+                      <div className="mt-1 rounded-lg bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700 ring-1 ring-amber-100">
+                        Этот профиль выглядит как поставщик, но тип стоит client. Исправьте на agent / guide / hotel / transport и сохраните.
+                      </div>
+                    )}
+                  </Field>
                   <Field label="Телефон"><TextInput value={edit.phone} onChange={(v) => setField("phone", v)} /></Field>
                   <Field label="Email"><TextInput value={edit.email} onChange={(v) => setField("email", v)} /></Field>
-                  <Field label="Статус аккаунта"><TextInput value={edit.account_status} onChange={(v) => setField("account_status", v)} placeholder="active / blocked / pending" /></Field>
+                  <Field label="Статус аккаунта">
+                    <select
+                      value={edit.account_status || "pending"}
+                      onChange={(e) => setField("account_status", e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                    >
+                      {ACCOUNT_STATUSES.map(([value, label]) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
+                    </select>
+                    <div className="mt-1 text-[11px] text-slate-500">pending = новый/ожидает подтверждения; active = активен.</div>
+                  </Field>
                   <Field label="hotel_id"><TextInput value={edit.hotel_id} onChange={(v) => setField("hotel_id", v)} /></Field>
                   <Field label="Address"><TextInput value={edit.address} onChange={(v) => setField("address", v)} /></Field>
                   <Field label="Photo URL"><TextInput value={edit.photo} onChange={(v) => setField("photo", v)} /></Field>
