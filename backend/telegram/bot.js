@@ -5496,7 +5496,7 @@ await ctx.reply("🧳 Выберите действие:", {
   reply_markup: {
     inline_keyboard: [
       [{ text: "📤 Выбрать мою услугу", switch_inline_query_current_chat: "#my refused_tour" }],
-      [{ text: "🖼 Карточками", callback_data: "prov_services:list_cards" }],
+      [{ text: "📢 Актуальные", callback_data: "prov_services:list_cards" }],
       [
         { text: archiveButtonLabel(counters.archive), callback_data: "archive:open" },
         { text: trashButtonLabel(counters.trash), callback_data: "trash:open" },
@@ -5663,7 +5663,7 @@ bot.action("prov_services:list", async (ctx) => {
       reply_markup: {
         inline_keyboard: [
           [{ text: "📤 Выбрать мою услугу", switch_inline_query_current_chat: "#my refused_tour" }],
-          [{ text: "🖼 Карточками", callback_data: "prov_services:list_cards" }],
+          [{ text: "📢 Актуальные", callback_data: "prov_services:list_cards" }],
           [
             { text: archiveButtonLabel(counters.archive), callback_data: "archive:open" },
             { text: trashButtonLabel(counters.trash), callback_data: "trash:open" },
