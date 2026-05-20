@@ -4628,6 +4628,20 @@ async function clearProviderServiceDraft(ctx) {
 }
 
 
+async function persistProviderCreateWizard(ctx) {
+  try {
+    if (
+      isCreateWizardState(ctx?.session?.state) &&
+      ctx?.session?.serviceDraft
+    ) {
+      await saveProviderServiceDraft(ctx);
+    }
+  } catch (e) {
+    console.error("[tg-bot] persistProviderCreateWizard error:", e?.message || e);
+  }
+}
+
+
 function forceCloseEditWizard(ctx) {
   if (!ctx?.session) return;
 
@@ -6918,6 +6932,7 @@ bot.action("svc_wiz:back", async (ctx) => {
 
     ctx.session.state = prev;
     await promptWizardState(ctx, prev);
+    await persistProviderCreateWizard(ctx);
   } catch (e) {
     console.error("[tg-bot] svc_wiz:back error:", e?.response?.data || e);
   }
@@ -7064,6 +7079,7 @@ bot.action("svc_wiz:skip", async (ctx) => {
     pushWizardState(ctx, state);
     ctx.session.state = nextState;
     await promptWizardState(ctx, nextState);
+    await persistProviderCreateWizard(ctx);
   } catch (e) {
     console.error("[tg-bot] svc_wiz:skip error:", e?.response?.data || e);
     await safeReply(ctx, "⚠️ Ошибка при пропуске. Попробуйте ещё раз.");
@@ -7105,12 +7121,14 @@ bot.action(
       if (category === "refused_hotel") {
         ctx.session.state = "svc_hotel_country";
         await promptWizardState(ctx, "svc_hotel_country");
+        await persistProviderCreateWizard(ctx);
         return;
       }
 
       // refused_tour и refused_flight начинаем одинаково (с title)
       ctx.session.state = "svc_create_title";
       await promptWizardState(ctx, "svc_create_title");
+      await persistProviderCreateWizard(ctx);
     } catch (e) {
       console.error("[tg-bot] svc_new_cat action error:", e);
     }
@@ -9368,7 +9386,8 @@ bot.on("text", async (ctx, next) => {
       if (!ctx.session.serviceDraft) ctx.session.serviceDraft = {};
       const draft = ctx.session.serviceDraft;
 
-      switch (state) {
+      try {
+        switch (state) {
         case "svc_create_title": {
           const v = await requireTextField(ctx, text, "Название", { min: 2 });
           if (!v) return;
@@ -9935,6 +9954,9 @@ bot.on("text", async (ctx, next) => {
 
         default:
           break;
+        }
+      } finally {
+        await persistProviderCreateWizard(ctx);
       }
     }
   } catch (e) {
@@ -10107,9 +10129,12 @@ bot.on("photo", async (ctx, next) => {
     draft.telegramPhotoFileId = fileId;
 
     if (state === "svc_create_photo") {
+      await persistProviderCreateWizard(ctx);
       await finishCreateServiceFromWizard(ctx);
       return;
     }
+
+    await persistProviderCreateWizard(ctx);
 
     await safeReply(
       ctx,
