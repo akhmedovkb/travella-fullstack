@@ -609,6 +609,17 @@ async function ensureInspectionsTable() {
       created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW()
     )
   `);
+
+  // Soft migrations for databases where hotel_inspection_media existed before
+  // width/height/duration_seconds/sort_order were introduced.
+  await db.query(`ALTER TABLE hotel_inspection_media ADD COLUMN IF NOT EXISTS public_id TEXT`);
+  await db.query(`ALTER TABLE hotel_inspection_media ADD COLUMN IF NOT EXISTS thumbnail_url TEXT`);
+  await db.query(`ALTER TABLE hotel_inspection_media ADD COLUMN IF NOT EXISTS width INTEGER`);
+  await db.query(`ALTER TABLE hotel_inspection_media ADD COLUMN IF NOT EXISTS height INTEGER`);
+  await db.query(`ALTER TABLE hotel_inspection_media ADD COLUMN IF NOT EXISTS duration_seconds INTEGER`);
+  await db.query(`ALTER TABLE hotel_inspection_media ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0`);
+  await db.query(`ALTER TABLE hotel_inspection_media ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW()`);
+
   await db.query(`CREATE INDEX IF NOT EXISTS idx_hotel_inspection_media_inspection ON hotel_inspection_media(inspection_id)`);
   await db.query(`CREATE INDEX IF NOT EXISTS idx_hotel_inspection_media_section ON hotel_inspection_media(section_key)`);
 
@@ -916,10 +927,10 @@ async function ensureHotelsAggregates(hotelId) {
 
   await db.query(
     `UPDATE hotels
-       SET attrs = COALESCE(attrs,'{}'::jsonb) || jsonb_build_object('aggregated_from_inspections', $2),
+       SET attrs = COALESCE(attrs,'{}'::jsonb) || jsonb_build_object('aggregated_from_inspections', $2::jsonb),
            updated_at = NOW()
      WHERE id=$1`,
-    [hotelId, { n, ...attrs }]
+    [hotelId, JSON.stringify({ n, ...attrs })]
   );
 }
 
