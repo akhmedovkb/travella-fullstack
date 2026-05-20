@@ -761,562 +761,586 @@ const inputCls = (season) =>
     }
   };
 
+
+  const [activeTab, setActiveTab] = useState("main");
+  const [pricingSeason, setPricingSeason] = useState("low");
+  const [pricingAudience, setPricingAudience] = useState("resident");
+
+  const SEASON_META = {
+    low: {
+      title: t("low_season", { defaultValue: "Низкий сезон" }),
+      short: t("admin.hotels.season_low", { defaultValue: "Низкий" }),
+      badge: "bg-emerald-50 text-emerald-700 ring-emerald-100",
+      panel: "bg-emerald-50/45 ring-emerald-100",
+    },
+    shoulder: {
+      title: t("shoulder_season", { defaultValue: "Средний сезон" }),
+      short: t("admin.hotels.season_shoulder", { defaultValue: "Средний" }),
+      badge: "bg-amber-50 text-amber-700 ring-amber-100",
+      panel: "bg-amber-50/45 ring-amber-100",
+    },
+    high: {
+      title: t("high_season", { defaultValue: "Высокий сезон" }),
+      short: t("admin.hotels.season_high", { defaultValue: "Высокий" }),
+      badge: "bg-rose-50 text-rose-700 ring-rose-100",
+      panel: "bg-rose-50/45 ring-rose-100",
+    },
+  };
+
+  const AUDIENCE_META = {
+    resident: t("for_residents", { defaultValue: "Для резидентов" }),
+    nonResident: t("for_nonresidents", { defaultValue: "Для нерезидентов" }),
+  };
+
+  const roomStats = useMemo(() => {
+    let filledRows = 0;
+    let pricesCount = 0;
+    let totalRooms = 0;
+    roomRows.forEach((row) => {
+      const count = Number(row.count || 0);
+      if (count > 0) totalRooms += count;
+      if (count > 0 || rowHasAnyPrice(row)) filledRows += 1;
+      SEASONS.forEach((season) => {
+        ["resident", "nonResident"].forEach((audience) => {
+          MEAL_PLANS.forEach((meal) => {
+            if (isFilled(row?.prices?.[season]?.[audience]?.[meal])) pricesCount += 1;
+          });
+        });
+      });
+    });
+    return { filledRows, pricesCount, totalRooms };
+  }, [roomRows]);
+
+  const completionItems = [
+    { label: t("name", { defaultValue: "Название" }), done: !!name.trim() },
+    { label: t("country", { defaultValue: "Страна" }), done: !!countryOpt },
+    { label: t("city", { defaultValue: "Город" }), done: !!cityOpt },
+    { label: t("address", { defaultValue: "Адрес" }), done: !!address.trim() },
+    { label: t("rooms_and_prices", { defaultValue: "Номерной фонд и цены" }), done: roomStats.filledRows > 0 },
+    { label: t("images", { defaultValue: "Изображения" }), done: images.length > 0 },
+  ];
+  const completedCount = completionItems.filter((x) => x.done).length;
+
+  const tabs = [
+    { id: "main", label: t("admin.hotels.tab_main", { defaultValue: "Основное" }) },
+    { id: "prices", label: t("admin.hotels.tab_prices", { defaultValue: "Номера и цены" }) },
+    { id: "taxes", label: t("admin.hotels.tab_taxes", { defaultValue: "Налоги" }) },
+    { id: "amenities", label: t("admin.hotels.tab_amenities", { defaultValue: "Удобства" }) },
+    { id: "media", label: t("admin.hotels.tab_media", { defaultValue: "Фото" }) },
+  ];
+
+  const formInputClass = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100";
+  const formLabelClass = "mb-1.5 block text-xs font-black uppercase tracking-[0.08em] text-slate-500";
+
   /* ==================== UI ==================== */
   return (
-    <div className="mx-auto max-w-screen-2xl bg-white rounded-xl border shadow-sm p-6 lg:p-8">
-      <div className="mb-3"><GeoNamesStatusBadge /></div>
-      {/* ── ШАПКА С КНОПКОЙ СЕЗОНОВ ── */}
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">
-         {isNew
-            ? t("admin.new_hotel_title",  { defaultValue: "Новый отель" })
-            : t("admin.edit_hotel_title", { defaultValue: "Редактирование отеля" })}
-        </h1>
+    <div className="mx-auto max-w-7xl rounded-3xl border border-slate-200 bg-slate-50/60 p-4 shadow-sm lg:p-6">
+      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <GeoNamesStatusBadge />
+            <span className="inline-flex items-center rounded-full bg-white px-2.5 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
+              {completedCount}/{completionItems.length} заполнено
+            </span>
+            {roomStats.pricesCount > 0 && (
+              <span className="inline-flex items-center rounded-full bg-orange-50 px-2.5 py-1 text-xs font-bold text-orange-700 ring-1 ring-orange-100">
+                {roomStats.pricesCount} цен
+              </span>
+            )}
+          </div>
+          <h1 className="mt-3 text-2xl font-black tracking-[-0.03em] text-slate-950">
+            {isNew
+              ? t("admin.new_hotel_title", { defaultValue: "Новый отель" })
+              : t("admin.edit_hotel_title", { defaultValue: "Редактирование отеля" })}
+          </h1>
+          <p className="mt-1 max-w-3xl text-sm font-medium leading-6 text-slate-600">
+            {t("admin.hotels.form_hint", {
+              defaultValue:
+                "Заполните карточку по шагам. Цены теперь редактируются без горизонтального скролла: выберите сезон и тип гостя.",
+            })}
+          </p>
+        </div>
 
-        {hotelId && (
+        <div className="flex flex-wrap items-center gap-2">
           <Link
-            to={`/admin/hotels/${encodeURIComponent(hotelId)}/seasons`}
-            className="inline-flex items-center px-3 py-1.5 border rounded text-sm hover:bg-gray-50"
+            to="/admin/hotels"
+            className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50"
           >
-            Управлять сезонами
+            ← {t("back", { defaultValue: "Назад" })}
           </Link>
-        )}
+          {hotelId && (
+            <Link
+              to={`/admin/hotels/${encodeURIComponent(hotelId)}/seasons`}
+              className="inline-flex items-center justify-center rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-sm font-bold text-orange-700 shadow-sm transition hover:bg-orange-100"
+            >
+              {t("admin.hotels.manage_seasons", { defaultValue: "Сезоны" })}
+            </Link>
+          )}
+          <button
+            type="button"
+            onClick={submit}
+            className="inline-flex items-center justify-center rounded-xl bg-orange-600 px-4 py-2 text-sm font-black text-white shadow-sm transition hover:bg-orange-700"
+          >
+            {t("save", { defaultValue: "Сохранить" })}
+          </button>
+        </div>
       </div>
 
-      {/* Базовая информация */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {/* Название отеля */}
-               <div className="col-span-2">
-          <div className="flex gap-3 items-start">
-            <div className="flex-1">
-              <label className="block text-sm font-medium mb-1">
-                {t("name", { defaultValue: "Название" })}
-              </label>
-              <AsyncCreatableSelect
-                cacheOptions
-                defaultOptions
-                {...ASYNC_MENU_PORTAL}
-                loadOptions={loadHotelOptions}
-                noOptionsMessage={ASYNC_I18N.noOptionsMessage}
-                loadingMessage={ASYNC_I18N.loadingMessage}
-                placeholder={t("hotel.search_placeholder", { defaultValue: "Найдите отель или введите свой вариант…" })}
-                value={name ? { value: name, label: name } : null}
-                onChange={(opt) => setName(opt?.value || "")}
-                onCreateOption={(input) => setName(input)}
-                isClearable
-              />
-            </div>
-            <div className="w-72 md:w-96">
-              <label className="block text-sm font-medium mb-1">
-                {t("contact", { defaultValue: "Контакт" })}
-              </label>
-              <input
-                className="w-full border rounded px-3 py-2"
-                value={contact}
-                onChange={(e) => setContact(sanitizeAlnumContact(e.target.value))}
-                inputMode="text"
-                autoComplete="off"
-                placeholder="+998..., email, https://..."
-                maxLength={300}
-              />
-            </div>
-            <div className="w-28">
-              <label className="block text-sm font-medium mb-1">
-                {t("stars", { defaultValue: "Звёзды" })}
-              </label>
-              <input
-                type="number"
-                min={1}
-                max={7}
-                step={1}
-                className="w-full border rounded px-3 py-2"
-                placeholder="1–7"
-                value={stars ?? ""}
-                onChange={(e) => setStars(e.target.value)}
-              />
-            </div>
-            <div className="w-36">
-              <label className="block text-sm font-medium mb-1">
-                provider_id
-              </label>
-              {isAdminLike ? (
+      <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
+        {completionItems.map((item) => (
+          <div
+            key={item.label}
+            className={`rounded-2xl border px-3 py-2 text-xs font-bold ${
+              item.done
+                ? "border-emerald-100 bg-emerald-50 text-emerald-700"
+                : "border-slate-200 bg-white text-slate-500"
+            }`}
+          >
+            <span className="mr-1">{item.done ? "✓" : "○"}</span>
+            {item.label}
+          </div>
+        ))}
+      </div>
+
+      <div className="sticky top-[72px] z-20 mb-5 rounded-2xl border border-slate-200 bg-white/95 p-1.5 shadow-sm backdrop-blur">
+        <div className="flex gap-1 overflow-x-auto">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={`whitespace-nowrap rounded-xl px-4 py-2 text-sm font-black transition ${
+                activeTab === tab.id
+                  ? "bg-slate-950 text-white shadow-sm"
+                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm lg:p-6">
+        {activeTab === "main" && (
+          <div className="space-y-5">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+              <div className="lg:col-span-6">
+                <label className={formLabelClass}>{t("name", { defaultValue: "Название" })}</label>
+                <AsyncCreatableSelect
+                  cacheOptions
+                  defaultOptions
+                  {...ASYNC_MENU_PORTAL}
+                  loadOptions={loadHotelOptions}
+                  noOptionsMessage={ASYNC_I18N.noOptionsMessage}
+                  loadingMessage={ASYNC_I18N.loadingMessage}
+                  placeholder={t("hotel.search_placeholder", { defaultValue: "Найдите отель или введите свой вариант…" })}
+                  value={name ? { value: name, label: name } : null}
+                  onChange={(opt) => setName(opt?.value || "")}
+                  onCreateOption={(input) => setName(input)}
+                  isClearable
+                />
+              </div>
+
+              <div className="lg:col-span-3">
+                <label className={formLabelClass}>{t("contact", { defaultValue: "Контакт" })}</label>
+                <input
+                  className={formInputClass}
+                  value={contact}
+                  onChange={(e) => setContact(sanitizeAlnumContact(e.target.value))}
+                  inputMode="text"
+                  autoComplete="off"
+                  placeholder="+998..., email, https://..."
+                  maxLength={300}
+                />
+              </div>
+
+              <div className="lg:col-span-1">
+                <label className={formLabelClass}>{t("stars", { defaultValue: "Звёзды" })}</label>
                 <input
                   type="number"
                   min={1}
+                  max={7}
                   step={1}
-                  className="w-full border rounded px-3 py-2"
-                  placeholder="id владельца"
-                  value={providerId ?? ""}
-                  onChange={(e) => setProviderId(e.target.value)}
+                  className={formInputClass}
+                  placeholder="1–7"
+                  value={stars ?? ""}
+                  onChange={(e) => setStars(e.target.value)}
                 />
-              ) : (
-                <input
-                  className="w-full border rounded px-3 py-2 bg-gray-50 text-gray-700"
-                  value={providerId ?? ""}
-                  readOnly
-                  disabled
+              </div>
+
+              <div className="lg:col-span-2">
+                <label className={formLabelClass}>provider_id</label>
+                {isAdminLike ? (
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    className={formInputClass}
+                    placeholder="id владельца"
+                    value={providerId ?? ""}
+                    onChange={(e) => setProviderId(e.target.value)}
+                  />
+                ) : (
+                  <input className={`${formInputClass} bg-slate-50 text-slate-600`} value={providerId ?? ""} readOnly disabled />
+                )}
+                <div className="mt-1 text-[11px] font-medium text-slate-500">
+                  {isAdminLike ? "Админ может изменить владельца" : "Только админ может менять владельца"}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+              <div className="lg:col-span-4">
+                <label className={formLabelClass}>{t("country", { defaultValue: "Страна" })}</label>
+                <Select
+                  options={countryOptions}
+                  value={countryOpt}
+                  onChange={(opt) => {
+                    setCountryOpt(opt || null);
+                    setCityOpt(null);
+                    setCityDefaultOptions([]);
+                  }}
+                  placeholder={t("select_country", { defaultValue: "Выберите страну" })}
+                  isClearable
                 />
-              )}
-              <div className="text-[11px] text-gray-500 mt-1">
-                {isAdminLike ? "Админ может изменить владельца" : "Только админ может менять владельца"}
+              </div>
+
+              <div className="lg:col-span-4">
+                <label className={formLabelClass}>{t("city", { defaultValue: "Город" })}</label>
+                <AsyncSelect
+                  isDisabled={!countryOpt}
+                  cacheOptions
+                  defaultOptions={cityDefaultOptions}
+                  {...ASYNC_MENU_PORTAL}
+                  loadOptions={loadCities}
+                  noOptionsMessage={ASYNC_I18N.noOptionsMessage}
+                  loadingMessage={ASYNC_I18N.loadingMessage}
+                  placeholder={t("select_city", { defaultValue: "Выберите город" })}
+                  value={cityOpt}
+                  onChange={(opt) => setCityOpt(opt || null)}
+                  isClearable
+                />
+                {!import.meta.env.VITE_GEONAMES_USERNAME && (
+                  <div className="mt-1 text-xs font-medium text-slate-500">
+                    Автодополнение городов недоступно: не задан VITE_GEONAMES_USERNAME
+                  </div>
+                )}
+              </div>
+
+              <div className="lg:col-span-2">
+                <label className={formLabelClass}>{t("currency", { defaultValue: "Валюта" })}</label>
+                <select className={formInputClass} value={currency} onChange={(e) => setCurrency(e.target.value)}>
+                  <option value="UZS">UZS</option>
+                  <option value="USD">USD</option>
+                  <option value="EUR">EUR</option>
+                </select>
+              </div>
+
+              <div className="lg:col-span-12">
+                <label className={formLabelClass}>{t("address", { defaultValue: "Адрес" })}</label>
+                <input className={formInputClass} value={address} onChange={(e) => setAddress(e.target.value)} />
               </div>
             </div>
           </div>
-        </div>
+        )}
 
-        {/* Страна */}
-        <div>
-          <label className="block text-sm font-medium mb-1">
-            {t("country", { defaultValue: "Страна" })}
-          </label>
-          <Select
-            options={countryOptions}
-            value={countryOpt}
-            onChange={(opt) => {
-              setCountryOpt(opt || null);
-              setCityOpt(null);
-              setCityDefaultOptions([]);
-            }}
-            placeholder={t("select_country", { defaultValue: "Выберите страну" })}
-            isClearable
-          />
-        </div>
-
-        {/* Город */}
-        <div>
-          <label className="block text-sm font-medium mb-1">
-            {t("city", { defaultValue: "Город" })}
-          </label>
-          <AsyncSelect
-            isDisabled={!countryOpt}
-            cacheOptions
-            defaultOptions={cityDefaultOptions}
-            {...ASYNC_MENU_PORTAL}
-            loadOptions={loadCities}
-            noOptionsMessage={ASYNC_I18N.noOptionsMessage}
-            loadingMessage={ASYNC_I18N.loadingMessage}
-            placeholder={t("select_city", { defaultValue: "Выберите город" })}
-            value={cityOpt}
-            onChange={(opt) => setCityOpt(opt || null)}
-            isClearable
-          />
-          {!import.meta.env.VITE_GEONAMES_USERNAME && (
-            <div className="text-xs text-gray-500 mt-1">
-              Автодополнение городов недоступно: не задан VITE_GEONAMES_USERNAME
-            </div>
-          )}
-        </div>
-
-        {/* Валюта + Адрес */}
-        <div>
-          <label className="block text-sm font-medium mb-1">
-            {t("currency", { defaultValue: "Валюта" })}
-          </label>
-          <select
-            className="w-full border rounded px-3 py-2 bg-white"
-            value={currency}
-            onChange={(e) => setCurrency(e.target.value)}
-          >
-            <option value="UZS">UZS</option>
-            <option value="USD">USD</option>
-            <option value="EUR">EUR</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">
-            {t("address", { defaultValue: "Адрес" })}
-          </label>
-          <input
-            className="w-full border rounded px-3 py-2"
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-          />
-        </div>
-      </div>
-
-      {/* Номерной фонд + сезонные цены */}
-      <h2 className="text-xl font-semibold mt-6 mb-2">
-        {t("rooms_and_prices", { defaultValue: "Номерной фонд и цены" })}
-      </h2>
-
-      <div className="overflow-auto border rounded">
-        <table className="w-full min-w-[1200px] text-sm align-top">
-          <thead>
-            <tr>
-              <th className="text-left px-3 py-2">
-                {t("room_category",{defaultValue:"Категория"})}
-              </th>
-              <th className="text-left px-3 py-2">
-                {t("count_short",{defaultValue:"Кол-во"})}
-              </th>
-               <th className="px-3 py-2 text-center bg-white rounded-tl-md" colSpan={10}>
-                 {t("low_season", { defaultValue: "Низкий сезон" })}
-               </th>
-               <th className="px-3 py-2 text-center bg-slate-50 border-l border-gray-300" colSpan={10}>
-                 {t("shoulder_season", { defaultValue: "Средний сезон" })}
-               </th>
-               <th className="px-3 py-2 text-center bg-gray-100 border-l border-gray-300 rounded-tr-md" colSpan={10}>
-                 {t("high_season", { defaultValue: "Высокий сезон" })}
-               </th>
-              <th className="w-[1%] px-3 py-2"></th>
-            </tr>
-            <tr className="bg-gray-50">
-              <th></th><th></th>
-               <th className="text-center px-3 py-1 bg-white" colSpan={5}>{t("for_residents",{defaultValue:"Для резидентов"})}</th>
-               <th className="text-center px-3 py-1 bg-white" colSpan={5}>{t("for_nonresidents",{defaultValue:"Для нерезидентов"})}</th>
-               
-               <th className="text-center px-3 py-1 bg-slate-50 border-l border-gray-300" colSpan={5}>{t("for_residents",{defaultValue:"Для резидентов"})}</th>
-               <th className="text-center px-3 py-1 bg-slate-50" colSpan={5}>{t("for_nonresidents",{defaultValue:"Для нерезидентов"})}</th>
-               
-               <th className="text-center px-3 py-1 bg-gray-100 border-l border-gray-300" colSpan={5}>{t("for_residents",{defaultValue:"Для резидентов"})}</th>
-               <th className="text-center px-3 py-1 bg-gray-100" colSpan={5}>{t("for_nonresidents",{defaultValue:"Для нерезидентов"})}</th>
-              <th></th>
-            </tr>
-            <tr className="bg-gray-50 text-xs">
-              <th></th><th></th>
-                  {MEAL_PLANS.map((mp) => (
-                    <th key={`low-res-${mp}`} className="px-2 py-1 bg-white">{mp}</th>
-                  ))}
-                  {MEAL_PLANS.map((mp) => (
-                    <th key={`low-non-${mp}`} className="px-2 py-1 bg-white">{mp}</th>
-                  ))}
-                  
-                  {MEAL_PLANS.map((mp, i) => (
-                    <th key={`shoulder-res-${mp}`} className={`px-2 py-1 bg-slate-50 ${i === 0 ? "border-l border-gray-300" : ""}`}>{mp}</th>
-                  ))}
-                  {MEAL_PLANS.map((mp) => (
-                    <th key={`shoulder-non-${mp}`} className="px-2 py-1 bg-slate-50">{mp}</th>
-                  ))}
-                  
-                  {MEAL_PLANS.map((mp, i) => (
-                    <th key={`high-res-${mp}`} className={`px-2 py-1 bg-gray-100 ${i === 0 ? "border-l border-gray-300" : ""}`}>{mp}</th>
-                  ))}
-                  {MEAL_PLANS.map((mp) => (
-                    <th key={`high-non-${mp}`} className="px-2 py-1 bg-gray-100">{mp}</th>
-                  ))}
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {roomRows.map((row) => (
-              <tr key={row.id}
-                id={`row-${row.id}`}
-                className={`border-t ${invalidRowIds.includes(row.id) ? "bg-red-50/40" : ""}`}
-              >
-                <td className="px-3 py-2">
-                  {row.builtin ? (
-                    row.name
-                  ) : (
-                    <input
-                      className="border rounded px-2 py-1 w-44"
-                      value={row.name}
-                      onChange={(e) => updateRow(row.id, { name: e.target.value })}
-                      placeholder={t("room_type_name", { defaultValue: "Название типа" })}
-                    />
-                  )}
-                </td>
-                <td className="px-3 py-2">
-                  <input
-                    type="number"
-                    min={0}
-                    className={`w-24 border rounded px-2 py-1 ${invalidRowIds.includes(row.id) ? "border-red-400" : ""}`}
-                    value={row.count}
-                    onChange={(e) => updateRow(row.id, { count: e.target.value })}
-                  />
-                  {invalidRowIds.includes(row.id) && (
-                    <div className="text-xs text-red-600 mt-1">
-                      Укажите количество комнат, иначе цены не сохранятся
-                    </div>
-                  )}
-                </td>
-
-                {/* low / resident */}
-                {MEAL_PLANS.map((mp) => (
-                  <td className={tdCls("low")} key={`${row.id}-low-res-${mp}`}>
-                    <input
-                      type="number" min={0} step="0.01"
-                      className={inputCls("low")}
-                      placeholder={currency}
-                      value={row.prices.low.resident[mp] ?? ""}
-                      onChange={(e) => updateMealPrice(row.id, "low", "resident", mp, e.target.value)}
-                    />
-                  </td>
-                ))}
-                 
-                {/* low / nonresident */}
-                {MEAL_PLANS.map((mp) => (
-                  <td className={tdCls("low")} key={`${row.id}-low-non-${mp}`}>
-                    <input
-                      type="number" min={0} step="0.01"
-                      className={inputCls("low")}
-                      placeholder={currency}
-                      value={row.prices.low.nonResident[mp] ?? ""}
-                      onChange={(e) => updateMealPrice(row.id, "low", "nonResident", mp, e.target.value)}
-                    />
-                  </td>
-                ))}
-               {/* shoulder / resident */}
-                {MEAL_PLANS.map((mp, i) => (
-                  <td
-                    className={tdCls("shoulder", i === 0 ? "border-l border-gray-300" : "")}
-                    key={`${row.id}-shoulder-res-${mp}`}
+        {activeTab === "prices" && (
+          <div className="space-y-5">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <h2 className="text-xl font-black tracking-[-0.02em] text-slate-950">
+                  {t("rooms_and_prices", { defaultValue: "Номерной фонд и цены" })}
+                </h2>
+                <p className="mt-1 text-sm font-medium text-slate-600">
+                  {t("admin.hotels.prices_hint", {
+                    defaultValue:
+                      "Выберите сезон и тип гостя. Сохраняется та же структура цен, но без широкой таблицы.",
+                  })}
+                </p>
+              </div>
+              <div className="grid grid-cols-3 gap-2 rounded-2xl bg-slate-100 p-1">
+                {SEASONS.map((season) => (
+                  <button
+                    key={season}
+                    type="button"
+                    onClick={() => setPricingSeason(season)}
+                    className={`rounded-xl px-3 py-2 text-xs font-black transition ${
+                      pricingSeason === season
+                        ? "bg-white text-slate-950 shadow-sm"
+                        : "text-slate-500 hover:text-slate-900"
+                    }`}
                   >
-                    <input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      className={inputCls("shoulder")}
-                      placeholder={currency}
-                      value={row.prices.shoulder.resident[mp] ?? ""}
-                      onChange={(e) =>
-                        updateMealPrice(row.id, "shoulder", "resident", mp, e.target.value)
-                      }
-                    />
-                  </td>
+                    {SEASON_META[season].short}
+                  </button>
                 ))}
+              </div>
+            </div>
 
-                {/* shoulder / nonresident */}
-                {MEAL_PLANS.map((mp) => (
-                  <td className={tdCls("shoulder")} key={`${row.id}-shoulder-non-${mp}`}>
-                    <input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      className={inputCls("shoulder")}
-                      placeholder={currency}
-                      value={row.prices.shoulder.nonResident[mp] ?? ""}
-                      onChange={(e) =>
-                        updateMealPrice(row.id, "shoulder", "nonResident", mp, e.target.value)
-                      }
-                    />
-                  </td>
+            <div className={`rounded-2xl p-3 ring-1 ${SEASON_META[pricingSeason].panel}`}>
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={`inline-flex rounded-full px-3 py-1 text-xs font-black ring-1 ${SEASON_META[pricingSeason].badge}`}>
+                    {SEASON_META[pricingSeason].title}
+                  </span>
+                  <span className="inline-flex rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
+                    {AUDIENCE_META[pricingAudience]}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-1 rounded-xl bg-white p-1 ring-1 ring-slate-200">
+                  {Object.entries(AUDIENCE_META).map(([key, label]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setPricingAudience(key)}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-black transition ${
+                        pricingAudience === key
+                          ? "bg-slate-950 text-white"
+                          : "text-slate-500 hover:bg-slate-100 hover:text-slate-950"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="overflow-hidden rounded-2xl border border-slate-200">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 text-xs uppercase tracking-[0.08em] text-slate-500">
+                  <tr>
+                    <th className="px-3 py-3 text-left">{t("room_category", { defaultValue: "Категория" })}</th>
+                    <th className="w-28 px-3 py-3 text-left">{t("count_short", { defaultValue: "Кол-во" })}</th>
+                    {MEAL_PLANS.map((mp) => (
+                      <th key={mp} className="px-2 py-3 text-left">{mp}</th>
+                    ))}
+                    <th className="w-12 px-3 py-3"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {roomRows.map((row) => (
+                    <tr
+                      key={row.id}
+                      id={`row-${row.id}`}
+                      className={invalidRowIds.includes(row.id) ? "bg-red-50/50" : "bg-white"}
+                    >
+                      <td className="px-3 py-3 align-top">
+                        {row.builtin ? (
+                          <div className="font-black text-slate-800">{row.name}</div>
+                        ) : (
+                          <input
+                            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                            value={row.name}
+                            onChange={(e) => updateRow(row.id, { name: e.target.value })}
+                            placeholder={t("room_type_name", { defaultValue: "Название типа" })}
+                          />
+                        )}
+                        {invalidRowIds.includes(row.id) && (
+                          <div className="mt-1 text-xs font-bold text-red-600">
+                            Укажите количество комнат, иначе цены не сохранятся
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-3 py-3 align-top">
+                        <input
+                          type="number"
+                          min={0}
+                          className={`w-24 rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2 ${
+                            invalidRowIds.includes(row.id)
+                              ? "border-red-400 focus:ring-red-100"
+                              : "border-slate-200 focus:border-orange-400 focus:ring-orange-100"
+                          }`}
+                          value={row.count}
+                          onChange={(e) => updateRow(row.id, { count: e.target.value })}
+                        />
+                      </td>
+                      {MEAL_PLANS.map((mp) => (
+                        <td className="px-2 py-3 align-top" key={`${row.id}-${pricingSeason}-${pricingAudience}-${mp}`}>
+                          <input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            className="w-full min-w-[96px] rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                            placeholder={currency}
+                            value={row.prices?.[pricingSeason]?.[pricingAudience]?.[mp] ?? ""}
+                            onChange={(e) => updateMealPrice(row.id, pricingSeason, pricingAudience, mp, e.target.value)}
+                          />
+                        </td>
+                      ))}
+                      <td className="px-3 py-3 text-right align-top">
+                        {!row.builtin && (
+                          <button
+                            type="button"
+                            className="rounded-lg px-2 py-1 text-slate-400 transition hover:bg-red-50 hover:text-red-600"
+                            onClick={() => removeRow(row.id)}
+                            title={t("delete", { defaultValue: "Удалить" })}
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
+              <input
+                className={formInputClass}
+                placeholder={t("add_custom_room_type_ph", { defaultValue: "Добавить свой тип номера (например, Deluxe…)" })}
+                value={newTypeName}
+                onChange={(e) => setNewTypeName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addCustomType())}
+              />
+              <button type="button" onClick={addCustomType} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-black text-white transition hover:bg-slate-800">
+                {t("add_type", { defaultValue: "Добавить тип" })}
+              </button>
+            </div>
+
+            <div className="max-w-sm">
+              <label className={formLabelClass}>
+                {t("extra_bed_cost", { defaultValue: "Стоимость доп. места (за человека/ночь)" })} ({currency})
+              </label>
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                className={formInputClass}
+                placeholder={currency}
+                value={extraBedPrice}
+                onChange={(e) => setExtraBedPrice(e.target.value)}
+              />
+            </div>
+          </div>
+        )}
+
+        {activeTab === "taxes" && (
+          <div className="space-y-5">
+            <h2 className="text-xl font-black tracking-[-0.02em] text-slate-950">
+              {t("taxes_fees", { defaultValue: "Налоги и сборы" })}
+            </h2>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700">
+                <input type="checkbox" checked={vatIncluded} onChange={(e) => setVatIncluded(e.target.checked)} />
+                {t("vat_included", { defaultValue: "Цены включают НДС" })}
+              </label>
+              <div>
+                <label className={formLabelClass}>{t("vat_percent", { defaultValue: "НДС, %" })}</label>
+                <input type="number" min={0} step="0.1" className={formInputClass} placeholder="%" value={vatRate} onChange={(e) => setVatRate(e.target.value)} />
+              </div>
+              <div />
+              <div>
+                <label className={formLabelClass}>
+                  {t("tourism_fee_resident", { defaultValue: "Туристический сбор (резидент), /чел/ночь" })} ({currency})
+                </label>
+                <input type="number" min={0} step="0.01" className={formInputClass} placeholder={currency} value={touristResident} onChange={(e) => setTouristResident(e.target.value)} />
+              </div>
+              <div>
+                <label className={formLabelClass}>
+                  {t("tourism_fee_nonresident", { defaultValue: "Туристический сбор (нерезидент), /чел/ночь" })} ({currency})
+                </label>
+                <input type="number" min={0} step="0.01" className={formInputClass} placeholder={currency} value={touristNonResident} onChange={(e) => setTouristNonResident(e.target.value)} />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "amenities" && (
+          <div className="grid gap-6 lg:grid-cols-2">
+            <div>
+              <h2 className="text-xl font-black tracking-[-0.02em] text-slate-950">{t("amenities", { defaultValue: "Удобства" })}</h2>
+              <form onSubmit={handleAmenityAdd} className="mt-3 flex gap-2">
+                <input name="amen" className={formInputClass} placeholder={t("add_amenity", { defaultValue: "Добавить удобство…" })} />
+                <button className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-black text-white">{t("add", { defaultValue: "Добавить" })}</button>
+              </form>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {amenities.map((a, i) => (
+                  <span key={i} className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700">
+                    {a} <button type="button" className="ml-1 text-slate-400 hover:text-red-600" onClick={() => setAmenities((p) => p.filter((_, idx) => idx !== i))}>×</button>
+                  </span>
                 ))}
-                 
-                {/* high / resident */}
-                {MEAL_PLANS.map((mp, i) => (
-                  <td className={tdCls("high", i===0 ? "border-l border-gray-300" : "")} key={`${row.id}-high-res-${mp}`}>
-                    <input
-                      type="number" min={0} step="0.01"
-                      className={inputCls("high")}
-                      placeholder={currency}
-                      value={row.prices.high.resident[mp] ?? ""}
-                      onChange={(e) => updateMealPrice(row.id, "high", "resident", mp, e.target.value)}
-                    />
-                  </td>
+              </div>
+            </div>
+
+            <div>
+              <h2 className="text-xl font-black tracking-[-0.02em] text-slate-950">{t("services", { defaultValue: "Услуги" })}</h2>
+              <form onSubmit={handleServiceAdd} className="mt-3 flex gap-2">
+                <input name="serv" className={formInputClass} placeholder={t("add_service", { defaultValue: "Добавить услугу…" })} />
+                <button className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-black text-white">{t("add", { defaultValue: "Добавить" })}</button>
+              </form>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {services.map((s, i) => (
+                  <span key={i} className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700">
+                    {s} <button type="button" className="ml-1 text-slate-400 hover:text-red-600" onClick={() => setServices((p) => p.filter((_, idx) => idx !== i))}>×</button>
+                  </span>
                 ))}
-                {/* high / nonresident */}
-                {MEAL_PLANS.map((mp) => (
-                  <td className={tdCls("high")} key={`${row.id}-high-non-${mp}`}>
-                    <input
-                      type="number" min={0} step="0.01"
-                      className={inputCls("high")}
-                      placeholder={currency}
-                      value={row.prices.high.nonResident[mp] ?? ""}
-                      onChange={(e) => updateMealPrice(row.id, "high", "nonResident", mp, e.target.value)}
-                    />
-                  </td>
-                ))}
-                <td className="px-3 py-2 text-right">
-                  {!row.builtin && (
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "media" && (
+          <div className="space-y-4">
+            <h2 className="text-xl font-black tracking-[-0.02em] text-slate-950">{t("images", { defaultValue: "Изображения" })}</h2>
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <input id="imagesInput" type="file" accept="image/*" multiple onChange={onImagePick} className="sr-only" />
+                <label htmlFor="imagesInput" className="inline-flex cursor-pointer items-center justify-center rounded-xl bg-slate-900 px-4 py-2 text-sm font-black text-white transition hover:bg-slate-800">
+                  {t("choose_files", { defaultValue: "Выбрать файлы" })}
+                </label>
+                <span className="text-sm font-bold text-slate-600">
+                  {images.length > 0
+                    ? `${t("file_chosen", { defaultValue: "Файлы выбраны" })}: ${images.length}`
+                    : t("no_files_selected", { defaultValue: "Файлы не выбраны" })}
+                </span>
+              </div>
+              <div className="mt-2 text-xs font-medium text-slate-500">
+                {t("images_hint", { defaultValue: "До 10 изображений, ≤ 3 МБ каждое" })}
+              </div>
+            </div>
+            {images.length > 0 && (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5">
+                {images.map((src, i) => (
+                  <div key={i} className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                    <img src={src} alt="" className="h-32 w-full object-cover" />
                     <button
                       type="button"
-                      className="text-gray-500 hover:text-red-600"
-                      onClick={() => removeRow(row.id)}
-                      title={t("delete", { defaultValue: "Удалить" })}
+                      onClick={() => setImages((p) => p.filter((_, idx) => idx !== i))}
+                      className="absolute right-2 top-2 rounded-full bg-white/95 px-2 py-1 text-xs font-black text-slate-600 shadow-sm transition hover:text-red-600"
                     >
-                      ✕
+                      ×
                     </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                    {i === 0 && (
+                      <div className="absolute bottom-2 left-2 rounded-full bg-white/95 px-2 py-1 text-[10px] font-black text-orange-700 shadow-sm">
+                        {t("cover", { defaultValue: "Обложка" })}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Добавить свой тип */}
-      <div className="flex items-center gap-2 mt-3">
-        <input
-          className="border rounded px-3 py-2 flex-1"
-          placeholder={t("add_custom_room_type_ph", { defaultValue: "Добавить свой тип номера (например, Deluxe…)" })}
-          value={newTypeName}
-          onChange={(e) => setNewTypeName(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addCustomType())}
-        />
-        <button type="button" onClick={addCustomType} className="px-3 py-2 rounded bg-gray-800 text-white">
-          {t("add_type", { defaultValue: "Добавить тип" })}
-        </button>
-      </div>
-
-      {/* Доп. место */}
-      <div className="mt-4">
-        <label className="block text-sm font-medium mb-1">
-          {t("extra_bed_cost", { defaultValue: "Стоимость доп. места (за человека/ночь)" })} ({currency})
-        </label>
-        <input
-          type="number"
-          min={0}
-          step="0.01"
-          className="w-64 border rounded px-3 py-2"
-          placeholder={currency}
-          value={extraBedPrice}
-          onChange={(e) => setExtraBedPrice(e.target.value)}
-        />
-      </div>
-
-      {/* Налоги и сборы */}
-      <h2 className="text-xl font-semibold mt-6 mb-2">
-        {t("taxes_fees", { defaultValue: "Налоги и сборы" })}
-      </h2>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={vatIncluded}
-            onChange={(e) => setVatIncluded(e.target.checked)}
-          />
-          {t("vat_included", { defaultValue: "Цены включают НДС" })}
-        </label>
-        <div>
-          <label className="block text-sm font-medium mb-1">
-            {t("vat_percent", { defaultValue: "НДС, %" })}
-          </label>
-          <input
-            type="number"
-            min={0}
-            step="0.1"
-            className="w-full border rounded px-3 py-2"
-            placeholder="%"
-            value={vatRate}
-            onChange={(e) => setVatRate(e.target.value)}
-          />
+      <div className="sticky bottom-4 z-20 mt-5 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+        <div className="text-sm font-bold text-slate-600">
+          {isNew ? "Создание новой карточки отеля" : `Отель #${hotelId}`} · {completedCount}/{completionItems.length} заполнено
         </div>
-        <div></div>
-        <div>
-          <label className="block text-sm font-medium mb-1">
-            {t("tourism_fee_resident", { defaultValue: "Туристический сбор (резидент), /чел/ночь" })} ({currency})
-          </label>
-          <input
-            type="number"
-            min={0}
-            step="0.01"
-            className="w-full border rounded px-3 py-2"
-            placeholder={currency}
-            value={touristResident}
-            onChange={(e) => setTouristResident(e.target.value)}
-          />
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveTab("prices")}
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700 transition hover:bg-slate-50"
+          >
+            {t("rooms_and_prices", { defaultValue: "Номерной фонд и цены" })}
+          </button>
+          <button onClick={submit} className="rounded-xl bg-orange-600 px-5 py-2 text-sm font-black text-white shadow-sm transition hover:bg-orange-700">
+            {t("save", { defaultValue: "Сохранить" })}
+          </button>
         </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">
-            {t("tourism_fee_nonresident", { defaultValue: "Туристический сбор (нерезидент), /чел/ночь" })} ({currency})
-          </label>
-          <input
-            type="number"
-            min={0}
-            step="0.01"
-            className="w-full border rounded px-3 py-2"
-            placeholder={currency}
-            value={touristNonResident}
-            onChange={(e) => setTouristNonResident(e.target.value)}
-          />
-        </div>
-      </div>
-
-      {/* Удобства */}
-      <h2 className="text-xl font-semibold mt-6 mb-2">
-        {t("amenities", { defaultValue: "Удобства" })}
-      </h2>
-      <form onSubmit={handleAmenityAdd} className="flex gap-2 mb-2">
-        <input name="amen" className="flex-1 border rounded px-3 py-2" placeholder={t("add_amenity", { defaultValue: "Добавить удобство…" })} />
-        <button className="px-3 py-2 rounded bg-gray-800 text-white">
-          {t("add", { defaultValue: "Добавить" })}
-        </button>
-      </form>
-      <div className="flex flex-wrap gap-2">
-        {amenities.map((a, i) => (
-          <span key={i} className="text-xs px-2 py-1 bg-gray-100 rounded-full">
-            {a}{" "}
-            <button className="ml-1 text-gray-500" onClick={() => setAmenities((p) => p.filter((_, idx) => idx !== i))}>×</button>
-          </span>
-        ))}
-      </div>
-
-      {/* Услуги */}
-      <h2 className="text-xl font-semibold mt-6 mb-2">
-        {t("services", { defaultValue: "Услуги" })}
-      </h2>
-      <form onSubmit={handleServiceAdd} className="flex gap-2 mb-2">
-        <input name="serv" className="flex-1 border rounded px-3 py-2" placeholder={t("add_service", { defaultValue: "Добавить услугу…" })} />
-        <button className="px-3 py-2 rounded bg-gray-800 text-white">
-          {t("add", { defaultValue: "Добавить" })}
-        </button>
-      </form>
-      <div className="flex flex-wrap gap-2">
-        {services.map((s, i) => (
-          <span key={i} className="text-xs px-2 py-1 bg-gray-100 rounded-full">
-            {s}{" "}
-            <button className="ml-1 text-gray-500" onClick={() => setServices((p) => p.filter((_, idx) => idx !== i))}>×</button>
-          </span>
-        ))}
-      </div>
-
-      {/* Изображения */}
-      <h2 className="text-xl font-semibold mt-6 mb-2">
-        {t("images", { defaultValue: "Изображения" })}
-      </h2>
-      <div className="flex items-center gap-3">
-        <input
-          id="imagesInput"
-          type="file"
-          accept="image/*"
-          multiple
-          onChange={onImagePick}
-          className="sr-only"
-        />
-        <label
-          htmlFor="imagesInput"
-          className="inline-flex items-center justify-center px-3 py-2 rounded bg-gray-800 text-white cursor-pointer"
-        >
-          {t("choose_files", { defaultValue: "Выбрать файлы" })}
-        </label>
-
-        <span className="text-sm text-gray-600">
-          {images.length > 0
-            ? `${t("file_chosen", { defaultValue: "Файлы выбраны" })}: ${images.length}`
-            : t("no_files_selected", { defaultValue: "Файлы не выбраны" })}
-        </span>
-      </div>
-      {t("images_hint") && (
-        <div className="text-xs text-gray-500 mt-1">
-          {t("images_hint", { defaultValue: "До 10 изображений, ≤ 3 МБ каждое" })}
-        </div>
-      )}
-      {images.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
-          {images.map((src, i) => (
-            <div key={i} className="relative">
-              <img src={src} alt="" className="w-full h-28 object-cover rounded border" />
-              <button
-                type="button"
-                onClick={() => setImages((p) => p.filter((_, idx) => idx !== i))}
-                className="absolute top-1 right-1 bg-white/90 rounded px-1 text-xs"
-              >
-                ×
-              </button>
-              {i === 0 && (
-                <div className="absolute bottom-1 left-1 text-[10px] bg-white/90 px-1 rounded">
-                  {t("cover", { defaultValue: "Обложка" })}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="mt-6 flex gap-2">
-        <button onClick={submit} className="bg-orange-600 text-white font-semibold px-4 py-2 rounded">
-          {t("save", { defaultValue: "Сохранить" })}
-        </button>
       </div>
     </div>
   );
