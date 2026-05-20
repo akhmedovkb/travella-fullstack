@@ -589,7 +589,7 @@ async function getProviderServices(req, res) {
         WHERE s.provider_id = $1
           AND s.category = ANY($2::text[])
           AND s.deleted_at IS NULL
-          AND s.status NOT IN ('archived', 'deleted')
+          AND s.status IN ('published', 'approved', 'active', 'pending')
           AND (
             s.expiration_at IS NULL
             OR s.expiration_at > NOW()
@@ -646,7 +646,7 @@ async function getProviderServicesAll(req, res) {
       LEFT JOIN providers p ON p.id = s.provider_id
       WHERE s.provider_id = $1
         AND s.deleted_at IS NULL
-        AND s.status != 'archived'
+        AND s.status IN ('published', 'approved', 'active', 'pending')
         AND (
           s.expiration_at IS NULL
           OR s.expiration_at > NOW()
@@ -802,6 +802,11 @@ async function searchPublicServices(req, res) {
       providerId = null;
     }
 
+    const categoryFilter =
+      category === "refused_ticket"
+        ? ["refused_ticket", "refused_event_ticket"]
+        : [category];
+
     // Публичные: approved
     // Свои (если providerId найден): published/active/pending/approved
     const q = `
@@ -820,7 +825,7 @@ async function searchPublicServices(req, res) {
         p.social AS provider_telegram
       FROM services s
       LEFT JOIN providers p ON p.id = s.provider_id
-      WHERE s.category = $1
+      WHERE s.category = ANY($1::text[])
         AND s.deleted_at IS NULL
         AND (
           s.details IS NULL
@@ -847,7 +852,7 @@ async function searchPublicServices(req, res) {
       LIMIT 200
     `;
 
-    const { rows } = await pool.query(q, [category, providerId]);
+    const { rows } = await pool.query(q, [categoryFilter, providerId]);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const items = (rows || []).filter((row) => isRefusedServiceActual(row, today));
