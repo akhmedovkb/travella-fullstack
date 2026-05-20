@@ -202,6 +202,8 @@ export default function Header() {
   const workspaceRef = useRef(null);
   const [toolsOpen, setToolsOpen] = useState(false);
   const toolsRef = useRef(null);
+  const [productsOpen, setProductsOpen] = useState(false);
+  const productsRef = useRef(null);
 
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -243,6 +245,7 @@ export default function Header() {
       if (servicesRef.current && !servicesRef.current.contains(e.target)) setServicesOpen(false);
       if (workspaceRef.current && !workspaceRef.current.contains(e.target)) setWorkspaceOpen(false);
       if (toolsRef.current && !toolsRef.current.contains(e.target)) setToolsOpen(false);
+      if (productsRef.current && !productsRef.current.contains(e.target)) setProductsOpen(false);
     };
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
@@ -413,11 +416,60 @@ export default function Header() {
               />
             </Link>
 
-            <nav className="hidden min-w-0 items-center gap-1 lg:gap-2 2xl:flex">
-              <NavItemDark to="/" label="MARKETPLACE" end />
-              {role === "provider" && <NavItemDark to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />}
-              <NavItemDark to="/hotels" label={t("nav.hotels", "Отели")} icon={<IconHotel />} />
-            </nav>
+              <nav className="hidden min-w-0 items-center gap-1 lg:gap-2 2xl:flex">
+              
+                <div className="relative" ref={productsRef}>
+                  <MenuButton
+                    active={
+                      productsOpen ||
+                      location.pathname === "/" ||
+                      location.pathname.startsWith("/tour-builder") ||
+                      location.pathname.startsWith("/hotels")
+                    }
+                    open={productsOpen}
+                    icon={<IconBurger />}
+                    label={t("nav.products", "Продукты")}
+                    onClick={() => setProductsOpen((v) => !v)}
+                  />
+              
+                  {productsOpen && (
+                    <DropdownPanel align="left" width="w-80">
+              
+                      <DropdownCaption
+                        title={t(
+                          "nav.products",
+                          "Продукты"
+                        )}
+                      />
+              
+                      <DropdownItem
+                        to="/"
+                        label="Marketplace"
+                        description="Отказные туры, отели, билеты и услуги"
+                        icon={<IconChecklist />}
+                      />
+              
+                      {role === "provider" && (
+                        <DropdownItem
+                          to="/tour-builder"
+                          label="Tour Builder"
+                          description="Конструктор туров"
+                          icon={<IconDoc />}
+                        />
+                      )}
+              
+                      <DropdownItem
+                        to="/hotels"
+                        label={t("nav.hotels", "Отели")}
+                        description="База отелей и инспекции"
+                        icon={<IconHotel />}
+                      />
+              
+                    </DropdownPanel>
+                  )}
+                </div>
+              
+              </nav>
           </div>
 
           <div className="hidden min-w-0 flex-1 items-center justify-end gap-1 2xl:flex">
