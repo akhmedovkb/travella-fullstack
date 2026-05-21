@@ -681,6 +681,51 @@ async function getProviderServicesAll(req, res) {
 }
 
 
+async function getProviderDraftServices(req, res) {
+  try {
+    const { chatId } = req.params;
+
+    const provRes = await pool.query(
+      `SELECT id
+         FROM providers
+        WHERE telegram_chat_id::text = $1
+           OR tg_chat_id::text = $1
+           OR telegram_web_chat_id::text = $1
+           OR telegram_refused_chat_id::text = $1
+        LIMIT 1`,
+      [chatId]
+    );
+
+    if (!provRes.rowCount) {
+      return res.status(403).json({ success: false });
+    }
+
+    const providerId = provRes.rows[0].id;
+
+    const q = await pool.query(
+      `
+      SELECT
+        s.*,
+        p.name   AS provider_name,
+        p.social AS provider_telegram
+      FROM services s
+      LEFT JOIN providers p ON p.id = s.provider_id
+      WHERE s.provider_id = $1
+        AND s.deleted_at IS NULL
+        AND s.status = 'draft'
+      ORDER BY COALESCE(s.updated_at, s.created_at) DESC
+      LIMIT 100
+      `,
+      [providerId]
+    );
+
+    return res.json({ success: true, items: q.rows });
+  } catch (e) {
+    console.error("[tg] getProviderDraftServices error:", e);
+    return res.status(500).json({ success: false });
+  }
+}
+
 async function getProviderArchiveServices(req, res) {
   try {
     const { chatId } = req.params;
@@ -1915,6 +1960,7 @@ module.exports = {
   rejectBooking,
   getProviderServices,
   getProviderServicesAll,
+  getProviderDraftServices,
   getProviderDeletedServices,
   getProviderArchiveServices,
   deleteServiceFromBot,
