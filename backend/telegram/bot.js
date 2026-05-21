@@ -1969,6 +1969,8 @@ const TRASH_MSG_BY_CHAT = new Map(); // chatId -> { chatId, messageId }
 const TRASH_ITEMS_BY_CHAT = new Map(); // chatId -> items[]
 const ARCHIVE_MSG_BY_CHAT = new Map(); // chatId -> { chatId, messageId }
 const ARCHIVE_ITEMS_BY_CHAT = new Map(); // chatId -> items[]
+const DRAFT_MSG_BY_CHAT = new Map(); // chatId -> { chatId, messageId }
+const DRAFT_ITEMS_BY_CHAT = new Map(); // chatId -> items[]
 
 
 function getArchiveReason(s) {
@@ -2031,6 +2033,63 @@ function buildArchiveListKeyboard(items) {
   for (let i = 0; i < buttons.length; i += 1) rows.push(buttons.slice(i, i + 1));
 
   rows.push([{ text: "🔄 Обновить архив", callback_data: "archive:open" }]);
+  rows.push([{ text: "⬅️ В меню услуг", callback_data: "prov_services:list" }]);
+  return { inline_keyboard: rows };
+}
+
+function buildDraftListText(items) {
+  if (!items.length) {
+    return (
+      `📝 <b>Черновики</b>
+
+` +
+      `Пока пусто. Здесь будут услуги, которые начали создавать через бот или веб, но ещё не опубликовали.`
+    );
+  }
+
+  const lines = items.slice(0, 20).map((s) => {
+    const id = s.id;
+    const d = pickDetails(s);
+    const title = escapeHtml(s.title || d.title || d.hotel || d.hotelName || "Без названия");
+    const cat = escapeHtml(CATEGORY_LABELS?.[s.category] || s.category || "");
+    const country = escapeHtml(d.directionCountry || d.country || d.locationCountry || "");
+    const city = escapeHtml(d.directionTo || d.toCity || d.city || d.locationCity || "");
+    const direction = [country, city].filter(Boolean).join(" / ");
+    const created = s.created_at ? escapeHtml(prettyDateTime(s.created_at)) : "";
+
+    return (
+      `<code>#R${id}</code> <b>${title}</b>` +
+      (cat ? `\n📌 ${cat}` : "") +
+      (direction ? `\n🌍 ${direction}` : "") +
+      (created ? `\n🕒 Создан: ${created}` : "") +
+      `\n📝 Статус: черновик`
+    );
+  });
+
+  return (
+    `📝 <b>Черновики</b>\n\n` +
+    `Здесь услуги, которые ещё не опубликованы. Нажмите на услугу, чтобы продолжить редактирование.\n\n` +
+    lines.join("\n\n") +
+    (items.length > 20 ? `\n\n…и ещё ${items.length - 20} шт.` : "")
+  );
+}
+
+function buildDraftListKeyboard(items) {
+  const buttons = items.slice(0, 20).map((s) => {
+    const d = pickDetails(s);
+    const title = String(s.title || d.title || d.hotel || d.hotelName || "").trim();
+    const shortTitle = title ? ` · ${title.slice(0, 18)}${title.length > 18 ? "…" : ""}` : "";
+    return {
+      text: `✏️ #R${s.id}${shortTitle}`,
+      callback_data: `svc_edit_start:${s.id}`,
+    };
+  });
+
+  const rows = [];
+  for (let i = 0; i < buttons.length; i += 1) rows.push(buttons.slice(i, i + 1));
+
+  rows.push([{ text: "🔄 Обновить черновики", callback_data: "drafts:open" }]);
+  rows.push([{ text: "🌐 Открыть веб-кабинет", url: `${SITE_URL}/dashboard/services/marketplace?tab=draft&from=tg` }]);
   rows.push([{ text: "⬅️ В меню услуг", callback_data: "prov_services:list" }]);
   return { inline_keyboard: rows };
 }
@@ -2212,16 +2271,27 @@ async function fetchArchiveItems(ctx) {
   return r?.data?.services || r?.data?.items || [];
 }
 
+async function fetchDraftItems(ctx) {
+  const actorId = getActorId(ctx);
+  const r = await axios.get(`/api/telegram/provider/${actorId}/services/drafts`);
+  return r?.data?.services || r?.data?.items || [];
+}
+
 async function fetchProviderServiceCounters(ctx) {
   try {
     const actorId = getActorId(ctx);
-    if (!actorId) return { archive: 0, trash: 0 };
+    if (!actorId) return { draft: 0, archive: 0, trash: 0 };
 
-    const [archiveRes, trashRes] = await Promise.allSettled([
+    const [draftRes, archiveRes, trashRes] = await Promise.allSettled([
+      axios.get(`/api/telegram/provider/${actorId}/services/drafts`),
       axios.get(`/api/telegram/provider/${actorId}/services/archive`),
       axios.get(`/api/telegram/provider/${actorId}/services/deleted`),
     ]);
 
+    const draftItems =
+      draftRes.status === "fulfilled"
+        ? draftRes.value?.data?.services || draftRes.value?.data?.items || []
+        : [];
     const archiveItems =
       archiveRes.status === "fulfilled"
         ? archiveRes.value?.data?.services || archiveRes.value?.data?.items || []
@@ -2232,12 +2302,18 @@ async function fetchProviderServiceCounters(ctx) {
         : [];
 
     return {
+      draft: Array.isArray(draftItems) ? draftItems.length : 0,
       archive: Array.isArray(archiveItems) ? archiveItems.length : 0,
       trash: Array.isArray(trashItems) ? trashItems.length : 0,
     };
   } catch {
-    return { archive: 0, trash: 0 };
+    return { draft: 0, archive: 0, trash: 0 };
   }
+}
+
+function draftButtonLabel(count = 0) {
+  const n = Number(count || 0);
+  return n > 0 ? `📝 Черновики (${n})` : "📝 Черновики";
 }
 
 function archiveButtonLabel(count = 0) {
@@ -2248,6 +2324,42 @@ function archiveButtonLabel(count = 0) {
 function trashButtonLabel(count = 0) {
   const n = Number(count || 0);
   return n > 0 ? `🧺 Корзина (${n})` : "🧺 Корзина";
+}
+
+async function renderDrafts(ctx) {
+  const chatId = ctx.chat?.id || ctx.update?.callback_query?.message?.chat?.id;
+  const items = await fetchDraftItems(ctx);
+  DRAFT_ITEMS_BY_CHAT.set(String(chatId), items);
+
+  const text = buildDraftListText(items);
+  const reply_markup = buildDraftListKeyboard(items);
+  const canEditFromCallback = Boolean(ctx.update?.callback_query?.message?.message_id);
+  const saved = DRAFT_MSG_BY_CHAT.get(String(chatId));
+  const messageIdToEdit = saved?.messageId;
+
+  if (canEditFromCallback) {
+    try {
+      await ctx.editMessageText(text, { parse_mode: "HTML", reply_markup });
+      const mid = ctx.update.callback_query.message.message_id;
+      DRAFT_MSG_BY_CHAT.set(String(chatId), { chatId, messageId: mid });
+      return;
+    } catch {}
+  }
+
+  if (messageIdToEdit) {
+    try {
+      await ctx.telegram.editMessageText(chatId, messageIdToEdit, undefined, text, {
+        parse_mode: "HTML",
+        reply_markup,
+      });
+      return;
+    } catch {
+      DRAFT_MSG_BY_CHAT.delete(String(chatId));
+    }
+  }
+
+  const sent = await ctx.reply(text, { parse_mode: "HTML", reply_markup });
+  if (sent?.message_id) DRAFT_MSG_BY_CHAT.set(String(chatId), { chatId, messageId: sent.message_id });
 }
 
 async function renderArchive(ctx) {
@@ -5966,6 +6078,7 @@ await ctx.reply("🧳 Выберите действие:", {
     inline_keyboard: [
       [{ text: "📤 Выбрать мою услугу", switch_inline_query_current_chat: "#my refused_tour" }],
       [{ text: "📢 Актуальные", callback_data: "prov_services:list_cards" }],
+      [{ text: draftButtonLabel(counters.draft), callback_data: "drafts:open" }],
       [
         { text: archiveButtonLabel(counters.archive), callback_data: "archive:open" },
         { text: trashButtonLabel(counters.trash), callback_data: "trash:open" },
@@ -5993,6 +6106,26 @@ bot.hears("🧺 Корзина", async (ctx) => {
   } catch (e) {
     console.error("[bot] trash hears error:", e?.message || e);
     return ctx.reply("❌ Не удалось загрузить корзину. Попробуйте позже.");
+  }
+});
+
+bot.hears("📝 Черновики", async (ctx) => {
+  try {
+    await renderDrafts(ctx);
+  } catch (e) {
+    console.error("[bot] drafts hears error:", e?.message || e);
+    return ctx.reply("❌ Не удалось загрузить черновики. Попробуйте позже.");
+  }
+});
+
+bot.action("drafts:open", async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    forceCloseEditWizard(ctx);
+    await renderDrafts(ctx);
+  } catch (e) {
+    console.error("[tg-bot] drafts:open error:", e?.response?.data || e?.message || e);
+    await safeReply(ctx, "⚠️ Не удалось загрузить черновики. Попробуйте позже.");
   }
 });
 
