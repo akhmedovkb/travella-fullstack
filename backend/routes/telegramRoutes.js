@@ -667,6 +667,12 @@ router.get(
 router.get("/provider/:chatId/services/all", telegramProviderController.getProviderServicesAll);
 
 
+// черновики услуг поставщика
+router.get(
+  "/provider/:chatId/services/drafts",
+  telegramProviderController.getProviderDraftServices
+);
+
 // архив просроченных/архивных отказов поставщика
 router.get(
   "/provider/:chatId/services/archive",
