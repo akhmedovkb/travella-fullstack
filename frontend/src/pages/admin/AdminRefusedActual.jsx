@@ -361,6 +361,110 @@ function Badge({ children, tone = "gray" }) {
   );
 }
 
+
+function categoryHumanLabel(category) {
+  const map = {
+    refused_tour: "Отказной тур",
+    refused_hotel: "Отказной отель",
+    refused_flight: "Авиабилет",
+    refused_ticket: "Билет",
+    refused_event_ticket: "Билет",
+  };
+  return map[category] || category || "Отказ";
+}
+
+function categoryAccent(category) {
+  if (category === "refused_tour") return "from-orange-50 to-amber-50 border-orange-100 text-orange-700";
+  if (category === "refused_hotel") return "from-sky-50 to-cyan-50 border-sky-100 text-sky-700";
+  if (category === "refused_flight") return "from-violet-50 to-fuchsia-50 border-violet-100 text-violet-700";
+  return "from-slate-50 to-gray-50 border-slate-100 text-slate-700";
+}
+
+function serviceMainTitle(it) {
+  return (
+    it?.title ||
+    it?.details?.hotel ||
+    it?.details?.hotelName ||
+    it?.details?.eventName ||
+    it?.details?.flightName ||
+    "Без названия"
+  );
+}
+
+function serviceRouteText(it) {
+  const d = it?.details || {};
+  const from = d.directionFrom || d.fromCity || d.departureCity || d.cityFrom || d.from || "";
+  const to = d.directionTo || d.toCity || d.arrivalCity || d.cityTo || d.to || "";
+  const country = d.directionCountry || d.country || d.destinationCountry || "";
+  const city = d.city || d.destinationCity || "";
+  if (from && to) return `${from} → ${to}`;
+  if (country && city) return `${country}, ${city}`;
+  return country || city || it?.direction || "—";
+}
+
+function serviceDateText(it) {
+  const d = it?.details || {};
+  const start = d.startDate || d.departureDate || d.checkIn || d.checkin || d.dateFrom || it?.startDate || it?.startDateForSort;
+  const end = d.endDate || d.returnDate || d.checkOut || d.checkout || d.dateTo || it?.endDate;
+  const fmt = (v) => {
+    if (!v) return "";
+    const dt = new Date(v);
+    if (Number.isNaN(dt.getTime())) return String(v).slice(0, 10);
+    return dt.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
+  };
+  const a = fmt(start);
+  const b = fmt(end);
+  if (a && b) return `${a} → ${b}`;
+  return a || b || "—";
+}
+
+function daysUntilText(dateValue) {
+  if (!dateValue) return { text: "без даты", tone: "gray", days: null };
+  const dt = new Date(dateValue);
+  if (Number.isNaN(dt.getTime())) return { text: "дата?", tone: "gray", days: null };
+  const now = new Date();
+  const diff = Math.ceil((dt.getTime() - now.getTime()) / 86400000);
+  if (diff < 0) return { text: "просрочено", tone: "red", days: diff };
+  if (diff === 0) return { text: "сегодня", tone: "red", days: diff };
+  if (diff <= 2) return { text: `${diff} дн.`, tone: "red", days: diff };
+  if (diff <= 5) return { text: `${diff} дн.`, tone: "amber", days: diff };
+  return { text: `${diff} дн.`, tone: "green", days: diff };
+}
+
+function StatCard({ label, value, hint, tone = "slate" }) {
+  const tones = {
+    slate: "border-slate-200 bg-white text-slate-950",
+    green: "border-emerald-200 bg-emerald-50/70 text-emerald-950",
+    amber: "border-amber-200 bg-amber-50/70 text-amber-950",
+    red: "border-red-200 bg-red-50/70 text-red-950",
+    blue: "border-blue-200 bg-blue-50/70 text-blue-950",
+  };
+  return (
+    <div className={classNames("rounded-2xl border p-4 shadow-sm", tones[tone] || tones.slate)}>
+      <div className="text-[11px] font-black uppercase tracking-[0.14em] text-slate-500">{label}</div>
+      <div className="mt-2 text-2xl font-black tracking-[-0.04em]">{value}</div>
+      {hint ? <div className="mt-1 text-xs font-medium text-slate-500">{hint}</div> : null}
+    </div>
+  );
+}
+
+function QuickChip({ active, children, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={classNames(
+        "rounded-full border px-3 py-1.5 text-xs font-bold transition",
+        active
+          ? "border-orange-200 bg-orange-50 text-orange-700 shadow-sm"
+          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
 function Modal({ open, title, onClose, children, footer }) {
   if (!open) return null;
 
@@ -984,10 +1088,90 @@ export default function AdminRefusedActual() {
     telegram_chat_id: "",
   });
 
+  const [viewMode, setViewMode] = useState("table");
+  const [quickFilter, setQuickFilter] = useState("all");
+  const [actionMenuOpen, setActionMenuOpen] = useState(null);
+
   const pageCount = useMemo(() => {
     const c = Math.ceil((total || 0) / (limit || 1));
     return Math.max(c, 1);
   }, [total, limit]);
+
+
+  const pageStats = useMemo(() => {
+    const list = Array.isArray(items) ? items : [];
+    const now = Date.now();
+    let actualCount = 0;
+    let inactiveCount = 0;
+    let tgMissingCount = 0;
+    let noAnswerCount = 0;
+    let urgentCount = 0;
+    let tourCount = 0;
+    let hotelCount = 0;
+    let flightCount = 0;
+
+    for (const it of list) {
+      if (it?.isActual) actualCount += 1;
+      else inactiveCount += 1;
+
+      if (it?.category === "refused_tour") tourCount += 1;
+      if (it?.category === "refused_hotel") hotelCount += 1;
+      if (it?.category === "refused_flight") flightCount += 1;
+
+      const effectiveTg =
+        it?.provider?.telegram_refused_chat_id ||
+        it?.provider?.telegram_web_chat_id ||
+        it?.provider?.telegram_chat_id ||
+        it?.provider?.chatId ||
+        "";
+      if (!effectiveTg) tgMissingCount += 1;
+
+      const meta = it?.meta || {};
+      if (meta.lastSentAt && !meta.lastAnswer) noAnswerCount += 1;
+
+      const d = new Date(it?.expirationAt || it?.expiration_at || it?.startDateForSort || "");
+      if (!Number.isNaN(d.getTime()) && d.getTime() >= now && d.getTime() - now <= 2 * 86400000) {
+        urgentCount += 1;
+      }
+    }
+
+    return {
+      shown: list.length,
+      actualCount,
+      inactiveCount,
+      tgMissingCount,
+      noAnswerCount,
+      urgentCount,
+      tourCount,
+      hotelCount,
+      flightCount,
+    };
+  }, [items]);
+
+  const visibleItems = useMemo(() => {
+    const list = Array.isArray(items) ? items : [];
+    if (quickFilter === "urgent") {
+      return list.filter((it) => {
+        const u = daysUntilText(it?.expirationAt || it?.expiration_at || it?.startDateForSort);
+        return u.tone === "red" || u.tone === "amber";
+      });
+    }
+    if (quickFilter === "no_tg") {
+      return list.filter((it) => {
+        const effectiveTg =
+          it?.provider?.telegram_refused_chat_id ||
+          it?.provider?.telegram_web_chat_id ||
+          it?.provider?.telegram_chat_id ||
+          it?.provider?.chatId ||
+          "";
+        return !effectiveTg;
+      });
+    }
+    if (quickFilter === "no_answer") {
+      return list.filter((it) => it?.meta?.lastSentAt && !it?.meta?.lastAnswer);
+    }
+    return list;
+  }, [items, quickFilter]);
 
   const canUse = useMemo(() => !!token, [token]);
 
@@ -1807,8 +1991,15 @@ const sortLabel = useMemo(() => {
         </div>
       ) : null}
 
-      <div className="mt-5 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+      <details className="mt-5 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+        <summary className="cursor-pointer select-none text-sm font-semibold text-gray-900">
+          Инструменты: открытие контактов
+          <span className="ml-2 text-xs font-normal text-gray-500">
+            {unlockIsPaid ? `платно • ${unlockPrice || 0} сум` : "бесплатно"}
+            {unlockUpdatedAt ? ` • обновлено: ${formatDate(unlockUpdatedAt)}` : ""}
+          </span>
+        </summary>
+        <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
             <div className="text-sm font-semibold text-gray-900">Открытие контактов</div>
             <div className="mt-1 text-xs text-gray-500">
@@ -1859,6 +2050,49 @@ const sortLabel = useMemo(() => {
                 {unlockCfgSaving ? "Сохранение…" : "Сохранить"}
               </button>
             </div>
+          </div>
+        </div>
+      </details>
+
+      <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-6">
+        <StatCard label="Всего по фильтру" value={total} hint={`на странице: ${pageStats.shown}`} tone="blue" />
+        <StatCard label="Актуальные" value={pageStats.actualCount} hint="в текущей выдаче" tone="green" />
+        <StatCard label="Неактуальные" value={pageStats.inactiveCount} hint="нужно проверить" tone={pageStats.inactiveCount ? "amber" : "slate"} />
+        <StatCard label="Срочные" value={pageStats.urgentCount} hint="сегодня / до 5 дней" tone={pageStats.urgentCount ? "red" : "slate"} />
+        <StatCard label="Без TG" value={pageStats.tgMissingCount} hint="нельзя спросить" tone={pageStats.tgMissingCount ? "red" : "slate"} />
+        <StatCard label="Без ответа" value={pageStats.noAnswerCount} hint="после запроса" tone={pageStats.noAnswerCount ? "amber" : "slate"} />
+      </div>
+
+      <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex flex-wrap gap-2">
+            <QuickChip active={quickFilter === "all"} onClick={() => setQuickFilter("all")}>Все на странице</QuickChip>
+            <QuickChip active={quickFilter === "urgent"} onClick={() => setQuickFilter("urgent")}>Срочные</QuickChip>
+            <QuickChip active={quickFilter === "no_answer"} onClick={() => setQuickFilter("no_answer")}>Без ответа</QuickChip>
+            <QuickChip active={quickFilter === "no_tg"} onClick={() => setQuickFilter("no_tg")}>Без Telegram</QuickChip>
+          </div>
+
+          <div className="inline-flex w-full rounded-2xl border border-slate-200 bg-slate-50 p-1 xl:w-auto">
+            <button
+              type="button"
+              onClick={() => setViewMode("table")}
+              className={classNames(
+                "flex-1 rounded-xl px-4 py-2 text-sm font-bold transition xl:flex-none",
+                viewMode === "table" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-900"
+              )}
+            >
+              Таблица
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("cards")}
+              className={classNames(
+                "flex-1 rounded-xl px-4 py-2 text-sm font-bold transition xl:flex-none",
+                viewMode === "cards" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-900"
+              )}
+            >
+              Карточки
+            </button>
           </div>
         </div>
       </div>
@@ -1989,8 +2223,87 @@ const sortLabel = useMemo(() => {
           </div>
         </div>
 
-        <div className="mt-4 overflow-auto rounded-xl border border-gray-200">
-          <table className="min-w-[1180px] w-full text-sm">
+        {viewMode === "cards" ? (
+          <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2 2xl:grid-cols-3">
+            {loading ? (
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600">Загрузка…</div>
+            ) : visibleItems.length ? (
+              visibleItems.map((it) => {
+                const effectiveTg =
+                  it?.provider?.telegram_refused_chat_id ||
+                  it?.provider?.telegram_web_chat_id ||
+                  it?.provider?.telegram_chat_id ||
+                  it?.provider?.chatId ||
+                  "";
+                const tgOk = !!effectiveTg;
+                const actual = !!it.isActual;
+                const deleted = !!it.deletedAt || String(it.status || "").toLowerCase() === "deleted";
+                const urgency = daysUntilText(it?.expirationAt || it?.expiration_at || it?.startDateForSort);
+                const meta = it.meta || {};
+                return (
+                  <div key={it.id} className={classNames("overflow-hidden rounded-3xl border bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md", actual ? "border-slate-200" : "border-red-100")}>
+                    <div className={classNames("border-b bg-gradient-to-br p-4", categoryAccent(it.category))}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-[11px] font-black uppercase tracking-[0.16em]">{categoryHumanLabel(it.category)} #{it.id}</div>
+                          <div className="mt-2 line-clamp-2 text-lg font-black tracking-[-0.03em] text-slate-950">{serviceMainTitle(it)}</div>
+                        </div>
+                        <Badge tone={actual ? "green" : "red"}>{actual ? "актуален" : "неактуален"}</Badge>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3 p-4">
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div className="rounded-2xl bg-slate-50 p-3">
+                          <div className="text-[11px] font-bold uppercase text-slate-400">Маршрут</div>
+                          <div className="mt-1 font-bold text-slate-900">{serviceRouteText(it)}</div>
+                        </div>
+                        <div className="rounded-2xl bg-slate-50 p-3">
+                          <div className="text-[11px] font-bold uppercase text-slate-400">Даты</div>
+                          <div className="mt-1 font-bold text-slate-900">{serviceDateText(it)}</div>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        <Badge tone={urgency.tone}>{urgency.text}</Badge>
+                        <Badge tone={tgOk ? "green" : "red"}>{tgOk ? "TG OK" : "нет TG"}</Badge>
+                        {meta.lastSentAt ? <Badge tone="blue">спросили</Badge> : null}
+                        {meta.lastAnswer ? <Badge tone="green">ответ: {String(meta.lastAnswer)}</Badge> : null}
+                        {deleted ? <Badge tone="amber">deleted</Badge> : null}
+                      </div>
+
+                      <div className="rounded-2xl border border-slate-100 bg-white p-3">
+                        <div className="text-[11px] font-bold uppercase text-slate-400">Провайдер</div>
+                        <div className="mt-1 font-bold text-slate-900">{it?.provider?.companyName || it?.provider?.name || "—"}</div>
+                        <div className="mt-0.5 text-xs text-slate-500">
+                          {it?.provider?.phone ? `📞 ${it.provider.phone}` : ""}
+                          {it?.provider?.telegramUsername ? ` • @${it.provider.telegramUsername}` : ""}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        <button onClick={() => openDetails(it.id)} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold hover:bg-slate-50">Детали</button>
+                        <button onClick={() => openEdit(it.id)} className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-bold text-violet-700 hover:bg-violet-100">Редактировать</button>
+                        {!deleted ? (
+                          <>
+                            <button onClick={() => askActual(it.id, false)} disabled={!tgOk || sendingId === it.id} className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50">Спросить</button>
+                            <button onClick={() => extendService(it.id)} disabled={sendingId === it.id} className="rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-xs font-bold text-green-700 hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-50">+7 дней</button>
+                          </>
+                        ) : (
+                          <button onClick={() => restoreService(it.id)} disabled={sendingId === it.id} className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100 disabled:opacity-50">Восстановить</button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600">Нет данных.</div>
+            )}
+          </div>
+        ) : (
+          <div className="mt-4 overflow-visible rounded-xl border border-gray-200">
+          <table className="w-full table-fixed text-sm">
             <thead className="sticky top-0 z-10 bg-gray-50 text-gray-700">
               <tr>
                 <th
@@ -2044,8 +2357,8 @@ const sortLabel = useMemo(() => {
                     Загрузка…
                   </td>
                 </tr>
-              ) : items.length ? (
-                items.map((it) => {
+              ) : visibleItems.length ? (
+                visibleItems.map((it) => {
                   const effectiveTg =
                     it?.provider?.telegram_refused_chat_id ||
                     it?.provider?.telegram_web_chat_id ||
@@ -2363,6 +2676,7 @@ const sortLabel = useMemo(() => {
             </tbody>
           </table>
         </div>
+        )}
 
         <div className="mt-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div className="text-sm text-gray-600">
