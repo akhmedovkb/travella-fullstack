@@ -690,6 +690,108 @@ function ImageUploader({ title, hint, images, onChange, max = 10 }) {
   );
 }
 
+
+function formatSupportAmount(value) {
+  const n = Number(value || 0);
+  return new Intl.NumberFormat("ru-RU").format(Number.isFinite(n) ? n : 0);
+}
+
+function SupportAfterCreateModal({ open, service, onClose, onPay, busy, error }) {
+  const [amount, setAmount] = useState(50000);
+  const [customAmount, setCustomAmount] = useState("");
+
+  if (!open || !service?.id) return null;
+
+  const presets = [20000, 50000, 100000, 200000];
+  const cleanCustom = Number(String(customAmount || "").replace(/\D/g, ""));
+  const finalAmount = cleanCustom > 0 ? cleanCustom : amount;
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/55 px-3 py-6 backdrop-blur-sm">
+      <div className="w-full max-w-xl overflow-hidden rounded-[2rem] bg-white shadow-2xl ring-1 ring-black/10">
+        <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-orange-500 px-6 py-6 text-white">
+          <div className="inline-flex rounded-full bg-white/15 px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] ring-1 ring-white/20">
+            Поддержка проекта
+          </div>
+          <h3 className="mt-4 text-2xl font-black tracking-[-0.04em]">
+            Услуга создана. Хотите поддержать проект?
+          </h3>
+          <p className="mt-2 text-sm font-semibold leading-6 text-white/85">
+            Добровольная поддержка помогает развивать Bot Otkaznyx Turov и Travella. Для объявления #R{service.id} донат сохранится в админке как поддержка, связанная с этой услугой.
+          </p>
+        </div>
+
+        <div className="space-y-4 p-6">
+          <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800 ring-1 ring-emerald-100">
+            ✅ {service.title || "Новая услуга"} сохранена. Оплата поддержки необязательная.
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {presets.map((x) => (
+              <button
+                key={x}
+                type="button"
+                onClick={() => {
+                  setAmount(x);
+                  setCustomAmount("");
+                }}
+                className={cx(
+                  "rounded-2xl px-3 py-3 text-sm font-black ring-1 transition",
+                  finalAmount === x && !customAmount
+                    ? "bg-orange-500 text-white ring-orange-500"
+                    : "bg-slate-50 text-slate-800 ring-slate-200 hover:bg-slate-100"
+                )}
+              >
+                {formatSupportAmount(x)} сум
+              </button>
+            ))}
+          </div>
+
+          <label className="block">
+            <span className="text-sm font-black text-slate-700">Своя сумма, сум</span>
+            <input
+              value={customAmount}
+              onChange={(e) => setCustomAmount(e.target.value)}
+              inputMode="numeric"
+              placeholder="Например: 75000"
+              className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-base font-bold text-slate-900 outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
+            />
+          </label>
+
+          {error ? (
+            <div className="rounded-2xl bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700 ring-1 ring-rose-100">
+              {error}
+            </div>
+          ) : null}
+
+          <div className="grid gap-2 sm:grid-cols-2">
+            <button
+              type="button"
+              disabled={busy || finalAmount <= 0}
+              onClick={() => onPay(finalAmount)}
+              className="rounded-2xl bg-orange-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-orange-100 transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+            >
+              {busy ? "Создаём Payme ссылку…" : `Поддержать на ${formatSupportAmount(finalAmount)} сум`}
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onClose}
+              className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+            >
+              Не сейчас
+            </button>
+          </div>
+
+          <p className="text-center text-xs font-semibold leading-5 text-slate-500">
+            После Payme вы вернётесь на страницу подтверждения. Созданная услуга останется сохранённой независимо от доната.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardServices() {
   const { t } = useTranslation();
   const API_BASE = import.meta.env.VITE_API_BASE_URL;
@@ -713,6 +815,9 @@ export default function DashboardServices() {
   const [serviceListFilter, setServiceListFilter] = useState("active");
   const [confirmModal, setConfirmModal] = useState(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
+  const [supportPromptService, setSupportPromptService] = useState(null);
+  const [supportPayBusy, setSupportPayBusy] = useState(false);
+  const [supportPayError, setSupportPayError] = useState("");
 
   const [category, setCategory] = useState("");
   const [title, setTitle] = useState("");
@@ -838,6 +943,8 @@ export default function DashboardServices() {
 
   const saveService = async () => {
     if (!validate()) return;
+    const wasEditing = !!selectedService?.id;
+    const createdCategory = category;
     try {
       setSaving(true);
       const net = parseMoney(details.netPrice);
@@ -871,7 +978,11 @@ export default function DashboardServices() {
         if (selectedService?.id) return prev.map((s) => (s.id === selectedService.id ? saved : s));
         return [...prev, saved];
       });
-      tSuccess(selectedService ? t("service_updated", { defaultValue: "Услуга обновлена" }) : t("service_added", { defaultValue: "Услуга добавлена" }));
+      tSuccess(wasEditing ? t("service_updated", { defaultValue: "Услуга обновлена" }) : t("service_added", { defaultValue: "Услуга добавлена" }));
+      if (!wasEditing && saved?.id && HISTORICAL_REFUSED_CATEGORIES.includes(createdCategory)) {
+        setSupportPayError("");
+        setSupportPromptService(saved);
+      }
       if (saved?.id) {
         loadServiceToEdit(saved);
       }
@@ -880,6 +991,27 @@ export default function DashboardServices() {
       tError(err?.response?.data?.message || t("add_error", { defaultValue: "Ошибка сохранения" }));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const createSupportPaymentAfterService = async (amountSum) => {
+    if (!supportPromptService?.id) return;
+    try {
+      setSupportPayBusy(true);
+      setSupportPayError("");
+      const res = await api.post("/api/provider-support/create", {
+        amount_sum: amountSum,
+        service_id: supportPromptService.id,
+        note: `Web support after service #R${supportPromptService.id}`,
+      });
+      const payUrl = res?.data?.pay_url;
+      if (!payUrl) throw new Error("Payme ссылка не создана");
+      window.location.href = payUrl;
+    } catch (err) {
+      console.error(err);
+      setSupportPayError(err?.response?.data?.message || err?.message || "Не удалось создать оплату Payme");
+    } finally {
+      setSupportPayBusy(false);
     }
   };
 
@@ -1863,6 +1995,20 @@ export default function DashboardServices() {
           </section>
         </div>
       </div>
+
+      <SupportAfterCreateModal
+        open={!!supportPromptService}
+        service={supportPromptService}
+        busy={supportPayBusy}
+        error={supportPayError}
+        onClose={() => {
+          if (!supportPayBusy) {
+            setSupportPayError("");
+            setSupportPromptService(null);
+          }
+        }}
+        onPay={createSupportPaymentAfterService}
+      />
 
       <ConfirmModal
         open={!!confirmModal}
