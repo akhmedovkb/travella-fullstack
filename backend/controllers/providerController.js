@@ -1875,17 +1875,23 @@ const restoreProviderService = async (req, res) => {
          SET deleted_at = NULL,
              deleted_by = NULL,
              updated_at = NOW(),
-             status = CASE WHEN status = 'deleted' THEN 'approved' ELSE status END
+             status = CASE WHEN status = 'deleted' THEN 'draft' ELSE status END,
+             moderation_status = 'draft',
+             submitted_at = NULL,
+             published_at = NULL,
+             approved_at = NULL,
+             rejected_at = NULL,
+             rejected_reason = NULL
        WHERE id = $1
          AND provider_id = $2
          AND deleted_at IS NOT NULL
-      RETURNING id
+      RETURNING *
       `,
       [id, providerId]
     );
 
     if (!upd.rowCount) return res.status(404).json({ message: "Не найдено в корзине" });
-    return res.json({ ok: true });
+    return res.json(upd.rows[0]);
   } catch (err) {
     console.error("restoreProviderService error:", err);
     return res.status(500).json({ message: "Ошибка сервера" });
