@@ -2080,8 +2080,8 @@ function buildDraftListKeyboard(items) {
     const title = String(s.title || d.title || d.hotel || d.hotelName || "").trim();
     const shortTitle = title ? ` · ${title.slice(0, 18)}${title.length > 18 ? "…" : ""}` : "";
     return {
-      text: `✏️ #R${s.id}${shortTitle}`,
-      callback_data: `svc_edit_start:${s.id}`,
+      text: `📝 #R${s.id}${shortTitle}`,
+      callback_data: `draft:item:${s.id}`,
     };
   });
 
@@ -2092,6 +2092,89 @@ function buildDraftListKeyboard(items) {
   rows.push([{ text: "🌐 Открыть веб-кабинет", url: `${SITE_URL}/dashboard/services/marketplace?tab=draft&from=tg` }]);
   rows.push([{ text: "⬅️ В меню услуг", callback_data: "prov_services:list" }]);
   return { inline_keyboard: rows };
+}
+
+function countDraftFilledFields(svc) {
+  const d = pickDetails(svc);
+  const category = String(svc?.category || "").toLowerCase();
+  const images = parseImagesAny(svc?.images);
+  const proofImages = Array.isArray(d.proofImages) ? d.proofImages : Array.isArray(d.proof_images) ? d.proof_images : [];
+
+  const has = (...values) => values.some((v) => v !== undefined && v !== null && String(v).trim() !== "");
+  const checks = [
+    { key: "title", label: "Название", ok: has(svc?.title, d.title) },
+    { key: "route", label: "Маршрут", ok: has(d.directionFrom, d.fromCity) && has(d.directionTo, d.toCity) },
+    { key: "dates", label: category === "refused_event_ticket" ? "Дата события" : "Даты", ok: has(d.startDate, d.start_date, d.startFlightDate, d.departureFlightDate, d.eventDate) },
+    { key: "hotel", label: category === "refused_hotel" ? "Отель" : "Отель / объект", ok: has(d.hotel, d.hotelName, d.eventName) },
+    { key: "accommodation", label: "Размещение", ok: has(d.accommodation, d.accommodationCategory, d.roomCategory, d.ticketDetails) },
+    { key: "price", label: "Цена", ok: has(d.netPrice, d.grossPrice, d.price, svc?.price) },
+    { key: "proof", label: "Proof / фото", ok: proofImages.filter(Boolean).length > 0 || images.length > 0 },
+  ];
+
+  const filled = checks.filter((x) => x.ok).length;
+  return { filled, total: checks.length, checks };
+}
+
+function buildDraftProgressBar(filled, total) {
+  const safeTotal = Math.max(1, Number(total || 1));
+  const percent = Math.round((Number(filled || 0) / safeTotal) * 100);
+  const blocks = Math.max(0, Math.min(10, Math.round(percent / 10)));
+  return `${"█".repeat(blocks)}${"░".repeat(10 - blocks)} ${percent}%`;
+}
+
+function buildDraftDetailText(svc) {
+  const d = pickDetails(svc);
+  const category = String(svc?.category || "refused_tour").toLowerCase();
+  const categoryLabel = CATEGORY_LABELS?.[category] || category || "Услуга";
+  const title = firstNonEmptyValue(svc?.title, d.title, d.hotel, d.hotelName, "Без названия");
+  const route = [
+    firstNonEmptyValue(d.directionFrom, d.fromCity),
+    firstNonEmptyValue(d.directionTo, d.toCity, d.city, d.location),
+  ].filter(Boolean).join(" → ");
+  const hotel = firstNonEmptyValue(d.hotel, d.hotelName, d.eventName);
+  const dates = [
+    firstNonEmptyValue(d.startDate, d.start_date, d.startFlightDate, d.departureFlightDate, d.eventDate),
+    firstNonEmptyValue(d.endDate, d.end_date, d.returnDate, d.returnFlightDate, d.endFlightDate),
+  ].filter(Boolean).join(" → ");
+  const price = firstNonEmptyValue(d.grossPrice, d.netPrice, d.price, svc?.price);
+  const currency = firstNonEmptyValue(d.currency, svc?.price_currency, svc?.currency, "USD");
+  const created = svc?.created_at ? prettyDateTime(svc.created_at) : "";
+  const { filled, total, checks } = countDraftFilledFields(svc);
+  const bar = buildDraftProgressBar(filled, total);
+
+  const checklist = checks
+    .map((item, idx) => `${idx + 1}️⃣ ${item.ok ? "✅" : "▫️"} ${escapeHtml(item.label)}`)
+    .join("\n");
+
+  let html =
+    `✏️ <b>Продолжение черновика #R${escapeHtml(svc?.id || "")}</b>\n\n` +
+    `📌 <b>${escapeHtml(title)}</b>\n` +
+    `🏷 <b>Категория:</b> ${escapeHtml(categoryLabel)}\n` +
+    `📝 <b>Заполнено:</b> ${filled}/${total} полей\n` +
+    `<code>${escapeHtml(bar)}</code>\n`;
+
+  if (route) html += `\n🌍 <b>Маршрут:</b> ${escapeHtml(route)}`;
+  if (hotel) html += `\n🏨 <b>Отель/объект:</b> ${escapeHtml(hotel)}`;
+  if (dates) html += `\n🗓 <b>Даты:</b> ${escapeHtml(dates)}`;
+  if (price) html += `\n💰 <b>Цена:</b> ${escapeHtml(String(price))} ${escapeHtml(currency)}`;
+  if (created) html += `\n🕒 <b>Создан:</b> ${escapeHtml(created)}`;
+
+  html +=
+    `\n\n<b>Что уже заполнено:</b>\n${checklist}` +
+    `\n\nНажмите <b>✏️ Продолжить</b>, чтобы открыть пошаговое редактирование прямо в боте.`;
+
+  return html;
+}
+
+function buildDraftDetailKeyboard(serviceId) {
+  return {
+    inline_keyboard: [
+      [{ text: "✏️ Продолжить", callback_data: `draft:continue:${serviceId}` }],
+      [{ text: "🌐 Открыть в веб", url: `${SITE_URL}/dashboard/services/marketplace?tab=draft&service_id=${serviceId}&from=tg` }],
+      [{ text: "🗑 Удалить черновик", callback_data: `svc_delete:${serviceId}` }],
+      [{ text: "⬅️ Назад к черновикам", callback_data: "drafts:open" }],
+    ],
+  };
 }
 
 function buildProviderServiceHeaderHtml(svc, category, details = {}) {
@@ -3482,6 +3565,129 @@ bot.action("svc_edit_cancel", async (ctx) => {
   }
 });
 
+
+bot.action(/^draft:item:(\d+)$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+
+    const role = await ensureProviderRole(ctx);
+    if (role !== "provider") {
+      await safeReply(ctx, "⚠️ Черновики доступны только поставщикам.", getMainMenuKeyboard("client"));
+      return;
+    }
+
+    const actorId = getActorId(ctx);
+    const serviceId = Number(ctx.match[1]);
+    if (!actorId || !serviceId) {
+      await safeReply(ctx, "⚠️ Не удалось открыть черновик. Откройте бота в ЛС и попробуйте ещё раз.");
+      return;
+    }
+
+    const { data } = await axios.get(`/api/telegram/provider/${actorId}/services/${serviceId}`);
+    const svc = data?.service || data?.item || data?.data || null;
+
+    if (!svc || Number(svc.id) !== serviceId) {
+      await safeReply(ctx, "⚠️ Черновик не найден. Нажмите «Обновить черновики».");
+      return;
+    }
+
+    if (String(svc.status || "draft").toLowerCase() !== "draft") {
+      await safeReply(ctx, "ℹ️ Эта услуга уже не является черновиком. Открываю редактирование.");
+      ctx.match[1] = String(serviceId);
+      return;
+    }
+
+    const text = buildDraftDetailText(svc);
+    const reply_markup = buildDraftDetailKeyboard(serviceId);
+
+    try {
+      await ctx.editMessageText(text, { parse_mode: "HTML", reply_markup, disable_web_page_preview: true });
+    } catch {
+      await safeReply(ctx, text, { parse_mode: "HTML", reply_markup, disable_web_page_preview: true });
+    }
+  } catch (e) {
+    console.error("[tg-bot] draft:item error:", e?.response?.data || e?.message || e);
+    await safeReply(ctx, "⚠️ Не удалось открыть черновик. Попробуйте обновить список.");
+  }
+});
+
+bot.action(/^draft:continue:(\d+)$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery("Открываю черновик...");
+    ctx.match = [ctx.match[0], ctx.match[1]];
+    const serviceId = Number(ctx.match[1]);
+    if (!serviceId) {
+      await safeReply(ctx, "⚠️ Некорректный ID черновика.");
+      return;
+    }
+
+    const role = await ensureProviderRole(ctx);
+    if (role !== "provider") {
+      await safeReply(ctx, "⚠️ Редактирование доступно только поставщикам.", getMainMenuKeyboard("client"));
+      return;
+    }
+
+    const actorId = getActorId(ctx);
+    if (!actorId) {
+      await safeReply(ctx, "⚠️ Не удалось определить пользователя. Откройте бота в ЛС и попробуйте ещё раз.");
+      return;
+    }
+
+    const { data } = await axios.get(`/api/telegram/provider/${actorId}/services/${serviceId}`);
+    const svc = data?.service || data?.item || data?.data || (data?.success && data?.service) || null;
+
+    if (!svc || Number(svc.id) !== serviceId) {
+      await safeReply(ctx, "⚠️ Черновик не найден.");
+      return;
+    }
+
+    const category = String(svc.category || svc.type || "refused_tour").trim();
+    const det = parseDetailsAny(svc.details);
+    const draft = {
+      id: svc.id,
+      category,
+      title: svc.title || det.title || "",
+      price: det.netPrice ?? det.price ?? svc.price ?? "",
+      grossPrice: det.grossPrice ?? svc.grossPrice ?? "",
+      expiration: det.expiration || svc.expiration || "",
+      isActive: typeof det.isActive === "boolean" ? det.isActive : (typeof svc.isActive === "boolean" ? svc.isActive : true),
+      country: det.directionCountry || "",
+      fromCity: det.directionFrom || "",
+      toCity: det.directionTo || "",
+      startDate: det.startDate || "",
+      endDate: det.endDate || "",
+      departureFlightDate: det.departureFlightDate || "",
+      returnFlightDate: det.returnFlightDate || "",
+      flightDetails: det.flightDetails || "",
+      hotel: det.hotel || "",
+      accommodation: det.accommodation || "",
+      roomCategory: det.roomCategory || det.accommodationCategory || "",
+      food: det.food || "",
+      halal: typeof det.halal === "boolean" ? det.halal : false,
+      transfer: det.transfer || "",
+      changeable: typeof det.changeable === "boolean" ? det.changeable : false,
+      insuranceIncluded: !!det.insuranceIncluded,
+      earlyCheckIn: !!det.earlyCheckIn,
+      arrivalFastTrack: !!det.arrivalFastTrack,
+      adt: Number.isFinite(det.adt) ? det.adt : (Number.isFinite(det.accommodationADT) ? det.accommodationADT : 0),
+      chd: Number.isFinite(det.chd) ? det.chd : (Number.isFinite(det.accommodationCHD) ? det.accommodationCHD : 0),
+      inf: Number.isFinite(det.inf) ? det.inf : (Number.isFinite(det.accommodationINF) ? det.accommodationINF : 0),
+      images: parseImagesAny(svc.images),
+    };
+
+    if (!ctx.session) ctx.session = {};
+    ctx.session.serviceDraft = draft;
+    ctx.session.editingServiceId = svc.id;
+    ctx.session.wizardStack = [];
+    ctx.session.state = "svc_edit_title";
+
+    await safeReply(ctx, `✏️ Продолжаем черновик #${svc.id}\n\nНачнём с названия 👇`);
+    await promptEditState(ctx, "svc_edit_title");
+  } catch (e) {
+    console.error("[tg-bot] draft:continue error:", e?.response?.data || e?.message || e);
+    await safeReply(ctx, "⚠️ Не удалось продолжить черновик. Попробуйте открыть его ещё раз.");
+  }
+});
 
 bot.action(/^svc_edit_start:(\d+)$/, async (ctx) => {
   try {
