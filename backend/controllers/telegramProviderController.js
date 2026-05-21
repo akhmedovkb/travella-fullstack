@@ -712,14 +712,14 @@ async function getProviderDraftServices(req, res) {
       LEFT JOIN providers p ON p.id = s.provider_id
       WHERE s.provider_id = $1
         AND s.deleted_at IS NULL
-        AND s.status = 'draft'
+        AND COALESCE(s.status, 'draft') = 'draft'
       ORDER BY COALESCE(s.updated_at, s.created_at) DESC
       LIMIT 100
       `,
       [providerId]
     );
 
-    return res.json({ success: true, items: q.rows });
+    return res.json({ success: true, items: q.rows, services: q.rows });
   } catch (e) {
     console.error("[tg] getProviderDraftServices error:", e);
     return res.status(500).json({ success: false });
@@ -1220,12 +1220,8 @@ async function createServiceFromBot(req, res) {
       ]
     );
 
-    try {
-      await notifyModerationNew({ service: insertRes.rows[0].id });
-    } catch (e) {
-      console.error("[telegram] notifyModerationNew failed:", e?.message || e);
-    }
-
+    // ВАЖНО: услуга создаётся как draft. Уведомление модерации отправляется
+    // только после submitServiceFromBot(), когда статус становится pending.
     await logBotServiceAudit({
       req,
       action: "bot_service_created",
