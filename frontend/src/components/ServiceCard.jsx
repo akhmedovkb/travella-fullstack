@@ -152,6 +152,15 @@ const getMarketplaceSticker = (rawCategory, t) => {
           "bg-fuchsia-600/95 text-white ring-1 ring-white/20",
       };
 
+    case "author_tour":
+      return {
+        label: t("marketplace.stickers.author_tour", {
+          defaultValue: "АВТОРСКИЙ ТУР",
+        }),
+        className:
+          "bg-cyan-700/95 text-white ring-1 ring-white/20",
+      };
+
     default:
       return null;
   }
@@ -398,6 +407,41 @@ function extractServiceFields(item, viewerRole, t) {
     svc.transfer_type
   );
 
+  const categoryRaw = String(firstNonEmpty(svc.category, item.category, details?.category, details?.type) || "").toLowerCase();
+  const isAuthorTour = categoryRaw === "author_tour";
+
+  const authorProgram = firstNonEmpty(
+    details?.program,
+    details?.tourProgram,
+    details?.itinerary,
+    details?.routeProgram,
+    details?.descriptionProgram
+  );
+  const authorIncluded = firstNonEmpty(
+    details?.included,
+    details?.includes,
+    details?.includedText,
+    details?.whatIncluded
+  );
+  const authorNotIncluded = firstNonEmpty(
+    details?.notIncluded,
+    details?.excluded,
+    details?.excludes,
+    details?.whatNotIncluded
+  );
+  const authorFormat = firstNonEmpty(details?.tourFormat, details?.format, details?.tour_type);
+  const authorDuration = firstNonEmpty(details?.duration, details?.durationDays, details?.nights, details?.days);
+  const authorPax = firstNonEmpty(
+    details?.pax,
+    details?.groupSize,
+    details?.maxPax,
+    details?.max_pax,
+    details?.peopleCount
+  );
+  const authorGuideLang = firstNonEmpty(details?.guideLanguage, details?.guideLang, details?.language);
+  const authorMeetingPoint = firstNonEmpty(details?.meetingPoint, details?.meeting_point, details?.startPoint);
+  const authorFlexibleDates = Boolean(details?.flexibleDates || details?.datesFlexible || details?.onRequest);
+
 const left = firstNonEmpty(
   bag.hotel_check_in,
   bag.checkIn,
@@ -602,6 +646,17 @@ const dates =
     flatTg,
     status,
     flightDetails,
+    categoryRaw,
+    isAuthorTour,
+    authorProgram,
+    authorIncluded,
+    authorNotIncluded,
+    authorFormat,
+    authorDuration,
+    authorPax,
+    authorGuideLang,
+    authorMeetingPoint,
+    authorFlexibleDates,
     insuranceIncluded: details?.insuranceIncluded,
     earlyCheckIn: details?.earlyCheckIn,
     arrivalFastTrack: details?.arrivalFastTrack,
@@ -640,6 +695,17 @@ export default function ServiceCard({
     status: statusRaw,
     details,
     flightDetails,
+    categoryRaw,
+    isAuthorTour,
+    authorProgram,
+    authorIncluded,
+    authorNotIncluded,
+    authorFormat,
+    authorDuration,
+    authorPax,
+    authorGuideLang,
+    authorMeetingPoint,
+    authorFlexibleDates,
   } = extractServiceFields(item, viewerRole, t);
 
   const isProviderViewer = viewerRole === "provider";
@@ -949,6 +1015,14 @@ const hasDetailsBlock =
   accommodation ||
   transfer ||
   flightDetails ||
+  authorProgram ||
+  authorIncluded ||
+  authorNotIncluded ||
+  authorFormat ||
+  authorDuration ||
+  authorPax ||
+  authorGuideLang ||
+  authorMeetingPoint ||
   hasProof ||
   details.insuranceIncluded ||
   details.earlyCheckIn ||
@@ -1559,6 +1633,37 @@ return (
             </div>
           )}
 
+          {/* Author tour value chips */}
+          {isAuthorTour && (authorFormat || authorDuration || authorPax || authorGuideLang || authorFlexibleDates) && (
+            <div className="mt-2.5 flex flex-wrap gap-1.5">
+              {authorFormat && (
+                <span className="inline-flex items-center rounded-full bg-cyan-50/80 px-2 py-0.5 text-[10px] font-bold text-cyan-800 ring-1 ring-cyan-100">
+                  🧭 {authorFormat}
+                </span>
+              )}
+              {authorDuration && (
+                <span className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-700 ring-1 ring-slate-100">
+                  ⏱ {authorDuration}
+                </span>
+              )}
+              {authorPax && (
+                <span className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-700 ring-1 ring-slate-100">
+                  👥 {authorPax}
+                </span>
+              )}
+              {authorGuideLang && (
+                <span className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-700 ring-1 ring-slate-100">
+                  🌐 {authorGuideLang}
+                </span>
+              )}
+              {authorFlexibleDates && (
+                <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 ring-1 ring-amber-100">
+                  🗓 {t("marketplace.author_flexible_dates", { defaultValue: "Даты по запросу" })}
+                </span>
+              )}
+            </div>
+          )}
+
           {/* Proof signal: compact materials row */}
           {hasProof && (
             <button
@@ -1935,7 +2040,7 @@ return (
               )}
             </div>
 
-            {(direction || accommodation || transfer || details.insuranceIncluded || details.earlyCheckIn || details.arrivalFastTrack) && (
+            {(direction || accommodation || transfer || authorFormat || authorDuration || authorPax || authorGuideLang || authorMeetingPoint || details.insuranceIncluded || details.earlyCheckIn || details.arrivalFastTrack) && (
               <div className="rounded-3xl border border-slate-200/80 bg-white p-4 shadow-[0_16px_40px_rgba(15,23,42,0.06)]">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
@@ -1955,6 +2060,46 @@ return (
                         {t("marketplace.route", { defaultValue: "Маршрут" })}
                       </div>
                       <div className="mt-1 text-sm font-black text-slate-900">✈️ {direction}</div>
+                    </div>
+                  )}
+                  {isAuthorTour && authorFormat && (
+                    <div className="rounded-2xl bg-cyan-50 px-3 py-2.5 text-cyan-900 ring-1 ring-cyan-100">
+                      <div className="text-[10px] font-black uppercase tracking-wide text-cyan-600/70">
+                        {t("marketplace.author_format", { defaultValue: "Формат" })}
+                      </div>
+                      <div className="mt-1 text-sm font-black">🧭 {authorFormat}</div>
+                    </div>
+                  )}
+                  {isAuthorTour && authorDuration && (
+                    <div className="rounded-2xl bg-slate-50 px-3 py-2.5 ring-1 ring-slate-100">
+                      <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                        {t("marketplace.author_duration", { defaultValue: "Длительность" })}
+                      </div>
+                      <div className="mt-1 text-sm font-black text-slate-900">⏱ {authorDuration}</div>
+                    </div>
+                  )}
+                  {isAuthorTour && authorPax && (
+                    <div className="rounded-2xl bg-slate-50 px-3 py-2.5 ring-1 ring-slate-100">
+                      <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                        {t("marketplace.author_pax", { defaultValue: "Группа" })}
+                      </div>
+                      <div className="mt-1 text-sm font-black text-slate-900">👥 {authorPax}</div>
+                    </div>
+                  )}
+                  {isAuthorTour && authorGuideLang && (
+                    <div className="rounded-2xl bg-slate-50 px-3 py-2.5 ring-1 ring-slate-100">
+                      <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                        {t("marketplace.author_guide_language", { defaultValue: "Язык" })}
+                      </div>
+                      <div className="mt-1 text-sm font-black text-slate-900">🌐 {authorGuideLang}</div>
+                    </div>
+                  )}
+                  {isAuthorTour && authorMeetingPoint && (
+                    <div className="rounded-2xl bg-slate-50 px-3 py-2.5 ring-1 ring-slate-100 sm:col-span-2">
+                      <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                        {t("marketplace.author_meeting_point", { defaultValue: "Место встречи" })}
+                      </div>
+                      <div className="mt-1 text-sm font-black text-slate-900">📍 {authorMeetingPoint}</div>
                     </div>
                   )}
                   {accommodation && (
@@ -1995,6 +2140,51 @@ return (
                         {t("arrival_fast_track", { defaultValue: "Fast Track" })}
                       </div>
                       <div className="mt-1 text-sm font-black">🛬 {t("marketplace.included", { defaultValue: "Включено" })}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {isAuthorTour && (authorProgram || authorIncluded || authorNotIncluded) && (
+              <div className="rounded-3xl border border-cyan-100 bg-gradient-to-br from-cyan-50 to-white p-4 shadow-[0_16px_40px_rgba(8,145,178,0.08)]">
+                <div className="mb-3 flex items-center gap-2 text-sm font-black text-slate-950">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-2xl bg-cyan-600 text-white shadow-sm">🧭</span>
+                  {t("marketplace.author_tour_details", { defaultValue: "Детали авторского тура" })}
+                </div>
+                <div className="space-y-3">
+                  {authorProgram && (
+                    <div>
+                      <div className="mb-1 text-[10px] font-black uppercase tracking-wide text-cyan-700/75">
+                        {t("marketplace.author_program", { defaultValue: "Программа" })}
+                      </div>
+                      <div className="whitespace-pre-wrap rounded-2xl bg-white/85 p-3 text-sm font-semibold leading-relaxed text-slate-700 ring-1 ring-cyan-100">
+                        {String(authorProgram || "").replace(/\r\n/g, "\n")}
+                      </div>
+                    </div>
+                  )}
+                  {(authorIncluded || authorNotIncluded) && (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {authorIncluded && (
+                        <div className="rounded-2xl bg-emerald-50 p-3 text-emerald-900 ring-1 ring-emerald-100">
+                          <div className="text-[10px] font-black uppercase tracking-wide text-emerald-700/70">
+                            {t("marketplace.author_included", { defaultValue: "Включено" })}
+                          </div>
+                          <div className="mt-1 whitespace-pre-wrap text-sm font-semibold leading-relaxed">
+                            {String(authorIncluded || "").replace(/\r\n/g, "\n")}
+                          </div>
+                        </div>
+                      )}
+                      {authorNotIncluded && (
+                        <div className="rounded-2xl bg-rose-50 p-3 text-rose-900 ring-1 ring-rose-100">
+                          <div className="text-[10px] font-black uppercase tracking-wide text-rose-700/70">
+                            {t("marketplace.author_not_included", { defaultValue: "Не включено" })}
+                          </div>
+                          <div className="mt-1 whitespace-pre-wrap text-sm font-semibold leading-relaxed">
+                            {String(authorNotIncluded || "").replace(/\r\n/g, "\n")}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
