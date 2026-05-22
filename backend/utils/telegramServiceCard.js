@@ -910,23 +910,45 @@ const priceKind =
 
   const getStayLines = () => {
     const out = [];
-  
+    const seen = new Set();
+
+    const addLine = (value) => {
+      const line = norm(value);
+      if (!line) return;
+      const key = line.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push(line);
+    };
+
     const pushItem = (hotel, nights, city) => {
       const h = norm(hotel);
       if (!h) return;
-  
-      let suffix = "";
-  
-      if (nights) suffix = `${nights} ночи`;
-      else if (city) suffix = city;
-  
-      out.push(
-        suffix
-          ? `${h} — ${suffix}`
-          : h
-      );
+
+      const suffix = nights ? pluralRuNights(nights) : norm(city || "");
+      addLine(suffix ? `${h} — ${suffix}` : h);
     };
-  
+
+    const parseTextAccommodation = (value) => {
+      const raw = cleanInline(value);
+      if (!raw) return;
+
+      raw
+        .split(/\n|;/g)
+        .map((x) => x.replace(/^[-–—•\s]+/g, "").trim())
+        .filter(Boolean)
+        .forEach((line) => {
+          // ВАЖНО: не тянем сюда всю программу тура. Только короткие строки проживания.
+          const tooLong = line.length > 110;
+          const hasDayProgram =
+            /день\s*\d+|day\s*\d+|экскурс|вылет|трансфер|встреча|возвращение|свободн|прогулк|посещение/i.test(line);
+          const looksLikeHotel =
+            /hotel|отель|m[oö]venpick|kar\s+hotel|great\s+fortune|resort|inn|suite|spa|palace|boutique/i.test(line);
+
+          if (looksLikeHotel && !hasDayProgram && !tooLong) addLine(line);
+        });
+    };
+
     const sources = [
       d.stays,
       d.accommodationPlan,
@@ -935,56 +957,69 @@ const priceKind =
       d.lodging,
       d.accommodationHotels,
     ];
-  
+
     for (const src of sources) {
       if (!src) continue;
-  
+
       if (Array.isArray(src)) {
         src.forEach((x) => {
           if (typeof x === "string") {
-            pushItem(x);
+            parseTextAccommodation(x);
             return;
           }
-  
-          pushItem(
-            x.hotel ||
-            x.name ||
-            x.title,
-  
-            x.nights ||
-            x.days,
-  
-            x.city
-          );
+
+          if (x && typeof x === "object") {
+            pushItem(
+              x.hotel ||
+                x.name ||
+                x.title ||
+                x.hotelName ||
+                x.accommodation ||
+                x.place,
+              x.nights ||
+                x.nightCount ||
+                x.nightsCount ||
+                x.days,
+              x.city ||
+                x.location
+            );
+          }
         });
+        continue;
+      }
+
+      if (typeof src === "string") {
+        parseTextAccommodation(src);
+        continue;
+      }
+
+      if (typeof src === "object") {
+        pushItem(
+          src.hotel ||
+            src.name ||
+            src.title ||
+            src.hotelName ||
+            src.accommodation ||
+            src.place,
+          src.nights ||
+            src.nightCount ||
+            src.nightsCount ||
+            src.days,
+          src.city ||
+            src.location
+        );
       }
     }
-  
-    // fallback:
-    // текст программы тура
+
+    // Последний безопасный fallback: берём только отдельные короткие строки из accommodation/hotel,
+    // но НЕ используем d.program, чтобы программа тура не попадала в блок «🏨 Проживание».
     if (!out.length) {
-      const txt =
-        String(
-          d.program ||
-          d.accommodation ||
-          ""
-        );
-  
-      const lines = txt
-        .split(/\n|;/)
-        .map((x) => x.trim())
-        .filter(Boolean);
-  
-      lines.forEach((x) => {
-        if (
-          /hotel|отель|möven|kar|fortune/i.test(x)
-        ) {
-          out.push(x);
-        }
-      });
+      parseTextAccommodation(d.accommodation);
+      parseTextAccommodation(d.hotel);
+      parseTextAccommodation(d.hotelName);
     }
-  
-    return out.slice(0,5);
+
+    return out.slice(0, 5);
   };
 
     const normalizeRouteLine = (value) =>
