@@ -870,15 +870,41 @@ const priceKind =
         .slice(0, maxItems);
     };
 
+    const pluralRuNights = (value) => {
+      const n = Number(value);
+      if (!Number.isFinite(n) || n <= 0) return "";
+      const abs = Math.abs(Math.trunc(n));
+      const last = abs % 10;
+      const last2 = abs % 100;
+      if (last === 1 && last2 !== 11) return `${abs} ночь`;
+      if (last >= 2 && last <= 4 && (last2 < 12 || last2 > 14)) return `${abs} ночи`;
+      return `${abs} ночей`;
+    };
+
     const formatStayItem = (item) => {
       if (item == null) return "";
       if (typeof item === "string") return item.trim();
       if (typeof item !== "object") return String(item).trim();
 
-      const hotelName = norm(item.hotel || item.name || item.title || item.accommodation || item.place || "");
-      const nightsCount = item.nights ?? item.nightCount ?? item.days ?? "";
+      const hotelName = norm(
+        item.hotel ||
+          item.name ||
+          item.title ||
+          item.accommodation ||
+          item.place ||
+          item.hotelName ||
+          ""
+      );
+
+      const nightsCount =
+        item.nights ??
+        item.nightCount ??
+        item.nightsCount ??
+        item.days ??
+        "";
+
       const cityName = norm(item.city || item.location || "");
-      const suffix = nightsCount ? `${nightsCount} ночи` : cityName;
+      const suffix = nightsCount ? pluralRuNights(nightsCount) : cityName;
       return joinClean([hotelName, suffix], " — ");
     };
 
@@ -900,7 +926,7 @@ const priceKind =
         if (!candidate) continue;
 
         if (Array.isArray(candidate)) {
-          const lines = candidate.map(formatStayItem).filter(Boolean).slice(0, 5);
+          const lines = candidate.map(formatStayItem).filter(Boolean).slice(0, 6);
           if (lines.length) return lines;
         }
 
@@ -910,7 +936,7 @@ const priceKind =
         }
 
         if (typeof candidate === "string") {
-          const lines = splitSmartLines(candidate, 5);
+          const lines = splitSmartLines(candidate, 6);
           if (lines.length) return lines;
         }
       }
@@ -918,26 +944,43 @@ const priceKind =
       return [];
     };
 
+    const normalizeRouteLine = (value) =>
+      String(value || "")
+        .replace(/\s*[-–—]\s*/g, " → ")
+        .replace(/\s*\/\s*/g, " → ")
+        .replace(/\s+→\s+/g, " → ")
+        .replace(/\s{2,}/g, " ")
+        .trim();
+
+    const isGenericAuthorTitle = (value) => {
+      const v = String(value || "").trim().toLowerCase();
+      return !v || v === "авторский тур" || v === "author tour" || v === "author_tour";
+    };
+
     if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
     parts.push(`🧭 <b>АВТОРСКИЙ ТУР</b> <code>#R${serviceId}</code>`);
 
-    const titleText = normalizeTitleSoft(String(svc.title || d.title || "").trim());
-    if (titleText && titleText.toLowerCase() !== "авторский тур") {
-      parts.push(`🏔 <b>${escapeHtml(titleText)}</b>`);
-    }
+    const titleText = normalizeRouteLine(
+      normalizeTitleSoft(String(svc.title || d.title || "").trim())
+    );
 
-    const routeTitle =
+    const routeTitle = normalizeRouteLine(
       norm(d.routeTitle || d.route || d.routeName || "") ||
-      joinClean([
-        norm(d.directionFrom || d.fromCity || d.cityFrom),
-        norm(d.directionTo || d.toCity || d.cityTo),
-      ], " → ");
-    const titleLower = String(titleText || "").toLowerCase();
-    const fromForRoute = norm(d.directionFrom || d.fromCity || d.cityFrom).toLowerCase();
-    const toForRoute = norm(d.directionTo || d.toCity || d.cityTo).toLowerCase();
-    const titleAlreadyHasRoute = fromForRoute && toForRoute && titleLower.includes(fromForRoute) && titleLower.includes(toForRoute);
-    if (routeTitle && routeTitle.toLowerCase() !== titleLower && !titleAlreadyHasRoute) {
-      parts.push(`🏔 ${escapeHtml(routeTitle)}`);
+        joinClean(
+          [
+            norm(d.directionFrom || d.fromCity || d.cityFrom),
+            norm(d.directionTo || d.toCity || d.cityTo),
+          ],
+          " → "
+        )
+    );
+
+    // Brochure v2: показываем одну сильную hero-строку маршрута/названия.
+    // Не выводим title + route одновременно, чтобы не было дубля вида:
+    // "Uzungol - Trabzon - Istanbul" + "Uzungol → Istanbul".
+    const heroLine = !isGenericAuthorTitle(titleText) ? titleText : routeTitle;
+    if (heroLine) {
+      parts.push(`🏔 <b>${escapeHtml(heroLine)}</b>`);
     }
 
     const countryTitle = norm(d.directionCountry || d.country || d.destinationCountry || "");
@@ -946,37 +989,54 @@ const priceKind =
     pushDivider(parts);
 
     if (dates) parts.push(`🗓 ${escapeHtml(dates)}`);
-    if (nights) parts.push(`🌙 ${escapeHtml(String(nights))} ночей`);
-    else if (norm(d.duration || d.tourDuration || "")) parts.push(labelLine("⏱", "Длительность", norm(d.duration || d.tourDuration || "")));
+    if (nights) {
+      parts.push(`🌙 ${escapeHtml(pluralRuNights(nights))}`);
+    } else if (norm(d.duration || d.tourDuration || "")) {
+      parts.push(labelLine("⏱", "Длительность", norm(d.duration || d.tourDuration || "")));
+    }
 
     const format = authorFormatLabel(d.tourFormat || d.format || "");
-    const pax = joinClean([
-      d.minPax ? `${d.minPax}` : "",
-      d.maxPax ? `${d.maxPax} чел` : "",
-    ], "–");
+    const pax = joinClean(
+      [
+        d.minPax ? `${d.minPax}` : "",
+        d.maxPax ? `${d.maxPax} чел` : "",
+      ],
+      "–"
+    );
     const formatLine = joinClean([format, pax], " • ");
     if (formatLine) parts.push(`👥 ${escapeHtml(formatLine)}`);
 
     const langLine = norm(d.guideLanguage || d.language || d.languages || "");
     if (langLine) parts.push(`🗣 ${escapeHtml(langLine)}`);
 
-    if (d.transportIncluded === true || String(d.transport || "").toLowerCase() === "included" || /^да$/i.test(String(d.transport || ""))) {
+    if (
+      d.transportIncluded === true ||
+      String(d.transport || "").toLowerCase() === "included" ||
+      /^да$/i.test(String(d.transport || ""))
+    ) {
       parts.push("🚐 Транспорт включён");
     }
 
-    const meetingPoint = norm(d.meetingPoint || d.startPoint || d.pickupPoint || "");
+    const meetingPoint =
+      norm(d.meetingPoint || d.startPoint || d.pickupPoint || "") ||
+      norm(d.directionFrom || d.fromCity || d.cityFrom || "");
+
     if (meetingPoint) parts.push(`📍 Старт: ${escapeHtml(meetingPoint)}`);
 
     const stayLines = getStayLines();
     if (stayLines.length) {
       pushDivider(parts);
+      parts.push("━━━━━━━━━━");
+      parts.push("");
       parts.push("🏨 <b>Проживание</b>");
       for (const line of stayLines) parts.push(`• ${escapeHtml(line)}`);
     }
 
-    const includedItems = splitSmartLines(d.included || d.includes || d.includedText, 5);
+    const includedItems = splitSmartLines(d.included || d.includes || d.includedText, 6);
     if (includedItems.length) {
       pushDivider(parts);
+      parts.push("━━━━━━━━━━");
+      parts.push("");
       parts.push("✅ <b>Включено</b>");
       for (const item of includedItems) parts.push(`✓ ${escapeHtml(item)}`);
     }
@@ -986,13 +1046,20 @@ const priceKind =
       parts.push(`💰 <b>${escapeHtml(String(priceWithCur))}</b> (${escapeHtml(priceKind)})`);
     }
 
-    if (projectSupportPaid) parts.push("💛 <b>Поддерживает проект</b>");
+    if (projectSupportPaid) {
+      parts.push("");
+      parts.push("💛 <b>Поддерживает проект</b>");
+    }
 
-    const authorName = providerNameRaw && providerNameRaw !== "Поставщик" ? providerNameRaw : norm(d.authorName || d.guideName || "");
+    const authorName =
+      providerNameRaw && providerNameRaw !== "Поставщик"
+        ? providerNameRaw
+        : norm(d.authorName || d.guideName || "");
+
     if (authorName) parts.push(`👨‍💼 <b>Автор:</b> ${escapeHtml(authorName)}`);
 
-    // Контакты не вшиваем в текст author_tour brochure-карточки:
-    // они открываются отдельной кнопкой «👤 Контакты», чтобы карточка оставалась чистой.
+    // ВАЖНО: программу тура НЕ вставляем в основную карточку.
+    // Она открывается отдельной кнопкой «🗓 Программа тура» через handler atp:<serviceId> в bot.js.
 
     const kbRows = [
       [
