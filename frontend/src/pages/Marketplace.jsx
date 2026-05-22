@@ -922,6 +922,7 @@ const CATEGORY_KEYWORDS = {
     "transport","transfer","driver","car","minivan","bus"
   ],
   refused_tour: ["отказной тур","пакет","package","package tour","refused tour"],
+  author_tour: ["авторский тур","авторский","программа","маршрут","custom tour","author tour","private tour"],
   refused_hotel: ["отказной отель","отель","hotel","room","номер"],
   refused_flight: ["авиабилет","билет на самолёт","flight","ticket","refused flight"],
   visa_support: ["виза","визовая","visa","visa support"]
@@ -1208,6 +1209,10 @@ const search = async (opts = {}) => {
     {
       value: "refused_tour",
       label: t("marketplace.package") || t("category.refused_tour") || "Отказной тур",
+    },
+    {
+      value: "author_tour",
+      label: t("marketplace.author_tour") || t("category.author_tour") || "Авторский тур",
     },
     {
       value: "refused_hotel",
