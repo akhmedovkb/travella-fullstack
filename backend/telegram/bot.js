@@ -5784,6 +5784,10 @@ async function finishCreateServiceFromWizard(ctx) {
       `✅ Готово!\n\nУслуга #${createdServiceId} создана и отправлена на модерацию.\nПосле одобрения она появится в поиске.`
     );
 
+    if (String(category || "").toLowerCase() === "author_tour") {
+      await replyProviderSupportPrompt(ctx, createdServiceId);
+    }
+
     resetServiceWizard(ctx);
 
     await ctx.reply("Что делаем дальше? 👇", {
@@ -7509,6 +7513,9 @@ bot.action("svc_wiz:skip", async (ctx) => {
       "svc_create_grossPrice",
       "svc_create_expiration", // можно поставить "нет" (кнопка = быстрый переход)
       "svc_create_photo",
+      "svc_author_not_included",
+      "svc_author_meeting",
+      "svc_author_cancel",
     ]);
 
     if (!optional.has(state)) {
@@ -7532,6 +7539,15 @@ bot.action("svc_wiz:skip", async (ctx) => {
     if (state === "svc_create_flight_details") {
       draft.flightDetails = null;
     }
+    if (state === "svc_author_not_included") {
+      draft.notIncluded = "";
+    }
+    if (state === "svc_author_meeting") {
+      draft.meetingPoint = "";
+    }
+    if (state === "svc_author_cancel") {
+      draft.cancellationPolicy = "";
+    }
 
     // Иногда пользователи нажимают кнопку «Пропустить» под старым сообщением,
     // когда ctx.session.state уже успел измениться. Чтобы не получать
@@ -7543,6 +7559,12 @@ bot.action("svc_wiz:skip", async (ctx) => {
         ? "svc_create_flight_details"
         : state === "svc_create_flight_details"
           ? (category === "refused_flight" ? "svc_create_price" : "svc_create_tour_hotel")
+          : state === "svc_author_not_included"
+            ? "svc_author_pax"
+          : state === "svc_author_meeting"
+            ? "svc_author_transport"
+          : state === "svc_author_cancel"
+            ? "svc_create_price"
           : state === "svc_create_grossPrice"
             ? "svc_create_expiration"
             : state === "svc_create_expiration"
@@ -9886,78 +9908,217 @@ bot.on("text", async (ctx, next) => {
 
       try {
         switch (state) {
-        case "svc_author_title":
-      await ctx.reply(
-        "🧭 Напишите *название авторского тура*.\nПример: *Авторский тур по Самарканду и горам*.\n\nЕсли не нужно — нажмите «⏭ Пропустить».",
-        { parse_mode: "Markdown", ...wizNavKeyboard() }
-      );
-      return;
+        case "svc_author_title": {
+          const v = await requireTextField(ctx, text, "Название авторского тура", { min: 2 });
+          if (!v) return;
+          draft.title = v;
+          pushWizardState(ctx, "svc_author_title");
+          ctx.session.state = "svc_author_country";
+          await promptWizardState(ctx, "svc_author_country");
+          return;
+        }
 
-    case "svc_author_country":
-      await ctx.reply("🌍 Укажите *страну / направление* авторского тура:", { parse_mode: "Markdown", ...wizNavKeyboard() });
-      return;
+        case "svc_author_country": {
+          const v = await requireTextField(ctx, text, "Страна / направление", { min: 2 });
+          if (!v) return;
+          draft.country = v;
+          pushWizardState(ctx, "svc_author_country");
+          ctx.session.state = "svc_author_from";
+          await promptWizardState(ctx, "svc_author_from");
+          return;
+        }
 
-    case "svc_author_from":
-      await ctx.reply("📍 Укажите *город старта / место начала* тура:", { parse_mode: "Markdown", ...wizNavKeyboard() });
-      return;
+        case "svc_author_from": {
+          const v = await requireTextField(ctx, text, "Город старта", { min: 2 });
+          if (!v) return;
+          draft.fromCity = v;
+          pushWizardState(ctx, "svc_author_from");
+          ctx.session.state = "svc_author_to";
+          await promptWizardState(ctx, "svc_author_to");
+          return;
+        }
 
-    case "svc_author_to":
-      await ctx.reply("🏁 Укажите *город финиша / конечную точку*. Если маршрут круговой — можно повторить город старта:", { parse_mode: "Markdown", ...wizNavKeyboard() });
-      return;
+        case "svc_author_to": {
+          const v = await requireTextField(ctx, text, "Город финиша", { min: 2 });
+          if (!v) return;
+          draft.toCity = v;
+          pushWizardState(ctx, "svc_author_to");
+          ctx.session.state = "svc_author_start";
+          await promptWizardState(ctx, "svc_author_start");
+          return;
+        }
 
-    case "svc_author_start":
-      await ctx.reply("📅 Укажите *дату начала* или напишите `по запросу`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
-      return;
+        case "svc_author_start": {
+          const low = text.toLowerCase().trim();
+          if (["по запросу", "запрос", "flex", "flexible", "нет", "пропустить", "skip", "-"].includes(low)) {
+            draft.startDate = "";
+            draft.flexibleDates = true;
+          } else {
+            const norm = normalizeDateInput(text);
+            if (!norm) {
+              await ctx.reply("😕 Не понял дату начала. Введите *YYYY-MM-DD* / *YYYY.MM.DD* или напишите `по запросу`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
+              return;
+            }
+            if (isPastYMD(norm)) {
+              await ctx.reply("⚠️ Эта дата уже в прошлом. Укажите будущую дату или напишите `по запросу`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
+              return;
+            }
+            draft.startDate = norm;
+            draft.flexibleDates = false;
+          }
+          pushWizardState(ctx, "svc_author_start");
+          ctx.session.state = "svc_author_end";
+          await promptWizardState(ctx, "svc_author_end");
+          return;
+        }
 
-    case "svc_author_end":
-      await ctx.reply("📅 Укажите *дату окончания* или напишите `по запросу`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
-      return;
+        case "svc_author_end": {
+          const low = text.toLowerCase().trim();
+          if (["по запросу", "запрос", "flex", "flexible", "нет", "пропустить", "skip", "-"].includes(low)) {
+            draft.endDate = "";
+            draft.flexibleDates = true;
+          } else {
+            const norm = normalizeDateInput(text);
+            if (!norm) {
+              await ctx.reply("😕 Не понял дату окончания. Введите *YYYY-MM-DD* / *YYYY.MM.DD* или напишите `по запросу`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
+              return;
+            }
+            if (draft.startDate && isBeforeYMD(norm, draft.startDate)) {
+              await ctx.reply(`⚠️ Дата окончания раньше даты начала.\nНачало: ${draft.startDate}\nУкажите корректную дату окончания или напишите \`по запросу\`.`, { parse_mode: "Markdown", ...wizNavKeyboard() });
+              return;
+            }
+            if (isPastYMD(norm)) {
+              await ctx.reply("⚠️ Эта дата уже в прошлом. Укажите будущую дату или напишите `по запросу`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
+              return;
+            }
+            draft.endDate = norm;
+          }
+          pushWizardState(ctx, "svc_author_end");
+          ctx.session.state = "svc_author_duration";
+          await promptWizardState(ctx, "svc_author_duration");
+          return;
+        }
 
-    case "svc_author_duration":
-      await ctx.reply("⏱ Укажите *длительность*. Пример: `3 дня / 2 ночи` или `8 часов`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
-      return;
+        case "svc_author_duration": {
+          const v = await requireTextField(ctx, text, "Длительность", { min: 1 });
+          if (!v) return;
+          draft.duration = v;
+          pushWizardState(ctx, "svc_author_duration");
+          ctx.session.state = "svc_author_format";
+          await promptWizardState(ctx, "svc_author_format");
+          return;
+        }
 
-    case "svc_author_format":
-      await ctx.reply("👥 Укажите *формат тура*: `group`, `private` или `custom`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
-      return;
+        case "svc_author_format": {
+          const raw = text.toLowerCase().trim();
+          const map = { group: "group", private: "private", custom: "custom", групповой: "group", группа: "group", индивидуальный: "private", приватный: "private", авторский: "custom", кастомный: "custom" };
+          draft.tourFormat = map[raw] || text.trim();
+          pushWizardState(ctx, "svc_author_format");
+          ctx.session.state = "svc_author_program";
+          await promptWizardState(ctx, "svc_author_program");
+          return;
+        }
 
-    case "svc_author_program":
-      await ctx.reply("🗺 Опишите *программу тура* по дням или блоками. Это главный продающий текст авторского тура.", { parse_mode: "Markdown", ...wizNavKeyboard() });
-      return;
+        case "svc_author_program": {
+          const v = await requireTextField(ctx, text, "Программа тура", { min: 10 });
+          if (!v) return;
+          draft.program = v;
+          pushWizardState(ctx, "svc_author_program");
+          ctx.session.state = "svc_author_included";
+          await promptWizardState(ctx, "svc_author_included");
+          return;
+        }
 
-    case "svc_author_included":
-      await ctx.reply("✅ Что *включено* в стоимость?", { parse_mode: "Markdown", ...wizNavKeyboard() });
-      return;
+        case "svc_author_included": {
+          const v = await requireTextField(ctx, text, "Что включено", { min: 2 });
+          if (!v) return;
+          draft.included = v;
+          pushWizardState(ctx, "svc_author_included");
+          ctx.session.state = "svc_author_not_included";
+          await promptWizardState(ctx, "svc_author_not_included");
+          return;
+        }
 
-    case "svc_author_not_included":
-      await ctx.reply("➖ Что *не включено*? Если нечего указать — нажмите «⏭ Пропустить».", { parse_mode: "Markdown", ...wizNavKeyboard() });
-      return;
+        case "svc_author_not_included": {
+          const low = text.toLowerCase().trim();
+          draft.notIncluded = ["пропустить", "skip", "-", "нет"].includes(low) ? "" : text.trim();
+          pushWizardState(ctx, "svc_author_not_included");
+          ctx.session.state = "svc_author_pax";
+          await promptWizardState(ctx, "svc_author_pax");
+          return;
+        }
 
-    case "svc_author_pax":
-      await ctx.reply("👥 Укажите *минимум/максимум человек* в формате `2/10`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
-      return;
+        case "svc_author_pax": {
+          const m = text.trim().match(/^(\d+)\s*\/\s*(\d+)$/);
+          if (!m) {
+            await ctx.reply("😕 Не понял формат. Введите строго *min/max*, например *2/10*.", { parse_mode: "Markdown", ...wizNavKeyboard() });
+            return;
+          }
+          draft.minPax = Number(m[1]);
+          draft.maxPax = Number(m[2]);
+          draft.pax = `${draft.minPax}/${draft.maxPax}`;
+          pushWizardState(ctx, "svc_author_pax");
+          ctx.session.state = "svc_author_language";
+          await promptWizardState(ctx, "svc_author_language");
+          return;
+        }
 
-    case "svc_author_language":
-      await ctx.reply("🗣 Укажите *язык гида*. Пример: `русский / английский / узбекский`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
-      return;
+        case "svc_author_language": {
+          const v = await requireTextField(ctx, text, "Язык гида", { min: 2 });
+          if (!v) return;
+          draft.guideLanguage = v;
+          pushWizardState(ctx, "svc_author_language");
+          ctx.session.state = "svc_author_meeting";
+          await promptWizardState(ctx, "svc_author_meeting");
+          return;
+        }
 
-    case "svc_author_meeting":
-      await ctx.reply("📌 Укажите *место встречи*. Если по договорённости — так и напишите.", { parse_mode: "Markdown", ...wizNavKeyboard() });
-      return;
+        case "svc_author_meeting": {
+          const low = text.toLowerCase().trim();
+          draft.meetingPoint = ["пропустить", "skip", "-", "нет"].includes(low) ? "" : text.trim();
+          pushWizardState(ctx, "svc_author_meeting");
+          ctx.session.state = "svc_author_transport";
+          await promptWizardState(ctx, "svc_author_transport");
+          return;
+        }
 
-    case "svc_author_transport":
-      await ctx.reply("🚗 Транспорт включён? Ответьте `да` или `нет`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
-      return;
+        case "svc_author_transport": {
+          const yn = parseYesNo(text);
+          if (yn === null) {
+            await ctx.reply("😕 Ответьте `да` или `нет`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
+            return;
+          }
+          draft.transportIncluded = yn;
+          draft.transport = yn ? "Включён" : "Не включён";
+          pushWizardState(ctx, "svc_author_transport");
+          ctx.session.state = "svc_author_guide";
+          await promptWizardState(ctx, "svc_author_guide");
+          return;
+        }
 
-    case "svc_author_guide":
-      await ctx.reply("🧑‍🏫 Гид включён? Ответьте `да` или `нет`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
-      return;
+        case "svc_author_guide": {
+          const yn = parseYesNo(text);
+          if (yn === null) {
+            await ctx.reply("😕 Ответьте `да` или `нет`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
+            return;
+          }
+          draft.guideIncluded = yn;
+          pushWizardState(ctx, "svc_author_guide");
+          ctx.session.state = "svc_author_cancel";
+          await promptWizardState(ctx, "svc_author_cancel");
+          return;
+        }
 
-    case "svc_author_cancel":
-      await ctx.reply("📄 Укажите *условия отмены / важные условия*. Если не нужно — нажмите «⏭ Пропустить».", { parse_mode: "Markdown", ...wizNavKeyboard() });
-      return;
+        case "svc_author_cancel": {
+          const low = text.toLowerCase().trim();
+          draft.cancellationPolicy = ["пропустить", "skip", "-", "нет"].includes(low) ? "" : text.trim();
+          pushWizardState(ctx, "svc_author_cancel");
+          ctx.session.state = "svc_create_price";
+          await promptWizardState(ctx, "svc_create_price");
+          return;
+        }
 
-    case "svc_create_title": {
+        case "svc_create_title": {
           const v = await requireTextField(ctx, text, "Название", { min: 2 });
           if (!v) return;
           draft.title = v;
