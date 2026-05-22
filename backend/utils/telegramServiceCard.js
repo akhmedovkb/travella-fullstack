@@ -854,89 +854,160 @@ const priceKind =
   if ((role !== "provider" || options?.forceRefused === true) && String(category) === "author_tour") {
     const parts = [];
 
-    if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
-    parts.push(`🧭 <b>АВТОРСКИЙ ТУР</b>
-📍 <code>#R${serviceId}</code>`);
+    const cleanInline = (value) =>
+      String(value ?? "")
+        .replace(/\r\n/g, "\n")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
 
-    const tl = titleLine("generic");
-    if (tl) parts.push(tl);
+    const splitSmartLines = (value, maxItems = 6) => {
+      const raw = cleanInline(value);
+      if (!raw) return [];
+      return raw
+        .split(/\n|;|•|✓|✔/g)
+        .map((x) => x.replace(/^[-–—\s]+/g, "").trim())
+        .filter(Boolean)
+        .slice(0, maxItems);
+    };
+
+    const formatStayItem = (item) => {
+      if (item == null) return "";
+      if (typeof item === "string") return item.trim();
+      if (typeof item !== "object") return String(item).trim();
+
+      const hotelName = norm(item.hotel || item.name || item.title || item.accommodation || item.place || "");
+      const nightsCount = item.nights ?? item.nightCount ?? item.days ?? "";
+      const cityName = norm(item.city || item.location || "");
+      const suffix = nightsCount ? `${nightsCount} ночи` : cityName;
+      return joinClean([hotelName, suffix], " — ");
+    };
+
+    const getStayLines = () => {
+      const candidates = [
+        d.accommodationPlan,
+        d.stays,
+        d.hotelsPlan,
+        d.hotels,
+        d.accommodationHotels,
+        d.lodging,
+        d.lodgingPlan,
+        d.accommodation,
+        d.hotel,
+        d.hotelName,
+      ];
+
+      for (const candidate of candidates) {
+        if (!candidate) continue;
+
+        if (Array.isArray(candidate)) {
+          const lines = candidate.map(formatStayItem).filter(Boolean).slice(0, 5);
+          if (lines.length) return lines;
+        }
+
+        if (typeof candidate === "object") {
+          const one = formatStayItem(candidate);
+          if (one) return [one];
+        }
+
+        if (typeof candidate === "string") {
+          const lines = splitSmartLines(candidate, 5);
+          if (lines.length) return lines;
+        }
+      }
+
+      return [];
+    };
+
+    if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
+    parts.push(`🧭 <b>АВТОРСКИЙ ТУР</b> <code>#R${serviceId}</code>`);
+
+    const titleText = normalizeTitleSoft(String(svc.title || d.title || "").trim());
+    if (titleText && titleText.toLowerCase() !== "авторский тур") {
+      parts.push(`🏔 <b>${escapeHtml(titleText)}</b>`);
+    }
 
     const routeTitle =
-      route ||
+      norm(d.routeTitle || d.route || d.routeName || "") ||
       joinClean([
         norm(d.directionFrom || d.fromCity || d.cityFrom),
         norm(d.directionTo || d.toCity || d.cityTo),
-      ], " → ") ||
-      norm(d.directionCountry || d.country || "");
-    if (routeTitle) parts.push(labelLine("🌍", "Маршрут", routeTitle));
+      ], " → ");
+    const titleLower = String(titleText || "").toLowerCase();
+    const fromForRoute = norm(d.directionFrom || d.fromCity || d.cityFrom).toLowerCase();
+    const toForRoute = norm(d.directionTo || d.toCity || d.cityTo).toLowerCase();
+    const titleAlreadyHasRoute = fromForRoute && toForRoute && titleLower.includes(fromForRoute) && titleLower.includes(toForRoute);
+    if (routeTitle && routeTitle.toLowerCase() !== titleLower && !titleAlreadyHasRoute) {
+      parts.push(`🏔 ${escapeHtml(routeTitle)}`);
+    }
 
-    const dateValue = dates
-      ? `${dates}${nights ? ` (${nights} ноч.)` : ""}`
-      : d.flexibleDates
-        ? "По запросу / гибкие даты"
-        : "";
-    if (dateValue) parts.push(labelLine("🗓", "Даты", dateValue));
+    const countryTitle = norm(d.directionCountry || d.country || d.destinationCountry || "");
+    if (countryTitle) parts.push(`🌍 ${escapeHtml(countryTitle)}`);
 
-    const duration = norm(d.duration || d.tourDuration || "");
-    if (duration) parts.push(labelLine("⏱", "Длительность", duration));
+    pushDivider(parts);
+
+    if (dates) parts.push(`🗓 ${escapeHtml(dates)}`);
+    if (nights) parts.push(`🌙 ${escapeHtml(String(nights))} ночей`);
+    else if (norm(d.duration || d.tourDuration || "")) parts.push(labelLine("⏱", "Длительность", norm(d.duration || d.tourDuration || "")));
 
     const format = authorFormatLabel(d.tourFormat || d.format || "");
     const pax = joinClean([
-      d.minPax ? `от ${d.minPax}` : "",
-      d.maxPax ? `до ${d.maxPax} чел.` : "",
-    ], " ");
+      d.minPax ? `${d.minPax}` : "",
+      d.maxPax ? `${d.maxPax} чел` : "",
+    ], "–");
     const formatLine = joinClean([format, pax], " • ");
-    if (formatLine) parts.push(labelLine("👥", "Формат", formatLine));
+    if (formatLine) parts.push(`👥 ${escapeHtml(formatLine)}`);
 
-    const guideBits = joinClean([
-      d.guideIncluded === true ? "гид включён" : "",
-      norm(d.guideLanguage || d.language || d.languages || ""),
-    ], " • ");
-    if (guideBits) parts.push(labelLine("🗣", "Гид / язык", guideBits));
+    const langLine = norm(d.guideLanguage || d.language || d.languages || "");
+    if (langLine) parts.push(`🗣 ${escapeHtml(langLine)}`);
 
-    if (d.transportIncluded === true || String(d.transport || "").toLowerCase() === "included") {
-      parts.push(labelLine("🚐", "Транспорт", "включён"));
+    if (d.transportIncluded === true || String(d.transport || "").toLowerCase() === "included" || /^да$/i.test(String(d.transport || ""))) {
+      parts.push("🚐 Транспорт включён");
     }
 
     const meetingPoint = norm(d.meetingPoint || d.startPoint || d.pickupPoint || "");
-    if (meetingPoint) parts.push(labelLine("📍", "Место встречи", meetingPoint));
+    if (meetingPoint) parts.push(`📍 Старт: ${escapeHtml(meetingPoint)}`);
 
-    const programPreview = compactText(d.program || d.itinerary || d.routeProgram || "", 220);
-    if (programPreview) {
-      parts.push("");
-      parts.push("🗓 <b>Программа тура</b>:");
-      parts.push(escapeHtml(programPreview));
+    const stayLines = getStayLines();
+    if (stayLines.length) {
+      pushDivider(parts);
+      parts.push("🏨 <b>Проживание</b>");
+      for (const line of stayLines) parts.push(`• ${escapeHtml(line)}`);
     }
 
-    pushBulletBlock(parts, "✅", "Включено", d.included || d.includes || d.includedText, 5);
-    pushBulletBlock(parts, "➖", "Не включено", d.notIncluded || d.excluded || d.not_included, 4);
+    const includedItems = splitSmartLines(d.included || d.includes || d.includedText, 5);
+    if (includedItems.length) {
+      pushDivider(parts);
+      parts.push("✅ <b>Включено</b>");
+      for (const item of includedItems) parts.push(`✓ ${escapeHtml(item)}`);
+    }
 
     if (priceWithCur != null && String(priceWithCur).trim()) {
-      parts.push(`💸 <b>Цена</b>: ${escapeHtml(String(priceWithCur))} (${priceKind})`);
+      pushDivider(parts);
+      parts.push(`💰 <b>${escapeHtml(String(priceWithCur))}</b> (${escapeHtml(priceKind)})`);
     }
 
-    if (badgeClean) parts.push(labelLine("⏳", "Срок", badgeClean));
-    if (projectSupportPaid) parts.push("💛 <b>Поддерживает проект Travella</b>");
+    if (projectSupportPaid) parts.push("💛 <b>Поддерживает проект</b>");
 
-    pushDivider(parts);
-    if (shouldShowProviderContacts(role, unlocked)) {
-      parts.push(providerLine);
-      if (telegramLine) parts.push(telegramLine);
-    } else {
-      parts.push(labelLine("👨‍💼", "Автор", "🔒 контакты скрыты"));
-      parts.push("🔓 Откройте контакты для связи с автором тура");
-    }
+    const authorName = providerNameRaw && providerNameRaw !== "Поставщик" ? providerNameRaw : norm(d.authorName || d.guideName || "");
+    if (authorName) parts.push(`👨‍💼 <b>Автор:</b> ${escapeHtml(authorName)}`);
 
-    pushDivider(parts);
-    parts.push(`👉 Подробнее и бронирование: ${a(serviceUrl, "открыть")}`);
+    // Контакты не вшиваем в текст author_tour brochure-карточки:
+    // они открываются отдельной кнопкой «👤 Контакты», чтобы карточка оставалась чистой.
 
     const kbRows = [];
-    if (String(d.program || d.itinerary || "").trim()) {
+    if (String(d.program || d.itinerary || d.routeProgram || "").trim()) {
       kbRows.push([{ text: "🗓 Программа тура", callback_data: `atp:${serviceId}` }]);
     }
-    const kbExtra = kbRows.length ? { inline_keyboard: kbRows } : null;
+    kbRows.push([{ text: "🌐 Подробнее на сайте", url: serviceUrl }]);
+    kbRows.push([{ text: "💬 Быстрый запрос", callback_data: `quick:${serviceId}` }]);
+    kbRows.push([{ text: "👤 Контакты", callback_data: `contacts:${serviceId}` }]);
 
-    return { text: parts.join("\n"), photoUrl: getFirstImageUrl(svc), serviceUrl, kbExtra };
+    return {
+      text: parts.join("\n"),
+      photoUrl: getFirstImageUrl(svc),
+      serviceUrl,
+      kbExtra: { inline_keyboard: kbRows, replaceDefault: true },
+    };
   }
 
   if ((role !== "provider" || options?.forceRefused === true) && String(category) === "refused_tour") {
