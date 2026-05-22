@@ -4801,10 +4801,10 @@ function hydrateProviderDraftSession(ctx, row) {
 
 function providerDraftCategoryLabel(category) {
   const c = String(category || "").toLowerCase();
+  if (c === "author_tour") return "Авторский тур";
   if (c === "refused_hotel") return "Отказной отель";
   if (c === "refused_flight") return "Отказной авиабилет";
   if (c === "refused_ticket" || c === "refused_event_ticket") return "Отказной билет";
-  if (c === "author_tour") return "Авторский тур";
   if (c === "refused_tour") return "Отказной тур";
   return "Категория ещё не выбрана";
 }
@@ -5096,6 +5096,48 @@ function calcGrossFromNet(netNum) {
   return Math.round(netNum * (1 + p / 100));
 }
 
+
+function autoTitleAuthorTour(draft) {
+  const title = String(draft.title || "").trim();
+  if (title) return title;
+  const country = String(draft.country || "").trim();
+  const from = String(draft.fromCity || "").trim();
+  const to = String(draft.toCity || "").trim();
+  const range = shortDateRange(draft.startDate, draft.endDate);
+  const route = [from, to].filter(Boolean).join(" → ");
+  return ["Авторский тур", country, route, range].filter(Boolean).join(" · ");
+}
+
+function buildDetailsForAuthorTour(draft, netPriceNum) {
+  return {
+    title: draft.title || "",
+    directionCountry: draft.country || "",
+    directionFrom: draft.fromCity || "",
+    directionTo: draft.toCity || "",
+    startDate: draft.startDate || "",
+    endDate: draft.endDate || "",
+    flexibleDates: !!draft.flexibleDates,
+    duration: draft.duration || "",
+    tourFormat: draft.tourFormat || "group",
+    program: draft.program || "",
+    included: draft.included || "",
+    notIncluded: draft.notIncluded || "",
+    minPax: draft.minPax || "",
+    maxPax: draft.maxPax || "",
+    guideLanguage: draft.guideLanguage || "",
+    meetingPoint: draft.meetingPoint || "",
+    guideIncluded: !!draft.guideIncluded,
+    transportIncluded: !!draft.transportIncluded,
+    transport: draft.transport || "",
+    cancellationPolicy: draft.cancellationPolicy || "",
+    netPrice: netPriceNum,
+    grossPrice: typeof draft.grossPriceNum === "number" ? draft.grossPriceNum : null,
+    expiration: draft.expiration || null,
+    isActive: true,
+    telegramPhotoFileId: draft.telegramPhotoFileId || null,
+  };
+}
+
 function buildDetailsForRefusedTour(draft, netPriceNum) {
   return {
     title: draft.title || "",
@@ -5125,40 +5167,6 @@ function buildDetailsForRefusedTour(draft, netPriceNum) {
     isActive: true,
     telegramPhotoFileId: draft.telegramPhotoFileId || null,
   };
-}
-
-function buildDetailsForAuthorTour(draft, netPriceNum) {
-  return {
-    title: draft.title || "",
-    directionCountry: draft.country || "",
-    directionFrom: draft.fromCity || "",
-    directionTo: draft.toCity || "",
-    startDate: draft.startDate || "",
-    endDate: draft.endDate || "",
-    authorFormat: draft.authorFormat || "group",
-    authorDuration: draft.authorDuration || "",
-    authorProgram: draft.authorProgram || "",
-    authorIncluded: draft.authorIncluded || "",
-    authorExcluded: draft.authorExcluded || "",
-    authorMinPax: draft.authorMinPax || "",
-    authorMaxPax: draft.authorMaxPax || "",
-    authorGuideLanguage: draft.authorGuideLanguage || "",
-    authorTransportIncluded: !!draft.authorTransportIncluded,
-    authorGuideIncluded: draft.authorGuideIncluded !== false,
-    authorMeetingPoint: draft.authorMeetingPoint || "",
-    authorCancellationPolicy: draft.authorCancellationPolicy || "",
-    netPrice: netPriceNum,
-    grossPrice: typeof draft.grossPriceNum === "number" ? draft.grossPriceNum : null,
-    expiration: draft.expiration || null,
-    isActive: true,
-    telegramPhotoFileId: draft.telegramPhotoFileId || null,
-  };
-}
-
-function autoTitleAuthorTour(draft) {
-  const route = [draft.fromCity, draft.toCity].filter(Boolean).join(" → ");
-  const duration = String(draft.authorDuration || "").trim();
-  return [draft.title || "Авторский тур", route, duration].filter(Boolean).join(" · ");
 }
 
 function buildDetailsForRefusedHotel(draft, netPriceNum) {
@@ -5270,13 +5278,82 @@ async function validateGrossNotLessThanNet(ctx, netStr, grossStr, backToState) {
 
 async function promptWizardState(ctx, state) {
   switch (state) {
+    case "svc_author_title":
+      await ctx.reply(
+        "🧭 Напишите *название авторского тура*.\nПример: *Авторский тур по Самарканду и горам*.\n\nЕсли не нужно — нажмите «⏭ Пропустить».",
+        { parse_mode: "Markdown", ...wizNavKeyboard() }
+      );
+      return;
+
+    case "svc_author_country":
+      await ctx.reply("🌍 Укажите *страну / направление* авторского тура:", { parse_mode: "Markdown", ...wizNavKeyboard() });
+      return;
+
+    case "svc_author_from":
+      await ctx.reply("📍 Укажите *город старта / место начала* тура:", { parse_mode: "Markdown", ...wizNavKeyboard() });
+      return;
+
+    case "svc_author_to":
+      await ctx.reply("🏁 Укажите *город финиша / конечную точку*. Если маршрут круговой — можно повторить город старта:", { parse_mode: "Markdown", ...wizNavKeyboard() });
+      return;
+
+    case "svc_author_start":
+      await ctx.reply("📅 Укажите *дату начала* или напишите `по запросу`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
+      return;
+
+    case "svc_author_end":
+      await ctx.reply("📅 Укажите *дату окончания* или напишите `по запросу`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
+      return;
+
+    case "svc_author_duration":
+      await ctx.reply("⏱ Укажите *длительность*. Пример: `3 дня / 2 ночи` или `8 часов`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
+      return;
+
+    case "svc_author_format":
+      await ctx.reply("👥 Укажите *формат тура*: `group`, `private` или `custom`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
+      return;
+
+    case "svc_author_program":
+      await ctx.reply("🗺 Опишите *программу тура* по дням или блоками. Это главный продающий текст авторского тура.", { parse_mode: "Markdown", ...wizNavKeyboard() });
+      return;
+
+    case "svc_author_included":
+      await ctx.reply("✅ Что *включено* в стоимость?", { parse_mode: "Markdown", ...wizNavKeyboard() });
+      return;
+
+    case "svc_author_not_included":
+      await ctx.reply("➖ Что *не включено*? Если нечего указать — нажмите «⏭ Пропустить».", { parse_mode: "Markdown", ...wizNavKeyboard() });
+      return;
+
+    case "svc_author_pax":
+      await ctx.reply("👥 Укажите *минимум/максимум человек* в формате `2/10`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
+      return;
+
+    case "svc_author_language":
+      await ctx.reply("🗣 Укажите *язык гида*. Пример: `русский / английский / узбекский`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
+      return;
+
+    case "svc_author_meeting":
+      await ctx.reply("📌 Укажите *место встречи*. Если по договорённости — так и напишите.", { parse_mode: "Markdown", ...wizNavKeyboard() });
+      return;
+
+    case "svc_author_transport":
+      await ctx.reply("🚗 Транспорт включён? Ответьте `да` или `нет`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
+      return;
+
+    case "svc_author_guide":
+      await ctx.reply("🧑‍🏫 Гид включён? Ответьте `да` или `нет`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
+      return;
+
+    case "svc_author_cancel":
+      await ctx.reply("📄 Укажите *условия отмены / важные условия*. Если не нужно — нажмите «⏭ Пропустить».", { parse_mode: "Markdown", ...wizNavKeyboard() });
+      return;
+
     case "svc_create_title": {
       const category = String(ctx.session?.serviceDraft?.category || "");
     
       const label =
-        category === "author_tour"
-          ? "авторского тура"
-          : category === "refused_flight"
+        category === "refused_flight"
           ? "отказного авиабилета"
           : category === "refused_hotel"
             ? "отказного отеля"
@@ -5391,84 +5468,6 @@ async function promptWizardState(ctx, state) {
         parse_mode: "Markdown",
         ...wizNavKeyboard(),
       });
-      return;
-
-    // ===== AUTHOR TOUR =====
-    case "svc_author_format":
-      await ctx.reply(
-        "🧭 Укажите *формат авторского тура*:\nНапример: групповой, индивидуальный или под запрос.",
-        { parse_mode: "Markdown", ...wizNavKeyboard() }
-      );
-      return;
-
-    case "svc_author_duration":
-      await ctx.reply(
-        "⏱ Укажите *длительность тура*\nНапример: *7 дней / 6 ночей* или *1 день*.",
-        { parse_mode: "Markdown", ...wizNavKeyboard() }
-      );
-      return;
-
-    case "svc_author_program":
-      await ctx.reply(
-        "🗺 Опишите *программу тура* по дням или по основным точкам маршрута.\n\nПример:\nДень 1: встреча, обзорная экскурсия...\nДень 2: горы, пикник...",
-        { parse_mode: "Markdown", ...wizNavKeyboard() }
-      );
-      return;
-
-    case "svc_author_included":
-      await ctx.reply(
-        "✅ Что *включено* в авторский тур?\nНапример: гид, транспорт, входные билеты, проживание.",
-        { parse_mode: "Markdown", ...wizNavKeyboard() }
-      );
-      return;
-
-    case "svc_author_excluded":
-      await ctx.reply(
-        "➖ Что *не включено*?\nНапример: авиабилеты, питание, личные расходы. Если не нужно — нажмите «⏭ Пропустить».",
-        { parse_mode: "Markdown", ...wizNavKeyboard() }
-      );
-      return;
-
-    case "svc_author_pax":
-      await ctx.reply(
-        "👥 Укажите вместимость в формате *min/max*\nПример: *2/12*. Если не нужно — нажмите «⏭ Пропустить».",
-        { parse_mode: "Markdown", ...wizNavKeyboard() }
-      );
-      return;
-
-    case "svc_author_guide_language":
-      await ctx.reply(
-        "🗣 Укажите *язык гида*\nНапример: русский / узбекский / английский. Если не нужно — нажмите «⏭ Пропустить».",
-        { parse_mode: "Markdown", ...wizNavKeyboard() }
-      );
-      return;
-
-    case "svc_author_transport":
-      await ctx.reply("🚗 *Транспорт включён?* Ответьте `да` или `нет`:", {
-        parse_mode: "Markdown",
-        ...wizNavKeyboard(),
-      });
-      return;
-
-    case "svc_author_guide":
-      await ctx.reply("🧑‍🏫 *Гид включён?* Ответьте `да` или `нет`:", {
-        parse_mode: "Markdown",
-        ...wizNavKeyboard(),
-      });
-      return;
-
-    case "svc_author_meeting_point":
-      await ctx.reply(
-        "📍 Укажите *место встречи*\nНапример: аэропорт, отель, центр города. Если не нужно — нажмите «⏭ Пропустить».",
-        { parse_mode: "Markdown", ...wizNavKeyboard() }
-      );
-      return;
-
-    case "svc_author_cancel_policy":
-      await ctx.reply(
-        "↩️ Укажите *условия отмены*\nНапример: бесплатная отмена за 72 часа. Если не нужно — нажмите «⏭ Пропустить».",
-        { parse_mode: "Markdown", ...wizNavKeyboard() }
-      );
       return;
 
     // ===== REFUSED HOTEL =====
@@ -5702,10 +5701,7 @@ async function finishCreateServiceFromWizard(ctx) {
 
     if (category === "author_tour") {
       details = buildDetailsForAuthorTour(draft, priceNum);
-      title =
-        draft.title && draft.title.trim()
-          ? draft.title.trim()
-          : autoTitleAuthorTour(draft);
+      title = autoTitleAuthorTour(draft);
 
     } else if (category === "refused_tour") {
       details = buildDetailsForRefusedTour(draft, priceNum);
@@ -6283,6 +6279,7 @@ bot.hears(/🔍 Найти услугу/i, async (ctx) => {
       reply_markup: {
         inline_keyboard: [
           [{ text: "🌴 Отказной тур (пакет)", switch_inline_query_current_chat: "#tour refused_tour" }],
+          [{ text: "🧭 Авторский тур", switch_inline_query_current_chat: "#author author_tour" }],
           [{ text: "🏨 Отказной отель", switch_inline_query_current_chat: "#tour refused_hotel" }],
           [{ text: "✈️ Отказной авиабилет", switch_inline_query_current_chat: "#tour refused_flight" }],
           [{ text: "🎫 Билет / мероприятие", switch_inline_query_current_chat: "#tour refused_ticket" }],
@@ -7311,7 +7308,6 @@ bot.action("tg_draft:continue", async (ctx) => {
         reply_markup: {
           inline_keyboard: [
             [{ text: "📍 Отказной тур", callback_data: "svc_new_cat:refused_tour" }],
-            [{ text: "🧭 Авторский тур", callback_data: "svc_new_cat:author_tour" }],
             [{ text: "🏨 Отказной отель", callback_data: "svc_new_cat:refused_hotel" }],
             [{ text: "✈️ Отказной авиабилет", callback_data: "svc_new_cat:refused_flight" }],
             [{ text: "🎫 Отказной билет", callback_data: "svc_new_cat:refused_ticket" }],
@@ -7460,30 +7456,6 @@ bot.action("svc_wiz:skip", async (ctx) => {
       "svc_create_photo",
     ];
 
-    const authorOrder = [
-      "svc_create_title",
-      "svc_create_tour_country",
-      "svc_create_tour_from",
-      "svc_create_tour_to",
-      "svc_create_tour_start",
-      "svc_create_tour_end",
-      "svc_author_format",
-      "svc_author_duration",
-      "svc_author_program",
-      "svc_author_included",
-      "svc_author_excluded",
-      "svc_author_pax",
-      "svc_author_guide_language",
-      "svc_author_transport",
-      "svc_author_guide",
-      "svc_author_meeting_point",
-      "svc_author_cancel_policy",
-      "svc_create_price",
-      "svc_create_grossPrice",
-      "svc_create_expiration",
-      "svc_create_photo",
-    ];
-
     const flightOrder = [
       "svc_create_title",
       "svc_create_tour_country",
@@ -7498,9 +7470,33 @@ bot.action("svc_wiz:skip", async (ctx) => {
       "svc_create_photo",
     ];
 
+    const authorOrder = [
+      "svc_author_title",
+      "svc_author_country",
+      "svc_author_from",
+      "svc_author_to",
+      "svc_author_start",
+      "svc_author_end",
+      "svc_author_duration",
+      "svc_author_format",
+      "svc_author_program",
+      "svc_author_included",
+      "svc_author_not_included",
+      "svc_author_pax",
+      "svc_author_language",
+      "svc_author_meeting",
+      "svc_author_transport",
+      "svc_author_guide",
+      "svc_author_cancel",
+      "svc_create_price",
+      "svc_create_grossPrice",
+      "svc_create_expiration",
+      "svc_create_photo",
+    ];
+
+    const isAuthorFlow = category === "author_tour" || state.startsWith("svc_author_");
     const isHotelFlow = category === "refused_hotel" || state.startsWith("svc_hotel_");
     const isFlightFlow = category === "refused_flight";
-    const isAuthorFlow = category === "author_tour" || state.startsWith("svc_author_");
     const order = isAuthorFlow ? authorOrder : (isFlightFlow ? flightOrder : (isHotelFlow ? hotelOrder : tourOrder));
 
     // какие шаги реально можно пропустить кнопкой
@@ -7513,11 +7509,6 @@ bot.action("svc_wiz:skip", async (ctx) => {
       "svc_create_grossPrice",
       "svc_create_expiration", // можно поставить "нет" (кнопка = быстрый переход)
       "svc_create_photo",
-      "svc_author_excluded",
-      "svc_author_pax",
-      "svc_author_guide_language",
-      "svc_author_meeting_point",
-      "svc_author_cancel_policy",
     ]);
 
     if (!optional.has(state)) {
@@ -7541,14 +7532,6 @@ bot.action("svc_wiz:skip", async (ctx) => {
     if (state === "svc_create_flight_details") {
       draft.flightDetails = null;
     }
-    if (state === "svc_author_excluded") draft.authorExcluded = "";
-    if (state === "svc_author_pax") {
-      draft.authorMinPax = "";
-      draft.authorMaxPax = "";
-    }
-    if (state === "svc_author_guide_language") draft.authorGuideLanguage = "";
-    if (state === "svc_author_meeting_point") draft.authorMeetingPoint = "";
-    if (state === "svc_author_cancel_policy") draft.authorCancellationPolicy = "";
 
     // Иногда пользователи нажимают кнопку «Пропустить» под старым сообщением,
     // когда ctx.session.state уже успел измениться. Чтобы не получать
@@ -7564,17 +7547,7 @@ bot.action("svc_wiz:skip", async (ctx) => {
             ? "svc_create_expiration"
             : state === "svc_create_expiration"
               ? "svc_create_photo"
-              : state === "svc_author_excluded"
-                ? "svc_author_pax"
-                : state === "svc_author_pax"
-                  ? "svc_author_guide_language"
-                  : state === "svc_author_guide_language"
-                    ? "svc_author_transport"
-                    : state === "svc_author_meeting_point"
-                      ? "svc_author_cancel_policy"
-                      : state === "svc_author_cancel_policy"
-                        ? "svc_create_price"
-                        : null;
+              : null;
 
     const idx = order.indexOf(state);
     const nextState = forcedNext || (idx >= 0 ? order[idx + 1] : null);
@@ -7634,6 +7607,14 @@ bot.action(
       // старт мастера (очищаем историю шагов)
       ctx.session.wizardStack = [];
 
+      // author_tour — отдельный поток без обязательного отеля/рейса/proof
+      if (category === "author_tour") {
+        ctx.session.state = "svc_author_title";
+        await promptWizardState(ctx, "svc_author_title");
+        await persistProviderCreateWizard(ctx);
+        return;
+      }
+
       // refused_hotel — отдельный поток
       if (category === "refused_hotel") {
         ctx.session.state = "svc_hotel_country";
@@ -7642,7 +7623,7 @@ bot.action(
         return;
       }
 
-      // refused_tour, author_tour и refused_flight начинаем одинаково (с title)
+      // refused_tour и refused_flight начинаем одинаково (с title)
       ctx.session.state = "svc_create_title";
       await promptWizardState(ctx, "svc_create_title");
       await persistProviderCreateWizard(ctx);
@@ -9905,7 +9886,78 @@ bot.on("text", async (ctx, next) => {
 
       try {
         switch (state) {
-        case "svc_create_title": {
+        case "svc_author_title":
+      await ctx.reply(
+        "🧭 Напишите *название авторского тура*.\nПример: *Авторский тур по Самарканду и горам*.\n\nЕсли не нужно — нажмите «⏭ Пропустить».",
+        { parse_mode: "Markdown", ...wizNavKeyboard() }
+      );
+      return;
+
+    case "svc_author_country":
+      await ctx.reply("🌍 Укажите *страну / направление* авторского тура:", { parse_mode: "Markdown", ...wizNavKeyboard() });
+      return;
+
+    case "svc_author_from":
+      await ctx.reply("📍 Укажите *город старта / место начала* тура:", { parse_mode: "Markdown", ...wizNavKeyboard() });
+      return;
+
+    case "svc_author_to":
+      await ctx.reply("🏁 Укажите *город финиша / конечную точку*. Если маршрут круговой — можно повторить город старта:", { parse_mode: "Markdown", ...wizNavKeyboard() });
+      return;
+
+    case "svc_author_start":
+      await ctx.reply("📅 Укажите *дату начала* или напишите `по запросу`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
+      return;
+
+    case "svc_author_end":
+      await ctx.reply("📅 Укажите *дату окончания* или напишите `по запросу`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
+      return;
+
+    case "svc_author_duration":
+      await ctx.reply("⏱ Укажите *длительность*. Пример: `3 дня / 2 ночи` или `8 часов`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
+      return;
+
+    case "svc_author_format":
+      await ctx.reply("👥 Укажите *формат тура*: `group`, `private` или `custom`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
+      return;
+
+    case "svc_author_program":
+      await ctx.reply("🗺 Опишите *программу тура* по дням или блоками. Это главный продающий текст авторского тура.", { parse_mode: "Markdown", ...wizNavKeyboard() });
+      return;
+
+    case "svc_author_included":
+      await ctx.reply("✅ Что *включено* в стоимость?", { parse_mode: "Markdown", ...wizNavKeyboard() });
+      return;
+
+    case "svc_author_not_included":
+      await ctx.reply("➖ Что *не включено*? Если нечего указать — нажмите «⏭ Пропустить».", { parse_mode: "Markdown", ...wizNavKeyboard() });
+      return;
+
+    case "svc_author_pax":
+      await ctx.reply("👥 Укажите *минимум/максимум человек* в формате `2/10`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
+      return;
+
+    case "svc_author_language":
+      await ctx.reply("🗣 Укажите *язык гида*. Пример: `русский / английский / узбекский`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
+      return;
+
+    case "svc_author_meeting":
+      await ctx.reply("📌 Укажите *место встречи*. Если по договорённости — так и напишите.", { parse_mode: "Markdown", ...wizNavKeyboard() });
+      return;
+
+    case "svc_author_transport":
+      await ctx.reply("🚗 Транспорт включён? Ответьте `да` или `нет`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
+      return;
+
+    case "svc_author_guide":
+      await ctx.reply("🧑‍🏫 Гид включён? Ответьте `да` или `нет`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
+      return;
+
+    case "svc_author_cancel":
+      await ctx.reply("📄 Укажите *условия отмены / важные условия*. Если не нужно — нажмите «⏭ Пропустить».", { parse_mode: "Markdown", ...wizNavKeyboard() });
+      return;
+
+    case "svc_create_title": {
           const v = await requireTextField(ctx, text, "Название", { min: 2 });
           if (!v) return;
           draft.title = v;
@@ -10006,11 +10058,6 @@ bot.on("text", async (ctx, next) => {
           }
           draft.endDate = normEnd;
           pushWizardState(ctx, "svc_create_tour_end");
-          if (String(draft.category || "") === "author_tour") {
-            ctx.session.state = "svc_author_format";
-            await promptWizardState(ctx, "svc_author_format");
-            return;
-          }
           ctx.session.state = "svc_create_flight_departure";
           await promptWizardState(ctx, "svc_create_flight_departure");
           return;
@@ -10209,130 +10256,6 @@ bot.on("text", async (ctx, next) => {
           await promptWizardState(ctx, "svc_create_price");
           return;
         }
-        // ===== AUTHOR TOUR FLOW =====
-        case "svc_author_format": {
-          const v = await requireTextField(ctx, text, "Формат тура", { min: 2 });
-          if (!v) return;
-          const low = v.toLowerCase();
-          draft.authorFormat = low.includes("инд") || low.includes("private") ? "private" : low.includes("запрос") || low.includes("custom") ? "custom" : "group";
-          pushWizardState(ctx, "svc_author_format");
-          ctx.session.state = "svc_author_duration";
-          await promptWizardState(ctx, "svc_author_duration");
-          return;
-        }
-
-        case "svc_author_duration": {
-          const v = await requireTextField(ctx, text, "Длительность", { min: 1 });
-          if (!v) return;
-          draft.authorDuration = v;
-          pushWizardState(ctx, "svc_author_duration");
-          ctx.session.state = "svc_author_program";
-          await promptWizardState(ctx, "svc_author_program");
-          return;
-        }
-
-        case "svc_author_program": {
-          const v = await requireTextField(ctx, text, "Программа тура", { min: 10 });
-          if (!v) return;
-          draft.authorProgram = v;
-          pushWizardState(ctx, "svc_author_program");
-          ctx.session.state = "svc_author_included";
-          await promptWizardState(ctx, "svc_author_included");
-          return;
-        }
-
-        case "svc_author_included": {
-          const v = await requireTextField(ctx, text, "Что включено", { min: 2 });
-          if (!v) return;
-          draft.authorIncluded = v;
-          pushWizardState(ctx, "svc_author_included");
-          ctx.session.state = "svc_author_excluded";
-          await promptWizardState(ctx, "svc_author_excluded");
-          return;
-        }
-
-        case "svc_author_excluded": {
-          const low = text.toLowerCase();
-          draft.authorExcluded = ["пропустить", "skip", "-", "нет"].includes(low) ? "" : text;
-          pushWizardState(ctx, "svc_author_excluded");
-          ctx.session.state = "svc_author_pax";
-          await promptWizardState(ctx, "svc_author_pax");
-          return;
-        }
-
-        case "svc_author_pax": {
-          const low = text.toLowerCase();
-          if (["пропустить", "skip", "-", "нет"].includes(low)) {
-            draft.authorMinPax = "";
-            draft.authorMaxPax = "";
-          } else {
-            const m = text.match(/(\d+)\s*[\/\-–]\s*(\d+)/);
-            if (!m) {
-              await ctx.reply("😕 Введите формат *min/max*, например *2/12*, или нажмите «⏭ Пропустить».", { parse_mode: "Markdown", ...wizNavKeyboard() });
-              return;
-            }
-            draft.authorMinPax = m[1];
-            draft.authorMaxPax = m[2];
-          }
-          pushWizardState(ctx, "svc_author_pax");
-          ctx.session.state = "svc_author_guide_language";
-          await promptWizardState(ctx, "svc_author_guide_language");
-          return;
-        }
-
-        case "svc_author_guide_language": {
-          const low = text.toLowerCase();
-          draft.authorGuideLanguage = ["пропустить", "skip", "-", "нет"].includes(low) ? "" : text;
-          pushWizardState(ctx, "svc_author_guide_language");
-          ctx.session.state = "svc_author_transport";
-          await promptWizardState(ctx, "svc_author_transport");
-          return;
-        }
-
-        case "svc_author_transport": {
-          const yn = parseYesNo(text);
-          if (yn === null) {
-            await ctx.reply("😕 Ответьте `да` или `нет`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
-            return;
-          }
-          draft.authorTransportIncluded = yn;
-          pushWizardState(ctx, "svc_author_transport");
-          ctx.session.state = "svc_author_guide";
-          await promptWizardState(ctx, "svc_author_guide");
-          return;
-        }
-
-        case "svc_author_guide": {
-          const yn = parseYesNo(text);
-          if (yn === null) {
-            await ctx.reply("😕 Ответьте `да` или `нет`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
-            return;
-          }
-          draft.authorGuideIncluded = yn;
-          pushWizardState(ctx, "svc_author_guide");
-          ctx.session.state = "svc_author_meeting_point";
-          await promptWizardState(ctx, "svc_author_meeting_point");
-          return;
-        }
-
-        case "svc_author_meeting_point": {
-          const low = text.toLowerCase();
-          draft.authorMeetingPoint = ["пропустить", "skip", "-", "нет"].includes(low) ? "" : text;
-          pushWizardState(ctx, "svc_author_meeting_point");
-          ctx.session.state = "svc_author_cancel_policy";
-          await promptWizardState(ctx, "svc_author_cancel_policy");
-          return;
-        }
-
-        case "svc_author_cancel_policy": {
-          const low = text.toLowerCase();
-          draft.authorCancellationPolicy = ["пропустить", "skip", "-", "нет"].includes(low) ? "" : text;
-          pushWizardState(ctx, "svc_author_cancel_policy");
-          ctx.session.state = "svc_create_price";
-          await promptWizardState(ctx, "svc_create_price");
-          return;
-        }
-
         // ===== HOTEL FLOW =====
         case "svc_hotel_country": {
           const v = await requireTextField(ctx, text, "Страна", { min: 2 });
@@ -10907,11 +10830,13 @@ bot.on("inline_query", async (ctx) => {
       if (q.startsWith("#hotel")) category = "refused_hotel";
       else if (q.startsWith("#flight")) category = "refused_flight";
       else if (q.startsWith("#ticket")) category = "refused_ticket";
+      else if (q.startsWith("#author") || q.startsWith("#custom")) category = "author_tour";
       else if (q.startsWith("#tour")) category = "refused_tour";
       else {
         if (q.includes("отель") || q.includes("hotel")) category = "refused_hotel";
         else if (q.includes("авиа") || q.includes("flight") || q.includes("avia")) category = "refused_flight";
         else if (q.includes("билет") || q.includes("ticket")) category = "refused_ticket";
+        else if (q.includes("автор") || q.includes("author") || q.includes("custom") || q.includes("маршрут")) category = "author_tour";
         else category = "refused_tour";
       }
     }
