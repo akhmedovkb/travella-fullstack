@@ -323,6 +323,14 @@ module.exports.getById = async (req, res, next) => {
       SELECT
         s.id, s.provider_id, s.title, s.description, s.category, s.price, s.images, s.availability,
         s.created_at, s.status, s.details, s.expiration_at,
+        EXISTS (
+          SELECT 1
+          FROM provider_support_donations psd
+          WHERE psd.provider_id = s.provider_id
+            AND psd.status = 'paid'
+            AND (psd.service_id IS NULL OR psd.service_id = s.id)
+          LIMIT 1
+        ) AS provider_supports_project,
         row_to_json(pv) AS provider
       FROM services s
       LEFT JOIN providers pv ON pv.id = s.provider_id
@@ -470,6 +478,14 @@ module.exports.search = async (req, res, next) => {
       SELECT
         s.id, s.provider_id, s.title, s.description, s.category, s.price, s.images, s.availability,
         s.created_at, s.status, s.details, s.expiration_at,
+        EXISTS (
+          SELECT 1
+          FROM provider_support_donations psd
+          WHERE psd.provider_id = s.provider_id
+            AND psd.status = 'paid'
+            AND (psd.service_id IS NULL OR psd.service_id = s.id)
+          LIMIT 1
+        ) AS provider_supports_project,
         row_to_json(pv) AS provider
       FROM services s
       LEFT JOIN providers pv ON pv.id = s.provider_id
