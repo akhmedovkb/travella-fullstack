@@ -12,6 +12,7 @@ const {
 
 const REFUSED_CATEGORIES = [
   "refused_tour",
+  "author_tour",
   "refused_hotel",
   "refused_flight",
   "refused_ticket",
