@@ -365,6 +365,7 @@ function Badge({ children, tone = "gray" }) {
 function categoryHumanLabel(category) {
   const map = {
     refused_tour: "Отказной тур",
+    author_tour: "Авторский тур",
     refused_hotel: "Отказной отель",
     refused_flight: "Авиабилет",
     refused_ticket: "Билет",
@@ -375,6 +376,7 @@ function categoryHumanLabel(category) {
 
 function categoryAccent(category) {
   if (category === "refused_tour") return "from-orange-50 to-amber-50 border-orange-100 text-orange-700";
+  if (category === "author_tour") return "from-emerald-50 to-teal-50 border-emerald-100 text-emerald-700";
   if (category === "refused_hotel") return "from-sky-50 to-cyan-50 border-sky-100 text-sky-700";
   if (category === "refused_flight") return "from-violet-50 to-fuchsia-50 border-violet-100 text-violet-700";
   return "from-slate-50 to-gray-50 border-slate-100 text-slate-700";
@@ -833,7 +835,59 @@ function renderDetailFields(editForm, setEditForm, extra = {}) {
     </Field>
   );
 
-  if (["refused_tour", "author_tour"].includes(category)) {
+  if (category === "author_tour") {
+    return (
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        {textField("directionCountry", "Страна / направление")}
+        {textField("directionFrom", "Город старта")}
+        {textField("directionTo", "Город финиша")}
+        {dateField("startDate", "Дата начала")}
+        {dateField("endDate", "Дата конца")}
+        {textField("duration", "Длительность")}
+        {selectField("tourFormat", "Формат тура", [
+          { value: "", label: "Не указано" },
+          { value: "group", label: "Групповой" },
+          { value: "private", label: "Индивидуальный" },
+          { value: "custom", label: "Под запрос" },
+        ])}
+        {textField("minPax", "Мин. человек")}
+        {textField("maxPax", "Макс. человек")}
+        {textField("guideLanguage", "Язык гида")}
+        {textField("meetingPoint", "Место встречи")}
+        {textField("transport", "Транспорт")}
+        {textField("netPrice", "Цена нетто")}
+        {textField("grossPrice", "Цена продажи")}
+        {textField("previousPrice", "Предыдущая цена")}
+        {dateField("expiration", "Срок актуальности")}
+        <div className="md:col-span-3">
+          <Field label="Программа тура" error={detailErrors?.program}>
+            <TextArea value={details?.program || ""} onChange={updateText("program")} rows={5} invalid={!!detailErrors?.program} />
+          </Field>
+        </div>
+        <div className="md:col-span-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+          <Field label="Что включено" error={detailErrors?.included}>
+            <TextArea value={details?.included || ""} onChange={updateText("included")} rows={4} invalid={!!detailErrors?.included} />
+          </Field>
+          <Field label="Что не включено" error={detailErrors?.notIncluded}>
+            <TextArea value={details?.notIncluded || ""} onChange={updateText("notIncluded")} rows={4} invalid={!!detailErrors?.notIncluded} />
+          </Field>
+        </div>
+        <div className="md:col-span-3">
+          <Field label="Условия отмены / важные условия">
+            <TextArea value={details?.cancellationPolicy || ""} onChange={updateText("cancellationPolicy")} rows={3} />
+          </Field>
+        </div>
+        <div className="md:col-span-3 flex flex-wrap gap-2">
+          <CheckboxField label="Даты по запросу" checked={details?.flexibleDates} onChange={updateCheckbox("flexibleDates")} />
+          <CheckboxField label="Гид включён" checked={details?.guideIncluded} onChange={updateCheckbox("guideIncluded")} />
+          <CheckboxField label="Транспорт включён" checked={details?.transportIncluded} onChange={updateCheckbox("transportIncluded")} />
+          <CheckboxField label="Актуально" checked={details?.isActive} onChange={updateCheckbox("isActive")} />
+        </div>
+      </div>
+    );
+  }
+
+  if (category === "refused_tour") {
     return (
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         {textField("directionCountry", "Страна направления")}
@@ -1107,6 +1161,7 @@ export default function AdminRefusedActual() {
     let noAnswerCount = 0;
     let urgentCount = 0;
     let tourCount = 0;
+    let authorTourCount = 0;
     let hotelCount = 0;
     let flightCount = 0;
 
@@ -1115,6 +1170,7 @@ export default function AdminRefusedActual() {
       else inactiveCount += 1;
 
       if (it?.category === "refused_tour") tourCount += 1;
+      if (it?.category === "author_tour") authorTourCount += 1;
       if (it?.category === "refused_hotel") hotelCount += 1;
       if (it?.category === "refused_flight") flightCount += 1;
 
@@ -1143,6 +1199,7 @@ export default function AdminRefusedActual() {
       noAnswerCount,
       urgentCount,
       tourCount,
+      authorTourCount,
       hotelCount,
       flightCount,
     };
@@ -1901,8 +1958,9 @@ async function saveInlineEdit(item) {
   }
 
   const categories = [
-    { value: "", label: "Все отказные" },
+    { value: "", label: "Все отказные и авторские" },
     { value: "refused_tour", label: "Отказной тур" },
+    { value: "author_tour", label: "Авторский тур" },
     { value: "refused_hotel", label: "Отказной отель" },
     { value: "refused_flight", label: "Отказной авиабилет" },
     { value: "refused_ticket", label: "Отказной билет" },
