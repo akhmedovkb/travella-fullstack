@@ -212,6 +212,12 @@ export default function AdminProviderSupport() {
   const pendingSum = Number(totals?.pending_sum || 0);
   const failedSum = Number(totals?.failed_sum || 0);
   const totalCount = Number(totals?.count || 0);
+  const authorPaidSum = Number(totals?.author_tour_paid_sum || 0);
+  const authorPendingSum = Number(totals?.author_tour_pending_sum || 0);
+  const authorCount = Number(totals?.author_tour_count || 0);
+  const authorPaidCount = Number(totals?.author_tour_paid_count || 0);
+  const authorPendingCount = Number(totals?.author_tour_pending_count || 0);
+  const authorConversion = Number(totals?.author_tour_paid_conversion_percent || 0);
 
   return (
     <div className="mx-auto max-w-7xl space-y-5">
@@ -254,6 +260,33 @@ export default function AdminProviderSupport() {
         <KpiCard title="Ожидает" value={`${formatMoney(pendingSum)} UZS`} hint="создано / pending" tone="amber" />
         <KpiCard title="Неуспешно" value={`${formatMoney(failedSum)} UZS`} hint="expired / canceled / failed" tone="rose" />
         <KpiCard title="Всего записей" value={formatMoney(totalCount)} hint="с учётом фильтров" tone="slate" />
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-4">
+        <KpiCard
+          title="Авторские туры"
+          value={formatMoney(authorCount)}
+          hint={`paid: ${authorPaidCount} · pending: ${authorPendingCount}`}
+          tone="slate"
+        />
+        <KpiCard
+          title="Оплачено по авторским"
+          value={`${formatMoney(authorPaidSum)} UZS`}
+          hint="донаты, связанные с author_tour"
+          tone="emerald"
+        />
+        <KpiCard
+          title="Ожидает по авторским"
+          value={`${formatMoney(authorPendingSum)} UZS`}
+          hint="created / pending"
+          tone="amber"
+        />
+        <KpiCard
+          title="Конверсия author_tour"
+          value={`${authorConversion}%`}
+          hint="paid / все author_tour донаты"
+          tone="slate"
+        />
       </div>
 
       {settingsOpen && (
@@ -378,6 +411,7 @@ export default function AdminProviderSupport() {
                 <tr>
                   <th className="px-4 py-3">ID</th>
                   <th className="px-4 py-3">Поставщик</th>
+                  <th className="px-4 py-3">Услуга</th>
                   <th className="px-4 py-3">Сумма</th>
                   <th className="px-4 py-3">Статус</th>
                   <th className="px-4 py-3">Источник</th>
@@ -388,9 +422,9 @@ export default function AdminProviderSupport() {
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
                 {loading && rows.length === 0 ? (
-                  <tr><td colSpan={8} className="px-4 py-10 text-center text-sm font-semibold text-slate-500">Загрузка...</td></tr>
+                  <tr><td colSpan={9} className="px-4 py-10 text-center text-sm font-semibold text-slate-500">Загрузка...</td></tr>
                 ) : rows.length === 0 ? (
-                  <tr><td colSpan={8} className="px-4 py-10 text-center text-sm font-semibold text-slate-500">Донаты поддержки не найдены</td></tr>
+                  <tr><td colSpan={9} className="px-4 py-10 text-center text-sm font-semibold text-slate-500">Донаты поддержки не найдены</td></tr>
                 ) : (
                   rows.map((row) => (
                     <tr key={row.id} className="align-top transition hover:bg-orange-50/40">
@@ -401,6 +435,19 @@ export default function AdminProviderSupport() {
                           provider: {row.provider_id || "—"} · tg: {compact(row.telegram_chat_id, 18)}
                         </div>
                         {row.provider_phone ? <div className="mt-0.5 text-xs text-slate-500">{row.provider_phone}</div> : null}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="max-w-[260px] truncate text-sm font-black text-slate-900" title={row.service_title || ""}>
+                          {row.service_title || (row.service_id ? `Услуга #${row.service_id}` : "—")}
+                        </div>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-1 text-xs font-semibold text-slate-500">
+                          {row.service_category === "author_tour" ? (
+                            <span className="rounded-full bg-cyan-50 px-2 py-0.5 text-cyan-700 ring-1 ring-cyan-100">🧭 author_tour</span>
+                          ) : row.service_category ? (
+                            <span>{row.service_category}</span>
+                          ) : null}
+                          {row.service_id ? <span>#{row.service_id}</span> : null}
+                        </div>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm font-black text-slate-950">{formatMoney(row.amount_sum)} UZS</td>
                       <td className="px-4 py-3"><StatusBadge status={row.status} /></td>
