@@ -178,6 +178,16 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function adminRefusedCategoryWhere(alias = "s") {
+  return `((${alias}.category LIKE 'refused_%') OR ${alias}.category = 'author_tour')`;
+}
+
+
+function isAdminRefusedCategoryValue(value) {
+  const v = String(value || "").trim().toLowerCase();
+  return v === "author_tour" || v.startsWith("refused_");
+}
+
 exports.listActualRefused = async (req, res) => {
   try {
     const {
@@ -219,13 +229,13 @@ exports.listActualRefused = async (req, res) => {
     const where = [];
     const params = [];
 
-    where.push(`s.category LIKE 'refused_%'`);
+    where.push(adminRefusedCategoryWhere('s'));
 
     if (String(showDeleted) !== "1") {
       where.push(`s.deleted_at IS NULL`);
     }
 
-    if (category && String(category).startsWith("refused_")) {
+    if (category && isAdminRefusedCategoryValue(category)) {
       params.push(category);
       where.push(`s.category = $${params.length}`);
     }
@@ -619,7 +629,7 @@ exports.extendRefusedService = async (req, res) => {
       FROM services
       WHERE id = $1
         AND deleted_at IS NULL
-        AND category LIKE 'refused_%'
+        AND ((category LIKE 'refused_%') OR category = 'author_tour')
       LIMIT 1
       `,
       [id]
@@ -651,7 +661,7 @@ exports.extendRefusedService = async (req, res) => {
            updated_at = NOW()
        WHERE id = $1
          AND deleted_at IS NULL
-         AND category LIKE 'refused_%'
+         AND ((category LIKE 'refused_%') OR category = 'author_tour')
        RETURNING id, category, status, details, expiration_at, updated_at
       `,
       [id]
@@ -691,7 +701,7 @@ exports.deleteRefusedService = async (req, res) => {
            updated_at = NOW()
        WHERE id = $1
          AND deleted_at IS NULL
-         AND category LIKE 'refused_%'
+         AND ((category LIKE 'refused_%') OR category = 'author_tour')
        RETURNING id
       `,
       [id, actorId]
@@ -732,7 +742,7 @@ exports.restoreRefusedService = async (req, res) => {
         status = 'published',
         updated_at = NOW()
       WHERE id = $1
-        AND category LIKE 'refused_%'
+        AND ((category LIKE 'refused_%') OR category = 'author_tour')
       RETURNING id
       `,
       [id]
