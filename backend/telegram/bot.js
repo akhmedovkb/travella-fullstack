@@ -5754,58 +5754,6 @@ async function finishCreateServiceFromWizard(ctx) {
 
     await finishProviderServiceDraft(ctx, "submitted");
 
-    // author_tour не требует proof-скриншоты, но обязательно должен реально уйти
-    // в services.moderation_status = 'pending'. Раньше здесь закрывался только
-    // telegram_provider_service_drafts, а сама услуга оставалась draft. Из-за этого
-    // бот писал «отправлена на модерацию», но в /api/admin/services/pending она не появлялась.
-    if (String(category || "").toLowerCase() === "author_tour") {
-      try {
-        const submitResp = await axios.post(
-          `/api/telegram/provider/${chatId}/services/${createdServiceId}/submit`
-        );
-
-        if (!submitResp?.data || submitResp.data.success === false) {
-          console.log("[tg-bot] author_tour submit resp:", submitResp?.data);
-          await ctx.reply(
-            `⚠️ Авторский тур #${createdServiceId} сохранён как черновик, но не отправлен на модерацию.\n` +
-              `Откройте «Мои услуги» и отправьте его повторно.`
-          );
-          resetServiceWizard(ctx);
-          return;
-        }
-      } catch (submitError) {
-        console.error(
-          "[tg-bot] author_tour submit error:",
-          submitError?.response?.data || submitError
-        );
-        await ctx.reply(
-          `⚠️ Авторский тур #${createdServiceId} сохранён как черновик, но не отправлен на модерацию.\n` +
-            `Откройте «Мои услуги» и отправьте его повторно.`
-        );
-        resetServiceWizard(ctx);
-        return;
-      }
-
-      await ctx.reply(
-        `✅ Готово!\n\nУслуга #${createdServiceId} создана и отправлена на модерацию.\nПосле одобрения она появится в поиске.`
-      );
-
-      resetServiceWizard(ctx);
-
-      await ctx.reply("Что делаем дальше? 👇", {
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: "📋 Мои услуги", callback_data: "prov_services:list" }],
-            [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
-            [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
-          ],
-        },
-      });
-
-      await replyProviderSupportPrompt(ctx, createdServiceId);
-      return;
-    }
-
     const refusedCategories = [
       "refused_tour",
       "refused_hotel",
@@ -7889,6 +7837,52 @@ bot.action(/^fd:(\d+)$/, async (ctx) => {
     try {
       await ctx.answerCbQuery("⚠️ Ошибка", { show_alert: true });
     } catch {}
+  }
+});
+
+/* ===================== AUTHOR TOUR PROGRAM (popup/message) ===================== */
+bot.action(/^atp:(\d+)$/, async (ctx) => {
+  try {
+    const serviceId = Number(ctx.match?.[1]);
+    if (!Number.isFinite(serviceId) || serviceId <= 0) {
+      await ctx.answerCbQuery("⚠️ Некорректная кнопка", { show_alert: true });
+      return;
+    }
+
+    const svc = await fetchTelegramService(serviceId, "client");
+    if (!svc) {
+      await ctx.answerCbQuery("⚠️ Тур не найден", { show_alert: true });
+      return;
+    }
+
+    const d = parseDetailsAny(svc.details);
+    const raw = String(d.program || d.itinerary || d.routeProgram || "").trim();
+    if (!raw) {
+      await ctx.answerCbQuery("ℹ️ Программа тура не указана", { show_alert: true });
+      return;
+    }
+
+    const escapeHtmlLocal = (value) =>
+      String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+
+    const title = String(svc.title || d.title || "Авторский тур").trim();
+    const body = raw.length > 3600 ? `${raw.slice(0, 3600).trim()}…` : raw;
+
+    await ctx.answerCbQuery("🗓 Программа тура");
+    await ctx.reply(
+      `🗓 <b>Программа тура</b>\n` +
+        `🧭 <b>${escapeHtmlLocal(title)}</b>\n\n` +
+        `${escapeHtmlLocal(body)}`,
+      { parse_mode: "HTML" }
+    );
+  } catch (e) {
+    console.error("[tg-bot] author tour program action error:", e?.message || e);
+    try { await ctx.answerCbQuery("⚠️ Ошибка", { show_alert: true }); } catch {}
   }
 });
 
