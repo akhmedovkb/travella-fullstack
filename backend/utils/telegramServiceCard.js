@@ -994,13 +994,16 @@ const priceKind =
     // Контакты не вшиваем в текст author_tour brochure-карточки:
     // они открываются отдельной кнопкой «👤 Контакты», чтобы карточка оставалась чистой.
 
-    const kbRows = [];
-    if (String(d.program || d.itinerary || d.routeProgram || "").trim()) {
-      kbRows.push([{ text: "🗓 Программа тура", callback_data: `atp:${serviceId}` }]);
-    }
-    kbRows.push([{ text: "🌐 Подробнее на сайте", url: serviceUrl }]);
-    kbRows.push([{ text: "💬 Быстрый запрос", callback_data: `quick:${serviceId}` }]);
-    kbRows.push([{ text: "👤 Контакты", callback_data: `contacts:${serviceId}` }]);
+    const kbRows = [
+      [
+        { text: "🗓 Программа тура", callback_data: `atp:${serviceId}` },
+        { text: "🌐 Подробнее на сайте", url: serviceUrl },
+      ],
+      [
+        { text: "💬 Быстрый запрос", callback_data: `quick:${serviceId}` },
+        { text: "👤 Контакты", callback_data: `contacts:${serviceId}` },
+      ],
+    ];
 
     return {
       text: parts.join("\n"),
