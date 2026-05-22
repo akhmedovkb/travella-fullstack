@@ -620,7 +620,8 @@
       "refused_hotel": "REFUSED HOTEL",
       "refused_flight": "REFUSED FLIGHT",
       "refused_ticket": "REFUSED TICKET",
-      "refused_event_ticket": "REFUSED EVENT TICKET"
+      "refused_event_ticket": "REFUSED EVENT TICKET",
+      "author_tour": "AUTHOR TOUR"
     },
     "success_subtitle": "Now you can contact the provider and book immediately",
     "success_title": "Contacts unlocked",
@@ -705,7 +706,18 @@
     "unlock_success_trust_direct": "Direct contact",
     "unlock_success_trust_no_repeat": "No repeat payment",
     "pay_modal_trust_saved": "Access saved",
-    "photo_coming_soon": "Photo coming soon"
+    "photo_coming_soon": "Photo coming soon",
+    "author_tour": "Author tour",
+    "author_flexible_dates": "Dates on request",
+    "author_format": "Format",
+    "author_duration": "Duration",
+    "author_pax": "Group size",
+    "author_guide_language": "Guide language",
+    "author_meeting_point": "Meeting point",
+    "author_tour_details": "Author tour details",
+    "author_program": "Program",
+    "author_included": "Included",
+    "author_not_included": "Not included"
   },
   "messages": {
     "booking_created": "Booking created",
