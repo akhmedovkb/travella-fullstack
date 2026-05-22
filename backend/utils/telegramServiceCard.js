@@ -35,6 +35,7 @@ const TG_IMAGE_BASE = (
 
 const CATEGORY_LABELS = {
   refused_tour: "Отказной тур",
+  author_tour: "Авторский тур",
   refused_hotel: "Отказной отель",
   refused_flight: "Отказной авиабилет",
   refused_ticket: "Отказной билет",
@@ -43,6 +44,7 @@ const CATEGORY_LABELS = {
 
 const CATEGORY_EMOJI = {
   refused_tour: "📍",
+  author_tour: "🧭",
   refused_hotel: "🏨",
   refused_flight: "✈️",
   refused_ticket: "🎫",
@@ -801,6 +803,70 @@ const priceKind =
   };
 
   /* ===================== SPECIAL TEMPLATES ===================== */
+
+  if ((role !== "provider" || options?.forceRefused === true) && String(category) === "author_tour") {
+    const parts = [];
+    if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
+    parts.push(`🧭 <b>АВТОРСКИЙ ТУР</b>
+📍 <code>#R${serviceId}</code>`);
+
+    const tl = titleLine("generic");
+    if (tl) parts.push(tl);
+
+    const locLines = tourLocationLines();
+    for (const line of locLines) parts.push(line);
+
+    if (dates) {
+      const dv = `${dates}${nights ? ` (${nights} ноч.)` : ""}`;
+      parts.push(labelLine("🗓", "Даты", dv));
+    }
+
+    const format = norm(d.authorFormat);
+    const duration = norm(d.authorDuration);
+    const program = norm(d.authorProgram || d.description);
+    const included = norm(d.authorIncluded);
+    const excluded = norm(d.authorExcluded);
+    const minPax = norm(d.authorMinPax);
+    const maxPax = norm(d.authorMaxPax);
+    const guideLanguage = norm(d.authorGuideLanguage);
+    const meetingPoint = norm(d.authorMeetingPoint);
+
+    if (format) parts.push(labelLine("🧩", "Формат", format === "private" ? "Индивидуальный" : format === "custom" ? "Под запрос" : "Групповой"));
+    if (duration) parts.push(labelLine("⏱", "Длительность", duration));
+    if (minPax || maxPax) parts.push(labelLine("👥", "Группа", `${minPax || "?"}–${maxPax || "?"} чел.`));
+    if (guideLanguage) parts.push(labelLine("🗣", "Язык", guideLanguage));
+    if (d.authorGuideIncluded !== undefined) parts.push(labelLine("🧑‍🏫", "Гид", d.authorGuideIncluded === false ? "Не включён" : "Включён"));
+    if (d.authorTransportIncluded !== undefined) parts.push(labelLine("🚗", "Транспорт", d.authorTransportIncluded ? "Включён" : "Не включён"));
+    if (meetingPoint) parts.push(labelLine("📍", "Место встречи", meetingPoint));
+
+    if (program) {
+      parts.push("");
+      parts.push(`🗺 <b>Программа</b>
+${escapeHtml(program).slice(0, 900)}`);
+    }
+    if (included) parts.push(labelLine("✅", "Включено", included));
+    if (excluded) parts.push(labelLine("➖", "Не включено", excluded));
+
+    if (priceWithCur != null && String(priceWithCur).trim()) {
+      parts.push(`💸 <b>Цена</b>: ${escapeHtml(String(priceWithCur))} (${priceKind})`);
+    }
+
+    if (badgeClean) parts.push(labelLine("⏳", "Срок", badgeClean));
+
+    pushDivider(parts);
+    if (shouldShowProviderContacts(role, unlocked)) {
+      parts.push(providerLine);
+      if (telegramLine) parts.push(telegramLine);
+    } else {
+      parts.push(labelLine("🏢", "Поставщик", "🔒 скрыт"));
+      parts.push("🔓 Откройте контакты для связи");
+    }
+
+    pushDivider(parts);
+    parts.push(`👉 Подробнее и бронирование: ${a(serviceUrl, "открыть")}`);
+
+    return { text: parts.join("\n"), photoUrl: getFirstImageUrl(svc), serviceUrl, kbExtra: null };
+  }
 
   if ((role !== "provider" || options?.forceRefused === true) && String(category) === "refused_tour") {
     const parts = [];
