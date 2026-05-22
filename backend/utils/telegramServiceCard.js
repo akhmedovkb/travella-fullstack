@@ -1013,11 +1013,39 @@ const priceKind =
 
     // Последний безопасный fallback: берём только отдельные короткие строки из accommodation/hotel,
     // но НЕ используем d.program, чтобы программа тура не попадала в блок «🏨 Проживание».
-    if (!out.length) {
-      parseTextAccommodation(d.accommodation);
-      parseTextAccommodation(d.hotel);
-      parseTextAccommodation(d.hotelName);
+// Последний fallback:
+// пробуем достать именно отели из текста программы,
+// но НЕ тянем весь program в карточку
+if (!out.length) {
+  parseTextAccommodation(d.accommodation);
+  parseTextAccommodation(d.hotel);
+  parseTextAccommodation(d.hotelName);
+
+  if (!out.length) {
+    const txt = cleanInline(d.program);
+
+    const hotelRegex =
+      /Размещение\s+в\s+отеле\s+([^,\n]+?)(?=\s{2,}|ДЕНЬ|Вылет|Трансфер|$)/gi;
+
+    const seenHotels = new Set();
+
+    let m;
+
+    while ((m = hotelRegex.exec(txt))) {
+      const hotel = norm(m[1]);
+
+      if (!hotel) continue;
+
+      const key = hotel.toLowerCase();
+
+      if (seenHotels.has(key)) continue;
+
+      seenHotels.add(key);
+
+      out.push(hotel);
     }
+  }
+}
 
     return out.slice(0, 5);
   };
