@@ -42,6 +42,18 @@ const DEFAULT_DETAILS = {
   ticketDetails: "",
   description: "",
   visaCountry: "",
+  authorFormat: "group",
+  authorProgram: "",
+  authorIncluded: "",
+  authorExcluded: "",
+  authorDuration: "",
+  authorMinPax: "",
+  authorMaxPax: "",
+  authorGuideLanguage: "",
+  authorTransportIncluded: false,
+  authorGuideIncluded: true,
+  authorMeetingPoint: "",
+  authorCancellationPolicy: "",
   proofImages: [],
 };
 
@@ -352,7 +364,8 @@ function buildReadinessItems({ category, title, images, details, isExtended, t }
   })();
 
   const specificOk = (() => {
-    if (["refused_tour", "author_tour"].includes(category)) return hasFilled(details.hotel) && validateFlightDetailsFormat(details.flightDetails);
+    if (category === "author_tour") return hasFilled(details.authorProgram || details.description) && hasFilled(details.authorDuration || details.startDate || details.endDate);
+    if (category === "refused_tour") return hasFilled(details.hotel) && validateFlightDetailsFormat(details.flightDetails);
     if (category === "refused_flight") return hasFilled(details.airline) && validateFlightDetailsFormat(details.flightDetails);
     if (category === "refused_hotel") return hasFilled(details.accommodationCategory) || hasFilled(details.accommodation);
     if (category === "refused_event_ticket") return hasFilled(details.ticketDetails) || hasFilled(details.eventCategory);
@@ -366,7 +379,7 @@ function buildReadinessItems({ category, title, images, details, isExtended, t }
     { ok: specificOk, label: t("service_form.ready_category_details", { defaultValue: "Детали категории заполнены" }) },
     { ok: Number.isFinite(net) && net > 0 && Number.isFinite(gross) && gross >= net, label: t("service_form.ready_price", { defaultValue: "Цена нетто и цена для клиента корректны" }) },
     { ok: Array.isArray(images) && images.length > 0, label: t("service_form.ready_photo", { defaultValue: "Добавлено фото услуги" }) },
-    { ok: proof > 0, label: t("service_form.ready_proof", { defaultValue: "Добавлен proof для модерации" }) },
+    { ok: category === "author_tour" ? true : proof > 0, label: category === "author_tour" ? t("service_form.ready_proof_recommended", { defaultValue: "Proof для авторского тура рекомендован, но не обязателен" }) : t("service_form.ready_proof", { defaultValue: "Добавлен proof для модерации" }) },
   ];
 }
 
@@ -392,7 +405,7 @@ function buildValidationIssues({ category, title, description, price, images, de
   const gross = parseMoney(details.grossPrice);
   const proofCount = Array.isArray(details.proofImages) ? details.proofImages.filter(Boolean).length : 0;
 
-  if (category === "refused_tour" || category === "author_tour") {
+  if (category === "refused_tour") {
     add(hasFilled(details.directionCountry), t("validation.country_required", { defaultValue: "Укажите страну направления" }));
     add(hasFilled(details.directionFrom), t("validation.from_required", { defaultValue: "Укажите город вылета" }));
     add(hasFilled(details.directionTo), t("validation.to_required", { defaultValue: "Укажите город прибытия" }));
@@ -400,6 +413,14 @@ function buildValidationIssues({ category, title, description, price, images, de
     add(hasFilled(details.endDate), t("validation.end_date_required", { defaultValue: "Укажите дату окончания" }));
     add(hasFilled(details.hotel), t("validation.hotel_required", { defaultValue: "Укажите отель" }));
     add(validateFlightDetailsFormat(details.flightDetails), t("validation.flight_details_format", { defaultValue: "Заполните детали рейса в правильном формате" }));
+  }
+
+  if (category === "author_tour") {
+    add(hasFilled(details.directionCountry), t("validation.country_required", { defaultValue: "Укажите страну направления" }));
+    add(hasFilled(details.directionFrom), t("validation.start_city_required", { defaultValue: "Укажите город старта" }));
+    add(hasFilled(details.directionTo), t("validation.finish_city_required", { defaultValue: "Укажите город окончания / основной город тура" }));
+    add(hasFilled(details.authorProgram || details.description), t("validation.author_program_required", { defaultValue: "Добавьте программу авторского тура" }));
+    add(hasFilled(details.authorDuration) || (hasFilled(details.startDate) && hasFilled(details.endDate)), t("validation.author_duration_required", { defaultValue: "Укажите длительность или даты тура" }));
   }
 
   if (category === "refused_hotel") {
@@ -1675,7 +1696,58 @@ export default function DashboardServices() {
                               </>
                             )}
 
-                            {["refused_tour", "author_tour"].includes(category) && (
+                            {category === "author_tour" && (
+                              <>
+                                <Field label={t("service_form.author_format", { defaultValue: "Формат тура" })} hint={t("service_form.author_format_hint", { defaultValue: "Как будет проходить авторский тур." })}>
+                                  <SelectInput value={details.authorFormat || "group"} onChange={(e) => patchDetails({ authorFormat: e.target.value })}>
+                                    <option value="group">{t("service_form.author_format_group", { defaultValue: "Групповой" })}</option>
+                                    <option value="private">{t("service_form.author_format_private", { defaultValue: "Индивидуальный" })}</option>
+                                    <option value="custom">{t("service_form.author_format_custom", { defaultValue: "Под запрос" })}</option>
+                                  </SelectInput>
+                                </Field>
+                                <Field label={t("service_form.author_duration", { defaultValue: "Длительность" })} hint={t("service_form.author_duration_hint", { defaultValue: "Например: 5 дней / 4 ночи или 1 день." })}>
+                                  <TextInput value={details.authorDuration} onChange={(e) => patchDetails({ authorDuration: e.target.value })} placeholder={t("service_form.ph_author_duration", { defaultValue: "Например: 7 дней / 6 ночей" })} />
+                                </Field>
+                                <Field label={t("service_form.author_min_pax", { defaultValue: "Мин. человек" })}>
+                                  <TextInput value={details.authorMinPax} onChange={(e) => patchDetails({ authorMinPax: e.target.value })} placeholder="2" />
+                                </Field>
+                                <Field label={t("service_form.author_max_pax", { defaultValue: "Макс. человек" })}>
+                                  <TextInput value={details.authorMaxPax} onChange={(e) => patchDetails({ authorMaxPax: e.target.value })} placeholder="12" />
+                                </Field>
+                                <Field label={t("service_form.author_guide_language", { defaultValue: "Язык гида" })}>
+                                  <TextInput value={details.authorGuideLanguage} onChange={(e) => patchDetails({ authorGuideLanguage: e.target.value })} placeholder={t("service_form.ph_author_guide_language", { defaultValue: "Русский / Узбекский / Английский" })} />
+                                </Field>
+                                <Field label={t("service_form.author_meeting_point", { defaultValue: "Место встречи" })}>
+                                  <TextInput value={details.authorMeetingPoint} onChange={(e) => patchDetails({ authorMeetingPoint: e.target.value })} placeholder={t("service_form.ph_author_meeting_point", { defaultValue: "Отель / аэропорт / центр города" })} />
+                                </Field>
+                                <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700">
+                                  <input type="checkbox" checked={!!details.authorTransportIncluded} onChange={(e) => patchDetails({ authorTransportIncluded: e.target.checked })} />
+                                  {t("service_form.author_transport_included", { defaultValue: "Транспорт включён" })}
+                                </label>
+                                <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700">
+                                  <input type="checkbox" checked={details.authorGuideIncluded !== false} onChange={(e) => patchDetails({ authorGuideIncluded: e.target.checked })} />
+                                  {t("service_form.author_guide_included", { defaultValue: "Гид включён" })}
+                                </label>
+                                <div className="sm:col-span-2">
+                                  <Field label={t("service_form.author_program", { defaultValue: "Программа тура" })} hint={t("service_form.author_program_hint", { defaultValue: "Опишите маршрут по дням: День 1, День 2 и т.д." })}>
+                                    <TextArea value={details.authorProgram} onChange={(e) => patchDetails({ authorProgram: e.target.value })} placeholder={t("service_form.ph_author_program", { defaultValue: "День 1: встреча, обзорная экскурсия...\nДень 2: горы, пикник..." })} className="min-h-[156px]" />
+                                  </Field>
+                                </div>
+                                <Field label={t("service_form.author_included", { defaultValue: "Что включено" })}>
+                                  <TextArea value={details.authorIncluded} onChange={(e) => patchDetails({ authorIncluded: e.target.value })} placeholder={t("service_form.ph_author_included", { defaultValue: "Гид, транспорт, входные билеты..." })} />
+                                </Field>
+                                <Field label={t("service_form.author_excluded", { defaultValue: "Что не включено" })}>
+                                  <TextArea value={details.authorExcluded} onChange={(e) => patchDetails({ authorExcluded: e.target.value })} placeholder={t("service_form.ph_author_excluded", { defaultValue: "Авиабилеты, личные расходы..." })} />
+                                </Field>
+                                <div className="sm:col-span-2">
+                                  <Field label={t("service_form.author_cancellation_policy", { defaultValue: "Условия отмены" })}>
+                                    <TextArea value={details.authorCancellationPolicy} onChange={(e) => patchDetails({ authorCancellationPolicy: e.target.value })} placeholder={t("service_form.ph_author_cancellation_policy", { defaultValue: "Например: бесплатная отмена за 72 часа." })} />
+                                  </Field>
+                                </div>
+                              </>
+                            )}
+
+                            {category === "refused_tour" && (
                               <>
                                 <Field label={t("direction_country", { defaultValue: "Страна назначения" })} hint={t("service_form.hint_country", { defaultValue: "Страна отдыха или назначения." })}>
                                   <TextInput value={details.directionCountry} onChange={(e) => patchDetails({ directionCountry: e.target.value })} placeholder={t("service_form.ph_country", { defaultValue: "Например: Вьетнам" })} />
@@ -1726,7 +1798,58 @@ export default function DashboardServices() {
                             </div>
                           </div>
                           <div className="grid gap-4 sm:grid-cols-2">
-                            {["refused_tour", "author_tour"].includes(category) && (
+                            {category === "author_tour" && (
+                              <>
+                                <Field label={t("service_form.author_format", { defaultValue: "Формат тура" })} hint={t("service_form.author_format_hint", { defaultValue: "Как будет проходить авторский тур." })}>
+                                  <SelectInput value={details.authorFormat || "group"} onChange={(e) => patchDetails({ authorFormat: e.target.value })}>
+                                    <option value="group">{t("service_form.author_format_group", { defaultValue: "Групповой" })}</option>
+                                    <option value="private">{t("service_form.author_format_private", { defaultValue: "Индивидуальный" })}</option>
+                                    <option value="custom">{t("service_form.author_format_custom", { defaultValue: "Под запрос" })}</option>
+                                  </SelectInput>
+                                </Field>
+                                <Field label={t("service_form.author_duration", { defaultValue: "Длительность" })} hint={t("service_form.author_duration_hint", { defaultValue: "Например: 5 дней / 4 ночи или 1 день." })}>
+                                  <TextInput value={details.authorDuration} onChange={(e) => patchDetails({ authorDuration: e.target.value })} placeholder={t("service_form.ph_author_duration", { defaultValue: "Например: 7 дней / 6 ночей" })} />
+                                </Field>
+                                <Field label={t("service_form.author_min_pax", { defaultValue: "Мин. человек" })}>
+                                  <TextInput value={details.authorMinPax} onChange={(e) => patchDetails({ authorMinPax: e.target.value })} placeholder="2" />
+                                </Field>
+                                <Field label={t("service_form.author_max_pax", { defaultValue: "Макс. человек" })}>
+                                  <TextInput value={details.authorMaxPax} onChange={(e) => patchDetails({ authorMaxPax: e.target.value })} placeholder="12" />
+                                </Field>
+                                <Field label={t("service_form.author_guide_language", { defaultValue: "Язык гида" })}>
+                                  <TextInput value={details.authorGuideLanguage} onChange={(e) => patchDetails({ authorGuideLanguage: e.target.value })} placeholder={t("service_form.ph_author_guide_language", { defaultValue: "Русский / Узбекский / Английский" })} />
+                                </Field>
+                                <Field label={t("service_form.author_meeting_point", { defaultValue: "Место встречи" })}>
+                                  <TextInput value={details.authorMeetingPoint} onChange={(e) => patchDetails({ authorMeetingPoint: e.target.value })} placeholder={t("service_form.ph_author_meeting_point", { defaultValue: "Отель / аэропорт / центр города" })} />
+                                </Field>
+                                <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700">
+                                  <input type="checkbox" checked={!!details.authorTransportIncluded} onChange={(e) => patchDetails({ authorTransportIncluded: e.target.checked })} />
+                                  {t("service_form.author_transport_included", { defaultValue: "Транспорт включён" })}
+                                </label>
+                                <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700">
+                                  <input type="checkbox" checked={details.authorGuideIncluded !== false} onChange={(e) => patchDetails({ authorGuideIncluded: e.target.checked })} />
+                                  {t("service_form.author_guide_included", { defaultValue: "Гид включён" })}
+                                </label>
+                                <div className="sm:col-span-2">
+                                  <Field label={t("service_form.author_program", { defaultValue: "Программа тура" })} hint={t("service_form.author_program_hint", { defaultValue: "Опишите маршрут по дням: День 1, День 2 и т.д." })}>
+                                    <TextArea value={details.authorProgram} onChange={(e) => patchDetails({ authorProgram: e.target.value })} placeholder={t("service_form.ph_author_program", { defaultValue: "День 1: встреча, обзорная экскурсия...\nДень 2: горы, пикник..." })} className="min-h-[156px]" />
+                                  </Field>
+                                </div>
+                                <Field label={t("service_form.author_included", { defaultValue: "Что включено" })}>
+                                  <TextArea value={details.authorIncluded} onChange={(e) => patchDetails({ authorIncluded: e.target.value })} placeholder={t("service_form.ph_author_included", { defaultValue: "Гид, транспорт, входные билеты..." })} />
+                                </Field>
+                                <Field label={t("service_form.author_excluded", { defaultValue: "Что не включено" })}>
+                                  <TextArea value={details.authorExcluded} onChange={(e) => patchDetails({ authorExcluded: e.target.value })} placeholder={t("service_form.ph_author_excluded", { defaultValue: "Авиабилеты, личные расходы..." })} />
+                                </Field>
+                                <div className="sm:col-span-2">
+                                  <Field label={t("service_form.author_cancellation_policy", { defaultValue: "Условия отмены" })}>
+                                    <TextArea value={details.authorCancellationPolicy} onChange={(e) => patchDetails({ authorCancellationPolicy: e.target.value })} placeholder={t("service_form.ph_author_cancellation_policy", { defaultValue: "Например: бесплатная отмена за 72 часа." })} />
+                                  </Field>
+                                </div>
+                              </>
+                            )}
+
+                            {category === "refused_tour" && (
                               <>
                                 <Field label={t("hotel", { defaultValue: "Отель" })} hint={t("service_form.hint_hotel", { defaultValue: "Название отеля так, как его увидит клиент." })}>
                                   <TextInput value={details.hotel} onChange={(e) => patchDetails({ hotel: e.target.value })} placeholder={t("service_form.ph_hotel", { defaultValue: "Например: Rixos Radamis Sharm El Sheikh 5*" })} />
@@ -1788,7 +1911,7 @@ export default function DashboardServices() {
                               </>
                             )}
 
-                            {["refused_tour", "author_tour", "refused_flight"].includes(category) && (
+                            {["refused_tour", "refused_flight"].includes(category) && (
                               <div className="sm:col-span-2">
                                 <Field
                                   label={t("flight_details", { defaultValue: "Детали рейса" })}
