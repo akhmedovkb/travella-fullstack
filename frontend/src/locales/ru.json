@@ -595,7 +595,8 @@
       "refused_tour": "ОТКАЗНОЙ ТУР",
       "refused_hotel": "ОТКАЗНОЙ ОТЕЛЬ",
       "refused_flight": "ОТКАЗНОЙ АВИАБИЛЕТ",
-      "refused_ticket": "ОТКАЗНОЙ БИЛЕТ"
+      "refused_ticket": "ОТКАЗНОЙ БИЛЕТ",
+      "author_tour": "АВТОРСКИЙ ТУР"
     },
     "success_subtitle": "Теперь вы можете сразу связаться с поставщиком и забронировать",
     "success_title": "Контакты открыты",
@@ -645,7 +646,18 @@
     "stats_unlocks_tooltip": "Пользователи, которые уже открыли контакты поставщика",
     "watching_now_short": "сейчас",
     "opened_contacts_count_short": "открыли",
-    "pay_modal_trust_saved": "Доступ сохранится"
+    "pay_modal_trust_saved": "Доступ сохранится",
+    "author_tour": "Авторский тур",
+    "author_flexible_dates": "Даты по запросу",
+    "author_format": "Формат",
+    "author_duration": "Длительность",
+    "author_pax": "Группа",
+    "author_guide_language": "Язык гида",
+    "author_meeting_point": "Место встречи",
+    "author_tour_details": "Детали авторского тура",
+    "author_program": "Программа",
+    "author_included": "Включено",
+    "author_not_included": "Не включено"
   },
   "messages": {
     "booking_created": "Бронирование создано",
