@@ -1016,6 +1016,8 @@ async function adminSupportDonations(req, res) {
         OR d.telegram_chat_id::text ILIKE $${i}
         OR p.name ILIKE $${i}
         OR p.phone ILIKE $${i}
+        OR s.title ILIKE $${i}
+        OR s.category ILIKE $${i}
       )`);
       args.push(`%${q}%`);
       i++;
@@ -1042,9 +1044,15 @@ async function adminSupportDonations(req, res) {
           COUNT(*)::int AS count,
           COALESCE(SUM(CASE WHEN d.status = 'paid' THEN d.amount_tiyin ELSE 0 END), 0)::bigint AS paid_tiyin,
           COALESCE(SUM(CASE WHEN d.status IN ('new', 'created', 'pending') THEN d.amount_tiyin ELSE 0 END), 0)::bigint AS pending_tiyin,
-          COALESCE(SUM(CASE WHEN d.status IN ('expired', 'canceled', 'cancelled') THEN d.amount_tiyin ELSE 0 END), 0)::bigint AS failed_tiyin
+          COALESCE(SUM(CASE WHEN d.status IN ('expired', 'canceled', 'cancelled') THEN d.amount_tiyin ELSE 0 END), 0)::bigint AS failed_tiyin,
+          COUNT(*) FILTER (WHERE s.category = 'author_tour')::int AS author_tour_count,
+          COUNT(*) FILTER (WHERE s.category = 'author_tour' AND d.status = 'paid')::int AS author_tour_paid_count,
+          COUNT(*) FILTER (WHERE s.category = 'author_tour' AND d.status IN ('new', 'created', 'pending'))::int AS author_tour_pending_count,
+          COALESCE(SUM(CASE WHEN s.category = 'author_tour' AND d.status = 'paid' THEN d.amount_tiyin ELSE 0 END), 0)::bigint AS author_tour_paid_tiyin,
+          COALESCE(SUM(CASE WHEN s.category = 'author_tour' AND d.status IN ('new', 'created', 'pending') THEN d.amount_tiyin ELSE 0 END), 0)::bigint AS author_tour_pending_tiyin
         FROM provider_support_donations d
         LEFT JOIN providers p ON p.id = d.provider_id
+        LEFT JOIN services s ON s.id = d.service_id
         ${whereSql}
       `,
       args
@@ -1059,6 +1067,8 @@ async function adminSupportDonations(req, res) {
           p.phone AS provider_phone,
           d.telegram_chat_id,
           d.service_id,
+          s.category AS service_category,
+          s.title AS service_title,
           d.amount_tiyin,
           FLOOR(d.amount_tiyin / 100)::bigint AS amount_sum,
           d.payme_order_id,
@@ -1077,6 +1087,7 @@ async function adminSupportDonations(req, res) {
           pt.cancel_time
         FROM provider_support_donations d
         LEFT JOIN providers p ON p.id = d.provider_id
+        LEFT JOIN services s ON s.id = d.service_id
         ${paymeJoin}
         ${whereSql}
         ORDER BY d.created_at DESC, d.id DESC
@@ -1085,20 +1096,34 @@ async function adminSupportDonations(req, res) {
       [...args, limit, offset]
     );
 
-    const paidTiyin = Number(totalsQ.rows[0]?.paid_tiyin || 0);
-    const pendingTiyin = Number(totalsQ.rows[0]?.pending_tiyin || 0);
-    const failedTiyin = Number(totalsQ.rows[0]?.failed_tiyin || 0);
+    const totalsRow = totalsQ.rows[0] || {};
+    const paidTiyin = Number(totalsRow.paid_tiyin || 0);
+    const pendingTiyin = Number(totalsRow.pending_tiyin || 0);
+    const failedTiyin = Number(totalsRow.failed_tiyin || 0);
+    const authorPaidTiyin = Number(totalsRow.author_tour_paid_tiyin || 0);
+    const authorPendingTiyin = Number(totalsRow.author_tour_pending_tiyin || 0);
+    const authorCount = Number(totalsRow.author_tour_count || 0);
+    const authorPaidCount = Number(totalsRow.author_tour_paid_count || 0);
+    const authorPendingCount = Number(totalsRow.author_tour_pending_count || 0);
 
     return res.json({
       ok: true,
       totals: {
-        count: Number(totalsQ.rows[0]?.count || 0),
+        count: Number(totalsRow.count || 0),
         paid_tiyin: paidTiyin,
         paid_sum: tiyinToSum(paidTiyin),
         pending_tiyin: pendingTiyin,
         pending_sum: tiyinToSum(pendingTiyin),
         failed_tiyin: failedTiyin,
         failed_sum: tiyinToSum(failedTiyin),
+        author_tour_count: authorCount,
+        author_tour_paid_count: authorPaidCount,
+        author_tour_pending_count: authorPendingCount,
+        author_tour_paid_tiyin: authorPaidTiyin,
+        author_tour_paid_sum: tiyinToSum(authorPaidTiyin),
+        author_tour_pending_tiyin: authorPendingTiyin,
+        author_tour_pending_sum: tiyinToSum(authorPendingTiyin),
+        author_tour_paid_conversion_percent: authorCount ? Math.round((authorPaidCount / authorCount) * 100) : 0,
       },
       rows: rowsQ.rows,
       limit,
