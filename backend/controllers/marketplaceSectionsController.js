@@ -1,3 +1,5 @@
+//backend/controllers/marketplaceSectionsController.js
+
 const pool = require("../db");
 
 // Унифицированная дата начала услуги для "Ближайшие"
@@ -61,6 +63,14 @@ exports.getTopServices = async (req, res) => {
                s.id, s.title, s.category, s.details, s.images, s.created_at,
                s.price_net, s.price_gross, s.currency,
                p.id AS provider_id, p.name AS provider_name, p.type AS provider_type, p.avatar_url,
+               EXISTS (
+                 SELECT 1
+                 FROM provider_support_donations psd
+                 WHERE psd.provider_id = p.id
+                   AND psd.status = 'paid'
+                   AND (psd.service_id IS NULL OR psd.service_id = s.id)
+                 LIMIT 1
+               ) AS provider_supports_project,
                COALESCE(pr.avg_rating, 0) AS avg_rating,
                COALESCE(pr.review_count, 0) AS review_count,
                COALESCE(mp.points_sum, 0) AS mod_points,
