@@ -679,6 +679,7 @@ async function searchCategory(req, res) {
 
   const allowed = [
     "refused_tour",
+    "author_tour",
     "refused_hotel",
     "refused_flight",
     "refused_ticket",
