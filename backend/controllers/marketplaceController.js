@@ -202,6 +202,7 @@ const CATEGORY_ALIAS = {
     "hotel_transfer",
   ],
   refused_tour: ["refused_tour"],
+  author_tour: ["author_tour"],
   refused_hotel: ["refused_hotel"],
   refused_flight: ["refused_flight"],
   refused_event_ticket: ["refused_event_ticket"],
