@@ -939,7 +939,9 @@ async function refreshUnlockedCard(ctx, serviceId) {
   };
   
   if (kbExtra?.inline_keyboard?.length) {
-    kb.inline_keyboard = [...kbExtra.inline_keyboard, ...kb.inline_keyboard];
+    kb.inline_keyboard = kbExtra.replaceDefault
+      ? kbExtra.inline_keyboard
+      : [...kbExtra.inline_keyboard, ...kb.inline_keyboard];
   }
 
   try {
@@ -6028,38 +6030,44 @@ bot.start(async (ctx) => {
           if (!unlocked) {
             textFinal = stripLockedLinks(text);
 
-            kb = {
-              inline_keyboard: [
-                [
-                  {
-                    text:
-                      unlockPrice > 0
-                        ? `🔓 Открыть контакты (${unlockPrice.toLocaleString("ru-RU")} сум)`
-                        : "🔓 Открыть контакты",
-                    callback_data: buildUnlockCbData(ctx.from.id, serviceId),
-                  },
-                ],
-              ],
-            };
+            kb = kbExtra?.replaceDefault && kbExtra?.inline_keyboard?.length
+              ? { inline_keyboard: kbExtra.inline_keyboard }
+              : {
+                  inline_keyboard: [
+                    [
+                      {
+                        text:
+                          unlockPrice > 0
+                            ? `🔓 Открыть контакты (${unlockPrice.toLocaleString("ru-RU")} сум)`
+                            : "🔓 Открыть контакты",
+                        callback_data: buildUnlockCbData(ctx.from.id, serviceId),
+                      },
+                    ],
+                  ],
+                };
           } else {
             // ✅ в бесплатном режиме / после unlock показываем сразу открытые действия
-            kb = {
-              inline_keyboard: [
-                ...(kbExtra?.inline_keyboard?.length ? kbExtra.inline_keyboard : []),
-                [{ text: "Подробнее на сайте", url: serviceUrl }],
-                [{ text: "📩 Быстрый запрос", callback_data: `quick:${serviceId}` }],
-              ],
-            };
+            kb = kbExtra?.replaceDefault && kbExtra?.inline_keyboard?.length
+              ? { inline_keyboard: kbExtra.inline_keyboard }
+              : {
+                  inline_keyboard: [
+                    ...(kbExtra?.inline_keyboard?.length ? kbExtra.inline_keyboard : []),
+                    [{ text: "🌐 Подробнее на сайте", url: serviceUrl }],
+                    [{ text: "💬 Быстрый запрос", callback_data: `quick:${serviceId}` }],
+                  ],
+                };
           }
         } else {
           // provider/admin
-          kb = {
-            inline_keyboard: [
-              ...(kbExtra?.inline_keyboard?.length ? kbExtra.inline_keyboard : []),
-              [{ text: "Подробнее на сайте", url: serviceUrl }],
-              [{ text: "📩 Быстрый запрос", callback_data: `quick:${serviceId}` }],
-            ],
-          };
+          kb = kbExtra?.replaceDefault && kbExtra?.inline_keyboard?.length
+            ? { inline_keyboard: kbExtra.inline_keyboard }
+            : {
+                inline_keyboard: [
+                  ...(kbExtra?.inline_keyboard?.length ? kbExtra.inline_keyboard : []),
+                  [{ text: "🌐 Подробнее на сайте", url: serviceUrl }],
+                  [{ text: "💬 Быстрый запрос", callback_data: `quick:${serviceId}` }],
+                ],
+              };
         }
 
           if (photoUrl) {
@@ -7501,6 +7509,9 @@ bot.action("svc_wiz:skip", async (ctx) => {
 
     // какие шаги реально можно пропустить кнопкой
     const optional = new Set([
+      "svc_author_title",
+      "svc_author_not_included",
+      "svc_author_cancel",
       "svc_create_flight_departure",
       "svc_create_flight_return",
       "svc_create_flight_details",
@@ -7537,7 +7548,13 @@ bot.action("svc_wiz:skip", async (ctx) => {
     // когда ctx.session.state уже успел измениться. Чтобы не получать
     // «Уже нечего пропускать», делаем явные переходы для optional-шагов.
   const forcedNext =
-    state === "svc_create_flight_departure"
+    state === "svc_author_title"
+      ? "svc_author_country"
+      : state === "svc_author_not_included"
+        ? "svc_author_pax"
+        : state === "svc_author_cancel"
+          ? "svc_create_price"
+          : state === "svc_create_flight_departure"
       ? "svc_create_flight_return"
       : state === "svc_create_flight_return"
         ? "svc_create_flight_details"
@@ -7906,6 +7923,23 @@ bot.action(/^quick:(\d+)$/, async (ctx) => {
   } catch (e) {
     console.error("[tg-bot] quick action error:", e);
     try { await ctx.answerCbQuery("Ошибка. Попробуйте ещё раз", { show_alert: true }); } catch {}
+  }
+});
+
+
+/* ===================== AUTHOR TOUR / CARD CONTACTS ALIAS ===================== */
+bot.action(/^contacts:(\d+)$/, async (ctx) => {
+  try {
+    const serviceId = Number(ctx.match?.[1]);
+    if (!Number.isFinite(serviceId) || serviceId <= 0) {
+      await ctx.answerCbQuery("⚠️ Некорректная кнопка", { show_alert: true });
+      return;
+    }
+
+    await doUnlockFlow(ctx, serviceId);
+  } catch (e) {
+    console.error("[tg-bot] contacts action error:", e?.message || e);
+    try { await ctx.answerCbQuery("⚠️ Ошибка. Попробуйте позже.", { show_alert: true }); } catch {}
   }
 });
 
@@ -9932,76 +9966,272 @@ bot.on("text", async (ctx, next) => {
 
       try {
         switch (state) {
-        case "svc_author_title":
-      await ctx.reply(
-        "🧭 Напишите *название авторского тура*.\nПример: *Авторский тур по Самарканду и горам*.\n\nЕсли не нужно — нажмите «⏭ Пропустить».",
-        { parse_mode: "Markdown", ...wizNavKeyboard() }
-      );
-      return;
+        case "svc_author_title": {
+          const v = normReq(text);
+          if (v) draft.title = v;
 
-    case "svc_author_country":
-      await ctx.reply("🌍 Укажите *страну / направление* авторского тура:", { parse_mode: "Markdown", ...wizNavKeyboard() });
-      return;
+          pushWizardState(ctx, "svc_author_title");
+          ctx.session.state = "svc_author_country";
+          await promptWizardState(ctx, "svc_author_country");
+          return;
+        }
 
-    case "svc_author_from":
-      await ctx.reply("📍 Укажите *город старта / место начала* тура:", { parse_mode: "Markdown", ...wizNavKeyboard() });
-      return;
+        case "svc_author_country": {
+          const v = await requireTextField(ctx, text, "Страна / направление", { min: 2 });
+          if (!v) return;
+          draft.country = v;
 
-    case "svc_author_to":
-      await ctx.reply("🏁 Укажите *город финиша / конечную точку*. Если маршрут круговой — можно повторить город старта:", { parse_mode: "Markdown", ...wizNavKeyboard() });
-      return;
+          pushWizardState(ctx, "svc_author_country");
+          ctx.session.state = "svc_author_from";
+          await promptWizardState(ctx, "svc_author_from");
+          return;
+        }
 
-    case "svc_author_start":
-      await ctx.reply("📅 Укажите *дату начала* или напишите `по запросу`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
-      return;
+        case "svc_author_from": {
+          const v = await requireTextField(ctx, text, "Город старта", { min: 2 });
+          if (!v) return;
+          draft.fromCity = v;
 
-    case "svc_author_end":
-      await ctx.reply("📅 Укажите *дату окончания* или напишите `по запросу`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
-      return;
+          pushWizardState(ctx, "svc_author_from");
+          ctx.session.state = "svc_author_to";
+          await promptWizardState(ctx, "svc_author_to");
+          return;
+        }
 
-    case "svc_author_duration":
-      await ctx.reply("⏱ Укажите *длительность*. Пример: `3 дня / 2 ночи` или `8 часов`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
-      return;
+        case "svc_author_to": {
+          const v = await requireTextField(ctx, text, "Город финиша", { min: 2 });
+          if (!v) return;
+          draft.toCity = v;
 
-    case "svc_author_format":
-      await ctx.reply("👥 Укажите *формат тура*: `group`, `private` или `custom`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
-      return;
+          pushWizardState(ctx, "svc_author_to");
+          ctx.session.state = "svc_author_start";
+          await promptWizardState(ctx, "svc_author_start");
+          return;
+        }
 
-    case "svc_author_program":
-      await ctx.reply("🗺 Опишите *программу тура* по дням или блоками. Это главный продающий текст авторского тура.", { parse_mode: "Markdown", ...wizNavKeyboard() });
-      return;
+        case "svc_author_start": {
+          const raw = String(text || "").trim().toLowerCase();
+          if (["по запросу", "запрос", "flex", "flexible", "гибко", "нет"].includes(raw)) {
+            draft.flexibleDates = true;
+            draft.startDate = "";
+            pushWizardState(ctx, "svc_author_start");
+            ctx.session.state = "svc_author_duration";
+            await promptWizardState(ctx, "svc_author_duration");
+            return;
+          }
 
-    case "svc_author_included":
-      await ctx.reply("✅ Что *включено* в стоимость?", { parse_mode: "Markdown", ...wizNavKeyboard() });
-      return;
+          const norm = normalizeDateInput(text);
+          if (!norm) {
+            await ctx.reply("😕 Не понял дату начала. Введите *YYYY-MM-DD* или напишите `по запросу`.", {
+              parse_mode: "Markdown",
+              ...wizNavKeyboard(),
+            });
+            return;
+          }
+          if (isPastYMD(norm)) {
+            await ctx.reply("⚠️ Эта дата уже в прошлом. Укажите будущую дату или `по запросу`.", {
+              parse_mode: "Markdown",
+              ...wizNavKeyboard(),
+            });
+            return;
+          }
 
-    case "svc_author_not_included":
-      await ctx.reply("➖ Что *не включено*? Если нечего указать — нажмите «⏭ Пропустить».", { parse_mode: "Markdown", ...wizNavKeyboard() });
-      return;
+          draft.flexibleDates = false;
+          draft.startDate = norm;
+          pushWizardState(ctx, "svc_author_start");
+          ctx.session.state = "svc_author_end";
+          await promptWizardState(ctx, "svc_author_end");
+          return;
+        }
 
-    case "svc_author_pax":
-      await ctx.reply("👥 Укажите *минимум/максимум человек* в формате `2/10`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
-      return;
+        case "svc_author_end": {
+          const raw = String(text || "").trim().toLowerCase();
+          if (["по запросу", "запрос", "flex", "flexible", "гибко", "нет"].includes(raw)) {
+            draft.flexibleDates = true;
+            draft.endDate = "";
+            pushWizardState(ctx, "svc_author_end");
+            ctx.session.state = "svc_author_duration";
+            await promptWizardState(ctx, "svc_author_duration");
+            return;
+          }
 
-    case "svc_author_language":
-      await ctx.reply("🗣 Укажите *язык гида*. Пример: `русский / английский / узбекский`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
-      return;
+          const norm = normalizeDateInput(text);
+          if (!norm) {
+            await ctx.reply("😕 Не понял дату окончания. Введите *YYYY-MM-DD* или напишите `по запросу`.", {
+              parse_mode: "Markdown",
+              ...wizNavKeyboard(),
+            });
+            return;
+          }
+          if (isPastYMD(norm)) {
+            await ctx.reply("⚠️ Эта дата уже в прошлом. Укажите будущую дату или `по запросу`.", {
+              parse_mode: "Markdown",
+              ...wizNavKeyboard(),
+            });
+            return;
+          }
+          if (draft.startDate && norm < draft.startDate) {
+            await ctx.reply("⚠️ Дата окончания раньше даты начала. Укажите корректную дату.", {
+              parse_mode: "Markdown",
+              ...wizNavKeyboard(),
+            });
+            return;
+          }
 
-    case "svc_author_meeting":
-      await ctx.reply("📌 Укажите *место встречи*. Если по договорённости — так и напишите.", { parse_mode: "Markdown", ...wizNavKeyboard() });
-      return;
+          draft.endDate = norm;
+          pushWizardState(ctx, "svc_author_end");
+          ctx.session.state = "svc_author_duration";
+          await promptWizardState(ctx, "svc_author_duration");
+          return;
+        }
 
-    case "svc_author_transport":
-      await ctx.reply("🚗 Транспорт включён? Ответьте `да` или `нет`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
-      return;
+        case "svc_author_duration": {
+          const v = await requireTextField(ctx, text, "Длительность", { min: 2 });
+          if (!v) return;
+          draft.duration = v;
 
-    case "svc_author_guide":
-      await ctx.reply("🧑‍🏫 Гид включён? Ответьте `да` или `нет`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
-      return;
+          pushWizardState(ctx, "svc_author_duration");
+          ctx.session.state = "svc_author_format";
+          await promptWizardState(ctx, "svc_author_format");
+          return;
+        }
 
-    case "svc_author_cancel":
-      await ctx.reply("📄 Укажите *условия отмены / важные условия*. Если не нужно — нажмите «⏭ Пропустить».", { parse_mode: "Markdown", ...wizNavKeyboard() });
-      return;
+        case "svc_author_format": {
+          const raw = String(text || "").trim().toLowerCase();
+          const map = {
+            group: "group",
+            private: "private",
+            custom: "custom",
+            "групповой": "group",
+            "индивидуальный": "private",
+            "под запрос": "custom",
+          };
+          draft.tourFormat = map[raw] || raw || "group";
+
+          pushWizardState(ctx, "svc_author_format");
+          ctx.session.state = "svc_author_program";
+          await promptWizardState(ctx, "svc_author_program");
+          return;
+        }
+
+        case "svc_author_program": {
+          const v = await requireTextField(ctx, text, "Программа тура", { min: 5 });
+          if (!v) return;
+          draft.program = v;
+
+          pushWizardState(ctx, "svc_author_program");
+          ctx.session.state = "svc_author_included";
+          await promptWizardState(ctx, "svc_author_included");
+          return;
+        }
+
+        case "svc_author_included": {
+          const v = await requireTextField(ctx, text, "Что включено", { min: 2 });
+          if (!v) return;
+          draft.included = v;
+
+          pushWizardState(ctx, "svc_author_included");
+          ctx.session.state = "svc_author_not_included";
+          await promptWizardState(ctx, "svc_author_not_included");
+          return;
+        }
+
+        case "svc_author_not_included": {
+          draft.notIncluded = normReq(text) || "";
+
+          pushWizardState(ctx, "svc_author_not_included");
+          ctx.session.state = "svc_author_pax";
+          await promptWizardState(ctx, "svc_author_pax");
+          return;
+        }
+
+        case "svc_author_pax": {
+          const raw = String(text || "").trim();
+          const m = raw.match(/(\d+)\D+(\d+)/);
+          if (!m) {
+            await ctx.reply("⚠️ Укажите минимум/максимум человек в формате `2/10`.", {
+              parse_mode: "Markdown",
+              ...wizNavKeyboard(),
+            });
+            return;
+          }
+          const minPax = Number(m[1]);
+          const maxPax = Number(m[2]);
+          if (!Number.isFinite(minPax) || !Number.isFinite(maxPax) || minPax <= 0 || maxPax < minPax) {
+            await ctx.reply("⚠️ Некорректное количество человек. Пример: `2/16`.", {
+              parse_mode: "Markdown",
+              ...wizNavKeyboard(),
+            });
+            return;
+          }
+          draft.minPax = minPax;
+          draft.maxPax = maxPax;
+
+          pushWizardState(ctx, "svc_author_pax");
+          ctx.session.state = "svc_author_language";
+          await promptWizardState(ctx, "svc_author_language");
+          return;
+        }
+
+        case "svc_author_language": {
+          const v = await requireTextField(ctx, text, "Язык гида", { min: 2 });
+          if (!v) return;
+          draft.guideLanguage = v;
+
+          pushWizardState(ctx, "svc_author_language");
+          ctx.session.state = "svc_author_meeting";
+          await promptWizardState(ctx, "svc_author_meeting");
+          return;
+        }
+
+        case "svc_author_meeting": {
+          const v = await requireTextField(ctx, text, "Место встречи", { min: 2 });
+          if (!v) return;
+          draft.meetingPoint = v;
+
+          pushWizardState(ctx, "svc_author_meeting");
+          ctx.session.state = "svc_author_transport";
+          await promptWizardState(ctx, "svc_author_transport");
+          return;
+        }
+
+        case "svc_author_transport": {
+          const yn = parseYesNo(text);
+          if (yn === null) {
+            await ctx.reply("⚠️ Ответьте `да` или `нет`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
+            return;
+          }
+          draft.transportIncluded = yn;
+          draft.transport = yn ? "included" : "not_included";
+
+          pushWizardState(ctx, "svc_author_transport");
+          ctx.session.state = "svc_author_guide";
+          await promptWizardState(ctx, "svc_author_guide");
+          return;
+        }
+
+        case "svc_author_guide": {
+          const yn = parseYesNo(text);
+          if (yn === null) {
+            await ctx.reply("⚠️ Ответьте `да` или `нет`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
+            return;
+          }
+          draft.guideIncluded = yn;
+
+          pushWizardState(ctx, "svc_author_guide");
+          ctx.session.state = "svc_author_cancel";
+          await promptWizardState(ctx, "svc_author_cancel");
+          return;
+        }
+
+        case "svc_author_cancel": {
+          draft.cancellationPolicy = normReq(text) || "";
+
+          pushWizardState(ctx, "svc_author_cancel");
+          ctx.session.state = "svc_create_price";
+          await promptWizardState(ctx, "svc_create_price");
+          return;
+        }
 
     case "svc_create_title": {
           const v = await requireTextField(ctx, text, "Название", { min: 2 });
@@ -11173,12 +11403,16 @@ const data = await getOrFetchCached(
               ],
             };
       
-      // ➜ добавляем кнопку "Детали рейса"
+      // ➜ добавляем дополнительные кнопки карточки.
+      // Для author_tour brochure карточки telegramServiceCard.js возвращает replaceDefault,
+      // чтобы не было дублей и порядок кнопок был ровно как в travel brochure.
       if (kbExtra?.inline_keyboard?.length) {
-        keyboardForClient.inline_keyboard = [
-          ...kbExtra.inline_keyboard,
-          ...keyboardForClient.inline_keyboard,
-        ];
+        keyboardForClient.inline_keyboard = kbExtra.replaceDefault
+          ? kbExtra.inline_keyboard
+          : [
+              ...kbExtra.inline_keyboard,
+              ...keyboardForClient.inline_keyboard,
+            ];
       }
 
       const keyboardForMy = {
