@@ -7873,6 +7873,12 @@ bot.action(/^atp:(\d+)$/, async (ctx) => {
       return;
     }
 
+    const userChatId = Number(ctx.from?.id || ctx.chat?.id || 0);
+    if (!Number.isFinite(userChatId) || userChatId <= 0) {
+      await ctx.answerCbQuery("⚠️ Не удалось определить чат", { show_alert: true });
+      return;
+    }
+
     const svc = await fetchTelegramService(serviceId, "client");
     if (!svc) {
       await ctx.answerCbQuery("⚠️ Тур не найден", { show_alert: true });
@@ -7880,7 +7886,15 @@ bot.action(/^atp:(\d+)$/, async (ctx) => {
     }
 
     const d = parseDetailsAny(svc.details);
-    const raw = String(d.program || d.itinerary || d.routeProgram || "").trim();
+    const raw = String(
+      d.program ||
+      d.tourProgram ||
+      d.programText ||
+      d.itinerary ||
+      d.routeProgram ||
+      ""
+    ).trim();
+
     if (!raw) {
       await ctx.answerCbQuery("ℹ️ Программа тура не указана", { show_alert: true });
       return;
@@ -7897,15 +7911,35 @@ bot.action(/^atp:(\d+)$/, async (ctx) => {
     const title = String(svc.title || d.title || "Авторский тур").trim();
     const body = raw.length > 3600 ? `${raw.slice(0, 3600).trim()}…` : raw;
 
-    await ctx.answerCbQuery("🗓 Программа тура");
-    await ctx.reply(
-      `🗓 <b>Программа тура</b>\n` +
+    await ctx.answerCbQuery("🗓 Отправляю программу тура");
+
+    await bot.telegram.sendMessage(
+      userChatId,
+      `🗓 <b>Программа тура</b> <code>#R${serviceId}</code>\n` +
         `🧭 <b>${escapeHtmlLocal(title)}</b>\n\n` +
         `${escapeHtmlLocal(body)}`,
-      { parse_mode: "HTML" }
+      {
+        parse_mode: "HTML",
+        disable_web_page_preview: true,
+      }
     );
   } catch (e) {
     console.error("[tg-bot] author tour program action error:", e?.message || e);
+
+    const desc = String(
+      e?.response?.description ||
+      e?.description ||
+      e?.message ||
+      ""
+    );
+
+    if (/bot was blocked|chat not found|user is deactivated|forbidden/i.test(desc)) {
+      try {
+        await ctx.answerCbQuery("Откройте личный чат с ботом и нажмите Start", { show_alert: true });
+      } catch {}
+      return;
+    }
+
     try { await ctx.answerCbQuery("⚠️ Ошибка", { show_alert: true }); } catch {}
   }
 });
