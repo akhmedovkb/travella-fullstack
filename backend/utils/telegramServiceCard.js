@@ -908,41 +908,84 @@ const priceKind =
       return joinClean([hotelName, suffix], " — ");
     };
 
-    const getStayLines = () => {
-      const candidates = [
-        d.accommodationPlan,
-        d.stays,
-        d.hotelsPlan,
-        d.hotels,
-        d.accommodationHotels,
-        d.lodging,
-        d.lodgingPlan,
-        d.accommodation,
-        d.hotel,
-        d.hotelName,
-      ];
-
-      for (const candidate of candidates) {
-        if (!candidate) continue;
-
-        if (Array.isArray(candidate)) {
-          const lines = candidate.map(formatStayItem).filter(Boolean).slice(0, 6);
-          if (lines.length) return lines;
-        }
-
-        if (typeof candidate === "object") {
-          const one = formatStayItem(candidate);
-          if (one) return [one];
-        }
-
-        if (typeof candidate === "string") {
-          const lines = splitSmartLines(candidate, 6);
-          if (lines.length) return lines;
-        }
-      }
-
-      return [];
+  const getStayLines = () => {
+    const out = [];
+  
+    const pushItem = (hotel, nights, city) => {
+      const h = norm(hotel);
+      if (!h) return;
+  
+      let suffix = "";
+  
+      if (nights) suffix = `${nights} ночи`;
+      else if (city) suffix = city;
+  
+      out.push(
+        suffix
+          ? `${h} — ${suffix}`
+          : h
+      );
     };
+  
+    const sources = [
+      d.stays,
+      d.accommodationPlan,
+      d.hotelsPlan,
+      d.hotels,
+      d.lodging,
+      d.accommodationHotels,
+    ];
+  
+    for (const src of sources) {
+      if (!src) continue;
+  
+      if (Array.isArray(src)) {
+        src.forEach((x) => {
+          if (typeof x === "string") {
+            pushItem(x);
+            return;
+          }
+  
+          pushItem(
+            x.hotel ||
+            x.name ||
+            x.title,
+  
+            x.nights ||
+            x.days,
+  
+            x.city
+          );
+        });
+      }
+    }
+  
+    // fallback:
+    // текст программы тура
+    if (!out.length) {
+      const txt =
+        String(
+          d.program ||
+          d.accommodation ||
+          ""
+        );
+  
+      const lines = txt
+        .split(/\n|;/)
+        .map((x) => x.trim())
+        .filter(Boolean);
+  
+      lines.forEach((x) => {
+        if (
+          /hotel|отель|möven|kar|fortune/i.test(x)
+        ) {
+          out.push(x);
+        }
+      });
+    }
+  
+    return out.slice(0,5);
+  };
 
     const normalizeRouteLine = (value) =>
       String(value || "")
