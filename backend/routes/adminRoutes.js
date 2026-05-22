@@ -387,7 +387,7 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
   // Требование:
   // 1) audience: all
   // 2) кнопка: "Открыть в боте"
-  // Публикуем только "отказные" категории.
+  // Публикуем только отказные категории и авторские туры.
   try {
     const info2 = await pool.query(
       `SELECT s.*, 
@@ -404,6 +404,7 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
 
     const isRefused = [
                         "refused_tour",
+                        "author_tour",
                         "refused_hotel",
                         "refused_flight",
                         "refused_ticket",
