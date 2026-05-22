@@ -617,7 +617,8 @@
       "refused_hotel": "QAYTARILGAN MEHMONXONA",
       "refused_flight": "QAYTARILGAN AVIABILET",
       "refused_ticket": "QAYTARILGAN BILET",
-      "refused_event_ticket": "QAYTARILGAN TADBIR CHIPTASI"
+      "refused_event_ticket": "QAYTARILGAN TADBIR CHIPTASI",
+      "author_tour": "MUALLIFLIK TURI"
     },
     "success_subtitle": "Endi siz ta`minotch bilan bog‘lanib, darhol bron qilishingiz mumkin",
     "success_title": "Kontaktlar ochildi",
@@ -705,7 +706,18 @@
     "unlock_success_trust_direct": "Bevosita aloqa",
     "unlock_success_trust_no_repeat": "Qayta to‘lovsiz",
     "pay_modal_trust_saved": "Kirish saqlanadi",
-    "photo_coming_soon": "Rasm tez orada qo‘shiladi"
+    "photo_coming_soon": "Rasm tez orada qo‘shiladi",
+    "author_tour": "Mualliflik turi",
+    "author_flexible_dates": "Sanalar so‘rov bo‘yicha",
+    "author_format": "Format",
+    "author_duration": "Davomiyligi",
+    "author_pax": "Guruh",
+    "author_guide_language": "Gid tili",
+    "author_meeting_point": "Uchrashuv joyi",
+    "author_tour_details": "Mualliflik turi tafsilotlari",
+    "author_program": "Dastur",
+    "author_included": "Kiritilgan",
+    "author_not_included": "Kiritilmagan"
   },
   "messages": {
     "booking_created": "Bron yaratildi",
