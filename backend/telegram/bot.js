@@ -7886,7 +7886,7 @@ bot.action(/^atp:(\d+)$/, async (ctx) => {
     }
 
     const d = parseDetailsAny(svc.details);
-    const raw = String(
+    const rawProgram = String(
       d.program ||
       d.tourProgram ||
       d.programText ||
@@ -7895,7 +7895,7 @@ bot.action(/^atp:(\d+)$/, async (ctx) => {
       ""
     ).trim();
 
-    if (!raw) {
+    if (!rawProgram) {
       await ctx.answerCbQuery("ℹ️ Программа тура не указана", { show_alert: true });
       return;
     }
@@ -7908,21 +7908,153 @@ bot.action(/^atp:(\d+)$/, async (ctx) => {
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#39;");
 
+    const normalizeProgramText = (value) =>
+      String(value || "")
+        .replace(/\r\n/g, "\n")
+        .replace(/\r/g, "\n")
+        .replace(/[ \t]+/g, " ")
+        .replace(/\s*—{2,}\s*/g, "\n")
+        .replace(/\s*–{2,}\s*/g, "\n")
+        .replace(/\s*-{3,}\s*/g, "\n")
+        .replace(/\s+(?=ДЕНЬ\s*\d+\s*\|)/gi, "\n")
+        .replace(/\s+(?=DAY\s*\d+\s*\|)/gi, "\n")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+
+    const stripCommercialTail = (value) =>
+      String(value || "")
+        .replace(/\s*(?:Цена\s+указана|Стоимость\s+указана)[\s\S]*$/i, "")
+        .replace(/\s*(?:Для\s+бронирования|Для\s+брони|Бронирование|Обращайтесь)[\s\S]*$/i, "")
+        .replace(/\s*(?:@[\w_]{4,}|https?:\/\/\S+|\+?\d[\d\s().-]{7,})[\s\S]*$/i, "")
+        .trim();
+
+    const prettifyDayBody = (value) => {
+      let s = String(value || "")
+        .replace(/\s+/g, " ")
+        .replace(/\s*—\s*/g, " — ")
+        .trim();
+
+      // Разбиваем длинную строку по смысловым emoji-маркерам.
+      s = s
+        .replace(/\s+(?=(?:✈️|🕒|🛬|🏨|🚙|🏞️|🌄|🌊|🏭|🛍️|☕|🍽️|🚤|🏙️|🛫|🛥️|🧳|🚌|🚗|📍))/g, "\n")
+        .replace(/\n{2,}/g, "\n")
+        .trim();
+
+      return s
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => `• ${line}`)
+        .join("\n");
+    };
+
+    const formatAuthorTourProgram = (value) => {
+      const cleaned = stripCommercialTail(normalizeProgramText(value));
+      if (!cleaned) return "";
+
+      const dayRegex = /(ДЕНЬ|DAY)\s*(\d+)\s*(?:\|\s*([^\n]+?))?(?=\n|$|\s(?:📍|✈️|🕒|🏨|🚙|🌊|🏞️|🏭|🛍️|☕|🍽️|🚤|🛫|🛬))/gi;
+      const matches = [];
+      let m;
+
+      while ((m = dayRegex.exec(cleaned))) {
+        matches.push({
+          index: m.index,
+          end: dayRegex.lastIndex,
+          number: m[2],
+          date: String(m[3] || "").trim(),
+          marker: m[0],
+        });
+      }
+
+      if (!matches.length) {
+        return prettifyDayBody(cleaned);
+      }
+
+      const sections = [];
+
+      for (let i = 0; i < matches.length; i += 1) {
+        const cur = matches[i];
+        const next = matches[i + 1];
+
+        const bodyRaw = cleaned
+          .slice(cur.end, next ? next.index : cleaned.length)
+          .replace(/^\s*[—–-]+\s*/g, "")
+          .trim();
+
+        const datePart = cur.date ? ` — ${cur.date}` : "";
+        const body = prettifyDayBody(bodyRaw);
+
+        if (body) {
+          sections.push(`📍 <b>День ${escapeHtmlLocal(cur.number)}${escapeHtmlLocal(datePart)}</b>\n${escapeHtmlLocal(body)}`);
+        } else {
+          sections.push(`📍 <b>День ${escapeHtmlLocal(cur.number)}${escapeHtmlLocal(datePart)}</b>`);
+        }
+      }
+
+      return sections.join("\n\n");
+    };
+
+    const splitHtmlMessages = (header, body, maxLen = 3600) => {
+      const safeBody = String(body || "").trim();
+      if (!safeBody) return [header];
+
+      const blocks = safeBody.split(/\n{2,}/g).filter(Boolean);
+      const chunks = [];
+      let current = header;
+
+      for (const block of blocks) {
+        const candidate = `${current}\n\n${block}`;
+        if (candidate.length <= maxLen) {
+          current = candidate;
+          continue;
+        }
+
+        if (current.trim() && current !== header) chunks.push(current.trim());
+
+        if ((header + "\n\n" + block).length <= maxLen) {
+          current = `${header}\n\n${block}`;
+        } else {
+          const lines = block.split("\n");
+          current = header;
+          for (const line of lines) {
+            const c2 = `${current}\n${line}`;
+            if (c2.length > maxLen) {
+              chunks.push(current.trim());
+              current = `${header}\n${line}`;
+            } else {
+              current = c2;
+            }
+          }
+        }
+      }
+
+      if (current.trim()) chunks.push(current.trim());
+      return chunks.length ? chunks.slice(0, 4) : [header];
+    };
+
     const title = String(svc.title || d.title || "Авторский тур").trim();
-    const body = raw.length > 3600 ? `${raw.slice(0, 3600).trim()}…` : raw;
+    const formattedProgram = formatAuthorTourProgram(rawProgram);
+
+    if (!formattedProgram) {
+      await ctx.answerCbQuery("ℹ️ Программа тура не указана", { show_alert: true });
+      return;
+    }
 
     await ctx.answerCbQuery("🗓 Отправляю программу тура");
 
-    await bot.telegram.sendMessage(
-      userChatId,
+    const header =
       `🗓 <b>Программа тура</b> <code>#R${serviceId}</code>\n` +
-        `🧭 <b>${escapeHtmlLocal(title)}</b>\n\n` +
-        `${escapeHtmlLocal(body)}`,
-      {
+      `🧭 <b>${escapeHtmlLocal(title)}</b>`;
+
+    const chunks = splitHtmlMessages(header, formattedProgram, 3600);
+
+    for (let i = 0; i < chunks.length; i += 1) {
+      const suffix = chunks.length > 1 ? `\n\n<i>Часть ${i + 1}/${chunks.length}</i>` : "";
+      await bot.telegram.sendMessage(userChatId, `${chunks[i]}${suffix}`, {
         parse_mode: "HTML",
         disable_web_page_preview: true,
-      }
-    );
+      });
+    }
   } catch (e) {
     console.error("[tg-bot] author tour program action error:", e?.message || e);
 
