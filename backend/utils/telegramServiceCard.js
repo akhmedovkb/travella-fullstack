@@ -1025,7 +1025,7 @@ if (!out.length) {
     const txt = cleanInline(d.program);
 
     const hotelRegex =
-      /Размещение\s+в\s+отеле\s+([^,\n]+?)(?=\s{2,}|ДЕНЬ|Вылет|Трансфер|$)/gi;
+      /Размещение\s+в\s+отеле\s+([^&\n]+?)(?=Размещение|ДЕНЬ|Вылет|Трансфер|$)/gi;
 
     const seenHotels = new Set();
 
