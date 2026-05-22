@@ -283,6 +283,7 @@ router.get("/webhook/:secret/_debug/ping", (req, res) => {
 // =====================================================================
 function _placeholderKindByCategory(category) {
   const c = String(category || "").toLowerCase();
+  if (c === "author_tour") return "tour";
   if (c === "refused_tour") return "tour";
   if (c === "refused_hotel") return "hotel";
   if (c === "refused_flight") return "flight";
