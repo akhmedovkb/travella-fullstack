@@ -805,7 +805,139 @@ const priceKind =
     parts.push("⏳ Актуальность ограничена");
   };
 
+  const authorFormatLabel = (value) => {
+    const v = String(value || "").trim().toLowerCase();
+    if (v === "group") return "Групповой";
+    if (v === "private") return "Индивидуальный";
+    if (v === "custom") return "Под запрос";
+    return String(value || "").trim();
+  };
+
+  const compactText = (value, max = 180) => {
+    const raw = String(value || "")
+      .replace(/\r\n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+    if (!raw) return "";
+    if (raw.length <= max) return raw;
+    return `${raw.slice(0, max).trim()}…`;
+  };
+
+  const splitBullets = (value, maxItems = 6) => {
+    const raw = String(value || "").trim();
+    if (!raw) return [];
+    return raw
+      .split(/\n|;|•|✓|✔|,/g)
+      .map((x) => x.replace(/^[-–—\s]+/g, "").trim())
+      .filter(Boolean)
+      .slice(0, maxItems);
+  };
+
+  const pushBulletBlock = (parts, icon, title, value, maxItems = 6) => {
+    const items = splitBullets(value, maxItems);
+    if (!items.length) return;
+    parts.push(`${icon} <b>${escapeHtml(title)}</b>:`);
+    for (const item of items) parts.push(`  ✓ ${escapeHtml(item)}`);
+  };
+
+  const projectSupportPaid =
+    svc.project_support_paid === true ||
+    svc.support_project_paid === true ||
+    svc.provider_support_paid === true ||
+    svc.has_project_support === true ||
+    d.projectSupportPaid === true ||
+    d.supportProjectPaid === true;
+
   /* ===================== SPECIAL TEMPLATES ===================== */
+
+
+  if ((role !== "provider" || options?.forceRefused === true) && String(category) === "author_tour") {
+    const parts = [];
+
+    if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
+    parts.push(`🧭 <b>АВТОРСКИЙ ТУР</b>
+📍 <code>#R${serviceId}</code>`);
+
+    const tl = titleLine("generic");
+    if (tl) parts.push(tl);
+
+    const routeTitle =
+      route ||
+      joinClean([
+        norm(d.directionFrom || d.fromCity || d.cityFrom),
+        norm(d.directionTo || d.toCity || d.cityTo),
+      ], " → ") ||
+      norm(d.directionCountry || d.country || "");
+    if (routeTitle) parts.push(labelLine("🌍", "Маршрут", routeTitle));
+
+    const dateValue = dates
+      ? `${dates}${nights ? ` (${nights} ноч.)` : ""}`
+      : d.flexibleDates
+        ? "По запросу / гибкие даты"
+        : "";
+    if (dateValue) parts.push(labelLine("🗓", "Даты", dateValue));
+
+    const duration = norm(d.duration || d.tourDuration || "");
+    if (duration) parts.push(labelLine("⏱", "Длительность", duration));
+
+    const format = authorFormatLabel(d.tourFormat || d.format || "");
+    const pax = joinClean([
+      d.minPax ? `от ${d.minPax}` : "",
+      d.maxPax ? `до ${d.maxPax} чел.` : "",
+    ], " ");
+    const formatLine = joinClean([format, pax], " • ");
+    if (formatLine) parts.push(labelLine("👥", "Формат", formatLine));
+
+    const guideBits = joinClean([
+      d.guideIncluded === true ? "гид включён" : "",
+      norm(d.guideLanguage || d.language || d.languages || ""),
+    ], " • ");
+    if (guideBits) parts.push(labelLine("🗣", "Гид / язык", guideBits));
+
+    if (d.transportIncluded === true || String(d.transport || "").toLowerCase() === "included") {
+      parts.push(labelLine("🚐", "Транспорт", "включён"));
+    }
+
+    const meetingPoint = norm(d.meetingPoint || d.startPoint || d.pickupPoint || "");
+    if (meetingPoint) parts.push(labelLine("📍", "Место встречи", meetingPoint));
+
+    const programPreview = compactText(d.program || d.itinerary || d.routeProgram || "", 220);
+    if (programPreview) {
+      parts.push("");
+      parts.push("🗓 <b>Программа тура</b>:");
+      parts.push(escapeHtml(programPreview));
+    }
+
+    pushBulletBlock(parts, "✅", "Включено", d.included || d.includes || d.includedText, 5);
+    pushBulletBlock(parts, "➖", "Не включено", d.notIncluded || d.excluded || d.not_included, 4);
+
+    if (priceWithCur != null && String(priceWithCur).trim()) {
+      parts.push(`💸 <b>Цена</b>: ${escapeHtml(String(priceWithCur))} (${priceKind})`);
+    }
+
+    if (badgeClean) parts.push(labelLine("⏳", "Срок", badgeClean));
+    if (projectSupportPaid) parts.push("💛 <b>Поддерживает проект Travella</b>");
+
+    pushDivider(parts);
+    if (shouldShowProviderContacts(role, unlocked)) {
+      parts.push(providerLine);
+      if (telegramLine) parts.push(telegramLine);
+    } else {
+      parts.push(labelLine("👨‍💼", "Автор", "🔒 контакты скрыты"));
+      parts.push("🔓 Откройте контакты для связи с автором тура");
+    }
+
+    pushDivider(parts);
+    parts.push(`👉 Подробнее и бронирование: ${a(serviceUrl, "открыть")}`);
+
+    const kbRows = [];
+    if (String(d.program || d.itinerary || "").trim()) {
+      kbRows.push([{ text: "🗓 Программа тура", callback_data: `atp:${serviceId}` }]);
+    }
+    const kbExtra = kbRows.length ? { inline_keyboard: kbRows } : null;
+
+    return { text: parts.join("\n"), photoUrl: getFirstImageUrl(svc), serviceUrl, kbExtra };
+  }
 
   if ((role !== "provider" || options?.forceRefused === true) && String(category) === "refused_tour") {
     const parts = [];
