@@ -441,6 +441,14 @@ function extractServiceFields(item, viewerRole, t) {
   const authorGuideLang = firstNonEmpty(details?.guideLanguage, details?.guideLang, details?.language);
   const authorMeetingPoint = firstNonEmpty(details?.meetingPoint, details?.meeting_point, details?.startPoint);
   const authorFlexibleDates = Boolean(details?.flexibleDates || details?.datesFlexible || details?.onRequest);
+  const providerSupportsProject = Boolean(
+    svc.provider_supports_project ||
+    svc.providerSupportsProject ||
+    item.provider_supports_project ||
+    item.providerSupportsProject ||
+    details?.providerSupportsProject ||
+    details?.supportsProject
+  );
 
 const left = firstNonEmpty(
   bag.hotel_check_in,
@@ -657,6 +665,7 @@ const dates =
     authorGuideLang,
     authorMeetingPoint,
     authorFlexibleDates,
+    providerSupportsProject,
     insuranceIncluded: details?.insuranceIncluded,
     earlyCheckIn: details?.earlyCheckIn,
     arrivalFastTrack: details?.arrivalFastTrack,
@@ -706,6 +715,7 @@ export default function ServiceCard({
     authorGuideLang,
     authorMeetingPoint,
     authorFlexibleDates,
+    providerSupportsProject,
   } = extractServiceFields(item, viewerRole, t);
 
   const isProviderViewer = viewerRole === "provider";
@@ -1634,8 +1644,13 @@ return (
           )}
 
           {/* Author tour value chips */}
-          {isAuthorTour && (authorFormat || authorDuration || authorPax || authorGuideLang || authorFlexibleDates) && (
+          {isAuthorTour && (authorFormat || authorDuration || authorPax || authorGuideLang || authorFlexibleDates || providerSupportsProject) && (
             <div className="mt-2.5 flex flex-wrap gap-1.5">
+              {providerSupportsProject && (
+                <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700 ring-1 ring-amber-100">
+                  💛 {t("marketplace.supports_project", { defaultValue: "Поддерживает проект" })}
+                </span>
+              )}
               {authorFormat && (
                 <span className="inline-flex items-center rounded-full bg-cyan-50/80 px-2 py-0.5 text-[10px] font-bold text-cyan-800 ring-1 ring-cyan-100">
                   🧭 {authorFormat}
