@@ -931,18 +931,25 @@ async function refreshUnlockedCard(ctx, serviceId) {
   const { text, photoUrl, serviceUrl, kbExtra } =
     buildServiceMessage(svc, category, "client", { unlocked: isUnlocked });
   
-  let kb = {
-    inline_keyboard: [
-      [{ text: "Подробнее на сайте", url: serviceUrl }],
-      [{ text: "📩 Быстрый запрос", callback_data: `quick:${serviceId}` }],
-    ],
-  };
-  
-  if (kbExtra?.inline_keyboard?.length) {
+let kb = {
+  inline_keyboard: [
+    [{ text: "Подробнее на сайте", url: serviceUrl }],
+    [{ text: "📩 Быстрый запрос", callback_data: `quick:${serviceId}` }],
+  ],
+};
+
+const isAuthorTour =
+  String(svc?.category || "").toLowerCase() === "author_tour";
+
+if (kbExtra?.inline_keyboard?.length) {
+  if (isAuthorTour) {
+    kb.inline_keyboard = kbExtra.inline_keyboard;
+  } else {
     kb.inline_keyboard = kbExtra.replaceDefault
       ? kbExtra.inline_keyboard
       : [...kbExtra.inline_keyboard, ...kb.inline_keyboard];
   }
+}
 
   try {
     await ctx.editMessageCaption(text, {
