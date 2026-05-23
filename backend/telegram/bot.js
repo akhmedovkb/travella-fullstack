@@ -4686,7 +4686,8 @@ function isCreateWizardState(state) {
     s === "svc_create_choose_category" ||
     s.startsWith("svc_create_") ||
     s.startsWith("svc_hotel_") ||
-    s.startsWith("svc_author_")
+    s.startsWith("svc_author_") ||
+    s.startsWith("author_stay_")
   );
 }
 
@@ -5566,20 +5567,32 @@ async function promptWizardState(ctx, state) {
               [{ text: "👥 Групповой тур", callback_data: "author_fmt:group" }],
               [{ text: "👤 Индивидуальный тур", callback_data: "author_fmt:private" }],
               [{ text: "✨ Под запрос", callback_data: "author_fmt:custom" }],
-              [{ text: "⬅️ Назад", callback_data: "wiz:back" }],
-              [{ text: "❌ Отмена", callback_data: "wiz:cancel" }],
+              [{ text: "⬅️ Назад", callback_data: "svc_wiz:back" }],
+              [{ text: "❌ Отмена", callback_data: "svc_wiz:cancel" }],
             ],
           },
         }
       );
       return;
 
-    case "svc_author_stays":
-      await ctx.reply(
-        "🏨 Укажите *проживание* по строкам.\n\nФормат каждой строки:\n`Город | Отель | ночей`\n\nПример:\n`Uzungol | Kar Hotel | 2`\n`Trabzon | Mövenpick Hotel Trabzon | 2`\n`Istanbul | Great Fortune Design Hotel & Spa | 3`",
-        { parse_mode: "Markdown", ...wizNavKeyboard() }
-      );
-      return;
+  case "svc_author_stays":
+    await ctx.reply(
+      "🏨 *Проживание тура*\n\nПока ничего не добавлено.\n\nДобавьте проживание по городам.",
+      {
+        parse_mode: "Markdown",
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "➕ Добавить проживание", callback_data: "author_stay:add" }],
+            [{ text: "✅ Продолжить", callback_data: "author_stay:done" }],
+            [
+              { text: "⬅️ Назад", callback_data: "svc_wiz:back" },
+              { text: "❌ Отмена", callback_data: "svc_wiz:cancel" },
+            ],
+          ],
+        },
+      }
+    );
+    return;
 
     case "svc_author_program_days":
       await ctx.reply(
@@ -7651,7 +7664,15 @@ bot.action("svc_wiz:back", async (ctx) => {
     await ctx.answerCbQuery();
 
     const cur = ctx.session?.state || null;
-    if (!cur || !(String(cur).startsWith("svc_create_") || String(cur).startsWith("svc_hotel_") || String(cur).startsWith("svc_author_")))
+    if (
+          !cur ||
+          !(
+            String(cur).startsWith("svc_create_") ||
+            String(cur).startsWith("svc_hotel_") ||
+            String(cur).startsWith("svc_author_") ||
+            String(cur).startsWith("author_stay_")
+          )
+        )
       return;
 
     const stack = ctx.session?.wizardStack || [];
@@ -8348,6 +8369,54 @@ bot.action(/^author_fmt:(group|private|custom)$/, async (ctx) => {
 
   } catch (e) {
     console.error("[author_fmt]", e);
+  }
+});
+
+bot.action("author_stay:add", async (ctx) => {
+  try {
+    if (!ctx.session) ctx.session = {};
+    if (!ctx.session.serviceDraft) ctx.session.serviceDraft = {};
+
+    pushWizardState(ctx, "svc_author_stays");
+    ctx.session.state = "author_stay_city";
+
+    await safeCb(ctx);
+
+    await ctx.reply(
+      "🌍 Укажите город проживания\n\nНапример:\nUzungol"
+    );
+  } catch (e) {
+    console.error("[author_stay:add]", e);
+  }
+});
+
+bot.action("author_stay:done", async (ctx) => {
+  try {
+    if (!ctx.session?.serviceDraft) return;
+
+    const stays = ctx.session.serviceDraft.stays || [];
+
+    if (!stays.length) {
+      await ctx.answerCbQuery(
+        "Добавьте хотя бы одно проживание",
+        { show_alert: true }
+      );
+      return;
+    }
+
+    pushWizardState(ctx, "svc_author_stays");
+
+    ctx.session.state = "svc_author_program_days";
+
+    await safeCb(ctx);
+
+    await promptWizardState(
+      ctx,
+      "svc_author_program_days"
+    );
+
+  } catch (e) {
+    console.error("[author_stay:done]", e);
   }
 });
 
@@ -10539,26 +10608,96 @@ bot.on("text", async (ctx, next) => {
           return;
         }
 
-        case "svc_author_stays": {
-          const stays = parseAuthorStaysInput(text);
-          if (!stays.length) {
+          case "svc_author_stays": {
             await ctx.reply(
-              "😕 Не понял проживание.\n\nФормат каждой строки:\n`Город | Отель | ночей`\n\nПример:\n`Uzungol | Kar Hotel | 2`\n`Trabzon | Mövenpick Hotel Trabzon | 2`",
-              { parse_mode: "Markdown", ...wizNavKeyboard() }
+              "🏨 Используйте кнопки ниже: добавьте проживание или продолжите дальше.",
+              {
+                reply_markup: {
+                  inline_keyboard: [
+                    [{ text: "➕ Добавить проживание", callback_data: "author_stay:add" }],
+                    [{ text: "✅ Продолжить", callback_data: "author_stay:done" }],
+                    [
+                      { text: "⬅️ Назад", callback_data: "svc_wiz:back" },
+                      { text: "❌ Отмена", callback_data: "svc_wiz:cancel" },
+                    ],
+                  ],
+                },
+              }
             );
             return;
           }
 
-          draft.stays = stays;
-          draft.staysText = text;
-
-          pushWizardState(ctx, "svc_author_stays");
-          ctx.session.state = "svc_author_program_days";
-          await promptWizardState(ctx, "svc_author_program_days");
-          return;
-        }
-
-        case "svc_author_program_days": {
+            case "author_stay_city": {
+              draft._stayCity = text;
+            
+              ctx.session.state = "author_stay_hotel";
+            
+              await ctx.reply(
+                "🏨 Укажите отель\n\nНапример:\nKar Hotel"
+              );
+              return;
+            }
+            
+            case "author_stay_hotel": {
+              draft._stayHotel = text;
+            
+              ctx.session.state = "author_stay_nights";
+            
+              await ctx.reply(
+                "🌙 Количество ночей\n\nНапример:\n2"
+              );
+              return;
+            }
+            
+            case "author_stay_nights": {
+              const nights =
+                Number(String(text).replace(/[^\d]/g, "")) || 1;
+            
+              if (!draft.stays)
+                draft.stays = [];
+            
+              draft.stays.push({
+                city: draft._stayCity,
+                hotel: draft._stayHotel,
+                nights,
+              });
+            
+              delete draft._stayCity;
+              delete draft._stayHotel;
+            
+              ctx.session.state = "svc_author_stays";
+            
+              const rows = draft.stays.map(
+                (x, i) =>
+                  `${i + 1}. ${x.city} — ${x.hotel} — ${x.nights} ноч.`
+              );
+            
+              await ctx.reply(
+                `🏨 Проживание\n\n${rows.join("\n")}`,
+                {
+                  reply_markup: {
+                    inline_keyboard: [
+                      [
+                        {
+                          text: "➕ Добавить ещё",
+                          callback_data: "author_stay:add",
+                        },
+                      ],
+                      [
+                        {
+                          text: "✅ Продолжить",
+                          callback_data: "author_stay:done",
+                        },
+                      ],
+                    ],
+                  },
+                }
+              );
+            
+              return;
+            }
+          
+          case "svc_author_program_days": {
           const programDays = parseAuthorProgramDaysInput(text);
           if (!programDays.length) {
             await ctx.reply(
