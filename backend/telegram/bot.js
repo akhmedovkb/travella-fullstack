@@ -4849,12 +4849,51 @@ async function replyProviderDraftResumePrompt(ctx, row) {
       })
     : "";
 
+    const stepLabels = {
+    svc_author_title: "Название авторского тура",
+    svc_author_country: "Страна направления",
+    svc_author_from: "Город отправления",
+    svc_author_to: "Маршрут / город прибытия",
+    svc_author_start: "Дата начала тура",
+    svc_author_end: "Дата окончания тура",
+    svc_author_format: "Формат тура",
+    svc_author_stays: "Проживание тура",
+
+    author_stay_city: "Проживание: город",
+    author_stay_hotel: "Проживание: отель",
+    author_stay_nights: "Проживание: количество ночей",
+
+    svc_author_program_days: "Программа тура",
+    author_day_date: "Программа: дата дня",
+    author_day_route: "Программа: маршрут дня",
+    author_day_title: "Программа: заголовок дня",
+    author_day_items: "Программа: пункты дня",
+
+    svc_author_included: "Что включено",
+    svc_author_not_included: "Что не включено",
+    svc_author_pax: "Количество человек",
+    svc_author_language: "Язык гида",
+    svc_author_meeting: "Место встречи",
+    svc_author_transport: "Транспорт",
+    svc_author_guide: "Гид",
+    svc_author_cancel: "Условия отмены",
+
+    svc_create_price: "Цена нетто",
+    svc_create_grossPrice: "Цена для клиента",
+    svc_create_expiration: "Срок актуальности",
+    svc_create_photo: "Фото услуги",
+  };
+
+  const currentStepRaw = String(row?.step || "").trim();
+  const currentStep = stepLabels[currentStepRaw] || currentStepRaw || "Не определён";
+
   await safeReply(
     ctx,
     `⚠️ <b>Создание услуги было прервано из-за обновления бота.</b>\n\n` +
       `Мы сохранили ваш черновик.\n` +
       `📌 Категория: <b>${escapeHtml(providerDraftCategoryLabel(category))}</b>\n` +
       `📝 Заполнено полей: <b>${filled}</b>\n` +
+      `📍 Текущий шаг: <b>${escapeHtml(currentStep)}</b>\n` +
       (updatedAt ? `🕒 Последнее сохранение: <b>${escapeHtml(updatedAt)}</b>\n\n` : "\n") +
       `Хотите продолжить создание?`,
     {
