@@ -4796,16 +4796,17 @@ function hydrateProviderDraftSession(ctx, row) {
         ? payload.images
         : [];
 
-    const legacyDraftStateMap = {
-    svc_author_transport: "svc_author_guide",
-    };
+  const legacyDraftStateMap = {
+    svc_author_transport: "svc_author_cancel",
+    svc_author_guide: "svc_author_cancel",
+  };
   
     const rawStep = String(row.step || "svc_create_choose_category");
     const normalizedStep = legacyDraftStateMap[rawStep] || rawStep;
   
     const wizardStack = (Array.isArray(row.wizard_stack) ? row.wizard_stack : [])
       .map((s) => legacyDraftStateMap[String(s || "")] || s)
-      .filter((s) => String(s || "") !== "svc_author_transport");
+      .filter((s) => !["svc_author_transport", "svc_author_guide"].includes(String(s || "")));
 
   ctx.session.serviceDraft = {
     ...payload,
@@ -4886,7 +4887,6 @@ async function replyProviderDraftResumePrompt(ctx, row) {
     svc_author_pax: "Количество человек",
     svc_author_language: "Язык гида",
     svc_author_meeting: "Место встречи",
-    svc_author_guide: "Гид",
     svc_author_cancel: "Условия отмены",
 
     svc_create_price: "Цена нетто",
@@ -5954,10 +5954,6 @@ async function promptWizardState(ctx, state) {
 
     case "svc_author_meeting":
       await ctx.reply("📌 Укажите *место встречи*. Если по договорённости — так и напишите.", { parse_mode: "Markdown", ...wizNavKeyboard() });
-      return;
-
-    case "svc_author_guide":
-      await ctx.reply("🧑‍🏫 Гид включён? Ответьте `да` или `нет`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
       return;
 
     case "svc_author_cancel":
@@ -8159,7 +8155,6 @@ bot.action("svc_wiz:skip", async (ctx) => {
       "svc_author_pax",
       "svc_author_language",
       "svc_author_meeting",
-      "svc_author_guide",
       "svc_author_cancel",
       "svc_create_price",
       "svc_create_grossPrice",
@@ -11558,21 +11553,6 @@ bot.on("text", async (ctx, next) => {
           draft.meetingPoint = v;
 
           pushWizardState(ctx, "svc_author_meeting");
-          ctx.session.state = "svc_author_guide";
-          await promptWizardState(ctx, "svc_author_guide");
-          return;
-        }
-
-        case "svc_author_guide": {
-          const yn = parseYesNo(text);
-          if (yn === null) {
-            await ctx.reply("⚠️ Ответьте `да` или `нет`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
-            return;
-          }
-          draft.guideIncluded = yn;
-          draft.guide = yn ? "included" : "not_included";
-
-          pushWizardState(ctx, "svc_author_guide");
           ctx.session.state = "svc_author_cancel";
           await promptWizardState(ctx, "svc_author_cancel");
           return;
