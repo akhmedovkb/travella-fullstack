@@ -6367,20 +6367,21 @@ async function finishCreateServiceFromWizard(ctx) {
 
     const refusedCategories = [
       "refused_tour",
+      "author_tour",
       "refused_hotel",
       "refused_flight",
       "refused_ticket",
       "refused_event_ticket",
     ];
 
-    if (refusedCategories.includes(String(category || "").toLowerCase())) {
+    if (proofRequiredCategories.includes(String(category || "").toLowerCase())) {
       ctx.session.awaitingProofForServiceId = createdServiceId;
       ctx.session.awaitingProofForCategory = String(category || "").toLowerCase();
 
       await ctx.reply(
         `✅ Заявка #${createdServiceId} создана.\n\n` +
           `Теперь для отправки на модерацию вы обязаны отправить скриншоты, ` +
-          `подтверждающие подлинность вашей брони ` +
+          `подтверждающие подлинность тура / программы / бронирований / договорённостей. ` +
           `тура / отеля / авиабилета / билета на мероприятие.\n\n` +
           `📎 Отправьте сюда изображения подтверждения.\n` +
           `Когда закончите, отправьте сообщение: ГОТОВО`
