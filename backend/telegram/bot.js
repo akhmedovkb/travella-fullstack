@@ -5226,43 +5226,162 @@ function parseAuthorTourProgramDaysFromText(value) {
 }
 
 function buildDetailsForAuthorTour(draft, netPriceNum) {
-  const stays = Array.isArray(draft.stays) && draft.stays.length
-    ? draft.stays
-    : parseAuthorTourStaysFromText(draft.duration || draft.program || "");
+  const durationMeta = calcAuthorDuration(draft.startDate, draft.endDate);
 
-  const programDays = Array.isArray(draft.programDays) && draft.programDays.length
+  const stays = Array.isArray(draft.stays)
+    ? draft.stays
+    : parseAuthorStaysInput(draft.staysText);
+
+  const programDays = Array.isArray(draft.programDays)
     ? draft.programDays
-    : parseAuthorTourProgramDaysFromText(draft.program || "");
+    : parseAuthorProgramDaysInput(draft.programDaysText);
 
   return {
-    title: draft.title || "",
-    directionCountry: draft.country || "",
-    directionFrom: draft.fromCity || "",
-    directionTo: draft.toCity || "",
-    startDate: draft.startDate || "",
-    endDate: draft.endDate || "",
-    flexibleDates: !!draft.flexibleDates,
-    duration: draft.duration || "",
+    title: draft.title || null,
+    directionCountry: draft.country || null,
+    directionFrom: draft.fromCity || null,
+    directionTo: draft.toCity || null,
+
+    startDate: draft.startDate || null,
+    endDate: draft.endDate || null,
+    days: durationMeta.days,
+    nights: durationMeta.nights,
+    duration: durationMeta.duration,
+
+    tourFormat: draft.tourFormat || null,
     stays,
-    tourFormat: draft.tourFormat || "group",
-    program: draft.program || "",
     programDays,
-    included: draft.included || "",
-    notIncluded: draft.notIncluded || "",
-    minPax: draft.minPax || "",
-    maxPax: draft.maxPax || "",
-    guideLanguage: draft.guideLanguage || "",
-    meetingPoint: draft.meetingPoint || "",
-    guideIncluded: !!draft.guideIncluded,
-    transportIncluded: !!draft.transportIncluded,
-    transport: draft.transport || "",
-    cancellationPolicy: draft.cancellationPolicy || "",
+
+    // legacy fallback — не удаляем
+    program: draft.program || draft.programDaysText || null,
+
+    included: draft.included || null,
+    notIncluded: draft.notIncluded || null,
+    minPax: draft.minPax || null,
+    maxPax: draft.maxPax || null,
+    guideLanguage: draft.guideLanguage || null,
+    meetingPoint: draft.meetingPoint || null,
+    transport: draft.transport || null,
+    guide: draft.guide || null,
+    cancelPolicy: draft.cancelPolicy || null,
+
     netPrice: netPriceNum,
-    grossPrice: typeof draft.grossPriceNum === "number" ? draft.grossPriceNum : null,
+    grossPrice: draft.grossPriceNum ?? null,
     expiration: draft.expiration || null,
     isActive: true,
-    telegramPhotoFileId: draft.telegramPhotoFileId || null,
   };
+}
+
+function normalizeAuthorDateInput(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+
+  let yyyy;
+  let mm;
+  let dd;
+
+  let m = raw.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/);
+  if (m) {
+    dd = Number(m[1]);
+    mm = Number(m[2]);
+    yyyy = Number(m[3]);
+  } else {
+    m = raw.match(/^(\d{4})[./-](\d{1,2})[./-](\d{1,2})$/);
+    if (!m) return null;
+    yyyy = Number(m[1]);
+    mm = Number(m[2]);
+    dd = Number(m[3]);
+  }
+
+  if (!Number.isInteger(yyyy) || !Number.isInteger(mm) || !Number.isInteger(dd)) return null;
+  if (yyyy < 2000 || yyyy > 2100 || mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
+
+  const dt = new Date(Date.UTC(yyyy, mm - 1, dd));
+  if (
+    dt.getUTCFullYear() !== yyyy ||
+    dt.getUTCMonth() !== mm - 1 ||
+    dt.getUTCDate() !== dd
+  ) {
+    return null;
+  }
+
+  return `${String(yyyy).padStart(4, "0")}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
+}
+
+function formatAuthorDateDMY(value) {
+  const iso = normalizeAuthorDateInput(value) || String(value || "").trim();
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return String(value || "").trim();
+  return `${m[3]}.${m[2]}.${m[1]}`;
+}
+
+function calcAuthorDuration(startDate, endDate) {
+  const s = normalizeAuthorDateInput(startDate);
+  const e = normalizeAuthorDateInput(endDate);
+  if (!s || !e) return { days: null, nights: null, duration: "" };
+
+  const sd = new Date(`${s}T00:00:00Z`);
+  const ed = new Date(`${e}T00:00:00Z`);
+  const diff = Math.round((ed.getTime() - sd.getTime()) / 86400000);
+
+  if (!Number.isFinite(diff) || diff <= 0) {
+    return { days: null, nights: null, duration: "" };
+  }
+
+  const nights = diff;
+  const days = diff + 1;
+  return {
+    days,
+    nights,
+    duration: `${days} дней / ${nights} ночей`,
+  };
+}
+
+function parseAuthorStaysInput(value) {
+  return String(value || "")
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const parts = line.split("|").map((x) => x.trim());
+      return {
+        city: parts[0] || "",
+        hotel: parts[1] || "",
+        nights: Number(parts[2] || 0) || null,
+      };
+    })
+    .filter((x) => x.city && x.hotel);
+}
+
+function parseAuthorProgramDaysInput(value) {
+  return String(value || "")
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line, index) => {
+      const parts = line.split("|").map((x) => x.trim());
+      const items = String(parts[4] || "")
+        .split(";")
+        .map((x) => x.trim())
+        .filter(Boolean);
+
+      const day = Number(parts[0] || index + 1) || index + 1;
+      const dateLabel = parts[1] || "";
+      const route = parts[2] || "";
+      const title = parts[3] || route || "";
+      const text = items.join("\n");
+
+      return {
+        day,
+        number: day,
+        date: dateLabel,
+        dateLabel,
+        route,
+        title,
+        items,
+        text,
+      };
+    });
 }
 
 function buildDetailsForRefusedTour(draft, netPriceNum) {
@@ -5425,23 +5544,38 @@ async function promptWizardState(ctx, state) {
       return;
 
     case "svc_author_start":
-      await ctx.reply("📅 Укажите *дату начала* или напишите `по запросу`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
+      await ctx.reply(
+        "📅 Укажите *дату начала* авторского тура.\n✅ Формат: *29.05.2026*\n\nДлительность будет рассчитана автоматически.",
+        { parse_mode: "Markdown", ...wizNavKeyboard() }
+      );
       return;
 
     case "svc_author_end":
-      await ctx.reply("📅 Укажите *дату окончания* или напишите `по запросу`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
-      return;
-
-    case "svc_author_duration":
-      await ctx.reply("⏱ Укажите *длительность*. Пример: `3 дня / 2 ночи` или `8 часов`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
+      await ctx.reply(
+        "📅 Укажите *дату окончания* авторского тура.\n✅ Формат: *05.06.2026*\n\nДлительность будет рассчитана автоматически.",
+        { parse_mode: "Markdown", ...wizNavKeyboard() }
+      );
       return;
 
     case "svc_author_format":
-      await ctx.reply("👥 Укажите *формат тура*: `group`, `private` или `custom`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
+      await ctx.reply(
+        "👥 Укажите *формат тура*: `group`, `private` или `custom`.",
+        { parse_mode: "Markdown", ...wizNavKeyboard() }
+      );
       return;
 
-    case "svc_author_program":
-      await ctx.reply("🗺 Опишите *программу тура* по дням или блоками. Это главный продающий текст авторского тура.", { parse_mode: "Markdown", ...wizNavKeyboard() });
+    case "svc_author_stays":
+      await ctx.reply(
+        "🏨 Укажите *проживание* по строкам.\n\nФормат каждой строки:\n`Город | Отель | ночей`\n\nПример:\n`Uzungol | Kar Hotel | 2`\n`Trabzon | Mövenpick Hotel Trabzon | 2`\n`Istanbul | Great Fortune Design Hotel & Spa | 3`",
+        { parse_mode: "Markdown", ...wizNavKeyboard() }
+      );
+      return;
+
+    case "svc_author_program_days":
+      await ctx.reply(
+        "🗓 Укажите *программу тура по дням* по строкам.\n\nФормат каждой строки:\n`День | Дата | Маршрут | Заголовок | пункт; пункт; пункт`\n\nПример:\n`1 | 29.05.2026 | Ташкент → Трабзон | Перелёт и размещение | Встреча в аэропорту; Трансфер; Размещение в отеле`\n`2 | 30.05.2026 | Uzungol | Экскурсия по окрестностям | Водопады; Качели и зиплайн; Свободное время`",
+        { parse_mode: "Markdown", ...wizNavKeyboard() }
+      );
       return;
 
     case "svc_author_included":
@@ -7610,9 +7744,9 @@ bot.action("svc_wiz:skip", async (ctx) => {
       "svc_author_to",
       "svc_author_start",
       "svc_author_end",
-      "svc_author_duration",
       "svc_author_format",
-      "svc_author_program",
+      "svc_author_stays",
+      "svc_author_program_days",
       "svc_author_included",
       "svc_author_not_included",
       "svc_author_pax",
@@ -10264,7 +10398,7 @@ bot.on("text", async (ctx, next) => {
         }
 
         case "svc_author_from": {
-          const v = await requireTextField(ctx, text, "Город старта", { min: 2 });
+          const v = await requireTextField(ctx, text, "Город отправления / старт", { min: 2 });
           if (!v) return;
           draft.fromCity = v;
 
@@ -10275,7 +10409,7 @@ bot.on("text", async (ctx, next) => {
         }
 
         case "svc_author_to": {
-          const v = await requireTextField(ctx, text, "Город финиша", { min: 2 });
+          const v = await requireTextField(ctx, text, "Маршрут / город прибытия", { min: 2 });
           if (!v) return;
           draft.toCity = v;
 
@@ -10286,26 +10420,17 @@ bot.on("text", async (ctx, next) => {
         }
 
         case "svc_author_start": {
-          const raw = String(text || "").trim().toLowerCase();
-          if (["по запросу", "запрос", "flex", "flexible", "гибко", "нет"].includes(raw)) {
-            draft.flexibleDates = true;
-            draft.startDate = "";
-            pushWizardState(ctx, "svc_author_start");
-            ctx.session.state = "svc_author_duration";
-            await promptWizardState(ctx, "svc_author_duration");
-            return;
-          }
-
-          const norm = normalizeDateInput(text);
+          const norm = normalizeAuthorDateInput(text);
           if (!norm) {
-            await ctx.reply("😕 Не понял дату начала. Введите *YYYY-MM-DD* или напишите `по запросу`.", {
+            await ctx.reply("😕 Не понял дату начала.\nВведите в формате *29.05.2026*.", {
               parse_mode: "Markdown",
               ...wizNavKeyboard(),
             });
             return;
           }
+
           if (isPastYMD(norm)) {
-            await ctx.reply("⚠️ Эта дата уже в прошлом. Укажите будущую дату или `по запросу`.", {
+            await ctx.reply("⚠️ Эта дата уже в прошлом. Укажите будущую дату.", {
               parse_mode: "Markdown",
               ...wizNavKeyboard(),
             });
@@ -10314,6 +10439,7 @@ bot.on("text", async (ctx, next) => {
 
           draft.flexibleDates = false;
           draft.startDate = norm;
+
           pushWizardState(ctx, "svc_author_start");
           ctx.session.state = "svc_author_end";
           await promptWizardState(ctx, "svc_author_end");
@@ -10321,32 +10447,24 @@ bot.on("text", async (ctx, next) => {
         }
 
         case "svc_author_end": {
-          const raw = String(text || "").trim().toLowerCase();
-          if (["по запросу", "запрос", "flex", "flexible", "гибко", "нет"].includes(raw)) {
-            draft.flexibleDates = true;
-            draft.endDate = "";
-            pushWizardState(ctx, "svc_author_end");
-            ctx.session.state = "svc_author_duration";
-            await promptWizardState(ctx, "svc_author_duration");
+          const norm = normalizeAuthorDateInput(text);
+          if (!norm) {
+            await ctx.reply("😕 Не понял дату окончания.\nВведите в формате *05.06.2026*.", {
+              parse_mode: "Markdown",
+              ...wizNavKeyboard(),
+            });
             return;
           }
 
-          const norm = normalizeDateInput(text);
-          if (!norm) {
-            await ctx.reply("😕 Не понял дату окончания. Введите *YYYY-MM-DD* или напишите `по запросу`.", {
-              parse_mode: "Markdown",
-              ...wizNavKeyboard(),
-            });
-            return;
-          }
           if (isPastYMD(norm)) {
-            await ctx.reply("⚠️ Эта дата уже в прошлом. Укажите будущую дату или `по запросу`.", {
+            await ctx.reply("⚠️ Эта дата уже в прошлом. Укажите будущую дату окончания.", {
               parse_mode: "Markdown",
               ...wizNavKeyboard(),
             });
             return;
           }
-          if (draft.startDate && norm < draft.startDate) {
+
+          if (draft.startDate && isBeforeYMD(norm, draft.startDate)) {
             await ctx.reply("⚠️ Дата окончания раньше даты начала. Укажите корректную дату.", {
               parse_mode: "Markdown",
               ...wizNavKeyboard(),
@@ -10355,18 +10473,9 @@ bot.on("text", async (ctx, next) => {
           }
 
           draft.endDate = norm;
+          Object.assign(draft, calcAuthorDuration(draft.startDate, draft.endDate));
+
           pushWizardState(ctx, "svc_author_end");
-          ctx.session.state = "svc_author_duration";
-          await promptWizardState(ctx, "svc_author_duration");
-          return;
-        }
-
-        case "svc_author_duration": {
-          const v = await requireTextField(ctx, text, "Длительность", { min: 2 });
-          if (!v) return;
-          draft.duration = v;
-
-          pushWizardState(ctx, "svc_author_duration");
           ctx.session.state = "svc_author_format";
           await promptWizardState(ctx, "svc_author_format");
           return;
@@ -10380,22 +10489,52 @@ bot.on("text", async (ctx, next) => {
             custom: "custom",
             "групповой": "group",
             "индивидуальный": "private",
+            "приватный": "private",
             "под запрос": "custom",
+            "индивидуально": "private",
           };
           draft.tourFormat = map[raw] || raw || "group";
 
           pushWizardState(ctx, "svc_author_format");
-          ctx.session.state = "svc_author_program";
-          await promptWizardState(ctx, "svc_author_program");
+          ctx.session.state = "svc_author_stays";
+          await promptWizardState(ctx, "svc_author_stays");
           return;
         }
 
-        case "svc_author_program": {
-          const v = await requireTextField(ctx, text, "Программа тура", { min: 5 });
-          if (!v) return;
-          draft.program = v;
+        case "svc_author_stays": {
+          const stays = parseAuthorStaysInput(text);
+          if (!stays.length) {
+            await ctx.reply(
+              "😕 Не понял проживание.\n\nФормат каждой строки:\n`Город | Отель | ночей`\n\nПример:\n`Uzungol | Kar Hotel | 2`\n`Trabzon | Mövenpick Hotel Trabzon | 2`",
+              { parse_mode: "Markdown", ...wizNavKeyboard() }
+            );
+            return;
+          }
 
-          pushWizardState(ctx, "svc_author_program");
+          draft.stays = stays;
+          draft.staysText = text;
+
+          pushWizardState(ctx, "svc_author_stays");
+          ctx.session.state = "svc_author_program_days";
+          await promptWizardState(ctx, "svc_author_program_days");
+          return;
+        }
+
+        case "svc_author_program_days": {
+          const programDays = parseAuthorProgramDaysInput(text);
+          if (!programDays.length) {
+            await ctx.reply(
+              "😕 Не понял программу.\n\nФормат каждой строки:\n`День | Дата | Маршрут | Заголовок | пункт; пункт; пункт`\n\nПример:\n`1 | 29.05.2026 | Ташкент → Трабзон | Перелёт и размещение | Встреча в аэропорту; Трансфер; Размещение в отеле`",
+              { parse_mode: "Markdown", ...wizNavKeyboard() }
+            );
+            return;
+          }
+
+          draft.programDays = programDays;
+          draft.programDaysText = text;
+          draft.program = text;
+
+          pushWizardState(ctx, "svc_author_program_days");
           ctx.session.state = "svc_author_included";
           await promptWizardState(ctx, "svc_author_included");
           return;
@@ -10413,7 +10552,8 @@ bot.on("text", async (ctx, next) => {
         }
 
         case "svc_author_not_included": {
-          draft.notIncluded = normReq(text) || "";
+          const low = String(text || "").trim().toLowerCase();
+          draft.notIncluded = ["пропустить", "skip", "-", "нет"].includes(low) ? "" : normReq(text);
 
           pushWizardState(ctx, "svc_author_not_included");
           ctx.session.state = "svc_author_pax";
@@ -10431,6 +10571,7 @@ bot.on("text", async (ctx, next) => {
             });
             return;
           }
+
           const minPax = Number(m[1]);
           const maxPax = Number(m[2]);
           if (!Number.isFinite(minPax) || !Number.isFinite(maxPax) || minPax <= 0 || maxPax < minPax) {
@@ -10440,6 +10581,7 @@ bot.on("text", async (ctx, next) => {
             });
             return;
           }
+
           draft.minPax = minPax;
           draft.maxPax = maxPax;
 
@@ -10493,6 +10635,7 @@ bot.on("text", async (ctx, next) => {
             return;
           }
           draft.guideIncluded = yn;
+          draft.guide = yn ? "included" : "not_included";
 
           pushWizardState(ctx, "svc_author_guide");
           ctx.session.state = "svc_author_cancel";
@@ -10501,7 +10644,9 @@ bot.on("text", async (ctx, next) => {
         }
 
         case "svc_author_cancel": {
-          draft.cancellationPolicy = normReq(text) || "";
+          const low = String(text || "").trim().toLowerCase();
+          draft.cancellationPolicy = ["пропустить", "skip", "-", "нет"].includes(low) ? "" : normReq(text);
+          draft.cancelPolicy = draft.cancellationPolicy;
 
           pushWizardState(ctx, "svc_author_cancel");
           ctx.session.state = "svc_create_price";
