@@ -47,14 +47,16 @@ const DEFAULT_DETAILS = {
   duration: "",
   tourFormat: "group",
   program: "",
-  included: "",
-  notIncluded: "",
+  programDays: [],
+  programDaysText: "",
+  included: [],
+  includedText: "",
+  notIncluded: [],
+  notIncludedText: "",
   minPax: "",
   maxPax: "",
   guideLanguage: "",
   meetingPoint: "",
-  guideIncluded: true,
-  transportIncluded: false,
   cancellationPolicy: "",
 };
 
@@ -441,25 +443,136 @@ function normalizeAuthorTourDetailsForSave(details = {}) {
   const included = authorLines(d.included || d.includes || d.includedText);
   const notIncluded = authorLines(d.notIncluded || d.excluded || d.notIncludedText || d.excludeText);
 
-  if (included.length) {
-    d.included = included;
-    d.includedText = included.join("\n");
-  }
+  if (d.guideIncluded && !included.some((x) => isSameText(x, "Услуги гида"))) included.push("Услуги гида");
+  if (d.transportIncluded && !included.some((x) => isSameText(x, "Трансфер"))) included.push("Трансфер");
 
-  if (notIncluded.length) {
-    d.notIncluded = notIncluded;
-    d.notIncludedText = notIncluded.join("\n");
-  }
+  delete d.guideIncluded;
+  delete d.transportIncluded;
+  delete d.transport;
 
-  const programText = authorProgramText(d);
-  if (programText) {
-    d.program = programText;
+  d.included = included;
+  d.includedText = included.join("\n");
+  d.notIncluded = notIncluded;
+  d.notIncludedText = notIncluded.join("\n");
+
+  const programDays = normalizeAuthorProgramDays(d.programDays);
+  if (programDays.length) {
+    const programText = authorProgramDaysToText(programDays);
+    d.programDays = programDays;
     d.programDaysText = programText;
-    d.programDays = parseAuthorProgramDays(programText);
+    d.program = programText;
+  } else {
+    const programText = authorProgramText(d);
+    if (programText) {
+      const parsedDays = normalizeAuthorProgramDays(parseAuthorProgramDays(programText));
+      const normalizedText = authorProgramDaysToText(parsedDays) || programText;
+      d.programDays = parsedDays;
+      d.programDaysText = normalizedText;
+      d.program = normalizedText;
+    }
   }
 
   return d;
 }
+
+function parseYmdDate(value) {
+  const m = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function pluralRu(n, one, few, many) {
+  const abs = Math.abs(Number(n) || 0);
+  const mod10 = abs % 10;
+  const mod100 = abs % 100;
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+  return many;
+}
+
+function calcAuthorDurationFromDates(startDate, endDate) {
+  const start = parseYmdDate(startDate);
+  const end = parseYmdDate(endDate);
+  if (!start || !end) return "";
+  const diffDays = Math.round((end.getTime() - start.getTime()) / 86400000);
+  if (diffDays < 0) return "";
+  const days = diffDays + 1;
+  const nights = Math.max(diffDays, 0);
+  return `${days} ${pluralRu(days, "день", "дня", "дней")} / ${nights} ${pluralRu(nights, "ночь", "ночи", "ночей")}`;
+}
+
+function asAuthorProgramItems(value) {
+  if (Array.isArray(value)) return value.flatMap((x) => asAuthorProgramItems(x));
+  if (!hasFilled(value)) return [];
+  return String(value)
+    .replace(/\r\n/g, "\n")
+    .split(/\n|;|•/g)
+    .map((x) => x.replace(/^[-–—•\s]+/, "").trim())
+    .filter(Boolean);
+}
+
+function normalizeAuthorProgramDays(value) {
+  if (!Array.isArray(value) || !value.length) return [];
+  return value
+    .map((day, idx) => {
+      if (typeof day === "string") {
+        return {
+          day: idx + 1,
+          location: "",
+          items: asAuthorProgramItems(day),
+        };
+      }
+
+      const location = String(day?.location || day?.city || day?.place || day?.title || day?.name || "").trim();
+      const items = [
+        ...asAuthorProgramItems(day?.items || day?.points || day?.activities),
+        ...asAuthorProgramItems(day?.text || day?.description || day?.program),
+      ];
+
+      return {
+        day: Number(day?.day) || idx + 1,
+        location,
+        items: items.length ? items : [""],
+      };
+    })
+    .filter((day) => hasFilled(day.location) || day.items.some(hasFilled))
+    .map((day, idx) => ({ ...day, day: idx + 1, items: day.items.filter((item, itemIdx) => hasFilled(item) || itemIdx === 0) }));
+}
+
+function authorProgramDaysToText(days = []) {
+  return normalizeAuthorProgramDays(days)
+    .map((day, idx) => {
+      const head = `День ${idx + 1}${day.location ? `: ${day.location}` : ""}`;
+      const body = day.items.filter(hasFilled).map((item) => `• ${item}`).join("\n");
+      return [head, body].filter(Boolean).join("\n");
+    })
+    .join("\n\n")
+    .trim();
+}
+
+function isSameText(a, b) {
+  return String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+}
+
+
+const AUTHOR_INCLUDED_OPTIONS = [
+  "Проживание в отеле",
+  "Питание (завтраки)",
+  "Трансфер",
+  "Экскурсии по программе",
+  "Услуги гида",
+  "Входные билеты",
+];
+
+const AUTHOR_NOT_INCLUDED_OPTIONS = [
+  "Авиабилеты",
+  "Страховка",
+  "Личные расходы",
+  "Дополнительные экскурсии",
+  "Чаевые",
+];
+
 
 function buildReadinessItems({ category, title, images, details, isExtended, t }) {
   if (!isExtended) {
@@ -939,6 +1052,140 @@ function SupportAfterCreateModal({ open, service, onClose, onPay, busy, error })
   );
 }
 
+
+function ChecklistBox({ title, options, values, otherValue, onToggle, onOtherChange, otherPlaceholder }) {
+  const selected = authorLines(values);
+  const known = options || [];
+
+  return (
+    <div>
+      <div className="mb-1.5 block text-xs font-black uppercase tracking-wide text-slate-500">{title}</div>
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+        {known.map((option) => {
+          const checked = selected.some((x) => isSameText(x, option));
+          return (
+            <label key={option} className="flex min-h-[36px] items-center gap-2 border-b border-slate-100 px-3 py-2 text-sm font-bold text-slate-700 last:border-b-0">
+              <input type="checkbox" checked={checked} onChange={(e) => onToggle(option, e.target.checked)} />
+              <span>{option}</span>
+            </label>
+          );
+        })}
+        <label className="flex min-h-[40px] items-center gap-2 px-3 py-2 text-sm font-bold text-slate-700">
+          <input type="checkbox" checked={hasFilled(otherValue)} onChange={(e) => !e.target.checked && onOtherChange("")} />
+          <TextInput
+            value={otherValue || ""}
+            onChange={(e) => onOtherChange(e.target.value)}
+            placeholder={otherPlaceholder || "Другое (впишите)"}
+            className="h-9 rounded-xl"
+          />
+        </label>
+      </div>
+    </div>
+  );
+}
+
+function AuthorProgramDaysEditor({ value, activeIndex, setActiveIndex, onChange, t }) {
+  const days = normalizeAuthorProgramDays(value).length ? normalizeAuthorProgramDays(value) : [{ day: 1, location: "", items: [""] }];
+  const safeIndex = Math.min(Math.max(activeIndex || 0, 0), days.length - 1);
+  const activeDay = days[safeIndex] || days[0];
+
+  const emit = (nextDays, nextIndex = safeIndex) => {
+    const normalized = normalizeAuthorProgramDays(nextDays).length ? normalizeAuthorProgramDays(nextDays) : [{ day: 1, location: "", items: [""] }];
+    onChange(normalized);
+    setActiveIndex(Math.min(Math.max(nextIndex, 0), normalized.length - 1));
+  };
+
+  const patchDay = (patch) => {
+    emit(days.map((day, idx) => (idx === safeIndex ? { ...day, ...patch } : day)));
+  };
+
+  const updateItem = (itemIndex, text) => {
+    const items = [...(activeDay.items || [""])];
+    items[itemIndex] = text;
+    patchDay({ items });
+  };
+
+  const addDay = () => {
+    emit([...days, { day: days.length + 1, location: "", items: [""] }], days.length);
+  };
+
+  const removeDay = () => {
+    if (days.length <= 1) return;
+    emit(days.filter((_, idx) => idx !== safeIndex), Math.max(0, safeIndex - 1));
+  };
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-3">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        {days.map((day, idx) => (
+          <button
+            key={idx}
+            type="button"
+            onClick={() => setActiveIndex(idx)}
+            className={cx(
+              "rounded-xl px-3 py-2 text-xs font-black transition",
+              idx === safeIndex ? "bg-blue-50 text-blue-700 ring-1 ring-blue-200" : "bg-slate-50 text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100"
+            )}
+          >
+            {t("service_form.author_day", { defaultValue: "День" })} {idx + 1}
+          </button>
+        ))}
+        <button type="button" onClick={addDay} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-blue-700 ring-1 ring-blue-200 transition hover:bg-blue-50">
+          + {t("service_form.add_day", { defaultValue: "Добавить день" })}
+        </button>
+        {days.length > 1 && (
+          <button type="button" onClick={removeDay} className="ml-auto rounded-xl bg-red-50 px-3 py-2 text-xs font-black text-red-600 ring-1 ring-red-100 transition hover:bg-red-100">
+            {t("service_form.delete_day", { defaultValue: "Удалить день" })}
+          </button>
+        )}
+      </div>
+
+      <div className="grid gap-3">
+        <Field label={t("service_form.day_location", { defaultValue: "Локация дня" })}>
+          <TextInput
+            value={activeDay.location || ""}
+            onChange={(e) => patchDay({ location: e.target.value })}
+            placeholder={t("service_form.ph_day_location", { defaultValue: "Например: Ташкент" })}
+          />
+        </Field>
+
+        <div>
+          <div className="mb-1.5 block text-xs font-black uppercase tracking-wide text-slate-500">
+            {t("service_form.day_program", { defaultValue: "Программа дня" })}
+          </div>
+          <div className="space-y-2">
+            {(activeDay.items && activeDay.items.length ? activeDay.items : [""]).map((item, itemIdx) => (
+              <div key={itemIdx} className="flex items-center gap-2">
+                <span className="w-5 shrink-0 text-center text-xs font-black text-slate-400">{itemIdx + 1}</span>
+                <TextInput
+                  value={item || ""}
+                  onChange={(e) => updateItem(itemIdx, e.target.value)}
+                  placeholder={t("service_form.ph_day_item", { defaultValue: "Например: Встреча в отеле" })}
+                />
+                <button
+                  type="button"
+                  onClick={() => patchDay({ items: (activeDay.items || []).filter((_, idx) => idx !== itemIdx) })}
+                  disabled={(activeDay.items || []).length <= 1}
+                  className="h-10 w-10 rounded-xl bg-slate-50 text-sm font-black text-slate-400 ring-1 ring-slate-200 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => patchDay({ items: [...(activeDay.items || []), ""] })}
+            className="mt-3 rounded-xl bg-blue-50 px-3 py-2 text-xs font-black text-blue-700 ring-1 ring-blue-100 transition hover:bg-blue-100"
+          >
+            + {t("service_form.add_program_item", { defaultValue: "Добавить пункт программы" })}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardServices() {
   const { t } = useTranslation();
   const API_BASE = import.meta.env.VITE_API_BASE_URL;
@@ -972,6 +1219,7 @@ export default function DashboardServices() {
   const [price, setPrice] = useState("");
   const [images, setImages] = useState([]);
   const [details, setDetails] = useState(DEFAULT_DETAILS);
+  const [authorProgramDayIndex, setAuthorProgramDayIndex] = useState(0);
 
   const isAgent = profile?.type === "agent";
   const isExtended = isAgent && EXTENDED_AGENT_CATEGORIES.includes(category);
@@ -1035,11 +1283,46 @@ export default function DashboardServices() {
     setPrice("");
     setImages([]);
     setDetails({ ...DEFAULT_DETAILS });
+    setAuthorProgramDayIndex(0);
     setStep(1);
     setTab("create");
   };
 
   const patchDetails = (patch) => setDetails((prev) => ({ ...prev, ...patch }));
+
+  const patchAuthorProgramDays = (nextDays) => {
+    const normalized = normalizeAuthorProgramDays(nextDays);
+    const programText = authorProgramDaysToText(normalized);
+    patchDetails({ programDays: normalized, programDaysText: programText, program: programText });
+  };
+
+  const patchAuthorChecklist = (field, option, checked) => {
+    const current = authorLines(details[field]);
+    const without = current.filter((x) => !isSameText(x, option));
+    const next = checked ? [...without, option] : without;
+    patchDetails({ [field]: next, [`${field}Text`]: next.join("\n") });
+  };
+
+  const patchAuthorChecklistOther = (field, options, text) => {
+    const current = authorLines(details[field]);
+    const base = current.filter((x) => !options.some((option) => isSameText(option, x)));
+    const checked = current.filter((x) => options.some((option) => isSameText(option, x)));
+    const otherLines = authorLines(text).filter((x) => !options.some((option) => isSameText(option, x)));
+    const next = [...checked, ...otherLines];
+    patchDetails({ [field]: next, [`${field}Text`]: next.join("\n") });
+  };
+
+  const getAuthorOtherChecklistText = (field, options) => {
+    return authorLines(details[field])
+      .filter((x) => !options.some((option) => isSameText(option, x)))
+      .join("\n");
+  };
+
+  const patchAuthorDate = (field, value) => {
+    const nextStart = field === "startDate" ? value : details.startDate;
+    const nextEnd = field === "endDate" ? value : details.endDate;
+    patchDetails({ [field]: value, duration: calcAuthorDurationFromDates(nextStart, nextEnd) });
+  };
 
   const loadServiceToEdit = (service) => {
     const d = service?.details && typeof service.details === "object" ? service.details : {};
@@ -1050,6 +1333,7 @@ export default function DashboardServices() {
     setPrice(service.price ?? "");
     setImages(Array.isArray(service.images) ? service.images : []);
     setDetails({ ...DEFAULT_DETAILS, ...d, proofImages: Array.isArray(d.proofImages || d.proof_images) ? (d.proofImages || d.proof_images) : [] });
+    setAuthorProgramDayIndex(0);
     setStep(1);
     setTab("create");
   };
@@ -1931,14 +2215,14 @@ export default function DashboardServices() {
                                   <TextInput value={details.directionTo} onChange={(e) => patchDetails({ directionTo: e.target.value })} placeholder={t("service_form.ph_author_to", { defaultValue: "Например: Бухара" })} />
                                 </Field>
                                 <Field label={t("start_date", { defaultValue: "Дата начала" })}>
-                                  <TextInput type="date" value={details.startDate} disabled={!!details.flexibleDates} onChange={(e) => patchDetails({ startDate: e.target.value })} />
+                                  <TextInput type="date" value={details.startDate} disabled={!!details.flexibleDates} onChange={(e) => patchAuthorDate("startDate", e.target.value)} />
                                 </Field>
                                 <Field label={t("end_date", { defaultValue: "Дата окончания" })}>
-                                  <TextInput type="date" value={details.endDate} disabled={!!details.flexibleDates} onChange={(e) => patchDetails({ endDate: e.target.value })} />
+                                  <TextInput type="date" value={details.endDate} disabled={!!details.flexibleDates} onChange={(e) => patchAuthorDate("endDate", e.target.value)} />
                                 </Field>
                                 <div className="flex items-end">
                                   <label className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-bold text-slate-700">
-                                    <input type="checkbox" checked={!!details.flexibleDates} onChange={(e) => patchDetails({ flexibleDates: e.target.checked, startDate: e.target.checked ? "" : details.startDate, endDate: e.target.checked ? "" : details.endDate })} />
+                                    <input type="checkbox" checked={!!details.flexibleDates} onChange={(e) => patchDetails({ flexibleDates: e.target.checked, startDate: e.target.checked ? "" : details.startDate, endDate: e.target.checked ? "" : details.endDate, duration: e.target.checked ? "" : calcAuthorDurationFromDates(details.startDate, details.endDate) })} />
                                     {t("service_form.flexible_dates", { defaultValue: "Даты по запросу" })}
                                   </label>
                                 </div>
@@ -1998,8 +2282,8 @@ export default function DashboardServices() {
 
                             {category === "author_tour" && (
                               <>
-                                <Field label={t("service_form.author_duration", { defaultValue: "Длительность" })} hint={t("service_form.hint_author_duration", { defaultValue: "Например: 3 дня / 2 ночи или 8 часов." })}>
-                                  <TextInput value={details.duration} onChange={(e) => patchDetails({ duration: e.target.value })} placeholder={t("service_form.ph_author_duration", { defaultValue: "3 дня / 2 ночи" })} />
+                                <Field label={t("service_form.author_duration", { defaultValue: "Длительность" })} hint={t("service_form.hint_author_duration_auto", { defaultValue: "Считается автоматически по датам. Если даты по запросу — можно оставить пустым." })}>
+                                  <TextInput value={details.duration} readOnly placeholder={t("service_form.ph_author_duration_auto", { defaultValue: "Автоматически после выбора дат" })} className="bg-slate-50 text-slate-500" />
                                 </Field>
                                 <Field label={t("service_form.author_format", { defaultValue: "Формат тура" })}>
                                   <SelectInput value={details.tourFormat || "group"} onChange={(e) => patchDetails({ tourFormat: e.target.value })}>
@@ -2021,27 +2305,36 @@ export default function DashboardServices() {
                                   <TextInput value={details.meetingPoint} onChange={(e) => patchDetails({ meetingPoint: e.target.value })} placeholder={t("service_form.ph_meeting_point", { defaultValue: "Отель / аэропорт / центр города" })} />
                                 </Field>
                                 <div className="sm:col-span-2">
-                                  <Field label={t("service_form.author_program", { defaultValue: "Программа тура" })}>
-                                    <TextArea value={authorProgramText(details)} onChange={(e) => patchDetails({ program: e.target.value, programDaysText: e.target.value, programDays: parseAuthorProgramDays(e.target.value) })} placeholder={t("service_form.ph_author_program", { defaultValue: "День 1: встреча, обзорная экскурсия..." })} className="min-h-[160px]" />
-                                  </Field>
+                                  <div className="mb-1.5 block text-xs font-black uppercase tracking-wide text-slate-500">
+                                    {t("service_form.author_program", { defaultValue: "Программа тура" })}
+                                  </div>
+                                  <AuthorProgramDaysEditor
+                                    value={details.programDays?.length ? details.programDays : parseAuthorProgramDays(authorProgramText(details))}
+                                    activeIndex={authorProgramDayIndex}
+                                    setActiveIndex={setAuthorProgramDayIndex}
+                                    onChange={patchAuthorProgramDays}
+                                    t={t}
+                                  />
                                 </div>
                                 <div className="sm:col-span-2 grid gap-4 sm:grid-cols-2">
-                                  <Field label={t("service_form.included", { defaultValue: "Что включено" })}>
-                                    <TextArea value={authorListText(details.included)} onChange={(e) => patchDetails({ included: authorLines(e.target.value), includedText: e.target.value })} className="min-h-[120px]" />
-                                  </Field>
-                                  <Field label={t("service_form.not_included", { defaultValue: "Что не включено" })}>
-                                    <TextArea value={authorListText(details.notIncluded)} onChange={(e) => patchDetails({ notIncluded: authorLines(e.target.value), notIncludedText: e.target.value })} className="min-h-[120px]" />
-                                  </Field>
-                                </div>
-                                <div className="sm:col-span-2 flex flex-wrap gap-2">
-                                  <label className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-bold text-slate-700">
-                                    <input type="checkbox" checked={!!details.guideIncluded} onChange={(e) => patchDetails({ guideIncluded: e.target.checked })} />
-                                    {t("service_form.guide_included", { defaultValue: "Гид включён" })}
-                                  </label>
-                                  <label className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-bold text-slate-700">
-                                    <input type="checkbox" checked={!!details.transportIncluded} onChange={(e) => patchDetails({ transportIncluded: e.target.checked, transport: e.target.checked ? "included" : "not_included" })} />
-                                    {t("service_form.transport_included", { defaultValue: "Транспорт включён" })}
-                                  </label>
+                                  <ChecklistBox
+                                    title={t("service_form.included", { defaultValue: "Что включено" })}
+                                    options={AUTHOR_INCLUDED_OPTIONS}
+                                    values={details.included}
+                                    otherValue={getAuthorOtherChecklistText("included", AUTHOR_INCLUDED_OPTIONS)}
+                                    onToggle={(option, checked) => patchAuthorChecklist("included", option, checked)}
+                                    onOtherChange={(text) => patchAuthorChecklistOther("included", AUTHOR_INCLUDED_OPTIONS, text)}
+                                    otherPlaceholder={t("service_form.other_write", { defaultValue: "Другое (впишите)" })}
+                                  />
+                                  <ChecklistBox
+                                    title={t("service_form.not_included", { defaultValue: "Что не включено" })}
+                                    options={AUTHOR_NOT_INCLUDED_OPTIONS}
+                                    values={details.notIncluded}
+                                    otherValue={getAuthorOtherChecklistText("notIncluded", AUTHOR_NOT_INCLUDED_OPTIONS)}
+                                    onToggle={(option, checked) => patchAuthorChecklist("notIncluded", option, checked)}
+                                    onOtherChange={(text) => patchAuthorChecklistOther("notIncluded", AUTHOR_NOT_INCLUDED_OPTIONS, text)}
+                                    otherPlaceholder={t("service_form.other_write", { defaultValue: "Другое (впишите)" })}
+                                  />
                                 </div>
                                 <div className="sm:col-span-2">
                                   <Field label={t("service_form.cancellation_policy", { defaultValue: "Условия отмены / важные условия" })}>
