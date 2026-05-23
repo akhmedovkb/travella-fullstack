@@ -5948,10 +5948,6 @@ async function promptWizardState(ctx, state) {
       await ctx.reply("📌 Укажите *место встречи*. Если по договорённости — так и напишите.", { parse_mode: "Markdown", ...wizNavKeyboard() });
       return;
 
-    case "svc_author_transport":
-      await ctx.reply("🚗 Транспорт включён? Ответьте `да` или `нет`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
-      return;
-
     case "svc_author_guide":
       await ctx.reply("🧑‍🏫 Гид включён? Ответьте `да` или `нет`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
       return;
@@ -11555,21 +11551,6 @@ bot.on("text", async (ctx, next) => {
           draft.meetingPoint = v;
 
           pushWizardState(ctx, "svc_author_meeting");
-          ctx.session.state = "svc_author_transport";
-          await promptWizardState(ctx, "svc_author_transport");
-          return;
-        }
-
-        case "svc_author_transport": {
-          const yn = parseYesNo(text);
-          if (yn === null) {
-            await ctx.reply("⚠️ Ответьте `да` или `нет`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
-            return;
-          }
-          draft.transportIncluded = yn;
-          draft.transport = yn ? "included" : "not_included";
-
-          pushWizardState(ctx, "svc_author_transport");
           ctx.session.state = "svc_author_guide";
           await promptWizardState(ctx, "svc_author_guide");
           return;
