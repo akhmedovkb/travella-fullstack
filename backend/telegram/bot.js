@@ -10459,7 +10459,7 @@ bot.on("text", async (ctx, next) => {
     }
 
     // 2) мастер создания отказных (tour + hotel)
-    if (state && (state.startsWith("svc_create_") || state.startsWith("svc_hotel_") || state.startsWith("svc_author_"))) {
+    if (state && (state.startsWith("svc_create_") || state.startsWith("svc_hotel_") || state.startsWith("svc_author_")) || state.startsWith("author_stay_")) {
       const text = ctx.message.text.trim();
 
       if (text.toLowerCase() === "отмена") {
