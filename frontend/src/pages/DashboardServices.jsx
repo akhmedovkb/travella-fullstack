@@ -437,18 +437,43 @@ function parseAuthorProgramDays(value) {
   return days.length ? days : [{ day: 1, text }];
 }
 
+function uniqueAuthorLines(value) {
+  const seen = new Set();
+  return authorLines(value).filter((item) => {
+    const key = String(item || "").trim().toLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function buildAuthorNotIncludedFromIncluded(includedValue) {
+  const included = uniqueAuthorLines(includedValue);
+  return AUTHOR_TOUR_INCLUDED_OPTIONS.filter((option) => !included.some((x) => isSameText(x, option)));
+}
+
+function getAuthorProgramValidationIssues(details = {}) {
+  const included = uniqueAuthorLines(details.included);
+  const programText = authorProgramText(details).toLowerCase();
+  return AUTHOR_TOUR_PROGRAM_RULES
+    .filter((rule) => included.some((x) => isSameText(x, rule.option)))
+    .filter((rule) => !rule.keywords.some((keyword) => programText.includes(String(keyword).toLowerCase())))
+    .map((rule) => rule.message);
+}
+
 function normalizeAuthorTourDetailsForSave(details = {}) {
   const d = { ...details };
 
-  const included = authorLines(d.included || d.includes || d.includedText);
-  const notIncluded = authorLines(d.notIncluded || d.excluded || d.notIncludedText || d.excludeText);
+  const included = uniqueAuthorLines(d.included || d.includes || d.includedText);
 
   if (d.guideIncluded && !included.some((x) => isSameText(x, "Услуги гида"))) included.push("Услуги гида");
-  if (d.transportIncluded && !included.some((x) => isSameText(x, "Трансфер"))) included.push("Трансфер");
+  if (d.transportIncluded && !included.some((x) => isSameText(x, "Транспорт по маршруту тура"))) included.push("Транспорт по маршруту тура");
 
   delete d.guideIncluded;
   delete d.transportIncluded;
   delete d.transport;
+
+  const notIncluded = buildAuthorNotIncludedFromIncluded(included);
 
   d.included = included;
   d.includedText = included.join("\n");
@@ -600,21 +625,193 @@ function isSameText(a, b) {
 }
 
 
-const AUTHOR_INCLUDED_OPTIONS = [
-  "Проживание в отеле",
-  "Питание (завтраки)",
-  "Трансфер",
-  "Экскурсии по программе",
-  "Услуги гида",
-  "Входные билеты",
+const AUTHOR_TOUR_INCLUDED_GROUPS = [
+  {
+    title: "🏨 Проживание",
+    items: [
+      "Отель",
+      "Апартаменты",
+      "Гостевой дом",
+      "Кемпинг",
+      "Глэмпинг",
+      "Вилла",
+      "Хостел",
+      "Палаточный лагерь",
+      "Ночь в юрте",
+      "Горный домик / lodge",
+    ],
+  },
+  {
+    title: "🍽 Питание",
+    items: [
+      "Завтраки (BB)",
+      "Полупансион (HB)",
+      "Полный пансион (FB)",
+      "Всё включено (AI)",
+      "Обеды",
+      "Ужины",
+      "Национальный ужин",
+      "Пикник",
+      "Welcome dinner",
+      "Дегустация",
+      "Кофе-брейк",
+      "Вода / снеки",
+    ],
+  },
+  {
+    title: "🚐 Транспорт",
+    items: [
+      "Трансфер аэропорт → отель",
+      "Трансфер отель → аэропорт",
+      "Трансфер ЖД вокзал → отель",
+      "Трансфер отель → ЖД вокзал",
+      "Транспорт по маршруту тура",
+      "Транспорт по городу",
+      "Междугородние переезды",
+      "Джип / внедорожник",
+      "Минивэн",
+      "Автобус",
+      "VIP транспорт",
+      "Внутренний перелёт",
+      "ЖД переезд",
+      "Канатная дорога",
+      "Катер / лодка",
+      "Паром",
+      "Лошадь",
+      "Верблюд",
+      "Квадроцикл",
+      "Багги",
+    ],
+  },
+  {
+    title: "🎫 Экскурсионная программа",
+    items: [
+      "Экскурсии по программе",
+      "Входные билеты",
+      "Музеи",
+      "Исторические объекты",
+      "Археологические объекты",
+      "Шоу / мероприятия",
+      "Мастер-классы",
+      "Фольклорная программа",
+      "Концерт",
+      "Театр",
+      "Посещение рынка / базара",
+      "Дегустационный тур",
+    ],
+  },
+  {
+    title: "🧑‍🏫 Сопровождение",
+    items: [
+      "Услуги гида",
+      "Локальный гид",
+      "Турлидер",
+      "Сопровождающий",
+      "Переводчик",
+      "Координатор группы",
+      "Фотограф",
+      "Видеограф",
+    ],
+  },
+  {
+    title: "🏔 Активности",
+    items: [
+      "Треккинг",
+      "Хайкинг",
+      "Подъём в горы",
+      "Лодочный тур",
+      "Рыбалка",
+      "Сафари",
+      "Снорклинг",
+      "Дайвинг",
+      "Рафтинг",
+      "Катание на лыжах",
+      "Сноуборд",
+      "Конный тур",
+      "Йога",
+      "СПА",
+    ],
+  },
+  {
+    title: "🛡 Дополнительно",
+    items: [
+      "Страховка",
+      "Виза",
+      "SIM-карта",
+      "Интернет",
+      "Welcome pack",
+      "Сертификат участника",
+      "Карта маршрута",
+      "Багаж",
+      "Носильщик",
+      "Медицинская поддержка",
+      "Аптечка",
+      "GPS трек",
+    ],
+  },
+  {
+    title: "👨‍👩‍👧 Для семей",
+    items: [
+      "Детская программа",
+      "Детская кровать",
+      "Няня",
+      "Детское меню",
+      "Анимация",
+      "Детский клуб",
+    ],
+  },
+  {
+    title: "🕌 Спец. условия",
+    items: [
+      "Halal питание",
+      "Vegetarian",
+      "Vegan",
+      "Prayer room",
+      "Женский гид",
+      "Мужской гид",
+      "Безбарьерная среда",
+      "Pet friendly",
+    ],
+  },
 ];
 
-const AUTHOR_NOT_INCLUDED_OPTIONS = [
-  "Авиабилеты",
-  "Страховка",
-  "Личные расходы",
-  "Дополнительные экскурсии",
-  "Чаевые",
+const AUTHOR_TOUR_INCLUDED_OPTIONS = AUTHOR_TOUR_INCLUDED_GROUPS.flatMap((group) => group.items);
+const AUTHOR_INCLUDED_OPTIONS = AUTHOR_TOUR_INCLUDED_OPTIONS;
+
+const AUTHOR_TOUR_TEMPLATES = [
+  { title: "Городской тур", items: ["Услуги гида", "Транспорт по городу", "Экскурсии по программе", "Входные билеты", "Музеи"] },
+  { title: "Горный тур", items: ["Трансфер аэропорт → отель", "Транспорт по маршруту тура", "Треккинг", "Пикник", "Услуги гида"] },
+  { title: "Паломнический", items: ["Отель", "Halal питание", "Услуги гида", "Транспорт по маршруту тура", "Prayer room"] },
+  { title: "Luxury", items: ["VIP транспорт", "Welcome dinner", "Фотограф", "Видеограф", "Страховка"] },
+  { title: "Семейный", items: ["Отель", "Завтраки (BB)", "Детская программа", "Детское меню", "Транспорт по маршруту тура", "Услуги гида"] },
+];
+
+const AUTHOR_TOUR_PROGRAM_RULES = [
+  {
+    option: "Катер / лодка",
+    keywords: ["катер", "лодк", "паром", "море", "озер", "река", "вод"],
+    message: "Вы выбрали «Катер / лодка» — добавьте в программу день или пункт с водной активностью.",
+  },
+  {
+    option: "Лошадь",
+    keywords: ["лошад", "конн", "конный", "верхов"],
+    message: "Вы выбрали «Лошадь» — добавьте в программу конную активность.",
+  },
+  {
+    option: "Квадроцикл",
+    keywords: ["квадро", "atv"],
+    message: "Вы выбрали «Квадроцикл» — добавьте этот пункт в программу тура.",
+  },
+  {
+    option: "Мастер-классы",
+    keywords: ["мастер", "класс", "workshop"],
+    message: "Вы выбрали «Мастер-классы» — укажите мастер-класс в программе дня.",
+  },
+  {
+    option: "Дегустация",
+    keywords: ["дегустац", "tasting"],
+    message: "Вы выбрали «Дегустация» — добавьте дегустацию в программу.",
+  },
 ];
 
 
@@ -644,7 +841,7 @@ function buildReadinessItems({ category, title, images, details, isExtended, t }
   })();
 
   const specificOk = (() => {
-    if (category === "author_tour") return hasFilled(authorProgramText(details)) && authorLines(details.included).length > 0 && hasFilled(details.duration);
+    if (category === "author_tour") return hasFilled(authorProgramText(details)) && authorLines(details.included).length > 0 && hasFilled(details.duration) && getAuthorProgramValidationIssues(details).length === 0;
     if (category === "refused_tour") return hasFilled(details.hotel) && validateFlightDetailsFormat(details.flightDetails);
     if (category === "refused_flight") return hasFilled(details.airline) && validateFlightDetailsFormat(details.flightDetails);
     if (category === "refused_hotel") return hasFilled(details.accommodationCategory) || hasFilled(details.accommodation);
@@ -694,6 +891,7 @@ function buildValidationIssues({ category, title, description, price, images, de
     add(hasFilled(details.duration), t("validation.duration_required", { defaultValue: "Укажите длительность тура" }));
     add(hasFilled(authorProgramText(details)), t("validation.program_required", { defaultValue: "Добавьте программу авторского тура" }));
     add(authorLines(details.included).length > 0, t("validation.included_required", { defaultValue: "Укажите, что включено в стоимость" }));
+    getAuthorProgramValidationIssues(details).forEach((issue) => issues.push(issue));
   }
 
   if (category === "refused_tour") {
@@ -1097,36 +1295,121 @@ function SupportAfterCreateModal({ open, service, onClose, onPay, busy, error })
 }
 
 
-function ChecklistBox({ title, options, values, otherValue, onToggle, onOtherChange, otherPlaceholder }) {
-  const selected = authorLines(values);
-  const known = options || [];
+function AuthorTourIncludedBuilder({ values, otherValue, searchValue, onSearchChange, onToggle, onApplyTemplate, onOtherChange, t }) {
+  const selected = uniqueAuthorLines(values);
+  const query = String(searchValue || "").trim().toLowerCase();
+  const notIncluded = buildAuthorNotIncludedFromIncluded(selected);
+
+  const groupHasVisibleItems = (group) => {
+    if (!query) return true;
+    return group.items.some((item) => `${group.title} ${item}`.toLowerCase().includes(query));
+  };
 
   return (
-    <div>
-      <div className="mb-1.5 block text-xs font-black uppercase tracking-wide text-slate-500">{title}</div>
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-        {known.map((option) => {
-          const checked = selected.some((x) => isSameText(x, option));
-          return (
-            <label key={option} className="flex min-h-[36px] items-center gap-2 border-b border-slate-100 px-3 py-2 text-sm font-bold text-slate-700 last:border-b-0">
-              <input type="checkbox" checked={checked} onChange={(e) => onToggle(option, e.target.checked)} />
-              <span>{option}</span>
-            </label>
-          );
-        })}
-        <label className="flex min-h-[40px] items-center gap-2 px-3 py-2 text-sm font-bold text-slate-700">
-          <input type="checkbox" checked={hasFilled(otherValue)} onChange={(e) => !e.target.checked && onOtherChange("")} />
+    <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:col-span-2">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="text-sm font-black text-slate-950">
+            {t("service_form.author_included_builder", { defaultValue: "Что входит в тур" })}
+          </div>
+          <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
+            {t("service_form.author_included_builder_hint", { defaultValue: "Отметьте только то, что входит. Всё невыбранное автоматически попадёт в «не включено»." })}
+          </p>
+        </div>
+        <div className="rounded-2xl bg-slate-50 px-3 py-2 text-xs font-black text-slate-600 ring-1 ring-slate-100">
+          {t("service_form.author_selected_count", { defaultValue: "Выбрано" })}: {selected.length}
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_280px]">
+        <div className="space-y-4">
           <TextInput
-            value={otherValue || ""}
-            onChange={(e) => onOtherChange(e.target.value)}
-            placeholder={otherPlaceholder || "Другое (впишите)"}
-            className="h-9 rounded-xl"
+            value={searchValue || ""}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder={t("service_form.author_search_inclusions", { defaultValue: "Поиск: трансфер, гид, страховка..." })}
+            className="bg-slate-50"
           />
-        </label>
+
+          <div className="flex flex-wrap gap-2">
+            {AUTHOR_TOUR_TEMPLATES.map((tpl) => (
+              <button
+                key={tpl.title}
+                type="button"
+                onClick={() => onApplyTemplate(tpl.items)}
+                className="rounded-full border border-orange-100 bg-orange-50 px-3 py-2 text-xs font-black text-orange-700 transition hover:bg-orange-100"
+              >
+                + {tpl.title}
+              </button>
+            ))}
+          </div>
+
+          <div className="space-y-3">
+            {AUTHOR_TOUR_INCLUDED_GROUPS.filter(groupHasVisibleItems).map((group) => {
+              const visibleItems = query
+                ? group.items.filter((item) => `${group.title} ${item}`.toLowerCase().includes(query))
+                : group.items;
+
+              if (!visibleItems.length) return null;
+
+              return (
+                <div key={group.title} className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                  <div className="border-b border-slate-100 bg-slate-50 px-3 py-2 text-xs font-black uppercase tracking-wide text-slate-600">
+                    {group.title}
+                  </div>
+                  <div className="grid gap-px bg-slate-100 sm:grid-cols-2 lg:grid-cols-3">
+                    {visibleItems.map((option) => {
+                      const checked = selected.some((x) => isSameText(x, option));
+                      return (
+                        <label key={option} className="flex min-h-[42px] cursor-pointer items-center gap-2 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-orange-50/50">
+                          <input type="checkbox" checked={checked} onChange={(e) => onToggle(option, e.target.checked)} />
+                          <span>{option}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div>
+            <div className="mb-1.5 block text-xs font-black uppercase tracking-wide text-slate-500">
+              {t("service_form.author_other_included", { defaultValue: "Другое включено" })}
+            </div>
+            <TextArea
+              value={otherValue || ""}
+              onChange={(e) => onOtherChange(e.target.value)}
+              placeholder={t("service_form.author_other_included_ph", { defaultValue: "Каждый пункт с новой строки: например, сопровождение врача, оборудование..." })}
+              rows={3}
+            />
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-3">
+            <div className="text-xs font-black uppercase tracking-wide text-emerald-700">
+              {t("service_form.included", { defaultValue: "Включено" })}
+            </div>
+            <div className="mt-2 max-h-56 space-y-1 overflow-auto pr-1 text-sm font-bold text-emerald-900">
+              {selected.length ? selected.map((item) => <div key={item}>✅ {item}</div>) : <div className="text-emerald-700/70">{t("service_form.author_empty_selected", { defaultValue: "Пока ничего не выбрано" })}</div>}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-rose-100 bg-rose-50 p-3">
+            <div className="text-xs font-black uppercase tracking-wide text-rose-700">
+              {t("service_form.not_included", { defaultValue: "Не включено автоматически" })}
+            </div>
+            <div className="mt-2 max-h-56 space-y-1 overflow-auto pr-1 text-sm font-bold text-rose-900">
+              {notIncluded.length ? notIncluded.slice(0, 24).map((item) => <div key={item}>— {item}</div>) : <div className="text-rose-700/70">{t("service_form.author_all_selected", { defaultValue: "Все стандартные пункты выбраны" })}</div>}
+              {notIncluded.length > 24 ? <div className="pt-1 text-xs font-black text-rose-700/70">+{notIncluded.length - 24}</div> : null}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
+
 
 function AuthorProgramDaysEditor({ value, activeIndex, setActiveIndex, onChange, t }) {
   const days = normalizeAuthorProgramDaysDraft(value);
@@ -1264,6 +1547,7 @@ export default function DashboardServices() {
   const [images, setImages] = useState([]);
   const [details, setDetails] = useState(DEFAULT_DETAILS);
   const [authorProgramDayIndex, setAuthorProgramDayIndex] = useState(0);
+  const [authorInclusionSearch, setAuthorInclusionSearch] = useState("");
 
   const isAgent = profile?.type === "agent";
   const isExtended = isAgent && EXTENDED_AGENT_CATEGORIES.includes(category);
@@ -1328,6 +1612,7 @@ export default function DashboardServices() {
     setImages([]);
     setDetails({ ...DEFAULT_DETAILS });
     setAuthorProgramDayIndex(0);
+    setAuthorInclusionSearch("");
     setStep(1);
     setTab("create");
   };
@@ -1340,25 +1625,37 @@ export default function DashboardServices() {
     patchDetails({ programDays: draftDays, programDaysText: programText, program: programText });
   };
 
-  const patchAuthorChecklist = (field, option, checked) => {
-    const current = authorLines(details[field]);
+  const patchAuthorInclusions = (nextIncluded) => {
+    const included = uniqueAuthorLines(nextIncluded);
+    const notIncluded = buildAuthorNotIncludedFromIncluded(included);
+    patchDetails({
+      included,
+      includedText: included.join("\n"),
+      notIncluded,
+      notIncludedText: notIncluded.join("\n"),
+    });
+  };
+
+  const patchAuthorChecklist = (option, checked) => {
+    const current = uniqueAuthorLines(details.included);
     const without = current.filter((x) => !isSameText(x, option));
-    const next = checked ? [...without, option] : without;
-    patchDetails({ [field]: next, [`${field}Text`]: next.join("\n") });
+    patchAuthorInclusions(checked ? [...without, option] : without);
   };
 
-  const patchAuthorChecklistOther = (field, options, text) => {
-    const current = authorLines(details[field]);
-    const base = current.filter((x) => !options.some((option) => isSameText(option, x)));
-    const checked = current.filter((x) => options.some((option) => isSameText(option, x)));
-    const otherLines = authorLines(text).filter((x) => !options.some((option) => isSameText(option, x)));
-    const next = [...checked, ...otherLines];
-    patchDetails({ [field]: next, [`${field}Text`]: next.join("\n") });
+  const applyAuthorTemplate = (items) => {
+    patchAuthorInclusions([...uniqueAuthorLines(details.included), ...authorLines(items)]);
   };
 
-  const getAuthorOtherChecklistText = (field, options) => {
-    return authorLines(details[field])
-      .filter((x) => !options.some((option) => isSameText(option, x)))
+  const patchAuthorChecklistOther = (text) => {
+    const current = uniqueAuthorLines(details.included);
+    const checked = current.filter((x) => AUTHOR_TOUR_INCLUDED_OPTIONS.some((option) => isSameText(option, x)));
+    const otherLines = authorLines(text).filter((x) => !AUTHOR_TOUR_INCLUDED_OPTIONS.some((option) => isSameText(option, x)));
+    patchAuthorInclusions([...checked, ...otherLines]);
+  };
+
+  const getAuthorOtherChecklistText = () => {
+    return uniqueAuthorLines(details.included)
+      .filter((x) => !AUTHOR_TOUR_INCLUDED_OPTIONS.some((option) => isSameText(option, x)))
       .join("\n");
   };
 
@@ -2360,26 +2657,26 @@ export default function DashboardServices() {
                                     t={t}
                                   />
                                 </div>
-                                <div className="sm:col-span-2 grid gap-4 sm:grid-cols-2">
-                                  <ChecklistBox
-                                    title={t("service_form.included", { defaultValue: "Что включено" })}
-                                    options={AUTHOR_INCLUDED_OPTIONS}
-                                    values={details.included}
-                                    otherValue={getAuthorOtherChecklistText("included", AUTHOR_INCLUDED_OPTIONS)}
-                                    onToggle={(option, checked) => patchAuthorChecklist("included", option, checked)}
-                                    onOtherChange={(text) => patchAuthorChecklistOther("included", AUTHOR_INCLUDED_OPTIONS, text)}
-                                    otherPlaceholder={t("service_form.other_write", { defaultValue: "Другое (впишите)" })}
-                                  />
-                                  <ChecklistBox
-                                    title={t("service_form.not_included", { defaultValue: "Что не включено" })}
-                                    options={AUTHOR_NOT_INCLUDED_OPTIONS}
-                                    values={details.notIncluded}
-                                    otherValue={getAuthorOtherChecklistText("notIncluded", AUTHOR_NOT_INCLUDED_OPTIONS)}
-                                    onToggle={(option, checked) => patchAuthorChecklist("notIncluded", option, checked)}
-                                    onOtherChange={(text) => patchAuthorChecklistOther("notIncluded", AUTHOR_NOT_INCLUDED_OPTIONS, text)}
-                                    otherPlaceholder={t("service_form.other_write", { defaultValue: "Другое (впишите)" })}
-                                  />
-                                </div>
+                                <AuthorTourIncludedBuilder
+                                  values={details.included}
+                                  otherValue={getAuthorOtherChecklistText()}
+                                  searchValue={authorInclusionSearch}
+                                  onSearchChange={setAuthorInclusionSearch}
+                                  onToggle={patchAuthorChecklist}
+                                  onApplyTemplate={applyAuthorTemplate}
+                                  onOtherChange={patchAuthorChecklistOther}
+                                  t={t}
+                                />
+                                {getAuthorProgramValidationIssues(details).length ? (
+                                  <div className="sm:col-span-2 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold leading-6 text-amber-900">
+                                    <div className="mb-1 text-xs font-black uppercase tracking-wide text-amber-700">
+                                      {t("service_form.author_program_checks", { defaultValue: "Проверьте связь с программой" })}
+                                    </div>
+                                    {getAuthorProgramValidationIssues(details).map((issue) => (
+                                      <div key={issue}>• {issue}</div>
+                                    ))}
+                                  </div>
+                                ) : null}
                                 <div className="sm:col-span-2">
                                   <Field label={t("service_form.cancellation_policy", { defaultValue: "Условия отмены / важные условия" })}>
                                     <TextArea value={details.cancellationPolicy} onChange={(e) => patchDetails({ cancellationPolicy: e.target.value })} />
