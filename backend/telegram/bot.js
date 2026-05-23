@@ -12744,12 +12744,16 @@ const data = await getOrFetchCached(
       // Для author_tour brochure карточки telegramServiceCard.js возвращает replaceDefault,
       // чтобы не было дублей и порядок кнопок был ровно как в travel brochure.
       if (kbExtra?.inline_keyboard?.length) {
-        keyboardForClient.inline_keyboard = kbExtra.replaceDefault
-          ? kbExtra.inline_keyboard
-          : [
-              ...kbExtra.inline_keyboard,
-              ...keyboardForClient.inline_keyboard,
-            ];
+        if (isAuthorTour) {
+          keyboardForClient.inline_keyboard = kbExtra.inline_keyboard;
+        } else {
+          keyboardForClient.inline_keyboard = kbExtra.replaceDefault
+            ? kbExtra.inline_keyboard
+            : [
+                ...kbExtra.inline_keyboard,
+                ...keyboardForClient.inline_keyboard,
+              ];
+        }
       }
 
       const keyboardForMy = {
