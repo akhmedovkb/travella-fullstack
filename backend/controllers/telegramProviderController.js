@@ -992,6 +992,10 @@ async function serviceActionFromBot(req, res, action) {
         `
       UPDATE services
          SET
+           status = CASE
+             WHEN status = 'archived' AND COALESCE(moderation_status, '') = 'approved' THEN 'published'
+             ELSE status
+           END,
            expiration_at = COALESCE(expiration_at, NOW()) + interval '7 days',
            details = jsonb_set(
              jsonb_set(
