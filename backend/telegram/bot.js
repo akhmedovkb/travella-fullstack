@@ -8000,7 +8000,8 @@ bot.action("svc_wiz:back", async (ctx) => {
             String(cur).startsWith("author_stay_") ||
             String(cur).startsWith("author_day_") ||
             String(cur).startsWith("author_included_") ||
-            String(cur).startsWith("author_excluded_")
+            state.startsWith("author_excluded_") ||
+            state.startsWith("author_language_")
           )
         )
       return;
@@ -11085,7 +11086,8 @@ bot.on("text", async (ctx, next) => {
         state.startsWith("author_stay_") ||
         state.startsWith("author_day_") ||
         state.startsWith("author_included_") ||
-        state.startsWith("author_excluded_")
+        state.startsWith("author_excluded_") ||
+        state.startsWith("author_language_")
       )
     ) {
       const text = ctx.message.text.trim();
