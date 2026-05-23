@@ -5355,6 +5355,23 @@ function parseAuthorStaysInput(value) {
     .filter((x) => x.city && x.hotel);
 }
 
+function parseAuthorDayItemsInput(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return [];
+
+  return raw
+    .replace(/\r/g, "\n")
+    .split(/\n|;/g)
+    .map((x) =>
+      String(x || "")
+        .trim()
+        .replace(/^[\s•●▪▫◦·*-]+/g, "")
+        .replace(/^—\s*/g, "")
+        .trim()
+    )
+    .filter(Boolean);
+}
+
 function parseAuthorProgramDaysInput(value) {
   return String(value || "")
     .split(/\n+/)
@@ -10811,10 +10828,7 @@ bot.on("text", async (ctx, next) => {
           }
 
           case "author_day_items": {
-            const items = String(text || "")
-              .split(/[;\n]+/)
-              .map((x) => x.trim())
-              .filter(Boolean);
+            const items = parseAuthorDayItemsInput(text);
 
             if (!items.length) {
               await ctx.reply(
