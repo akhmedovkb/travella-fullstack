@@ -339,6 +339,128 @@ function hasFilled(value) {
   return value !== undefined && value !== null && String(value).trim() !== "";
 }
 
+function hasFilledArray(value) {
+  return Array.isArray(value) && value.some((x) => hasFilled(x));
+}
+
+function serviceRequiresProof(category) {
+  const cat = String(category || "").toLowerCase();
+  return cat.startsWith("refused_") || cat === "author_tour";
+}
+
+function authorProgramText(details = {}) {
+  if (hasFilled(details.program)) return details.program;
+  if (hasFilled(details.programDaysText)) return details.programDaysText;
+  if (Array.isArray(details.programDays) && details.programDays.length) {
+    return details.programDays
+      .map((day, idx) => {
+        if (typeof day === "string") return day;
+        const title = day?.title || day?.name || "";
+        const text = day?.text || day?.description || day?.program || "";
+        return [`День ${day?.day || idx + 1}`, title, text].filter(Boolean).join(": ");
+      })
+      .filter(Boolean)
+      .join("\n");
+  }
+  return "";
+}
+
+function authorListText(value) {
+  if (Array.isArray(value)) return value.filter(Boolean).join("\n");
+  if (hasFilled(value)) return value;
+  return "";
+}
+
+function authorLines(value) {
+  if (Array.isArray(value)) {
+    return value
+      .flatMap((item) => authorLines(item))
+      .map((item) => String(item || "").trim())
+      .filter(Boolean);
+  }
+
+  if (!hasFilled(value)) return [];
+
+  return String(value)
+    .replace(/\r\n/g, "\n")
+    .split(/\n|;|•/g)
+    .map((item) => item.replace(/^[-–—•\s]+/, "").trim())
+    .filter(Boolean);
+}
+
+function parseAuthorProgramDays(value) {
+  const text = String(value || "")
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+
+  if (!text) return [];
+
+  const lines = text.split("\n");
+  const days = [];
+  let current = null;
+
+  const flush = () => {
+    if (!current) return;
+    const cleanText = current.text.join("\n").trim();
+    days.push({
+      day: current.day || days.length + 1,
+      ...(current.title ? { title: current.title } : {}),
+      ...(cleanText ? { text: cleanText } : {}),
+    });
+    current = null;
+  };
+
+  for (const line of lines) {
+    const m = line.match(/^(?:день|day)\s*(\d+)?\s*[:.\-–—]?\s*(.*)$/i);
+    if (m) {
+      flush();
+      current = {
+        day: m[1] ? Number(m[1]) : days.length + 1,
+        title: String(m[2] || "").trim(),
+        text: [],
+      };
+      continue;
+    }
+
+    if (!current) current = { day: days.length + 1, title: "", text: [] };
+    current.text.push(line);
+  }
+
+  flush();
+
+  return days.length ? days : [{ day: 1, text }];
+}
+
+function normalizeAuthorTourDetailsForSave(details = {}) {
+  const d = { ...details };
+
+  const included = authorLines(d.included || d.includes || d.includedText);
+  const notIncluded = authorLines(d.notIncluded || d.excluded || d.notIncludedText || d.excludeText);
+
+  if (included.length) {
+    d.included = included;
+    d.includedText = included.join("\n");
+  }
+
+  if (notIncluded.length) {
+    d.notIncluded = notIncluded;
+    d.notIncludedText = notIncluded.join("\n");
+  }
+
+  const programText = authorProgramText(d);
+  if (programText) {
+    d.program = programText;
+    d.programDaysText = programText;
+    d.programDays = parseAuthorProgramDays(programText);
+  }
+
+  return d;
+}
+
 function buildReadinessItems({ category, title, images, details, isExtended, t }) {
   if (!isExtended) {
     return [
@@ -365,7 +487,7 @@ function buildReadinessItems({ category, title, images, details, isExtended, t }
   })();
 
   const specificOk = (() => {
-    if (category === "author_tour") return hasFilled(details.program) && hasFilled(details.included) && hasFilled(details.duration);
+    if (category === "author_tour") return hasFilled(authorProgramText(details)) && authorLines(details.included).length > 0 && hasFilled(details.duration);
     if (category === "refused_tour") return hasFilled(details.hotel) && validateFlightDetailsFormat(details.flightDetails);
     if (category === "refused_flight") return hasFilled(details.airline) && validateFlightDetailsFormat(details.flightDetails);
     if (category === "refused_hotel") return hasFilled(details.accommodationCategory) || hasFilled(details.accommodation);
@@ -413,8 +535,8 @@ function buildValidationIssues({ category, title, description, price, images, de
     add(details.flexibleDates || hasFilled(details.startDate), t("validation.start_date_required", { defaultValue: "Укажите дату начала или включите даты по запросу" }));
     add(details.flexibleDates || hasFilled(details.endDate), t("validation.end_date_required", { defaultValue: "Укажите дату окончания или включите даты по запросу" }));
     add(hasFilled(details.duration), t("validation.duration_required", { defaultValue: "Укажите длительность тура" }));
-    add(hasFilled(details.program), t("validation.program_required", { defaultValue: "Добавьте программу авторского тура" }));
-    add(hasFilled(details.included), t("validation.included_required", { defaultValue: "Укажите, что включено в стоимость" }));
+    add(hasFilled(authorProgramText(details)), t("validation.program_required", { defaultValue: "Добавьте программу авторского тура" }));
+    add(authorLines(details.included).length > 0, t("validation.included_required", { defaultValue: "Укажите, что включено в стоимость" }));
   }
 
   if (category === "refused_tour") {
@@ -938,7 +1060,7 @@ export default function DashboardServices() {
   );
 
   const moderationValidationIssues = useMemo(
-    () => buildValidationIssues({ category, title, description, price, images, details, isExtended, t, requireProof: true }),
+    () => buildValidationIssues({ category, title, description, price, images, details, isExtended, t, requireProof: serviceRequiresProof(category) }),
     [category, title, description, price, images, details, isExtended, t]
   );
 
@@ -984,7 +1106,7 @@ export default function DashboardServices() {
         description: isExtended ? undefined : description,
         details: isExtended
           ? {
-              ...details,
+              ...(category === "author_tour" ? normalizeAuthorTourDetailsForSave(details) : details),
               flightDetails: normalizeFlightDetails(details.flightDetails),
               netPrice: net,
               grossPrice: gross,
@@ -1100,6 +1222,33 @@ export default function DashboardServices() {
     }
   };
 
+  const performServiceAction = async (service, action, event) => {
+    event?.stopPropagation?.();
+    if (!service?.id || !action) return;
+
+    try {
+      const res = await api.post(`/api/providers/services/${service.id}/action`, { action });
+      const updated = res.data || service;
+
+      setServices((prev) => prev.map((s) => (s.id === service.id ? updated : s)));
+
+      if (selectedService?.id === service.id) {
+        loadServiceToEdit(updated);
+      }
+
+      const messages = {
+        extend7: t("service_action.extended", { defaultValue: "Услуга продлена на 7 дней" }),
+        unpublish: t("service_action.unpublished", { defaultValue: "Услуга снята с актуальных" }),
+        archive: t("service_action.archived", { defaultValue: "Услуга перенесена в архив" }),
+        restore_active: t("service_action.restored_active", { defaultValue: "Услуга возвращена в актуальные" }),
+      };
+      tSuccess(messages[action] || t("service_updated", { defaultValue: "Услуга обновлена" }));
+    } catch (err) {
+      console.error(err);
+      tError(err?.response?.data?.message || t("service_action.error", { defaultValue: "Не удалось выполнить действие" }));
+    }
+  };
+
   const handleConfirmModalConfirm = async () => {
     if (!confirmModal?.service) return;
     try {
@@ -1131,7 +1280,7 @@ export default function DashboardServices() {
       details: { ...DEFAULT_DETAILS, ...serviceDetails, proofImages: Array.isArray(serviceDetails.proofImages || serviceDetails.proof_images) ? (serviceDetails.proofImages || serviceDetails.proof_images) : [] },
       isExtended: serviceIsExtended,
       t,
-      requireProof: String(service.category || "").startsWith("refused_"),
+      requireProof: serviceRequiresProof(service.category),
     });
 
     if (issues.length > 0) {
@@ -1379,11 +1528,16 @@ export default function DashboardServices() {
                         details: serviceDetails,
                         isExtended: profile?.type === "agent" && EXTENDED_AGENT_CATEGORIES.includes(service.category),
                         t,
-                        requireProof: String(service.category || "").startsWith("refused_"),
+                        requireProof: serviceRequiresProof(service.category),
                       });
                       const isSubmitReady = serviceSubmitIssues.length === 0;
                       const isSelected = selectedService?.id === service.id;
                       const isTrashOrArchive = isDeletedService(service) || isArchivedService(service);
+                      const status = getServiceStatus(service);
+                      const canArchive = !isDeletedService(service) && status !== "archived";
+                      const canRestoreActive = !isDeletedService(service) && isArchivedService(service);
+                      const canExtend = !isDeletedService(service) && (status === "published" || status === "archived" || isArchivedService(service));
+                      const canUnpublish = !isDeletedService(service) && !isArchivedService(service) && status === "published";
 
                       return (
                         <article
@@ -1465,6 +1619,49 @@ export default function DashboardServices() {
                               >
                                 {t("restore_service", { defaultValue: "Восстановить" })}
                               </button>
+                            </div>
+                          )}
+
+                          {!isDeletedService(service) && (canExtend || canUnpublish || canArchive || canRestoreActive) && (
+                            <div className="border-t border-slate-100 bg-white px-3 py-2">
+                              <div className="grid grid-cols-2 gap-2">
+                                {canRestoreActive && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => performServiceAction(service, "restore_active", e)}
+                                    className="rounded-2xl bg-emerald-600 px-3 py-2 text-xs font-black text-white shadow-sm transition hover:bg-emerald-700"
+                                  >
+                                    {t("service_action.restore_active", { defaultValue: "Вернуть" })}
+                                  </button>
+                                )}
+                                {canExtend && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => performServiceAction(service, "extend7", e)}
+                                    className="rounded-2xl bg-orange-500 px-3 py-2 text-xs font-black text-white shadow-sm transition hover:bg-orange-600"
+                                  >
+                                    {t("service_action.extend7", { defaultValue: "+7 дней" })}
+                                  </button>
+                                )}
+                                {canUnpublish && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => performServiceAction(service, "unpublish", e)}
+                                    className="rounded-2xl bg-slate-700 px-3 py-2 text-xs font-black text-white shadow-sm transition hover:bg-slate-800"
+                                  >
+                                    {t("service_action.unpublish", { defaultValue: "Снять" })}
+                                  </button>
+                                )}
+                                {canArchive && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => performServiceAction(service, "archive", e)}
+                                    className="rounded-2xl bg-blue-600 px-3 py-2 text-xs font-black text-white shadow-sm transition hover:bg-blue-700"
+                                  >
+                                    {t("service_action.archive", { defaultValue: "В архив" })}
+                                  </button>
+                                )}
+                              </div>
                             </div>
                           )}
 
@@ -1825,15 +2022,15 @@ export default function DashboardServices() {
                                 </Field>
                                 <div className="sm:col-span-2">
                                   <Field label={t("service_form.author_program", { defaultValue: "Программа тура" })}>
-                                    <TextArea value={details.program} onChange={(e) => patchDetails({ program: e.target.value })} placeholder={t("service_form.ph_author_program", { defaultValue: "День 1: встреча, обзорная экскурсия..." })} className="min-h-[160px]" />
+                                    <TextArea value={authorProgramText(details)} onChange={(e) => patchDetails({ program: e.target.value, programDaysText: e.target.value, programDays: parseAuthorProgramDays(e.target.value) })} placeholder={t("service_form.ph_author_program", { defaultValue: "День 1: встреча, обзорная экскурсия..." })} className="min-h-[160px]" />
                                   </Field>
                                 </div>
                                 <div className="sm:col-span-2 grid gap-4 sm:grid-cols-2">
                                   <Field label={t("service_form.included", { defaultValue: "Что включено" })}>
-                                    <TextArea value={details.included} onChange={(e) => patchDetails({ included: e.target.value })} className="min-h-[120px]" />
+                                    <TextArea value={authorListText(details.included)} onChange={(e) => patchDetails({ included: authorLines(e.target.value), includedText: e.target.value })} className="min-h-[120px]" />
                                   </Field>
                                   <Field label={t("service_form.not_included", { defaultValue: "Что не включено" })}>
-                                    <TextArea value={details.notIncluded} onChange={(e) => patchDetails({ notIncluded: e.target.value })} className="min-h-[120px]" />
+                                    <TextArea value={authorListText(details.notIncluded)} onChange={(e) => patchDetails({ notIncluded: authorLines(e.target.value), notIncludedText: e.target.value })} className="min-h-[120px]" />
                                   </Field>
                                 </div>
                                 <div className="sm:col-span-2 flex flex-wrap gap-2">
@@ -2074,6 +2271,22 @@ export default function DashboardServices() {
                       <button type="button" onClick={saveService} disabled={saving} className="w-full rounded-2xl bg-orange-500 py-3 text-sm font-black text-white shadow-sm transition hover:bg-orange-600 disabled:opacity-60">
                         {saving ? t("saving", { defaultValue: "Сохраняю…" }) : t("save_service", { defaultValue: "Сохранить услугу" })}
                       </button>
+                    )}
+                    {selectedService?.id && !isDeletedService(selectedService) && (
+                      <>
+                        {isArchivedService(selectedService) ? (
+                          <button type="button" onClick={(e) => performServiceAction(selectedService, "restore_active", e)} className="rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-black text-white">
+                            {t("service_action.restore_active", { defaultValue: "Вернуть" })}
+                          </button>
+                        ) : (
+                          <button type="button" onClick={(e) => performServiceAction(selectedService, "archive", e)} className="rounded-2xl bg-blue-600 px-4 py-3 text-sm font-black text-white">
+                            {t("service_action.archive", { defaultValue: "В архив" })}
+                          </button>
+                        )}
+                        <button type="button" onClick={(e) => performServiceAction(selectedService, "extend7", e)} className="rounded-2xl bg-orange-500 px-4 py-3 text-sm font-black text-white">
+                          {t("service_action.extend7", { defaultValue: "+7 дней" })}
+                        </button>
+                      </>
                     )}
                     {selectedService?.id && <button type="button" onClick={() => deleteService(selectedService)} className="rounded-2xl bg-rose-600 px-4 py-3 text-sm font-black text-white">{t("delete", { defaultValue: "Удалить" })}</button>}
                   </div>
