@@ -4690,7 +4690,8 @@ function isCreateWizardState(state) {
     s.startsWith("author_stay_") ||
     s.startsWith("author_day_") ||
     s.startsWith("author_included_") ||
-    s.startsWith("author_excluded_")
+    s.startsWith("author_excluded_") ||
+    s.startsWith("author_language_")
   );
 }
 
@@ -5914,7 +5915,33 @@ async function promptWizardState(ctx, state) {
       return;
 
     case "svc_author_language":
-      await ctx.reply("🗣 Укажите *язык гида*. Пример: `русский / английский / узбекский`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
+      await ctx.reply(
+        "🗣 Укажите язык гида",
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: "🇺🇿 УЗБ", callback_data: "author_lang:uz" },
+                { text: "🇷🇺 РУС", callback_data: "author_lang:ru" },
+              ],
+              [
+                { text: "🇬🇧 АНГ", callback_data: "author_lang:en" },
+              ],
+              [
+                { text: "➕ Свой вариант", callback_data: "author_lang:custom" },
+              ],
+              [
+                { text: "⏭ Пропустить", callback_data: "svc_wiz:skip" },
+              ],
+              [
+                { text: "⬅️ Назад", callback_data: "svc_wiz:back" },
+                { text: "❌ Отмена", callback_data: "svc_wiz:cancel" },
+              ],
+            ],
+          },
+        }
+      );
+      
       return;
 
     case "svc_author_meeting":
@@ -8909,6 +8936,34 @@ bot.action("author_included:done", async (ctx) => {
   }
 });
 
+bot.action(/^author_lang:(.+)$/, async (ctx) => {
+  const value = ctx.match[1];
+
+  if (value === "custom") {
+    ctx.session.state = "author_language_custom";
+
+    await ctx.reply(
+      "🗣 Введите язык гида\n\nНапример:\nТурецкий",
+      { ...wizNavKeyboard() }
+    );
+    return;
+  }
+
+  const map = {
+    uz: "Узбекский",
+    ru: "Русский",
+    en: "Английский",
+  };
+
+  ctx.session.serviceDraft.language = map[value];
+
+  ctx.session.state = "svc_author_meeting";
+
+  await promptWizardState(ctx);
+
+  return;
+});
+
 bot.action(/^author_excluded:toggle:([a-z0-9_]+)$/, async (ctx) => {
   try {
     if (!ctx.session) ctx.session = {};
@@ -11473,6 +11528,19 @@ bot.on("text", async (ctx, next) => {
           if (!v) return;
           draft.guideLanguage = v;
 
+          pushWizardState(ctx, "svc_author_language");
+          ctx.session.state = "svc_author_meeting";
+          await promptWizardState(ctx, "svc_author_meeting");
+          return;
+        }
+
+        case "author_language_custom": {
+          const v = await requireTextField(ctx, text, "Язык гида", { min: 2 });
+          if (!v) return;
+        
+          draft.guideLanguage = v;
+          draft.language = v;
+        
           pushWizardState(ctx, "svc_author_language");
           ctx.session.state = "svc_author_meeting";
           await promptWizardState(ctx, "svc_author_meeting");
