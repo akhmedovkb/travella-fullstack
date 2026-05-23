@@ -4688,7 +4688,9 @@ function isCreateWizardState(state) {
     s.startsWith("svc_hotel_") ||
     s.startsWith("svc_author_") ||
     s.startsWith("author_stay_") ||
-    s.startsWith("author_day_")
+    s.startsWith("author_day_") ||
+    s.startsWith("author_included_") ||
+    s.startsWith("author_excluded_")
   );
 }
 
@@ -5540,6 +5542,152 @@ function authorDayNavKeyboard({ skip = true } = {}) {
   };
 }
 
+
+const AUTHOR_INCLUDED_PRESETS = [
+  { key: "stay", icon: "🏨", label: "Проживание" },
+  { key: "transfer", icon: "🚐", label: "Трансферы" },
+  { key: "food", icon: "🍽", label: "Питание" },
+  { key: "guide", icon: "🧑‍🏫", label: "Гид" },
+  { key: "excursions", icon: "🎟", label: "Экскурсии" },
+  { key: "bosphorus", icon: "🚤", label: "Босфор" },
+  { key: "tickets", icon: "🎫", label: "Входные билеты" },
+  { key: "support", icon: "📞", label: "Сопровождение" },
+];
+
+const AUTHOR_EXCLUDED_PRESETS = [
+  { key: "flight", icon: "✈️", label: "Авиабилеты" },
+  { key: "insurance", icon: "🛡", label: "Страховка" },
+  { key: "lunches", icon: "🍽", label: "Обеды" },
+  { key: "personal", icon: "💸", label: "Личные расходы" },
+  { key: "shopping", icon: "🛍", label: "Шопинг" },
+  { key: "visa", icon: "🛂", label: "Виза" },
+  { key: "citytax", icon: "🏨", label: "Туристический сбор" },
+  { key: "optional", icon: "🎟", label: "Доп. экскурсии" },
+];
+
+function normalizeAuthorList(value) {
+  if (Array.isArray(value)) {
+    return value.map((x) => String(x || "").trim()).filter(Boolean);
+  }
+
+  const raw = String(value || "").trim();
+  if (!raw) return [];
+
+  return raw
+    .replace(/\r/g, "\n")
+    .split(/\n|;/g)
+    .map((x) =>
+      String(x || "")
+        .trim()
+        .replace(/^[\s•●▪▫◦·*-]+/g, "")
+        .replace(/^—\s*/g, "")
+        .trim()
+    )
+    .filter(Boolean);
+}
+
+function authorPresetByKey(kind, key) {
+  const list = kind === "excluded" ? AUTHOR_EXCLUDED_PRESETS : AUTHOR_INCLUDED_PRESETS;
+  return list.find((x) => x.key === key) || null;
+}
+
+function toggleAuthorListItem(list, item) {
+  const arr = normalizeAuthorList(list);
+  const value = String(item || "").trim();
+  if (!value) return arr;
+
+  const idx = arr.findIndex((x) => x.toLowerCase() === value.toLowerCase());
+  if (idx >= 0) {
+    arr.splice(idx, 1);
+    return arr;
+  }
+
+  arr.push(value);
+  return arr;
+}
+
+function formatAuthorListPreview(items) {
+  const arr = normalizeAuthorList(items);
+  if (!arr.length) return "Пока ничего не выбрано.";
+  return arr.map((x, i) => `${i + 1}. ${x}`).join("\n");
+}
+
+function buildAuthorIncludedKeyboard(selected = []) {
+  const picked = new Set(normalizeAuthorList(selected).map((x) => x.toLowerCase()));
+  const rows = [];
+
+  for (let i = 0; i < AUTHOR_INCLUDED_PRESETS.length; i += 2) {
+    const pair = AUTHOR_INCLUDED_PRESETS.slice(i, i + 2).map((item) => ({
+      text: `${picked.has(item.label.toLowerCase()) ? "✅" : "⬜️"} ${item.icon} ${item.label}`,
+      callback_data: `author_included:toggle:${item.key}`,
+    }));
+    rows.push(pair);
+  }
+
+  rows.push([{ text: "➕ Свой пункт", callback_data: "author_included:custom" }]);
+  rows.push([{ text: "✅ Продолжить", callback_data: "author_included:done" }]);
+  rows.push([
+    { text: "⬅️ Назад", callback_data: "svc_wiz:back" },
+    { text: "❌ Отмена", callback_data: "svc_wiz:cancel" },
+  ]);
+
+  return { inline_keyboard: rows };
+}
+
+function buildAuthorExcludedKeyboard(selected = []) {
+  const picked = new Set(normalizeAuthorList(selected).map((x) => x.toLowerCase()));
+  const rows = [];
+
+  for (let i = 0; i < AUTHOR_EXCLUDED_PRESETS.length; i += 2) {
+    const pair = AUTHOR_EXCLUDED_PRESETS.slice(i, i + 2).map((item) => ({
+      text: `${picked.has(item.label.toLowerCase()) ? "✅" : "⬜️"} ${item.icon} ${item.label}`,
+      callback_data: `author_excluded:toggle:${item.key}`,
+    }));
+    rows.push(pair);
+  }
+
+  rows.push([{ text: "➕ Свой пункт", callback_data: "author_excluded:custom" }]);
+  rows.push([{ text: "✅ Продолжить", callback_data: "author_excluded:done" }]);
+  rows.push([{ text: "⏭ Пропустить", callback_data: "svc_wiz:skip" }]);
+  rows.push([
+    { text: "⬅️ Назад", callback_data: "svc_wiz:back" },
+    { text: "❌ Отмена", callback_data: "svc_wiz:cancel" },
+  ]);
+
+  return { inline_keyboard: rows };
+}
+
+async function replyAuthorIncludedBuilder(ctx) {
+  if (!ctx.session) ctx.session = {};
+  if (!ctx.session.serviceDraft) ctx.session.serviceDraft = {};
+  const selected = normalizeAuthorList(ctx.session.serviceDraft.included);
+
+  await ctx.reply(
+    `✅ Что включено в стоимость?\n\nВыбрано:\n${formatAuthorListPreview(selected)}`,
+    {
+      reply_markup: {
+        inline_keyboard: buildAuthorIncludedKeyboard(selected),
+      },
+    }
+  );
+}
+
+async function replyAuthorExcludedBuilder(ctx) {
+  if (!ctx.session) ctx.session = {};
+  if (!ctx.session.serviceDraft) ctx.session.serviceDraft = {};
+  const selected = normalizeAuthorList(ctx.session.serviceDraft.notIncluded);
+
+  await ctx.reply(
+    `➖ Что не включено?\n\nВыбрано:\n${formatAuthorListPreview(selected)}`,
+    {
+      reply_markup: {
+        inline_keyboard: buildAuthorExcludedKeyboard(selected),
+      },
+    }
+  );
+}
+
+
 function pushWizardState(ctx, prevState) {
   if (!ctx.session) ctx.session = {};
   if (!ctx.session.wizardStack) ctx.session.wizardStack = [];
@@ -5549,7 +5697,9 @@ function pushWizardState(ctx, prevState) {
       String(prevState).startsWith("svc_hotel_") ||
       String(prevState).startsWith("svc_author_") ||
       String(prevState).startsWith("author_stay_") ||
-      String(prevState).startsWith("author_day_"))
+      String(prevState).startsWith("author_day_") ||
+      String(prevState).startsWith("author_included_") ||
+      String(prevState).startsWith("author_excluded_"))
   ) {
     ctx.session.wizardStack.push(prevState);
   }
@@ -5720,11 +5870,25 @@ async function promptWizardState(ctx, state) {
       return;
 
     case "svc_author_included":
-      await ctx.reply("✅ Что *включено* в стоимость?", { parse_mode: "Markdown", ...wizNavKeyboard() });
+      await replyAuthorIncludedBuilder(ctx);
       return;
 
     case "svc_author_not_included":
-      await ctx.reply("➖ Что *не включено*? Если нечего указать — нажмите «⏭ Пропустить».", { parse_mode: "Markdown", ...wizNavKeyboard() });
+      await replyAuthorExcludedBuilder(ctx);
+      return;
+
+    case "author_included_custom":
+      await ctx.reply(
+        "➕ Введите свой пункт, который включён в стоимость.\n\nНапример:\nСтраховка",
+        { ...wizNavKeyboard() }
+      );
+      return;
+
+    case "author_excluded_custom":
+      await ctx.reply(
+        "➕ Введите свой пункт, который не включён в стоимость.\n\nНапример:\nЛичные расходы",
+        { ...wizNavKeyboard() }
+      );
       return;
 
     case "svc_author_pax":
@@ -7789,7 +7953,9 @@ bot.action("svc_wiz:back", async (ctx) => {
             String(cur).startsWith("svc_hotel_") ||
             String(cur).startsWith("svc_author_") ||
             String(cur).startsWith("author_stay_") ||
-            String(cur).startsWith("author_day_")
+            String(cur).startsWith("author_day_") ||
+            String(cur).startsWith("author_included_") ||
+            String(cur).startsWith("author_excluded_")
           )
         )
       return;
@@ -7817,6 +7983,20 @@ bot.action("svc_wiz:back", async (ctx) => {
 
       ctx.session.state = prevLocal;
       await promptWizardState(ctx, prevLocal);
+      await persistProviderCreateWizard(ctx);
+      return;
+    }
+
+    if (cur === "author_included_custom") {
+      ctx.session.state = "svc_author_included";
+      await promptWizardState(ctx, "svc_author_included");
+      await persistProviderCreateWizard(ctx);
+      return;
+    }
+
+    if (cur === "author_excluded_custom") {
+      ctx.session.state = "svc_author_not_included";
+      await promptWizardState(ctx, "svc_author_not_included");
       await persistProviderCreateWizard(ctx);
       return;
     }
@@ -7975,6 +8155,9 @@ bot.action("svc_wiz:skip", async (ctx) => {
     }
     if (state === "author_day_title") {
       draft._programDayTitle = "";
+    }
+    if (state === "svc_author_not_included") {
+      draft.notIncluded = [];
     }
 
     if (state === "svc_create_grossPrice") {
@@ -8627,6 +8810,159 @@ bot.action("author_day:done", async (ctx) => {
     console.error("[author_day:done]", e);
   }
 });
+
+
+bot.action(/^author_included:toggle:([a-z0-9_]+)$/, async (ctx) => {
+  try {
+    if (!ctx.session) ctx.session = {};
+    if (!ctx.session.serviceDraft) ctx.session.serviceDraft = {};
+
+    const key = String(ctx.match?.[1] || "");
+    const preset = authorPresetByKey("included", key);
+    if (!preset) {
+      await ctx.answerCbQuery("⚠️ Неизвестный пункт", { show_alert: true });
+      return;
+    }
+
+    ctx.session.serviceDraft.included = toggleAuthorListItem(
+      ctx.session.serviceDraft.included,
+      preset.label
+    );
+    ctx.session.state = "svc_author_included";
+
+    await safeCb(ctx);
+
+    try {
+      await ctx.editMessageText(
+        `✅ Что включено в стоимость?\n\nВыбрано:\n${formatAuthorListPreview(ctx.session.serviceDraft.included)}`,
+        {
+          reply_markup: {
+            inline_keyboard: buildAuthorIncludedKeyboard(ctx.session.serviceDraft.included),
+          },
+        }
+      );
+    } catch {
+      await replyAuthorIncludedBuilder(ctx);
+    }
+
+    await persistProviderCreateWizard(ctx);
+  } catch (e) {
+    console.error("[author_included:toggle]", e);
+  }
+});
+
+bot.action("author_included:custom", async (ctx) => {
+  try {
+    if (!ctx.session) ctx.session = {};
+    if (!ctx.session.serviceDraft) ctx.session.serviceDraft = {};
+
+    ctx.session.state = "author_included_custom";
+
+    await safeCb(ctx);
+    await promptWizardState(ctx, "author_included_custom");
+    await persistProviderCreateWizard(ctx);
+  } catch (e) {
+    console.error("[author_included:custom]", e);
+  }
+});
+
+bot.action("author_included:done", async (ctx) => {
+  try {
+    if (!ctx.session) ctx.session = {};
+    if (!ctx.session.serviceDraft) ctx.session.serviceDraft = {};
+
+    const included = normalizeAuthorList(ctx.session.serviceDraft.included);
+
+    if (!included.length) {
+      await ctx.answerCbQuery("Добавьте хотя бы один пункт", { show_alert: true });
+      return;
+    }
+
+    ctx.session.serviceDraft.included = included;
+
+    pushWizardState(ctx, "svc_author_included");
+    ctx.session.state = "svc_author_not_included";
+
+    await safeCb(ctx);
+    await promptWizardState(ctx, "svc_author_not_included");
+    await persistProviderCreateWizard(ctx);
+  } catch (e) {
+    console.error("[author_included:done]", e);
+  }
+});
+
+bot.action(/^author_excluded:toggle:([a-z0-9_]+)$/, async (ctx) => {
+  try {
+    if (!ctx.session) ctx.session = {};
+    if (!ctx.session.serviceDraft) ctx.session.serviceDraft = {};
+
+    const key = String(ctx.match?.[1] || "");
+    const preset = authorPresetByKey("excluded", key);
+    if (!preset) {
+      await ctx.answerCbQuery("⚠️ Неизвестный пункт", { show_alert: true });
+      return;
+    }
+
+    ctx.session.serviceDraft.notIncluded = toggleAuthorListItem(
+      ctx.session.serviceDraft.notIncluded,
+      preset.label
+    );
+    ctx.session.state = "svc_author_not_included";
+
+    await safeCb(ctx);
+
+    try {
+      await ctx.editMessageText(
+        `➖ Что не включено?\n\nВыбрано:\n${formatAuthorListPreview(ctx.session.serviceDraft.notIncluded)}`,
+        {
+          reply_markup: {
+            inline_keyboard: buildAuthorExcludedKeyboard(ctx.session.serviceDraft.notIncluded),
+          },
+        }
+      );
+    } catch {
+      await replyAuthorExcludedBuilder(ctx);
+    }
+
+    await persistProviderCreateWizard(ctx);
+  } catch (e) {
+    console.error("[author_excluded:toggle]", e);
+  }
+});
+
+bot.action("author_excluded:custom", async (ctx) => {
+  try {
+    if (!ctx.session) ctx.session = {};
+    if (!ctx.session.serviceDraft) ctx.session.serviceDraft = {};
+
+    ctx.session.state = "author_excluded_custom";
+
+    await safeCb(ctx);
+    await promptWizardState(ctx, "author_excluded_custom");
+    await persistProviderCreateWizard(ctx);
+  } catch (e) {
+    console.error("[author_excluded:custom]", e);
+  }
+});
+
+bot.action("author_excluded:done", async (ctx) => {
+  try {
+    if (!ctx.session) ctx.session = {};
+    if (!ctx.session.serviceDraft) ctx.session.serviceDraft = {};
+
+    ctx.session.serviceDraft.notIncluded = normalizeAuthorList(ctx.session.serviceDraft.notIncluded);
+
+    pushWizardState(ctx, "svc_author_not_included");
+    ctx.session.state = "svc_author_pax";
+
+    await safeCb(ctx);
+    await promptWizardState(ctx, "svc_author_pax");
+    await persistProviderCreateWizard(ctx);
+  } catch (e) {
+    console.error("[author_excluded:done]", e);
+  }
+});
+
 
 // ✅ Alias для кнопок из deep-link карточек (refused_<id>), где callback_data = quick:<id>
 bot.action(/^quick:(\d+)$/, async (ctx) => {
@@ -10674,7 +11010,9 @@ bot.on("text", async (ctx, next) => {
         state.startsWith("svc_hotel_") ||
         state.startsWith("svc_author_") ||
         state.startsWith("author_stay_") ||
-        state.startsWith("author_day_")
+        state.startsWith("author_day_") ||
+        state.startsWith("author_included_") ||
+        state.startsWith("author_excluded_")
       )
     ) {
       const text = ctx.message.text.trim();
@@ -11033,23 +11371,52 @@ bot.on("text", async (ctx, next) => {
           }
 
         case "svc_author_included": {
-          const v = await requireTextField(ctx, text, "Что включено", { min: 2 });
-          if (!v) return;
-          draft.included = v;
+          await ctx.reply(
+            "✅ Используйте кнопки ниже: выберите пункты, добавьте свой пункт или нажмите «Продолжить».",
+            {
+              reply_markup: {
+                inline_keyboard: buildAuthorIncludedKeyboard(draft.included),
+              },
+            }
+          );
+          return;
+        }
 
-          pushWizardState(ctx, "svc_author_included");
-          ctx.session.state = "svc_author_not_included";
-          await promptWizardState(ctx, "svc_author_not_included");
+        case "author_included_custom": {
+          const custom = normReq(text);
+          if (!custom) {
+            await ctx.reply("⚠️ Введите пункт, который включён в стоимость.", { ...wizNavKeyboard() });
+            return;
+          }
+
+          draft.included = toggleAuthorListItem(draft.included, custom);
+          ctx.session.state = "svc_author_included";
+          await replyAuthorIncludedBuilder(ctx);
           return;
         }
 
         case "svc_author_not_included": {
-          const low = String(text || "").trim().toLowerCase();
-          draft.notIncluded = ["пропустить", "skip", "-", "нет"].includes(low) ? "" : normReq(text);
+          await ctx.reply(
+            "➖ Используйте кнопки ниже: выберите пункты, добавьте свой пункт или продолжите дальше.",
+            {
+              reply_markup: {
+                inline_keyboard: buildAuthorExcludedKeyboard(draft.notIncluded),
+              },
+            }
+          );
+          return;
+        }
 
-          pushWizardState(ctx, "svc_author_not_included");
-          ctx.session.state = "svc_author_pax";
-          await promptWizardState(ctx, "svc_author_pax");
+        case "author_excluded_custom": {
+          const custom = normReq(text);
+          if (!custom) {
+            await ctx.reply("⚠️ Введите пункт, который не включён в стоимость.", { ...wizNavKeyboard() });
+            return;
+          }
+
+          draft.notIncluded = toggleAuthorListItem(draft.notIncluded, custom);
+          ctx.session.state = "svc_author_not_included";
+          await replyAuthorExcludedBuilder(ctx);
           return;
         }
 
