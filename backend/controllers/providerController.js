@@ -251,21 +251,48 @@ function parseAuthorProgramDays(value) {
   return days.length ? days : [{ day: 1, text }];
 }
 
+
+const AUTHOR_TOUR_INCLUDED_OPTIONS = [
+  "Отель", "Апартаменты", "Гостевой дом", "Кемпинг", "Глэмпинг", "Вилла", "Хостел", "Палаточный лагерь", "Ночь в юрте", "Горный домик / lodge",
+  "Завтраки (BB)", "Полупансион (HB)", "Полный пансион (FB)", "Всё включено (AI)", "Обеды", "Ужины", "Национальный ужин", "Пикник", "Welcome dinner", "Дегустация", "Кофе-брейк", "Вода / снеки",
+  "Трансфер аэропорт → отель", "Трансфер отель → аэропорт", "Трансфер ЖД вокзал → отель", "Трансфер отель → ЖД вокзал", "Транспорт по маршруту тура", "Транспорт по городу", "Междугородние переезды", "Джип / внедорожник", "Минивэн", "Автобус", "VIP транспорт", "Внутренний перелёт", "ЖД переезд", "Канатная дорога", "Катер / лодка", "Паром", "Лошадь", "Верблюд", "Квадроцикл", "Багги",
+  "Экскурсии по программе", "Входные билеты", "Музеи", "Исторические объекты", "Археологические объекты", "Шоу / мероприятия", "Мастер-классы", "Фольклорная программа", "Концерт", "Театр", "Посещение рынка / базара", "Дегустационный тур",
+  "Услуги гида", "Локальный гид", "Турлидер", "Сопровождающий", "Переводчик", "Координатор группы", "Фотограф", "Видеограф",
+  "Треккинг", "Хайкинг", "Подъём в горы", "Лодочный тур", "Рыбалка", "Сафари", "Снорклинг", "Дайвинг", "Рафтинг", "Катание на лыжах", "Сноуборд", "Конный тур", "Йога", "СПА",
+  "Страховка", "Виза", "SIM-карта", "Интернет", "Welcome pack", "Сертификат участника", "Карта маршрута", "Багаж", "Носильщик", "Медицинская поддержка", "Аптечка", "GPS трек",
+  "Детская программа", "Детская кровать", "Няня", "Детское меню", "Анимация", "Детский клуб",
+  "Halal питание", "Vegetarian", "Vegan", "Prayer room", "Женский гид", "Мужской гид", "Безбарьерная среда", "Pet friendly",
+];
+
+function sameAuthorOption(a, b) {
+  return String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+}
+
+function uniqueAuthorLines(value) {
+  const seen = new Set();
+  return splitAuthorLines(value).filter((item) => {
+    const key = String(item || "").trim().toLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function buildAuthorNotIncluded(included) {
+  const selected = uniqueAuthorLines(included);
+  return AUTHOR_TOUR_INCLUDED_OPTIONS.filter((option) => !selected.some((x) => sameAuthorOption(x, option)));
+}
+
 function normalizeAuthorTourDetails(details = {}) {
   const d = { ...toPlainObject(details) };
 
-  const included = splitAuthorLines(d.included ?? d.includes ?? d.includedText);
-  const notIncluded = splitAuthorLines(d.notIncluded ?? d.excluded ?? d.notIncludedText ?? d.excludeText);
+  const included = uniqueAuthorLines(d.included ?? d.includes ?? d.includedText);
+  const notIncluded = buildAuthorNotIncluded(included);
 
-  if (included.length) {
-    d.included = included;
-    d.includedText = included.join("\n");
-  }
-
-  if (notIncluded.length) {
-    d.notIncluded = notIncluded;
-    d.notIncludedText = notIncluded.join("\n");
-  }
+  d.included = included;
+  d.includedText = included.join("\n");
+  d.notIncluded = notIncluded;
+  d.notIncludedText = notIncluded.join("\n");
 
   const programText = firstNonEmptyValue(d.program, d.programDaysText);
   if (programText) {
