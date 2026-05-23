@@ -12701,6 +12701,8 @@ const data = await getOrFetchCached(
       const photoUrl = built?.photoUrl || null;
       const serviceUrl = built?.serviceUrl || `${SITE_URL}/service/${svc.id}`;
       const kbExtra = built?.kbExtra || null;
+      const isAuthorTour =
+        String(svcCategory || svc?.category || "").toLowerCase() === "author_tour";
       
       let textFinal = builtText;
       if (roleForInline === "client" && !canSeeContacts) {
