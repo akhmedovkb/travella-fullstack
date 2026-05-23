@@ -5631,7 +5631,7 @@ function buildAuthorIncludedKeyboard(selected = []) {
     { text: "❌ Отмена", callback_data: "svc_wiz:cancel" },
   ]);
 
-  return { inline_keyboard: rows };
+  return rows;
 }
 
 function buildAuthorExcludedKeyboard(selected = []) {
@@ -5654,7 +5654,7 @@ function buildAuthorExcludedKeyboard(selected = []) {
     { text: "❌ Отмена", callback_data: "svc_wiz:cancel" },
   ]);
 
-  return { inline_keyboard: rows };
+  return rows;
 }
 
 async function replyAuthorIncludedBuilder(ctx) {
