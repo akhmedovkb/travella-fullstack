@@ -16,6 +16,7 @@ const {
   updateService,
   deleteService,
   restoreService,
+  serviceAction,
   updateServiceImagesOnly,
   getBookedDates,
   getBlockedDates,
@@ -80,6 +81,7 @@ router.post("/services", authenticateToken, requireProvider, addService);
 router.put("/services/:id", authenticateToken, requireProvider, updateService);
 router.delete("/services/:id", authenticateToken, requireProvider, deleteService);
 router.post("/services/:id/restore", authenticateToken, requireProvider, restoreService);
+router.post("/services/:id/action", authenticateToken, requireProvider, serviceAction);
 router.patch("/services/:id/images", authenticateToken, requireProvider, updateServiceImagesOnly);
 
 /* -------------------- PROVIDER SERVICES (каскад в профиле) -------------------- */
@@ -241,6 +243,7 @@ router.post(
         "refused_flight",
         "refused_ticket",
         "refused_event_ticket",
+        "author_tour",
       ];
 
       if (refusedCategories.includes(category)) {
