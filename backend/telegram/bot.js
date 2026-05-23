@@ -5559,8 +5559,18 @@ async function promptWizardState(ctx, state) {
 
     case "svc_author_format":
       await ctx.reply(
-        "👥 Укажите *формат тура*: `group`, `private` или `custom`.",
-        { parse_mode: "Markdown", ...wizNavKeyboard() }
+        "👥 Выберите формат авторского тура",
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "👥 Групповой тур", callback_data: "author_fmt:group" }],
+              [{ text: "👤 Индивидуальный тур", callback_data: "author_fmt:private" }],
+              [{ text: "✨ Под запрос", callback_data: "author_fmt:custom" }],
+              [{ text: "⬅️ Назад", callback_data: "wiz:back" }],
+              [{ text: "❌ Отмена", callback_data: "wiz:cancel" }],
+            ],
+          },
+        }
       );
       return;
 
@@ -8310,6 +8320,34 @@ bot.action(/^atp:(\d+)$/, async (ctx) => {
     }
 
     try { await ctx.answerCbQuery("⚠️ Ошибка", { show_alert: true }); } catch {}
+  }
+});
+
+bot.action(/^author_fmt:(group|private|custom)$/, async (ctx) => {
+  try {
+    const mode = ctx.match[1];
+
+    if (!ctx.session) ctx.session = {};
+    if (!ctx.session.serviceDraft) ctx.session.serviceDraft = {};
+
+    ctx.session.serviceDraft.tourFormat = mode;
+
+    pushWizardState(ctx, "svc_author_format");
+
+    ctx.session.state = "svc_author_stays";
+
+    await safeCb(ctx);
+
+    try {
+      await ctx.editMessageReplyMarkup({
+        inline_keyboard: [],
+      });
+    } catch {}
+
+    await promptWizardState(ctx, "svc_author_stays");
+
+  } catch (e) {
+    console.error("[author_fmt]", e);
   }
 });
 
