@@ -4796,7 +4796,16 @@ function hydrateProviderDraftSession(ctx, row) {
         ? payload.images
         : [];
 
-  const wizardStack = Array.isArray(row.wizard_stack) ? row.wizard_stack : [];
+    const legacyDraftStateMap = {
+    svc_author_transport: "svc_author_guide",
+    };
+  
+    const rawStep = String(row.step || "svc_create_choose_category");
+    const normalizedStep = legacyDraftStateMap[rawStep] || rawStep;
+  
+    const wizardStack = (Array.isArray(row.wizard_stack) ? row.wizard_stack : [])
+      .map((s) => legacyDraftStateMap[String(s || "")] || s)
+      .filter((s) => String(s || "") !== "svc_author_transport");
 
   ctx.session.serviceDraft = {
     ...payload,
@@ -4804,7 +4813,7 @@ function hydrateProviderDraftSession(ctx, row) {
     images,
   };
   ctx.session.wizardStack = wizardStack;
-  ctx.session.state = row.step || "svc_create_choose_category";
+  ctx.session.state = normalizedStep;
   ctx.session.editWiz = null;
   ctx.session.editDraft = null;
   ctx.session.editingServiceId = null;
@@ -4877,7 +4886,6 @@ async function replyProviderDraftResumePrompt(ctx, row) {
     svc_author_pax: "Количество человек",
     svc_author_language: "Язык гида",
     svc_author_meeting: "Место встречи",
-    svc_author_transport: "Транспорт",
     svc_author_guide: "Гид",
     svc_author_cancel: "Условия отмены",
 
@@ -8151,7 +8159,6 @@ bot.action("svc_wiz:skip", async (ctx) => {
       "svc_author_pax",
       "svc_author_language",
       "svc_author_meeting",
-      "svc_author_transport",
       "svc_author_guide",
       "svc_author_cancel",
       "svc_create_price",
