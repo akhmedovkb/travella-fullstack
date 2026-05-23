@@ -6897,7 +6897,7 @@ bot.hears(/🔍 Найти услугу/i, async (ctx) => {
       reply_markup: {
         inline_keyboard: [
           [{ text: "🌴 Отказной тур (пакет)", switch_inline_query_current_chat: "#tour refused_tour" }],
-          [{ text: "🧭 Авторский тур", switch_inline_query_current_chat: "#author author_tour" }],
+          [{ text: "🧭 Авторский тур", switch_inline_query_current_chat: "#author" }],
           [{ text: "🏨 Отказной отель", switch_inline_query_current_chat: "#tour refused_hotel" }],
           [{ text: "✈️ Отказной авиабилет", switch_inline_query_current_chat: "#tour refused_flight" }],
           [{ text: "🎫 Билет / мероприятие", switch_inline_query_current_chat: "#tour refused_ticket" }],
