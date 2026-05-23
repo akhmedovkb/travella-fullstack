@@ -5521,6 +5521,25 @@ function wizNavKeyboard() {
   };
 }
 
+function authorDayNavKeyboard({ skip = true } = {}) {
+  const rows = [];
+
+  if (skip) {
+    rows.push([{ text: "⏭ Пропустить", callback_data: "svc_wiz:skip" }]);
+  }
+
+  rows.push([
+    { text: "⬅️ Назад", callback_data: "svc_wiz:back" },
+    { text: "❌ Отмена", callback_data: "svc_wiz:cancel" },
+  ]);
+
+  return {
+    reply_markup: {
+      inline_keyboard: rows,
+    },
+  };
+}
+
 function pushWizardState(ctx, prevState) {
   if (!ctx.session) ctx.session = {};
   if (!ctx.session.wizardStack) ctx.session.wizardStack = [];
@@ -5528,7 +5547,9 @@ function pushWizardState(ctx, prevState) {
     prevState &&
     (String(prevState).startsWith("svc_create_") ||
       String(prevState).startsWith("svc_hotel_") ||
-      String(prevState).startsWith("svc_author_"))
+      String(prevState).startsWith("svc_author_") ||
+      String(prevState).startsWith("author_stay_") ||
+      String(prevState).startsWith("author_day_"))
   ) {
     ctx.session.wizardStack.push(prevState);
   }
@@ -5667,6 +5688,34 @@ async function promptWizardState(ctx, state) {
             ],
           },
         }
+      );
+      return;
+
+    case "author_day_date":
+      await ctx.reply(
+        "📅 Укажите *дату дня программы*\n\nФормат: *29.05.2026*\n\nЕсли дата для этого дня не нужна — нажмите «⏭ Пропустить».",
+        { parse_mode: "Markdown", ...authorDayNavKeyboard({ skip: true }) }
+      );
+      return;
+
+    case "author_day_route":
+      await ctx.reply(
+        "🛫 Укажите *маршрут / локацию дня*\n\nНапример:\nУзунгёль → Трабзон\n\nЕсли маршрута нет — нажмите «⏭ Пропустить».",
+        { parse_mode: "Markdown", ...authorDayNavKeyboard({ skip: true }) }
+      );
+      return;
+
+    case "author_day_title":
+      await ctx.reply(
+        "📝 Укажите *заголовок дня*\n\nНапример:\nЭкскурсия по окрестностям Узунгёля\n\nЕсли заголовок не нужен — нажмите «⏭ Пропустить».",
+        { parse_mode: "Markdown", ...authorDayNavKeyboard({ skip: true }) }
+      );
+      return;
+
+    case "author_day_items":
+      await ctx.reply(
+        "📌 Укажите *пункты программы*\n\nМожно через точку с запятой или каждый пункт с новой строки.\n\nПример:\nВстреча в аэропорту; Трансфер; Размещение в отеле",
+        { parse_mode: "Markdown", ...authorDayNavKeyboard({ skip: false }) }
       );
       return;
 
@@ -7745,6 +7794,33 @@ bot.action("svc_wiz:back", async (ctx) => {
         )
       return;
 
+    if (String(cur).startsWith("author_day_")) {
+      const localBackMap = {
+        author_day_date: "svc_author_program_days",
+        author_day_route: "author_day_date",
+        author_day_title: "author_day_route",
+        author_day_items: "author_day_title",
+      };
+
+      const prevLocal = localBackMap[String(cur)] || "svc_author_program_days";
+
+      if (cur === "author_day_date") {
+        delete ctx.session.serviceDraft?._programDayDate;
+        delete ctx.session.serviceDraft?._programDayRoute;
+        delete ctx.session.serviceDraft?._programDayTitle;
+      } else if (cur === "author_day_route") {
+        delete ctx.session.serviceDraft?._programDayRoute;
+        delete ctx.session.serviceDraft?._programDayTitle;
+      } else if (cur === "author_day_title") {
+        delete ctx.session.serviceDraft?._programDayTitle;
+      }
+
+      ctx.session.state = prevLocal;
+      await promptWizardState(ctx, prevLocal);
+      await persistProviderCreateWizard(ctx);
+      return;
+    }
+
     const stack = ctx.session?.wizardStack || [];
     const prev = stack.length ? stack.pop() : null;
 
@@ -7872,6 +7948,9 @@ bot.action("svc_wiz:skip", async (ctx) => {
       "svc_author_title",
       "svc_author_not_included",
       "svc_author_cancel",
+      "author_day_date",
+      "author_day_route",
+      "author_day_title",
       "svc_create_flight_departure",
       "svc_create_flight_return",
       "svc_create_flight_details",
@@ -7888,6 +7967,16 @@ bot.action("svc_wiz:skip", async (ctx) => {
     }
 
     // спец-логика: пропуск = записать дефолт/пустое и перейти дальше
+    if (state === "author_day_date") {
+      draft._programDayDate = "";
+    }
+    if (state === "author_day_route") {
+      draft._programDayRoute = "";
+    }
+    if (state === "author_day_title") {
+      draft._programDayTitle = "";
+    }
+
     if (state === "svc_create_grossPrice") {
       draft.grossPrice = null;
     }
@@ -7908,7 +7997,13 @@ bot.action("svc_wiz:skip", async (ctx) => {
     // когда ctx.session.state уже успел измениться. Чтобы не получать
     // «Уже нечего пропускать», делаем явные переходы для optional-шагов.
   const forcedNext =
-    state === "svc_author_title"
+    state === "author_day_date"
+      ? "author_day_route"
+      : state === "author_day_route"
+        ? "author_day_title"
+        : state === "author_day_title"
+          ? "author_day_items"
+          : state === "svc_author_title"
       ? "svc_author_country"
       : state === "svc_author_not_included"
         ? "svc_author_pax"
@@ -8501,9 +8596,7 @@ bot.action("author_day:add", async (ctx) => {
 
     await safeCb(ctx);
 
-    await ctx.reply(
-      "📅 Укажите дату дня программы\n\nФормат: 29.05.2026"
-    );
+    await promptWizardState(ctx, "author_day_date");
   } catch (e) {
     console.error("[author_day:add]", e);
   }
@@ -10826,7 +10919,7 @@ bot.on("text", async (ctx, next) => {
             if (!norm) {
               await ctx.reply("😕 Не понял дату. Введите в формате *29.05.2026*.", {
                 parse_mode: "Markdown",
-                ...wizNavKeyboard(),
+                ...authorDayNavKeyboard({ skip: true }),
               });
               return;
             }
@@ -10834,9 +10927,7 @@ bot.on("text", async (ctx, next) => {
             draft._programDayDate = formatAuthorDateDMY(norm);
             ctx.session.state = "author_day_route";
 
-            await ctx.reply(
-              "🛫 Укажите маршрут / локацию дня\n\nНапример:\nТашкент → Трабзон"
-            );
+            await promptWizardState(ctx, "author_day_route");
             return;
           }
 
@@ -10847,9 +10938,7 @@ bot.on("text", async (ctx, next) => {
             draft._programDayRoute = v;
             ctx.session.state = "author_day_title";
 
-            await ctx.reply(
-              "📝 Укажите заголовок дня\n\nНапример:\nПерелёт и размещение"
-            );
+            await promptWizardState(ctx, "author_day_title");
             return;
           }
 
@@ -10860,9 +10949,7 @@ bot.on("text", async (ctx, next) => {
             draft._programDayTitle = v;
             ctx.session.state = "author_day_items";
 
-            await ctx.reply(
-              "📌 Укажите пункты программы\n\nМожно через точку с запятой или каждый пункт с новой строки.\n\nПример:\nВстреча в аэропорту; Трансфер; Размещение в отеле"
-            );
+            await promptWizardState(ctx, "author_day_items");
             return;
           }
 
@@ -10872,7 +10959,7 @@ bot.on("text", async (ctx, next) => {
             if (!items.length) {
               await ctx.reply(
                 "😕 Добавьте хотя бы один пункт программы.\n\nПример:\nВстреча в аэропорту; Трансфер; Размещение в отеле",
-                wizNavKeyboard()
+                authorDayNavKeyboard({ skip: false })
               );
               return;
             }
