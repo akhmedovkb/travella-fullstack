@@ -540,6 +540,50 @@ function normalizeAuthorProgramDays(value) {
     .map((day, idx) => ({ ...day, day: idx + 1, items: day.items.filter((item, itemIdx) => hasFilled(item) || itemIdx === 0) }));
 }
 
+
+function normalizeAuthorProgramDaysDraft(value) {
+  if (!Array.isArray(value) || !value.length) return [{ day: 1, location: "", items: [""] }];
+
+  return value.map((day, idx) => {
+    if (typeof day === "string") {
+      return {
+        day: idx + 1,
+        location: "",
+        items: [String(day || "")],
+      };
+    }
+
+    const rawItems = Array.isArray(day?.items)
+      ? day.items
+      : Array.isArray(day?.points)
+        ? day.points
+        : Array.isArray(day?.activities)
+          ? day.activities
+          : hasFilled(day?.text || day?.description || day?.program)
+            ? String(day?.text || day?.description || day?.program).split(/\r?\n|;|•/g)
+            : [""];
+
+    const items = rawItems.length ? rawItems.map((item) => String(item ?? "")) : [""];
+
+    return {
+      day: idx + 1,
+      location: String(day?.location || day?.city || day?.place || day?.title || day?.name || ""),
+      items: items.length ? items : [""],
+    };
+  });
+}
+
+function authorProgramDaysDraftToText(days = []) {
+  return normalizeAuthorProgramDaysDraft(days)
+    .map((day, idx) => {
+      const head = `День ${idx + 1}${String(day.location || "").trim() ? `: ${String(day.location || "").trim()}` : ""}`;
+      const body = (day.items || []).filter(hasFilled).map((item) => `• ${String(item || "").trim()}`).join("\n");
+      return [head, body].filter(Boolean).join("\n");
+    })
+    .join("\n\n")
+    .trim();
+}
+
 function authorProgramDaysToText(days = []) {
   return normalizeAuthorProgramDays(days)
     .map((day, idx) => {
@@ -1085,12 +1129,12 @@ function ChecklistBox({ title, options, values, otherValue, onToggle, onOtherCha
 }
 
 function AuthorProgramDaysEditor({ value, activeIndex, setActiveIndex, onChange, t }) {
-  const days = normalizeAuthorProgramDays(value).length ? normalizeAuthorProgramDays(value) : [{ day: 1, location: "", items: [""] }];
+  const days = normalizeAuthorProgramDaysDraft(value);
   const safeIndex = Math.min(Math.max(activeIndex || 0, 0), days.length - 1);
   const activeDay = days[safeIndex] || days[0];
 
   const emit = (nextDays, nextIndex = safeIndex) => {
-    const normalized = normalizeAuthorProgramDays(nextDays).length ? normalizeAuthorProgramDays(nextDays) : [{ day: 1, location: "", items: [""] }];
+    const normalized = normalizeAuthorProgramDaysDraft(nextDays);
     onChange(normalized);
     setActiveIndex(Math.min(Math.max(nextIndex, 0), normalized.length - 1));
   };
@@ -1291,9 +1335,9 @@ export default function DashboardServices() {
   const patchDetails = (patch) => setDetails((prev) => ({ ...prev, ...patch }));
 
   const patchAuthorProgramDays = (nextDays) => {
-    const normalized = normalizeAuthorProgramDays(nextDays);
-    const programText = authorProgramDaysToText(normalized);
-    patchDetails({ programDays: normalized, programDaysText: programText, program: programText });
+    const draftDays = normalizeAuthorProgramDaysDraft(nextDays);
+    const programText = authorProgramDaysDraftToText(draftDays);
+    patchDetails({ programDays: draftDays, programDaysText: programText, program: programText });
   };
 
   const patchAuthorChecklist = (field, option, checked) => {
