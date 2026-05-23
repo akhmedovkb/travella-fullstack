@@ -187,6 +187,110 @@ function normalizeIncludedOptions(details = {}) {
   return d;
 }
 
+function splitAuthorLines(value) {
+  if (Array.isArray(value)) {
+    return value
+      .flatMap((item) => splitAuthorLines(item))
+      .map((item) => String(item || "").trim())
+      .filter(Boolean);
+  }
+
+  if (value === undefined || value === null || String(value).trim() === "") return [];
+
+  return String(value)
+    .replace(/\r\n/g, "\n")
+    .split(/\n|;|•/g)
+    .map((item) => item.replace(/^[-–—•\s]+/, "").trim())
+    .filter(Boolean);
+}
+
+function parseAuthorProgramDays(value) {
+  const text = String(value || "")
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+
+  if (!text) return [];
+
+  const lines = text.split("\n");
+  const days = [];
+  let current = null;
+
+  const flush = () => {
+    if (!current) return;
+    const cleanText = current.text.join("\n").trim();
+    days.push({
+      day: current.day || days.length + 1,
+      ...(current.title ? { title: current.title } : {}),
+      ...(cleanText ? { text: cleanText } : {}),
+    });
+    current = null;
+  };
+
+  for (const line of lines) {
+    const m = line.match(/^(?:день|day)\s*(\d+)?\s*[:.\-–—]?\s*(.*)$/i);
+    if (m) {
+      flush();
+      current = {
+        day: m[1] ? Number(m[1]) : days.length + 1,
+        title: String(m[2] || "").trim(),
+        text: [],
+      };
+      continue;
+    }
+
+    if (!current) current = { day: days.length + 1, title: "", text: [] };
+    current.text.push(line);
+  }
+
+  flush();
+
+  return days.length ? days : [{ day: 1, text }];
+}
+
+function normalizeAuthorTourDetails(details = {}) {
+  const d = { ...toPlainObject(details) };
+
+  const included = splitAuthorLines(d.included ?? d.includes ?? d.includedText);
+  const notIncluded = splitAuthorLines(d.notIncluded ?? d.excluded ?? d.notIncludedText ?? d.excludeText);
+
+  if (included.length) {
+    d.included = included;
+    d.includedText = included.join("\n");
+  }
+
+  if (notIncluded.length) {
+    d.notIncluded = notIncluded;
+    d.notIncludedText = notIncluded.join("\n");
+  }
+
+  const programText = firstNonEmptyValue(d.program, d.programDaysText);
+  if (programText) {
+    d.program = programText;
+    d.programDaysText = programText;
+    d.programDays = parseAuthorProgramDays(programText);
+  } else if (Array.isArray(d.programDays) && d.programDays.length) {
+    const lines = d.programDays
+      .map((day, idx) => {
+        if (typeof day === "string") return day.trim();
+        const num = day?.day || idx + 1;
+        const title = String(day?.title || day?.name || "").trim();
+        const text = String(day?.text || day?.description || day?.program || "").trim();
+        return [`День ${num}`, title, text].filter(Boolean).join(": ");
+      })
+      .filter(Boolean);
+    if (lines.length) {
+      d.programDaysText = lines.join("\n");
+      d.program = d.program || d.programDaysText;
+    }
+  }
+
+  return d;
+}
+
 // Нормализуем Telegram username к виду "@username"
 function normalizeTelegramUsername(input) {
   if (!input) return null;
@@ -347,6 +451,9 @@ function normalizeServicePayload(body = {}) {
 
   if (detailsObj) {
     detailsObj = normalizeIncludedOptions(detailsObj);
+    if (String(catStr).trim().toLowerCase() === "author_tour") {
+      detailsObj = normalizeAuthorTourDetails(detailsObj);
+    }
   }
 
   // seats — только у транспорта
@@ -798,7 +905,11 @@ const addService = async (req, res) => {
     
     normalizedDetailsObj = normalizeIncludedOptions(normalizedDetailsObj);
     
-    const isRefused = String(category || "").toLowerCase().startsWith("refused_");
+    const cat = String(category || "").toLowerCase();
+    if (cat === "author_tour") {
+      normalizedDetailsObj = normalizeAuthorTourDetails(normalizedDetailsObj);
+    }
+    const isRefused = cat.startsWith("refused_") || cat === "author_tour";
     if (isRefused) {
       normalizedDetailsObj = normalizeRefusedStartDate(normalizedDetailsObj, category);
     }
@@ -971,7 +1082,11 @@ const updateService = async (req, res) => {
     
     normalizedDetailsObj = normalizeIncludedOptions(normalizedDetailsObj);
     
-    const isRefused = String(category || "").toLowerCase().startsWith("refused_");
+    const cat = String(category || "").toLowerCase();
+    if (cat === "author_tour") {
+      normalizedDetailsObj = normalizeAuthorTourDetails(normalizedDetailsObj);
+    }
+    const isRefused = cat.startsWith("refused_") || cat === "author_tour";
     if (isRefused) {
       normalizedDetailsObj = normalizeRefusedStartDate(normalizedDetailsObj, category);
     }
@@ -1074,6 +1189,132 @@ const updateService = async (req, res) => {
         message: "Expiration must not be earlier than start date",
       });
     }
+    return res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+
+const serviceAction = async (req, res) => {
+  try {
+    const providerId = req.user.id;
+    const serviceId = Number(req.params.id);
+    const action = String(req.body?.action || "").trim();
+
+    const allowed = new Set(["extend7", "unpublish", "archive", "restore_active"]);
+    if (!Number.isFinite(serviceId) || !allowed.has(action)) {
+      return res.status(400).json({ message: "Некорректное действие" });
+    }
+
+    const beforeRes = await pool.query(
+      `SELECT * FROM services WHERE id=$1 AND provider_id=$2 LIMIT 1`,
+      [serviceId, providerId]
+    );
+    if (!beforeRes.rowCount) {
+      return res.status(404).json({ message: "Услуга не найдена" });
+    }
+
+    const before = beforeRes.rows[0];
+    let upd;
+
+    if (action === "unpublish") {
+      upd = await pool.query(
+        `
+        UPDATE services
+           SET details = jsonb_set(
+                 jsonb_set(COALESCE(details::jsonb, '{}'::jsonb),
+                           '{isActive}', 'false'::jsonb, true),
+                 '{expiration}', to_jsonb(NOW()::timestamp)::jsonb, true
+               ),
+               expiration_at = NOW(),
+               updated_at = NOW()
+         WHERE id=$1 AND provider_id=$2 AND deleted_at IS NULL
+         RETURNING *
+        `,
+        [serviceId, providerId]
+      );
+    } else if (action === "extend7") {
+      upd = await pool.query(
+        `
+        UPDATE services
+           SET status = CASE
+                 WHEN status = 'archived' AND COALESCE(moderation_status, '') = 'approved' THEN 'published'
+                 ELSE status
+               END,
+               expiration_at = COALESCE(expiration_at, NOW()) + interval '7 days',
+               details = jsonb_set(
+                 jsonb_set(COALESCE(details::jsonb, '{}'::jsonb),
+                           '{isActive}', 'true'::jsonb, true),
+                 '{expiration}',
+                 to_jsonb((COALESCE(expiration_at, NOW()) + interval '7 days')::timestamp)::jsonb,
+                 true
+               ),
+               updated_at = NOW()
+         WHERE id=$1 AND provider_id=$2 AND deleted_at IS NULL
+         RETURNING *
+        `,
+        [serviceId, providerId]
+      );
+    } else if (action === "archive") {
+      upd = await pool.query(
+        `
+        UPDATE services
+           SET status = 'archived',
+               expiration_at = COALESCE(expiration_at, NOW()),
+               details = jsonb_set(COALESCE(details::jsonb, '{}'::jsonb),
+                                   '{isActive}', 'false'::jsonb, true),
+               updated_at = NOW()
+         WHERE id=$1 AND provider_id=$2 AND deleted_at IS NULL
+         RETURNING *
+        `,
+        [serviceId, providerId]
+      );
+    } else if (action === "restore_active") {
+      upd = await pool.query(
+        `
+        UPDATE services
+           SET status = CASE
+                 WHEN COALESCE(moderation_status, '') = 'approved' THEN 'published'
+                 WHEN status = 'archived' THEN 'published'
+                 ELSE status
+               END,
+               expiration_at = NOW() + interval '7 days',
+               details = jsonb_set(
+                 jsonb_set(COALESCE(details::jsonb, '{}'::jsonb),
+                           '{isActive}', 'true'::jsonb, true),
+                 '{expiration}', to_jsonb((NOW() + interval '7 days')::timestamp)::jsonb, true
+               ),
+               updated_at = NOW()
+         WHERE id=$1 AND provider_id=$2 AND deleted_at IS NULL
+         RETURNING *
+        `,
+        [serviceId, providerId]
+      );
+    }
+
+    if (!upd?.rowCount) {
+      return res.status(404).json({ message: "Услуга не найдена или находится в корзине" });
+    }
+
+    const actionMap = {
+      extend7: "service_extended_7_days",
+      unpublish: "service_unpublished",
+      archive: "service_archived",
+      restore_active: "service_restored_active",
+    };
+
+    await logProviderServiceAction({
+      req,
+      action: actionMap[action] || "service_action",
+      providerId,
+      serviceId,
+      oldService: before,
+      newService: upd.rows[0],
+      meta: { source: "provider_dashboard", action },
+    });
+
+    return res.json(upd.rows[0]);
+  } catch (err) {
+    console.error("❌ Ошибка действия с услугой:", err);
     return res.status(500).json({ message: "Ошибка сервера" });
   }
 };
@@ -1938,6 +2179,7 @@ module.exports = {
   updateService,
   deleteService,
   restoreService,
+  serviceAction,
   updateServiceImagesOnly,
   getProviderPublicById,
   // календарь
