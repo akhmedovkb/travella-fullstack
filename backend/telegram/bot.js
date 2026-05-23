@@ -5117,7 +5117,123 @@ function autoTitleAuthorTour(draft) {
   return ["Авторский тур", country, route, range].filter(Boolean).join(" · ");
 }
 
+
+function pluralRuNightsBot(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return "";
+  const abs = Math.abs(Math.trunc(n));
+  const last = abs % 10;
+  const last2 = abs % 100;
+  if (last === 1 && last2 !== 11) return `${abs} ночь`;
+  if (last >= 2 && last <= 4 && (last2 < 12 || last2 > 14)) return `${abs} ночи`;
+  return `${abs} ночей`;
+}
+
+function cleanAuthorTourText(value) {
+  return String(value || "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .replace(/\s*[⸻━]{2,}\s*/g, "\n")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function parseAuthorTourStaysFromText(value) {
+  const raw = cleanAuthorTourText(value);
+  if (!raw) return [];
+
+  const out = [];
+  const seen = new Set();
+
+  const add = (hotel, nights, city) => {
+    const h = String(hotel || "").replace(/[,.;\s]+$/g, "").trim();
+    if (!h) return;
+    const key = h.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({
+      hotel: h,
+      nights: Number.isFinite(Number(nights)) && Number(nights) > 0 ? Number(nights) : null,
+      city: String(city || "").replace(/[,.;\s]+$/g, "").trim() || null,
+    });
+  };
+
+  // Structured text like: Kar Hotel - 2 nights - Uzungol Mövenpick Hotel - 2 nights - Trabzon
+  const durationRegex = /(.+?)\s*-\s*(\d+)\s*(?:nights?|ноч(?:ь|и|ей))\s*-\s*([^\n]+?)(?=\s+[A-ZА-ЯЁÜÖÇĞİŞ][^\n]*?\s*-\s*\d+\s*(?:nights?|ноч(?:ь|и|ей))\s*-|$)/giu;
+  let m;
+  while ((m = durationRegex.exec(raw))) add(m[1], m[2], m[3]);
+  if (out.length) return out.slice(0, 8);
+
+  // Program text like: Размещение в отеле Kar Hotel, Uzungöl
+  const programHotelRegex = /Размещение\s+в\s+отеле\s+([^\n]+?)(?=\s+(?:🗓\s*)?ДЕНЬ\s*\d+|\s+Выезд|\s+Трансфер|\s+Возвращение|\s+Экскурсия|$)/giu;
+  while ((m = programHotelRegex.exec(raw))) {
+    const chunk = String(m[1] || "").trim();
+    const [hotel, city] = chunk.split(/,\s*/);
+    add(hotel, null, city || null);
+  }
+
+  return out.slice(0, 8);
+}
+
+function parseAuthorTourProgramDaysFromText(value) {
+  const raw0 = cleanAuthorTourText(value)
+    .replace(/\s*(?=(?:🗓\s*)?(?:ДЕНЬ|DAY)\s*\d+)/giu, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  if (!raw0) return [];
+
+  const dayRegex = /(?:🗓\s*)?(?:ДЕНЬ|DAY)\s*(\d+)\s*(?:\|\s*([^\n]+))?/giu;
+  const matches = [];
+  let m;
+  while ((m = dayRegex.exec(raw0))) {
+    matches.push({ index: m.index, end: dayRegex.lastIndex, day: Number(m[1]), dateLabel: String(m[2] || "").trim() });
+  }
+
+  if (!matches.length) return [];
+
+  const days = [];
+  for (let i = 0; i < matches.length; i += 1) {
+    const cur = matches[i];
+    const next = matches[i + 1];
+    let body = raw0.slice(cur.end, next ? next.index : raw0.length).trim();
+    body = body
+      .replace(/^[-–—\s]+/g, "")
+      .replace(/\s*(?:Цена\s+указана|Стоимость\s+указана)[\s\S]*$/i, "")
+      .replace(/\s*(?:Для\s+бронирования|Для\s+брони|Бронирование|Обращайтесь)[\s\S]*$/i, "")
+      .replace(/\s*(?:@\w{4,}|\+?\d[\d\s().-]{7,})[\s\S]*$/i, "")
+      .trim();
+    if (!body) continue;
+
+    const routeMatch = body.match(/📍\s*([^✈🕒🏨🚐🌊🎢⛰🍃🛍🕳🌉🏞🛳☕🛫\n]+)/u);
+    const route = routeMatch ? routeMatch[1].trim() : "";
+    const stayMatch = body.match(/Размещение\s+в\s+отеле\s+([^\n]+?)(?=\s+(?:✈|🕒|🛫|🛬|🚐|🌊|🎢|⛰|🍃|🛍|🕳|🌉|🏞|🛳|☕|$))/iu);
+    let stay = null;
+    if (stayMatch) {
+      const [hotel, city] = String(stayMatch[1] || "").split(/,\s*/);
+      stay = { hotel: (hotel || "").trim(), city: (city || "").trim() || null, nights: null };
+    }
+
+    const text = body
+      .replace(/\s+(?=(?:✈️?|🕒|🏨|🚐|🌊|🎢|⛰|🍃|🛍|🕳|🌉|🏞|🛳|☕|🛫|🛬|🚌|🚗|📍))/gu, "\n")
+      .replace(/\n{2,}/g, "\n")
+      .trim();
+
+    days.push({ day: cur.day, dateLabel: cur.dateLabel, route, text, stay });
+  }
+
+  return days.slice(0, 30);
+}
+
 function buildDetailsForAuthorTour(draft, netPriceNum) {
+  const stays = Array.isArray(draft.stays) && draft.stays.length
+    ? draft.stays
+    : parseAuthorTourStaysFromText(draft.duration || draft.program || "");
+
+  const programDays = Array.isArray(draft.programDays) && draft.programDays.length
+    ? draft.programDays
+    : parseAuthorTourProgramDaysFromText(draft.program || "");
+
   return {
     title: draft.title || "",
     directionCountry: draft.country || "",
@@ -5127,8 +5243,10 @@ function buildDetailsForAuthorTour(draft, netPriceNum) {
     endDate: draft.endDate || "",
     flexibleDates: !!draft.flexibleDates,
     duration: draft.duration || "",
+    stays,
     tourFormat: draft.tourFormat || "group",
     program: draft.program || "",
+    programDays,
     included: draft.included || "",
     notIncluded: draft.notIncluded || "",
     minPax: draft.minPax || "",
@@ -7886,19 +8004,6 @@ bot.action(/^atp:(\d+)$/, async (ctx) => {
     }
 
     const d = parseDetailsAny(svc.details);
-    const rawProgram = String(
-      d.program ||
-      d.tourProgram ||
-      d.programText ||
-      d.itinerary ||
-      d.routeProgram ||
-      ""
-    ).trim();
-
-    if (!rawProgram) {
-      await ctx.answerCbQuery("ℹ️ Программа тура не указана", { show_alert: true });
-      return;
-    }
 
     const escapeHtmlLocal = (value) =>
       String(value ?? "")
@@ -7912,12 +8017,9 @@ bot.action(/^atp:(\d+)$/, async (ctx) => {
       String(value || "")
         .replace(/\r\n/g, "\n")
         .replace(/\r/g, "\n")
+        .replace(/\s*[⸻━]{2,}\s*/g, "\n")
         .replace(/[ \t]+/g, " ")
-        .replace(/\s*—{2,}\s*/g, "\n")
-        .replace(/\s*–{2,}\s*/g, "\n")
-        .replace(/\s*-{3,}\s*/g, "\n")
-        .replace(/\s+(?=ДЕНЬ\s*\d+\s*\|)/gi, "\n")
-        .replace(/\s+(?=DAY\s*\d+\s*\|)/gi, "\n")
+        .replace(/\s*(?=(?:🗓\s*)?(?:ДЕНЬ|DAY)\s*\d+)/giu, "\n")
         .replace(/\n{3,}/g, "\n\n")
         .trim();
 
@@ -7925,18 +8027,52 @@ bot.action(/^atp:(\d+)$/, async (ctx) => {
       String(value || "")
         .replace(/\s*(?:Цена\s+указана|Стоимость\s+указана)[\s\S]*$/i, "")
         .replace(/\s*(?:Для\s+бронирования|Для\s+брони|Бронирование|Обращайтесь)[\s\S]*$/i, "")
-        .replace(/\s*(?:@[\w_]{4,}|https?:\/\/\S+|\+?\d[\d\s().-]{7,})[\s\S]*$/i, "")
+        .replace(/\s*(?:@\w{4,}|https?:\/\/\S+|\+?\d[\d\s().-]{7,})[\s\S]*$/i, "")
         .trim();
+
+    const formatStayLine = (stay) => {
+      if (!stay || typeof stay !== "object") return "";
+      const hotel = String(stay.hotel || stay.name || stay.hotelName || "").trim();
+      if (!hotel) return "";
+      const city = String(stay.city || stay.location || "").trim();
+      const nights = pluralRuNightsBot(stay.nights || stay.days || stay.nightCount || "");
+      return [hotel, nights, city].filter(Boolean).join(" — ");
+    };
+
+    const formatStructuredProgramDays = (programDays) => {
+      if (!Array.isArray(programDays) || !programDays.length) return "";
+
+      return programDays
+        .map((day, idx) => {
+          if (!day || typeof day !== "object") return "";
+          const dayNum = day.day || day.number || idx + 1;
+          const dateLabel = day.dateLabel || day.date || "";
+          const title = day.title || day.route || day.name || "";
+          const text = String(day.text || day.description || day.body || "").trim();
+          const stayLine = formatStayLine(day.stay);
+
+          const lines = [];
+          lines.push(`📍 <b>День ${escapeHtmlLocal(dayNum)}${dateLabel ? ` — ${escapeHtmlLocal(dateLabel)}` : ""}</b>`);
+          if (title) lines.push(`🧭 <b>${escapeHtmlLocal(title)}</b>`);
+          if (text) {
+            const activityLines = text
+              .split(/\n+/g)
+              .map((x) => x.trim())
+              .filter(Boolean)
+              .map((x) => `• ${escapeHtmlLocal(x)}`);
+            lines.push(...activityLines);
+          }
+          if (stayLine) lines.push(`🏨 ${escapeHtmlLocal(stayLine)}`);
+          return lines.join("\n");
+        })
+        .filter(Boolean)
+        .join("\n\n");
+    };
 
     const prettifyDayBody = (value) => {
-      let s = String(value || "")
+      const s = String(value || "")
         .replace(/\s+/g, " ")
-        .replace(/\s*—\s*/g, " — ")
-        .trim();
-
-      // Разбиваем длинную строку по смысловым emoji-маркерам.
-      s = s
-        .replace(/\s+(?=(?:✈️|🕒|🛬|🏨|🚙|🏞️|🌄|🌊|🏭|🛍️|☕|🍽️|🚤|🏙️|🛫|🛥️|🧳|🚌|🚗|📍))/g, "\n")
+        .replace(/\s+(?=(?:✈️?|🕒|🏨|🚐|🌊|🎢|⛰|🍃|🛍|🕳|🌉|🏞|🛳|☕|🛫|🛬|🚌|🚗|📍))/gu, "\n")
         .replace(/\n{2,}/g, "\n")
         .trim();
 
@@ -7944,61 +8080,65 @@ bot.action(/^atp:(\d+)$/, async (ctx) => {
         .split("\n")
         .map((line) => line.trim())
         .filter(Boolean)
-        .map((line) => `• ${line}`)
+        .map((line) => `• ${escapeHtmlLocal(line)}`)
         .join("\n");
     };
 
-    const formatAuthorTourProgram = (value) => {
+    const formatLegacyProgram = (value) => {
       const cleaned = stripCommercialTail(normalizeProgramText(value));
       if (!cleaned) return "";
 
-      const dayRegex = /(ДЕНЬ|DAY)\s*(\d+)\s*(?:\|\s*([^\n]+?))?(?=\n|$|\s(?:📍|✈️|🕒|🏨|🚙|🌊|🏞️|🏭|🛍️|☕|🍽️|🚤|🛫|🛬))/gi;
+      const dayRegex = /(?:🗓\s*)?(?:ДЕНЬ|DAY)\s*(\d+)\s*(?:\|\s*([^\n]+))?/giu;
       const matches = [];
       let m;
 
       while ((m = dayRegex.exec(cleaned))) {
-        matches.push({
-          index: m.index,
-          end: dayRegex.lastIndex,
-          number: m[2],
-          date: String(m[3] || "").trim(),
-          marker: m[0],
-        });
+        matches.push({ index: m.index, end: dayRegex.lastIndex, number: m[1], date: String(m[2] || "").trim() });
       }
 
-      if (!matches.length) {
-        return prettifyDayBody(cleaned);
-      }
+      if (!matches.length) return prettifyDayBody(cleaned);
 
       const sections = [];
-
       for (let i = 0; i < matches.length; i += 1) {
         const cur = matches[i];
         const next = matches[i + 1];
-
         const bodyRaw = cleaned
           .slice(cur.end, next ? next.index : cleaned.length)
           .replace(/^\s*[—–-]+\s*/g, "")
           .trim();
-
-        const datePart = cur.date ? ` — ${cur.date}` : "";
         const body = prettifyDayBody(bodyRaw);
-
-        if (body) {
-          sections.push(`📍 <b>День ${escapeHtmlLocal(cur.number)}${escapeHtmlLocal(datePart)}</b>\n${escapeHtmlLocal(body)}`);
-        } else {
-          sections.push(`📍 <b>День ${escapeHtmlLocal(cur.number)}${escapeHtmlLocal(datePart)}</b>`);
-        }
+        const datePart = cur.date ? ` — ${cur.date}` : "";
+        sections.push(`📍 <b>День ${escapeHtmlLocal(cur.number)}${escapeHtmlLocal(datePart)}</b>${body ? `\n${body}` : ""}`);
       }
 
       return sections.join("\n\n");
     };
 
-    const splitHtmlMessages = (header, body, maxLen = 3600) => {
-      const safeBody = String(body || "").trim();
-      if (!safeBody) return [header];
+    const rawProgram = String(
+      d.program ||
+        d.tourProgram ||
+        d.programText ||
+        d.itinerary ||
+        d.routeProgram ||
+        ""
+    ).trim();
 
-      const blocks = safeBody.split(/\n{2,}/g).filter(Boolean);
+    const formattedProgram = formatStructuredProgramDays(d.programDays) || formatLegacyProgram(rawProgram);
+
+    if (!formattedProgram) {
+      await ctx.answerCbQuery("ℹ️ Программа тура не указана", { show_alert: true });
+      return;
+    }
+
+    await ctx.answerCbQuery("🗓 Отправляю программу тура");
+
+    const title = String(svc.title || d.title || "Авторский тур").trim();
+    const header =
+      `🗓 <b>Программа тура</b> <code>#R${serviceId}</code>\n` +
+      `🧭 <b>${escapeHtmlLocal(title)}</b>`;
+
+    const splitHtmlMessages = (body, maxLen = 3600) => {
+      const blocks = String(body || "").split(/\n{2,}/g).filter(Boolean);
       const chunks = [];
       let current = header;
 
@@ -8008,46 +8148,15 @@ bot.action(/^atp:(\d+)$/, async (ctx) => {
           current = candidate;
           continue;
         }
-
-        if (current.trim() && current !== header) chunks.push(current.trim());
-
-        if ((header + "\n\n" + block).length <= maxLen) {
-          current = `${header}\n\n${block}`;
-        } else {
-          const lines = block.split("\n");
-          current = header;
-          for (const line of lines) {
-            const c2 = `${current}\n${line}`;
-            if (c2.length > maxLen) {
-              chunks.push(current.trim());
-              current = `${header}\n${line}`;
-            } else {
-              current = c2;
-            }
-          }
-        }
+        if (current && current !== header) chunks.push(current.trim());
+        current = `${header}\n\n${block}`;
       }
 
       if (current.trim()) chunks.push(current.trim());
-      return chunks.length ? chunks.slice(0, 4) : [header];
+      return chunks.length ? chunks.slice(0, 6) : [header];
     };
 
-    const title = String(svc.title || d.title || "Авторский тур").trim();
-    const formattedProgram = formatAuthorTourProgram(rawProgram);
-
-    if (!formattedProgram) {
-      await ctx.answerCbQuery("ℹ️ Программа тура не указана", { show_alert: true });
-      return;
-    }
-
-    await ctx.answerCbQuery("🗓 Отправляю программу тура");
-
-    const header =
-      `🗓 <b>Программа тура</b> <code>#R${serviceId}</code>\n` +
-      `🧭 <b>${escapeHtmlLocal(title)}</b>`;
-
-    const chunks = splitHtmlMessages(header, formattedProgram, 3600);
-
+    const chunks = splitHtmlMessages(formattedProgram, 3600);
     for (let i = 0; i < chunks.length; i += 1) {
       const suffix = chunks.length > 1 ? `\n\n<i>Часть ${i + 1}/${chunks.length}</i>` : "";
       await bot.telegram.sendMessage(userChatId, `${chunks[i]}${suffix}`, {
@@ -8058,13 +8167,7 @@ bot.action(/^atp:(\d+)$/, async (ctx) => {
   } catch (e) {
     console.error("[tg-bot] author tour program action error:", e?.message || e);
 
-    const desc = String(
-      e?.response?.description ||
-      e?.description ||
-      e?.message ||
-      ""
-    );
-
+    const desc = String(e?.response?.description || e?.description || e?.message || "");
     if (/bot was blocked|chat not found|user is deactivated|forbidden/i.test(desc)) {
       try {
         await ctx.answerCbQuery("Откройте личный чат с ботом и нажмите Start", { show_alert: true });
