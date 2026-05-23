@@ -1144,13 +1144,26 @@ const priceKind =
       for (const line of stayLines) parts.push(`• ${escapeHtml(line)}`);
     }
 
-    const includedItems = splitSmartLines(d.included || d.includes || d.includedText, 6);
+    const includedItems = splitSmartLines(d.included || d.includes || d.includedText, 12);
     if (includedItems.length) {
       pushDivider(parts);
       parts.push("━━━━━━━━━━");
       parts.push("");
       parts.push("✅ <b>Включено</b>");
-      for (const item of includedItems) parts.push(`✓ ${escapeHtml(item)}`);
+      for (const item of includedItems) parts.push(`• ${escapeHtml(item)}`);
+    }
+    
+    const notIncludedItems = splitSmartLines(
+      d.notIncluded || d.excluded || d.notIncludedText || d.excludeText,
+      12
+    );
+    
+    if (notIncludedItems.length) {
+      pushDivider(parts);
+      parts.push("━━━━━━━━━━");
+      parts.push("");
+      parts.push("❌ <b>Не включено</b>");
+      for (const item of notIncludedItems) parts.push(`• ${escapeHtml(item)}`);
     }
 
     if (priceWithCur != null && String(priceWithCur).trim()) {
@@ -1183,11 +1196,17 @@ const priceKind =
       .trim();
 
     if (authorName) {
-      const authorValue = authorTelegram
+      const providerValue = authorTelegram
         ? a(`https://t.me/${encodeURIComponent(authorTelegram)}`, authorName)
         : escapeHtml(authorName);
-      parts.push(`👨‍💼 <b>Автор:</b> ${authorValue}`);
+    
+      parts.push(`🏢 <b>Поставщик:</b> ${providerValue}`);
     }
+          const authorValue = authorTelegram
+            ? a(`https://t.me/${encodeURIComponent(authorTelegram)}`, authorName)
+            : escapeHtml(authorName);
+          parts.push(`👨‍💼 <b>Автор:</b> ${authorValue}`);
+        }
 
     // ВАЖНО: программу тура НЕ вставляем в основную карточку.
     // Она открывается отдельной кнопкой «🗓 Программа тура» через handler atp:<serviceId> в bot.js.
