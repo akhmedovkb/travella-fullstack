@@ -4687,7 +4687,8 @@ function isCreateWizardState(state) {
     s.startsWith("svc_create_") ||
     s.startsWith("svc_hotel_") ||
     s.startsWith("svc_author_") ||
-    s.startsWith("author_stay_")
+    s.startsWith("author_stay_") ||
+    s.startsWith("author_day_")
   );
 }
 
@@ -5596,8 +5597,20 @@ async function promptWizardState(ctx, state) {
 
     case "svc_author_program_days":
       await ctx.reply(
-        "🗓 Укажите *программу тура по дням* по строкам.\n\nФормат каждой строки:\n`День | Дата | Маршрут | Заголовок | пункт; пункт; пункт`\n\nПример:\n`1 | 29.05.2026 | Ташкент → Трабзон | Перелёт и размещение | Встреча в аэропорту; Трансфер; Размещение в отеле`\n`2 | 30.05.2026 | Uzungol | Экскурсия по окрестностям | Водопады; Качели и зиплайн; Свободное время`",
-        { parse_mode: "Markdown", ...wizNavKeyboard() }
+        "🗓 *Программа тура по дням*\n\nПока дни программы не добавлены.\n\nДобавьте каждый день как отдельный блок: дата, маршрут, заголовок и пункты программы.",
+        {
+          parse_mode: "Markdown",
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "➕ Добавить день программы", callback_data: "author_day:add" }],
+              [{ text: "✅ Продолжить", callback_data: "author_day:done" }],
+              [
+                { text: "⬅️ Назад", callback_data: "svc_wiz:back" },
+                { text: "❌ Отмена", callback_data: "svc_wiz:cancel" },
+              ],
+            ],
+          },
+        }
       );
       return;
 
@@ -7670,7 +7683,8 @@ bot.action("svc_wiz:back", async (ctx) => {
             String(cur).startsWith("svc_create_") ||
             String(cur).startsWith("svc_hotel_") ||
             String(cur).startsWith("svc_author_") ||
-            String(cur).startsWith("author_stay_")
+            String(cur).startsWith("author_stay_") ||
+            String(cur).startsWith("author_day_")
           )
         )
       return;
@@ -8417,6 +8431,51 @@ bot.action("author_stay:done", async (ctx) => {
 
   } catch (e) {
     console.error("[author_stay:done]", e);
+  }
+});
+
+
+bot.action("author_day:add", async (ctx) => {
+  try {
+    if (!ctx.session) ctx.session = {};
+    if (!ctx.session.serviceDraft) ctx.session.serviceDraft = {};
+
+    pushWizardState(ctx, "svc_author_program_days");
+    ctx.session.state = "author_day_date";
+
+    await safeCb(ctx);
+
+    await ctx.reply(
+      "📅 Укажите дату дня программы\n\nФормат: 29.05.2026"
+    );
+  } catch (e) {
+    console.error("[author_day:add]", e);
+  }
+});
+
+bot.action("author_day:done", async (ctx) => {
+  try {
+    if (!ctx.session?.serviceDraft) return;
+
+    const programDays = ctx.session.serviceDraft.programDays || [];
+
+    if (!programDays.length) {
+      await ctx.answerCbQuery(
+        "Добавьте хотя бы один день программы",
+        { show_alert: true }
+      );
+      return;
+    }
+
+    pushWizardState(ctx, "svc_author_program_days");
+
+    ctx.session.state = "svc_author_included";
+
+    await safeCb(ctx);
+
+    await promptWizardState(ctx, "svc_author_included");
+  } catch (e) {
+    console.error("[author_day:done]", e);
   }
 });
 
@@ -10459,7 +10518,16 @@ bot.on("text", async (ctx, next) => {
     }
 
     // 2) мастер создания отказных (tour + hotel)
-    if (state && (state.startsWith("svc_create_") || state.startsWith("svc_hotel_") || state.startsWith("svc_author_")) || state.startsWith("author_stay_")) {
+    if (
+      state &&
+      (
+        state.startsWith("svc_create_") ||
+        state.startsWith("svc_hotel_") ||
+        state.startsWith("svc_author_") ||
+        state.startsWith("author_stay_") ||
+        state.startsWith("author_day_")
+      )
+    ) {
       const text = ctx.message.text.trim();
 
       if (text.toLowerCase() === "отмена") {
@@ -10697,25 +10765,132 @@ bot.on("text", async (ctx, next) => {
               return;
             }
           
-          case "svc_author_program_days": {
-          const programDays = parseAuthorProgramDaysInput(text);
-          if (!programDays.length) {
+          case "author_day_date": {
+            const norm = normalizeAuthorDateInput(text);
+            if (!norm) {
+              await ctx.reply("😕 Не понял дату. Введите в формате *29.05.2026*.", {
+                parse_mode: "Markdown",
+                ...wizNavKeyboard(),
+              });
+              return;
+            }
+
+            draft._programDayDate = formatAuthorDateDMY(norm);
+            ctx.session.state = "author_day_route";
+
             await ctx.reply(
-              "😕 Не понял программу.\n\nФормат каждой строки:\n`День | Дата | Маршрут | Заголовок | пункт; пункт; пункт`\n\nПример:\n`1 | 29.05.2026 | Ташкент → Трабзон | Перелёт и размещение | Встреча в аэропорту; Трансфер; Размещение в отеле`",
-              { parse_mode: "Markdown", ...wizNavKeyboard() }
+              "🛫 Укажите маршрут / локацию дня\n\nНапример:\nТашкент → Трабзон"
             );
             return;
           }
 
-          draft.programDays = programDays;
-          draft.programDaysText = text;
-          draft.program = text;
+          case "author_day_route": {
+            const v = await requireTextField(ctx, text, "Маршрут / локация дня", { min: 2 });
+            if (!v) return;
 
-          pushWizardState(ctx, "svc_author_program_days");
-          ctx.session.state = "svc_author_included";
-          await promptWizardState(ctx, "svc_author_included");
-          return;
-        }
+            draft._programDayRoute = v;
+            ctx.session.state = "author_day_title";
+
+            await ctx.reply(
+              "📝 Укажите заголовок дня\n\nНапример:\nПерелёт и размещение"
+            );
+            return;
+          }
+
+          case "author_day_title": {
+            const v = await requireTextField(ctx, text, "Заголовок дня", { min: 2 });
+            if (!v) return;
+
+            draft._programDayTitle = v;
+            ctx.session.state = "author_day_items";
+
+            await ctx.reply(
+              "📌 Укажите пункты программы\n\nМожно через точку с запятой или каждый пункт с новой строки.\n\nПример:\nВстреча в аэропорту; Трансфер; Размещение в отеле"
+            );
+            return;
+          }
+
+          case "author_day_items": {
+            const items = String(text || "")
+              .split(/[;\n]+/)
+              .map((x) => x.trim())
+              .filter(Boolean);
+
+            if (!items.length) {
+              await ctx.reply(
+                "😕 Добавьте хотя бы один пункт программы.\n\nПример:\nВстреча в аэропорту; Трансфер; Размещение в отеле",
+                wizNavKeyboard()
+              );
+              return;
+            }
+
+            if (!draft.programDays) draft.programDays = [];
+
+            const dayNumber = draft.programDays.length + 1;
+
+            draft.programDays.push({
+              day: dayNumber,
+              date: draft._programDayDate,
+              route: draft._programDayRoute,
+              title: draft._programDayTitle,
+              items,
+              text: items.join("\n"),
+            });
+
+            draft.programDaysText = draft.programDays
+              .map((d) => `${d.day} | ${d.date || ""} | ${d.route || ""} | ${d.title || ""} | ${(d.items || []).join("; ")}`)
+              .join("\n");
+            draft.program = draft.programDaysText;
+
+            delete draft._programDayDate;
+            delete draft._programDayRoute;
+            delete draft._programDayTitle;
+
+            ctx.session.state = "svc_author_program_days";
+
+            const rows = draft.programDays.map((d) => {
+              const title = d.title ? ` — ${d.title}` : "";
+              const route = d.route ? `\n   🛫 ${d.route}` : "";
+              return `${d.day}. ${d.date || "без даты"}${title}${route}`;
+            });
+
+            await ctx.reply(
+              `🗓 Программа тура\n\n${rows.join("\n\n")}`,
+              {
+                reply_markup: {
+                  inline_keyboard: [
+                    [{ text: "➕ Добавить ещё день", callback_data: "author_day:add" }],
+                    [{ text: "✅ Продолжить", callback_data: "author_day:done" }],
+                    [
+                      { text: "⬅️ Назад", callback_data: "svc_wiz:back" },
+                      { text: "❌ Отмена", callback_data: "svc_wiz:cancel" },
+                    ],
+                  ],
+                },
+              }
+            );
+
+            return;
+          }
+
+          case "svc_author_program_days": {
+            await ctx.reply(
+              "🗓 Используйте кнопки ниже: добавьте день программы или продолжите дальше.",
+              {
+                reply_markup: {
+                  inline_keyboard: [
+                    [{ text: "➕ Добавить день программы", callback_data: "author_day:add" }],
+                    [{ text: "✅ Продолжить", callback_data: "author_day:done" }],
+                    [
+                      { text: "⬅️ Назад", callback_data: "svc_wiz:back" },
+                      { text: "❌ Отмена", callback_data: "svc_wiz:cancel" },
+                    ],
+                  ],
+                },
+              }
+            );
+            return;
+          }
 
         case "svc_author_included": {
           const v = await requireTextField(ctx, text, "Что включено", { min: 2 });
