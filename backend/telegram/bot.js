@@ -4439,6 +4439,35 @@ function isPastDateTime(value) {
   return dt.getTime() < Date.now();
 }
 
+function ymdToLocalEndOfDay(value) {
+  const m = String(value || "").trim().match(/^(\d{4})[-.](\d{2})[-.](\d{2})/);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  if (!Number.isInteger(y) || !Number.isInteger(mo) || !Number.isInteger(d)) return null;
+  const dt = new Date(y, mo - 1, d, 23, 59, 59, 999);
+  if (Number.isNaN(dt.getTime())) return null;
+  if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return null;
+  return dt;
+}
+
+function getDraftTripStartForExpiration(draft) {
+  const category = String(draft?.category || "").toLowerCase();
+  if (category === "refused_flight") {
+    return draft?.departureFlightDate || draft?.startFlightDate || draft?.startDate || null;
+  }
+  return draft?.startDate || draft?.departureFlightDate || draft?.startFlightDate || null;
+}
+
+function isExpirationAfterTripStart(draft, expirationValue) {
+  const exp = parseDateFlexible(expirationValue);
+  const tripStartRaw = getDraftTripStartForExpiration(draft);
+  const tripStartEnd = ymdToLocalEndOfDay(tripStartRaw);
+  if (!exp || !tripStartEnd) return false;
+  return exp.getTime() > tripStartEnd.getTime();
+}
+
 function dateAtLocalMidnight(ymd) {
   const m = String(ymd || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!m) return null;
@@ -6408,10 +6437,29 @@ async function finishCreateServiceFromWizard(ctx) {
       },
     });
   } catch (e) {
+    const apiError = e?.response?.data?.error || null;
     console.error(
       "[tg-bot] finishCreateServiceFromWizard error:",
       e?.response?.data || e
     );
+
+    if (apiError === "BAD_EXPIRATION_AFTER_START") {
+      await ctx.reply(
+        "⚠️ Срок актуальности не может быть позже даты начала тура / вылета.\n" +
+          "Вернитесь к шагу актуальности и укажите дату до начала услуги."
+      );
+      ctx.session.state = "svc_create_expiration";
+      return;
+    }
+
+    if (apiError === "BAD_EXPIRATION") {
+      await ctx.reply(
+        "⚠️ Неверный формат срока актуальности. Используйте YYYY-MM-DD HH:mm или YYYY.MM.DD HH:mm."
+      );
+      ctx.session.state = "svc_create_expiration";
+      return;
+    }
+
     await ctx.reply("⚠️ Ошибка при сохранении услуги. Попробуйте позже.");
     resetServiceWizard(ctx);
   }
@@ -12112,6 +12160,15 @@ bot.on("text", async (ctx, next) => {
               parse_mode: "Markdown",
               ...wizNavKeyboard(),
             });
+            return;
+          }
+
+          if (normExp && isExpirationAfterTripStart(draft, normExp)) {
+            await ctx.reply(
+              "⚠️ Срок актуальности не может быть позже даты начала тура / вылета.\n" +
+                "Укажите дату и время до начала услуги или напишите `нет`.",
+              { parse_mode: "Markdown", ...wizNavKeyboard() }
+            );
             return;
           }
 
