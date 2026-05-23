@@ -4045,8 +4045,10 @@ async function finishEditWizard(ctx) {
       ctx.session.awaitingProofForServiceId = draft.id;
       ctx.session.awaitingProofForCategory = category;
       
-      // ❗ НЕ сбрасываем wizard здесь!
-      // resetServiceWizard(ctx); ← УБРАТЬ ОТСЮДА
+      // На этапе proof старый edit/create wizard больше не должен перехватывать текст «ГОТОВО».
+      ctx.session.state = null;
+      ctx.session.editWiz = null;
+      ctx.session.wizardStack = [];
       
       await safeReply(
         ctx,
@@ -4098,6 +4100,17 @@ function logUpdate(ctx, label = "update") {
     console.log("[tg-bot]", label, { type, subTypes, fromId, username });
   } catch (_) {}
 }
+
+// Категории, для которых бот обязан запросить proof перед отправкой на модерацию.
+// Важно: используется и при создании, и при редактировании.
+const proofRequiredCategories = [
+  "refused_tour",
+  "author_tour",
+  "refused_hotel",
+  "refused_flight",
+  "refused_ticket",
+  "refused_event_ticket",
+];
 
 // Маппинг подписей для категорий
 const CATEGORY_LABELS = {
@@ -6393,15 +6406,6 @@ async function finishCreateServiceFromWizard(ctx) {
     const createdServiceId = data?.service?.id;
 
     await finishProviderServiceDraft(ctx, "submitted");
-
-    const refusedCategories = [
-      "refused_tour",
-      "author_tour",
-      "refused_hotel",
-      "refused_flight",
-      "refused_ticket",
-      "refused_event_ticket",
-    ];
 
     if (proofRequiredCategories.includes(String(category || "").toLowerCase())) {
       ctx.session.awaitingProofForServiceId = createdServiceId;
@@ -10763,6 +10767,15 @@ bot.on("text", async (ctx, next) => {
       return;
     }
 
+    // ===================== PROOF FINISH =====================
+    // Важно: bot.on("text") стоит раньше bot.hears(/готово/), поэтому
+    // сообщение «ГОТОВО» нужно обработать здесь, иначе оно уходит в wizard.
+    const rawText = String(ctx.message?.text || "").trim();
+    if (/^(✅\s*)?(готово|done)$/i.test(rawText) && ctx.session?.awaitingProofForServiceId) {
+      await finishProofSubmissionFromBot(ctx);
+      return;
+    }
+
     // ===================== EDIT WIZARD (svc_edit_*) =====================
     // Важно: чтобы редактирование услуг работало как раньше
     if (await handleSvcEditWizardText(ctx)) return;
@@ -12388,7 +12401,7 @@ bot.on("photo", async (ctx, next) => {
   }
 });
 
-bot.hears(/^(готово|done)$/i, async (ctx) => {
+async function finishProofSubmissionFromBot(ctx) {
   try {
     const serviceId = Number(ctx.session?.awaitingProofForServiceId || 0);
     if (!serviceId) return;
@@ -12478,6 +12491,10 @@ bot.hears(/^(готово|done)$/i, async (ctx) => {
       "⚠️ Ошибка при завершении отправки на модерацию. Попробуйте ещё раз."
     );
   }
+}
+
+bot.hears(/^(готово|done)$/i, async (ctx) => {
+  await finishProofSubmissionFromBot(ctx);
 });
 
 bot.on("inline_query", async (ctx) => {
