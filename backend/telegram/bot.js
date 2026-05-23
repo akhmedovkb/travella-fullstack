@@ -5544,25 +5544,43 @@ function authorDayNavKeyboard({ skip = true } = {}) {
 
 
 const AUTHOR_INCLUDED_PRESETS = [
-  { key: "stay", icon: "🏨", label: "Проживание" },
-  { key: "transfer", icon: "🚐", label: "Трансферы" },
-  { key: "food", icon: "🍽", label: "Питание" },
-  { key: "guide", icon: "🧑‍🏫", label: "Гид" },
-  { key: "excursions", icon: "🎟", label: "Экскурсии" },
-  { key: "bosphorus", icon: "🚤", label: "Босфор" },
-  { key: "tickets", icon: "🎫", label: "Входные билеты" },
-  { key: "support", icon: "📞", label: "Сопровождение" },
+  { key:"flights", label:"Авиабилеты", icon:"✈️" },
+  { key:"stay", label:"Проживание", icon:"🏨" },
+
+  { key:"transfer", label:"Трансферы", icon:"🚐" },
+  { key:"visa", label:"Виза", icon:"🛂" },
+
+  { key:"guide", label:"Гид", icon:"🧑‍🏫" },
+  { key:"insurance", label:"Страхование", icon:"🛡" },
+
+  { key:"excursions", label:"Экскурсии", icon:"🎟" },
+  { key:"entrance", label:"Входные билеты", icon:"🎫" },
+
+  { key:"escort", label:"Сопровождение", icon:"📞" },
+  { key:"lunch", label:"Обед", icon:"🍲" },
+
+  { key:"dinner", label:"Ужин", icon:"🍽" },
+  { key:"photo", label:"Фото/видео съёмка", icon:"📸" },
 ];
 
 const AUTHOR_EXCLUDED_PRESETS = [
   { key: "flight", icon: "✈️", label: "Авиабилеты" },
-  { key: "insurance", icon: "🛡", label: "Страховка" },
-  { key: "lunches", icon: "🍽", label: "Обеды" },
-  { key: "personal", icon: "💸", label: "Личные расходы" },
-  { key: "shopping", icon: "🛍", label: "Шопинг" },
   { key: "visa", icon: "🛂", label: "Виза" },
+
+  { key: "insurance", icon: "🛡", label: "Страхование" },
+  { key: "personal", icon: "💸", label: "Личные расходы" },
+
+  { key: "shopping", icon: "🛍", label: "Шопинг" },
   { key: "citytax", icon: "🏨", label: "Туристический сбор" },
+
   { key: "optional", icon: "🎟", label: "Доп. экскурсии" },
+  { key: "single", icon: "🛏", label: "Single доплата" },
+
+  { key: "lunch", icon: "🍲", label: "Обед" },
+  { key: "dinner", icon: "🍽", label: "Ужин" },
+
+  { key: "photo", icon: "📸", label: "Фото/видео съёмка" },
+  { key: "tips", icon: "💵", label: "Чаевые" },
 ];
 
 function normalizeAuthorList(value) {
