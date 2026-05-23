@@ -336,6 +336,36 @@ function normalizeDateTimeInput(value) {
   return raw;
 }
 
+
+function ymdToUtcEndOfDay(value) {
+  const m = String(value || "").trim().match(/^(\d{4})[-.](\d{2})[-.](\d{2})/);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  if (!Number.isInteger(y) || !Number.isInteger(mo) || !Number.isInteger(d)) return null;
+  const dt = new Date(Date.UTC(y, mo - 1, d, 23, 59, 59, 999));
+  if (Number.isNaN(dt.getTime())) return null;
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) return null;
+  return dt;
+}
+
+function getDetailsTripStartForExpiration(category, details) {
+  const cat = String(category || "").toLowerCase();
+  if (cat === "refused_flight") {
+    return details?.departureFlightDate || details?.startFlightDate || details?.startDate || null;
+  }
+  return details?.startDate || details?.departureFlightDate || details?.startFlightDate || null;
+}
+
+function isExpirationAfterTripStartForStorage(category, details, expirationIso) {
+  if (!expirationIso) return false;
+  const exp = new Date(expirationIso);
+  const tripStartEnd = ymdToUtcEndOfDay(getDetailsTripStartForExpiration(category, details));
+  if (Number.isNaN(exp.getTime()) || !tripStartEnd) return false;
+  return exp.getTime() > tripStartEnd.getTime();
+}
+
 function parseExpirationForStorage(value) {
   if (value === undefined) {
     return { provided: false, valid: true, value: undefined };
@@ -1179,6 +1209,17 @@ async function createServiceFromBot(req, res) {
 
     if (expirationParsed.provided) {
       safeDetails.expiration = expirationParsed.value;
+    }
+
+    if (
+      expirationParsed.provided &&
+      expirationParsed.value &&
+      isExpirationAfterTripStartForStorage(category, safeDetails, expirationParsed.value)
+    ) {
+      return res.status(400).json({
+        success: false,
+        error: "BAD_EXPIRATION_AFTER_START",
+      });
     }
 
     const safeDetailsJson = JSON.stringify(safeDetails);
