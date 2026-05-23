@@ -1195,18 +1195,14 @@ const priceKind =
       .replace(/^tg:\/\/resolve\?domain=/i, "")
       .trim();
 
-    if (authorName) {
-      const providerValue = authorTelegram
-        ? a(`https://t.me/${encodeURIComponent(authorTelegram)}`, authorName)
-        : escapeHtml(authorName);
-    
-      parts.push(`🏢 <b>Поставщик:</b> ${providerValue}`);
-    }
-          const authorValue = authorTelegram
-            ? a(`https://t.me/${encodeURIComponent(authorTelegram)}`, authorName)
-            : escapeHtml(authorName);
-          parts.push(`👨‍💼 <b>Автор:</b> ${authorValue}`);
-        }
+      if (authorName) {
+        const providerValue = authorTelegram
+          ? a(`https://t.me/${encodeURIComponent(authorTelegram)}`, authorName)
+          : escapeHtml(authorName);
+      
+        parts.push(`🏢 <b>Поставщик:</b> ${providerValue}`);
+      }
+
 
     // ВАЖНО: программу тура НЕ вставляем в основную карточку.
     // Она открывается отдельной кнопкой «🗓 Программа тура» через handler atp:<serviceId> в bot.js.
