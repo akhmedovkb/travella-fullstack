@@ -924,9 +924,12 @@ const priceKind =
     const pushItem = (hotel, nights, city) => {
       const h = norm(hotel);
       if (!h) return;
-
-      const suffix = nights ? pluralRuNights(nights) : norm(city || "");
-      addLine(suffix ? `${h} — ${suffix}` : h);
+      const suffixParts = [];
+      const nightsText = nights ? pluralRuNights(nights) : "";
+      const cityText = norm(city || "");
+      if (nightsText) suffixParts.push(nightsText);
+      if (cityText) suffixParts.push(cityText);
+      addLine(suffixParts.length ? `${h} — ${suffixParts.join(" — ")}` : h);
     };
 
     const parseTextAccommodation = (value) => {
@@ -938,7 +941,6 @@ const priceKind =
         .map((x) => x.replace(/^[-–—•\s]+/g, "").trim())
         .filter(Boolean)
         .forEach((line) => {
-          // ВАЖНО: не тянем сюда всю программу тура. Только короткие строки проживания.
           const tooLong = line.length > 110;
           const hasDayProgram =
             /день\s*\d+|day\s*\d+|экскурс|вылет|трансфер|встреча|возвращение|свободн|прогулк|посещение/i.test(line);
@@ -949,17 +951,19 @@ const priceKind =
         });
     };
 
-    const sources = [
-      d.stays,
-      d.accommodationPlan,
-      d.hotelsPlan,
-      d.hotels,
-      d.lodging,
-      d.accommodationHotels,
-    ];
+    const parseDurationStays = (value) => {
+      const raw = cleanInline(value);
+      if (!raw) return;
 
-    for (const src of sources) {
-      if (!src) continue;
+      const re = /(.+?)\s*-\s*(\d+)\s*(?:nights?|ноч(?:ь|и|ей))\s*-\s*([^\n]+?)(?=\s+[A-ZА-ЯЁÜÖÇĞİŞ][^\n]*?\s*-\s*\d+\s*(?:nights?|ноч(?:ь|и|ей))\s*-|$)/giu;
+      let m;
+      while ((m = re.exec(raw))) {
+        pushItem(m[1], m[2], m[3]);
+      }
+    };
+
+    const pushAnyStaySource = (src) => {
+      if (!src) return;
 
       if (Array.isArray(src)) {
         src.forEach((x) => {
@@ -985,12 +989,12 @@ const priceKind =
             );
           }
         });
-        continue;
+        return;
       }
 
       if (typeof src === "string") {
         parseTextAccommodation(src);
-        continue;
+        return;
       }
 
       if (typeof src === "object") {
@@ -1009,43 +1013,45 @@ const priceKind =
             src.location
         );
       }
+    };
+
+    [
+      d.stays,
+      d.accommodationPlan,
+      d.hotelsPlan,
+      d.hotels,
+      d.lodging,
+      d.accommodationHotels,
+    ].forEach(pushAnyStaySource);
+
+    if (!out.length && Array.isArray(d.programDays)) {
+      d.programDays.forEach((day) => {
+        if (day?.stay) pushAnyStaySource(day.stay);
+        if (Array.isArray(day?.stays)) pushAnyStaySource(day.stays);
+      });
     }
 
-    // Последний безопасный fallback: берём только отдельные короткие строки из accommodation/hotel,
-    // но НЕ используем d.program, чтобы программа тура не попадала в блок «🏨 Проживание».
-// Последний fallback:
-// пробуем достать именно отели из текста программы,
-// но НЕ тянем весь program в карточку
-if (!out.length) {
-  parseTextAccommodation(d.accommodation);
-  parseTextAccommodation(d.hotel);
-  parseTextAccommodation(d.hotelName);
+    // Новый основной fallback для старых записей: в R793 проживание лежит в details.duration
+    if (!out.length) parseDurationStays(d.duration || d.tourDuration || "");
 
-  if (!out.length) {
-    const txt = cleanInline(d.program);
-
-    const hotelRegex =
-      /Размещение\s+в\s+отеле\s+([^&\n]+?)(?=Размещение|ДЕНЬ|Вылет|Трансфер|$)/gi;
-
-    const seenHotels = new Set();
-
-    let m;
-
-    while ((m = hotelRegex.exec(txt))) {
-      const hotel = norm(m[1]);
-
-      if (!hotel) continue;
-
-      const key = hotel.toLowerCase();
-
-      if (seenHotels.has(key)) continue;
-
-      seenHotels.add(key);
-
-      out.push(hotel);
+    // Последний fallback: из обычных полей отеля.
+    if (!out.length) {
+      parseTextAccommodation(d.accommodation);
+      parseTextAccommodation(d.hotel);
+      parseTextAccommodation(d.hotelName);
     }
-  }
-}
+
+    // Самый последний fallback для legacy: вытянуть только названия отелей из program, не весь текст программы.
+    if (!out.length) {
+      const txt = cleanInline(d.program);
+      const hotelRegex = /Размещение\s+в\s+отеле\s+([^\n]+?)(?=\s+(?:🗓\s*)?ДЕНЬ\s*\d+|\s+Выезд|\s+Трансфер|\s+Возвращение|\s+Экскурсия|$)/giu;
+      let m;
+      while ((m = hotelRegex.exec(txt))) {
+        const chunk = String(m[1] || "").trim();
+        const [hotelName, cityName] = chunk.split(/,\s*/);
+        pushItem(hotelName, null, cityName || null);
+      }
+    }
 
     return out.slice(0, 5);
   };
@@ -1162,7 +1168,26 @@ if (!out.length) {
         ? providerNameRaw
         : norm(d.authorName || d.guideName || "");
 
-    if (authorName) parts.push(`👨‍💼 <b>Автор:</b> ${escapeHtml(authorName)}`);
+    const authorTelegramRaw = String(
+      d.authorTelegram ||
+        d.guideTelegram ||
+        svc.provider_telegram ||
+        svc.providerTelegram ||
+        ""
+    ).trim();
+
+    const authorTelegram = authorTelegramRaw
+      .replace(/^@/, "")
+      .replace(/^https?:\/\/t\.me\//i, "")
+      .replace(/^tg:\/\/resolve\?domain=/i, "")
+      .trim();
+
+    if (authorName) {
+      const authorValue = authorTelegram
+        ? a(`https://t.me/${encodeURIComponent(authorTelegram)}`, authorName)
+        : escapeHtml(authorName);
+      parts.push(`👨‍💼 <b>Автор:</b> ${authorValue}`);
+    }
 
     // ВАЖНО: программу тура НЕ вставляем в основную карточку.
     // Она открывается отдельной кнопкой «🗓 Программа тура» через handler atp:<serviceId> в bot.js.
