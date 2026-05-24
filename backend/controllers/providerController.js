@@ -1067,6 +1067,7 @@ const updateService = async (req, res) => {
       const resetRes = await pool.query(
         `UPDATE services
             SET status='draft',
+                moderation_status='draft',
                 submitted_at=NULL,
                 published_at=NULL,
                 approved_at=NULL,
