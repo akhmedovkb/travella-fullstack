@@ -476,142 +476,220 @@ exports.getRefusedById = async (req, res) => {
   }
 };
 
+async function sendActualityQuestionForService(id, { force = false, lastSentBy = "admin" } = {}) {
+  if (!id) {
+    return { success: false, code: "BAD_ID", message: "Bad id" };
+  }
+
+  const sql = `
+    SELECT
+      s.id, s.category, s.status, s.title, s.details, s.provider_id,
+      p.telegram_refused_chat_id,
+      p.telegram_web_chat_id,
+      p.telegram_chat_id,
+      p.tg_chat_id,
+      p.social, p.phone, p.name
+    FROM services s
+    JOIN providers p ON p.id = s.provider_id
+    WHERE s.id = $1
+      AND s.deleted_at IS NULL
+    LIMIT 1
+  `;
+  const r = await db.query(sql, [id]);
+  const row = r.rows?.[0];
+  if (!row) {
+    return { success: false, code: "NOT_FOUND", message: "Not found" };
+  }
+
+  const chatId = pickProviderChatId(row);
+  if (!chatId) {
+    return {
+      success: false,
+      code: "NO_PROVIDER_CHAT_ID",
+      message: "У провайдера нет Telegram chatId. Попросите поставщика открыть Telegram-бота и нажать /start, либо внесите chatId вручную через TG inline edit.",
+      serviceId: row.id,
+    };
+  }
+
+  const detailsObj = normalizeMeta(parseDetailsAny(row.details));
+  const meta = detailsObj.tg_actual_reminders_meta;
+
+  const escapeHtml = (s) =>
+    String(s ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+
+  if (!force && meta.lockUntil) {
+    const lock = new Date(meta.lockUntil);
+    if (!isNaN(lock.getTime()) && lock.getTime() > Date.now()) {
+      return {
+        success: false,
+        code: "LOCKED",
+        message: `Locked until ${meta.lockUntil}`,
+        locked: true,
+        serviceId: row.id,
+        meta: {
+          lockUntil: meta.lockUntil,
+          lastSentAt: meta.lastSentAt || null,
+        },
+      };
+    }
+  }
+
+  const keyboard = buildSvcActualKeyboard(row.id, { isActual: true });
+  const safeTitle = escapeHtml((row.title || "Услуга").toString().slice(0, 80));
+  const safeCategory = escapeHtml(row.category);
+  const d = parseDetailsAny(row.details);
+
+  const dateInfo =
+    (d.startDate && d.endDate && `${d.startDate} → ${d.endDate}`) ||
+    (d.checkinDate &&
+      d.checkoutDate &&
+      `${d.checkinDate} → ${d.checkoutDate}`) ||
+    (d.checkInDate &&
+      d.checkOutDate &&
+      `${d.checkInDate} → ${d.checkOutDate}`) ||
+    (d.departureFlightDate &&
+      `${d.departureFlightDate}${
+        d.returnFlightDate ? ` → ${d.returnFlightDate}` : ""
+      }`) ||
+    (d.eventDate && String(d.eventDate)) ||
+    "";
+
+  const placeInfo =
+    [d.directionCountry, d.directionFrom, d.directionTo]
+      .filter(Boolean)
+      .join(" / ") ||
+    [d.country, d.city].filter(Boolean).join(" / ") ||
+    (d.hotel && String(d.hotel)) ||
+    "";
+
+  const msg =
+    `⏰ <b>Проверка актуальности</b>\n\n` +
+    `Код: <code>#R${row.id}</code>\n` +
+    `Услуга: <b>${safeTitle}</b>\n` +
+    (placeInfo
+      ? `Направление/отель: <b>${escapeHtml(placeInfo)}</b>\n`
+      : "") +
+    (dateInfo ? `Даты: <b>${escapeHtml(dateInfo)}</b>\n` : "") +
+    `Категория: <code>${safeCategory}</code>\n\n` +
+    `Актуально ли предложение сейчас?`;
+
+  const sendOk = await tgSend(
+    chatId,
+    msg,
+    {
+      reply_markup: keyboard,
+      disable_web_page_preview: true,
+    },
+    CLIENT_BOT_TOKEN || ""
+  );
+
+  meta.lastSentAt = nowIso();
+  meta.lastSentBy = lastSentBy || "admin";
+  meta.lockUntil = new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString();
+  meta.lastSendOk = !!sendOk;
+
+  await db.query(`UPDATE services SET details = $1 WHERE id = $2`, [
+    JSON.stringify(detailsObj),
+    row.id,
+  ]);
+
+  return {
+    success: true,
+    ok: !!sendOk,
+    sent: !!sendOk,
+    chatId,
+    serviceId: row.id,
+    message: "Sent",
+    meta: {
+      lastSentAt: meta.lastSentAt,
+      lockUntil: meta.lockUntil,
+      lastSentBy: meta.lastSentBy,
+    },
+  };
+}
+
 exports.askActualNow = async (req, res) => {
   try {
     const id = Number(req.params.id);
-    if (!id) {
-      return res.status(400).json({ success: false, message: "Bad id" });
+    const force = String(req.query.force || "0") === "1";
+    const result = await sendActualityQuestionForService(id, { force, lastSentBy: "admin" });
+
+    if (result.code === "BAD_ID") {
+      return res.status(400).json(result);
+    }
+    if (result.code === "NOT_FOUND") {
+      return res.status(404).json(result);
     }
 
-    const sql = `
-      SELECT
-        s.id, s.category, s.status, s.title, s.details, s.provider_id,
-        p.telegram_refused_chat_id,
-        p.telegram_web_chat_id,
-        p.telegram_chat_id,
-        p.tg_chat_id,
-        p.social, p.phone, p.name
-      FROM services s
-      JOIN providers p ON p.id = s.provider_id
-      WHERE s.id = $1
-        AND s.deleted_at IS NULL
-      LIMIT 1
-    `;
-    const r = await db.query(sql, [id]);
-    const row = r.rows?.[0];
-    if (!row) {
-      return res.status(404).json({ success: false, message: "Not found" });
-    }
+    return res.json(result);
+  } catch (e) {
+    console.error("[adminRefused] askActualNow error:", e);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
 
-    const chatId = pickProviderChatId(row);
-    if (!chatId) {
-      return res.json({
+exports.askActualBulk = async (req, res) => {
+  try {
+    const rawIds = Array.isArray(req.body?.ids) ? req.body.ids : [];
+    const ids = Array.from(
+      new Set(
+        rawIds
+          .map((x) => Number(x))
+          .filter((x) => Number.isFinite(x) && x > 0)
+      )
+    ).slice(0, 100);
+
+    if (!ids.length) {
+      return res.status(400).json({
         success: false,
-        code: "NO_PROVIDER_CHAT_ID",
-        message: "У провайдера нет Telegram chatId. Попросите поставщика открыть Telegram-бота и нажать /start, либо внесите chatId вручную через TG inline edit.",
+        message: "ids must be a non-empty array",
       });
     }
 
-    const detailsObj = normalizeMeta(parseDetailsAny(row.details));
-    const meta = detailsObj.tg_actual_reminders_meta;
+    const force = String(req.query.force || req.body?.force || "0") === "1";
+    const results = [];
 
-    const escapeHtml = (s) =>
-      String(s ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#39;");
-
-    const force = String(req.query.force || "0") === "1";
-    if (!force && meta.lockUntil) {
-      const lock = new Date(meta.lockUntil);
-      if (!isNaN(lock.getTime()) && lock.getTime() > Date.now()) {
-        return res.json({
+    for (const id of ids) {
+      try {
+        const result = await sendActualityQuestionForService(id, {
+          force,
+          lastSentBy: "admin_bulk",
+        });
+        results.push(result);
+      } catch (e) {
+        results.push({
           success: false,
-          message: `Locked until ${meta.lockUntil}`,
-          locked: true,
-          meta: {
-            lockUntil: meta.lockUntil,
-            lastSentAt: meta.lastSentAt || null,
-          },
+          serviceId: id,
+          code: "ERROR",
+          message: e?.message || "Send error",
         });
       }
     }
 
-    const keyboard = buildSvcActualKeyboard(row.id, { isActual: true });
-    const safeTitle = escapeHtml((row.title || "Услуга").toString().slice(0, 80));
-    const safeCategory = escapeHtml(row.category);
-    const d = parseDetailsAny(row.details);
+    const sent = results.filter((x) => x?.sent || x?.ok).length;
+    const locked = results.filter((x) => x?.locked || x?.code === "LOCKED").length;
+    const noChat = results.filter((x) => x?.code === "NO_PROVIDER_CHAT_ID").length;
+    const notFound = results.filter((x) => x?.code === "NOT_FOUND").length;
+    const failed = results.length - sent - locked;
 
-    const dateInfo =
-      (d.startDate && d.endDate && `${d.startDate} → ${d.endDate}`) ||
-      (d.checkinDate &&
-        d.checkoutDate &&
-        `${d.checkinDate} → ${d.checkoutDate}`) ||
-      (d.checkInDate &&
-        d.checkOutDate &&
-        `${d.checkInDate} → ${d.checkOutDate}`) ||
-      (d.departureFlightDate &&
-        `${d.departureFlightDate}${
-          d.returnFlightDate ? ` → ${d.returnFlightDate}` : ""
-        }`) ||
-      (d.eventDate && String(d.eventDate)) ||
-      "";
-
-    const placeInfo =
-      [d.directionCountry, d.directionFrom, d.directionTo]
-        .filter(Boolean)
-        .join(" / ") ||
-      [d.country, d.city].filter(Boolean).join(" / ") ||
-      (d.hotel && String(d.hotel)) ||
-      "";
-
-    const msg =
-      `⏰ <b>Проверка актуальности</b>\n\n` +
-      `Код: <code>#R${row.id}</code>\n` +
-      `Услуга: <b>${safeTitle}</b>\n` +
-      (placeInfo
-        ? `Направление/отель: <b>${escapeHtml(placeInfo)}</b>\n`
-        : "") +
-      (dateInfo ? `Даты: <b>${escapeHtml(dateInfo)}</b>\n` : "") +
-      `Категория: <code>${safeCategory}</code>\n\n` +
-      `Актуально ли предложение сейчас?`;
-
-    const sendOk = await tgSend(
-      chatId,
-      msg,
-      {
-        reply_markup: keyboard,
-        disable_web_page_preview: true,
-      },
-      CLIENT_BOT_TOKEN || ""
-    );
-
-    meta.lastSentAt = nowIso();
-    meta.lastSentBy = "admin";
-    meta.lockUntil = new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString();
-    meta.lastSendOk = !!sendOk;
-
-    await db.query(`UPDATE services SET details = $1 WHERE id = $2`, [
-      JSON.stringify(detailsObj),
-      row.id,
-    ]);
-
-    res.json({
+    return res.json({
       success: true,
-      ok: !!sendOk,
-      sent: !!sendOk,
-      chatId,
-      message: "Sent",
-      meta: {
-        lastSentAt: meta.lastSentAt,
-        lockUntil: meta.lockUntil,
-        lastSentBy: meta.lastSentBy,
-      },
+      ok: true,
+      total: ids.length,
+      sent,
+      locked,
+      noChat,
+      notFound,
+      failed,
+      results,
     });
   } catch (e) {
-    console.error("[adminRefused] askActualNow error:", e);
+    console.error("[adminRefused] askActualBulk error:", e);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
