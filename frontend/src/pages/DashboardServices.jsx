@@ -2221,13 +2221,29 @@ export default function DashboardServices() {
                                     <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-700 ring-1 ring-blue-100">
                                       {getArchiveReasonLabel(service, t)}
                                     </span>
+                                  ) : status === "pending" || String(service.moderation_status || "").toLowerCase() === "pending" ? (
+                                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700 ring-1 ring-amber-100">
+                                      {t("service_status.pending", { defaultValue: "На модерации" })}
+                                    </span>
+                                  ) : status === "draft" ? (
+                                    <span className="rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-black text-slate-600 ring-1 ring-slate-200">
+                                      {t("service_status.draft", { defaultValue: "Черновик" })}
+                                    </span>
+                                  ) : status === "rejected" || String(service.moderation_status || "").toLowerCase() === "rejected" ? (
+                                    <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-black text-rose-700 ring-1 ring-rose-100">
+                                      {t("service_status.rejected", { defaultValue: "Отклонено" })}
+                                    </span>
                                   ) : d.isActive === false ? (
                                     <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-black text-rose-700 ring-1 ring-rose-100">
                                       {t("inactive", { defaultValue: "Неактуально" })}
                                     </span>
-                                  ) : (
+                                  ) : status === "published" || status === "approved" ? (
                                     <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-700 ring-1 ring-emerald-100">
                                       {t("is_active", { defaultValue: "Актуально" })}
+                                    </span>
+                                  ) : (
+                                    <span className="rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-black text-slate-600 ring-1 ring-slate-200">
+                                      {getServiceStatusLabel(service.status || service.moderation_status || "draft", t)}
                                     </span>
                                   )}
                                 </div>
@@ -2906,6 +2922,12 @@ export default function DashboardServices() {
                         {saving ? t("saving", { defaultValue: "Сохраняю…" }) : t("save_service", { defaultValue: "Сохранить услугу" })}
                       </button>
                     )}
+                    {selectedService?.id && isDeletedService(selectedService) && (
+                      <button type="button" onClick={(e) => restoreServiceFromTrash(selectedService, e)} className="rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-black text-white">
+                        {t("restore_service", { defaultValue: "Восстановить" })}
+                      </button>
+                    )}
+
                     {selectedService?.id && !isDeletedService(selectedService) && (
                       <>
                         {isArchivedService(selectedService) ? (
@@ -2917,12 +2939,21 @@ export default function DashboardServices() {
                             {t("service_action.archive", { defaultValue: "В архив" })}
                           </button>
                         )}
-                        <button type="button" onClick={(e) => performServiceAction(selectedService, "extend7", e)} className="rounded-2xl bg-orange-500 px-4 py-3 text-sm font-black text-white">
-                          {t("service_action.extend7", { defaultValue: "+7 дней" })}
-                        </button>
+
+                        {(getServiceStatus(selectedService) === "published" || getServiceStatus(selectedService) === "approved") && !isArchivedService(selectedService) && (
+                          <button type="button" onClick={(e) => performServiceAction(selectedService, "unpublish", e)} className="rounded-2xl bg-slate-700 px-4 py-3 text-sm font-black text-white">
+                            {t("service_action.unpublish", { defaultValue: "Снять" })}
+                          </button>
+                        )}
+
+                        {(getServiceStatus(selectedService) === "published" || getServiceStatus(selectedService) === "approved" || isArchivedService(selectedService)) && (
+                          <button type="button" onClick={(e) => performServiceAction(selectedService, "extend7", e)} className="rounded-2xl bg-orange-500 px-4 py-3 text-sm font-black text-white">
+                            {t("service_action.extend7", { defaultValue: "+7 дней" })}
+                          </button>
+                        )}
                       </>
                     )}
-                    {selectedService?.id && <button type="button" onClick={() => deleteService(selectedService)} className="rounded-2xl bg-rose-600 px-4 py-3 text-sm font-black text-white">{t("delete", { defaultValue: "Удалить" })}</button>}
+                    {selectedService?.id && !isDeletedService(selectedService) && <button type="button" onClick={() => deleteService(selectedService)} className="rounded-2xl bg-rose-600 px-4 py-3 text-sm font-black text-white">{t("delete", { defaultValue: "Удалить" })}</button>}
                   </div>
                 </div>
 
