@@ -930,8 +930,21 @@ export default function ServiceCard({
 
   const rating = Number(svc.rating ?? item.rating ?? 0);
   const statusLower = typeof statusRaw === "string" ? statusRaw.toLowerCase() : null;
-  const statusForBadge =
-    statusLower === "draft" || statusLower === "published" ? null : statusRaw;
+  const moderationLower = String(svc.moderation_status || item.moderation_status || details?.moderation_status || "").toLowerCase();
+  const deletedAt = svc.deleted_at || item.deleted_at || details?.deleted_at;
+  const isStatusArchived = statusLower === "archived";
+  const isStatusDeleted = statusLower === "deleted" || !!deletedAt;
+  const isStatusPending = statusLower === "pending" || moderationLower === "pending";
+  const isStatusDraft = statusLower === "draft";
+  const isStatusRejected = statusLower === "rejected" || moderationLower === "rejected";
+  const statusForBadge = (() => {
+    if (isStatusDeleted) return t("service_status.in_trash", { defaultValue: "В корзине" });
+    if (isStatusArchived) return t("service_status.archived", { defaultValue: "Архив" });
+    if (isStatusPending) return t("service_status.pending", { defaultValue: "На модерации" });
+    if (isStatusRejected) return t("service_status.rejected", { defaultValue: "Отклонено" });
+    if (isStatusDraft) return t("service_status.draft", { defaultValue: "Черновик" });
+    return null;
+  })();
   const badge = rating > 0 ? `★ ${rating.toFixed(1)}` : statusForBadge;
 
   const categorySticker = getMarketplaceSticker(
