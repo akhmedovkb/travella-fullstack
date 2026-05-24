@@ -3637,6 +3637,11 @@ bot.action(/^draft:continue:(\d+)$/, async (ctx) => {
       return;
     }
 
+    const isMorePage = String(ctx.callbackQuery?.data || "").endsWith(":more");
+    if (!isMorePage) {
+      ctx.session.cardsOffset = 0;
+    }
+
     const actorId = getActorId(ctx);
     if (!actorId) {
       await safeReply(ctx, "⚠️ Не удалось определить пользователя. Откройте бота в ЛС и попробуйте ещё раз.");
@@ -6675,7 +6680,7 @@ bot.start(async (ctx) => {
         }
 
         const cardRole = role === "client" ? "client" : role;
-        const isRefused = String(category || "").startsWith("refused_");
+        const isRefused = String(category || "").startsWith("refused_") || String(category || "").toLowerCase() === "author_tour";
 
         const { text, photoUrl, serviceUrl, kbExtra } =
           buildServiceMessage(svc, category, cardRole, {
@@ -7279,7 +7284,7 @@ bot.action("prov_services:list", async (ctx) => {
   );
 });
 
-bot.action("prov_services:list_cards", async (ctx) => {
+bot.action(/^prov_services:list_cards(?::more)?$/, async (ctx) => {
   try {
     await ctx.answerCbQuery();
         // 🔴 ВАЖНО: принудительно закрываем wizard редактирования
@@ -7401,7 +7406,7 @@ bot.action("prov_services:list_cards", async (ctx) => {
       await ctx.reply("⬇️ Показать ещё?", {
         reply_markup: {
           inline_keyboard: [
-            [{ text: "⬇️ Показать ещё", callback_data: "prov_services:list_cards" }],
+            [{ text: "⬇️ Показать ещё", callback_data: "prov_services:list_cards:more" }],
             [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
           ],
         },
