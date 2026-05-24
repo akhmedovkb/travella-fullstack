@@ -7945,10 +7945,6 @@ bot.action(/^trash:purge_confirm:(\d+)$/, async (ctx) => {
   }
 });
 
-bot.action(/^trash:menu$/, async (ctx) => {
-  await ctx.answerCbQuery();
-  await ctx.reply("🏠 Главное меню", getMainMenuKeyboard("provider"));
-});
 
 // noop (если ещё нет)
 bot.action(/^noop:\d+$/, async (ctx) => {
