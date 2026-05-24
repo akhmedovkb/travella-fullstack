@@ -9,6 +9,7 @@ import axios from "axios";
  *  - GET    /api/admin/refused/actual
  *  - GET    /api/admin/refused/:id
  *  - POST   /api/admin/refused/:id/ask-actual?force=1
+ *  - POST   /api/admin/refused/ask-actual/bulk
  *  - POST   /api/admin/refused/:id/extend
  *  - DELETE /api/admin/refused/:id
  *  - POST   /api/admin/refused/:id/restore
@@ -1133,6 +1134,8 @@ export default function AdminRefusedActual() {
   const editValidation = useMemo(() => validateEditForm(editForm), [editForm]);
 
   const [sendingId, setSendingId] = useState(null);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [bulkSending, setBulkSending] = useState(false);
   const [inlineEditId, setInlineEditId] = useState(null);
   const [inlineSaving, setInlineSaving] = useState(false);
   const [inlineError, setInlineError] = useState("");
@@ -1229,6 +1232,39 @@ export default function AdminRefusedActual() {
     }
     return list;
   }, [items, quickFilter]);
+
+  const visibleItemIds = useMemo(
+    () => visibleItems.map((it) => Number(it.id)).filter((id) => Number.isFinite(id)),
+    [visibleItems]
+  );
+
+  const selectableVisibleIds = useMemo(
+    () =>
+      visibleItems
+        .filter((it) => {
+          const deleted = !!it.deletedAt || String(it.status || "").toLowerCase() === "deleted";
+          const effectiveTg =
+            it?.provider?.telegram_refused_chat_id ||
+            it?.provider?.telegram_web_chat_id ||
+            it?.provider?.telegram_chat_id ||
+            it?.provider?.chatId ||
+            "";
+          return !deleted && !!effectiveTg;
+        })
+        .map((it) => Number(it.id))
+        .filter((id) => Number.isFinite(id)),
+    [visibleItems]
+  );
+
+  const selectedVisibleCount = useMemo(
+    () => selectableVisibleIds.filter((id) => selectedIds.includes(id)).length,
+    [selectableVisibleIds, selectedIds]
+  );
+
+  const allVisibleSelected =
+    selectableVisibleIds.length > 0 && selectedVisibleCount === selectableVisibleIds.length;
+
+  const someVisibleSelected = selectedVisibleCount > 0 && !allVisibleSelected;
 
   const canUse = useMemo(() => !!token, [token]);
 
@@ -1464,6 +1500,11 @@ export default function AdminRefusedActual() {
     loadList(page);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page]);
+
+
+  useEffect(() => {
+    setSelectedIds((prev) => prev.filter((id) => visibleItemIds.includes(id)));
+  }, [visibleItemIds]);
 
   async function openDetails(id) {
     setDetailsOpen(true);
@@ -1876,6 +1917,63 @@ async function saveInlineEdit(item) {
       showToast("err", `❌ ${info.msg}`);
     } finally {
       setSendingId(null);
+    }
+  }
+
+
+  function toggleSelectOne(id) {
+    const n = Number(id);
+    if (!Number.isFinite(n)) return;
+    setSelectedIds((prev) =>
+      prev.includes(n) ? prev.filter((x) => x !== n) : [...prev, n]
+    );
+  }
+
+  function toggleSelectVisible() {
+    setSelectedIds((prev) => {
+      if (allVisibleSelected) {
+        return prev.filter((id) => !selectableVisibleIds.includes(id));
+      }
+      return Array.from(new Set([...prev, ...selectableVisibleIds]));
+    });
+  }
+
+  async function askActualSelected(force = false) {
+    const ids = selectedIds
+      .map((id) => Number(id))
+      .filter((id) => Number.isFinite(id) && selectableVisibleIds.includes(id));
+
+    if (!ids.length) {
+      showToast("warn", "Выберите услуги с TG chatId на текущей странице");
+      return;
+    }
+
+    setBulkSending(true);
+    setError("");
+    try {
+      const resp = await http.post(
+        apiPath(`/admin/refused/ask-actual/bulk`),
+        { ids, force: force ? "1" : "0" },
+        { params: { force: force ? "1" : "0" } }
+      );
+      const data = ensureJsonOrThrow(resp, "askActualSelected");
+      if (!data?.success) {
+        throw new Error(data?.message || "Не удалось отправить выбранным");
+      }
+
+      showToast(
+        data.sent > 0 ? "ok" : "warn",
+        `📨 Выбрано: ${data.total || ids.length}. Отправлено: ${data.sent || 0}. Lock: ${data.locked || 0}. Без TG: ${data.noChat || 0}. Ошибки: ${data.failed || 0}.`
+      );
+
+      setSelectedIds([]);
+      await loadList(page);
+    } catch (e) {
+      const info = extractAxiosError(e);
+      setError(info.msg);
+      showToast("err", `❌ ${info.msg}`);
+    } finally {
+      setBulkSending(false);
     }
   }
 
@@ -2360,10 +2458,67 @@ const sortLabel = useMemo(() => {
             )}
           </div>
         ) : (
+          <>
+            <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm md:flex-row md:items-center md:justify-between">
+              <label className="inline-flex items-center gap-2 text-sm font-bold text-slate-800">
+                <input
+                  type="checkbox"
+                  checked={allVisibleSelected}
+                  ref={(el) => {
+                    if (el) el.indeterminate = someVisibleSelected;
+                  }}
+                  onChange={toggleSelectVisible}
+                  disabled={!selectableVisibleIds.length || bulkSending}
+                  className="h-4 w-4 rounded border-slate-300"
+                />
+                Выбрать все на странице
+              </label>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
+                  Выбрано: {selectedIds.length}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => askActualSelected(false)}
+                  disabled={!selectedIds.length || bulkSending}
+                  className={classNames(
+                    "rounded-xl border px-3 py-2 text-xs font-bold",
+                    !selectedIds.length || bulkSending
+                      ? "cursor-not-allowed border-gray-200 bg-gray-50 text-gray-400"
+                      : "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                  )}
+                >
+                  {bulkSending ? "Отправка…" : "Спросить выбранные"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedIds([])}
+                  disabled={!selectedIds.length || bulkSending}
+                  className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Снять выбор
+                </button>
+              </div>
+            </div>
+
           <div className="mt-4 overflow-visible rounded-xl border border-gray-200">
           <table className="w-full table-fixed text-sm">
             <thead className="sticky top-0 z-10 bg-gray-50 text-gray-700">
               <tr>
+                <th className="w-12 px-3 py-2 text-left font-medium">
+                  <input
+                    type="checkbox"
+                    checked={allVisibleSelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate = someVisibleSelected;
+                    }}
+                    onChange={toggleSelectVisible}
+                    disabled={!selectableVisibleIds.length || bulkSending}
+                    className="h-4 w-4 rounded border-slate-300"
+                    title="Выбрать все на странице"
+                  />
+                </th>
                 <th
                   className={thClass("id")}
                   onClick={() => toggleSort("id")}
@@ -2411,7 +2566,7 @@ const sortLabel = useMemo(() => {
             <tbody className="divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td className="px-3 py-3 text-gray-600" colSpan={9}>
+                  <td className="px-3 py-3 text-gray-600" colSpan={10}>
                     Загрузка…
                   </td>
                 </tr>
@@ -2450,6 +2605,16 @@ const sortLabel = useMemo(() => {
 
                   return (
                     <tr key={it.id} className="bg-white hover:bg-gray-50">
+                      <td className="px-3 py-2 align-top">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(Number(it.id))}
+                          onChange={() => toggleSelectOne(it.id)}
+                          disabled={deleted || !tgOk || bulkSending}
+                          className="h-4 w-4 rounded border-slate-300 disabled:cursor-not-allowed disabled:opacity-40"
+                          title={deleted ? "Удалённые не выбираются" : !tgOk ? "Нет Telegram chatId" : "Выбрать услугу"}
+                        />
+                      </td>
                       <td className="whitespace-nowrap px-3 py-2 text-gray-900">{it.id}</td>
 
                       <td className="whitespace-nowrap px-3 py-2">
@@ -2726,7 +2891,7 @@ const sortLabel = useMemo(() => {
                 })
               ) : (
                 <tr>
-                  <td className="px-3 py-3 text-gray-600" colSpan={9}>
+                  <td className="px-3 py-3 text-gray-600" colSpan={10}>
                     Нет данных.
                   </td>
                 </tr>
@@ -2734,6 +2899,7 @@ const sortLabel = useMemo(() => {
             </tbody>
           </table>
         </div>
+          </>
         )}
 
         <div className="mt-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
