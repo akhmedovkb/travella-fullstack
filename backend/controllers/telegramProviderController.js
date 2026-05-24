@@ -1477,6 +1477,12 @@ async function restoreServiceFromBot(req, res) {
          SET deleted_at = NULL,
              deleted_by = NULL,
              status = 'draft',
+             moderation_status = 'draft',
+             submitted_at = NULL,
+             published_at = NULL,
+             approved_at = NULL,
+             rejected_at = NULL,
+             rejected_reason = NULL,
              updated_at = NOW()
        WHERE id = $1
          AND provider_id = $2
