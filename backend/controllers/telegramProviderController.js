@@ -3,6 +3,7 @@ const pool = require("../db");
 const axiosBase = require("axios");
 const { tgSend, notifyModerationNew } = require("../utils/telegram");
 const { logProviderServiceAction } = require("../utils/serviceAuditLog");
+const { applyServiceLifecycleAction } = require("../utils/serviceLifecycle");
 const MAX_TITLE_LEN = 100;
 const {
   extractPrices,
@@ -690,7 +691,7 @@ async function getProviderServicesAll(req, res) {
       LEFT JOIN providers p ON p.id = s.provider_id
       WHERE s.provider_id = $1
         AND s.deleted_at IS NULL
-        AND s.status IN ('published', 'approved', 'active', 'pending')
+        AND s.status IN ('published', 'approved', 'active')
         AND (
           s.expiration_at IS NULL
           OR s.expiration_at > NOW()
@@ -981,126 +982,26 @@ async function serviceActionFromBot(req, res, action) {
     }
     const providerId = providerRes.rows[0].id;
 
-    const svcRes = await pool.query(
-      `SELECT id, provider_id, category, title, price, status, moderation_status, details, images, expiration_at, deleted_at, created_at, updated_at
-         FROM services
-        WHERE id = $1 AND provider_id = $2
-        LIMIT 1`,
-      [svcId, providerId]
-    );
-    if (svcRes.rowCount === 0) {
+    const oldService = await fetchProviderServiceSnapshot(svcId, providerId);
+    if (!oldService) {
       return res
         .status(404)
         .json({ success: false, error: "SERVICE_NOT_FOUND" });
     }
 
-    const oldService = normalizeServiceSnapshot(svcRes.rows[0]);
-    let updated;
+    const applied = await applyServiceLifecycleAction(pool, {
+      providerId,
+      serviceId: svcId,
+      action,
+    });
 
-    if (action === "unpublish") {
-      const updRes = await pool.query(
-        `
-          UPDATE services
-             SET
-               details = jsonb_set(
-                 jsonb_set(COALESCE(details::jsonb, '{}'::jsonb),
-                           '{isActive}', 'false'::jsonb, true),
-                 '{expiration}',
-                 to_jsonb(NOW()::timestamp)::jsonb,
-                 true
-               ),
-               expiration_at = NOW()
-           WHERE id = $1
-             AND provider_id = $2
-           RETURNING id, provider_id, category, title, price, status, moderation_status, details, images, expiration_at, deleted_at, created_at, updated_at
-        `,
-        [svcId, providerId]
-      );
-      updated = updRes.rows[0];
-    } else if (action === "extend7") {
-      const updRes = await pool.query(
-        `
-      UPDATE services
-         SET
-           status = CASE
-             WHEN status = 'archived' AND COALESCE(moderation_status, '') = 'approved' THEN 'published'
-             ELSE status
-           END,
-           expiration_at = COALESCE(expiration_at, NOW()) + interval '7 days',
-           details = jsonb_set(
-             jsonb_set(
-               COALESCE(details::jsonb, '{}'::jsonb),
-               '{isActive}',
-               'true'::jsonb,
-               true
-             ),
-             '{expiration}',
-             to_jsonb(
-               (COALESCE(expiration_at, NOW()) + interval '7 days')::timestamp
-             )::jsonb,
-             true
-           )
-       WHERE id = $1
-         AND provider_id = $2
-       RETURNING id, provider_id, category, title, price, status, moderation_status, details, images, expiration_at, deleted_at, created_at, updated_at
-    `,
-        [svcId, providerId]
-      );
-      updated = updRes.rows[0];
-    } else if (action === "archive") {
-      const updRes = await pool.query(
-        `
-          UPDATE services
-             SET
-               status = 'archived',
-               expiration_at = COALESCE(expiration_at, NOW()),
-               details = jsonb_set(
-                 COALESCE(details::jsonb, '{}'::jsonb),
-                 '{isActive}',
-                 'false'::jsonb,
-                 true
-               )
-           WHERE id = $1
-             AND provider_id = $2
-           RETURNING id, provider_id, category, title, price, status, moderation_status, details, images, expiration_at, deleted_at, created_at, updated_at
-        `,
-        [svcId, providerId]
-      );
-      updated = updRes.rows[0];
-    } else if (action === "restore_active") {
-      const updRes = await pool.query(
-        `
-          UPDATE services
-             SET
-               status = CASE
-                 WHEN COALESCE(moderation_status, '') = 'approved' THEN 'published'
-                 WHEN status = 'archived' THEN 'published'
-                 ELSE status
-               END,
-               expiration_at = NOW() + interval '7 days',
-               details = jsonb_set(
-                 jsonb_set(
-                   COALESCE(details::jsonb, '{}'::jsonb),
-                   '{isActive}',
-                   'true'::jsonb,
-                   true
-                 ),
-                 '{expiration}',
-                 to_jsonb((NOW() + interval '7 days')::timestamp)::jsonb,
-                 true
-               )
-           WHERE id = $1
-             AND provider_id = $2
-           RETURNING id, provider_id, category, title, price, status, moderation_status, details, images, expiration_at, deleted_at, created_at, updated_at
-        `,
-        [svcId, providerId]
-      );
-      updated = updRes.rows[0];
-    } else {
+    if (!applied.rowCount || !applied.service) {
       return res
-        .status(400)
-        .json({ success: false, error: "UNKNOWN_ACTION" });
+        .status(404)
+        .json({ success: false, error: "SERVICE_NOT_FOUND_OR_DELETED" });
     }
+
+    const updated = normalizeServiceSnapshot(applied.service);
 
     const botActionMap = {
       unpublish: "bot_service_unpublished",
@@ -1123,7 +1024,7 @@ async function serviceActionFromBot(req, res, action) {
   } catch (err) {
     console.error("[telegram] serviceActionFromBot error:", err);
     return res
-      .status(500)
+      .status(err?.status || 500)
       .json({ success: false, error: "SERVER_ERROR" });
   }
 }
