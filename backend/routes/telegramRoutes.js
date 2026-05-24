@@ -674,6 +674,13 @@ router.get(
   telegramProviderController.getProviderDraftServices
 );
 
+
+// услуги поставщика на модерации
+router.get(
+  "/provider/:chatId/services/pending",
+  telegramProviderController.getProviderPendingServices
+);
+
 // архив просроченных/архивных отказов поставщика
 router.get(
   "/provider/:chatId/services/archive",
