@@ -9,6 +9,7 @@ const {
   listActualRefused,
   getRefusedById,
   askActualNow,
+  askActualBulk,
   extendRefusedService,
   deleteRefusedService,
   restoreRefusedService,
@@ -25,6 +26,9 @@ router.get("/refused/:id", getRefusedById);
 
 // отправить вопрос актуальности
 router.post("/refused/:id/ask-actual", askActualNow);
+
+// массово отправить вопрос актуальности по выбранным услугам
+router.post("/refused/ask-actual/bulk", askActualBulk);
 
 // продлить на +7 дней
 router.post("/refused/:id/extend", extendRefusedService);
