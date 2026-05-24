@@ -1981,6 +1981,8 @@ const ARCHIVE_MSG_BY_CHAT = new Map(); // chatId -> { chatId, messageId }
 const ARCHIVE_ITEMS_BY_CHAT = new Map(); // chatId -> items[]
 const DRAFT_MSG_BY_CHAT = new Map(); // chatId -> { chatId, messageId }
 const DRAFT_ITEMS_BY_CHAT = new Map(); // chatId -> items[]
+const PENDING_MSG_BY_CHAT = new Map(); // chatId -> { chatId, messageId }
+const PENDING_ITEMS_BY_CHAT = new Map(); // chatId -> items[]
 
 
 function getArchiveReason(s) {
@@ -2370,13 +2372,20 @@ async function fetchDraftItems(ctx) {
   return r?.data?.services || r?.data?.items || [];
 }
 
+async function fetchPendingItems(ctx) {
+  const actorId = getActorId(ctx);
+  const r = await axios.get(`/api/telegram/provider/${actorId}/services/pending`);
+  return r?.data?.services || r?.data?.items || [];
+}
+
 async function fetchProviderServiceCounters(ctx) {
   try {
     const actorId = getActorId(ctx);
-    if (!actorId) return { draft: 0, archive: 0, trash: 0 };
+    if (!actorId) return { draft: 0, pending: 0, archive: 0, trash: 0 };
 
-    const [draftRes, archiveRes, trashRes] = await Promise.allSettled([
+    const [draftRes, pendingRes, archiveRes, trashRes] = await Promise.allSettled([
       axios.get(`/api/telegram/provider/${actorId}/services/drafts`),
+      axios.get(`/api/telegram/provider/${actorId}/services/pending`),
       axios.get(`/api/telegram/provider/${actorId}/services/archive`),
       axios.get(`/api/telegram/provider/${actorId}/services/deleted`),
     ]);
@@ -2384,6 +2393,10 @@ async function fetchProviderServiceCounters(ctx) {
     const draftItems =
       draftRes.status === "fulfilled"
         ? draftRes.value?.data?.services || draftRes.value?.data?.items || []
+        : [];
+    const pendingItems =
+      pendingRes.status === "fulfilled"
+        ? pendingRes.value?.data?.services || pendingRes.value?.data?.items || []
         : [];
     const archiveItems =
       archiveRes.status === "fulfilled"
@@ -2396,17 +2409,23 @@ async function fetchProviderServiceCounters(ctx) {
 
     return {
       draft: Array.isArray(draftItems) ? draftItems.length : 0,
+      pending: Array.isArray(pendingItems) ? pendingItems.length : 0,
       archive: Array.isArray(archiveItems) ? archiveItems.length : 0,
       trash: Array.isArray(trashItems) ? trashItems.length : 0,
     };
   } catch {
-    return { draft: 0, archive: 0, trash: 0 };
+    return { draft: 0, pending: 0, archive: 0, trash: 0 };
   }
 }
 
 function draftButtonLabel(count = 0) {
   const n = Number(count || 0);
   return n > 0 ? `📝 Черновики (${n})` : "📝 Черновики";
+}
+
+function pendingButtonLabel(count = 0) {
+  const n = Number(count || 0);
+  return n > 0 ? `🕓 На модерации (${n})` : "🕓 На модерации";
 }
 
 function archiveButtonLabel(count = 0) {
@@ -2417,6 +2436,73 @@ function archiveButtonLabel(count = 0) {
 function trashButtonLabel(count = 0) {
   const n = Number(count || 0);
   return n > 0 ? `🧺 Корзина (${n})` : "🧺 Корзина";
+}
+
+function buildPendingListText(items) {
+  if (!items.length) {
+    return (
+      `🕓 <b>На модерации</b>\n\n` +
+      `Пока пусто. Здесь будут услуги, которые отправлены на проверку администратору.`
+    );
+  }
+
+  const lines = items.slice(0, 20).map((s) => {
+    const id = s.id;
+    const d = pickDetails(s);
+    const title = escapeHtml(s.title || d.title || d.hotel || d.hotelName || "Без названия");
+    const cat = escapeHtml(CATEGORY_LABELS?.[s.category] || s.category || "");
+    const country = escapeHtml(d.directionCountry || d.country || d.locationCountry || "");
+    const city = escapeHtml(d.directionTo || d.toCity || d.city || d.locationCity || "");
+    const direction = [country, city].filter(Boolean).join(" / ");
+    const submitted = s.submitted_at ? escapeHtml(prettyDateTime(s.submitted_at)) : "";
+
+    return (
+      `<code>#R${id}</code> <b>${title}</b>` +
+      (cat ? `\n📌 ${cat}` : "") +
+      (direction ? `\n🌍 ${direction}` : "") +
+      (submitted ? `\n🕒 Отправлено: ${submitted}` : "") +
+      `\n🕓 Статус: на модерации`
+    );
+  });
+
+  return (
+    `🕓 <b>На модерации</b>\n\n` +
+    `Эти услуги уже отправлены администратору. Пока идёт проверка, редактирование лучше не начинать: после правок услуга вернётся в черновик.\n\n` +
+    lines.join("\n\n") +
+    (items.length > 20 ? `\n\n…и ещё ${items.length - 20} шт.` : "")
+  );
+}
+
+function buildPendingListKeyboard(items) {
+  const buttons = items.slice(0, 20).map((s) => {
+    const d = pickDetails(s);
+    const title = String(s.title || d.title || d.hotel || d.hotelName || "").trim();
+    const shortTitle = title ? ` · ${title.slice(0, 18)}${title.length > 18 ? "…" : ""}` : "";
+    return {
+      text: `🕓 #R${s.id}${shortTitle}`,
+      callback_data: `pending:item:${s.id}`,
+    };
+  });
+
+  const rows = [];
+  for (let i = 0; i < buttons.length; i += 1) rows.push(buttons.slice(i, i + 1));
+
+  rows.push([{ text: "🔄 Обновить", callback_data: "pending:open" }]);
+  rows.push([{ text: "🌐 Открыть веб-кабинет", url: `${SITE_URL}/dashboard/services/marketplace?tab=pending&from=tg` }]);
+  rows.push([{ text: "⬅️ В меню услуг", callback_data: "prov_services:list" }]);
+  return { inline_keyboard: rows };
+}
+
+async function renderPending(ctx) {
+  const chatId = ctx.chat?.id || ctx.update?.callback_query?.message?.chat?.id;
+  const items = await fetchPendingItems(ctx);
+  PENDING_ITEMS_BY_CHAT.set(String(chatId), items);
+
+  await safeReply(ctx, buildPendingListText(items), {
+    parse_mode: "HTML",
+    reply_markup: buildPendingListKeyboard(items),
+    disable_web_page_preview: true,
+  });
 }
 
 async function renderDrafts(ctx) {
@@ -3575,6 +3661,48 @@ bot.action("svc_edit_cancel", async (ctx) => {
   }
 });
 
+
+bot.action(/^pending:item:(\d+)$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    const serviceId = Number(ctx.match?.[1]);
+    const chatId = ctx.chat?.id || ctx.update?.callback_query?.message?.chat?.id;
+    const items = PENDING_ITEMS_BY_CHAT.get(String(chatId)) || [];
+    const svc = items.find((x) => Number(x.id) === serviceId);
+
+    if (!svc) {
+      await safeReply(ctx, "⚠️ Не нашёл услугу в списке. Нажмите «Обновить».", {
+        reply_markup: { inline_keyboard: [[{ text: "🔄 Обновить", callback_data: "pending:open" }]] },
+      });
+      return;
+    }
+
+    const d = pickDetails(svc);
+    const title = escapeHtml(svc.title || d.title || d.hotel || d.hotelName || "Без названия");
+    const categoryLabel = escapeHtml(CATEGORY_LABELS?.[svc.category] || svc.category || "Услуга");
+    const submitted = svc.submitted_at ? escapeHtml(prettyDateTime(svc.submitted_at)) : "—";
+    const text =
+      `🕓 <b>Услуга на модерации #R${escapeHtml(svc.id)}</b>\n\n` +
+      `📌 <b>${title}</b>\n` +
+      `🏷 <b>Категория:</b> ${categoryLabel}\n` +
+      `🕒 <b>Отправлено:</b> ${submitted}\n\n` +
+      `Администратор проверяет данные и proof. После редактирования услуга вернётся в черновик и её нужно будет отправить повторно.`;
+
+    await safeReply(ctx, text, {
+      parse_mode: "HTML",
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "✏️ Редактировать", callback_data: `svc_edit_start:${svc.id}` }],
+          [{ text: "🌐 Открыть в кабинете", url: `${SITE_URL}/dashboard?from=tg&service=${svc.id}` }],
+          [{ text: "⬅️ Назад", callback_data: "pending:open" }],
+        ],
+      },
+    });
+  } catch (e) {
+    console.error("[tg-bot] pending:item error:", e?.response?.data || e?.message || e);
+    await safeReply(ctx, "⚠️ Не удалось открыть услугу на модерации.");
+  }
+});
 
 bot.action(/^draft:item:(\d+)$/, async (ctx) => {
   try {
@@ -7083,7 +7211,10 @@ await ctx.reply("🧳 Выберите действие:", {
     inline_keyboard: [
       [{ text: "📤 Выбрать мою услугу", switch_inline_query_current_chat: "#my refused_tour" }],
       [{ text: "📢 Актуальные", callback_data: "prov_services:list_cards" }],
-      [{ text: draftButtonLabel(counters.draft), callback_data: "drafts:open" }],
+      [
+        { text: pendingButtonLabel(counters.pending), callback_data: "pending:open" },
+        { text: draftButtonLabel(counters.draft), callback_data: "drafts:open" },
+      ],
       [
         { text: archiveButtonLabel(counters.archive), callback_data: "archive:open" },
         { text: trashButtonLabel(counters.trash), callback_data: "trash:open" },
@@ -7123,6 +7254,15 @@ bot.hears("📝 Черновики", async (ctx) => {
   }
 });
 
+bot.hears("🕓 На модерации", async (ctx) => {
+  try {
+    await renderPending(ctx);
+  } catch (e) {
+    console.error("[bot] pending hears error:", e?.message || e);
+    return ctx.reply("❌ Не удалось загрузить услуги на модерации. Попробуйте позже.");
+  }
+});
+
 bot.action("drafts:open", async (ctx) => {
   try {
     await ctx.answerCbQuery();
@@ -7131,6 +7271,17 @@ bot.action("drafts:open", async (ctx) => {
   } catch (e) {
     console.error("[tg-bot] drafts:open error:", e?.response?.data || e?.message || e);
     await safeReply(ctx, "⚠️ Не удалось загрузить черновики. Попробуйте позже.");
+  }
+});
+
+bot.action("pending:open", async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    forceCloseEditWizard(ctx);
+    await renderPending(ctx);
+  } catch (e) {
+    console.error("[tg-bot] pending:open error:", e?.response?.data || e?.message || e);
+    await safeReply(ctx, "⚠️ Не удалось загрузить услуги на модерации. Попробуйте позже.");
   }
 });
 
@@ -7272,6 +7423,10 @@ bot.action("prov_services:list", async (ctx) => {
         inline_keyboard: [
           [{ text: "📤 Выбрать мою услугу", switch_inline_query_current_chat: "#my refused_tour" }],
           [{ text: "📢 Актуальные", callback_data: "prov_services:list_cards" }],
+          [
+            { text: pendingButtonLabel(counters.pending), callback_data: "pending:open" },
+            { text: draftButtonLabel(counters.draft), callback_data: "drafts:open" },
+          ],
           [
             { text: archiveButtonLabel(counters.archive), callback_data: "archive:open" },
             { text: trashButtonLabel(counters.trash), callback_data: "trash:open" },
