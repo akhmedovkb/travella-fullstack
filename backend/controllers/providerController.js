@@ -14,6 +14,7 @@ const {
 
 const { getContactUnlockSettings } = require("../utils/contactUnlockSettings");
 const { logProviderServiceAction } = require("../utils/serviceAuditLog");
+const { applyServiceLifecycleAction } = require("../utils/serviceLifecycle");
 
 require("../utils/refusedPriceDropBroadcast");
 
@@ -1242,84 +1243,13 @@ const serviceAction = async (req, res) => {
     }
 
     const before = beforeRes.rows[0];
-    let upd;
+    const applied = await applyServiceLifecycleAction(pool, {
+      providerId,
+      serviceId,
+      action,
+    });
 
-    if (action === "unpublish") {
-      upd = await pool.query(
-        `
-        UPDATE services
-           SET details = jsonb_set(
-                 jsonb_set(COALESCE(details::jsonb, '{}'::jsonb),
-                           '{isActive}', 'false'::jsonb, true),
-                 '{expiration}', to_jsonb(NOW()::timestamp)::jsonb, true
-               ),
-               expiration_at = NOW(),
-               updated_at = NOW()
-         WHERE id=$1 AND provider_id=$2 AND deleted_at IS NULL
-         RETURNING *
-        `,
-        [serviceId, providerId]
-      );
-    } else if (action === "extend7") {
-      upd = await pool.query(
-        `
-        UPDATE services
-           SET status = CASE
-                 WHEN status = 'archived' AND COALESCE(moderation_status, '') = 'approved' THEN 'published'
-                 ELSE status
-               END,
-               expiration_at = COALESCE(expiration_at, NOW()) + interval '7 days',
-               details = jsonb_set(
-                 jsonb_set(COALESCE(details::jsonb, '{}'::jsonb),
-                           '{isActive}', 'true'::jsonb, true),
-                 '{expiration}',
-                 to_jsonb((COALESCE(expiration_at, NOW()) + interval '7 days')::timestamp)::jsonb,
-                 true
-               ),
-               updated_at = NOW()
-         WHERE id=$1 AND provider_id=$2 AND deleted_at IS NULL
-         RETURNING *
-        `,
-        [serviceId, providerId]
-      );
-    } else if (action === "archive") {
-      upd = await pool.query(
-        `
-        UPDATE services
-           SET status = 'archived',
-               expiration_at = COALESCE(expiration_at, NOW()),
-               details = jsonb_set(COALESCE(details::jsonb, '{}'::jsonb),
-                                   '{isActive}', 'false'::jsonb, true),
-               updated_at = NOW()
-         WHERE id=$1 AND provider_id=$2 AND deleted_at IS NULL
-         RETURNING *
-        `,
-        [serviceId, providerId]
-      );
-    } else if (action === "restore_active") {
-      upd = await pool.query(
-        `
-        UPDATE services
-           SET status = CASE
-                 WHEN COALESCE(moderation_status, '') = 'approved' THEN 'published'
-                 WHEN status = 'archived' THEN 'published'
-                 ELSE status
-               END,
-               expiration_at = NOW() + interval '7 days',
-               details = jsonb_set(
-                 jsonb_set(COALESCE(details::jsonb, '{}'::jsonb),
-                           '{isActive}', 'true'::jsonb, true),
-                 '{expiration}', to_jsonb((NOW() + interval '7 days')::timestamp)::jsonb, true
-               ),
-               updated_at = NOW()
-         WHERE id=$1 AND provider_id=$2 AND deleted_at IS NULL
-         RETURNING *
-        `,
-        [serviceId, providerId]
-      );
-    }
-
-    if (!upd?.rowCount) {
+    if (!applied.rowCount || !applied.service) {
       return res.status(404).json({ message: "Услуга не найдена или находится в корзине" });
     }
 
@@ -1336,14 +1266,14 @@ const serviceAction = async (req, res) => {
       providerId,
       serviceId,
       oldService: before,
-      newService: upd.rows[0],
+      newService: applied.service,
       meta: { source: "provider_dashboard", action },
     });
 
-    return res.json(upd.rows[0]);
+    return res.json(applied.service);
   } catch (err) {
     console.error("❌ Ошибка действия с услугой:", err);
-    return res.status(500).json({ message: "Ошибка сервера" });
+    return res.status(err?.status || 500).json({ message: "Ошибка сервера" });
   }
 };
 
