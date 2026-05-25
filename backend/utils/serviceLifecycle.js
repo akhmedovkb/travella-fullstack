@@ -1,5 +1,7 @@
 // backend/utils/serviceLifecycle.js
 
+const { isProofRequiredCategory } = require("./serviceCategories");
+
 const DEFAULT_RETURNING = `
   id,
   provider_id,
@@ -15,15 +17,25 @@ const DEFAULT_RETURNING = `
   moderation_status,
   expiration_at,
   deleted_at,
+  deleted_by,
+  submitted_at,
+  published_at,
+  approved_at,
+  rejected_at,
+  rejected_reason,
   created_at,
   updated_at
 `;
 
 const SERVICE_LIFECYCLE_ACTIONS = new Set([
+  "submit",
   "extend7",
   "unpublish",
   "archive",
   "restore_active",
+  "delete",
+  "restore_deleted",
+  "purge",
 ]);
 
 function normalizeLifecycleAction(action) {
@@ -41,6 +53,68 @@ function assertLifecycleAction(action) {
   return normalized;
 }
 
+function normalizeDetails(details) {
+  if (!details) return {};
+  if (typeof details === "object" && !Array.isArray(details)) return details;
+  if (typeof details === "string") {
+    try {
+      const parsed = JSON.parse(details);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
+function getProofImages(details) {
+  const d = normalizeDetails(details);
+  return Array.isArray(d.proofImages) ? d.proofImages.filter(Boolean) : [];
+}
+
+async function fetchServiceForLifecycle(pool, providerId, serviceId) {
+  const result = await pool.query(
+    `SELECT ${DEFAULT_RETURNING}
+       FROM services
+      WHERE id = $1
+        AND provider_id = $2
+      LIMIT 1`,
+    [serviceId, providerId]
+  );
+  return result.rows[0] || null;
+}
+
+async function assertNoPurgeBlockers(pool, serviceId) {
+  const blockers = [];
+  const checks = [
+    { table: "bookings", field: "service_id", code: "HAS_BOOKINGS" },
+    { table: "booking_requests", field: "service_id", code: "HAS_REQUESTS" },
+    { table: "client_service_contact_unlocks", field: "service_id", code: "HAS_UNLOCKS" },
+    { table: "provider_favorites", field: "service_id", code: "HAS_FAVORITES" },
+  ];
+
+  for (const c of checks) {
+    try {
+      const r = await pool.query(
+        `SELECT 1 FROM ${c.table} WHERE ${c.field} = $1 LIMIT 1`,
+        [serviceId]
+      );
+      if (r.rowCount) blockers.push(c.code);
+    } catch (e) {
+      // Some installations may not have every optional table yet.
+      console.warn(`[serviceLifecycle] purge check skipped for ${c.table}:`, e?.message || e);
+    }
+  }
+
+  if (blockers.length) {
+    const err = new Error("PURGE_BLOCKED");
+    err.code = "PURGE_BLOCKED";
+    err.status = 409;
+    err.blockers = blockers;
+    throw err;
+  }
+}
+
 async function applyServiceLifecycleAction(pool, { providerId, serviceId, action }) {
   const pid = Number(providerId);
   const sid = Number(serviceId);
@@ -53,90 +127,223 @@ async function applyServiceLifecycleAction(pool, { providerId, serviceId, action
     throw err;
   }
 
-  let sql;
+  const before = await fetchServiceForLifecycle(pool, pid, sid);
 
-  if (act === "unpublish") {
-    // Снять с витрины: услуга остаётся в истории, но перестаёт быть актуальной.
-    // status намеренно переводим в archived, чтобы web и Telegram одинаково не показывали её в актуальных.
-    sql = `
-      UPDATE services
-         SET status = 'archived',
-             expiration_at = NOW(),
-             details = jsonb_set(
-               jsonb_set(COALESCE(details::jsonb, '{}'::jsonb),
-                         '{isActive}', 'false'::jsonb, true),
-               '{expiration}', to_jsonb(NOW()::timestamp)::jsonb, true
-             ),
-             updated_at = NOW()
-       WHERE id = $1
-         AND provider_id = $2
-         AND deleted_at IS NULL
-       RETURNING ${DEFAULT_RETURNING}
-    `;
-  } else if (act === "extend7") {
-    sql = `
-      UPDATE services
-         SET status = CASE
-               WHEN status = 'archived' AND COALESCE(moderation_status, '') = 'approved' THEN 'published'
-               ELSE status
-             END,
-             expiration_at = COALESCE(expiration_at, NOW()) + interval '7 days',
-             details = jsonb_set(
-               jsonb_set(COALESCE(details::jsonb, '{}'::jsonb),
-                         '{isActive}', 'true'::jsonb, true),
-               '{expiration}',
-               to_jsonb((COALESCE(expiration_at, NOW()) + interval '7 days')::timestamp)::jsonb,
-               true
-             ),
-             updated_at = NOW()
-       WHERE id = $1
-         AND provider_id = $2
-         AND deleted_at IS NULL
-       RETURNING ${DEFAULT_RETURNING}
-    `;
-  } else if (act === "archive") {
-    sql = `
-      UPDATE services
-         SET status = 'archived',
-             expiration_at = COALESCE(expiration_at, NOW()),
-             details = jsonb_set(COALESCE(details::jsonb, '{}'::jsonb),
-                                 '{isActive}', 'false'::jsonb, true),
-             updated_at = NOW()
-       WHERE id = $1
-         AND provider_id = $2
-         AND deleted_at IS NULL
-       RETURNING ${DEFAULT_RETURNING}
-    `;
-  } else if (act === "restore_active") {
-    sql = `
-      UPDATE services
-         SET status = CASE
-               WHEN COALESCE(moderation_status, '') = 'approved' THEN 'published'
-               WHEN status = 'archived' THEN 'published'
-               ELSE status
-             END,
-             expiration_at = NOW() + interval '7 days',
-             details = jsonb_set(
-               jsonb_set(COALESCE(details::jsonb, '{}'::jsonb),
-                         '{isActive}', 'true'::jsonb, true),
-               '{expiration}', to_jsonb((NOW() + interval '7 days')::timestamp)::jsonb, true
-             ),
-             updated_at = NOW()
-       WHERE id = $1
-         AND provider_id = $2
-         AND deleted_at IS NULL
-       RETURNING ${DEFAULT_RETURNING}
-    `;
+  if (!before) {
+    const err = new Error("SERVICE_NOT_FOUND");
+    err.code = "SERVICE_NOT_FOUND";
+    err.status = 404;
+    throw err;
   }
 
-  const result = await pool.query(sql, [sid, pid]);
+  let result;
+
+  if (act === "submit") {
+    if (before.deleted_at) {
+      const err = new Error("SERVICE_DELETED");
+      err.code = "SERVICE_DELETED";
+      err.status = 409;
+      throw err;
+    }
+
+    if (isProofRequiredCategory(before.category) && !getProofImages(before.details).length) {
+      const err = new Error("PROOF_IMAGES_REQUIRED");
+      err.code = "PROOF_IMAGES_REQUIRED";
+      err.status = 400;
+      throw err;
+    }
+
+    result = await pool.query(
+      `UPDATE services
+          SET status = 'pending',
+              moderation_status = 'pending',
+              submitted_at = NOW(),
+              updated_at = NOW()
+        WHERE id = $1
+          AND provider_id = $2
+          AND deleted_at IS NULL
+          AND (status IN ('draft','rejected') OR status IS NULL)
+        RETURNING ${DEFAULT_RETURNING}`,
+      [sid, pid]
+    );
+
+    if (!result.rowCount) {
+      const err = new Error("SERVICE_NOT_SUBMITTABLE");
+      err.code = "SERVICE_NOT_SUBMITTABLE";
+      err.status = 409;
+      throw err;
+    }
+  } else if (act === "unpublish") {
+    result = await pool.query(
+      `UPDATE services
+          SET status = 'archived',
+              expiration_at = NOW(),
+              details = jsonb_set(
+                jsonb_set(COALESCE(details::jsonb, '{}'::jsonb),
+                          '{isActive}', 'false'::jsonb, true),
+                '{expiration}', to_jsonb(NOW()::timestamp)::jsonb, true
+              ),
+              updated_at = NOW()
+        WHERE id = $1
+          AND provider_id = $2
+          AND deleted_at IS NULL
+        RETURNING ${DEFAULT_RETURNING}`,
+      [sid, pid]
+    );
+  } else if (act === "extend7") {
+    result = await pool.query(
+      `UPDATE services
+          SET status = CASE
+                WHEN status = 'archived' AND COALESCE(moderation_status, '') = 'approved' THEN 'published'
+                ELSE status
+              END,
+              expiration_at = COALESCE(expiration_at, NOW()) + interval '7 days',
+              details = jsonb_set(
+                jsonb_set(COALESCE(details::jsonb, '{}'::jsonb),
+                          '{isActive}', 'true'::jsonb, true),
+                '{expiration}',
+                to_jsonb((COALESCE(expiration_at, NOW()) + interval '7 days')::timestamp)::jsonb,
+                true
+              ),
+              updated_at = NOW()
+        WHERE id = $1
+          AND provider_id = $2
+          AND deleted_at IS NULL
+        RETURNING ${DEFAULT_RETURNING}`,
+      [sid, pid]
+    );
+  } else if (act === "archive") {
+    result = await pool.query(
+      `UPDATE services
+          SET status = 'archived',
+              expiration_at = COALESCE(expiration_at, NOW()),
+              details = jsonb_set(COALESCE(details::jsonb, '{}'::jsonb),
+                                  '{isActive}', 'false'::jsonb, true),
+              updated_at = NOW()
+        WHERE id = $1
+          AND provider_id = $2
+          AND deleted_at IS NULL
+        RETURNING ${DEFAULT_RETURNING}`,
+      [sid, pid]
+    );
+  } else if (act === "restore_active") {
+    result = await pool.query(
+      `UPDATE services
+          SET status = CASE
+                WHEN COALESCE(moderation_status, '') = 'approved' THEN 'published'
+                WHEN status = 'archived' THEN 'published'
+                ELSE status
+              END,
+              expiration_at = NOW() + interval '7 days',
+              details = jsonb_set(
+                jsonb_set(COALESCE(details::jsonb, '{}'::jsonb),
+                          '{isActive}', 'true'::jsonb, true),
+                '{expiration}', to_jsonb((NOW() + interval '7 days')::timestamp)::jsonb, true
+              ),
+              updated_at = NOW()
+        WHERE id = $1
+          AND provider_id = $2
+          AND deleted_at IS NULL
+        RETURNING ${DEFAULT_RETURNING}`,
+      [sid, pid]
+    );
+  } else if (act === "delete") {
+    result = await pool.query(
+      `UPDATE services
+          SET status = 'deleted',
+              deleted_at = NOW(),
+              deleted_by = $2,
+              updated_at = NOW()
+        WHERE id = $1
+          AND provider_id = $2
+          AND deleted_at IS NULL
+        RETURNING ${DEFAULT_RETURNING}`,
+      [sid, pid]
+    );
+
+    if (!result.rowCount) {
+      const err = new Error(before.deleted_at ? "ALREADY_DELETED" : "DELETE_FAILED");
+      err.code = before.deleted_at ? "ALREADY_DELETED" : "DELETE_FAILED";
+      err.status = 409;
+      throw err;
+    }
+  } else if (act === "restore_deleted") {
+    result = await pool.query(
+      `UPDATE services
+          SET deleted_at = NULL,
+              deleted_by = NULL,
+              status = 'draft',
+              moderation_status = 'draft',
+              submitted_at = NULL,
+              published_at = NULL,
+              approved_at = NULL,
+              rejected_at = NULL,
+              rejected_reason = NULL,
+              updated_at = NOW()
+        WHERE id = $1
+          AND provider_id = $2
+          AND deleted_at IS NOT NULL
+        RETURNING ${DEFAULT_RETURNING}`,
+      [sid, pid]
+    );
+
+    if (!result.rowCount) {
+      const err = new Error("NOT_DELETED");
+      err.code = "NOT_DELETED";
+      err.status = 409;
+      throw err;
+    }
+  } else if (act === "purge") {
+    if (!before.deleted_at) {
+      const err = new Error("NOT_IN_TRASH");
+      err.code = "NOT_IN_TRASH";
+      err.status = 409;
+      throw err;
+    }
+
+    await assertNoPurgeBlockers(pool, sid);
+
+    result = await pool.query(
+      `DELETE FROM services
+        WHERE id = $1
+          AND provider_id = $2
+          AND deleted_at IS NOT NULL
+        RETURNING id`,
+      [sid, pid]
+    );
+
+    if (!result.rowCount) {
+      const err = new Error("PURGE_FAILED");
+      err.code = "PURGE_FAILED";
+      err.status = 409;
+      throw err;
+    }
+
+    return {
+      rowCount: result.rowCount,
+      service: null,
+      before,
+      purgedId: result.rows[0]?.id || sid,
+    };
+  }
+
+  if (!result?.rowCount) {
+    const err = new Error("SERVICE_NOT_FOUND_OR_DELETED");
+    err.code = "SERVICE_NOT_FOUND_OR_DELETED";
+    err.status = 404;
+    throw err;
+  }
+
   return {
     rowCount: result.rowCount,
     service: result.rows[0] || null,
+    before,
   };
 }
 
 module.exports = {
   SERVICE_LIFECYCLE_ACTIONS,
   applyServiceLifecycleAction,
+  fetchServiceForLifecycle,
+  getProofImages,
 };
