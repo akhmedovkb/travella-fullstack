@@ -57,14 +57,7 @@ const MANAGER_CHAT_ID = process.env.TELEGRAM_MANAGER_CHAT_ID || "";
 const PRICE_CURRENCY = (process.env.PRICE_CURRENCY || "USD").trim();
 
 // Для /tour_123 и inline-поиска — работаем с отказными категориями
-const REFUSED_CATEGORIES = [
-  "refused_tour",
-  "author_tour",
-  "refused_hotel",
-  "refused_flight",
-  "refused_ticket",
-  "refused_event_ticket",
-];
+const { REFUSED_CATEGORIES, PROOF_REQUIRED_CATEGORIES } = require("../utils/serviceCategories");
 
 const API_BASE = (
   process.env.API_BASE_URL ||
@@ -4236,14 +4229,7 @@ function logUpdate(ctx, label = "update") {
 
 // Категории, для которых бот обязан запросить proof перед отправкой на модерацию.
 // Важно: используется и при создании, и при редактировании.
-const proofRequiredCategories = [
-  "refused_tour",
-  "author_tour",
-  "refused_hotel",
-  "refused_flight",
-  "refused_ticket",
-  "refused_event_ticket",
-];
+const proofRequiredCategories = PROOF_REQUIRED_CATEGORIES;
 
 // Маппинг подписей для категорий
 const CATEGORY_LABELS = {
