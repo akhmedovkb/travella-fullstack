@@ -1280,95 +1280,96 @@ const serviceAction = async (req, res) => {
 const deleteService = async (req, res) => {
   try {
     const providerId = req.user.id;
-    const serviceId = req.params.id;
+    const serviceId = Number(req.params.id);
 
-    const before = await pool.query(
-      `SELECT * FROM services WHERE id=$1 AND provider_id=$2 LIMIT 1`,
-      [serviceId, providerId]
-    );
-
-    const del = await pool.query(
-      `
-      UPDATE services
-         SET
-           status = 'deleted',
-           deleted_at = NOW(),
-           deleted_by = $2,
-           updated_at = NOW()
-       WHERE id = $1 AND provider_id = $2
-       RETURNING *
-      `,
-      [serviceId, providerId]
-    );
-    if (!del.rowCount) return res.status(404).json({ message: "Услуга не найдена" });
+    const applied = await applyServiceLifecycleAction(pool, {
+      providerId,
+      serviceId,
+      action: "delete",
+    });
 
     await logProviderServiceAction({
       req,
       action: "service_deleted",
       providerId,
       serviceId,
-      oldService: before.rows[0] || null,
-      newService: del.rows[0],
+      oldService: applied.before,
+      newService: applied.service,
       meta: { deleted_by_provider: true },
     });
 
-    res.json({ message: "Удалено" });
+    return res.json({ message: "Удалено", service: applied.service });
   } catch (err) {
     console.error("❌ Ошибка удаления услуги:", err);
-    res.status(500).json({ message: "Ошибка сервера" });
+    return res.status(err?.status || 500).json({
+      message: err?.code || "Ошибка сервера",
+      code: err?.code,
+      blockers: err?.blockers,
+    });
   }
 };
 
 const restoreService = async (req, res) => {
   try {
     const providerId = req.user.id;
-    const serviceId = req.params.id;
+    const serviceId = Number(req.params.id);
 
-    const before = await pool.query(
-      `SELECT * FROM services WHERE id=$1 AND provider_id=$2 LIMIT 1`,
-      [serviceId, providerId]
-    );
-
-    const restored = await pool.query(
-      `
-      UPDATE services
-         SET
-           status = 'draft',
-           moderation_status = 'draft',
-           deleted_at = NULL,
-           deleted_by = NULL,
-           submitted_at = NULL,
-           published_at = NULL,
-           approved_at = NULL,
-           rejected_at = NULL,
-           rejected_reason = NULL,
-           updated_at = NOW()
-       WHERE id = $1
-         AND provider_id = $2
-         AND deleted_at IS NOT NULL
-      RETURNING *
-      `,
-      [serviceId, providerId]
-    );
-
-    if (!restored.rowCount) {
-      return res.status(404).json({ message: "Услуга не найдена в корзине" });
-    }
+    const applied = await applyServiceLifecycleAction(pool, {
+      providerId,
+      serviceId,
+      action: "restore_deleted",
+    });
 
     await logProviderServiceAction({
       req,
       action: "service_restored",
       providerId,
       serviceId,
-      oldService: before.rows[0] || null,
-      newService: restored.rows[0],
+      oldService: applied.before,
+      newService: applied.service,
       meta: { restored_to: "draft" },
     });
 
-    return res.json(restored.rows[0]);
+    return res.json(applied.service);
   } catch (err) {
     console.error("❌ Ошибка восстановления услуги:", err);
-    return res.status(500).json({ message: "Ошибка сервера" });
+    return res.status(err?.status || 500).json({
+      message: err?.code || "Ошибка сервера",
+      code: err?.code,
+      blockers: err?.blockers,
+    });
+  }
+};
+
+const purgeService = async (req, res) => {
+  try {
+    const providerId = req.user.id;
+    const serviceId = Number(req.params.id);
+
+    const applied = await applyServiceLifecycleAction(pool, {
+      providerId,
+      serviceId,
+      action: "purge",
+    });
+
+    await logProviderServiceAction({
+      req,
+      action: "service_purged",
+      providerId,
+      serviceId,
+      oldService: applied.before,
+      newService: null,
+      meta: { purged_by_provider: true },
+    });
+
+    return res.json({ ok: true, purgedId: applied.purgedId });
+  } catch (err) {
+    console.error("❌ Ошибка удаления навсегда:", err);
+    return res.status(err?.status || 500).json({
+      message: err?.code || "Ошибка сервера",
+      code: err?.code,
+      blockers: err?.blockers,
+    });
   }
 };
 
@@ -2100,28 +2101,36 @@ const restoreProviderService = async (req, res) => {
 // DELETE /api/providers/:providerId/services/:id/purge
 const purgeProviderService = async (req, res) => {
   try {
-    const providerId = Number(req.params.providerId);
+    const providerId = Number(req.params.providerId || req.user.id);
     const id = Number(req.params.id);
     if (!Number.isFinite(providerId) || providerId !== req.user.id) {
       return res.status(403).json({ message: "Forbidden" });
     }
 
-    const del = await pool.query(
-      `
-      DELETE FROM services
-       WHERE id = $1
-         AND provider_id = $2
-         AND deleted_at IS NOT NULL
-      RETURNING id
-      `,
-      [id, providerId]
-    );
+    const applied = await applyServiceLifecycleAction(pool, {
+      providerId,
+      serviceId: id,
+      action: "purge",
+    });
 
-    if (!del.rowCount) return res.status(404).json({ message: "Не найдено в корзине" });
-    return res.json({ ok: true });
+    await logProviderServiceAction({
+      req,
+      action: "provider_service_purged",
+      providerId,
+      serviceId: id,
+      oldService: applied.before,
+      newService: null,
+      meta: { purged_by_provider: true },
+    });
+
+    return res.json({ ok: true, purgedId: applied.purgedId });
   } catch (err) {
     console.error("purgeProviderService error:", err);
-    return res.status(500).json({ message: "Ошибка сервера" });
+    return res.status(err?.status || 500).json({
+      message: err?.code || "Ошибка сервера",
+      code: err?.code,
+      blockers: err?.blockers,
+    });
   }
 };
 
@@ -2137,6 +2146,7 @@ module.exports = {
   updateService,
   deleteService,
   restoreService,
+  purgeService,
   serviceAction,
   updateServiceImagesOnly,
   getProviderPublicById,
