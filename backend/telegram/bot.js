@@ -5472,7 +5472,16 @@ function buildDetailsForAuthorTour(draft, netPriceNum) {
     notIncluded: draft.notIncluded || null,
     minPax: draft.minPax || null,
     maxPax: draft.maxPax || null,
-    guideLanguage: draft.guideLanguage || null,
+    
+    guideLanguages: Array.isArray(draft.languages) ? draft.languages : [],
+    languages: Array.isArray(draft.languages) ? draft.languages : [],
+    guideLanguage: Array.isArray(draft.languages)
+      ? draft.languages.join(", ")
+      : draft.guideLanguage || draft.language || null,
+    language: Array.isArray(draft.languages)
+      ? draft.languages.join(", ")
+      : draft.guideLanguage || draft.language || null,
+    
     meetingPoint: draft.meetingPoint || null,
     transport: draft.transport || null,
     guide: draft.guide || null,
@@ -6083,21 +6092,39 @@ async function promptWizardState(ctx, state) {
       await ctx.reply("👥 Укажите *минимум/максимум человек* в формате `2/10`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
       return;
 
-    case "svc_author_language":
+    case "svc_author_language": {
+      const selected = Array.isArray(ctx.session.serviceDraft?.languages)
+        ? ctx.session.serviceDraft.languages
+        : [];
+    
+      const has = (name) => selected.includes(name);
+    
       await ctx.reply(
-        "🗣 Укажите язык гида",
+        "🗣 Укажите язык гида\n\nМожно выбрать несколько языков, затем нажмите ✅ Продолжить.",
         {
           reply_markup: {
             inline_keyboard: [
               [
-                { text: "🇺🇿 УЗБ", callback_data: "author_lang:uz" },
-                { text: "🇷🇺 РУС", callback_data: "author_lang:ru" },
+                {
+                  text: `${has("Узбекский") ? "✅" : "☐"} 🇺🇿 УЗБ`,
+                  callback_data: "author_lang:uz",
+                },
+                {
+                  text: `${has("Русский") ? "✅" : "☐"} 🇷🇺 РУС`,
+                  callback_data: "author_lang:ru",
+                },
               ],
               [
-                { text: "🇬🇧 АНГ", callback_data: "author_lang:en" },
+                {
+                  text: `${has("Английский") ? "✅" : "☐"} 🇬🇧 АНГ`,
+                  callback_data: "author_lang:en",
+                },
               ],
               [
                 { text: "➕ Свой вариант", callback_data: "author_lang:custom" },
+              ],
+              [
+                { text: "✅ Продолжить", callback_data: "author_lang:done" },
               ],
               [
                 { text: "⏭ Пропустить", callback_data: "svc_wiz:skip" },
@@ -6110,8 +6137,7 @@ async function promptWizardState(ctx, state) {
           },
         }
       );
-      
-      return;
+    return;
 
     case "svc_author_meeting":
       await ctx.reply("📌 Укажите *место встречи*. Если по договорённости — так и напишите.", { parse_mode: "Markdown", ...wizNavKeyboard() });
@@ -9133,6 +9159,13 @@ bot.action("author_included:done", async (ctx) => {
 bot.action(/^author_lang:(.+)$/, async (ctx) => {
   const value = ctx.match[1];
 
+  if (value === "done") {
+    ctx.session.state = "svc_author_meeting";
+
+    await promptWizardState(ctx);
+    return;
+  }
+
   if (value === "custom") {
     ctx.session.state = "author_language_custom";
 
@@ -9149,11 +9182,27 @@ bot.action(/^author_lang:(.+)$/, async (ctx) => {
     en: "Английский",
   };
 
-  ctx.session.serviceDraft.language = map[value];
+  const draft = ctx.session.serviceDraft || {};
 
-  ctx.session.state = "svc_author_meeting";
+  draft.languages = Array.isArray(draft.languages)
+    ? draft.languages
+    : [];
 
-  await promptWizardState(ctx);
+  const lang = map[value];
+
+  if (draft.languages.includes(lang)) {
+    draft.languages = draft.languages.filter(
+      (x) => x !== lang
+    );
+  } else {
+    draft.languages.push(lang);
+  }
+
+  ctx.session.serviceDraft = draft;
+
+  await ctx.answerCbQuery(
+    `Языки: ${draft.languages.join(", ")}`
+  );
 
   return;
 });
