@@ -2927,6 +2927,32 @@ function editWizNavKeyboard() {
 }
 
 
+function editWizYesNoKeyboard() {
+  return {
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: "✅ Да", callback_data: "svc_edit_bool:yes" },
+          { text: "❌ Нет", callback_data: "svc_edit_bool:no" },
+        ],
+        [{ text: "⏭ Пропустить", callback_data: "svc_edit:skip" }],
+        [
+          { text: "⬅️ Назад", callback_data: "svc_edit_back" },
+          { text: "❌ Отмена", callback_data: "svc_edit_cancel" },
+        ],
+      ],
+    },
+  };
+}
+
+function editWizKeyboardForPrompt(message = "") {
+  const s = String(message || "").toLowerCase();
+  return /да\s*\/\s*нет|ответьте\s+да\s*\/\s*нет|\?\s*\(текущее:/.test(s)
+    ? editWizYesNoKeyboard()
+    : editWizNavKeyboard();
+}
+
+
 function editConfirmKeyboard() {
   return {
     reply_markup: {
@@ -3907,6 +3933,29 @@ bot.action(/^svc_edit_start:(\d+)$/, async (ctx) => {
       adt: Number.isFinite(det.adt) ? det.adt : (Number.isFinite(det.accommodationADT) ? det.accommodationADT : 0),
       chd: Number.isFinite(det.chd) ? det.chd : (Number.isFinite(det.accommodationCHD) ? det.accommodationCHD : 0),
       inf: Number.isFinite(det.inf) ? det.inf : (Number.isFinite(det.accommodationINF) ? det.accommodationINF : 0),
+
+      // author_tour structured fields
+      tourFormat: det.tourFormat || det.format || "",
+      stays: Array.isArray(det.stays) ? det.stays : [],
+      staysText: det.staysText || "",
+      programDays: Array.isArray(det.programDays) ? det.programDays : [],
+      programDaysText: det.programDaysText || det.program || "",
+      program: det.program || det.programDaysText || "",
+      included: Array.isArray(det.included) ? det.included : (det.includedText ? String(det.includedText).split(/\n|;|•/).map((x) => x.trim()).filter(Boolean) : []),
+      notIncluded: Array.isArray(det.notIncluded) ? det.notIncluded : (det.notIncludedText ? String(det.notIncludedText).split(/\n|;|•/).map((x) => x.trim()).filter(Boolean) : []),
+      minPax: det.minPax || "",
+      maxPax: det.maxPax || "",
+      languages: Array.isArray(det.languages)
+        ? det.languages
+        : Array.isArray(det.guideLanguages)
+          ? det.guideLanguages
+          : (det.guideLanguage || det.language ? String(det.guideLanguage || det.language).split(/,|\n|;|•/).map((x) => x.trim()).filter(Boolean) : []),
+      guideLanguage: det.guideLanguage || det.language || "",
+      language: det.language || det.guideLanguage || "",
+      meetingPoint: det.meetingPoint || "",
+      cancellationPolicy: det.cancellationPolicy || det.cancelPolicy || "",
+      cancelPolicy: det.cancelPolicy || det.cancellationPolicy || "",
+
       images: parseImagesAny(svc.images),
     };
 
@@ -3915,6 +3964,18 @@ bot.action(/^svc_edit_start:(\d+)$/, async (ctx) => {
     ctx.session.serviceDraft = draft;
     ctx.session.editingServiceId = svc.id;
     ctx.session.wizardStack = [];
+
+    if (category === "author_tour") {
+      // Для author_tour редактирование должно идти тем же мастером, что и создание.
+      // Это сохраняет одинаковые шаги в Telegram create/edit и не уводит в старый universal-flow.
+      ctx.session.editWiz = null;
+      ctx.session.state = "svc_author_title";
+
+      await safeReply(ctx, `✏️ Редактирование авторского тура #${svc.id}\n\nШаги редактирования такие же, как при создании 👇`);
+      await promptWizardState(ctx, "svc_author_title");
+      return;
+    }
+
     ctx.session.state = "svc_edit_title";
 
     await safeReply(ctx, `✏️ Редактирование услуги #${svc.id}\n\nНачнём 👇`);
@@ -6535,10 +6596,17 @@ async function finishCreateServiceFromWizard(ctx) {
     const chatId = getActorId(ctx);
     if (!chatId) return;
 
-    const { data } = await axios.post(
-      `/api/telegram/provider/${chatId}/services`,
-      payload
-    );
+    const isEditMode = Number.isFinite(Number(draft.id)) && Number(draft.id) > 0;
+
+    const { data } = isEditMode
+      ? await axios.patch(
+          `/api/telegram/provider/${chatId}/services/${Number(draft.id)}`,
+          payload
+        )
+      : await axios.post(
+          `/api/telegram/provider/${chatId}/services`,
+          payload
+        );
 
     if (!data || !data.success) {
       console.log("[tg-bot] createServiceFromWizard resp:", data);
@@ -6549,7 +6617,7 @@ async function finishCreateServiceFromWizard(ctx) {
       return;
     }
 
-    const createdServiceId = data?.service?.id;
+    const createdServiceId = data?.service?.id || (Number.isFinite(Number(draft.id)) ? Number(draft.id) : null);
 
     await finishProviderServiceDraft(ctx, "submitted");
 
@@ -6558,7 +6626,7 @@ async function finishCreateServiceFromWizard(ctx) {
       ctx.session.awaitingProofForCategory = String(category || "").toLowerCase();
 
       await ctx.reply(
-        `✅ Заявка #${createdServiceId} создана.\n\n` +
+        `${isEditMode ? "✅ Изменения" : "✅ Заявка"} #${createdServiceId} сохранены.\n\n` +
           `Теперь для отправки на модерацию вы обязаны отправить скриншоты, ` +
           `подтверждающие подлинность тура / программы / бронирований / договорённостей. ` +
           `тура / отеля / авиабилета / билета на мероприятие.\n\n` +
@@ -6572,7 +6640,9 @@ async function finishCreateServiceFromWizard(ctx) {
     }
 
     await ctx.reply(
-      `✅ Готово!\n\nУслуга #${createdServiceId} создана и отправлена на модерацию.\nПосле одобрения она появится в поиске.`
+      isEditMode
+        ? `✅ Готово!\n\nИзменения услуги #${createdServiceId} сохранены и отправлены на модерацию.`
+        : `✅ Готово!\n\nУслуга #${createdServiceId} создана и отправлена на модерацию.\nПосле одобрения она появится в поиске.`
     );
 
     resetServiceWizard(ctx);
@@ -9158,54 +9228,97 @@ bot.action("author_included:done", async (ctx) => {
 });
 
 bot.action(/^author_lang:(.+)$/, async (ctx) => {
-  const value = ctx.match[1];
+  try {
+    const value = String(ctx.match?.[1] || "");
 
-  if (value === "done") {
-    ctx.session.state = "svc_author_meeting";
+    if (!ctx.session) ctx.session = {};
+    if (!ctx.session.serviceDraft) ctx.session.serviceDraft = {};
 
-    await promptWizardState(ctx);
-    return;
+    const draft = ctx.session.serviceDraft;
+
+    if (value === "done") {
+      pushWizardState(ctx, "svc_author_language");
+      ctx.session.state = "svc_author_meeting";
+      await safeCb(ctx, "Продолжаем");
+      await promptWizardState(ctx, "svc_author_meeting");
+      await persistProviderCreateWizard(ctx);
+      return;
+    }
+
+    if (value === "custom") {
+      ctx.session.state = "author_language_custom";
+      await safeCb(ctx);
+      await ctx.reply(
+        "🗣 Введите язык гида\n\nНапример:\nТурецкий",
+        { ...wizNavKeyboard() }
+      );
+      await persistProviderCreateWizard(ctx);
+      return;
+    }
+
+    const map = {
+      uz: "Узбекский",
+      ru: "Русский",
+      en: "Английский",
+    };
+
+    const lang = map[value];
+    if (!lang) {
+      await safeCb(ctx, "⚠️ Неизвестный язык", true);
+      return;
+    }
+
+    draft.languages = Array.isArray(draft.languages) ? draft.languages : [];
+
+    if (draft.languages.includes(lang)) {
+      draft.languages = draft.languages.filter((x) => x !== lang);
+    } else {
+      draft.languages.push(lang);
+    }
+
+    draft.guideLanguage = draft.languages.join(", ");
+    draft.language = draft.guideLanguage;
+
+    ctx.session.serviceDraft = draft;
+    ctx.session.state = "svc_author_language";
+
+    await safeCb(ctx, draft.languages.length ? `Языки: ${draft.languages.join(", ")}` : "Языки не выбраны");
+
+    try {
+      const selected = draft.languages;
+      const has = (name) => selected.includes(name);
+
+      await ctx.editMessageText(
+        "🗣 Укажите язык гида\n\nМожно выбрать несколько языков, затем нажмите ✅ Продолжить.",
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: `${has("Узбекский") ? "✅" : "☐"} 🇺🇿 УЗБ`, callback_data: "author_lang:uz" },
+                { text: `${has("Русский") ? "✅" : "☐"} 🇷🇺 РУС`, callback_data: "author_lang:ru" },
+              ],
+              [
+                { text: `${has("Английский") ? "✅" : "☐"} 🇬🇧 АНГ`, callback_data: "author_lang:en" },
+              ],
+              [{ text: "➕ Свой вариант", callback_data: "author_lang:custom" }],
+              [{ text: "✅ Продолжить", callback_data: "author_lang:done" }],
+              [{ text: "⏭ Пропустить", callback_data: "svc_wiz:skip" }],
+              [
+                { text: "⬅️ Назад", callback_data: "svc_wiz:back" },
+                { text: "❌ Отмена", callback_data: "svc_wiz:cancel" },
+              ],
+            ],
+          },
+        }
+      );
+    } catch {
+      await promptWizardState(ctx, "svc_author_language");
+    }
+
+    await persistProviderCreateWizard(ctx);
+  } catch (e) {
+    console.error("[author_lang]", e);
   }
-
-  if (value === "custom") {
-    ctx.session.state = "author_language_custom";
-
-    await ctx.reply(
-      "🗣 Введите язык гида\n\nНапример:\nТурецкий",
-      { ...wizNavKeyboard() }
-    );
-    return;
-  }
-
-  const map = {
-    uz: "Узбекский",
-    ru: "Русский",
-    en: "Английский",
-  };
-
-  const draft = ctx.session.serviceDraft || {};
-
-  draft.languages = Array.isArray(draft.languages)
-    ? draft.languages
-    : [];
-
-  const lang = map[value];
-
-  if (draft.languages.includes(lang)) {
-    draft.languages = draft.languages.filter(
-      (x) => x !== lang
-    );
-  } else {
-    draft.languages.push(lang);
-  }
-
-  ctx.session.serviceDraft = draft;
-
-  await ctx.answerCbQuery(
-    `Языки: ${draft.languages.join(", ")}`
-  );
-
-  return;
 });
 
 bot.action(/^author_excluded:toggle:([a-z0-9_]+)$/, async (ctx) => {
@@ -10214,7 +10327,7 @@ async function handleSvcEditWizardText(ctx) {
       ctx.session.editWiz.step = nextState;
 
       ctx.session.state = nextState;
-      await safeReply(ctx, message, editWizNavKeyboard());
+      await safeReply(ctx, message, editWizKeyboardForPrompt(message));
     };
 
     switch (state) {
@@ -11780,7 +11893,11 @@ bot.on("text", async (ctx, next) => {
         case "svc_author_language": {
           const v = await requireTextField(ctx, text, "Язык гида", { min: 2 });
           if (!v) return;
-          draft.guideLanguage = v;
+
+          draft.languages = Array.isArray(draft.languages) ? draft.languages : [];
+          if (!draft.languages.includes(v)) draft.languages.push(v);
+          draft.guideLanguage = draft.languages.join(", ");
+          draft.language = draft.guideLanguage;
 
           pushWizardState(ctx, "svc_author_language");
           ctx.session.state = "svc_author_meeting";
@@ -11791,17 +11908,19 @@ bot.on("text", async (ctx, next) => {
         case "author_language_custom": {
           const v = await requireTextField(ctx, text, "Язык гида", { min: 2 });
           if (!v) return;
-        
-          draft.guideLanguage = v;
-          draft.language = v;
-        
-          pushWizardState(ctx, "svc_author_language");
-          ctx.session.state = "svc_author_meeting";
-          await promptWizardState(ctx, "svc_author_meeting");
+
+          draft.languages = Array.isArray(draft.languages) ? draft.languages : [];
+          if (!draft.languages.includes(v)) draft.languages.push(v);
+          draft.guideLanguage = draft.languages.join(", ");
+          draft.language = draft.guideLanguage;
+
+          ctx.session.state = "svc_author_language";
+          await promptWizardState(ctx, "svc_author_language");
+          await persistProviderCreateWizard(ctx);
           return;
         }
 
-        case "svc_author_meeting": {
+                case "svc_author_meeting": {
           const v = await requireTextField(ctx, text, "Место встречи", { min: 2 });
           if (!v) return;
           draft.meetingPoint = v;
@@ -13239,6 +13358,26 @@ bot.action("svc_edit_img_done", async (ctx) => {
 });
 
 // bot.launch() — запуск делаем из index.js
+
+bot.action(/^svc_edit_bool:(yes|no)$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+
+    const value = ctx.match?.[1] === "yes" ? "да" : "нет";
+
+    if (!ctx.session) ctx.session = {};
+    ctx.message = ctx.message || {};
+    ctx.message.text = value;
+
+    const handled = await handleSvcEditWizardText(ctx);
+    if (!handled) {
+      await safeReply(ctx, "⚠️ Сейчас нет активного шага редактирования.");
+    }
+  } catch (e) {
+    console.error("svc_edit_bool error:", e);
+    await safeReply(ctx, "⚠️ Не удалось обработать ответ.");
+  }
+});
 
 bot.action("svc_edit_save", async (ctx) => {
   try {
