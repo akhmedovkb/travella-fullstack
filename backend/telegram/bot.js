@@ -6441,14 +6441,42 @@ async function promptWizardState(ctx, state) {
       return;
     }
 
-    case "svc_author_program_days":
+    case "svc_author_program_days": {
+      const draft = ctx.session.serviceDraft || {};
+    
+      const programDays = Array.isArray(draft.programDays)
+        ? draft.programDays
+        : Array.isArray(draft.details?.programDays)
+          ? draft.details.programDays
+          : [];
+    
+      const text = programDays.length
+        ? programDays
+            .map((x, i) => {
+              const date = x.date ? `📅 ${x.date}\n` : "";
+              const route = x.route ? `🛣 ${x.route}\n` : "";
+              const title = x.title ? `📝 ${x.title}\n` : "";
+              const items = Array.isArray(x.items)
+                ? x.items.map((it) => `• ${it}`).join("\n")
+                : String(x.items || "").trim();
+    
+              return `${i + 1}-kun\n${date}${route}${title}${items}`;
+            })
+            .join("\n\n")
+        : "Пока дни программы не добавлены.\n\nДобавьте каждый день как отдельный блок: дата, маршрут, заголовок и пункты программы.";
+    
       await ctx.reply(
-        "🗓 *Программа тура по дням*\n\nПока дни программы не добавлены.\n\nДобавьте каждый день как отдельный блок: дата, маршрут, заголовок и пункты программы.",
+        `🗓 *Программа тура по дням*\n\n${text}`,
         {
           parse_mode: "Markdown",
           reply_markup: {
             inline_keyboard: [
-              [{ text: "➕ Добавить день программы", callback_data: "author_day:add" }],
+              [
+                {
+                  text: programDays.length ? "➕ Добавить ещё день" : "➕ Добавить день программы",
+                  callback_data: "author_day:add",
+                },
+              ],
               [{ text: "✅ Продолжить", callback_data: "author_day:done" }],
               [
                 { text: "⬅️ Назад", callback_data: "svc_wiz:back" },
@@ -6458,7 +6486,9 @@ async function promptWizardState(ctx, state) {
           },
         }
       );
+    
       return;
+    }
 
     case "author_day_date":
       await replyWizardCalendar(ctx, "author_day_date");
@@ -9497,6 +9527,8 @@ bot.action("author_stay:done", async (ctx) => {
 
     ctx.session.state = "svc_author_program_days";
 
+    await persistProviderCreateWizard(ctx);
+
     await safeCb(ctx);
 
     await promptWizardState(
@@ -9517,6 +9549,8 @@ bot.action("author_day:add", async (ctx) => {
 
     pushWizardState(ctx, "svc_author_program_days");
     ctx.session.state = "author_day_date";
+
+    await persistProviderCreateWizard(ctx);
 
     await safeCb(ctx);
 
@@ -9543,6 +9577,8 @@ bot.action("author_day:done", async (ctx) => {
     pushWizardState(ctx, "svc_author_program_days");
 
     ctx.session.state = "svc_author_included";
+    
+    await persistProviderCreateWizard(ctx);
 
     await safeCb(ctx);
 
@@ -12346,6 +12382,8 @@ bot.on("text", async (ctx, next) => {
             delete draft._programDayTitle;
 
             ctx.session.state = "svc_author_program_days";
+
+            await persistProviderCreateWizard(ctx);
 
             const rows = draft.programDays.map((d) => {
               const title = d.title ? ` — ${d.title}` : "";
