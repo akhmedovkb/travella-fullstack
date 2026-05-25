@@ -1819,6 +1819,31 @@ export default function DashboardServices() {
     }
   };
 
+
+  const purgeServiceForever = (service, event) => {
+    event?.stopPropagation?.();
+    if (!service?.id) return;
+    setConfirmModal({ type: "purge", service });
+  };
+
+  const performPurgeServiceForever = async (service) => {
+    if (!service?.id) return;
+    try {
+      await api.delete(`/api/providers/services/${service.id}/purge`);
+      setServices((prev) => prev.filter((s) => s.id !== service.id));
+      if (selectedService?.id === service.id) {
+        setSelectedService(null);
+      }
+      tSuccess(t("service_purged", { defaultValue: "Услуга удалена навсегда" }));
+    } catch (err) {
+      console.error(err);
+      const blockers = err?.response?.data?.blockers;
+      const suffix = Array.isArray(blockers) && blockers.length ? ` (${blockers.join(", ")})` : "";
+      tError((err?.response?.data?.message || t("purge_error", { defaultValue: "Не удалось удалить навсегда" })) + suffix);
+      throw err;
+    }
+  };
+
   const restoreServiceFromTrash = (service, event) => {
     event?.stopPropagation?.();
     if (!service?.id) return;
@@ -1883,6 +1908,9 @@ export default function DashboardServices() {
       }
       if (confirmModal.type === "restore") {
         await performRestoreServiceFromTrash(confirmModal.service);
+      }
+      if (confirmModal.type === "purge") {
+        await performPurgeServiceForever(confirmModal.service);
       }
       setConfirmModal(null);
     } finally {
@@ -2253,13 +2281,22 @@ export default function DashboardServices() {
 
                           {isDeletedService(service) && (
                             <div className="border-t border-slate-100 bg-slate-50 px-3 py-2">
-                              <button
-                                type="button"
-                                onClick={(e) => restoreServiceFromTrash(service, e)}
-                                className="w-full rounded-2xl bg-emerald-600 px-3 py-2 text-xs font-black text-white shadow-sm transition hover:bg-emerald-700"
-                              >
-                                {t("restore_service", { defaultValue: "Восстановить" })}
-                              </button>
+                              <div className="grid grid-cols-2 gap-2">
+                                <button
+                                  type="button"
+                                  onClick={(e) => restoreServiceFromTrash(service, e)}
+                                  className="rounded-2xl bg-emerald-600 px-3 py-2 text-xs font-black text-white shadow-sm transition hover:bg-emerald-700"
+                                >
+                                  {t("restore_service", { defaultValue: "Восстановить" })}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => purgeServiceForever(service, e)}
+                                  className="rounded-2xl bg-rose-600 px-3 py-2 text-xs font-black text-white shadow-sm transition hover:bg-rose-700"
+                                >
+                                  {t("service_action.purge", { defaultValue: "Навсегда" })}
+                                </button>
+                              </div>
                             </div>
                           )}
 
@@ -2923,9 +2960,14 @@ export default function DashboardServices() {
                       </button>
                     )}
                     {selectedService?.id && isDeletedService(selectedService) && (
-                      <button type="button" onClick={(e) => restoreServiceFromTrash(selectedService, e)} className="rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-black text-white">
-                        {t("restore_service", { defaultValue: "Восстановить" })}
-                      </button>
+                      <>
+                        <button type="button" onClick={(e) => restoreServiceFromTrash(selectedService, e)} className="rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-black text-white">
+                          {t("restore_service", { defaultValue: "Восстановить" })}
+                        </button>
+                        <button type="button" onClick={(e) => purgeServiceForever(selectedService, e)} className="rounded-2xl bg-rose-700 px-4 py-3 text-sm font-black text-white">
+                          {t("service_action.purge", { defaultValue: "Удалить навсегда" })}
+                        </button>
+                      </>
                     )}
 
                     {selectedService?.id && !isDeletedService(selectedService) && (
@@ -2998,26 +3040,34 @@ export default function DashboardServices() {
 
       <ConfirmModal
         open={!!confirmModal}
-        danger={confirmModal?.type === "delete"}
+        danger={confirmModal?.type === "delete" || confirmModal?.type === "purge"}
         busy={confirmBusy}
         title={
           confirmModal?.type === "delete"
             ? t("confirm_delete_service_title", { defaultValue: "Удалить услугу" })
-            : t("confirm_restore_service_title", { defaultValue: "Восстановить услугу" })
+            : confirmModal?.type === "purge"
+              ? t("confirm_purge_service_title", { defaultValue: "Удалить навсегда" })
+              : t("confirm_restore_service_title", { defaultValue: "Восстановить услугу" })
         }
         message={
           confirmModal?.type === "delete"
             ? t("confirm_delete_service_full", {
                 defaultValue: `Удалить #R${confirmModal?.service?.id || ""}? Услуга уйдет в корзину и будет скрыта из активных.`,
               })
-            : t("confirm_restore_service", {
-                defaultValue: `Восстановить #R${confirmModal?.service?.id || ""} в черновики?`,
-              })
+            : confirmModal?.type === "purge"
+              ? t("confirm_purge_service_full", {
+                  defaultValue: `Удалить #R${confirmModal?.service?.id || ""} навсегда? Действие нельзя отменить.`,
+                })
+              : t("confirm_restore_service", {
+                  defaultValue: `Восстановить #R${confirmModal?.service?.id || ""} в черновики?`,
+                })
         }
         confirmLabel={
           confirmModal?.type === "delete"
             ? t("delete", { defaultValue: "Удалить" })
-            : t("restore_service", { defaultValue: "Восстановить" })
+            : confirmModal?.type === "purge"
+              ? t("service_action.purge", { defaultValue: "Удалить навсегда" })
+              : t("restore_service", { defaultValue: "Восстановить" })
         }
         cancelLabel={t("actions.cancel", { defaultValue: "Отмена" })}
         onClose={() => {
