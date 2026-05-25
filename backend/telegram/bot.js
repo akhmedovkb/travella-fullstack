@@ -5084,7 +5084,9 @@ async function replyProviderDraftResumePrompt(ctx, row) {
       })
     : "";
 
-    const stepLabels = {
+  const stepLabels = {
+    svc_create_choose_category: "Выбор категории",
+  
     svc_author_title: "Название авторского тура",
     svc_author_country: "Страна направления",
     svc_author_from: "Город отправления",
@@ -5093,24 +5095,58 @@ async function replyProviderDraftResumePrompt(ctx, row) {
     svc_author_end: "Дата окончания тура",
     svc_author_format: "Формат тура",
     svc_author_stays: "Проживание тура",
-
     author_stay_city: "Проживание: город",
     author_stay_hotel: "Проживание: отель",
     author_stay_nights: "Проживание: количество ночей",
-
     svc_author_program_days: "Программа тура",
     author_day_date: "Программа: дата дня",
     author_day_route: "Программа: маршрут дня",
     author_day_title: "Программа: заголовок дня",
     author_day_items: "Программа: пункты дня",
-
     svc_author_included: "Что включено",
     svc_author_not_included: "Что не включено",
+    author_included_custom: "Что включено: свой пункт",
+    author_excluded_custom: "Что не включено: свой пункт",
     svc_author_pax: "Количество человек",
     svc_author_language: "Язык гида",
+    author_language_custom: "Язык гида: свой вариант",
     svc_author_meeting: "Место встречи",
     svc_author_cancel: "Условия отмены",
-
+  
+    svc_create_title: "Название услуги",
+    svc_create_tour_country: "Страна направления",
+    svc_create_tour_from: "Город отправления",
+    svc_create_tour_to: "Город прибытия",
+    svc_create_tour_start: "Дата начала тура",
+    svc_create_tour_end: "Дата окончания тура",
+    svc_create_flight_departure: "Дата рейса вылета",
+    svc_create_flight_return: "Дата рейса обратно",
+    svc_ticket_event_date: "Дата мероприятия / билета",
+    svc_create_flight_details: "Детали рейса",
+    svc_create_tour_hotel: "Отель",
+    svc_create_tour_accommodation: "Размещение",
+    svc_create_tour_roomcat: "Категория номера",
+    svc_create_tour_food: "Питание",
+    svc_create_tour_insurance: "Страховка",
+    svc_create_tour_early_checkin: "Ранний заезд",
+    svc_create_tour_fast_track: "Fast Track",
+  
+    svc_hotel_country: "Страна отеля",
+    svc_hotel_city: "Город отеля",
+    svc_hotel_name: "Название отеля",
+    svc_hotel_checkin: "Дата заезда",
+    svc_hotel_checkout: "Дата выезда",
+    svc_hotel_roomcat: "Категория номера",
+    svc_hotel_accommodation: "Размещение",
+    svc_hotel_food: "Питание",
+    svc_hotel_halal: "Halal",
+    svc_hotel_transfer: "Трансфер",
+    svc_hotel_changeable: "Можно менять",
+    svc_hotel_pax: "Количество гостей",
+    svc_hotel_insurance: "Страховка",
+    svc_hotel_early_checkin: "Ранний заезд",
+    svc_hotel_fast_track: "Fast Track",
+  
     svc_create_price: "Цена нетто",
     svc_create_grossPrice: "Цена для клиента",
     svc_create_expiration: "Срок актуальности",
@@ -6570,53 +6606,60 @@ async function promptWizardState(ctx, state) {
     }
 
     case "svc_author_language": {
-      const selected = Array.isArray(ctx.session.serviceDraft?.languages)
-        ? ctx.session.serviceDraft.languages
-        : [];
-    
-      const has = (name) => selected.includes(name);
-    
-      await ctx.reply(
-        "🗣 Укажите язык гида\n\nМожно выбрать несколько языков, затем нажмите ✅ Продолжить.",
-        {
-          reply_markup: {
-            inline_keyboard: [
-              [
-                {
-                  text: `${has("Узбекский") ? "✅" : "☐"} 🇺🇿 УЗБ`,
-                  callback_data: "author_lang:uz",
-                },
-                {
-                  text: `${has("Русский") ? "✅" : "☐"} 🇷🇺 РУС`,
-                  callback_data: "author_lang:ru",
-                },
+        const selected = Array.isArray(ctx.session.serviceDraft?.languages)
+          ? ctx.session.serviceDraft.languages
+          : [];
+      
+        const has = (name) => selected.includes(name);
+      
+        await ctx.reply(
+          "🗣 Укажите язык гида\n\nМожно выбрать несколько языков, затем нажмите ✅ Продолжить.",
+          {
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  {
+                    text: `${has("Узбекский") ? "✅" : "☐"} 🇺🇿 УЗБ`,
+                    callback_data: "author_lang:uz",
+                  },
+                  {
+                    text: `${has("Русский") ? "✅" : "☐"} 🇷🇺 РУС`,
+                    callback_data: "author_lang:ru",
+                  },
+                ],
+                [
+                  {
+                    text: `${has("Английский") ? "✅" : "☐"} 🇬🇧 АНГ`,
+                    callback_data: "author_lang:en",
+                  },
+                ],
+                [
+                  { text: "➕ Свой вариант", callback_data: "author_lang:custom" },
+                ],
+                [
+                  { text: "✅ Продолжить", callback_data: "author_lang:done" },
+                ],
+                [
+                  { text: "⏭ Пропустить", callback_data: "svc_wiz:skip" },
+                ],
+                [
+                  { text: "⬅️ Назад", callback_data: "svc_wiz:back" },
+                  { text: "❌ Отмена", callback_data: "svc_wiz:cancel" },
+                ],
               ],
-              [
-                {
-                  text: `${has("Английский") ? "✅" : "☐"} 🇬🇧 АНГ`,
-                  callback_data: "author_lang:en",
-                },
-              ],
-              [
-                { text: "➕ Свой вариант", callback_data: "author_lang:custom" },
-              ],
-              [
-                { text: "✅ Продолжить", callback_data: "author_lang:done" },
-              ],
-              [
-                { text: "⏭ Пропустить", callback_data: "svc_wiz:skip" },
-              ],
-              [
-                { text: "⬅️ Назад", callback_data: "svc_wiz:back" },
-                { text: "❌ Отмена", callback_data: "svc_wiz:cancel" },
-              ],
-            ],
-          },
-        }
-      );
+            },
+          }
+        );
+      return;
+      }
+  
+      case "author_language_custom":
+    await ctx.reply(
+      "🗣 Введите язык гида\n\nНапример:\nТурецкий",
+      { ...wizNavKeyboard() }
+    );
     return;
-    }
-
+    
     case "svc_author_meeting":
       await ctx.reply("📌 Укажите *место встречи*. Если по договорённости — так и напишите.", { parse_mode: "Markdown", ...wizNavKeyboard() });
       return;
@@ -8642,6 +8685,7 @@ bot.action("tg_draft:continue", async (ctx) => {
         reply_markup: {
           inline_keyboard: [
             [{ text: "📍 Отказной тур", callback_data: "svc_new_cat:refused_tour" }],
+            [{ text: "🧭 Авторский тур", callback_data: "svc_new_cat:author_tour" }],
             [{ text: "🏨 Отказной отель", callback_data: "svc_new_cat:refused_hotel" }],
             [{ text: "✈️ Отказной авиабилет", callback_data: "svc_new_cat:refused_flight" }],
             [{ text: "🎫 Отказной билет", callback_data: "svc_new_cat:refused_ticket" }],
