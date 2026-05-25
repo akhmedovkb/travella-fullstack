@@ -6382,24 +6382,64 @@ async function promptWizardState(ctx, state) {
       );
       return;
 
-  case "svc_author_stays":
-    await ctx.reply(
-      "🏨 *Проживание тура*\n\nПока ничего не добавлено.\n\nДобавьте проживание по городам.",
-      {
-        parse_mode: "Markdown",
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: "➕ Добавить проживание", callback_data: "author_stay:add" }],
-            [{ text: "✅ Продолжить", callback_data: "author_stay:done" }],
-            [
-              { text: "⬅️ Назад", callback_data: "svc_wiz:back" },
-              { text: "❌ Отмена", callback_data: "svc_wiz:cancel" },
+    case "svc_author_stays": {
+      const draft = ctx.session.serviceDraft || {};
+    
+      const stays = Array.isArray(draft.stays)
+        ? draft.stays
+        : Array.isArray(draft.details?.stays)
+          ? draft.details.stays
+          : [];
+    
+      const text = stays.length
+        ? stays
+            .map((x, i) => {
+              const city = x.city || "Город";
+              const hotel =
+                x.hotel ||
+                x.hotelName ||
+                x.name ||
+                "Отель";
+    
+              const nights =
+                Number(
+                  x.nights ??
+                  x.nightCount ??
+                  x.days ??
+                  0
+                ) || 0;
+    
+              return `${i + 1}. 🌍 ${city}\n🏨 ${hotel}${nights ? `\n🌙 ${nights} ноч.` : ""}`;
+            })
+            .join("\n\n")
+        : "Пока ничего не добавлено.\n\nДобавьте проживание по городам.";
+    
+      await ctx.reply(
+        `🏨 *Проживание тура*\n\n${text}`,
+        {
+          parse_mode: "Markdown",
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: stays.length
+                    ? "➕ Добавить ещё"
+                    : "➕ Добавить проживание",
+                  callback_data: "author_stay:add",
+                },
+              ],
+              [{ text: "✅ Продолжить", callback_data: "author_stay:done" }],
+              [
+                { text: "⬅️ Назад", callback_data: "svc_wiz:back" },
+                { text: "❌ Отмена", callback_data: "svc_wiz:cancel" },
+              ],
             ],
-          ],
-        },
-      }
-    );
-    return;
+          },
+        }
+      );
+    
+      return;
+    }
 
     case "svc_author_program_days":
       await ctx.reply(
@@ -9426,7 +9466,9 @@ bot.action("author_stay:add", async (ctx) => {
 
     pushWizardState(ctx, "svc_author_stays");
     ctx.session.state = "author_stay_city";
-
+    
+    await persistProviderCreateWizard(ctx);
+    
     await safeCb(ctx);
 
     await ctx.reply(
@@ -12196,9 +12238,11 @@ bot.on("text", async (ctx, next) => {
             
               delete draft._stayCity;
               delete draft._stayHotel;
-            
+              
               ctx.session.state = "svc_author_stays";
-            
+              
+              await persistProviderCreateWizard(ctx);
+              
               const rows = draft.stays.map(
                 (x, i) =>
                   `${i + 1}. ${x.city} — ${x.hotel} — ${x.nights} ноч.`
