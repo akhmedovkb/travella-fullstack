@@ -6404,7 +6404,6 @@ function wizardCurrentPreview(ctx, state) {
     author_day_title: ["Дата / маршрут", [d._programDayDate, d._programDayRoute].filter(Boolean).join(" — ")],
     author_day_items: ["День программы", [d._programDayDate, d._programDayRoute, d._programDayTitle].filter(Boolean).join(" — ")],
 
-    svc_author_pax: ["Группа", [d.minPax, d.maxPax].filter(Boolean).join("–")],
     svc_author_language: ["Языки", d.languages || d.language],
     author_language_custom: ["Языки", d.languages || d.language],
     svc_author_meeting: ["Место встречи", d.meetingPoint],
