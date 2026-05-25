@@ -6490,6 +6490,27 @@ async function promptWizardState(ctx, state) {
       return;
     }
 
+    case "author_stay_city":
+      await ctx.reply(
+        "🌍 Укажите город проживания\n\nНапример:\nUzungol",
+        authorDayNavKeyboard({ skip: false })
+      );
+      return;
+
+    case "author_stay_hotel":
+      await ctx.reply(
+        "🏨 Укажите отель\n\nНапример:\nKar Hotel",
+        authorDayNavKeyboard({ skip: false })
+      );
+      return;
+
+    case "author_stay_nights":
+      await ctx.reply(
+        "🌙 Количество ночей\n\nНапример:\n2",
+        authorDayNavKeyboard({ skip: false })
+      );
+      return;
+    
     case "author_day_date":
       await replyWizardCalendar(ctx, "author_day_date");
       return;
