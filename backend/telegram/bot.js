@@ -6372,7 +6372,93 @@ async function validateGrossNotLessThanNet(ctx, netStr, grossStr, backToState) {
   return true;
 }
 
+function wizardCurrentPreview(ctx, state) {
+  const d = ctx.session?.serviceDraft || {};
+  const show = (label, value) => {
+    if (value === null || value === undefined || value === "") return "";
+    if (Array.isArray(value)) return value.length ? `📌 Сейчас сохранено:\n${label}: ${value.join(", ")}` : "";
+    return `📌 Сейчас сохранено:\n${label}: ${value}`;
+  };
+
+  const bool = (v) => {
+    if (v === true) return "Да";
+    if (v === false) return "Нет";
+    return "";
+  };
+
+  const map = {
+    svc_author_title: ["Название", d.title],
+    svc_author_country: ["Страна", d.country],
+    svc_author_from: ["Старт", d.fromCity],
+    svc_author_to: ["Финиш/маршрут", d.toCity || d.directionTo],
+    svc_author_start: ["Дата начала", d.startDate],
+    svc_author_end: ["Дата окончания", d.endDate],
+    svc_author_format: ["Формат", d.tourFormat],
+
+    author_stay_city: ["Проживание", (d.stays || []).map(x => `${x.city} — ${x.hotel} — ${x.nights} ноч.`)],
+    author_stay_hotel: ["Город", d._stayCity],
+    author_stay_nights: ["Город / отель", [d._stayCity, d._stayHotel].filter(Boolean).join(" — ")],
+
+    author_day_date: ["Программа", (d.programDays || []).map(x => `${x.day}. ${x.date} — ${x.route} — ${x.title}`)],
+    author_day_route: ["Дата дня", d._programDayDate],
+    author_day_title: ["Дата / маршрут", [d._programDayDate, d._programDayRoute].filter(Boolean).join(" — ")],
+    author_day_items: ["День программы", [d._programDayDate, d._programDayRoute, d._programDayTitle].filter(Boolean).join(" — ")],
+
+    svc_author_pax: ["Группа", [d.minPax, d.maxPax].filter(Boolean).join("–")],
+    svc_author_language: ["Языки", d.languages || d.language],
+    author_language_custom: ["Языки", d.languages || d.language],
+    svc_author_meeting: ["Место встречи", d.meetingPoint],
+    svc_author_cancel: ["Условия отмены", d.cancelPolicy || d.cancellationPolicy],
+
+    svc_create_title: ["Название", d.title],
+    svc_create_tour_country: ["Страна", d.country],
+    svc_create_tour_from: ["Город вылета", d.fromCity],
+    svc_create_tour_to: ["Город прибытия", d.toCity],
+    svc_create_tour_start: ["Дата начала", d.startDate],
+    svc_create_tour_end: ["Дата окончания", d.endDate],
+    svc_create_flight_departure: ["Дата рейса вылета", d.departureFlightDate],
+    svc_create_flight_return: ["Дата рейса обратно", d.returnFlightDate],
+    svc_ticket_event_date: ["Дата мероприятия", d.eventDate || d.ticketDate],
+    svc_create_flight_details: ["Детали рейса", d.flightDetails],
+    svc_create_tour_hotel: ["Отель", d.hotel],
+    svc_create_tour_accommodation: ["Размещение", d.accommodation],
+    svc_create_tour_roomcat: ["Категория номера", d.roomCategory],
+    svc_create_tour_food: ["Питание", d.food],
+    svc_create_tour_insurance: ["Страховка", bool(d.insuranceIncluded)],
+    svc_create_tour_early_checkin: ["Ранний заезд", bool(d.earlyCheckIn)],
+    svc_create_tour_fast_track: ["Fast Track", bool(d.arrivalFastTrack)],
+
+    svc_hotel_country: ["Страна", d.country],
+    svc_hotel_city: ["Город", d.toCity || d.city],
+    svc_hotel_name: ["Отель", d.hotel],
+    svc_hotel_checkin: ["Заезд", d.startDate],
+    svc_hotel_checkout: ["Выезд", d.endDate],
+    svc_hotel_roomcat: ["Категория номера", d.roomCategory],
+    svc_hotel_accommodation: ["Размещение", d.accommodation],
+    svc_hotel_food: ["Питание", d.food],
+    svc_hotel_transfer: ["Трансфер", d.transfer],
+    svc_hotel_pax: ["Гости", `${d.adt || 0}/${d.chd || 0}/${d.inf || 0}`],
+    svc_hotel_halal: ["Halal", bool(d.halal)],
+    svc_hotel_changeable: ["Можно менять", bool(d.changeable)],
+    svc_hotel_insurance: ["Страховка", bool(d.insuranceIncluded)],
+    svc_hotel_early_checkin: ["Ранний заезд", bool(d.earlyCheckIn)],
+    svc_hotel_fast_track: ["Fast Track", bool(d.arrivalFastTrack)],
+
+    svc_create_price: ["Нетто", d.price || d.netPrice],
+    svc_create_grossPrice: ["Цена для клиента", d.grossPrice],
+    svc_create_expiration: ["Актуально до", d.expiration],
+    svc_create_photo: ["Фото", Array.isArray(d.images) ? `${d.images.length} шт.` : ""],
+  };
+
+  const row = map[state];
+  return row ? show(row[0], row[1]) : "";
+}
+
 async function promptWizardState(ctx, state) {
+  const currentPreview = wizardCurrentPreview(ctx, state);
+  if (currentPreview) {
+    await ctx.reply(currentPreview);
+  }
   switch (state) {
     case "svc_author_title":
       await ctx.reply(
@@ -12306,6 +12392,8 @@ bot.on("text", async (ctx, next) => {
               draft._stayCity = text;
             
               ctx.session.state = "author_stay_hotel";
+
+              await persistProviderCreateWizard(ctx);
             
               await ctx.reply(
                 "🏨 Укажите отель\n\nНапример:\nKar Hotel"
@@ -12317,6 +12405,8 @@ bot.on("text", async (ctx, next) => {
               draft._stayHotel = text;
             
               ctx.session.state = "author_stay_nights";
+
+              await persistProviderCreateWizard(ctx);
             
               await ctx.reply(
                 "🌙 Количество ночей\n\nНапример:\n2"
@@ -12387,6 +12477,8 @@ bot.on("text", async (ctx, next) => {
             draft._programDayDate = formatAuthorDateDMY(norm);
             ctx.session.state = "author_day_route";
 
+            await persistProviderCreateWizard(ctx);
+
             await promptWizardState(ctx, "author_day_route");
             return;
           }
@@ -12398,6 +12490,8 @@ bot.on("text", async (ctx, next) => {
             draft._programDayRoute = v;
             ctx.session.state = "author_day_title";
 
+            await persistProviderCreateWizard(ctx);
+
             await promptWizardState(ctx, "author_day_title");
             return;
           }
@@ -12408,6 +12502,8 @@ bot.on("text", async (ctx, next) => {
 
             draft._programDayTitle = v;
             ctx.session.state = "author_day_items";
+
+            await persistProviderCreateWizard(ctx);
 
             await promptWizardState(ctx, "author_day_items");
             return;
