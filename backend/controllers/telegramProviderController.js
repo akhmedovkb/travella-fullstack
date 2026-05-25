@@ -4,21 +4,13 @@ const axiosBase = require("axios");
 const { tgSend, notifyModerationNew } = require("../utils/telegram");
 const { logProviderServiceAction } = require("../utils/serviceAuditLog");
 const { applyServiceLifecycleAction } = require("../utils/serviceLifecycle");
+const { REFUSED_CATEGORIES } = require("../utils/serviceCategories");
 const MAX_TITLE_LEN = 100;
 const {
   extractPrices,
   isPriceDrop,
   broadcastPriceDropCard,
 } = require("../utils/refusedPriceDropBroadcast");
-
-const REFUSED_CATEGORIES = [
-  "refused_tour",
-  "author_tour",
-  "refused_hotel",
-  "refused_flight",
-  "refused_ticket",
-  "refused_event_ticket",
-];
 
 const TG_TOKEN =
   process.env.TELEGRAM_CLIENT_BOT_TOKEN ||
@@ -634,7 +626,7 @@ async function getProviderServices(req, res) {
         WHERE s.provider_id = $1
           AND s.category = ANY($2::text[])
           AND s.deleted_at IS NULL
-          AND s.status IN ('published', 'approved', 'active', 'pending')
+          AND s.status IN ('published', 'approved', 'active')
           AND (
             s.expiration_at IS NULL
             OR s.expiration_at > NOW()
@@ -1319,78 +1311,33 @@ async function deleteServiceFromBot(req, res) {
     );
 
     if (!provRes.rowCount) {
-      return res
-        .status(403)
-        .json({ success: false, error: "PROVIDER_NOT_FOUND" });
+      return res.status(403).json({ success: false, error: "PROVIDER_NOT_FOUND" });
     }
 
     const providerId = provRes.rows[0].id;
-
-    const oldService = await fetchProviderServiceSnapshot(serviceId, providerId);
-
-    const upd = await pool.query(
-      `
-      UPDATE services
-         SET status = 'deleted',
-             deleted_at = NOW(),
-             deleted_by = $2,
-             updated_at = NOW()
-       WHERE id = $1
-         AND provider_id = $2
-         AND deleted_at IS NULL
-       RETURNING id, provider_id, category, title, price, status, moderation_status, details, images, expiration_at, deleted_at, created_at, updated_at
-      `,
-      [serviceId, providerId]
-    );
-
-    if (!upd.rowCount) {
-      const check = await pool.query(
-        `
-        SELECT id, provider_id, deleted_at
-          FROM services
-         WHERE id = $1
-         LIMIT 1
-        `,
-        [serviceId]
-      );
-
-      if (!check.rowCount) {
-        return res
-          .status(404)
-          .json({ success: false, error: "SERVICE_NOT_FOUND" });
-      }
-
-      if (Number(check.rows[0].provider_id) !== Number(providerId)) {
-        return res.status(403).json({ success: false, error: "FORBIDDEN" });
-      }
-
-      if (check.rows[0].deleted_at) {
-        return res
-          .status(409)
-          .json({ success: false, error: "ALREADY_DELETED" });
-      }
-
-      return res
-        .status(409)
-        .json({ success: false, error: "DELETE_FAILED" });
-    }
+    const applied = await applyServiceLifecycleAction(pool, {
+      providerId,
+      serviceId,
+      action: "delete",
+    });
 
     await logBotServiceAudit({
       req,
       action: "bot_service_deleted",
       providerId,
       serviceId,
-      oldService,
-      newService: upd.rows[0],
+      oldService: applied.before,
+      newService: applied.service,
     });
 
-    return res.json({
-      success: true,
-      item: upd.rows[0],
-    });
+    return res.json({ success: true, item: applied.service });
   } catch (e) {
     console.error("[tg] deleteServiceFromBot error:", e);
-    return res.status(500).json({ success: false, error: "SERVER_ERROR" });
+    return res.status(e?.status || 500).json({
+      success: false,
+      error: e?.code || "SERVER_ERROR",
+      blockers: e?.blockers || undefined,
+    });
   }
 }
 
@@ -1410,84 +1357,33 @@ async function restoreServiceFromBot(req, res) {
     );
 
     if (!provRes.rowCount) {
-      return res
-        .status(403)
-        .json({ success: false, error: "PROVIDER_NOT_FOUND" });
+      return res.status(403).json({ success: false, error: "PROVIDER_NOT_FOUND" });
     }
 
     const providerId = provRes.rows[0].id;
-
-    const oldService = await fetchProviderServiceSnapshot(serviceId, providerId);
-
-    const upd = await pool.query(
-      `
-      UPDATE services
-         SET deleted_at = NULL,
-             deleted_by = NULL,
-             status = 'draft',
-             moderation_status = 'draft',
-             submitted_at = NULL,
-             published_at = NULL,
-             approved_at = NULL,
-             rejected_at = NULL,
-             rejected_reason = NULL,
-             updated_at = NOW()
-       WHERE id = $1
-         AND provider_id = $2
-         AND deleted_at IS NOT NULL
-       RETURNING id, provider_id, category, title, price, status, moderation_status, details, images, expiration_at, deleted_at, created_at, updated_at
-      `,
-      [serviceId, providerId]
-    );
-
-    if (!upd.rowCount) {
-      const check = await pool.query(
-        `
-        SELECT id, provider_id, deleted_at
-          FROM services
-         WHERE id = $1
-         LIMIT 1
-        `,
-        [serviceId]
-      );
-
-      if (!check.rowCount) {
-        return res
-          .status(404)
-          .json({ success: false, error: "SERVICE_NOT_FOUND" });
-      }
-
-      if (Number(check.rows[0].provider_id) !== Number(providerId)) {
-        return res.status(403).json({ success: false, error: "FORBIDDEN" });
-      }
-
-      if (!check.rows[0].deleted_at) {
-        return res
-          .status(409)
-          .json({ success: false, error: "NOT_DELETED" });
-      }
-
-      return res
-        .status(409)
-        .json({ success: false, error: "RESTORE_FAILED" });
-    }
+    const applied = await applyServiceLifecycleAction(pool, {
+      providerId,
+      serviceId,
+      action: "restore_deleted",
+    });
 
     await logBotServiceAudit({
       req,
       action: "bot_service_restored",
       providerId,
       serviceId,
-      oldService,
-      newService: upd.rows[0],
+      oldService: applied.before,
+      newService: applied.service,
     });
 
-    return res.json({
-      success: true,
-      item: upd.rows[0],
-    });
+    return res.json({ success: true, item: applied.service });
   } catch (e) {
     console.error("[tg] restoreServiceFromBot error:", e);
-    return res.status(500).json({ success: false, error: "SERVER_ERROR" });
+    return res.status(e?.status || 500).json({
+      success: false,
+      error: e?.code || "SERVER_ERROR",
+      blockers: e?.blockers || undefined,
+    });
   }
 }
 
@@ -1497,148 +1393,43 @@ async function purgeServiceFromBot(req, res) {
     const { chatId, serviceId } = req.params;
 
     const provRes = await pool.query(
-      `
-      SELECT id
-      FROM providers
-      WHERE telegram_chat_id::text = $1
-         OR tg_chat_id::text = $1
-         OR telegram_web_chat_id::text = $1
-         OR telegram_refused_chat_id::text = $1
-      LIMIT 1
-      `,
+      `SELECT id
+         FROM providers
+        WHERE telegram_chat_id::text = $1
+           OR tg_chat_id::text = $1
+           OR telegram_web_chat_id::text = $1
+           OR telegram_refused_chat_id::text = $1
+        LIMIT 1`,
       [chatId]
     );
 
     if (!provRes.rowCount) {
-      return res.status(403).json({
-        success: false,
-        error: "PROVIDER_NOT_FOUND",
-      });
+      return res.status(403).json({ success: false, error: "PROVIDER_NOT_FOUND" });
     }
 
     const providerId = provRes.rows[0].id;
-
-    const svcRes = await pool.query(
-      `
-      SELECT id, provider_id, category, title, price, status, moderation_status, details, images, expiration_at, deleted_at, created_at, updated_at
-      FROM services
-      WHERE id = $1
-      LIMIT 1
-      `,
-      [serviceId]
-    );
-
-    if (!svcRes.rowCount) {
-      return res.status(404).json({
-        success: false,
-        error: "SERVICE_NOT_FOUND",
-      });
-    }
-
-    const svc = svcRes.rows[0];
-
-    if (Number(svc.provider_id) !== Number(providerId)) {
-      return res.status(403).json({
-        success: false,
-        error: "FORBIDDEN",
-      });
-    }
-
-    if (!svc.deleted_at) {
-      return res.status(409).json({
-        success: false,
-        error: "NOT_IN_TRASH",
-      });
-    }
-
-    const blockers = [];
-
-    const checks = [
-      {
-        table: "bookings",
-        field: "service_id",
-        code: "HAS_BOOKINGS",
-      },
-      {
-        table: "booking_requests",
-        field: "service_id",
-        code: "HAS_REQUESTS",
-      },
-      {
-        table: "client_service_contact_unlocks",
-        field: "service_id",
-        code: "HAS_UNLOCKS",
-      },
-      {
-        table: "provider_favorites",
-        field: "service_id",
-        code: "HAS_FAVORITES",
-      },
-    ];
-
-    for (const c of checks) {
-      try {
-        const r = await pool.query(
-          `SELECT 1 FROM ${c.table} WHERE ${c.field} = $1 LIMIT 1`,
-          [serviceId]
-        );
-
-        if (r.rowCount) {
-          blockers.push(c.code);
-        }
-      } catch (e) {
-        console.warn(
-          `[tg purge] check skipped for table ${c.table}:`,
-          e.message
-        );
-      }
-    }
-
-    if (blockers.length) {
-      return res.status(409).json({
-        success: false,
-        error: "PURGE_BLOCKED",
-        blockers,
-      });
-    }
-
-    const del = await pool.query(
-      `
-      DELETE FROM services
-      WHERE id = $1
-        AND provider_id = $2
-        AND deleted_at IS NOT NULL
-      RETURNING id
-      `,
-      [serviceId, providerId]
-    );
-
-    if (!del.rowCount) {
-      return res.status(409).json({
-        success: false,
-        error: "PURGE_FAILED",
-      });
-    }
+    const applied = await applyServiceLifecycleAction(pool, {
+      providerId,
+      serviceId,
+      action: "purge",
+    });
 
     await logBotServiceAudit({
       req,
       action: "bot_service_purged",
       providerId,
       serviceId,
-      oldService: svc,
+      oldService: applied.before,
       newService: null,
     });
 
-    return res.json({
-      success: true,
-      purgedId: del.rows[0].id,
-    });
+    return res.json({ success: true, purgedId: applied.purgedId });
   } catch (e) {
     console.error("[tg] purgeServiceFromBot error:", e);
-
-    return res.status(500).json({
+    return res.status(e?.status || 500).json({
       success: false,
-      error: "SERVER_ERROR",
+      error: e?.code || "SERVER_ERROR",
+      blockers: e?.blockers || undefined,
     });
   }
 }
@@ -1880,58 +1671,19 @@ async function submitServiceFromBot(req, res) {
     }
 
     const providerId = providerRes.rows[0].id;
-
-    const svcRes = await pool.query(
-      `SELECT id, provider_id, category, title, price, status, moderation_status, details, images, expiration_at, deleted_at, created_at, updated_at
-         FROM services
-        WHERE id = $1 AND provider_id = $2
-        LIMIT 1`,
-      [svcId, providerId]
-    );
-
-    if (!svcRes.rowCount) {
-      return res.status(404).json({ success: false, error: "SERVICE_NOT_FOUND" });
-    }
-
-    const svc = svcRes.rows[0];
-
-    const details =
-      svc.details && typeof svc.details === "object"
-        ? svc.details
-        : {};
-
-    const proofImages = Array.isArray(details.proofImages)
-      ? details.proofImages.filter(Boolean)
-      : [];
-
-    if (!proofImages.length) {
-      return res.status(400).json({
-        success: false,
-        error: "PROOF_REQUIRED",
-        message: "Proof images are required",
-      });
-    }
-
-    const upd = await pool.query(
-      `
-      UPDATE services
-         SET status = 'pending',
-             moderation_status = 'pending',
-             submitted_at = NOW(),
-             updated_at = NOW()
-       WHERE id = $1 AND provider_id = $2
-       RETURNING id, provider_id, category, title, price, status, moderation_status, details, images, expiration_at, deleted_at, created_at, updated_at
-      `,
-      [svcId, providerId]
-    );
+    const applied = await applyServiceLifecycleAction(pool, {
+      providerId,
+      serviceId: svcId,
+      action: "submit",
+    });
 
     await logBotServiceAudit({
       req,
       action: "bot_service_submitted",
       providerId,
       serviceId: svcId,
-      oldService: svc,
-      newService: upd.rows[0],
+      oldService: applied.before,
+      newService: applied.service,
     });
 
     try {
@@ -1940,13 +1692,15 @@ async function submitServiceFromBot(req, res) {
       console.error("[telegram] notifyModerationNew failed:", e);
     }
 
-    return res.json({
-      success: true,
-      service: upd.rows[0],
-    });
+    return res.json({ success: true, service: applied.service });
   } catch (err) {
     console.error("[telegram] submitServiceFromBot error:", err);
-    return res.status(500).json({ success: false, error: "SERVER_ERROR" });
+    return res.status(err?.status || 500).json({
+      success: false,
+      error: err?.code || "SERVER_ERROR",
+      message: err?.code === "PROOF_IMAGES_REQUIRED" ? "Proof images are required" : undefined,
+      blockers: err?.blockers || undefined,
+    });
   }
 }
 
