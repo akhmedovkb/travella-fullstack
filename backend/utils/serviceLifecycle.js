@@ -162,7 +162,7 @@ async function applyServiceLifecycleAction(pool, { providerId, serviceId, action
         WHERE id = $1
           AND provider_id = $2
           AND deleted_at IS NULL
-          AND (status IN ('draft','rejected') OR status IS NULL)
+          AND (status IN ('draft','rejected','pending') OR status IS NULL)
         RETURNING ${DEFAULT_RETURNING}`,
       [sid, pid]
     );
