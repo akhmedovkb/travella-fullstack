@@ -6138,6 +6138,7 @@ async function promptWizardState(ctx, state) {
         }
       );
     return;
+    }
 
     case "svc_author_meeting":
       await ctx.reply("📌 Укажите *место встречи*. Если по договорённости — так и напишите.", { parse_mode: "Markdown", ...wizNavKeyboard() });
