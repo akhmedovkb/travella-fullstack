@@ -1587,9 +1587,13 @@ async function updateServiceFromBot(req, res) {
            details = $5::jsonb,
            expiration_at = $6,
            images = $7::jsonb,
-           status = 'pending',
-           moderation_status = 'pending',
-           submitted_at = NOW(),
+           status = 'draft',
+           moderation_status = 'draft',
+           submitted_at = NULL,
+           published_at = NULL,
+           approved_at = NULL,
+           rejected_at = NULL,
+           rejected_reason = NULL,
            updated_at = NOW()
        WHERE id = $1 AND provider_id = $2
        RETURNING id, provider_id, title, price, category, status, moderation_status, details, images, expiration_at, deleted_at, created_at, updated_at
@@ -1626,15 +1630,8 @@ async function updateServiceFromBot(req, res) {
       newService: updRes.rows[0],
     });
 
-    try {
-      await notifyModerationNew({ service: updRes.rows[0].id });
-    } catch (e) {
-      console.error(
-        "[telegram] notifyModerationNew (update) failed:",
-        e?.message || e
-      );
-    }
-
+    // ВАЖНО: после редактирования услуга остаётся draft.
+    // Уведомление модерации отправляется только после proof + submitServiceFromBot().
     return res.json({ success: true, service: updRes.rows[0] });
   } catch (err) {
     console.error("[telegram] updateServiceFromBot error:", err);
