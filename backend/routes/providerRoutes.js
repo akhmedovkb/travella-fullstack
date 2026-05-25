@@ -16,6 +16,7 @@ const {
   updateService,
   deleteService,
   restoreService,
+  purgeService,
   serviceAction,
   updateServiceImagesOnly,
   getBookedDates,
@@ -48,6 +49,7 @@ const {
 
 const { notifyModerationNew } = require("../utils/telegram");
 const { logProviderServiceAction } = require("../utils/serviceAuditLog");
+const { applyServiceLifecycleAction } = require("../utils/serviceLifecycle");
 
 function requireProvider(req, res, next) {
   if (!req.user || !req.user.id) {
@@ -81,6 +83,7 @@ router.post("/services", authenticateToken, requireProvider, addService);
 router.put("/services/:id", authenticateToken, requireProvider, updateService);
 router.delete("/services/:id", authenticateToken, requireProvider, deleteService);
 router.post("/services/:id/restore", authenticateToken, requireProvider, restoreService);
+router.delete("/services/:id/purge", authenticateToken, requireProvider, purgeService);
 router.post("/services/:id/action", authenticateToken, requireProvider, serviceAction);
 router.patch("/services/:id/images", authenticateToken, requireProvider, updateServiceImagesOnly);
 
@@ -215,90 +218,44 @@ router.post(
   requireProvider,
   async (req, res, next) => {
     try {
-      const { id } = req.params;
-
-      const checkRes = await pool.query(
-        `
-          SELECT *
-            FROM services
-           WHERE id = $1
-             AND provider_id = $2
-           LIMIT 1
-        `,
-        [id, req.user.id]
-      );
-
-      if (!checkRes.rows.length) {
-        return res.status(404).json({ message: "Service not found" });
-      }
-
-      const svc = checkRes.rows[0];
-      const category = String(svc.category || "").toLowerCase();
-      const details =
-        svc.details && typeof svc.details === "object" ? svc.details : {};
-
-      const refusedCategories = [
-        "refused_tour",
-        "refused_hotel",
-        "refused_flight",
-        "refused_ticket",
-        "refused_event_ticket",
-        "author_tour",
-      ];
-
-      if (refusedCategories.includes(category)) {
-        const proofImages = Array.isArray(details.proofImages)
-          ? details.proofImages.filter(Boolean)
-          : [];
-
-        if (proofImages.length === 0) {
-          return res.status(400).json({
-            message:
-              "Before sending to moderation, upload screenshots confirming the authenticity of the booking/ticket.",
-            code: "PROOF_IMAGES_REQUIRED",
-          });
-        }
-      }
-
-      const { rows } = await pool.query(
-        `
-          UPDATE services
-             SET status='pending',
-                 moderation_status='pending',
-                 submitted_at = NOW(),
-                 updated_at   = NOW()
-           WHERE id=$1
-             AND provider_id=$2
-             AND (status IN ('draft','rejected') OR status IS NULL)
-           RETURNING id, category, status, moderation_status, submitted_at, details
-        `,
-        [id, req.user.id]
-      );
-
-      if (!rows.length) {
-        return res.status(409).json({
-          message:
-            "Service must be in draft/rejected (or empty status) to submit",
-        });
-      }
+      const id = Number(req.params.id);
+      const applied = await applyServiceLifecycleAction(pool, {
+        providerId: req.user.id,
+        serviceId: id,
+        action: "submit",
+      });
 
       await logProviderServiceAction({
         req,
         action: "service_submitted",
         providerId: req.user.id,
-        serviceId: rows[0].id,
-        oldService: svc,
-        newService: rows[0],
+        serviceId: id,
+        oldService: applied.before,
+        newService: applied.service,
         meta: { submitted_to_moderation: true },
       });
 
       try {
-        await notifyModerationNew({ service: rows[0].id });
+        await notifyModerationNew({ service: id });
       } catch {}
 
-      return res.json({ ok: true, service: rows[0] });
+      return res.json({ ok: true, service: applied.service });
     } catch (e) {
-      next(e);
+      if (e?.code === "PROOF_IMAGES_REQUIRED") {
+        return res.status(400).json({
+          message: "Before sending to moderation, upload screenshots confirming the authenticity of the booking/ticket.",
+          code: "PROOF_IMAGES_REQUIRED",
+        });
+      }
+
+      if (e?.code === "SERVICE_NOT_SUBMITTABLE") {
+        return res.status(409).json({
+          message: "Service must be in draft/rejected (or empty status) to submit",
+          code: e.code,
+        });
+      }
+
+      return next(e);
     }
   }
 );
