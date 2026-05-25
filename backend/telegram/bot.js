@@ -5358,6 +5358,31 @@ function buildDetailsForRefusedFlight(draft, netPriceNum) {
   };
 }
 
+function autoTitleRefusedTicket(draft) {
+  const title = String(draft.title || "").trim();
+  if (title) return title;
+  const country = String(draft.country || "").trim();
+  const city = String(draft.toCity || draft.fromCity || "").trim();
+  const eventDate = String(draft.eventDate || draft.startDate || "").trim();
+  return ["🎫 Отказной билет", country, city, eventDate].filter(Boolean).join(" · ");
+}
+
+function buildDetailsForRefusedTicket(draft, netPriceNum) {
+  return {
+    title: draft.title || "",
+    directionCountry: draft.country || "",
+    directionFrom: draft.fromCity || "",
+    directionTo: draft.toCity || "",
+    eventDate: draft.eventDate || draft.startDate || "",
+    startDate: draft.eventDate || draft.startDate || "",
+    netPrice: netPriceNum,
+    grossPrice: draft.grossPriceNum ?? null,
+    expiration: draft.expiration || null,
+    isActive: true,
+    telegramPhotoFileId: draft.telegramPhotoFileId || null,
+  };
+}
+
 function autoTitleRefusedHotel(draft) {
   const hotel = (draft.hotel || "Отель").trim();
   const city = (draft.toCity || "").trim();
@@ -5763,6 +5788,24 @@ function wizNavKeyboard() {
   };
 }
 
+function yesNoWizardKeyboard() {
+  return {
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: "✅ Да", callback_data: "wiz_bool:yes" },
+          { text: "❌ Нет", callback_data: "wiz_bool:no" },
+        ],
+        [{ text: "⏭ Пропустить", callback_data: "svc_wiz:skip" }],
+        [
+          { text: "⬅️ Назад", callback_data: "svc_wiz:back" },
+          { text: "❌ Отмена", callback_data: "svc_wiz:cancel" },
+        ],
+      ],
+    },
+  };
+}
+
 function authorDayNavKeyboard({ skip = true } = {}) {
   const rows = [];
 
@@ -5962,6 +6005,290 @@ function pushWizardState(ctx, prevState) {
     ctx.session.wizardStack.push(prevState);
   }
 }
+
+const TG_CALENDAR_MONTHS_RU = [
+  "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
+  "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь",
+];
+
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
+
+function toYmdLocal(date) {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
+function parseYmdLocal(value) {
+  const m = String(value || "").trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  const dt = new Date(y, mo - 1, d, 0, 0, 0, 0);
+  if (Number.isNaN(dt.getTime())) return null;
+  if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return null;
+  return dt;
+}
+
+function formatYmdDMY(value) {
+  const ymd = normalizeDateInput(value) || normalizeAuthorDateInput(value) || String(value || "").slice(0, 10);
+  const m = String(ymd || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return String(value || "").trim();
+  return `${m[3]}.${m[2]}.${m[1]}`;
+}
+
+function normalizeTimeHHMM(value) {
+  const s = String(value || "").trim();
+  const m = s.match(/^(\d{2})(\d{2})$/) || s.match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  const hh = Number(m[1]);
+  const mm = Number(m[2]);
+  if (!Number.isInteger(hh) || !Number.isInteger(mm) || hh < 0 || hh > 23 || mm < 0 || mm > 59) return null;
+  return `${pad2(hh)}:${pad2(mm)}`;
+}
+
+function getDraftForCalendar(ctx) {
+  if (!ctx.session) ctx.session = {};
+  if (!ctx.session.serviceDraft) ctx.session.serviceDraft = {};
+  return ctx.session.serviceDraft;
+}
+
+function getCurrentCalendarValue(draft, state) {
+  switch (state) {
+    case "svc_author_start":
+    case "svc_create_tour_start":
+    case "svc_hotel_checkin":
+      return draft.startDate || null;
+    case "svc_author_end":
+    case "svc_create_tour_end":
+    case "svc_hotel_checkout":
+      return draft.endDate || null;
+    case "svc_create_flight_departure":
+      return draft.departureFlightDate || null;
+    case "svc_create_flight_return":
+      return draft.returnFlightDate || null;
+    case "svc_ticket_event_date":
+      return draft.eventDate || draft.startDate || null;
+    case "author_day_date":
+      return draft._programDayDate || null;
+    case "svc_create_expiration":
+      return draft.expiration || null;
+    default:
+      return null;
+  }
+}
+
+function getCalendarConfig(state, draft = {}) {
+  switch (state) {
+    case "svc_author_start":
+      return { title: "📅 Выберите дату начала авторского тура", field: "startDate", next: "svc_author_end", kind: "date", required: true };
+    case "svc_author_end":
+      return { title: "📅 Выберите дату окончания авторского тура", field: "endDate", next: "svc_author_format", kind: "date", required: true };
+    case "author_day_date":
+      return { title: "📅 Выберите дату дня программы", field: "_programDayDate", next: "author_day_route", kind: "author_day_date", required: false };
+    case "svc_create_tour_start":
+      return { title: "📅 Выберите дату начала тура", field: "startDate", next: "svc_create_tour_end", kind: "date", required: true };
+    case "svc_create_tour_end":
+      return { title: "📅 Выберите дату окончания тура", field: "endDate", next: "svc_create_flight_departure", kind: "date", required: true };
+    case "svc_create_flight_departure":
+      return { title: "🛫 Выберите дату рейса вылета", field: "departureFlightDate", next: "svc_create_flight_return", kind: "date", required: false };
+    case "svc_create_flight_return":
+      return { title: "🛬 Выберите дату рейса обратно", field: "returnFlightDate", next: "svc_create_flight_details", kind: "date", required: false };
+    case "svc_hotel_checkin":
+      return { title: "📅 Выберите дату заезда", field: "startDate", next: "svc_hotel_checkout", kind: "date", required: true };
+    case "svc_hotel_checkout":
+      return { title: "📅 Выберите дату выезда", field: "endDate", next: "svc_hotel_roomcat", kind: "date", required: true };
+    case "svc_ticket_event_date":
+      return { title: "🎫 Выберите дату мероприятия / билета", field: "eventDate", next: "svc_create_price", kind: "date", required: true };
+    case "svc_create_expiration":
+      return { title: "⏳ Выберите дату окончания актуальности", field: "expiration", next: "svc_create_photo", kind: "datetime", required: false };
+    default:
+      return null;
+  }
+}
+
+function calendarManualText(state) {
+  switch (state) {
+    case "svc_create_expiration":
+      return "✍️ Введите дату и время актуальности вручную.\n\nФормат: YYYY-MM-DD HH:mm или YYYY.MM.DD HH:mm";
+    case "svc_author_start":
+      return "✍️ Введите дату начала авторского тура вручную.\n\nФормат: 29.05.2026 или 2026-05-29";
+    case "svc_author_end":
+      return "✍️ Введите дату окончания авторского тура вручную.\n\nФормат: 05.06.2026 или 2026-06-05";
+    case "author_day_date":
+      return "✍️ Введите дату дня программы вручную.\n\nФормат: 29.05.2026 или 2026-05-29";
+    default:
+      return "✍️ Введите дату вручную.\n\nФормат: YYYY-MM-DD или YYYY.MM.DD";
+  }
+}
+
+function buildCalendarKeyboard(state, year, monthIndex, selectedYmd = null) {
+  const rows = [];
+  const prev = new Date(year, monthIndex - 1, 1);
+  const next = new Date(year, monthIndex + 1, 1);
+
+  rows.push([
+    { text: "◀️", callback_data: `cal:nav:${state}:${prev.getFullYear()}:${pad2(prev.getMonth() + 1)}` },
+    { text: `${TG_CALENDAR_MONTHS_RU[monthIndex]} ${year}`, callback_data: "cal:noop" },
+    { text: "▶️", callback_data: `cal:nav:${state}:${next.getFullYear()}:${pad2(next.getMonth() + 1)}` },
+  ]);
+
+  rows.push(["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map((d) => ({ text: d, callback_data: "cal:noop" })));
+
+  const first = new Date(year, monthIndex, 1);
+  const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+  const startOffset = (first.getDay() + 6) % 7; // Monday-first
+  let day = 1;
+
+  for (let r = 0; r < 6; r += 1) {
+    const row = [];
+    for (let c = 0; c < 7; c += 1) {
+      if ((r === 0 && c < startOffset) || day > daysInMonth) {
+        row.push({ text: " ", callback_data: "cal:noop" });
+      } else {
+        const ymd = `${year}-${pad2(monthIndex + 1)}-${pad2(day)}`;
+        const mark = selectedYmd && normalizeDateInput(selectedYmd) === ymd ? "✅ " : "";
+        row.push({ text: `${mark}${day}`, callback_data: `cal:date:${state}:${ymd}` });
+        day += 1;
+      }
+    }
+    rows.push(row);
+    if (day > daysInMonth) break;
+  }
+
+  rows.push([{ text: "✍️ Ввести вручную", callback_data: `cal:manual:${state}` }]);
+
+  const cfg = getCalendarConfig(state);
+  if (cfg && !cfg.required) {
+    rows.push([{ text: "❌ Нет / не указано", callback_data: `cal:none:${state}` }]);
+  }
+
+  rows.push([{ text: "⬅️ Назад", callback_data: "svc_wiz:back" }, { text: "❌ Отмена", callback_data: "svc_wiz:cancel" }]);
+
+  return { inline_keyboard: rows };
+}
+
+async function replyWizardCalendar(ctx, state, opts = {}) {
+  const draft = getDraftForCalendar(ctx);
+  const cfg = getCalendarConfig(state, draft);
+  if (!cfg) return false;
+
+  const current = getCurrentCalendarValue(draft, state);
+  const base = current ? (normalizeDateInput(current) || normalizeAuthorDateInput(current) || String(current).slice(0, 10)) : null;
+  const baseDate = parseYmdLocal(opts.ymd || base) || new Date();
+  const year = Number(opts.year || baseDate.getFullYear());
+  const month = Number(opts.month || baseDate.getMonth() + 1);
+  const monthIndex = Math.max(0, Math.min(11, month - 1));
+  const currentText = current
+    ? `\n\nТекущее: ${state === "svc_create_expiration" ? String(current).replace("T", " ").slice(0, 16) : formatYmdDMY(current)}`
+    : "\n\nТекущее: не указано";
+
+  await ctx.reply(`${cfg.title}${currentText}`, {
+    reply_markup: buildCalendarKeyboard(state, year, monthIndex, current),
+  });
+  return true;
+}
+
+async function replyExpirationTimePicker(ctx, state, ymd) {
+  const pretty = formatYmdDMY(ymd);
+  await ctx.reply(`🕒 Выберите время актуальности для даты ${pretty}`, {
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: "09:00", callback_data: `cal:time:${state}:${ymd}:0900` },
+          { text: "12:00", callback_data: `cal:time:${state}:${ymd}:1200` },
+        ],
+        [
+          { text: "18:00", callback_data: `cal:time:${state}:${ymd}:1800` },
+          { text: "23:59", callback_data: `cal:time:${state}:${ymd}:2359` },
+        ],
+        [{ text: "✍️ Ввести вручную", callback_data: `cal:manual:${state}` }],
+        [{ text: "⬅️ Назад к календарю", callback_data: `cal:nav:${state}:${ymd.slice(0, 4)}:${ymd.slice(5, 7)}` }],
+      ],
+    },
+  });
+}
+
+function setDraftDateByState(draft, state, ymdOrDateTime) {
+  const cfg = getCalendarConfig(state, draft);
+  if (!cfg) return false;
+
+  if (state === "author_day_date") {
+    draft._programDayDate = formatAuthorDateDMY(ymdOrDateTime);
+    return true;
+  }
+
+  if (state === "svc_ticket_event_date") {
+    draft.eventDate = ymdOrDateTime;
+    draft.startDate = ymdOrDateTime;
+    return true;
+  }
+
+  draft[cfg.field] = ymdOrDateTime;
+  return true;
+}
+
+async function advanceAfterCalendarDate(ctx, state) {
+  const draft = getDraftForCalendar(ctx);
+  const cfg = getCalendarConfig(state, draft);
+  if (!cfg) return;
+
+  pushWizardState(ctx, state);
+  ctx.session.state = cfg.next;
+
+  if (cfg.next === "svc_create_photo") {
+    await promptWizardState(ctx, "svc_create_photo");
+  } else {
+    await promptWizardState(ctx, cfg.next);
+  }
+
+  await persistProviderCreateWizard(ctx);
+}
+
+function calendarDateValidationError(draft, state, ymdOrDateTime) {
+  if (state === "svc_create_expiration") {
+    if (ymdOrDateTime && isPastDateTime(ymdOrDateTime)) {
+      return "⚠️ Дата актуальности уже в прошлом. Выберите будущую дату.";
+    }
+    if (ymdOrDateTime && isExpirationAfterTripStart(draft, ymdOrDateTime)) {
+      return "⚠️ Срок актуальности не может быть позже даты начала тура / вылета.";
+    }
+    return null;
+  }
+
+  const ymd = normalizeDateInput(ymdOrDateTime) || normalizeAuthorDateInput(ymdOrDateTime);
+  if (!ymd) return "⚠️ Некорректная дата.";
+
+  if (isPastYMD(ymd)) {
+    return "⚠️ Эта дата уже в прошлом. Выберите будущую дату.";
+  }
+
+  if ((state === "svc_author_end" || state === "svc_create_tour_end" || state === "svc_hotel_checkout") && draft.startDate && isBeforeYMD(ymd, draft.startDate)) {
+    return "⚠️ Дата окончания раньше даты начала. Выберите корректную дату.";
+  }
+
+  if (state === "svc_create_flight_return" && draft.departureFlightDate && isBeforeYMD(ymd, draft.departureFlightDate)) {
+    return "⚠️ Дата обратного рейса раньше даты вылета. Выберите корректную дату.";
+  }
+
+  return null;
+}
+
+async function handleCalendarApply(ctx, state, value) {
+  const draft = getDraftForCalendar(ctx);
+  const err = calendarDateValidationError(draft, state, value);
+  if (err) {
+    await safeCb(ctx, err, true);
+    return;
+  }
+
+  setDraftDateByState(draft, state, value);
+  ctx.session.serviceDraft = draft;
+  await safeCb(ctx, "Дата выбрана");
+  await advanceAfterCalendarDate(ctx, state);
+}
+
 function normReq(text) {
   const v = String(text ?? "").replace(/\s+/g, " ").trim();
   return v.length ? v : null;
@@ -6031,17 +6358,11 @@ async function promptWizardState(ctx, state) {
       return;
 
     case "svc_author_start":
-      await ctx.reply(
-        "📅 Укажите *дату начала* авторского тура.\n✅ Формат: *29.05.2026*\n\nДлительность будет рассчитана автоматически.",
-        { parse_mode: "Markdown", ...wizNavKeyboard() }
-      );
+      await replyWizardCalendar(ctx, "svc_author_start");
       return;
 
     case "svc_author_end":
-      await ctx.reply(
-        "📅 Укажите *дату окончания* авторского тура.\n✅ Формат: *05.06.2026*\n\nДлительность будет рассчитана автоматически.",
-        { parse_mode: "Markdown", ...wizNavKeyboard() }
-      );
+      await replyWizardCalendar(ctx, "svc_author_end");
       return;
 
     case "svc_author_format":
@@ -6100,10 +6421,7 @@ async function promptWizardState(ctx, state) {
       return;
 
     case "author_day_date":
-      await ctx.reply(
-        "📅 Укажите *дату дня программы*\n\nФормат: *29.05.2026*\n\nЕсли дата для этого дня не нужна — нажмите «⏭ Пропустить».",
-        { parse_mode: "Markdown", ...authorDayNavKeyboard({ skip: true }) }
-      );
+      await replyWizardCalendar(ctx, "author_day_date");
       return;
 
     case "author_day_route":
@@ -6149,9 +6467,16 @@ async function promptWizardState(ctx, state) {
       );
       return;
 
-    case "svc_author_pax":
-      await ctx.reply("👥 Укажите *минимум/максимум человек* в формате `2/10`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
+    case "svc_author_pax": {
+      const currentMin = ctx.session.serviceDraft?.minPax || "";
+      const currentMax = ctx.session.serviceDraft?.maxPax || "";
+      const current =
+        currentMin || currentMax
+          ? `\n\nТекущее: ${currentMin || "?"}/${currentMax || "?"}`
+          : "";
+      await ctx.reply(`👥 Укажите *минимум/максимум человек* в формате \`2/10\`.${current}`, { parse_mode: "Markdown", ...wizNavKeyboard() });
       return;
+    }
 
     case "svc_author_language": {
       const selected = Array.isArray(ctx.session.serviceDraft?.languages)
@@ -6248,31 +6573,23 @@ async function promptWizardState(ctx, state) {
       return;
 
     case "svc_create_tour_start":
-      await ctx.reply(
-        "📅 Укажите *дату начала тура*\n✅ Формат: *YYYY-MM-DD* или *YYYY.MM.DD*\nПример: *2025-12-09*",
-        { parse_mode: "Markdown", ...wizNavKeyboard() }
-      );
+      await replyWizardCalendar(ctx, "svc_create_tour_start");
       return;
 
     case "svc_create_tour_end":
-      await ctx.reply(
-        "📅 Укажите *дату окончания тура*\n✅ Формат: *YYYY-MM-DD* или *YYYY.MM.DD*\nПример: *2025-12-15*",
-        { parse_mode: "Markdown", ...wizNavKeyboard() }
-      );
+      await replyWizardCalendar(ctx, "svc_create_tour_end");
       return;
 
     case "svc_create_flight_departure":
-      await ctx.reply(
-        "🛫 Укажите *дату рейса вылета* (опционально)\n✅ Формат: *YYYY-MM-DD* или *YYYY.MM.DD*\nЕсли не нужно — нажмите «⏭ Пропустить».",
-        { parse_mode: "Markdown", ...wizNavKeyboard() }
-      );
+      await replyWizardCalendar(ctx, "svc_create_flight_departure");
       return;
 
     case "svc_create_flight_return":
-      await ctx.reply(
-        "🛬 Укажите *дату рейса обратно* (опционально)\n✅ Формат: *YYYY-MM-DD* или *YYYY.MM.DD*\nЕсли не нужно — нажмите «⏭ Пропустить».",
-        { parse_mode: "Markdown", ...wizNavKeyboard() }
-      );
+      await replyWizardCalendar(ctx, "svc_create_flight_return");
+      return;
+
+    case "svc_ticket_event_date":
+      await replyWizardCalendar(ctx, "svc_ticket_event_date");
       return;
 
     case "svc_create_flight_details":
@@ -6310,23 +6627,23 @@ async function promptWizardState(ctx, state) {
       return;
 
     case "svc_create_tour_insurance":
-      await ctx.reply("🛡 *Страховка включена?* Ответьте `да` или `нет`:", {
+      await ctx.reply("🛡 *Страховка включена?*", {
         parse_mode: "Markdown",
-        ...wizNavKeyboard(),
+        ...yesNoWizardKeyboard(),
       });
       return;
 
     case "svc_create_tour_early_checkin":
-      await ctx.reply("🏨 *Раннее заселение доступно?* Ответьте `да` или `нет`:", {
+      await ctx.reply("🏨 *Раннее заселение доступно?*", {
         parse_mode: "Markdown",
-        ...wizNavKeyboard(),
+        ...yesNoWizardKeyboard(),
       });
       return;
 
     case "svc_create_tour_fast_track":
-      await ctx.reply("🛬 *Arrival Fast Track включён?* Ответьте `да` или `нет`:", {
+      await ctx.reply("🛬 *Arrival Fast Track включён?*", {
         parse_mode: "Markdown",
-        ...wizNavKeyboard(),
+        ...yesNoWizardKeyboard(),
       });
       return;
 
@@ -6353,17 +6670,11 @@ async function promptWizardState(ctx, state) {
       return;
 
     case "svc_hotel_checkin":
-      await ctx.reply(
-        "📅 Укажите *дату заезда*\n✅ Формат: *YYYY-MM-DD* или *YYYY.MM.DD*\nПример: *2025-12-20*",
-        { parse_mode: "Markdown", ...wizNavKeyboard() }
-      );
+      await replyWizardCalendar(ctx, "svc_hotel_checkin");
       return;
 
     case "svc_hotel_checkout":
-      await ctx.reply(
-        "📅 Укажите *дату выезда*\n✅ Формат: *YYYY-MM-DD* или *YYYY.MM.DD*\nПример: *2025-12-27*",
-        { parse_mode: "Markdown", ...wizNavKeyboard() }
-      );
+      await replyWizardCalendar(ctx, "svc_hotel_checkout");
       return;
 
     case "svc_hotel_roomcat":
@@ -6388,9 +6699,9 @@ async function promptWizardState(ctx, state) {
       return;
 
     case "svc_hotel_halal":
-      await ctx.reply("🥗 *Halal питание?* Ответьте `да` или `нет`:", {
+      await ctx.reply("🥗 *Halal питание?*", {
         parse_mode: "Markdown",
-        ...wizNavKeyboard(),
+        ...yesNoWizardKeyboard(),
       });
       return;
 
@@ -6402,9 +6713,9 @@ async function promptWizardState(ctx, state) {
       return;
 
     case "svc_hotel_changeable":
-      await ctx.reply("🔁 *Можно вносить изменения?* Ответьте `да` или `нет`:", {
+      await ctx.reply("🔁 *Можно вносить изменения?*", {
         parse_mode: "Markdown",
-        ...wizNavKeyboard(),
+        ...yesNoWizardKeyboard(),
       });
       return;
 
@@ -6416,23 +6727,23 @@ async function promptWizardState(ctx, state) {
       return;
 
         case "svc_hotel_insurance":
-      await ctx.reply("🛡 *Страховка включена?* Ответьте `да` или `нет`:", {
+      await ctx.reply("🛡 *Страховка включена?*", {
         parse_mode: "Markdown",
-        ...wizNavKeyboard(),
+        ...yesNoWizardKeyboard(),
       });
       return;
 
     case "svc_hotel_early_checkin":
-      await ctx.reply("🏨 *Раннее заселение доступно?* Ответьте `да` или `нет`:", {
+      await ctx.reply("🏨 *Раннее заселение доступно?*", {
         parse_mode: "Markdown",
-        ...wizNavKeyboard(),
+        ...yesNoWizardKeyboard(),
       });
       return;
 
     case "svc_hotel_fast_track":
-      await ctx.reply("🛬 *Arrival Fast Track включён?* Ответьте `да` или `нет`:", {
+      await ctx.reply("🛬 *Arrival Fast Track включён?*", {
         parse_mode: "Markdown",
-        ...wizNavKeyboard(),
+        ...yesNoWizardKeyboard(),
       });
       return;
       
@@ -6474,18 +6785,34 @@ async function promptWizardState(ctx, state) {
     }
 
     case "svc_create_expiration":
-      await ctx.reply(
-        "⏳ До какой даты и времени услуга *актуальна*?\n✅ Формат: *YYYY-MM-DD HH:mm* или *YYYY.MM.DD HH:mm*\nИли напишите `нет`.",
-        { parse_mode: "Markdown", ...wizNavKeyboard() }
-      );
+      await replyWizardCalendar(ctx, "svc_create_expiration");
       return;
 
-    case "svc_create_photo":
+    case "svc_create_photo": {
+      const photos = Array.isArray(ctx.session.serviceDraft?.images)
+        ? ctx.session.serviceDraft.images
+        : [];
+      const currentText = photos.length
+        ? `\n\nСейчас загружено: ${photos.length} фото`
+        : "\n\nСейчас фото нет";
       await ctx.reply(
-        "🖼 Отправьте *одно фото* (одним сообщением)\nили нажмите «⏭ Пропустить».",
-        { parse_mode: "Markdown", ...wizNavKeyboard() }
+        `🖼 Отправьте фото услуги${currentText}\n\n• Можно отправить несколько фото\n• Нажмите «✅ Готово», когда закончите`,
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "🧹 Очистить фото", callback_data: "svc_photo:clear" }],
+              [{ text: "✅ Готово", callback_data: "svc_photo:done" }],
+              [{ text: "⏭ Пропустить", callback_data: "svc_wiz:skip" }],
+              [
+                { text: "⬅️ Назад", callback_data: "svc_wiz:back" },
+                { text: "❌ Отмена", callback_data: "svc_wiz:cancel" },
+              ],
+            ],
+          },
+        }
       );
       return;
+    }
 
     default:
       await ctx.reply("Продолжаем создание услуги 👇", wizNavKeyboard());
@@ -6498,7 +6825,7 @@ async function finishCreateServiceFromWizard(ctx) {
     const draft = ctx.session?.serviceDraft;
     const category = draft?.category;
 
-    if (!draft || (category !== "refused_tour" && category !== "author_tour" && category !== "refused_hotel" && category !== "refused_flight")) {
+    if (!draft || !["refused_tour", "author_tour", "refused_hotel", "refused_flight", "refused_ticket", "refused_event_ticket"].includes(category)) {
       await ctx.reply(
         "⚠️ Не вижу данных мастера.\nПожалуйста, начните заново через «🧳 Мои услуги»."
       );
@@ -6576,7 +6903,14 @@ async function finishCreateServiceFromWizard(ctx) {
         draft.title && draft.title.trim()
           ? draft.title.trim()
           : autoTitleRefusedFlight(draft);
-    
+
+    } else if (category === "refused_ticket" || category === "refused_event_ticket") {
+      details = buildDetailsForRefusedTicket(draft, priceNum);
+      title =
+        draft.title && draft.title.trim()
+          ? draft.title.trim()
+          : autoTitleRefusedTicket(draft);
+
     } else {
       details = buildDetailsForRefusedHotel(draft, priceNum);
       title =
@@ -8433,6 +8767,18 @@ bot.action("svc_wiz:skip", async (ctx) => {
       "svc_create_photo",
     ];
 
+    const ticketOrder = [
+      "svc_create_title",
+      "svc_create_tour_country",
+      "svc_create_tour_from",
+      "svc_create_tour_to",
+      "svc_ticket_event_date",
+      "svc_create_price",
+      "svc_create_grossPrice",
+      "svc_create_expiration",
+      "svc_create_photo",
+    ];
+
     const authorOrder = [
       "svc_author_title",
       "svc_author_country",
@@ -8458,7 +8804,8 @@ bot.action("svc_wiz:skip", async (ctx) => {
     const isAuthorFlow = category === "author_tour" || state.startsWith("svc_author_");
     const isHotelFlow = category === "refused_hotel" || state.startsWith("svc_hotel_");
     const isFlightFlow = category === "refused_flight";
-    const order = isAuthorFlow ? authorOrder : (isFlightFlow ? flightOrder : (isHotelFlow ? hotelOrder : tourOrder));
+    const isTicketFlow = category === "refused_ticket" || category === "refused_event_ticket" || state === "svc_ticket_event_date";
+    const order = isAuthorFlow ? authorOrder : (isTicketFlow ? ticketOrder : (isFlightFlow ? flightOrder : (isHotelFlow ? hotelOrder : tourOrder)));
 
     // какие шаги реально можно пропустить кнопкой
     const optional = new Set([
@@ -8583,7 +8930,7 @@ bot.action("svc_wiz:skip", async (ctx) => {
 /* ===================== CREATE: choose category ===================== */
 
 bot.action(
-  /^svc_new_cat:(refused_tour|author_tour|refused_hotel|refused_flight|refused_ticket)$/,
+  /^svc_new_cat:(refused_tour|author_tour|refused_hotel|refused_flight|refused_ticket|refused_event_ticket)$/,
   async (ctx) => {
     try {
       await ctx.answerCbQuery();
@@ -8598,10 +8945,12 @@ bot.action(
         category !== "refused_tour" &&
         category !== "author_tour" &&
         category !== "refused_hotel" &&
-        category !== "refused_flight"
+        category !== "refused_flight" &&
+        category !== "refused_ticket" &&
+        category !== "refused_event_ticket"
       ) {
         await ctx.reply(
-          "⚠️ Создание через бот пока доступно только для «Отказной тур», «Авторский тур», «Отказной отель» и «Отказной авиабилет».\n\n" +
+          "⚠️ Создание через бот доступно для отказного тура, авторского тура, отеля, авиабилета и билета на мероприятие.\n\n" +
             "Для остальных категорий используйте личный кабинет:\n" +
             `${SITE_URL}`
         );
@@ -9240,6 +9589,180 @@ bot.action("author_included:done", async (ctx) => {
     console.error("[author_included:done]", e);
   }
 });
+
+
+
+async function applyWizardBooleanChoice(ctx, value) {
+  if (!ctx.session) ctx.session = {};
+  if (!ctx.session.serviceDraft) ctx.session.serviceDraft = {};
+  const draft = ctx.session.serviceDraft;
+  const state = String(ctx.session.state || "");
+
+  const move = async (field, nextState) => {
+    draft[field] = value;
+    pushWizardState(ctx, state);
+    ctx.session.state = nextState;
+    await safeCb(ctx, value ? "Да" : "Нет");
+    await promptWizardState(ctx, nextState);
+    await persistProviderCreateWizard(ctx);
+  };
+
+  switch (state) {
+    case "svc_create_tour_insurance":
+      return move("insuranceIncluded", "svc_create_tour_early_checkin");
+    case "svc_create_tour_early_checkin":
+      return move("earlyCheckIn", "svc_create_tour_fast_track");
+    case "svc_create_tour_fast_track":
+      return move("arrivalFastTrack", "svc_create_price");
+    case "svc_hotel_halal":
+      return move("halal", "svc_hotel_transfer");
+    case "svc_hotel_changeable":
+      return move("changeable", "svc_hotel_pax");
+    case "svc_hotel_insurance":
+      return move("insuranceIncluded", "svc_hotel_early_checkin");
+    case "svc_hotel_early_checkin":
+      return move("earlyCheckIn", "svc_hotel_fast_track");
+    case "svc_hotel_fast_track":
+      return move("arrivalFastTrack", "svc_create_price");
+    default:
+      await safeCb(ctx, "Этот шаг не ожидает Да/Нет", true);
+  }
+}
+
+bot.action(/^wiz_bool:(yes|no)$/, async (ctx) => {
+  try {
+    await applyWizardBooleanChoice(ctx, ctx.match[1] === "yes");
+  } catch (e) {
+    console.error("[wiz_bool]", e?.message || e);
+    await safeReply(ctx, "⚠️ Не удалось сохранить выбор. Попробуйте ещё раз.");
+  }
+});
+
+
+bot.action("cal:noop", async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+  } catch {}
+});
+
+bot.action(/^cal:nav:([^:]+):(\d{4}):(\d{2})$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    const state = String(ctx.match?.[1] || "");
+    const year = Number(ctx.match?.[2]);
+    const month = Number(ctx.match?.[3]);
+    const draft = getDraftForCalendar(ctx);
+    const current = getCurrentCalendarValue(draft, state);
+
+    await ctx.editMessageReplyMarkup(
+      buildCalendarKeyboard(state, year, Math.max(0, Math.min(11, month - 1)), current)
+    );
+  } catch (e) {
+    console.error("[calendar nav]", e?.message || e);
+  }
+});
+
+bot.action(/^cal:manual:([^:]+)$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery("Ручной ввод");
+    const state = String(ctx.match?.[1] || "");
+    if (!ctx.session) ctx.session = {};
+    ctx.session.state = state;
+    await ctx.reply(calendarManualText(state), { ...wizNavKeyboard() });
+  } catch (e) {
+    console.error("[calendar manual]", e?.message || e);
+  }
+});
+
+bot.action(/^cal:none:([^:]+)$/, async (ctx) => {
+  try {
+    const state = String(ctx.match?.[1] || "");
+    const draft = getDraftForCalendar(ctx);
+
+    if (state === "svc_create_expiration") {
+      draft.expiration = null;
+      ctx.session.serviceDraft = draft;
+      await safeCb(ctx, "Без срока актуальности");
+      await advanceAfterCalendarDate(ctx, state);
+      return;
+    }
+
+    if (state === "author_day_date") {
+      draft._programDayDate = "";
+      ctx.session.serviceDraft = draft;
+      await safeCb(ctx, "Дата не указана");
+      await advanceAfterCalendarDate(ctx, state);
+      return;
+    }
+
+    await safeCb(ctx, "Этот шаг нельзя очистить", true);
+  } catch (e) {
+    console.error("[calendar none]", e?.message || e);
+  }
+});
+
+bot.action(/^cal:date:([^:]+):(\d{4}-\d{2}-\d{2})$/, async (ctx) => {
+  try {
+    const state = String(ctx.match?.[1] || "");
+    const ymd = String(ctx.match?.[2] || "");
+
+    if (state === "svc_create_expiration") {
+      await safeCb(ctx, "Выберите время");
+      await replyExpirationTimePicker(ctx, state, ymd);
+      return;
+    }
+
+    await handleCalendarApply(ctx, state, ymd);
+  } catch (e) {
+    console.error("[calendar date]", e?.message || e);
+  }
+});
+
+bot.action(/^cal:time:([^:]+):(\d{4}-\d{2}-\d{2}):(\d{4})$/, async (ctx) => {
+  try {
+    const state = String(ctx.match?.[1] || "");
+    const ymd = String(ctx.match?.[2] || "");
+    const hhmm = normalizeTimeHHMM(ctx.match?.[3]);
+    if (!hhmm) {
+      await safeCb(ctx, "Некорректное время", true);
+      return;
+    }
+    await handleCalendarApply(ctx, state, `${ymd} ${hhmm}`);
+  } catch (e) {
+    console.error("[calendar time]", e?.message || e);
+  }
+});
+
+bot.action(/^(svc_photo|author_photo):clear$/, async (ctx) => {
+  try {
+    if (!ctx.session) ctx.session = {};
+    if (!ctx.session.serviceDraft) ctx.session.serviceDraft = {};
+    ctx.session.serviceDraft.images = [];
+    ctx.session.serviceDraft.telegramPhotoFileId = null;
+    await safeCb(ctx, "Фото очищены");
+    await promptWizardState(ctx, "svc_create_photo");
+    await persistProviderCreateWizard(ctx);
+  } catch (e) {
+    console.error("[svc_photo clear]", e?.message || e);
+  }
+});
+
+bot.action(/^(svc_photo|author_photo):done$/, async (ctx) => {
+  try {
+    await safeCb(ctx, "Готово");
+    const draft = ctx.session?.serviceDraft;
+    const isEditFlow = !!ctx.session?.editingServiceId || !!draft?.id;
+    if (isEditFlow) {
+      await finishEditWizard(ctx);
+    } else {
+      await finishCreateServiceFromWizard(ctx);
+    }
+  } catch (e) {
+    console.error("[svc_photo done]", e?.message || e);
+    await safeReply(ctx, "⚠️ Не удалось завершить сохранение. Попробуйте ещё раз.");
+  }
+});
+
 
 bot.action(/^author_lang:(.+)$/, async (ctx) => {
   try {
@@ -12150,6 +12673,30 @@ bot.on("text", async (ctx, next) => {
           return;
         }
 
+        case "svc_ticket_event_date": {
+          const norm = normalizeDateInput(text);
+          if (!norm) {
+            await ctx.reply("😕 Не понял дату мероприятия. Введите YYYY-MM-DD или YYYY.MM.DD.", {
+              parse_mode: "Markdown",
+              ...wizNavKeyboard(),
+            });
+            return;
+          }
+          if (isPastYMD(norm)) {
+            await ctx.reply("⚠️ Эта дата уже в прошлом. Укажите будущую дату.", {
+              parse_mode: "Markdown",
+              ...wizNavKeyboard(),
+            });
+            return;
+          }
+          draft.eventDate = norm;
+          draft.startDate = norm;
+          pushWizardState(ctx, "svc_ticket_event_date");
+          ctx.session.state = "svc_create_price";
+          await promptWizardState(ctx, "svc_create_price");
+          return;
+        }
+
         case "svc_create_tour_hotel":
           draft.hotel = text;
           pushWizardState(ctx, "svc_create_tour_hotel");
@@ -12707,7 +13254,23 @@ bot.on("photo", async (ctx, next) => {
 
     if (state === "svc_create_photo") {
       await persistProviderCreateWizard(ctx);
-      await finishCreateServiceFromWizard(ctx);
+      await safeReply(
+        ctx,
+        `✅ Фото добавлено. Сейчас выбрано: ${draft.images.length} шт.\n\nОтправьте ещё фото или нажмите «✅ Готово».`,
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "🧹 Очистить фото", callback_data: "svc_photo:clear" }],
+              [{ text: "✅ Готово", callback_data: "svc_photo:done" }],
+              [{ text: "⏭ Пропустить", callback_data: "svc_wiz:skip" }],
+              [
+                { text: "⬅️ Назад", callback_data: "svc_wiz:back" },
+                { text: "❌ Отмена", callback_data: "svc_wiz:cancel" },
+              ],
+            ],
+          },
+        }
+      );
       return;
     }
 
