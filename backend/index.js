@@ -41,6 +41,7 @@ const adminTravelSalesRoutes = require("./routes/adminTravelSalesRoutes");
 const adminServiceAuditRoutes = require("./routes/adminServiceAuditRoutes");
 const serviceStatsRoutes = require("./routes/serviceStatsRoutes");
 const providerSupportRoutes = require("./routes/providerSupportRoutes");
+const activityEventsRoutes = require("./routes/activityEventsRoutes");
 
 dotenv.config();
 const app = express();
@@ -979,6 +980,7 @@ app.use("/api/admin/travel-sales", adminTravelSalesRoutes);
 app.use("/api/admin", adminServiceAuditRoutes);
 app.use("/api", providerSupportRoutes);
 app.use("/api/admin", providerSupportRoutes);
+app.use("/api", activityEventsRoutes);
 
 /** ===================== Start (в самом конце) ===================== */
 const PORT = process.env.PORT || 5000;
