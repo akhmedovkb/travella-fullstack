@@ -49,6 +49,7 @@ import AdminServiceAudit from "./pages/admin/AdminServiceAudit";
 import PassportParser from "./pages/PassportParser";
 import SupportSuccess from "./pages/SupportSuccess";
 import SupportProject from "./pages/SupportProject";
+import { installActivityTracker } from "./utils/activityTracker";
 
 // Клиентские
 import ClientRegister from "./pages/ClientRegister";
@@ -144,6 +145,10 @@ function AdminRoute({ children }) {
 
 export default function App() {
   const [leadOpen, setLeadOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    installActivityTracker();
+  }, []);
 
   return (
     <Router>
