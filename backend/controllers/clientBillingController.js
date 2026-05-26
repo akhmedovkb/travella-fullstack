@@ -599,6 +599,40 @@ async function autoUnlockAfterTopup(req, res) {
         result,
       });
     }
+
+    const serviceCheck = await db.query(
+      `
+        SELECT id, provider_id, status, expiration_at, deleted_at
+        FROM services
+        WHERE id = $1
+          AND deleted_at IS NULL
+          AND status IN ('published', 'approved', 'active')
+          AND (expiration_at IS NULL OR expiration_at > now())
+          AND COALESCE(NULLIF(LOWER(details->>'isActive'), ''), 'true') <> 'false'
+        LIMIT 1
+      `,
+      [serviceId]
+    );
+
+    if (!serviceCheck.rows[0]) {
+      await db.query("COMMIT");
+
+      await safeLogUnlockFunnel(pool, {
+        clientId,
+        serviceId,
+        source: "web_unlock_auto",
+        step: "service_not_available_before_payment",
+      });
+
+      return res.status(404).json({
+        ok: false,
+        error: "service_not_available",
+        message: "Услуга недоступна для открытия контактов",
+      });
+    }
+
+    const service = serviceCheck.rows[0];
+
     const existingPending = await db.query(
       `
         SELECT *
@@ -674,6 +708,7 @@ async function autoUnlockAfterTopup(req, res) {
           purpose,
           order_type,
           service_id,
+          provider_id,
           redirect_url,
           expires_at,
           meta
@@ -689,7 +724,8 @@ async function autoUnlockAfterTopup(req, res) {
           $3,
           $4,
           $5,
-          $6
+          $6,
+          $7
         )
         RETURNING *
       `,
@@ -697,6 +733,7 @@ async function autoUnlockAfterTopup(req, res) {
         clientId,
         unlockPrice,
         serviceId,
+        service.provider_id || null,
         initialRedirectUrl,
         expiresAt,
         {
