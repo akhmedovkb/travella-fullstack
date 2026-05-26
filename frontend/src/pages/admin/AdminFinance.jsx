@@ -13,6 +13,7 @@ import AdminPaymeEvents from "./AdminPaymeEvents";
 import PaymePayments from "./PaymePayments";
 import AdminTravelSales from "./AdminTravelSales";
 import AdminProviderSupport from "./AdminProviderSupport";
+import AdminActivityEvents from "./AdminActivityEvents";
 
 const VALID_TABS = new Set([
   "clients",
@@ -25,6 +26,7 @@ const VALID_TABS = new Set([
   "payments",
   "travel",
   "support",
+  "activity",
 ]);
 
 function normalizeTab(x) {
@@ -74,6 +76,7 @@ export default function AdminFinance() {
           <TabBtn id="payments">Payments</TabBtn>
           <TabBtn id="travel">Travel Sales</TabBtn>
           <TabBtn id="support">Support</TabBtn>
+          <TabBtn id="activity">Clicks</TabBtn>
         </div>
       </div>
 
@@ -87,6 +90,7 @@ export default function AdminFinance() {
       {tab === "payments" && <PaymePayments />}
       {tab === "travel" && <AdminTravelSales />}
       {tab === "support" && <AdminProviderSupport />}
+      {tab === "activity" && <AdminActivityEvents />}
     </div>
   );
 }
