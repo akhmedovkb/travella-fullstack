@@ -1355,6 +1355,11 @@ return (
     <>
       <div
         ref={cardRef}
+        data-track="service_card"
+        data-service-id={id || ""}
+        data-provider-id={providerId || ""}
+        data-track-service-id={id || ""}
+        data-track-provider-id={providerId || ""}
         className={[
           "group relative overflow-hidden rounded-[1.65rem] border shadow-sm flex flex-col transition-all duration-500 ease-out hover:-translate-y-1 hover:shadow-[0_24px_55px_rgba(15,23,42,0.15)]",
           unlocked
