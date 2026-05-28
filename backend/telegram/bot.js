@@ -10660,22 +10660,7 @@ bot.on("successful_payment", async (ctx) => {
         );
         if (ex.rowCount) {
                     // ✅ EXTRA SAFETY: если ledger уже содержит списание по этой услуге — повторно не списываем
-          try {
-            const ledEx = await db.query(
-              `
-              SELECT 1
-                FROM contact_balance_ledger
-               WHERE client_id = $1
-                 AND service_id = $2
-                 AND reason = 'unlock_contacts'
-               LIMIT 1
-              `,
-              [cid, sid]
-            );
-            if (ledEx.rowCount) {
-              return { ok: true, already: true, charged: 0 };
-            }
-          } catch {}
+
           await tx.query("ROLLBACK");
           const balNow = await getClientBalanceUnified(pool, clientRow.id);
           await safeReply(
