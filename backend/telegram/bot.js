@@ -10622,6 +10622,95 @@ bot.action(/^support_project:pay:(\d+):(\d+)$/, async (ctx) => {
   }
 });
 
+async function sendUnlockedServiceCard(ctx, serviceId) {
+  try {
+    const { data } = await axios.get(`/api/telegram/service/${serviceId}`, {
+      params: { role: "client", chatId: ctx.from?.id },
+    });
+
+    if (!data?.success || !data?.service) {
+      await safeReply(ctx, "✅ Контакты открыты. Откройте карточку услуги повторно, чтобы увидеть контакты.");
+      return;
+    }
+
+    const svc = data.service;
+    const category = String(svc.category || svc.type || "refused_tour").trim().toLowerCase();
+    const { text, photoUrl, serviceUrl, kbExtra } = buildServiceMessage(svc, category, "client", {
+      unlocked: true,
+      isInline: false,
+      forceRefused: String(category || "").startsWith("refused_") || category === "author_tour",
+    });
+
+    const kb = kbExtra?.replaceDefault && kbExtra?.inline_keyboard?.length
+      ? { inline_keyboard: kbExtra.inline_keyboard }
+      : {
+          inline_keyboard: [
+            ...(kbExtra?.inline_keyboard?.length ? kbExtra.inline_keyboard : []),
+            [{ text: "🌐 Подробнее на сайте", url: serviceUrl }],
+            [{ text: "💬 Быстрый запрос", callback_data: `quick:${serviceId}` }],
+          ],
+        };
+
+    if (photoUrl) {
+      await safeReplyWithPhoto(ctx, photoUrl, text, {
+        parse_mode: "HTML",
+        reply_markup: kb,
+      });
+    } else {
+      await safeReply(ctx, text, {
+        parse_mode: "HTML",
+        reply_markup: kb,
+        disable_web_page_preview: true,
+      });
+    }
+  } catch (e) {
+    console.error("[tg-bot] sendUnlockedServiceCard error:", e?.message || e);
+    await safeReply(ctx, "✅ Контакты открыты. Откройте карточку услуги повторно, чтобы увидеть контакты.");
+  }
+}
+
+async function sendUnlockContactInvoice(ctx, { clientId, serviceId, amountSum }) {
+  const cid = Number(clientId);
+  const sid = Number(serviceId);
+  const amount = Math.trunc(Number(amountSum || 0));
+
+  if (!PAYMENTS_PROVIDER_TOKEN) {
+    await safeReply(ctx, "⚠️ Telegram Payme не настроен на сервере.");
+    return { ok: false, reason: "no_provider_token" };
+  }
+  if (!Number.isFinite(cid) || cid <= 0 || !Number.isFinite(sid) || sid <= 0) {
+    await safeReply(ctx, "⚠️ Не удалось подготовить оплату. Откройте карточку услуги заново.");
+    return { ok: false, reason: "bad_payload" };
+  }
+  if (!Number.isFinite(amount) || amount <= 0) {
+    await safeReply(ctx, "⚠️ Некорректная сумма открытия контактов.");
+    return { ok: false, reason: "bad_amount" };
+  }
+
+  let title = "Контакты поставщика";
+  try {
+    const brief = await fetchServiceBrief(sid);
+    if (brief?.title) title = truncate(String(brief.title), 80);
+  } catch {}
+
+  await ctx.telegram.sendInvoice(ctx.chat.id, {
+    title: "Открытие контактов",
+    description: title,
+    payload: `unlock_contact:${cid}:${sid}:${amount}:${Date.now()}`,
+    provider_token: PAYMENTS_PROVIDER_TOKEN,
+    currency: PAYMENTS_CURRENCY,
+    prices: [
+      {
+        label: "Открытие контактов",
+        amount: amount * currencyMinorFactor(PAYMENTS_CURRENCY),
+      },
+    ],
+    start_parameter: `unlock_${sid}`,
+  });
+
+  return { ok: true };
+}
+
 // Telegram Payments: acknowledge checkout
 bot.on("pre_checkout_query", async (ctx) => {
   try {
@@ -10644,22 +10733,118 @@ bot.on("successful_payment", async (ctx) => {
     const clientRow = await getClientRowByChatId(pool, chatId);
     if (!clientRow?.id) return;
 
-    // payload format: contact_topup:clientId:amount:ts
+    // payload formats:
+    // contact_topup:<clientId>:<amount>:<ts>
+    // unlock_contact:<clientId>:<serviceId>:<amount>:<ts>
     const payload = String(sp.invoice_payload || "");
     const parts = payload.split(":");
-    if (parts[0] !== "contact_topup") return;
+    const paymentType = String(parts[0] || "").trim();
+    if (paymentType !== "contact_topup" && paymentType !== "unlock_contact") return;
 
     const payloadClientId = Number(parts[1] || 0);
-    const payloadAmount = Number(parts[2] || 0);
     if (payloadClientId !== Number(clientRow.id)) {
-      console.warn("[tg-bot] topup payload client mismatch", { payloadClientId, clientId: clientRow.id });
+      console.warn("[tg-bot] payment payload client mismatch", { paymentType, payloadClientId, clientId: clientRow.id });
       return;
     }
 
     const factor = currencyMinorFactor(sp.currency || PAYMENTS_CURRENCY);
     const paidMinor = Number(sp.total_amount || 0);
     const paidMajor = factor > 0 ? Math.trunc(paidMinor / factor) : Math.trunc(paidMinor);
-    
+
+    if (paymentType === "unlock_contact") {
+      const serviceId = Number(parts[2] || 0);
+      const payloadAmount = Number(parts[3] || 0);
+      const paidAmount = Number.isFinite(payloadAmount) && payloadAmount > 0 ? Math.trunc(payloadAmount) : paidMajor;
+
+      if (!Number.isFinite(serviceId) || serviceId <= 0) {
+        console.warn("[tg-bot] unlock payment bad serviceId", { payload });
+        await safeReply(ctx, "⚠️ Оплата прошла, но ID услуги некорректный. Напишите администратору.");
+        return;
+      }
+
+      await ensureUnlockTables(pool);
+      const tx = await pool.connect();
+      try {
+        await tx.query("BEGIN");
+        await tx.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [
+          `tg_unlock_payment:${Number(clientRow.id)}:${Number(serviceId)}`,
+        ]);
+
+        const chargeId = String(sp.telegram_payment_charge_id || "");
+        const providerChargeId = String(sp.provider_payment_charge_id || "");
+
+        if (chargeId || providerChargeId) {
+          const ex = await tx.query(
+            `
+            SELECT 1
+              FROM contact_balance_ledger
+             WHERE client_id = $1
+               AND reason = 'unlock_telegram_payment'
+               AND (
+                 (meta->>'telegram_payment_charge_id' = $2 AND $2 <> '')
+                 OR
+                 (meta->>'provider_payment_charge_id' = $3 AND $3 <> '')
+               )
+             LIMIT 1
+            `,
+            [Number(clientRow.id), chargeId, providerChargeId]
+          );
+          if (ex.rowCount) {
+            await tx.query("ROLLBACK");
+            await safeReply(ctx, "ℹ️ Этот платеж уже был обработан. Контакты уже открыты.");
+            await sendUnlockedServiceCard(ctx, serviceId);
+            return;
+          }
+        }
+
+        await tx.query(
+          `
+          INSERT INTO client_service_contact_unlocks
+            (client_id, service_id, price_charged)
+          VALUES ($1,$2,$3)
+          ON CONFLICT (client_id, service_id) DO NOTHING
+          `,
+          [Number(clientRow.id), Number(serviceId), Number(paidAmount || 0)]
+        );
+
+        await tx.query(
+          `
+          INSERT INTO contact_balance_ledger
+            (client_id, amount, reason, service_id, source, meta)
+          VALUES ($1,0,'unlock_telegram_payment',$2,'telegram_payment',$3::jsonb)
+          `,
+          [
+            Number(clientRow.id),
+            Number(serviceId),
+            JSON.stringify({
+              provider_payment_charge_id: sp.provider_payment_charge_id,
+              telegram_payment_charge_id: sp.telegram_payment_charge_id,
+              currency: sp.currency,
+              total_amount: sp.total_amount,
+              paid_amount_sum: paidAmount,
+              invoice_payload: sp.invoice_payload,
+            }),
+          ]
+        );
+
+        await tx.query("COMMIT");
+
+        await safeReply(
+          ctx,
+          `✅ Оплата прошла успешно!\n\n🔓 Контакты открыты.\n💸 Оплачено: <b>${Number(paidAmount || 0).toLocaleString("ru-RU")}</b> сум`,
+          { parse_mode: "HTML" }
+        );
+        await sendUnlockedServiceCard(ctx, serviceId);
+        return;
+      } catch (e) {
+        try { await tx.query("ROLLBACK"); } catch {}
+        throw e;
+      } finally {
+        tx.release();
+      }
+    }
+
+    const payloadAmount = Number(parts[2] || 0);
     const creditAmount =
       Number.isFinite(payloadAmount) && payloadAmount > 0 ? Math.trunc(payloadAmount) : paidMajor;
 
@@ -10754,6 +10939,67 @@ bot.on("successful_payment", async (ctx) => {
   } catch (e) {
     console.error("[tg-bot] successful_payment handler error:", e?.message || e);
     try { await safeReply(ctx, "⚠️ Платеж получен, но произошла ошибка при зачислении. Напишите администратору."); } catch {}
+  }
+});
+
+bot.action(/^unlock:pay:(\d+)$/, async (ctx) => {
+  try {
+    await safeCb(ctx);
+
+    if (ctx.chat?.type !== "private") {
+      await safeReply(ctx, "🔒 Оплата и показ контактов доступны только в личном чате с ботом.");
+      return;
+    }
+
+    const serviceId = Number(ctx.match?.[1] || 0);
+    if (!Number.isFinite(serviceId) || serviceId <= 0) {
+      await safeReply(ctx, "⚠️ Некорректный ID услуги. Откройте карточку заново.");
+      return;
+    }
+
+    const chatId = ctx.from?.id;
+    const clientRow = await getClientRowByChatId(pool, chatId);
+    if (!clientRow?.id) {
+      await safeReply(ctx, "👋 Сначала привяжите аккаунт через /start");
+      return;
+    }
+
+    const already = await isContactsUnlocked(pool, { clientId: clientRow.id, serviceId });
+    if (already) {
+      await safeReply(ctx, "✅ Контакты уже открыты.");
+      await sendUnlockedServiceCard(ctx, serviceId);
+      return;
+    }
+
+    const offerCheck = await pool.query(
+      `SELECT 1
+         FROM user_offer_accepts
+        WHERE user_role = 'client'
+          AND user_id = $1
+          AND offer_version = $2
+        LIMIT 1`,
+      [clientRow.id, OFFER_VERSION || "v1.0"]
+    );
+
+    if (!offerCheck.rowCount) {
+      await showOfferGate(ctx, serviceId);
+      return;
+    }
+
+    const unlockSettings = await getContactUnlockSettings(pool);
+    const priceSum = tiyinToSum(unlockSettings.effective_price || 0) || CONTACT_UNLOCK_PRICE || 10000;
+
+    ctx.session = ctx.session || {};
+    ctx.session.lastUnlockServiceId = serviceId;
+
+    await sendUnlockContactInvoice(ctx, {
+      clientId: clientRow.id,
+      serviceId,
+      amountSum: priceSum,
+    });
+  } catch (e) {
+    console.error("[tg-bot] unlock:pay error:", e?.message || e);
+    try { await safeReply(ctx, "⚠️ Не удалось создать Telegram Payme оплату. Попробуйте позже."); } catch {}
   }
 });
 
@@ -10961,10 +11207,10 @@ if (!result.ok) {
 
       await safeReply(
         ctx,
-        "💳 <b>Недостаточно средств</b>\n\n" +
+        "💳 <b>Открытие контактов</b>\n\n" +
           `💰 Баланс: <b>${bal}</b> сум\n` +
-          `🔒 Нужно: <b>${need}</b> сум\n\n` +
-          "Пополните баланс и нажмите «Повторить открытие».",
+          `🔒 Стоимость открытия: <b>${need}</b> сум\n\n` +
+          "Можно оплатить и сразу открыть контакты внутри Telegram.",
         {
           parse_mode: "HTML",
           disable_web_page_preview: true,
@@ -10972,7 +11218,7 @@ if (!result.ok) {
             inline_keyboard: [
               [
                 PAYMENTS_PROVIDER_TOKEN
-                  ? { text: "💳 Пополнить баланс", callback_data: "balance:topup" }
+                  ? { text: `💳 Оплатить и открыть (${need} сум)`, callback_data: `unlock:pay:${serviceId}` }
                   : { text: "💳 Пополнить баланс", url: topupUrl },
               ],
               [{ text: "🔓 Повторить открытие", callback_data: "balance:retry" }],
