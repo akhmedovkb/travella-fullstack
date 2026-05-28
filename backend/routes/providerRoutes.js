@@ -93,7 +93,19 @@ router.get("/finance", authenticateToken, requireProvider, async (req, res) => {
     return !!r.rowCount;
   }
 
-  const toSum = (v) => Math.round(Number(v || 0) / 100);
+  async function hasColumns(table, columns) {
+    const r = await pool.query(
+      `
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema='public'
+        AND table_name=$1
+        AND column_name = ANY($2::text[])
+      `,
+      [table, columns]
+    );
+    return new Set((r.rows || []).map((x) => x.column_name));
+  }
 
   try {
     const unlocksQ = await pool.query(
@@ -102,8 +114,6 @@ router.get("/finance", authenticateToken, requireProvider, async (req, res) => {
         u.id,
         u.client_id,
         u.service_id,
-        u.price_charged,
-        FLOOR(COALESCE(u.price_charged, 0) / 100)::bigint AS price_sum,
         u.source,
         u.created_at,
         COALESCE(c.name, c.full_name, c.phone, 'Client #' || u.client_id::text) AS client_name,
@@ -125,8 +135,7 @@ router.get("/finance", authenticateToken, requireProvider, async (req, res) => {
       `
       SELECT
         COUNT(*)::bigint AS unlock_count,
-        COALESCE(SUM(COALESCE(u.price_charged, 0)), 0)::bigint AS unlock_amount_tiyin,
-        FLOOR(COALESCE(SUM(COALESCE(u.price_charged, 0)), 0) / 100)::bigint AS unlock_amount_sum
+        COUNT(DISTINCT u.client_id)::bigint AS hot_clients_count
       FROM client_service_contact_unlocks u
       JOIN services s ON s.id = u.service_id
       WHERE s.provider_id = $1
@@ -134,92 +143,95 @@ router.get("/finance", authenticateToken, requireProvider, async (req, res) => {
       [providerId]
     );
 
-    let telegramPayments = [];
-    let telegramStats = { telegram_paid_count: 0, telegram_paid_sum: 0 };
-    if (await hasTable("telegram_payments")) {
-      const tgQ = await pool.query(
-        `
-        SELECT
-          tp.id,
-          tp.payment_type,
-          tp.client_id,
-          tp.service_id,
-          tp.status,
-          tp.source,
-          tp.currency,
-          tp.amount_minor,
-          COALESCE(tp.amount_sum, FLOOR(COALESCE(tp.amount_minor,0) / 100))::bigint AS amount_sum,
-          tp.telegram_payment_charge_id,
-          tp.provider_payment_charge_id,
-          tp.created_at,
-          s.title AS title,
-          s.category AS service_category
-        FROM telegram_payments tp
-        JOIN services s ON s.id = tp.service_id
-        WHERE s.provider_id = $1
-        ORDER BY tp.created_at DESC, tp.id DESC
-        LIMIT 50
-        `,
-        [providerId]
-      );
-      telegramPayments = tgQ.rows || [];
+    const hotClientsQ = await pool.query(
+      `
+      SELECT
+        u.client_id,
+        COALESCE(c.name, c.full_name, c.phone, 'Client #' || u.client_id::text) AS client_name,
+        c.phone AS client_phone,
+        c.telegram AS client_telegram,
+        COUNT(*)::bigint AS unlock_count,
+        MAX(u.created_at) AS last_activity_at,
+        (ARRAY_AGG(s.title ORDER BY u.created_at DESC, u.id DESC))[1] AS last_service_title
+      FROM client_service_contact_unlocks u
+      JOIN services s ON s.id = u.service_id
+      LEFT JOIN clients c ON c.id = u.client_id
+      WHERE s.provider_id = $1
+      GROUP BY u.client_id, c.name, c.full_name, c.phone, c.telegram
+      ORDER BY COUNT(*) DESC, MAX(u.created_at) DESC
+      LIMIT 30
+      `,
+      [providerId]
+    );
 
-      const tgStatsQ = await pool.query(
-        `
-        SELECT
-          COUNT(*) FILTER (WHERE tp.status IN ('paid','success','completed','unlocked'))::bigint AS telegram_paid_count,
-          COALESCE(SUM(CASE WHEN tp.status IN ('paid','success','completed','unlocked') THEN COALESCE(tp.amount_sum, FLOOR(COALESCE(tp.amount_minor,0) / 100)) ELSE 0 END),0)::bigint AS telegram_paid_sum
-        FROM telegram_payments tp
-        JOIN services s ON s.id = tp.service_id
-        WHERE s.provider_id = $1
-        `,
-        [providerId]
-      );
-      telegramStats = tgStatsQ.rows?.[0] || telegramStats;
+    const topServicesQ = await pool.query(
+      `
+      SELECT
+        s.id AS service_id,
+        s.title AS service_title,
+        s.category AS service_category,
+        COUNT(u.id)::bigint AS unlock_count,
+        MAX(u.created_at) AS last_unlock_at
+      FROM services s
+      LEFT JOIN client_service_contact_unlocks u ON u.service_id = s.id
+      WHERE s.provider_id = $1
+        AND s.deleted_at IS NULL
+      GROUP BY s.id, s.title, s.category
+      HAVING COUNT(u.id) > 0
+      ORDER BY COUNT(u.id) DESC, MAX(u.created_at) DESC NULLS LAST
+      LIMIT 20
+      `,
+      [providerId]
+    );
+
+    let viewsCount = 0;
+    let quickRequests = [];
+
+    if (await hasTable("service_views")) {
+      const cols = await hasColumns("service_views", ["service_id", "created_at"]);
+      if (cols.has("service_id")) {
+        const viewsQ = await pool.query(
+          `
+          SELECT COUNT(*)::bigint AS views_count
+          FROM service_views v
+          JOIN services s ON s.id = v.service_id
+          WHERE s.provider_id = $1
+          `,
+          [providerId]
+        );
+        viewsCount = Number(viewsQ.rows?.[0]?.views_count || 0);
+      }
     }
 
-    let supportDonations = [];
-    let supportStats = { support_paid_count: 0, support_paid_sum: 0 };
-    if (await hasTable("provider_support_donations")) {
-      const supportQ = await pool.query(
-        `
-        SELECT
-          d.id,
-          d.provider_id,
-          d.service_id,
-          d.status,
-          d.source,
-          d.payme_id,
-          d.payme_order_id,
-          d.amount_tiyin,
-          FLOOR(COALESCE(d.amount_tiyin,0) / 100)::bigint AS amount_sum,
-          d.created_at,
-          d.paid_at,
-          COALESCE(s.title, 'Поддержка проекта') AS title
-        FROM provider_support_donations d
-        LEFT JOIN services s ON s.id = d.service_id
-        WHERE d.provider_id = $1
-           OR s.provider_id = $1
-        ORDER BY d.created_at DESC, d.id DESC
-        LIMIT 50
-        `,
-        [providerId]
-      );
-      supportDonations = supportQ.rows || [];
-
-      const supportStatsQ = await pool.query(
-        `
-        SELECT
-          COUNT(*) FILTER (WHERE d.status = 'paid')::bigint AS support_paid_count,
-          FLOOR(COALESCE(SUM(CASE WHEN d.status = 'paid' THEN d.amount_tiyin ELSE 0 END),0) / 100)::bigint AS support_paid_sum
-        FROM provider_support_donations d
-        LEFT JOIN services s ON s.id = d.service_id
-        WHERE d.provider_id = $1
-           OR s.provider_id = $1
-        `,
-        [providerId]
-      );
-      supportStats = supportStatsQ.rows?.[0] || supportStats;
+    if (await hasTable("quick_requests")) {
+      const cols = await hasColumns("quick_requests", ["id", "service_id", "client_id", "name", "client_name", "message", "status", "created_at"]);
+      if (cols.has("service_id")) {
+        const nameExpr = cols.has("client_name") ? "qr.client_name" : (cols.has("name") ? "qr.name" : "NULL::text");
+        const messageExpr = cols.has("message") ? "qr.message" : "NULL::text";
+        const statusExpr = cols.has("status") ? "qr.status" : "'new'::text";
+        const createdExpr = cols.has("created_at") ? "qr.created_at" : "NOW()";
+        const idExpr = cols.has("id") ? "qr.id" : "NULL::bigint";
+        const quickQ = await pool.query(
+          `
+          SELECT
+            ${idExpr} AS id,
+            qr.service_id,
+            ${nameExpr} AS client_name,
+            ${messageExpr} AS message,
+            ${statusExpr} AS status,
+            ${createdExpr} AS created_at,
+            s.title AS service_title,
+            s.category AS service_category
+          FROM quick_requests qr
+          JOIN services s ON s.id = qr.service_id
+          WHERE s.provider_id = $1
+          ORDER BY ${createdExpr} DESC
+          LIMIT 30
+          `,
+          [providerId]
+        );
+        quickRequests = quickQ.rows || [];
+      }
     }
 
     const baseStats = statsQ.rows?.[0] || {};
@@ -228,20 +240,18 @@ router.get("/finance", authenticateToken, requireProvider, async (req, res) => {
       provider_id: providerId,
       stats: {
         unlock_count: Number(baseStats.unlock_count || 0),
-        unlock_amount_tiyin: Number(baseStats.unlock_amount_tiyin || 0),
-        unlock_amount_sum: Number(baseStats.unlock_amount_sum || 0),
-        telegram_paid_count: Number(telegramStats.telegram_paid_count || 0),
-        telegram_paid_sum: Number(telegramStats.telegram_paid_sum || 0),
-        support_paid_count: Number(supportStats.support_paid_count || 0),
-        support_paid_sum: Number(supportStats.support_paid_sum || 0),
+        hot_clients_count: Number(baseStats.hot_clients_count || 0),
+        views_count: Number(viewsCount || 0),
+        quick_requests_count: quickRequests.length,
       },
       recent_unlocks: unlocksQ.rows || [],
-      telegram_payments: telegramPayments,
-      support_donations: supportDonations,
+      hot_clients: hotClientsQ.rows || [],
+      top_services: topServicesQ.rows || [],
+      quick_requests: quickRequests,
     });
   } catch (e) {
-    console.error("providers/finance error:", e);
-    return res.status(500).json({ ok: false, message: "provider finance error" });
+    console.error("providers/finance demand dashboard error:", e);
+    return res.status(500).json({ ok: false, message: "provider demand dashboard error" });
   }
 });
 
