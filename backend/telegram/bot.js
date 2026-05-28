@@ -10669,6 +10669,217 @@ async function sendUnlockedServiceCard(ctx, serviceId) {
   }
 }
 
+
+async function ensureTelegramPaymentsTables(poolArg = pool) {
+  if (!poolArg) return false;
+
+  await poolArg.query(`
+    CREATE TABLE IF NOT EXISTS telegram_payments (
+      id BIGSERIAL PRIMARY KEY,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      processed_at TIMESTAMPTZ,
+      status TEXT NOT NULL DEFAULT 'created',
+      payment_type TEXT NOT NULL,
+      client_id BIGINT,
+      service_id BIGINT,
+      invoice_payload TEXT,
+      telegram_payment_charge_id TEXT,
+      provider_payment_charge_id TEXT,
+      amount_minor BIGINT NOT NULL DEFAULT 0,
+      amount_sum BIGINT NOT NULL DEFAULT 0,
+      currency TEXT NOT NULL DEFAULT 'UZS',
+      source TEXT NOT NULL DEFAULT 'telegram_bot',
+      error TEXT,
+      meta JSONB NOT NULL DEFAULT '{}'::jsonb
+    )
+  `);
+
+  await poolArg.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS ux_telegram_payments_tg_charge
+    ON telegram_payments (telegram_payment_charge_id)
+    WHERE telegram_payment_charge_id IS NOT NULL AND telegram_payment_charge_id <> ''
+  `);
+
+  await poolArg.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS ux_telegram_payments_provider_charge
+    ON telegram_payments (provider_payment_charge_id)
+    WHERE provider_payment_charge_id IS NOT NULL AND provider_payment_charge_id <> ''
+  `);
+
+  await poolArg.query(`CREATE INDEX IF NOT EXISTS idx_telegram_payments_client ON telegram_payments (client_id, created_at DESC)`);
+  await poolArg.query(`CREATE INDEX IF NOT EXISTS idx_telegram_payments_service ON telegram_payments (service_id, created_at DESC)`);
+  await poolArg.query(`CREATE INDEX IF NOT EXISTS idx_telegram_payments_status ON telegram_payments (status, created_at DESC)`);
+
+  return true;
+}
+
+function parseTelegramPaymentPayload(payload) {
+  const raw = String(payload || '').trim();
+  const parts = raw.split(':');
+  const paymentType = String(parts[0] || '').trim();
+
+  if (paymentType === 'contact_topup') {
+    return {
+      ok: true,
+      raw,
+      paymentType,
+      clientId: Number(parts[1] || 0),
+      amountSum: Number(parts[2] || 0),
+      serviceId: null,
+      ts: Number(parts[3] || 0),
+    };
+  }
+
+  if (paymentType === 'unlock_contact') {
+    return {
+      ok: true,
+      raw,
+      paymentType,
+      clientId: Number(parts[1] || 0),
+      serviceId: Number(parts[2] || 0),
+      amountSum: Number(parts[3] || 0),
+      ts: Number(parts[4] || 0),
+    };
+  }
+
+  return { ok: false, raw, paymentType, reason: 'unsupported_payload' };
+}
+
+async function trackTelegramBotEvent(eventName, {
+  clientId = null,
+  serviceId = null,
+  providerId = null,
+  chatId = null,
+  source = 'telegram_bot',
+  meta = {},
+} = {}) {
+  try {
+    if (!pool) return false;
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS activity_events (
+        id BIGSERIAL PRIMARY KEY,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        actor_role TEXT,
+        actor_id BIGINT,
+        actor_name TEXT,
+        actor_phone TEXT,
+        session_id TEXT,
+        event_type TEXT NOT NULL,
+        event_name TEXT NOT NULL,
+        page_path TEXT,
+        page_title TEXT,
+        element_text TEXT,
+        element_tag TEXT,
+        element_role TEXT,
+        element_href TEXT,
+        service_id BIGINT,
+        provider_id BIGINT,
+        client_id BIGINT,
+        source TEXT,
+        user_agent TEXT,
+        ip INET,
+        meta JSONB NOT NULL DEFAULT '{}'::jsonb
+      )
+    `);
+
+    await pool.query(
+      `
+      INSERT INTO activity_events (
+        actor_role, actor_id, event_type, event_name,
+        service_id, provider_id, client_id, source, meta
+      )
+      VALUES ('client', $1, 'telegram_payment', $2, $3, $4, $5, $6, $7::jsonb)
+      `,
+      [
+        clientId || chatId || null,
+        String(eventName || 'telegram_event'),
+        serviceId || null,
+        providerId || null,
+        clientId || null,
+        source,
+        JSON.stringify({ chat_id: chatId || null, ...meta }),
+      ]
+    );
+
+    return true;
+  } catch (e) {
+    console.error('[tg-bot] trackTelegramBotEvent error:', e?.message || e);
+    return false;
+  }
+}
+
+async function validateServiceForTelegramUnlock(poolArg, serviceId) {
+  const sid = Number(serviceId);
+  if (!poolArg || !Number.isFinite(sid) || sid <= 0) {
+    return { ok: false, reason: 'bad_service_id' };
+  }
+
+  const { rows } = await poolArg.query(
+    `
+    SELECT
+      s.id,
+      s.provider_id,
+      s.status,
+      s.expiration_at,
+      s.deleted_at,
+      s.title,
+      s.category,
+      s.details
+    FROM services s
+    JOIN providers p ON p.id = s.provider_id
+    WHERE s.id = $1
+      AND s.deleted_at IS NULL
+      AND s.status IN ('published', 'approved', 'active')
+      AND (s.expiration_at IS NULL OR s.expiration_at > NOW())
+      AND COALESCE(NULLIF(LOWER(s.details->>'isActive'), ''), 'true') <> 'false'
+    LIMIT 1
+    `,
+    [sid]
+  );
+
+  const service = rows?.[0] || null;
+  if (!service) return { ok: false, reason: 'service_not_available' };
+  return { ok: true, service };
+}
+
+async function markTelegramPaymentFailed({ parsed, sp = {}, error }) {
+  try {
+    if (!pool) return false;
+    await ensureTelegramPaymentsTables(pool);
+    await pool.query(
+      `
+      INSERT INTO telegram_payments (
+        status, payment_type, client_id, service_id, invoice_payload,
+        telegram_payment_charge_id, provider_payment_charge_id,
+        amount_minor, amount_sum, currency, error, meta
+      )
+      VALUES ('failed', $1, $2, $3, $4, NULLIF($5,''), NULLIF($6,''), $7, $8, $9, $10, $11::jsonb)
+      ON CONFLICT (telegram_payment_charge_id)
+      WHERE telegram_payment_charge_id IS NOT NULL AND telegram_payment_charge_id <> ''
+      DO UPDATE SET status='failed', error=EXCLUDED.error, meta=telegram_payments.meta || EXCLUDED.meta, processed_at=NOW()
+      `,
+      [
+        parsed?.paymentType || 'unknown',
+        parsed?.clientId || null,
+        parsed?.serviceId || null,
+        parsed?.raw || sp?.invoice_payload || null,
+        String(sp?.telegram_payment_charge_id || ''),
+        String(sp?.provider_payment_charge_id || ''),
+        Number(sp?.total_amount || 0),
+        parsed?.amountSum || 0,
+        String(sp?.currency || PAYMENTS_CURRENCY || 'UZS'),
+        String(error?.message || error || 'unknown_error').slice(0, 500),
+        JSON.stringify({ error_stack: String(error?.stack || '').slice(0, 2000) }),
+      ]
+    );
+    return true;
+  } catch (e) {
+    console.error('[tg-bot] markTelegramPaymentFailed error:', e?.message || e);
+    return false;
+  }
+}
+
 async function getUnlockPaymentPreview(ctx, serviceId) {
   const sid = Number(serviceId);
   const out = { title: "Контакты поставщика", photoUrl: null, service: null };
@@ -10788,6 +10999,18 @@ async function sendUnlockContactInvoice(ctx, { clientId, serviceId, amountSum })
     return { ok: false, reason: "bad_amount" };
   }
 
+  const serviceCheck = await validateServiceForTelegramUnlock(pool, sid);
+  if (!serviceCheck.ok) {
+    await trackTelegramBotEvent('tg_unlock_invoice_blocked', {
+      clientId: cid,
+      serviceId: sid,
+      chatId: ctx.from?.id,
+      meta: { reason: serviceCheck.reason },
+    });
+    await safeReply(ctx, "⚠️ Эта услуга уже недоступна для открытия контактов.");
+    return { ok: false, reason: serviceCheck.reason };
+  }
+
   const preview = await getUnlockPaymentPreview(ctx, sid);
   const invoiceTitle = "🔥 Контакты поставщика Travella";
   const invoiceDescription = truncate(
@@ -10795,10 +11018,12 @@ async function sendUnlockContactInvoice(ctx, { clientId, serviceId, amountSum })
     255
   );
 
+  const payload = `unlock_contact:${cid}:${sid}:${amount}:${Date.now()}`;
+
   await ctx.telegram.sendInvoice(ctx.chat.id, {
     title: invoiceTitle,
     description: invoiceDescription,
-    payload: `unlock_contact:${cid}:${sid}:${amount}:${Date.now()}`,
+    payload,
     provider_token: PAYMENTS_PROVIDER_TOKEN,
     currency: PAYMENTS_CURRENCY,
     prices: [
@@ -10810,12 +11035,42 @@ async function sendUnlockContactInvoice(ctx, { clientId, serviceId, amountSum })
     start_parameter: `unlock_${sid}`,
   });
 
+  await trackTelegramBotEvent('tg_unlock_invoice_open', {
+    clientId: cid,
+    serviceId: sid,
+    providerId: serviceCheck.service?.provider_id || null,
+    chatId: ctx.from?.id,
+    meta: { amount_sum: amount, currency: PAYMENTS_CURRENCY, payload_type: 'unlock_contact' },
+  });
+
   return { ok: true };
 }
 
 // Telegram Payments: acknowledge checkout
 bot.on("pre_checkout_query", async (ctx) => {
   try {
+    const q = ctx.preCheckoutQuery;
+    const parsed = parseTelegramPaymentPayload(q?.invoice_payload || "");
+
+    if (!parsed.ok) {
+      await ctx.answerPreCheckoutQuery(false, "Некорректный платеж. Откройте оплату заново.");
+      return;
+    }
+
+    if (parsed.paymentType === "unlock_contact") {
+      const clientRow = await getClientRowByChatId(pool, ctx.from?.id);
+      if (!clientRow?.id || Number(clientRow.id) !== Number(parsed.clientId)) {
+        await ctx.answerPreCheckoutQuery(false, "Клиент не найден. Откройте бот через /start.");
+        return;
+      }
+
+      const serviceCheck = await validateServiceForTelegramUnlock(pool, parsed.serviceId);
+      if (!serviceCheck.ok) {
+        await ctx.answerPreCheckoutQuery(false, "Эта услуга уже недоступна.");
+        return;
+      }
+    }
+
     await ctx.answerPreCheckoutQuery(true);
   } catch (e) {
     console.error("[tg-bot] pre_checkout_query error:", e?.message || e);
@@ -10823,9 +11078,11 @@ bot.on("pre_checkout_query", async (ctx) => {
   }
 });
 
-// Telegram Payments: credit balance on successful payment
+// Telegram Payments: credit balance or unlock contacts on successful payment
 bot.on("successful_payment", async (ctx) => {
   const sp = ctx.message?.successful_payment;
+  let parsed = null;
+
   try {
     if (!sp) return;
 
@@ -10835,17 +11092,17 @@ bot.on("successful_payment", async (ctx) => {
     const clientRow = await getClientRowByChatId(pool, chatId);
     if (!clientRow?.id) return;
 
-    // payload formats:
-    // contact_topup:<clientId>:<amount>:<ts>
-    // unlock_contact:<clientId>:<serviceId>:<amount>:<ts>
-    const payload = String(sp.invoice_payload || "");
-    const parts = payload.split(":");
-    const paymentType = String(parts[0] || "").trim();
-    if (paymentType !== "contact_topup" && paymentType !== "unlock_contact") return;
+    parsed = parseTelegramPaymentPayload(sp.invoice_payload || "");
+    if (!parsed.ok) return;
 
-    const payloadClientId = Number(parts[1] || 0);
-    if (payloadClientId !== Number(clientRow.id)) {
-      console.warn("[tg-bot] payment payload client mismatch", { paymentType, payloadClientId, clientId: clientRow.id });
+    if (parsed.paymentType !== "contact_topup" && parsed.paymentType !== "unlock_contact") return;
+
+    if (Number(parsed.clientId) !== Number(clientRow.id)) {
+      console.warn("[tg-bot] payment payload client mismatch", {
+        paymentType: parsed.paymentType,
+        payloadClientId: parsed.clientId,
+        clientId: clientRow.id,
+      });
       return;
     }
 
@@ -10853,13 +11110,20 @@ bot.on("successful_payment", async (ctx) => {
     const paidMinor = Number(sp.total_amount || 0);
     const paidMajor = factor > 0 ? Math.trunc(paidMinor / factor) : Math.trunc(paidMinor);
 
-    if (paymentType === "unlock_contact") {
-      const serviceId = Number(parts[2] || 0);
-      const payloadAmount = Number(parts[3] || 0);
-      const paidAmount = Number.isFinite(payloadAmount) && payloadAmount > 0 ? Math.trunc(payloadAmount) : paidMajor;
+    await ensureTelegramPaymentsTables(pool);
+
+    if (parsed.paymentType === "unlock_contact") {
+      const serviceId = Number(parsed.serviceId || 0);
+      const paidAmount = Number.isFinite(parsed.amountSum) && parsed.amountSum > 0
+        ? Math.trunc(parsed.amountSum)
+        : paidMajor;
 
       if (!Number.isFinite(serviceId) || serviceId <= 0) {
-        console.warn("[tg-bot] unlock payment bad serviceId", { payload });
+        await trackTelegramBotEvent('tg_unlock_payment_failed', {
+          clientId: Number(clientRow.id),
+          chatId,
+          meta: { reason: 'bad_service_id', payload: parsed.raw },
+        });
         await safeReply(ctx, "⚠️ Оплата прошла, но ID услуги некорректный. Напишите администратору.");
         return;
       }
@@ -10868,36 +11132,100 @@ bot.on("successful_payment", async (ctx) => {
       const tx = await pool.connect();
       try {
         await tx.query("BEGIN");
-        await tx.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [
-          `tg_unlock_payment:${Number(clientRow.id)}:${Number(serviceId)}`,
-        ]);
 
         const chargeId = String(sp.telegram_payment_charge_id || "");
         const providerChargeId = String(sp.provider_payment_charge_id || "");
+        const lockKey = chargeId || providerChargeId || parsed.raw || `tg_unlock:${clientRow.id}:${serviceId}`;
+        await tx.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`telegram_payment:${lockKey}`]);
+        await tx.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`unlock:${Number(clientRow.id)}:${Number(serviceId)}`]);
 
-        if (chargeId || providerChargeId) {
-          const ex = await tx.query(
-            `
-            SELECT 1
-              FROM contact_balance_ledger
-             WHERE client_id = $1
-               AND reason = 'unlock_telegram_payment'
-               AND (
-                 (meta->>'telegram_payment_charge_id' = $2 AND $2 <> '')
-                 OR
-                 (meta->>'provider_payment_charge_id' = $3 AND $3 <> '')
-               )
-             LIMIT 1
-            `,
-            [Number(clientRow.id), chargeId, providerChargeId]
-          );
-          if (ex.rowCount) {
-            await tx.query("ROLLBACK");
-            await safeReply(ctx, "ℹ️ Этот платеж уже был обработан. Контакты уже открыты.");
-            await sendUnlockedServiceCard(ctx, serviceId);
-            return;
-          }
+        const duplicate = await tx.query(
+          `
+          SELECT id, status
+            FROM telegram_payments
+           WHERE ($1 <> '' AND telegram_payment_charge_id = $1)
+              OR ($2 <> '' AND provider_payment_charge_id = $2)
+           LIMIT 1
+          `,
+          [chargeId, providerChargeId]
+        );
+
+        if (duplicate.rowCount && String(duplicate.rows[0].status || '') === 'succeeded') {
+          await tx.query("COMMIT");
+          await safeReply(ctx, "ℹ️ Этот платеж уже обработан. Контакты уже открыты.");
+          await sendUnlockedServiceCard(ctx, serviceId);
+          return;
         }
+
+        const serviceCheck = await validateServiceForTelegramUnlock(tx, serviceId);
+        if (!serviceCheck.ok) {
+          await tx.query(
+            `
+            INSERT INTO telegram_payments (
+              status, payment_type, client_id, service_id, invoice_payload,
+              telegram_payment_charge_id, provider_payment_charge_id,
+              amount_minor, amount_sum, currency, error, meta
+            )
+            VALUES ('needs_manual_review', 'unlock_contact', $1, $2, $3, NULLIF($4,''), NULLIF($5,''), $6, $7, $8, $9, $10::jsonb)
+            ON CONFLICT (telegram_payment_charge_id)
+            WHERE telegram_payment_charge_id IS NOT NULL AND telegram_payment_charge_id <> ''
+            DO UPDATE SET status='needs_manual_review', error=EXCLUDED.error, meta=telegram_payments.meta || EXCLUDED.meta, processed_at=NOW()
+            `,
+            [
+              Number(clientRow.id),
+              Number(serviceId),
+              parsed.raw,
+              chargeId,
+              providerChargeId,
+              paidMinor,
+              paidAmount,
+              String(sp.currency || PAYMENTS_CURRENCY || 'UZS'),
+              serviceCheck.reason,
+              JSON.stringify({ successful_payment: sp, reason: serviceCheck.reason }),
+            ]
+          );
+          await tx.query("COMMIT");
+
+          await trackTelegramBotEvent('tg_unlock_payment_needs_manual_review', {
+            clientId: Number(clientRow.id),
+            serviceId,
+            chatId,
+            meta: { reason: serviceCheck.reason, paid_amount_sum: paidAmount },
+          });
+          await safeReply(
+            ctx,
+            "⚠️ Оплата прошла, но услуга уже недоступна. Мы видим платеж и разберём его вручную. Напишите администратору."
+          );
+          return;
+        }
+
+        await tx.query(
+          `
+          INSERT INTO telegram_payments (
+            status, payment_type, client_id, service_id, invoice_payload,
+            telegram_payment_charge_id, provider_payment_charge_id,
+            amount_minor, amount_sum, currency, source, meta
+          )
+          VALUES ('processing', 'unlock_contact', $1, $2, $3, NULLIF($4,''), NULLIF($5,''), $6, $7, $8, 'telegram_bot', $9::jsonb)
+          ON CONFLICT (telegram_payment_charge_id)
+          WHERE telegram_payment_charge_id IS NOT NULL AND telegram_payment_charge_id <> ''
+          DO UPDATE SET
+            status = CASE WHEN telegram_payments.status = 'succeeded' THEN telegram_payments.status ELSE 'processing' END,
+            meta = telegram_payments.meta || EXCLUDED.meta
+          RETURNING id, status
+          `,
+          [
+            Number(clientRow.id),
+            Number(serviceId),
+            parsed.raw,
+            chargeId,
+            providerChargeId,
+            paidMinor,
+            paidAmount,
+            String(sp.currency || PAYMENTS_CURRENCY || 'UZS'),
+            JSON.stringify({ successful_payment: sp }),
+          ]
+        );
 
         await tx.query(
           `
@@ -10914,6 +11242,7 @@ bot.on("successful_payment", async (ctx) => {
           INSERT INTO contact_balance_ledger
             (client_id, amount, reason, service_id, source, meta)
           VALUES ($1,0,'unlock_telegram_payment',$2,'telegram_payment',$3::jsonb)
+          ON CONFLICT DO NOTHING
           `,
           [
             Number(clientRow.id),
@@ -10929,7 +11258,30 @@ bot.on("successful_payment", async (ctx) => {
           ]
         );
 
+        await tx.query(
+          `
+          UPDATE telegram_payments
+             SET status='succeeded', processed_at=NOW(), error=NULL
+           WHERE ($1 <> '' AND telegram_payment_charge_id = $1)
+              OR ($2 <> '' AND provider_payment_charge_id = $2)
+          `,
+          [chargeId, providerChargeId]
+        );
+
         await tx.query("COMMIT");
+
+        await trackTelegramBotEvent('tg_unlock_invoice_paid', {
+          clientId: Number(clientRow.id),
+          serviceId,
+          providerId: serviceCheck.service?.provider_id || null,
+          chatId,
+          meta: {
+            paid_amount_sum: paidAmount,
+            currency: sp.currency,
+            telegram_payment_charge_id: sp.telegram_payment_charge_id,
+            provider_payment_charge_id: sp.provider_payment_charge_id,
+          },
+        });
 
         await safeReply(
           ctx,
@@ -10939,55 +11291,91 @@ bot.on("successful_payment", async (ctx) => {
             `⚡ Рекомендуем написать поставщику сразу — отказные варианты часто уходят быстро.`,
           { parse_mode: "HTML" }
         );
+
         await sendUnlockedServiceCard(ctx, serviceId);
+
+        await trackTelegramBotEvent('tg_unlock_success', {
+          clientId: Number(clientRow.id),
+          serviceId,
+          providerId: serviceCheck.service?.provider_id || null,
+          chatId,
+          meta: { source: 'telegram_payment' },
+        });
         return;
       } catch (e) {
         try { await tx.query("ROLLBACK"); } catch {}
+        await markTelegramPaymentFailed({ parsed, sp, error: e });
+        await trackTelegramBotEvent('tg_unlock_payment_failed', {
+          clientId: Number(clientRow.id),
+          serviceId,
+          chatId,
+          meta: { error: e?.message || String(e) },
+        });
         throw e;
       } finally {
         tx.release();
       }
     }
 
-    const payloadAmount = Number(parts[2] || 0);
-    const creditAmount =
-      Number.isFinite(payloadAmount) && payloadAmount > 0 ? Math.trunc(payloadAmount) : paidMajor;
+    const creditAmount = Number.isFinite(parsed.amountSum) && parsed.amountSum > 0
+      ? Math.trunc(parsed.amountSum)
+      : paidMajor;
 
     const tx = await pool.connect();
     try {
       await tx.query("BEGIN");
       const chargeId = String(sp.telegram_payment_charge_id || "");
       const providerChargeId = String(sp.provider_payment_charge_id || "");
-      
-      if (chargeId || providerChargeId) {
-        const ex = await tx.query(
-          `
-          SELECT 1
-            FROM contact_balance_ledger
-           WHERE client_id = $1
-             AND reason = 'topup_telegram'
-             AND (
-               (meta->>'telegram_payment_charge_id' = $2 AND $2 <> '')
-               OR
-               (meta->>'provider_payment_charge_id' = $3 AND $3 <> '')
-             )
-           LIMIT 1
-          `,
-          [Number(clientRow.id), chargeId, providerChargeId]
-        );
-        if (ex.rowCount) {
-                    // ✅ EXTRA SAFETY: если ledger уже содержит списание по этой услуге — повторно не списываем
+      const lockKey = chargeId || providerChargeId || parsed.raw || `tg_topup:${clientRow.id}:${Date.now()}`;
+      await tx.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`telegram_payment:${lockKey}`]);
 
-          await tx.query("ROLLBACK");
-          const balNow = await getClientBalanceUnified(pool, clientRow.id);
-          await safeReply(
-            ctx,
-            `ℹ️ Этот платеж уже был зачислен.\n\nВаш баланс: <b>${Number(balNow || 0).toLocaleString("ru-RU")}</b> сум`,
-            { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "💰 Проверить баланс", callback_data: "balance:check" }]] } }
-          );
-          return;
-        }
+      const ex = await tx.query(
+        `
+        SELECT 1
+          FROM telegram_payments
+         WHERE status='succeeded'
+           AND (($1 <> '' AND telegram_payment_charge_id = $1)
+             OR ($2 <> '' AND provider_payment_charge_id = $2))
+         LIMIT 1
+        `,
+        [chargeId, providerChargeId]
+      );
+
+      if (ex.rowCount) {
+        await tx.query("ROLLBACK");
+        const balNow = await getClientBalanceUnified(pool, clientRow.id);
+        await safeReply(
+          ctx,
+          `ℹ️ Этот платеж уже был зачислен.\n\nВаш баланс: <b>${Number(balNow || 0).toLocaleString("ru-RU")}</b> сум`,
+          { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "💰 Проверить баланс", callback_data: "balance:check" }]] } }
+        );
+        return;
       }
+
+      await tx.query(
+        `
+        INSERT INTO telegram_payments (
+          status, payment_type, client_id, invoice_payload,
+          telegram_payment_charge_id, provider_payment_charge_id,
+          amount_minor, amount_sum, currency, source, meta
+        )
+        VALUES ('processing', 'contact_topup', $1, $2, NULLIF($3,''), NULLIF($4,''), $5, $6, $7, 'telegram_bot', $8::jsonb)
+        ON CONFLICT (telegram_payment_charge_id)
+        WHERE telegram_payment_charge_id IS NOT NULL AND telegram_payment_charge_id <> ''
+        DO UPDATE SET status='processing', meta=telegram_payments.meta || EXCLUDED.meta
+        `,
+        [
+          Number(clientRow.id),
+          parsed.raw,
+          chargeId,
+          providerChargeId,
+          paidMinor,
+          creditAmount,
+          String(sp.currency || PAYMENTS_CURRENCY || 'UZS'),
+          JSON.stringify({ successful_payment: sp }),
+        ]
+      );
+
       const res = await addContactBalanceLedgerTx(tx, {
         clientId: clientRow.id,
         amount: creditAmount,
@@ -11002,10 +11390,28 @@ bot.on("successful_payment", async (ctx) => {
           invoice_payload: sp.invoice_payload,
         },
       });
+
+      await tx.query(
+        `
+        UPDATE telegram_payments
+           SET status='succeeded', processed_at=NOW(), error=NULL
+         WHERE ($1 <> '' AND telegram_payment_charge_id = $1)
+            OR ($2 <> '' AND provider_payment_charge_id = $2)
+        `,
+        [chargeId, providerChargeId]
+      );
+
       await tx.query("COMMIT");
 
       const bal = Number(res?.balance || 0).toLocaleString("ru-RU");
       const sid = Number(ctx.session?.lastUnlockServiceId || 0);
+
+      await trackTelegramBotEvent('tg_topup_success', {
+        clientId: Number(clientRow.id),
+        serviceId: sid || null,
+        chatId,
+        meta: { amount_sum: creditAmount, currency: sp.currency },
+      });
       
       if (sid > 0) {
         try {
@@ -11037,13 +11443,27 @@ bot.on("successful_payment", async (ctx) => {
       );
     } catch (e) {
       try { await tx.query("ROLLBACK"); } catch {}
+      await markTelegramPaymentFailed({ parsed, sp, error: e });
       throw e;
     } finally {
       tx.release();
     }
   } catch (e) {
     console.error("[tg-bot] successful_payment handler error:", e?.message || e);
-    try { await safeReply(ctx, "⚠️ Платеж получен, но произошла ошибка при зачислении. Напишите администратору."); } catch {}
+    try {
+      await safeReply(
+        ctx,
+        "⚠️ Платеж получен, но произошла ошибка при обработке. Нажмите кнопку ниже — мы повторим открытие контактов.",
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "🔄 Повторить открытие контактов", callback_data: "balance:retry" }],
+              [{ text: "🆘 Написать администратору", url: `${SITE_URL}/support/project` }],
+            ],
+          },
+        }
+      );
+    } catch {}
   }
 });
 
