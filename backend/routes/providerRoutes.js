@@ -78,6 +78,174 @@ router.put("/password", authenticateToken, requireProvider, changeProviderPasswo
 
 router.get("/stats", authenticateToken, requireProvider, getProviderStats);
 
+
+router.get("/finance", authenticateToken, requireProvider, async (req, res) => {
+  const providerId = Number(req.user.id);
+  if (!Number.isFinite(providerId) || providerId <= 0) {
+    return res.status(401).json({ ok: false, message: "Требуется авторизация поставщика" });
+  }
+
+  async function hasTable(name) {
+    const r = await pool.query(
+      `SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name=$1 LIMIT 1`,
+      [name]
+    );
+    return !!r.rowCount;
+  }
+
+  const toSum = (v) => Math.round(Number(v || 0) / 100);
+
+  try {
+    const unlocksQ = await pool.query(
+      `
+      SELECT
+        u.id,
+        u.client_id,
+        u.service_id,
+        u.price_charged,
+        FLOOR(COALESCE(u.price_charged, 0) / 100)::bigint AS price_sum,
+        u.source,
+        u.created_at,
+        COALESCE(c.name, c.full_name, c.phone, 'Client #' || u.client_id::text) AS client_name,
+        c.phone AS client_phone,
+        c.telegram AS client_telegram,
+        s.title AS service_title,
+        s.category AS service_category
+      FROM client_service_contact_unlocks u
+      JOIN services s ON s.id = u.service_id
+      LEFT JOIN clients c ON c.id = u.client_id
+      WHERE s.provider_id = $1
+      ORDER BY u.created_at DESC, u.id DESC
+      LIMIT 50
+      `,
+      [providerId]
+    );
+
+    const statsQ = await pool.query(
+      `
+      SELECT
+        COUNT(*)::bigint AS unlock_count,
+        COALESCE(SUM(COALESCE(u.price_charged, 0)), 0)::bigint AS unlock_amount_tiyin,
+        FLOOR(COALESCE(SUM(COALESCE(u.price_charged, 0)), 0) / 100)::bigint AS unlock_amount_sum
+      FROM client_service_contact_unlocks u
+      JOIN services s ON s.id = u.service_id
+      WHERE s.provider_id = $1
+      `,
+      [providerId]
+    );
+
+    let telegramPayments = [];
+    let telegramStats = { telegram_paid_count: 0, telegram_paid_sum: 0 };
+    if (await hasTable("telegram_payments")) {
+      const tgQ = await pool.query(
+        `
+        SELECT
+          tp.id,
+          tp.payment_type,
+          tp.client_id,
+          tp.service_id,
+          tp.status,
+          tp.source,
+          tp.currency,
+          tp.amount_minor,
+          COALESCE(tp.amount_sum, FLOOR(COALESCE(tp.amount_minor,0) / 100))::bigint AS amount_sum,
+          tp.telegram_payment_charge_id,
+          tp.provider_payment_charge_id,
+          tp.created_at,
+          s.title AS title,
+          s.category AS service_category
+        FROM telegram_payments tp
+        JOIN services s ON s.id = tp.service_id
+        WHERE s.provider_id = $1
+        ORDER BY tp.created_at DESC, tp.id DESC
+        LIMIT 50
+        `,
+        [providerId]
+      );
+      telegramPayments = tgQ.rows || [];
+
+      const tgStatsQ = await pool.query(
+        `
+        SELECT
+          COUNT(*) FILTER (WHERE tp.status IN ('paid','success','completed','unlocked'))::bigint AS telegram_paid_count,
+          COALESCE(SUM(CASE WHEN tp.status IN ('paid','success','completed','unlocked') THEN COALESCE(tp.amount_sum, FLOOR(COALESCE(tp.amount_minor,0) / 100)) ELSE 0 END),0)::bigint AS telegram_paid_sum
+        FROM telegram_payments tp
+        JOIN services s ON s.id = tp.service_id
+        WHERE s.provider_id = $1
+        `,
+        [providerId]
+      );
+      telegramStats = tgStatsQ.rows?.[0] || telegramStats;
+    }
+
+    let supportDonations = [];
+    let supportStats = { support_paid_count: 0, support_paid_sum: 0 };
+    if (await hasTable("provider_support_donations")) {
+      const supportQ = await pool.query(
+        `
+        SELECT
+          d.id,
+          d.provider_id,
+          d.service_id,
+          d.status,
+          d.source,
+          d.payme_id,
+          d.payme_order_id,
+          d.amount_tiyin,
+          FLOOR(COALESCE(d.amount_tiyin,0) / 100)::bigint AS amount_sum,
+          d.created_at,
+          d.paid_at,
+          COALESCE(s.title, 'Поддержка проекта') AS title
+        FROM provider_support_donations d
+        LEFT JOIN services s ON s.id = d.service_id
+        WHERE d.provider_id = $1
+           OR s.provider_id = $1
+        ORDER BY d.created_at DESC, d.id DESC
+        LIMIT 50
+        `,
+        [providerId]
+      );
+      supportDonations = supportQ.rows || [];
+
+      const supportStatsQ = await pool.query(
+        `
+        SELECT
+          COUNT(*) FILTER (WHERE d.status = 'paid')::bigint AS support_paid_count,
+          FLOOR(COALESCE(SUM(CASE WHEN d.status = 'paid' THEN d.amount_tiyin ELSE 0 END),0) / 100)::bigint AS support_paid_sum
+        FROM provider_support_donations d
+        LEFT JOIN services s ON s.id = d.service_id
+        WHERE d.provider_id = $1
+           OR s.provider_id = $1
+        `,
+        [providerId]
+      );
+      supportStats = supportStatsQ.rows?.[0] || supportStats;
+    }
+
+    const baseStats = statsQ.rows?.[0] || {};
+    return res.json({
+      ok: true,
+      provider_id: providerId,
+      stats: {
+        unlock_count: Number(baseStats.unlock_count || 0),
+        unlock_amount_tiyin: Number(baseStats.unlock_amount_tiyin || 0),
+        unlock_amount_sum: Number(baseStats.unlock_amount_sum || 0),
+        telegram_paid_count: Number(telegramStats.telegram_paid_count || 0),
+        telegram_paid_sum: Number(telegramStats.telegram_paid_sum || 0),
+        support_paid_count: Number(supportStats.support_paid_count || 0),
+        support_paid_sum: Number(supportStats.support_paid_sum || 0),
+      },
+      recent_unlocks: unlocksQ.rows || [],
+      telegram_payments: telegramPayments,
+      support_donations: supportDonations,
+    });
+  } catch (e) {
+    console.error("providers/finance error:", e);
+    return res.status(500).json({ ok: false, message: "provider finance error" });
+  }
+});
+
+
 router.get("/services", authenticateToken, requireProvider, getServices);
 router.post("/services", authenticateToken, requireProvider, addService);
 router.put("/services/:id", authenticateToken, requireProvider, updateService);
