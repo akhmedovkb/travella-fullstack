@@ -93,7 +93,7 @@ async function enrichActor(req, payload) {
 
   if (actorId && (actorRole === "provider" || actorRole === "admin" || actorRole === "moderator")) {
     const { rows } = await pool.query(
-      `SELECT COALESCE(company_name, name, full_name, email) AS name, phone FROM providers WHERE id = $1 LIMIT 1`,
+      `SELECT COALESCE(name, email) AS name, phone FROM providers WHERE id = $1 LIMIT 1`,
       [actorId]
     );
     actorName = rows[0]?.name || actorName;
@@ -214,7 +214,7 @@ async function getActivityEvents(req, res) {
         ae.*,
         s.title AS service_title,
         s.category AS service_category,
-        p.company_name AS provider_company_name,
+        p.name AS provider_company_name,
         c.name AS client_name,
         c.phone AS client_phone
       FROM activity_events ae
