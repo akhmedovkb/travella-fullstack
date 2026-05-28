@@ -7365,13 +7365,13 @@ bot.hears(/^\/testpay(?:@\w+)?$/i, async (ctx) => {
     await ctx.telegram.sendInvoice(ctx.chat.id, {
       title: "Тест Payme",
       description: "Проверка Telegram Payments",
-      payload: `contact_topup:${ctx.from.id}:1000:${Date.now()}`,
+      payload: `contact_topup:${ctx.from.id}:10000:${Date.now()}`,
       provider_token: PAYMENTS_PROVIDER_TOKEN,
       currency: PAYMENTS_CURRENCY,
       prices: [
         {
           label: "Тестовый платеж",
-          amount: 1000 * currencyMinorFactor(PAYMENTS_CURRENCY),
+          amount: 10000 * currencyMinorFactor(PAYMENTS_CURRENCY),
         },
       ],
       start_parameter: "test_payment",
