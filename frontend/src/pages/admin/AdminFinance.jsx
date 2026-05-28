@@ -8,30 +8,24 @@ import AdminBilling from "./AdminBilling";
 import AdminContactBalance from "./AdminContactBalance";
 import AdminUnlockFunnel from "./AdminUnlockFunnel";
 import AdminUnlockNudgeAnalytics from "./AdminUnlockNudgeAnalytics";
-import PaymeDashboard from "./PaymeDashboard";
-import AdminPaymeEvents from "./AdminPaymeEvents";
-import PaymePayments from "./PaymePayments";
 import AdminTravelSales from "./AdminTravelSales";
-import AdminProviderSupport from "./AdminProviderSupport";
 import AdminActivityEvents from "./AdminActivityEvents";
+import PaymePayments from "./PaymePayments";
 
 const VALID_TABS = new Set([
   "clients",
-  "payme",
-  "events",
+  "payments",
   "funnel",
   "nudges",
   "audit",
   "health",
-  "payments",
   "travel",
-  "support",
   "activity",
 ]);
 
 function normalizeTab(x) {
   const t = String(x || "").trim().toLowerCase();
-  return VALID_TABS.has(t) ? t : "clients";
+  return VALID_TABS.has(t) ? t : "payments";
 }
 
 export default function AdminFinance() {
@@ -67,29 +61,23 @@ export default function AdminFinance() {
 
         <div className="flex flex-wrap items-center gap-2">
           <TabBtn id="clients">Clients</TabBtn>
-          <TabBtn id="payme">Payme</TabBtn>
-          <TabBtn id="events">Events</TabBtn>
+          <TabBtn id="payments">Payments</TabBtn>
           <TabBtn id="funnel">Funnel</TabBtn>
           <TabBtn id="nudges">Nudges</TabBtn>
           <TabBtn id="audit">Audit</TabBtn>
           <TabBtn id="health">Health</TabBtn>
-          <TabBtn id="payments">Payments</TabBtn>
           <TabBtn id="travel">Travel Sales</TabBtn>
-          <TabBtn id="support">Support</TabBtn>
           <TabBtn id="activity">Clicks</TabBtn>
         </div>
       </div>
 
       {tab === "clients" && <AdminContactBalance />}
-      {tab === "payme" && <PaymeDashboard />}
-      {tab === "events" && <AdminPaymeEvents />}
+      {tab === "payments" && <PaymePayments />}
       {tab === "funnel" && <AdminUnlockFunnel />}
       {tab === "nudges" && <AdminUnlockNudgeAnalytics />}
       {tab === "audit" && <AdminBilling />}
       {tab === "health" && <AdminPaymeHealth />}
-      {tab === "payments" && <PaymePayments />}
       {tab === "travel" && <AdminTravelSales />}
-      {tab === "support" && <AdminProviderSupport />}
       {tab === "activity" && <AdminActivityEvents />}
     </div>
   );
