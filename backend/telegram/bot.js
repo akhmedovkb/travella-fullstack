@@ -7362,21 +7362,20 @@ bot.hears(/^\/testpay(?:@\w+)?$/i, async (ctx) => {
       return;
     }
 
-    await ctx.telegram.sendInvoice(
-      ctx.chat.id,
-      "Тест Payme",
-      "Проверка Telegram Payments",
-      `contact_topup:${ctx.from.id}:1000:${Date.now()}`,
-      PAYMENTS_PROVIDER_TOKEN,
-      "test_payment",
-      PAYMENTS_CURRENCY,
-      [
+    await ctx.telegram.sendInvoice(ctx.chat.id, {
+      title: "Тест Payme",
+      description: "Проверка Telegram Payments",
+      payload: `contact_topup:${ctx.from.id}:1000:${Date.now()}`,
+      provider_token: PAYMENTS_PROVIDER_TOKEN,
+      currency: PAYMENTS_CURRENCY,
+      prices: [
         {
           label: "Тестовый платеж",
           amount: 1000 * currencyMinorFactor(PAYMENTS_CURRENCY),
         },
-      ]
-    );
+      ],
+      start_parameter: "test_payment",
+    });
   } catch (e) {
     console.error("[tg-bot] /testpay error:", e?.message || e);
     await ctx.reply("❌ Ошибка Telegram Payme testpay");
