@@ -558,6 +558,13 @@ export default function Header() {
                         description={`${loading ? "…" : bookingsBadge} бронирований`}
                         icon={<IconBookings />}
                       />
+
+                      <DropdownItem
+                        to="/dashboard/finance"
+                        label={t("nav.provider_finance", "Финансы")}
+                        description={t("nav.provider_finance_desc", "Открытия контактов, Telegram Payme и support")}
+                        icon={<IconWallet />}
+                      />
                   
                     </DropdownPanel>
                   )}
@@ -692,6 +699,7 @@ export default function Header() {
                 <NavItemMobileDark to="/dashboard/requests" label={t("nav.requests", "Запросы")} icon={<IconRequests />} badge={providerRequests} loading={loading} />
                 <NavItemMobileDark to="/dashboard/favorites" label={t("nav.favorites", "Избранное")} icon={<IconHeart />} badge={favCount} />
                 <NavItemMobileDark to="/dashboard/bookings" label={t("nav.bookings", "Брони")} icon={<IconBookings />} badge={bookingsBadge} loading={loading} />
+                <NavItemMobileDark to="/dashboard/finance" label={t("nav.provider_finance", "Финансы")} icon={<IconWallet />} />
                 <NavItemMobileDark to="/dashboard/passport-parser" label="Passport Parser" icon={<IconDoc />} />
               </RowGroupDark>
             )}
