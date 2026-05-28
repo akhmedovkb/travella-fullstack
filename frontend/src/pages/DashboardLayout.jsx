@@ -19,6 +19,10 @@ export default function DashboardLayout() {
           className={({isActive}) => `px-3 py-1.5 rounded-full ${isActive ? "bg-gray-900 text-white" : "text-gray-700 hover:bg-gray-50"}`}>
           {t("calendar") || "Календарь"}
         </NavLink>
+        <NavLink to="/dashboard/finance"
+          className={({isActive}) => `px-3 py-1.5 rounded-full ${isActive ? "bg-gray-900 text-white" : "text-gray-700 hover:bg-gray-50"}`}>
+          📈 Спрос и клиенты
+        </NavLink>
       </div>
 
       {/* сюда рендерятся вкладки */}
