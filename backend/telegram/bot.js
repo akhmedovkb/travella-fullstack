@@ -7355,6 +7355,34 @@ async function handlePhoneRegistration(ctx, requestedRole, phone) {
   }
 }
 
+bot.hears(/^\/testpay(?:@\w+)?$/i, async (ctx) => {
+  try {
+    if (!PAYMENTS_PROVIDER_TOKEN) {
+      await ctx.reply("❌ TELEGRAM_PAYMENTS_PROVIDER_TOKEN отсутствует");
+      return;
+    }
+
+    await ctx.telegram.sendInvoice(
+      ctx.chat.id,
+      "Тест Payme",
+      "Проверка Telegram Payments",
+      `contact_topup:${ctx.from.id}:1000:${Date.now()}`,
+      PAYMENTS_PROVIDER_TOKEN,
+      "test_payment",
+      PAYMENTS_CURRENCY,
+      [
+        {
+          label: "Тестовый платеж",
+          amount: 1000 * currencyMinorFactor(PAYMENTS_CURRENCY),
+        },
+      ]
+    );
+  } catch (e) {
+    console.error("[tg-bot] /testpay error:", e?.message || e);
+    await ctx.reply("❌ Ошибка Telegram Payme testpay");
+  }
+});
+
 /* ===================== /start ===================== */
 
 bot.start(async (ctx) => {
