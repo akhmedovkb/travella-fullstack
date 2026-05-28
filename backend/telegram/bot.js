@@ -10669,6 +10669,107 @@ async function sendUnlockedServiceCard(ctx, serviceId) {
   }
 }
 
+async function getUnlockPaymentPreview(ctx, serviceId) {
+  const sid = Number(serviceId);
+  const out = { title: "Контакты поставщика", photoUrl: null, service: null };
+
+  try {
+    const { data } = await axios.get(`/api/telegram/service/${sid}`, {
+      params: { role: "client", chatId: ctx.from?.id },
+    });
+
+    if (data?.success && data?.service) {
+      const svc = data.service;
+      const category = String(svc.category || "").toLowerCase();
+      const d = parseDetailsAny(svc.details);
+      const pickedTitle =
+        svc.title ||
+        d.title ||
+        d.hotelName ||
+        d.hotel ||
+        d.directionCountry ||
+        "Контакты поставщика";
+
+      out.title = String(pickedTitle || out.title).trim() || out.title;
+      out.service = svc;
+
+      try {
+        const built = buildServiceMessage(svc, category, "client", {
+          unlocked: false,
+          isInline: false,
+          forceRefused: String(category || "").startsWith("refused_") || category === "author_tour",
+        });
+        if (built?.photoUrl) out.photoUrl = built.photoUrl;
+      } catch {}
+
+      return out;
+    }
+  } catch (e) {
+    console.error("[tg-bot] getUnlockPaymentPreview service error:", e?.message || e);
+  }
+
+  try {
+    const brief = await fetchServiceBrief(sid);
+    if (brief?.title) out.title = String(brief.title).trim() || out.title;
+  } catch {}
+
+  return out;
+}
+
+function buildUnlockPaywallText({ title, balanceSum, priceSum }) {
+  const bal = Number(balanceSum || 0).toLocaleString("ru-RU");
+  const price = Number(priceSum || 0).toLocaleString("ru-RU");
+  const safeTitle = escapeHtml(truncate(title || "Контакты поставщика", 90));
+
+  return (
+    `🔓 <b>Открытие контактов поставщика</b>\n\n` +
+    `📌 <b>${safeTitle}</b>\n\n` +
+    `После оплаты вы сразу получите:\n` +
+    `📞 телефон поставщика\n` +
+    `💬 Telegram / прямую связь\n` +
+    `⚡ возможность быстро забронировать вариант без ожидания\n\n` +
+    `🔥 Отказные предложения часто уходят быстро — лучше связаться сразу после открытия контактов.\n\n` +
+    `💰 Ваш баланс: <b>${bal}</b> сум\n` +
+    `🔐 Стоимость открытия: <b>${price}</b> сум\n\n` +
+    `✅ Контакты откроются автоматически сразу после успешной оплаты.`
+  );
+}
+
+async function sendUnlockPaywallCard(ctx, { serviceId, balanceSum, priceSum }) {
+  const preview = await getUnlockPaymentPreview(ctx, serviceId);
+  const price = Number(priceSum || 0).toLocaleString("ru-RU");
+  const text = buildUnlockPaywallText({
+    title: preview.title,
+    balanceSum,
+    priceSum,
+  });
+
+  const replyMarkup = {
+    inline_keyboard: [
+      [
+        PAYMENTS_PROVIDER_TOKEN
+          ? { text: `💳 Оплатить и открыть (${price} сум)`, callback_data: `unlock:pay:${serviceId}` }
+          : { text: "💳 Пополнить баланс", url: `${SITE_URL}/dashboard/balance` },
+      ],
+      [{ text: "🔓 Повторить открытие", callback_data: "balance:retry" }],
+    ],
+  };
+
+  if (preview.photoUrl) {
+    await safeReplyWithPhoto(ctx, preview.photoUrl, text, {
+      parse_mode: "HTML",
+      reply_markup: replyMarkup,
+    });
+    return;
+  }
+
+  await safeReply(ctx, text, {
+    parse_mode: "HTML",
+    disable_web_page_preview: true,
+    reply_markup: replyMarkup,
+  });
+}
+
 async function sendUnlockContactInvoice(ctx, { clientId, serviceId, amountSum }) {
   const cid = Number(clientId);
   const sid = Number(serviceId);
@@ -10687,21 +10788,22 @@ async function sendUnlockContactInvoice(ctx, { clientId, serviceId, amountSum })
     return { ok: false, reason: "bad_amount" };
   }
 
-  let title = "Контакты поставщика";
-  try {
-    const brief = await fetchServiceBrief(sid);
-    if (brief?.title) title = truncate(String(brief.title), 80);
-  } catch {}
+  const preview = await getUnlockPaymentPreview(ctx, sid);
+  const invoiceTitle = "🔥 Контакты поставщика Travella";
+  const invoiceDescription = truncate(
+    `${preview.title || "Контакты поставщика"} · телефон и Telegram откроются автоматически`,
+    255
+  );
 
   await ctx.telegram.sendInvoice(ctx.chat.id, {
-    title: "Открытие контактов",
-    description: title,
+    title: invoiceTitle,
+    description: invoiceDescription,
     payload: `unlock_contact:${cid}:${sid}:${amount}:${Date.now()}`,
     provider_token: PAYMENTS_PROVIDER_TOKEN,
     currency: PAYMENTS_CURRENCY,
     prices: [
       {
-        label: "Открытие контактов",
+        label: "Открытие контактов поставщика",
         amount: amount * currencyMinorFactor(PAYMENTS_CURRENCY),
       },
     ],
@@ -10831,7 +10933,10 @@ bot.on("successful_payment", async (ctx) => {
 
         await safeReply(
           ctx,
-          `✅ Оплата прошла успешно!\n\n🔓 Контакты открыты.\n💸 Оплачено: <b>${Number(paidAmount || 0).toLocaleString("ru-RU")}</b> сум`,
+          `✅ <b>Оплата прошла успешно!</b>\n\n` +
+            `🔓 Контакты поставщика открыты.\n` +
+            `💸 Оплачено: <b>${Number(paidAmount || 0).toLocaleString("ru-RU")}</b> сум\n\n` +
+            `⚡ Рекомендуем написать поставщику сразу — отказные варианты часто уходят быстро.`,
           { parse_mode: "HTML" }
         );
         await sendUnlockedServiceCard(ctx, serviceId);
@@ -11205,27 +11310,11 @@ if (!result.ok) {
     try {
       const topupUrl = `${SITE_URL}/dashboard/balance`;
 
-      await safeReply(
-        ctx,
-        "💳 <b>Открытие контактов</b>\n\n" +
-          `💰 Баланс: <b>${bal}</b> сум\n` +
-          `🔒 Стоимость открытия: <b>${need}</b> сум\n\n` +
-          "Можно оплатить и сразу открыть контакты внутри Telegram.",
-        {
-          parse_mode: "HTML",
-          disable_web_page_preview: true,
-          reply_markup: {
-            inline_keyboard: [
-              [
-                PAYMENTS_PROVIDER_TOKEN
-                  ? { text: `💳 Оплатить и открыть (${need} сум)`, callback_data: `unlock:pay:${serviceId}` }
-                  : { text: "💳 Пополнить баланс", url: topupUrl },
-              ],
-              [{ text: "🔓 Повторить открытие", callback_data: "balance:retry" }],
-            ],
-          },
-        }
-      );
+      await sendUnlockPaywallCard(ctx, {
+        serviceId,
+        balanceSum: balNum,
+        priceSum: needNum,
+      });
     } catch (e) {
       console.error("[tg-bot] no_balance UI error:", e?.message || e);
     }
