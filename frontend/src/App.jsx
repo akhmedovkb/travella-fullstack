@@ -60,6 +60,7 @@ import ClientBalance from "./pages/ClientBalance";
 // Провайдерские новые страницы
 import ProviderRequests from "./pages/ProviderRequests";
 import ProviderBookings from "./pages/ProviderBookings";
+import ProviderFinance from "./pages/ProviderFinance";
 
 // 🔹 Новые провайдерские страницы «услуг» + календарь
 import ProviderServicesTourBuilder from "./pages/ProviderServicesTourBuilder";
@@ -278,6 +279,14 @@ export default function App() {
               element={
                 <PrivateRoute>
                   <ProviderProfileCabinet />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/dashboard/finance"
+              element={
+                <PrivateRoute>
+                  <ProviderFinance />
                 </PrivateRoute>
               }
             />
