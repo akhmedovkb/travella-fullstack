@@ -185,6 +185,7 @@ export default function PaymePayments() {
             <option value="">All sources</option>
             <option value="web">Web Payme</option>
             <option value="telegram">Telegram</option>
+            <option value="telegram_invoice">Telegram invoice</option>
           </select>
 
           <select
