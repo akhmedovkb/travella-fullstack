@@ -605,610 +605,369 @@ const ProviderProfile = () => {
 
   // ---------- RENDER ----------
 
+  const publicName = profile?.name || "Travella";
+  const typeLabel = providerTypeLabel(profile?.type, t) || t("not_specified");
+  const locationsText = normalizeLocationList(profile.location).join(", ");
+  const heroPhoto = newPhoto || profile.photo || "https://placehold.co/160x160?text=Travella";
+  const contactReady = Boolean(profile?.phone && (profile?.social || profile?.telegram_username || profile?.telegramUsername));
+
   return (
-    <div className="w-full max-w-6xl mx-auto bg-white p-6 rounded-xl shadow-md flex flex-col min-w-0">
+    <div className="mx-auto w-full max-w-6xl min-w-0 space-y-5 px-3 sm:px-4 lg:px-0">
       <div id="anchor-profile-left" />
 
-      <div className="flex flex-col md:flex-row gap-4 items-stretch">
-        {/* Левая колонка: фото, телефон, адрес, карта, пароль, logout */}
-        <div className="flex flex-col items-center w-full md:w-1/2 h-full">
-          {/* Фото */}
-          <div className="relative flex flex-col items-center">
-            <div id="anchor-logo" />
-            <img
-              src={
-                newPhoto ||
-                profile.photo ||
-                "https://placehold.co/96x96"
-              }
-              className="w-24 h-24 rounded-full object-cover mb-2"
-              alt="Фото"
-            />
-            {isEditing && (
-              <>
-                <label className="inline-block bg-orange-500 text-white px-4 py-2 rounded cursor-pointer text-sm">
-                  {t("choose_files", {
-                    defaultValue: "Выбрать файлы",
-                  })}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handlePhotoChange}
-                    className="hidden"
-                  />
-                </label>
-                <div className="text-sm text-gray-600 mt-1">
-                  {newPhoto
-                    ? t("file_chosen")
-                    : t("no_files_selected")}
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Телефон */}
-          <h3 className="font-semibold text-lg mt-6 mb-2">
-            {t("phone")}
-          </h3>
-          {isEditing ? (
-            <input
-              type="tel"
-              placeholder={t("phone")}
-              value={newPhone}
-              onChange={(e) => setNewPhone(e.target.value)}
-              className="border px-3 py-2 mb-2 rounded w-full"
-            />
-          ) : (
-            <div className="border px-3 py-2 mb-2 rounded bg-gray-100 w-full text-center">
-              {profile.phone || t("not_specified")}
-            </div>
-          )}
-
-          {/* Email (только просмотр) */}
-          <h3 className="font-semibold text-lg mb-2">
-            {t("email", { defaultValue: "Email" })}
-          </h3>
-          <div className="border px-3 py-2 mb-2 rounded bg-gray-100 w-full text-center">
-            {profile.email || t("not_specified")}
-          </div>
-
-          {/* Адрес */}
-          <h3 className="font-semibold text-lg mb-2">
-            {t("address")}
-          </h3>
-          {isEditing ? (
-            <input
-              type="text"
-              placeholder={t("address")}
-              value={newAddress}
-              onChange={(e) =>
-                setNewAddress(e.target.value)
-              }
-              className="border px-3 py-2 mb-2 rounded w-full"
-            />
-          ) : (
-            <div className="border px-3 py-2 mb-2 rounded bg-gray-100 w-full text-center">
-              {profile.address || t("not_specified")}
-            </div>
-          )}
-
-          {/* Карта */}
-          {profile.address && !isEditing && (
-            <div className="w-full mb-4">
-              <iframe
-                title="provider-map"
-                width="100%"
-                height="200"
-                frameBorder="0"
-                scrolling="no"
-                marginHeight="0"
-                marginWidth="0"
-                className="rounded"
-                src={`https://www.google.com/maps?q=${encodeURIComponent(
-                  profile.address
-                )}&output=embed`}
-              />
-            </div>
-          )}
-
-          {/* Смена пароля */}
-          <div className="mt-4">
-            <button
-              type="button"
-              onClick={() => setPwdOpen((v) => !v)}
-              className="w-full flex items-center justify-between rounded-lg border px-4 py-2 font-semibold hover:bg-gray-50"
-              aria-expanded={pwdOpen}
-              aria-controls="pwd-collapse"
-            >
-              <span>{t("change_password")}</span>
-              <svg
-                className={`h-5 w-5 transition-transform ${
-                  pwdOpen ? "rotate-180" : ""
-                }`}
-                viewBox="0 0 20 20"
-                fill="currentColor"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M5.23 7.21a.75.75 0 011.06.02L10 11.06l3.71-3.83a.75.75 0 111.08 1.04l-4.25 4.38a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z"
-                  clipRule="evenodd"
+      {/* Product hero */}
+      <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_18px_60px_rgba(15,23,42,0.10)]">
+        <div className="relative bg-[radial-gradient(circle_at_18%_20%,rgba(255,115,22,0.28),transparent_32%),linear-gradient(135deg,#070b1d_0%,#111827_48%,#7c2d12_100%)] p-5 text-white sm:p-7">
+          <div className="absolute inset-x-0 bottom-0 h-px bg-white/15" />
+          <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+            <div className="flex min-w-0 items-center gap-4">
+              <div className="relative shrink-0">
+                <div id="anchor-logo" />
+                <img
+                  src={heroPhoto}
+                  className="h-24 w-24 rounded-3xl border border-white/20 object-cover shadow-2xl ring-4 ring-white/10"
+                  alt="Provider logo"
                 />
-              </svg>
-            </button>
-            <div
-              id="pwd-collapse"
-              className={`grid transition-all duration-300 ease-in-out overflow-hidden ${
-                pwdOpen
-                  ? "grid-rows-[1fr] mt-3"
-                  : "grid-rows-[0fr]"
-              }`}
-            >
-              <div className="min-h-0">
-                <div className="space-y-2">
-                  <input
-                    type="password"
-                    placeholder={
-                      t("current_password") ||
-                      "Текущий пароль"
-                    }
-                    value={oldPassword}
-                    onChange={(e) =>
-                      setOldPassword(e.target.value)
-                    }
-                    className="w-full border px-3 py-2 rounded"
-                  />
-                  <input
-                    type="password"
-                    placeholder={t("new_password")}
-                    value={newPassword}
-                    onChange={(e) =>
-                      setNewPassword(e.target.value)
-                    }
-                    className="w-full border px-3 py-2 rounded"
-                  />
-                  <button
-                    onClick={handleChangePassword}
-                    className="w-full bg-orange-500 text-white py-2 rounded font-bold"
-                  >
-                    {t("change")}
-                  </button>
+                <span className="absolute -bottom-2 -right-2 rounded-full bg-emerald-500 px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-white shadow-lg">
+                  {t("profile.verified", { defaultValue: "Active" })}
+                </span>
+              </div>
+
+              <div className="min-w-0">
+                <div className="inline-flex rounded-full bg-white/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-orange-100 ring-1 ring-white/10">
+                  Travella provider profile
+                </div>
+                <h1 className="mt-3 truncate text-3xl font-black tracking-[-0.04em] sm:text-4xl">
+                  {publicName}
+                </h1>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-sm font-semibold text-white/80">
+                  <span className="rounded-full bg-white/10 px-3 py-1 ring-1 ring-white/10">{typeLabel}</span>
+                  {locationsText ? (
+                    <span className="rounded-full bg-white/10 px-3 py-1 ring-1 ring-white/10">📍 {locationsText}</span>
+                  ) : null}
+                  {contactReady ? (
+                    <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-emerald-100 ring-1 ring-emerald-300/20">✅ Контакты заполнены</span>
+                  ) : (
+                    <span className="rounded-full bg-amber-500/15 px-3 py-1 text-amber-100 ring-1 ring-amber-300/20">⚠️ Контакты нужно проверить</span>
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* Logout */}
-            <button
-              onClick={() => {
-                if (typeof localStorage !== "undefined") {
-                  localStorage.removeItem("token");
-                  localStorage.removeItem("provider_id");
-                }
-                window.location.href = "/login";
-              }}
-              className="mt-3 w-full bg-red-600 text-white px-4 py-2 rounded font-semibold"
-            >
-              {t("logout")}
-            </button>
-          </div>
-        </div>
-
-        {/* Правая колонка: общие данные, регионы, автопарк, соцсети, языки, сертификат */}
-        <div className="w-full md:w-1/2 space-y-3 min-w-0">
-          <div>
-            <label className="block font-medium">
-              {t("name")}
-            </label>
-            <div className="border px-3 py-2 rounded bg-gray-100">
-              {profile.name}
-            </div>
-          </div>
-
-          <div>
-            <label className="block font-medium">
-              {t("type")}
-            </label>
-            <div className="border px-3 py-2 rounded bg-gray-100">
-              {t(profile.type)}
-            </div>
-          </div>
-
-          <div>
-            <label className="block font-medium">
-              {t("location")}{" "}
-              <span className="text-xs text-gray-500">
-                {t("location_hint", {
-                  defaultValue: (i18n?.language || "").startsWith(
-                    "ru"
-                  )
-                    ? "(вводите название города только на английском)"
-                    : (i18n?.language || "").startsWith("uz")
-                    ? "(shahar nomini faqat ingliz tilida kiriting)"
-                    : "(enter the city name in English only)",
-                })}
-              </span>
-            </label>
-            {isEditing ? (
-              <AsyncCreatableSelect
-                isMulti
-                cacheOptions
-                defaultOptions
-                {...ASYNC_MENU_PORTAL}
-                loadOptions={loadCities}
-                noOptionsMessage={ASYNC_I18N.noOptionsMessage}
-                loadingMessage={ASYNC_I18N.loadingMessage}
-                placeholder={t(
-                  "profile.regions_placeholder",
-                  {
-                    defaultValue:
-                      "Start typing city name (EN)…",
-                  }
-                )}
-                value={regions}
-                onChange={(vals) =>
-                  setRegions(vals || [])
-                }
-              />
-            ) : (
-              <div className="border px-3 py-2 rounded bg-gray-100">
-                {normalizeLocationList(profile.location).join(", ") ||
-                  t("not_specified")}
-              </div>
-            )}
-          </div>
-
-          {(profile.type === "guide" ||
-            profile.type === "transport") && (
-            <div className="mt-3">
-              <div id="anchor-transport" />
-              <label className="block font-medium mb-2">
-                {t("car_fleet") || "Автопарк"}
-              </label>
-
+            <div className="flex flex-wrap gap-2 md:justify-end">
               {isEditing ? (
                 <>
-                  <div className="space-y-3">
-                    {carFleet.map((car, idx) => (
-                      <div
-                        key={idx}
-                        className="border rounded p-3"
-                      >
-                        <div className="grid grid-cols-2 gap-3">
-                          <input
-                            className="border rounded px-3 py-2"
-                            placeholder="Модель (например, Chevrolet Lacetti)"
-                            value={car.model}
-                            onChange={(e) =>
-                              updateCar(idx, {
-                                model: e.target.value,
-                              })
-                            }
-                          />
-                          <input
-                            className="border rounded px-3 py-2"
-                            type="number"
-                            min={1}
-                            placeholder="Вместимость, мест"
-                            value={car.seats}
-                            onChange={(e) =>
-                              updateCar(idx, {
-                                seats: e.target.value,
-                              })
-                            }
-                          />
-                        </div>
-
-                        <div className="mt-2 flex items-center gap-3">
-                          <label className="inline-block bg-orange-500 text-white px-3 py-1.5 rounded cursor-pointer text-sm">
-                            {t("choose_files", {
-                              defaultValue: "Выбрать файлы",
-                            })}
-                            <input
-                              type="file"
-                              accept="image/*"
-                              multiple
-                              className="hidden"
-                              onChange={async (e) => {
-                                const files = Array.from(
-                                  e.target.files || []
-                                );
-                                const out = [];
-                                for (const f of files.slice(
-                                  0,
-                                  10
-                                )) {
-                                  try {
-                                    out.push(
-                                      await resizeImageFile(
-                                        f,
-                                        1200,
-                                        800,
-                                        0.85,
-                                        "image/jpeg"
-                                      )
-                                    );
-                                  } catch {
-                                    /* ignore */
-                                  }
-                                }
-                                updateCarImage(
-                                  idx,
-                                  [
-                                    ...(car.images || []),
-                                    ...out,
-                                  ].slice(0, 10)
-                                );
-                                e.target.value = "";
-                              }}
-                            />
-                          </label>
-                          <label className="inline-flex items-center gap-2 text-sm">
-                            <input
-                              type="checkbox"
-                              checked={
-                                car.is_active !== false
-                              }
-                              onChange={(e) =>
-                                updateCar(idx, {
-                                  is_active:
-                                    e.target.checked,
-                                })
-                              }
-                            />
-                            <span>{t("is_active")}</span>
-                          </label>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              removeCar(idx)
-                            }
-                            className="ml-auto text-red-600 text-sm"
-                          >
-                            {t("delete")}
-                          </button>
-                        </div>
-
-                        {car.images?.length ? (
-                          <div className="mt-2 grid grid-cols-4 gap-2">
-                            {car.images.map(
-                              (src, i) => (
-                                <div
-                                  key={i}
-                                  className="relative"
-                                >
-                                  <img
-                                    src={src}
-                                    alt=""
-                                    className="w-full h-20 object-cover rounded border"
-                                  />
-                                </div>
-                              )
-                            )}
-                          </div>
-                        ) : null}
-                      </div>
-                    ))}
-                  </div>
                   <button
                     type="button"
-                    onClick={addCar}
-                    className="mt-2 rounded border px-3 py-1.5 text-sm"
+                    onClick={handleSaveProfile}
+                    className="rounded-2xl bg-orange-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-orange-950/20 transition hover:bg-orange-600"
                   >
-                    + {t("add") || "Добавить авто"}
+                    💾 {t("save", { defaultValue: "Сохранить" })}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsEditing(false);
+                      setNewPhoto(null);
+                      setNewCertificate(null);
+                      setNewSocial(profile.social || "");
+                      setNewPhone(profile.phone || "");
+                      setNewAddress(profile.address || "");
+                      setRegions(normalizeLocationList(profile.location).map((c) => ({ value: c, label: c })));
+                      setCarFleet(Array.isArray(profile.car_fleet) ? profile.car_fleet : []);
+                    }}
+                    className="rounded-2xl bg-white/10 px-5 py-3 text-sm font-black text-white ring-1 ring-white/15 transition hover:bg-white/15"
+                  >
+                    {t("cancel", { defaultValue: "Отмена" })}
                   </button>
                 </>
               ) : (
-                <div className="space-y-2">
-                  {(Array.isArray(profile.car_fleet)
-                    ? profile.car_fleet
-                    : []
-                  ).map((c, i) => (
-                    <div
-                      key={i}
-                      className="border rounded p-2 flex items-center gap-3"
-                    >
-                      <div className="font-medium">
-                        {c.model}
-                      </div>
-                      <div className="text-sm text-gray-600">
-                        • {c.seats} мест
-                      </div>
-                      {c.images?.[0] ? (
-                        <img
-                          src={c.images[0]}
-                          alt=""
-                          className="ml-auto w-12 h-12 object-cover rounded"
-                        />
-                      ) : null}
-                    </div>
-                  ))}
-                  {!profile?.car_fleet?.length && (
-                    <div className="text-gray-500">
-                      {t("not_specified")}
-                    </div>
-                  )}
+                <button
+                  type="button"
+                  onClick={() => setIsEditing(true)}
+                  className="rounded-2xl bg-white px-5 py-3 text-sm font-black text-slate-950 shadow-lg transition hover:bg-orange-50"
+                >
+                  ✏️ {t("edit", { defaultValue: "Редактировать" })}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {isEditing && (
+          <div className="border-b border-slate-100 bg-orange-50/70 px-5 py-3 text-sm font-semibold text-orange-900 sm:px-7">
+            Режим редактирования включён. После изменений нажмите “Сохранить”.
+          </div>
+        )}
+      </section>
+
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.08fr_0.92fr]">
+        <div className="space-y-5">
+          {/* Logo / contacts / map */}
+          <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <div className="mb-5 flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-black tracking-[-0.03em] text-slate-950">Основные контакты</h2>
+                <p className="mt-1 text-sm font-medium text-slate-500">Эти данные помогают клиентам быстрее связаться с вами после открытия контактов.</p>
+              </div>
+            </div>
+
+            {isEditing && (
+              <div className="mb-5 rounded-2xl border border-orange-100 bg-orange-50 p-4">
+                <div className="text-sm font-black text-orange-900">Логотип / фото профиля</div>
+                <label className="mt-3 inline-flex cursor-pointer items-center rounded-xl bg-orange-500 px-4 py-2 text-sm font-black text-white transition hover:bg-orange-600">
+                  {t("choose_files", { defaultValue: "Выбрать файл" })}
+                  <input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
+                </label>
+                <div className="mt-2 text-xs font-semibold text-orange-800/80">
+                  {newPhoto ? t("file_chosen") : t("no_files_selected")}
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <ProfileInfoBox label={t("phone", { defaultValue: "Телефон" })} icon="📞">
+                {isEditing ? (
+                  <input type="tel" placeholder={t("phone")} value={newPhone} onChange={(e) => setNewPhone(e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" />
+                ) : (
+                  <span>{profile.phone || t("not_specified")}</span>
+                )}
+              </ProfileInfoBox>
+
+              <ProfileInfoBox label={t("email", { defaultValue: "Email" })} icon="✉️">
+                <span>{profile.email || t("not_specified")}</span>
+              </ProfileInfoBox>
+            </div>
+
+            <div className="mt-4">
+              <ProfileInfoBox label={t("address", { defaultValue: "Адрес" })} icon="📍">
+                {isEditing ? (
+                  <input type="text" placeholder={t("address")} value={newAddress} onChange={(e) => setNewAddress(e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" />
+                ) : (
+                  <span>{profile.address || t("not_specified")}</span>
+                )}
+              </ProfileInfoBox>
+            </div>
+
+            {profile.address && !isEditing && (
+              <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+                <iframe
+                  title="provider-map"
+                  width="100%"
+                  height="230"
+                  frameBorder="0"
+                  scrolling="no"
+                  marginHeight="0"
+                  marginWidth="0"
+                  className="block"
+                  src={`https://www.google.com/maps?q=${encodeURIComponent(profile.address)}&output=embed`}
+                />
+              </div>
+            )}
+          </section>
+
+          {/* Business info */}
+          <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <h2 className="text-xl font-black tracking-[-0.03em] text-slate-950">Данные поставщика</h2>
+            <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <ProfileInfoBox label={t("name", { defaultValue: "Наименование" })} icon="🏢">
+                <span>{profile.name || t("not_specified")}</span>
+              </ProfileInfoBox>
+              <ProfileInfoBox label={t("type", { defaultValue: "Тип поставщика" })} icon="🧭">
+                <span>{typeLabel || t("not_specified")}</span>
+              </ProfileInfoBox>
+            </div>
+
+            <div className="mt-4">
+              <ProfileInfoBox
+                label={t("location", { defaultValue: "Регионы / города работы" })}
+                icon="🌍"
+                hint={t("location_hint", { defaultValue: "вводите название города только на английском" })}
+              >
+                {isEditing ? (
+                  <AsyncCreatableSelect
+                    isMulti
+                    cacheOptions
+                    defaultOptions
+                    {...ASYNC_MENU_PORTAL}
+                    loadOptions={loadCities}
+                    noOptionsMessage={ASYNC_I18N.noOptionsMessage}
+                    loadingMessage={ASYNC_I18N.loadingMessage}
+                    placeholder={t("profile.regions_placeholder", { defaultValue: "Start typing city name (EN)…" })}
+                    value={regions}
+                    onChange={(vals) => setRegions(vals || [])}
+                  />
+                ) : (
+                  <span>{locationsText || t("not_specified")}</span>
+                )}
+              </ProfileInfoBox>
+            </div>
+
+            <div className="mt-4">
+              <div id="anchor-telegram" />
+              <ProfileInfoBox label={t("social", { defaultValue: "Telegram / соцсети" })} icon="💬">
+                {isEditing ? (
+                  <input value={newSocial} onChange={(e) => setNewSocial(e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" placeholder="@username или ссылка" />
+                ) : (
+                  <span>{profile.social || profile.telegram_username || t("not_specified")}</span>
+                )}
+              </ProfileInfoBox>
+
+              {!isTgLinked && tgDeepLink && (
+                <div className="mt-3 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-950">
+                  <div className="font-black">{t("tg.title", { defaultValue: "Уведомления в Telegram" })}</div>
+                  <p className="mt-1 font-medium text-blue-900/80">{t("tg.subtitle", { defaultValue: "Свяжите Telegram и получайте уведомления о заявках, открытиях контактов и бронированиях." })}</p>
+                  <a href={tgDeepLink} target="_blank" rel="noreferrer" className="mt-3 inline-flex rounded-xl bg-blue-600 px-4 py-2 text-sm font-black text-white transition hover:bg-blue-700">
+                    {t("tg.connect", { defaultValue: "Подключить Telegram" })}
+                  </a>
                 </div>
               )}
             </div>
-          )}
+          </section>
 
-          {/* Соцсети + Telegram-линк */}
-          <div>
-            <label className="block font-medium">
-              {t("social")}
-            </label>
-            {isEditing ? (
-              <input
-                value={newSocial}
-                onChange={(e) =>
-                  setNewSocial(e.target.value)
-                }
-                className="w-full border px-3 py-2 rounded"
-              />
-            ) : (
-              <div className="border px-3 py-2 rounded bg-gray-100">
-                {profile.social || t("not_specified")}
-              </div>
-            )}
+          {/* Car fleet */}
+          {(profile.type === "guide" || profile.type === "transport") && (
+            <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+              <div id="anchor-transport" />
+              <h2 className="text-xl font-black tracking-[-0.03em] text-slate-950">{t("car_fleet") || "Автопарк"}</h2>
 
-            <div id="anchor-telegram" />
-            {!isTgLinked && tgDeepLink && (
-              <div className="mt-3 rounded-lg bg-blue-50 p-3 text-sm text-blue-900 ring-1 ring-blue-200">
-                <div className="font-medium mb-1">
-                  {t("tg.title", {
-                    defaultValue: (i18n?.language || "").startsWith(
-                      "uz"
-                    )
-                      ? "Telegram orqali bildirishnomalar"
-                      : (i18n?.language || "").startsWith(
-                          "en"
-                        )
-                      ? "Notifications in Telegram"
-                      : "Уведомления в Telegram",
-                  })}
-                </div>
-                <div className="mb-2">
-                  {t("tg.subtitle", {
-                    defaultValue: (i18n?.language || "").startsWith(
-                      "uz"
-                    )
-                      ? "Telegram’ni bog‘lab, so‘rovlar va bronlar haqida xabarnomalarni oling."
-                      : (i18n?.language || "").startsWith(
-                          "en"
-                        )
-                      ? "Link your Telegram to receive notifications about requests and bookings."
-                      : "Нажмите, чтобы связать Telegram и получать уведомления о заявках и бронированиях.",
-                  })}
-                </div>
-                <a
-                  href={tgDeepLink}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 font-semibold text-white hover:bg-blue-700"
-                >
-                  {t("tg.connect", {
-                    defaultValue: (i18n?.language || "").startsWith(
-                      "uz"
-                    )
-                      ? "Telegram’ni ulash"
-                      : (i18n?.language || "").startsWith(
-                          "en"
-                        )
-                      ? "Connect Telegram"
-                      : "Подключить Telegram",
-                  })}
-                </a>
-              </div>
-            )}
-          </div>
-
-          {/* Языки */}
-          {["guide", "transport", "agent"].includes(
-            profile.type
-          ) && (
-            <div className="mt-4">
-              <div id="anchor-languages" />
-              <ProviderLanguages
-                ref={langRef}
-                token={token}
-                editing={isEditing}
-              />
-            </div>
-          )}
-
-          {/* Сертификат */}
-          <div>
-            <div id="anchor-certificate" />
-            <label className="block font-medium">
-              {t("certificate")}
-            </label>
-
-            {isEditing ? (
-              <div className="flex flex-col gap-2">
-                <label className="inline-block bg-orange-500 text-white px-4 py-2 rounded cursor-pointer text-sm w-fit">
-                  {t("choose_files", {
-                    defaultValue: "Выбрать файлы",
-                  })}
-                  <input
-                    type="file"
-                    accept=".pdf,.jpg,.jpeg,.png"
-                    onChange={handleCertificateChange}
-                    className="hidden"
-                  />
-                </label>
-                {newCertificate ? (
-                  newCertificate.startsWith("data:image") ? (
-                    <img
-                      src={newCertificate}
-                      alt="Certificate preview"
-                      className="w-32 h-32 object-cover border rounded"
-                    />
-                  ) : (
-                    <div className="text-sm text-gray-600">
-                      📄 {t("file_chosen")}
+              {isEditing ? (
+                <div className="mt-5 space-y-3">
+                  {carFleet.map((car, idx) => (
+                    <div key={idx} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" placeholder="Модель" value={car.model} onChange={(e) => updateCar(idx, { model: e.target.value })} />
+                        <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" type="number" min={1} placeholder="Мест" value={car.seats} onChange={(e) => updateCar(idx, { seats: e.target.value })} />
+                      </div>
+                      <div className="mt-3 flex flex-wrap items-center gap-3">
+                        <label className="cursor-pointer rounded-xl bg-orange-500 px-3 py-2 text-sm font-black text-white transition hover:bg-orange-600">
+                          {t("choose_files", { defaultValue: "Выбрать файлы" })}
+                          <input type="file" accept="image/*" multiple className="hidden" onChange={async (e) => {
+                            const files = Array.from(e.target.files || []);
+                            const out = [];
+                            for (const f of files.slice(0, 10)) {
+                              try { out.push(await resizeImageFile(f, 1200, 800, 0.85, "image/jpeg")); } catch {}
+                            }
+                            updateCarImage(idx, [...(car.images || []), ...out].slice(0, 10));
+                            e.target.value = "";
+                          }} />
+                        </label>
+                        <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
+                          <input type="checkbox" checked={car.is_active !== false} onChange={(e) => updateCar(idx, { is_active: e.target.checked })} />
+                          <span>{t("is_active")}</span>
+                        </label>
+                        <button type="button" onClick={() => removeCar(idx)} className="ml-auto text-sm font-black text-red-600">{t("delete")}</button>
+                      </div>
+                      {car.images?.length ? (
+                        <div className="mt-3 grid grid-cols-4 gap-2">
+                          {car.images.map((src, i) => (
+                            <img key={i} src={src} alt="" className="h-16 w-full rounded-xl object-cover" />
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
-                  )
-                ) : (
-                  <div className="text-sm text-gray-600">
-                    {t("no_files_selected")}
-                  </div>
-                )}
+                  ))}
+                  <button type="button" onClick={addCar} className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-2 text-sm font-black text-orange-700 hover:bg-orange-100">
+                    + {t("add") || "Добавить авто"}
+                  </button>
+                </div>
+              ) : (
+                <div className="mt-5 grid gap-3">
+                  {(Array.isArray(profile.car_fleet) ? profile.car_fleet : []).map((c, i) => (
+                    <div key={i} className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                      {c.images?.[0] ? <img src={c.images[0]} alt="" className="h-14 w-14 rounded-xl object-cover" /> : <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-white text-xl">🚗</div>}
+                      <div className="min-w-0">
+                        <div className="font-black text-slate-950">{c.model}</div>
+                        <div className="text-sm font-semibold text-slate-500">{c.seats} мест</div>
+                      </div>
+                    </div>
+                  ))}
+                  {!profile?.car_fleet?.length && <div className="rounded-2xl border border-dashed border-slate-200 p-5 text-center text-sm font-semibold text-slate-400">{t("not_specified")}</div>}
+                </div>
+              )}
+            </section>
+          )}
+        </div>
+
+        <aside className="space-y-5 lg:sticky lg:top-24 lg:self-start">
+          <ProviderCompleteness profile={profile} onFix={scrollToProfilePart} />
+
+          {/* Languages */}
+          {['guide', 'transport', 'agent'].includes(profile.type) && (
+            <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+              <div id="anchor-languages" />
+              <ProviderLanguages ref={langRef} token={token} editing={isEditing} />
+            </section>
+          )}
+
+          {/* Certificate */}
+          <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <div id="anchor-certificate" />
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-black tracking-[-0.03em] text-slate-950">{t("certificate", { defaultValue: "Сертификат" })}</h2>
+                <p className="mt-1 text-sm font-medium text-slate-500">Документы повышают доверие к профилю и услугам.</p>
+              </div>
+              <span className={certObjectUrl ? "rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700 ring-1 ring-emerald-100" : "rounded-full bg-amber-50 px-3 py-1 text-xs font-black text-amber-700 ring-1 ring-amber-100"}>
+                {certObjectUrl ? "Загружен" : "Нужен"}
+              </span>
+            </div>
+
+            {isEditing ? (
+              <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4">
+                <label className="inline-flex cursor-pointer rounded-xl bg-orange-500 px-4 py-2 text-sm font-black text-white transition hover:bg-orange-600">
+                  {t("choose_files", { defaultValue: "Выбрать файл" })}
+                  <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleCertificateChange} className="hidden" />
+                </label>
+                <div className="mt-3 text-sm font-semibold text-slate-500">{newCertificate ? `📄 ${t("file_chosen")}` : t("no_files_selected")}</div>
+                {newCertificate?.startsWith("data:image") ? <img src={newCertificate} alt="Certificate preview" className="mt-3 h-32 w-32 rounded-2xl border object-cover" /> : null}
               </div>
             ) : certObjectUrl ? (
-              <div className="flex items-center gap-4">
-                <a
-                  href={certObjectUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-600 underline"
-                >
-                  {t("view_certificate")}
-                </a>
-              </div>
+              <a href={certObjectUrl} target="_blank" rel="noopener noreferrer" className="mt-4 inline-flex rounded-xl bg-slate-950 px-4 py-2 text-sm font-black text-white transition hover:bg-slate-800">
+                {t("view_certificate", { defaultValue: "Посмотреть сертификат" })}
+              </a>
             ) : (
-              <div className="text-gray-500">
-                {t("not_specified")}
-              </div>
+              <div className="mt-4 rounded-2xl border border-dashed border-slate-200 p-5 text-center text-sm font-semibold text-slate-400">{t("not_specified")}</div>
             )}
-          </div>
+          </section>
 
-          {/* Кнопка сохранить/редактировать */}
-          <button
-            onClick={
-              isEditing
-                ? handleSaveProfile
-                : () => setIsEditing(true)
-            }
-            className="w-full bg-orange-500 text-white py-2 rounded font-bold mt-2"
-          >
-            {isEditing ? t("save") : t("edit")}
-          </button>
-
-          <ProviderCompleteness
-            profile={profile}
-            onFix={scrollToProfilePart}
-          />
-        </div>
+          {/* Security */}
+          <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <button type="button" onClick={() => setPwdOpen((v) => !v)} className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left font-black text-slate-950 transition hover:bg-slate-100" aria-expanded={pwdOpen} aria-controls="pwd-collapse">
+              <span>🔐 {t("change_password", { defaultValue: "Сменить пароль" })}</span>
+              <svg className={`h-5 w-5 transition-transform ${pwdOpen ? "rotate-180" : ""}`} viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.06l3.71-3.83a.75.75 0 111.08 1.04l-4.25 4.38a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clipRule="evenodd" /></svg>
+            </button>
+            <div id="pwd-collapse" className={`grid overflow-hidden transition-all duration-300 ease-in-out ${pwdOpen ? "mt-3 grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
+              <div className="min-h-0 space-y-2">
+                <input type="password" placeholder={t("current_password") || "Текущий пароль"} value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" />
+                <input type="password" placeholder={t("new_password")} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" />
+                <button onClick={handleChangePassword} className="w-full rounded-xl bg-orange-500 py-2.5 font-black text-white transition hover:bg-orange-600">{t("change")}</button>
+              </div>
+            </div>
+            <button onClick={() => {
+              if (typeof localStorage !== "undefined") {
+                localStorage.removeItem("token");
+                localStorage.removeItem("provider_id");
+              }
+              window.location.href = "/login";
+            }} className="mt-3 w-full rounded-2xl bg-red-600 px-4 py-3 font-black text-white transition hover:bg-red-700">
+              {t("logout", { defaultValue: "Выйти" })}
+            </button>
+          </section>
+        </aside>
       </div>
 
       {/* Статистика */}
-      <div className="px-6 mt-6">
+      <div className="mt-6">
         <ProviderStatsHeader
           rating={Number(profile?.rating) || 0}
           stats={{
-            requests_total:
-              Number(stats?.requests_total) || 0,
-            requests_active:
-              Number(stats?.requests_active) || 0,
-            bookings_total:
-              Number(stats?.bookings_total) || 0,
-            completed:
-              Number(stats?.completed) || 0,
-            cancelled:
-              Number(stats?.cancelled) || 0,
-            points:
-              Number(
-                stats?.points ?? stats?.completed ?? 0
-              ),
+            requests_total: Number(stats?.requests_total) || 0,
+            requests_active: Number(stats?.requests_active) || 0,
+            bookings_total: Number(stats?.bookings_total) || 0,
+            completed: Number(stats?.completed) || 0,
+            cancelled: Number(stats?.cancelled) || 0,
+            points: Number(stats?.points ?? stats?.completed ?? 0),
           }}
           bonusTarget={500}
           t={t}
@@ -1216,24 +975,31 @@ const ProviderProfile = () => {
       </div>
 
       {/* Отзывы */}
-      <div className="px-6 mt-6">
-        <div className="rounded-xl border bg-white p-4 sm:p-6">
-          <div
-            className="
-              min-w-0 max-w-full overflow-hidden
-              break-words [text-wrap:pretty]
-              [&_*]:min-w-0 [&_*]:break-words
-              [&_time]:whitespace-nowrap [&_.review-date]:whitespace-nowrap [&_.rv-date]:whitespace-nowrap
-            "
-          >
-            {hasProviderId ? (
-              <ProviderReviews providerId={providerId} t={t} />
-            ) : null}
+      <div className="mt-6">
+        <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+          <div className="min-w-0 max-w-full overflow-hidden break-words [text-wrap:pretty] [&_*]:min-w-0 [&_*]:break-words [&_time]:whitespace-nowrap [&_.review-date]:whitespace-nowrap [&_.rv-date]:whitespace-nowrap">
+            {hasProviderId ? <ProviderReviews providerId={providerId} t={t} /> : null}
           </div>
         </div>
       </div>
     </div>
   );
+
+  function ProfileInfoBox({ label, icon, hint, children }) {
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.14em] text-slate-400">
+            <span>{icon}</span>
+            <span>{label}</span>
+          </div>
+        </div>
+        {hint ? <div className="mb-2 text-xs font-medium text-slate-400">{hint}</div> : null}
+        <div className="text-sm font-bold leading-6 text-slate-800">{children}</div>
+      </div>
+    );
+  }
+
 };
 
 export default ProviderProfile;
