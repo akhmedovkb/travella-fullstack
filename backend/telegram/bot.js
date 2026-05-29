@@ -11100,6 +11100,84 @@ async function sendUnlockContactInvoice(ctx, { clientId, serviceId, amountSum })
   return { ok: true };
 }
 
+
+async function notifyProviderAboutContactUnlock({ serviceId, clientId, paidAmount, source = "telegram_payment" }) {
+  try {
+    if (!pool) return false;
+    const sid = Number(serviceId);
+    const cid = Number(clientId);
+    if (!Number.isFinite(sid) || sid <= 0 || !Number.isFinite(cid) || cid <= 0) return false;
+
+    const serviceQ = await pool.query(
+      `
+      SELECT
+        s.id,
+        s.title,
+        s.category,
+        p.id AS provider_id,
+        COALESCE(p.telegram_refused_chat_id, p.telegram_web_chat_id, p.telegram_chat_id, p.tg_chat_id) AS provider_chat_id
+      FROM services s
+      JOIN providers p ON p.id = s.provider_id
+      WHERE s.id = $1
+      LIMIT 1
+      `,
+      [sid]
+    );
+
+    const service = serviceQ.rows?.[0];
+    const providerChatId = service?.provider_chat_id ? String(service.provider_chat_id).trim() : "";
+    if (!providerChatId) return false;
+
+    const clientQ = await pool.query(`SELECT to_jsonb(c) AS data FROM clients c WHERE c.id=$1 LIMIT 1`, [cid]);
+    const c = clientQ.rows?.[0]?.data || {};
+    const clientName =
+      c.name ||
+      c.full_name ||
+      [c.first_name, c.last_name].filter(Boolean).join(" ").trim() ||
+      c.phone ||
+      `Client #${cid}`;
+    const clientPhone = c.phone || c.phone_number || "";
+    const clientTelegram = c.telegram || c.telegram_username || c.username || "";
+    const title = service?.title || `Услуга #${sid}`;
+    const serviceUrl = `${SITE_URL}/dashboard/finance?from=tg&service_id=${sid}`;
+
+    const lines = [
+      `🔥 <b>Клиент открыл контакты</b>`,
+      ``,
+      `📦 <b>Услуга:</b> #${sid} · ${escapeHtml(title)}`,
+      `👤 <b>Клиент:</b> ${escapeHtml(clientName)}`,
+    ];
+
+    if (clientPhone) lines.push(`☎️ <b>Телефон:</b> <code>${escapeHtml(clientPhone)}</code>`);
+    if (clientTelegram) lines.push(`💬 <b>Telegram:</b> ${escapeHtml(String(clientTelegram).startsWith("@") ? clientTelegram : `@${clientTelegram}`)}`);
+    if (paidAmount) lines.push(`💳 <b>Оплачено за открытие:</b> ${Number(paidAmount || 0).toLocaleString("ru-RU")} сум`);
+
+    lines.push(``, `⚡ Ответьте быстрее — клиент уже проявил прямой интерес.`);
+
+    await bot.telegram.sendMessage(providerChatId, lines.join("\n"), {
+      parse_mode: "HTML",
+      disable_web_page_preview: true,
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "📈 Открыть CRM", url: serviceUrl }],
+        ],
+      },
+    });
+
+    await trackTelegramBotEvent('tg_provider_unlock_notified', {
+      clientId: cid,
+      serviceId: sid,
+      providerId: Number(service?.provider_id || 0) || null,
+      chatId: providerChatId,
+      meta: { source },
+    });
+    return true;
+  } catch (e) {
+    console.error("[tg-bot] notifyProviderAboutContactUnlock error:", e?.message || e);
+    return false;
+  }
+}
+
 // Telegram Payments: acknowledge checkout
 bot.on("pre_checkout_query", async (ctx) => {
   try {
@@ -11400,6 +11478,13 @@ bot.on("successful_payment", async (ctx) => {
             telegram_payment_charge_id: sp.telegram_payment_charge_id,
             provider_payment_charge_id: sp.provider_payment_charge_id,
           },
+        });
+
+        await notifyProviderAboutContactUnlock({
+          serviceId,
+          clientId: Number(clientRow.id),
+          paidAmount,
+          source: 'telegram_payment',
         });
 
         await safeReply(
