@@ -11014,7 +11014,7 @@ async function sendUnlockContactInvoice(ctx, { clientId, serviceId, amountSum })
   const preview = await getUnlockPaymentPreview(ctx, sid);
   const invoiceTitle = "🔥 Контакты поставщика";
   const invoiceDescription = truncate(
-    `${preview.title || "Контакты поставщика"} · телефон и Telegram откроются автоматически`,
+    `${preview.title || "Услуга"} · телефон и Telegram поставщика откроются сразу после оплаты`,
     255
   );
 
@@ -11028,7 +11028,7 @@ async function sendUnlockContactInvoice(ctx, { clientId, serviceId, amountSum })
     currency: PAYMENTS_CURRENCY,
     prices: [
       {
-        label: "Открытие контактов поставщика",
+        label: "Доступ к телефону и Telegram поставщика",
         amount: amount * currencyMinorFactor(PAYMENTS_CURRENCY),
       },
     ],
