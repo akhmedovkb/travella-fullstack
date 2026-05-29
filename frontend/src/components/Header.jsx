@@ -411,7 +411,7 @@ export default function Header() {
                 <img
                   src="/logo-travella-dark.png"
                   alt="Travella"
-                  className="h-7 w-auto object-contain"
+                  className="h-11 w-auto object-contain"
                   loading="eager"
                 />
               </Link>
