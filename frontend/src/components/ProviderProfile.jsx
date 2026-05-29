@@ -230,6 +230,29 @@ const makeAsyncSelectI18n = (t) => ({
     t("select.loading", { defaultValue: "Загрузка…" }),
 });
 
+
+function providerTypeLabel(type, t) {
+  const key = String(type || "").trim().toLowerCase();
+
+  const labels = {
+    agent: t("provider_type.agent", { defaultValue: "Турагент" }),
+    agency: t("provider_type.agent", { defaultValue: "Турагент" }),
+    touragent: t("provider_type.agent", { defaultValue: "Турагент" }),
+    hotel: t("provider_type.hotel", { defaultValue: "Отель" }),
+    guide: t("provider_type.guide", { defaultValue: "Гид" }),
+    transport: t("provider_type.transport", { defaultValue: "Транспорт" }),
+    transfer: t("provider_type.transport", { defaultValue: "Транспорт" }),
+  };
+
+  if (labels[key]) return labels[key];
+  if (!key) return t("not_specified", { defaultValue: "Не указан" });
+
+  return String(type)
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /** ================= Component ================= */
 
 const ProviderProfile = () => {
