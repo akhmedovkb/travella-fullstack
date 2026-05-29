@@ -10540,11 +10540,50 @@ bot.action(/^balance:topup:(\d+)$/, async (ctx) => {
 });
 
 
+const PROVIDER_SUPPORT_PROMPT_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+
+function getProviderSupportContext(ctx) {
+  const data = String(ctx?.callbackQuery?.data || "");
+  if (data.startsWith("svc_archive") || data.startsWith("archive:")) return "after_archive";
+  if (data.startsWith("svc_unpublish")) return "after_unpublish";
+  if (data.includes("proof")) return "after_proof";
+  return "manual";
+}
+
+async function recentlySupportedProject(providerId) {
+  try {
+    if (!pool || !providerId) return false;
+    const r = await pool.query(
+      `
+      SELECT 1
+        FROM provider_support_donations
+       WHERE provider_id = $1
+         AND status IN ('paid','succeeded')
+         AND paid_at >= NOW() - INTERVAL '24 hours'
+       LIMIT 1
+      `,
+      [Number(providerId)]
+    );
+    return !!r.rowCount;
+  } catch {
+    return false;
+  }
+}
+
 async function replyProviderSupportPrompt(ctx, serviceId = null) {
   try {
     if (!pool) return;
     const settings = await getProviderSupportSettings(pool);
     if (!settings?.enabled) return;
+
+    if (!ctx.session) ctx.session = {};
+    const now = Date.now();
+    const lastPromptAt = Number(ctx.session.__providerSupportPromptAt || 0);
+    if (lastPromptAt && now - lastPromptAt < PROVIDER_SUPPORT_PROMPT_COOLDOWN_MS) return;
+
+    const telegramChatId = getActorId(ctx) || ctx.from?.id || null;
+    const providerId = await resolveProviderIdByTelegramChatId(telegramChatId).catch(() => null);
+    if (providerId && await recentlySupportedProject(providerId)) return;
 
     const amounts = Array.isArray(settings.suggested_amounts)
       ? settings.suggested_amounts
@@ -10555,22 +10594,38 @@ async function replyProviderSupportPrompt(ctx, serviceId = null) {
       .filter((x) => Number.isFinite(x) && x > 0)
       .slice(0, 8)
       .map((x) => [{
-        text: `✅ Поддержать: ${x.toLocaleString("ru-RU")} сум`,
+        text: `💛 ${x.toLocaleString("ru-RU")} сум`,
         callback_data: `support_project:pay:${x}:${Number(serviceId || 0)}`,
       }]);
 
     if (!rows.length) return;
-    rows.push([{ text: "📋 Мои услуги", callback_data: "prov_services:list" }]);
-    rows.push([{ text: "🗄 Архив", callback_data: "archive:open" }]);
+
+    rows.push([{ text: "⏭ Продолжить без поддержки", callback_data: "support_project:skip" }]);
+    rows.push([
+      { text: "📋 Мои услуги", callback_data: "prov_services:list" },
+      { text: "🗄 Архив", callback_data: "archive:open" },
+    ]);
+    rows.push([{ text: "📈 Спрос и клиенты", url: `${SITE_URL}/dashboard/finance` }]);
 
     const text =
-      `❤️ <b>Спасибо, что помогаете держать базу отказов актуальной.</b>\n\n` +
-      `Поддержка проекта — добровольная. Если бот помог вам быстрее снять, обновить или продвинуть отказ, можете отправить любую удобную сумму.\n\n` +
-      `Средства идут на развитие <b>Bot Otkaznyx Turov</b>:\n` +
-      `• улучшение поиска и карточек\n` +
-      `• продвижение отказных предложений\n` +
-      `• поддержку Telegram-бота и веб-кабинета\n\n` +
-      `Выберите сумму ниже или просто продолжайте работу с услугами.`;
+      `❤️ <b>Спасибо, что помогаете держать базу отказов актуальной.</b>
+
+` +
+      `Поддержка проекта — добровольная. Она помогает развивать <b>Bot Otkaznyx Turov</b> и делает базу отказных предложений удобнее для всех.
+
+` +
+      `Ваш вклад помогает нам:
+` +
+      `• улучшать поиск и карточки
+` +
+      `• поддерживать Telegram-бота и веб-кабинет
+` +
+      `• быстрее дорабатывать инструменты для поставщиков
+
+` +
+      `Выберите комфортную сумму или продолжайте работу с услугами.`;
+
+    ctx.session.__providerSupportPromptAt = now;
 
     await safeReply(ctx, text, {
       parse_mode: "HTML",
@@ -10580,6 +10635,22 @@ async function replyProviderSupportPrompt(ctx, serviceId = null) {
     console.error("[tg-bot] provider support prompt error:", e?.message || e);
   }
 }
+
+bot.action("support_project:skip", async (ctx) => {
+  try {
+    await safeCb(ctx, "Продолжаем работу с услугами");
+    await safeReply(ctx, "Хорошо, продолжаем без поддержки проекта.", {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "📋 Мои услуги", callback_data: "prov_services:list" }],
+          [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
+        ],
+      },
+    });
+  } catch (e) {
+    console.error("[tg-bot] support_project:skip error:", e?.message || e);
+  }
+});
 
 async function sendProviderSupportInvoice(ctx, { providerId, serviceId = null, amountSum }) {
   const pid = Number(providerId || 0);
@@ -10606,10 +10677,37 @@ async function sendProviderSupportInvoice(ctx, { providerId, serviceId = null, a
     return { ok: false, reason: "bad_amount" };
   }
 
-  const payload = `support_project:${pid}:${sid}:${amount}:${Date.now()}`;
+  const supportContext = getProviderSupportContext(ctx);
   const amountMinor = amount * currencyMinorFactor(PAYMENTS_CURRENCY);
 
   await ensureTelegramPaymentsTables(pool);
+
+  const donationQ = await pool.query(
+    `
+    INSERT INTO provider_support_donations (
+      provider_id,
+      telegram_chat_id,
+      service_id,
+      amount_tiyin,
+      status,
+      source,
+      note,
+      expires_at
+    )
+    VALUES ($1, $2, $3, $4, 'created', 'telegram_invoice', $5, NOW() + INTERVAL '30 minutes')
+    RETURNING id
+    `,
+    [
+      pid,
+      Number(ctx.from?.id || ctx.chat?.id || 0) || null,
+      sid || null,
+      amountMinor,
+      supportContext,
+    ]
+  );
+
+  const donationId = Number(donationQ.rows?.[0]?.id || 0) || 0;
+  const payload = `support_project:${pid}:${sid}:${amount}:${donationId}:${Date.now()}`;
 
   await pool.query(
     `
@@ -10628,6 +10726,9 @@ async function sendProviderSupportInvoice(ctx, { providerId, serviceId = null, a
       JSON.stringify({
         provider_id: pid,
         service_id: sid || null,
+        donation_id: donationId || null,
+        support_context: supportContext,
+        source: "telegram_invoice",
         stage: "invoice_created",
       }),
     ]
@@ -10641,7 +10742,7 @@ async function sendProviderSupportInvoice(ctx, { providerId, serviceId = null, a
     currency: PAYMENTS_CURRENCY,
     prices: [
       {
-        label: "Поддержка проекта",
+        label: "Развитие Bot Otkaznyx Turov",
         amount: amountMinor,
       },
     ],
@@ -10797,6 +10898,7 @@ function parseTelegramPaymentPayload(payload) {
   }
 
   if (paymentType === 'support_project') {
+    const hasDonationId = parts.length >= 6;
     return {
       ok: true,
       raw,
@@ -10804,7 +10906,8 @@ function parseTelegramPaymentPayload(payload) {
       providerId: Number(parts[1] || 0),
       serviceId: Number(parts[2] || 0) || null,
       amountSum: Number(parts[3] || 0),
-      ts: Number(parts[4] || 0),
+      donationId: hasDonationId ? Number(parts[4] || 0) || null : null,
+      ts: Number(parts[hasDonationId ? 5 : 4] || 0),
     };
   }
 
@@ -11448,6 +11551,8 @@ bot.on("successful_payment", async (ctx) => {
             JSON.stringify({
               provider_id: providerId,
               service_id: serviceId,
+              donation_id: Number(parsed.donationId || 0) || null,
+              source: "telegram_invoice",
               successful_payment: sp,
             }),
           ]
@@ -11461,6 +11566,47 @@ bot.on("successful_payment", async (ctx) => {
           `,
           [parsed.raw]
         );
+
+        if (Number(parsed.donationId || 0) > 0) {
+          await tx.query(
+            `
+            UPDATE provider_support_donations
+               SET status='paid',
+                   paid_at=COALESCE(paid_at, NOW()),
+                   updated_at=NOW(),
+                   payme_id=COALESCE(NULLIF(payme_id,''), NULLIF($2,'')),
+                   source='telegram_invoice',
+                   note=COALESCE(NULLIF(note,''), 'telegram_invoice')
+             WHERE id=$1
+            `,
+            [Number(parsed.donationId), chargeId || providerChargeId || null]
+          );
+        } else {
+          await tx.query(
+            `
+            INSERT INTO provider_support_donations (
+              provider_id,
+              telegram_chat_id,
+              service_id,
+              amount_tiyin,
+              payme_id,
+              status,
+              source,
+              note,
+              paid_at,
+              updated_at
+            )
+            VALUES ($1,$2,$3,$4,NULLIF($5,''),'paid','telegram_invoice','legacy_telegram_invoice',NOW(),NOW())
+            `,
+            [
+              providerId,
+              chatId,
+              serviceId,
+              paidMinor,
+              chargeId || providerChargeId || "",
+            ]
+          );
+        }
 
         await tx.query("COMMIT");
       } catch (e) {
@@ -11476,6 +11622,8 @@ bot.on("successful_payment", async (ctx) => {
         chatId,
         meta: {
           amount_sum: amountSum,
+          donation_id: Number(parsed.donationId || 0) || null,
+          source: "telegram_invoice",
           currency: sp.currency,
           telegram_payment_charge_id: sp.telegram_payment_charge_id,
           provider_payment_charge_id: sp.provider_payment_charge_id,
@@ -11484,16 +11632,30 @@ bot.on("successful_payment", async (ctx) => {
 
       await safeReply(
         ctx,
-        `❤️ <b>Спасибо за поддержку проекта.</b>\n\n` +
-          `Ваш вклад помогает развивать <b>Bot Otkaznyx Turov</b>.\n\n` +
-          `Сумма: <b>${Number(amountSum || 0).toLocaleString("ru-RU")} сум</b>`,
+        `❤️ <b>Спасибо за поддержку проекта.</b>
+
+` +
+          `Ваш вклад помогает развивать <b>Bot Otkaznyx Turov</b>.
+
+` +
+          `🧾 <b>Мини-чек</b>
+` +
+          `Сумма: <b>${Number(amountSum || 0).toLocaleString("ru-RU")} сум</b>
+` +
+          `Статус: <b>оплачено</b>
+` +
+          `Назначение: развитие Bot Otkaznyx Turov
+
+` +
+          `💛 В карточках ваших услуг будет отображаться знак доверия: <b>Поддерживает проект</b>.`,
         {
           parse_mode: "HTML",
           reply_markup: {
             inline_keyboard: [
+              [{ text: "📋 Вернуться к моим услугам", callback_data: "prov_services:list" }],
               [
-                { text: "📋 Мои услуги", callback_data: "prov_services:list" },
-                { text: "➕ Создать услугу", callback_data: "prov_services:create" },
+                { text: "➕ Создать новый отказ", callback_data: "prov_services:create" },
+                { text: "📈 Спрос и клиенты", url: `${SITE_URL}/dashboard/finance` },
               ],
             ],
           },
