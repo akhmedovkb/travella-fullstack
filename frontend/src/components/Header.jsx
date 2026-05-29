@@ -210,6 +210,7 @@ export default function Header() {
   const [counts, setCounts] = useState(null);
   const [loading, setLoading] = useState(false);
   const [favCount, setFavCount] = useState(0);
+  const [demandNewCount, setDemandNewCount] = useState(0);
   const [clientBalance, setClientBalance] = useState(0);
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0);
@@ -355,6 +356,34 @@ export default function Header() {
       window.removeEventListener("provider:inbox:changed", bump);
     };
   }, []);
+
+
+  useEffect(() => {
+    if (role !== "provider") {
+      setDemandNewCount(0);
+      return undefined;
+    }
+
+    let alive = true;
+    const loadDemand = async () => {
+      try {
+        const res = await apiGet("/api/providers/finance?period=30d", role);
+        if (alive) setDemandNewCount(Number(res?.stats?.new_leads_count || 0));
+      } catch {
+        if (alive) setDemandNewCount(0);
+      }
+    };
+
+    loadDemand();
+    const onChanged = () => loadDemand();
+    window.addEventListener("provider:demand:changed", onChanged);
+    window.addEventListener("provider:counts:refresh", onChanged);
+    return () => {
+      alive = false;
+      window.removeEventListener("provider:demand:changed", onChanged);
+      window.removeEventListener("provider:counts:refresh", onChanged);
+    };
+  }, [role, refreshTick]);
 
   useEffect(() => {
     if (role !== "client") return undefined;
@@ -561,8 +590,8 @@ export default function Header() {
 
                       <DropdownItem
                         to="/dashboard/finance"
-                        label={t("nav.provider_finance", "📈 Спрос и клиенты")}
-                        description={t("nav.provider_finance_desc", "Открытия контактов, горячие клиенты и спрос по услугам")}
+                        label={`${t("nav.provider_finance", "📈 Спрос и клиенты")}${demandNewCount > 0 ? ` · ${demandNewCount}` : ""}`}
+                        description={t("nav.provider_finance_desc", "Открытия контактов, горячие клиенты и быстрые запросы")}
                         icon={<IconWallet />}
                       />
                   
@@ -699,7 +728,7 @@ export default function Header() {
                 <NavItemMobileDark to="/dashboard/requests" label={t("nav.requests", "Запросы")} icon={<IconRequests />} badge={providerRequests} loading={loading} />
                 <NavItemMobileDark to="/dashboard/favorites" label={t("nav.favorites", "Избранное")} icon={<IconHeart />} badge={favCount} />
                 <NavItemMobileDark to="/dashboard/bookings" label={t("nav.bookings", "Брони")} icon={<IconBookings />} badge={bookingsBadge} loading={loading} />
-                <NavItemMobileDark to="/dashboard/finance" label={t("nav.provider_finance", "📈 Спрос и клиенты")} icon={<IconWallet />} />
+                <NavItemMobileDark to="/dashboard/finance" label={`${t("nav.provider_finance", "📈 Спрос и клиенты")}${demandNewCount > 0 ? ` · ${demandNewCount}` : ""}`} icon={<IconWallet />} badge={demandNewCount} />
                 <NavItemMobileDark to="/dashboard/passport-parser" label="Passport Parser" icon={<IconDoc />} />
               </RowGroupDark>
             )}
