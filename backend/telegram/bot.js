@@ -11012,7 +11012,7 @@ async function sendUnlockContactInvoice(ctx, { clientId, serviceId, amountSum })
   }
 
   const preview = await getUnlockPaymentPreview(ctx, sid);
-  const invoiceTitle = "🔥 Контакты поставщика Travella";
+  const invoiceTitle = "🔥 Контакты поставщика";
   const invoiceDescription = truncate(
     `${preview.title || "Контакты поставщика"} · телефон и Telegram откроются автоматически`,
     255
