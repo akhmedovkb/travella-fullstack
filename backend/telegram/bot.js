@@ -10745,6 +10745,60 @@ function parseTelegramPaymentPayload(payload) {
   return { ok: false, raw, paymentType, reason: 'unsupported_payload' };
 }
 
+function validateTelegramPaymentAmount({ parsed, totalAmountMinor, currency }) {
+  const expectedSum = Math.trunc(Number(parsed?.amountSum || 0));
+  const actualMinor = Math.trunc(Number(totalAmountMinor || 0));
+  const expectedCurrency = String(PAYMENTS_CURRENCY || "UZS").toUpperCase();
+  const actualCurrency = String(currency || "").toUpperCase();
+  const factor = currencyMinorFactor(expectedCurrency);
+  const expectedMinor = expectedSum * factor;
+
+  if (!Number.isFinite(expectedSum) || expectedSum <= 0) {
+    return {
+      ok: false,
+      reason: "bad_payload_amount",
+      expectedSum,
+      expectedMinor,
+      actualMinor,
+      actualCurrency,
+      expectedCurrency,
+    };
+  }
+
+  if (actualCurrency !== expectedCurrency) {
+    return {
+      ok: false,
+      reason: "currency_mismatch",
+      expectedSum,
+      expectedMinor,
+      actualMinor,
+      actualCurrency,
+      expectedCurrency,
+    };
+  }
+
+  if (!Number.isFinite(actualMinor) || actualMinor !== expectedMinor) {
+    return {
+      ok: false,
+      reason: "amount_mismatch",
+      expectedSum,
+      expectedMinor,
+      actualMinor,
+      actualCurrency,
+      expectedCurrency,
+    };
+  }
+
+  return {
+    ok: true,
+    expectedSum,
+    expectedMinor,
+    actualMinor,
+    actualCurrency,
+    expectedCurrency,
+  };
+}
+
 async function trackTelegramBotEvent(eventName, {
   clientId = null,
   serviceId = null,
@@ -11064,9 +11118,40 @@ bot.on("pre_checkout_query", async (ctx) => {
         return;
       }
 
+      const amountCheck = validateTelegramPaymentAmount({
+        parsed,
+        totalAmountMinor: q?.total_amount,
+        currency: q?.currency,
+      });
+      if (!amountCheck.ok) {
+        console.warn("[tg-bot] pre_checkout amount rejected", {
+          reason: amountCheck.reason,
+          payload: parsed.raw,
+          expectedMinor: amountCheck.expectedMinor,
+          actualMinor: amountCheck.actualMinor,
+          expectedCurrency: amountCheck.expectedCurrency,
+          actualCurrency: amountCheck.actualCurrency,
+        });
+        await ctx.answerPreCheckoutQuery(false, "Сумма платежа изменилась. Откройте оплату заново.");
+        return;
+      }
+
       const serviceCheck = await validateServiceForTelegramUnlock(pool, parsed.serviceId);
       if (!serviceCheck.ok) {
         await ctx.answerPreCheckoutQuery(false, "Эта услуга уже недоступна.");
+        return;
+      }
+
+      const settings = await getContactUnlockSettings(pool).catch(() => null);
+      const currentPrice = Math.trunc(Number(settings?.effective_price ?? CONTACT_UNLOCK_PRICE ?? 0));
+      if (currentPrice > 0 && Number(parsed.amountSum) !== currentPrice) {
+        console.warn("[tg-bot] pre_checkout stale invoice rejected", {
+          payloadAmount: parsed.amountSum,
+          currentPrice,
+          serviceId: parsed.serviceId,
+          clientId: parsed.clientId,
+        });
+        await ctx.answerPreCheckoutQuery(false, "Цена открытия изменилась. Откройте оплату заново.");
         return;
       }
     }
@@ -11125,6 +11210,40 @@ bot.on("successful_payment", async (ctx) => {
           meta: { reason: 'bad_service_id', payload: parsed.raw },
         });
         await safeReply(ctx, "⚠️ Оплата прошла, но ID услуги некорректный. Напишите администратору.");
+        return;
+      }
+
+      const amountCheck = validateTelegramPaymentAmount({
+        parsed,
+        totalAmountMinor: sp.total_amount,
+        currency: sp.currency,
+      });
+
+      if (!amountCheck.ok) {
+        await markTelegramPaymentFailed({
+          parsed,
+          sp,
+          error: new Error(`telegram_unlock_${amountCheck.reason}`),
+        });
+
+        await trackTelegramBotEvent('tg_unlock_payment_needs_manual_review', {
+          clientId: Number(clientRow.id),
+          serviceId,
+          chatId,
+          meta: {
+            reason: amountCheck.reason,
+            expected_amount_sum: amountCheck.expectedSum,
+            expected_amount_minor: amountCheck.expectedMinor,
+            paid_amount_minor: amountCheck.actualMinor,
+            expected_currency: amountCheck.expectedCurrency,
+            paid_currency: amountCheck.actualCurrency,
+          },
+        });
+
+        await safeReply(
+          ctx,
+          "⚠️ Оплата получена, но сумма платежа не совпала с ожидаемой. Контакты не открыты автоматически — администратор проверит платеж вручную."
+        );
         return;
       }
 
@@ -11286,9 +11405,9 @@ bot.on("successful_payment", async (ctx) => {
         await safeReply(
           ctx,
           `✅ <b>Оплата прошла успешно!</b>\n\n` +
-            `🔓 Контакты поставщика открыты.\n` +
+            `🔓 Контакты поставщика открыты автоматически.\n` +
             `💸 Оплачено: <b>${Number(paidAmount || 0).toLocaleString("ru-RU")}</b> сум\n\n` +
-            `⚡ Рекомендуем написать поставщику сразу — отказные варианты часто уходят быстро.`,
+            `👇 Ниже отправляю карточку уже с открытыми контактами. Напишите поставщику сразу — отказные варианты часто уходят быстро.`,
           { parse_mode: "HTML" }
         );
 
