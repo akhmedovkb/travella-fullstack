@@ -405,7 +405,7 @@ export default function Header() {
             </button>
               <Link
                 to="/"
-                className="inline-flex shrink-0 items-center"
+                className="mr-4 flex shrink-0 items-center transition-all duration-200 hover:opacity-90"
                 aria-label="Travella Home"
               >
                 <img
