@@ -93,39 +93,66 @@ router.get("/finance", authenticateToken, requireProvider, async (req, res) => {
     return !!r.rowCount;
   }
 
-  async function hasColumns(table, columns) {
+  async function getColumns(table) {
     const r = await pool.query(
       `
       SELECT column_name
       FROM information_schema.columns
       WHERE table_schema='public'
         AND table_name=$1
-        AND column_name = ANY($2::text[])
       `,
-      [table, columns]
+      [table]
     );
     return new Set((r.rows || []).map((x) => x.column_name));
   }
 
+  function col(cols, name, sqlIfExists, fallbackSql = "NULL::text") {
+    return cols.has(name) ? sqlIfExists : fallbackSql;
+  }
+
+  function firstExisting(cols, candidates, alias, fallbackSql = "NULL::text") {
+    const parts = candidates.filter((x) => cols.has(x)).map((x) => `NULLIF(c.${x}::text, '')`);
+    return parts.length ? `COALESCE(${parts.join(", ")}, ${fallbackSql}) AS ${alias}` : `${fallbackSql} AS ${alias}`;
+  }
+
   try {
+    const unlockCols = await getColumns("client_service_contact_unlocks");
+    const clientCols = (await hasTable("clients")) ? await getColumns("clients") : new Set();
+    const serviceCols = await getColumns("services");
+
+    const unlockIdExpr = unlockCols.has("id") ? "u.id" : "ROW_NUMBER() OVER (ORDER BY u.created_at DESC)::bigint";
+    const unlockSourceExpr = unlockCols.has("source") ? "COALESCE(NULLIF(u.source::text, ''), 'marketplace')" : "'marketplace'::text";
+    const unlockCreatedExpr = unlockCols.has("created_at") ? "u.created_at" : "NOW()";
+
+    const clientNameSelect = clientCols.size
+      ? firstExisting(clientCols, ["name", "full_name", "first_name", "phone", "email", "telegram"], "client_name", "'Клиент'::text")
+      : "'Клиент'::text AS client_name";
+    const clientPhoneSelect = clientCols.has("phone") ? "c.phone AS client_phone" : "NULL::text AS client_phone";
+    const clientTelegramSelect = clientCols.has("telegram")
+      ? "c.telegram AS client_telegram"
+      : (clientCols.has("username") ? "c.username AS client_telegram" : "NULL::text AS client_telegram");
+
+    const serviceTitleExpr = serviceCols.has("title") ? "s.title" : "('Услуга #' || s.id::text)";
+    const serviceCategoryExpr = serviceCols.has("category") ? "s.category" : "NULL::text";
+
     const unlocksQ = await pool.query(
       `
       SELECT
-        u.id,
+        ${unlockIdExpr} AS id,
         u.client_id,
         u.service_id,
-        u.source,
-        u.created_at,
-        COALESCE(c.name, c.full_name, c.phone, 'Client #' || u.client_id::text) AS client_name,
-        c.phone AS client_phone,
-        c.telegram AS client_telegram,
-        s.title AS service_title,
-        s.category AS service_category
+        ${unlockSourceExpr} AS source,
+        ${unlockCreatedExpr} AS created_at,
+        ${clientNameSelect},
+        ${clientPhoneSelect},
+        ${clientTelegramSelect},
+        ${serviceTitleExpr} AS service_title,
+        ${serviceCategoryExpr} AS service_category
       FROM client_service_contact_unlocks u
       JOIN services s ON s.id = u.service_id
-      LEFT JOIN clients c ON c.id = u.client_id
+      ${clientCols.size ? "LEFT JOIN clients c ON c.id = u.client_id" : ""}
       WHERE s.provider_id = $1
-      ORDER BY u.created_at DESC, u.id DESC
+      ORDER BY ${unlockCreatedExpr} DESC, ${unlockIdExpr} DESC
       LIMIT 50
       `,
       [providerId]
@@ -147,49 +174,29 @@ router.get("/finance", authenticateToken, requireProvider, async (req, res) => {
       `
       SELECT
         u.client_id,
-        COALESCE(c.name, c.full_name, c.phone, 'Client #' || u.client_id::text) AS client_name,
-        c.phone AS client_phone,
-        c.telegram AS client_telegram,
+        ${clientNameSelect},
+        ${clientPhoneSelect},
+        ${clientTelegramSelect},
         COUNT(*)::bigint AS unlock_count,
-        MAX(u.created_at) AS last_activity_at,
-        (ARRAY_AGG(s.title ORDER BY u.created_at DESC, u.id DESC))[1] AS last_service_title
+        MAX(${unlockCreatedExpr}) AS last_activity_at,
+        (ARRAY_AGG(${serviceTitleExpr} ORDER BY ${unlockCreatedExpr} DESC, ${unlockIdExpr} DESC))[1] AS last_service_title
       FROM client_service_contact_unlocks u
       JOIN services s ON s.id = u.service_id
-      LEFT JOIN clients c ON c.id = u.client_id
+      ${clientCols.size ? "LEFT JOIN clients c ON c.id = u.client_id" : ""}
       WHERE s.provider_id = $1
-      GROUP BY u.client_id, c.name, c.full_name, c.phone, c.telegram
-      ORDER BY COUNT(*) DESC, MAX(u.created_at) DESC
+      GROUP BY u.client_id${clientCols.has("name") ? ", c.name" : ""}${clientCols.has("full_name") ? ", c.full_name" : ""}${clientCols.has("first_name") ? ", c.first_name" : ""}${clientCols.has("phone") ? ", c.phone" : ""}${clientCols.has("email") ? ", c.email" : ""}${clientCols.has("telegram") ? ", c.telegram" : ""}${clientCols.has("username") ? ", c.username" : ""}
+      ORDER BY COUNT(*) DESC, MAX(${unlockCreatedExpr}) DESC
       LIMIT 30
       `,
       [providerId]
     );
 
-    const topServicesQ = await pool.query(
-      `
-      SELECT
-        s.id AS service_id,
-        s.title AS service_title,
-        s.category AS service_category,
-        COUNT(u.id)::bigint AS unlock_count,
-        MAX(u.created_at) AS last_unlock_at
-      FROM services s
-      LEFT JOIN client_service_contact_unlocks u ON u.service_id = s.id
-      WHERE s.provider_id = $1
-        AND s.deleted_at IS NULL
-      GROUP BY s.id, s.title, s.category
-      HAVING COUNT(u.id) > 0
-      ORDER BY COUNT(u.id) DESC, MAX(u.created_at) DESC NULLS LAST
-      LIMIT 20
-      `,
-      [providerId]
-    );
-
     let viewsCount = 0;
-    let quickRequests = [];
-
+    let viewsByServiceJoin = "";
+    let viewsByServiceSelect = "0::bigint AS views_count";
     if (await hasTable("service_views")) {
-      const cols = await hasColumns("service_views", ["service_id", "created_at"]);
-      if (cols.has("service_id")) {
+      const viewCols = await getColumns("service_views");
+      if (viewCols.has("service_id")) {
         const viewsQ = await pool.query(
           `
           SELECT COUNT(*)::bigint AS views_count
@@ -200,17 +207,53 @@ router.get("/finance", authenticateToken, requireProvider, async (req, res) => {
           [providerId]
         );
         viewsCount = Number(viewsQ.rows?.[0]?.views_count || 0);
+        viewsByServiceJoin = `
+          LEFT JOIN (
+            SELECT service_id, COUNT(*)::bigint AS views_count
+            FROM service_views
+            GROUP BY service_id
+          ) vv ON vv.service_id = s.id`;
+        viewsByServiceSelect = "COALESCE(vv.views_count, 0)::bigint AS views_count";
       }
     }
 
+    let favoritesCount = 0;
+    let favoritesByServiceJoin = "";
+    let favoritesByServiceSelect = "0::bigint AS favorites_count";
+    if (await hasTable("wishlist")) {
+      const wishlistCols = await getColumns("wishlist");
+      if (wishlistCols.has("service_id")) {
+        const favQ = await pool.query(
+          `
+          SELECT COUNT(*)::bigint AS favorites_count
+          FROM wishlist w
+          JOIN services s ON s.id = w.service_id
+          WHERE s.provider_id = $1
+          `,
+          [providerId]
+        );
+        favoritesCount = Number(favQ.rows?.[0]?.favorites_count || 0);
+        favoritesByServiceJoin = `
+          LEFT JOIN (
+            SELECT service_id, COUNT(*)::bigint AS favorites_count
+            FROM wishlist
+            GROUP BY service_id
+          ) ff ON ff.service_id = s.id`;
+        favoritesByServiceSelect = "COALESCE(ff.favorites_count, 0)::bigint AS favorites_count";
+      }
+    }
+
+    let quickRequests = [];
+    let quickByServiceJoin = "";
+    let quickByServiceSelect = "0::bigint AS quick_requests_count";
     if (await hasTable("quick_requests")) {
-      const cols = await hasColumns("quick_requests", ["id", "service_id", "client_id", "name", "client_name", "message", "status", "created_at"]);
-      if (cols.has("service_id")) {
-        const nameExpr = cols.has("client_name") ? "qr.client_name" : (cols.has("name") ? "qr.name" : "NULL::text");
-        const messageExpr = cols.has("message") ? "qr.message" : "NULL::text";
-        const statusExpr = cols.has("status") ? "qr.status" : "'new'::text";
-        const createdExpr = cols.has("created_at") ? "qr.created_at" : "NOW()";
-        const idExpr = cols.has("id") ? "qr.id" : "NULL::bigint";
+      const qrCols = await getColumns("quick_requests");
+      if (qrCols.has("service_id")) {
+        const nameExpr = qrCols.has("client_name") ? "qr.client_name" : (qrCols.has("name") ? "qr.name" : "NULL::text");
+        const messageExpr = qrCols.has("message") ? "qr.message" : "NULL::text";
+        const statusExpr = qrCols.has("status") ? "qr.status" : "'new'::text";
+        const createdExpr = qrCols.has("created_at") ? "qr.created_at" : "NOW()";
+        const idExpr = qrCols.has("id") ? "qr.id" : `ROW_NUMBER() OVER (ORDER BY ${createdExpr} DESC)::bigint`;
         const quickQ = await pool.query(
           `
           SELECT
@@ -220,8 +263,8 @@ router.get("/finance", authenticateToken, requireProvider, async (req, res) => {
             ${messageExpr} AS message,
             ${statusExpr} AS status,
             ${createdExpr} AS created_at,
-            s.title AS service_title,
-            s.category AS service_category
+            ${serviceTitleExpr} AS service_title,
+            ${serviceCategoryExpr} AS service_category
           FROM quick_requests qr
           JOIN services s ON s.id = qr.service_id
           WHERE s.provider_id = $1
@@ -231,8 +274,42 @@ router.get("/finance", authenticateToken, requireProvider, async (req, res) => {
           [providerId]
         );
         quickRequests = quickQ.rows || [];
+        quickByServiceJoin = `
+          LEFT JOIN (
+            SELECT service_id, COUNT(*)::bigint AS quick_requests_count
+            FROM quick_requests
+            GROUP BY service_id
+          ) qq ON qq.service_id = s.id`;
+        quickByServiceSelect = "COALESCE(qq.quick_requests_count, 0)::bigint AS quick_requests_count";
       }
     }
+
+    const topServicesQ = await pool.query(
+      `
+      SELECT
+        s.id AS service_id,
+        ${serviceTitleExpr} AS service_title,
+        ${serviceCategoryExpr} AS service_category,
+        COUNT(u.id)::bigint AS unlock_count,
+        ${viewsByServiceSelect},
+        ${favoritesByServiceSelect},
+        ${quickByServiceSelect},
+        MAX(${unlockCreatedExpr}) AS last_unlock_at
+      FROM services s
+      LEFT JOIN client_service_contact_unlocks u ON u.service_id = s.id
+      ${viewsByServiceJoin}
+      ${favoritesByServiceJoin}
+      ${quickByServiceJoin}
+      WHERE s.provider_id = $1
+        ${serviceCols.has("deleted_at") ? "AND s.deleted_at IS NULL" : ""}
+      GROUP BY s.id${serviceCols.has("title") ? ", s.title" : ""}${serviceCols.has("category") ? ", s.category" : ""}${viewsByServiceJoin ? ", vv.views_count" : ""}${favoritesByServiceJoin ? ", ff.favorites_count" : ""}${quickByServiceJoin ? ", qq.quick_requests_count" : ""}
+      HAVING COUNT(u.id) > 0${viewsByServiceJoin ? " OR COALESCE(MAX(vv.views_count),0) > 0" : ""}${favoritesByServiceJoin ? " OR COALESCE(MAX(ff.favorites_count),0) > 0" : ""}${quickByServiceJoin ? " OR COALESCE(MAX(qq.quick_requests_count),0) > 0" : ""}
+      ORDER BY (COUNT(u.id) * 5${quickByServiceJoin ? " + COALESCE(MAX(qq.quick_requests_count),0) * 4" : ""}${favoritesByServiceJoin ? " + COALESCE(MAX(ff.favorites_count),0) * 3" : ""}${viewsByServiceJoin ? " + COALESCE(MAX(vv.views_count),0)" : ""}) DESC,
+               MAX(${unlockCreatedExpr}) DESC NULLS LAST
+      LIMIT 20
+      `,
+      [providerId]
+    );
 
     const baseStats = statsQ.rows?.[0] || {};
     return res.json({
@@ -242,6 +319,7 @@ router.get("/finance", authenticateToken, requireProvider, async (req, res) => {
         unlock_count: Number(baseStats.unlock_count || 0),
         hot_clients_count: Number(baseStats.hot_clients_count || 0),
         views_count: Number(viewsCount || 0),
+        favorites_count: Number(favoritesCount || 0),
         quick_requests_count: quickRequests.length,
       },
       recent_unlocks: unlocksQ.rows || [],
@@ -251,10 +329,9 @@ router.get("/finance", authenticateToken, requireProvider, async (req, res) => {
     });
   } catch (e) {
     console.error("providers/finance demand dashboard error:", e);
-    return res.status(500).json({ ok: false, message: "provider demand dashboard error" });
+    return res.status(500).json({ ok: false, message: e?.message || "provider demand dashboard error" });
   }
 });
-
 
 router.get("/services", authenticateToken, requireProvider, getServices);
 router.post("/services", authenticateToken, requireProvider, addService);
