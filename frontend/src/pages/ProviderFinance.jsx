@@ -167,10 +167,11 @@ export default function ProviderFinance() {
           </div>
         ) : null}
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <StatCard icon="🔓" tone="orange" label="Открытия контактов" value={stats.unlock_count || 0} hint="клиенты уже проявили прямой интерес" />
           <StatCard icon="🔥" tone="emerald" label="Горячие клиенты" value={stats.hot_clients_count || hottestClients.length || 0} hint="клиенты с контактами для быстрого ответа" />
-          <StatCard icon="👀" tone="sky" label="Просмотры" value={stats.views_count || 0} hint="если трекинг просмотров включён в базе" />
+          <StatCard icon="👀" tone="sky" label="Просмотры" value={stats.views_count || 0} hint="просмотры карточек ваших услуг" />
+          <StatCard icon="❤️" tone="slate" label="В избранном" value={stats.favorites_count || 0} hint="сколько раз услуги сохранили" />
           <StatCard icon="⚡" tone="violet" label="Быстрые запросы" value={stats.quick_requests_count || quickRequests.length || 0} hint="заявки и быстрые обращения по услугам" />
         </div>
 
@@ -283,10 +284,16 @@ export default function ProviderFinance() {
                       <div className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">открытий</div>
                     </div>
                   </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs font-black text-slate-600 sm:grid-cols-4">
+                    <div className="rounded-2xl bg-orange-50 px-3 py-2 text-orange-700">🔓 {s.unlock_count || 0}</div>
+                    <div className="rounded-2xl bg-sky-50 px-3 py-2 text-sky-700">👀 {s.views_count || 0}</div>
+                    <div className="rounded-2xl bg-rose-50 px-3 py-2 text-rose-700">❤️ {s.favorites_count || 0}</div>
+                    <div className="rounded-2xl bg-violet-50 px-3 py-2 text-violet-700">⚡ {s.quick_requests_count || 0}</div>
+                  </div>
                   <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
                     <div
                       className="h-full rounded-full bg-slate-950"
-                      style={{ width: `${Math.max(8, Math.min(100, Number(s.unlock_count || 0) * 18))}%` }}
+                      style={{ width: `${Math.max(8, Math.min(100, (Number(s.unlock_count || 0) * 5) + (Number(s.quick_requests_count || 0) * 4) + (Number(s.favorites_count || 0) * 3) + Number(s.views_count || 0)))}%` }}
                     />
                   </div>
                 </div>
