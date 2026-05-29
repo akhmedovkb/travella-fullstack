@@ -85,6 +85,17 @@ router.get("/finance", authenticateToken, requireProvider, async (req, res) => {
     return res.status(401).json({ ok: false, message: "Требуется авторизация поставщика" });
   }
 
+  const period = String(req.query.period || "30d").trim();
+  const serviceId = Number(req.query.service_id || 0);
+  const hasServiceFilter = Number.isFinite(serviceId) && serviceId > 0;
+
+  function periodSql(alias = "u") {
+    if (period === "today") return ` AND ${alias}.created_at >= date_trunc('day', NOW()) `;
+    if (period === "7d") return ` AND ${alias}.created_at >= NOW() - INTERVAL '7 days' `;
+    if (period === "30d") return ` AND ${alias}.created_at >= NOW() - INTERVAL '30 days' `;
+    return "";
+  }
+
   async function hasTable(name) {
     const r = await pool.query(
       `SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name=$1 LIMIT 1`,
@@ -93,69 +104,97 @@ router.get("/finance", authenticateToken, requireProvider, async (req, res) => {
     return !!r.rowCount;
   }
 
-  async function getColumns(table) {
+  async function hasColumns(table, columns) {
     const r = await pool.query(
       `
       SELECT column_name
       FROM information_schema.columns
       WHERE table_schema='public'
         AND table_name=$1
+        AND column_name = ANY($2::text[])
       `,
-      [table]
+      [table, columns]
     );
     return new Set((r.rows || []).map((x) => x.column_name));
   }
 
-  function col(cols, name, sqlIfExists, fallbackSql = "NULL::text") {
-    return cols.has(name) ? sqlIfExists : fallbackSql;
-  }
-
-  function firstExisting(cols, candidates, alias, fallbackSql = "NULL::text") {
-    const parts = candidates.filter((x) => cols.has(x)).map((x) => `NULLIF(c.${x}::text, '')`);
-    return parts.length ? `COALESCE(${parts.join(", ")}, ${fallbackSql}) AS ${alias}` : `${fallbackSql} AS ${alias}`;
+  async function ensureLeadCrmTable() {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS provider_lead_crm (
+        id BIGSERIAL PRIMARY KEY,
+        provider_id BIGINT NOT NULL,
+        client_id BIGINT,
+        service_id BIGINT,
+        status TEXT NOT NULL DEFAULT 'new',
+        note TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (provider_id, client_id, service_id)
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_provider_lead_crm_provider ON provider_lead_crm(provider_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_provider_lead_crm_client ON provider_lead_crm(client_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_provider_lead_crm_service ON provider_lead_crm(service_id)`);
   }
 
   try {
-    const unlockCols = await getColumns("client_service_contact_unlocks");
-    const clientCols = (await hasTable("clients")) ? await getColumns("clients") : new Set();
-    const serviceCols = await getColumns("services");
+    await ensureLeadCrmTable();
 
-    const unlockIdExpr = unlockCols.has("id") ? "u.id" : "ROW_NUMBER() OVER (ORDER BY u.created_at DESC)::bigint";
-    const unlockSourceExpr = unlockCols.has("source") ? "COALESCE(NULLIF(u.source::text, ''), 'marketplace')" : "'marketplace'::text";
+    const clientsCols = await hasColumns("clients", ["name", "full_name", "phone", "telegram", "telegram_username", "username", "first_name", "last_name"]);
+    const unlockCols = await hasColumns("client_service_contact_unlocks", ["id", "client_id", "service_id", "source", "created_at", "price_charged"]);
+
+    const clientNameParts = [];
+    if (clientsCols.has("name")) clientNameParts.push("NULLIF(c.name, '')");
+    if (clientsCols.has("full_name")) clientNameParts.push("NULLIF(c.full_name, '')");
+    if (clientsCols.has("first_name") || clientsCols.has("last_name")) {
+      const first = clientsCols.has("first_name") ? "COALESCE(c.first_name,'')" : "''";
+      const last = clientsCols.has("last_name") ? "COALESCE(c.last_name,'')" : "''";
+      clientNameParts.push(`NULLIF(TRIM(${first} || ' ' || ${last}), '')`);
+    }
+    if (clientsCols.has("phone")) clientNameParts.push("NULLIF(c.phone, '')");
+    const clientNameExpr = `COALESCE(${clientNameParts.length ? clientNameParts.join(", ") + ", " : ""}'Client #' || u.client_id::text)`;
+    const clientPhoneExpr = clientsCols.has("phone") ? "c.phone" : "NULL::text";
+    const clientTelegramExpr = clientsCols.has("telegram")
+      ? "c.telegram"
+      : clientsCols.has("telegram_username")
+        ? "c.telegram_username"
+        : clientsCols.has("username")
+          ? "c.username"
+          : "NULL::text";
+    const unlockSourceExpr = unlockCols.has("source") ? "u.source" : "'telegram_payment'::text";
     const unlockCreatedExpr = unlockCols.has("created_at") ? "u.created_at" : "NOW()";
 
-    const clientNameSelect = clientCols.size
-      ? firstExisting(clientCols, ["name", "full_name", "first_name", "phone", "email", "telegram"], "client_name", "'Клиент'::text")
-      : "'Клиент'::text AS client_name";
-    const clientPhoneSelect = clientCols.has("phone") ? "c.phone AS client_phone" : "NULL::text AS client_phone";
-    const clientTelegramSelect = clientCols.has("telegram")
-      ? "c.telegram AS client_telegram"
-      : (clientCols.has("username") ? "c.username AS client_telegram" : "NULL::text AS client_telegram");
-
-    const serviceTitleExpr = serviceCols.has("title") ? "s.title" : "('Услуга #' || s.id::text)";
-    const serviceCategoryExpr = serviceCols.has("category") ? "s.category" : "NULL::text";
+    const unlockWhereExtra = `${periodSql("u")} ${hasServiceFilter ? " AND s.id = $2 " : ""}`;
+    const params = hasServiceFilter ? [providerId, serviceId] : [providerId];
 
     const unlocksQ = await pool.query(
       `
       SELECT
-        ${unlockIdExpr} AS id,
+        u.id,
         u.client_id,
         u.service_id,
         ${unlockSourceExpr} AS source,
         ${unlockCreatedExpr} AS created_at,
-        ${clientNameSelect},
-        ${clientPhoneSelect},
-        ${clientTelegramSelect},
-        ${serviceTitleExpr} AS service_title,
-        ${serviceCategoryExpr} AS service_category
+        ${clientNameExpr} AS client_name,
+        ${clientPhoneExpr} AS client_phone,
+        ${clientTelegramExpr} AS client_telegram,
+        s.title AS service_title,
+        s.category AS service_category,
+        COALESCE(l.status, 'new') AS lead_status,
+        l.note AS lead_note
       FROM client_service_contact_unlocks u
       JOIN services s ON s.id = u.service_id
-      ${clientCols.size ? "LEFT JOIN clients c ON c.id = u.client_id" : ""}
+      LEFT JOIN clients c ON c.id = u.client_id
+      LEFT JOIN provider_lead_crm l
+        ON l.provider_id = s.provider_id
+       AND l.client_id = u.client_id
+       AND l.service_id = u.service_id
       WHERE s.provider_id = $1
-      ORDER BY ${unlockCreatedExpr} DESC, ${unlockIdExpr} DESC
-      LIMIT 50
+        ${unlockWhereExtra}
+      ORDER BY ${unlockCreatedExpr} DESC, u.id DESC
+      LIMIT 80
       `,
-      [providerId]
+      params
     );
 
     const statsQ = await pool.query(
@@ -166,147 +205,213 @@ router.get("/finance", authenticateToken, requireProvider, async (req, res) => {
       FROM client_service_contact_unlocks u
       JOIN services s ON s.id = u.service_id
       WHERE s.provider_id = $1
+        ${unlockWhereExtra}
       `,
-      [providerId]
+      params
     );
 
     const hotClientsQ = await pool.query(
       `
       SELECT
         u.client_id,
-        ${clientNameSelect},
-        ${clientPhoneSelect},
-        ${clientTelegramSelect},
+        ${clientNameExpr} AS client_name,
+        ${clientPhoneExpr} AS client_phone,
+        ${clientTelegramExpr} AS client_telegram,
         COUNT(*)::bigint AS unlock_count,
         MAX(${unlockCreatedExpr}) AS last_activity_at,
-        (ARRAY_AGG(${serviceTitleExpr} ORDER BY ${unlockCreatedExpr} DESC, ${unlockIdExpr} DESC))[1] AS last_service_title
+        (ARRAY_AGG(s.title ORDER BY ${unlockCreatedExpr} DESC, u.id DESC))[1] AS last_service_title,
+        (ARRAY_AGG(s.id ORDER BY ${unlockCreatedExpr} DESC, u.id DESC))[1] AS last_service_id,
+        COALESCE((ARRAY_AGG(l.status ORDER BY l.updated_at DESC NULLS LAST))[1], 'new') AS lead_status,
+        (ARRAY_AGG(l.note ORDER BY l.updated_at DESC NULLS LAST))[1] AS lead_note
       FROM client_service_contact_unlocks u
       JOIN services s ON s.id = u.service_id
-      ${clientCols.size ? "LEFT JOIN clients c ON c.id = u.client_id" : ""}
+      LEFT JOIN clients c ON c.id = u.client_id
+      LEFT JOIN provider_lead_crm l
+        ON l.provider_id = s.provider_id
+       AND l.client_id = u.client_id
+       AND l.service_id = u.service_id
       WHERE s.provider_id = $1
-      GROUP BY u.client_id${clientCols.has("name") ? ", c.name" : ""}${clientCols.has("full_name") ? ", c.full_name" : ""}${clientCols.has("first_name") ? ", c.first_name" : ""}${clientCols.has("phone") ? ", c.phone" : ""}${clientCols.has("email") ? ", c.email" : ""}${clientCols.has("telegram") ? ", c.telegram" : ""}${clientCols.has("username") ? ", c.username" : ""}
+        ${unlockWhereExtra}
+      GROUP BY u.client_id, ${clientPhoneExpr}, ${clientTelegramExpr}, ${clientNameExpr}
       ORDER BY COUNT(*) DESC, MAX(${unlockCreatedExpr}) DESC
       LIMIT 30
       `,
-      [providerId]
+      params
     );
 
     let viewsCount = 0;
-    let viewsByServiceJoin = "";
-    let viewsByServiceSelect = "0::bigint AS views_count";
+    let favoriteCount = 0;
+    const viewsByService = new Map();
+    const favoritesByService = new Map();
+
     if (await hasTable("service_views")) {
-      const viewCols = await getColumns("service_views");
-      if (viewCols.has("service_id")) {
+      const cols = await hasColumns("service_views", ["service_id", "created_at"]);
+      if (cols.has("service_id")) {
+        const viewsWhereExtra = `${cols.has("created_at") ? periodSql("v") : ""} ${hasServiceFilter ? " AND s.id = $2 " : ""}`;
         const viewsQ = await pool.query(
           `
           SELECT COUNT(*)::bigint AS views_count
           FROM service_views v
           JOIN services s ON s.id = v.service_id
           WHERE s.provider_id = $1
+            ${viewsWhereExtra}
           `,
-          [providerId]
+          params
         );
         viewsCount = Number(viewsQ.rows?.[0]?.views_count || 0);
-        viewsByServiceJoin = `
-          LEFT JOIN (
-            SELECT service_id, COUNT(*)::bigint AS views_count
-            FROM service_views
-            GROUP BY service_id
-          ) vv ON vv.service_id = s.id`;
-        viewsByServiceSelect = "COALESCE(vv.views_count, 0)::bigint AS views_count";
+
+        const viewsByServiceQ = await pool.query(
+          `
+          SELECT v.service_id, COUNT(*)::bigint AS views_count
+          FROM service_views v
+          JOIN services s ON s.id = v.service_id
+          WHERE s.provider_id = $1
+            ${viewsWhereExtra}
+          GROUP BY v.service_id
+          `,
+          params
+        );
+        for (const row of viewsByServiceQ.rows || []) viewsByService.set(Number(row.service_id), Number(row.views_count || 0));
       }
     }
 
-    let favoritesCount = 0;
-    let favoritesByServiceJoin = "";
-    let favoritesByServiceSelect = "0::bigint AS favorites_count";
     if (await hasTable("wishlist")) {
-      const wishlistCols = await getColumns("wishlist");
-      if (wishlistCols.has("service_id")) {
+      const cols = await hasColumns("wishlist", ["service_id", "created_at"]);
+      if (cols.has("service_id")) {
+        const favWhereExtra = `${cols.has("created_at") ? periodSql("w") : ""} ${hasServiceFilter ? " AND s.id = $2 " : ""}`;
         const favQ = await pool.query(
           `
-          SELECT COUNT(*)::bigint AS favorites_count
+          SELECT COUNT(*)::bigint AS favorite_count
           FROM wishlist w
           JOIN services s ON s.id = w.service_id
           WHERE s.provider_id = $1
+            ${favWhereExtra}
           `,
-          [providerId]
+          params
         );
-        favoritesCount = Number(favQ.rows?.[0]?.favorites_count || 0);
-        favoritesByServiceJoin = `
-          LEFT JOIN (
-            SELECT service_id, COUNT(*)::bigint AS favorites_count
-            FROM wishlist
-            GROUP BY service_id
-          ) ff ON ff.service_id = s.id`;
-        favoritesByServiceSelect = "COALESCE(ff.favorites_count, 0)::bigint AS favorites_count";
+        favoriteCount = Number(favQ.rows?.[0]?.favorite_count || 0);
+
+        const favByServiceQ = await pool.query(
+          `
+          SELECT w.service_id, COUNT(*)::bigint AS favorite_count
+          FROM wishlist w
+          JOIN services s ON s.id = w.service_id
+          WHERE s.provider_id = $1
+            ${favWhereExtra}
+          GROUP BY w.service_id
+          `,
+          params
+        );
+        for (const row of favByServiceQ.rows || []) favoritesByService.set(Number(row.service_id), Number(row.favorite_count || 0));
       }
     }
 
     let quickRequests = [];
-    let quickByServiceJoin = "";
-    let quickByServiceSelect = "0::bigint AS quick_requests_count";
-    if (await hasTable("quick_requests")) {
-      const qrCols = await getColumns("quick_requests");
-      if (qrCols.has("service_id")) {
-        const nameExpr = qrCols.has("client_name") ? "qr.client_name" : (qrCols.has("name") ? "qr.name" : "NULL::text");
-        const messageExpr = qrCols.has("message") ? "qr.message" : "NULL::text";
-        const statusExpr = qrCols.has("status") ? "qr.status" : "'new'::text";
-        const createdExpr = qrCols.has("created_at") ? "qr.created_at" : "NOW()";
-        const idExpr = qrCols.has("id") ? "qr.id" : `ROW_NUMBER() OVER (ORDER BY ${createdExpr} DESC)::bigint`;
-        const quickQ = await pool.query(
-          `
-          SELECT
-            ${idExpr} AS id,
-            qr.service_id,
-            ${nameExpr} AS client_name,
-            ${messageExpr} AS message,
-            ${statusExpr} AS status,
-            ${createdExpr} AS created_at,
-            ${serviceTitleExpr} AS service_title,
-            ${serviceCategoryExpr} AS service_category
-          FROM quick_requests qr
-          JOIN services s ON s.id = qr.service_id
-          WHERE s.provider_id = $1
-          ORDER BY ${createdExpr} DESC
-          LIMIT 30
-          `,
-          [providerId]
-        );
-        quickRequests = quickQ.rows || [];
-        quickByServiceJoin = `
-          LEFT JOIN (
-            SELECT service_id, COUNT(*)::bigint AS quick_requests_count
-            FROM quick_requests
-            GROUP BY service_id
-          ) qq ON qq.service_id = s.id`;
-        quickByServiceSelect = "COALESCE(qq.quick_requests_count, 0)::bigint AS quick_requests_count";
-      }
+    const quickByService = new Map();
+
+    async function loadQuickRequestsFrom(table) {
+      if (!(await hasTable(table))) return [];
+      const cols = await hasColumns(table, [
+        "id", "service_id", "client_id", "name", "client_name", "message", "status", "created_at",
+        "requester_chat_id", "username", "first_name", "last_name", "provider_id"
+      ]);
+      if (!cols.has("service_id")) return [];
+
+      const idExpr = cols.has("id") ? "qr.id" : "NULL::bigint";
+      const clientIdExpr = cols.has("client_id") ? "qr.client_id" : "NULL::bigint";
+      const nameExpr = cols.has("client_name")
+        ? "qr.client_name"
+        : cols.has("name")
+          ? "qr.name"
+          : cols.has("first_name") || cols.has("last_name")
+            ? `NULLIF(TRIM(${cols.has("first_name") ? "COALESCE(qr.first_name,'')" : "''"} || ' ' || ${cols.has("last_name") ? "COALESCE(qr.last_name,'')" : "''"}), '')`
+            : cols.has("requester_chat_id")
+              ? "'TG #' || qr.requester_chat_id::text"
+              : "NULL::text";
+      const messageExpr = cols.has("message") ? "qr.message" : "NULL::text";
+      const statusExpr = cols.has("status") ? "qr.status" : "'new'::text";
+      const createdExpr = cols.has("created_at") ? "qr.created_at" : "NOW()";
+      const sourceExpr = table === "telegram_quick_requests" ? "'telegram'::text" : "'site'::text";
+      const quickWhereExtra = `${cols.has("created_at") ? periodSql("qr") : ""} ${hasServiceFilter ? " AND s.id = $2 " : ""}`;
+
+      const quickQ = await pool.query(
+        `
+        SELECT
+          ${idExpr} AS id,
+          ${clientIdExpr} AS client_id,
+          qr.service_id,
+          ${nameExpr} AS client_name,
+          ${messageExpr} AS message,
+          ${statusExpr} AS status,
+          ${createdExpr} AS created_at,
+          ${sourceExpr} AS source,
+          s.title AS service_title,
+          s.category AS service_category
+        FROM ${table} qr
+        JOIN services s ON s.id = qr.service_id
+        WHERE s.provider_id = $1
+          ${quickWhereExtra}
+        ORDER BY ${createdExpr} DESC
+        LIMIT 40
+        `,
+        params
+      );
+      return quickQ.rows || [];
+    }
+
+    const qr1 = await loadQuickRequestsFrom("quick_requests");
+    const qr2 = await loadQuickRequestsFrom("telegram_quick_requests");
+    quickRequests = [...qr1, ...qr2]
+      .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+      .slice(0, 40);
+    for (const row of quickRequests) {
+      const sid = Number(row.service_id);
+      if (Number.isFinite(sid)) quickByService.set(sid, (quickByService.get(sid) || 0) + 1);
     }
 
     const topServicesQ = await pool.query(
       `
       SELECT
         s.id AS service_id,
-        ${serviceTitleExpr} AS service_title,
-        ${serviceCategoryExpr} AS service_category,
+        s.title AS service_title,
+        s.category AS service_category,
         COUNT(u.id)::bigint AS unlock_count,
-        ${viewsByServiceSelect},
-        ${favoritesByServiceSelect},
-        ${quickByServiceSelect},
         MAX(${unlockCreatedExpr}) AS last_unlock_at
       FROM services s
-      LEFT JOIN client_service_contact_unlocks u ON u.service_id = s.id
-      ${viewsByServiceJoin}
-      ${favoritesByServiceJoin}
-      ${quickByServiceJoin}
+      LEFT JOIN client_service_contact_unlocks u ON u.service_id = s.id ${periodSql("u")}
       WHERE s.provider_id = $1
-        ${serviceCols.has("deleted_at") ? "AND s.deleted_at IS NULL" : ""}
-      GROUP BY s.id${serviceCols.has("title") ? ", s.title" : ""}${serviceCols.has("category") ? ", s.category" : ""}${viewsByServiceJoin ? ", vv.views_count" : ""}${favoritesByServiceJoin ? ", ff.favorites_count" : ""}${quickByServiceJoin ? ", qq.quick_requests_count" : ""}
-      HAVING COUNT(u.id) > 0${viewsByServiceJoin ? " OR COALESCE(MAX(vv.views_count),0) > 0" : ""}${favoritesByServiceJoin ? " OR COALESCE(MAX(ff.favorites_count),0) > 0" : ""}${quickByServiceJoin ? " OR COALESCE(MAX(qq.quick_requests_count),0) > 0" : ""}
-      ORDER BY (COUNT(u.id) * 5${quickByServiceJoin ? " + COALESCE(MAX(qq.quick_requests_count),0) * 4" : ""}${favoritesByServiceJoin ? " + COALESCE(MAX(ff.favorites_count),0) * 3" : ""}${viewsByServiceJoin ? " + COALESCE(MAX(vv.views_count),0)" : ""}) DESC,
-               MAX(${unlockCreatedExpr}) DESC NULLS LAST
+        AND s.deleted_at IS NULL
+        ${hasServiceFilter ? " AND s.id = $2 " : ""}
+      GROUP BY s.id, s.title, s.category
+      ORDER BY COUNT(u.id) DESC, MAX(${unlockCreatedExpr}) DESC NULLS LAST, s.id DESC
       LIMIT 20
+      `,
+      params
+    );
+
+    const topServices = (topServicesQ.rows || []).map((row) => {
+      const sid = Number(row.service_id);
+      const unlockCount = Number(row.unlock_count || 0);
+      const views = viewsByService.get(sid) || 0;
+      const favorites = favoritesByService.get(sid) || 0;
+      const quick = quickByService.get(sid) || 0;
+      return {
+        ...row,
+        unlock_count: unlockCount,
+        views_count: views,
+        favorite_count: favorites,
+        quick_requests_count: quick,
+        demand_score: unlockCount * 6 + quick * 4 + favorites * 2 + views,
+      };
+    }).sort((a, b) => Number(b.demand_score || 0) - Number(a.demand_score || 0));
+
+    const servicesQ = await pool.query(
+      `
+      SELECT id, title, category
+      FROM services
+      WHERE provider_id = $1 AND deleted_at IS NULL
+      ORDER BY created_at DESC NULLS LAST, id DESC
+      LIMIT 200
       `,
       [providerId]
     );
@@ -315,23 +420,111 @@ router.get("/finance", authenticateToken, requireProvider, async (req, res) => {
     return res.json({
       ok: true,
       provider_id: providerId,
+      filters: { period, service_id: hasServiceFilter ? serviceId : null },
       stats: {
         unlock_count: Number(baseStats.unlock_count || 0),
         hot_clients_count: Number(baseStats.hot_clients_count || 0),
         views_count: Number(viewsCount || 0),
-        favorites_count: Number(favoritesCount || 0),
+        favorite_count: Number(favoriteCount || 0),
         quick_requests_count: quickRequests.length,
+        new_leads_count: (unlocksQ.rows || []).filter((x) => String(x.lead_status || "new") === "new").length,
       },
       recent_unlocks: unlocksQ.rows || [],
       hot_clients: hotClientsQ.rows || [],
-      top_services: topServicesQ.rows || [],
+      top_services: topServices,
       quick_requests: quickRequests,
+      services: servicesQ.rows || [],
     });
   } catch (e) {
     console.error("providers/finance demand dashboard error:", e);
-    return res.status(500).json({ ok: false, message: e?.message || "provider demand dashboard error" });
+    return res.status(500).json({ ok: false, message: "provider demand dashboard error" });
   }
 });
+
+router.post("/finance/leads/status", authenticateToken, requireProvider, async (req, res) => {
+  const providerId = Number(req.user.id);
+  const clientId = Number(req.body?.client_id || 0);
+  const serviceId = Number(req.body?.service_id || 0);
+  const status = String(req.body?.status || "new").trim();
+  const allowed = new Set(["new", "contacted", "in_progress", "closed", "not_relevant"]);
+  if (!allowed.has(status)) return res.status(400).json({ ok: false, message: "Некорректный статус" });
+  if (!Number.isFinite(clientId) || clientId <= 0) return res.status(400).json({ ok: false, message: "Некорректный клиент" });
+  if (!Number.isFinite(serviceId) || serviceId <= 0) return res.status(400).json({ ok: false, message: "Некорректная услуга" });
+
+  try {
+    const own = await pool.query(`SELECT 1 FROM services WHERE id=$1 AND provider_id=$2 LIMIT 1`, [serviceId, providerId]);
+    if (!own.rowCount) return res.status(404).json({ ok: false, message: "Услуга не найдена" });
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS provider_lead_crm (
+        id BIGSERIAL PRIMARY KEY,
+        provider_id BIGINT NOT NULL,
+        client_id BIGINT,
+        service_id BIGINT,
+        status TEXT NOT NULL DEFAULT 'new',
+        note TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (provider_id, client_id, service_id)
+      )
+    `);
+    const r = await pool.query(
+      `
+      INSERT INTO provider_lead_crm (provider_id, client_id, service_id, status, updated_at)
+      VALUES ($1,$2,$3,$4,NOW())
+      ON CONFLICT (provider_id, client_id, service_id)
+      DO UPDATE SET status=EXCLUDED.status, updated_at=NOW()
+      RETURNING *
+      `,
+      [providerId, clientId, serviceId, status]
+    );
+    return res.json({ ok: true, lead: r.rows?.[0] || null });
+  } catch (e) {
+    console.error("providers/finance/leads/status error:", e);
+    return res.status(500).json({ ok: false, message: "Не удалось сохранить статус" });
+  }
+});
+
+router.post("/finance/leads/note", authenticateToken, requireProvider, async (req, res) => {
+  const providerId = Number(req.user.id);
+  const clientId = Number(req.body?.client_id || 0);
+  const serviceId = Number(req.body?.service_id || 0);
+  const note = String(req.body?.note || "").trim().slice(0, 1000);
+  if (!Number.isFinite(clientId) || clientId <= 0) return res.status(400).json({ ok: false, message: "Некорректный клиент" });
+  if (!Number.isFinite(serviceId) || serviceId <= 0) return res.status(400).json({ ok: false, message: "Некорректная услуга" });
+
+  try {
+    const own = await pool.query(`SELECT 1 FROM services WHERE id=$1 AND provider_id=$2 LIMIT 1`, [serviceId, providerId]);
+    if (!own.rowCount) return res.status(404).json({ ok: false, message: "Услуга не найдена" });
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS provider_lead_crm (
+        id BIGSERIAL PRIMARY KEY,
+        provider_id BIGINT NOT NULL,
+        client_id BIGINT,
+        service_id BIGINT,
+        status TEXT NOT NULL DEFAULT 'new',
+        note TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (provider_id, client_id, service_id)
+      )
+    `);
+    const r = await pool.query(
+      `
+      INSERT INTO provider_lead_crm (provider_id, client_id, service_id, note, updated_at)
+      VALUES ($1,$2,$3,$4,NOW())
+      ON CONFLICT (provider_id, client_id, service_id)
+      DO UPDATE SET note=EXCLUDED.note, updated_at=NOW()
+      RETURNING *
+      `,
+      [providerId, clientId, serviceId, note]
+    );
+    return res.json({ ok: true, lead: r.rows?.[0] || null });
+  } catch (e) {
+    console.error("providers/finance/leads/note error:", e);
+    return res.status(500).json({ ok: false, message: "Не удалось сохранить заметку" });
+  }
+});
+
 
 router.get("/services", authenticateToken, requireProvider, getServices);
 router.post("/services", authenticateToken, requireProvider, addService);
