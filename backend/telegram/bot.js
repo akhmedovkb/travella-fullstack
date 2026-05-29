@@ -10581,6 +10581,76 @@ async function replyProviderSupportPrompt(ctx, serviceId = null) {
   }
 }
 
+async function sendProviderSupportInvoice(ctx, { providerId, serviceId = null, amountSum }) {
+  const pid = Number(providerId || 0);
+  const sid = Number(serviceId || 0) || 0;
+  const amount = Math.trunc(Number(amountSum || 0));
+
+  if (!PAYMENTS_PROVIDER_TOKEN) {
+    await safeReply(ctx, "⚠️ Telegram Payme не настроен на сервере.");
+    return { ok: false, reason: "no_provider_token" };
+  }
+
+  if (ctx.chat?.type !== "private") {
+    await safeReply(ctx, "🔒 Поддержать проект через Telegram Payme можно только в личном чате с ботом.");
+    return { ok: false, reason: "not_private" };
+  }
+
+  if (!Number.isFinite(pid) || pid <= 0) {
+    await safeReply(ctx, "⚠️ Не удалось определить поставщика. Откройте бота через /start.");
+    return { ok: false, reason: "bad_provider" };
+  }
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    await safeReply(ctx, "⚠️ Некорректная сумма поддержки проекта.");
+    return { ok: false, reason: "bad_amount" };
+  }
+
+  const payload = `support_project:${pid}:${sid}:${amount}:${Date.now()}`;
+  const amountMinor = amount * currencyMinorFactor(PAYMENTS_CURRENCY);
+
+  await ensureTelegramPaymentsTables(pool);
+
+  await pool.query(
+    `
+    INSERT INTO telegram_payments (
+      status, payment_type, service_id, invoice_payload,
+      amount_minor, amount_sum, currency, source, meta
+    )
+    VALUES ('created', 'provider_support', $1, $2, $3, $4, $5, 'telegram_bot', $6::jsonb)
+    `,
+    [
+      sid || null,
+      payload,
+      amountMinor,
+      amount,
+      String(PAYMENTS_CURRENCY || "UZS"),
+      JSON.stringify({
+        provider_id: pid,
+        service_id: sid || null,
+        stage: "invoice_created",
+      }),
+    ]
+  );
+
+  await ctx.telegram.sendInvoice(ctx.chat.id, {
+    title: "❤️ Поддержка проекта",
+    description: "Добровольный вклад в развитие Bot Otkaznyx Turov",
+    payload,
+    provider_token: PAYMENTS_PROVIDER_TOKEN,
+    currency: PAYMENTS_CURRENCY,
+    prices: [
+      {
+        label: "Поддержка проекта",
+        amount: amountMinor,
+      },
+    ],
+    start_parameter: "provider_support",
+  });
+
+  return { ok: true };
+}
+
 bot.action(/^support_project:pay:(\d+):(\d+)$/, async (ctx) => {
   try {
     await safeCb(ctx);
@@ -10589,36 +10659,20 @@ bot.action(/^support_project:pay:(\d+):(\d+)$/, async (ctx) => {
     const serviceId = Number(ctx.match?.[2] || 0) || null;
     const telegramChatId = getActorId(ctx) || ctx.from?.id || null;
 
-    const result = await createProviderSupportDonationOrder({
-      telegramChatId,
+    const providerId = await resolveProviderIdByTelegramChatId(telegramChatId);
+    if (!providerId) {
+      await safeReply(ctx, "⚠️ Не удалось определить ваш аккаунт поставщика. Откройте бота через /start.");
+      return;
+    }
+
+    await sendProviderSupportInvoice(ctx, {
+      providerId,
       serviceId,
       amountSum,
-      source: "telegram_provider_bot",
-      note: serviceId ? `provider support after service action #${serviceId}` : "provider support",
     });
-
-    await safeReply(
-      ctx,
-      `❤️ <b>Спасибо за поддержку проекта.</b>\n\n` +
-        `Ваш вклад помогает развивать <b>Bot Otkaznyx Turov</b>.\n\n` +
-        `Сумма: <b>${amountSum.toLocaleString("ru-RU")} сум</b>\n` +
-        `Заказ: <code>#${result.order.id}</code>`,
-      {
-        parse_mode: "HTML",
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: "✅ Поддержать проект", url: result.pay_url }],
-            [
-              { text: "📋 Мои услуги", callback_data: "prov_services:list" },
-              { text: "➕ Создать услугу", callback_data: "prov_services:create" },
-            ],
-          ],
-        },
-      }
-    );
   } catch (e) {
     console.error("[tg-bot] support_project:pay error:", e?.message || e);
-    await safeReply(ctx, "⚠️ Не удалось создать ссылку Payme для поддержки проекта. Попробуйте позже.");
+    await safeReply(ctx, "⚠️ Не удалось создать Telegram Payme оплату поддержки проекта. Попробуйте позже.");
   }
 });
 
@@ -10737,6 +10791,18 @@ function parseTelegramPaymentPayload(payload) {
       paymentType,
       clientId: Number(parts[1] || 0),
       serviceId: Number(parts[2] || 0),
+      amountSum: Number(parts[3] || 0),
+      ts: Number(parts[4] || 0),
+    };
+  }
+
+  if (paymentType === 'support_project') {
+    return {
+      ok: true,
+      raw,
+      paymentType,
+      providerId: Number(parts[1] || 0),
+      serviceId: Number(parts[2] || 0) || null,
       amountSum: Number(parts[3] || 0),
       ts: Number(parts[4] || 0),
     };
@@ -11189,6 +11255,33 @@ bot.on("pre_checkout_query", async (ctx) => {
       return;
     }
 
+    if (parsed.paymentType === "support_project") {
+      const amountCheck = validateTelegramPaymentAmount({
+        parsed,
+        totalAmountMinor: q?.total_amount,
+        currency: q?.currency,
+      });
+
+      if (!amountCheck.ok) {
+        console.warn("[tg-bot] provider support pre_checkout amount rejected", {
+          reason: amountCheck.reason,
+          payload: parsed.raw,
+          expectedMinor: amountCheck.expectedMinor,
+          actualMinor: amountCheck.actualMinor,
+          expectedCurrency: amountCheck.expectedCurrency,
+          actualCurrency: amountCheck.actualCurrency,
+        });
+        await ctx.answerPreCheckoutQuery(false, "Сумма платежа изменилась. Выберите сумму заново.");
+        return;
+      }
+
+      const providerId = await resolveProviderIdByTelegramChatId(ctx.from?.id);
+      if (!providerId || Number(providerId) !== Number(parsed.providerId)) {
+        await ctx.answerPreCheckoutQuery(false, "Поставщик не найден. Откройте бот через /start.");
+        return;
+      }
+    }
+
     if (parsed.paymentType === "unlock_contact") {
       const clientRow = await getClientRowByChatId(pool, ctx.from?.id);
       if (!clientRow?.id || Number(clientRow.id) !== Number(parsed.clientId)) {
@@ -11252,13 +11345,165 @@ bot.on("successful_payment", async (ctx) => {
     const chatId = ctx.from?.id;
     if (!chatId) return;
 
-    const clientRow = await getClientRowByChatId(pool, chatId);
-    if (!clientRow?.id) return;
-
     parsed = parseTelegramPaymentPayload(sp.invoice_payload || "");
     if (!parsed.ok) return;
 
-    if (parsed.paymentType !== "contact_topup" && parsed.paymentType !== "unlock_contact") return;
+    if (parsed.paymentType !== "contact_topup" && parsed.paymentType !== "unlock_contact" && parsed.paymentType !== "support_project") return;
+
+    const factor = currencyMinorFactor(sp.currency || PAYMENTS_CURRENCY);
+    const paidMinor = Number(sp.total_amount || 0);
+    const paidMajor = factor > 0 ? Math.trunc(paidMinor / factor) : Math.trunc(paidMinor);
+
+    await ensureTelegramPaymentsTables(pool);
+
+    if (parsed.paymentType === "support_project") {
+      const amountCheck = validateTelegramPaymentAmount({
+        parsed,
+        totalAmountMinor: sp.total_amount,
+        currency: sp.currency,
+      });
+
+      const providerId = await resolveProviderIdByTelegramChatId(chatId);
+      if (!providerId || Number(providerId) !== Number(parsed.providerId)) {
+        await trackTelegramBotEvent("tg_provider_support_payment_failed", {
+          providerId: Number(parsed.providerId || 0) || null,
+          serviceId: Number(parsed.serviceId || 0) || null,
+          chatId,
+          meta: { reason: "provider_mismatch", payload: parsed.raw },
+        });
+        await safeReply(ctx, "⚠️ Оплата получена, но аккаунт поставщика не совпал. Мы видим платеж и проверим его вручную.");
+        return;
+      }
+
+      if (!amountCheck.ok) {
+        await trackTelegramBotEvent("tg_provider_support_payment_failed", {
+          providerId,
+          serviceId: Number(parsed.serviceId || 0) || null,
+          chatId,
+          meta: {
+            reason: amountCheck.reason,
+            expected_amount_sum: amountCheck.expectedSum,
+            expected_amount_minor: amountCheck.expectedMinor,
+            paid_amount_minor: amountCheck.actualMinor,
+            expected_currency: amountCheck.expectedCurrency,
+            paid_currency: amountCheck.actualCurrency,
+          },
+        });
+        await safeReply(ctx, "⚠️ Оплата получена, но сумма не совпала с ожидаемой. Мы видим платеж и проверим его вручную.");
+        return;
+      }
+
+      const amountSum = Math.trunc(Number(parsed.amountSum || paidMajor || 0));
+      const serviceId = Number(parsed.serviceId || 0) || null;
+      const chargeId = String(sp.telegram_payment_charge_id || "");
+      const providerChargeId = String(sp.provider_payment_charge_id || "");
+      const lockKey = chargeId || providerChargeId || parsed.raw || `tg_support:${providerId}:${Date.now()}`;
+
+      const tx = await pool.connect();
+      try {
+        await tx.query("BEGIN");
+        await tx.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`telegram_payment:${lockKey}`]);
+
+        const duplicate = await tx.query(
+          `
+          SELECT id, status
+            FROM telegram_payments
+           WHERE ($1 <> '' AND telegram_payment_charge_id = $1)
+              OR ($2 <> '' AND provider_payment_charge_id = $2)
+           LIMIT 1
+          `,
+          [chargeId, providerChargeId]
+        );
+
+        if (duplicate.rowCount && String(duplicate.rows[0].status || "") === "succeeded") {
+          await tx.query("COMMIT");
+          await safeReply(ctx, "ℹ️ Этот платеж поддержки уже был обработан. Спасибо!");
+          return;
+        }
+
+        await tx.query(
+          `
+          INSERT INTO telegram_payments (
+            status, payment_type, service_id, invoice_payload,
+            telegram_payment_charge_id, provider_payment_charge_id,
+            amount_minor, amount_sum, currency, source, meta
+          )
+          VALUES ('succeeded', 'provider_support', $1, $2, NULLIF($3,''), NULLIF($4,''), $5, $6, $7, 'telegram_bot', $8::jsonb)
+          ON CONFLICT (telegram_payment_charge_id)
+          WHERE telegram_payment_charge_id IS NOT NULL AND telegram_payment_charge_id <> ''
+          DO UPDATE SET
+            status='succeeded',
+            processed_at=NOW(),
+            error=NULL,
+            meta=telegram_payments.meta || EXCLUDED.meta
+          `,
+          [
+            serviceId,
+            parsed.raw,
+            chargeId,
+            providerChargeId,
+            paidMinor,
+            amountSum,
+            String(sp.currency || PAYMENTS_CURRENCY || "UZS"),
+            JSON.stringify({
+              provider_id: providerId,
+              service_id: serviceId,
+              successful_payment: sp,
+            }),
+          ]
+        );
+
+        await tx.query(
+          `
+          UPDATE telegram_payments
+             SET status='succeeded', processed_at=NOW(), error=NULL
+           WHERE invoice_payload = $1
+          `,
+          [parsed.raw]
+        );
+
+        await tx.query("COMMIT");
+      } catch (e) {
+        try { await tx.query("ROLLBACK"); } catch {}
+        throw e;
+      } finally {
+        tx.release();
+      }
+
+      await trackTelegramBotEvent("tg_provider_support_paid", {
+        providerId,
+        serviceId,
+        chatId,
+        meta: {
+          amount_sum: amountSum,
+          currency: sp.currency,
+          telegram_payment_charge_id: sp.telegram_payment_charge_id,
+          provider_payment_charge_id: sp.provider_payment_charge_id,
+        },
+      });
+
+      await safeReply(
+        ctx,
+        `❤️ <b>Спасибо за поддержку проекта.</b>\n\n` +
+          `Ваш вклад помогает развивать <b>Bot Otkaznyx Turov</b>.\n\n` +
+          `Сумма: <b>${Number(amountSum || 0).toLocaleString("ru-RU")} сум</b>`,
+        {
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: "📋 Мои услуги", callback_data: "prov_services:list" },
+                { text: "➕ Создать услугу", callback_data: "prov_services:create" },
+              ],
+            ],
+          },
+        }
+      );
+      return;
+    }
+
+    const clientRow = await getClientRowByChatId(pool, chatId);
+    if (!clientRow?.id) return;
 
     if (Number(parsed.clientId) !== Number(clientRow.id)) {
       console.warn("[tg-bot] payment payload client mismatch", {
@@ -11268,12 +11513,6 @@ bot.on("successful_payment", async (ctx) => {
       });
       return;
     }
-
-    const factor = currencyMinorFactor(sp.currency || PAYMENTS_CURRENCY);
-    const paidMinor = Number(sp.total_amount || 0);
-    const paidMajor = factor > 0 ? Math.trunc(paidMinor / factor) : Math.trunc(paidMinor);
-
-    await ensureTelegramPaymentsTables(pool);
 
     if (parsed.paymentType === "unlock_contact") {
       const serviceId = Number(parsed.serviceId || 0);
