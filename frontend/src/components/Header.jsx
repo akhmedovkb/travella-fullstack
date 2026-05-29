@@ -403,18 +403,18 @@ export default function Header() {
             >
               {mobileOpen ? <IconClose /> : <IconBurger />}
             </button>
-
-            <Link to="/" className="inline-flex shrink-0 items-center" aria-label="Travella Home">
-              <img
-                src="/logo1.jpg"
-                alt="Travella"
-                className="h-9 w-auto object-contain sm:h-9 md:h-10"
-                loading="lazy"
-                onError={(e) => {
-                  e.currentTarget.src = "/logo7.jpg";
-                }}
-              />
-            </Link>
+              <Link
+                to="/"
+                className="inline-flex shrink-0 items-center"
+                aria-label="Travella Home"
+              >
+                <img
+                  src="/logo-travella-dark.png"
+                  alt="Travella"
+                  className="h-7 w-auto object-contain"
+                  loading="eager"
+                />
+              </Link>
 
               <nav className="hidden min-w-0 items-center gap-1 lg:gap-2 2xl:flex">
               
