@@ -4,6 +4,12 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import {
   createInspection,
   createInspectionComment,
+  deleteInspection,
+  moderateInspection,
+  moderateInspectionComment,
+  reportInspection,
+  reportInspectionComment,
+  updateInspection,
   getHotel,
   likeInspection,
   listAllInspections,
@@ -232,6 +238,30 @@ function TrustBadge({ visitType, authorType }) {
   );
 }
 
+function InspectionStatusBadge({ status, moderationStatus, rejectionReason }) {
+  const s = String(status || moderationStatus || "approved").toLowerCase();
+  const map = {
+    pending: ["⏳", "На модерации", "bg-amber-50 text-amber-700 ring-amber-100"],
+    draft: ["📝", "Черновик", "bg-slate-50 text-slate-600 ring-slate-200"],
+    approved: ["✅", "Опубликовано", "bg-emerald-50 text-emerald-700 ring-emerald-100"],
+    published: ["✅", "Опубликовано", "bg-emerald-50 text-emerald-700 ring-emerald-100"],
+    rejected: ["⛔", rejectionReason || "Отклонено", "bg-red-50 text-red-700 ring-red-100"],
+    hidden: ["🙈", "Скрыто", "bg-slate-100 text-slate-700 ring-slate-200"],
+    deleted: ["🗑", "Удалено", "bg-red-50 text-red-700 ring-red-100"],
+  };
+  const [icon, label, cls] = map[s] || map.approved;
+  return <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-[11px] font-black ring-1 ${cls}`}>{icon} {label}</span>;
+}
+
+function VerifiedVisitBadge({ item }) {
+  if (!item?.verified_visit && !arr(item?.proof_media).length) return null;
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-3 py-1 text-[11px] font-black text-blue-700 ring-1 ring-blue-100">
+      🛡 Проверенный визит
+    </span>
+  );
+}
+
 function Chip({ active, children, onClick, className = "" }) {
   return (
     <button
@@ -371,6 +401,28 @@ function CommentsPanel({ inspectionId, initialCount = 0 }) {
     }
   }
 
+  async function reportComment(commentId) {
+    const reason = window.prompt("Почему жалуетесь на комментарий?", "Некорректный комментарий");
+    if (!reason) return;
+    try {
+      await reportInspectionComment(commentId, { reason: "comment_report", text: reason });
+      tSuccess("Жалоба отправлена на модерацию");
+    } catch (e) {
+      alert(e?.message || "Не удалось отправить жалобу");
+    }
+  }
+
+  async function hideComment(commentId) {
+    if (!window.confirm("Скрыть комментарий?")) return;
+    try {
+      await moderateInspectionComment(commentId, { status: "hidden" });
+      setItems((prev) => prev.filter((x) => x.id !== commentId));
+      tSuccess("Комментарий скрыт");
+    } catch (e) {
+      alert(e?.message || "Не удалось скрыть комментарий");
+    }
+  }
+
   return (
     <div className="mt-4 rounded-3xl border border-slate-100 bg-slate-50/70 p-3">
       <button type="button" onClick={() => setOpen((v) => !v)} className="flex w-full items-center justify-between text-left">
@@ -388,6 +440,10 @@ function CommentsPanel({ inspectionId, initialCount = 0 }) {
                 <div className="text-[11px] font-bold text-slate-400">{formatDate(c.created_at)}</div>
               </div>
               <div className="mt-1 whitespace-pre-wrap text-sm font-medium leading-5 text-slate-600">{c.text}</div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button type="button" onClick={() => reportComment(c.id)} className="text-[11px] font-black text-amber-600 hover:underline">Пожаловаться</button>
+                {c.can_moderate && <button type="button" onClick={() => hideComment(c.id)} className="text-[11px] font-black text-red-600 hover:underline">Скрыть</button>}
+              </div>
             </div>
           ))}
           <div className="flex flex-col gap-2 md:flex-row">
@@ -407,12 +463,14 @@ function CommentsPanel({ inspectionId, initialCount = 0 }) {
   );
 }
 
-function InspectionCard({ item, onLiked }) {
+function InspectionCard({ item, onLiked, onEdit, onDeleted, onModerated, onReported }) {
   const hero = getBestMedia(item);
   const score = Number(item?.recommendation_score || avgScore(item?.scores) || 0);
   const audience = arr(item?.audience_keys);
   const cons = arr(item?.con_keys);
   const month = toInt(item?.travel_month);
+  const canManage = Boolean(item?.can_manage);
+  const canModerate = Boolean(item?.can_moderate);
 
   return (
     <article className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
@@ -429,6 +487,8 @@ function InspectionCard({ item, onLiked }) {
         )}
         <div className="absolute left-3 top-3 flex flex-wrap gap-2">
           <TrustBadge visitType={item.visit_type} authorType={item.author_type} />
+          <VerifiedVisitBadge item={item} />
+          <InspectionStatusBadge status={item.status} moderationStatus={item.moderation_status} rejectionReason={item.rejection_reason} />
           {month ? <span className="rounded-full bg-white/95 px-3 py-1 text-[11px] font-black text-slate-700 ring-1 ring-white/80">{MONTHS[month - 1]}</span> : null}
         </div>
         <div className="absolute bottom-3 right-3 rounded-2xl bg-white/95 px-4 py-2 text-right shadow-sm ring-1 ring-white/80">
@@ -480,13 +540,20 @@ function InspectionCard({ item, onLiked }) {
         <ScoreBars scores={item.scores} />
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
-          <button
-            type="button"
-            onClick={() => onLiked(item)}
-            className={`rounded-2xl px-4 py-2 text-sm font-black ring-1 transition ${item.liked_by_me ? "bg-rose-50 text-rose-600 ring-rose-100" : "bg-white text-slate-700 ring-slate-200 hover:bg-slate-50"}`}
-          >
-            ❤️ Полезно · {Number(item.likes || 0)}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => onLiked(item)}
+              className={`rounded-2xl px-4 py-2 text-sm font-black ring-1 transition ${item.liked_by_me ? "bg-rose-50 text-rose-600 ring-rose-100" : "bg-white text-slate-700 ring-slate-200 hover:bg-slate-50"}`}
+            >
+              ❤️ Полезно · {Number(item.likes || 0)}
+            </button>
+            <button type="button" onClick={() => onReported(item)} className="rounded-2xl bg-amber-50 px-4 py-2 text-sm font-black text-amber-700 ring-1 ring-amber-100 hover:bg-amber-100">⚠️ Пожаловаться</button>
+            {canManage && <button type="button" onClick={() => onEdit(item)} className="rounded-2xl bg-blue-50 px-4 py-2 text-sm font-black text-blue-700 ring-1 ring-blue-100 hover:bg-blue-100">✏️ Редактировать</button>}
+            {canManage && <button type="button" onClick={() => onDeleted(item)} className="rounded-2xl bg-red-50 px-4 py-2 text-sm font-black text-red-700 ring-1 ring-red-100 hover:bg-red-100">🗑 Скрыть</button>}
+            {canModerate && <button type="button" onClick={() => onModerated(item, "approved")} className="rounded-2xl bg-emerald-50 px-4 py-2 text-sm font-black text-emerald-700 ring-1 ring-emerald-100 hover:bg-emerald-100">✅ Одобрить</button>}
+            {canModerate && <button type="button" onClick={() => onModerated(item, "rejected")} className="rounded-2xl bg-slate-50 px-4 py-2 text-sm font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100">⛔ Отклонить</button>}
+          </div>
           <div className="text-xs font-bold text-slate-400">Медиа: {arr(item.section_media).length}</div>
         </div>
 
@@ -581,6 +648,82 @@ function Filters({ filters, setFilters, hotelMode }) {
   );
 }
 
+
+function EditInspectionPanel({ item, onClose, onSaved }) {
+  const [title, setTitle] = useState(item?.title || "");
+  const [review, setReview] = useState(item?.review || "");
+  const [pros, setPros] = useState(item?.pros || "");
+  const [cons, setCons] = useState(item?.cons || "");
+  const [features, setFeatures] = useState(item?.features || "");
+  const [recommendationScore, setRecommendationScore] = useState(Number(item?.recommendation_score || 5));
+  const [travelMonth, setTravelMonth] = useState(item?.travel_month || "");
+  const [visitType, setVisitType] = useState(item?.visit_type || "agent_inspection");
+  const [audienceKeys, setAudienceKeys] = useState(arr(item?.audience_keys));
+  const [conKeys, setConKeys] = useState(arr(item?.con_keys));
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    if (!item?.id || saving) return;
+    setSaving(true);
+    try {
+      await updateInspection(item.id, {
+        title,
+        review,
+        pros,
+        cons,
+        features,
+        recommendation_score: recommendationScore,
+        travel_month: travelMonth || null,
+        visit_type: visitType,
+        audience_keys: audienceKeys,
+        con_keys: conKeys,
+      });
+      tSuccess("Инспекция обновлена и отправлена на модерацию");
+      onSaved?.();
+      onClose?.();
+    } catch (e) {
+      alert(e?.message || "Не удалось сохранить инспекцию");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/50 p-3 md:items-center">
+      <div className="max-h-[92vh] w-full max-w-3xl overflow-auto rounded-[28px] bg-white p-4 shadow-2xl md:p-6">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="inline-flex rounded-full bg-orange-50 px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-orange-600 ring-1 ring-orange-100">Редактирование инспекции</div>
+            <h2 className="mt-2 text-2xl font-black tracking-[-0.04em] text-slate-950">Обновить обзор отеля</h2>
+            <p className="mt-1 text-sm font-semibold text-slate-500">После сохранения обзор снова попадёт на модерацию.</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-2xl bg-slate-100 px-4 py-2 text-sm font-black text-slate-700">Закрыть</button>
+        </div>
+        <div className="mt-5 grid gap-3">
+          <input value={title} onChange={(e) => setTitle(e.target.value)} className="rounded-2xl border border-slate-200 px-3 py-3 text-sm font-semibold outline-none focus:border-orange-300" placeholder="Заголовок" />
+          <textarea value={review} onChange={(e) => setReview(e.target.value)} className="min-h-[120px] rounded-2xl border border-slate-200 px-3 py-3 text-sm font-semibold outline-none focus:border-orange-300" placeholder="Основной обзор" />
+          <div className="grid gap-3 md:grid-cols-2">
+            <textarea value={pros} onChange={(e) => setPros(e.target.value)} className="min-h-[90px] rounded-2xl border border-slate-200 px-3 py-3 text-sm font-semibold outline-none focus:border-orange-300" placeholder="Плюсы" />
+            <textarea value={cons} onChange={(e) => setCons(e.target.value)} className="min-h-[90px] rounded-2xl border border-slate-200 px-3 py-3 text-sm font-semibold outline-none focus:border-orange-300" placeholder="Минусы / предупреждения" />
+          </div>
+          <textarea value={features} onChange={(e) => setFeatures(e.target.value)} className="min-h-[80px] rounded-2xl border border-slate-200 px-3 py-3 text-sm font-semibold outline-none focus:border-orange-300" placeholder="Особенности" />
+          <div className="grid gap-3 md:grid-cols-3">
+            <select value={visitType} onChange={(e) => setVisitType(e.target.value)} className="rounded-2xl border border-slate-200 px-3 py-3 text-sm font-semibold">{VISIT_TYPES.map((x) => <option key={x.key} value={x.key}>{x.icon} {x.label}</option>)}</select>
+            <select value={travelMonth} onChange={(e) => setTravelMonth(e.target.value)} className="rounded-2xl border border-slate-200 px-3 py-3 text-sm font-semibold"><option value="">Месяц поездки</option>{MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}</select>
+            <label className="rounded-2xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-500">Рекомендация: {recommendationScore}/5<input type="range" min="1" max="5" value={recommendationScore} onChange={(e) => setRecommendationScore(Number(e.target.value))} className="mt-2 w-full" /></label>
+          </div>
+          <div><div className="mb-2 text-xs font-black uppercase tracking-[0.16em] text-slate-400">Кому подходит</div><div className="flex flex-wrap gap-2">{AUDIENCE_OPTIONS.map((x) => <Chip key={x.key} active={audienceKeys.includes(x.key)} onClick={() => toggleInArray(setAudienceKeys, x.key)}>{x.icon} {x.label}</Chip>)}</div></div>
+          <div><div className="mb-2 text-xs font-black uppercase tracking-[0.16em] text-slate-400">Предупреждения</div><div className="flex flex-wrap gap-2">{CON_OPTIONS.map((x) => <Chip key={x.key} active={conKeys.includes(x.key)} onClick={() => toggleInArray(setConKeys, x.key)}>{x.icon} {x.label}</Chip>)}</div></div>
+        </div>
+        <div className="mt-5 flex flex-wrap justify-end gap-3 border-t border-slate-100 pt-4">
+          <button type="button" onClick={onClose} className="rounded-2xl bg-slate-100 px-5 py-3 text-sm font-black text-slate-700">Отмена</button>
+          <button type="button" onClick={save} disabled={saving} className="rounded-2xl bg-orange-500 px-5 py-3 text-sm font-black text-white disabled:opacity-50">{saving ? "Сохраняем…" : "Сохранить"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AddInspectionWizard({ hotel, hotelId, onCreated }) {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -602,6 +745,12 @@ function AddInspectionWizard({ hotel, hotelId, onCreated }) {
   const [nearby, setNearby] = useState({});
   const [files, setFiles] = useState([]);
   const [mediaMeta, setMediaMeta] = useState([]);
+
+  const stepReady = useMemo(() => {
+    if (step === 1) return title.trim().length >= 3 && review.trim().length >= 20 && visitType;
+    if (step === 2) return audienceKeys.length > 0;
+    return true;
+  }, [step, title, review, visitType, audienceKeys.length]);
 
   function onFilesChange(e) {
     const picked = Array.from(e.target.files || []).slice(0, 13);
@@ -633,7 +782,7 @@ function AddInspectionWizard({ hotel, hotelId, onCreated }) {
       fd.append("mediaMeta", JSON.stringify(mediaMeta));
       files.forEach((file) => fd.append("files", file));
       await createInspection(hotelId, fd);
-      tSuccess("Инспекция добавлена");
+      tSuccess("Инспекция отправлена на модерацию");
       setOpen(false);
       setStep(1);
       onCreated?.();
@@ -740,7 +889,7 @@ function AddInspectionWizard({ hotel, hotelId, onCreated }) {
 
           <div className="mt-5 flex flex-wrap justify-between gap-3 border-t border-slate-100 pt-4">
             <button type="button" onClick={() => step > 1 ? setStep(step - 1) : setOpen(false)} className="rounded-2xl bg-slate-100 px-5 py-3 text-sm font-black text-slate-700">Назад</button>
-            {step < 5 ? <button type="button" onClick={() => setStep(step + 1)} className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white">Дальше</button> : <button type="button" onClick={submit} disabled={submitting} className="rounded-2xl bg-orange-500 px-5 py-3 text-sm font-black text-white disabled:opacity-50">{submitting ? "Сохраняем…" : "Опубликовать инспекцию"}</button>}
+            {step < 5 ? <button type="button" onClick={() => stepReady ? setStep(step + 1) : alert(step === 1 ? "Заполните заголовок и обзор минимум 20 символов" : "Выберите хотя бы одну аудиторию") } className={`rounded-2xl px-5 py-3 text-sm font-black text-white ${stepReady ? "bg-slate-950" : "bg-slate-400"}`}>Дальше</button> : <button type="button" onClick={submit} disabled={submitting} className="rounded-2xl bg-orange-500 px-5 py-3 text-sm font-black text-white disabled:opacity-50">{submitting ? "Сохраняем…" : "Опубликовать инспекцию"}</button>}
           </div>
         </div>
       )}
@@ -757,6 +906,7 @@ export default function HotelInspections() {
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState(() => parseFilterFromSearch(searchParams));
   const [reloadKey, setReloadKey] = useState(0);
+  const [editingItem, setEditingItem] = useState(null);
   const hotelMode = Boolean(hotelId);
 
   useEffect(() => {
@@ -808,6 +958,39 @@ export default function HotelInspections() {
     }
   }
 
+  async function onDeleted(item) {
+    if (!window.confirm("Скрыть эту инспекцию?")) return;
+    try {
+      await deleteInspection(item.id);
+      setItems((prev) => prev.filter((x) => x.id !== item.id));
+      tSuccess("Инспекция скрыта");
+    } catch (e) {
+      alert(e?.message || "Не удалось скрыть инспекцию");
+    }
+  }
+
+  async function onReported(item) {
+    const reason = window.prompt("Причина жалобы на инспекцию", "Некорректная или устаревшая информация");
+    if (!reason) return;
+    try {
+      await reportInspection(item.id, { reason: "inspection_report", text: reason });
+      tSuccess("Жалоба отправлена на модерацию");
+    } catch (e) {
+      alert(e?.message || "Не удалось отправить жалобу");
+    }
+  }
+
+  async function onModerated(item, status) {
+    const reason = status === "rejected" ? window.prompt("Причина отклонения", "Нужно уточнить данные") : "";
+    try {
+      const res = await moderateInspection(item.id, { status, reason, verified_visit: status === "approved" });
+      setItems((prev) => prev.map((x) => x.id === item.id ? { ...x, ...(res?.item || {}), status, moderation_status: status } : x));
+      tSuccess(status === "approved" ? "Инспекция одобрена" : "Статус инспекции обновлён");
+    } catch (e) {
+      alert(e?.message || "Не удалось обновить статус");
+    }
+  }
+
   return (
     <div className="mx-auto max-w-6xl space-y-5 p-4 md:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -817,6 +1000,7 @@ export default function HotelInspections() {
         </div>
       </div>
 
+      {editingItem && <EditInspectionPanel item={editingItem} onClose={() => setEditingItem(null)} onSaved={() => setReloadKey((v) => v + 1)} />}
       <PassportSummary hotel={hotel} items={items} />
       <AddInspectionWizard hotel={hotel} hotelId={hotelId} onCreated={() => setReloadKey((v) => v + 1)} />
       <Filters filters={filters} setFilters={setFilters} hotelMode={hotelMode} />
@@ -827,7 +1011,7 @@ export default function HotelInspections() {
         </div>
       ) : items.length ? (
         <div className="grid gap-5 lg:grid-cols-2">
-          {items.map((item) => <InspectionCard key={item.id} item={item} onLiked={onLiked} />)}
+          {items.map((item) => <InspectionCard key={item.id} item={item} onLiked={onLiked} onEdit={setEditingItem} onDeleted={onDeleted} onModerated={onModerated} onReported={onReported} />)}
         </div>
       ) : (
         <div className="rounded-[28px] border border-slate-200 bg-white p-8 text-center shadow-sm">
