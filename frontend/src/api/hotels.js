@@ -13,7 +13,7 @@ function appendInspectionFilters(qs, filters = {}) {
 }
 
 export async function listRanked({ type = "top", limit = 20 } = {}) {
-  return apiGet(`/api/hotels/ranked?type=${encodeURIComponent(type)}&limit=${limit}`, true);
+  return apiGet(`/api/hotels/ranked?type=${encodeURIComponent(type)}&limit=${limit}`, false);
 }
 
 /** Публичный поиск отелей */
@@ -25,12 +25,12 @@ export async function searchHotels({ name = "", city = "", country = "", page = 
   qs.set("page", String(page));
   qs.set("limit", String(limit));
   qs.set("ext", "0");
-  return apiGet(`/api/hotels/search?${qs.toString()}`, true);
+  return apiGet(`/api/hotels/search?${qs.toString()}`, false);
 }
 
 /** Карточка отеля (публично) */
 export function getHotel(hotelId) {
-  return apiGet(`/api/hotels/${encodeURIComponent(hotelId)}`, true);
+  return apiGet(`/api/hotels/${encodeURIComponent(hotelId)}`, false);
 }
 
 /** Создать отель (провайдер/админ) */
@@ -92,14 +92,14 @@ export async function createInspection(hotelId, payload) {
 export function listInspections(hotelId, filters = {}) {
   const qs = appendInspectionFilters(new URLSearchParams(), filters);
   if (!qs.has("sort")) qs.set("sort", "top");
-  return apiGet(`/api/hotels/${encodeURIComponent(hotelId)}/inspections?${qs.toString()}`, true);
+  return apiGet(`/api/hotels/${encodeURIComponent(hotelId)}/inspections?${qs.toString()}`, false);
 }
 
 /** Общая лента инспекций по всем отелям с фильтрами. */
 export function listAllInspections(filters = {}) {
   const qs = appendInspectionFilters(new URLSearchParams(), filters);
   if (!qs.has("sort")) qs.set("sort", "top");
-  return apiGet(`/api/hotels/inspections?${qs.toString()}`, true);
+  return apiGet(`/api/hotels/inspections?${qs.toString()}`, false);
 }
 
 /** Лайк инспекции (auto-роль: подойдёт любой доступный токен) */
@@ -118,9 +118,48 @@ export function createInspectionComment(inspectionId, text) {
 }
 
 
-/** Обновить свою инспекцию или модерировать её админом. */
-export function updateInspection(inspectionId, payload) {
-  return apiPut(`/api/hotels/inspections/${encodeURIComponent(inspectionId)}`, payload, true);
+/** Обновить свою инспекцию. Поддерживает JSON и FormData с фото/видео. */
+export async function updateInspection(inspectionId, payload) {
+  const url = `/api/hotels/inspections/${encodeURIComponent(inspectionId)}`;
+
+  if (payload instanceof FormData) {
+    let res;
+    try {
+      res = await fetch(buildUrl(url), {
+        method: "PUT",
+        headers: getAuthHeaders(true),
+        body: payload,
+        credentials: "include",
+      });
+    } catch (err) {
+      const e = new Error(
+        "Не удалось обновить инспекцию. Проверьте размер фото/видео и соединение. Если загружаете видео, попробуйте уменьшить файл."
+      );
+      e.code = "network_upload_failed";
+      e.cause = err;
+      throw e;
+    }
+
+    const text = await res.text();
+    let data = null;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = null;
+    }
+
+    if (!res.ok) {
+      const err = new Error((data && (data.error || data.message)) || res.statusText || `HTTP ${res.status}`);
+      err.status = res.status;
+      err.data = data || {};
+      err.code = data?.error || data?.code;
+      throw err;
+    }
+
+    return data || {};
+  }
+
+  return apiPut(url, payload, true);
 }
 
 /** Мягко удалить/скрыть свою инспекцию. */
