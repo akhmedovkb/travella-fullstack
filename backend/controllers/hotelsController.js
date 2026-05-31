@@ -579,11 +579,24 @@ async function ensureInspectionsTable() {
   await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS scores JSONB`);
   await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS amenities JSONB`);
   await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS nearby JSONB`);
+  await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'approved'`);
+  await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS moderation_status TEXT NOT NULL DEFAULT 'approved'`);
+  await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS rejection_reason TEXT`);
+  await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS verified_visit BOOLEAN NOT NULL DEFAULT false`);
+  await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS proof_media JSONB DEFAULT '[]'::jsonb`);
+  await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITHOUT TIME ZONE`);
+  await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS hidden_at TIMESTAMP WITHOUT TIME ZONE`);
+  await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS report_count INTEGER NOT NULL DEFAULT 0`);
+  await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW()`);
+  await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS edited_at TIMESTAMP WITHOUT TIME ZONE`);
   await db.query(`CREATE INDEX IF NOT EXISTS idx_inspections_hotel ON inspections(hotel_id)`);
   await db.query(`CREATE INDEX IF NOT EXISTS idx_inspections_author ON inspections(author_provider_id)`);
   await db.query(`CREATE INDEX IF NOT EXISTS idx_inspections_client ON inspections(author_client_id)`);
   await db.query(`CREATE INDEX IF NOT EXISTS idx_inspections_author_type ON inspections(author_type)`);
   await db.query(`CREATE INDEX IF NOT EXISTS idx_inspections_travel_month ON inspections(travel_month)`);
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_inspections_status ON inspections(status)`);
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_inspections_moderation_status ON inspections(moderation_status)`);
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_inspections_deleted ON inspections(deleted_at)`);
   // уникальность: один провайдер — одна инспекция на отель. Клиентские обзоры не блокируем этим индексом.
   await db.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS uniq_inspections_hotel_author
@@ -658,7 +671,28 @@ async function ensureInspectionsTable() {
       deleted_at TIMESTAMP WITHOUT TIME ZONE
     )
   `);
+  await db.query(`ALTER TABLE hotel_inspection_comments ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'visible'`);
+  await db.query(`ALTER TABLE hotel_inspection_comments ADD COLUMN IF NOT EXISTS hidden_at TIMESTAMP WITHOUT TIME ZONE`);
+  await db.query(`ALTER TABLE hotel_inspection_comments ADD COLUMN IF NOT EXISTS report_count INTEGER NOT NULL DEFAULT 0`);
   await db.query(`CREATE INDEX IF NOT EXISTS idx_hotel_inspection_comments_inspection ON hotel_inspection_comments(inspection_id)`);
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_hotel_inspection_comments_status ON hotel_inspection_comments(status)`);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS hotel_inspection_reports (
+      id SERIAL PRIMARY KEY,
+      inspection_id INTEGER REFERENCES inspections(id) ON DELETE CASCADE,
+      comment_id INTEGER REFERENCES hotel_inspection_comments(id) ON DELETE CASCADE,
+      reporter_type TEXT,
+      reporter_id INTEGER,
+      reason TEXT,
+      text TEXT,
+      status TEXT NOT NULL DEFAULT 'new',
+      created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW()
+    )
+  `);
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_hotel_inspection_reports_inspection ON hotel_inspection_reports(inspection_id)`);
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_hotel_inspection_reports_comment ON hotel_inspection_reports(comment_id)`);
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_hotel_inspection_reports_status ON hotel_inspection_reports(status)`);
 }
 
 // таблица уникальных лайков (toggle)
@@ -858,6 +892,40 @@ function getActorFromReq(req) {
   return { actorType, actorId, fp };
 }
 
+function isInspectionOwner(row, actorType, actorId) {
+  if (!row || !actorId) return false;
+  if (actorType === "provider" && Number(row.author_provider_id) === Number(actorId)) return true;
+  if (actorType === "client" && Number(row.author_client_id) === Number(actorId)) return true;
+  return false;
+}
+
+function getInspectionVisibilitySql({ admin, actorIdIdx, actorTypeIdx } = {}) {
+  if (admin) {
+    return `(i.deleted_at IS NULL)`;
+  }
+  return `(i.deleted_at IS NULL AND i.hidden_at IS NULL AND (
+    COALESCE(i.status,'approved') IN ('approved','published')
+    OR ($${actorIdIdx}::int IS NOT NULL AND $${actorTypeIdx}::text = 'provider' AND i.author_provider_id = $${actorIdIdx}::int)
+    OR ($${actorIdIdx}::int IS NOT NULL AND $${actorTypeIdx}::text = 'client' AND i.author_client_id = $${actorIdIdx}::int)
+  ))`;
+}
+
+function canModerateHotelInspection(req) {
+  return isAdminLike(req?.user || {});
+}
+
+function normalizeInspectionStatus(v, fallback = 'pending') {
+  const value = String(v || '').trim().toLowerCase();
+  if (['draft','pending','approved','rejected','hidden','deleted'].includes(value)) return value;
+  return fallback;
+}
+
+function getProofMediaFromBody(p) {
+  const raw = p.proof_media || p.proofMedia || p.proof || [];
+  const arr = Array.isArray(raw) ? raw : safeJson(raw, []);
+  return Array.isArray(arr) ? arr.slice(0, 10) : [];
+}
+
 // пересчёт агрегатов по инспекциям → hotels.attrs.aggregated_from_inspections
 async function ensureHotelsAggregates(hotelId) {
   await ensureHotelsAttrsColumn();
@@ -880,14 +948,14 @@ async function ensureHotelsAggregates(hotelId) {
         MIN( (nearby->>'pharmacy_m')::numeric )      AS pharmacy_m,
         MIN( (nearby->>'park_m')::numeric )          AS park_m
       FROM inspections
-      WHERE hotel_id = $1
+      WHERE hotel_id = $1 AND deleted_at IS NULL AND hidden_at IS NULL AND COALESCE(status,'approved') IN ('approved','published')
     ),
     am AS (
       SELECT jsonb_agg(DISTINCT a) AS amenities
       FROM (
         SELECT jsonb_array_elements(amenities) AS a
         FROM inspections
-        WHERE hotel_id = $1 AND amenities IS NOT NULL
+        WHERE hotel_id = $1 AND amenities IS NOT NULL AND deleted_at IS NULL AND hidden_at IS NULL AND COALESCE(status,'approved') IN ('approved','published')
       ) z
     )
     SELECT
@@ -1002,6 +1070,9 @@ async function listAllHotelInspections(req, res) {
         i.id, i.hotel_id, h.name AS hotel_name, COALESCE(h.city, h.location) AS hotel_city,
         i.author_name, i.author_type, i.author_provider_id, i.author_client_id,
         i.title, i.visit_type, i.trip_type, i.travel_month, i.recommendation_score,
+        COALESCE(i.status,'approved') AS status, COALESCE(i.moderation_status,'approved') AS moderation_status,
+        i.rejection_reason, COALESCE(i.verified_visit,false) AS verified_visit, COALESCE(i.proof_media,'[]'::jsonb) AS proof_media,
+        i.deleted_at, i.hidden_at, COALESCE(i.report_count,0) AS report_count,
         i.review, i.pros, i.cons, i.features,
         i.media, i.scores, i.amenities, i.nearby,
         i.likes, i.created_at,
@@ -1053,7 +1124,7 @@ async function listAllHotelInspections(req, res) {
             ($${actorIdIdx}::int IS NOT NULL AND liked.actor_type = $${actorTypeIdx}::text AND liked.actor_id = $${actorIdIdx}::int)
             OR ($${fpIdx}::text IS NOT NULL AND liked.fp = $${fpIdx}::text)
        )
-      ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+      WHERE ${[...where, getInspectionVisibilitySql({ admin: isAdminLike(req.user || {}), actorIdIdx, actorTypeIdx })].join(" AND ")}
       ORDER BY ${order}
       LIMIT 200
     `;
@@ -1069,6 +1140,8 @@ async function listAllHotelInspections(req, res) {
       audience_keys: Array.isArray(r.audience_keys) ? r.audience_keys : (r.audience_keys || []),
       con_keys: Array.isArray(r.con_keys) ? r.con_keys : (r.con_keys || []),
       author_profile_url: r.author_provider_id ? `/profile/provider/${r.author_provider_id}` : null,
+      can_manage: isAdminLike(req.user || {}) || isInspectionOwner(r, actorType, actorId),
+      can_moderate: isAdminLike(req.user || {}),
     }));
 
     return res.json({ items });
@@ -1148,6 +1221,9 @@ async function listHotelInspections(req, res) {
       SELECT
         i.id, i.hotel_id, i.author_name, i.author_type, i.author_provider_id, i.author_client_id,
         i.title, i.visit_type, i.trip_type, i.travel_month, i.recommendation_score,
+        COALESCE(i.status,'approved') AS status, COALESCE(i.moderation_status,'approved') AS moderation_status,
+        i.rejection_reason, COALESCE(i.verified_visit,false) AS verified_visit, COALESCE(i.proof_media,'[]'::jsonb) AS proof_media,
+        i.deleted_at, i.hidden_at, COALESCE(i.report_count,0) AS report_count,
         i.review, i.pros, i.cons, i.features,
         i.media, i.scores, i.amenities, i.nearby,
         i.likes, i.created_at,
@@ -1198,7 +1274,7 @@ async function listHotelInspections(req, res) {
             ($${actorIdIdx}::int IS NOT NULL AND liked.actor_type = $${actorTypeIdx}::text AND liked.actor_id = $${actorIdIdx}::int)
             OR ($${fpIdx}::text IS NOT NULL AND liked.fp = $${fpIdx}::text)
        )
-      WHERE ${where.join(" AND ")}
+      WHERE ${[...where, getInspectionVisibilitySql({ admin: isAdminLike(req.user || {}), actorIdIdx, actorTypeIdx })].join(" AND ")}
       ORDER BY ${myOrder}${baseOrder}
       LIMIT 200
     `;
@@ -1214,6 +1290,8 @@ async function listHotelInspections(req, res) {
       audience_keys: Array.isArray(r.audience_keys) ? r.audience_keys : (r.audience_keys || []),
       con_keys: Array.isArray(r.con_keys) ? r.con_keys : (r.con_keys || []),
       author_profile_url: r.author_provider_id ? `/profile/provider/${r.author_provider_id}` : null,
+      can_manage: isAdminLike(req.user || {}) || isInspectionOwner(r, actorType, actorId),
+      can_moderate: isAdminLike(req.user || {}),
     }));
 
     res.json({ items });
@@ -1270,7 +1348,7 @@ async function createHotelInspection(req, res) {
     // запрет: один провайдер == одна инспекция на отель. Клиентские обзоры не блокируем.
     if (authorProviderId) {
       const dup = await db.query(
-        `SELECT 1 FROM inspections WHERE hotel_id=$1 AND author_provider_id=$2 LIMIT 1`,
+        `SELECT 1 FROM inspections WHERE hotel_id=$1 AND author_provider_id=$2 AND deleted_at IS NULL LIMIT 1`,
         [hotelId, authorProviderId]
       );
       if (dup.rowCount) {
@@ -1350,12 +1428,14 @@ async function createHotelInspection(req, res) {
            (hotel_id, author_name, author_type, author_provider_id, author_client_id,
             title, visit_type, trip_type, travel_month, recommendation_score,
             review, pros, cons, features,
-            media, scores, amenities, nearby, likes)
+            media, scores, amenities, nearby, likes,
+            status, moderation_status, verified_visit, proof_media)
          VALUES
            ($1, $2, $3, $4, $5,
             $6, $7, $8, $9, $10,
             $11, $12, $13, $14,
-            $15::jsonb, $16::jsonb, $17::jsonb, $18::jsonb, 0)
+            $15::jsonb, $16::jsonb, $17::jsonb, $18::jsonb, 0,
+            $19, $20, $21, $22::jsonb)
          RETURNING id`,
         [
           hotelId,
@@ -1376,6 +1456,10 @@ async function createHotelInspection(req, res) {
           scores ? JSON.stringify(scores) : null,
           amenities ? JSON.stringify(amenities) : null,
           nearby ? JSON.stringify(nearby) : null,
+          isAdminLike(u) ? 'approved' : 'pending',
+          isAdminLike(u) ? 'approved' : 'pending',
+          Boolean(p.verified_visit === true || p.verifiedVisit === true || p.visit_verified === true || p.visitVerified === true || getProofMediaFromBody(p).length > 0),
+          JSON.stringify(getProofMediaFromBody(p)),
         ]
       );
 
@@ -1385,7 +1469,7 @@ async function createHotelInspection(req, res) {
 
       await ensureHotelsAggregates(hotelId);
 
-      return res.json({ id: inspectionId, media: mediaRows });
+      return res.json({ id: inspectionId, media: mediaRows, status: isAdminLike(u) ? 'approved' : 'pending', moderation_status: isAdminLike(u) ? 'approved' : 'pending' });
     } catch (txErr) {
       await client.query("ROLLBACK");
       throw txErr;
@@ -1412,7 +1496,7 @@ async function listInspectionComments(req, res) {
     const { rows } = await db.query(
       `SELECT id, inspection_id, author_type, author_id, author_name, text, likes, created_at
          FROM hotel_inspection_comments
-        WHERE inspection_id = $1 AND deleted_at IS NULL
+        WHERE inspection_id = $1 AND deleted_at IS NULL AND COALESCE(status,'visible') = 'visible'
         ORDER BY created_at ASC, id ASC
         LIMIT 200`,
       [inspectionId]
@@ -1458,6 +1542,240 @@ async function createInspectionComment(req, res) {
   } catch (e) {
     console.error("createInspectionComment error", e);
     return res.status(500).json({ error: "comment_failed" });
+  }
+}
+
+
+async function getInspectionRowForAction(inspectionId) {
+  const { rows } = await db.query(
+    `SELECT id, hotel_id, author_provider_id, author_client_id, author_type, status, moderation_status, deleted_at
+       FROM inspections
+      WHERE id=$1
+      LIMIT 1`,
+    [inspectionId]
+  );
+  return rows[0] || null;
+}
+
+async function updateHotelInspection(req, res) {
+  const inspectionId = parseIntSafe(req.params.id);
+  if (!inspectionId) return res.status(400).json({ error: "bad_id" });
+  const p = req.body || {};
+
+  try {
+    await ensureInspectionsTable();
+    const row = await getInspectionRowForAction(inspectionId);
+    if (!row || row.deleted_at) return res.status(404).json({ error: "inspection_not_found" });
+
+    const { actorType, actorId } = getActorFromReq(req);
+    const admin = isAdminLike(req.user || {});
+    if (!admin && !isInspectionOwner(row, actorType, actorId)) return res.status(403).json({ error: "forbidden" });
+
+    const scores = (p.scores && typeof p.scores === "object") ? p.scores : safeJson(p.scores, null);
+    const amenities = Array.isArray(p.amenities) ? p.amenities : safeJson(p.amenities, null);
+    const nearby = (p.nearby && typeof p.nearby === "object") ? p.nearby : safeJson(p.nearby, null);
+    const audienceKeys = normalizeStringArray(p.audience_keys || p.audienceKeys, HOTEL_REVIEW_AUDIENCE_KEYS, 12);
+    const conKeys = normalizeStringArray(p.con_keys || p.conKeys, HOTEL_REVIEW_CON_KEYS, 12);
+    const travelMonth = clampInt(p.travel_month || p.travelMonth, 1, 12);
+    const recommendationScore = clampInt(p.recommendation_score || p.recommendationScore, 1, 5);
+    const proofMedia = getProofMediaFromBody(p);
+    const verifiedVisit = Boolean(p.verified_visit === true || p.verifiedVisit === true || proofMedia.length > 0);
+    const nextStatus = admin ? normalizeInspectionStatus(p.status || p.moderation_status || p.moderationStatus, row.status || 'approved') : 'pending';
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const { rows } = await client.query(
+        `UPDATE inspections
+            SET title=$2,
+                visit_type=$3,
+                trip_type=$4,
+                travel_month=$5,
+                recommendation_score=$6,
+                review=$7,
+                pros=$8,
+                cons=$9,
+                features=$10,
+                scores=$11::jsonb,
+                amenities=$12::jsonb,
+                nearby=$13::jsonb,
+                status=$14,
+                moderation_status=$15,
+                verified_visit=$16,
+                proof_media=$17::jsonb,
+                edited_at=NOW(),
+                updated_at=NOW(),
+                rejection_reason=NULL
+          WHERE id=$1
+          RETURNING id, hotel_id, status, moderation_status`,
+        [
+          inspectionId,
+          p.title || null,
+          p.visit_type || p.visitType || null,
+          p.trip_type || p.tripType || null,
+          travelMonth,
+          recommendationScore,
+          p.review || null,
+          p.pros || null,
+          p.cons || null,
+          p.features || null,
+          scores ? JSON.stringify(scores) : null,
+          amenities ? JSON.stringify(amenities) : null,
+          nearby ? JSON.stringify(nearby) : null,
+          nextStatus,
+          nextStatus,
+          verifiedVisit,
+          JSON.stringify(proofMedia),
+        ]
+      );
+      await client.query(`DELETE FROM hotel_inspection_audience WHERE inspection_id=$1`, [inspectionId]);
+      await client.query(`DELETE FROM hotel_inspection_cons WHERE inspection_id=$1`, [inspectionId]);
+      await insertHotelInspectionRelations(client, inspectionId, { audienceKeys, conKeys, mediaRows: [] });
+      await client.query("COMMIT");
+      await ensureHotelsAggregates(rows[0].hotel_id);
+      return res.json({ item: rows[0] });
+    } catch (txErr) {
+      await client.query("ROLLBACK");
+      throw txErr;
+    } finally {
+      client.release();
+    }
+  } catch (e) {
+    console.error("updateHotelInspection error", e);
+    return res.status(500).json({ error: "update_failed" });
+  }
+}
+
+async function deleteHotelInspection(req, res) {
+  const inspectionId = parseIntSafe(req.params.id);
+  if (!inspectionId) return res.status(400).json({ error: "bad_id" });
+  try {
+    await ensureInspectionsTable();
+    const row = await getInspectionRowForAction(inspectionId);
+    if (!row) return res.status(404).json({ error: "inspection_not_found" });
+    const { actorType, actorId } = getActorFromReq(req);
+    const admin = isAdminLike(req.user || {});
+    if (!admin && !isInspectionOwner(row, actorType, actorId)) return res.status(403).json({ error: "forbidden" });
+    await db.query(
+      `UPDATE inspections
+          SET deleted_at = COALESCE(deleted_at, NOW()), status='deleted', moderation_status='deleted', updated_at=NOW()
+        WHERE id=$1`,
+      [inspectionId]
+    );
+    await ensureHotelsAggregates(row.hotel_id);
+    return res.json({ ok: true, id: inspectionId });
+  } catch (e) {
+    console.error("deleteHotelInspection error", e);
+    return res.status(500).json({ error: "delete_failed" });
+  }
+}
+
+async function moderateHotelInspection(req, res) {
+  const inspectionId = parseIntSafe(req.params.id);
+  if (!inspectionId) return res.status(400).json({ error: "bad_id" });
+  if (!canModerateHotelInspection(req)) return res.status(403).json({ error: "forbidden" });
+  const next = normalizeInspectionStatus(req.body?.status || req.body?.moderation_status || req.body?.moderationStatus, 'pending');
+  const reason = String(req.body?.reason || req.body?.rejection_reason || '').trim() || null;
+  const verified = req.body?.verified_visit === true || req.body?.verifiedVisit === true;
+  try {
+    await ensureInspectionsTable();
+    const row = await getInspectionRowForAction(inspectionId);
+    if (!row) return res.status(404).json({ error: "inspection_not_found" });
+    const hiddenAt = next === 'hidden' ? 'NOW()' : 'NULL';
+    const deletedAt = next === 'deleted' ? 'NOW()' : 'deleted_at';
+    const { rows } = await db.query(
+      `UPDATE inspections
+          SET status=$2,
+              moderation_status=$2,
+              rejection_reason=$3,
+              verified_visit = CASE WHEN $4::boolean THEN true ELSE verified_visit END,
+              hidden_at = ${hiddenAt},
+              deleted_at = ${deletedAt},
+              updated_at=NOW()
+        WHERE id=$1
+        RETURNING id, hotel_id, status, moderation_status, verified_visit, rejection_reason`,
+      [inspectionId, next, reason, verified]
+    );
+    await ensureHotelsAggregates(row.hotel_id);
+    return res.json({ item: rows[0] });
+  } catch (e) {
+    console.error("moderateHotelInspection error", e);
+    return res.status(500).json({ error: "moderation_failed" });
+  }
+}
+
+async function reportHotelInspection(req, res) {
+  const inspectionId = parseIntSafe(req.params.id);
+  if (!inspectionId) return res.status(400).json({ error: "bad_id" });
+  const reason = String(req.body?.reason || 'other').trim().slice(0, 80);
+  const text = String(req.body?.text || '').trim().slice(0, 1000) || null;
+  try {
+    await ensureInspectionsTable();
+    const exists = await db.query(`SELECT id FROM inspections WHERE id=$1 AND deleted_at IS NULL LIMIT 1`, [inspectionId]);
+    if (!exists.rowCount) return res.status(404).json({ error: "inspection_not_found" });
+    const { actorType, actorId } = getActorFromReq(req);
+    await db.query(
+      `INSERT INTO hotel_inspection_reports (inspection_id, reporter_type, reporter_id, reason, text)
+       VALUES ($1,$2,$3,$4,$5)`,
+      [inspectionId, actorType || 'guest', actorId || null, reason, text]
+    );
+    const cnt = await db.query(`SELECT COUNT(*)::int AS c FROM hotel_inspection_reports WHERE inspection_id=$1`, [inspectionId]);
+    const reportCount = Number(cnt.rows?.[0]?.c || 0);
+    await db.query(`UPDATE inspections SET report_count=$2, updated_at=NOW() WHERE id=$1`, [inspectionId, reportCount]);
+    return res.status(201).json({ ok: true, report_count: reportCount });
+  } catch (e) {
+    console.error("reportHotelInspection error", e);
+    return res.status(500).json({ error: "report_failed" });
+  }
+}
+
+async function moderateInspectionComment(req, res) {
+  const commentId = parseIntSafe(req.params.commentId || req.params.id);
+  if (!commentId) return res.status(400).json({ error: "bad_id" });
+  if (!canModerateHotelInspection(req)) return res.status(403).json({ error: "forbidden" });
+  const status = String(req.body?.status || 'hidden').trim().toLowerCase();
+  const hidden = status === 'hidden' || status === 'deleted';
+  try {
+    await ensureInspectionsTable();
+    const { rows } = await db.query(
+      `UPDATE hotel_inspection_comments
+          SET status=$2,
+              hidden_at = CASE WHEN $3::boolean THEN NOW() ELSE NULL END,
+              deleted_at = CASE WHEN $2 = 'deleted' THEN NOW() ELSE deleted_at END
+        WHERE id=$1
+        RETURNING id, inspection_id, status, hidden_at, deleted_at`,
+      [commentId, status === 'visible' ? 'visible' : status === 'deleted' ? 'deleted' : 'hidden', hidden]
+    );
+    if (!rows.length) return res.status(404).json({ error: "comment_not_found" });
+    return res.json({ item: rows[0] });
+  } catch (e) {
+    console.error("moderateInspectionComment error", e);
+    return res.status(500).json({ error: "comment_moderation_failed" });
+  }
+}
+
+async function reportInspectionComment(req, res) {
+  const commentId = parseIntSafe(req.params.commentId || req.params.id);
+  if (!commentId) return res.status(400).json({ error: "bad_id" });
+  const reason = String(req.body?.reason || 'other').trim().slice(0, 80);
+  const text = String(req.body?.text || '').trim().slice(0, 1000) || null;
+  try {
+    await ensureInspectionsTable();
+    const existing = await db.query(`SELECT id, inspection_id FROM hotel_inspection_comments WHERE id=$1 AND deleted_at IS NULL LIMIT 1`, [commentId]);
+    if (!existing.rowCount) return res.status(404).json({ error: "comment_not_found" });
+    const { actorType, actorId } = getActorFromReq(req);
+    await db.query(
+      `INSERT INTO hotel_inspection_reports (inspection_id, comment_id, reporter_type, reporter_id, reason, text)
+       VALUES ($1,$2,$3,$4,$5,$6)`,
+      [existing.rows[0].inspection_id, commentId, actorType || 'guest', actorId || null, reason, text]
+    );
+    const cnt = await db.query(`SELECT COUNT(*)::int AS c FROM hotel_inspection_reports WHERE comment_id=$1`, [commentId]);
+    const reportCount = Number(cnt.rows?.[0]?.c || 0);
+    await db.query(`UPDATE hotel_inspection_comments SET report_count=$2 WHERE id=$1`, [commentId, reportCount]);
+    return res.status(201).json({ ok: true, report_count: reportCount });
+  } catch (e) {
+    console.error("reportInspectionComment error", e);
+    return res.status(500).json({ error: "comment_report_failed" });
   }
 }
 
@@ -1538,7 +1856,13 @@ module.exports = {
   listHotelInspections,
   listAllHotelInspections,
   createHotelInspection,
+  updateHotelInspection,
+  deleteHotelInspection,
+  moderateHotelInspection,
+  reportHotelInspection,
   listInspectionComments,
   createInspectionComment,
+  moderateInspectionComment,
+  reportInspectionComment,
   likeInspection,
 };
