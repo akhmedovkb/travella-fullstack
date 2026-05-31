@@ -25,6 +25,7 @@ const {
   moderateInspectionComment,
   reportInspectionComment,
   listAllHotelInspections,
+  getHotelInspectionMedia,
   listMyHotels,
 } = require("../controllers/hotelsController");
 
@@ -87,6 +88,8 @@ const canLike = allowRoles("provider", "tour_agent", "agency", "supplier", "clie
 router.get("/search", searchHotels);
 router.get("/ranked", listRankedHotels);
 router.get("/_list", listHotels);
+// R2 media proxy for Hotel Passport uploads. Must stay before dynamic /:id route.
+router.get("/media/:key", getHotelInspectionMedia);
 
 /* ===  список по городу для каскада === */
 router.get("/by-city", listHotelsByCity);   // /api/hotels/by-city?city=Samarkand
