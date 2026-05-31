@@ -13,7 +13,6 @@ import AsyncCreatableSelect from "react-select/async-creatable";
 
 import ProviderLanguages from "./ProviderLanguages";
 import ProviderCompleteness from "./ProviderCompleteness";
-import ProviderStatsHeader from "./ProviderStatsHeader";
 import ProviderReviews from "./ProviderReviews";
 import { tSuccess, tError, tInfo, tWarn } from "../shared/toast";
 
@@ -880,10 +879,6 @@ const ProviderProfile = () => {
             <button type="button" onClick={() => { if (typeof localStorage !== "undefined") { localStorage.removeItem("token"); localStorage.removeItem("provider_id"); } window.location.href = "/login"; }} className="mt-3 w-full rounded-2xl bg-red-600 px-4 py-3 font-black text-white transition hover:bg-red-700">{t("logout", { defaultValue: "Выйти" })}</button>
           </ProfileCard>
         </aside>
-      </div>
-
-      <div className="mt-6 rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
-        <ProviderStatsHeader rating={Number(profile?.rating) || 0} stats={{ requests_total: Number(stats?.requests_total) || 0, requests_active: Number(stats?.requests_active) || 0, bookings_total: Number(stats?.bookings_total) || 0, completed: Number(stats?.completed) || 0, cancelled: Number(stats?.cancelled) || 0, points: Number(stats?.points ?? stats?.completed ?? 0) }} bonusTarget={500} t={t} />
       </div>
 
       <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm sm:p-6"><div className="min-w-0 max-w-full overflow-hidden break-words [text-wrap:pretty] [&_*]:min-w-0 [&_*]:break-words [&_time]:whitespace-nowrap [&_.review-date]:whitespace-nowrap [&_.rv-date]:whitespace-nowrap">{hasProviderId ? <ProviderReviews providerId={providerId} t={t} /> : null}</div></div>
