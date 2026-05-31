@@ -13,7 +13,7 @@ function appendInspectionFilters(qs, filters = {}) {
 }
 
 export async function listRanked({ type = "top", limit = 20 } = {}) {
-  return apiGet(`/api/hotels/ranked?type=${encodeURIComponent(type)}&limit=${limit}`, false);
+  return apiGet(`/api/hotels/ranked?type=${encodeURIComponent(type)}&limit=${limit}`, true);
 }
 
 /** Публичный поиск отелей */
@@ -25,12 +25,12 @@ export async function searchHotels({ name = "", city = "", country = "", page = 
   qs.set("page", String(page));
   qs.set("limit", String(limit));
   qs.set("ext", "0");
-  return apiGet(`/api/hotels/search?${qs.toString()}`, false);
+  return apiGet(`/api/hotels/search?${qs.toString()}`, true);
 }
 
 /** Карточка отеля (публично) */
 export function getHotel(hotelId) {
-  return apiGet(`/api/hotels/${encodeURIComponent(hotelId)}`, false);
+  return apiGet(`/api/hotels/${encodeURIComponent(hotelId)}`, true);
 }
 
 /** Создать отель (провайдер/админ) */
@@ -92,14 +92,14 @@ export async function createInspection(hotelId, payload) {
 export function listInspections(hotelId, filters = {}) {
   const qs = appendInspectionFilters(new URLSearchParams(), filters);
   if (!qs.has("sort")) qs.set("sort", "top");
-  return apiGet(`/api/hotels/${encodeURIComponent(hotelId)}/inspections?${qs.toString()}`, false);
+  return apiGet(`/api/hotels/${encodeURIComponent(hotelId)}/inspections?${qs.toString()}`, true);
 }
 
 /** Общая лента инспекций по всем отелям с фильтрами. */
 export function listAllInspections(filters = {}) {
   const qs = appendInspectionFilters(new URLSearchParams(), filters);
   if (!qs.has("sort")) qs.set("sort", "top");
-  return apiGet(`/api/hotels/inspections?${qs.toString()}`, false);
+  return apiGet(`/api/hotels/inspections?${qs.toString()}`, true);
 }
 
 /** Лайк инспекции (auto-роль: подойдёт любой доступный токен) */
