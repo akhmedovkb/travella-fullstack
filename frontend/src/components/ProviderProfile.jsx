@@ -231,26 +231,79 @@ const makeAsyncSelectI18n = (t) => ({
 });
 
 
-function providerTypeLabel(type, t) {
+function providerTypeLabel(type, t = (k, o) => o?.defaultValue || k) {
   const key = String(type || "").trim().toLowerCase();
-
-  const labels = {
+  const map = {
     agent: t("provider_type.agent", { defaultValue: "Турагент" }),
-    agency: t("provider_type.agent", { defaultValue: "Турагент" }),
-    touragent: t("provider_type.agent", { defaultValue: "Турагент" }),
-    hotel: t("provider_type.hotel", { defaultValue: "Отель" }),
+    tour_agent: t("provider_type.agent", { defaultValue: "Турагент" }),
     guide: t("provider_type.guide", { defaultValue: "Гид" }),
     transport: t("provider_type.transport", { defaultValue: "Транспорт" }),
-    transfer: t("provider_type.transport", { defaultValue: "Транспорт" }),
+    hotel: t("provider_type.hotel", { defaultValue: "Отель" }),
+    restaurant: t("provider_type.restaurant", { defaultValue: "Ресторан" }),
+    event: t("provider_type.event", { defaultValue: "Мероприятия" }),
   };
+  return map[key] || (key ? key : t("not_specified", { defaultValue: "Не указан" }));
+}
 
-  if (labels[key]) return labels[key];
-  if (!key) return t("not_specified", { defaultValue: "Не указан" });
+function normalizeTelegramUsername(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (raw.startsWith("https://t.me/")) return `@${raw.replace("https://t.me/", "").replace(/^@/, "")}`;
+  if (raw.startsWith("http://t.me/")) return `@${raw.replace("http://t.me/", "").replace(/^@/, "")}`;
+  return raw.startsWith("@") ? raw : `@${raw}`;
+}
 
-  return String(type)
-    .replace(/[_-]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+function getProviderTrust(profile = {}, stats = {}) {
+  const locations = normalizeLocationList(profile.location);
+  const languages = Array.isArray(profile.languages) ? profile.languages : [];
+  const checks = [
+    { key: "logo", label: "Логотип", ok: !!(profile.photo || profile.logo || profile.logoUrl || profile.avatar), weight: 15 },
+    { key: "contacts", label: "Контакты", ok: !!(profile.phone && (profile.social || profile.telegram_username || profile.telegram_chat_id || profile.tg_chat_id)), weight: 20 },
+    { key: "certificate", label: "Сертификат", ok: !!(profile.certificate || profile.certificateUrl || profile.certificate_url), weight: 20 },
+    { key: "telegram", label: "Telegram", ok: !!(profile.telegram_chat_id || profile.tg_chat_id || profile.telegram_username || profile.social), weight: 15 },
+    { key: "geo", label: "География", ok: locations.length > 0, weight: 10 },
+    { key: "languages", label: "Языки", ok: String(profile.type || "").toLowerCase() === "agent" || languages.length > 0, weight: 10 },
+    { key: "activity", label: "Активность", ok: Number(stats?.requests_total || stats?.bookings_total || stats?.completed || 0) > 0, weight: 10 },
+  ];
+  const score = checks.reduce((sum, x) => sum + (x.ok ? x.weight : 0), 0);
+  return { score: Math.max(0, Math.min(100, score)), checks };
+}
+
+function ProfileCard({ title, subtitle, children, action }) {
+  return (
+    <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+      <div className="mb-5 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-xl font-black tracking-[-0.03em] text-slate-950">{title}</h2>
+          {subtitle ? <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">{subtitle}</p> : null}
+        </div>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function ProfileInfoBox({ label, icon, hint, children }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+      <div className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-[0.14em] text-slate-400">
+        <span>{icon}</span>
+        <span>{label}</span>
+      </div>
+      {hint ? <div className="mb-2 text-xs font-semibold text-slate-400">{hint}</div> : null}
+      <div className="text-sm font-bold leading-6 text-slate-800">{children}</div>
+    </div>
+  );
+}
+
+function TrustPill({ ok, children }) {
+  return (
+    <span className={[
+      "inline-flex items-center rounded-full px-3 py-1 text-xs font-black ring-1",
+      ok ? "bg-emerald-50 text-emerald-700 ring-emerald-100" : "bg-amber-50 text-amber-700 ring-amber-100",
+    ].join(" ")}>{ok ? "✅" : "⚪"} {children}</span>
+  );
 }
 
 /** ================= Component ================= */
@@ -629,112 +682,108 @@ const ProviderProfile = () => {
   // ---------- RENDER ----------
 
   const publicName = profile?.name || "Travella";
-  const typeLabel = providerTypeLabel(profile?.type, t) || t("not_specified");
-  const locationsText = normalizeLocationList(profile.location).join(", ");
-  const heroPhoto = newPhoto || profile.photo || "https://placehold.co/160x160?text=Travella";
-  const contactReady = Boolean(profile?.phone && (profile?.social || profile?.telegram_username || profile?.telegramUsername));
+  const typeLabel = providerTypeLabel(profile?.type, t);
+  const locations = normalizeLocationList(profile.location);
+  const locationsText = locations.join(", ");
+  const heroPhoto = newPhoto || profile.photo || profile.logo || "https://placehold.co/160x160?text=Travella";
+  const socialValue = profile.social || profile.telegram_username || profile.telegramUsername || "";
+  const telegramDisplay = normalizeTelegramUsername(isEditing ? newSocial : socialValue);
+  const isTgReady = Boolean(profile?.telegram_chat_id || profile?.tg_chat_id || telegramDisplay);
+  const certStatus = Boolean(certObjectUrl);
+  const trust = getProviderTrust(profile, stats);
+  const contactReady = Boolean(profile?.phone && (profile?.social || profile?.telegram_username || profile?.telegram_chat_id || profile?.tg_chat_id));
+  const demandStats = {
+    opens: Number(stats?.contact_unlocks || stats?.unlocks || stats?.contacts_opened || 0),
+    hot: Number(stats?.hot_clients || stats?.requests_active || 0),
+    requests: Number(stats?.requests_total || 0),
+    bookings: Number(stats?.bookings_total || 0),
+  };
+  const publicPreviewUrl = hasProviderId ? `/provider/${providerId}` : "/";
 
   return (
-    <div className="mx-auto w-full max-w-6xl min-w-0 space-y-5 px-3 sm:px-4 lg:px-0">
+    <div className="mx-auto w-full max-w-7xl min-w-0 space-y-6 px-3 pb-10 sm:px-4 lg:px-0">
       <div id="anchor-profile-left" />
 
-      {/* Product hero */}
-      <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_18px_60px_rgba(15,23,42,0.10)]">
-        <div className="relative bg-[radial-gradient(circle_at_18%_20%,rgba(255,115,22,0.28),transparent_32%),linear-gradient(135deg,#070b1d_0%,#111827_48%,#7c2d12_100%)] p-5 text-white sm:p-7">
-          <div className="absolute inset-x-0 bottom-0 h-px bg-white/15" />
-          <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-            <div className="flex min-w-0 items-center gap-4">
+      <section className="overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-[0_18px_60px_rgba(15,23,42,0.10)]">
+        <div className="relative bg-[radial-gradient(circle_at_16%_20%,rgba(255,115,22,0.30),transparent_34%),linear-gradient(135deg,#070b1d_0%,#111827_48%,#7c2d12_100%)] p-5 text-white sm:p-7">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-center">
               <div className="relative shrink-0">
                 <div id="anchor-logo" />
-                <img
-                  src={heroPhoto}
-                  className="h-24 w-24 rounded-3xl border border-white/20 object-cover shadow-2xl ring-4 ring-white/10"
-                  alt="Provider logo"
-                />
-                <span className="absolute -bottom-2 -right-2 rounded-full bg-emerald-500 px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-white shadow-lg">
-                  {t("profile.verified", { defaultValue: "Active" })}
+                <img src={heroPhoto} className="h-24 w-24 rounded-3xl border border-white/20 object-cover shadow-2xl ring-4 ring-white/10 sm:h-28 sm:w-28" alt="Provider logo" />
+                <span className="absolute -bottom-2 -right-2 rounded-full bg-emerald-500 px-3 py-1 text-[11px] font-black uppercase tracking-wide text-white shadow-lg">
+                  {trust.score >= 85 ? "Trusted" : "Profile"}
                 </span>
               </div>
 
               <div className="min-w-0">
                 <div className="inline-flex rounded-full bg-white/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-orange-100 ring-1 ring-white/10">
-                  Travella provider profile
+                  Travella verified partner
                 </div>
-                <h1 className="mt-3 truncate text-3xl font-black tracking-[-0.04em] sm:text-4xl">
-                  {publicName}
-                </h1>
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-sm font-semibold text-white/80">
+                <h1 className="mt-3 truncate text-3xl font-black tracking-[-0.04em] sm:text-4xl">{publicName}</h1>
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-sm font-semibold text-white/85">
                   <span className="rounded-full bg-white/10 px-3 py-1 ring-1 ring-white/10">{typeLabel}</span>
-                  {locationsText ? (
-                    <span className="rounded-full bg-white/10 px-3 py-1 ring-1 ring-white/10">📍 {locationsText}</span>
-                  ) : null}
-                  {contactReady ? (
-                    <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-emerald-100 ring-1 ring-emerald-300/20">✅ Контакты заполнены</span>
-                  ) : (
-                    <span className="rounded-full bg-amber-500/15 px-3 py-1 text-amber-100 ring-1 ring-amber-300/20">⚠️ Контакты нужно проверить</span>
-                  )}
+                  {locations.length ? <span className="rounded-full bg-white/10 px-3 py-1 ring-1 ring-white/10">📍 {locations.slice(0, 3).join(", ")}{locations.length > 3 ? ` +${locations.length - 3}` : ""}</span> : null}
+                  <span className={contactReady ? "rounded-full bg-emerald-500/15 px-3 py-1 text-emerald-100 ring-1 ring-emerald-300/20" : "rounded-full bg-amber-500/15 px-3 py-1 text-amber-100 ring-1 ring-amber-300/20"}>
+                    {contactReady ? "✅ Контакты готовы" : "⚠️ Проверьте контакты"}
+                  </span>
                 </div>
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-2 md:justify-end">
-              {isEditing ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={handleSaveProfile}
-                    className="rounded-2xl bg-orange-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-orange-950/20 transition hover:bg-orange-600"
-                  >
-                    💾 {t("save", { defaultValue: "Сохранить" })}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsEditing(false);
-                      setNewPhoto(null);
-                      setNewCertificate(null);
-                      setNewSocial(profile.social || "");
-                      setNewPhone(profile.phone || "");
-                      setNewAddress(profile.address || "");
-                      setRegions(normalizeLocationList(profile.location).map((c) => ({ value: c, label: c })));
-                      setCarFleet(Array.isArray(profile.car_fleet) ? profile.car_fleet : []);
-                    }}
-                    className="rounded-2xl bg-white/10 px-5 py-3 text-sm font-black text-white ring-1 ring-white/15 transition hover:bg-white/15"
-                  >
-                    {t("cancel", { defaultValue: "Отмена" })}
-                  </button>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setIsEditing(true)}
-                  className="rounded-2xl bg-white px-5 py-3 text-sm font-black text-slate-950 shadow-lg transition hover:bg-orange-50"
-                >
-                  ✏️ {t("edit", { defaultValue: "Редактировать" })}
-                </button>
-              )}
+            <div className="grid min-w-[240px] gap-3 rounded-3xl bg-white/10 p-4 ring-1 ring-white/10 backdrop-blur">
+              <div className="flex items-end justify-between gap-3">
+                <div>
+                  <div className="text-xs font-black uppercase tracking-[0.16em] text-white/55">Trust Score</div>
+                  <div className="mt-1 text-4xl font-black tracking-[-0.05em]">{trust.score}/100</div>
+                </div>
+                <div className="text-right text-xs font-bold text-white/65">Профиль доверия</div>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-white/15">
+                <div className="h-full rounded-full bg-orange-400 transition-all" style={{ width: `${trust.score}%` }} />
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {trust.checks.slice(0, 4).map((it) => (
+                  <span key={it.key} className={it.ok ? "rounded-full bg-emerald-400/15 px-2 py-1 text-[11px] font-black text-emerald-100" : "rounded-full bg-white/10 px-2 py-1 text-[11px] font-black text-white/60"}>{it.ok ? "✓" : "•"} {it.label}</span>
+                ))}
+              </div>
             </div>
+          </div>
+
+          <div className="mt-6 flex flex-wrap gap-2">
+            {isEditing ? (
+              <>
+                <button type="button" onClick={handleSaveProfile} className="rounded-2xl bg-orange-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-orange-950/20 transition hover:bg-orange-600">💾 {t("save", { defaultValue: "Сохранить" })}</button>
+                <button type="button" onClick={() => {
+                  setIsEditing(false); setNewPhoto(null); setNewCertificate(null); setNewSocial(profile.social || ""); setNewPhone(profile.phone || ""); setNewAddress(profile.address || ""); setRegions(normalizeLocationList(profile.location).map((c) => ({ value: c, label: c }))); setCarFleet(Array.isArray(profile.car_fleet) ? profile.car_fleet : []);
+                }} className="rounded-2xl bg-white/10 px-5 py-3 text-sm font-black text-white ring-1 ring-white/15 transition hover:bg-white/15">{t("cancel", { defaultValue: "Отмена" })}</button>
+              </>
+            ) : (
+              <button type="button" onClick={() => setIsEditing(true)} className="rounded-2xl bg-white px-5 py-3 text-sm font-black text-slate-950 shadow-lg transition hover:bg-orange-50">✏️ {t("edit", { defaultValue: "Редактировать" })}</button>
+            )}
+            <a href={publicPreviewUrl} target="_blank" rel="noreferrer" className="rounded-2xl bg-white/10 px-5 py-3 text-sm font-black text-white ring-1 ring-white/15 transition hover:bg-white/15">👁 Посмотреть как клиент</a>
+            <a href="/dashboard/finance" className="rounded-2xl bg-white/10 px-5 py-3 text-sm font-black text-white ring-1 ring-white/15 transition hover:bg-white/15">📈 Спрос и клиенты</a>
           </div>
         </div>
-
-        {isEditing && (
-          <div className="border-b border-slate-100 bg-orange-50/70 px-5 py-3 text-sm font-semibold text-orange-900 sm:px-7">
-            Режим редактирования включён. После изменений нажмите “Сохранить”.
-          </div>
-        )}
       </section>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.08fr_0.92fr]">
-        <div className="space-y-5">
-          {/* Logo / contacts / map */}
-          <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-            <div className="mb-5 flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-xl font-black tracking-[-0.03em] text-slate-950">Основные контакты</h2>
-                <p className="mt-1 text-sm font-medium text-slate-500">Эти данные помогают клиентам быстрее связаться с вами после открытия контактов.</p>
-              </div>
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+        <main className="space-y-6">
+          <ProfileCard title="Как клиент увидит вас после открытия контакта" subtitle="Проверьте, что телефон, Telegram и бренд выглядят правильно.">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <ProfileInfoBox label="Телефон" icon="📞">{profile.phone || t("not_specified", { defaultValue: "Не указан" })}</ProfileInfoBox>
+              <ProfileInfoBox label="Telegram" icon="💬">{telegramDisplay || t("not_specified", { defaultValue: "Не указан" })}</ProfileInfoBox>
+              <ProfileInfoBox label="Статус" icon="🛡️">{trust.score >= 85 ? "Высокое доверие" : "Можно усилить"}</ProfileInfoBox>
             </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <TrustPill ok={certStatus}>Сертификат</TrustPill>
+              <TrustPill ok={isTgReady}>Telegram</TrustPill>
+              <TrustPill ok={!!profile.phone}>Телефон</TrustPill>
+              <TrustPill ok={locations.length > 0}>География</TrustPill>
+            </div>
+          </ProfileCard>
 
+          <ProfileCard title="Основные контакты" subtitle="Эти данные показываются клиенту после открытия контактов.">
             {isEditing && (
               <div className="mb-5 rounded-2xl border border-orange-100 bg-orange-50 p-4">
                 <div className="text-sm font-black text-orange-900">Логотип / фото профиля</div>
@@ -742,287 +791,104 @@ const ProviderProfile = () => {
                   {t("choose_files", { defaultValue: "Выбрать файл" })}
                   <input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
                 </label>
-                <div className="mt-2 text-xs font-semibold text-orange-800/80">
-                  {newPhoto ? t("file_chosen") : t("no_files_selected")}
-                </div>
+                <div className="mt-2 text-xs font-semibold text-orange-800/80">{newPhoto ? t("file_chosen", { defaultValue: "Файл выбран" }) : t("no_files_selected", { defaultValue: "Файл не выбран" })}</div>
               </div>
             )}
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <ProfileInfoBox label={t("phone", { defaultValue: "Телефон" })} icon="📞">
-                {isEditing ? (
-                  <input type="tel" placeholder={t("phone")} value={newPhone} onChange={(e) => setNewPhone(e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" />
-                ) : (
-                  <span>{profile.phone || t("not_specified")}</span>
-                )}
+                {isEditing ? <input type="tel" placeholder={t("phone")} value={newPhone} onChange={(e) => setNewPhone(e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" /> : <span>{profile.phone || t("not_specified", { defaultValue: "Не указан" })}</span>}
               </ProfileInfoBox>
-
-              <ProfileInfoBox label={t("email", { defaultValue: "Email" })} icon="✉️">
-                <span>{profile.email || t("not_specified")}</span>
-              </ProfileInfoBox>
+              <ProfileInfoBox label={t("email", { defaultValue: "Email" })} icon="✉️"><span>{profile.email || t("not_specified", { defaultValue: "Не указан" })}</span></ProfileInfoBox>
             </div>
 
             <div className="mt-4">
               <ProfileInfoBox label={t("address", { defaultValue: "Адрес" })} icon="📍">
-                {isEditing ? (
-                  <input type="text" placeholder={t("address")} value={newAddress} onChange={(e) => setNewAddress(e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" />
-                ) : (
-                  <span>{profile.address || t("not_specified")}</span>
-                )}
+                {isEditing ? <input type="text" placeholder={t("address")} value={newAddress} onChange={(e) => setNewAddress(e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" /> : <span>{profile.address || t("not_specified", { defaultValue: "Не указан" })}</span>}
               </ProfileInfoBox>
             </div>
 
-            {profile.address && !isEditing && (
-              <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
-                <iframe
-                  title="provider-map"
-                  width="100%"
-                  height="230"
-                  frameBorder="0"
-                  scrolling="no"
-                  marginHeight="0"
-                  marginWidth="0"
-                  className="block"
-                  src={`https://www.google.com/maps?q=${encodeURIComponent(profile.address)}&output=embed`}
-                />
-              </div>
-            )}
-          </section>
+            {profile.address && !isEditing && <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50"><iframe title="provider-map" width="100%" height="230" frameBorder="0" scrolling="no" marginHeight="0" marginWidth="0" className="block" src={`https://www.google.com/maps?q=${encodeURIComponent(profile.address)}&output=embed`} /></div>}
+          </ProfileCard>
 
-          {/* Business info */}
-          <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-            <h2 className="text-xl font-black tracking-[-0.03em] text-slate-950">Данные поставщика</h2>
-            <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <ProfileInfoBox label={t("name", { defaultValue: "Наименование" })} icon="🏢">
-                <span>{profile.name || t("not_specified")}</span>
-              </ProfileInfoBox>
-              <ProfileInfoBox label={t("type", { defaultValue: "Тип поставщика" })} icon="🧭">
-                <span>{typeLabel || t("not_specified")}</span>
-              </ProfileInfoBox>
+          <ProfileCard title="Данные поставщика" subtitle="Тип, география работы и публичные каналы связи.">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <ProfileInfoBox label={t("name", { defaultValue: "Наименование" })} icon="🏢"><span>{profile.name || t("not_specified", { defaultValue: "Не указан" })}</span></ProfileInfoBox>
+              <ProfileInfoBox label={t("type", { defaultValue: "Тип поставщика" })} icon="🧭"><span>{typeLabel}</span></ProfileInfoBox>
             </div>
 
             <div className="mt-4">
-              <ProfileInfoBox
-                label={t("location", { defaultValue: "Регионы / города работы" })}
-                icon="🌍"
-                hint={t("location_hint", { defaultValue: "вводите название города только на английском" })}
-              >
+              <ProfileInfoBox label={t("location", { defaultValue: "Регионы / города работы" })} icon="🌍" hint={t("location_hint", { defaultValue: "вводите название города только на английском" })}>
                 {isEditing ? (
-                  <AsyncCreatableSelect
-                    isMulti
-                    cacheOptions
-                    defaultOptions
-                    {...ASYNC_MENU_PORTAL}
-                    loadOptions={loadCities}
-                    noOptionsMessage={ASYNC_I18N.noOptionsMessage}
-                    loadingMessage={ASYNC_I18N.loadingMessage}
-                    placeholder={t("profile.regions_placeholder", { defaultValue: "Start typing city name (EN)…" })}
-                    value={regions}
-                    onChange={(vals) => setRegions(vals || [])}
-                  />
-                ) : (
-                  <span>{locationsText || t("not_specified")}</span>
-                )}
+                  <AsyncCreatableSelect isMulti cacheOptions defaultOptions {...ASYNC_MENU_PORTAL} loadOptions={loadCities} noOptionsMessage={ASYNC_I18N.noOptionsMessage} loadingMessage={ASYNC_I18N.loadingMessage} placeholder={t("profile.regions_placeholder", { defaultValue: "Start typing city name (EN)…" })} value={regions} onChange={(vals) => setRegions(vals || [])} />
+                ) : locations.length ? (
+                  <div className="flex flex-wrap gap-2">{locations.map((loc) => <span key={loc} className="rounded-full bg-white px-3 py-1 text-xs font-black text-slate-700 ring-1 ring-slate-200">📍 {loc}</span>)}</div>
+                ) : <span>{t("not_specified", { defaultValue: "Не указан" })}</span>}
               </ProfileInfoBox>
             </div>
 
-            <div className="mt-4">
-              <div id="anchor-telegram" />
-              <ProfileInfoBox label={t("social", { defaultValue: "Telegram / соцсети" })} icon="💬">
-                {isEditing ? (
-                  <input value={newSocial} onChange={(e) => setNewSocial(e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" placeholder="@username или ссылка" />
-                ) : (
-                  <span>{profile.social || profile.telegram_username || t("not_specified")}</span>
-                )}
+            <div className="mt-4" id="anchor-telegram">
+              <ProfileInfoBox label="Telegram / соцсети" icon="💬">
+                {isEditing ? <input value={newSocial} onChange={(e) => setNewSocial(normalizeTelegramUsername(e.target.value))} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" placeholder="@username или ссылка" /> : <span>{telegramDisplay || t("not_specified", { defaultValue: "Не указан" })}</span>}
               </ProfileInfoBox>
-
-              {!isTgLinked && tgDeepLink && (
-                <div className="mt-3 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-950">
-                  <div className="font-black">{t("tg.title", { defaultValue: "Уведомления в Telegram" })}</div>
-                  <p className="mt-1 font-medium text-blue-900/80">{t("tg.subtitle", { defaultValue: "Свяжите Telegram и получайте уведомления о заявках, открытиях контактов и бронированиях." })}</p>
-                  <a href={tgDeepLink} target="_blank" rel="noreferrer" className="mt-3 inline-flex rounded-xl bg-blue-600 px-4 py-2 text-sm font-black text-white transition hover:bg-blue-700">
-                    {t("tg.connect", { defaultValue: "Подключить Telegram" })}
-                  </a>
-                </div>
-              )}
+              {!isTgReady && tgDeepLink ? <div className="mt-3 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-950"><div className="font-black">Уведомления в Telegram</div><p className="mt-1 font-medium text-blue-900/80">Свяжите Telegram и получайте уведомления о заявках, открытиях контактов и бронированиях.</p><a href={tgDeepLink} target="_blank" rel="noreferrer" className="mt-3 inline-flex rounded-xl bg-blue-600 px-4 py-2 text-sm font-black text-white transition hover:bg-blue-700">Подключить Telegram</a></div> : null}
             </div>
-          </section>
+          </ProfileCard>
 
-          {/* Car fleet */}
           {(profile.type === "guide" || profile.type === "transport") && (
-            <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <ProfileCard title={t("car_fleet", { defaultValue: "Автопарк" })} subtitle="Транспорт повышает доверие к услугам гида и транспортника.">
               <div id="anchor-transport" />
-              <h2 className="text-xl font-black tracking-[-0.03em] text-slate-950">{t("car_fleet") || "Автопарк"}</h2>
-
               {isEditing ? (
-                <div className="mt-5 space-y-3">
+                <div className="space-y-3">
                   {carFleet.map((car, idx) => (
                     <div key={idx} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" placeholder="Модель" value={car.model} onChange={(e) => updateCar(idx, { model: e.target.value })} />
-                        <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" type="number" min={1} placeholder="Мест" value={car.seats} onChange={(e) => updateCar(idx, { seats: e.target.value })} />
-                      </div>
-                      <div className="mt-3 flex flex-wrap items-center gap-3">
-                        <label className="cursor-pointer rounded-xl bg-orange-500 px-3 py-2 text-sm font-black text-white transition hover:bg-orange-600">
-                          {t("choose_files", { defaultValue: "Выбрать файлы" })}
-                          <input type="file" accept="image/*" multiple className="hidden" onChange={async (e) => {
-                            const files = Array.from(e.target.files || []);
-                            const out = [];
-                            for (const f of files.slice(0, 10)) {
-                              try { out.push(await resizeImageFile(f, 1200, 800, 0.85, "image/jpeg")); } catch {}
-                            }
-                            updateCarImage(idx, [...(car.images || []), ...out].slice(0, 10));
-                            e.target.value = "";
-                          }} />
-                        </label>
-                        <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
-                          <input type="checkbox" checked={car.is_active !== false} onChange={(e) => updateCar(idx, { is_active: e.target.checked })} />
-                          <span>{t("is_active")}</span>
-                        </label>
-                        <button type="button" onClick={() => removeCar(idx)} className="ml-auto text-sm font-black text-red-600">{t("delete")}</button>
-                      </div>
-                      {car.images?.length ? (
-                        <div className="mt-3 grid grid-cols-4 gap-2">
-                          {car.images.map((src, i) => (
-                            <img key={i} src={src} alt="" className="h-16 w-full rounded-xl object-cover" />
-                          ))}
-                        </div>
-                      ) : null}
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2"><input className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" placeholder="Модель" value={car.model} onChange={(e) => updateCar(idx, { model: e.target.value })} /><input className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" type="number" min={1} placeholder="Мест" value={car.seats} onChange={(e) => updateCar(idx, { seats: e.target.value })} /></div>
+                      <div className="mt-3 flex flex-wrap items-center gap-3"><label className="cursor-pointer rounded-xl bg-orange-500 px-3 py-2 text-sm font-black text-white transition hover:bg-orange-600">{t("choose_files", { defaultValue: "Выбрать файлы" })}<input type="file" accept="image/*" multiple className="hidden" onChange={async (e) => { const files = Array.from(e.target.files || []); const out = []; for (const f of files.slice(0, 10)) { try { out.push(await resizeImageFile(f, 1200, 800, 0.85, "image/jpeg")); } catch {} } updateCarImage(idx, [...(car.images || []), ...out].slice(0, 10)); e.target.value = ""; }} /></label><label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700"><input type="checkbox" checked={car.is_active !== false} onChange={(e) => updateCar(idx, { is_active: e.target.checked })} /><span>{t("is_active", { defaultValue: "Активно" })}</span></label><button type="button" onClick={() => removeCar(idx)} className="ml-auto text-sm font-black text-red-600">{t("delete", { defaultValue: "Удалить" })}</button></div>
                     </div>
                   ))}
-                  <button type="button" onClick={addCar} className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-2 text-sm font-black text-orange-700 hover:bg-orange-100">
-                    + {t("add") || "Добавить авто"}
-                  </button>
+                  <button type="button" onClick={addCar} className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-2 text-sm font-black text-orange-700 hover:bg-orange-100">+ {t("add", { defaultValue: "Добавить" })}</button>
                 </div>
               ) : (
-                <div className="mt-5 grid gap-3">
-                  {(Array.isArray(profile.car_fleet) ? profile.car_fleet : []).map((c, i) => (
-                    <div key={i} className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                      {c.images?.[0] ? <img src={c.images[0]} alt="" className="h-14 w-14 rounded-xl object-cover" /> : <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-white text-xl">🚗</div>}
-                      <div className="min-w-0">
-                        <div className="font-black text-slate-950">{c.model}</div>
-                        <div className="text-sm font-semibold text-slate-500">{c.seats} мест</div>
-                      </div>
-                    </div>
-                  ))}
-                  {!profile?.car_fleet?.length && <div className="rounded-2xl border border-dashed border-slate-200 p-5 text-center text-sm font-semibold text-slate-400">{t("not_specified")}</div>}
-                </div>
+                <div className="grid gap-3">{(Array.isArray(profile.car_fleet) ? profile.car_fleet : []).map((c, i) => <div key={i} className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">{c.images?.[0] ? <img src={c.images[0]} alt="" className="h-14 w-14 rounded-xl object-cover" /> : <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-white text-xl">🚗</div>}<div className="min-w-0"><div className="font-black text-slate-950">{c.model}</div><div className="text-sm font-semibold text-slate-500">{c.seats} мест</div></div></div>)}{!profile?.car_fleet?.length && <div className="rounded-2xl border border-dashed border-slate-200 p-5 text-center text-sm font-semibold text-slate-400">{t("not_specified", { defaultValue: "Не указан" })}</div>}</div>
               )}
-            </section>
+            </ProfileCard>
           )}
-        </div>
+        </main>
 
-        <aside className="space-y-5 lg:sticky lg:top-24 lg:self-start">
+        <aside className="space-y-6 xl:sticky xl:top-24 xl:self-start">
+          <ProfileCard title="CRM-сводка" subtitle="Короткий срез активности по профилю.">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-2xl bg-orange-50 p-4 ring-1 ring-orange-100"><div className="text-2xl font-black text-slate-950">{demandStats.opens}</div><div className="mt-1 text-xs font-black uppercase tracking-[0.12em] text-orange-700">Открытий</div></div>
+              <div className="rounded-2xl bg-emerald-50 p-4 ring-1 ring-emerald-100"><div className="text-2xl font-black text-slate-950">{demandStats.hot}</div><div className="mt-1 text-xs font-black uppercase tracking-[0.12em] text-emerald-700">Горячих</div></div>
+              <div className="rounded-2xl bg-blue-50 p-4 ring-1 ring-blue-100"><div className="text-2xl font-black text-slate-950">{demandStats.requests}</div><div className="mt-1 text-xs font-black uppercase tracking-[0.12em] text-blue-700">Запросов</div></div>
+              <div className="rounded-2xl bg-violet-50 p-4 ring-1 ring-violet-100"><div className="text-2xl font-black text-slate-950">{demandStats.bookings}</div><div className="mt-1 text-xs font-black uppercase tracking-[0.12em] text-violet-700">Броней</div></div>
+            </div>
+          </ProfileCard>
+
           <ProviderCompleteness profile={profile} onFix={scrollToProfilePart} />
 
-          {/* Languages */}
-          {['guide', 'transport', 'agent'].includes(profile.type) && (
-            <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-              <div id="anchor-languages" />
-              <ProviderLanguages ref={langRef} token={token} editing={isEditing} />
-            </section>
-          )}
+          {['guide', 'transport', 'agent'].includes(profile.type) && <ProfileCard title="Владение языками" subtitle="Языки помогают клиенту быстрее выбрать подходящего поставщика."><div id="anchor-languages" /><ProviderLanguages ref={langRef} token={token} editing={isEditing} /></ProfileCard>}
 
-          {/* Certificate */}
-          <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <ProfileCard title={t("certificate", { defaultValue: "Сертификаты и доверие" })} subtitle="Документы повышают доверие к профилю и услугам." action={<span className={certObjectUrl ? "rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700 ring-1 ring-emerald-100" : "rounded-full bg-amber-50 px-3 py-1 text-xs font-black text-amber-700 ring-1 ring-amber-100"}>{certObjectUrl ? "Загружен" : "Нужен"}</span>}>
             <div id="anchor-certificate" />
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-xl font-black tracking-[-0.03em] text-slate-950">{t("certificate", { defaultValue: "Сертификат" })}</h2>
-                <p className="mt-1 text-sm font-medium text-slate-500">Документы повышают доверие к профилю и услугам.</p>
-              </div>
-              <span className={certObjectUrl ? "rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700 ring-1 ring-emerald-100" : "rounded-full bg-amber-50 px-3 py-1 text-xs font-black text-amber-700 ring-1 ring-amber-100"}>
-                {certObjectUrl ? "Загружен" : "Нужен"}
-              </span>
-            </div>
+            {isEditing ? <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4"><label className="inline-flex cursor-pointer rounded-xl bg-orange-500 px-4 py-2 text-sm font-black text-white transition hover:bg-orange-600">{t("choose_files", { defaultValue: "Выбрать файл" })}<input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleCertificateChange} className="hidden" /></label><div className="mt-3 text-sm font-semibold text-slate-500">{newCertificate ? `📄 ${t("file_chosen", { defaultValue: "Файл выбран" })}` : t("no_files_selected", { defaultValue: "Файл не выбран" })}</div>{newCertificate?.startsWith("data:image") ? <img src={newCertificate} alt="Certificate preview" className="mt-3 h-32 w-32 rounded-2xl border object-cover" /> : null}</div> : certObjectUrl ? <a href={certObjectUrl} target="_blank" rel="noopener noreferrer" className="inline-flex rounded-xl bg-slate-950 px-4 py-2 text-sm font-black text-white transition hover:bg-slate-800">{t("view_certificate", { defaultValue: "Посмотреть сертификат" })}</a> : <div className="rounded-2xl border border-dashed border-slate-200 p-5 text-center text-sm font-semibold text-slate-400">{t("not_specified", { defaultValue: "Не указан" })}</div>}
+          </ProfileCard>
 
-            {isEditing ? (
-              <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4">
-                <label className="inline-flex cursor-pointer rounded-xl bg-orange-500 px-4 py-2 text-sm font-black text-white transition hover:bg-orange-600">
-                  {t("choose_files", { defaultValue: "Выбрать файл" })}
-                  <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleCertificateChange} className="hidden" />
-                </label>
-                <div className="mt-3 text-sm font-semibold text-slate-500">{newCertificate ? `📄 ${t("file_chosen")}` : t("no_files_selected")}</div>
-                {newCertificate?.startsWith("data:image") ? <img src={newCertificate} alt="Certificate preview" className="mt-3 h-32 w-32 rounded-2xl border object-cover" /> : null}
-              </div>
-            ) : certObjectUrl ? (
-              <a href={certObjectUrl} target="_blank" rel="noopener noreferrer" className="mt-4 inline-flex rounded-xl bg-slate-950 px-4 py-2 text-sm font-black text-white transition hover:bg-slate-800">
-                {t("view_certificate", { defaultValue: "Посмотреть сертификат" })}
-              </a>
-            ) : (
-              <div className="mt-4 rounded-2xl border border-dashed border-slate-200 p-5 text-center text-sm font-semibold text-slate-400">{t("not_specified")}</div>
-            )}
-          </section>
-
-          {/* Security */}
-          <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-            <button type="button" onClick={() => setPwdOpen((v) => !v)} className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left font-black text-slate-950 transition hover:bg-slate-100" aria-expanded={pwdOpen} aria-controls="pwd-collapse">
-              <span>🔐 {t("change_password", { defaultValue: "Сменить пароль" })}</span>
-              <svg className={`h-5 w-5 transition-transform ${pwdOpen ? "rotate-180" : ""}`} viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.06l3.71-3.83a.75.75 0 111.08 1.04l-4.25 4.38a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clipRule="evenodd" /></svg>
-            </button>
-            <div id="pwd-collapse" className={`grid overflow-hidden transition-all duration-300 ease-in-out ${pwdOpen ? "mt-3 grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
-              <div className="min-h-0 space-y-2">
-                <input type="password" placeholder={t("current_password") || "Текущий пароль"} value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" />
-                <input type="password" placeholder={t("new_password")} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" />
-                <button onClick={handleChangePassword} className="w-full rounded-xl bg-orange-500 py-2.5 font-black text-white transition hover:bg-orange-600">{t("change")}</button>
-              </div>
-            </div>
-            <button onClick={() => {
-              if (typeof localStorage !== "undefined") {
-                localStorage.removeItem("token");
-                localStorage.removeItem("provider_id");
-              }
-              window.location.href = "/login";
-            }} className="mt-3 w-full rounded-2xl bg-red-600 px-4 py-3 font-black text-white transition hover:bg-red-700">
-              {t("logout", { defaultValue: "Выйти" })}
-            </button>
-          </section>
+          <ProfileCard title="Безопасность" subtitle="Пароль и выход из кабинета.">
+            <button type="button" onClick={() => setPwdOpen((v) => !v)} className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left font-black text-slate-950 transition hover:bg-slate-100" aria-expanded={pwdOpen} aria-controls="pwd-collapse"><span>🔐 {t("change_password", { defaultValue: "Сменить пароль" })}</span><svg className={`h-5 w-5 transition-transform ${pwdOpen ? "rotate-180" : ""}`} viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.06l3.71-3.83a.75.75 0 111.08 1.04l-4.25 4.38a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clipRule="evenodd" /></svg></button>
+            <div id="pwd-collapse" className={`grid overflow-hidden transition-all duration-300 ease-in-out ${pwdOpen ? "mt-3 grid-rows-[1fr]" : "grid-rows-[0fr]"}`}><div className="min-h-0 space-y-2"><input type="password" placeholder={t("current_password", { defaultValue: "Текущий пароль" })} value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" /><input type="password" placeholder={t("new_password", { defaultValue: "Новый пароль" })} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" /><button type="button" onClick={handleChangePassword} className="w-full rounded-xl bg-orange-500 py-2.5 font-black text-white transition hover:bg-orange-600">{t("change", { defaultValue: "Изменить" })}</button></div></div>
+            <button type="button" onClick={() => { if (typeof localStorage !== "undefined") { localStorage.removeItem("token"); localStorage.removeItem("provider_id"); } window.location.href = "/login"; }} className="mt-3 w-full rounded-2xl bg-red-600 px-4 py-3 font-black text-white transition hover:bg-red-700">{t("logout", { defaultValue: "Выйти" })}</button>
+          </ProfileCard>
         </aside>
       </div>
 
-      {/* Статистика */}
-      <div className="mt-6">
-        <ProviderStatsHeader
-          rating={Number(profile?.rating) || 0}
-          stats={{
-            requests_total: Number(stats?.requests_total) || 0,
-            requests_active: Number(stats?.requests_active) || 0,
-            bookings_total: Number(stats?.bookings_total) || 0,
-            completed: Number(stats?.completed) || 0,
-            cancelled: Number(stats?.cancelled) || 0,
-            points: Number(stats?.points ?? stats?.completed ?? 0),
-          }}
-          bonusTarget={500}
-          t={t}
-        />
+      <div className="mt-6 rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+        <ProviderStatsHeader rating={Number(profile?.rating) || 0} stats={{ requests_total: Number(stats?.requests_total) || 0, requests_active: Number(stats?.requests_active) || 0, bookings_total: Number(stats?.bookings_total) || 0, completed: Number(stats?.completed) || 0, cancelled: Number(stats?.cancelled) || 0, points: Number(stats?.points ?? stats?.completed ?? 0) }} bonusTarget={500} t={t} />
       </div>
 
-      {/* Отзывы */}
-      <div className="mt-6">
-        <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
-          <div className="min-w-0 max-w-full overflow-hidden break-words [text-wrap:pretty] [&_*]:min-w-0 [&_*]:break-words [&_time]:whitespace-nowrap [&_.review-date]:whitespace-nowrap [&_.rv-date]:whitespace-nowrap">
-            {hasProviderId ? <ProviderReviews providerId={providerId} t={t} /> : null}
-          </div>
-        </div>
-      </div>
+      <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm sm:p-6"><div className="min-w-0 max-w-full overflow-hidden break-words [text-wrap:pretty] [&_*]:min-w-0 [&_*]:break-words [&_time]:whitespace-nowrap [&_.review-date]:whitespace-nowrap [&_.rv-date]:whitespace-nowrap">{hasProviderId ? <ProviderReviews providerId={providerId} t={t} /> : null}</div></div>
     </div>
   );
-
-  function ProfileInfoBox({ label, icon, hint, children }) {
-    return (
-      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.14em] text-slate-400">
-            <span>{icon}</span>
-            <span>{label}</span>
-          </div>
-        </div>
-        {hint ? <div className="mb-2 text-xs font-medium text-slate-400">{hint}</div> : null}
-        <div className="text-sm font-bold leading-6 text-slate-800">{children}</div>
-      </div>
-    );
-  }
-
 };
 
 export default ProviderProfile;
