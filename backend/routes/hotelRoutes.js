@@ -15,9 +15,15 @@ const {
   // инспекции
   listHotelInspections,
   createHotelInspection,
+  updateHotelInspection,
+  deleteHotelInspection,
+  moderateHotelInspection,
+  reportHotelInspection,
   likeInspection,
   listInspectionComments,
   createInspectionComment,
+  moderateInspectionComment,
+  reportInspectionComment,
   listAllHotelInspections,
   listMyHotels,
 } = require("../controllers/hotelsController");
@@ -91,6 +97,15 @@ router.get("/mine", providerOnly, listMyHotels);
 /* --- лайки инспекций (авторизация обязательна) --- */
 // ставим выше, чтобы не конфликтовало с "/:id/inspections"
 router.post("/inspections/:id/like", canLike, likeInspection);
+router.patch("/inspections/:id", reviewerOnly, updateHotelInspection);
+router.put("/inspections/:id", reviewerOnly, updateHotelInspection);
+router.delete("/inspections/:id", reviewerOnly, deleteHotelInspection);
+router.patch("/inspections/:id/moderation", allowRoles("admin", "moderator"), moderateHotelInspection);
+router.put("/inspections/:id/moderation", allowRoles("admin", "moderator"), moderateHotelInspection);
+router.post("/inspections/:id/report", tryAuth, reportHotelInspection);
+router.patch("/inspections/comments/:commentId/moderation", allowRoles("admin", "moderator"), moderateInspectionComment);
+router.put("/inspections/comments/:commentId/moderation", allowRoles("admin", "moderator"), moderateInspectionComment);
+router.post("/inspections/comments/:commentId/report", tryAuth, reportInspectionComment);
 router.get("/inspections/:id/comments", tryAuth, listInspectionComments);
 router.post("/inspections/:id/comments", reviewerOnly, createInspectionComment);
 router.get("/inspections", tryAuth, listAllHotelInspections);
