@@ -1000,6 +1000,68 @@ function getProofMediaFromBody(p) {
   return Array.isArray(arr) ? arr.slice(0, 10) : [];
 }
 
+function getKeepMediaIdsFromBody(p) {
+  const raw = p.keep_media_ids || p.keepMediaIds || p.existing_media_ids || p.existingMediaIds;
+  if (raw == null || raw === "") return null;
+  const parsed = Array.isArray(raw) ? raw : safeJson(raw, []);
+  if (!Array.isArray(parsed)) return [];
+  return parsed
+    .map((x) => Number(x))
+    .filter((n) => Number.isFinite(n) && n > 0)
+    .slice(0, 100);
+}
+
+async function buildHotelInspectionMediaRowsFromRequest(req, hotelId, fallbackSortOrder = 0) {
+  const p = req.body || {};
+  const mediaMeta = buildUploadMeta(req);
+  const uploadFiles = Array.isArray(req.files) ? req.files : [];
+  const mediaRows = [];
+
+  for (let i = 0; i < uploadFiles.length; i += 1) {
+    const file = uploadFiles[i];
+    const meta = mediaMeta[i] || {};
+    const sectionKey = normalizeKey(meta.section_key || meta.sectionKey || p.section_key, HOTEL_REVIEW_MEDIA_SECTIONS, "room");
+    const tags = normalizeStringArray(meta.tags, null, 16);
+    const uploaded = await uploadBufferToR2(file, {
+      public_prefix: `hotel-${hotelId}-${sectionKey}`,
+    });
+    mediaRows.push({
+      media_type: inferUploadedMediaType(file),
+      section_key: sectionKey,
+      caption: first(meta.caption, meta.label),
+      tags,
+      url: uploaded.url,
+      public_id: uploaded.public_id,
+      thumbnail_url: uploaded.thumbnail_url,
+      width: uploaded.width,
+      height: uploaded.height,
+      duration_seconds: uploaded.duration_seconds,
+      sort_order: fallbackSortOrder + i,
+    });
+  }
+
+  const structuredUrlMedia = safeJson(p.section_media || p.sectionMedia, []);
+  if (Array.isArray(structuredUrlMedia)) {
+    for (let i = 0; i < structuredUrlMedia.length; i += 1) {
+      const m = structuredUrlMedia[i] || {};
+      const url = first(m.url, m.src);
+      if (!url) continue;
+      mediaRows.push({
+        media_type: String(m.media_type || m.mediaType || "photo").toLowerCase() === "video" ? "video" : "photo",
+        section_key: normalizeKey(m.section_key || m.sectionKey, HOTEL_REVIEW_MEDIA_SECTIONS, "room"),
+        caption: first(m.caption, m.label),
+        tags: normalizeStringArray(m.tags, null, 16),
+        url,
+        public_id: m.public_id || m.publicId || null,
+        thumbnail_url: m.thumbnail_url || m.thumbnailUrl || url,
+        sort_order: Number.isFinite(Number(m.sort_order)) ? Number(m.sort_order) : fallbackSortOrder + i,
+      });
+    }
+  }
+
+  return mediaRows;
+}
+
 // пересчёт агрегатов по инспекциям → hotels.attrs.aggregated_from_inspections
 async function ensureHotelsAggregates(hotelId) {
   await ensureHotelsAttrsColumn();
@@ -1675,7 +1737,13 @@ async function updateHotelInspection(req, res) {
     const recommendationScore = clampInt(p.recommendation_score || p.recommendationScore, 1, 5);
     const proofMedia = getProofMediaFromBody(p);
     const verifiedVisit = Boolean(p.verified_visit === true || p.verifiedVisit === true || proofMedia.length > 0);
-    const nextStatus = admin ? normalizeInspectionStatus(p.status || p.moderation_status || p.moderationStatus, row.status || 'pending') : 'pending';
+    const keepMediaIds = getKeepMediaIdsFromBody(p);
+    const mediaRows = await buildHotelInspectionMediaRowsFromRequest(req, row.hotel_id, 1000);
+
+    // Любое редактирование не админом снова отправляет инспекцию на модерацию.
+    const nextStatus = admin
+      ? normalizeInspectionStatus(p.status || p.moderation_status || p.moderationStatus, row.status || "pending")
+      : "pending";
 
     const client = await pool.connect();
     try {
@@ -1723,12 +1791,27 @@ async function updateHotelInspection(req, res) {
           JSON.stringify(proofMedia),
         ]
       );
+
       await client.query(`DELETE FROM hotel_inspection_audience WHERE inspection_id=$1`, [inspectionId]);
       await client.query(`DELETE FROM hotel_inspection_cons WHERE inspection_id=$1`, [inspectionId]);
-      await insertHotelInspectionRelations(client, inspectionId, { audienceKeys, conKeys, mediaRows: [] });
+
+      if (Array.isArray(keepMediaIds)) {
+        if (keepMediaIds.length) {
+          await client.query(
+            `DELETE FROM hotel_inspection_media
+              WHERE inspection_id=$1
+                AND NOT (id = ANY($2::int[]))`,
+            [inspectionId, keepMediaIds]
+          );
+        } else {
+          await client.query(`DELETE FROM hotel_inspection_media WHERE inspection_id=$1`, [inspectionId]);
+        }
+      }
+
+      await insertHotelInspectionRelations(client, inspectionId, { audienceKeys, conKeys, mediaRows });
       await client.query("COMMIT");
       await ensureHotelsAggregates(rows[0].hotel_id);
-      return res.json({ item: rows[0] });
+      return res.json({ item: rows[0], appended_media: mediaRows.length });
     } catch (txErr) {
       await client.query("ROLLBACK");
       throw txErr;
@@ -1737,6 +1820,7 @@ async function updateHotelInspection(req, res) {
     }
   } catch (e) {
     console.error("updateHotelInspection error", e);
+    if (e?.code === "r2_not_configured") return res.status(500).json({ error: "r2_not_configured" });
     return res.status(500).json({ error: "update_failed" });
   }
 }
