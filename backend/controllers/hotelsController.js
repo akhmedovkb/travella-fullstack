@@ -4,7 +4,7 @@
 const axios = require("axios");
 const crypto = require("crypto");
 const { Pool } = require("pg");
-const { uploadBufferToCloudinary } = require("../utils/cloudinary");
+const { uploadBufferToR2, getR2ObjectStream } = require("../utils/r2Upload");
 
 // /api/hotels/:id/brief
 async function getHotelBrief(req, res) {
@@ -1381,7 +1381,7 @@ async function createHotelInspection(req, res) {
       const meta = mediaMeta[i] || {};
       const sectionKey = normalizeKey(meta.section_key || meta.sectionKey || p.section_key, HOTEL_REVIEW_MEDIA_SECTIONS, "room");
       const tags = normalizeStringArray(meta.tags, null, 16);
-      const uploaded = await uploadBufferToCloudinary(file, {
+      const uploaded = await uploadBufferToR2(file, {
         public_prefix: `hotel-${hotelId}-${sectionKey}`,
       });
       mediaRows.push({
@@ -1478,13 +1478,34 @@ async function createHotelInspection(req, res) {
     }
   } catch (e) {
     console.error("createHotelInspection error", e);
-    if (e?.code === "cloudinary_not_configured") {
-      return res.status(500).json({ error: "cloudinary_not_configured" });
+    if (e?.code === "r2_not_configured") {
+      return res.status(500).json({ error: "r2_not_configured" });
+    }
+    if (e?.code === "empty_upload_file") {
+      return res.status(400).json({ error: "empty_upload_file" });
     }
     res.status(500).json({ error: "create_failed" });
   }
 }
 
+
+
+// GET /api/hotels/media/:key
+// Proxy для R2, если R2_PUBLIC_URL не задан или bucket не публичный.
+async function getHotelInspectionMedia(req, res) {
+  const key = req.params.key || req.params[0] || "";
+  try {
+    const obj = await getR2ObjectStream(key);
+    if (obj.ContentType) res.setHeader("Content-Type", obj.ContentType);
+    if (obj.ContentLength) res.setHeader("Content-Length", String(obj.ContentLength));
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    return obj.Body.pipe(res);
+  } catch (e) {
+    console.error("getHotelInspectionMedia error", e);
+    if (e?.code === "r2_not_configured") return res.status(500).json({ error: "r2_not_configured" });
+    return res.status(404).json({ error: "media_not_found" });
+  }
+}
 
 // GET /api/hotels/inspections/:id/comments
 async function listInspectionComments(req, res) {
@@ -1855,6 +1876,7 @@ module.exports = {
   // инспекции + лайки
   listHotelInspections,
   listAllHotelInspections,
+  getHotelInspectionMedia,
   createHotelInspection,
   updateHotelInspection,
   deleteHotelInspection,
