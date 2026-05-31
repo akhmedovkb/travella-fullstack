@@ -579,8 +579,8 @@ async function ensureInspectionsTable() {
   await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS scores JSONB`);
   await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS amenities JSONB`);
   await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS nearby JSONB`);
-  await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'approved'`);
-  await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS moderation_status TEXT NOT NULL DEFAULT 'approved'`);
+  await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending'`);
+  await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS moderation_status TEXT NOT NULL DEFAULT 'pending'`);
   await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS rejection_reason TEXT`);
   await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS verified_visit BOOLEAN NOT NULL DEFAULT false`);
   await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS proof_media JSONB DEFAULT '[]'::jsonb`);
@@ -1456,8 +1456,8 @@ async function createHotelInspection(req, res) {
           scores ? JSON.stringify(scores) : null,
           amenities ? JSON.stringify(amenities) : null,
           nearby ? JSON.stringify(nearby) : null,
-          isAdminLike(u) ? 'approved' : 'pending',
-          isAdminLike(u) ? 'approved' : 'pending',
+          'pending',
+          'pending',
           Boolean(p.verified_visit === true || p.verifiedVisit === true || p.visit_verified === true || p.visitVerified === true || getProofMediaFromBody(p).length > 0),
           JSON.stringify(getProofMediaFromBody(p)),
         ]
@@ -1469,7 +1469,7 @@ async function createHotelInspection(req, res) {
 
       await ensureHotelsAggregates(hotelId);
 
-      return res.json({ id: inspectionId, media: mediaRows, status: isAdminLike(u) ? 'approved' : 'pending', moderation_status: isAdminLike(u) ? 'approved' : 'pending' });
+      return res.status(201).json({ id: inspectionId, media: mediaRows, status: 'pending', moderation_status: 'pending' });
     } catch (txErr) {
       await client.query("ROLLBACK");
       throw txErr;
