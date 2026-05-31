@@ -440,6 +440,41 @@ function StatMini({ label, value }) {
   );
 }
 
+
+function MyInspectionPanel({ inspection, hotelId }) {
+  if (!inspection) {
+    return (
+      <div className="rounded-3xl border border-dashed border-orange-200 bg-orange-50/50 p-4">
+        <div className="text-sm font-black text-slate-950">У вас ещё нет обзора этого отеля</div>
+        <div className="mt-1 text-xs font-bold leading-5 text-slate-500">Оставьте инспекцию — после проверки админом она станет публичной в Hotel Passport.</div>
+        <Link to={`/hotels/${hotelId}/inspections?new=1`} className="mt-3 inline-flex rounded-xl bg-orange-500 px-4 py-2 text-sm font-black text-white shadow-sm hover:bg-orange-600">➕ Оставить обзор</Link>
+      </div>
+    );
+  }
+
+  const status = String(inspection.moderation_status || inspection.status || "pending").toLowerCase();
+  const cfg = {
+    pending: ["⏳", "Ваш обзор на модерации", "Видите только вы и админ. После одобрения обзор станет публичным.", "bg-amber-50 text-amber-900 ring-amber-100"],
+    approved: ["✅", "Ваш обзор опубликован", "Обзор виден в Hotel Passport.", "bg-emerald-50 text-emerald-900 ring-emerald-100"],
+    published: ["✅", "Ваш обзор опубликован", "Обзор виден в Hotel Passport.", "bg-emerald-50 text-emerald-900 ring-emerald-100"],
+    rejected: ["⛔", "Ваш обзор отклонён", inspection.rejection_reason ? `Причина: ${inspection.rejection_reason}` : "Исправьте обзор и отправьте повторно.", "bg-red-50 text-red-900 ring-red-100"],
+    hidden: ["🙈", "Ваш обзор скрыт", "Обзор не публикуется в общей ленте.", "bg-slate-100 text-slate-800 ring-slate-200"],
+    draft: ["📝", "Ваш обзор в черновике", "Можно продолжить заполнение и отправить на модерацию.", "bg-slate-50 text-slate-800 ring-slate-200"],
+  }[status] || ["🧾", "Ваш обзор найден", "Откройте инспекции, чтобы посмотреть детали.", "bg-slate-50 text-slate-800 ring-slate-200"];
+
+  return (
+    <div className={`rounded-3xl p-4 ring-1 ${cfg[3]}`}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="text-sm font-black">{cfg[0]} {cfg[1]}</div>
+          <div className="mt-1 text-xs font-bold leading-5 opacity-80">{cfg[2]}</div>
+        </div>
+        <Link to={`/hotels/${hotelId}/inspections?edit=${inspection.id}`} className="shrink-0 rounded-xl bg-white px-4 py-2 text-sm font-black text-slate-900 shadow-sm ring-1 ring-black/5 hover:bg-slate-50">✏️ Редактировать</Link>
+      </div>
+    </div>
+  );
+}
+
 export default function HotelDetails() {
   const { hotelId } = useParams();
   const [hotel, setHotel] = useState(null);
@@ -452,7 +487,7 @@ export default function HotelDetails() {
       setLoading(true);
       try {
         const [hotelData, inspectionData] = await Promise.all([
-          apiGet(`/api/hotels/${encodeURIComponent(hotelId)}`, false),
+          apiGet(`/api/hotels/${encodeURIComponent(hotelId)}`, true),
           listInspections(hotelId, { sort: "top" }).catch(() => ({ items: [] })),
         ]);
         if (!alive) return;
@@ -516,6 +551,7 @@ export default function HotelDetails() {
   const fullAddress = [hotel.address, hotel.city || hotel.location, hotel.country].filter(Boolean).join(", ");
   const latest = inspections.slice(0, 4);
   const scoreLabel = Number.isFinite(stats.score) ? stats.score.toFixed(1) : "—";
+  const myInspection = hotel.my_inspection || hotel.myInspection || null;
 
   return (
     <div className="bg-slate-50/70">
@@ -553,8 +589,16 @@ export default function HotelDetails() {
 
                 <div className="flex shrink-0 flex-wrap gap-2">
                   <Link to={`/hotels/${hotel.id}/inspections`} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700 shadow-sm transition hover:bg-slate-50">🏨 Инспекции</Link>
-                  <Link to={`/hotels/${hotel.id}/inspections?new=1`} className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-black text-white shadow-sm transition hover:bg-orange-600">➕ Оставить</Link>
+                  {myInspection ? (
+                    <Link to={`/hotels/${hotel.id}/inspections?edit=${myInspection.id}`} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-black text-white shadow-sm transition hover:bg-black">✏️ Редактировать обзор</Link>
+                  ) : (
+                    <Link to={`/hotels/${hotel.id}/inspections?new=1`} className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-black text-white shadow-sm transition hover:bg-orange-600">➕ Оставить обзор</Link>
+                  )}
                 </div>
+              </div>
+
+              <div className="mt-6">
+                <MyInspectionPanel inspection={myInspection} hotelId={hotel.id} />
               </div>
 
               <div className="mt-6 grid gap-3 md:grid-cols-3">
