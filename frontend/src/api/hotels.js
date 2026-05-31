@@ -106,3 +106,42 @@ export function listInspectionComments(inspectionId) {
 export function createInspectionComment(inspectionId, text) {
   return apiPost(`/api/hotels/inspections/${encodeURIComponent(inspectionId)}/comments`, { text }, true);
 }
+
+
+/** Обновить свою инспекцию или модерировать её админом. */
+export function updateInspection(inspectionId, payload) {
+  return apiPut(`/api/hotels/inspections/${encodeURIComponent(inspectionId)}`, payload, true);
+}
+
+/** Мягко удалить/скрыть свою инспекцию. */
+export async function deleteInspection(inspectionId) {
+  const res = await fetch(buildUrl(`/api/hotels/inspections/${encodeURIComponent(inspectionId)}`), {
+    method: "DELETE",
+    headers: getAuthHeaders(true),
+    credentials: "include",
+  });
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : {};
+  if (!res.ok) throw new Error(data?.error || data?.message || res.statusText || `HTTP ${res.status}`);
+  return data;
+}
+
+/** Админ-модерация инспекции. */
+export function moderateInspection(inspectionId, payload) {
+  return apiPut(`/api/hotels/inspections/${encodeURIComponent(inspectionId)}/moderation`, payload, "admin");
+}
+
+/** Жалоба на инспекцию. */
+export function reportInspection(inspectionId, payload = {}) {
+  return apiPost(`/api/hotels/inspections/${encodeURIComponent(inspectionId)}/report`, payload, true);
+}
+
+/** Модерация комментария инспекции. */
+export function moderateInspectionComment(commentId, payload) {
+  return apiPut(`/api/hotels/inspections/comments/${encodeURIComponent(commentId)}/moderation`, payload, "admin");
+}
+
+/** Жалоба на комментарий инспекции. */
+export function reportInspectionComment(commentId, payload = {}) {
+  return apiPost(`/api/hotels/inspections/comments/${encodeURIComponent(commentId)}/report`, payload, true);
+}
