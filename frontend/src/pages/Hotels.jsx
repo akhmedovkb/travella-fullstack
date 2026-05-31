@@ -13,6 +13,7 @@ function normalizeHotel(h) {
     rating: h.rating ?? h.avg_rating ?? h.average_rating ?? h.stars ?? h.score ?? null,
     views: h.views ?? h.view_count ?? h.popularity ?? h.seen ?? h.hits ?? 0,
     created_at: h.created_at ?? h.createdAt ?? null,
+    my_inspection: h.my_inspection || h.myInspection || null,
   };
 }
 
@@ -23,6 +24,26 @@ function RatingPill({ value }) {
     <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-black text-amber-700 ring-1 ring-amber-100">
       ⭐ {label}
     </span>
+  );
+}
+
+function MyInspectionBadge({ inspection }) {
+  if (!inspection) return null;
+  const status = String(inspection.moderation_status || inspection.status || "").toLowerCase();
+  const cfg = {
+    pending: ["⏳", "Ваш обзор на модерации", "bg-amber-50 text-amber-800 ring-amber-100"],
+    approved: ["✅", "Ваш обзор опубликован", "bg-emerald-50 text-emerald-800 ring-emerald-100"],
+    published: ["✅", "Ваш обзор опубликован", "bg-emerald-50 text-emerald-800 ring-emerald-100"],
+    rejected: ["⛔", "Ваш обзор отклонён", "bg-red-50 text-red-800 ring-red-100"],
+    hidden: ["🙈", "Ваш обзор скрыт", "bg-slate-100 text-slate-700 ring-slate-200"],
+    draft: ["📝", "Ваш обзор в черновике", "bg-slate-50 text-slate-700 ring-slate-200"],
+  }[status] || ["🧾", "Ваш обзор есть", "bg-slate-50 text-slate-700 ring-slate-200"];
+  return (
+    <div className={`mt-3 rounded-2xl px-3 py-2 text-xs font-black ring-1 ${cfg[2]}`}>
+      <div>{cfg[0]} {cfg[1]}</div>
+      {status === "pending" && <div className="mt-0.5 text-[11px] font-bold opacity-80">Видите только вы и админ. После одобрения обзор станет публичным.</div>}
+      {status === "rejected" && inspection.rejection_reason && <div className="mt-0.5 text-[11px] font-bold opacity-80">Причина: {inspection.rejection_reason}</div>}
+    </div>
   );
 }
 
@@ -44,8 +65,10 @@ function HotelResultCard({ hotel, t }) {
         <RatingPill value={hotel.rating} />
       </div>
 
+      <MyInspectionBadge inspection={hotel.my_inspection} />
+
       <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3 text-xs font-bold text-slate-500">
-        <span>{t("hotels.open_card", { defaultValue: "Открыть карточку" })}</span>
+        <span>{hotel.my_inspection ? "Открыть / редактировать обзор" : t("hotels.open_card", { defaultValue: "Открыть карточку" })}</span>
         <span className="text-orange-600">→</span>
       </div>
     </NavLink>
