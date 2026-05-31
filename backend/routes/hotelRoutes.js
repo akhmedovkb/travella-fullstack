@@ -102,8 +102,8 @@ router.get("/mine", providerOnly, listMyHotels);
 /* --- лайки инспекций (авторизация обязательна) --- */
 // ставим выше, чтобы не конфликтовало с "/:id/inspections"
 router.post("/inspections/:id/like", canLike, likeInspection);
-router.patch("/inspections/:id", reviewerOnly, updateHotelInspection);
-router.put("/inspections/:id", reviewerOnly, updateHotelInspection);
+router.patch("/inspections/:id", reviewerOnly, inspectionUpload.array("files", 13), updateHotelInspection);
+router.put("/inspections/:id", reviewerOnly, inspectionUpload.array("files", 13), updateHotelInspection);
 router.delete("/inspections/:id", reviewerOnly, deleteHotelInspection);
 router.patch("/inspections/:id/moderation", allowRoles("admin", "moderator"), moderateHotelInspection);
 router.put("/inspections/:id/moderation", allowRoles("admin", "moderator"), moderateHotelInspection);
