@@ -785,6 +785,18 @@ function AddInspectionWizard({ hotel, hotelId, onCreated }) {
   const [nearby, setNearby] = useState({});
   const [files, setFiles] = useState([]);
   const [mediaMeta, setMediaMeta] = useState([]);
+  const [activeMediaSection, setActiveMediaSection] = useState("room");
+
+  const mediaSectionCounts = useMemo(() => {
+    const out = {};
+    for (const meta of mediaMeta || []) {
+      const key = meta?.section_key || "room";
+      out[key] = (out[key] || 0) + 1;
+    }
+    return out;
+  }, [mediaMeta]);
+
+  const activeSectionMeta = sectionMeta(activeMediaSection);
 
   const stepReady = useMemo(() => {
     if (step === 1) return title.trim().length >= 3 && review.trim().length >= 20 && visitType;
@@ -794,7 +806,17 @@ function AddInspectionWizard({ hotel, hotelId, onCreated }) {
 
   function onFilesChange(e) {
     const picked = Array.from(e.target.files || []);
-    const nextFiles = [...files, ...picked].slice(0, MAX_INSPECTION_FILES);
+    if (!picked.length) return;
+
+    const remaining = Math.max(0, MAX_INSPECTION_FILES - files.length);
+    if (remaining <= 0) {
+      alert(`Можно загрузить максимум ${MAX_INSPECTION_FILES} файлов.`);
+      e.target.value = "";
+      return;
+    }
+
+    const addedFiles = picked.slice(0, remaining);
+    const nextFiles = [...files, ...addedFiles];
     const validationError = validateInspectionFiles(nextFiles);
 
     if (validationError) {
@@ -803,17 +825,27 @@ function AddInspectionWizard({ hotel, hotelId, onCreated }) {
       return;
     }
 
+    if (picked.length > remaining) {
+      alert(`Добавлено ${addedFiles.length} файлов. Лимит инспекции — ${MAX_INSPECTION_FILES} файлов.`);
+    }
+
     setFiles(nextFiles);
     setMediaMeta((prev) => [
       ...prev,
-      ...picked.map((file) => ({
-        section_key: "room",
+      ...addedFiles.map((file) => ({
+        section_key: activeMediaSection,
         caption: file.name,
         tags: [],
       })),
-    ].slice(0, MAX_INSPECTION_FILES));
+    ]);
     e.target.value = "";
   }
+
+  function removeInspectionFile(index) {
+    setFiles((prev) => prev.filter((_, idx) => idx !== index));
+    setMediaMeta((prev) => prev.filter((_, idx) => idx !== index));
+  }
+
   function updateMediaMeta(i, patch) {
     setMediaMeta((prev) => prev.map((m, idx) => (idx === i ? { ...m, ...patch } : m)));
   }
@@ -924,11 +956,83 @@ function AddInspectionWizard({ hotel, hotelId, onCreated }) {
 
           {step === 3 && (
             <div className="grid gap-4">
-              <label className="flex cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed border-orange-200 bg-orange-50/50 p-6 text-center">
-                <span className="text-3xl">📷</span><span className="mt-2 text-sm font-black text-slate-800">Загрузить фото/видео по зонам отеля</span><span className="mt-1 text-xs font-bold text-slate-400">До 13 файлов, каждый файл можно подписать и отнести к секции</span>
+              <div className="rounded-3xl border border-orange-100 bg-orange-50/40 p-4">
+                <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+                  <div>
+                    <div className="text-xs font-black uppercase tracking-[0.16em] text-orange-600">Зоны отеля</div>
+                    <div className="mt-1 text-sm font-bold text-slate-700">Сначала выберите зону, затем загрузите фото/видео — файлы автоматически попадут в выбранный раздел.</div>
+                  </div>
+                  <div className="shrink-0 rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-600 ring-1 ring-orange-100">
+                    {files.length}/{MAX_INSPECTION_FILES} файлов
+                  </div>
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                  {MEDIA_SECTIONS.map((section) => {
+                    const count = mediaSectionCounts[section.key] || 0;
+                    const active = activeMediaSection === section.key;
+                    return (
+                      <button
+                        key={section.key}
+                        type="button"
+                        onClick={() => setActiveMediaSection(section.key)}
+                        className={`rounded-2xl border px-3 py-3 text-left transition ${
+                          active
+                            ? "border-orange-300 bg-white shadow-sm ring-4 ring-orange-100"
+                            : "border-orange-100 bg-white/70 hover:bg-white"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-2xl">{section.icon}</span>
+                          <span className={`rounded-full px-2 py-0.5 text-[11px] font-black ${active ? "bg-orange-500 text-white" : "bg-slate-100 text-slate-500"}`}>
+                            {count}
+                          </span>
+                        </div>
+                        <div className="mt-2 text-sm font-black text-slate-900">{section.short || section.label}</div>
+                        {section.hints?.length ? (
+                          <div className="mt-1 line-clamp-1 text-[11px] font-semibold text-slate-400">
+                            {section.hints.slice(0, 3).join(" · ")}
+                          </div>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <label className="flex cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed border-orange-200 bg-orange-50/50 p-6 text-center transition hover:bg-orange-50">
+                <span className="text-3xl">{activeSectionMeta.icon}</span>
+                <span className="mt-2 text-sm font-black text-slate-800">
+                  Загрузить в зону: {activeSectionMeta.label}
+                </span>
+                <span className="mt-1 text-xs font-bold text-slate-400">
+                  До 13 файлов. Фото до 8 MB, видео до 25 MB, общий объём до 45 MB.
+                </span>
                 <input type="file" accept="image/*,video/*" multiple onChange={onFilesChange} className="hidden" />
               </label>
-              {files.length > 0 && <div className="grid gap-2">{files.map((file, i) => <div key={`${file.name}-${i}`} className="grid gap-2 rounded-2xl border border-slate-100 bg-slate-50 p-3 md:grid-cols-[1fr_180px_1fr]"><div className="truncate text-sm font-black text-slate-800">{file.name}</div><select value={mediaMeta[i]?.section_key || "room"} onChange={(e) => updateMediaMeta(i, { section_key: e.target.value })} className="rounded-xl border border-slate-200 px-2 py-2 text-sm font-semibold">{MEDIA_SECTIONS.map((s) => <option key={s.key} value={s.key}>{s.icon} {s.label}</option>)}</select><input value={mediaMeta[i]?.caption || ""} onChange={(e) => updateMediaMeta(i, { caption: e.target.value })} placeholder="Подпись" className="rounded-xl border border-slate-200 px-2 py-2 text-sm font-semibold" /></div>)}</div>}
+
+              {files.length > 0 && (
+                <div className="grid gap-2">
+                  {files.map((file, i) => {
+                    const meta = sectionMeta(mediaMeta[i]?.section_key || "room");
+                    return (
+                      <div key={`${file.name}-${i}`} className="grid gap-2 rounded-2xl border border-slate-100 bg-slate-50 p-3 md:grid-cols-[minmax(0,1fr)_190px_minmax(0,1fr)_auto] md:items-center">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-black text-slate-800">{file.name}</div>
+                          <div className="mt-0.5 text-xs font-semibold text-slate-400">{formatBytes(file.size)} · {meta.icon} {meta.label}</div>
+                        </div>
+                        <select value={mediaMeta[i]?.section_key || "room"} onChange={(e) => updateMediaMeta(i, { section_key: e.target.value })} className="rounded-xl border border-slate-200 bg-white px-2 py-2 text-sm font-semibold">
+                          {MEDIA_SECTIONS.map((s) => <option key={s.key} value={s.key}>{s.icon} {s.label}</option>)}
+                        </select>
+                        <input value={mediaMeta[i]?.caption || ""} onChange={(e) => updateMediaMeta(i, { caption: e.target.value })} placeholder="Подпись" className="rounded-xl border border-slate-200 bg-white px-2 py-2 text-sm font-semibold" />
+                        <button type="button" onClick={() => removeInspectionFile(i)} className="rounded-xl bg-red-50 px-3 py-2 text-xs font-black text-red-600 ring-1 ring-red-100 hover:bg-red-100">
+                          Удалить
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
