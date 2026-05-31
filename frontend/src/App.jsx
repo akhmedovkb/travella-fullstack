@@ -19,6 +19,7 @@ import HotelInspections from "./pages/HotelInspections";
 import AdminHotelsTable from "./pages/admin/AdminHotelsTable";
 import AdminProviders from "./pages/admin/AdminProviders";
 import AdminHotelSeasons from "./pages/admin/AdminHotelSeasons";
+import AdminHotelInspections from "./pages/admin/AdminHotelInspections";
 import AdminLeads from "./pages/admin/Leads";
 import AdminRefusedActual from "./pages/admin/AdminRefusedActual";
 import IndiaInside from "./pages/landing/IndiaInside";
@@ -454,6 +455,17 @@ export default function App() {
                 <PrivateRoute>
                   <AdminRoute>
                     <AdminEntryFees />
+                  </AdminRoute>
+                </PrivateRoute>
+              }
+            />
+
+            <Route
+              path="/admin/hotels/inspections"
+              element={
+                <PrivateRoute>
+                  <AdminRoute>
+                    <AdminHotelInspections />
                   </AdminRoute>
                 </PrivateRoute>
               }
