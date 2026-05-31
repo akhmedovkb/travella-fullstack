@@ -511,9 +511,12 @@ function InspectionCard({ item, onLiked, onEdit, onDeleted, onModerated, onRepor
   const month = toInt(item?.travel_month);
   const canManage = Boolean(item?.can_manage);
   const canModerate = Boolean(item?.can_moderate);
+  const currentStatus = String(item?.status || item?.moderation_status || "approved").toLowerCase();
+  const isPending = currentStatus === "pending" || currentStatus === "draft";
+  const isRejected = currentStatus === "rejected";
 
   return (
-    <article className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
+    <article className={`overflow-hidden rounded-[28px] border bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg ${isPending ? "border-amber-200 ring-2 ring-amber-100" : isRejected ? "border-red-200 ring-2 ring-red-100" : "border-slate-200"}`}>
       <div className="relative bg-slate-100">
         {hero ? (
           hero.media_type === "video" ? (
@@ -538,6 +541,20 @@ function InspectionCard({ item, onLiked, onEdit, onDeleted, onModerated, onRepor
       </div>
 
       <div className="p-4 md:p-5">
+        {isPending && (
+          <div className="mb-4 rounded-3xl bg-amber-50 p-4 text-sm font-bold leading-6 text-amber-900 ring-1 ring-amber-100">
+            <div className="text-base font-black">⏳ На модерации</div>
+            <div className="mt-1">Эту инспекцию сейчас видите только вы и админ. После одобрения она станет публичной в Hotel Passport.</div>
+          </div>
+        )}
+
+        {isRejected && (
+          <div className="mb-4 rounded-3xl bg-red-50 p-4 text-sm font-bold leading-6 text-red-800 ring-1 ring-red-100">
+            <div className="text-base font-black">⛔ Инспекция отклонена</div>
+            <div className="mt-1">{item.rejection_reason || "Админ отклонил инспекцию. Отредактируйте данные и отправьте её повторно."}</div>
+          </div>
+        )}
+
         {item.hotel_name ? (
           <Link to={`/hotels/${item.hotel_id}`} className="text-sm font-black text-orange-600 hover:underline">
             {item.hotel_name}{item.hotel_city ? ` · ${item.hotel_city}` : ""}
