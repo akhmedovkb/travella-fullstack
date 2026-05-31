@@ -318,6 +318,97 @@ function Chip({ active, children, onClick, className = "" }) {
   );
 }
 
+
+function MediaCarousel({ items = [], heightClass = "h-64", compact = false }) {
+  const slides = arr(items).filter((m) => m?.url || m?.thumbnail_url);
+  const [idx, setIdx] = useState(0);
+
+  useEffect(() => {
+    if (idx >= slides.length) setIdx(0);
+  }, [idx, slides.length]);
+
+  if (!slides.length) return null;
+
+  const active = slides[idx] || slides[0];
+  const src = active?.url || active?.thumbnail_url;
+  const thumb = active?.thumbnail_url || active?.url;
+  const isVideo = String(active?.media_type || "photo").toLowerCase() === "video";
+  const many = slides.length > 1;
+
+  const prev = () => setIdx((v) => (v - 1 + slides.length) % slides.length);
+  const next = () => setIdx((v) => (v + 1) % slides.length);
+
+  return (
+    <div className="space-y-2">
+      <div className={`relative overflow-hidden rounded-2xl border border-white bg-slate-100 shadow-sm ${heightClass}`}>
+        {isVideo ? (
+          <video
+            src={src}
+            poster={thumb && thumb !== src ? thumb : undefined}
+            controls
+            playsInline
+            preload="metadata"
+            className="h-full w-full bg-slate-950 object-contain"
+          />
+        ) : (
+          <img src={thumb || src} alt={active?.caption || ""} className="h-full w-full object-cover" />
+        )}
+
+        {many && (
+          <>
+            <button
+              type="button"
+              onClick={prev}
+              className="absolute left-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-lg font-black text-slate-900 shadow-sm ring-1 ring-white/70 hover:bg-white"
+              aria-label="Предыдущее медиа"
+            >
+              ‹
+            </button>
+            <button
+              type="button"
+              onClick={next}
+              className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-lg font-black text-slate-900 shadow-sm ring-1 ring-white/70 hover:bg-white"
+              aria-label="Следующее медиа"
+            >
+              ›
+            </button>
+            <div className="absolute bottom-2 right-2 rounded-full bg-slate-950/75 px-2.5 py-1 text-[11px] font-black text-white">
+              {idx + 1}/{slides.length}
+            </div>
+          </>
+        )}
+      </div>
+
+      {(active?.caption || arr(active?.tags).length > 0) && (
+        <div className="px-1 text-xs font-semibold text-slate-600">
+          {active.caption ? <div className="line-clamp-2">{active.caption}</div> : null}
+          {arr(active.tags).length > 0 ? <div className="mt-1 truncate text-[11px] text-slate-400">#{arr(active.tags).join(" #")}</div> : null}
+        </div>
+      )}
+
+      {many && !compact && (
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {slides.map((m, i) => {
+            const t = m.thumbnail_url || m.url;
+            const video = String(m.media_type || "photo").toLowerCase() === "video";
+            return (
+              <button
+                key={m.id || m.url || i}
+                type="button"
+                onClick={() => setIdx(i)}
+                className={`relative h-14 w-20 shrink-0 overflow-hidden rounded-xl border bg-white ${i === idx ? "border-orange-400 ring-2 ring-orange-100" : "border-slate-200"}`}
+              >
+                {video ? <div className="absolute inset-0 flex items-center justify-center bg-slate-900/50 text-white">▶</div> : null}
+                {t ? <img src={t} alt="" className="h-full w-full object-cover" /> : null}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SectionMediaTabs({ items = [] }) {
   const normalized = arr(items);
   const grouped = useMemo(() => {
@@ -351,29 +442,7 @@ function SectionMediaTabs({ items = [] }) {
           );
         })}
       </div>
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-        {activeList.map((m) => {
-          const src = m.thumbnail_url || m.url;
-          return (
-            <a key={m.id || m.url} href={m.url} target="_blank" rel="noreferrer" className="group overflow-hidden rounded-2xl border border-white bg-white shadow-sm">
-              {m.media_type === "video" ? (
-                <div className="relative h-36 bg-slate-900">
-                  {src ? <img src={src} alt="" className="h-full w-full object-cover opacity-80 transition group-hover:scale-[1.03]" /> : null}
-                  <div className="absolute inset-0 flex items-center justify-center text-4xl text-white">▶</div>
-                </div>
-              ) : (
-                <img src={src} alt="" className="h-36 w-full object-cover transition group-hover:scale-[1.03]" />
-              )}
-              {(m.caption || arr(m.tags).length > 0) && (
-                <div className="p-2 text-xs font-semibold text-slate-600">
-                  {m.caption && <div className="line-clamp-2">{m.caption}</div>}
-                  {arr(m.tags).length > 0 && <div className="mt-1 truncate text-[11px] text-slate-400">#{arr(m.tags).join(" #")}</div>}
-                </div>
-              )}
-            </a>
-          );
-        })}
-      </div>
+      <MediaCarousel items={activeList} heightClass="h-72 md:h-80" />
     </div>
   );
 }
@@ -511,19 +580,20 @@ function InspectionCard({ item, onLiked, onEdit, onDeleted, onModerated, onRepor
   const month = toInt(item?.travel_month);
   const canManage = Boolean(item?.can_manage);
   const canModerate = Boolean(item?.can_moderate);
-  const currentStatus = String(item?.status || item?.moderation_status || "approved").toLowerCase();
-  const isPending = currentStatus === "pending" || currentStatus === "draft";
-  const isRejected = currentStatus === "rejected";
 
   return (
-    <article className={`overflow-hidden rounded-[28px] border bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg ${isPending ? "border-amber-200 ring-2 ring-amber-100" : isRejected ? "border-red-200 ring-2 ring-red-100" : "border-slate-200"}`}>
+    <article className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
       <div className="relative bg-slate-100">
         {hero ? (
           hero.media_type === "video" ? (
-            <a href={hero.url} target="_blank" rel="noreferrer" className="block">
-              <img src={hero.thumbnail_url || hero.url} alt="" className="h-64 w-full object-cover" />
-              <div className="absolute inset-0 flex items-center justify-center bg-black/10 text-5xl text-white">▶</div>
-            </a>
+            <video
+              src={hero.url}
+              poster={hero.thumbnail_url && hero.thumbnail_url !== hero.url ? hero.thumbnail_url : undefined}
+              controls
+              playsInline
+              preload="metadata"
+              className="h-64 w-full bg-slate-950 object-contain"
+            />
           ) : <img src={hero.thumbnail_url || hero.url} alt="" className="h-64 w-full object-cover" />
         ) : (
           <div className="flex h-48 items-center justify-center bg-gradient-to-br from-orange-50 to-slate-100 text-6xl">🏨</div>
@@ -541,20 +611,6 @@ function InspectionCard({ item, onLiked, onEdit, onDeleted, onModerated, onRepor
       </div>
 
       <div className="p-4 md:p-5">
-        {isPending && (
-          <div className="mb-4 rounded-3xl bg-amber-50 p-4 text-sm font-bold leading-6 text-amber-900 ring-1 ring-amber-100">
-            <div className="text-base font-black">⏳ На модерации</div>
-            <div className="mt-1">Эту инспекцию сейчас видите только вы и админ. После одобрения она станет публичной в Hotel Passport.</div>
-          </div>
-        )}
-
-        {isRejected && (
-          <div className="mb-4 rounded-3xl bg-red-50 p-4 text-sm font-bold leading-6 text-red-800 ring-1 ring-red-100">
-            <div className="text-base font-black">⛔ Инспекция отклонена</div>
-            <div className="mt-1">{item.rejection_reason || "Админ отклонил инспекцию. Отредактируйте данные и отправьте её повторно."}</div>
-          </div>
-        )}
-
         {item.hotel_name ? (
           <Link to={`/hotels/${item.hotel_id}`} className="text-sm font-black text-orange-600 hover:underline">
             {item.hotel_name}{item.hotel_city ? ` · ${item.hotel_city}` : ""}
