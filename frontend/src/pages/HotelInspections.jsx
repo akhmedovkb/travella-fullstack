@@ -951,7 +951,7 @@ function AddInspectionWizard({ hotel, hotelId, onCreated }) {
       fd.append("mediaMeta", JSON.stringify(mediaMeta));
       files.forEach((file) => fd.append("files", file));
       await createInspection(hotelId, fd);
-      tSuccess("Инспекция отправлена на модерацию");
+      tSuccess("Инспекция отправлена на модерацию. После проверки админом она станет публичной.");
       setOpen(false);
       setStep(1);
       onCreated?.();
@@ -1131,7 +1131,7 @@ function AddInspectionWizard({ hotel, hotelId, onCreated }) {
 
           <div className="mt-5 flex flex-wrap justify-between gap-3 border-t border-slate-100 pt-4">
             <button type="button" onClick={() => step > 1 ? setStep(step - 1) : setOpen(false)} className="rounded-2xl bg-slate-100 px-5 py-3 text-sm font-black text-slate-700">Назад</button>
-            {step < 5 ? <button type="button" onClick={() => stepReady ? setStep(step + 1) : alert(step === 1 ? "Заполните заголовок и обзор минимум 20 символов" : "Выберите хотя бы одну аудиторию") } className={`rounded-2xl px-5 py-3 text-sm font-black text-white ${stepReady ? "bg-slate-950" : "bg-slate-400"}`}>Дальше</button> : <button type="button" onClick={submit} disabled={submitting} className="rounded-2xl bg-orange-500 px-5 py-3 text-sm font-black text-white disabled:opacity-50">{submitting ? "Сохраняем…" : "Опубликовать инспекцию"}</button>}
+            {step < 5 ? <button type="button" onClick={() => stepReady ? setStep(step + 1) : alert(step === 1 ? "Заполните заголовок и обзор минимум 20 символов" : "Выберите хотя бы одну аудиторию") } className={`rounded-2xl px-5 py-3 text-sm font-black text-white ${stepReady ? "bg-slate-950" : "bg-slate-400"}`}>Дальше</button> : <button type="button" onClick={submit} disabled={submitting} className="rounded-2xl bg-orange-500 px-5 py-3 text-sm font-black text-white disabled:opacity-50">{submitting ? "Сохраняем…" : "Отправить на модерацию"}</button>}
           </div>
         </div>
       )}
