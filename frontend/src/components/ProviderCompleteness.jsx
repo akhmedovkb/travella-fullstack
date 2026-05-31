@@ -58,16 +58,58 @@ export default function ProviderCompleteness({ profile = {}, onFix }) {
     profile.telegramLinked,
     profile.telegram_chat_id,
     profile.tg_chat_id,
-    profile.telegramChatId
+    profile.telegramChatId,
+    profile.social
   );
 
+  const contactsOk = hasAny(profile.phone) && tgOk;
+  const locationOk = hasAny(profile.location);
+
   const providerType = String(profile?.type || "").toLowerCase();
-  const isAgent = providerType.includes("agent") || providerType.includes("турагент");
-  const isGuide = providerType.includes("guide") || providerType.includes("гид");
-  const isTransportProvider = providerType.includes("transport") || providerType.includes("транспорт");
+  const isAgent = providerType.includes("agent");
+  const isGuide = providerType.includes("guide");
+  const isTransportProvider = providerType.includes("transport");
 
   const items = useMemo(() => {
     const arr = [];
+
+    arr.push(
+      {
+        key: "contacts",
+        label: t("profile.completeness.contacts", "Контакты для клиентов"),
+        ok: contactsOk,
+        required: true,
+        points: 20,
+      },
+      {
+        key: "logo",
+        label: t("profile.completeness.logo", "Логотип / фото"),
+        ok: logoOk,
+        required: true,
+        points: 15,
+      },
+      {
+        key: "certificate",
+        label: t("profile.completeness.certificate", "Сертификат"),
+        ok: certificateOk,
+        required: true,
+        points: 20,
+      },
+      {
+        key: "telegram",
+        label: t("profile.completeness.telegram", "Telegram подключён"),
+        ok: tgOk,
+        required: true,
+        points: 15,
+      },
+      {
+        key: "fallback",
+        label: t("profile.completeness.location", "География работы"),
+        ok: locationOk,
+        required: true,
+        points: 10,
+      }
+    );
 
     if (!isAgent) {
       arr.push({
@@ -75,6 +117,7 @@ export default function ProviderCompleteness({ profile = {}, onFix }) {
         label: t("profile.completeness.languages", "Владение языками"),
         ok: languagesOk,
         required: true,
+        points: 10,
       });
     }
 
@@ -84,139 +127,106 @@ export default function ProviderCompleteness({ profile = {}, onFix }) {
         label: t("profile.completeness.transport", "Транспорт в наличии"),
         ok: transportOk,
         required: isTransportProvider,
+        points: 10,
       });
     }
 
-    arr.push(
-      {
-        key: "certificate",
-        label: t("profile.completeness.certificate", "Загрузка сертификата"),
-        ok: certificateOk,
-        required: true,
-      },
-      {
-        key: "logo",
-        label: t("profile.completeness.logo", "Загрузка лого"),
-        ok: logoOk,
-        required: true,
-      },
-      {
-        key: "telegram",
-        label: t("profile.completeness.telegram", "Подключение Telegram"),
-        ok: tgOk,
-        required: true,
-      }
-    );
-
     return arr;
   }, [
+    certificateOk,
+    contactsOk,
     isAgent,
     isGuide,
     isTransportProvider,
     languagesOk,
-    transportOk,
-    certificateOk,
+    locationOk,
     logoOk,
     tgOk,
+    transportOk,
     t,
   ]);
 
-  const totalRequired = items.filter((i) => i.required).length;
-  const doneRequired = items.filter((i) => i.required && i.ok).length;
-  const percent = Math.round((doneRequired / Math.max(1, totalRequired)) * 100);
-  const nextItem = items.find((i) => i.required && !i.ok);
+  const totalPoints = items.reduce((sum, item) => sum + (item.required ? item.points : 0), 0);
+  const donePoints = items.reduce(
+    (sum, item) => sum + (item.required && item.ok ? item.points : 0),
+    0
+  );
+  const percent = Math.round((donePoints / Math.max(1, totalPoints)) * 100);
+  const missing = items.filter((item) => item.required && !item.ok);
+
+  const level = percent >= 90 ? "high" : percent >= 70 ? "mid" : "low";
+  const levelText =
+    level === "high"
+      ? t("profile.trust.high", "Высокое доверие")
+      : level === "mid"
+      ? t("profile.trust.mid", "Хорошая база")
+      : t("profile.trust.low", "Нужно усилить");
 
   return (
-    <section className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm">
-      <div className="bg-[linear-gradient(135deg,#0f172a_0%,#1e293b_55%,#fb923c_160%)] p-5 text-white">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="inline-flex rounded-full bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-orange-100 ring-1 ring-white/10">
-              Trust score
-            </div>
-            <h2 className="mt-3 text-xl font-black tracking-[-0.03em]">
-              {t("profile.completeness.title", "Заполненность профиля")}
-            </h2>
-            <p className="mt-1 text-sm font-medium text-white/70">
-              Чем полнее профиль, тем выше доверие клиента к поставщику.
-            </p>
+    <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="text-xs font-black uppercase tracking-[0.16em] text-orange-500">
+            Travella trust
           </div>
-          <div className="shrink-0 text-right">
-            <div className="text-3xl font-black leading-none">{percent}%</div>
-            <div className="mt-1 text-[11px] font-bold uppercase tracking-wide text-white/55">
-              готово
-            </div>
-          </div>
+          <h2 className="mt-2 text-xl font-black tracking-[-0.03em] text-slate-950">
+            {t("profile.completeness.title", "Профиль доверия")}
+          </h2>
+          <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">
+            Чем выше доверие, тем увереннее клиент открывает контакты и отправляет запрос.
+          </p>
         </div>
-
-        <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-white/15">
-          <div
-            className="h-full rounded-full bg-orange-400 transition-all duration-500"
-            style={{ width: `${percent}%` }}
-            aria-label={t("profile.completeness.progress", "{{percent}}% заполнено", { percent })}
-          />
+        <div className="shrink-0 text-right">
+          <div className="text-3xl font-black tracking-[-0.05em] text-slate-950">{percent}</div>
+          <div className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">из 100</div>
         </div>
       </div>
 
-      <div className="p-5">
-        {nextItem ? (
-          <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            <div className="font-black">Следующий шаг: {nextItem.label}</div>
-            <div className="mt-1 font-medium text-amber-800/80">
-              Заполните этот пункт, чтобы профиль выглядел надёжнее для клиентов.
-            </div>
-          </div>
-        ) : (
-          <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-            <div className="font-black">Профиль готов к работе</div>
-            <div className="mt-1 font-medium text-emerald-800/80">
-              Основные элементы доверия заполнены.
-            </div>
-          </div>
-        )}
+      <div className="mt-4 h-3 overflow-hidden rounded-full bg-slate-100">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-orange-400 to-orange-600 transition-all"
+          style={{ width: `${percent}%` }}
+          aria-label={t("profile.completeness.progress", "{{percent}}% заполнено", { percent })}
+        />
+      </div>
 
-        <ul className="space-y-2.5">
-          {items.map((it) => {
-            const reqBadge = it.required ? null : t("profile.completeness.optional", "необязательно");
-            return (
-              <li
-                key={it.key}
-                className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3"
+      <div className="mt-3 inline-flex rounded-full bg-slate-950 px-3 py-1 text-xs font-black text-white">
+        {levelText}
+      </div>
+
+      {missing.length > 0 && (
+        <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold leading-6 text-amber-900">
+          Осталось усилить: {missing.slice(0, 3).map((x) => x.label).join(", ")}
+          {missing.length > 3 ? ` и ещё ${missing.length - 3}` : ""}.
+        </div>
+      )}
+
+      <ul className="mt-4 space-y-2">
+        {items.map((it) => (
+          <li key={it.key} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <span aria-hidden>{it.ok ? "✅" : "⚪"}</span>
+              <span className="truncate text-sm font-bold text-slate-700">
+                {it.label}
+                {!it.required ? <span className="ml-1 text-xs font-semibold text-slate-400">optional</span> : null}
+              </span>
+            </div>
+            {!it.ok ? (
+              <button
+                type="button"
+                onClick={() => onFix?.(it.key)}
+                className="shrink-0 rounded-xl border border-orange-200 bg-white px-3 py-1.5 text-xs font-black text-orange-700 transition hover:bg-orange-50"
               >
-                <div className="flex min-w-0 items-center gap-3">
-                  <span
-                    className={[
-                      "flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-sm font-black",
-                      it.ok
-                        ? "bg-emerald-100 text-emerald-700"
-                        : "bg-white text-slate-400 ring-1 ring-slate-200",
-                    ].join(" ")}
-                    aria-hidden
-                  >
-                    {it.ok ? "✓" : "•"}
-                  </span>
-                  <div className="min-w-0">
-                    <div className={it.ok ? "font-black text-slate-800" : "font-black text-slate-700"}>
-                      {it.label}
-                    </div>
-                    {reqBadge ? <div className="text-xs font-semibold text-slate-400">{reqBadge}</div> : null}
-                  </div>
-                </div>
-
-                {!it.ok && (
-                  <button
-                    type="button"
-                    onClick={() => onFix?.(it.key)}
-                    className="shrink-0 rounded-xl border border-orange-200 bg-white px-3 py-2 text-xs font-black text-orange-700 transition hover:bg-orange-50"
-                  >
-                    {t("profile.completeness.fill", "Заполнить")}
-                  </button>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      </div>
+                {t("profile.completeness.fill", "Заполнить")}
+              </button>
+            ) : (
+              <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-black text-emerald-700 ring-1 ring-emerald-100">
+                +{it.points}
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
