@@ -773,24 +773,103 @@ function EditInspectionPanel({ item, onClose, onSaved }) {
   const [visitType, setVisitType] = useState(item?.visit_type || "agent_inspection");
   const [audienceKeys, setAudienceKeys] = useState(arr(item?.audience_keys));
   const [conKeys, setConKeys] = useState(arr(item?.con_keys));
+  const [scores, setScores] = useState(obj(item?.scores));
+  const [amenities, setAmenities] = useState(arr(item?.amenities));
+  const [nearby, setNearby] = useState(obj(item?.nearby));
+  const [existingMedia, setExistingMedia] = useState(() => arr(item?.section_media));
+  const [files, setFiles] = useState([]);
+  const [mediaMeta, setMediaMeta] = useState([]);
+  const [activeMediaSection, setActiveMediaSection] = useState("room");
   const [saving, setSaving] = useState(false);
+
+  const existingMediaCount = existingMedia.length;
+  const newFilesCount = files.length;
+  const activeSectionMeta = sectionMeta(activeMediaSection);
+  const mediaSectionCounts = useMemo(() => {
+    const out = {};
+    for (const media of existingMedia) {
+      const key = media?.section_key || "room";
+      out[key] = (out[key] || 0) + 1;
+    }
+    for (const meta of mediaMeta || []) {
+      const key = meta?.section_key || "room";
+      out[key] = (out[key] || 0) + 1;
+    }
+    return out;
+  }, [existingMedia, mediaMeta]);
+
+  function onFilesChange(e) {
+    const picked = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (!picked.length) return;
+
+    const remaining = Math.max(0, MAX_INSPECTION_FILES - existingMedia.length - files.length);
+    if (remaining <= 0) {
+      alert(`Можно оставить максимум ${MAX_INSPECTION_FILES} файлов в одной инспекции. Удалите старые медиа или не добавляйте новые.`);
+      return;
+    }
+
+    const addedFiles = picked.slice(0, remaining);
+    const validationError = validateInspectionFiles([...files, ...addedFiles]);
+    if (validationError) {
+      alert(validationError);
+      return;
+    }
+
+    setFiles((prev) => [...prev, ...addedFiles]);
+    setMediaMeta((prev) => [
+      ...prev,
+      ...addedFiles.map(() => ({ section_key: activeMediaSection, caption: "", tags: [] })),
+    ]);
+  }
+
+  function updateMediaMeta(index, patch) {
+    setMediaMeta((prev) => prev.map((meta, i) => (i === index ? { ...meta, ...patch } : meta)));
+  }
+
+  function removeNewFile(index) {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+    setMediaMeta((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function removeExistingMedia(mediaIdOrUrl) {
+    setExistingMedia((prev) => prev.filter((m) => (m.id || m.url) !== mediaIdOrUrl));
+  }
+
+  function setScoreField(key, value) {
+    setScores((prev) => ({ ...prev, [key]: Number(value) || null }));
+  }
 
   async function save() {
     if (!item?.id || saving) return;
+
+    const validationError = validateInspectionFiles(files);
+    if (validationError) {
+      alert(validationError);
+      return;
+    }
+
     setSaving(true);
     try {
-      await updateInspection(item.id, {
-        title,
-        review,
-        pros,
-        cons,
-        features,
-        recommendation_score: recommendationScore,
-        travel_month: travelMonth || null,
-        visit_type: visitType,
-        audience_keys: audienceKeys,
-        con_keys: conKeys,
-      });
+      const fd = new FormData();
+      fd.append("title", title || "");
+      fd.append("review", review || "");
+      fd.append("pros", pros || "");
+      fd.append("cons", cons || "");
+      fd.append("features", features || "");
+      fd.append("recommendation_score", String(recommendationScore || 5));
+      if (travelMonth) fd.append("travel_month", String(travelMonth));
+      fd.append("visit_type", visitType || "agent_inspection");
+      fd.append("audience_keys", JSON.stringify(audienceKeys));
+      fd.append("con_keys", JSON.stringify(conKeys));
+      fd.append("scores", JSON.stringify(scores || {}));
+      fd.append("amenities", JSON.stringify(amenities || []));
+      fd.append("nearby", JSON.stringify(nearby || {}));
+      fd.append("keep_media_ids", JSON.stringify(existingMedia.map((m) => Number(m.id)).filter((n) => Number.isFinite(n) && n > 0)));
+      fd.append("mediaMeta", JSON.stringify(mediaMeta));
+      files.forEach((file) => fd.append("files", file));
+
+      await updateInspection(item.id, fd);
       tSuccess("Инспекция обновлена и отправлена на модерацию");
       onSaved?.();
       onClose?.();
@@ -803,34 +882,155 @@ function EditInspectionPanel({ item, onClose, onSaved }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/50 p-3 md:items-center">
-      <div className="max-h-[92vh] w-full max-w-3xl overflow-auto rounded-[28px] bg-white p-4 shadow-2xl md:p-6">
+      <div className="max-h-[94vh] w-full max-w-5xl overflow-auto rounded-[28px] bg-white p-4 shadow-2xl md:p-6">
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="inline-flex rounded-full bg-orange-50 px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-orange-600 ring-1 ring-orange-100">Редактирование инспекции</div>
             <h2 className="mt-2 text-2xl font-black tracking-[-0.04em] text-slate-950">Обновить обзор отеля</h2>
-            <p className="mt-1 text-sm font-semibold text-slate-500">После сохранения обзор снова попадёт на модерацию.</p>
+            <p className="mt-1 text-sm font-semibold text-slate-500">Можно изменить текст, оценки, аудиторию, удобства и фото/видео. После сохранения обзор снова попадёт на модерацию.</p>
           </div>
           <button type="button" onClick={onClose} className="rounded-2xl bg-slate-100 px-4 py-2 text-sm font-black text-slate-700">Закрыть</button>
         </div>
-        <div className="mt-5 grid gap-3">
-          <input value={title} onChange={(e) => setTitle(e.target.value)} className="rounded-2xl border border-slate-200 px-3 py-3 text-sm font-semibold outline-none focus:border-orange-300" placeholder="Заголовок" />
-          <textarea value={review} onChange={(e) => setReview(e.target.value)} className="min-h-[120px] rounded-2xl border border-slate-200 px-3 py-3 text-sm font-semibold outline-none focus:border-orange-300" placeholder="Основной обзор" />
-          <div className="grid gap-3 md:grid-cols-2">
-            <textarea value={pros} onChange={(e) => setPros(e.target.value)} className="min-h-[90px] rounded-2xl border border-slate-200 px-3 py-3 text-sm font-semibold outline-none focus:border-orange-300" placeholder="Плюсы" />
-            <textarea value={cons} onChange={(e) => setCons(e.target.value)} className="min-h-[90px] rounded-2xl border border-slate-200 px-3 py-3 text-sm font-semibold outline-none focus:border-orange-300" placeholder="Минусы / предупреждения" />
-          </div>
-          <textarea value={features} onChange={(e) => setFeatures(e.target.value)} className="min-h-[80px] rounded-2xl border border-slate-200 px-3 py-3 text-sm font-semibold outline-none focus:border-orange-300" placeholder="Особенности" />
-          <div className="grid gap-3 md:grid-cols-3">
-            <select value={visitType} onChange={(e) => setVisitType(e.target.value)} className="rounded-2xl border border-slate-200 px-3 py-3 text-sm font-semibold">{VISIT_TYPES.map((x) => <option key={x.key} value={x.key}>{x.icon} {x.label}</option>)}</select>
-            <select value={travelMonth} onChange={(e) => setTravelMonth(e.target.value)} className="rounded-2xl border border-slate-200 px-3 py-3 text-sm font-semibold"><option value="">Месяц поездки</option>{MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}</select>
-            <label className="rounded-2xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-500">Рекомендация: {recommendationScore}/5<input type="range" min="1" max="5" value={recommendationScore} onChange={(e) => setRecommendationScore(Number(e.target.value))} className="mt-2 w-full" /></label>
-          </div>
-          <div><div className="mb-2 text-xs font-black uppercase tracking-[0.16em] text-slate-400">Кому подходит</div><div className="flex flex-wrap gap-2">{AUDIENCE_OPTIONS.map((x) => <Chip key={x.key} active={audienceKeys.includes(x.key)} onClick={() => toggleInArray(setAudienceKeys, x.key)}>{x.icon} {x.label}</Chip>)}</div></div>
-          <div><div className="mb-2 text-xs font-black uppercase tracking-[0.16em] text-slate-400">Предупреждения</div><div className="flex flex-wrap gap-2">{CON_OPTIONS.map((x) => <Chip key={x.key} active={conKeys.includes(x.key)} onClick={() => toggleInArray(setConKeys, x.key)}>{x.icon} {x.label}</Chip>)}</div></div>
+
+        <div className="mt-5 grid gap-5">
+          <section className="rounded-3xl border border-slate-100 bg-slate-50/60 p-4">
+            <div className="mb-3 text-xs font-black uppercase tracking-[0.16em] text-slate-400">Основной текст</div>
+            <div className="grid gap-3">
+              <input value={title} onChange={(e) => setTitle(e.target.value)} className="rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold outline-none focus:border-orange-300" placeholder="Заголовок" />
+              <textarea value={review} onChange={(e) => setReview(e.target.value)} className="min-h-[150px] rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold outline-none focus:border-orange-300" placeholder="Основной обзор" />
+              <div className="grid gap-3 md:grid-cols-2">
+                <textarea value={pros} onChange={(e) => setPros(e.target.value)} className="min-h-[110px] rounded-2xl border border-emerald-100 bg-emerald-50/40 px-3 py-3 text-sm font-semibold outline-none focus:border-emerald-300" placeholder="Главные плюсы" />
+                <textarea value={cons} onChange={(e) => setCons(e.target.value)} className="min-h-[110px] rounded-2xl border border-amber-100 bg-amber-50/40 px-3 py-3 text-sm font-semibold outline-none focus:border-amber-300" placeholder="Главные минусы / предупреждения" />
+              </div>
+              <textarea value={features} onChange={(e) => setFeatures(e.target.value)} className="min-h-[90px] rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold outline-none focus:border-orange-300" placeholder="Особенности" />
+            </div>
+          </section>
+
+          <section className="rounded-3xl border border-slate-100 bg-white p-4">
+            <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <div>
+                <div className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Фото и видео</div>
+                <div className="mt-1 text-sm font-bold text-slate-700">Сохранено: {existingMediaCount}. Новых файлов: {newFilesCount}. Максимум: {MAX_INSPECTION_FILES}.</div>
+              </div>
+              <label className="inline-flex cursor-pointer items-center justify-center rounded-2xl bg-orange-500 px-4 py-3 text-sm font-black text-white transition hover:bg-orange-600">
+                ➕ Добавить фото/видео
+                <input type="file" accept="image/*,video/*" multiple onChange={onFilesChange} className="hidden" />
+              </label>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+              {MEDIA_SECTIONS.map((section) => {
+                const count = mediaSectionCounts[section.key] || 0;
+                const active = activeMediaSection === section.key;
+                return (
+                  <button
+                    key={section.key}
+                    type="button"
+                    onClick={() => setActiveMediaSection(section.key)}
+                    className={`rounded-2xl border px-3 py-3 text-left transition ${active ? "border-orange-300 bg-orange-50 ring-4 ring-orange-100" : "border-slate-200 bg-white hover:bg-slate-50"}`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xl">{section.icon}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-black ${active ? "bg-orange-500 text-white" : "bg-slate-100 text-slate-500"}`}>{count}</span>
+                    </div>
+                    <div className="mt-1 text-xs font-black text-slate-800">{section.short || section.label}</div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {existingMedia.length > 0 ? (
+              <div className="mt-4">
+                <div className="mb-2 text-xs font-black uppercase tracking-[0.16em] text-slate-400">Текущие медиа</div>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {existingMedia.map((m, index) => {
+                    const src = m.thumbnail_url || m.url;
+                    const mediaKey = m.id || m.url || index;
+                    const isVideo = String(m.media_type || "photo").toLowerCase() === "video";
+                    const meta = sectionMeta(m.section_key || "room");
+                    return (
+                      <div key={mediaKey} className="overflow-hidden rounded-3xl border border-slate-100 bg-slate-50 shadow-sm">
+                        <div className="relative h-40 bg-slate-100">
+                          {isVideo ? (
+                            <video src={m.url} poster={src} controls playsInline preload="metadata" className="h-full w-full bg-slate-950 object-contain" />
+                          ) : (
+                            <img src={src} alt={m.caption || ""} className="h-full w-full object-cover" />
+                          )}
+                          <div className="absolute left-2 top-2 rounded-full bg-white/90 px-2 py-1 text-[11px] font-black text-slate-700 shadow-sm">{meta.icon} {meta.short || meta.label}</div>
+                        </div>
+                        <div className="p-3">
+                          <div className="line-clamp-2 min-h-[32px] text-xs font-semibold text-slate-500">{m.caption || "Без подписи"}</div>
+                          <button type="button" onClick={() => removeExistingMedia(mediaKey)} className="mt-3 w-full rounded-2xl bg-red-50 px-3 py-2 text-xs font-black text-red-600 ring-1 ring-red-100 hover:bg-red-100">Удалить из обзора</button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4 rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-5 text-center text-sm font-bold text-slate-400">В обзоре пока нет сохранённых фото/видео.</div>
+            )}
+
+            {files.length > 0 && (
+              <div className="mt-4 grid gap-2">
+                <div className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Новые файлы</div>
+                {files.map((file, i) => {
+                  const meta = sectionMeta(mediaMeta[i]?.section_key || "room");
+                  return (
+                    <div key={`${file.name}-${i}`} className="grid gap-2 rounded-2xl border border-slate-100 bg-slate-50 p-3 md:grid-cols-[minmax(0,1fr)_190px_minmax(0,1fr)_auto] md:items-center">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-black text-slate-800">{file.name}</div>
+                        <div className="mt-0.5 text-xs font-semibold text-slate-400">{formatBytes(file.size)} · {meta.icon} {meta.label}</div>
+                      </div>
+                      <select value={mediaMeta[i]?.section_key || "room"} onChange={(e) => updateMediaMeta(i, { section_key: e.target.value })} className="rounded-xl border border-slate-200 bg-white px-2 py-2 text-sm font-semibold">
+                        {MEDIA_SECTIONS.map((s) => <option key={s.key} value={s.key}>{s.icon} {s.label}</option>)}
+                      </select>
+                      <input value={mediaMeta[i]?.caption || ""} onChange={(e) => updateMediaMeta(i, { caption: e.target.value })} placeholder="Подпись" className="rounded-xl border border-slate-200 bg-white px-2 py-2 text-sm font-semibold" />
+                      <button type="button" onClick={() => removeNewFile(i)} className="rounded-xl bg-red-50 px-3 py-2 text-xs font-black text-red-600 ring-1 ring-red-100 hover:bg-red-100">Удалить</button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          <section className="rounded-3xl border border-slate-100 bg-slate-50/60 p-4">
+            <div className="mb-3 text-xs font-black uppercase tracking-[0.16em] text-slate-400">Тип визита и рекомендация</div>
+            <div className="grid gap-3 md:grid-cols-3">
+              <select value={visitType} onChange={(e) => setVisitType(e.target.value)} className="rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold">{VISIT_TYPES.map((x) => <option key={x.key} value={x.key}>{x.icon} {x.label}</option>)}</select>
+              <select value={travelMonth} onChange={(e) => setTravelMonth(e.target.value)} className="rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold"><option value="">Месяц поездки</option>{MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}</select>
+              <label className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-500">Рекомендация: {recommendationScore}/5<input type="range" min="1" max="5" value={recommendationScore} onChange={(e) => setRecommendationScore(Number(e.target.value))} className="mt-2 w-full" /></label>
+            </div>
+          </section>
+
+          <section className="rounded-3xl border border-slate-100 bg-white p-4">
+            <div className="mb-3 text-xs font-black uppercase tracking-[0.16em] text-slate-400">Оценки по деталям</div>
+            <div className="grid gap-3 md:grid-cols-2">
+              {SCORE_FIELDS.map((f) => {
+                const value = Number(scores?.[f.key] || 0);
+                return (
+                  <label key={f.key} className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
+                    <div className="mb-2 flex justify-between text-xs font-black text-slate-600"><span>{f.label}</span><span>{value || "—"}/5</span></div>
+                    <input type="range" min="0" max="5" value={value} onChange={(e) => setScoreField(f.key, e.target.value)} className="w-full" />
+                  </label>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="rounded-3xl border border-slate-100 bg-slate-50/60 p-4">
+            <div className="grid gap-5">
+              <div><div className="mb-2 text-xs font-black uppercase tracking-[0.16em] text-slate-400">Кому подходит</div><div className="flex flex-wrap gap-2">{AUDIENCE_OPTIONS.map((x) => <Chip key={x.key} active={audienceKeys.includes(x.key)} onClick={() => toggleInArray(setAudienceKeys, x.key)}>{x.icon} {x.label}</Chip>)}</div></div>
+              <div><div className="mb-2 text-xs font-black uppercase tracking-[0.16em] text-slate-400">Предупреждения</div><div className="flex flex-wrap gap-2">{CON_OPTIONS.map((x) => <Chip key={x.key} active={conKeys.includes(x.key)} onClick={() => toggleInArray(setConKeys, x.key)}>{x.icon} {x.label}</Chip>)}</div></div>
+              <div><div className="mb-2 text-xs font-black uppercase tracking-[0.16em] text-slate-400">Удобства</div><div className="flex flex-wrap gap-2">{AMENITIES.map((x) => <Chip key={x.key} active={amenities.includes(x.key)} onClick={() => toggleInArray(setAmenities, x.key)}>{x.label}</Chip>)}</div></div>
+              <div className="grid gap-3 md:grid-cols-4">{NEARBY_FIELDS.map((f) => <input key={f.key} value={nearby[f.key] || ""} onChange={(e) => setNearby((prev) => ({ ...prev, [f.key]: e.target.value }))} placeholder={f.label} className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold" />)}</div>
+            </div>
+          </section>
         </div>
+
         <div className="mt-5 flex flex-wrap justify-end gap-3 border-t border-slate-100 pt-4">
           <button type="button" onClick={onClose} className="rounded-2xl bg-slate-100 px-5 py-3 text-sm font-black text-slate-700">Отмена</button>
-          <button type="button" onClick={save} disabled={saving} className="rounded-2xl bg-orange-500 px-5 py-3 text-sm font-black text-white disabled:opacity-50">{saving ? "Сохраняем…" : "Сохранить"}</button>
+          <button type="button" onClick={save} disabled={saving} className="rounded-2xl bg-orange-500 px-5 py-3 text-sm font-black text-white disabled:opacity-50">{saving ? "Сохраняем…" : "Сохранить и отправить на модерацию"}</button>
         </div>
       </div>
     </div>
