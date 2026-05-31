@@ -90,7 +90,7 @@ async function listMyHotels(req, res) {
       params.slice(0, i) // те же параметры без limit/offset
     );
 
-    return res.json({ items: rows, page, limit, total: cnt[0]?.c ?? rows.length });
+    return res.json({ items: await attachMyInspectionToHotels(req, rows), page, limit, total: cnt[0]?.c ?? rows.length });
   } catch (e) {
     console.error("hotels.listMy error:", e);
     return res.status(500).json({ error: "list_failed" });
@@ -197,10 +197,11 @@ async function searchHotels(req, res) {
           LIMIT $1`,
         [limit]
       );
-      return res.json((rows || []).map(r => ({
+      const items = (rows || []).map(r => ({
         id: r.id, name: r.name, city: r.city || null, country: r.country || null,
         label: r.name, city_local: r.city || null, city_en: r.city || null, provider: "local",
-      })));
+      }));
+      return res.json(await attachMyInspectionToHotels(req, items));
     } catch {
       return res.json([]);
     }
@@ -284,7 +285,7 @@ async function searchHotels(req, res) {
       seen.add(k);
       deduped.push(x);
     }
-    return res.json(deduped.slice(0, limit));
+    return res.json(await attachMyInspectionToHotels(req, deduped.slice(0, limit)));
   } catch (e) {
     console.error("hotels.search error", e);
     return res.status(500).json([]);
@@ -347,7 +348,7 @@ async function listRankedHotels(req, res) {
        LIMIT $1
     `;
     const q = await db.query(sql, [limit]);
-    return res.json(q.rows || []);
+    return res.json(await attachMyInspectionToHotels(req, q.rows || []));
   } catch (e) {
     console.error("hotels.ranked error:", e);
     return res.status(500).json([]);
@@ -439,7 +440,12 @@ async function getHotel(req, res) {
       } catch (_) {}
     });
 
-    return res.json(rows[0]);
+    const item = {
+      ...rows[0],
+      my_inspection: await getMyInspectionForHotel(req, id),
+    };
+
+    return res.json(item);
   } catch (e) {
     console.error("hotels.get error:", e);
     return res.status(500).json({ error: "read_failed" });
@@ -462,7 +468,7 @@ async function listHotels(req, res) {
         LIMIT $1 OFFSET $2`,
       [limit, offset]
     );
-    return res.json({ items: rows, page, limit });
+    return res.json({ items: await attachMyInspectionToHotels(req, rows), page, limit });
   } catch (e) {
     console.error("hotels.list error:", e);
     return res.status(500).json({ error: "list_failed" });
@@ -918,6 +924,74 @@ function normalizeInspectionStatus(v, fallback = 'pending') {
   const value = String(v || '').trim().toLowerCase();
   if (['draft','pending','approved','rejected','hidden','deleted'].includes(value)) return value;
   return fallback;
+}
+
+
+async function getMyInspectionForHotel(req, hotelId) {
+  const { actorType, actorId } = getActorFromReq(req);
+  if (!actorId || !hotelId) return null;
+
+  const column = actorType === "provider"
+    ? "author_provider_id"
+    : actorType === "client"
+      ? "author_client_id"
+      : null;
+
+  if (!column) return null;
+
+  const { rows } = await db.query(
+    `SELECT id,
+            hotel_id,
+            COALESCE(status,'pending') AS status,
+            COALESCE(moderation_status, COALESCE(status,'pending')) AS moderation_status,
+            rejection_reason,
+            created_at,
+            updated_at
+       FROM inspections
+      WHERE hotel_id = $1
+        AND ${column} = $2
+        AND deleted_at IS NULL
+      ORDER BY id DESC
+      LIMIT 1`,
+    [hotelId, actorId]
+  );
+  return rows[0] || null;
+}
+
+async function attachMyInspectionToHotels(req, rows = []) {
+  const { actorType, actorId } = getActorFromReq(req);
+  if (!actorId || !Array.isArray(rows) || rows.length === 0) return rows;
+
+  const column = actorType === "provider"
+    ? "author_provider_id"
+    : actorType === "client"
+      ? "author_client_id"
+      : null;
+
+  if (!column) return rows;
+
+  const ids = [...new Set(rows.map((r) => Number(r.id)).filter(Number.isFinite))];
+  if (!ids.length) return rows;
+
+  const { rows: inspections } = await db.query(
+    `SELECT DISTINCT ON (hotel_id)
+            id,
+            hotel_id,
+            COALESCE(status,'pending') AS status,
+            COALESCE(moderation_status, COALESCE(status,'pending')) AS moderation_status,
+            rejection_reason,
+            created_at,
+            updated_at
+       FROM inspections
+      WHERE hotel_id = ANY($1::int[])
+        AND ${column} = $2
+        AND deleted_at IS NULL
+      ORDER BY hotel_id, id DESC`,
+    [ids, actorId]
+  );
+
+  const byHotel = new Map(inspections.map((x) => [Number(x.hotel_id), x]));
+  return rows.map((h) => ({ ...h, my_inspection: byHotel.get(Number(h.id)) || null }));
 }
 
 function getProofMediaFromBody(p) {
@@ -1601,7 +1675,7 @@ async function updateHotelInspection(req, res) {
     const recommendationScore = clampInt(p.recommendation_score || p.recommendationScore, 1, 5);
     const proofMedia = getProofMediaFromBody(p);
     const verifiedVisit = Boolean(p.verified_visit === true || p.verifiedVisit === true || proofMedia.length > 0);
-    const nextStatus = admin ? normalizeInspectionStatus(p.status || p.moderation_status || p.moderationStatus, row.status || 'approved') : 'pending';
+    const nextStatus = admin ? normalizeInspectionStatus(p.status || p.moderation_status || p.moderationStatus, row.status || 'pending') : 'pending';
 
     const client = await pool.connect();
     try {
