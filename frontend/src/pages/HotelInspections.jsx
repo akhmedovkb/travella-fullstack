@@ -697,9 +697,9 @@ function PassportSummary({ hotel, items = [] }) {
     <div className="rounded-[28px] border border-orange-100 bg-gradient-to-br from-orange-50 via-white to-white p-5 shadow-sm">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <div className="inline-flex rounded-full bg-white px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-orange-600 ring-1 ring-orange-100">Hotel Passport Summary</div>
-          <h1 className="mt-3 text-2xl font-black tracking-[-0.04em] text-slate-950">{hotel?.name || "Инспекции отелей"}</h1>
-          <p className="mt-1 text-sm font-semibold text-slate-500">{hotel ? [hotel.city || hotel.location, hotel.country].filter(Boolean).join(", ") : "Живая лента обзоров от поставщиков и клиентов Travella"}</p>
+          <div className="inline-flex rounded-full bg-white px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-orange-600 ring-1 ring-orange-100">Hotel Passport</div>
+          <h1 className="mt-3 text-2xl font-black tracking-[-0.04em] text-slate-950">{hotel?.name || "Лента Hotel Passport"}</h1>
+          <p className="mt-1 text-sm font-semibold text-slate-500">{hotel ? [hotel.city || hotel.location, hotel.country].filter(Boolean).join(", ") : "Живые обзоры отелей от поставщиков и клиентов Travella"}</p>
         </div>
         <div className="grid grid-cols-3 gap-2 text-center">
           <div className="rounded-2xl bg-white p-3 ring-1 ring-orange-100"><div className="text-2xl font-black text-slate-950">{items.length}</div><div className="text-[11px] font-black text-slate-400">обзоров</div></div>
@@ -1190,6 +1190,13 @@ export default function HotelInspections() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hotelId, filters.sort, filters.city, filters.month, filters.audience, filters.visit_type, filters.min_score, filters.has_media, reloadKey]);
+
+  useEffect(() => {
+    const editId = Number(searchParams.get("edit") || 0);
+    if (!editId || editingItem) return;
+    const found = items.find((x) => Number(x.id) === editId);
+    if (found && found.can_manage) setEditingItem(found);
+  }, [searchParams, items, editingItem]);
 
   async function onLiked(item) {
     try {
