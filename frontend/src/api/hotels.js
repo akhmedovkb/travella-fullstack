@@ -48,12 +48,22 @@ export async function createInspection(hotelId, payload) {
   const url = `/api/hotels/${encodeURIComponent(hotelId)}/inspections`;
 
   if (payload instanceof FormData) {
-    const res = await fetch(buildUrl(url), {
-      method: "POST",
-      headers: getAuthHeaders(null),
-      body: payload,
-      credentials: "include",
-    });
+    let res;
+    try {
+      res = await fetch(buildUrl(url), {
+        method: "POST",
+        headers: getAuthHeaders("provider"),
+        body: payload,
+        credentials: "include",
+      });
+    } catch (err) {
+      const e = new Error(
+        "Не удалось отправить инспекцию. Проверьте размер фото/видео и соединение. Если загружаете видео, попробуйте уменьшить файл."
+      );
+      e.code = "network_upload_failed";
+      e.cause = err;
+      throw e;
+    }
 
     const text = await res.text();
     let data = null;
