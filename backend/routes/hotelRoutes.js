@@ -89,8 +89,9 @@ router.get("/search", searchHotels);
 router.get("/ranked", listRankedHotels);
 router.get("/_list", listHotels);
 // R2 media proxy for Hotel Passport uploads. Must stay before dynamic /:id route.
-// R2 keys contain folders (hotel-passport/reviews/...), so the route must capture slashes too.
+// R2 object keys contain slashes, therefore the wildcard route is required.
 router.get("/media/*", getHotelInspectionMedia);
+router.get("/media/:key", getHotelInspectionMedia);
 
 /* ===  список по городу для каскада === */
 router.get("/by-city", listHotelsByCity);   // /api/hotels/by-city?city=Samarkand
