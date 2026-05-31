@@ -7,12 +7,18 @@ import AdminRefusedActual from "./AdminRefusedActual";
 import AdminProviders from "./AdminProviders";
 import AdminClients from "./AdminClients";
 import AdminServiceAudit from "./AdminServiceAudit";
+import AdminHotelInspections from "./AdminHotelInspections";
 
 const TABS = [
   {
     id: "moderation",
     label: "Модерация услуг",
     hint: "Проверка и управление услугами провайдеров.",
+  },
+  {
+    id: "hotel_inspections",
+    label: "Модерация инспекций отелей",
+    hint: "Проверка pending-инспекций Hotel Passport, фото/видео и причин отклонения.",
   },
   {
     id: "leads",
@@ -78,8 +84,9 @@ export default function AdminOperations() {
           <p className="text-sm text-gray-500">{activeMeta.hint}</p>
         </div>
   
-        <div className="grid w-full grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
+        <div className="grid w-full grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-7">
           <TabBtn id="moderation">Модерация услуг</TabBtn>
+          <TabBtn id="hotel_inspections">Модерация инспекций отелей</TabBtn>
           <TabBtn id="leads">Leads</TabBtn>
           <TabBtn id="refused">Все отказные услуги</TabBtn>
           <TabBtn id="providers">Провайдеры</TabBtn>
@@ -89,6 +96,7 @@ export default function AdminOperations() {
       </div>
   
       {activeTab === "moderation" && <AdminModeration />}
+      {activeTab === "hotel_inspections" && <AdminHotelInspections embedded />}
       {activeTab === "leads" && <AdminLeads />}
       {activeTab === "refused" && <AdminRefusedActual />}
       {activeTab === "providers" && <AdminProviders />}
