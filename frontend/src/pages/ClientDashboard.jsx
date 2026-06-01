@@ -193,7 +193,7 @@ async function fetchProviderProfile(providerId) {
   let profile = null;
   for (const url of endpoints) {
     try {
-      const res = await apiGet(url);
+      const res = await apiGet(url, "client");
       const obj = (res && (res.data || res.item || res.profile || res.provider || res.company)) || res;
       if (obj && (obj.id || obj.name || obj.title)) { profile = obj; break; }
     } catch {}
@@ -266,7 +266,7 @@ async function fetchClientRequestsSafe(myId) {
   ];
   for (const url of candidates) {
     try {
-      const r = await apiGet(url);
+      const r = await apiGet(url, "client");
       let list = arrify(r);
       if (url === "/api/requests" && myId) {
         list = list.filter((x) => {
@@ -1512,7 +1512,7 @@ export default function ClientDashboard() {
     (async () => {
       try {
         setLoadingProfile(true);
-        const profile = await apiGet("/api/clients/me");
+        const profile = await apiGet("/api/clients/me", "client");
         setMe(profile); // <-- сохраняем в стейт
         setName(profile?.name || "");
         setPhone(profile?.phone || "");
@@ -1586,7 +1586,7 @@ const tgDeepLink = useMemo(() => {
     (async () => {
       try {
         setLoadingStats(true);
-        const data = await apiGet("/api/clients/stats");
+        const data = await apiGet("/api/clients/stats", "client");
         setStats(data || {});
       } catch {
         setStats({});
@@ -1604,7 +1604,7 @@ useEffect(() => {
     setLoadingInside(true);
     const tryGet = async (url) => {
       try {
-        const r = await apiGet(url);
+        const r = await apiGet(url, "client");
         return r?.data ?? r?.item ?? r ?? null;
       } catch { return null; }
     };
@@ -1637,7 +1637,7 @@ useEffect(() => {
         const drafts  = [...loadDrafts(myId), ...loadDrafts(null)];
         if (!cancelled) setRequests(mergeRequests(apiList, drafts));
       } else if (activeTab === "favorites") {
-        const data = await apiGet("/api/wishlist?expand=service");
+        const data = await apiGet("/api/wishlist?expand=service", "client");
         const arr = Array.isArray(data) ? data : data?.items || [];
         if (!cancelled) setFavorites(arr);
       }
@@ -1710,7 +1710,7 @@ useEffect(() => {
     (async () => {
       if (activeTab !== "favorites") return;
       try {
-        const ids = await apiGet("/api/wishlist/ids");
+        const ids = await apiGet("/api/wishlist/ids", "client");
         const arr = Array.isArray(ids) ? ids : [];
         if (!cancelled) setFavIds(new Set(arr.map(String)));
       } catch { if (!cancelled) setFavIds(new Set()); }
@@ -1765,7 +1765,7 @@ useEffect(() => {
       const payload = { name, phone, telegram };
       if (avatarBase64) payload.avatar_base64 = stripDataUrlPrefix(avatarBase64);
       if (removeAvatar) payload.remove_avatar = true;
-      const res = await apiPut("/api/clients/me", payload);
+      const res = await apiPut("/api/clients/me", payload, "client");
       setMessage(t("messages.profile_saved", { defaultValue: "Профиль сохранён" }));
       tSuccess(t("messages.profile_saved") || "Профиль сохранён", { autoClose: 1800 });
       setName(res?.name ?? name);
@@ -1785,7 +1785,7 @@ useEffect(() => {
     if (!newPassword || newPassword.length < 6) { setError(t("client.dashboard.passwordTooShort", { defaultValue: "Пароль должен быть не короче 6 символов" })); return; }
     try {
       setChangingPass(true); setError(null);
-      await apiPost("/api/clients/change-password", { password: newPassword });
+      await apiPost("/api/clients/change-password", { password: newPassword }, "client");
       setMessage(t("client.dashboard.passwordChanged", { defaultValue: "Пароль изменён" }));
       tSuccess(t("client.dashboard.passwordChanged") || "Пароль изменён", { autoClose: 1800 });
     } catch {
@@ -1806,7 +1806,7 @@ useEffect(() => {
 
   // старый remove по itemId (оставляю — может вызывать из других мест)
   const handleRemoveFavorite = async (itemId) => {
-    try { await apiPost("/api/wishlist/toggle", { itemId }); } catch {}
+    try { await apiPost("/api/wishlist/toggle", { itemId }, "client"); } catch {}
     setFavorites((prev) => prev.filter((x) => x.id !== itemId));
     setMessage(t("messages.favorite_removed", { defaultValue: "Удалено из избранного" }));
     tInfo(t("favorites.removed_toast") || "Удалено из избранного", { autoClose: 1500 });
@@ -1822,7 +1822,7 @@ useEffect(() => {
     }
 
     try {
-      const res = await apiPost("/api/wishlist/toggle", { serviceId });
+      const res = await apiPost("/api/wishlist/toggle", { serviceId }, "client");
       const added = !!(res?.added ?? res?.data?.added);
 
       (added ? tSuccess : tInfo)(
@@ -1898,7 +1898,7 @@ useEffect(() => {
     ) || undefined;
 
     try {
-      await apiPost("/api/requests", { service_id: serviceId, note });
+      await apiPost("/api/requests", { service_id: serviceId, note }, "client");
       tSuccess(t("messages.request_sent") || "Запрос отправлен", { autoClose: 1800 });
       setMessage(t("messages.request_sent", { defaultValue: "Запрос отправлен" }));
 
@@ -1962,7 +1962,7 @@ useEffect(() => {
         setMessage(t("client.dashboard.requestDeleted", { defaultValue: "Заявка удалена" }));
         tSuccess(t("client.dashboard.requestDeleted") || "Заявка удалена", { autoClose: 1500 });
       } else {
-        await apiDelete(`/api/requests/${delUI.id}`);
+        await apiDelete(`/api/requests/${delUI.id}`, "client");
         setRequests((prev) => prev.filter((x) => x.id !== delUI.id));
         setMessage(t("client.dashboard.requestDeleted", { defaultValue: "Заявка удалена" }));
         tSuccess(t("client.dashboard.requestDeleted") || "Заявка удалена", { autoClose: 1500 });
@@ -2012,7 +2012,7 @@ useEffect(() => {
     setQrSending(true);
 
     try {
-      await apiPost("/api/requests", { service_id: qrServiceId, note: note || undefined });
+      await apiPost("/api/requests", { service_id: qrServiceId, note: note || undefined }, "client");
       tSuccess(t("messages.request_sent") || "Запрос отправлен", { autoClose: 1800 });
       setMessage(t("messages.request_sent", { defaultValue: "Запрос отправлен" }));
 
@@ -2223,11 +2223,11 @@ useEffect(() => {
         setRequests(mergeRequests(apiList, drafts));
       } else if (activeTab === "favorites") {
         setLoadingTab(true);
-        const data = await apiGet("/api/wishlist?expand=service");
+        const data = await apiGet("/api/wishlist?expand=service", "client");
         const arr = Array.isArray(data) ? data : data?.items || [];
         setFavorites(arr);
         try {
-          const ids = await apiGet("/api/wishlist/ids");
+          const ids = await apiGet("/api/wishlist/ids", "client");
           const list = Array.isArray(ids) ? ids : [];
           setFavIds(new Set(list.map(String)));
         } catch {}
