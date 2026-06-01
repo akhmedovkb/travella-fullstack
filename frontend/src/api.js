@@ -47,7 +47,10 @@ function getTokenByRole(role) {
   const r = String(role || "").toLowerCase();
 
   const directKeysByRole = {
-    client: ["clientToken", "token", "adminToken"],
+    // ВАЖНО: clientToken должен иметь абсолютный приоритет.
+    // Нельзя подставлять providerToken/adminToken в клиентские запросы,
+    // иначе после входа в разные роли браузер может отправить неверный JWT.
+    client: ["clientToken", "token"],
     provider: ["providerToken", "token", "adminToken"],
     admin: ["adminToken", "token"],
   };
@@ -119,16 +122,36 @@ async function handle(res) {
   return data === null ? {} : data;
 }
 
-function buildHeaders(withAuthOrRole) {
+function inferRoleFromPath(path) {
+  const p = String(path || "").split("?")[0];
+
+  // Клиентские endpoints часто вызываются без явной роли.
+  // Здесь принудительно выбираем clientToken, чтобы provider/admin token
+  // из localStorage не ломал клиентский кабинет и избранное.
+  if (
+    p.startsWith("/api/clients") ||
+    p.startsWith("/api/client/") ||
+    p === "/api/client" ||
+    p.startsWith("/api/wishlist")
+  ) {
+    return "client";
+  }
+
+  return null;
+}
+
+function buildHeaders(withAuthOrRole, path = "") {
   const base = { "Content-Type": "application/json" };
   if (withAuthOrRole === false) return base;
 
-  const role =
+  const explicitRole =
     withAuthOrRole === "client" ||
     withAuthOrRole === "provider" ||
     withAuthOrRole === "admin"
       ? withAuthOrRole
       : null;
+
+  const role = explicitRole || inferRoleFromPath(path);
 
   return { ...base, ...getAuthHeaders(role) };
 }
@@ -154,7 +177,7 @@ function safeJsonStringify(obj) {
 
 export async function apiGet(path, withAuthOrRole = true) {
   const res = await fetch(buildUrl(path), {
-    headers: buildHeaders(withAuthOrRole),
+    headers: buildHeaders(withAuthOrRole, path),
     credentials: "include",
   });
   return handle(res);
@@ -163,7 +186,7 @@ export async function apiGet(path, withAuthOrRole = true) {
 export async function apiPost(path, body, withAuthOrRole = true) {
   const res = await fetch(buildUrl(path), {
     method: "POST",
-    headers: buildHeaders(withAuthOrRole),
+    headers: buildHeaders(withAuthOrRole, path),
     body: safeJsonStringify(body),
     credentials: "include",
   });
@@ -173,7 +196,7 @@ export async function apiPost(path, body, withAuthOrRole = true) {
 export async function apiPut(path, body, withAuthOrRole = true) {
   const res = await fetch(buildUrl(path), {
     method: "PUT",
-    headers: buildHeaders(withAuthOrRole),
+    headers: buildHeaders(withAuthOrRole, path),
     body: safeJsonStringify(body),
     credentials: "include",
   });
@@ -201,7 +224,7 @@ export async function apiDelete(path, bodyOrRole, withAuthOrRole = true) {
 
   const res = await fetch(buildUrl(path), {
     method: "DELETE",
-    headers: buildHeaders(auth),
+    headers: buildHeaders(auth, path),
     body: body ? safeJsonStringify(body) : undefined,
     credentials: "include",
   });
