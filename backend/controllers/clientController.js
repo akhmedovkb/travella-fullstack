@@ -5,7 +5,7 @@ const jwt = require("jsonwebtoken");
 
 /* ================= Helpers ================= */
 function signToken(payload) {
-  const secret = process.env.JWT_SECRET || "secret";
+  const secret = process.env.JWT_SECRET || "changeme_in_env";
   return jwt.sign(payload, secret, { expiresIn: "30d" });
 }
 
