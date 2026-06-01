@@ -613,7 +613,7 @@ export default function Marketplace() {
       provider_id: qrProviderId || undefined,
       service_title: qrServiceTitle || undefined,
       note: note || undefined,
-    });
+    }, "client");
     tSuccess(t("messages.request_sent") || "Запрос отправлен", { autoClose: 1800 });
     window.dispatchEvent(new CustomEvent("request:created", {
       detail: { service_id: qrServiceId, title: qrServiceTitle },
@@ -1092,7 +1092,7 @@ const search = async (opts = {}) => {
         try {
           if (role === "client") {
             // клиентское избранное (как было)
-            const ids = await apiGet("/api/wishlist/ids");
+            const ids = await apiGet("/api/wishlist/ids", "client");
             const arr = Array.isArray(ids) ? ids : [];
             setFavIds(new Set(arr.map(x => String(x))));
           } else if (role === "provider") {
@@ -1122,7 +1122,7 @@ const search = async (opts = {}) => {
   // ----- КЛИЕНТ -----
   if (role === "client") {
     try {
-      const res = await apiPost("/api/wishlist/toggle", { serviceId: id });
+      const res = await apiPost("/api/wishlist/toggle", { serviceId: id }, "client");
       const added = !!res?.added;
       setFavIds((prev) => {
         const next = new Set(prev);
