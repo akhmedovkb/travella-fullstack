@@ -79,7 +79,11 @@ export default function ClientLogin() {
         <div className="h-px bg-gray-200 flex-1" />
       </div>
 
-      <TelegramLoginButton role="client" redirectTo="/client/dashboard" />
+      <TelegramLoginButton
+        role="client"
+        redirectTo="/client/dashboard"
+        lazy
+      />
 
       <div className="mt-3 text-sm text-gray-600">
         {t("client.login.noAccount")}{" "}
