@@ -7,10 +7,12 @@ export default function TelegramLoginButton({
   role = "client",
   redirectTo,
   className = "",
+  lazy = false,
 }) {
   const nav = useNavigate();
   const hostRef = useRef(null);
   const [err, setErr] = useState("");
+  const [enabled, setEnabled] = useState(!lazy);
 
   const botUsername =
     (import.meta.env.VITE_TG_BOT_USERNAME ||
@@ -23,6 +25,7 @@ export default function TelegramLoginButton({
   );
 
   useEffect(() => {
+    if (!enabled) return;
     if (!botUsername || !hostRef.current) return;
 
     window[callbackName] = async function onTelegramAuth(user) {
@@ -84,13 +87,35 @@ export default function TelegramLoginButton({
       } catch {}
       if (hostRef.current) hostRef.current.innerHTML = "";
     };
-  }, [botUsername, callbackName, nav, redirectTo, role]);
+  }, [enabled, botUsername, callbackName, nav, redirectTo, role]);
 
   if (!botUsername) return null;
 
+  if (!enabled) {
+    return (
+      <div className={className}>
+        <button
+          type="button"
+          onClick={() => {
+            setErr("");
+            setEnabled(true);
+          }}
+          className="w-full rounded-xl bg-sky-500 px-4 py-3 font-bold text-white hover:bg-sky-600 transition"
+        >
+          Войти через Telegram
+        </button>
+
+        {err ? (
+          <div className="mt-2 text-sm text-red-600">{err}</div>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div className={className}>
-      <div ref={hostRef} />
+      <div ref={hostRef} className="flex justify-center" />
+
       {err ? (
         <div className="mt-2 text-sm text-red-600">{err}</div>
       ) : null}
