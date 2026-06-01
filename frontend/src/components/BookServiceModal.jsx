@@ -1,12 +1,37 @@
 // frontend/src/components/BookServiceModal.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { apiGet, apiPost } from "../api";
+import { apiPost } from "../api";
 
 function normalizeService(svcLike) {
   if (!svcLike) return null;
   if (svcLike.service && (svcLike.service.id || svcLike.service.title)) return svcLike.service;
   return svcLike;
+}
+
+function dateRangeToDates(dateFrom, dateTo) {
+  const from = String(dateFrom || "").trim();
+  const to = String(dateTo || "").trim();
+  if (!from) return [];
+
+  const start = new Date(`${from}T00:00:00`);
+  const end = new Date(`${(to || from)}T00:00:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return [];
+
+  const a = start <= end ? start : end;
+  const b = start <= end ? end : start;
+  const out = [];
+  const cur = new Date(a);
+
+  while (cur <= b && out.length < 370) {
+    const y = cur.getFullYear();
+    const m = String(cur.getMonth() + 1).padStart(2, "0");
+    const d = String(cur.getDate()).padStart(2, "0");
+    out.push(`${y}-${m}-${d}`);
+    cur.setDate(cur.getDate() + 1);
+  }
+
+  return out;
 }
 
 export default function BookServiceModal({ open, onClose, service }) {
@@ -53,11 +78,18 @@ export default function BookServiceModal({ open, onClose, service }) {
         return;
       }
 
+      const dates = dateRangeToDates(dateFrom, dateTo);
+      if (!dates.length) {
+        setErr(t("booking.date_required") || "Выберите дату бронирования");
+        return;
+      }
+
       const payload = {
         service_id: Number(serviceId),
+        dates,
         details: {
-          date_from: dateFrom || undefined,
-          date_to: dateTo || undefined,
+          date_from: dates[0],
+          date_to: dates[dates.length - 1],
           note: note || undefined,
         },
       };
