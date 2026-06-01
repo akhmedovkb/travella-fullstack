@@ -12,6 +12,7 @@ const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [showTelegramLogin, setShowTelegramLogin] = useState(false);
 
   const navigate = useNavigate();
 
@@ -59,11 +60,13 @@ const Login = () => {
   }, [navigate, t]);
 
   useEffect(() => {
+    if (!showTelegramLogin) return;
+  
     const container = document.getElementById("telegram-login-container");
     if (!container) return;
-
+  
     container.innerHTML = "";
-
+  
     if (!providerBotUsername) {
       container.innerHTML = `<div style="font-size:13px;color:#dc2626;text-align:center;">${t(
         "telegram_provider_auth.bot_not_configured",
@@ -71,10 +74,10 @@ const Login = () => {
       )}</div>`;
       return;
     }
-
+  
     const existing = document.getElementById("telegram-provider-login");
     if (existing) existing.remove();
-
+  
     const script = document.createElement("script");
     script.src = "https://telegram.org/js/telegram-widget.js?22";
     script.async = true;
@@ -83,9 +86,9 @@ const Login = () => {
     script.setAttribute("data-size", "large");
     script.setAttribute("data-onauth", "onTelegramProviderLogin(user)");
     script.setAttribute("data-request-access", "write");
-
+  
     container.appendChild(script);
-  }, [providerBotUsername, t]);
+}, [showTelegramLogin, providerBotUsername, t]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -172,7 +175,22 @@ const Login = () => {
             })}
           </div>
 
-          <div id="telegram-login-container" className="flex justify-center" />
+          {!showTelegramLogin ? (
+            <button
+              type="button"
+              onClick={() => setShowTelegramLogin(true)}
+              className="w-full rounded-xl bg-sky-500 px-4 py-3 font-bold text-white hover:bg-sky-600 transition"
+            >
+              {t("telegram_provider_auth.login", {
+                defaultValue: "Войти через Telegram",
+              })}
+            </button>
+          ) : (
+            <div
+              id="telegram-login-container"
+              className="flex justify-center"
+            />
+          )}
 
           <div className="mt-3 text-center text-xs text-gray-400">
             {t("telegram_provider_auth.domain_hint", {
