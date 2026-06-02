@@ -4,6 +4,7 @@ const cron = require("node-cron");
 const { askActualReminder } = require("./askActualReminder");
 const { cleanupExpiredServicesJob } = require("./cleanupExpiredServicesJob");
 const { runUnlockNudge } = require("./unlockNudgeJob");
+const { runAbandonedPaymeReminderJob } = require("./abandonedPaymeReminderJob");
 
 const TZ = "Asia/Tashkent";
 const ASK_HOURS = new Set([10, 14, 18]);
@@ -130,6 +131,21 @@ async function runCleanupExpiredServicesJob() {
   }
 }
 
+
+async function runAbandonedPaymeReminderSchedulerJob() {
+  console.log(`[scheduler] abandonedPaymeReminderJob started (${TZ})`);
+
+  try {
+    const result = await runAbandonedPaymeReminderJob({ limit: 100 });
+    console.log(
+      `[scheduler] abandonedPaymeReminderJob finished`,
+      result || {}
+    );
+  } catch (err) {
+    console.error(`[scheduler] abandonedPaymeReminderJob failed`, err);
+  }
+}
+
 function startJobsScheduler() {
   if (
     String(process.env.DISABLE_REMINDER_SCHEDULER || "").trim() === "1" ||
@@ -175,6 +191,15 @@ function startJobsScheduler() {
     "*/10 * * * *",
     async () => {
       await runUnlockNudge();
+    },
+    { timezone: TZ }
+  );
+
+  // Брошенные Payme оплаты: expire CREATED после 12ч + 3-step reminder funnel
+  cron.schedule(
+    "*/15 * * * *",
+    async () => {
+      await runAbandonedPaymeReminderSchedulerJob();
     },
     { timezone: TZ }
   );
