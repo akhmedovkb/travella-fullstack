@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { apiGet } from "../../api";
-import { tError } from "../../shared/toast";
+import { apiGet, apiPost } from "../../api";
+import { tError, tSuccess } from "../../shared/toast";
 
 function normalizeStateValue(v) {
   const s = String(v ?? "").trim().toLowerCase();
@@ -12,6 +12,7 @@ function normalizeStateValue(v) {
   if (["-1", "canceled", "cancelled"].includes(s)) return "canceled";
   if (["-2", "refund", "refunded"].includes(s)) return "refund";
   if (["failed", "error"].includes(s)) return "failed";
+  if (["expired", "expire"].includes(s)) return "expired";
   return "";
 }
 
@@ -20,6 +21,7 @@ function stateLabel(v) {
   if (s === "success") return "SUCCESS";
   if (s === "created") return "CREATED";
   if (s === "pending" || s === "new") return "PENDING";
+  if (s === "expired") return "EXPIRED";
   if (s === "canceled") return "CANCELED";
   if (s === "refund") return "REFUND";
   if (s === "failed") return "FAILED";
@@ -30,6 +32,7 @@ function stateBadgeClass(v) {
   const s = String(v ?? "").trim().toLowerCase();
   if (s === "success") return "bg-green-100 text-green-700";
   if (s === "created" || s === "pending" || s === "new") return "bg-yellow-100 text-yellow-700";
+  if (s === "expired") return "bg-slate-200 text-slate-700";
   if (s === "canceled") return "bg-orange-100 text-orange-700";
   if (s === "refund" || s === "failed") return "bg-red-100 text-red-700";
   return "bg-gray-100 text-gray-700";
@@ -63,11 +66,24 @@ function money(x) {
   return `${Math.round(Number(x || 0)).toLocaleString("ru-RU")} сум`;
 }
 
+function pct(part, total) {
+  const p = Number(part || 0);
+  const t = Number(total || 0);
+  if (!t) return "0%";
+  return `${((p / t) * 100).toFixed(1)}%`;
+}
+
 function shortId(x, max = 18) {
   const s = String(x || "").trim();
   if (!s) return "—";
   if (s.length <= max) return s;
   return `${s.slice(0, 8)}…${s.slice(-6)}`;
+}
+
+function reminderLabel(row) {
+  const count = Number(row?.reminder_count || 0);
+  if (!count) return "—";
+  return `${count}/3 · ${fmtTs(row?.last_reminder_sent_at)}`;
 }
 
 function StatCard({ label, value, hint }) {
@@ -92,6 +108,7 @@ export default function PaymePayments() {
   const [rows, setRows] = useState([]);
   const [totals, setTotals] = useState({});
   const [loading, setLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
 
   const [q, setQ] = useState(initialQ);
   const [state, setState] = useState(initialState);
@@ -122,6 +139,42 @@ export default function PaymePayments() {
       tError("Не удалось загрузить Payments");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function expireOldCreated() {
+    setActionLoading(true);
+    try {
+      const data = await apiPost("/api/admin/payme/payments/expire", {}, "admin");
+      tSuccess(
+        `Expired orders: ${Number(data?.expired_orders || 0).toLocaleString("ru-RU")}`
+      );
+      await load();
+    } catch (e) {
+      console.error(e);
+      tError("Не удалось протухлить старые CREATED платежи");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function sendDueReminders() {
+    setActionLoading(true);
+    try {
+      const data = await apiPost(
+        "/api/admin/payme/payments/reminders",
+        { limit: 100 },
+        "admin"
+      );
+      tSuccess(
+        `Reminders sent: ${Number(data?.sent || 0).toLocaleString("ru-RU")}, failed: ${Number(data?.failed || 0).toLocaleString("ru-RU")}`
+      );
+      await load();
+    } catch (e) {
+      console.error(e);
+      tError("Не удалось отправить напоминания");
+    } finally {
+      setActionLoading(false);
     }
   }
 
@@ -156,6 +209,8 @@ export default function PaymePayments() {
   const totalCount = Number(totals?.count || 0);
   const successCount = Number(totals?.success_count || 0);
   const pendingCount = Number(totals?.pending_count || 0);
+  const abandonedCount = Number(totals?.abandoned_count || 0);
+  const expiredCount = Number(totals?.expired_count || 0);
   const failedCount = Number(totals?.failed_count || 0);
   const successAmount = Number(totals?.success_amount || 0);
 
@@ -211,6 +266,7 @@ export default function PaymePayments() {
             <option value="">All states</option>
             <option value="success">SUCCESS</option>
             <option value="created">CREATED/PENDING</option>
+            <option value="expired">EXPIRED</option>
             <option value="failed">FAILED</option>
             <option value="canceled">CANCELED</option>
             <option value="refund">REFUND</option>
@@ -229,18 +285,44 @@ export default function PaymePayments() {
           <button
             className="rounded-lg bg-black px-4 py-2 text-white disabled:opacity-60"
             onClick={load}
-            disabled={loading}
+            disabled={loading || actionLoading}
           >
             {loading ? "Loading..." : "Reload"}
           </button>
         </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-4">
+      <div className="flex flex-col gap-2 rounded-2xl border border-orange-100 bg-orange-50 p-3 md:flex-row md:items-center md:justify-between">
+        <div className="text-sm font-semibold text-orange-900">
+          Payme recovery: CREATED заказы старше 12 часов переводятся в EXPIRED. Дожим идёт в 3 касания до истечения заказа.
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <button
+            type="button"
+            disabled={actionLoading}
+            onClick={expireOldCreated}
+            className="rounded-xl border border-orange-200 bg-white px-4 py-2 text-sm font-bold text-orange-700 transition hover:bg-orange-100 disabled:opacity-60"
+          >
+            Expire old CREATED
+          </button>
+          <button
+            type="button"
+            disabled={actionLoading}
+            onClick={sendDueReminders}
+            className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-black text-white transition hover:bg-orange-600 disabled:opacity-60"
+          >
+            Send due reminders
+          </button>
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-6">
         <StatCard label="Total payments" value={totalCount.toLocaleString("ru-RU")} />
         <StatCard label="Success" value={successCount.toLocaleString("ru-RU")} hint={money(successAmount)} />
+        <StatCard label="Conversion" value={pct(successCount, totalCount)} hint="success / total" />
         <StatCard label="Pending" value={pendingCount.toLocaleString("ru-RU")} />
-        <StatCard label="Failed / canceled / refund" value={failedCount.toLocaleString("ru-RU")} />
+        <StatCard label="Abandoned nudged" value={abandonedCount.toLocaleString("ru-RU")} hint="CREATED with reminders" />
+        <StatCard label="Expired / failed" value={`${expiredCount.toLocaleString("ru-RU")} / ${failedCount.toLocaleString("ru-RU")}`} />
       </div>
 
       <div className="rounded-xl border bg-white overflow-auto shadow-sm">
@@ -255,6 +337,7 @@ export default function PaymePayments() {
               <th className="px-3 py-2 text-left">Service</th>
               <th className="px-3 py-2 text-left">Amount</th>
               <th className="px-3 py-2 text-left">State</th>
+              <th className="px-3 py-2 text-left">Reminder</th>
               <th className="px-3 py-2 text-left">Paid</th>
               <th className="px-3 py-2 text-left">Payme / Telegram ID</th>
               <th className="px-3 py-2 text-left">Order</th>
@@ -264,7 +347,7 @@ export default function PaymePayments() {
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td className="px-3 py-6 text-center opacity-60" colSpan={11}>
+                <td className="px-3 py-6 text-center opacity-60" colSpan={12}>
                   No payments
                 </td>
               </tr>
@@ -321,6 +404,10 @@ export default function PaymePayments() {
                       <span className={`px-2 py-1 rounded text-xs font-semibold ${stateBadgeClass(r.state)}`}>
                         {stateLabel(r.state)}
                       </span>
+                    </td>
+
+                    <td className="px-3 py-2 whitespace-nowrap text-xs text-slate-600">
+                      {reminderLabel(r)}
                     </td>
 
                     <td className="px-3 py-2 whitespace-nowrap">{fmtTs(r.performed_at)}</td>
