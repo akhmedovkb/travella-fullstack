@@ -50,6 +50,27 @@ const SITE_URL = (
 // ⚠️ Плейсхолдер НЕ форсим — лучше article без thumb_url, чем 404 -> "Не найдено"
 const INLINE_PLACEHOLDER_THUMB = "";
 
+function buildPaymeGuideUrlForTelegram(payUrl, options = {}) {
+  const url = String(payUrl || "").trim();
+  if (!url) return "";
+
+  const params = new URLSearchParams();
+  params.set("pay_url", url);
+  if (options.purpose) params.set("purpose", String(options.purpose));
+  if (options.amount != null && options.amount !== "") params.set("amount", String(options.amount));
+  if (options.orderId != null && options.orderId !== "") params.set("order_id", String(options.orderId));
+  if (options.serviceId != null && options.serviceId !== "") params.set("service_id", String(options.serviceId));
+
+  return `${SITE_URL}/payme/guide?${params.toString()}`;
+}
+
+const PAYME_CARD_ONLY_HINT =
+  "⚠️ <b>Важно перед оплатой Payme</b>\n\n" +
+  "На странице Payme вводите только:\n" +
+  "💳 номер карты\n" +
+  "📅 срок действия карты\n\n" +
+  "<b>Не вводите телефон для авторизации Payme.</b> Это необязательно для оплаты картой и может задержать SMS/оплату.";
+
 // Кому отправлять "быстрые запросы" из бота
 const MANAGER_CHAT_ID = process.env.TELEGRAM_MANAGER_CHAT_ID || "";
 
@@ -10520,13 +10541,25 @@ bot.action(/^balance:topup:(\d+)$/, async (ctx) => {
       callbackUrl,
     });
 
+    const guideUrl = buildPaymeGuideUrlForTelegram(payUrl, {
+      purpose: "balance_topup",
+      amount: amountSum,
+      orderId,
+    });
+
     await safeReply(
       ctx,
-      `💳 Оплата через Payme:\nСумма: ${amountSum.toLocaleString("ru-RU")} сум\nЗаказ: #${orderId}\n\nПосле оплаты нажмите «Проверить баланс».`,
+      `${PAYME_CARD_ONLY_HINT}
+
+💳 <b>Сумма:</b> ${amountSum.toLocaleString("ru-RU")} сум
+<b>Заказ:</b> #${orderId}
+
+После оплаты нажмите «Проверить баланс».`,
       {
+        parse_mode: "HTML",
         reply_markup: {
           inline_keyboard: [
-            [{ text: "✅ Оплатить в Payme", url: payUrl }],
+            [{ text: "✅ Понятно, перейти к оплате", url: guideUrl || payUrl }],
             [{ text: "🔄 Проверить баланс", callback_data: "balance:check" }],
             [{ text: "⬅️ Назад", callback_data: "balance:topup" }],
           ],
@@ -10733,6 +10766,8 @@ async function sendProviderSupportInvoice(ctx, { providerId, serviceId = null, a
       }),
     ]
   );
+
+  await safeReply(ctx, PAYME_CARD_ONLY_HINT, { parse_mode: "HTML" });
 
   await ctx.telegram.sendInvoice(ctx.chat.id, {
     title: "❤️ Поддержка проекта",
