@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { apiGet, apiPost } from "../api";
 import { tSuccess } from "../shared/toast";
+import { redirectToPaymeGuide } from "../utils/paymeGuide";
 import WishHeart from "./WishHeart";
 const SHOW_REVIEWS = false;
 
@@ -3003,7 +3004,12 @@ return (
                         shortfall_sum: Number(unlockPayModal.shortfallSum || 0),
                       });
 
-                      window.location.href = url;
+                      redirectToPaymeGuide(url, {
+                        purpose: "unlock_contact",
+                        amount: Number(unlockPayModal.shortfallSum || 0),
+                        orderId: unlockPayModal.orderId || null,
+                        serviceId: unlockPayModal.serviceId || null,
+                      });
                     }}
                     className="group/pay relative inline-flex w-full overflow-hidden items-center justify-center rounded-2xl bg-gradient-to-r from-orange-500 via-amber-500 to-orange-400 px-4 py-3 text-sm font-black text-white shadow-[0_16px_36px_rgba(249,115,22,0.32)] ring-1 ring-orange-200/70 transition-all duration-300 hover:-translate-y-0.5 hover:scale-[1.03] hover:shadow-[0_24px_54px_rgba(249,115,22,0.48)] active:translate-y-0 active:scale-[0.98] animate-[pulse_2.4s_ease-in-out_infinite]"
                   >
