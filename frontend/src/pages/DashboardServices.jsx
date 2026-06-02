@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import ProviderServicesCard from "../components/ProviderServicesCard";
 import ConfirmModal from "../components/ConfirmModal";
 import { tSuccess, tError, tWarn } from "../shared/toast";
+import { redirectToPaymeGuide } from "../utils/paymeGuide";
 
 const DEFAULT_DETAILS = {
   directionCountry: "",
@@ -1778,7 +1779,12 @@ export default function DashboardServices() {
       });
       const payUrl = res?.data?.pay_url;
       if (!payUrl) throw new Error("Payme ссылка не создана");
-      window.location.href = payUrl;
+      redirectToPaymeGuide(payUrl, {
+        purpose: "provider_support",
+        amount: amountSum,
+        orderId: res?.data?.order_id || res?.data?.order?.id || null,
+        serviceId: supportPromptService?.id || null,
+      });
     } catch (err) {
       console.error(err);
       setSupportPayError(err?.response?.data?.message || err?.message || "Не удалось создать оплату Payme");
