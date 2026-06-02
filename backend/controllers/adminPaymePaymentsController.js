@@ -1,6 +1,11 @@
 // backend/controllers/adminPaymePaymentsController.js
 
 const pool = require("../db");
+const {
+  ensureAbandonedPaymeShape,
+  expireCreatedPaymeOrders,
+  runAbandonedPaymeReminderJob,
+} = require("../jobs/abandonedPaymeReminderJob");
 
 function clampInt(x, def, min, max) {
   const n = Number(x);
@@ -66,6 +71,7 @@ function normalizeStateFilter(v) {
   if (["-1", "cancel", "canceled", "cancelled"].includes(s)) return "canceled";
   if (["-2", "refund", "refunded"].includes(s)) return "refund";
   if (["failed", "error"].includes(s)) return "failed";
+  if (["expired", "expire"].includes(s)) return "expired";
   return s;
 }
 
@@ -100,6 +106,9 @@ function buildWebPaymeUnion() {
       NULL::text AS provider_payment_charge_id,
       pt.order_id::bigint AS order_id,
       pt.state::text AS raw_status,
+      COALESCE(o.reminder_count, 0)::int AS reminder_count,
+      o.last_reminder_sent_at AS last_reminder_sent_at,
+      o.expired_at AS expired_at,
       jsonb_build_object(
         'table', 'payme_transactions',
         'provider', o.provider,
@@ -138,7 +147,8 @@ function buildOrdersWithoutTxUnion() {
       CASE
         WHEN LOWER(COALESCE(o.status, 'created')) IN ('paid', 'success', 'performed') THEN 'success'
         WHEN LOWER(COALESCE(o.status, 'created')) IN ('canceled', 'cancelled', 'cancel') THEN 'canceled'
-        WHEN LOWER(COALESCE(o.status, 'created')) IN ('failed', 'error', 'expired') THEN 'failed'
+        WHEN LOWER(COALESCE(o.status, 'created')) IN ('expired') THEN 'expired'
+        WHEN LOWER(COALESCE(o.status, 'created')) IN ('failed', 'error') THEN 'failed'
         ELSE LOWER(COALESCE(o.status, 'created'))
       END::text AS state,
       o.created_at AS created_at,
@@ -148,12 +158,17 @@ function buildOrdersWithoutTxUnion() {
       NULL::text AS provider_payment_charge_id,
       o.id::bigint AS order_id,
       o.status::text AS raw_status,
+      COALESCE(o.reminder_count, 0)::int AS reminder_count,
+      o.last_reminder_sent_at AS last_reminder_sent_at,
+      o.expired_at AS expired_at,
       jsonb_build_object(
         'table', 'topup_orders',
         'provider', o.provider,
         'purpose', o.purpose,
         'support_donation_id', o.support_donation_id,
-        'expires_at', o.expires_at
+        'expires_at', o.expires_at,
+        'reminder_count', COALESCE(o.reminder_count, 0),
+        'last_reminder_sent_at', o.last_reminder_sent_at
       ) AS meta
     FROM topup_orders o
     LEFT JOIN clients c ON c.id = o.client_id
@@ -196,6 +211,9 @@ function buildTelegramPaymentsUnion() {
       tp.provider_payment_charge_id::text AS provider_payment_charge_id,
       NULL::bigint AS order_id,
       tp.status::text AS raw_status,
+      0::int AS reminder_count,
+      NULL::timestamptz AS last_reminder_sent_at,
+      NULL::timestamptz AS expired_at,
       jsonb_build_object(
         'table', 'telegram_payments',
         'currency', tp.currency,
@@ -227,7 +245,8 @@ function buildSupportDonationOnlyUnion() {
       CASE
         WHEN LOWER(COALESCE(d.status, 'created')) IN ('paid', 'success') THEN 'success'
         WHEN LOWER(COALESCE(d.status, 'created')) IN ('canceled', 'cancelled') THEN 'canceled'
-        WHEN LOWER(COALESCE(d.status, 'created')) IN ('failed', 'expired') THEN 'failed'
+        WHEN LOWER(COALESCE(d.status, 'created')) IN ('expired') THEN 'expired'
+        WHEN LOWER(COALESCE(d.status, 'created')) IN ('failed') THEN 'failed'
         ELSE LOWER(COALESCE(d.status, 'created'))
       END::text AS state,
       d.created_at AS created_at,
@@ -237,6 +256,9 @@ function buildSupportDonationOnlyUnion() {
       NULL::text AS provider_payment_charge_id,
       d.payme_order_id::bigint AS order_id,
       d.status::text AS raw_status,
+      COALESCE(d.reminder_count, 0)::int AS reminder_count,
+      d.last_reminder_sent_at AS last_reminder_sent_at,
+      d.expired_at AS expired_at,
       jsonb_build_object(
         'table', 'provider_support_donations',
         'donation_id', d.id,
@@ -258,6 +280,8 @@ async function adminPaymePayments(req, res) {
     const state = normalizeStateFilter(req.query.state);
     const type = cleanFilter(req.query.type);
     const source = cleanFilter(req.query.source);
+
+    await ensureAbandonedPaymeShape(pool);
 
     const hasPaymeTransactions = await relationExists("payme_transactions");
     const hasTopupOrders = await relationExists("topup_orders");
@@ -350,6 +374,8 @@ async function adminPaymePayments(req, res) {
         COUNT(*)::int AS count,
         COUNT(*) FILTER (WHERE state = 'success')::int AS success_count,
         COUNT(*) FILTER (WHERE state IN ('created', 'pending', 'new'))::int AS pending_count,
+        COUNT(*) FILTER (WHERE state IN ('created', 'pending', 'new') AND COALESCE(reminder_count, 0) > 0)::int AS abandoned_count,
+        COUNT(*) FILTER (WHERE state = 'expired')::int AS expired_count,
         COUNT(*) FILTER (WHERE state IN ('failed', 'canceled', 'refund'))::int AS failed_count,
         COALESCE(SUM(CASE WHEN state = 'success' THEN amount ELSE 0 END), 0)::numeric AS success_amount,
         COALESCE(SUM(amount), 0)::numeric AS total_amount
@@ -375,4 +401,31 @@ async function adminPaymePayments(req, res) {
   }
 }
 
-module.exports = { adminPaymePayments };
+
+async function expireAbandonedPaymePayments(req, res) {
+  try {
+    const result = await expireCreatedPaymeOrders();
+    return res.json({ success: true, ...result });
+  } catch (e) {
+    console.error("[expireAbandonedPaymePayments] error:", e);
+    return res.status(500).json({ success: false, error: "Internal error" });
+  }
+}
+
+async function sendAbandonedPaymeReminders(req, res) {
+  try {
+    const limit = clampInt(req.body?.limit || req.query?.limit, 100, 1, 200);
+    const dryRun = String(req.body?.dryRun || req.query?.dryRun || "").toLowerCase() === "true";
+    const result = await runAbandonedPaymeReminderJob({ limit, dryRun });
+    return res.json({ success: true, ...result });
+  } catch (e) {
+    console.error("[sendAbandonedPaymeReminders] error:", e);
+    return res.status(500).json({ success: false, error: "Internal error" });
+  }
+}
+
+module.exports = {
+  adminPaymePayments,
+  expireAbandonedPaymePayments,
+  sendAbandonedPaymeReminders,
+};
