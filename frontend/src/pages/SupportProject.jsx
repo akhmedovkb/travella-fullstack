@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import { apiPost } from "../api";
+import { redirectToPaymeGuide } from "../utils/paymeGuide";
 
 const PRESETS = [20000, 50000, 100000, 200000];
 
@@ -33,7 +34,11 @@ export default function SupportProject() {
       );
 
       if (res?.pay_url) {
-        window.location.href = res.pay_url;
+        redirectToPaymeGuide(res.pay_url, {
+          purpose: "provider_support",
+          amount: finalAmount,
+          orderId: res?.order_id || res?.order?.id || null,
+        });
         return;
       }
 
