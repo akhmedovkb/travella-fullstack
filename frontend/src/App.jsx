@@ -50,6 +50,7 @@ import AdminServiceAudit from "./pages/admin/AdminServiceAudit";
 import PassportParser from "./pages/PassportParser";
 import SupportSuccess from "./pages/SupportSuccess";
 import SupportProject from "./pages/SupportProject";
+import PaymeGuide from "./pages/PaymeGuide";
 import { installActivityTracker } from "./utils/activityTracker";
 
 // Клиентские
@@ -164,6 +165,7 @@ export default function App() {
 
 
             <Route path="/support/success" element={<SupportSuccess />} />
+            <Route path="/payme/guide" element={<PaymeGuide />} />
             <Route
               path="/support/project"
               element={
