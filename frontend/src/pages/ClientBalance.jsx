@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { apiGet, apiPost } from "../api";
 import { tError, tSuccess } from "../shared/toast";
+import { redirectToPaymeGuide } from "../utils/paymeGuide";
 import { useTranslation } from "react-i18next";
 
 function formatMoney(value, lang = "ru", fromTiyin = false) {
@@ -175,7 +176,12 @@ export default function ClientBalance() {
         })
       );
 
-      window.location.href = data.pay_url;
+      redirectToPaymeGuide(data.pay_url, {
+        purpose: serviceId ? "unlock_contact" : "balance_topup",
+        amount: sum,
+        orderId: data?.order_id || data?.order?.id || null,
+        serviceId: serviceId || null,
+      });
     } catch (e) {
       console.error("[ClientBalance] doTopup error:", e);
 
