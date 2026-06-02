@@ -3,472 +3,433 @@
 const pool = require("../db");
 const { tgSend } = require("../utils/telegram");
 
-const SITE_PUBLIC_URL = String(
+const SITE = String(
   process.env.SITE_PUBLIC_URL ||
+    process.env.SITE_URL ||
     process.env.FRONTEND_URL ||
-    process.env.PUBLIC_SITE_URL ||
     "https://travella.uz"
 ).replace(/\/+$/, "");
 
-const ORDER_EXPIRE_HOURS = 12;
-const MAX_REMINDERS = 3;
+const TOPUP_ORDER_ACTIVE_STATUSES = ["created", "pending"];
+const SUPPORT_ACTIVE_STATUSES = ["created", "new"];
 
-function minutes(n) {
-  return `${Number(n)} minutes`;
+function toInt(v, def = 0) {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.trunc(n) : def;
 }
 
-function hours(n) {
-  return `${Number(n)} hours`;
-}
-
-function cleanText(value, max = 4000) {
-  return String(value || "")
-    .replace(/[\u0000-\u001f\u007f]/g, " ")
-    .trim()
-    .slice(0, max);
-}
-
-function escapeHtml(value) {
-  return cleanText(value)
+function escapeHtml(s) {
+  return String(s || "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 }
 
-function formatSumFromTiyin(amountTiyin) {
-  const sum = Math.round(Number(amountTiyin || 0) / 100);
-  return `${sum.toLocaleString("ru-RU")} сум`;
-}
-
-function isAbsoluteUrl(value) {
-  try {
-    const u = new URL(String(value || ""));
-    return u.protocol === "https:" || u.protocol === "http:";
-  } catch {
-    return false;
-  }
-}
-
-function buildPaymeGuideUrl(row) {
-  const payUrl = cleanText(row?.pay_url, 4000);
-  if (!isAbsoluteUrl(payUrl)) return "";
+function buildPaymeGuideUrl(payUrl, options = {}) {
+  const url = String(payUrl || "").trim();
+  if (!url) return "";
 
   const params = new URLSearchParams();
-  params.set("pay_url", payUrl);
-  params.set("purpose", row.order_type || row.purpose || "payme");
-  params.set("amount", String(Math.round(Number(row.amount_tiyin || 0) / 100)));
-  params.set("order_id", String(row.order_id));
-  if (row.service_id) params.set("service_id", String(row.service_id));
+  params.set("pay_url", url);
+  if (options.kind) params.set("kind", String(options.kind));
+  if (options.orderId) params.set("order_id", String(options.orderId));
+  if (options.serviceId) params.set("service_id", String(options.serviceId));
+  if (options.donationId) params.set("donation_id", String(options.donationId));
 
-  return `${SITE_PUBLIC_URL}/payme/guide?${params.toString()}`;
+  return `${SITE}/payme/guide?${params.toString()}`;
 }
 
-function reminderDelayFor(row) {
-  const type = String(row?.order_type || row?.purpose || "").trim();
-  const count = Number(row?.reminder_count || 0);
+async function ensureRecoveryColumns(db = pool) {
+  await db.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS is_test_account BOOLEAN DEFAULT FALSE`);
+  await db.query(`ALTER TABLE providers ADD COLUMN IF NOT EXISTS is_test_account BOOLEAN DEFAULT FALSE`);
 
-  // Payme technical order life is 12h in Travella, so all three reminders must fit before expiry.
-  if (type === "provider_support") {
-    if (count <= 0) return hours(1);
-    if (count === 1) return hours(6);
-    return hours(10);
-  }
+  await db.query(`
+    ALTER TABLE topup_orders
+      ADD COLUMN IF NOT EXISTS reminder_count INTEGER NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS last_reminder_sent_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS reminder_1_sent_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS reminder_2_sent_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS reminder_3_sent_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS expired_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS meta JSONB
+  `);
 
-  // unlock_contact is a stronger intent; first touch should be faster.
-  if (count <= 0) return minutes(15);
-  if (count === 1) return hours(3);
-  return hours(10);
+  await db.query(`
+    ALTER TABLE provider_support_donations
+      ADD COLUMN IF NOT EXISTS reminder_count INTEGER NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS last_reminder_sent_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS reminder_1_sent_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS reminder_2_sent_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS reminder_3_sent_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS expired_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS meta JSONB
+  `);
+
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_topup_orders_recovery ON topup_orders(status, created_at, reminder_count)`);
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_provider_support_recovery ON provider_support_donations(status, created_at, reminder_count)`);
 }
 
-function buildReminderText(row) {
-  const type = String(row?.order_type || row?.purpose || "").trim();
-  const count = Number(row?.reminder_count || 0);
-  const amount = formatSumFromTiyin(row?.amount_tiyin);
-  const serviceTitle = escapeHtml(row?.service_title || "");
-  const orderLine = `<code>#${escapeHtml(row?.order_id || "")}</code>`;
+async function expireOldPaymeOrders({ dryRun = false } = {}) {
+  await ensureRecoveryColumns();
 
-  if (type === "provider_support") {
-    if (count <= 0) {
-      return [
-        "❤️ <b>Вы начали поддержку проекта Travella, но платёж не завершён.</b>",
-        "",
-        `Сумма: <b>${escapeHtml(amount)}</b>`,
-        `Заказ: ${orderLine}`,
-        "",
-        "Если желание поддержать проект осталось, оплату можно продолжить.",
-        "",
-        "⚠️ На странице Payme вводите только номер карты и срок карты. Телефон для авторизации Payme вводить не нужно.",
-      ].join("\n");
-    }
+  const result = {
+    dryRun: !!dryRun,
+    topup_active_expired: 0,
+    topup_old_new_expired: 0,
+    support_expired: 0,
+  };
 
-    if (count === 1) {
-      return [
-        "❤️ <b>Напоминаем про поддержку Travella.</b>",
-        "",
-        `Платёж на <b>${escapeHtml(amount)}</b> пока не завершён.`,
-        "Ваш вклад помогает развивать базу отказных туров и инструменты для поставщиков.",
-        "",
-        "💳 Для оплаты Payme достаточно карты и срока действия карты. Блок телефона — это вход в Payme, его можно не использовать.",
-      ].join("\n");
-    }
-
-    return [
-      "❤️ <b>Последнее напоминание по поддержке проекта.</b>",
-      "",
-      `Оплата на <b>${escapeHtml(amount)}</b> ещё не завершена.`,
-      "Если актуально — можно продолжить по кнопке ниже.",
-    ].join("\n");
-  }
-
-  if (count <= 0) {
-    return [
-      "🔓 <b>Вы начали открывать контакты, но не завершили оплату.</b>",
-      "",
-      serviceTitle ? `Услуга: <b>${serviceTitle}</b>` : "Услуга: <b>карточка Travella</b>",
-      `Сумма: <b>${escapeHtml(amount)}</b>`,
-      `Заказ: ${orderLine}`,
-      "",
-      "Контакты поставщика всё ещё можно открыть.",
-      "",
-      "⚠️ На странице Payme вводите только номер карты и срок карты. Телефон для авторизации Payme вводить не нужно.",
-    ].join("\n");
-  }
-
-  if (count === 1) {
-    return [
-      "🔓 <b>Контакты поставщика пока не открыты.</b>",
-      "",
-      serviceTitle ? `Услуга: <b>${serviceTitle}</b>` : "",
-      `Стоимость открытия: <b>${escapeHtml(amount)}</b>`,
-      "",
-      "💳 Если Payme показывает поле телефона — это вход в Payme-аккаунт. Для оплаты Travella достаточно ввести карту и срок карты.",
-    ]
-      .filter(Boolean)
-      .join("\n");
-  }
-
-  return [
-    "🔓 <b>Последнее напоминание по открытию контактов.</b>",
-    "",
-    serviceTitle ? `Услуга: <b>${serviceTitle}</b>` : "",
-    `Сумма: <b>${escapeHtml(amount)}</b>`,
-    "",
-    "Если контакты ещё нужны — можно завершить оплату по кнопке ниже.",
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
-async function relationKind(client, name) {
-  const q = await client.query(
-    `
-      SELECT c.relkind
-        FROM pg_class c
-        JOIN pg_namespace n ON n.oid = c.relnamespace
-       WHERE n.nspname = 'public'
-         AND c.relname = $1
-       LIMIT 1
-    `,
-    [String(name)]
-  );
-  return q.rows?.[0]?.relkind || "";
-}
-
-async function relationExists(client, name) {
-  return Boolean(await relationKind(client, name));
-}
-
-async function resolveTopupTarget(client) {
-  const topupKind = await relationKind(client, "topup_orders");
-  if (topupKind === "r" || topupKind === "p") return "topup_orders";
-  const paymeKind = await relationKind(client, "payme_topup_orders");
-  if (paymeKind === "r" || paymeKind === "p") return "payme_topup_orders";
-  return "";
-}
-
-async function ensureAbandonedPaymeShape(client) {
-  const topupTarget = await resolveTopupTarget(client);
-
-  if (topupTarget) {
-    await client.query(`
-      ALTER TABLE ${topupTarget}
-        ADD COLUMN IF NOT EXISTS reminder_count INTEGER NOT NULL DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS last_reminder_sent_at TIMESTAMPTZ,
-        ADD COLUMN IF NOT EXISTS expired_at TIMESTAMPTZ,
-        ADD COLUMN IF NOT EXISTS failed_at TIMESTAMPTZ,
-        ADD COLUMN IF NOT EXISTS pay_url TEXT,
-        ADD COLUMN IF NOT EXISTS telegram_chat_id BIGINT,
-        ADD COLUMN IF NOT EXISTS support_donation_id BIGINT,
-        ADD COLUMN IF NOT EXISTS provider_id BIGINT,
-        ADD COLUMN IF NOT EXISTS service_id BIGINT,
-        ADD COLUMN IF NOT EXISTS purpose TEXT,
-        ADD COLUMN IF NOT EXISTS order_type TEXT,
-        ADD COLUMN IF NOT EXISTS meta JSONB
-    `);
-
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_${topupTarget}_abandoned_payme
-        ON ${topupTarget}(status, order_type, created_at, reminder_count)
-    `);
-  }
-
-  if (await relationExists(client, "provider_support_donations")) {
-    await client.query(`
-      ALTER TABLE provider_support_donations
-        ADD COLUMN IF NOT EXISTS reminder_count INTEGER NOT NULL DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS last_reminder_sent_at TIMESTAMPTZ,
-        ADD COLUMN IF NOT EXISTS expired_at TIMESTAMPTZ
-    `);
-  }
-
-  return { topupTarget };
-}
-
-async function expireCreatedPaymeOrders(options = {}) {
-  const client = options.client || (await pool.connect());
-  const shouldRelease = !options.client;
-
-  try {
-    const { topupTarget } = await ensureAbandonedPaymeShape(client);
-    if (!topupTarget) return { expired_orders: 0, expired_support_donations: 0 };
-
-    const expiredOrdersQ = await client.query(`
-      UPDATE ${topupTarget}
-         SET status = 'expired',
-             expired_at = COALESCE(expired_at, NOW()),
-             failed_at = COALESCE(failed_at, NOW())
-       WHERE LOWER(COALESCE(status, 'created')) IN ('created', 'pending', 'new')
-         AND COALESCE(provider, 'payme') = 'payme'
-         AND COALESCE(order_type, purpose, '') IN ('unlock_contact', 'provider_support')
-         AND (
-           (expires_at IS NOT NULL AND expires_at < NOW())
-           OR created_at < NOW() - INTERVAL '${ORDER_EXPIRE_HOURS} hours'
-         )
-      RETURNING id, support_donation_id
-    `);
-
-    let expiredSupportDonations = 0;
-    if ((expiredOrdersQ.rows || []).length && (await relationExists(client, "provider_support_donations"))) {
-      const ids = expiredOrdersQ.rows
-        .map((r) => Number(r.support_donation_id || 0))
-        .filter((n) => Number.isFinite(n) && n > 0);
-
-      if (ids.length) {
-        const dQ = await client.query(
-          `
-            UPDATE provider_support_donations
-               SET status = 'expired',
-                   expired_at = COALESCE(expired_at, NOW())
-             WHERE id = ANY($1::bigint[])
-               AND LOWER(COALESCE(status, 'created')) IN ('created', 'pending', 'new')
-            RETURNING id
-          `,
-          [ids]
-        );
-        expiredSupportDonations = dQ.rowCount || 0;
-      }
-    }
-
-    return {
-      expired_orders: expiredOrdersQ.rowCount || 0,
-      expired_support_donations: expiredSupportDonations,
-    };
-  } finally {
-    if (shouldRelease) client.release();
-  }
-}
-
-async function listDueReminderCandidates(client, limit = 50) {
-  const { topupTarget } = await ensureAbandonedPaymeShape(client);
-  if (!topupTarget) return [];
-
-  const hasSupportDonations = await relationExists(client, "provider_support_donations");
-
-  const supportJoin = hasSupportDonations
-    ? `LEFT JOIN provider_support_donations d ON d.id = o.support_donation_id`
-    : `LEFT JOIN LATERAL (SELECT NULL::bigint AS id, NULL::bigint AS telegram_chat_id) d ON TRUE`;
-
-  const q = await client.query(
-    `
-      WITH base AS (
-        SELECT
-          o.id AS order_id,
-          COALESCE(o.order_type, o.purpose, '') AS order_type,
-          o.purpose,
-          o.client_id,
-          o.provider_id,
-          o.service_id,
-          o.support_donation_id,
-          o.telegram_chat_id AS order_telegram_chat_id,
-          d.telegram_chat_id AS donation_telegram_chat_id,
-          COALESCE(c.telegram_chat_id, NULL) AS client_telegram_chat_id,
-          COALESCE(p.telegram_refused_chat_id, p.telegram_web_chat_id, p.telegram_chat_id, p.tg_chat_id) AS provider_telegram_chat_id,
-          COALESCE(c.name, p.name, 'Travella user') AS actor_name,
-          s.title AS service_title,
-          o.amount_tiyin,
-          o.pay_url,
-          o.created_at,
-          o.expires_at,
-          COALESCE(o.reminder_count, 0) AS reminder_count,
-          o.last_reminder_sent_at,
-          CASE
-            WHEN COALESCE(o.order_type, o.purpose, '') = 'provider_support' AND COALESCE(o.reminder_count, 0) <= 0 THEN NOW() - INTERVAL '1 hour'
-            WHEN COALESCE(o.order_type, o.purpose, '') = 'provider_support' AND COALESCE(o.reminder_count, 0) = 1 THEN NOW() - INTERVAL '6 hours'
-            WHEN COALESCE(o.order_type, o.purpose, '') = 'provider_support' AND COALESCE(o.reminder_count, 0) = 2 THEN NOW() - INTERVAL '10 hours'
-            WHEN COALESCE(o.reminder_count, 0) <= 0 THEN NOW() - INTERVAL '15 minutes'
-            WHEN COALESCE(o.reminder_count, 0) = 1 THEN NOW() - INTERVAL '3 hours'
-            ELSE NOW() - INTERVAL '10 hours'
-          END AS due_cutoff
-        FROM ${topupTarget} o
+  const topupActiveSql = `
+    WITH candidates AS (
+      SELECT o.id
+        FROM topup_orders o
         LEFT JOIN clients c ON c.id = o.client_id
         LEFT JOIN providers p ON p.id = o.provider_id
-        LEFT JOIN services s ON s.id = o.service_id
-        ${supportJoin}
-        WHERE LOWER(COALESCE(o.status, 'created')) IN ('created', 'pending', 'new')
-          AND COALESCE(o.provider, 'payme') = 'payme'
-          AND COALESCE(o.order_type, o.purpose, '') IN ('unlock_contact', 'provider_support')
-          AND COALESCE(o.reminder_count, 0) < ${MAX_REMINDERS}
-          AND COALESCE(o.pay_url, '') <> ''
-          AND (
-            o.expires_at IS NULL
-            OR o.expires_at > NOW() + INTERVAL '15 minutes'
-          )
+       WHERE LOWER(COALESCE(o.status, '')) = ANY($1::text[])
+         AND COALESCE(c.is_test_account, false) = false
+         AND COALESCE(p.is_test_account, false) = false
+         AND (
+           (o.expires_at IS NOT NULL AND o.expires_at < NOW())
+           OR o.created_at < NOW() - interval '12 hours'
+         )
+    )
+    ${dryRun ? "SELECT COUNT(*)::int AS count FROM candidates" : `
+      UPDATE topup_orders o
+         SET status = 'expired',
+             failed_at = COALESCE(o.failed_at, NOW()),
+             expired_at = COALESCE(o.expired_at, NOW()),
+             meta = jsonb_set(
+               COALESCE(o.meta, '{}'::jsonb),
+               '{recovery_expired}',
+               jsonb_build_object('at', NOW(), 'reason', 'active_order_timeout', 'previous_status', o.status),
+               true
+             )
+        FROM candidates c
+       WHERE o.id = c.id
+       RETURNING o.id
+    `}
+  `;
+
+  const topupActive = await pool.query(topupActiveSql, [TOPUP_ORDER_ACTIVE_STATUSES]);
+  result.topup_active_expired = dryRun ? Number(topupActive.rows[0]?.count || 0) : topupActive.rowCount;
+
+  const topupOldNewSql = `
+    WITH candidates AS (
+      SELECT o.id
+        FROM topup_orders o
+        LEFT JOIN clients c ON c.id = o.client_id
+        LEFT JOIN providers p ON p.id = o.provider_id
+       WHERE LOWER(COALESCE(o.status, '')) = 'new'
+         AND COALESCE(c.is_test_account, false) = false
+         AND COALESCE(p.is_test_account, false) = false
+         AND o.created_at < NOW() - interval '30 days'
+    )
+    ${dryRun ? "SELECT COUNT(*)::int AS count FROM candidates" : `
+      UPDATE topup_orders o
+         SET status = 'expired',
+             failed_at = COALESCE(o.failed_at, NOW()),
+             expired_at = COALESCE(o.expired_at, NOW()),
+             meta = jsonb_set(
+               COALESCE(o.meta, '{}'::jsonb),
+               '{recovery_expired}',
+               jsonb_build_object('at', NOW(), 'reason', 'old_new_cleanup', 'previous_status', o.status),
+               true
+             )
+        FROM candidates c
+       WHERE o.id = c.id
+       RETURNING o.id
+    `}
+  `;
+
+  const topupOldNew = await pool.query(topupOldNewSql);
+  result.topup_old_new_expired = dryRun ? Number(topupOldNew.rows[0]?.count || 0) : topupOldNew.rowCount;
+
+  const supportSql = `
+    WITH candidates AS (
+      SELECT d.id
+        FROM provider_support_donations d
+        LEFT JOIN providers p ON p.id = d.provider_id
+       WHERE LOWER(COALESCE(d.status, '')) = ANY($1::text[])
+         AND COALESCE(p.is_test_account, false) = false
+         AND (
+           (d.expires_at IS NOT NULL AND d.expires_at < NOW())
+           OR d.created_at < NOW() - interval '12 hours'
+         )
+    )
+    ${dryRun ? "SELECT COUNT(*)::int AS count FROM candidates" : `
+      UPDATE provider_support_donations d
+         SET status = 'expired',
+             failed_at = COALESCE(d.failed_at, NOW()),
+             expired_at = COALESCE(d.expired_at, NOW()),
+             meta = jsonb_set(
+               COALESCE(d.meta, '{}'::jsonb),
+               '{recovery_expired}',
+               jsonb_build_object('at', NOW(), 'reason', 'support_timeout', 'previous_status', d.status),
+               true
+             )
+        FROM candidates c
+       WHERE d.id = c.id
+       RETURNING d.id
+    `}
+  `;
+
+  const support = await pool.query(supportSql, [SUPPORT_ACTIVE_STATUSES]);
+  result.support_expired = dryRun ? Number(support.rows[0]?.count || 0) : support.rowCount;
+
+  return result;
+}
+
+function dueConditionSql(kind) {
+  if (kind === "support") {
+    return `
+      (
+        (COALESCE(reminder_count, 0) = 0 AND created_at <= NOW() - interval '1 hour')
+        OR (COALESCE(reminder_count, 0) = 1 AND last_reminder_sent_at <= NOW() - interval '6 hours')
+        OR (COALESCE(reminder_count, 0) = 2 AND last_reminder_sent_at <= NOW() - interval '10 hours')
       )
-      SELECT *,
-             COALESCE(
-               order_telegram_chat_id,
-               donation_telegram_chat_id,
-               CASE WHEN order_type = 'provider_support' THEN provider_telegram_chat_id ELSE client_telegram_chat_id END,
-               provider_telegram_chat_id,
-               client_telegram_chat_id
-             ) AS chat_id
-        FROM base
-       WHERE created_at <= due_cutoff
-         AND (last_reminder_sent_at IS NULL OR last_reminder_sent_at <= due_cutoff)
-         AND COALESCE(
-               order_telegram_chat_id,
-               donation_telegram_chat_id,
-               CASE WHEN order_type = 'provider_support' THEN provider_telegram_chat_id ELSE client_telegram_chat_id END,
-               provider_telegram_chat_id,
-               client_telegram_chat_id
-             ) IS NOT NULL
-       ORDER BY created_at ASC
-       LIMIT $1
+    `;
+  }
+
+  return `
+    (
+      (COALESCE(reminder_count, 0) = 0 AND created_at <= NOW() - interval '15 minutes')
+      OR (COALESCE(reminder_count, 0) = 1 AND last_reminder_sent_at <= NOW() - interval '3 hours')
+      OR (COALESCE(reminder_count, 0) = 2 AND last_reminder_sent_at <= NOW() - interval '10 hours')
+    )
+  `;
+}
+
+function buildTopupReminderText(row, step) {
+  const amountSum = Math.round(Number(row.amount_tiyin || row.amount || 0) / 100).toLocaleString("ru-RU");
+  const serviceTitle = String(row.service_title || "").trim();
+  const isUnlock = String(row.order_type || row.purpose || "").includes("unlock");
+
+  if (step === 1) {
+    return isUnlock
+      ? `🔓 Вы начали открытие контактов, но не завершили оплату.\n\n${serviceTitle ? `Услуга:\n<b>${escapeHtml(serviceTitle)}</b>\n\n` : ""}Сумма: <b>${amountSum} сум</b>\n\nНа странице Payme вводите только номер карты и срок карты. Телефон для входа в Payme вводить не обязательно.`
+      : `💳 Вы начали оплату в Travella, но не завершили её.\n\nСумма: <b>${amountSum} сум</b>\n\nНа странице Payme вводите только номер карты и срок карты. Телефон для входа в Payme вводить не обязательно.`;
+  }
+
+  if (step === 2) {
+    return isUnlock
+      ? `⏳ Контакты всё ещё можно открыть.\n\n${serviceTitle ? `<b>${escapeHtml(serviceTitle)}</b>\n\n` : ""}Если Payme показывает поле телефона — это вход в Payme-аккаунт. Для оплаты картой достаточно номера карты и срока действия.`
+      : `⏳ Ваш платёж Travella ещё не завершён.\n\nЕсли Payme показывает поле телефона — это вход в Payme-аккаунт. Для оплаты картой достаточно номера карты и срока действия.`;
+  }
+
+  return isUnlock
+    ? `⚠️ Последнее напоминание по незавершённой оплате.\n\n${serviceTitle ? `<b>${escapeHtml(serviceTitle)}</b>\n\n` : ""}Ссылка на оплату ещё доступна. После оплаты контакты будут открыты автоматически.`
+    : `⚠️ Последнее напоминание по незавершённой оплате Travella.\n\nСсылка на оплату ещё доступна. После оплаты статус обновится автоматически.`;
+}
+
+function buildSupportReminderText(row, step) {
+  const amountSum = Math.round(Number(row.amount_tiyin || 0) / 100).toLocaleString("ru-RU");
+  const serviceTitle = String(row.service_title || "").trim();
+
+  if (step === 1) {
+    return `❤️ Спасибо, что решили поддержать проект Travella.\n\nПлатёж не был завершён.\n\n${serviceTitle ? `Услуга:\n<b>${escapeHtml(serviceTitle)}</b>\n\n` : ""}Сумма поддержки: <b>${amountSum} сум</b>\n\nНа странице Payme вводите только номер карты и срок карты. Телефон для входа в Payme вводить не обязательно.`;
+  }
+
+  if (step === 2) {
+    return `🙏 Ваша поддержка помогает усиливать доверие к поставщикам и развивать базу отказных туров.\n\nЕсли желание поддержать проект осталось, можно завершить оплату. В Payme телефон для авторизации можно не вводить.`;
+  }
+
+  return `⚠️ Последнее напоминание по поддержке проекта.\n\nПлатёж ещё можно завершить по ссылке ниже. Спасибо за участие в развитии Travella.`;
+}
+
+async function sendDuePaymeReminders({ dryRun = false, limit = 100 } = {}) {
+  await ensureRecoveryColumns();
+  await expireOldPaymeOrders({ dryRun: false });
+
+  const maxLimit = Math.max(1, Math.min(toInt(limit, 100), 300));
+  const result = {
+    dryRun: !!dryRun,
+    topup_candidates: 0,
+    topup_sent: 0,
+    support_candidates: 0,
+    support_sent: 0,
+    errors: [],
+  };
+
+  const topupQ = await pool.query(
+    `
+    SELECT
+      o.id,
+      o.client_id,
+      o.service_id,
+      o.order_type,
+      o.purpose,
+      o.amount,
+      o.amount_tiyin,
+      o.pay_url,
+      o.created_at,
+      COALESCE(o.reminder_count, 0) AS reminder_count,
+      COALESCE(o.telegram_chat_id, c.telegram_chat_id, c.tg_chat_id) AS telegram_chat_id,
+      c.name AS client_name,
+      s.title AS service_title
+    FROM topup_orders o
+    LEFT JOIN clients c ON c.id = o.client_id
+    LEFT JOIN services s ON s.id = o.service_id
+    WHERE LOWER(COALESCE(o.status, '')) = ANY($1::text[])
+      AND COALESCE(c.is_test_account, false) = false
+      AND COALESCE(o.reminder_count, 0) < 3
+      AND o.pay_url IS NOT NULL
+      AND TRIM(o.pay_url) <> ''
+      AND COALESCE(o.telegram_chat_id, c.telegram_chat_id, c.tg_chat_id) IS NOT NULL
+      AND o.created_at >= NOW() - interval '7 days'
+      AND ${dueConditionSql("topup")}
+    ORDER BY o.created_at ASC
+    LIMIT $2
     `,
-    [Math.max(1, Math.min(Number(limit) || 50, 200))]
+    [TOPUP_ORDER_ACTIVE_STATUSES, maxLimit]
   );
 
-  return q.rows || [];
-}
+  result.topup_candidates = topupQ.rowCount;
 
-async function sendOneReminder(client, row, options = {}) {
-  const chatId = String(row?.chat_id || "").trim();
-  const guideUrl = buildPaymeGuideUrl(row);
-  if (!chatId || !guideUrl) return { ok: false, reason: "missing_chat_or_url" };
+  for (const row of topupQ.rows) {
+    const step = Math.min(Number(row.reminder_count || 0) + 1, 3);
+    const guideUrl = buildPaymeGuideUrl(row.pay_url, {
+      kind: "topup",
+      orderId: row.id,
+      serviceId: row.service_id,
+    });
 
-  const text = buildReminderText(row);
-  const buttonText =
-    String(row?.order_type || row?.purpose || "") === "provider_support"
-      ? "❤️ Продолжить поддержку"
-      : "🔓 Продолжить оплату";
+    if (!guideUrl) continue;
 
-  let sent = false;
-  let error = "";
-
-  if (!options.dryRun) {
-    try {
-      sent = await tgSend(chatId, text, {
-        reply_markup: {
-          inline_keyboard: [[{ text: buttonText, url: guideUrl }]],
-        },
-      });
-    } catch (e) {
-      sent = false;
-      error = e?.response?.data?.description || e?.message || String(e);
-    }
-  } else {
-    sent = true;
-  }
-
-  if (sent) {
-    const nextCount = Number(row.reminder_count || 0) + 1;
-    await client.query(
-      `
-        UPDATE topup_orders
-           SET reminder_count = $2,
-               last_reminder_sent_at = NOW(),
-               meta = COALESCE(meta, '{}'::jsonb) || jsonb_build_object(
-                 'abandoned_payme_last_reminder_at', NOW(),
-                 'abandoned_payme_reminder_count', $2
-               )
-         WHERE id = $1
-      `,
-      [row.order_id, nextCount]
-    );
-
-    if (row.support_donation_id && (await relationExists(client, "provider_support_donations"))) {
-      await client.query(
-        `
-          UPDATE provider_support_donations
-             SET reminder_count = $2,
-                 last_reminder_sent_at = NOW()
-           WHERE id = $1
-        `,
-        [row.support_donation_id, nextCount]
-      );
-    }
-
-    return { ok: true, order_id: row.order_id, reminder_count: nextCount };
-  }
-
-  return { ok: false, order_id: row.order_id, reason: error || "telegram_send_failed" };
-}
-
-async function runAbandonedPaymeReminderJob(options = {}) {
-  const client = await pool.connect();
-  const limit = Math.max(1, Math.min(Number(options.limit) || 50, 200));
-  const dryRun = Boolean(options.dryRun);
-
-  try {
-    await ensureAbandonedPaymeShape(client);
-    const expired = await expireCreatedPaymeOrders({ client });
-    const candidates = await listDueReminderCandidates(client, limit);
-
-    let sent = 0;
-    let failed = 0;
-    const errors = [];
-
-    for (const row of candidates) {
+    if (!dryRun) {
       try {
-        const result = await sendOneReminder(client, row, { dryRun });
-        if (result.ok) sent += 1;
-        else {
-          failed += 1;
-          errors.push({ order_id: row.order_id, reason: result.reason });
-        }
+        const ok = await tgSend(row.telegram_chat_id, buildTopupReminderText(row, step), {
+          reply_markup: {
+            inline_keyboard: [[{ text: "💳 Продолжить оплату", url: guideUrl }]],
+          },
+        });
+
+        if (!ok) continue;
+
+        await pool.query(
+          `
+          UPDATE topup_orders
+             SET reminder_count = COALESCE(reminder_count, 0) + 1,
+                 last_reminder_sent_at = NOW(),
+                 reminder_1_sent_at = CASE WHEN $2 = 1 AND reminder_1_sent_at IS NULL THEN NOW() ELSE reminder_1_sent_at END,
+                 reminder_2_sent_at = CASE WHEN $2 = 2 AND reminder_2_sent_at IS NULL THEN NOW() ELSE reminder_2_sent_at END,
+                 reminder_3_sent_at = CASE WHEN $2 = 3 AND reminder_3_sent_at IS NULL THEN NOW() ELSE reminder_3_sent_at END,
+                 meta = jsonb_set(
+                   COALESCE(meta, '{}'::jsonb),
+                   '{last_abandoned_reminder}',
+                   jsonb_build_object('at', NOW(), 'step', $2),
+                   true
+                 )
+           WHERE id = $1
+          `,
+          [row.id, step]
+        );
       } catch (e) {
-        failed += 1;
-        errors.push({ order_id: row.order_id, reason: e?.message || String(e) });
+        result.errors.push({ table: "topup_orders", id: row.id, error: e?.message || String(e) });
+        continue;
       }
     }
 
-    return {
-      ok: true,
-      dryRun,
-      expired,
-      checked: candidates.length,
-      sent,
-      failed,
-      errors: errors.slice(0, 20),
-    };
-  } finally {
-    client.release();
+    result.topup_sent += 1;
+  }
+
+  const supportQ = await pool.query(
+    `
+    SELECT
+      d.id,
+      d.provider_id,
+      d.service_id,
+      d.amount_tiyin,
+      d.payme_order_id,
+      COALESCE(d.reminder_count, 0) AS reminder_count,
+      COALESCE(d.telegram_chat_id, p.telegram_chat_id, p.tg_chat_id, o.telegram_chat_id) AS telegram_chat_id,
+      COALESCE(o.pay_url, '') AS pay_url,
+      p.name AS provider_name,
+      s.title AS service_title
+    FROM provider_support_donations d
+    LEFT JOIN providers p ON p.id = d.provider_id
+    LEFT JOIN topup_orders o ON o.id = d.payme_order_id
+    LEFT JOIN services s ON s.id = d.service_id
+    WHERE LOWER(COALESCE(d.status, '')) = ANY($1::text[])
+      AND COALESCE(p.is_test_account, false) = false
+      AND COALESCE(d.reminder_count, 0) < 3
+      AND COALESCE(o.pay_url, '') <> ''
+      AND COALESCE(d.telegram_chat_id, p.telegram_chat_id, p.tg_chat_id, o.telegram_chat_id) IS NOT NULL
+      AND d.created_at >= NOW() - interval '7 days'
+      AND ${dueConditionSql("support")}
+    ORDER BY d.created_at ASC
+    LIMIT $2
+    `,
+    [SUPPORT_ACTIVE_STATUSES, maxLimit]
+  );
+
+  result.support_candidates = supportQ.rowCount;
+
+  for (const row of supportQ.rows) {
+    const step = Math.min(Number(row.reminder_count || 0) + 1, 3);
+    const guideUrl = buildPaymeGuideUrl(row.pay_url, {
+      kind: "support",
+      orderId: row.payme_order_id,
+      donationId: row.id,
+      serviceId: row.service_id,
+    });
+
+    if (!guideUrl) continue;
+
+    if (!dryRun) {
+      try {
+        const ok = await tgSend(row.telegram_chat_id, buildSupportReminderText(row, step), {
+          reply_markup: {
+            inline_keyboard: [[{ text: "❤️ Завершить поддержку", url: guideUrl }]],
+          },
+        });
+
+        if (!ok) continue;
+
+        await pool.query(
+          `
+          UPDATE provider_support_donations
+             SET reminder_count = COALESCE(reminder_count, 0) + 1,
+                 last_reminder_sent_at = NOW(),
+                 reminder_1_sent_at = CASE WHEN $2 = 1 AND reminder_1_sent_at IS NULL THEN NOW() ELSE reminder_1_sent_at END,
+                 reminder_2_sent_at = CASE WHEN $2 = 2 AND reminder_2_sent_at IS NULL THEN NOW() ELSE reminder_2_sent_at END,
+                 reminder_3_sent_at = CASE WHEN $2 = 3 AND reminder_3_sent_at IS NULL THEN NOW() ELSE reminder_3_sent_at END,
+                 meta = jsonb_set(
+                   COALESCE(meta, '{}'::jsonb),
+                   '{last_abandoned_reminder}',
+                   jsonb_build_object('at', NOW(), 'step', $2),
+                   true
+                 )
+           WHERE id = $1
+          `,
+          [row.id, step]
+        );
+      } catch (e) {
+        result.errors.push({ table: "provider_support_donations", id: row.id, error: e?.message || String(e) });
+        continue;
+      }
+    }
+
+    result.support_sent += 1;
+  }
+
+  return result;
+}
+
+async function runAbandonedPaymeReminderJob() {
+  try {
+    const result = await sendDuePaymeReminders({ dryRun: false, limit: 100 });
+    console.log("[payme-recovery] finished", result);
+    return result;
+  } catch (e) {
+    console.error("[payme-recovery] failed", e);
+    return { ok: false, error: e?.message || String(e) };
   }
 }
 
 module.exports = {
-  ensureAbandonedPaymeShape,
-  expireCreatedPaymeOrders,
+  ensureRecoveryColumns,
+  expireOldPaymeOrders,
+  sendDuePaymeReminders,
   runAbandonedPaymeReminderJob,
 };
