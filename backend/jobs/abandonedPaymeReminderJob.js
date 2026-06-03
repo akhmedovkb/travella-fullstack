@@ -180,22 +180,22 @@ async function expireOldPaymeOrders({ dryRun = false } = {}) {
   return result;
 }
 
-function dueConditionSql(kind) {
+function dueConditionSql(kind, alias = "o") {
   if (kind === "support") {
     return `
       (
-        (COALESCE(reminder_count, 0) = 0 AND created_at <= NOW() - interval '1 hour')
-        OR (COALESCE(reminder_count, 0) = 1 AND last_reminder_sent_at <= NOW() - interval '6 hours')
-        OR (COALESCE(reminder_count, 0) = 2 AND last_reminder_sent_at <= NOW() - interval '10 hours')
+        (COALESCE(${alias}.reminder_count, 0) = 0 AND ${alias}.created_at <= NOW() - interval '1 hour')
+        OR (COALESCE(${alias}.reminder_count, 0) = 1 AND ${alias}.last_reminder_sent_at <= NOW() - interval '6 hours')
+        OR (COALESCE(${alias}.reminder_count, 0) = 2 AND ${alias}.last_reminder_sent_at <= NOW() - interval '10 hours')
       )
     `;
   }
 
   return `
     (
-      (COALESCE(reminder_count, 0) = 0 AND created_at <= NOW() - interval '15 minutes')
-      OR (COALESCE(reminder_count, 0) = 1 AND last_reminder_sent_at <= NOW() - interval '3 hours')
-      OR (COALESCE(reminder_count, 0) = 2 AND last_reminder_sent_at <= NOW() - interval '10 hours')
+      (COALESCE(${alias}.reminder_count, 0) = 0 AND ${alias}.created_at <= NOW() - interval '15 minutes')
+      OR (COALESCE(${alias}.reminder_count, 0) = 1 AND ${alias}.last_reminder_sent_at <= NOW() - interval '3 hours')
+      OR (COALESCE(${alias}.reminder_count, 0) = 2 AND ${alias}.last_reminder_sent_at <= NOW() - interval '10 hours')
     )
   `;
 }
