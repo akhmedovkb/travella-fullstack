@@ -277,7 +277,7 @@ async function sendDuePaymeReminders({ dryRun = false, limit = 100 } = {}) {
       AND TRIM(o.pay_url) <> ''
       AND COALESCE(o.telegram_chat_id, c.telegram_chat_id, c.tg_chat_id) IS NOT NULL
       AND o.created_at >= NOW() - interval '7 days'
-      AND ${dueConditionSql("topup")}
+      AND ${dueConditionSql("topup", "o")}
     ORDER BY o.created_at ASC
     LIMIT $2
     `,
@@ -356,7 +356,7 @@ async function sendDuePaymeReminders({ dryRun = false, limit = 100 } = {}) {
       AND COALESCE(o.pay_url, '') <> ''
       AND COALESCE(d.telegram_chat_id, p.telegram_chat_id, p.tg_chat_id, o.telegram_chat_id) IS NOT NULL
       AND d.created_at >= NOW() - interval '7 days'
-      AND ${dueConditionSql("support")}
+      AND ${dueConditionSql("support", "d")}
     ORDER BY d.created_at ASC
     LIMIT $2
     `,
