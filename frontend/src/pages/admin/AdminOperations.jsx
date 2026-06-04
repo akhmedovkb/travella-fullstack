@@ -8,6 +8,7 @@ import AdminProviders from "./AdminProviders";
 import AdminClients from "./AdminClients";
 import AdminServiceAudit from "./AdminServiceAudit";
 import AdminHotelInspections from "./AdminHotelInspections";
+import AdminProviderFunnel from "./AdminProviderFunnel";
 
 const TABS = [
   {
@@ -19,6 +20,11 @@ const TABS = [
     id: "hotel_inspections",
     label: "Модерация инспекций отелей",
     hint: "Проверка pending-инспекций Hotel Passport, фото/видео и причин отклонения.",
+  },
+  {
+    id: "provider_funnel",
+    label: "Воронка поставщиков",
+    hint: "Где поставщики начинают создание услуг, где бросают и сколько доходит до proof/модерации.",
   },
   {
     id: "leads",
@@ -41,8 +47,9 @@ const TABS = [
     hint: "Поиск, просмотр и контроль зарегистрированных клиентов.",
   },
   {
-   id:"provider_actions",
-   label:"Действия поставщиков"
+    id: "provider_actions",
+    label: "Действия поставщиков",
+    hint: "Журнал действий поставщиков по услугам.",
   },
 ];
 
@@ -83,10 +90,11 @@ export default function AdminOperations() {
           <h1 className="text-xl font-semibold">Admin Operations</h1>
           <p className="text-sm text-gray-500">{activeMeta.hint}</p>
         </div>
-  
-        <div className="grid w-full grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-7">
+
+        <div className="grid w-full grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-8">
           <TabBtn id="moderation">Модерация услуг</TabBtn>
           <TabBtn id="hotel_inspections">Модерация инспекций отелей</TabBtn>
+          <TabBtn id="provider_funnel">Воронка поставщиков</TabBtn>
           <TabBtn id="leads">Leads</TabBtn>
           <TabBtn id="refused">Все отказные услуги</TabBtn>
           <TabBtn id="providers">Провайдеры</TabBtn>
@@ -94,14 +102,15 @@ export default function AdminOperations() {
           <TabBtn id="provider_actions">Действия поставщиков</TabBtn>
         </div>
       </div>
-  
+
       {activeTab === "moderation" && <AdminModeration />}
       {activeTab === "hotel_inspections" && <AdminHotelInspections embedded />}
+      {activeTab === "provider_funnel" && <AdminProviderFunnel embedded />}
       {activeTab === "leads" && <AdminLeads />}
       {activeTab === "refused" && <AdminRefusedActual />}
       {activeTab === "providers" && <AdminProviders />}
       {activeTab === "clients" && <AdminClients />}
-      {activeTab==="provider_actions" && (<AdminServiceAudit embedded />)}
+      {activeTab === "provider_actions" && <AdminServiceAudit embedded />}
     </div>
   );
 }
