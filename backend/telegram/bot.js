@@ -4212,6 +4212,8 @@ async function finishEditWizard(ctx) {
           : String(draft.flightDetails || "").trim() || null,
 
       expiration: expirationValue,
+      urgency: draft.urgency || null,
+      urgencyLabel: urgencyLabel(draft.urgency),
       isActive: !!draft.isActive,
     };
 
@@ -4258,20 +4260,11 @@ async function finishEditWizard(ctx) {
       ctx.session.editWiz = null;
       ctx.session.wizardStack = [];
       
-      await safeReply(
-        ctx,
-        "📸 Отправьте подтверждение (пруф):\n\n" +
-        "• скриншоты бронирования\n" +
-        "• ваучер\n" +
-        "• билеты\n\n" +
-        "После загрузки нажмите «✅ Готово»",
-        {
-          reply_markup: {
-            keyboard: [[{ text: "✅ Готово" }]],
-            resize_keyboard: true,
-          },
-        }
-      );
+      await replyProofUploadPrompt(ctx, {
+        serviceId: draft.id,
+        category,
+        isEditMode: true,
+      });
       
       return;
   } catch (e) {
@@ -5170,6 +5163,7 @@ async function replyProviderDraftResumePrompt(ctx, row) {
   
     svc_create_price: "Цена нетто",
     svc_create_grossPrice: "Цена для клиента",
+    svc_create_urgency: "Срочность продажи",
     svc_create_expiration: "Срок актуальности",
     svc_create_photo: "Фото услуги",
   };
@@ -5845,6 +5839,256 @@ function wizNavKeyboard() {
   };
 }
 
+
+function getServiceWizardOrder(category = "", state = "") {
+  const c = String(category || "").toLowerCase();
+  const st = String(state || "");
+
+  const tourOrder = [
+    "svc_create_title",
+    "svc_create_tour_country",
+    "svc_create_tour_from",
+    "svc_create_tour_to",
+    "svc_create_tour_start",
+    "svc_create_tour_end",
+    "svc_create_flight_departure",
+    "svc_create_flight_return",
+    "svc_create_flight_details",
+    "svc_create_tour_hotel",
+    "svc_create_tour_accommodation",
+    "svc_create_tour_roomcat",
+    "svc_create_tour_food",
+    "svc_create_price",
+    "svc_create_grossPrice",
+    "svc_create_urgency",
+    "svc_create_expiration",
+    "svc_create_photo",
+  ];
+
+  const hotelOrder = [
+    "svc_hotel_country",
+    "svc_hotel_city",
+    "svc_hotel_name",
+    "svc_hotel_checkin",
+    "svc_hotel_checkout",
+    "svc_hotel_roomcat",
+    "svc_hotel_accommodation",
+    "svc_hotel_food",
+    "svc_hotel_halal",
+    "svc_hotel_transfer",
+    "svc_hotel_changeable",
+    "svc_hotel_pax",
+    "svc_create_price",
+    "svc_create_grossPrice",
+    "svc_create_urgency",
+    "svc_create_expiration",
+    "svc_create_photo",
+  ];
+
+  const flightOrder = [
+    "svc_create_title",
+    "svc_create_tour_country",
+    "svc_create_tour_from",
+    "svc_create_tour_to",
+    "svc_create_flight_departure",
+    "svc_create_flight_return",
+    "svc_create_flight_details",
+    "svc_create_price",
+    "svc_create_grossPrice",
+    "svc_create_urgency",
+    "svc_create_expiration",
+    "svc_create_photo",
+  ];
+
+  const ticketOrder = [
+    "svc_create_title",
+    "svc_create_tour_country",
+    "svc_create_tour_from",
+    "svc_create_tour_to",
+    "svc_ticket_event_date",
+    "svc_create_price",
+    "svc_create_grossPrice",
+    "svc_create_urgency",
+    "svc_create_expiration",
+    "svc_create_photo",
+  ];
+
+  const authorOrder = [
+    "svc_author_title",
+    "svc_author_country",
+    "svc_author_from",
+    "svc_author_to",
+    "svc_author_start",
+    "svc_author_end",
+    "svc_author_format",
+    "svc_author_stays",
+    "svc_author_program_days",
+    "svc_author_included",
+    "svc_author_not_included",
+    "svc_author_pax",
+    "svc_author_language",
+    "svc_author_meeting",
+    "svc_author_cancel",
+    "svc_create_price",
+    "svc_create_grossPrice",
+    "svc_create_urgency",
+    "svc_create_expiration",
+    "svc_create_photo",
+  ];
+
+  if (c === "author_tour" || st.startsWith("svc_author_") || st.startsWith("author_")) return authorOrder;
+  if (c === "refused_hotel" || st.startsWith("svc_hotel_")) return hotelOrder;
+  if (c === "refused_flight") return flightOrder;
+  if (c === "refused_ticket" || c === "refused_event_ticket" || st === "svc_ticket_event_date") return ticketOrder;
+  return tourOrder;
+}
+
+function wizardProgressText(ctx, state) {
+  const draft = ctx.session?.serviceDraft || {};
+  const order = getServiceWizardOrder(draft.category, state);
+  const idx = order.indexOf(state);
+  if (idx < 0) return "";
+  const categoryLabel = providerDraftCategoryLabel(draft.category || "");
+  const pct = Math.round(((idx + 1) / order.length) * 100);
+  const barSize = 8;
+  const filled = Math.max(1, Math.round((pct / 100) * barSize));
+  const bar = "●".repeat(filled) + "○".repeat(Math.max(0, barSize - filled));
+  return `🧭 <b>${escapeHtml(categoryLabel)}</b>\nШаг <b>${idx + 1}</b> из <b>${order.length}</b> · ${pct}%\n${bar}`;
+}
+
+function buildUrgencyKeyboard() {
+  return {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "🔴 Срочно: сегодня", callback_data: "svc_urgency:urgent" }],
+        [{ text: "🟠 В течение 1–3 дней", callback_data: "svc_urgency:soon" }],
+        [{ text: "🟢 Не срочно", callback_data: "svc_urgency:normal" }],
+        [{ text: "⏭ Пропустить", callback_data: "svc_wiz:skip" }],
+        [
+          { text: "⬅️ Назад", callback_data: "svc_wiz:back" },
+          { text: "❌ Отмена", callback_data: "svc_wiz:cancel" },
+        ],
+      ],
+    },
+  };
+}
+
+function urgencyLabel(value) {
+  const v = String(value || "").toLowerCase();
+  if (v === "urgent") return "🔴 Срочно: сегодня";
+  if (v === "soon") return "🟠 В течение 1–3 дней";
+  if (v === "normal") return "🟢 Не срочно";
+  return "Не указано";
+}
+
+function buildProofKeyboard(serviceId, count = 0) {
+  const rows = [
+    [{ text: "➕ Добавить ещё", callback_data: "proof:add_more" }],
+  ];
+
+  if (count > 0) {
+    rows.push([{ text: "👀 Просмотреть", callback_data: `proof:view:${Number(serviceId || 0)}` }]);
+    rows.push([{ text: "🗑 Удалить последнее", callback_data: "proof:delete_last" }]);
+    rows.push([{ text: "✅ Отправить на модерацию", callback_data: "proof:submit" }]);
+  }
+
+  rows.push([{ text: "❌ Отменить отправку", callback_data: "proof:cancel" }]);
+  return { reply_markup: { inline_keyboard: rows } };
+}
+
+function buildDraftProofSummary(ctx, serviceId, count = 0) {
+  const draft = ctx.session?.serviceDraft || {};
+  const category = ctx.session?.awaitingProofForCategory || draft.category || "";
+  const lines = [];
+  lines.push(`📌 <b>${escapeHtml(providerDraftCategoryLabel(category))}</b>${serviceId ? ` <code>#${serviceId}</code>` : ""}`);
+  if (draft.title) lines.push(`📝 ${escapeHtml(draft.title)}`);
+  const route = [draft.country, draft.fromCity, draft.toCity].filter(Boolean).join(" → ");
+  if (route) lines.push(`🌍 ${escapeHtml(route)}`);
+  if (draft.startDate || draft.endDate) lines.push(`📅 ${escapeHtml([draft.startDate, draft.endDate].filter(Boolean).join(" → "))}`);
+  if (draft.price) lines.push(`💰 Нетто: ${escapeHtml(draft.price)}`);
+  if (draft.grossPrice) lines.push(`💳 Клиенту: ${escapeHtml(draft.grossPrice)}`);
+  if (draft.urgency) lines.push(`⚡ ${escapeHtml(urgencyLabel(draft.urgency))}`);
+  lines.push(`📎 Доказательств: <b>${Number(count || 0)}</b>`);
+  return lines.join("\n");
+}
+
+async function getProofImagesForService(serviceId) {
+  if (!pool || !serviceId) return [];
+  const r = await pool.query(
+    `SELECT details FROM services WHERE id = $1 LIMIT 1`,
+    [Number(serviceId)]
+  );
+  const details = r.rows?.[0]?.details && typeof r.rows[0].details === "object" ? r.rows[0].details : {};
+  return Array.isArray(details.proofImages) ? details.proofImages.filter(Boolean) : [];
+}
+
+async function replyProofUploadPrompt(ctx, { serviceId, category, isEditMode = false } = {}) {
+  if (!ctx.session) ctx.session = {};
+  if (serviceId) ctx.session.awaitingProofForServiceId = Number(serviceId);
+  if (category) ctx.session.awaitingProofForCategory = String(category || "").toLowerCase();
+
+  const count = (await getProofImagesForService(serviceId)).length;
+  await safeReply(
+    ctx,
+    `${isEditMode ? "✅ Изменения сохранены." : "✅ Услуга сохранена."}\n\n` +
+      `📸 <b>Теперь прикрепите доказательства подлинности</b>\n\n` +
+      `Можно отправить скриншоты бронирования, ваучер, билет или подтверждение от поставщика.\n\n` +
+      `${buildDraftProofSummary(ctx, serviceId, count)}\n\n` +
+      `После загрузки нажмите кнопку <b>«✅ Отправить на модерацию»</b>.`,
+    {
+      parse_mode: "HTML",
+      ...buildProofKeyboard(serviceId, count),
+    }
+  );
+}
+
+async function sendProofPreview(ctx, serviceId) {
+  const images = await getProofImagesForService(serviceId);
+  if (!images.length) {
+    await safeReply(ctx, "📎 Доказательства пока не загружены. Отправьте фото/скриншот сюда в чат.", buildProofKeyboard(serviceId, 0));
+    return;
+  }
+
+  await safeReply(ctx, `👀 Загружено доказательств: ${images.length}. Показываю первые ${Math.min(images.length, 8)}.`);
+
+  for (const item of images.slice(0, 8)) {
+    const s = String(item || "");
+    try {
+      if (s.startsWith("data:image/")) {
+        const base64 = s.split(",")[1] || "";
+        const buf = Buffer.from(base64, "base64");
+        await ctx.replyWithPhoto({ source: buf }, { caption: "📎 Подтверждение" });
+      } else {
+        await ctx.replyWithPhoto(s, { caption: "📎 Подтверждение" });
+      }
+    } catch (e) {
+      console.error("[tg-bot] proof preview item error:", e?.message || e);
+    }
+  }
+
+  await safeReply(ctx, "Что сделать дальше?", buildProofKeyboard(serviceId, images.length));
+}
+
+async function deleteLastProofImage(ctx) {
+  const serviceId = Number(ctx.session?.awaitingProofForServiceId || 0);
+  if (!serviceId) return;
+
+  const r = await pool.query(`SELECT details FROM services WHERE id = $1 LIMIT 1`, [serviceId]);
+  const currentDetails = r.rows?.[0]?.details && typeof r.rows[0].details === "object" ? r.rows[0].details : {};
+  const proofImages = Array.isArray(currentDetails.proofImages) ? currentDetails.proofImages.filter(Boolean) : [];
+  if (!proofImages.length) {
+    await safeReply(ctx, "📎 Список доказательств уже пуст.", buildProofKeyboard(serviceId, 0));
+    return;
+  }
+
+  proofImages.pop();
+  await pool.query(
+    `UPDATE services SET details = $1::jsonb, updated_at = NOW() WHERE id = $2`,
+    [JSON.stringify({ ...currentDetails, proofImages }), serviceId]
+  );
+  await safeReply(ctx, `🗑 Последнее доказательство удалено. Осталось: ${proofImages.length}.`, buildProofKeyboard(serviceId, proofImages.length));
+}
+
 function yesNoWizardKeyboard() {
   return {
     reply_markup: {
@@ -6466,6 +6710,7 @@ function wizardCurrentPreview(ctx, state) {
 
     svc_create_price: ["Нетто", d.price || d.netPrice],
     svc_create_grossPrice: ["Цена для клиента", d.grossPrice],
+    svc_create_urgency: ["Срочность", urgencyLabel(d.urgency)],
     svc_create_expiration: ["Актуально до", d.expiration],
     svc_create_photo: ["Фото", Array.isArray(d.images) ? `${d.images.length} шт.` : ""],
   };
@@ -6475,6 +6720,11 @@ function wizardCurrentPreview(ctx, state) {
 }
 
 async function promptWizardState(ctx, state) {
+  const progressText = wizardProgressText(ctx, state);
+  if (progressText) {
+    await ctx.reply(progressText, { parse_mode: "HTML" });
+  }
+
   const currentPreview = wizardCurrentPreview(ctx, state);
   if (currentPreview) {
     await ctx.reply(currentPreview);
@@ -7024,6 +7274,13 @@ async function promptWizardState(ctx, state) {
       return;
     }
 
+    case "svc_create_urgency":
+      await ctx.reply(
+        "⚡ <b>Как быстро нужно продать?</b>\n\nЭто поможет Travella выделять самые срочные отказные предложения и правильнее сортировать карточки.",
+        { parse_mode: "HTML", ...buildUrgencyKeyboard() }
+      );
+      return;
+
     case "svc_create_expiration":
       await replyWizardCalendar(ctx, "svc_create_expiration");
       return;
@@ -7041,7 +7298,7 @@ async function promptWizardState(ctx, state) {
           reply_markup: {
             inline_keyboard: [
               [{ text: "🧹 Очистить фото", callback_data: "svc_photo:clear" }],
-              [{ text: "✅ Готово", callback_data: "svc_photo:done" }],
+              [{ text: "✅ Завершить фото", callback_data: "svc_photo:done" }],
               [{ text: "⏭ Пропустить", callback_data: "svc_wiz:skip" }],
               [
                 { text: "⬅️ Назад", callback_data: "svc_wiz:back" },
@@ -7159,6 +7416,11 @@ async function finishCreateServiceFromWizard(ctx) {
           : autoTitleRefusedHotel(draft);
     }
 
+    if (details && typeof details === "object") {
+      details.urgency = draft.urgency || null;
+      details.urgencyLabel = urgencyLabel(draft.urgency);
+    }
+
     const payload = {
       category,
       title,
@@ -7199,14 +7461,11 @@ async function finishCreateServiceFromWizard(ctx) {
       ctx.session.awaitingProofForServiceId = createdServiceId;
       ctx.session.awaitingProofForCategory = String(category || "").toLowerCase();
 
-      await ctx.reply(
-        `${isEditMode ? "✅ Изменения" : "✅ Заявка"} #${createdServiceId} сохранены.\n\n` +
-          `Теперь для отправки на модерацию вы обязаны отправить скриншоты, ` +
-          `подтверждающие подлинность тура / программы / бронирований / договорённостей. ` +
-          `тура / отеля / авиабилета / билета на мероприятие.\n\n` +
-          `📎 Отправьте сюда изображения подтверждения.\n` +
-          `Когда закончите, отправьте сообщение: ГОТОВО`
-      );
+      await replyProofUploadPrompt(ctx, {
+        serviceId: createdServiceId,
+        category,
+        isEditMode,
+      });
 
       resetServiceWizard(ctx);
 
@@ -8880,6 +9139,25 @@ bot.action("svc_wiz:cancel", async (ctx) => {
   }
 });
 
+
+bot.action(/^svc_urgency:(urgent|soon|normal)$/, async (ctx) => {
+  try {
+    await safeCb(ctx, "Срочность сохранена");
+    if (!ctx.session) ctx.session = {};
+    if (!ctx.session.serviceDraft) ctx.session.serviceDraft = {};
+    const value = String(ctx.match[1] || "normal");
+    ctx.session.serviceDraft.urgency = value;
+    pushWizardState(ctx, "svc_create_urgency");
+    ctx.session.state = "svc_create_expiration";
+    await safeReply(ctx, `${urgencyLabel(value)}\n\nПереходим к сроку актуальности.`);
+    await promptWizardState(ctx, "svc_create_expiration");
+    await persistProviderCreateWizard(ctx);
+  } catch (e) {
+    console.error("[tg-bot] svc_urgency error:", e?.message || e);
+    await safeReply(ctx, "⚠️ Не удалось сохранить срочность. Попробуйте ещё раз.");
+  }
+});
+
 bot.action("svc_wiz:back", async (ctx) => {
   try {
     await ctx.answerCbQuery();
@@ -8998,6 +9276,7 @@ bot.action("svc_wiz:skip", async (ctx) => {
       "svc_create_tour_food",   
       "svc_create_price",
       "svc_create_grossPrice",
+      "svc_create_urgency",
       "svc_create_expiration",
       "svc_create_photo",
     ];
@@ -9017,6 +9296,7 @@ bot.action("svc_wiz:skip", async (ctx) => {
       "svc_hotel_pax",
       "svc_create_price",
       "svc_create_grossPrice",
+      "svc_create_urgency",
       "svc_create_expiration",
       "svc_create_photo",
     ];
@@ -9031,6 +9311,7 @@ bot.action("svc_wiz:skip", async (ctx) => {
       "svc_create_flight_details",
       "svc_create_price",
       "svc_create_grossPrice",
+      "svc_create_urgency",
       "svc_create_expiration",
       "svc_create_photo",
     ];
@@ -9043,6 +9324,7 @@ bot.action("svc_wiz:skip", async (ctx) => {
       "svc_ticket_event_date",
       "svc_create_price",
       "svc_create_grossPrice",
+      "svc_create_urgency",
       "svc_create_expiration",
       "svc_create_photo",
     ];
@@ -9065,6 +9347,7 @@ bot.action("svc_wiz:skip", async (ctx) => {
       "svc_author_cancel",
       "svc_create_price",
       "svc_create_grossPrice",
+      "svc_create_urgency",
       "svc_create_expiration",
       "svc_create_photo",
     ];
@@ -9089,6 +9372,7 @@ bot.action("svc_wiz:skip", async (ctx) => {
       "svc_create_tour_roomcat",
       "svc_create_tour_food",
       "svc_create_grossPrice",
+      "svc_create_urgency",
       "svc_create_expiration", // можно поставить "нет" (кнопка = быстрый переход)
       "svc_create_photo",
     ]);
@@ -9119,6 +9403,9 @@ bot.action("svc_wiz:skip", async (ctx) => {
 
       if (state === "svc_create_grossPrice") {
         draft.grossPrice = null;
+      }
+      if (state === "svc_create_urgency") {
+        draft.urgency = "normal";
       }
       if (state === "svc_create_expiration") {
         draft.expiration = null;
@@ -9157,9 +9444,11 @@ bot.action("svc_wiz:skip", async (ctx) => {
         : state === "svc_create_flight_details"
           ? (category === "refused_flight" ? "svc_create_price" : "svc_create_tour_hotel")
           : state === "svc_create_grossPrice"
-            ? "svc_create_expiration"
-            : state === "svc_create_expiration"
-              ? "svc_create_photo"
+            ? "svc_create_urgency"
+            : state === "svc_create_urgency"
+              ? "svc_create_expiration"
+              : state === "svc_create_expiration"
+                ? "svc_create_photo"
               : null;
 
     const idx = order.indexOf(state);
@@ -14671,6 +14960,21 @@ bot.on("text", async (ctx, next) => {
           const lower = text.trim().toLowerCase();
           draft.grossPrice = lower === "пропустить" || lower === "нет" ? null : text;
           pushWizardState(ctx, "svc_create_grossPrice");
+          ctx.session.state = "svc_create_urgency";
+          await promptWizardState(ctx, "svc_create_urgency");
+          return;
+        }
+
+        case "svc_create_urgency": {
+          const lower = text.trim().toLowerCase();
+          if (/сроч|urgent|сегодня|крас/i.test(lower)) draft.urgency = "urgent";
+          else if (/1|3|дн|soon|скоро|оранж/i.test(lower)) draft.urgency = "soon";
+          else if (/нет|обыч|normal|не сроч|зел/i.test(lower)) draft.urgency = "normal";
+          else {
+            await ctx.reply("Выберите срочность кнопкой ниже 👇", { parse_mode: "HTML", ...buildUrgencyKeyboard() });
+            return;
+          }
+          pushWizardState(ctx, "svc_create_urgency");
           ctx.session.state = "svc_create_expiration";
           await promptWizardState(ctx, "svc_create_expiration");
           return;
@@ -14839,7 +15143,8 @@ bot.on("photo", async (ctx, next) => {
 
       await safeReply(
         ctx,
-        `📎 Скриншот подтверждения сохранён.\nСейчас загружено: ${proofImages.length} шт.\n\nОтправьте ещё скриншоты или напишите «ГОТОВО».`
+        `📎 Доказательство загружено.\nСейчас загружено: ${proofImages.length} шт.\n\nПроверьте материалы и отправьте услугу на модерацию.`,
+        buildProofKeyboard(proofServiceId, proofImages.length)
       );
       return;
     }
@@ -14910,7 +15215,7 @@ bot.on("photo", async (ctx, next) => {
           reply_markup: {
             inline_keyboard: [
               [{ text: "🧹 Очистить фото", callback_data: "svc_photo:clear" }],
-              [{ text: "✅ Готово", callback_data: "svc_photo:done" }],
+              [{ text: "✅ Завершить фото", callback_data: "svc_photo:done" }],
               [{ text: "⏭ Пропустить", callback_data: "svc_wiz:skip" }],
               [
                 { text: "⬅️ Назад", callback_data: "svc_wiz:back" },
@@ -15004,10 +15309,10 @@ async function finishProofSubmissionFromBot(ctx) {
 
     await safeReply(
       ctx,
-      `✅ Готово!\n\n` +
-        `Услуга #${serviceId} отправлена на модерацию.\n` +
-        `Скриншоты подтверждения прикреплены.\n` +
-        `После одобрения услуга появится в поиске.`
+      `📨 Услуга #${serviceId} отправлена на модерацию.\n\n` +
+        `Статус: ⏳ На модерации\n` +
+        `Доказательства подлинности прикреплены.\n\n` +
+        `После одобрения объявление появится в Travella, маркетплейсе и Telegram-поиске.`
     );
 
     await safeReply(ctx, "Что делаем дальше? 👇", {
@@ -15029,6 +15334,40 @@ async function finishProofSubmissionFromBot(ctx) {
     );
   }
 }
+
+bot.action("proof:submit", async (ctx) => {
+  await safeCb(ctx, "Отправляем на модерацию…");
+  await finishProofSubmissionFromBot(ctx);
+});
+
+bot.action("proof:add_more", async (ctx) => {
+  const serviceId = Number(ctx.session?.awaitingProofForServiceId || 0);
+  const count = serviceId ? (await getProofImagesForService(serviceId)).length : 0;
+  await safeCb(ctx, "Отправьте следующий скриншот сюда в чат");
+  await safeReply(
+    ctx,
+    `📎 Отправьте ещё скриншот / ваучер / билет сюда в чат.\n\nСейчас загружено: ${count}.`,
+    buildProofKeyboard(serviceId, count)
+  );
+});
+
+bot.action(/^proof:view:(\d+)$/, async (ctx) => {
+  await safeCb(ctx, "Показываю доказательства");
+  await sendProofPreview(ctx, Number(ctx.match[1]));
+});
+
+bot.action("proof:delete_last", async (ctx) => {
+  await safeCb(ctx, "Удаляю последнее доказательство…");
+  await deleteLastProofImage(ctx);
+});
+
+bot.action("proof:cancel", async (ctx) => {
+  await safeCb(ctx, "Отправка отменена");
+  if (!ctx.session) ctx.session = {};
+  ctx.session.awaitingProofForServiceId = null;
+  ctx.session.awaitingProofForCategory = null;
+  await safeReply(ctx, "❌ Отправка на модерацию отменена. Услуга сохранена как черновик/ожидающая подтверждения.");
+});
 
 bot.hears(/^(готово|done)$/i, async (ctx) => {
   await finishProofSubmissionFromBot(ctx);
