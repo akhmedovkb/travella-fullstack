@@ -2,158 +2,164 @@
 
 const pool = require("../db");
 
+function toBool(v) {
+  return v === true || String(v || "").toLowerCase() === "true" || String(v || "") === "1";
+}
+
+async function tableColumns(client, tableName) {
+  const { rows } = await client.query(
+    `
+      SELECT column_name
+        FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = $1
+       ORDER BY ordinal_position
+    `,
+    [tableName]
+  );
+  return new Set(rows.map((r) => r.column_name));
+}
+
 async function adminPaymeAutoFix(req, res) {
+  const client = await pool.connect();
+  const apply = toBool(req.query?.apply || req.body?.apply);
+
+  const report = {
+    success: true,
+    mode: apply ? "apply_safe" : "audit_only",
+    warning:
+      "Dangerous auto-fix is disabled. This endpoint does not force Payme state=2 and does not create ledger rows manually. Payme must be finalized only through PerformTransaction or a reviewed manual recovery.",
+    schema: {},
+    candidates: {
+      stuck_state1_older_than_10_min: 0,
+      completed_missing_perform_time: 0,
+      completed_missing_topup_paid: 0,
+      completed_without_ledger_effect: 0,
+      duplicate_payme_id_groups: 0,
+    },
+    fixed: {
+      topup_paid_synced: 0,
+    },
+    errors: [],
+  };
+
   try {
-    const report = {
-      fixed_state1: 0,
-      fixed_missing_perform: 0,
-      fixed_missing_ledger: 0,
-      duplicates_removed: 0,
-      errors: [],
-    };
+    const txCols = await tableColumns(client, "payme_transactions");
+    const orderCols = await tableColumns(client, "topup_orders");
+    const effectCols = await tableColumns(client, "payme_ledger_effects");
 
-    const client = await pool.connect();
+    report.schema.payme_transactions = Array.from(txCols);
+    report.schema.topup_orders = Array.from(orderCols);
+    report.schema.payme_ledger_effects = Array.from(effectCols);
 
-    try {
-      await client.query("BEGIN");
-
-      // -----------------------------
-      // 1️⃣ зависшие state=1 → state=2
-      // -----------------------------
-      const stuck = await client.query(`
-        SELECT id, payme_id, amount
-        FROM payme_transactions
-        WHERE state = 1
-        AND create_time < NOW() - INTERVAL '10 minutes'
-      `);
-
-      for (const tx of stuck.rows) {
-        await client.query(
-          `
-          UPDATE payme_transactions
-          SET state = 2,
-              perform_time = NOW()
-          WHERE id = $1
-        `,
-          [tx.id]
-        );
-
-        report.fixed_state1++;
-      }
-
-      // --------------------------------
-      // 2️⃣ perform_time отсутствует
-      // --------------------------------
-      const missingPerform = await client.query(`
-        SELECT id
-        FROM payme_transactions
-        WHERE state = 2
-        AND perform_time IS NULL
-      `);
-
-      for (const tx of missingPerform.rows) {
-        await client.query(
-          `
-          UPDATE payme_transactions
-          SET perform_time = NOW()
-          WHERE id = $1
-        `,
-          [tx.id]
-        );
-
-        report.fixed_missing_perform++;
-      }
-
-      // --------------------------------
-      // 3️⃣ нет записи в ledger
-      // --------------------------------
-      const missingLedger = await client.query(`
-        SELECT p.id, p.payme_id, p.amount, p.order_id
-        FROM payme_transactions p
-        LEFT JOIN contact_balance_ledger l
-        ON l.ref_id = p.payme_id
-        WHERE p.state = 2
-        AND l.id IS NULL
-      `);
-
-      for (const tx of missingLedger.rows) {
-        await client.query(
-          `
-          INSERT INTO contact_balance_ledger
-          (client_id, amount, type, ref_id, created_at)
-          VALUES (
-            $1,
-            $2,
-            'topup',
-            $3,
-            NOW()
-          )
-        `,
-          [tx.order_id, tx.amount / 100, tx.payme_id]
-        );
-
-        report.fixed_missing_ledger++;
-      }
-
-      // --------------------------------
-      // 4️⃣ удаляем дубли
-      // --------------------------------
-      const duplicates = await client.query(`
-        SELECT payme_id
-        FROM payme_transactions
-        GROUP BY payme_id
-        HAVING COUNT(*) > 1
-      `);
-
-      for (const row of duplicates.rows) {
-        const dups = await client.query(
-          `
-          SELECT id
-          FROM payme_transactions
-          WHERE payme_id = $1
-          ORDER BY id
-        `,
-          [row.payme_id]
-        );
-
-        const keep = dups.rows[0].id;
-
-        for (let i = 1; i < dups.rows.length; i++) {
-          await client.query(
-            `
-            DELETE FROM payme_transactions
-            WHERE id = $1
-          `,
-            [dups.rows[i].id]
-          );
-
-          report.duplicates_removed++;
-        }
-      }
-
-      await client.query("COMMIT");
-
-      res.json({
-        success: true,
-        report,
-      });
-    } catch (err) {
-      await client.query("ROLLBACK");
-
-      report.errors.push(err.message);
-
-      res.status(500).json({
+    if (!txCols.has("payme_id") || !txCols.has("state")) {
+      return res.status(400).json({
+        ...report,
         success: false,
-        report,
+        errors: ["payme_transactions schema is missing payme_id/state"],
       });
-    } finally {
-      client.release();
     }
+
+    const tenMinutesAgoMs = Date.now() - 10 * 60 * 1000;
+
+    if (txCols.has("create_time")) {
+      const { rows } = await client.query(
+        `
+          SELECT COUNT(*)::int AS count
+            FROM payme_transactions
+           WHERE state = 1
+             AND create_time IS NOT NULL
+             AND create_time < $1
+        `,
+        [tenMinutesAgoMs]
+      );
+      report.candidates.stuck_state1_older_than_10_min = Number(rows[0]?.count || 0);
+    }
+
+    if (txCols.has("perform_time")) {
+      const { rows } = await client.query(
+        `
+          SELECT COUNT(*)::int AS count
+            FROM payme_transactions
+           WHERE state = 2
+             AND perform_time IS NULL
+        `
+      );
+      report.candidates.completed_missing_perform_time = Number(rows[0]?.count || 0);
+    }
+
+    if (txCols.has("order_id") && orderCols.has("id") && orderCols.has("status")) {
+      const { rows } = await client.query(
+        `
+          SELECT COUNT(*)::int AS count
+            FROM payme_transactions p
+            JOIN topup_orders o ON o.id = p.order_id
+           WHERE p.state = 2
+             AND LOWER(COALESCE(o.status, '')) <> 'paid'
+        `
+      );
+      report.candidates.completed_missing_topup_paid = Number(rows[0]?.count || 0);
+    }
+
+    if (effectCols.has("transaction_id")) {
+      const { rows } = await client.query(
+        `
+          SELECT COUNT(*)::int AS count
+            FROM payme_transactions p
+            LEFT JOIN payme_ledger_effects e ON e.transaction_id = p.payme_id
+           WHERE p.state = 2
+             AND e.transaction_id IS NULL
+        `
+      );
+      report.candidates.completed_without_ledger_effect = Number(rows[0]?.count || 0);
+    }
+
+    const { rows: duplicateRows } = await client.query(
+      `
+        SELECT COUNT(*)::int AS count
+          FROM (
+            SELECT payme_id
+              FROM payme_transactions
+             WHERE payme_id IS NOT NULL
+             GROUP BY payme_id
+            HAVING COUNT(*) > 1
+          ) d
+      `
+    );
+    report.candidates.duplicate_payme_id_groups = Number(duplicateRows[0]?.count || 0);
+
+    // Safe optional repair: sync topup_orders.status='paid' only for already completed Payme transactions.
+    // This does NOT create ledger rows and does NOT force transaction completion.
+    if (apply && txCols.has("order_id") && orderCols.has("id") && orderCols.has("status")) {
+      await client.query("BEGIN");
+      try {
+        const paidAtExpr = orderCols.has("paid_at") ? ", paid_at = COALESCE(paid_at, NOW())" : "";
+        const { rowCount } = await client.query(
+          `
+            UPDATE topup_orders o
+               SET status = 'paid'
+                   ${paidAtExpr}
+              FROM payme_transactions p
+             WHERE p.order_id = o.id
+               AND p.state = 2
+               AND LOWER(COALESCE(o.status, '')) NOT IN ('paid', 'refunded')
+          `
+        );
+        report.fixed.topup_paid_synced = rowCount;
+        await client.query("COMMIT");
+      } catch (e) {
+        await client.query("ROLLBACK");
+        throw e;
+      }
+    }
+
+    return res.json(report);
   } catch (err) {
-    res.status(500).json({
-      success: false,
-      error: err.message,
-    });
+    report.success = false;
+    report.errors.push(err?.message || String(err));
+    return res.status(500).json(report);
+  } finally {
+    client.release();
   }
 }
 
