@@ -47,6 +47,7 @@ import AdminFinance from "./pages/admin/AdminFinance";
 import AdminOperations from "./pages/admin/AdminOperations";
 import AdminProviderSupport from "./pages/admin/AdminProviderSupport";
 import AdminServiceAudit from "./pages/admin/AdminServiceAudit";
+import AdminProviderFunnel from "./pages/admin/AdminProviderFunnel";
 import PassportParser from "./pages/PassportParser";
 import SupportSuccess from "./pages/SupportSuccess";
 import SupportProject from "./pages/SupportProject";
@@ -417,6 +418,16 @@ export default function App() {
                 <PrivateRoute>
                   <AdminRoute>
                     <AdminProviderSupport />
+                  </AdminRoute>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/admin/provider-funnel"
+              element={
+                <PrivateRoute>
+                  <AdminRoute>
+                    <AdminProviderFunnel />
                   </AdminRoute>
                 </PrivateRoute>
               }
