@@ -195,7 +195,24 @@ async function applyServiceLifecycleAction(pool, { providerId, serviceId, action
       `UPDATE services
           SET status = CASE
                 WHEN status = 'archived' AND COALESCE(moderation_status, '') = 'approved' THEN 'published'
+                WHEN status = 'archived' THEN 'draft'
                 ELSE status
+              END,
+              moderation_status = CASE
+                WHEN status = 'archived' AND COALESCE(moderation_status, '') <> 'approved' THEN 'draft'
+                ELSE moderation_status
+              END,
+              submitted_at = CASE
+                WHEN status = 'archived' AND COALESCE(moderation_status, '') <> 'approved' THEN NULL
+                ELSE submitted_at
+              END,
+              rejected_at = CASE
+                WHEN status = 'archived' AND COALESCE(moderation_status, '') <> 'approved' THEN NULL
+                ELSE rejected_at
+              END,
+              rejected_reason = CASE
+                WHEN status = 'archived' AND COALESCE(moderation_status, '') <> 'approved' THEN NULL
+                ELSE rejected_reason
               END,
               expiration_at = COALESCE(expiration_at, NOW()) + interval '7 days',
               details = jsonb_set(
@@ -231,8 +248,23 @@ async function applyServiceLifecycleAction(pool, { providerId, serviceId, action
       `UPDATE services
           SET status = CASE
                 WHEN COALESCE(moderation_status, '') = 'approved' THEN 'published'
-                WHEN status = 'archived' THEN 'published'
-                ELSE status
+                ELSE 'draft'
+              END,
+              moderation_status = CASE
+                WHEN COALESCE(moderation_status, '') = 'approved' THEN moderation_status
+                ELSE 'draft'
+              END,
+              submitted_at = CASE
+                WHEN COALESCE(moderation_status, '') = 'approved' THEN submitted_at
+                ELSE NULL
+              END,
+              rejected_at = CASE
+                WHEN COALESCE(moderation_status, '') = 'approved' THEN rejected_at
+                ELSE NULL
+              END,
+              rejected_reason = CASE
+                WHEN COALESCE(moderation_status, '') = 'approved' THEN rejected_reason
+                ELSE NULL
               END,
               expiration_at = NOW() + interval '7 days',
               details = jsonb_set(
@@ -341,9 +373,37 @@ async function applyServiceLifecycleAction(pool, { providerId, serviceId, action
   };
 }
 
+
+function getServiceLifecycleState(service = {}) {
+  const status = String(service.status || "").toLowerCase();
+  const moderationStatus = String(service.moderation_status || "").toLowerCase();
+
+  if (service.deleted_at || status === "deleted") return "deleted";
+  if (status === "archived") return "archived";
+  if (status === "pending" || moderationStatus === "pending") return "pending";
+  if (status === "rejected" || moderationStatus === "rejected") return "rejected";
+  if (status === "published" || status === "active" || status === "approved") return "published";
+  return "draft";
+}
+
+function getServiceLifecycleLabel(service = {}) {
+  const state = getServiceLifecycleState(service);
+  const labels = {
+    draft: "Черновик",
+    pending: "На модерации",
+    rejected: "Отклонено",
+    published: "Опубликовано",
+    archived: "Архив",
+    deleted: "Корзина",
+  };
+  return labels[state] || labels.draft;
+}
+
 module.exports = {
   SERVICE_LIFECYCLE_ACTIONS,
   applyServiceLifecycleAction,
   fetchServiceForLifecycle,
   getProofImages,
+  getServiceLifecycleState,
+  getServiceLifecycleLabel,
 };
