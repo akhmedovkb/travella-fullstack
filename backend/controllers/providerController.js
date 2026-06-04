@@ -2069,32 +2069,30 @@ const restoreProviderService = async (req, res) => {
       return res.status(403).json({ message: "Forbidden" });
     }
 
-    const upd = await pool.query(
-      `
-      UPDATE services
-         SET deleted_at = NULL,
-             deleted_by = NULL,
-             updated_at = NOW(),
-             status = CASE WHEN status = 'deleted' THEN 'draft' ELSE status END,
-             moderation_status = 'draft',
-             submitted_at = NULL,
-             published_at = NULL,
-             approved_at = NULL,
-             rejected_at = NULL,
-             rejected_reason = NULL
-       WHERE id = $1
-         AND provider_id = $2
-         AND deleted_at IS NOT NULL
-      RETURNING *
-      `,
-      [id, providerId]
-    );
+    const applied = await applyServiceLifecycleAction(pool, {
+      providerId,
+      serviceId: id,
+      action: "restore_deleted",
+    });
 
-    if (!upd.rowCount) return res.status(404).json({ message: "Не найдено в корзине" });
-    return res.json(upd.rows[0]);
+    await logProviderServiceAction({
+      req,
+      action: "provider_service_restored",
+      providerId,
+      serviceId: id,
+      oldService: applied.before,
+      newService: applied.service,
+      meta: { restored_to: "draft", source: "provider_dashboard_nested_route" },
+    });
+
+    return res.json(applied.service);
   } catch (err) {
     console.error("restoreProviderService error:", err);
-    return res.status(500).json({ message: "Ошибка сервера" });
+    return res.status(err?.status || 500).json({
+      message: err?.code || "Ошибка сервера",
+      code: err?.code,
+      blockers: err?.blockers,
+    });
   }
 };
 
