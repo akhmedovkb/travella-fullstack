@@ -3,6 +3,7 @@
 const crypto = require("crypto");
 const pool = require("../db");
 const { unlockContactSafe } = require("../utils/contactUnlock");
+const { recordPaymeEvent } = require("../utils/paymeEvents");
 
 const PAYME_STATE = {
   CREATED: 1,
@@ -802,6 +803,37 @@ function accountOrderId(account = {}) {
   );
 }
 
+
+function clientIp(req) {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (typeof forwarded === "string" && forwarded.trim()) {
+    return forwarded.split(",")[0].trim();
+  }
+  return req.ip || req.socket?.remoteAddress || null;
+}
+
+function extractEventPaymeId(method, params = {}) {
+  if (params.id) return params.id;
+  if (params.transaction) return params.transaction;
+  return null;
+}
+
+function extractEventOrderId(params = {}) {
+  const fromAccount = accountOrderId(params.account || {});
+  if (fromAccount) return fromAccount;
+  if (params.order_id) return params.order_id;
+  if (params.orderId) return params.orderId;
+  return null;
+}
+
+function redactAuthorizationHeaders(headers = {}) {
+  return {
+    "content-type": headers["content-type"] || null,
+    "user-agent": headers["user-agent"] || null,
+    "x-forwarded-for": headers["x-forwarded-for"] || null,
+  };
+}
+
 function paymeResultTransaction(tx) {
   return {
     transaction: String(tx.payme_id),
@@ -1282,7 +1314,39 @@ async function GetStatement(req, res, id, params) {
 }
 
 async function handlePaymeMerchant(req, res) {
+  const startedAt = Date.now();
   const { id, method, params = {} } = req.body || {};
+  const originalJson = res.json.bind(res);
+
+  res.json = (payload) => {
+    const sent = originalJson(payload);
+
+    const err = payload?.error || null;
+    const stage = err ? "error" : "success";
+
+    setImmediate(() => {
+      recordPaymeEvent({
+        method: method || null,
+        stage,
+        payme_id: extractEventPaymeId(method, params),
+        order_id: extractEventOrderId(params),
+        rpc_id: id ?? null,
+        http_status: res.statusCode || 200,
+        error_code: err?.code ?? null,
+        error_message: err?.message ?? null,
+        ip: clientIp(req),
+        user_agent: req.headers?.["user-agent"] || null,
+        duration_ms: Date.now() - startedAt,
+        req_json: {
+          headers: redactAuthorizationHeaders(req.headers || {}),
+          body: req.body || null,
+        },
+        res_json: payload || null,
+      });
+    });
+
+    return sent;
+  };
 
   if (!validateAuth(req)) {
     return res.json(
