@@ -5987,7 +5987,8 @@ function buildProofKeyboard(serviceId, count = 0) {
   ];
 
   if (count > 0) {
-    rows.push([{ text: "👀 Просмотреть", callback_data: `proof:view:${Number(serviceId || 0)}` }]);
+    rows.push([{ text: "🧾 Предпросмотр карточки", callback_data: `proof:card:${Number(serviceId || 0)}` }]);
+    rows.push([{ text: "👀 Просмотреть proof", callback_data: `proof:view:${Number(serviceId || 0)}` }]);
     rows.push([{ text: "🗑 Удалить последнее", callback_data: "proof:delete_last" }]);
     rows.push([{ text: "✅ Отправить на модерацию", callback_data: "proof:submit" }]);
   }
@@ -6067,6 +6068,46 @@ async function sendProofPreview(ctx, serviceId) {
   }
 
   await safeReply(ctx, "Что сделать дальше?", buildProofKeyboard(serviceId, images.length));
+}
+
+
+async function sendProofCardPreview(ctx, serviceId) {
+  if (!pool || !serviceId) return;
+  const r = await pool.query(`SELECT * FROM services WHERE id = $1 LIMIT 1`, [Number(serviceId)]);
+  const svc = r.rows?.[0] || null;
+  if (!svc) {
+    await safeReply(ctx, "⚠️ Услуга для предпросмотра не найдена.");
+    return;
+  }
+  try {
+    if (typeof svc.details === "string") svc.details = JSON.parse(svc.details);
+  } catch {}
+  try {
+    if (typeof svc.images === "string") svc.images = JSON.parse(svc.images);
+  } catch {}
+
+  const category = String(svc.category || svc.type || "refused_tour").toLowerCase();
+  const built = buildServiceMessage(svc, category, "provider", { forceRefused: true });
+  const caption =
+    `🧾 <b>Предпросмотр перед модерацией</b>\n\n` +
+    `${built.text || "Карточка сформирована."}\n\n` +
+    `Проверьте, как выглядит услуга. Если всё верно — отправьте на модерацию.`;
+  const proofCount = (await getProofImagesForService(serviceId)).length;
+  const kb = buildProofKeyboard(serviceId, proofCount).reply_markup;
+
+  if (built.photoUrl) {
+    await safeReplyWithPhoto(ctx, built.photoUrl, caption, {
+      parse_mode: "HTML",
+      reply_markup: kb,
+    });
+    return;
+  }
+
+  await safeReply(ctx, caption, {
+    parse_mode: "HTML",
+    disable_web_page_preview: true,
+    reply_markup: kb,
+  });
 }
 
 async function deleteLastProofImage(ctx) {
@@ -15349,6 +15390,12 @@ bot.action("proof:add_more", async (ctx) => {
     `📎 Отправьте ещё скриншот / ваучер / билет сюда в чат.\n\nСейчас загружено: ${count}.`,
     buildProofKeyboard(serviceId, count)
   );
+});
+
+
+bot.action(/^proof:card:(\d+)$/, async (ctx) => {
+  await safeCb(ctx);
+  await sendProofCardPreview(ctx, Number(ctx.match[1]));
 });
 
 bot.action(/^proof:view:(\d+)$/, async (ctx) => {
