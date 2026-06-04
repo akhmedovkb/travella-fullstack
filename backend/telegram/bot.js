@@ -79,6 +79,7 @@ const PRICE_CURRENCY = (process.env.PRICE_CURRENCY || "USD").trim();
 
 // Для /tour_123 и inline-поиска — работаем с отказными категориями
 const { REFUSED_CATEGORIES, PROOF_REQUIRED_CATEGORIES } = require("../utils/serviceCategories");
+const { logProviderFunnelEvent } = require("../utils/providerFunnel");
 
 const API_BASE = (
   process.env.API_BASE_URL ||
@@ -1977,6 +1978,33 @@ async function showClientHome(ctx) {
 // ✅ Для идентификации пользователя всегда используем ctx.from.id
 function getActorId(ctx) {
   return ctx?.from?.id || ctx?.chat?.id || null;
+}
+
+async function trackProviderFunnelFromBot(ctx, eventName, options = {}) {
+  try {
+    const draft = ctx.session?.serviceDraft || {};
+    const actorId = getActorId(ctx);
+    await logProviderFunnelEvent({
+      source: "telegram_bot",
+      actorRole: "provider",
+      actorId,
+      providerId: options.providerId || null,
+      serviceId: options.serviceId || draft.id || null,
+      category: options.category || draft.category || ctx.session?.awaitingProofForCategory || null,
+      eventName,
+      step: options.step || ctx.session?.state || null,
+      status: options.status || null,
+      sessionId: actorId ? `tg:${actorId}` : null,
+      meta: {
+        chat_id: actorId || null,
+        username: ctx.from?.username || null,
+        first_name: ctx.from?.first_name || null,
+        ...options.meta,
+      },
+    });
+  } catch (e) {
+    console.error("[tg-bot] trackProviderFunnelFromBot error:", e?.message || e);
+  }
 }
 
 function escapeHtml(s) {
@@ -6761,6 +6789,11 @@ function wizardCurrentPreview(ctx, state) {
 }
 
 async function promptWizardState(ctx, state) {
+  await trackProviderFunnelFromBot(ctx, "wizard_step", {
+    step: state,
+    meta: { state },
+  });
+
   const progressText = wizardProgressText(ctx, state);
   if (progressText) {
     await ctx.reply(progressText, { parse_mode: "HTML" });
@@ -7496,6 +7529,13 @@ async function finishCreateServiceFromWizard(ctx) {
 
     const createdServiceId = data?.service?.id || (Number.isFinite(Number(draft.id)) ? Number(draft.id) : null);
 
+    await trackProviderFunnelFromBot(ctx, "wizard_saved_draft", {
+      serviceId: createdServiceId,
+      category,
+      status: "draft",
+      meta: { is_edit_mode: isEditMode },
+    });
+
     await finishProviderServiceDraft(ctx, "submitted");
 
     if (proofRequiredCategories.includes(String(category || "").toLowerCase())) {
@@ -7512,6 +7552,13 @@ async function finishCreateServiceFromWizard(ctx) {
 
       return;
     }
+
+    await trackProviderFunnelFromBot(ctx, "submitted_to_moderation", {
+      serviceId: createdServiceId,
+      category,
+      status: "pending",
+      meta: { proof_required: false, is_edit_mode: isEditMode },
+    });
 
     await ctx.reply(
       isEditMode
@@ -9537,6 +9584,11 @@ bot.action(
       if (!ctx.session) ctx.session = {};
       if (!ctx.session.serviceDraft) ctx.session.serviceDraft = {};
       ctx.session.serviceDraft.category = category;
+
+      await trackProviderFunnelFromBot(ctx, "wizard_started", {
+        category,
+        step: "choose_category",
+      });
 
       // ✅ Разрешаем создание через бот только для: tour, hotel, flight
       if (
@@ -15182,6 +15234,12 @@ bot.on("photo", async (ctx, next) => {
         [JSON.stringify(nextDetails), proofServiceId]
       );
 
+      await trackProviderFunnelFromBot(ctx, "proof_uploaded", {
+        serviceId: proofServiceId,
+        status: "proof_uploaded",
+        meta: { proof_count: proofImages.length },
+      });
+
       await safeReply(
         ctx,
         `📎 Доказательство загружено.\nСейчас загружено: ${proofImages.length} шт.\n\nПроверьте материалы и отправьте услугу на модерацию.`,
@@ -15344,6 +15402,12 @@ async function finishProofSubmissionFromBot(ctx) {
       );
       return;
     }
+
+    await trackProviderFunnelFromBot(ctx, "submitted_to_moderation", {
+      serviceId,
+      status: "pending",
+      meta: { proof_required: true },
+    });
 
     ctx.session.awaitingProofForServiceId = null;
     ctx.session.awaitingProofForCategory = null;
