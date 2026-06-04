@@ -15,6 +15,7 @@ const {
 const { getContactUnlockSettings } = require("../utils/contactUnlockSettings");
 const { logProviderServiceAction } = require("../utils/serviceAuditLog");
 const { applyServiceLifecycleAction } = require("../utils/serviceLifecycle");
+const { logProviderFunnelEvent } = require("../utils/providerFunnel");
 
 require("../utils/refusedPriceDropBroadcast");
 
@@ -1000,6 +1001,18 @@ const addService = async (req, res) => {
       meta: { note: "created_from_provider_dashboard" },
     });
 
+    await logProviderFunnelEvent({
+      source: "web_provider_dashboard",
+      actorRole: "provider",
+      actorId: providerId,
+      providerId,
+      serviceId: ins.rows[0]?.id,
+      category,
+      eventName: "wizard_saved_draft",
+      status: "draft",
+      meta: { note: "created_from_provider_dashboard_funnel" },
+    });
+
     res.status(201).json(ins.rows[0]);
   } catch (err) {
     console.error("❌ Ошибка добавления услуги:", err);
@@ -1270,6 +1283,25 @@ const serviceAction = async (req, res) => {
       meta: { source: "provider_dashboard", action },
     });
 
+    const funnelActionMap = {
+      extend7: "published",
+      unpublish: "archived",
+      archive: "archived",
+      restore_active: "published",
+    };
+
+    await logProviderFunnelEvent({
+      source: "web_provider_dashboard",
+      actorRole: "provider",
+      actorId: providerId,
+      providerId,
+      serviceId,
+      category: applied?.service?.category || before?.category || null,
+      eventName: funnelActionMap[action] || "service_lifecycle_action",
+      status: applied?.service?.status || null,
+      meta: { source: "provider_dashboard_lifecycle_funnel", action },
+    });
+
     return res.json(applied.service);
   } catch (err) {
     console.error("❌ Ошибка действия с услугой:", err);
@@ -1296,6 +1328,18 @@ const deleteService = async (req, res) => {
       oldService: applied.before,
       newService: applied.service,
       meta: { deleted_by_provider: true },
+    });
+
+    await logProviderFunnelEvent({
+      source: "web_provider_dashboard",
+      actorRole: "provider",
+      actorId: providerId,
+      providerId,
+      serviceId,
+      category: applied?.before?.category || applied?.service?.category || null,
+      eventName: "deleted",
+      status: applied?.service?.status || "deleted",
+      meta: { deleted_by_provider_funnel: true },
     });
 
     return res.json({ message: "Удалено", service: applied.service });
@@ -1328,6 +1372,18 @@ const restoreService = async (req, res) => {
       oldService: applied.before,
       newService: applied.service,
       meta: { restored_to: "draft" },
+    });
+
+    await logProviderFunnelEvent({
+      source: "web_provider_dashboard",
+      actorRole: "provider",
+      actorId: providerId,
+      providerId,
+      serviceId,
+      category: applied?.service?.category || applied?.before?.category || null,
+      eventName: "wizard_saved_draft",
+      status: "draft",
+      meta: { restored_to_draft_funnel: true },
     });
 
     return res.json(applied.service);
