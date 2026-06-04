@@ -125,6 +125,28 @@ function MediaCarousel({ items = [] }) {
           })}
         </div>
       ) : null}
+      {rejecting ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4">
+          <div className="w-full max-w-xl rounded-[28px] bg-white p-5 shadow-2xl ring-1 ring-slate-200">
+            <div className="text-xs font-black uppercase tracking-[0.16em] text-red-600">Hotel Passport moderation</div>
+            <h3 className="mt-2 text-2xl font-black tracking-[-0.04em] text-slate-950">Отклонить инспекцию #{rejecting.id}</h3>
+            <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">
+              Причина будет показана автору обзора в карточке отеля. Напишите конкретно, что нужно исправить: фото, даты, текст, доказательства или качество обзора.
+            </p>
+            <textarea
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              rows={5}
+              className="mt-4 w-full rounded-2xl border border-slate-200 p-3 text-sm font-semibold outline-none focus:border-red-300 focus:ring-4 focus:ring-red-50"
+              placeholder="Например: добавьте фото территории/номера и уточните дату посещения."
+            />
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <button type="button" onClick={() => { setRejecting(null); setRejectReason(""); }} className="rounded-2xl bg-slate-100 px-4 py-2 text-sm font-black text-slate-700 hover:bg-slate-200">Отмена</button>
+              <button type="button" onClick={() => setModeration(rejecting, "rejected", rejectReason)} className="rounded-2xl bg-red-600 px-4 py-2 text-sm font-black text-white hover:bg-red-700">⛔ Отклонить с причиной</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -134,6 +156,8 @@ export default function AdminHotelInspections({ embedded = false }) {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("pending");
   const [q, setQ] = useState("");
+  const [rejecting, setRejecting] = useState(null);
+  const [rejectReason, setRejectReason] = useState("");
 
   async function load() {
     setLoading(true);
@@ -171,21 +195,32 @@ export default function AdminHotelInspections({ embedded = false }) {
     });
   }, [items, q, status]);
 
-  async function setModeration(item, nextStatus) {
-    const reason = nextStatus === "rejected" ? window.prompt("Причина отклонения", item.rejection_reason || "Нужно уточнить информацию") : "";
-    if (nextStatus === "rejected" && reason === null) return;
+  async function setModeration(item, nextStatus, reason = "") {
+    const cleanReason = String(reason || "").trim();
+    if (nextStatus === "rejected" && cleanReason.length < 5) {
+      tError("Укажите понятную причину отклонения — её увидит автор обзора");
+      return;
+    }
+
     try {
       const res = await moderateInspection(item.id, {
         status: nextStatus,
-        reason,
+        reason: nextStatus === "rejected" ? cleanReason : "",
         verified_visit: nextStatus === "approved",
       });
       const next = res?.item || { id: item.id, status: nextStatus, moderation_status: nextStatus };
       setItems((prev) => prev.map((x) => x.id === item.id ? { ...x, ...next } : x));
-      tSuccess(nextStatus === "approved" ? "Инспекция опубликована" : "Статус обновлён");
+      tSuccess(nextStatus === "approved" ? "Инспекция опубликована" : nextStatus === "rejected" ? "Инспекция отклонена" : "Статус обновлён");
+      setRejecting(null);
+      setRejectReason("");
     } catch (e) {
       tError(e?.message || "Не удалось обновить статус");
     }
+  }
+
+  function openRejectModal(item) {
+    setRejecting(item);
+    setRejectReason(item?.rejection_reason || "");
   }
 
   const shellClass = embedded ? "space-y-5" : "mx-auto max-w-7xl space-y-5 p-4 md:p-6";
@@ -251,7 +286,7 @@ export default function AdminHotelInspections({ embedded = false }) {
                     {item.rejection_reason ? <div className="mt-3 rounded-2xl bg-red-50 p-3 text-sm font-bold text-red-700 ring-1 ring-red-100">Причина: {item.rejection_reason}</div> : null}
                     <div className="mt-4 flex flex-wrap gap-2">
                       <button onClick={() => setModeration(item, "approved")} className="rounded-2xl bg-emerald-50 px-4 py-2 text-sm font-black text-emerald-700 ring-1 ring-emerald-100 hover:bg-emerald-100">✅ Одобрить</button>
-                      <button onClick={() => setModeration(item, "rejected")} className="rounded-2xl bg-red-50 px-4 py-2 text-sm font-black text-red-700 ring-1 ring-red-100 hover:bg-red-100">⛔ Отклонить</button>
+                      <button onClick={() => openRejectModal(item)} className="rounded-2xl bg-red-50 px-4 py-2 text-sm font-black text-red-700 ring-1 ring-red-100 hover:bg-red-100">⛔ Отклонить</button>
                       <button onClick={() => setModeration(item, "hidden")} className="rounded-2xl bg-slate-100 px-4 py-2 text-sm font-black text-slate-700 hover:bg-slate-200">🙈 Скрыть</button>
                     </div>
                   </div>
@@ -268,6 +303,28 @@ export default function AdminHotelInspections({ embedded = false }) {
           <div className="mt-1 text-sm font-semibold text-slate-500">Смените статус или обновите список.</div>
         </div>
       )}
+      {rejecting ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4">
+          <div className="w-full max-w-xl rounded-[28px] bg-white p-5 shadow-2xl ring-1 ring-slate-200">
+            <div className="text-xs font-black uppercase tracking-[0.16em] text-red-600">Hotel Passport moderation</div>
+            <h3 className="mt-2 text-2xl font-black tracking-[-0.04em] text-slate-950">Отклонить инспекцию #{rejecting.id}</h3>
+            <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">
+              Причина будет показана автору обзора в карточке отеля. Напишите конкретно, что нужно исправить: фото, даты, текст, доказательства или качество обзора.
+            </p>
+            <textarea
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              rows={5}
+              className="mt-4 w-full rounded-2xl border border-slate-200 p-3 text-sm font-semibold outline-none focus:border-red-300 focus:ring-4 focus:ring-red-50"
+              placeholder="Например: добавьте фото территории/номера и уточните дату посещения."
+            />
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <button type="button" onClick={() => { setRejecting(null); setRejectReason(""); }} className="rounded-2xl bg-slate-100 px-4 py-2 text-sm font-black text-slate-700 hover:bg-slate-200">Отмена</button>
+              <button type="button" onClick={() => setModeration(rejecting, "rejected", rejectReason)} className="rounded-2xl bg-red-600 px-4 py-2 text-sm font-black text-white hover:bg-red-700">⛔ Отклонить с причиной</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
