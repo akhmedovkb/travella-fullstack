@@ -4,6 +4,7 @@ const axiosBase = require("axios");
 const { tgSend, notifyModerationNew } = require("../utils/telegram");
 const { logProviderServiceAction } = require("../utils/serviceAuditLog");
 const { applyServiceLifecycleAction } = require("../utils/serviceLifecycle");
+const { logProviderFunnelEvent } = require("../utils/providerFunnel");
 const { REFUSED_CATEGORIES } = require("../utils/serviceCategories");
 const MAX_TITLE_LEN = 100;
 const {
@@ -1059,6 +1060,25 @@ async function serviceActionFromBot(req, res, action) {
       meta: { bot_action: action },
     });
 
+    const funnelActionMap = {
+      unpublish: "archived",
+      extend7: "published",
+      archive: "archived",
+      restore_active: "published",
+    };
+
+    await logProviderFunnelEvent({
+      source: "telegram_bot",
+      actorRole: "provider",
+      actorId: Number(chatId) || null,
+      providerId,
+      serviceId: svcId,
+      category: updated?.category || oldService?.category || null,
+      eventName: funnelActionMap[action] || "service_lifecycle_action",
+      status: updated?.status || null,
+      meta: { bot_action: action, note: "bot_lifecycle_funnel" },
+    });
+
     return res.json({ success: true, service: updated });
   } catch (err) {
     console.error("[telegram] serviceActionFromBot error:", err);
@@ -1215,6 +1235,18 @@ async function createServiceFromBot(req, res) {
       serviceId: insertRes.rows[0].id,
       oldService: null,
       newService: insertRes.rows[0],
+    });
+
+    await logProviderFunnelEvent({
+      source: "telegram_bot",
+      actorRole: "provider",
+      actorId: Number(chatId) || null,
+      providerId,
+      serviceId: insertRes.rows[0].id,
+      category,
+      eventName: "wizard_saved_draft",
+      status: "draft",
+      meta: { note: "bot_service_created_funnel" },
     });
 
     return res.json({
@@ -1681,6 +1713,18 @@ async function submitServiceFromBot(req, res) {
       serviceId: svcId,
       oldService: applied.before,
       newService: applied.service,
+    });
+
+    await logProviderFunnelEvent({
+      source: "telegram_bot",
+      actorRole: "provider",
+      actorId: Number(chatId) || null,
+      providerId,
+      serviceId: svcId,
+      category: applied?.service?.category || applied?.before?.category || null,
+      eventName: "submitted_to_moderation",
+      status: applied?.service?.status || "pending",
+      meta: { note: "bot_service_submitted_funnel" },
     });
 
     try {
