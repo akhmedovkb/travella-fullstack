@@ -79,6 +79,40 @@ async function getProviderFunnelSummary(req, res) {
       [days]
     );
 
+    const bySourceQ = await pool.query(
+      `
+      SELECT COALESCE(source, 'unknown') AS source, COUNT(*)::int AS count
+      FROM provider_funnel_events
+      WHERE created_at >= ${sinceSql}
+      GROUP BY COALESCE(source, 'unknown')
+      ORDER BY count DESC, source ASC
+      LIMIT 20
+      `,
+      [days]
+    );
+
+    const latestStepsQ = await pool.query(
+      `
+      WITH latest AS (
+        SELECT DISTINCT ON (COALESCE(session_id, provider_id::text, actor_id::text, service_id::text, id::text))
+          COALESCE(session_id, provider_id::text, actor_id::text, service_id::text, id::text) AS funnel_key,
+          event_name,
+          COALESCE(step, '—') AS step,
+          created_at
+        FROM provider_funnel_events
+        WHERE created_at >= ${sinceSql}
+        ORDER BY COALESCE(session_id, provider_id::text, actor_id::text, service_id::text, id::text), created_at DESC
+      )
+      SELECT step, COUNT(*)::int AS count
+      FROM latest
+      WHERE event_name = 'wizard_step'
+      GROUP BY step
+      ORDER BY count DESC, step ASC
+      LIMIT 30
+      `,
+      [days]
+    );
+
     const recentQ = await pool.query(
       `
       SELECT
@@ -124,6 +158,8 @@ async function getProviderFunnelSummary(req, res) {
       by_event: byEventQ.rows,
       by_step: byStepQ.rows,
       by_category: byCategoryQ.rows,
+      by_source: bySourceQ.rows,
+      abandoned_steps: latestStepsQ.rows,
       recent: recentQ.rows,
     });
   } catch (err) {
