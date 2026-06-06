@@ -50,6 +50,7 @@ const {
 const { notifyModerationNew } = require("../utils/telegram");
 const { logProviderServiceAction } = require("../utils/serviceAuditLog");
 const { applyServiceLifecycleAction } = require("../utils/serviceLifecycle");
+const { logProviderFunnelEvent } = require("../utils/providerFunnel");
 
 function requireProvider(req, res, next) {
   if (!req.user || !req.user.id) {
@@ -681,6 +682,18 @@ router.post(
         oldService: applied.before,
         newService: applied.service,
         meta: { submitted_to_moderation: true },
+      });
+
+      await logProviderFunnelEvent({
+        source: "web_provider_dashboard",
+        actorRole: "provider",
+        actorId: req.user.id,
+        providerId: req.user.id,
+        serviceId: id,
+        category: applied?.service?.category || applied?.before?.category || null,
+        eventName: "submitted_to_moderation",
+        status: applied?.service?.status || "pending",
+        meta: { submitted_to_moderation: true, route: "provider_submit" },
       });
 
       try {
