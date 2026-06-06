@@ -65,11 +65,37 @@ function EventBadge({ name }) {
     published: "Опубликовано",
     archived: "Архив",
     deleted: "Удалено",
+    service_updated: "Обновлено",
+    service_images_updated: "Фото обновлены",
+    purged: "Удалено навсегда",
   };
   return (
     <span className="inline-flex rounded-full bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-700">
       {map[name] || name || "—"}
     </span>
+  );
+}
+
+function pct(part, total) {
+  const a = Number(part || 0);
+  const b = Number(total || 0);
+  if (!b) return "0%";
+  return `${Math.round((a / b) * 100)}%`;
+}
+
+function MiniBar({ label, value, max }) {
+  const n = Number(value || 0);
+  const m = Math.max(1, Number(max || 0));
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <span className="min-w-0 truncate font-medium text-slate-700">{label || "—"}</span>
+        <span className="font-black text-slate-950">{n.toLocaleString("ru-RU")}</span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+        <div className="h-full rounded-full bg-slate-900" style={{ width: `${Math.max(4, Math.min(100, (n / m) * 100))}%` }} />
+      </div>
+    </div>
   );
 }
 
@@ -104,6 +130,11 @@ export default function AdminProviderFunnel({ embedded = false }) {
   const totals = summary?.totals || {};
   const byStep = summary?.by_step || [];
   const byCategory = summary?.by_category || [];
+  const bySource = summary?.by_source || [];
+  const abandonedSteps = summary?.abandoned_steps || [];
+  const maxStep = Math.max(1, ...byStep.map((x) => Number(x.count || 0)));
+  const maxSource = Math.max(1, ...bySource.map((x) => Number(x.count || 0)));
+  const maxAbandoned = Math.max(1, ...abandonedSteps.map((x) => Number(x.count || 0)));
 
   return (
     <div className={embedded ? "space-y-5" : "p-4 md:p-6 space-y-5"}>
@@ -154,23 +185,39 @@ export default function AdminProviderFunnel({ embedded = false }) {
         <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-500">Загрузка...</div>
       ) : null}
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
         <StatCard title="Начали создание" value={totals.wizard_started} hint="wizard_started" />
+        <StatCard title="Черновики" value={totals.wizard_saved_draft} hint="wizard_saved_draft" />
         <StatCard title="Proof загружен" value={totals.proof_uploaded} hint="proof_uploaded" />
         <StatCard title="На модерации" value={totals.submitted_to_moderation} hint="submitted_to_moderation" />
         <StatCard title="Одобрено" value={totals.approved} hint="approved" />
         <StatCard title="Отклонено" value={totals.rejected} hint="rejected" />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="text-xs font-bold uppercase tracking-wide text-slate-500">Черновик → Модерация</div>
+          <div className="mt-2 text-3xl font-black text-slate-950">{pct(totals.submitted_to_moderation, totals.wizard_saved_draft)}</div>
+          <div className="mt-1 text-xs text-slate-500">Сколько сохранённых услуг дошли до проверки.</div>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="text-xs font-bold uppercase tracking-wide text-slate-500">Proof → Модерация</div>
+          <div className="mt-2 text-3xl font-black text-slate-950">{pct(totals.submitted_to_moderation, totals.proof_uploaded)}</div>
+          <div className="mt-1 text-xs text-slate-500">Показывает, где застревают после загрузки доказательств.</div>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="text-xs font-bold uppercase tracking-wide text-slate-500">Модерация → Одобрено</div>
+          <div className="mt-2 text-3xl font-black text-slate-950">{pct(totals.approved, totals.submitted_to_moderation)}</div>
+          <div className="mt-1 text-xs text-slate-500">Качество отправляемых услуг.</div>
+        </div>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-3">
         <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
           <h2 className="text-base font-black text-slate-950">Где чаще всего находятся поставщики</h2>
           <div className="mt-3 space-y-2">
             {byStep.length ? byStep.slice(0, 12).map((row) => (
-              <div key={row.step} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2">
-                <span className="min-w-0 truncate text-sm font-medium text-slate-700">{row.step}</span>
-                <span className="text-sm font-black text-slate-950">{Number(row.count || 0).toLocaleString("ru-RU")}</span>
-              </div>
+              <MiniBar key={row.step} label={row.step} value={row.count} max={maxStep} />
             )) : (
               <div className="text-sm text-slate-500">Пока нет данных по шагам.</div>
             )}
@@ -189,6 +236,29 @@ export default function AdminProviderFunnel({ embedded = false }) {
               <div className="text-sm text-slate-500">Пока нет данных по категориям.</div>
             )}
           </div>
+        </div>
+
+        <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h2 className="text-base font-black text-slate-950">Источник</h2>
+          <div className="mt-3 space-y-3">
+            {bySource.length ? bySource.map((row) => (
+              <MiniBar key={row.source} label={row.source} value={row.count} max={maxSource} />
+            )) : (
+              <div className="text-sm text-slate-500">Пока нет данных по источникам.</div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+        <h2 className="text-base font-black text-slate-950">Где могли остановиться</h2>
+        <p className="mt-1 text-xs text-slate-500">Последний зафиксированный шаг по сессиям, где пользователь ещё не дошёл до финального действия.</p>
+        <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {abandonedSteps.length ? abandonedSteps.slice(0, 12).map((row) => (
+            <MiniBar key={row.step} label={row.step} value={row.count} max={maxAbandoned} />
+          )) : (
+            <div className="text-sm text-slate-500">Пока нет данных по остановкам.</div>
+          )}
         </div>
       </div>
 
