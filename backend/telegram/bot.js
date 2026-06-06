@@ -1984,12 +1984,29 @@ async function trackProviderFunnelFromBot(ctx, eventName, options = {}) {
   try {
     const draft = ctx.session?.serviceDraft || {};
     const actorId = getActorId(ctx);
+
+    let providerId = options.providerId || ctx.session?.__providerFunnelProviderId || null;
+    if (!providerId && actorId) {
+      providerId = await resolveProviderIdByTelegramChatId(actorId).catch(() => null);
+      if (providerId) {
+        if (!ctx.session) ctx.session = {};
+        ctx.session.__providerFunnelProviderId = providerId;
+      }
+    }
+
+    const serviceId =
+      options.serviceId ||
+      draft.id ||
+      ctx.session?.awaitingProofForServiceId ||
+      null;
+
     await logProviderFunnelEvent({
       source: "telegram_bot",
       actorRole: "provider",
       actorId,
-      providerId: options.providerId || null,
-      serviceId: options.serviceId || draft.id || null,
+      telegramChatId: actorId,
+      providerId,
+      serviceId,
       category: options.category || draft.category || ctx.session?.awaitingProofForCategory || null,
       eventName,
       step: options.step || ctx.session?.state || null,
@@ -1997,6 +2014,8 @@ async function trackProviderFunnelFromBot(ctx, eventName, options = {}) {
       sessionId: actorId ? `tg:${actorId}` : null,
       meta: {
         chat_id: actorId || null,
+        provider_id: providerId || null,
+        service_id: serviceId || null,
         username: ctx.from?.username || null,
         first_name: ctx.from?.first_name || null,
         ...options.meta,
