@@ -1198,6 +1198,22 @@ const updateService = async (req, res) => {
       newService: upd.rows[0],
     });
 
+    await logProviderFunnelEvent({
+      source: "web_provider_dashboard",
+      actorRole: "provider",
+      actorId: providerId,
+      providerId,
+      serviceId,
+      category: upd.rows[0]?.category || category || prevSvcRow?.category || null,
+      eventName: "service_updated",
+      status: upd.rows[0]?.status || "draft",
+      meta: {
+        note: "updated_from_provider_dashboard_funnel",
+        previous_status: prevSvcRow?.status || null,
+        moderation_status: upd.rows[0]?.moderation_status || null,
+      },
+    });
+
     // ✅ PRICE DROP BROADCAST (если цена снижена)
     try {
       const nextSvcRow = upd.rows[0];
@@ -1418,6 +1434,18 @@ const purgeService = async (req, res) => {
       meta: { purged_by_provider: true },
     });
 
+    await logProviderFunnelEvent({
+      source: "web_provider_dashboard",
+      actorRole: "provider",
+      actorId: providerId,
+      providerId,
+      serviceId,
+      category: applied?.before?.category || null,
+      eventName: "purged",
+      status: "purged",
+      meta: { purged_by_provider_funnel: true },
+    });
+
     return res.json({ ok: true, purgedId: applied.purgedId });
   } catch (err) {
     console.error("❌ Ошибка удаления навсегда:", err);
@@ -1444,6 +1472,19 @@ const updateServiceImagesOnly = async (req, res) => {
       [JSON.stringify(imagesArr), serviceId, providerId]
     );
     if (!upd.rowCount) return res.status(404).json({ message: "Услуга не найдена" });
+
+    await logProviderFunnelEvent({
+      source: "web_provider_dashboard",
+      actorRole: "provider",
+      actorId: providerId,
+      providerId,
+      serviceId,
+      category: upd.rows[0]?.category || null,
+      eventName: "service_images_updated",
+      status: upd.rows[0]?.status || null,
+      meta: { images_count: imagesArr.length },
+    });
+
     res.json(upd.rows[0]);
   } catch (err) {
     console.error("❌ Ошибка обновления картинок:", err);
@@ -2141,6 +2182,18 @@ const restoreProviderService = async (req, res) => {
       meta: { restored_to: "draft", source: "provider_dashboard_nested_route" },
     });
 
+    await logProviderFunnelEvent({
+      source: "web_provider_dashboard",
+      actorRole: "provider",
+      actorId: providerId,
+      providerId,
+      serviceId: id,
+      category: applied?.service?.category || applied?.before?.category || null,
+      eventName: "wizard_saved_draft",
+      status: "draft",
+      meta: { restored_to_draft_funnel: true, route: "nested_provider_service_restore" },
+    });
+
     return res.json(applied.service);
   } catch (err) {
     console.error("restoreProviderService error:", err);
@@ -2175,6 +2228,18 @@ const purgeProviderService = async (req, res) => {
       oldService: applied.before,
       newService: null,
       meta: { purged_by_provider: true },
+    });
+
+    await logProviderFunnelEvent({
+      source: "web_provider_dashboard",
+      actorRole: "provider",
+      actorId: providerId,
+      providerId,
+      serviceId: id,
+      category: applied?.before?.category || null,
+      eventName: "purged",
+      status: "purged",
+      meta: { purged_by_provider_funnel: true, route: "nested_provider_service_purge" },
     });
 
     return res.json({ ok: true, purgedId: applied.purgedId });
