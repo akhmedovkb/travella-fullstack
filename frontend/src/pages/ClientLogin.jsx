@@ -1,7 +1,7 @@
 //travella-fullstack/frontend/src/pages/ClientLogin.jsx
 
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useLocation } from "react-router-dom";
 import { apiPost } from "../api";
 import LanguageSelector from "../components/LanguageSelector";
 import { useTranslation } from "react-i18next";
@@ -10,6 +10,9 @@ import TelegramLoginButton from "../components/TelegramLoginButton";
 export default function ClientLogin() {
   const { t } = useTranslation();
   const nav = useNavigate();
+  const location = useLocation();
+  const rawRedirect = new URLSearchParams(location.search).get("redirect") || "";
+  const safeRedirect = rawRedirect.startsWith("/") && !rawRedirect.startsWith("//") ? rawRedirect : "/client/dashboard";
   const [form, setForm] = useState({ email: "", password: "" });
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
@@ -26,7 +29,7 @@ export default function ClientLogin() {
       const data = await apiPost("/api/clients/login", payload, false);
       if (!data?.token) throw new Error("No token");
       localStorage.setItem("clientToken", data.token);
-      nav("/client/dashboard");
+      nav(safeRedirect, { replace: true });
     } catch (e2) {
       setErr(e2.message || "Error");
     } finally {
@@ -81,14 +84,14 @@ export default function ClientLogin() {
 
       <TelegramLoginButton
         role="client"
-        redirectTo="/client/dashboard"
+        redirectTo={safeRedirect}
         lazy
       />
 
       <div className="mt-3 text-sm text-gray-600">
         {t("client.login.noAccount")}{" "}
         <Link
-          to="/client/register"
+          to={`/client/register${safeRedirect !== "/client/dashboard" ? `?redirect=${encodeURIComponent(safeRedirect)}` : ""}`}
           className="text-orange-600 font-semibold hover:underline"
         >
           {t("client.login.registerLink")}
