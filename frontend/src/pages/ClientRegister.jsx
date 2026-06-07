@@ -1,6 +1,6 @@
 // frontend/src/pages/ClientRegister.jsx
 import React, { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
 import LanguageSelector from "../components/LanguageSelector";
@@ -51,6 +51,9 @@ const parseErrorMessage = (err, t) => {
 export default function ClientRegister() {
   const { t } = useTranslation();
   const nav = useNavigate();
+  const location = useLocation();
+  const rawRedirect = new URLSearchParams(location.search).get("redirect") || "";
+  const safeRedirect = rawRedirect.startsWith("/") && !rawRedirect.startsWith("//") ? rawRedirect : "/client/dashboard";
 
   const [form, setForm] = useState({ name: "", email: "", phone: "", password: "" });
   const [loading, setLoading] = useState(false);
@@ -90,7 +93,7 @@ export default function ClientRegister() {
         }
       );
 
-      nav("/client/login");
+      nav(`/client/login?redirect=${encodeURIComponent(safeRedirect)}`);
     } catch (e2) {
       // на всякий — продублируем в баннер локализованное сообщение
       const msg = parseErrorMessage(e2, t);
@@ -104,6 +107,7 @@ export default function ClientRegister() {
     <div className="max-w-md mx-auto bg-white p-6 rounded-xl shadow">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold">{t("client.register.title")}</h1>
+        <LanguageSelector />
       </div>
 
       {err && (
@@ -173,7 +177,7 @@ export default function ClientRegister() {
 
       <div className="mt-3 text-sm text-gray-600">
         {t("client.register.haveAccount")}{" "}
-        <Link to="/client/login" className="text-orange-600 font-semibold hover:underline">
+        <Link to={`/client/login?redirect=${encodeURIComponent(safeRedirect)}`} className="text-orange-600 font-semibold hover:underline">
           {t("client.register.loginLink")}
         </Link>
       </div>
