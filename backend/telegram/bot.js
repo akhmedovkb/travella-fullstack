@@ -10779,7 +10779,7 @@ bot.action("balance:check", async (ctx) => {
     const bal = Number(balNum || 0).toLocaleString("ru-RU");
     const unlockSettings = await getContactUnlockSettings(pool);
     const need = tiyinToSum(unlockSettings.effective_price || 0).toLocaleString("ru-RU");
-    const topupUrl = `${SITE_URL}/dashboard/balance`;
+    const topupUrl = `${SITE_URL}/client/balance`;
 
     const hasLast = !!ctx.session?.lastUnlockServiceId;
 
@@ -10854,11 +10854,11 @@ bot.action("balance:topup", async (ctx) => {
     if (!PAYMENTS_PROVIDER_TOKEN) {
       await safeReply(
         ctx,
-        `💳 Пополнение через сайт:\n${SITE_URL}/dashboard/balance`,
+        `💳 Пополнение через сайт:\n${SITE_URL}/client/balance`,
         {
           disable_web_page_preview: true,
           reply_markup: {
-            inline_keyboard: [[{ text: "Открыть страницу пополнения", url: `${SITE_URL}/dashboard/balance` }]],
+            inline_keyboard: [[{ text: "Открыть страницу пополнения", url: `${SITE_URL}/client/balance` }]],
           },
         }
       );
@@ -10924,15 +10924,46 @@ bot.action(/^balance:topup:(\d+)$/, async (ctx) => {
     }
     const clientId = Number(clientRow.id);
 
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
+    const redirectUrl = `${SITE_PUBLIC.replace(/\/+$/, "")}/client/balance?source=telegram`;
+
     const r = await pool.query(
-      `INSERT INTO topup_orders (client_id, amount_tiyin, provider, status)
-       VALUES ($1,$2,'payme','new')
+      `INSERT INTO topup_orders (
+         client_id,
+         amount,
+         amount_tiyin,
+         provider,
+         status,
+         purpose,
+         order_type,
+         redirect_url,
+         expires_at,
+         meta
+       )
+       VALUES (
+         $1,
+         $2,
+         $2,
+         'payme',
+         'created',
+         'client_topup',
+         'balance_topup',
+         $3,
+         $4,
+         $5::jsonb
+       )
        RETURNING id`,
-      [clientId, amountTiyin]
+      [
+        clientId,
+        amountTiyin,
+        redirectUrl,
+        expiresAt,
+        JSON.stringify({ source: "telegram_bot", chat_id: chatId }),
+      ]
     );
     const orderId = Number(r.rows?.[0]?.id);
 
-    const callbackUrl = `${SITE_PUBLIC.replace(/\/+$/, "")}/payme/return?order_id=${orderId}`;
+    const callbackUrl = `${SITE_PUBLIC.replace(/\/+$/, "")}/client/balance?order_id=${orderId}&source=telegram`;
     const payUrl = buildPaymeCheckoutUrl({
       merchantId: MERCHANT_ID,
       checkoutBase: CHECKOUT_URL,
@@ -10941,6 +10972,11 @@ bot.action(/^balance:topup:(\d+)$/, async (ctx) => {
       lang,
       callbackUrl,
     });
+
+    await pool.query(
+      `UPDATE topup_orders SET pay_url = $2, redirect_url = $3 WHERE id = $1`,
+      [orderId, payUrl, callbackUrl]
+    );
 
     const guideUrl = buildPaymeGuideUrlForTelegram(payUrl, {
       purpose: "balance_topup",
@@ -11619,7 +11655,7 @@ async function sendUnlockPaywallCard(ctx, { serviceId, balanceSum, priceSum }) {
       [
         PAYMENTS_PROVIDER_TOKEN
           ? { text: `💳 Оплатить и открыть (${price} сум)`, callback_data: `unlock:pay:${serviceId}` }
-          : { text: "💳 Пополнить баланс", url: `${SITE_URL}/dashboard/balance` },
+          : { text: "💳 Пополнить баланс", url: `${SITE_URL}/client/balance` },
       ],
       [{ text: "🔓 Повторить открытие", callback_data: "balance:retry" }],
     ],
@@ -12769,7 +12805,7 @@ if (!result.ok) {
 
     // 2) "окно" в чат с кнопками
     try {
-      const topupUrl = `${SITE_URL}/dashboard/balance`;
+      const topupUrl = `${SITE_URL}/client/balance`;
 
       await sendUnlockPaywallCard(ctx, {
         serviceId,
