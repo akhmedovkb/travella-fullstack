@@ -26,6 +26,12 @@ const PAYMENT_ENTRY_OPTIONS = [
   { value: "refund", label: "Возврат от поставщика" },
 ];
 
+const OPERATION_TYPE_OPTIONS = [
+  { value: "sale", label: "Продажа" },
+  { value: "refund", label: "Возврат" },
+  { value: "rebook", label: "Перебронирование" },
+];
+
 function localTodayIso() {
   const now = new Date();
   const y = now.getFullYear();
@@ -45,16 +51,24 @@ const emptyAgentForm = {
 
 const emptySaleForm = {
   sale_date: todayIso,
+  operation_type: "sale",
   agent_id: "",
   supplier_agent_id: "",
   service_type: "airticket",
   direction: "",
   traveller_name: "",
+  original_sale_date: "",
+  original_ticket_info: "",
   fare_amount: "",
   taxes_amount: "",
   commission_percent: "",
   sale_amount: "",
   vat_percent: "",
+  refund_fare_amount: "",
+  refund_taxes_amount: "",
+  penalty_amount: "",
+  refund_commission_amount: "",
+  rebooking_amount: "",
 };
 
 const emptyPaymentForm = {
@@ -79,11 +93,62 @@ function roundMoney(v) {
 }
 
 function calculateSaleFinance(form) {
+  const operationType = String(form.operation_type || "sale");
   const fare = Math.max(0, numeric(form.fare_amount));
   const taxes = Math.max(0, numeric(form.taxes_amount));
   const commissionPercent = Math.max(0, numeric(form.commission_percent));
   const sale = Math.max(0, numeric(form.sale_amount));
   const vatPercent = Math.max(0, numeric(form.vat_percent));
+  const refundFare = Math.max(0, numeric(form.refund_fare_amount));
+  const refundTaxes = Math.max(0, numeric(form.refund_taxes_amount));
+  const penalty = Math.max(0, numeric(form.penalty_amount));
+  const refundCommission = Math.max(0, numeric(form.refund_commission_amount));
+  const rebookingAmount = Math.max(0, numeric(form.rebooking_amount));
+
+  if (operationType === "refund") {
+    const refundTotal = roundMoney(Math.max(0, refundFare + refundTaxes - penalty - refundCommission));
+    return {
+      operation_type: operationType,
+      fare_amount: 0,
+      taxes_amount: 0,
+      commission_percent: 0,
+      commission_amount: 0,
+      net_amount: roundMoney(0 - refundTotal),
+      sale_amount: roundMoney(0 - refundTotal),
+      vat_percent: 0,
+      vat_amount: 0,
+      markup_amount: 0,
+      refund_fare_amount: refundFare,
+      refund_taxes_amount: refundTaxes,
+      penalty_amount: penalty,
+      refund_commission_amount: refundCommission,
+      rebooking_amount: 0,
+      refund_total: refundTotal,
+      margin: 0,
+    };
+  }
+
+  if (operationType === "rebook") {
+    return {
+      operation_type: operationType,
+      fare_amount: 0,
+      taxes_amount: 0,
+      commission_percent: 0,
+      commission_amount: 0,
+      net_amount: rebookingAmount,
+      sale_amount: rebookingAmount,
+      vat_percent: 0,
+      vat_amount: 0,
+      markup_amount: 0,
+      refund_fare_amount: 0,
+      refund_taxes_amount: 0,
+      penalty_amount: 0,
+      refund_commission_amount: 0,
+      rebooking_amount: rebookingAmount,
+      refund_total: 0,
+      margin: 0,
+    };
+  }
 
   const commissionAmount = roundMoney((fare * commissionPercent) / 100);
   const netAmount = roundMoney(fare + taxes - commissionAmount);
@@ -92,6 +157,7 @@ function calculateSaleFinance(form) {
   const vatAmount = roundMoney(Math.max(0, sale - netAmount - markupAmount));
 
   return {
+    operation_type: operationType,
     fare_amount: fare,
     taxes_amount: taxes,
     commission_percent: commissionPercent,
@@ -101,8 +167,18 @@ function calculateSaleFinance(form) {
     vat_percent: vatPercent,
     vat_amount: vatAmount,
     markup_amount: markupAmount,
+    refund_fare_amount: 0,
+    refund_taxes_amount: 0,
+    penalty_amount: 0,
+    refund_commission_amount: 0,
+    rebooking_amount: 0,
+    refund_total: 0,
     margin: markupAmount,
   };
+}
+
+function operationTypeLabel(v) {
+  return OPERATION_TYPE_OPTIONS.find((x) => x.value === v)?.label || "Продажа";
 }
 
 function money(v) {
@@ -145,6 +221,8 @@ function agentKindLabel(v) {
 
 function ledgerTypeLabel(v) {
   if (v === "supply") return "Поставка";
+  if (v === "sale_refund") return "Возврат";
+  if (v === "sale_rebook") return "Перебронирование";
   if (v === "legacy_sale") return "Продажа (старая)";
   if (v === "payment") return "Оплата";
   if (v === "refund") return "Возврат";
@@ -162,6 +240,8 @@ function badgeClassByServiceType(v) {
 
 function badgeClassByLedgerType(v) {
   if (v === "supply") return "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200";
+  if (v === "sale_refund") return "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200";
+  if (v === "sale_rebook") return "bg-indigo-50 text-indigo-700 ring-1 ring-inset ring-indigo-200";
   if (v === "legacy_sale") return "bg-violet-50 text-violet-700 ring-1 ring-inset ring-violet-200";
   if (v === "payment") return "bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200";
   if (v === "refund") return "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200";
@@ -508,6 +588,14 @@ export default function AdminTravelSales() {
     const calculated = calculateSaleFinance(saleForm);
     const payload = {
       sale_date: saleForm.sale_date,
+      operation_type: saleForm.operation_type || "sale",
+      original_sale_date: saleForm.original_sale_date || null,
+      original_ticket_info: saleForm.original_ticket_info.trim(),
+      refund_fare_amount: calculated.refund_fare_amount,
+      refund_taxes_amount: calculated.refund_taxes_amount,
+      penalty_amount: calculated.penalty_amount,
+      refund_commission_amount: calculated.refund_commission_amount,
+      rebooking_amount: calculated.rebooking_amount,
       agent_id: Number(saleForm.agent_id),
       supplier_agent_id: Number(saleForm.supplier_agent_id),
       service_type: saleForm.service_type,
@@ -525,7 +613,9 @@ export default function AdminTravelSales() {
     if (!payload.supplier_agent_id) return tError("Выбери поставщика");
     if (!payload.service_type) return tError("Выбери тип услуги");
     if (!payload.direction) return tError("Укажи направление");
-    if (payload.sale_amount < 0) return tError("Сумма продажи не может быть отрицательной");
+    if (payload.operation_type === "sale" && payload.sale_amount < 0) return tError("Сумма продажи не может быть отрицательной");
+    if (payload.operation_type === "refund" && calculated.refund_total <= 0) return tError("Укажи сумму возврата");
+    if (payload.operation_type === "rebook" && calculated.rebooking_amount <= 0) return tError("Укажи сумму перебронирования");
 
     try {
       if (editingSaleId) {
@@ -550,6 +640,14 @@ export default function AdminTravelSales() {
     setEditingSaleId(row.id);
     setSaleForm({
       sale_date: iso(row.sale_date) || todayIso,
+      operation_type: row.operation_type || "sale",
+      original_sale_date: iso(row.original_sale_date) || "",
+      original_ticket_info: row.original_ticket_info || "",
+      refund_fare_amount: row.refund_fare_amount ?? "",
+      refund_taxes_amount: row.refund_taxes_amount ?? "",
+      penalty_amount: row.penalty_amount ?? "",
+      refund_commission_amount: row.refund_commission_amount ?? "",
+      rebooking_amount: row.rebooking_amount ?? "",
       agent_id: String(row.agent_id || ""),
       supplier_agent_id: String(row.supplier_agent_id || ""),
       service_type: row.service_type || "airticket",
@@ -638,6 +736,9 @@ export default function AdminTravelSales() {
     exportToExcel(`travel-sales-report-${new Date().toISOString().slice(0, 10)}.xlsx`, salesReport.map((row, idx) => ({
       "№": idx + 1,
       Дата: iso(row.sale_date),
+      "Тип операции": operationTypeLabel(row.operation_type),
+      "Дата исходной продажи": iso(row.original_sale_date),
+      "Описание исходного билета": row.original_ticket_info || "",
       Агент: row.agent || "",
       Поставщик: row.supplier_agent || "",
       "Тип услуги": typeLabel(row.service_type),
@@ -652,6 +753,11 @@ export default function AdminTravelSales() {
       "НДС %": Number(row.vat_percent || 0),
       "НДС сумма": Number(row.vat_amount || 0),
       Наценка: Number(row.markup_amount || row.margin || 0),
+      "Тариф возврата": Number(row.refund_fare_amount || 0),
+      "Таксы возврата": Number(row.refund_taxes_amount || 0),
+      Штраф: Number(row.penalty_amount || 0),
+      "Комиссия возврата": Number(row.refund_commission_amount || 0),
+      Перебронирование: Number(row.rebooking_amount || 0),
     })));
   }
 
@@ -661,7 +767,7 @@ export default function AdminTravelSales() {
       "№": idx + 1,
       "Дата операции": iso(row.txn_date),
       "Тип записи": ledgerTypeLabel(row.entry_type),
-      "Агент/поставщик": row.agent || "",
+      Агент: row.agent || "",
       "Тип услуги": typeLabel(row.service_type),
       Направление: row.direction || "",
       "Name of traveller": row.traveller_name || "",
@@ -681,7 +787,7 @@ export default function AdminTravelSales() {
   const balanceGroups = useMemo(() => groupByDate(balanceReport, "txn_date"), [balanceReport]);
   const paymentGroups = useMemo(() => groupByDate(payments, "payment_date"), [payments]);
 
-  const resetSaleVisible = editingSaleId || Object.entries(saleForm).some(([k, v]) => k !== "sale_date" && k !== "service_type" && String(v || "").trim());
+  const resetSaleVisible = editingSaleId || Object.entries(saleForm).some(([k, v]) => k !== "sale_date" && k !== "service_type" && k !== "operation_type" && String(v || "").trim());
 
   return (
     <div className="space-y-6">
@@ -740,37 +846,67 @@ export default function AdminTravelSales() {
             <Card title={editingSaleId ? "Редактировать продажу" : "Добавить продажу"} subtitle="Тариф + таксы - комиссия = нетто поставщика">
               <form onSubmit={handleSaveSale} className="space-y-4">
                 <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Дата</label><input type="date" className={inputClass()} value={saleForm.sale_date} onChange={(e) => setSaleForm((p) => ({ ...p, sale_date: e.target.value }))} /></div>
+                <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Тип операции</label><select className={inputClass()} value={saleForm.operation_type} onChange={(e) => setSaleForm((p) => ({ ...p, operation_type: e.target.value }))}>{OPERATION_TYPE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select></div>
                 <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Агент продаж</label><select className={inputClass()} value={saleForm.agent_id} onChange={(e) => setSaleForm((p) => ({ ...p, agent_id: e.target.value }))}><option value="">Выберите агента</option>{salesAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
                 <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Поставщик</label><select className={inputClass()} value={saleForm.supplier_agent_id} onChange={(e) => setSaleForm((p) => ({ ...p, supplier_agent_id: e.target.value }))}><option value="">Выберите поставщика</option>{suppliers.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
                 <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Тип услуги</label><select className={inputClass()} value={saleForm.service_type} onChange={(e) => setSaleForm((p) => ({ ...p, service_type: e.target.value }))}>{SERVICE_TYPE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select></div>
                 <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Направление</label><input className={inputClass()} value={saleForm.direction} onChange={(e) => setSaleForm((p) => ({ ...p, direction: e.target.value }))} placeholder="Например: TAS / IST / TAS" /></div>
                 <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Name of traveller</label><input className={inputClass()} value={saleForm.traveller_name} onChange={(e) => setSaleForm((p) => ({ ...p, traveller_name: e.target.value }))} placeholder="Например: Ali Valiyev" /></div>
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Тариф</label><input type="number" className={inputClass()} value={saleForm.fare_amount} onChange={(e) => setSaleForm((p) => ({ ...p, fare_amount: e.target.value }))} placeholder="0" /></div>
-                  <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Таксы</label><input type="number" className={inputClass()} value={saleForm.taxes_amount} onChange={(e) => setSaleForm((p) => ({ ...p, taxes_amount: e.target.value }))} placeholder="0" /></div>
-                </div>
-                <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Комиссия % от тарифа</label><input type="number" className={inputClass()} value={saleForm.commission_percent} onChange={(e) => setSaleForm((p) => ({ ...p, commission_percent: e.target.value }))} placeholder="Например: 5" /></div>
-                <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Сумма продажи</label><input type="number" className={inputClass()} value={saleForm.sale_amount} onChange={(e) => setSaleForm((p) => ({ ...p, sale_amount: e.target.value }))} placeholder="0" /></div>
-                <div><label className="mb-1.5 block text-sm font-medium text-gray-700">НДС %</label><input type="number" className={inputClass()} value={saleForm.vat_percent} onChange={(e) => setSaleForm((p) => ({ ...p, vat_percent: e.target.value }))} placeholder="0" /></div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div><div className="text-xs text-slate-500">Комиссия сумма авто</div><b className="text-slate-900">{money(finance.commission_amount)}</b></div>
-                    <div><div className="text-xs text-slate-500">Нетто / поставка авто</div><b className="text-slate-900">{money(finance.net_amount)}</b></div>
-                    <div><div className="text-xs text-slate-500">НДС сумма авто</div><b className="text-slate-900">{money(finance.vat_amount)}</b></div>
-                    <div><div className="text-xs text-slate-500">Наценка авто</div><b className="text-emerald-700">{money(finance.markup_amount)}</b></div>
-                  </div>
-                  <p className="mt-3 text-xs text-slate-500">Формулы: комиссия = тариф × % / 100. Нетто = тариф + таксы − комиссия. Наценка считается из суммы продажи без НДС.</p>
-                </div>
+                {saleForm.operation_type === "sale" && (
+                  <>
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                      <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Тариф</label><input type="number" className={inputClass()} value={saleForm.fare_amount} onChange={(e) => setSaleForm((p) => ({ ...p, fare_amount: e.target.value }))} placeholder="0" /></div>
+                      <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Таксы</label><input type="number" className={inputClass()} value={saleForm.taxes_amount} onChange={(e) => setSaleForm((p) => ({ ...p, taxes_amount: e.target.value }))} placeholder="0" /></div>
+                    </div>
+                    <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Комиссия % от тарифа</label><input type="number" className={inputClass()} value={saleForm.commission_percent} onChange={(e) => setSaleForm((p) => ({ ...p, commission_percent: e.target.value }))} placeholder="Например: 5" /></div>
+                    <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Сумма продажи</label><input type="number" className={inputClass()} value={saleForm.sale_amount} onChange={(e) => setSaleForm((p) => ({ ...p, sale_amount: e.target.value }))} placeholder="0" /></div>
+                    <div><label className="mb-1.5 block text-sm font-medium text-gray-700">НДС %</label><input type="number" className={inputClass()} value={saleForm.vat_percent} onChange={(e) => setSaleForm((p) => ({ ...p, vat_percent: e.target.value }))} placeholder="0" /></div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div><div className="text-xs text-slate-500">Комиссия сумма авто</div><b className="text-slate-900">{money(finance.commission_amount)}</b></div>
+                        <div><div className="text-xs text-slate-500">Нетто / поставка авто</div><b className="text-slate-900">{money(finance.net_amount)}</b></div>
+                        <div><div className="text-xs text-slate-500">НДС сумма авто</div><b className="text-slate-900">{money(finance.vat_amount)}</b></div>
+                        <div><div className="text-xs text-slate-500">Наценка авто</div><b className="text-emerald-700">{money(finance.markup_amount)}</b></div>
+                      </div>
+                      <p className="mt-3 text-xs text-slate-500">Формулы: комиссия = тариф × % / 100. Нетто = тариф + таксы − комиссия. Наценка считается из суммы продажи без НДС.</p>
+                    </div>
+                  </>
+                )}
+                {saleForm.operation_type !== "sale" && (
+                  <>
+                    <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Дата исходной продажи</label><input type="date" className={inputClass()} value={saleForm.original_sale_date} onChange={(e) => setSaleForm((p) => ({ ...p, original_sale_date: e.target.value }))} /></div>
+                    <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Описание / номер билета</label><input className={inputClass()} value={saleForm.original_ticket_info} onChange={(e) => setSaleForm((p) => ({ ...p, original_ticket_info: e.target.value }))} placeholder="Например: билет 2 июня, пассажир, PNR" /></div>
+                  </>
+                )}
+                {saleForm.operation_type === "refund" && (
+                  <>
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                      <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Тариф к возврату</label><input type="number" className={inputClass()} value={saleForm.refund_fare_amount} onChange={(e) => setSaleForm((p) => ({ ...p, refund_fare_amount: e.target.value }))} placeholder="0" /></div>
+                      <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Таксы к возврату</label><input type="number" className={inputClass()} value={saleForm.refund_taxes_amount} onChange={(e) => setSaleForm((p) => ({ ...p, refund_taxes_amount: e.target.value }))} placeholder="0" /></div>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                      <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Штраф</label><input type="number" className={inputClass()} value={saleForm.penalty_amount} onChange={(e) => setSaleForm((p) => ({ ...p, penalty_amount: e.target.value }))} placeholder="0" /></div>
+                      <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Комиссия к возврату</label><input type="number" className={inputClass()} value={saleForm.refund_commission_amount} onChange={(e) => setSaleForm((p) => ({ ...p, refund_commission_amount: e.target.value }))} placeholder="0" /></div>
+                    </div>
+                    <div className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm"><div className="text-xs text-rose-600">Итого возврат поставщика</div><b className="text-rose-700">-{money(finance.refund_total)}</b><p className="mt-2 text-xs text-rose-500">Формула: тариф возврата + таксы возврата − штраф − комиссия возврата.</p></div>
+                  </>
+                )}
+                {saleForm.operation_type === "rebook" && (
+                  <>
+                    <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Сумма перебронирования</label><input type="number" className={inputClass()} value={saleForm.rebooking_amount} onChange={(e) => setSaleForm((p) => ({ ...p, rebooking_amount: e.target.value }))} placeholder="0" /></div>
+                    <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-3 text-sm"><div className="text-xs text-indigo-600">Поставка по перебронированию</div><b className="text-indigo-700">{money(finance.rebooking_amount)}</b></div>
+                  </>
+                )}
                 <div className="flex flex-wrap gap-2"><ActionButton type="submit" variant="primary">{editingSaleId ? "Сохранить" : "Добавить"}</ActionButton>{resetSaleVisible ? <ActionButton type="button" onClick={() => { setEditingSaleId(null); setSaleForm(emptySaleForm); }}>Сбросить</ActionButton> : null}</div>
               </form>
             </Card>
 
             <div className="xl:col-span-2">
               <Card title="Список продаж" subtitle="Поставщик фиксируется сразу и попадает в баланс" right={<div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:flex-wrap lg:items-center lg:justify-end"><select className={inputClass("lg:w-[170px]")} value={dailyFilterAgentId} onChange={(e) => setDailyFilterAgentId(e.target.value)}><option value="">Все агенты</option>{salesAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select><select className={inputClass("lg:w-[190px]")} value={dailyFilterSupplierId} onChange={(e) => setDailyFilterSupplierId(e.target.value)}><option value="">Все поставщики</option>{suppliers.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select><select className={inputClass("lg:w-[150px]")} value={dailyServiceType} onChange={(e) => setDailyServiceType(e.target.value)}><option value="">Все типы</option>{SERVICE_TYPE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select><input type="date" className={inputClass("lg:w-[150px]")} value={dailyDateFrom} onChange={(e) => setDailyDateFrom(e.target.value)} /><input type="date" className={inputClass("lg:w-[150px]")} value={dailyDateTo} onChange={(e) => setDailyDateTo(e.target.value)} /><ActionButton onClick={loadDailySales} type="button">Фильтр</ActionButton></div>}>
-                <TableShell><Table><thead><tr><TH>№</TH><TH>Дата</TH><TH>Агент</TH><TH>Поставщик</TH><TH>Тип</TH><TH>Направление</TH><TH>Traveller</TH><TH align="right">Тариф</TH><TH align="right">Таксы</TH><TH align="right">Комиссия</TH><TH align="right">Продажа</TH><TH align="right">Нетто</TH><TH align="right">НДС</TH><TH align="right">Наценка</TH><TH>Действия</TH></tr></thead><tbody>
-                  {dailyLoading || dailySales.length === 0 ? <EmptyRow loading={dailyLoading} colSpan={15} /> : dailyGroups.flatMap((group) => {
-                    const header = <tr key={`daily-${group.date}`}><td colSpan={15} className="px-3 py-3"><div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"><b>{group.date}</b><span className="ml-3 text-xs text-slate-500">Продаж: {group.items.length}</span><span className="ml-3 text-xs font-semibold text-slate-700">Сумма: {money(group.items.reduce((s, r) => s + Number(r.sale_amount || 0), 0))}</span><span className="ml-3 text-xs font-semibold text-emerald-700">Наценка: {money(group.items.reduce((s, r) => s + Number(r.markup_amount || 0), 0))}</span></div></td></tr>;
-                    const rows = group.items.map((row, idx) => <tr key={row.id} className="border-b border-gray-100 hover:bg-gray-50/70"><TD>{idx + 1}</TD><TD>{iso(row.sale_date)}</TD><TD><b>{row.agent_name}</b></TD><TD>{row.supplier_agent_name || "—"}</TD><TD><Badge className={badgeClassByServiceType(row.service_type)}>{typeLabel(row.service_type)}</Badge></TD><TD>{row.direction || "—"}</TD><TD>{row.traveller_name || "—"}</TD><TD align="right">{money(row.fare_amount)}</TD><TD align="right">{money(row.taxes_amount)}</TD><TD align="right">{money(row.commission_amount)}</TD><TD align="right"><b>{money(row.sale_amount)}</b></TD><TD align="right"><b>{money(row.net_amount)}</b></TD><TD align="right">{money(row.vat_amount)}</TD><TD align="right" className="font-semibold text-emerald-700">{money(row.markup_amount)}</TD><TD><div className="flex gap-2"><ActionButton type="button" onClick={() => startEditSale(row)}>Изменить</ActionButton><ActionButton type="button" variant="danger" onClick={() => handleDeleteSale(row.id)}>Удалить</ActionButton></div></TD></tr>);
+                <TableShell><Table><thead><tr><TH>№</TH><TH>Дата</TH><TH>Агент</TH><TH>Поставщик</TH><TH>Операция</TH><TH>Тип</TH><TH>Направление</TH><TH>Traveller</TH><TH align="right">Тариф</TH><TH align="right">Таксы</TH><TH align="right">Комиссия</TH><TH align="right">Продажа</TH><TH align="right">Нетто</TH><TH align="right">НДС</TH><TH align="right">Наценка</TH><TH>Действия</TH></tr></thead><tbody>
+                  {dailyLoading || dailySales.length === 0 ? <EmptyRow loading={dailyLoading} colSpan={16} /> : dailyGroups.flatMap((group) => {
+                    const header = <tr key={`daily-${group.date}`}><td colSpan={16} className="px-3 py-3"><div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"><b>{group.date}</b><span className="ml-3 text-xs text-slate-500">Продаж: {group.items.length}</span><span className="ml-3 text-xs font-semibold text-slate-700">Сумма: {money(group.items.reduce((s, r) => s + Number(r.sale_amount || 0), 0))}</span><span className="ml-3 text-xs font-semibold text-emerald-700">Наценка: {money(group.items.reduce((s, r) => s + Number(r.markup_amount || 0), 0))}</span></div></td></tr>;
+                    const rows = group.items.map((row, idx) => <tr key={row.id} className="border-b border-gray-100 hover:bg-gray-50/70"><TD>{idx + 1}</TD><TD>{iso(row.sale_date)}</TD><TD><b>{row.agent_name}</b></TD><TD>{row.supplier_agent_name || "—"}</TD><TD><Badge className={badgeClassByLedgerType(row.operation_type === "refund" ? "sale_refund" : row.operation_type === "rebook" ? "sale_rebook" : "supply")}>{operationTypeLabel(row.operation_type)}</Badge></TD><TD><Badge className={badgeClassByServiceType(row.service_type)}>{typeLabel(row.service_type)}</Badge></TD><TD>{row.direction || "—"}</TD><TD>{row.traveller_name || "—"}</TD><TD align="right">{money(row.fare_amount)}</TD><TD align="right">{money(row.taxes_amount)}</TD><TD align="right">{money(row.commission_amount)}</TD><TD align="right"><b>{money(row.sale_amount)}</b></TD><TD align="right"><b>{money(row.net_amount)}</b></TD><TD align="right">{money(row.vat_amount)}</TD><TD align="right" className="font-semibold text-emerald-700">{money(row.markup_amount)}</TD><TD><div className="flex gap-2"><ActionButton type="button" onClick={() => startEditSale(row)}>Изменить</ActionButton><ActionButton type="button" variant="danger" onClick={() => handleDeleteSale(row.id)}>Удалить</ActionButton></div></TD></tr>);
                     return [header, ...rows];
                   })}
                 </tbody></Table></TableShell>
@@ -817,7 +953,7 @@ export default function AdminTravelSales() {
             <StatCard title="Наценка" value={money(totals.reportMarkup)} hint={`≈ ${moneyCompact(totals.reportMarkup)}`} accent="emerald" />
           </div>
           <Card title="Отчет продаж" subtitle="Для сверки с поставщиками и внутренней маржи" right={<div className="flex flex-wrap gap-2"><select className={inputClass("w-[170px]")} value={salesAgentId} onChange={(e) => setSalesAgentId(e.target.value)}><option value="">Все агенты</option>{salesAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select><select className={inputClass("w-[190px]")} value={salesSupplierId} onChange={(e) => setSalesSupplierId(e.target.value)}><option value="">Все поставщики</option>{suppliers.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select><select className={inputClass("w-[150px]")} value={salesServiceType} onChange={(e) => setSalesServiceType(e.target.value)}><option value="">Все типы</option>{SERVICE_TYPE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select><input type="date" className={inputClass("w-[150px]")} value={salesDateFrom} onChange={(e) => setSalesDateFrom(e.target.value)} /><input type="date" className={inputClass("w-[150px]")} value={salesDateTo} onChange={(e) => setSalesDateTo(e.target.value)} /><ActionButton type="button" onClick={loadSalesReport}>Фильтр</ActionButton><ActionButton type="button" variant="primary" onClick={exportSalesReport}>Excel</ActionButton></div>}>
-            <TableShell><Table><thead><tr><TH>№</TH><TH>Дата</TH><TH>Агент</TH><TH>Поставщик</TH><TH>Тип</TH><TH>Направление</TH><TH>Traveller</TH><TH align="right">Тариф</TH><TH align="right">Таксы</TH><TH align="right">Комиссия</TH><TH align="right">Продажа</TH><TH align="right">Нетто</TH><TH align="right">НДС</TH><TH align="right">Наценка</TH></tr></thead><tbody>{salesReportLoading || salesReport.length === 0 ? <EmptyRow loading={salesReportLoading} colSpan={14} /> : salesGroups.flatMap((group) => [<tr key={`rep-${group.date}`}><td colSpan={14} className="px-3 py-3"><div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"><b>{group.date}</b><span className="ml-3 text-xs text-slate-500">Продаж: {group.items.length}</span><span className="ml-3 text-xs font-semibold">Продажа: {money(group.items.reduce((s, r) => s + Number(r.sale_amount || 0), 0))}</span><span className="ml-3 text-xs font-semibold text-emerald-700">Наценка: {money(group.items.reduce((s, r) => s + Number(r.markup_amount || r.margin || 0), 0))}</span></div></td></tr>, ...group.items.map((row, idx) => <tr key={row.id} className="border-b border-gray-100 hover:bg-gray-50/70"><TD>{idx + 1}</TD><TD>{iso(row.sale_date)}</TD><TD><b>{row.agent}</b></TD><TD>{row.supplier_agent || "—"}</TD><TD><Badge className={badgeClassByServiceType(row.service_type)}>{typeLabel(row.service_type)}</Badge></TD><TD>{row.direction || "—"}</TD><TD>{row.traveller_name || "—"}</TD><TD align="right">{money(row.fare_amount)}</TD><TD align="right">{money(row.taxes_amount)}</TD><TD align="right">{money(row.commission_amount)}</TD><TD align="right"><b>{money(row.sale_amount)}</b></TD><TD align="right"><b>{money(row.net_amount)}</b></TD><TD align="right">{money(row.vat_amount)}</TD><TD align="right" className="font-semibold text-emerald-700">{money(row.markup_amount || row.margin)}</TD></tr>)])}</tbody></Table></TableShell>
+            <TableShell><Table><thead><tr><TH>№</TH><TH>Дата</TH><TH>Агент</TH><TH>Поставщик</TH><TH>Операция</TH><TH>Тип</TH><TH>Направление</TH><TH>Traveller</TH><TH align="right">Тариф</TH><TH align="right">Таксы</TH><TH align="right">Комиссия</TH><TH align="right">Продажа</TH><TH align="right">Нетто</TH><TH align="right">НДС</TH><TH align="right">Наценка</TH></tr></thead><tbody>{salesReportLoading || salesReport.length === 0 ? <EmptyRow loading={salesReportLoading} colSpan={15} /> : salesGroups.flatMap((group) => [<tr key={`rep-${group.date}`}><td colSpan={15} className="px-3 py-3"><div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"><b>{group.date}</b><span className="ml-3 text-xs text-slate-500">Продаж: {group.items.length}</span><span className="ml-3 text-xs font-semibold">Продажа: {money(group.items.reduce((s, r) => s + Number(r.sale_amount || 0), 0))}</span><span className="ml-3 text-xs font-semibold text-emerald-700">Наценка: {money(group.items.reduce((s, r) => s + Number(r.markup_amount || r.margin || 0), 0))}</span></div></td></tr>, ...group.items.map((row, idx) => <tr key={row.id} className="border-b border-gray-100 hover:bg-gray-50/70"><TD>{idx + 1}</TD><TD>{iso(row.sale_date)}</TD><TD><b>{row.agent}</b></TD><TD>{row.supplier_agent || "—"}</TD><TD><Badge className={badgeClassByLedgerType(row.operation_type === "refund" ? "sale_refund" : row.operation_type === "rebook" ? "sale_rebook" : "supply")}>{operationTypeLabel(row.operation_type)}</Badge></TD><TD><Badge className={badgeClassByServiceType(row.service_type)}>{typeLabel(row.service_type)}</Badge></TD><TD>{row.direction || "—"}</TD><TD>{row.traveller_name || "—"}</TD><TD align="right">{money(row.fare_amount)}</TD><TD align="right">{money(row.taxes_amount)}</TD><TD align="right">{money(row.commission_amount)}</TD><TD align="right"><b>{money(row.sale_amount)}</b></TD><TD align="right"><b>{money(row.net_amount)}</b></TD><TD align="right">{money(row.vat_amount)}</TD><TD align="right" className="font-semibold text-emerald-700">{money(row.markup_amount || row.margin)}</TD></tr>)])}</tbody></Table></TableShell>
           </Card>
         </>
       )}
@@ -831,7 +967,7 @@ export default function AdminTravelSales() {
             <StatCard title="Оплаты + возвраты" value={money(balanceReport.reduce((s, r) => s + Number(r.payment_amount || 0) + Number(r.refund_amount || 0), 0))} hint="Реальные движения денег" accent="amber" />
           </div>
           <Card title="Баланс агентов" subtitle="Поставки приходят из дневной продажи, оплаты — из перечислений" right={<div className="flex flex-wrap gap-2"><select className={inputClass("w-[190px]")} value={balanceAgentId} onChange={(e) => setBalanceAgentId(e.target.value)}><option value="">Все агенты</option>{sortedAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select><select className={inputClass("w-[150px]")} value={balanceServiceType} onChange={(e) => setBalanceServiceType(e.target.value)}><option value="">Все типы</option>{SERVICE_TYPE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select><input type="date" className={inputClass("w-[150px]")} value={balanceDateFrom} onChange={(e) => setBalanceDateFrom(e.target.value)} /><input type="date" className={inputClass("w-[150px]")} value={balanceDateTo} onChange={(e) => setBalanceDateTo(e.target.value)} /><ActionButton type="button" onClick={loadBalanceReport}>Фильтр</ActionButton><ActionButton type="button" variant="primary" onClick={exportBalanceReport}>Excel</ActionButton></div>}>
-            <TableShell><Table><thead><tr><TH>№</TH><TH>Дата</TH><TH>Тип</TH><TH>Агент</TH><TH>Тип услуги</TH><TH>Направление</TH><TH>Traveller</TH><TH align="right">Тариф</TH><TH align="right">Таксы</TH><TH align="right">Комиссия</TH><TH align="right">Поставка</TH><TH align="right">Оплата</TH><TH align="right">Возврат</TH><TH>Комментарий</TH><TH align="right">Баланс</TH></tr></thead><tbody>{balanceLoading || balanceReport.length === 0 ? <EmptyRow loading={balanceLoading} colSpan={15} /> : balanceGroups.flatMap((group) => [<tr key={`bal-${group.date}`}><td colSpan={15} className="px-3 py-3"><div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"><b>{group.date}</b><span className="ml-3 text-xs text-slate-500">Операций: {group.items.length}</span><span className="ml-3 text-xs font-semibold text-emerald-700">Поставки: {money(group.items.reduce((s, r) => s + Number(r.supply_amount || 0), 0))}</span><span className="ml-3 text-xs font-semibold text-sky-700">Оплаты: {money(group.items.reduce((s, r) => s + Number(r.payment_amount || 0), 0))}</span></div></td></tr>, ...group.items.map((row, idx) => { const status = balanceStatus(row.balance); return <tr key={row.row_key || `${row.entry_type}-${idx}`} className={`border-b border-gray-100 ${status.rowCls}`}><TD>{idx + 1}</TD><TD>{iso(row.txn_date)}</TD><TD><Badge className={badgeClassByLedgerType(row.entry_type)}>{ledgerTypeLabel(row.entry_type)}</Badge></TD><TD><b>{row.agent}</b></TD><TD>{row.service_type ? <Badge className={badgeClassByServiceType(row.service_type)}>{typeLabel(row.service_type)}</Badge> : "—"}</TD><TD>{row.direction || "—"}</TD><TD>{row.traveller_name || "—"}</TD><TD align="right">{money(row.fare_amount)}</TD><TD align="right">{money(row.taxes_amount)}</TD><TD align="right">{money(row.commission_amount)}</TD><TD align="right"><b>{money(row.supply_amount)}</b></TD><TD align="right">{money(row.payment_amount)}</TD><TD align="right">{money(row.refund_amount)}</TD><TD>{row.comment || "—"}</TD><TD align="right"><div className="flex items-center justify-end gap-2"><b className={Number(row.balance || 0) > 0 ? "text-red-600" : Number(row.balance || 0) < 0 ? "text-emerald-700" : "text-gray-900"}>{money(row.balance)}</b><Badge className={`ring-1 ${status.cls}`}>{status.label}</Badge></div></TD></tr>; })])}</tbody></Table></TableShell>
+            <TableShell><Table><thead><tr><TH>№</TH><TH>Дата</TH><TH>Тип</TH><TH>Агент</TH><TH>Тип услуги</TH><TH>Направление</TH><TH>Traveller</TH><TH align="right">Тариф</TH><TH align="right">Таксы</TH><TH align="right">Комиссия</TH><TH align="right">Поставка</TH><TH align="right">Оплата</TH><TH align="right">Возврат</TH><TH>Комментарий</TH><TH align="right">Баланс</TH></tr></thead><tbody>{balanceLoading || balanceReport.length === 0 ? <EmptyRow loading={balanceLoading} colSpan={15} /> : balanceGroups.flatMap((group) => [<tr key={`bal-${group.date}`}><td colSpan={16} className="px-3 py-3"><div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"><b>{group.date}</b><span className="ml-3 text-xs text-slate-500">Операций: {group.items.length}</span><span className="ml-3 text-xs font-semibold text-emerald-700">Поставки: {money(group.items.reduce((s, r) => s + Number(r.supply_amount || 0), 0))}</span><span className="ml-3 text-xs font-semibold text-sky-700">Оплаты: {money(group.items.reduce((s, r) => s + Number(r.payment_amount || 0), 0))}</span></div></td></tr>, ...group.items.map((row, idx) => { const status = balanceStatus(row.balance); return <tr key={row.row_key || `${row.entry_type}-${idx}`} className={`border-b border-gray-100 ${status.rowCls}`}><TD>{idx + 1}</TD><TD>{iso(row.txn_date)}</TD><TD><Badge className={badgeClassByLedgerType(row.entry_type)}>{ledgerTypeLabel(row.entry_type)}</Badge></TD><TD><b>{row.agent}</b></TD><TD>{row.service_type ? <Badge className={badgeClassByServiceType(row.service_type)}>{typeLabel(row.service_type)}</Badge> : "—"}</TD><TD>{row.direction || "—"}</TD><TD>{row.traveller_name || "—"}</TD><TD align="right">{money(row.fare_amount)}</TD><TD align="right">{money(row.taxes_amount)}</TD><TD align="right">{money(row.commission_amount)}</TD><TD align="right"><b>{money(row.supply_amount)}</b></TD><TD align="right">{money(row.payment_amount)}</TD><TD align="right">{money(row.refund_amount)}</TD><TD>{row.comment || "—"}</TD><TD align="right"><div className="flex items-center justify-end gap-2"><b className={Number(row.balance || 0) > 0 ? "text-red-600" : Number(row.balance || 0) < 0 ? "text-emerald-700" : "text-gray-900"}>{money(row.balance)}</b><Badge className={`ring-1 ${status.cls}`}>{status.label}</Badge></div></TD></tr>; })])}</tbody></Table></TableShell>
           </Card>
         </>
       )}
