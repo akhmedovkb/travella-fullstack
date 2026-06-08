@@ -1951,26 +1951,37 @@ async function askRole(ctx) {
   });
 }
 
-async function showClientHome(ctx) {
-  const text =
-    "✈️ <b>Вы вошли как клиент</b>\n\n" +
-    "🔥 <b>Найдём туры и услуги дешевле рынка</b>\n" +
-    "(отказные предложения со скидками)\n\n" +
-    "💰 <b>Экономия обычно 20–40%</b>\n" +
-    "⚡ Лучшие варианты быстро разбирают\n\n" +
-    "👇 <b>Начните поиск</b>";
+function getClientHomeKeyboard() {
+  return {
+    keyboard: [
+      [{ text: "🔍 Найти услугу" }, { text: "🔥 Горящие предложения" }],
+      [{ text: "❤️ Избранное" }, { text: "📄 Бронирования" }],
+      [{ text: "📨 Заявки" }, { text: "👤 Профиль" }],
+      [{ text: "🏢 Стать поставщиком" }],
+    ],
+    resize_keyboard: true,
+  };
+}
 
-  await ctx.reply(text, {
+function buildClientApprovedWelcomeText() {
+  return (
+    "✅ <b>Аккаунт успешно подтверждён</b>\n\n" +
+    "Добро пожаловать в <b>Travella</b>!\n\n" +
+    "Здесь вы можете:\n" +
+    "✈️ находить отказные туры и авиабилеты дешевле рынка\n" +
+    "🏨 искать отели и туристические услуги\n" +
+    "❤️ сохранять предложения в избранное\n" +
+    "📨 отправлять быстрые запросы поставщикам\n" +
+    "🔓 открывать контакты поставщиков напрямую\n\n" +
+    "🔥 Новые предложения появляются ежедневно и быстро разбираются.\n\n" +
+    "👇 <b>Начните поиск прямо сейчас</b>"
+  );
+}
+
+async function showClientHome(ctx) {
+  await ctx.reply(buildClientApprovedWelcomeText(), {
     parse_mode: "HTML",
-    reply_markup: {
-      keyboard: [
-        [{ text: "🔍 Найти услугу" }, { text: "🔥 Горящие предложения" }],
-        [{ text: "❤️ Избранное" }, { text: "📄 Бронирования" }],
-        [{ text: "📨 Заявки" }, { text: "👤 Профиль" }],
-        [{ text: "🏢 Стать поставщиком" }],
-      ],
-      resize_keyboard: true,
-    },
+    reply_markup: getClientHomeKeyboard(),
     disable_web_page_preview: true,
   });
 }
@@ -7690,27 +7701,7 @@ async function handlePhoneRegistration(ctx, requestedRole, phone) {
 
 
     if (finalRole === "client") {
-      await ctx.reply(
-        "✅ <b>Вы успешно подключены</b>\n\n" +
-          "🔥 <b>Теперь вам доступны выгодные предложения</b>\n" +
-          "(отказные туры и услуги дешевле рынка)\n\n" +
-          "💰 <b>Экономия обычно 20–40%</b>\n" +
-          "⚡ Лучшие варианты быстро разбирают\n\n" +
-          "👀 <b>Сейчас доступны выгодные предложения</b>\n\n" +
-          "👇 <b>Начните поиск прямо сейчас</b>",
-        {
-          parse_mode: "HTML",
-          reply_markup: {
-            keyboard: [
-              [{ text: "🔍 Найти услугу" }, { text: "🔥 Горящие предложения" }],
-              [{ text: "❤️ Избранное" }, { text: "📄 Бронирования" }],
-              [{ text: "📨 Заявки" }, { text: "👤 Профиль" }],
-              [{ text: "🏢 Стать поставщиком" }],
-            ],
-            resize_keyboard: true,
-          },
-        }
-      );
+      await showClientHome(ctx);
       return;
     }
     
