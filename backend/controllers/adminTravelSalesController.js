@@ -11,29 +11,6 @@ function toNum(v) {
   return Number.isFinite(n) ? n : 0;
 }
 
-function round2(v) {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return 0;
-  return Math.round((n + Number.EPSILON) * 100) / 100;
-}
-
-function normalizeVatPercent(v) {
-  const n = toNum(v);
-  if (!Number.isFinite(n) || n < 0) return 0;
-  return Math.min(100, round2(n));
-}
-
-function calculateSaleAmounts({ saleAmount, netAmount, vatPercent }) {
-  const sale = round2(saleAmount);
-  const net = round2(netAmount);
-  const vatPct = normalizeVatPercent(vatPercent);
-  const divisor = 1 + vatPct / 100;
-  const baseBeforeVat = divisor > 0 ? round2(sale / divisor) : sale;
-  const markup = round2(baseBeforeVat - net);
-  const vat = round2(sale - baseBeforeVat);
-  return { vatPercent: vatPct, markupAmount: markup, vatAmount: vat };
-}
-
 function clampInt(v, def, min, max) {
   const n = Number(v);
   if (!Number.isFinite(n)) return def;
@@ -113,8 +90,29 @@ function normalizeLedgerRows(rows) {
 
 function normalizeServiceType(v) {
   const s = toStr(v).toLowerCase();
-  if (["airticket", "train_ticket", "visa", "tourpackage"].includes(s)) return s;
+  if (["airticket", "rail_ticket", "visa", "tourpackage", "hotel", "insurance", "other"].includes(s)) return s;
   return "";
+}
+
+function normalizeOptionalId(v) {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? Math.trunc(n) : null;
+}
+
+function computeSaleAmounts({ saleAmount, netAmount, vatPercent }) {
+  const sale = toNum(saleAmount);
+  const net = toNum(netAmount);
+  const vatRate = Math.max(0, toNum(vatPercent));
+  const baseWithoutVat = vatRate > 0 ? sale / (1 + vatRate / 100) : sale;
+  const markup = Math.max(0, baseWithoutVat - net);
+  const vatAmount = Math.max(0, sale - baseWithoutVat);
+  return {
+    sale_amount: sale,
+    net_amount: net,
+    vat_percent: vatRate,
+    markup_amount: markup,
+    vat_amount: vatAmount,
+  };
 }
 
 async function ensureTables() {
@@ -134,15 +132,11 @@ async function ensureTables() {
       id BIGSERIAL PRIMARY KEY,
       sale_date DATE NOT NULL DEFAULT CURRENT_DATE,
       agent_id BIGINT NOT NULL REFERENCES travel_agents(id) ON DELETE RESTRICT,
-      supplier_agent_id BIGINT REFERENCES travel_agents(id) ON DELETE SET NULL,
       service_type TEXT NOT NULL DEFAULT '',
       direction TEXT NOT NULL DEFAULT '',
       traveller_name TEXT NOT NULL DEFAULT '',
       sale_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
       net_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
-      vat_percent NUMERIC(5,2) NOT NULL DEFAULT 0,
-      markup_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
-      vat_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
       payment NUMERIC(14,2) NOT NULL DEFAULT 0,
       payment_date DATE NOT NULL DEFAULT CURRENT_DATE,
       comment TEXT NOT NULL DEFAULT '',
@@ -173,7 +167,7 @@ async function ensureTables() {
 
   await db.query(`
     ALTER TABLE travel_daily_sales
-    ADD COLUMN IF NOT EXISTS supplier_agent_id BIGINT REFERENCES travel_agents(id) ON DELETE SET NULL;
+    ADD COLUMN IF NOT EXISTS supplier_agent_id BIGINT REFERENCES travel_agents(id) ON DELETE RESTRICT;
   `);
 
   await db.query(`
@@ -192,22 +186,8 @@ async function ensureTables() {
   `);
 
   await db.query(`
-    UPDATE travel_daily_sales
-       SET markup_amount = ROUND((sale_amount - net_amount - COALESCE(vat_amount, 0))::numeric, 2)
-     WHERE COALESCE(markup_amount, 0) = 0
-       AND COALESCE(vat_percent, 0) = 0
-       AND COALESCE(vat_amount, 0) = 0
-       AND ROUND((sale_amount - net_amount)::numeric, 2) <> 0;
-  `);
-
-  await db.query(`
     CREATE INDEX IF NOT EXISTS idx_travel_daily_sales_agent_id
     ON travel_daily_sales(agent_id);
-  `);
-
-  await db.query(`
-    CREATE INDEX IF NOT EXISTS idx_travel_daily_sales_supplier_agent_id
-    ON travel_daily_sales(supplier_agent_id);
   `);
 
   await db.query(`
@@ -218,6 +198,11 @@ async function ensureTables() {
   await db.query(`
     CREATE INDEX IF NOT EXISTS idx_travel_daily_sales_service_type
     ON travel_daily_sales(service_type);
+  `);
+
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS idx_travel_daily_sales_supplier_agent
+    ON travel_daily_sales(supplier_agent_id);
   `);
 
   await db.query(`
@@ -433,10 +418,10 @@ async function getDailySales(req, res) {
     const limit = clampInt(req.query.limit, 200, 1, 1000);
     const offset = clampInt(req.query.offset, 0, 0, 1000000);
     const agentId = req.query.agent_id ? Number(req.query.agent_id) : null;
+    const supplierAgentId = req.query.supplier_agent_id ? Number(req.query.supplier_agent_id) : null;
     const dateFrom = validateDate(req.query.date_from);
     const dateTo = validateDate(req.query.date_to);
     const serviceType = normalizeServiceType(req.query.service_type);
-    const supplierAgentId = req.query.supplier_agent_id ? Number(req.query.supplier_agent_id) : null;
 
     const { rows } = await db.query(
       `
@@ -453,8 +438,8 @@ async function getDailySales(req, res) {
         s.sale_amount,
         s.net_amount,
         s.vat_percent,
-        s.markup_amount,
         s.vat_amount,
+        s.markup_amount,
         s.payment,
         s.payment_date,
         s.comment,
@@ -464,19 +449,19 @@ async function getDailySales(req, res) {
       JOIN travel_agents a ON a.id = s.agent_id
       LEFT JOIN travel_agents supplier ON supplier.id = s.supplier_agent_id
       WHERE ($1::bigint IS NULL OR s.agent_id = $1)
-        AND ($2::date IS NULL OR s.sale_date >= $2::date)
-        AND ($3::date IS NULL OR s.sale_date <= $3::date)
-        AND ($4::text = '' OR s.service_type = $4)
-        AND ($5::bigint IS NULL OR s.supplier_agent_id = $5)
+        AND ($2::bigint IS NULL OR s.supplier_agent_id = $2)
+        AND ($3::date IS NULL OR s.sale_date >= $3::date)
+        AND ($4::date IS NULL OR s.sale_date <= $4::date)
+        AND ($5::text = '' OR s.service_type = $5)
       ORDER BY s.sale_date DESC, s.id DESC
       LIMIT $6 OFFSET $7
       `,
       [
         Number.isFinite(agentId) ? agentId : null,
+        Number.isFinite(supplierAgentId) ? supplierAgentId : null,
         dateFrom,
         dateTo,
         serviceType,
-        Number.isFinite(supplierAgentId) ? supplierAgentId : null,
         limit,
         offset,
       ]
@@ -500,21 +485,19 @@ async function createDailySale(req, res) {
 
     const saleDate = validateDate(req.body?.sale_date) || null;
     const agentId = Number(req.body?.agent_id);
-    const supplierAgentId = Number(req.body?.supplier_agent_id);
+    const supplierAgentId = normalizeOptionalId(req.body?.supplier_agent_id);
     const serviceType = normalizeServiceType(req.body?.service_type);
     const direction = toStr(req.body?.direction);
     const travellerName = toStr(req.body?.traveller_name);
-    const saleAmount = toNum(req.body?.sale_amount);
-    const netAmount = toNum(req.body?.net_amount);
-    const vatPercent = normalizeVatPercent(req.body?.vat_percent);
-    const calcAmounts = calculateSaleAmounts({ saleAmount, netAmount, vatPercent });
+    const amounts = computeSaleAmounts({
+      saleAmount: req.body?.sale_amount,
+      netAmount: req.body?.net_amount,
+      vatPercent: req.body?.vat_percent,
+    });
+    const { sale_amount: saleAmount, net_amount: netAmount, vat_percent: vatPercent, vat_amount: vatAmount, markup_amount: markupAmount } = amounts;
 
     if (!Number.isFinite(agentId) || agentId <= 0) {
       return res.status(400).json({ ok: false, message: "agent_id is required" });
-    }
-
-    if (!Number.isFinite(supplierAgentId) || supplierAgentId <= 0) {
-      return res.status(400).json({ ok: false, message: "supplier_agent_id is required" });
     }
 
     if (!serviceType) {
@@ -542,13 +525,14 @@ async function createDailySale(req, res) {
       return res.status(404).json({ ok: false, message: "Agent not found" });
     }
 
-    const supplierQ = await db.query(
-      `SELECT id, name FROM travel_agents WHERE id = $1 LIMIT 1`,
-      [supplierAgentId]
-    );
-
-    if (!supplierQ.rows.length) {
-      return res.status(404).json({ ok: false, message: "Supplier not found" });
+    if (supplierAgentId) {
+      const supplierQ = await db.query(
+        `SELECT id FROM travel_agents WHERE id = $1 LIMIT 1`,
+        [supplierAgentId]
+      );
+      if (!supplierQ.rows.length) {
+        return res.status(404).json({ ok: false, message: "Supplier not found" });
+      }
     }
 
     const { rows } = await db.query(
@@ -563,8 +547,8 @@ async function createDailySale(req, res) {
         sale_amount,
         net_amount,
         vat_percent,
-        markup_amount,
         vat_amount,
+        markup_amount,
         payment,
         payment_date,
         comment
@@ -596,27 +580,15 @@ async function createDailySale(req, res) {
         sale_amount,
         net_amount,
         vat_percent,
-        markup_amount,
         vat_amount,
+        markup_amount,
         payment,
         payment_date,
         comment,
         created_at,
         updated_at
       `,
-      [
-        saleDate,
-        agentId,
-        supplierAgentId,
-        serviceType,
-        direction,
-        travellerName,
-        saleAmount,
-        netAmount,
-        calcAmounts.vatPercent,
-        calcAmounts.markupAmount,
-        calcAmounts.vatAmount,
-      ]
+      [saleDate, agentId, supplierAgentId, serviceType, direction, travellerName, saleAmount, netAmount, vatPercent, vatAmount, markupAmount]
     );
 
     return res.json({
@@ -636,14 +608,16 @@ async function updateDailySale(req, res) {
     const id = Number(req.params?.id);
     const saleDate = validateDate(req.body?.sale_date);
     const agentId = Number(req.body?.agent_id);
-    const supplierAgentId = Number(req.body?.supplier_agent_id);
+    const supplierAgentId = normalizeOptionalId(req.body?.supplier_agent_id);
     const serviceType = normalizeServiceType(req.body?.service_type);
     const direction = toStr(req.body?.direction);
     const travellerName = toStr(req.body?.traveller_name);
-    const saleAmount = toNum(req.body?.sale_amount);
-    const netAmount = toNum(req.body?.net_amount);
-    const vatPercent = normalizeVatPercent(req.body?.vat_percent);
-    const calcAmounts = calculateSaleAmounts({ saleAmount, netAmount, vatPercent });
+    const amounts = computeSaleAmounts({
+      saleAmount: req.body?.sale_amount,
+      netAmount: req.body?.net_amount,
+      vatPercent: req.body?.vat_percent,
+    });
+    const { sale_amount: saleAmount, net_amount: netAmount, vat_percent: vatPercent, vat_amount: vatAmount, markup_amount: markupAmount } = amounts;
 
     if (!Number.isFinite(id) || id <= 0) {
       return res.status(400).json({ ok: false, message: "Bad id" });
@@ -651,10 +625,6 @@ async function updateDailySale(req, res) {
 
     if (!Number.isFinite(agentId) || agentId <= 0) {
       return res.status(400).json({ ok: false, message: "agent_id is required" });
-    }
-
-    if (!Number.isFinite(supplierAgentId) || supplierAgentId <= 0) {
-      return res.status(400).json({ ok: false, message: "supplier_agent_id is required" });
     }
 
     if (!saleDate) {
@@ -686,13 +656,14 @@ async function updateDailySale(req, res) {
       return res.status(404).json({ ok: false, message: "Agent not found" });
     }
 
-    const supplierQ = await db.query(
-      `SELECT id FROM travel_agents WHERE id = $1 LIMIT 1`,
-      [supplierAgentId]
-    );
-
-    if (!supplierQ.rows.length) {
-      return res.status(404).json({ ok: false, message: "Supplier not found" });
+    if (supplierAgentId) {
+      const supplierQ = await db.query(
+        `SELECT id FROM travel_agents WHERE id = $1 LIMIT 1`,
+        [supplierAgentId]
+      );
+      if (!supplierQ.rows.length) {
+        return res.status(404).json({ ok: false, message: "Supplier not found" });
+      }
     }
 
     const { rows } = await db.query(
@@ -708,8 +679,8 @@ async function updateDailySale(req, res) {
         sale_amount = $7,
         net_amount = $8,
         vat_percent = $9,
-        markup_amount = $10,
-        vat_amount = $11,
+        vat_amount = $10,
+        markup_amount = $11,
         updated_at = NOW()
       WHERE id = $12
       RETURNING
@@ -723,28 +694,15 @@ async function updateDailySale(req, res) {
         sale_amount,
         net_amount,
         vat_percent,
-        markup_amount,
         vat_amount,
+        markup_amount,
         payment,
         payment_date,
         comment,
         created_at,
         updated_at
       `,
-      [
-        saleDate,
-        agentId,
-        supplierAgentId,
-        serviceType,
-        direction,
-        travellerName,
-        saleAmount,
-        netAmount,
-        calcAmounts.vatPercent,
-        calcAmounts.markupAmount,
-        calcAmounts.vatAmount,
-        id,
-      ]
+      [saleDate, agentId, supplierAgentId, serviceType, direction, travellerName, saleAmount, netAmount, vatPercent, vatAmount, markupAmount, id]
     );
 
     if (!rows.length) {
@@ -1021,16 +979,17 @@ async function getSalesReport(req, res) {
     const limit = clampInt(req.query.limit, 500, 1, 5000);
     const offset = clampInt(req.query.offset, 0, 0, 1000000);
     const agentId = req.query.agent_id ? Number(req.query.agent_id) : null;
+    const supplierAgentId = req.query.supplier_agent_id ? Number(req.query.supplier_agent_id) : null;
     const dateFrom = validateDate(req.query.date_from);
     const dateTo = validateDate(req.query.date_to);
     const serviceType = normalizeServiceType(req.query.service_type);
-    const supplierAgentId = req.query.supplier_agent_id ? Number(req.query.supplier_agent_id) : null;
 
     const { rows } = await db.query(
       `
       SELECT
         s.id,
         s.sale_date,
+        s.agent_id,
         a.name AS agent,
         s.supplier_agent_id,
         supplier.name AS supplier_agent,
@@ -1040,26 +999,26 @@ async function getSalesReport(req, res) {
         s.sale_amount,
         s.net_amount,
         s.vat_percent,
-        s.markup_amount,
         s.vat_amount,
-        s.markup_amount AS margin
+        s.markup_amount,
+        COALESCE(s.markup_amount, s.sale_amount - s.net_amount - COALESCE(s.vat_amount, 0)) AS margin
       FROM travel_daily_sales s
       JOIN travel_agents a ON a.id = s.agent_id
       LEFT JOIN travel_agents supplier ON supplier.id = s.supplier_agent_id
       WHERE ($1::bigint IS NULL OR s.agent_id = $1)
-        AND ($2::date IS NULL OR s.sale_date >= $2::date)
-        AND ($3::date IS NULL OR s.sale_date <= $3::date)
-        AND ($4::text = '' OR s.service_type = $4)
-        AND ($5::bigint IS NULL OR s.supplier_agent_id = $5)
+        AND ($2::bigint IS NULL OR s.supplier_agent_id = $2)
+        AND ($3::date IS NULL OR s.sale_date >= $3::date)
+        AND ($4::date IS NULL OR s.sale_date <= $4::date)
+        AND ($5::text = '' OR s.service_type = $5)
       ORDER BY s.sale_date DESC, s.id DESC
       LIMIT $6 OFFSET $7
       `,
       [
         Number.isFinite(agentId) ? agentId : null,
+        Number.isFinite(supplierAgentId) ? supplierAgentId : null,
         dateFrom,
         dateTo,
         serviceType,
-        Number.isFinite(supplierAgentId) ? supplierAgentId : null,
         limit,
         offset,
       ]
@@ -1091,8 +1050,9 @@ async function getAgentBalanceReport(req, res) {
     const { rows } = await db.query(
       `
       WITH ledger_source AS (
+        /* Долг клиента/агента по продажам: кто продал */
         SELECT
-          s.id::text AS row_key,
+          ('sale-agent-' || s.id::text) AS row_key,
           s.agent_id,
           a.name AS agent,
           s.sale_date AS txn_date,
@@ -1104,7 +1064,8 @@ async function getAgentBalanceReport(req, res) {
           s.service_type,
           s.direction,
           s.traveller_name,
-          s.sale_amount,
+          s.sale_amount::numeric(14,2) AS sale_amount,
+          0::numeric(14,2) AS supply_amount,
           0::numeric(14,2) AS payment_amount,
           0::numeric(14,2) AS refund_amount,
           NULL::text AS comment,
@@ -1115,9 +1076,40 @@ async function getAgentBalanceReport(req, res) {
           AND ($2::date IS NULL OR s.sale_date >= $2::date)
           AND ($3::date IS NULL OR s.sale_date <= $3::date)
           AND ($4::text = '' OR s.service_type = $4)
-    
+
         UNION ALL
-    
+
+        /* Каскадная поставка: выбранный поставщик получает долг по нетто */
+        SELECT
+          ('supply-' || s.id::text) AS row_key,
+          s.supplier_agent_id AS agent_id,
+          supplier.name AS agent,
+          s.sale_date AS txn_date,
+          'supplier_supply'::text AS entry_type,
+          s.id AS sale_id,
+          NULL::bigint AS payment_id,
+          s.sale_date,
+          NULL::date AS payment_date,
+          s.service_type,
+          s.direction,
+          s.traveller_name,
+          0::numeric(14,2) AS sale_amount,
+          s.net_amount::numeric(14,2) AS supply_amount,
+          0::numeric(14,2) AS payment_amount,
+          0::numeric(14,2) AS refund_amount,
+          ('Поставка по продаже #' || s.id::text || CASE WHEN a.name IS NOT NULL THEN ' / агент: ' || a.name ELSE '' END)::text AS comment,
+          s.net_amount::numeric(14,2) AS delta_amount
+        FROM travel_daily_sales s
+        JOIN travel_agents supplier ON supplier.id = s.supplier_agent_id
+        LEFT JOIN travel_agents a ON a.id = s.agent_id
+        WHERE s.supplier_agent_id IS NOT NULL
+          AND ($1::bigint IS NULL OR s.supplier_agent_id = $1)
+          AND ($2::date IS NULL OR s.sale_date >= $2::date)
+          AND ($3::date IS NULL OR s.sale_date <= $3::date)
+          AND ($4::text = '' OR s.service_type = $4)
+
+        UNION ALL
+
         SELECT
           ('legacy-' || s.id::text) AS row_key,
           s.agent_id,
@@ -1132,6 +1124,7 @@ async function getAgentBalanceReport(req, res) {
           s.direction,
           s.traveller_name,
           0::numeric(14,2) AS sale_amount,
+          0::numeric(14,2) AS supply_amount,
           s.payment::numeric(14,2) AS payment_amount,
           0::numeric(14,2) AS refund_amount,
           s.comment,
@@ -1143,9 +1136,9 @@ async function getAgentBalanceReport(req, res) {
           AND ($2::date IS NULL OR s.payment_date >= $2::date)
           AND ($3::date IS NULL OR s.payment_date <= $3::date)
           AND ($4::text = '' OR s.service_type = $4)
-    
+
         UNION ALL
-    
+
         SELECT
           ('payment-' || p.id::text) AS row_key,
           p.agent_id,
@@ -1160,6 +1153,7 @@ async function getAgentBalanceReport(req, res) {
           ''::text AS direction,
           ''::text AS traveller_name,
           0::numeric(14,2) AS sale_amount,
+          0::numeric(14,2) AS supply_amount,
           CASE
             WHEN COALESCE(NULLIF(p.entry_type, ''), 'payment') = 'refund'
               THEN 0::numeric(14,2)
@@ -1171,7 +1165,11 @@ async function getAgentBalanceReport(req, res) {
             ELSE 0::numeric(14,2)
           END AS refund_amount,
           p.comment,
-          (0 - p.amount)::numeric(14,2) AS delta_amount
+          CASE
+            WHEN COALESCE(NULLIF(p.entry_type, ''), 'payment') = 'refund'
+              THEN p.amount::numeric(14,2)
+            ELSE (0 - p.amount)::numeric(14,2)
+          END AS delta_amount
         FROM travel_agent_payments p
         JOIN travel_agents a ON a.id = p.agent_id
         WHERE ($1::bigint IS NULL OR p.agent_id = $1)
@@ -1193,6 +1191,7 @@ async function getAgentBalanceReport(req, res) {
           direction,
           traveller_name,
           sale_amount,
+          supply_amount,
           payment_amount,
           refund_amount,
           comment,
@@ -1218,6 +1217,7 @@ async function getAgentBalanceReport(req, res) {
         direction,
         traveller_name,
         sale_amount,
+        supply_amount,
         payment_amount,
         refund_amount,
         comment,
