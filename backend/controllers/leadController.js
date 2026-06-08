@@ -7,6 +7,192 @@ const TELEGRAM_DUMMY_PASSWORD_HASH =
   process.env.TELEGRAM_DUMMY_PASSWORD_HASH ||
   "$2b$10$N9qo8uLOickgx2ZMRZo5i.Ul5cW93vGN9VOGQsv5nPVnrwJknhkAu";
 
+
+const SITE_URL = (
+  process.env.SITE_PUBLIC_URL ||
+  process.env.SITE_URL ||
+  "https://travella.uz"
+).replace(/\/+$/, "");
+
+const SERVICE_URL_TEMPLATE = (
+  process.env.SERVICE_URL_TEMPLATE || "{SITE_URL}?service={id}"
+).trim();
+
+const HOT_OFFER_CATEGORIES = [
+  "refused_tour",
+  "author_tour",
+  "refused_hotel",
+  "refused_flight",
+  "refused_ticket",
+  "refused_event_ticket",
+];
+
+function escapeHtml(s) {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function parseHotOfferDetails(details) {
+  if (!details) return {};
+  if (typeof details === "object") return details;
+  try {
+    return JSON.parse(details);
+  } catch {
+    return {};
+  }
+}
+
+function firstHotValue(...values) {
+  for (const v of values) {
+    const s = String(v ?? "").trim();
+    if (s) return s;
+  }
+  return "";
+}
+
+function categoryHotLabel(category) {
+  const c = String(category || "").toLowerCase();
+  return ({
+    refused_tour: "Отказной тур",
+    author_tour: "Авторский тур",
+    refused_hotel: "Отказной отель",
+    refused_flight: "Отказной авиабилет",
+    refused_ticket: "Отказной билет",
+    refused_event_ticket: "Билет / мероприятие",
+  })[c] || "Предложение";
+}
+
+function formatHotDate(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  return d.toLocaleDateString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
+function formatHotMoney(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return raw;
+  return n.toLocaleString("ru-RU");
+}
+
+function hotServiceUrl(id) {
+  return SERVICE_URL_TEMPLATE
+    .replace("{SITE_URL}", SITE_URL)
+    .replace("{id}", String(id));
+}
+
+function buildHotOfferMiniCard(service, idx) {
+  const d = parseHotOfferDetails(service.details);
+  const title = firstHotValue(
+    service.title,
+    d.title,
+    d.hotelName,
+    d.hotel,
+    d.eventName,
+    d.directionCountry,
+    "Горящее предложение"
+  );
+  const dateFrom = firstHotValue(
+    d.departureFlightDate,
+    d.startDate,
+    d.checkIn,
+    d.checkin,
+    d.eventDate,
+    d.date
+  );
+  const dateTo = firstHotValue(
+    d.returnFlightDate,
+    d.endDate,
+    d.checkOut,
+    d.checkout
+  );
+  const fromCity = firstHotValue(d.directionFrom, d.fromCity, d.departureCity);
+  const toCity = firstHotValue(d.directionTo, d.toCity, d.arrivalCity, d.directionCountry, d.country);
+  const price = firstHotValue(d.grossPrice, d.netPrice, d.price, service.price);
+  const expire = service.expiration_at ? formatHotDate(service.expiration_at) : "";
+
+  const lines = [
+    `🔥 <b>${idx}. ${escapeHtml(categoryHotLabel(service.category))}</b>`,
+    `📌 <b>${escapeHtml(title)}</b>`,
+  ];
+
+  if (fromCity || toCity) lines.push(`📍 ${escapeHtml([fromCity, toCity].filter(Boolean).join(" → "))}`);
+  if (dateFrom || dateTo) lines.push(`🗓 ${escapeHtml([formatHotDate(dateFrom), formatHotDate(dateTo)].filter(Boolean).join(" → "))}`);
+  if (price) lines.push(`💰 ${escapeHtml(formatHotMoney(price))}`);
+  if (expire) lines.push(`⏳ Актуально до: ${escapeHtml(expire)}`);
+
+  return lines.join("\n");
+}
+
+async function fetchClientHotOffers(limit = 3) {
+  const safeLimit = Math.max(1, Math.min(5, Number(limit) || 3));
+  const { rows } = await pool.query(
+    `
+    SELECT
+      id,
+      title,
+      category,
+      price,
+      details,
+      expiration_at,
+      created_at,
+      published_at,
+      approved_at
+    FROM services
+    WHERE deleted_at IS NULL
+      AND status IN ('published', 'approved', 'active')
+      AND category = ANY($1::text[])
+      AND (expiration_at IS NULL OR expiration_at > NOW())
+      AND COALESCE(NULLIF(LOWER(details->>'isActive'), ''), 'true') <> 'false'
+    ORDER BY
+      CASE WHEN expiration_at IS NULL THEN 1 ELSE 0 END ASC,
+      expiration_at ASC NULLS LAST,
+      COALESCE(published_at, approved_at, created_at) DESC NULLS LAST,
+      id DESC
+    LIMIT $2
+    `,
+    [HOT_OFFER_CATEGORIES, safeLimit]
+  );
+  return rows || [];
+}
+
+async function sendClientFreshHotOffers(chatId) {
+  try {
+    const offers = await fetchClientHotOffers(3);
+    if (!offers.length) return;
+
+    await tgSend(
+      chatId,
+      "🔥 <b>3 свежих горящих предложения для старта</b>\n\n" +
+        "Ниже — актуальные варианты, которые могут быстро уйти:",
+      {}
+    );
+
+    for (let i = 0; i < offers.length; i += 1) {
+      const svc = offers[i];
+      await tgSend(chatId, buildHotOfferMiniCard(svc, i + 1), {
+        reply_markup: {
+          inline_keyboard: [[
+            { text: "🔎 Открыть предложение", url: hotServiceUrl(svc.id) },
+          ]],
+        },
+      });
+    }
+  } catch (e) {
+    console.error("[lead] sendClientFreshHotOffers failed:", e?.message || e);
+  }
+}
+
 /* ================= CREATE LEAD ================= */
 async function createLead(req, res) {
   try {
@@ -482,7 +668,7 @@ async function decideLead(req, res) {
       await tgSend(
         chatId,
         "✅ <b>Аккаунт успешно подтверждён</b>\n\n" +
-          "Добро пожаловать в <b>в Базу Отказных Туров от TRAVELLA.UZ</b>!\n\n" +
+          "Добро пожаловать в <b>Базу Отказных Туров от TRAVELLA.UZ</b>!\n\n" +
           "Здесь вы можете:\n" +
           "✈️ находить отказные туры и авиабилеты дешевле рынка\n" +
           "🏨 искать отели и туристические услуги\n" +
@@ -493,6 +679,8 @@ async function decideLead(req, res) {
           "👇 <b>Начните поиск прямо сейчас</b>",
         { reply_markup: clientMenu }
       );
+
+      await sendClientFreshHotOffers(chatId);
     } else {
       await tgSend(chatId, "❌ К сожалению, ваша заявка была отклонена.", {
         reply_markup: { remove_keyboard: true },
