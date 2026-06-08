@@ -90,7 +90,7 @@ function normalizeLedgerRows(rows) {
 
 function normalizeServiceType(v) {
   const s = toStr(v).toLowerCase();
-  if (["airticket", "visa", "tourpackage"].includes(s)) return s;
+  if (["airticket", "train_ticket", "visa", "tourpackage"].includes(s)) return s;
   return "";
 }
 
@@ -111,6 +111,7 @@ async function ensureTables() {
       id BIGSERIAL PRIMARY KEY,
       sale_date DATE NOT NULL DEFAULT CURRENT_DATE,
       agent_id BIGINT NOT NULL REFERENCES travel_agents(id) ON DELETE RESTRICT,
+      supplier_agent_id BIGINT REFERENCES travel_agents(id) ON DELETE SET NULL,
       service_type TEXT NOT NULL DEFAULT '',
       direction TEXT NOT NULL DEFAULT '',
       traveller_name TEXT NOT NULL DEFAULT '',
@@ -145,8 +146,18 @@ async function ensureTables() {
   `);
 
   await db.query(`
+    ALTER TABLE travel_daily_sales
+    ADD COLUMN IF NOT EXISTS supplier_agent_id BIGINT REFERENCES travel_agents(id) ON DELETE SET NULL;
+  `);
+
+  await db.query(`
     CREATE INDEX IF NOT EXISTS idx_travel_daily_sales_agent_id
     ON travel_daily_sales(agent_id);
+  `);
+
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS idx_travel_daily_sales_supplier_agent_id
+    ON travel_daily_sales(supplier_agent_id);
   `);
 
   await db.query(`
@@ -322,7 +333,7 @@ async function deleteAgent(req, res) {
     }
 
     const usedSalesQ = await db.query(
-      `SELECT 1 FROM travel_daily_sales WHERE agent_id = $1 LIMIT 1`,
+      `SELECT 1 FROM travel_daily_sales WHERE agent_id = $1 OR supplier_agent_id = $1 LIMIT 1`,
       [id]
     );
 
@@ -375,6 +386,7 @@ async function getDailySales(req, res) {
     const dateFrom = validateDate(req.query.date_from);
     const dateTo = validateDate(req.query.date_to);
     const serviceType = normalizeServiceType(req.query.service_type);
+    const supplierAgentId = req.query.supplier_agent_id ? Number(req.query.supplier_agent_id) : null;
 
     const { rows } = await db.query(
       `
@@ -383,6 +395,8 @@ async function getDailySales(req, res) {
         s.sale_date,
         s.agent_id,
         a.name AS agent_name,
+        s.supplier_agent_id,
+        supplier.name AS supplier_agent_name,
         s.service_type,
         s.direction,
         s.traveller_name,
@@ -395,18 +409,21 @@ async function getDailySales(req, res) {
         s.updated_at
       FROM travel_daily_sales s
       JOIN travel_agents a ON a.id = s.agent_id
+      LEFT JOIN travel_agents supplier ON supplier.id = s.supplier_agent_id
       WHERE ($1::bigint IS NULL OR s.agent_id = $1)
         AND ($2::date IS NULL OR s.sale_date >= $2::date)
         AND ($3::date IS NULL OR s.sale_date <= $3::date)
         AND ($4::text = '' OR s.service_type = $4)
+        AND ($5::bigint IS NULL OR s.supplier_agent_id = $5)
       ORDER BY s.sale_date DESC, s.id DESC
-      LIMIT $5 OFFSET $6
+      LIMIT $6 OFFSET $7
       `,
       [
         Number.isFinite(agentId) ? agentId : null,
         dateFrom,
         dateTo,
         serviceType,
+        Number.isFinite(supplierAgentId) ? supplierAgentId : null,
         limit,
         offset,
       ]
@@ -430,6 +447,7 @@ async function createDailySale(req, res) {
 
     const saleDate = validateDate(req.body?.sale_date) || null;
     const agentId = Number(req.body?.agent_id);
+    const supplierAgentId = Number(req.body?.supplier_agent_id);
     const serviceType = normalizeServiceType(req.body?.service_type);
     const direction = toStr(req.body?.direction);
     const travellerName = toStr(req.body?.traveller_name);
@@ -438,6 +456,10 @@ async function createDailySale(req, res) {
 
     if (!Number.isFinite(agentId) || agentId <= 0) {
       return res.status(400).json({ ok: false, message: "agent_id is required" });
+    }
+
+    if (!Number.isFinite(supplierAgentId) || supplierAgentId <= 0) {
+      return res.status(400).json({ ok: false, message: "supplier_agent_id is required" });
     }
 
     if (!serviceType) {
@@ -465,11 +487,21 @@ async function createDailySale(req, res) {
       return res.status(404).json({ ok: false, message: "Agent not found" });
     }
 
+    const supplierQ = await db.query(
+      `SELECT id, name FROM travel_agents WHERE id = $1 LIMIT 1`,
+      [supplierAgentId]
+    );
+
+    if (!supplierQ.rows.length) {
+      return res.status(404).json({ ok: false, message: "Supplier not found" });
+    }
+
     const { rows } = await db.query(
       `
       INSERT INTO travel_daily_sales (
         sale_date,
         agent_id,
+        supplier_agent_id,
         service_type,
         direction,
         traveller_name,
@@ -487,6 +519,7 @@ async function createDailySale(req, res) {
         $5,
         $6,
         $7,
+        $8,
         0,
         CURRENT_DATE,
         ''
@@ -495,6 +528,7 @@ async function createDailySale(req, res) {
         id,
         sale_date,
         agent_id,
+        supplier_agent_id,
         service_type,
         direction,
         traveller_name,
@@ -506,7 +540,7 @@ async function createDailySale(req, res) {
         created_at,
         updated_at
       `,
-      [saleDate, agentId, serviceType, direction, travellerName, saleAmount, netAmount]
+      [saleDate, agentId, supplierAgentId, serviceType, direction, travellerName, saleAmount, netAmount]
     );
 
     return res.json({
@@ -526,6 +560,7 @@ async function updateDailySale(req, res) {
     const id = Number(req.params?.id);
     const saleDate = validateDate(req.body?.sale_date);
     const agentId = Number(req.body?.agent_id);
+    const supplierAgentId = Number(req.body?.supplier_agent_id);
     const serviceType = normalizeServiceType(req.body?.service_type);
     const direction = toStr(req.body?.direction);
     const travellerName = toStr(req.body?.traveller_name);
@@ -538,6 +573,10 @@ async function updateDailySale(req, res) {
 
     if (!Number.isFinite(agentId) || agentId <= 0) {
       return res.status(400).json({ ok: false, message: "agent_id is required" });
+    }
+
+    if (!Number.isFinite(supplierAgentId) || supplierAgentId <= 0) {
+      return res.status(400).json({ ok: false, message: "supplier_agent_id is required" });
     }
 
     if (!saleDate) {
@@ -569,23 +608,34 @@ async function updateDailySale(req, res) {
       return res.status(404).json({ ok: false, message: "Agent not found" });
     }
 
+    const supplierQ = await db.query(
+      `SELECT id FROM travel_agents WHERE id = $1 LIMIT 1`,
+      [supplierAgentId]
+    );
+
+    if (!supplierQ.rows.length) {
+      return res.status(404).json({ ok: false, message: "Supplier not found" });
+    }
+
     const { rows } = await db.query(
       `
       UPDATE travel_daily_sales
       SET
         sale_date = $1::date,
         agent_id = $2,
-        service_type = $3,
-        direction = $4,
-        traveller_name = $5,
-        sale_amount = $6,
-        net_amount = $7,
+        supplier_agent_id = $3,
+        service_type = $4,
+        direction = $5,
+        traveller_name = $6,
+        sale_amount = $7,
+        net_amount = $8,
         updated_at = NOW()
-      WHERE id = $8
+      WHERE id = $9
       RETURNING
         id,
         sale_date,
         agent_id,
+        supplier_agent_id,
         service_type,
         direction,
         traveller_name,
@@ -597,7 +647,7 @@ async function updateDailySale(req, res) {
         created_at,
         updated_at
       `,
-      [saleDate, agentId, serviceType, direction, travellerName, saleAmount, netAmount, id]
+      [saleDate, agentId, supplierAgentId, serviceType, direction, travellerName, saleAmount, netAmount, id]
     );
 
     if (!rows.length) {
@@ -877,6 +927,7 @@ async function getSalesReport(req, res) {
     const dateFrom = validateDate(req.query.date_from);
     const dateTo = validateDate(req.query.date_to);
     const serviceType = normalizeServiceType(req.query.service_type);
+    const supplierAgentId = req.query.supplier_agent_id ? Number(req.query.supplier_agent_id) : null;
 
     const { rows } = await db.query(
       `
@@ -884,6 +935,8 @@ async function getSalesReport(req, res) {
         s.id,
         s.sale_date,
         a.name AS agent,
+        s.supplier_agent_id,
+        supplier.name AS supplier_agent,
         s.service_type,
         s.direction,
         s.traveller_name,
@@ -892,18 +945,21 @@ async function getSalesReport(req, res) {
         (s.sale_amount - s.net_amount) AS margin
       FROM travel_daily_sales s
       JOIN travel_agents a ON a.id = s.agent_id
+      LEFT JOIN travel_agents supplier ON supplier.id = s.supplier_agent_id
       WHERE ($1::bigint IS NULL OR s.agent_id = $1)
         AND ($2::date IS NULL OR s.sale_date >= $2::date)
         AND ($3::date IS NULL OR s.sale_date <= $3::date)
         AND ($4::text = '' OR s.service_type = $4)
+        AND ($5::bigint IS NULL OR s.supplier_agent_id = $5)
       ORDER BY s.sale_date DESC, s.id DESC
-      LIMIT $5 OFFSET $6
+      LIMIT $6 OFFSET $7
       `,
       [
         Number.isFinite(agentId) ? agentId : null,
         dateFrom,
         dateTo,
         serviceType,
+        Number.isFinite(supplierAgentId) ? supplierAgentId : null,
         limit,
         offset,
       ]
