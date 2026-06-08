@@ -1966,7 +1966,7 @@ function getClientHomeKeyboard() {
 function buildClientApprovedWelcomeText() {
   return (
     "✅ <b>Аккаунт успешно подтверждён</b>\n\n" +
-    "Добро пожаловать в <b>Travella</b>!\n\n" +
+    "Добро пожаловать в <b>Базу Отказных Туров от TRAVELLA.UZ</b>!\n\n" +
     "Здесь вы можете:\n" +
     "✈️ находить отказные туры и авиабилеты дешевле рынка\n" +
     "🏨 искать отели и туристические услуги\n" +
@@ -8095,6 +8095,155 @@ bot.hears(/^\+?\d[\d\s\-()]{5,}$/i, async (ctx, next) => {
   await handlePhoneRegistration(ctx, requestedRole, phone);
 });
 
+
+async function fetchClientHotOffersForBot(limit = 3) {
+  if (!pool) return [];
+  const safeLimit = Math.max(1, Math.min(10, Number(limit) || 3));
+  const categories = [
+    "refused_tour",
+    "author_tour",
+    "refused_hotel",
+    "refused_flight",
+    "refused_ticket",
+    "refused_event_ticket",
+  ];
+
+  const { rows } = await pool.query(
+    `
+    SELECT
+      id,
+      title,
+      category,
+      price,
+      details,
+      expiration_at,
+      created_at,
+      published_at,
+      approved_at
+    FROM services
+    WHERE deleted_at IS NULL
+      AND status IN ('published', 'approved', 'active')
+      AND category = ANY($1::text[])
+      AND (expiration_at IS NULL OR expiration_at > NOW())
+      AND COALESCE(NULLIF(LOWER(details->>'isActive'), ''), 'true') <> 'false'
+    ORDER BY
+      CASE WHEN expiration_at IS NULL THEN 1 ELSE 0 END ASC,
+      expiration_at ASC NULLS LAST,
+      COALESCE(published_at, approved_at, created_at) DESC NULLS LAST,
+      id DESC
+    LIMIT $2
+    `,
+    [categories, safeLimit]
+  );
+
+  return rows || [];
+}
+
+function hotOfferCategoryLabelForBot(category) {
+  const c = String(category || "").toLowerCase();
+  return ({
+    refused_tour: "Отказной тур",
+    author_tour: "Авторский тур",
+    refused_hotel: "Отказной отель",
+    refused_flight: "Отказной авиабилет",
+    refused_ticket: "Отказной билет",
+    refused_event_ticket: "Билет / мероприятие",
+  })[c] || "Предложение";
+}
+
+function hotOfferDateForBot(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  return d.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
+function hotOfferMoneyForBot(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return raw;
+  return n.toLocaleString("ru-RU");
+}
+
+function hotOfferPublicUrlForBot(id) {
+  return SERVICE_URL_TEMPLATE
+    .replace("{SITE_URL}", SITE_URL)
+    .replace("{id}", String(id));
+}
+
+function buildHotOfferMiniCardForBot(service, idx) {
+  const d = parseDetailsAny(service.details);
+  const title = firstNonEmptyValue(
+    service.title,
+    d.title,
+    d.hotelName,
+    d.hotel,
+    d.eventName,
+    d.directionCountry,
+    "Горящее предложение"
+  );
+  const dateFrom = firstNonEmptyValue(
+    d.departureFlightDate,
+    d.startDate,
+    d.checkIn,
+    d.checkin,
+    d.eventDate,
+    d.date
+  );
+  const dateTo = firstNonEmptyValue(d.returnFlightDate, d.endDate, d.checkOut, d.checkout);
+  const fromCity = firstNonEmptyValue(d.directionFrom, d.fromCity, d.departureCity);
+  const toCity = firstNonEmptyValue(d.directionTo, d.toCity, d.arrivalCity, d.directionCountry, d.country);
+  const price = firstNonEmptyValue(d.grossPrice, d.netPrice, d.price, service.price);
+  const expire = service.expiration_at ? hotOfferDateForBot(service.expiration_at) : "";
+
+  const lines = [
+    `🔥 <b>${idx}. ${escapeHtml(hotOfferCategoryLabelForBot(service.category))}</b>`,
+    `📌 <b>${escapeHtml(title)}</b>`,
+  ];
+
+  if (fromCity || toCity) lines.push(`📍 ${escapeHtml([fromCity, toCity].filter(Boolean).join(" → "))}`);
+  if (dateFrom || dateTo) lines.push(`🗓 ${escapeHtml([hotOfferDateForBot(dateFrom), hotOfferDateForBot(dateTo)].filter(Boolean).join(" → "))}`);
+  if (price) lines.push(`💰 ${escapeHtml(hotOfferMoneyForBot(price))}`);
+  if (expire) lines.push(`⏳ Актуально до: ${escapeHtml(expire)}`);
+
+  return lines.join("\n");
+}
+
+async function sendClientHotOffersPreview(ctx, limit = 3) {
+  try {
+    const offers = await fetchClientHotOffersForBot(limit);
+    if (!offers.length) {
+      await ctx.reply(
+        "🔥 Сейчас нет горящих предложений.\n\nНажмите «🔍 Найти услугу», чтобы посмотреть все актуальные варианты."
+      );
+      return;
+    }
+
+    await ctx.reply(
+      `🔥 <b>${Math.min(offers.length, limit)} свежих горящих предложения</b>\n\n` +
+        "Актуальные варианты, которые могут быстро уйти:",
+      { parse_mode: "HTML" }
+    );
+
+    for (let i = 0; i < offers.length; i += 1) {
+      const svc = offers[i];
+      await ctx.reply(buildHotOfferMiniCardForBot(svc, i + 1), {
+        parse_mode: "HTML",
+        disable_web_page_preview: true,
+        reply_markup: {
+          inline_keyboard: [[
+            { text: "🔎 Открыть предложение", url: hotOfferPublicUrlForBot(svc.id) },
+          ]],
+        },
+      });
+    }
+  } catch (e) {
+    console.error("[tg-bot] sendClientHotOffersPreview error:", e?.message || e);
+    await ctx.reply("⚠️ Не удалось загрузить горящие предложения. Попробуйте позже.");
+  }
+}
+
 /* ===================== MAIN MENU BUTTONS ===================== */
 
 bot.hears(/🔍 Найти услугу/i, async (ctx) => {
@@ -8134,6 +8283,27 @@ bot.hears(/🔍 Найти услугу/i, async (ctx) => {
   );
 
   await ctx.reply("💡 Нажмите кнопку, выберите карточку — бот отправит её в этот чат.");
+});
+
+
+
+bot.hears(/🔥 Горящие предложения/i, async (ctx) => {
+  logUpdate(ctx, "hears Горящие предложения");
+  forceCloseEditWizard(ctx);
+  resetServiceWizard(ctx);
+
+  const maybeProvider = await ensureProviderRole(ctx);
+  const maybeClient = maybeProvider ? null : await ensureClientRole(ctx);
+  const linked = !!ctx.session?.linked;
+  const role = maybeProvider || maybeClient || ctx.session?.role || null;
+
+  if (!linked && !role) {
+    await ctx.reply("📌 Чтобы смотреть горящие предложения, нужно привязать аккаунт по номеру телефона.");
+    await askRole(ctx);
+    return;
+  }
+
+  await sendClientHotOffersPreview(ctx, 3);
 });
 
 bot.hears(/❤️ Избранное/i, async (ctx) => {
