@@ -8,6 +8,7 @@ import { tError, tSuccess } from "../../shared/toast";
 
 const SERVICE_TYPE_OPTIONS = [
   { value: "airticket", label: "Авиабилет" },
+  { value: "train_ticket", label: "ЖД билет" },
   { value: "visa", label: "Виза" },
   { value: "tourpackage", label: "Турпакет" },
 ];
@@ -19,6 +20,7 @@ const PAYMENT_ENTRY_OPTIONS = [
 
 const SERVICE_TYPE_LABELS = {
   airticket: "Авиабилет",
+  train_ticket: "ЖД билет",
   visa: "Виза",
   tourpackage: "Турпакет",
 };
@@ -38,6 +40,7 @@ const todayIso = localTodayIso();
 const emptySaleForm = {
   sale_date: todayIso,
   agent_id: "",
+  supplier_agent_id: "",
   service_type: "airticket",
   direction: "",
   traveller_name: "",
@@ -114,6 +117,7 @@ function ledgerTypeLabel(v) {
 
 function badgeClassByServiceType(v) {
   if (v === "airticket") return "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200";
+  if (v === "train_ticket") return "bg-cyan-50 text-cyan-700 ring-1 ring-inset ring-cyan-200";
   if (v === "visa") return "bg-fuchsia-50 text-fuchsia-700 ring-1 ring-inset ring-fuchsia-200";
   if (v === "tourpackage") return "bg-orange-50 text-orange-700 ring-1 ring-inset ring-orange-200";
   return "bg-gray-100 text-gray-600 ring-1 ring-inset ring-gray-200";
@@ -313,6 +317,7 @@ export default function AdminTravelSales() {
   const [saleForm, setSaleForm] = useState(emptySaleForm);
   const [editingSaleId, setEditingSaleId] = useState(null);
   const [dailyFilterAgentId, setDailyFilterAgentId] = useState("");
+  const [dailySupplierAgentId, setDailySupplierAgentId] = useState("");
   const [dailyDateFrom, setDailyDateFrom] = useState("");
   const [dailyDateTo, setDailyDateTo] = useState("");
   const [dailyServiceType, setDailyServiceType] = useState("");
@@ -331,6 +336,7 @@ export default function AdminTravelSales() {
   const [salesReport, setSalesReport] = useState([]);
   const [salesReportLoading, setSalesReportLoading] = useState(false);
   const [salesAgentId, setSalesAgentId] = useState("");
+  const [salesSupplierAgentId, setSalesSupplierAgentId] = useState("");
   const [salesDateFrom, setSalesDateFrom] = useState("");
   const [salesDateTo, setSalesDateTo] = useState("");
   const [salesServiceType, setSalesServiceType] = useState("");
@@ -378,6 +384,7 @@ export default function AdminTravelSales() {
       const q = new URLSearchParams();
       q.set("limit", "500");
       if (dailyFilterAgentId) q.set("agent_id", dailyFilterAgentId);
+      if (dailySupplierAgentId) q.set("supplier_agent_id", dailySupplierAgentId);
       if (dailyDateFrom) q.set("date_from", dailyDateFrom);
       if (dailyDateTo) q.set("date_to", dailyDateTo);
       if (dailyServiceType) q.set("service_type", dailyServiceType);
@@ -416,6 +423,7 @@ export default function AdminTravelSales() {
       const q = new URLSearchParams();
       q.set("limit", "1000");
       if (salesAgentId) q.set("agent_id", salesAgentId);
+      if (salesSupplierAgentId) q.set("supplier_agent_id", salesSupplierAgentId);
       if (salesDateFrom) q.set("date_from", salesDateFrom);
       if (salesDateTo) q.set("date_to", salesDateTo);
       if (salesServiceType) q.set("service_type", salesServiceType);
@@ -449,9 +457,9 @@ export default function AdminTravelSales() {
   }
 
   useEffect(() => { loadAgents(); }, []);
-  useEffect(() => { if (tab === "daily") loadDailySales(); }, [tab, dailyFilterAgentId, dailyDateFrom, dailyDateTo, dailyServiceType]);
+  useEffect(() => { if (tab === "daily") loadDailySales(); }, [tab, dailyFilterAgentId, dailySupplierAgentId, dailyDateFrom, dailyDateTo, dailyServiceType]);
   useEffect(() => { if (tab === "payments") loadPayments(); }, [tab, paymentsAgentId, paymentsEntryType, paymentsDateFrom, paymentsDateTo]);
-  useEffect(() => { if (tab === "sales") loadSalesReport(); }, [tab, salesAgentId, salesDateFrom, salesDateTo, salesServiceType]);
+  useEffect(() => { if (tab === "sales") loadSalesReport(); }, [tab, salesAgentId, salesSupplierAgentId, salesDateFrom, salesDateTo, salesServiceType]);
   useEffect(() => { if (tab === "balance") loadBalanceReport(); }, [tab, balanceAgentId, balanceDateFrom, balanceDateTo, balanceServiceType]);
 
   const totalSales = useMemo(() => salesReport.reduce((s, r) => s + Number(r.sale_amount || 0), 0), [salesReport]);
@@ -475,6 +483,7 @@ export default function AdminTravelSales() {
   const sortedDailySales = useMemo(() => sortRows(dailySales, dailySort, {
     sale_date: (row) => iso(row.sale_date),
     agent: (row) => agentDisplayName(row),
+    supplier_agent: (row) => row.supplier_agent_name || row.supplier_agent || "",
     service_type: (row) => typeLabel(row.service_type),
     direction: (row) => row.direction || "",
     traveller_name: (row) => row.traveller_name || "",
@@ -493,6 +502,7 @@ export default function AdminTravelSales() {
   const sortedSalesReport = useMemo(() => sortRows(salesReport, salesSort, {
     sale_date: (row) => iso(row.sale_date),
     agent: (row) => agentDisplayName(row),
+    supplier_agent: (row) => row.supplier_agent_name || row.supplier_agent || "",
     service_type: (row) => typeLabel(row.service_type),
     direction: (row) => row.direction || "",
     traveller_name: (row) => row.traveller_name || "",
@@ -701,6 +711,7 @@ export default function AdminTravelSales() {
       const payload = {
         sale_date: saleForm.sale_date,
         agent_id: Number(saleForm.agent_id),
+        supplier_agent_id: Number(saleForm.supplier_agent_id),
         service_type: String(saleForm.service_type || "").trim(),
         direction: String(saleForm.direction || "").trim(),
         traveller_name: String(saleForm.traveller_name || "").trim(),
@@ -708,6 +719,7 @@ export default function AdminTravelSales() {
         net_amount: Number(saleForm.net_amount || 0),
       };
       if (!payload.agent_id) return tError("Выбери агента");
+      if (!payload.supplier_agent_id) return tError("Выбери поставщика");
       if (!payload.sale_date) return tError("Укажи дату");
       if (!payload.service_type) return tError("Выбери тип услуги");
       if (!payload.direction) return tError("Укажи направление");
@@ -734,6 +746,7 @@ export default function AdminTravelSales() {
     setSaleForm({
       sale_date: iso(row.sale_date),
       agent_id: String(row.agent_id || ""),
+      supplier_agent_id: String(row.supplier_agent_id || ""),
       service_type: row.service_type || "airticket",
       direction: row.direction || "",
       traveller_name: row.traveller_name || "",
@@ -826,6 +839,7 @@ export default function AdminTravelSales() {
       "№": idx + 1,
       Дата: iso(row.sale_date),
       Агент: row.agent,
+      Поставщик: row.supplier_agent || "",
       "Тип услуги": typeLabel(row.service_type),
       Направление: row.direction || "",
       "Name of traveller": row.traveller_name || "",
@@ -947,23 +961,24 @@ export default function AdminTravelSales() {
                 <form onSubmit={handleSaveSale} className="space-y-4">
                   <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Дата</label><input type="date" className={inputClass()} value={saleForm.sale_date} onChange={(e) => setSaleForm((p) => ({ ...p, sale_date: e.target.value }))} /></div>
                   <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Агент</label><select className={inputClass()} value={saleForm.agent_id} onChange={(e) => setSaleForm((p) => ({ ...p, agent_id: e.target.value }))}><option value="">Выберите агента</option>{sortedAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
+                  <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Поставщик</label><select className={inputClass()} value={saleForm.supplier_agent_id} onChange={(e) => setSaleForm((p) => ({ ...p, supplier_agent_id: e.target.value }))}><option value="">Выберите поставщика</option>{sortedAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
                   <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Тип услуги</label><select className={inputClass()} value={saleForm.service_type} onChange={(e) => setSaleForm((p) => ({ ...p, service_type: e.target.value }))}>{SERVICE_TYPE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select></div>
                   <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Направление</label><input className={inputClass()} value={saleForm.direction} onChange={(e) => setSaleForm((p) => ({ ...p, direction: e.target.value }))} placeholder="Например: Дели / Дубай / Ташкент" /></div>
                   <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Name of traveller</label><input className={inputClass()} value={saleForm.traveller_name} onChange={(e) => setSaleForm((p) => ({ ...p, traveller_name: e.target.value }))} placeholder="Например: Ali Valiyev" /></div>
                   <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Сумма продажи</label><input type="number" className={inputClass()} value={saleForm.sale_amount} onChange={(e) => setSaleForm((p) => ({ ...p, sale_amount: e.target.value }))} placeholder="0" /></div>
                   <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Сумма нетто</label><input type="number" className={inputClass()} value={saleForm.net_amount} onChange={(e) => setSaleForm((p) => ({ ...p, net_amount: e.target.value }))} placeholder="0" /></div>
-                  <div className="flex flex-wrap gap-2"><ActionButton type="submit" variant="primary">{editingSaleId ? "Сохранить" : "Добавить"}</ActionButton>{(editingSaleId || saleForm.agent_id || saleForm.direction || saleForm.traveller_name || saleForm.sale_amount || saleForm.net_amount) && <ActionButton type="button" onClick={() => { setEditingSaleId(null); setSaleForm(emptySaleForm); }}>Сбросить</ActionButton>}</div>
+                  <div className="flex flex-wrap gap-2"><ActionButton type="submit" variant="primary">{editingSaleId ? "Сохранить" : "Добавить"}</ActionButton>{(editingSaleId || saleForm.agent_id || saleForm.supplier_agent_id || saleForm.direction || saleForm.traveller_name || saleForm.sale_amount || saleForm.net_amount) && <ActionButton type="button" onClick={() => { setEditingSaleId(null); setSaleForm(emptySaleForm); }}>Сбросить</ActionButton>}</div>
                 </form>
               </Card>
             </div>
             <div className="xl:col-span-2">
-              <Card title="Список продаж" subtitle="Акцент на важных цифрах" right={<div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:flex-wrap lg:items-center lg:justify-end"><select className={inputClass("lg:w-[180px]")} value={dailyFilterAgentId} onChange={(e) => setDailyFilterAgentId(e.target.value)}><option value="">Все агенты</option>{sortedAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select><select className={inputClass("lg:w-[170px]")} value={dailyServiceType} onChange={(e) => setDailyServiceType(e.target.value)}><option value="">Все типы</option>{SERVICE_TYPE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select><input type="date" className={inputClass("lg:w-[160px]")} value={dailyDateFrom} onChange={(e) => setDailyDateFrom(e.target.value)} /><input type="date" className={inputClass("lg:w-[160px]")} value={dailyDateTo} onChange={(e) => setDailyDateTo(e.target.value)} /><ActionButton className="lg:w-auto" onClick={loadDailySales} type="button">Фильтр</ActionButton></div>}>
+              <Card title="Список продаж" subtitle="Акцент на важных цифрах" right={<div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:flex-wrap lg:items-center lg:justify-end"><select className={inputClass("lg:w-[180px]")} value={dailyFilterAgentId} onChange={(e) => setDailyFilterAgentId(e.target.value)}><option value="">Все агенты</option>{sortedAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select><select className={inputClass("lg:w-[190px]")} value={dailySupplierAgentId} onChange={(e) => setDailySupplierAgentId(e.target.value)}><option value="">Все поставщики</option>{sortedAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select><select className={inputClass("lg:w-[170px]")} value={dailyServiceType} onChange={(e) => setDailyServiceType(e.target.value)}><option value="">Все типы</option>{SERVICE_TYPE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select><input type="date" className={inputClass("lg:w-[160px]")} value={dailyDateFrom} onChange={(e) => setDailyDateFrom(e.target.value)} /><input type="date" className={inputClass("lg:w-[160px]")} value={dailyDateTo} onChange={(e) => setDailyDateTo(e.target.value)} /><ActionButton className="lg:w-auto" onClick={loadDailySales} type="button">Фильтр</ActionButton></div>}>
                 <TableShell>
                   <Table>
-                    <TableHead><tr><TH>№</TH><SortTH sortKey="sale_date" sort={dailySort} onSort={toggleSort(setDailySort)}>Дата</SortTH><SortTH sortKey="agent" sort={dailySort} onSort={toggleSort(setDailySort)}>Агент</SortTH><SortTH sortKey="service_type" sort={dailySort} onSort={toggleSort(setDailySort)}>Тип</SortTH><SortTH sortKey="direction" sort={dailySort} onSort={toggleSort(setDailySort)}>Направление</SortTH><SortTH sortKey="traveller_name" sort={dailySort} onSort={toggleSort(setDailySort)}>Name of traveller</SortTH><SortTH sortKey="sale_amount" sort={dailySort} onSort={toggleSort(setDailySort)} align="right">Продажа</SortTH><SortTH sortKey="net_amount" sort={dailySort} onSort={toggleSort(setDailySort)} align="right">Нетто</SortTH><TH className="w-[180px]">Действия</TH></tr></TableHead>
+                    <TableHead><tr><TH>№</TH><SortTH sortKey="sale_date" sort={dailySort} onSort={toggleSort(setDailySort)}>Дата</SortTH><SortTH sortKey="agent" sort={dailySort} onSort={toggleSort(setDailySort)}>Агент</SortTH><SortTH sortKey="supplier_agent" sort={dailySort} onSort={toggleSort(setDailySort)}>Поставщик</SortTH><SortTH sortKey="service_type" sort={dailySort} onSort={toggleSort(setDailySort)}>Тип</SortTH><SortTH sortKey="direction" sort={dailySort} onSort={toggleSort(setDailySort)}>Направление</SortTH><SortTH sortKey="traveller_name" sort={dailySort} onSort={toggleSort(setDailySort)}>Name of traveller</SortTH><SortTH sortKey="sale_amount" sort={dailySort} onSort={toggleSort(setDailySort)} align="right">Продажа</SortTH><SortTH sortKey="net_amount" sort={dailySort} onSort={toggleSort(setDailySort)} align="right">Нетто</SortTH><TH className="w-[180px]">Действия</TH></tr></TableHead>
                       <tbody>
                         {dailyLoading || dailySales.length === 0 ? (
-                          <EmptyRow loading={dailyLoading} colSpan={9} />
+                          <EmptyRow loading={dailyLoading} colSpan={10} />
                         ) : (
                           dailySalesGroups.flatMap((group) => {
                             const today = iso(new Date());
@@ -971,7 +986,7 @@ export default function AdminTravelSales() {
                       
                             const headerRow = (
                               <tr key={`group-${group.date}`}>
-                                <td colSpan={9} className="px-3 py-3">
+                                <td colSpan={10} className="px-3 py-3">
                                   <div
                                     className={`flex flex-col gap-2 rounded-2xl border px-4 py-3 md:flex-row md:items-center md:justify-between ${
                                       isToday
@@ -1014,6 +1029,9 @@ export default function AdminTravelSales() {
                                 <TD>{iso(row.sale_date)}</TD>
                                 <TD>
                                   <div className="font-medium text-gray-900">{row.agent_name}</div>
+                                </TD>
+                                <TD>
+                                  <div className="font-medium text-gray-900">{row.supplier_agent_name || "—"}</div>
                                 </TD>
                                 <TD>
                                   <Badge className={badgeClassByServiceType(row.service_type)}>
@@ -1140,20 +1158,20 @@ export default function AdminTravelSales() {
             <StatCard title="Маржа" value={money(totalMargin)} hint={`≈ ${moneyCompact(totalMargin)}`} accent="emerald" />
             <StatCard title="Записей" value={String(salesReport.length)} hint="По текущим фильтрам" accent="violet" />
           </div>
-          <Card title="Отчет продаж" subtitle="Сильный акцент на деньгах и марже" right={<div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:flex-wrap lg:items-center lg:justify-end"><select className={inputClass("lg:w-[180px]")} value={salesAgentId} onChange={(e) => setSalesAgentId(e.target.value)}><option value="">Все агенты</option>{sortedAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select><select className={inputClass("lg:w-[170px]")} value={salesServiceType} onChange={(e) => setSalesServiceType(e.target.value)}><option value="">Все типы</option>{SERVICE_TYPE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select><input type="date" className={inputClass("lg:w-[160px]")} value={salesDateFrom} onChange={(e) => setSalesDateFrom(e.target.value)} /><input type="date" className={inputClass("lg:w-[160px]")} value={salesDateTo} onChange={(e) => setSalesDateTo(e.target.value)} /><ActionButton onClick={loadSalesReport} type="button">Фильтр</ActionButton><ActionButton variant="primary" onClick={exportSalesReport} type="button">Excel</ActionButton></div>}>
+          <Card title="Отчет продаж" subtitle="Сильный акцент на деньгах и марже" right={<div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:flex-wrap lg:items-center lg:justify-end"><select className={inputClass("lg:w-[180px]")} value={salesAgentId} onChange={(e) => setSalesAgentId(e.target.value)}><option value="">Все агенты</option>{sortedAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select><select className={inputClass("lg:w-[190px]")} value={salesSupplierAgentId} onChange={(e) => setSalesSupplierAgentId(e.target.value)}><option value="">Все поставщики</option>{sortedAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select><select className={inputClass("lg:w-[170px]")} value={salesServiceType} onChange={(e) => setSalesServiceType(e.target.value)}><option value="">Все типы</option>{SERVICE_TYPE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select><input type="date" className={inputClass("lg:w-[160px]")} value={salesDateFrom} onChange={(e) => setSalesDateFrom(e.target.value)} /><input type="date" className={inputClass("lg:w-[160px]")} value={salesDateTo} onChange={(e) => setSalesDateTo(e.target.value)} /><ActionButton onClick={loadSalesReport} type="button">Фильтр</ActionButton><ActionButton variant="primary" onClick={exportSalesReport} type="button">Excel</ActionButton></div>}>
             <TableShell>
               <Table>
-                <TableHead><tr><TH>№</TH><SortTH sortKey="sale_date" sort={salesSort} onSort={toggleSort(setSalesSort)}>Дата</SortTH><SortTH sortKey="agent" sort={salesSort} onSort={toggleSort(setSalesSort)}>Агент</SortTH><SortTH sortKey="service_type" sort={salesSort} onSort={toggleSort(setSalesSort)}>Тип</SortTH><SortTH sortKey="direction" sort={salesSort} onSort={toggleSort(setSalesSort)}>Направление</SortTH><SortTH sortKey="traveller_name" sort={salesSort} onSort={toggleSort(setSalesSort)}>Name of traveller</SortTH><SortTH sortKey="sale_amount" sort={salesSort} onSort={toggleSort(setSalesSort)} align="right">Сумма продажи</SortTH><SortTH sortKey="net_amount" sort={salesSort} onSort={toggleSort(setSalesSort)} align="right">Сумма нетто</SortTH><SortTH sortKey="margin" sort={salesSort} onSort={toggleSort(setSalesSort)} align="right">Маржа</SortTH></tr></TableHead>
+                <TableHead><tr><TH>№</TH><SortTH sortKey="sale_date" sort={salesSort} onSort={toggleSort(setSalesSort)}>Дата</SortTH><SortTH sortKey="agent" sort={salesSort} onSort={toggleSort(setSalesSort)}>Агент</SortTH><SortTH sortKey="supplier_agent" sort={salesSort} onSort={toggleSort(setSalesSort)}>Поставщик</SortTH><SortTH sortKey="service_type" sort={salesSort} onSort={toggleSort(setSalesSort)}>Тип</SortTH><SortTH sortKey="direction" sort={salesSort} onSort={toggleSort(setSalesSort)}>Направление</SortTH><SortTH sortKey="traveller_name" sort={salesSort} onSort={toggleSort(setSalesSort)}>Name of traveller</SortTH><SortTH sortKey="sale_amount" sort={salesSort} onSort={toggleSort(setSalesSort)} align="right">Сумма продажи</SortTH><SortTH sortKey="net_amount" sort={salesSort} onSort={toggleSort(setSalesSort)} align="right">Сумма нетто</SortTH><SortTH sortKey="margin" sort={salesSort} onSort={toggleSort(setSalesSort)} align="right">Маржа</SortTH></tr></TableHead>
                 <tbody>
                   {salesReportLoading || sortedSalesReport.length === 0 ? (
-                    <EmptyRow loading={salesReportLoading} colSpan={9} />
+                    <EmptyRow loading={salesReportLoading} colSpan={10} />
                   ) : (
                     salesReportGroups.flatMap((group) => {
                       const today = iso(new Date());
                       const isToday = group.date === today;
                       const headerRow = (
                         <tr key={`sales-report-group-${group.date}`}>
-                          <td colSpan={9} className="px-3 py-3">
+                          <td colSpan={10} className="px-3 py-3">
                             <div className={`flex flex-col gap-2 rounded-2xl border px-4 py-3 md:flex-row md:items-center md:justify-between ${isToday ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}>
                               <div>
                                 <div className="text-sm font-semibold text-slate-900">{group.date}{isToday ? " • сегодня" : ""}</div>
@@ -1173,6 +1191,7 @@ export default function AdminTravelSales() {
                           <TD className="text-gray-500">{idx + 1}</TD>
                           <TD>{iso(row.sale_date)}</TD>
                           <TD><div className="font-medium text-gray-900">{row.agent}</div></TD>
+                          <TD><div className="font-medium text-gray-900">{row.supplier_agent || "—"}</div></TD>
                           <TD><Badge className={badgeClassByServiceType(row.service_type)}>{typeLabel(row.service_type)}</Badge></TD>
                           <TD className="max-w-[220px] whitespace-pre-wrap break-words">{row.direction || "—"}</TD>
                           <TD>{row.traveller_name || "—"}</TD>
