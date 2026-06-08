@@ -8,30 +8,23 @@ import { tError, tSuccess } from "../../shared/toast";
 
 const SERVICE_TYPE_OPTIONS = [
   { value: "airticket", label: "Авиабилет" },
-  { value: "rail_ticket", label: "ЖД билет" },
+  { value: "railticket", label: "ЖД билет" },
   { value: "visa", label: "Виза" },
   { value: "tourpackage", label: "Турпакет" },
-  { value: "hotel", label: "Отель" },
-  { value: "insurance", label: "Страховка" },
-  { value: "other", label: "Другое" },
+];
+
+const SERVICE_TYPE_LABELS = Object.fromEntries(SERVICE_TYPE_OPTIONS.map((x) => [x.value, x.label]));
+
+const AGENT_KIND_OPTIONS = [
+  { value: "agent", label: "Агент продаж" },
+  { value: "supplier", label: "Поставщик" },
+  { value: "both", label: "Агент + поставщик" },
 ];
 
 const PAYMENT_ENTRY_OPTIONS = [
-  { value: "payment", label: "Оплата" },
-  { value: "refund", label: "Возврат" },
+  { value: "payment", label: "Оплата / перечисление поставщику" },
+  { value: "refund", label: "Возврат от поставщика" },
 ];
-
-const SERVICE_TYPE_LABELS = {
-  airticket: "Авиабилет",
-  rail_ticket: "ЖД билет",
-  visa: "Виза",
-  tourpackage: "Турпакет",
-  hotel: "Отель",
-  insurance: "Страховка",
-  other: "Другое",
-};
-
-const emptyAgentForm = { name: "", contact: "", address: "" };
 
 function localTodayIso() {
   const now = new Date();
@@ -43,6 +36,13 @@ function localTodayIso() {
 
 const todayIso = localTodayIso();
 
+const emptyAgentForm = {
+  name: "",
+  contact: "",
+  address: "",
+  agent_kind: "agent",
+};
+
 const emptySaleForm = {
   sale_date: todayIso,
   agent_id: "",
@@ -50,9 +50,11 @@ const emptySaleForm = {
   service_type: "airticket",
   direction: "",
   traveller_name: "",
+  fare_amount: "",
+  taxes_amount: "",
+  commission_percent: "",
   sale_amount: "",
-  net_amount: "",
-  vat_percent: "0",
+  vat_percent: "",
 };
 
 const emptyPaymentForm = {
@@ -63,12 +65,51 @@ const emptyPaymentForm = {
   comment: "",
 };
 
+const collator = new Intl.Collator("ru", { sensitivity: "base", numeric: true });
+
+function numeric(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function roundMoney(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 0;
+  return Math.round(n * 100) / 100;
+}
+
+function calculateSaleFinance(form) {
+  const fare = Math.max(0, numeric(form.fare_amount));
+  const taxes = Math.max(0, numeric(form.taxes_amount));
+  const commissionPercent = Math.max(0, numeric(form.commission_percent));
+  const sale = Math.max(0, numeric(form.sale_amount));
+  const vatPercent = Math.max(0, numeric(form.vat_percent));
+
+  const commissionAmount = roundMoney((fare * commissionPercent) / 100);
+  const netAmount = roundMoney(fare + taxes - commissionAmount);
+  const baseWithoutVat = vatPercent > 0 ? roundMoney(sale / (1 + vatPercent / 100)) : sale;
+  const markupAmount = roundMoney(Math.max(0, baseWithoutVat - netAmount));
+  const vatAmount = roundMoney(Math.max(0, sale - netAmount - markupAmount));
+
+  return {
+    fare_amount: fare,
+    taxes_amount: taxes,
+    commission_percent: commissionPercent,
+    commission_amount: commissionAmount,
+    net_amount: netAmount,
+    sale_amount: sale,
+    vat_percent: vatPercent,
+    vat_amount: vatAmount,
+    markup_amount: markupAmount,
+    margin: markupAmount,
+  };
+}
+
 function money(v) {
-  const n = Number(v || 0);
   return new Intl.NumberFormat("ru-RU", {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
-  }).format(n);
+  }).format(Number(v || 0));
 }
 
 function moneyCompact(v) {
@@ -78,22 +119,6 @@ function moneyCompact(v) {
   if (abs >= 1_000_000) return `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(n / 1_000_000)} млн`;
   if (abs >= 1_000) return `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(n / 1_000)} тыс`;
   return money(n);
-}
-
-function num(v) {
-  if (v === "" || v === null || v === undefined) return "";
-  const n = Number(v);
-  return Number.isFinite(n) ? n : "";
-}
-
-function calcSaleDerived(form) {
-  const sale = Number(form?.sale_amount || 0);
-  const net = Number(form?.net_amount || 0);
-  const vatPercent = Math.max(0, Number(form?.vat_percent || 0));
-  const baseWithoutVat = vatPercent > 0 ? sale / (1 + vatPercent / 100) : sale;
-  const markup = Math.max(0, baseWithoutVat - net);
-  const vatAmount = Math.max(0, sale - baseWithoutVat);
-  return { markup, vatAmount };
 }
 
 function iso(v) {
@@ -110,23 +135,17 @@ function iso(v) {
   return `${y}-${m}-${day}`;
 }
 
-function nowLabel() {
-  return new Intl.DateTimeFormat("ru-RU", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date());
-}
-
 function typeLabel(v) {
   return SERVICE_TYPE_LABELS[v] || "—";
 }
 
+function agentKindLabel(v) {
+  return AGENT_KIND_OPTIONS.find((x) => x.value === v)?.label || "Агент продаж";
+}
+
 function ledgerTypeLabel(v) {
-  if (v === "sale") return "Продажа";
-  if (v === "supplier_supply") return "Поставка";
+  if (v === "supply") return "Поставка";
+  if (v === "legacy_sale") return "Продажа (старая)";
   if (v === "payment") return "Оплата";
   if (v === "refund") return "Возврат";
   if (v === "payment_legacy") return "Оплата (старая)";
@@ -135,51 +154,34 @@ function ledgerTypeLabel(v) {
 
 function badgeClassByServiceType(v) {
   if (v === "airticket") return "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200";
-  if (v === "rail_ticket") return "bg-cyan-50 text-cyan-700 ring-1 ring-inset ring-cyan-200";
+  if (v === "railticket") return "bg-cyan-50 text-cyan-700 ring-1 ring-inset ring-cyan-200";
   if (v === "visa") return "bg-fuchsia-50 text-fuchsia-700 ring-1 ring-inset ring-fuchsia-200";
   if (v === "tourpackage") return "bg-orange-50 text-orange-700 ring-1 ring-inset ring-orange-200";
   return "bg-gray-100 text-gray-600 ring-1 ring-inset ring-gray-200";
 }
 
 function badgeClassByLedgerType(v) {
-  if (v === "sale") return "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200";
-  if (v === "supplier_supply") return "bg-indigo-50 text-indigo-700 ring-1 ring-inset ring-indigo-200";
+  if (v === "supply") return "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200";
+  if (v === "legacy_sale") return "bg-violet-50 text-violet-700 ring-1 ring-inset ring-violet-200";
   if (v === "payment") return "bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200";
   if (v === "refund") return "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200";
   if (v === "payment_legacy") return "bg-violet-50 text-violet-700 ring-1 ring-inset ring-violet-200";
   return "bg-gray-100 text-gray-600 ring-1 ring-inset ring-gray-200";
 }
 
-function amountClass(v, mode = "default") {
-  const n = Number(v || 0);
-  if (mode === "balance") return n > 0 ? "text-red-600" : n < 0 ? "text-emerald-700" : "text-gray-900";
-  return n < 0 ? "text-red-600" : "text-gray-900";
-}
-
 function balanceStatus(v) {
   const n = Number(v || 0);
   if (n > 0) {
-    return {
-      label: "ДОЛГ",
-      hint: "агент должен",
-      cls: "bg-red-50 text-red-700 ring-red-200",
-      rowCls: "bg-red-50/35 hover:bg-red-50/70",
-    };
+    return { label: "ДОЛГ", cls: "bg-red-50 text-red-700 ring-red-200", rowCls: "bg-red-50/35 hover:bg-red-50/70" };
   }
   if (n < 0) {
-    return {
-      label: "ПЕРЕПЛАТА",
-      hint: "мы должны агенту / аванс",
-      cls: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-      rowCls: "bg-emerald-50/25 hover:bg-emerald-50/60",
-    };
+    return { label: "ПЕРЕПЛАТА", cls: "bg-emerald-50 text-emerald-700 ring-emerald-200", rowCls: "bg-emerald-50/25 hover:bg-emerald-50/60" };
   }
-  return {
-    label: "ЗАКРЫТО",
-    hint: "баланс закрыт",
-    cls: "bg-gray-100 text-gray-600 ring-gray-200",
-    rowCls: "",
-  };
+  return { label: "ЗАКРЫТО", cls: "bg-gray-100 text-gray-600 ring-gray-200", rowCls: "" };
+}
+
+function inputClass(extra = "") {
+  return `w-full rounded-2xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-gray-400 focus:ring-2 focus:ring-gray-200 ${extra}`;
 }
 
 function clsTab(active) {
@@ -188,8 +190,13 @@ function clsTab(active) {
     : "inline-flex items-center rounded-2xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-600 transition hover:bg-gray-50";
 }
 
-function inputClass(extra = "") {
-  return `w-full rounded-2xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-gray-400 focus:ring-2 focus:ring-gray-200 ${extra}`;
+function ActionButton({ children, variant = "default", className = "", ...props }) {
+  const styles = {
+    primary: "rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-black",
+    default: "rounded-2xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50",
+    danger: "rounded-2xl border border-red-200 bg-white px-4 py-2.5 text-sm font-medium text-red-600 transition hover:bg-red-50",
+  };
+  return <button className={`${styles[variant] || styles.default} ${className}`} {...props}>{children}</button>;
 }
 
 function Card({ title, subtitle, children, right }) {
@@ -225,17 +232,8 @@ function StatCard({ title, value, hint, accent = "blue" }) {
   );
 }
 
-function ActionButton({ children, variant = "default", className = "", ...props }) {
-  const styles = {
-    primary: "rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-black",
-    default: "rounded-2xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50",
-    danger: "rounded-2xl border border-red-200 bg-white px-4 py-2.5 text-sm font-medium text-red-600 transition hover:bg-red-50",
-  };
-  return <button className={`${styles[variant] || styles.default} ${className}`} {...props}>{children}</button>;
-}
-
-function Badge({ children, className = "" }) {
-  return <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${className}`}>{children}</span>;
+function Badge({ children, className = "", title = "" }) {
+  return <span title={title} className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${className}`}>{children}</span>;
 }
 
 function TableShell({ children }) {
@@ -250,12 +248,8 @@ function Table({ children }) {
   return <table className="min-w-full text-sm">{children}</table>;
 }
 
-function TableHead({ children }) {
-  return <thead className="bg-gray-50">{children}</thead>;
-}
-
 function TH({ children, align = "left", className = "" }) {
-  return <th className={`whitespace-nowrap border-b border-gray-100 px-3 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500 ${align === "right" ? "text-right" : "text-left"} ${className}`}>{children}</th>;
+  return <th className={`whitespace-nowrap border-b border-gray-100 bg-gray-50 px-3 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500 ${align === "right" ? "text-right" : "text-left"} ${className}`}>{children}</th>;
 }
 
 function TD({ children, align = "left", className = "" }) {
@@ -265,71 +259,40 @@ function TD({ children, align = "left", className = "" }) {
 function EmptyRow({ loading, colSpan }) {
   return (
     <tr>
-      <td className="px-3 py-10 text-center text-sm text-gray-500" colSpan={colSpan}>
-        {loading ? "Загрузка..." : "Нет данных"}
-      </td>
+      <td className="px-3 py-10 text-center text-sm text-gray-500" colSpan={colSpan}>{loading ? "Загрузка..." : "Нет данных"}</td>
     </tr>
   );
 }
 
-
-const collator = new Intl.Collator("ru", { sensitivity: "base", numeric: true });
-
-function agentDisplayName(row) {
-  return String(row?.agent_name || row?.agent || row?.name || "").trim();
-}
-
-function compareValues(a, b) {
-  const av = a ?? "";
-  const bv = b ?? "";
-  const an = Number(av);
-  const bn = Number(bv);
-  if (Number.isFinite(an) && Number.isFinite(bn) && String(av).trim() !== "" && String(bv).trim() !== "") {
-    return an - bn;
-  }
-  return collator.compare(String(av), String(bv));
-}
-
-function sortRows(rows, sort, accessors) {
-  const list = Array.isArray(rows) ? [...rows] : [];
-  if (!sort?.key || !accessors?.[sort.key]) return list;
-  const dir = sort.dir === "asc" ? 1 : -1;
-  return list.sort((a, b) => compareValues(accessors[sort.key](a), accessors[sort.key](b)) * dir);
-}
-
-function SortTH({ children, sortKey, sort, onSort, align = "left", className = "" }) {
-  const active = sort?.key === sortKey;
-  const icon = active ? (sort.dir === "asc" ? "↑" : "↓") : "↕";
-  return (
-    <TH align={align} className={className}>
-      <button
-        type="button"
-        onClick={() => onSort(sortKey)}
-        className={`inline-flex items-center gap-1 whitespace-nowrap font-semibold uppercase tracking-wide ${align === "right" ? "justify-end" : "justify-start"}`}
-      >
-        <span>{children}</span>
-        <span className={active ? "text-slate-900" : "text-slate-300"}>{icon}</span>
-      </button>
-    </TH>
-  );
-}
-
 function exportToExcel(filename, rows) {
-  const worksheet = XLSX.utils.json_to_sheet(rows);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Report");
-  const wbout = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
-  saveAs(new Blob([wbout], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), filename);
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Report");
+  const buffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+  saveAs(new Blob([buffer], { type: "application/octet-stream" }), filename);
+}
+
+function sortByName(list) {
+  return [...(Array.isArray(list) ? list : [])].sort((a, b) => collator.compare(String(a.name || ""), String(b.name || "")));
+}
+
+function groupByDate(rows, dateKey) {
+  const map = new Map();
+  rows.forEach((row) => {
+    const date = iso(row[dateKey]) || "Без даты";
+    if (!map.has(date)) map.set(date, []);
+    map.get(date).push(row);
+  });
+  return Array.from(map.entries()).map(([date, items]) => ({ date, items })).sort((a, b) => String(b.date).localeCompare(String(a.date)));
 }
 
 export default function AdminTravelSales() {
   const [tab, setTab] = useState("agents");
-
   const [agents, setAgents] = useState([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
+  const [agentQuery, setAgentQuery] = useState("");
   const [agentForm, setAgentForm] = useState(emptyAgentForm);
   const [editingAgentId, setEditingAgentId] = useState(null);
-  const [agentQuery, setAgentQuery] = useState("");
 
   const [dailySales, setDailySales] = useState([]);
   const [dailyLoading, setDailyLoading] = useState(false);
@@ -337,10 +300,9 @@ export default function AdminTravelSales() {
   const [editingSaleId, setEditingSaleId] = useState(null);
   const [dailyFilterAgentId, setDailyFilterAgentId] = useState("");
   const [dailyFilterSupplierId, setDailyFilterSupplierId] = useState("");
+  const [dailyServiceType, setDailyServiceType] = useState("");
   const [dailyDateFrom, setDailyDateFrom] = useState("");
   const [dailyDateTo, setDailyDateTo] = useState("");
-  const [dailyServiceType, setDailyServiceType] = useState("");
-  const [dailySort, setDailySort] = useState({ key: "sale_date", dir: "desc" });
 
   const [payments, setPayments] = useState([]);
   const [paymentsLoading, setPaymentsLoading] = useState(false);
@@ -350,7 +312,6 @@ export default function AdminTravelSales() {
   const [paymentsEntryType, setPaymentsEntryType] = useState("");
   const [paymentsDateFrom, setPaymentsDateFrom] = useState("");
   const [paymentsDateTo, setPaymentsDateTo] = useState("");
-  const [paymentsSort, setPaymentsSort] = useState({ key: "payment_date", dir: "desc" });
 
   const [salesReport, setSalesReport] = useState([]);
   const [salesReportLoading, setSalesReportLoading] = useState(false);
@@ -359,7 +320,6 @@ export default function AdminTravelSales() {
   const [salesDateFrom, setSalesDateFrom] = useState("");
   const [salesDateTo, setSalesDateTo] = useState("");
   const [salesServiceType, setSalesServiceType] = useState("");
-  const [salesSort, setSalesSort] = useState({ key: "sale_date", dir: "desc" });
 
   const [balanceReport, setBalanceReport] = useState([]);
   const [balanceLoading, setBalanceLoading] = useState(false);
@@ -367,26 +327,39 @@ export default function AdminTravelSales() {
   const [balanceDateFrom, setBalanceDateFrom] = useState("");
   const [balanceDateTo, setBalanceDateTo] = useState("");
   const [balanceServiceType, setBalanceServiceType] = useState("");
-  const [balanceSort, setBalanceSort] = useState({ key: "txn_date", dir: "desc" });
 
-  const sortedAgents = useMemo(
-    () => [...agents].sort((a, b) => collator.compare(String(a.name || ""), String(b.name || ""))),
-    [agents]
-  );
+  const sortedAgents = useMemo(() => sortByName(agents), [agents]);
+  const salesAgents = useMemo(() => sortedAgents.filter((a) => ["agent", "both", ""].includes(String(a.agent_kind || "agent"))), [sortedAgents]);
+  const suppliers = useMemo(() => sortedAgents.filter((a) => ["supplier", "both"].includes(String(a.agent_kind || "agent"))), [sortedAgents]);
+  const finance = useMemo(() => calculateSaleFinance(saleForm), [saleForm]);
 
-  const toggleSort = (setter) => (key) => {
-    setter((prev) => ({
-      key,
-      dir: prev.key === key && prev.dir === "asc" ? "desc" : "asc",
-    }));
-  };
+  const totals = useMemo(() => ({
+    dailySale: dailySales.reduce((s, r) => s + Number(r.sale_amount || 0), 0),
+    dailyNet: dailySales.reduce((s, r) => s + Number(r.net_amount || 0), 0),
+    dailyCommission: dailySales.reduce((s, r) => s + Number(r.commission_amount || 0), 0),
+    dailyMarkup: dailySales.reduce((s, r) => s + Number(r.markup_amount || 0), 0),
+    reportSale: salesReport.reduce((s, r) => s + Number(r.sale_amount || 0), 0),
+    reportNet: salesReport.reduce((s, r) => s + Number(r.net_amount || 0), 0),
+    reportCommission: salesReport.reduce((s, r) => s + Number(r.commission_amount || 0), 0),
+    reportMarkup: salesReport.reduce((s, r) => s + Number(r.markup_amount || r.margin || 0), 0),
+    payments: payments.reduce((s, r) => s + (String(r.entry_type || "payment") === "payment" ? Number(r.amount || 0) : 0), 0),
+    refunds: payments.reduce((s, r) => s + (String(r.entry_type || "payment") === "refund" ? Number(r.amount || 0) : 0), 0),
+  }), [dailySales, salesReport, payments]);
+
+  const totalBalance = useMemo(() => {
+    const latestByAgent = new Map();
+    [...balanceReport]
+      .sort((a, b) => `${iso(a.txn_date)}-${a.row_key}`.localeCompare(`${iso(b.txn_date)}-${b.row_key}`))
+      .forEach((r) => latestByAgent.set(r.agent_id, Number(r.balance || 0)));
+    return Array.from(latestByAgent.values()).reduce((s, n) => s + n, 0);
+  }, [balanceReport]);
 
   async function loadAgents() {
     try {
       setAgentsLoading(true);
       const q = new URLSearchParams();
+      q.set("limit", "1000");
       if (agentQuery.trim()) q.set("q", agentQuery.trim());
-      q.set("limit", "500");
       const res = await apiGet(`/api/admin/travel-sales/agents?${q.toString()}`, "admin");
       setAgents(Array.isArray(res?.rows) ? res.rows : []);
     } catch (e) {
@@ -401,7 +374,7 @@ export default function AdminTravelSales() {
     try {
       setDailyLoading(true);
       const q = new URLSearchParams();
-      q.set("limit", "500");
+      q.set("limit", "1000");
       if (dailyFilterAgentId) q.set("agent_id", dailyFilterAgentId);
       if (dailyFilterSupplierId) q.set("supplier_agent_id", dailyFilterSupplierId);
       if (dailyDateFrom) q.set("date_from", dailyDateFrom);
@@ -421,7 +394,7 @@ export default function AdminTravelSales() {
     try {
       setPaymentsLoading(true);
       const q = new URLSearchParams();
-      q.set("limit", "500");
+      q.set("limit", "1000");
       if (paymentsAgentId) q.set("agent_id", paymentsAgentId);
       if (paymentsEntryType) q.set("entry_type", paymentsEntryType);
       if (paymentsDateFrom) q.set("date_from", paymentsDateFrom);
@@ -440,7 +413,7 @@ export default function AdminTravelSales() {
     try {
       setSalesReportLoading(true);
       const q = new URLSearchParams();
-      q.set("limit", "1000");
+      q.set("limit", "3000");
       if (salesAgentId) q.set("agent_id", salesAgentId);
       if (salesSupplierId) q.set("supplier_agent_id", salesSupplierId);
       if (salesDateFrom) q.set("date_from", salesDateFrom);
@@ -460,7 +433,7 @@ export default function AdminTravelSales() {
     try {
       setBalanceLoading(true);
       const q = new URLSearchParams();
-      q.set("limit", "2000");
+      q.set("limit", "5000");
       if (balanceAgentId) q.set("agent_id", balanceAgentId);
       if (balanceDateFrom) q.set("date_from", balanceDateFrom);
       if (balanceDateTo) q.set("date_to", balanceDateTo);
@@ -469,7 +442,7 @@ export default function AdminTravelSales() {
       setBalanceReport(Array.isArray(res?.rows) ? res.rows : []);
     } catch (e) {
       console.error(e);
-      tError(e?.message || "Не удалось загрузить баланс агентов");
+      tError(e?.message || "Не удалось загрузить баланс");
     } finally {
       setBalanceLoading(false);
     }
@@ -481,273 +454,80 @@ export default function AdminTravelSales() {
   useEffect(() => { if (tab === "sales") loadSalesReport(); }, [tab, salesAgentId, salesSupplierId, salesDateFrom, salesDateTo, salesServiceType]);
   useEffect(() => { if (tab === "balance") loadBalanceReport(); }, [tab, balanceAgentId, balanceDateFrom, balanceDateTo, balanceServiceType]);
 
-  const totalSales = useMemo(() => salesReport.reduce((s, r) => s + Number(r.sale_amount || 0), 0), [salesReport]);
-  const totalNet = useMemo(() => salesReport.reduce((s, r) => s + Number(r.net_amount || 0), 0), [salesReport]);
-  const totalMargin = useMemo(() => salesReport.reduce((s, r) => s + Number(r.margin || 0), 0), [salesReport]);
-  const totalPayments = useMemo(() => payments.reduce((s, r) => s + (String(r.entry_type || "payment") === "payment" ? Number(r.amount || 0) : 0), 0), [payments]);
-  const totalRefunds = useMemo(() => payments.reduce((s, r) => s + (String(r.entry_type || "payment") === "refund" ? Number(r.amount || 0) : 0), 0), [payments]);
-
-  const totalBalance = useMemo(() => {
-    const byAgent = new Map();
-    [...balanceReport]
-      .sort((a, b) => `${a.txn_date || ""}${a.row_key || ""}`.localeCompare(`${b.txn_date || ""}${b.row_key || ""}`))
-      .forEach((r) => byAgent.set(r.agent_id, Number(r.balance || 0)));
-    return Array.from(byAgent.values()).reduce((s, n) => s + n, 0);
-  }, [balanceReport]);
-
-  const agentsWithContact = useMemo(() => agents.filter((a) => String(a.contact || "").trim()).length, [agents]);
-  const agentsWithAddress = useMemo(() => agents.filter((a) => String(a.address || "").trim()).length, [agents]);
-  const paymentsNet = totalPayments - totalRefunds;
-
-  const sortedDailySales = useMemo(() => sortRows(dailySales, dailySort, {
-    sale_date: (row) => iso(row.sale_date),
-    agent: (row) => agentDisplayName(row),
-    supplier_agent: (row) => row.supplier_agent_name || row.supplier_agent || "",
-    service_type: (row) => typeLabel(row.service_type),
-    direction: (row) => row.direction || "",
-    traveller_name: (row) => row.traveller_name || "",
-    sale_amount: (row) => Number(row.sale_amount || 0),
-    net_amount: (row) => Number(row.net_amount || 0),
-    vat_percent: (row) => Number(row.vat_percent || 0),
-    vat_amount: (row) => Number(row.vat_amount || 0),
-    markup_amount: (row) => Number(row.markup_amount || row.margin || 0),
-  }), [dailySales, dailySort]);
-
-  const sortedPayments = useMemo(() => sortRows(payments, paymentsSort, {
-    payment_date: (row) => iso(row.payment_date),
-    agent: (row) => agentDisplayName(row),
-    entry_type: (row) => ledgerTypeLabel(row.entry_type),
-    amount: (row) => Number(row.amount || 0),
-    comment: (row) => row.comment || "",
-  }), [payments, paymentsSort]);
-
-  const sortedSalesReport = useMemo(() => sortRows(salesReport, salesSort, {
-    sale_date: (row) => iso(row.sale_date),
-    agent: (row) => agentDisplayName(row),
-    supplier_agent: (row) => row.supplier_agent || row.supplier_agent_name || "",
-    service_type: (row) => typeLabel(row.service_type),
-    direction: (row) => row.direction || "",
-    traveller_name: (row) => row.traveller_name || "",
-    sale_amount: (row) => Number(row.sale_amount || 0),
-    net_amount: (row) => Number(row.net_amount || 0),
-    vat_percent: (row) => Number(row.vat_percent || 0),
-    vat_amount: (row) => Number(row.vat_amount || 0),
-    margin: (row) => Number(row.margin || row.markup_amount || 0),
-  }), [salesReport, salesSort]);
-
-  const sortedBalanceReport = useMemo(() => sortRows(balanceReport, balanceSort, {
-    txn_date: (row) => iso(row.txn_date),
-    entry_type: (row) => ledgerTypeLabel(row.entry_type),
-    agent: (row) => agentDisplayName(row),
-    service_type: (row) => typeLabel(row.service_type),
-    direction: (row) => row.direction || "",
-    traveller_name: (row) => row.traveller_name || "",
-    sale_amount: (row) => Number(row.sale_amount || 0),
-    supply_amount: (row) => Number(row.supply_amount || 0),
-    payment_amount: (row) => Number(row.payment_amount || 0),
-    refund_amount: (row) => Number(row.refund_amount || 0),
-    comment: (row) => row.comment || "",
-    balance: (row) => Number(row.balance || 0),
-  }), [balanceReport, balanceSort]);
-
-  const dailySalesGroups = useMemo(() => {
-    const map = new Map();
-
-    sortedDailySales.forEach((row) => {
-      const dateKey = iso(row.sale_date) || "Без даты";
-
-      if (!map.has(dateKey)) {
-        map.set(dateKey, {
-          date: dateKey,
-          items: [],
-          saleTotal: 0,
-          netTotal: 0,
-        });
-      }
-
-      const group = map.get(dateKey);
-      group.items.push(row);
-      group.saleTotal += Number(row.sale_amount || 0);
-      group.netTotal += Number(row.net_amount || 0);
-    });
-
-    return Array.from(map.values()).sort((a, b) =>
-      dailySort.key === "sale_date"
-        ? compareValues(a.date, b.date) * (dailySort.dir === "asc" ? 1 : -1)
-        : String(b.date).localeCompare(String(a.date))
-    );
-  }, [sortedDailySales, dailySort]);
-
-
-  const paymentsGroups = useMemo(() => {
-    const map = new Map();
-
-    sortedPayments.forEach((row) => {
-      const dateKey = iso(row.payment_date) || "Без даты";
-
-      if (!map.has(dateKey)) {
-        map.set(dateKey, {
-          date: dateKey,
-          items: [],
-          paymentTotal: 0,
-          refundTotal: 0,
-        });
-      }
-
-      const group = map.get(dateKey);
-      const amount = Number(row.amount || 0);
-      group.items.push(row);
-      if (String(row.entry_type || "payment") === "refund") group.refundTotal += amount;
-      else group.paymentTotal += amount;
-    });
-
-    return Array.from(map.values()).sort((a, b) =>
-      paymentsSort.key === "payment_date"
-        ? compareValues(a.date, b.date) * (paymentsSort.dir === "asc" ? 1 : -1)
-        : String(b.date).localeCompare(String(a.date))
-    );
-  }, [sortedPayments, paymentsSort]);
-
-  const salesReportGroups = useMemo(() => {
-    const map = new Map();
-
-    sortedSalesReport.forEach((row) => {
-      const dateKey = iso(row.sale_date) || "Без даты";
-
-      if (!map.has(dateKey)) {
-        map.set(dateKey, {
-          date: dateKey,
-          items: [],
-          saleTotal: 0,
-          netTotal: 0,
-          marginTotal: 0,
-        });
-      }
-
-      const group = map.get(dateKey);
-      group.items.push(row);
-      group.saleTotal += Number(row.sale_amount || 0);
-      group.netTotal += Number(row.net_amount || 0);
-      group.marginTotal += Number(row.margin || 0);
-    });
-
-    return Array.from(map.values()).sort((a, b) =>
-      salesSort.key === "sale_date"
-        ? compareValues(a.date, b.date) * (salesSort.dir === "asc" ? 1 : -1)
-        : String(b.date).localeCompare(String(a.date))
-    );
-  }, [sortedSalesReport, salesSort]);
-
-  const balanceReportGroups = useMemo(() => {
-    const map = new Map();
-
-    sortedBalanceReport.forEach((row) => {
-      const dateKey = iso(row.txn_date) || "Без даты";
-
-      if (!map.has(dateKey)) {
-        map.set(dateKey, {
-          date: dateKey,
-          items: [],
-          saleTotal: 0,
-          paymentTotal: 0,
-          refundTotal: 0,
-          debtCount: 0,
-          overpayCount: 0,
-          closedCount: 0,
-        });
-      }
-
-      const group = map.get(dateKey);
-      group.items.push(row);
-      group.saleTotal += Number(row.sale_amount || 0);
-      group.paymentTotal += Number(row.payment_amount || 0);
-      group.refundTotal += Number(row.refund_amount || 0);
-      const balance = Number(row.balance || 0);
-      if (balance > 0) group.debtCount += 1;
-      else if (balance < 0) group.overpayCount += 1;
-      else group.closedCount += 1;
-    });
-
-    return Array.from(map.values()).sort((a, b) =>
-      balanceSort.key === "txn_date"
-        ? compareValues(a.date, b.date) * (balanceSort.dir === "asc" ? 1 : -1)
-        : String(b.date).localeCompare(String(a.date))
-    );
-  }, [sortedBalanceReport, balanceSort]);
-
-  const currentTabSummary = useMemo(() => {
-    if (tab === "daily") return `Продажи в фокусе • ${dailySales.length} записей`;
-    if (tab === "payments") return `Оплаты в фокусе • ${payments.length} записей`;
-    if (tab === "sales") return `Отчет по продажам • ${salesReport.length} строк`;
-    if (tab === "balance") return `Баланс агентов • ${balanceReport.length} строк`;
-    return `Справочник агентов • ${agents.length} записей`;
-  }, [tab, dailySales.length, payments.length, salesReport.length, balanceReport.length, agents.length]);
-
   async function handleSaveAgent(e) {
     e.preventDefault();
+    const payload = {
+      name: agentForm.name.trim(),
+      contact: agentForm.contact.trim(),
+      address: agentForm.address.trim(),
+      agent_kind: agentForm.agent_kind || "agent",
+    };
+    if (!payload.name) return tError("Введите наименование");
     try {
-      const payload = {
-        name: agentForm.name.trim(),
-        contact: agentForm.contact.trim(),
-        address: agentForm.address.trim(),
-      };
-      if (!payload.name) return tError("Введите наименование агента");
       if (editingAgentId) {
         await apiPut(`/api/admin/travel-sales/agents/${editingAgentId}`, payload, "admin");
-        tSuccess("Агент обновлен");
+        tSuccess("Запись обновлена");
       } else {
         await apiPost("/api/admin/travel-sales/agents", payload, "admin");
-        tSuccess("Агент добавлен");
+        tSuccess("Запись добавлена");
       }
-      setAgentForm(emptyAgentForm);
       setEditingAgentId(null);
+      setAgentForm(emptyAgentForm);
       await loadAgents();
     } catch (e2) {
       console.error(e2);
-      tError(e2?.message || "Ошибка сохранения агента");
+      tError(e2?.message || "Ошибка сохранения");
     }
   }
 
   function startEditAgent(row) {
     setEditingAgentId(row.id);
-    setAgentForm({ name: row.name || "", contact: row.contact || "", address: row.address || "" });
+    setAgentForm({
+      name: row.name || "",
+      contact: row.contact || "",
+      address: row.address || "",
+      agent_kind: row.agent_kind || "agent",
+    });
     setTab("agents");
   }
 
   async function handleDeleteAgent(id) {
-    if (!window.confirm("Удалить агента?")) return;
+    if (!window.confirm("Удалить запись?")) return;
     try {
       await apiDelete(`/api/admin/travel-sales/agents/${id}`, "admin");
-      tSuccess("Агент удален");
-      if (editingAgentId === id) {
-        setEditingAgentId(null);
-        setAgentForm(emptyAgentForm);
-      }
+      tSuccess("Удалено");
       await loadAgents();
     } catch (e) {
       console.error(e);
-      tError(e?.message || "Не удалось удалить агента");
+      tError(e?.message || "Не удалось удалить");
     }
   }
 
   async function handleSaveSale(e) {
     e.preventDefault();
+    const calculated = calculateSaleFinance(saleForm);
+    const payload = {
+      sale_date: saleForm.sale_date,
+      agent_id: Number(saleForm.agent_id),
+      supplier_agent_id: Number(saleForm.supplier_agent_id),
+      service_type: saleForm.service_type,
+      direction: saleForm.direction.trim(),
+      traveller_name: saleForm.traveller_name.trim(),
+      fare_amount: calculated.fare_amount,
+      taxes_amount: calculated.taxes_amount,
+      commission_percent: calculated.commission_percent,
+      sale_amount: calculated.sale_amount,
+      net_amount: calculated.net_amount,
+      vat_percent: calculated.vat_percent,
+    };
+    if (!payload.sale_date) return tError("Укажи дату");
+    if (!payload.agent_id) return tError("Выбери агента продаж");
+    if (!payload.supplier_agent_id) return tError("Выбери поставщика");
+    if (!payload.service_type) return tError("Выбери тип услуги");
+    if (!payload.direction) return tError("Укажи направление");
+    if (payload.sale_amount < 0) return tError("Сумма продажи не может быть отрицательной");
+
     try {
-      const payload = {
-        sale_date: saleForm.sale_date,
-        agent_id: Number(saleForm.agent_id),
-        supplier_agent_id: saleForm.supplier_agent_id ? Number(saleForm.supplier_agent_id) : null,
-        service_type: String(saleForm.service_type || "").trim(),
-        direction: String(saleForm.direction || "").trim(),
-        traveller_name: String(saleForm.traveller_name || "").trim(),
-        sale_amount: Number(saleForm.sale_amount || 0),
-        net_amount: Number(saleForm.net_amount || 0),
-        vat_percent: Number(saleForm.vat_percent || 0),
-      };
-      if (!payload.agent_id) return tError("Выбери агента");
-      if (!payload.sale_date) return tError("Укажи дату");
-      if (!payload.service_type) return tError("Выбери тип услуги");
-      if (!payload.direction) return tError("Укажи направление");
       if (editingSaleId) {
         await apiPut(`/api/admin/travel-sales/daily-sales/${editingSaleId}`, payload, "admin");
         tSuccess("Продажа обновлена");
@@ -769,15 +549,17 @@ export default function AdminTravelSales() {
   function startEditSale(row) {
     setEditingSaleId(row.id);
     setSaleForm({
-      sale_date: iso(row.sale_date),
+      sale_date: iso(row.sale_date) || todayIso,
       agent_id: String(row.agent_id || ""),
       supplier_agent_id: String(row.supplier_agent_id || ""),
       service_type: row.service_type || "airticket",
       direction: row.direction || "",
       traveller_name: row.traveller_name || "",
-      sale_amount: num(row.sale_amount),
-      net_amount: num(row.net_amount),
-      vat_percent: num(row.vat_percent) === "" ? "0" : num(row.vat_percent),
+      fare_amount: row.fare_amount ?? "",
+      taxes_amount: row.taxes_amount ?? "",
+      commission_percent: row.commission_percent ?? "",
+      sale_amount: row.sale_amount ?? "",
+      vat_percent: row.vat_percent ?? "",
     });
     setTab("daily");
   }
@@ -787,10 +569,6 @@ export default function AdminTravelSales() {
     try {
       await apiDelete(`/api/admin/travel-sales/daily-sales/${id}`, "admin");
       tSuccess("Продажа удалена");
-      if (editingSaleId === id) {
-        setEditingSaleId(null);
-        setSaleForm(emptySaleForm);
-      }
       await loadDailySales();
       await loadSalesReport();
       await loadBalanceReport();
@@ -802,17 +580,17 @@ export default function AdminTravelSales() {
 
   async function handleSavePayment(e) {
     e.preventDefault();
+    const payload = {
+      payment_date: paymentForm.payment_date,
+      agent_id: Number(paymentForm.agent_id),
+      entry_type: paymentForm.entry_type || "payment",
+      amount: Number(paymentForm.amount || 0),
+      comment: paymentForm.comment.trim(),
+    };
+    if (!payload.agent_id) return tError("Выбери агента/поставщика");
+    if (!payload.payment_date) return tError("Укажи дату");
+    if (payload.amount < 0) return tError("Сумма не может быть отрицательной");
     try {
-      const payload = {
-        payment_date: paymentForm.payment_date,
-        agent_id: Number(paymentForm.agent_id),
-        entry_type: paymentForm.entry_type || "payment",
-        amount: Number(paymentForm.amount || 0),
-        comment: String(paymentForm.comment || "").trim(),
-      };
-      if (!payload.agent_id) return tError("Выбери агента");
-      if (!payload.payment_date) return tError("Укажи дату оплаты");
-      if (payload.amount < 0) return tError("Сумма оплаты не может быть отрицательной");
       if (editingPaymentId) {
         await apiPut(`/api/admin/travel-sales/payments/${editingPaymentId}`, payload, "admin");
         tSuccess("Оплата обновлена");
@@ -836,7 +614,7 @@ export default function AdminTravelSales() {
       payment_date: iso(row.payment_date) || todayIso,
       agent_id: String(row.agent_id || ""),
       entry_type: row.entry_type || "payment",
-      amount: num(row.amount),
+      amount: row.amount ?? "",
       comment: row.comment || "",
     });
     setTab("payments");
@@ -847,10 +625,6 @@ export default function AdminTravelSales() {
     try {
       await apiDelete(`/api/admin/travel-sales/payments/${id}`, "admin");
       tSuccess("Оплата удалена");
-      if (editingPaymentId === id) {
-        setEditingPaymentId(null);
-        setPaymentForm(emptyPaymentForm);
-      }
       await loadPayments();
       await loadBalanceReport();
     } catch (e) {
@@ -864,16 +638,20 @@ export default function AdminTravelSales() {
     exportToExcel(`travel-sales-report-${new Date().toISOString().slice(0, 10)}.xlsx`, salesReport.map((row, idx) => ({
       "№": idx + 1,
       Дата: iso(row.sale_date),
-      Агент: row.agent,
+      Агент: row.agent || "",
       Поставщик: row.supplier_agent || "",
       "Тип услуги": typeLabel(row.service_type),
       Направление: row.direction || "",
       "Name of traveller": row.traveller_name || "",
+      Тариф: Number(row.fare_amount || 0),
+      Таксы: Number(row.taxes_amount || 0),
+      "Комиссия %": Number(row.commission_percent || 0),
+      "Комиссия сумма": Number(row.commission_amount || 0),
       "Сумма продажи": Number(row.sale_amount || 0),
       "Сумма нетто": Number(row.net_amount || 0),
       "НДС %": Number(row.vat_percent || 0),
       "НДС сумма": Number(row.vat_amount || 0),
-      Наценка: Number(row.margin || row.markup_amount || 0),
+      Наценка: Number(row.markup_amount || row.margin || 0),
     })));
   }
 
@@ -883,94 +661,67 @@ export default function AdminTravelSales() {
       "№": idx + 1,
       "Дата операции": iso(row.txn_date),
       "Тип записи": ledgerTypeLabel(row.entry_type),
-      Агент: row.agent,
-      Поставщик: row.supplier_agent || "",
+      "Агент/поставщик": row.agent || "",
       "Тип услуги": typeLabel(row.service_type),
       Направление: row.direction || "",
       "Name of traveller": row.traveller_name || "",
-      Продажа: Number(row.sale_amount || 0),
+      Тариф: Number(row.fare_amount || 0),
+      Таксы: Number(row.taxes_amount || 0),
+      "Комиссия сумма": Number(row.commission_amount || 0),
       Поставка: Number(row.supply_amount || 0),
       Оплата: Number(row.payment_amount || 0),
       Возврат: Number(row.refund_amount || 0),
-      Комментарий: row.comment || "",
-      Дельта: Number(row.delta_amount || 0),
       Баланс: Number(row.balance || 0),
+      Комментарий: row.comment || "",
     })));
   }
 
-  return (
-    <div className="space-y-6 [&_tbody_tr]:border-b [&_tbody_tr]:border-gray-100 [&_tbody_tr]:transition [&_tbody_tr:hover]:bg-gray-50/80">
-      <section className="overflow-hidden rounded-[32px] border border-slate-800 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-800 px-6 py-6 text-white shadow-[0_24px_60px_rgba(15,23,42,0.22)] md:px-7">
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-          <div className="max-w-3xl">
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-white/80">
-              <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400" /> Travel Sales Admin
-            </div>
-            <h1 className="mt-4 text-2xl font-semibold tracking-tight md:text-4xl">Финансы по агентам — аккуратно, ясно и по делу</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300 md:text-base">
-              Улучшенный интерфейс для продаж, оплат, отчетов и баланса агентов без изменения текущей CRUD-логики.
-            </p>
-            <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-slate-300">
-              <span className="inline-flex items-center gap-2"><span className="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400" /> Система в норме</span>
-              <span>Сейчас работает: {agentsWithContact} агентов</span>
-              <span>{currentTabSummary}</span>
-              <span>{nowLabel()}</span>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:min-w-[560px]">
-            <div className="rounded-3xl border border-white/10 bg-white/10 px-4 py-3 backdrop-blur"><div className="text-[11px] uppercase tracking-wide text-slate-300">Агенты</div><div className="mt-1 text-2xl font-semibold">{agents.length}</div></div>
-            <div className="rounded-3xl border border-white/10 bg-white/10 px-4 py-3 backdrop-blur"><div className="text-[11px] uppercase tracking-wide text-slate-300">Продажи</div><div className="mt-1 text-2xl font-semibold">{moneyCompact(totalSales)}</div></div>
-            <div className="rounded-3xl border border-white/10 bg-white/10 px-4 py-3 backdrop-blur"><div className="text-[11px] uppercase tracking-wide text-slate-300">Оплаты</div><div className="mt-1 text-2xl font-semibold">{moneyCompact(totalPayments)}</div></div>
-            <div className="rounded-3xl border border-white/10 bg-white/10 px-4 py-3 backdrop-blur"><div className="text-[11px] uppercase tracking-wide text-slate-300">Баланс</div><div className="mt-1 text-2xl font-semibold">{moneyCompact(totalBalance)}</div></div>
-          </div>
-        </div>
-      </section>
+  const dailyGroups = useMemo(() => groupByDate(dailySales, "sale_date"), [dailySales]);
+  const salesGroups = useMemo(() => groupByDate(salesReport, "sale_date"), [salesReport]);
+  const balanceGroups = useMemo(() => groupByDate(balanceReport, "txn_date"), [balanceReport]);
+  const paymentGroups = useMemo(() => groupByDate(payments, "payment_date"), [payments]);
 
-      <div className="flex flex-wrap items-center gap-2 rounded-[28px] border border-gray-200 bg-white/90 p-2 shadow-sm backdrop-blur">
-        <button className={clsTab(tab === "agents")} onClick={() => setTab("agents")}>Все агенты</button>
-        <button className={clsTab(tab === "daily")} onClick={() => setTab("daily")}>Дневная продажа</button>
-        <button className={clsTab(tab === "payments")} onClick={() => setTab("payments")}>Оплата агента</button>
-        <button className={clsTab(tab === "sales")} onClick={() => setTab("sales")}>Отчет продаж</button>
-        <button className={clsTab(tab === "balance")} onClick={() => setTab("balance")}>Баланс агента</button>
+  const resetSaleVisible = editingSaleId || Object.entries(saleForm).some(([k, v]) => k !== "sale_date" && k !== "service_type" && String(v || "").trim());
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-[28px] border border-gray-200 bg-white p-3 shadow-sm">
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => setTab("agents")} className={clsTab(tab === "agents")}>Все агенты</button>
+          <button type="button" onClick={() => setTab("daily")} className={clsTab(tab === "daily")}>Дневная продажа</button>
+          <button type="button" onClick={() => setTab("payments")} className={clsTab(tab === "payments")}>Оплата / перечисление</button>
+          <button type="button" onClick={() => setTab("sales")} className={clsTab(tab === "sales")}>Отчет продаж</button>
+          <button type="button" onClick={() => setTab("balance")} className={clsTab(tab === "balance")}>Баланс поставщика</button>
+        </div>
       </div>
 
       {tab === "agents" && (
         <>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <StatCard title="Всего агентов" value={String(agents.length)} hint="Отображается с учетом поиска" accent="blue" />
-            <StatCard title="С заполненным контактом" value={String(agentsWithContact)} hint="Есть телефон или контакт" accent="emerald" />
-            <StatCard title="С указанным адресом" value={String(agentsWithAddress)} hint="Для быстрой навигации" accent="amber" />
-            <StatCard title="Режим" value={editingAgentId ? "Редактирование" : "Добавление"} hint={editingAgentId ? "Открыта текущая запись" : "Создание новой записи"} accent="violet" />
+            <StatCard title="Всего записей" value={String(agents.length)} hint="Агенты и поставщики" accent="blue" />
+            <StatCard title="Поставщиков" value={String(suppliers.length)} hint="agent_kind = supplier/both" accent="emerald" />
+            <StatCard title="Агентов продаж" value={String(salesAgents.length)} hint="agent_kind = agent/both" accent="amber" />
+            <StatCard title="Режим" value={editingAgentId ? "Редактирование" : "Новая запись"} hint="Справочник Travel Finance" accent="violet" />
           </div>
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-            <div className="xl:col-span-1">
-              <Card title={editingAgentId ? "Редактировать агента" : "Добавить агента"} subtitle="Чистая форма без лишнего шума">
-                <form onSubmit={handleSaveAgent} className="space-y-4">
-                  <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Наименование</label><input className={inputClass()} value={agentForm.name} onChange={(e) => setAgentForm((p) => ({ ...p, name: e.target.value }))} placeholder="Например: Air Broker" /></div>
-                  <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Контакт</label><input className={inputClass()} value={agentForm.contact} onChange={(e) => setAgentForm((p) => ({ ...p, contact: e.target.value }))} placeholder="+998 ..." /></div>
-                  <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Адрес</label><textarea className={inputClass("min-h-[110px] resize-y")} value={agentForm.address} onChange={(e) => setAgentForm((p) => ({ ...p, address: e.target.value }))} placeholder="Адрес агента" /></div>
-                  <div className="flex flex-wrap gap-2"><ActionButton type="submit" variant="primary">{editingAgentId ? "Сохранить" : "Добавить"}</ActionButton>{(editingAgentId || agentForm.name || agentForm.contact || agentForm.address) && <ActionButton type="button" onClick={() => { setEditingAgentId(null); setAgentForm(emptyAgentForm); }}>Сбросить</ActionButton>}</div>
-                </form>
-              </Card>
-            </div>
+            <Card title={editingAgentId ? "Редактировать запись" : "Добавить агента / поставщика"} subtitle="Один справочник, но с разными ролями">
+              <form onSubmit={handleSaveAgent} className="space-y-4">
+                <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Наименование</label><input className={inputClass()} value={agentForm.name} onChange={(e) => setAgentForm((p) => ({ ...p, name: e.target.value }))} /></div>
+                <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Роль</label><select className={inputClass()} value={agentForm.agent_kind} onChange={(e) => setAgentForm((p) => ({ ...p, agent_kind: e.target.value }))}>{AGENT_KIND_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select></div>
+                <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Контакт</label><input className={inputClass()} value={agentForm.contact} onChange={(e) => setAgentForm((p) => ({ ...p, contact: e.target.value }))} /></div>
+                <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Адрес</label><input className={inputClass()} value={agentForm.address} onChange={(e) => setAgentForm((p) => ({ ...p, address: e.target.value }))} /></div>
+                <div className="flex flex-wrap gap-2"><ActionButton type="submit" variant="primary">{editingAgentId ? "Сохранить" : "Добавить"}</ActionButton>{editingAgentId ? <ActionButton type="button" onClick={() => { setEditingAgentId(null); setAgentForm(emptyAgentForm); }}>Сбросить</ActionButton> : null}</div>
+              </form>
+            </Card>
             <div className="xl:col-span-2">
-              <Card title="Список агентов" subtitle="Удобнее читать, быстрее искать, приятнее смотреть" right={<div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center"><input className={inputClass("sm:w-64")} placeholder="Поиск по названию..." value={agentQuery} onChange={(e) => setAgentQuery(e.target.value)} /><ActionButton onClick={loadAgents} type="button">Найти</ActionButton></div>}>
-                <TableShell>
-                  <Table>
-                    <TableHead><tr><TH>№</TH><TH>Наименование</TH><TH>Контакт</TH><TH>Адрес</TH><TH className="w-[180px]">Действия</TH></tr></TableHead>
-                    <tbody>
-                      {agentsLoading || agents.length === 0 ? <EmptyRow loading={agentsLoading} colSpan={5} /> : sortedAgents.map((row, idx) => (
-                        <tr key={row.id}>
-                          <TD className="text-gray-500">{idx + 1}</TD>
-                          <TD><div className="font-semibold text-gray-900">{row.name}</div></TD>
-                          <TD>{row.contact || "—"}</TD>
-                          <TD className="max-w-[280px] whitespace-pre-wrap break-words">{row.address || "—"}</TD>
-                          <TD><div className="flex flex-wrap gap-3"><button onClick={() => startEditAgent(row)} type="button" className="text-sm font-medium text-blue-600 transition hover:text-blue-800 hover:underline">Изменить</button><button onClick={() => handleDeleteAgent(row.id)} type="button" className="text-sm font-medium text-red-500 transition hover:text-red-700 hover:underline">Удалить</button></div></TD>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </Table>
-                </TableShell>
+              <Card title="Справочник" subtitle="Здесь задается, кто может быть агентом продаж, а кто поставщиком" right={<div className="flex gap-2"><input className={inputClass("w-[260px]")} placeholder="Поиск" value={agentQuery} onChange={(e) => setAgentQuery(e.target.value)} /><ActionButton type="button" onClick={loadAgents}>Поиск</ActionButton></div>}>
+                <TableShell><Table><thead><tr><TH>№</TH><TH>Наименование</TH><TH>Роль</TH><TH>Контакт</TH><TH>Адрес</TH><TH>Действия</TH></tr></thead><tbody>
+                  {agentsLoading || sortedAgents.length === 0 ? <EmptyRow loading={agentsLoading} colSpan={6} /> : sortedAgents.map((row, idx) => (
+                    <tr key={row.id} className="border-b border-gray-100 hover:bg-gray-50/70">
+                      <TD>{idx + 1}</TD><TD><b>{row.name}</b></TD><TD>{agentKindLabel(row.agent_kind)}</TD><TD>{row.contact || "—"}</TD><TD>{row.address || "—"}</TD><TD><div className="flex gap-3"><button type="button" onClick={() => startEditAgent(row)} className="text-blue-600">Изменить</button><button type="button" onClick={() => handleDeleteAgent(row.id)} className="text-red-500">Удалить</button></div></TD>
+                    </tr>
+                  ))}
+                </tbody></Table></TableShell>
               </Card>
             </div>
           </div>
@@ -980,136 +731,49 @@ export default function AdminTravelSales() {
       {tab === "daily" && (
         <>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <StatCard title="Записей в таблице" value={String(dailySales.length)} hint="С учетом фильтров" accent="blue" />
-            <StatCard title="Сумма продаж" value={money(dailySales.reduce((s, r) => s + Number(r.sale_amount || 0), 0))} hint={`≈ ${moneyCompact(dailySales.reduce((s, r) => s + Number(r.sale_amount || 0), 0))}`} accent="emerald" />
-            <StatCard title="Сумма нетто" value={money(dailySales.reduce((s, r) => s + Number(r.net_amount || 0), 0))} hint={`≈ ${moneyCompact(dailySales.reduce((s, r) => s + Number(r.net_amount || 0), 0))}`} accent="amber" />
-            <StatCard title="Режим" value={editingSaleId ? "Редактирование" : "Новая продажа"} hint={editingSaleId ? "Открыта текущая запись" : "Ввод новой продажи"} accent="violet" />
+            <StatCard title="Записей" value={String(dailySales.length)} hint="По текущим фильтрам" accent="blue" />
+            <StatCard title="Сумма продаж" value={money(totals.dailySale)} hint={`≈ ${moneyCompact(totals.dailySale)}`} accent="emerald" />
+            <StatCard title="Нетто / поставка" value={money(totals.dailyNet)} hint={`≈ ${moneyCompact(totals.dailyNet)}`} accent="amber" />
+            <StatCard title="Комиссия поставщиков" value={money(totals.dailyCommission)} hint={`Наценка: ${money(totals.dailyMarkup)}`} accent="violet" />
           </div>
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-            <div className="xl:col-span-1">
-              <Card title={editingSaleId ? "Редактировать продажу" : "Добавить продажу"} subtitle="Форма остается прежней по логике, но выглядит чище">
-                <form onSubmit={handleSaveSale} className="space-y-4">
-                  <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Дата</label><input type="date" className={inputClass()} value={saleForm.sale_date} onChange={(e) => setSaleForm((p) => ({ ...p, sale_date: e.target.value }))} /></div>
-                  <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Агент</label><select className={inputClass()} value={saleForm.agent_id} onChange={(e) => setSaleForm((p) => ({ ...p, agent_id: e.target.value }))}><option value="">Выберите агента</option>{sortedAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
-                  <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Поставщик</label><select className={inputClass()} value={saleForm.supplier_agent_id} onChange={(e) => setSaleForm((p) => ({ ...p, supplier_agent_id: e.target.value }))}><option value="">Выберите поставщика</option>{sortedAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select><p className="mt-1 text-xs text-gray-400">Если выбран поставщик, нетто автоматически попадёт в его баланс как поставка.</p></div>
-                  <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Тип услуги</label><select className={inputClass()} value={saleForm.service_type} onChange={(e) => setSaleForm((p) => ({ ...p, service_type: e.target.value }))}>{SERVICE_TYPE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select></div>
-                  <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Направление</label><input className={inputClass()} value={saleForm.direction} onChange={(e) => setSaleForm((p) => ({ ...p, direction: e.target.value }))} placeholder="Например: Дели / Дубай / Ташкент" /></div>
-                  <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Name of traveller</label><input className={inputClass()} value={saleForm.traveller_name} onChange={(e) => setSaleForm((p) => ({ ...p, traveller_name: e.target.value }))} placeholder="Например: Ali Valiyev" /></div>
-                  <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Сумма продажи</label><input type="number" className={inputClass()} value={saleForm.sale_amount} onChange={(e) => setSaleForm((p) => ({ ...p, sale_amount: e.target.value }))} placeholder="0" /></div>
-                  <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Сумма нетто</label><input type="number" className={inputClass()} value={saleForm.net_amount} onChange={(e) => setSaleForm((p) => ({ ...p, net_amount: e.target.value }))} placeholder="0" /></div>
-                  <div><label className="mb-1.5 block text-sm font-medium text-gray-700">НДС, %</label><input type="number" min="0" step="0.01" className={inputClass()} value={saleForm.vat_percent} onChange={(e) => setSaleForm((p) => ({ ...p, vat_percent: e.target.value }))} placeholder="0" /></div>
-                  <div className="grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
-                    <div><div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Наценка авто</div><div className="mt-1 text-base font-semibold text-emerald-700">{money(calcSaleDerived(saleForm).markup)}</div></div>
-                    <div><div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">НДС сумма авто</div><div className="mt-1 text-base font-semibold text-slate-900">{money(calcSaleDerived(saleForm).vatAmount)}</div></div>
+            <Card title={editingSaleId ? "Редактировать продажу" : "Добавить продажу"} subtitle="Тариф + таксы - комиссия = нетто поставщика">
+              <form onSubmit={handleSaveSale} className="space-y-4">
+                <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Дата</label><input type="date" className={inputClass()} value={saleForm.sale_date} onChange={(e) => setSaleForm((p) => ({ ...p, sale_date: e.target.value }))} /></div>
+                <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Агент продаж</label><select className={inputClass()} value={saleForm.agent_id} onChange={(e) => setSaleForm((p) => ({ ...p, agent_id: e.target.value }))}><option value="">Выберите агента</option>{salesAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
+                <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Поставщик</label><select className={inputClass()} value={saleForm.supplier_agent_id} onChange={(e) => setSaleForm((p) => ({ ...p, supplier_agent_id: e.target.value }))}><option value="">Выберите поставщика</option>{suppliers.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
+                <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Тип услуги</label><select className={inputClass()} value={saleForm.service_type} onChange={(e) => setSaleForm((p) => ({ ...p, service_type: e.target.value }))}>{SERVICE_TYPE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select></div>
+                <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Направление</label><input className={inputClass()} value={saleForm.direction} onChange={(e) => setSaleForm((p) => ({ ...p, direction: e.target.value }))} placeholder="Например: TAS / IST / TAS" /></div>
+                <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Name of traveller</label><input className={inputClass()} value={saleForm.traveller_name} onChange={(e) => setSaleForm((p) => ({ ...p, traveller_name: e.target.value }))} placeholder="Например: Ali Valiyev" /></div>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Тариф</label><input type="number" className={inputClass()} value={saleForm.fare_amount} onChange={(e) => setSaleForm((p) => ({ ...p, fare_amount: e.target.value }))} placeholder="0" /></div>
+                  <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Таксы</label><input type="number" className={inputClass()} value={saleForm.taxes_amount} onChange={(e) => setSaleForm((p) => ({ ...p, taxes_amount: e.target.value }))} placeholder="0" /></div>
+                </div>
+                <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Комиссия % от тарифа</label><input type="number" className={inputClass()} value={saleForm.commission_percent} onChange={(e) => setSaleForm((p) => ({ ...p, commission_percent: e.target.value }))} placeholder="Например: 5" /></div>
+                <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Сумма продажи</label><input type="number" className={inputClass()} value={saleForm.sale_amount} onChange={(e) => setSaleForm((p) => ({ ...p, sale_amount: e.target.value }))} placeholder="0" /></div>
+                <div><label className="mb-1.5 block text-sm font-medium text-gray-700">НДС %</label><input type="number" className={inputClass()} value={saleForm.vat_percent} onChange={(e) => setSaleForm((p) => ({ ...p, vat_percent: e.target.value }))} placeholder="0" /></div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><div className="text-xs text-slate-500">Комиссия сумма авто</div><b className="text-slate-900">{money(finance.commission_amount)}</b></div>
+                    <div><div className="text-xs text-slate-500">Нетто / поставка авто</div><b className="text-slate-900">{money(finance.net_amount)}</b></div>
+                    <div><div className="text-xs text-slate-500">НДС сумма авто</div><b className="text-slate-900">{money(finance.vat_amount)}</b></div>
+                    <div><div className="text-xs text-slate-500">Наценка авто</div><b className="text-emerald-700">{money(finance.markup_amount)}</b></div>
                   </div>
-                  <p className="text-xs text-gray-400">Формула: продажа = нетто + наценка + НДС. Баланс поставщика берёт сумму нетто.</p>
-                  <div className="flex flex-wrap gap-2"><ActionButton type="submit" variant="primary">{editingSaleId ? "Сохранить" : "Добавить"}</ActionButton>{(editingSaleId || saleForm.agent_id || saleForm.supplier_agent_id || saleForm.direction || saleForm.traveller_name || saleForm.sale_amount || saleForm.net_amount) && <ActionButton type="button" onClick={() => { setEditingSaleId(null); setSaleForm(emptySaleForm); }}>Сбросить</ActionButton>}</div>
-                </form>
-              </Card>
-            </div>
+                  <p className="mt-3 text-xs text-slate-500">Формулы: комиссия = тариф × % / 100. Нетто = тариф + таксы − комиссия. Наценка считается из суммы продажи без НДС.</p>
+                </div>
+                <div className="flex flex-wrap gap-2"><ActionButton type="submit" variant="primary">{editingSaleId ? "Сохранить" : "Добавить"}</ActionButton>{resetSaleVisible ? <ActionButton type="button" onClick={() => { setEditingSaleId(null); setSaleForm(emptySaleForm); }}>Сбросить</ActionButton> : null}</div>
+              </form>
+            </Card>
+
             <div className="xl:col-span-2">
-              <Card title="Список продаж" subtitle="Акцент на важных цифрах" right={<div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:flex-wrap lg:items-center lg:justify-end"><select className={inputClass("lg:w-[180px]")} value={dailyFilterAgentId} onChange={(e) => setDailyFilterAgentId(e.target.value)}><option value="">Все агенты</option>{sortedAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select><select className={inputClass("lg:w-[190px]")} value={dailyFilterSupplierId} onChange={(e) => setDailyFilterSupplierId(e.target.value)}><option value="">Все поставщики</option>{sortedAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select><select className={inputClass("lg:w-[170px]")} value={dailyServiceType} onChange={(e) => setDailyServiceType(e.target.value)}><option value="">Все типы</option>{SERVICE_TYPE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select><input type="date" className={inputClass("lg:w-[160px]")} value={dailyDateFrom} onChange={(e) => setDailyDateFrom(e.target.value)} /><input type="date" className={inputClass("lg:w-[160px]")} value={dailyDateTo} onChange={(e) => setDailyDateTo(e.target.value)} /><ActionButton className="lg:w-auto" onClick={loadDailySales} type="button">Фильтр</ActionButton></div>}>
-                <TableShell>
-                  <Table>
-                    <TableHead><tr><TH>№</TH><SortTH sortKey="sale_date" sort={dailySort} onSort={toggleSort(setDailySort)}>Дата</SortTH><SortTH sortKey="agent" sort={dailySort} onSort={toggleSort(setDailySort)}>Агент</SortTH><SortTH sortKey="supplier_agent" sort={dailySort} onSort={toggleSort(setDailySort)}>Поставщик</SortTH><SortTH sortKey="service_type" sort={dailySort} onSort={toggleSort(setDailySort)}>Тип</SortTH><SortTH sortKey="direction" sort={dailySort} onSort={toggleSort(setDailySort)}>Направление</SortTH><SortTH sortKey="traveller_name" sort={dailySort} onSort={toggleSort(setDailySort)}>Name of traveller</SortTH><SortTH sortKey="sale_amount" sort={dailySort} onSort={toggleSort(setDailySort)} align="right">Продажа</SortTH><SortTH sortKey="net_amount" sort={dailySort} onSort={toggleSort(setDailySort)} align="right">Нетто</SortTH><SortTH sortKey="vat_percent" sort={dailySort} onSort={toggleSort(setDailySort)} align="right">НДС %</SortTH><SortTH sortKey="vat_amount" sort={dailySort} onSort={toggleSort(setDailySort)} align="right">НДС</SortTH><SortTH sortKey="markup_amount" sort={dailySort} onSort={toggleSort(setDailySort)} align="right">Наценка</SortTH><TH className="w-[180px]">Действия</TH></tr></TableHead>
-                      <tbody>
-                        {dailyLoading || dailySales.length === 0 ? (
-                          <EmptyRow loading={dailyLoading} colSpan={13} />
-                        ) : (
-                          dailySalesGroups.flatMap((group) => {
-                            const today = iso(new Date());
-                            const isToday = group.date === today;
-                      
-                            const headerRow = (
-                              <tr key={`group-${group.date}`}>
-                                <td colSpan={13} className="px-3 py-3">
-                                  <div
-                                    className={`flex flex-col gap-2 rounded-2xl border px-4 py-3 md:flex-row md:items-center md:justify-between ${
-                                      isToday
-                                        ? "border-emerald-200 bg-emerald-50"
-                                        : "border-slate-200 bg-slate-50"
-                                    }`}
-                                  >
-                                    <div>
-                                      <div className="text-sm font-semibold text-slate-900">
-                                        {group.date}
-                                        {isToday ? " • сегодня" : ""}
-                                      </div>
-                                      <div className="text-xs text-slate-500">
-                                        Продаж: {group.items.length}
-                                      </div>
-                                    </div>
-                      
-                                    <div className="flex flex-wrap gap-2 text-xs">
-                                      <span className="rounded-full bg-white px-3 py-1 font-semibold text-slate-700 ring-1 ring-slate-200">
-                                        Продажа: {money(group.saleTotal)}
-                                      </span>
-                                      <span className="rounded-full bg-white px-3 py-1 font-semibold text-slate-700 ring-1 ring-slate-200">
-                                        Нетто: {money(group.netTotal)}
-                                      </span>
-                                      <span className="rounded-full bg-white px-3 py-1 font-semibold text-emerald-700 ring-1 ring-emerald-200">
-                                        Маржа: {money(group.saleTotal - group.netTotal)}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                      
-                            const itemRows = group.items.map((row, idx) => (
-                              <tr
-                                key={row.id}
-                                className="border-b border-gray-100 transition hover:bg-gray-50/70"
-                              >
-                                <TD className="text-gray-500">{idx + 1}</TD>
-                                <TD>{iso(row.sale_date)}</TD>
-                                <TD>
-                                  <div className="font-medium text-gray-900">{row.agent_name}</div>
-                                </TD>
-                                <TD>
-                                  <div className="font-medium text-gray-900">{row.supplier_agent_name || "—"}</div>
-                                </TD>
-                                <TD>
-                                  <Badge className={badgeClassByServiceType(row.service_type)}>
-                                    {typeLabel(row.service_type)}
-                                  </Badge>
-                                </TD>
-                                <TD className="max-w-[200px] whitespace-pre-wrap break-words">
-                                  {row.direction}
-                                </TD>
-                                <TD>{row.traveller_name || "—"}</TD>
-                                <TD align="right" className="font-semibold text-gray-900">
-                                  {money(row.sale_amount)}
-                                </TD>
-                                <TD align="right" className="font-semibold text-gray-900">
-                                  {money(row.net_amount)}
-                                </TD>
-                                <TD align="right">{money(row.vat_percent)}%</TD>
-                                <TD align="right">{money(row.vat_amount)}</TD>
-                                <TD align="right" className="font-semibold text-emerald-700">{money(row.markup_amount || Number(row.sale_amount || 0) - Number(row.net_amount || 0) - Number(row.vat_amount || 0))}</TD>
-                                <TD>
-                                  <div className="flex flex-wrap gap-2">
-                                    <ActionButton onClick={() => startEditSale(row)} type="button">
-                                      Изменить
-                                    </ActionButton>
-                                    <ActionButton
-                                      variant="danger"
-                                      onClick={() => handleDeleteSale(row.id)}
-                                      type="button"
-                                    >
-                                      Удалить
-                                    </ActionButton>
-                                  </div>
-                                </TD>
-                              </tr>
-                            ));
-                      
-                            return [headerRow, ...itemRows];
-                          })
-                        )}
-                      </tbody>
-                  </Table>
-                </TableShell>
+              <Card title="Список продаж" subtitle="Поставщик фиксируется сразу и попадает в баланс" right={<div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:flex-wrap lg:items-center lg:justify-end"><select className={inputClass("lg:w-[170px]")} value={dailyFilterAgentId} onChange={(e) => setDailyFilterAgentId(e.target.value)}><option value="">Все агенты</option>{salesAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select><select className={inputClass("lg:w-[190px]")} value={dailyFilterSupplierId} onChange={(e) => setDailyFilterSupplierId(e.target.value)}><option value="">Все поставщики</option>{suppliers.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select><select className={inputClass("lg:w-[150px]")} value={dailyServiceType} onChange={(e) => setDailyServiceType(e.target.value)}><option value="">Все типы</option>{SERVICE_TYPE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select><input type="date" className={inputClass("lg:w-[150px]")} value={dailyDateFrom} onChange={(e) => setDailyDateFrom(e.target.value)} /><input type="date" className={inputClass("lg:w-[150px]")} value={dailyDateTo} onChange={(e) => setDailyDateTo(e.target.value)} /><ActionButton onClick={loadDailySales} type="button">Фильтр</ActionButton></div>}>
+                <TableShell><Table><thead><tr><TH>№</TH><TH>Дата</TH><TH>Агент</TH><TH>Поставщик</TH><TH>Тип</TH><TH>Направление</TH><TH>Traveller</TH><TH align="right">Тариф</TH><TH align="right">Таксы</TH><TH align="right">Комиссия</TH><TH align="right">Продажа</TH><TH align="right">Нетто</TH><TH align="right">НДС</TH><TH align="right">Наценка</TH><TH>Действия</TH></tr></thead><tbody>
+                  {dailyLoading || dailySales.length === 0 ? <EmptyRow loading={dailyLoading} colSpan={15} /> : dailyGroups.flatMap((group) => {
+                    const header = <tr key={`daily-${group.date}`}><td colSpan={15} className="px-3 py-3"><div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"><b>{group.date}</b><span className="ml-3 text-xs text-slate-500">Продаж: {group.items.length}</span><span className="ml-3 text-xs font-semibold text-slate-700">Сумма: {money(group.items.reduce((s, r) => s + Number(r.sale_amount || 0), 0))}</span><span className="ml-3 text-xs font-semibold text-emerald-700">Наценка: {money(group.items.reduce((s, r) => s + Number(r.markup_amount || 0), 0))}</span></div></td></tr>;
+                    const rows = group.items.map((row, idx) => <tr key={row.id} className="border-b border-gray-100 hover:bg-gray-50/70"><TD>{idx + 1}</TD><TD>{iso(row.sale_date)}</TD><TD><b>{row.agent_name}</b></TD><TD>{row.supplier_agent_name || "—"}</TD><TD><Badge className={badgeClassByServiceType(row.service_type)}>{typeLabel(row.service_type)}</Badge></TD><TD>{row.direction || "—"}</TD><TD>{row.traveller_name || "—"}</TD><TD align="right">{money(row.fare_amount)}</TD><TD align="right">{money(row.taxes_amount)}</TD><TD align="right">{money(row.commission_amount)}</TD><TD align="right"><b>{money(row.sale_amount)}</b></TD><TD align="right"><b>{money(row.net_amount)}</b></TD><TD align="right">{money(row.vat_amount)}</TD><TD align="right" className="font-semibold text-emerald-700">{money(row.markup_amount)}</TD><TD><div className="flex gap-2"><ActionButton type="button" onClick={() => startEditSale(row)}>Изменить</ActionButton><ActionButton type="button" variant="danger" onClick={() => handleDeleteSale(row.id)}>Удалить</ActionButton></div></TD></tr>);
+                    return [header, ...rows];
+                  })}
+                </tbody></Table></TableShell>
               </Card>
             </div>
           </div>
@@ -1119,70 +783,25 @@ export default function AdminTravelSales() {
       {tab === "payments" && (
         <>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <StatCard title="Сумма оплат" value={money(totalPayments)} hint={`≈ ${moneyCompact(totalPayments)}`} accent="blue" />
-            <StatCard title="Сумма возвратов" value={money(totalRefunds)} hint={`≈ ${moneyCompact(totalRefunds)}`} accent="amber" />
-            <StatCard title="Чистый эффект" value={money(paymentsNet)} hint={`≈ ${moneyCompact(paymentsNet)}`} accent="emerald" />
-            <StatCard title="Записей" value={String(payments.length)} hint="По текущим фильтрам" accent="violet" />
+            <StatCard title="Оплаты" value={money(totals.payments)} hint={`≈ ${moneyCompact(totals.payments)}`} accent="blue" />
+            <StatCard title="Возвраты" value={money(totals.refunds)} hint={`≈ ${moneyCompact(totals.refunds)}`} accent="amber" />
+            <StatCard title="Чистый эффект" value={money(totals.payments - totals.refunds)} hint="Оплаты минус возвраты" accent="emerald" />
+            <StatCard title="Записей" value={String(payments.length)} hint="По фильтрам" accent="violet" />
           </div>
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-            <div className="xl:col-span-1">
-              <Card title={editingPaymentId ? "Редактировать оплату" : "Добавить оплату"} subtitle="Оплаты и возвраты теперь читаются легче">
-                <form onSubmit={handleSavePayment} className="space-y-4">
-                  <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Дата оплаты</label><input type="date" className={inputClass()} value={paymentForm.payment_date} onChange={(e) => setPaymentForm((p) => ({ ...p, payment_date: e.target.value }))} /></div>
-                  <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Агент</label><select className={inputClass()} value={paymentForm.agent_id} onChange={(e) => setPaymentForm((p) => ({ ...p, agent_id: e.target.value }))}><option value="">Выберите агента</option>{sortedAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
-                  <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Тип записи</label><select className={inputClass()} value={paymentForm.entry_type} onChange={(e) => setPaymentForm((p) => ({ ...p, entry_type: e.target.value }))}>{PAYMENT_ENTRY_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select></div>
-                  <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Сумма оплаты</label><input type="number" className={inputClass()} value={paymentForm.amount} onChange={(e) => setPaymentForm((p) => ({ ...p, amount: e.target.value }))} placeholder="0" /></div>
-                  <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Комментарий</label><textarea className={inputClass("min-h-[100px] resize-y")} value={paymentForm.comment} onChange={(e) => setPaymentForm((p) => ({ ...p, comment: e.target.value }))} placeholder="Комментарий" /></div>
-                  <div className="flex flex-wrap gap-2"><ActionButton type="submit" variant="primary">{editingPaymentId ? "Сохранить" : "Добавить"}</ActionButton>{(editingPaymentId || paymentForm.agent_id || paymentForm.amount || paymentForm.comment) && <ActionButton type="button" onClick={() => { setEditingPaymentId(null); setPaymentForm(emptyPaymentForm); }}>Сбросить</ActionButton>}</div>
-                </form>
-              </Card>
-            </div>
+            <Card title={editingPaymentId ? "Редактировать оплату" : "Добавить оплату"} subtitle="Здесь фиксируются реальные перечисления поставщикам">
+              <form onSubmit={handleSavePayment} className="space-y-4">
+                <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Дата</label><input type="date" className={inputClass()} value={paymentForm.payment_date} onChange={(e) => setPaymentForm((p) => ({ ...p, payment_date: e.target.value }))} /></div>
+                <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Агент / поставщик</label><select className={inputClass()} value={paymentForm.agent_id} onChange={(e) => setPaymentForm((p) => ({ ...p, agent_id: e.target.value }))}><option value="">Выберите</option>{sortedAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
+                <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Тип записи</label><select className={inputClass()} value={paymentForm.entry_type} onChange={(e) => setPaymentForm((p) => ({ ...p, entry_type: e.target.value }))}>{PAYMENT_ENTRY_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select></div>
+                <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Сумма</label><input type="number" className={inputClass()} value={paymentForm.amount} onChange={(e) => setPaymentForm((p) => ({ ...p, amount: e.target.value }))} /></div>
+                <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Комментарий</label><textarea className={inputClass("min-h-[100px] resize-y")} value={paymentForm.comment} onChange={(e) => setPaymentForm((p) => ({ ...p, comment: e.target.value }))} /></div>
+                <div className="flex gap-2"><ActionButton type="submit" variant="primary">{editingPaymentId ? "Сохранить" : "Добавить"}</ActionButton>{editingPaymentId ? <ActionButton type="button" onClick={() => { setEditingPaymentId(null); setPaymentForm(emptyPaymentForm); }}>Сбросить</ActionButton> : null}</div>
+              </form>
+            </Card>
             <div className="xl:col-span-2">
-              <Card title="Список оплат" subtitle="Суммы и типы операций выделены визуально" right={<div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:flex-wrap lg:items-center lg:justify-end"><select className={inputClass("lg:w-[180px]")} value={paymentsAgentId} onChange={(e) => setPaymentsAgentId(e.target.value)}><option value="">Все агенты</option>{sortedAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select><select className={inputClass("lg:w-[170px]")} value={paymentsEntryType} onChange={(e) => setPaymentsEntryType(e.target.value)}><option value="">Все записи</option>{PAYMENT_ENTRY_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select><input type="date" className={inputClass("lg:w-[160px]")} value={paymentsDateFrom} onChange={(e) => setPaymentsDateFrom(e.target.value)} /><input type="date" className={inputClass("lg:w-[160px]")} value={paymentsDateTo} onChange={(e) => setPaymentsDateTo(e.target.value)} /><ActionButton className="lg:w-auto" onClick={loadPayments} type="button">Фильтр</ActionButton></div>}>
-                <TableShell>
-                  <Table>
-                    <TableHead><tr><TH>№</TH><SortTH sortKey="payment_date" sort={paymentsSort} onSort={toggleSort(setPaymentsSort)}>Дата оплаты</SortTH><SortTH sortKey="agent" sort={paymentsSort} onSort={toggleSort(setPaymentsSort)}>Агент</SortTH><SortTH sortKey="entry_type" sort={paymentsSort} onSort={toggleSort(setPaymentsSort)}>Тип записи</SortTH><SortTH sortKey="amount" sort={paymentsSort} onSort={toggleSort(setPaymentsSort)} align="right">Сумма</SortTH><SortTH sortKey="comment" sort={paymentsSort} onSort={toggleSort(setPaymentsSort)}>Комментарий</SortTH><TH className="w-[180px]">Действия</TH></tr></TableHead>
-                    <tbody>
-                      {paymentsLoading || sortedPayments.length === 0 ? (
-                        <EmptyRow loading={paymentsLoading} colSpan={7} />
-                      ) : (
-                        paymentsGroups.flatMap((group) => {
-                          const today = iso(new Date());
-                          const isToday = group.date === today;
-                          const headerRow = (
-                            <tr key={`payments-group-${group.date}`}>
-                              <td colSpan={7} className="px-3 py-3">
-                                <div className={`flex flex-col gap-2 rounded-2xl border px-4 py-3 md:flex-row md:items-center md:justify-between ${isToday ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}>
-                                  <div>
-                                    <div className="text-sm font-semibold text-slate-900">{group.date}{isToday ? " • сегодня" : ""}</div>
-                                    <div className="text-xs text-slate-500">Операций: {group.items.length}</div>
-                                  </div>
-                                  <div className="flex flex-wrap gap-2 text-xs">
-                                    <span className="rounded-full bg-white px-3 py-1 font-semibold text-slate-700 ring-1 ring-slate-200">Оплата: {money(group.paymentTotal)}</span>
-                                    <span className="rounded-full bg-white px-3 py-1 font-semibold text-amber-700 ring-1 ring-amber-200">Возврат: {money(group.refundTotal)}</span>
-                                    <span className="rounded-full bg-white px-3 py-1 font-semibold text-emerald-700 ring-1 ring-emerald-200">Чистый эффект: {money(group.paymentTotal - group.refundTotal)}</span>
-                                  </div>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                          const itemRows = group.items.map((row, idx) => (
-                            <tr key={row.id}>
-                              <TD className="text-gray-500">{idx + 1}</TD>
-                              <TD>{iso(row.payment_date)}</TD>
-                              <TD><div className="font-medium text-gray-900">{row.agent_name || row.agent}</div></TD>
-                              <TD><Badge className={badgeClassByLedgerType(row.entry_type)}>{ledgerTypeLabel(row.entry_type)}</Badge></TD>
-                              <TD align="right" className="font-semibold text-gray-900">{money(row.amount)}</TD>
-                              <TD className="max-w-[260px] whitespace-pre-wrap break-words">{row.comment || "—"}</TD>
-                              <TD><div className="flex flex-wrap gap-3"><button onClick={() => startEditPayment(row)} type="button" className="text-sm font-medium text-blue-600 transition hover:text-blue-800 hover:underline">Изменить</button><button onClick={() => handleDeletePayment(row.id)} type="button" className="text-sm font-medium text-red-500 transition hover:text-red-700 hover:underline">Удалить</button></div></TD>
-                            </tr>
-                          ));
-                          return [headerRow, ...itemRows];
-                        })
-                      )}
-                    </tbody>
-                  </Table>
-                </TableShell>
+              <Card title="Список оплат" subtitle="Оплаты уменьшают баланс поставщика" right={<div className="flex flex-wrap gap-2"><select className={inputClass("w-[190px]")} value={paymentsAgentId} onChange={(e) => setPaymentsAgentId(e.target.value)}><option value="">Все</option>{sortedAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select><select className={inputClass("w-[170px]")} value={paymentsEntryType} onChange={(e) => setPaymentsEntryType(e.target.value)}><option value="">Все типы</option>{PAYMENT_ENTRY_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select><input type="date" className={inputClass("w-[150px]")} value={paymentsDateFrom} onChange={(e) => setPaymentsDateFrom(e.target.value)} /><input type="date" className={inputClass("w-[150px]")} value={paymentsDateTo} onChange={(e) => setPaymentsDateTo(e.target.value)} /><ActionButton type="button" onClick={loadPayments}>Фильтр</ActionButton></div>}>
+                <TableShell><Table><thead><tr><TH>№</TH><TH>Дата</TH><TH>Агент / поставщик</TH><TH>Тип</TH><TH align="right">Сумма</TH><TH>Комментарий</TH><TH>Действия</TH></tr></thead><tbody>{paymentsLoading || payments.length === 0 ? <EmptyRow loading={paymentsLoading} colSpan={7} /> : paymentGroups.flatMap((group) => [<tr key={`pay-${group.date}`}><td colSpan={7} className="px-3 py-3"><div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"><b>{group.date}</b><span className="ml-3 text-xs text-slate-500">Операций: {group.items.length}</span></div></td></tr>, ...group.items.map((row, idx) => <tr key={row.id} className="border-b border-gray-100 hover:bg-gray-50/70"><TD>{idx + 1}</TD><TD>{iso(row.payment_date)}</TD><TD><b>{row.agent_name}</b></TD><TD><Badge className={badgeClassByLedgerType(row.entry_type)}>{ledgerTypeLabel(row.entry_type)}</Badge></TD><TD align="right"><b>{money(row.amount)}</b></TD><TD>{row.comment || "—"}</TD><TD><div className="flex gap-2"><ActionButton type="button" onClick={() => startEditPayment(row)}>Изменить</ActionButton><ActionButton type="button" variant="danger" onClick={() => handleDeletePayment(row.id)}>Удалить</ActionButton></div></TD></tr>)])}</tbody></Table></TableShell>
               </Card>
             </div>
           </div>
@@ -1192,61 +811,13 @@ export default function AdminTravelSales() {
       {tab === "sales" && (
         <>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <StatCard title="Сумма продаж" value={money(totalSales)} hint={`≈ ${moneyCompact(totalSales)}`} accent="blue" />
-            <StatCard title="Сумма нетто" value={money(totalNet)} hint={`≈ ${moneyCompact(totalNet)}`} accent="amber" />
-            <StatCard title="Маржа" value={money(totalMargin)} hint={`≈ ${moneyCompact(totalMargin)}`} accent="emerald" />
-            <StatCard title="Записей" value={String(salesReport.length)} hint="По текущим фильтрам" accent="violet" />
+            <StatCard title="Сумма продаж" value={money(totals.reportSale)} hint={`≈ ${moneyCompact(totals.reportSale)}`} accent="blue" />
+            <StatCard title="Нетто / поставка" value={money(totals.reportNet)} hint={`≈ ${moneyCompact(totals.reportNet)}`} accent="amber" />
+            <StatCard title="Комиссия поставщиков" value={money(totals.reportCommission)} hint={`≈ ${moneyCompact(totals.reportCommission)}`} accent="violet" />
+            <StatCard title="Наценка" value={money(totals.reportMarkup)} hint={`≈ ${moneyCompact(totals.reportMarkup)}`} accent="emerald" />
           </div>
-          <Card title="Отчет продаж" subtitle="Сильный акцент на деньгах и марже" right={<div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:flex-wrap lg:items-center lg:justify-end"><select className={inputClass("lg:w-[180px]")} value={salesAgentId} onChange={(e) => setSalesAgentId(e.target.value)}><option value="">Все агенты</option>{sortedAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select><select className={inputClass("lg:w-[190px]")} value={salesSupplierId} onChange={(e) => setSalesSupplierId(e.target.value)}><option value="">Все поставщики</option>{sortedAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select><select className={inputClass("lg:w-[170px]")} value={salesServiceType} onChange={(e) => setSalesServiceType(e.target.value)}><option value="">Все типы</option>{SERVICE_TYPE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select><input type="date" className={inputClass("lg:w-[160px]")} value={salesDateFrom} onChange={(e) => setSalesDateFrom(e.target.value)} /><input type="date" className={inputClass("lg:w-[160px]")} value={salesDateTo} onChange={(e) => setSalesDateTo(e.target.value)} /><ActionButton onClick={loadSalesReport} type="button">Фильтр</ActionButton><ActionButton variant="primary" onClick={exportSalesReport} type="button">Excel</ActionButton></div>}>
-            <TableShell>
-              <Table>
-                <TableHead><tr><TH>№</TH><SortTH sortKey="sale_date" sort={salesSort} onSort={toggleSort(setSalesSort)}>Дата</SortTH><SortTH sortKey="agent" sort={salesSort} onSort={toggleSort(setSalesSort)}>Агент</SortTH><SortTH sortKey="supplier_agent" sort={salesSort} onSort={toggleSort(setSalesSort)}>Поставщик</SortTH><SortTH sortKey="service_type" sort={salesSort} onSort={toggleSort(setSalesSort)}>Тип</SortTH><SortTH sortKey="direction" sort={salesSort} onSort={toggleSort(setSalesSort)}>Направление</SortTH><SortTH sortKey="traveller_name" sort={salesSort} onSort={toggleSort(setSalesSort)}>Name of traveller</SortTH><SortTH sortKey="sale_amount" sort={salesSort} onSort={toggleSort(setSalesSort)} align="right">Сумма продажи</SortTH><SortTH sortKey="net_amount" sort={salesSort} onSort={toggleSort(setSalesSort)} align="right">Сумма нетто</SortTH><SortTH sortKey="vat_percent" sort={salesSort} onSort={toggleSort(setSalesSort)} align="right">НДС %</SortTH><SortTH sortKey="vat_amount" sort={salesSort} onSort={toggleSort(setSalesSort)} align="right">НДС</SortTH><SortTH sortKey="margin" sort={salesSort} onSort={toggleSort(setSalesSort)} align="right">Наценка</SortTH></tr></TableHead>
-                <tbody>
-                  {salesReportLoading || sortedSalesReport.length === 0 ? (
-                    <EmptyRow loading={salesReportLoading} colSpan={13} />
-                  ) : (
-                    salesReportGroups.flatMap((group) => {
-                      const today = iso(new Date());
-                      const isToday = group.date === today;
-                      const headerRow = (
-                        <tr key={`sales-report-group-${group.date}`}>
-                          <td colSpan={13} className="px-3 py-3">
-                            <div className={`flex flex-col gap-2 rounded-2xl border px-4 py-3 md:flex-row md:items-center md:justify-between ${isToday ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}>
-                              <div>
-                                <div className="text-sm font-semibold text-slate-900">{group.date}{isToday ? " • сегодня" : ""}</div>
-                                <div className="text-xs text-slate-500">Продаж: {group.items.length}</div>
-                              </div>
-                              <div className="flex flex-wrap gap-2 text-xs">
-                                <span className="rounded-full bg-white px-3 py-1 font-semibold text-slate-700 ring-1 ring-slate-200">Сумма продаж: {money(group.saleTotal)}</span>
-                                <span className="rounded-full bg-white px-3 py-1 font-semibold text-slate-700 ring-1 ring-slate-200">Нетто: {money(group.netTotal)}</span>
-                                <span className="rounded-full bg-white px-3 py-1 font-semibold text-emerald-700 ring-1 ring-emerald-200">Маржа: {money(group.marginTotal)}</span>
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                      const itemRows = group.items.map((row, idx) => (
-                        <tr key={row.id || `${row.sale_date}-${idx}`}>
-                          <TD className="text-gray-500">{idx + 1}</TD>
-                          <TD>{iso(row.sale_date)}</TD>
-                          <TD><div className="font-medium text-gray-900">{row.agent}</div></TD>
-                          <TD><div className="font-medium text-gray-900">{row.supplier_agent || "—"}</div></TD>
-                          <TD><Badge className={badgeClassByServiceType(row.service_type)}>{typeLabel(row.service_type)}</Badge></TD>
-                          <TD className="max-w-[220px] whitespace-pre-wrap break-words">{row.direction || "—"}</TD>
-                          <TD>{row.traveller_name || "—"}</TD>
-                          <TD align="right" className="font-semibold text-gray-900">{money(row.sale_amount)}</TD>
-                          <TD align="right" className="font-semibold text-gray-900">{money(row.net_amount)}</TD>
-                          <TD align="right">{money(row.vat_percent)}%</TD>
-                          <TD align="right">{money(row.vat_amount)}</TD>
-                          <TD align="right" className="font-semibold text-emerald-700">{money(row.margin || row.markup_amount)}</TD>
-                        </tr>
-                      ));
-                      return [headerRow, ...itemRows];
-                    })
-                  )}
-                </tbody>
-              </Table>
-            </TableShell>
+          <Card title="Отчет продаж" subtitle="Для сверки с поставщиками и внутренней маржи" right={<div className="flex flex-wrap gap-2"><select className={inputClass("w-[170px]")} value={salesAgentId} onChange={(e) => setSalesAgentId(e.target.value)}><option value="">Все агенты</option>{salesAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select><select className={inputClass("w-[190px]")} value={salesSupplierId} onChange={(e) => setSalesSupplierId(e.target.value)}><option value="">Все поставщики</option>{suppliers.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select><select className={inputClass("w-[150px]")} value={salesServiceType} onChange={(e) => setSalesServiceType(e.target.value)}><option value="">Все типы</option>{SERVICE_TYPE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select><input type="date" className={inputClass("w-[150px]")} value={salesDateFrom} onChange={(e) => setSalesDateFrom(e.target.value)} /><input type="date" className={inputClass("w-[150px]")} value={salesDateTo} onChange={(e) => setSalesDateTo(e.target.value)} /><ActionButton type="button" onClick={loadSalesReport}>Фильтр</ActionButton><ActionButton type="button" variant="primary" onClick={exportSalesReport}>Excel</ActionButton></div>}>
+            <TableShell><Table><thead><tr><TH>№</TH><TH>Дата</TH><TH>Агент</TH><TH>Поставщик</TH><TH>Тип</TH><TH>Направление</TH><TH>Traveller</TH><TH align="right">Тариф</TH><TH align="right">Таксы</TH><TH align="right">Комиссия</TH><TH align="right">Продажа</TH><TH align="right">Нетто</TH><TH align="right">НДС</TH><TH align="right">Наценка</TH></tr></thead><tbody>{salesReportLoading || salesReport.length === 0 ? <EmptyRow loading={salesReportLoading} colSpan={14} /> : salesGroups.flatMap((group) => [<tr key={`rep-${group.date}`}><td colSpan={14} className="px-3 py-3"><div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"><b>{group.date}</b><span className="ml-3 text-xs text-slate-500">Продаж: {group.items.length}</span><span className="ml-3 text-xs font-semibold">Продажа: {money(group.items.reduce((s, r) => s + Number(r.sale_amount || 0), 0))}</span><span className="ml-3 text-xs font-semibold text-emerald-700">Наценка: {money(group.items.reduce((s, r) => s + Number(r.markup_amount || r.margin || 0), 0))}</span></div></td></tr>, ...group.items.map((row, idx) => <tr key={row.id} className="border-b border-gray-100 hover:bg-gray-50/70"><TD>{idx + 1}</TD><TD>{iso(row.sale_date)}</TD><TD><b>{row.agent}</b></TD><TD>{row.supplier_agent || "—"}</TD><TD><Badge className={badgeClassByServiceType(row.service_type)}>{typeLabel(row.service_type)}</Badge></TD><TD>{row.direction || "—"}</TD><TD>{row.traveller_name || "—"}</TD><TD align="right">{money(row.fare_amount)}</TD><TD align="right">{money(row.taxes_amount)}</TD><TD align="right">{money(row.commission_amount)}</TD><TD align="right"><b>{money(row.sale_amount)}</b></TD><TD align="right"><b>{money(row.net_amount)}</b></TD><TD align="right">{money(row.vat_amount)}</TD><TD align="right" className="font-semibold text-emerald-700">{money(row.markup_amount || row.margin)}</TD></tr>)])}</tbody></Table></TableShell>
           </Card>
         </>
       )}
@@ -1255,82 +826,12 @@ export default function AdminTravelSales() {
         <>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             <StatCard title="Общий баланс" value={money(totalBalance)} hint={`≈ ${moneyCompact(totalBalance)}`} accent="rose" />
-            <StatCard title="Строк в отчете" value={String(balanceReport.length)} hint="По текущим фильтрам" accent="blue" />
-            <StatCard title="Продажи в отчете" value={money(balanceReport.reduce((s, r) => s + Number(r.sale_amount || 0), 0))} hint={`≈ ${moneyCompact(balanceReport.reduce((s, r) => s + Number(r.sale_amount || 0), 0))}`} accent="emerald" />
-            <StatCard title="Оплаты + возвраты" value={money(balanceReport.reduce((s, r) => s + Number(r.payment_amount || 0) + Number(r.refund_amount || 0), 0))} hint={`≈ ${moneyCompact(balanceReport.reduce((s, r) => s + Number(r.payment_amount || 0) + Number(r.refund_amount || 0), 0))}`} accent="amber" />
+            <StatCard title="Строк" value={String(balanceReport.length)} hint="По текущим фильтрам" accent="blue" />
+            <StatCard title="Поставки" value={money(balanceReport.reduce((s, r) => s + Number(r.supply_amount || 0), 0))} hint="Нетто из дневных продаж" accent="emerald" />
+            <StatCard title="Оплаты + возвраты" value={money(balanceReport.reduce((s, r) => s + Number(r.payment_amount || 0) + Number(r.refund_amount || 0), 0))} hint="Реальные движения денег" accent="amber" />
           </div>
-          <Card title="Баланс агента" subtitle="Лучше читается последовательность операций и текущий баланс" right={<div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:flex-wrap lg:items-center lg:justify-end"><select className={inputClass("lg:w-[180px]")} value={balanceAgentId} onChange={(e) => setBalanceAgentId(e.target.value)}><option value="">Все агенты</option>{sortedAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select><select className={inputClass("lg:w-[170px]")} value={balanceServiceType} onChange={(e) => setBalanceServiceType(e.target.value)}><option value="">Все типы</option>{SERVICE_TYPE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select><input type="date" className={inputClass("lg:w-[160px]")} value={balanceDateFrom} onChange={(e) => setBalanceDateFrom(e.target.value)} /><input type="date" className={inputClass("lg:w-[160px]")} value={balanceDateTo} onChange={(e) => setBalanceDateTo(e.target.value)} /><ActionButton onClick={loadBalanceReport} type="button">Фильтр</ActionButton><ActionButton variant="primary" onClick={exportBalanceReport} type="button">Excel</ActionButton></div>}>
-            <TableShell>
-              <Table>
-                <TableHead><tr><TH>№</TH><SortTH sortKey="txn_date" sort={balanceSort} onSort={toggleSort(setBalanceSort)}>Дата операции</SortTH><SortTH sortKey="entry_type" sort={balanceSort} onSort={toggleSort(setBalanceSort)}>Тип записи</SortTH><SortTH sortKey="agent" sort={balanceSort} onSort={toggleSort(setBalanceSort)}>Агент</SortTH><SortTH sortKey="service_type" sort={balanceSort} onSort={toggleSort(setBalanceSort)}>Тип услуги</SortTH><SortTH sortKey="direction" sort={balanceSort} onSort={toggleSort(setBalanceSort)}>Направление</SortTH><SortTH sortKey="traveller_name" sort={balanceSort} onSort={toggleSort(setBalanceSort)}>Name of traveller</SortTH><SortTH sortKey="sale_amount" sort={balanceSort} onSort={toggleSort(setBalanceSort)} align="right">Продажа</SortTH><SortTH sortKey="supply_amount" sort={balanceSort} onSort={toggleSort(setBalanceSort)} align="right">Поставка</SortTH><SortTH sortKey="payment_amount" sort={balanceSort} onSort={toggleSort(setBalanceSort)} align="right">Оплата</SortTH><SortTH sortKey="refund_amount" sort={balanceSort} onSort={toggleSort(setBalanceSort)} align="right">Возврат</SortTH><SortTH sortKey="comment" sort={balanceSort} onSort={toggleSort(setBalanceSort)}>Комментарий</SortTH><SortTH sortKey="balance" sort={balanceSort} onSort={toggleSort(setBalanceSort)} align="right">Баланс</SortTH></tr></TableHead>
-                <tbody>
-                  {balanceLoading || sortedBalanceReport.length === 0 ? (
-                    <EmptyRow loading={balanceLoading} colSpan={13} />
-                  ) : (
-                    balanceReportGroups.flatMap((group) => {
-                      const today = iso(new Date());
-                      const isToday = group.date === today;
-                      const headerRow = (
-                        <tr key={`balance-report-group-${group.date}`}>
-                          <td colSpan={13} className="px-3 py-3">
-                            <div className={`flex flex-col gap-2 rounded-2xl border px-4 py-3 md:flex-row md:items-center md:justify-between ${isToday ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}>
-                              <div>
-                                <div className="text-sm font-semibold text-slate-900">{group.date}{isToday ? " • сегодня" : ""}</div>
-                                <div className="text-xs text-slate-500">Операций: {group.items.length}</div>
-                              </div>
-                              <div className="flex flex-wrap gap-2 text-xs">
-                                <span className="rounded-full bg-white px-3 py-1 font-semibold text-slate-700 ring-1 ring-slate-200">Продажи: {money(group.saleTotal)}</span>
-                                <span className="rounded-full bg-white px-3 py-1 font-semibold text-slate-700 ring-1 ring-slate-200">Оплаты: {money(group.paymentTotal)}</span>
-                                <span className="rounded-full bg-white px-3 py-1 font-semibold text-amber-700 ring-1 ring-amber-200">Возвраты: {money(group.refundTotal)}</span>
-                                {group.debtCount > 0 ? (
-                                  <span className="rounded-full bg-red-50 px-3 py-1 font-semibold text-red-700 ring-1 ring-red-200">Долг: {group.debtCount}</span>
-                                ) : null}
-                                {group.overpayCount > 0 ? (
-                                  <span className="rounded-full bg-emerald-50 px-3 py-1 font-semibold text-emerald-700 ring-1 ring-emerald-200">Переплата: {group.overpayCount}</span>
-                                ) : null}
-                                {group.debtCount === 0 && group.overpayCount === 0 ? (
-                                  <span className="rounded-full bg-gray-100 px-3 py-1 font-semibold text-gray-600 ring-1 ring-gray-200">Закрыто</span>
-                                ) : null}
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                      const itemRows = group.items.map((row, idx) => {
-                        const status = balanceStatus(row.balance);
-                        return (
-                        <tr key={row.row_key || `${row.entry_type}-${idx}`} className={status.rowCls}>
-                          <TD className="text-gray-500">{idx + 1}</TD>
-                          <TD>{iso(row.txn_date)}</TD>
-                          <TD><Badge className={badgeClassByLedgerType(row.entry_type)}>{ledgerTypeLabel(row.entry_type)}</Badge></TD>
-                          <TD><div className="font-medium text-gray-900">{row.agent}</div></TD>
-                          <TD>{row.service_type ? <Badge className={badgeClassByServiceType(row.service_type)}>{typeLabel(row.service_type)}</Badge> : "—"}</TD>
-                          <TD className="max-w-[220px] whitespace-pre-wrap break-words">{row.direction || "—"}</TD>
-                          <TD>{row.traveller_name || "—"}</TD>
-                          <TD align="right">{Number(row.sale_amount || 0) ? money(row.sale_amount) : "0"}</TD>
-                          <TD align="right">{Number(row.supply_amount || 0) ? money(row.supply_amount) : "0"}</TD>
-                          <TD align="right">{Number(row.payment_amount || 0) ? money(row.payment_amount) : "0"}</TD>
-                          <TD align="right">{Number(row.refund_amount || 0) ? money(row.refund_amount) : "0"}</TD>
-                          <TD className="max-w-[260px] whitespace-pre-wrap break-words">{row.comment || "—"}</TD>
-                          <TD align="right">
-                            <div className="flex items-center justify-end gap-2">
-                              <span className={`font-semibold ${amountClass(row.balance, "balance")}`}>
-                                {money(row.balance)}
-                              </span>
-                              <Badge className={`ring-1 ${status.cls}`} title={status.hint}>
-                                {status.label}
-                              </Badge>
-                            </div>
-                          </TD>
-                        </tr>
-                        );
-                      });
-                      return [headerRow, ...itemRows];
-                    })
-                  )}
-                </tbody>
-              </Table>
-            </TableShell>
+          <Card title="Баланс поставщика" subtitle="Поставка приходит из дневной продажи, оплата — из перечислений" right={<div className="flex flex-wrap gap-2"><select className={inputClass("w-[190px]")} value={balanceAgentId} onChange={(e) => setBalanceAgentId(e.target.value)}><option value="">Все агенты/поставщики</option>{sortedAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select><select className={inputClass("w-[150px]")} value={balanceServiceType} onChange={(e) => setBalanceServiceType(e.target.value)}><option value="">Все типы</option>{SERVICE_TYPE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select><input type="date" className={inputClass("w-[150px]")} value={balanceDateFrom} onChange={(e) => setBalanceDateFrom(e.target.value)} /><input type="date" className={inputClass("w-[150px]")} value={balanceDateTo} onChange={(e) => setBalanceDateTo(e.target.value)} /><ActionButton type="button" onClick={loadBalanceReport}>Фильтр</ActionButton><ActionButton type="button" variant="primary" onClick={exportBalanceReport}>Excel</ActionButton></div>}>
+            <TableShell><Table><thead><tr><TH>№</TH><TH>Дата</TH><TH>Тип</TH><TH>Агент / поставщик</TH><TH>Тип услуги</TH><TH>Направление</TH><TH>Traveller</TH><TH align="right">Тариф</TH><TH align="right">Таксы</TH><TH align="right">Комиссия</TH><TH align="right">Поставка</TH><TH align="right">Оплата</TH><TH align="right">Возврат</TH><TH>Комментарий</TH><TH align="right">Баланс</TH></tr></thead><tbody>{balanceLoading || balanceReport.length === 0 ? <EmptyRow loading={balanceLoading} colSpan={15} /> : balanceGroups.flatMap((group) => [<tr key={`bal-${group.date}`}><td colSpan={15} className="px-3 py-3"><div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"><b>{group.date}</b><span className="ml-3 text-xs text-slate-500">Операций: {group.items.length}</span><span className="ml-3 text-xs font-semibold text-emerald-700">Поставки: {money(group.items.reduce((s, r) => s + Number(r.supply_amount || 0), 0))}</span><span className="ml-3 text-xs font-semibold text-sky-700">Оплаты: {money(group.items.reduce((s, r) => s + Number(r.payment_amount || 0), 0))}</span></div></td></tr>, ...group.items.map((row, idx) => { const status = balanceStatus(row.balance); return <tr key={row.row_key || `${row.entry_type}-${idx}`} className={`border-b border-gray-100 ${status.rowCls}`}><TD>{idx + 1}</TD><TD>{iso(row.txn_date)}</TD><TD><Badge className={badgeClassByLedgerType(row.entry_type)}>{ledgerTypeLabel(row.entry_type)}</Badge></TD><TD><b>{row.agent}</b></TD><TD>{row.service_type ? <Badge className={badgeClassByServiceType(row.service_type)}>{typeLabel(row.service_type)}</Badge> : "—"}</TD><TD>{row.direction || "—"}</TD><TD>{row.traveller_name || "—"}</TD><TD align="right">{money(row.fare_amount)}</TD><TD align="right">{money(row.taxes_amount)}</TD><TD align="right">{money(row.commission_amount)}</TD><TD align="right"><b>{money(row.supply_amount)}</b></TD><TD align="right">{money(row.payment_amount)}</TD><TD align="right">{money(row.refund_amount)}</TD><TD>{row.comment || "—"}</TD><TD align="right"><div className="flex items-center justify-end gap-2"><b className={Number(row.balance || 0) > 0 ? "text-red-600" : Number(row.balance || 0) < 0 ? "text-emerald-700" : "text-gray-900"}>{money(row.balance)}</b><Badge className={`ring-1 ${status.cls}`}>{status.label}</Badge></div></TD></tr>; })])}</tbody></Table></TableShell>
           </Card>
         </>
       )}
