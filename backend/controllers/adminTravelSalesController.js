@@ -11,6 +11,29 @@ function toNum(v) {
   return Number.isFinite(n) ? n : 0;
 }
 
+function round2(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 0;
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
+function normalizeVatPercent(v) {
+  const n = toNum(v);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.min(100, round2(n));
+}
+
+function calculateSaleAmounts({ saleAmount, netAmount, vatPercent }) {
+  const sale = round2(saleAmount);
+  const net = round2(netAmount);
+  const vatPct = normalizeVatPercent(vatPercent);
+  const divisor = 1 + vatPct / 100;
+  const baseBeforeVat = divisor > 0 ? round2(sale / divisor) : sale;
+  const markup = round2(baseBeforeVat - net);
+  const vat = round2(sale - baseBeforeVat);
+  return { vatPercent: vatPct, markupAmount: markup, vatAmount: vat };
+}
+
 function clampInt(v, def, min, max) {
   const n = Number(v);
   if (!Number.isFinite(n)) return def;
@@ -117,6 +140,9 @@ async function ensureTables() {
       traveller_name TEXT NOT NULL DEFAULT '',
       sale_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
       net_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
+      vat_percent NUMERIC(5,2) NOT NULL DEFAULT 0,
+      markup_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
+      vat_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
       payment NUMERIC(14,2) NOT NULL DEFAULT 0,
       payment_date DATE NOT NULL DEFAULT CURRENT_DATE,
       comment TEXT NOT NULL DEFAULT '',
@@ -148,6 +174,30 @@ async function ensureTables() {
   await db.query(`
     ALTER TABLE travel_daily_sales
     ADD COLUMN IF NOT EXISTS supplier_agent_id BIGINT REFERENCES travel_agents(id) ON DELETE SET NULL;
+  `);
+
+  await db.query(`
+    ALTER TABLE travel_daily_sales
+    ADD COLUMN IF NOT EXISTS vat_percent NUMERIC(5,2) NOT NULL DEFAULT 0;
+  `);
+
+  await db.query(`
+    ALTER TABLE travel_daily_sales
+    ADD COLUMN IF NOT EXISTS markup_amount NUMERIC(14,2) NOT NULL DEFAULT 0;
+  `);
+
+  await db.query(`
+    ALTER TABLE travel_daily_sales
+    ADD COLUMN IF NOT EXISTS vat_amount NUMERIC(14,2) NOT NULL DEFAULT 0;
+  `);
+
+  await db.query(`
+    UPDATE travel_daily_sales
+       SET markup_amount = ROUND((sale_amount - net_amount - COALESCE(vat_amount, 0))::numeric, 2)
+     WHERE COALESCE(markup_amount, 0) = 0
+       AND COALESCE(vat_percent, 0) = 0
+       AND COALESCE(vat_amount, 0) = 0
+       AND ROUND((sale_amount - net_amount)::numeric, 2) <> 0;
   `);
 
   await db.query(`
@@ -402,6 +452,9 @@ async function getDailySales(req, res) {
         s.traveller_name,
         s.sale_amount,
         s.net_amount,
+        s.vat_percent,
+        s.markup_amount,
+        s.vat_amount,
         s.payment,
         s.payment_date,
         s.comment,
@@ -453,6 +506,8 @@ async function createDailySale(req, res) {
     const travellerName = toStr(req.body?.traveller_name);
     const saleAmount = toNum(req.body?.sale_amount);
     const netAmount = toNum(req.body?.net_amount);
+    const vatPercent = normalizeVatPercent(req.body?.vat_percent);
+    const calcAmounts = calculateSaleAmounts({ saleAmount, netAmount, vatPercent });
 
     if (!Number.isFinite(agentId) || agentId <= 0) {
       return res.status(400).json({ ok: false, message: "agent_id is required" });
@@ -507,6 +562,9 @@ async function createDailySale(req, res) {
         traveller_name,
         sale_amount,
         net_amount,
+        vat_percent,
+        markup_amount,
+        vat_amount,
         payment,
         payment_date,
         comment
@@ -520,6 +578,9 @@ async function createDailySale(req, res) {
         $6,
         $7,
         $8,
+        $9,
+        $10,
+        $11,
         0,
         CURRENT_DATE,
         ''
@@ -534,13 +595,28 @@ async function createDailySale(req, res) {
         traveller_name,
         sale_amount,
         net_amount,
+        vat_percent,
+        markup_amount,
+        vat_amount,
         payment,
         payment_date,
         comment,
         created_at,
         updated_at
       `,
-      [saleDate, agentId, supplierAgentId, serviceType, direction, travellerName, saleAmount, netAmount]
+      [
+        saleDate,
+        agentId,
+        supplierAgentId,
+        serviceType,
+        direction,
+        travellerName,
+        saleAmount,
+        netAmount,
+        calcAmounts.vatPercent,
+        calcAmounts.markupAmount,
+        calcAmounts.vatAmount,
+      ]
     );
 
     return res.json({
@@ -566,6 +642,8 @@ async function updateDailySale(req, res) {
     const travellerName = toStr(req.body?.traveller_name);
     const saleAmount = toNum(req.body?.sale_amount);
     const netAmount = toNum(req.body?.net_amount);
+    const vatPercent = normalizeVatPercent(req.body?.vat_percent);
+    const calcAmounts = calculateSaleAmounts({ saleAmount, netAmount, vatPercent });
 
     if (!Number.isFinite(id) || id <= 0) {
       return res.status(400).json({ ok: false, message: "Bad id" });
@@ -629,8 +707,11 @@ async function updateDailySale(req, res) {
         traveller_name = $6,
         sale_amount = $7,
         net_amount = $8,
+        vat_percent = $9,
+        markup_amount = $10,
+        vat_amount = $11,
         updated_at = NOW()
-      WHERE id = $9
+      WHERE id = $12
       RETURNING
         id,
         sale_date,
@@ -641,13 +722,29 @@ async function updateDailySale(req, res) {
         traveller_name,
         sale_amount,
         net_amount,
+        vat_percent,
+        markup_amount,
+        vat_amount,
         payment,
         payment_date,
         comment,
         created_at,
         updated_at
       `,
-      [saleDate, agentId, supplierAgentId, serviceType, direction, travellerName, saleAmount, netAmount, id]
+      [
+        saleDate,
+        agentId,
+        supplierAgentId,
+        serviceType,
+        direction,
+        travellerName,
+        saleAmount,
+        netAmount,
+        calcAmounts.vatPercent,
+        calcAmounts.markupAmount,
+        calcAmounts.vatAmount,
+        id,
+      ]
     );
 
     if (!rows.length) {
@@ -942,7 +1039,10 @@ async function getSalesReport(req, res) {
         s.traveller_name,
         s.sale_amount,
         s.net_amount,
-        (s.sale_amount - s.net_amount) AS margin
+        s.vat_percent,
+        s.markup_amount,
+        s.vat_amount,
+        s.markup_amount AS margin
       FROM travel_daily_sales s
       JOIN travel_agents a ON a.id = s.agent_id
       LEFT JOIN travel_agents supplier ON supplier.id = s.supplier_agent_id
