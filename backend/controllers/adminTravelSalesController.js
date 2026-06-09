@@ -756,8 +756,8 @@ async function getAgentBalanceReport(req, res) {
           0::numeric(14,2) AS payment_amount,
           0::numeric(14,2) AS refund_amount,
           CASE
-            WHEN COALESCE(NULLIF(s.operation_type, ''), 'sale') = 'refund' THEN CONCAT('Р’РѕР·РІСЂР°С‚: ', COALESCE(NULLIF(s.original_ticket_info, ''), 'Р±РµР· РѕРїРёСЃР°РЅРёСЏ'))
-            WHEN COALESCE(NULLIF(s.operation_type, ''), 'sale') = 'rebook' THEN CONCAT('РџРµСЂРµР±СЂРѕРЅРёСЂРѕРІР°РЅРёРµ: ', COALESCE(NULLIF(s.original_ticket_info, ''), 'Р±РµР· РѕРїРёСЃР°РЅРёСЏ'))
+            WHEN COALESCE(NULLIF(s.operation_type, ''), 'sale') = 'refund' THEN CONCAT('Р вЂ™Р С•Р В·Р Р†РЎР‚Р В°РЎвЂљ: ', COALESCE(NULLIF(s.original_ticket_info, ''), 'Р В±Р ВµР В· Р С•Р С—Р С‘РЎРѓР В°Р Р…Р С‘РЎРЏ'))
+            WHEN COALESCE(NULLIF(s.operation_type, ''), 'sale') = 'rebook' THEN CONCAT('Р СџР ВµРЎР‚Р ВµР В±РЎР‚Р С•Р Р…Р С‘РЎР‚Р С•Р Р†Р В°Р Р…Р С‘Р Вµ: ', COALESCE(NULLIF(s.original_ticket_info, ''), 'Р В±Р ВµР В· Р С•Р С—Р С‘РЎРѓР В°Р Р…Р С‘РЎРЏ'))
             ELSE NULL::text
           END AS comment,
           s.net_amount::numeric(14,2) AS delta_amount,
@@ -772,6 +772,46 @@ async function getAgentBalanceReport(req, res) {
         JOIN travel_agents sup ON sup.id = s.supplier_agent_id
         WHERE s.supplier_agent_id IS NOT NULL
           AND ($1::bigint IS NULL OR s.supplier_agent_id = $1)
+          AND ($2::date IS NULL OR s.sale_date >= $2::date)
+          AND ($3::date IS NULL OR s.sale_date <= $3::date)
+          AND ($4::text = '' OR s.service_type = $4)
+
+        UNION ALL
+
+        SELECT
+          ('agent-sale-' || s.id::text) AS row_key,
+          s.agent_id,
+          a.name AS agent,
+          s.sale_date AS txn_date,
+          CASE WHEN COALESCE(NULLIF(s.operation_type, ''), 'sale') = 'refund' THEN 'agent_sale_refund' WHEN COALESCE(NULLIF(s.operation_type, ''), 'sale') = 'rebook' THEN 'agent_sale_rebook' ELSE 'agent_sale' END::text AS entry_type,
+          s.id AS sale_id,
+          NULL::bigint AS payment_id,
+          s.sale_date,
+          NULL::date AS payment_date,
+          s.service_type,
+          s.direction,
+          s.traveller_name,
+          s.sale_amount::numeric(14,2) AS sale_amount,
+          0::numeric(14,2) AS supply_amount,
+          0::numeric(14,2) AS payment_amount,
+          0::numeric(14,2) AS refund_amount,
+          CASE
+            WHEN COALESCE(NULLIF(s.operation_type, ''), 'sale') = 'refund' THEN CONCAT('Р’РѕР·РІСЂР°С‚ РїСЂРѕРґР°Р¶Рё: ', COALESCE(NULLIF(s.original_ticket_info, ''), 'Р±РµР· РѕРїРёСЃР°РЅРёСЏ'))
+            WHEN COALESCE(NULLIF(s.operation_type, ''), 'sale') = 'rebook' THEN CONCAT('РџРµСЂРµР±СЂРѕРЅРёСЂРѕРІР°РЅРёРµ РїСЂРѕРґР°Р¶Рё: ', COALESCE(NULLIF(s.original_ticket_info, ''), 'Р±РµР· РѕРїРёСЃР°РЅРёСЏ'))
+            ELSE NULL::text
+          END AS comment,
+          s.sale_amount::numeric(14,2) AS delta_amount,
+          s.fare_amount,
+          s.taxes_amount,
+          s.commission_percent,
+          s.commission_amount,
+          s.vat_percent,
+          s.vat_amount,
+          s.markup_amount
+        FROM travel_daily_sales s
+        JOIN travel_agents a ON a.id = s.agent_id
+        WHERE s.supplier_agent_id IS NOT NULL
+          AND ($1::bigint IS NULL OR s.agent_id = $1)
           AND ($2::date IS NULL OR s.sale_date >= $2::date)
           AND ($3::date IS NULL OR s.sale_date <= $3::date)
           AND ($4::text = '' OR s.service_type = $4)
