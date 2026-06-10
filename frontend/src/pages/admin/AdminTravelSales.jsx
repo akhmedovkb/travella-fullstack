@@ -109,7 +109,7 @@ function calculateSaleFinance(form) {
 
   if (operationType === "refund") {
     const supplierRefundTotal = roundMoney(Math.max(0, refundFare + refundTaxes - penalty - refundCommission));
-    const clientRefundTotal = roundMoney(Math.max(0, supplierRefundTotal - refundFee));
+    const agentRefundTotal = roundMoney(Math.max(0, supplierRefundTotal + refundFee));
     return {
       operation_type: operationType,
       fare_amount: 0,
@@ -117,7 +117,7 @@ function calculateSaleFinance(form) {
       commission_percent: 0,
       commission_amount: 0,
       net_amount: roundMoney(0 - supplierRefundTotal),
-      sale_amount: roundMoney(0 - clientRefundTotal),
+      sale_amount: roundMoney(0 - agentRefundTotal),
       vat_percent: 0,
       vat_amount: 0,
       markup_amount: refundFee,
@@ -128,7 +128,7 @@ function calculateSaleFinance(form) {
       refund_fee_amount: refundFee,
       rebooking_amount: 0,
       refund_total: supplierRefundTotal,
-      client_refund_total: clientRefundTotal,
+      agent_refund_total: agentRefundTotal,
       margin: refundFee,
     };
   }
@@ -152,7 +152,7 @@ function calculateSaleFinance(form) {
       refund_fee_amount: 0,
       rebooking_amount: rebookingAmount,
       refund_total: 0,
-      client_refund_total: 0,
+      agent_refund_total: 0,
       margin: 0,
     };
   }
@@ -181,7 +181,7 @@ function calculateSaleFinance(form) {
     refund_fee_amount: 0,
     rebooking_amount: 0,
     refund_total: 0,
-    client_refund_total: 0,
+    agent_refund_total: 0,
     margin: markupAmount,
   };
 }
@@ -771,7 +771,7 @@ export default function AdminTravelSales() {
       Штраф: Number(row.penalty_amount || 0),
       "Комиссия возврата": Number(row.refund_commission_amount || 0),
       "Сбор": Number(row.refund_fee_amount || 0),
-      "Возврат клиенту": Math.abs(Number(row.sale_amount || 0)),
+      "Возврат агенту": Math.abs(Number(row.sale_amount || 0)),
       Перебронирование: Number(row.rebooking_amount || 0),
     })));
   }
@@ -908,10 +908,10 @@ export default function AdminTravelSales() {
                     <div className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm">
                       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                         <div><div className="text-xs text-rose-600">Возврат от поставщика</div><b className="text-rose-700">-{money(finance.refund_total)}</b></div>
-                        <div><div className="text-xs text-rose-600">Возврат клиенту</div><b className="text-rose-700">-{money(finance.client_refund_total)}</b></div>
+                        <div><div className="text-xs text-rose-600">Возврат агенту</div><b className="text-rose-700">-{money(finance.agent_refund_total)}</b></div>
                         <div><div className="text-xs text-rose-600">Сбор</div><b className="text-rose-700">{money(finance.refund_fee_amount)}</b></div>
                       </div>
-                      <p className="mt-2 text-xs text-rose-500">Формулы: возврат от поставщика = тариф + таксы − штраф − комиссия. Возврат клиенту = возврат от поставщика − сбор.</p>
+                      <p className="mt-2 text-xs text-rose-500">Формулы: возврат от поставщика = тариф + таксы − штраф − комиссия. Возврат агенту = возврат от поставщика + сбор.</p>
                     </div>
                   </>
                 )}
