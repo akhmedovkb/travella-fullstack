@@ -100,10 +100,12 @@ function calculateSaleFinance(body = {}) {
   const refundTaxes = Math.max(0, toNum(body.refund_taxes_amount));
   const penalty = Math.max(0, toNum(body.penalty_amount));
   const refundCommission = Math.max(0, toNum(body.refund_commission_amount));
+  const refundFee = Math.max(0, toNum(body.refund_fee_amount));
   const rebookingAmount = Math.max(0, toNum(body.rebooking_amount));
 
   if (operationType === "refund") {
-    const refundTotal = roundMoney(Math.max(0, refundFare + refundTaxes - penalty - refundCommission));
+    const supplierRefundTotal = roundMoney(Math.max(0, refundFare + refundTaxes - penalty - refundCommission));
+    const clientRefundTotal = roundMoney(Math.max(0, supplierRefundTotal - refundFee));
     return {
       operationType,
       originalSaleDate: validateDate(body.original_sale_date),
@@ -112,15 +114,16 @@ function calculateSaleFinance(body = {}) {
       taxesAmount: 0,
       commissionPercent: 0,
       commissionAmount: 0,
-      netAmount: roundMoney(0 - refundTotal),
+      netAmount: roundMoney(0 - supplierRefundTotal),
       vatPercent: 0,
       vatAmount: 0,
-      markupAmount: 0,
-      saleAmount: roundMoney(0 - refundTotal),
+      markupAmount: roundMoney(refundFee),
+      saleAmount: roundMoney(0 - clientRefundTotal),
       refundFareAmount: roundMoney(refundFare),
       refundTaxesAmount: roundMoney(refundTaxes),
       penaltyAmount: roundMoney(penalty),
       refundCommissionAmount: roundMoney(refundCommission),
+      refundFeeAmount: roundMoney(refundFee),
       rebookingAmount: 0,
     };
   }
@@ -143,6 +146,7 @@ function calculateSaleFinance(body = {}) {
       refundTaxesAmount: 0,
       penaltyAmount: 0,
       refundCommissionAmount: 0,
+      refundFeeAmount: 0,
       rebookingAmount: roundMoney(rebookingAmount),
     };
   }
@@ -173,6 +177,7 @@ function calculateSaleFinance(body = {}) {
     refundTaxesAmount: 0,
     penaltyAmount: 0,
     refundCommissionAmount: 0,
+    refundFeeAmount: 0,
     rebookingAmount: 0,
   };
 }
@@ -229,6 +234,7 @@ async function ensureTables() {
   await db.query(`ALTER TABLE travel_daily_sales ADD COLUMN IF NOT EXISTS refund_taxes_amount NUMERIC(14,2) NOT NULL DEFAULT 0;`);
   await db.query(`ALTER TABLE travel_daily_sales ADD COLUMN IF NOT EXISTS penalty_amount NUMERIC(14,2) NOT NULL DEFAULT 0;`);
   await db.query(`ALTER TABLE travel_daily_sales ADD COLUMN IF NOT EXISTS refund_commission_amount NUMERIC(14,2) NOT NULL DEFAULT 0;`);
+  await db.query(`ALTER TABLE travel_daily_sales ADD COLUMN IF NOT EXISTS refund_fee_amount NUMERIC(14,2) NOT NULL DEFAULT 0;`);
   await db.query(`ALTER TABLE travel_daily_sales ADD COLUMN IF NOT EXISTS rebooking_amount NUMERIC(14,2) NOT NULL DEFAULT 0;`);
 
   await db.query(`CREATE INDEX IF NOT EXISTS idx_travel_daily_sales_agent_id ON travel_daily_sales(agent_id);`);
@@ -393,6 +399,7 @@ function saleReturnFields() {
     refund_taxes_amount,
     penalty_amount,
     refund_commission_amount,
+    refund_fee_amount,
     rebooking_amount,
     service_type,
     direction,
@@ -432,7 +439,7 @@ async function getDailySales(req, res) {
         s.supplier_agent_id, sup.name AS supplier_agent_name,
         COALESCE(NULLIF(s.operation_type, ''), 'sale') AS operation_type,
         s.original_sale_date, s.original_ticket_info,
-        s.refund_fare_amount, s.refund_taxes_amount, s.penalty_amount, s.refund_commission_amount, s.rebooking_amount,
+        s.refund_fare_amount, s.refund_taxes_amount, s.penalty_amount, s.refund_commission_amount, s.refund_fee_amount, s.rebooking_amount,
         s.service_type, s.direction, s.traveller_name,
         s.fare_amount, s.taxes_amount, s.commission_percent, s.commission_amount,
         s.sale_amount, s.net_amount, s.vat_percent, s.vat_amount, s.markup_amount,
@@ -495,16 +502,16 @@ async function createDailySale(req, res) {
       `
       INSERT INTO travel_daily_sales (
         sale_date, agent_id, supplier_agent_id, operation_type, original_sale_date, original_ticket_info,
-        refund_fare_amount, refund_taxes_amount, penalty_amount, refund_commission_amount, rebooking_amount,
+        refund_fare_amount, refund_taxes_amount, penalty_amount, refund_commission_amount, refund_fee_amount, rebooking_amount,
         service_type, direction, traveller_name,
         fare_amount, taxes_amount, commission_percent, commission_amount,
         sale_amount, net_amount, vat_percent, vat_amount, markup_amount,
         payment, payment_date, comment
       )
-      VALUES (COALESCE($1::date, CURRENT_DATE), $2, $3, $4, $5::date, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, 0, CURRENT_DATE, '')
+      VALUES (COALESCE($1::date, CURRENT_DATE), $2, $3, $4, $5::date, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, 0, CURRENT_DATE, '')
       RETURNING ${saleReturnFields()}
       `,
-      [payload.saleDate, payload.agentId, payload.supplierAgentId, f.operationType, f.originalSaleDate, f.originalTicketInfo, f.refundFareAmount, f.refundTaxesAmount, f.penaltyAmount, f.refundCommissionAmount, f.rebookingAmount, payload.serviceType, payload.direction, payload.travellerName, f.fareAmount, f.taxesAmount, f.commissionPercent, f.commissionAmount, f.saleAmount, f.netAmount, f.vatPercent, f.vatAmount, f.markupAmount]
+      [payload.saleDate, payload.agentId, payload.supplierAgentId, f.operationType, f.originalSaleDate, f.originalTicketInfo, f.refundFareAmount, f.refundTaxesAmount, f.penaltyAmount, f.refundCommissionAmount, f.refundFeeAmount, f.rebookingAmount, payload.serviceType, payload.direction, payload.travellerName, f.fareAmount, f.taxesAmount, f.commissionPercent, f.commissionAmount, f.saleAmount, f.netAmount, f.vatPercent, f.vatAmount, f.markupAmount]
     );
     return res.json({ ok: true, row: normalizeDateRow(rows[0], ["sale_date", "payment_date", "original_sale_date"]) });
   } catch (e) {
@@ -538,24 +545,25 @@ async function updateDailySale(req, res) {
           refund_taxes_amount = $8,
           penalty_amount = $9,
           refund_commission_amount = $10,
-          rebooking_amount = $11,
-          service_type = $12,
-          direction = $13,
-          traveller_name = $14,
-          fare_amount = $15,
-          taxes_amount = $16,
-          commission_percent = $17,
-          commission_amount = $18,
-          sale_amount = $19,
-          net_amount = $20,
-          vat_percent = $21,
-          vat_amount = $22,
-          markup_amount = $23,
+          refund_fee_amount = $11,
+          rebooking_amount = $12,
+          service_type = $13,
+          direction = $14,
+          traveller_name = $15,
+          fare_amount = $16,
+          taxes_amount = $17,
+          commission_percent = $18,
+          commission_amount = $19,
+          sale_amount = $20,
+          net_amount = $21,
+          vat_percent = $22,
+          vat_amount = $23,
+          markup_amount = $24,
           updated_at = NOW()
-      WHERE id = $24
+      WHERE id = $25
       RETURNING ${saleReturnFields()}
       `,
-      [payload.saleDate, payload.agentId, payload.supplierAgentId, f.operationType, f.originalSaleDate, f.originalTicketInfo, f.refundFareAmount, f.refundTaxesAmount, f.penaltyAmount, f.refundCommissionAmount, f.rebookingAmount, payload.serviceType, payload.direction, payload.travellerName, f.fareAmount, f.taxesAmount, f.commissionPercent, f.commissionAmount, f.saleAmount, f.netAmount, f.vatPercent, f.vatAmount, f.markupAmount, id]
+      [payload.saleDate, payload.agentId, payload.supplierAgentId, f.operationType, f.originalSaleDate, f.originalTicketInfo, f.refundFareAmount, f.refundTaxesAmount, f.penaltyAmount, f.refundCommissionAmount, f.refundFeeAmount, f.rebookingAmount, payload.serviceType, payload.direction, payload.travellerName, f.fareAmount, f.taxesAmount, f.commissionPercent, f.commissionAmount, f.saleAmount, f.netAmount, f.vatPercent, f.vatAmount, f.markupAmount, id]
     );
     if (!rows.length) return res.status(404).json({ ok: false, message: "Sale not found" });
     return res.json({ ok: true, row: normalizeDateRow(rows[0], ["sale_date", "payment_date", "original_sale_date"]) });
@@ -700,7 +708,7 @@ async function getSalesReport(req, res) {
         sup.name AS supplier_agent,
         COALESCE(NULLIF(s.operation_type, ''), 'sale') AS operation_type,
         s.original_sale_date, s.original_ticket_info,
-        s.refund_fare_amount, s.refund_taxes_amount, s.penalty_amount, s.refund_commission_amount, s.rebooking_amount,
+        s.refund_fare_amount, s.refund_taxes_amount, s.penalty_amount, s.refund_commission_amount, s.refund_fee_amount, s.rebooking_amount,
         s.service_type, s.direction, s.traveller_name,
         s.fare_amount, s.taxes_amount, s.commission_percent, s.commission_amount,
         s.sale_amount, s.net_amount, s.vat_percent, s.vat_amount, s.markup_amount,
@@ -756,8 +764,8 @@ async function getAgentBalanceReport(req, res) {
           0::numeric(14,2) AS payment_amount,
           0::numeric(14,2) AS refund_amount,
           CASE
-            WHEN COALESCE(NULLIF(s.operation_type, ''), 'sale') = 'refund' THEN CONCAT('Р вЂ™Р С•Р В·Р Р†РЎР‚Р В°РЎвЂљ: ', COALESCE(NULLIF(s.original_ticket_info, ''), 'Р В±Р ВµР В· Р С•Р С—Р С‘РЎРѓР В°Р Р…Р С‘РЎРЏ'))
-            WHEN COALESCE(NULLIF(s.operation_type, ''), 'sale') = 'rebook' THEN CONCAT('Р СџР ВµРЎР‚Р ВµР В±РЎР‚Р С•Р Р…Р С‘РЎР‚Р С•Р Р†Р В°Р Р…Р С‘Р Вµ: ', COALESCE(NULLIF(s.original_ticket_info, ''), 'Р В±Р ВµР В· Р С•Р С—Р С‘РЎРѓР В°Р Р…Р С‘РЎРЏ'))
+            WHEN COALESCE(NULLIF(s.operation_type, ''), 'sale') = 'refund' THEN CONCAT('Р’РѕР·РІСЂР°С‚ РѕС‚ РїРѕСЃС‚Р°РІС‰РёРєР°: ', COALESCE(NULLIF(s.original_ticket_info, ''), 'Р±РµР· РѕРїРёСЃР°РЅРёСЏ'))
+            WHEN COALESCE(NULLIF(s.operation_type, ''), 'sale') = 'rebook' THEN CONCAT('РџРµСЂРµР±СЂРѕРЅРёСЂРѕРІР°РЅРёРµ: ', COALESCE(NULLIF(s.original_ticket_info, ''), 'Р±РµР· РѕРїРёСЃР°РЅРёСЏ'))
             ELSE NULL::text
           END AS comment,
           s.net_amount::numeric(14,2) AS delta_amount,
@@ -783,7 +791,7 @@ async function getAgentBalanceReport(req, res) {
           s.agent_id,
           a.name AS agent,
           s.sale_date AS txn_date,
-          CASE WHEN COALESCE(NULLIF(s.operation_type, ''), 'sale') = 'refund' THEN 'agent_sale_refund' WHEN COALESCE(NULLIF(s.operation_type, ''), 'sale') = 'rebook' THEN 'agent_sale_rebook' ELSE 'agent_sale' END::text AS entry_type,
+          CASE WHEN COALESCE(NULLIF(s.operation_type, ''), 'sale') = 'refund' THEN 'sale_refund' WHEN COALESCE(NULLIF(s.operation_type, ''), 'sale') = 'rebook' THEN 'sale_rebook' ELSE 'sale' END::text AS entry_type,
           s.id AS sale_id,
           NULL::bigint AS payment_id,
           s.sale_date,
@@ -794,10 +802,10 @@ async function getAgentBalanceReport(req, res) {
           s.sale_amount::numeric(14,2) AS sale_amount,
           0::numeric(14,2) AS supply_amount,
           0::numeric(14,2) AS payment_amount,
-          0::numeric(14,2) AS refund_amount,
+          CASE WHEN COALESCE(NULLIF(s.operation_type, ''), 'sale') = 'refund' THEN ABS(s.sale_amount)::numeric(14,2) ELSE 0::numeric(14,2) END AS refund_amount,
           CASE
-            WHEN COALESCE(NULLIF(s.operation_type, ''), 'sale') = 'refund' THEN CONCAT('Р’РѕР·РІСЂР°С‚ РїСЂРѕРґР°Р¶Рё: ', COALESCE(NULLIF(s.original_ticket_info, ''), 'Р±РµР· РѕРїРёСЃР°РЅРёСЏ'))
-            WHEN COALESCE(NULLIF(s.operation_type, ''), 'sale') = 'rebook' THEN CONCAT('РџРµСЂРµР±СЂРѕРЅРёСЂРѕРІР°РЅРёРµ РїСЂРѕРґР°Р¶Рё: ', COALESCE(NULLIF(s.original_ticket_info, ''), 'Р±РµР· РѕРїРёСЃР°РЅРёСЏ'))
+            WHEN COALESCE(NULLIF(s.operation_type, ''), 'sale') = 'refund' THEN CONCAT('Р’РѕР·РІСЂР°С‚ РєР»РёРµРЅС‚Сѓ. РЎР±РѕСЂ: ', COALESCE(s.refund_fee_amount, 0)::text)
+            WHEN COALESCE(NULLIF(s.operation_type, ''), 'sale') = 'rebook' THEN CONCAT('РџРµСЂРµР±СЂРѕРЅРёСЂРѕРІР°РЅРёРµ: ', COALESCE(NULLIF(s.original_ticket_info, ''), 'Р±РµР· РѕРїРёСЃР°РЅРёСЏ'))
             ELSE NULL::text
           END AS comment,
           s.sale_amount::numeric(14,2) AS delta_amount,
