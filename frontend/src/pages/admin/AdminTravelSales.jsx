@@ -190,6 +190,36 @@ function operationTypeLabel(v) {
   return OPERATION_TYPE_OPTIONS.find((x) => x.value === v)?.label || "Продажа";
 }
 
+
+function repairCp1251Mojibake(value) {
+  const text = String(value ?? "");
+  if (!/[РС][\u0400-\u04ff]/.test(text)) return text;
+  if (typeof TextDecoder === "undefined") return text;
+
+  const bytes = [];
+  for (const ch of text) {
+    const code = ch.charCodeAt(0);
+    if (code <= 0xff) bytes.push(code);
+    else if (code >= 0x0410 && code <= 0x044f) bytes.push(code - 0x0410 + 0xc0);
+    else if (code === 0x0401) bytes.push(0xa8);
+    else if (code === 0x0451) bytes.push(0xb8);
+    else {
+      return text;
+    }
+  }
+
+  try {
+    const decoded = new TextDecoder("utf-8", { fatal: true }).decode(new Uint8Array(bytes));
+    return decoded || text;
+  } catch {
+    return text;
+  }
+}
+
+function cleanText(value) {
+  return repairCp1251Mojibake(value);
+}
+
 function money(v) {
   return new Intl.NumberFormat("ru-RU", {
     minimumFractionDigits: 0,
@@ -254,16 +284,16 @@ function badgeClassByServiceType(v) {
 
 function badgeClassByLedgerType(v) {
   if (v === "sale") return "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200";
-  if (v === "supply") return "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200";
+  if (v === "supply") return "bg-teal-50 text-teal-700 ring-1 ring-inset ring-teal-200";
   if (v === "sale_refund") return "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200";
-  if (v === "sale_rebook") return "bg-indigo-50 text-indigo-700 ring-1 ring-inset ring-indigo-200";
+  if (v === "sale_rebook") return "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200";
   if (v === "supplier_refund") return "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200";
-  if (v === "supplier_rebook") return "bg-indigo-50 text-indigo-700 ring-1 ring-inset ring-indigo-200";
-  if (v === "agent_refund") return "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200";
-  if (v === "agent_rebook") return "bg-indigo-50 text-indigo-700 ring-1 ring-inset ring-indigo-200";
+  if (v === "supplier_rebook") return "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200";
+  if (v === "agent_refund") return "bg-purple-50 text-purple-700 ring-1 ring-inset ring-purple-200";
+  if (v === "agent_rebook") return "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200";
   if (v === "legacy_sale") return "bg-violet-50 text-violet-700 ring-1 ring-inset ring-violet-200";
   if (v === "payment") return "bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200";
-  if (v === "refund") return "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200";
+  if (v === "refund") return "bg-purple-50 text-purple-700 ring-1 ring-inset ring-purple-200";
   if (v === "payment_legacy") return "bg-violet-50 text-violet-700 ring-1 ring-inset ring-violet-200";
   return "bg-gray-100 text-gray-600 ring-1 ring-inset ring-gray-200";
 }
@@ -969,7 +999,7 @@ export default function AdminTravelSales() {
             </Card>
             <div className="xl:col-span-2">
               <Card title="Список оплат" subtitle="Оплаты уменьшают баланс поставщика" right={<div className="flex flex-wrap gap-2"><select className={inputClass("w-[190px]")} value={paymentsAgentId} onChange={(e) => setPaymentsAgentId(e.target.value)}><option value="">Все</option>{sortedAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select><select className={inputClass("w-[170px]")} value={paymentsEntryType} onChange={(e) => setPaymentsEntryType(e.target.value)}><option value="">Все типы</option>{PAYMENT_ENTRY_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select><input type="date" className={inputClass("w-[150px]")} value={paymentsDateFrom} onChange={(e) => setPaymentsDateFrom(e.target.value)} /><input type="date" className={inputClass("w-[150px]")} value={paymentsDateTo} onChange={(e) => setPaymentsDateTo(e.target.value)} /><ActionButton type="button" onClick={loadPayments}>Фильтр</ActionButton></div>}>
-                <TableShell><Table><thead><tr><TH>№</TH><TH>Дата</TH><TH>Агент</TH><TH>Тип</TH><TH align="right">Сумма</TH><TH>Комментарий</TH><TH>Действия</TH></tr></thead><tbody>{paymentsLoading || payments.length === 0 ? <EmptyRow loading={paymentsLoading} colSpan={7} /> : paymentGroups.flatMap((group) => [<tr key={`pay-${group.date}`}><td colSpan={7} className="px-3 py-3"><div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"><b>{group.date}</b><span className="ml-3 text-xs text-slate-500">Операций: {group.items.length}</span></div></td></tr>, ...group.items.map((row, idx) => <tr key={row.id} className="border-b border-gray-100 hover:bg-gray-50/70"><TD>{idx + 1}</TD><TD>{iso(row.payment_date)}</TD><TD><b>{row.agent_name}</b></TD><TD><Badge className={badgeClassByLedgerType(row.entry_type)}>{ledgerTypeLabel(row.entry_type)}</Badge></TD><TD align="right"><b>{money(row.amount)}</b></TD><TD>{row.comment || "—"}</TD><TD><div className="flex gap-2"><ActionButton type="button" onClick={() => startEditPayment(row)}>Изменить</ActionButton><ActionButton type="button" variant="danger" onClick={() => handleDeletePayment(row.id)}>Удалить</ActionButton></div></TD></tr>)])}</tbody></Table></TableShell>
+                <TableShell><Table><thead><tr><TH>№</TH><TH>Дата</TH><TH>Агент</TH><TH>Тип</TH><TH align="right">Сумма</TH><TH>Комментарий</TH><TH>Действия</TH></tr></thead><tbody>{paymentsLoading || payments.length === 0 ? <EmptyRow loading={paymentsLoading} colSpan={7} /> : paymentGroups.flatMap((group) => [<tr key={`pay-${group.date}`}><td colSpan={7} className="px-3 py-3"><div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"><b>{group.date}</b><span className="ml-3 text-xs text-slate-500">Операций: {group.items.length}</span></div></td></tr>, ...group.items.map((row, idx) => <tr key={row.id} className="border-b border-gray-100 hover:bg-gray-50/70"><TD>{idx + 1}</TD><TD>{iso(row.payment_date)}</TD><TD><b>{row.agent_name}</b></TD><TD><Badge className={badgeClassByLedgerType(row.entry_type)}>{ledgerTypeLabel(row.entry_type)}</Badge></TD><TD align="right"><b>{money(row.amount)}</b></TD><TD>{cleanText(row.comment) || "—"}</TD><TD><div className="flex gap-2"><ActionButton type="button" onClick={() => startEditPayment(row)}>Изменить</ActionButton><ActionButton type="button" variant="danger" onClick={() => handleDeletePayment(row.id)}>Удалить</ActionButton></div></TD></tr>)])}</tbody></Table></TableShell>
               </Card>
             </div>
           </div>
@@ -999,7 +1029,7 @@ export default function AdminTravelSales() {
             <StatCard title="Оплаты + возвраты" value={money(balanceReport.reduce((s, r) => s + Number(r.payment_amount || 0) + Number(r.refund_amount || 0), 0))} hint="Оплаты и возвраты" accent="amber" />
           </div>
           <Card title="Баланс агентов" subtitle="Баланс: продажа/поставка + перебронирование − оплата − возврат" right={<div className="flex flex-wrap gap-2"><select className={inputClass("w-[190px]")} value={balanceAgentId} onChange={(e) => setBalanceAgentId(e.target.value)}><option value="">Все агенты</option>{sortedAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select><select className={inputClass("w-[150px]")} value={balanceServiceType} onChange={(e) => setBalanceServiceType(e.target.value)}><option value="">Все типы</option>{SERVICE_TYPE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select><input type="date" className={inputClass("w-[150px]")} value={balanceDateFrom} onChange={(e) => setBalanceDateFrom(e.target.value)} /><input type="date" className={inputClass("w-[150px]")} value={balanceDateTo} onChange={(e) => setBalanceDateTo(e.target.value)} /><ActionButton type="button" onClick={loadBalanceReport}>Фильтр</ActionButton><ActionButton type="button" variant="primary" onClick={exportBalanceReport}>Excel</ActionButton></div>}>
-            <TableShell><Table><thead><tr><TH>№</TH><TH>Дата</TH><TH>Тип</TH><TH>Агент</TH><TH>Тип услуги</TH><TH>Направление</TH><TH>Traveller</TH><TH align="right">Тариф</TH><TH align="right">Таксы</TH><TH align="right">Комиссия</TH><TH align="right">Продажа</TH><TH align="right">Поставка</TH><TH align="right">Оплата</TH><TH align="right">Возврат</TH><TH>Комментарий</TH><TH align="right">Баланс</TH></tr></thead><tbody>{balanceLoading || balanceReport.length === 0 ? <EmptyRow loading={balanceLoading} colSpan={16} /> : balanceGroups.flatMap((group) => [<tr key={`bal-${group.date}`}><td colSpan={16} className="px-3 py-3"><div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"><b>{group.date}</b><span className="ml-3 text-xs text-slate-500">Операций: {group.items.length}</span><span className="ml-3 text-xs font-semibold text-emerald-700">Поставки: {money(group.items.reduce((s, r) => s + Number(r.supply_amount || 0), 0))}</span><span className="ml-3 text-xs font-semibold text-sky-700">Оплаты: {money(group.items.reduce((s, r) => s + Number(r.payment_amount || 0), 0))}</span></div></td></tr>, ...group.items.map((row, idx) => { const status = balanceStatus(row.balance); return <tr key={row.row_key || `${row.entry_type}-${idx}`} className={`border-b border-gray-100 ${status.rowCls}`}><TD>{idx + 1}</TD><TD>{iso(row.txn_date)}</TD><TD><Badge className={badgeClassByLedgerType(row.entry_type)}>{ledgerTypeLabel(row.entry_type)}</Badge></TD><TD><b>{row.agent}</b></TD><TD>{row.service_type ? <Badge className={badgeClassByServiceType(row.service_type)}>{typeLabel(row.service_type)}</Badge> : "—"}</TD><TD>{row.direction || "—"}</TD><TD>{row.traveller_name || "—"}</TD><TD align="right">{money(row.fare_amount)}</TD><TD align="right">{money(row.taxes_amount)}</TD><TD align="right">{money(row.commission_amount)}</TD><TD align="right">{money(row.sale_amount)}</TD><TD align="right"><b>{money(row.supply_amount)}</b></TD><TD align="right">{money(row.payment_amount)}</TD><TD align="right">{money(row.refund_amount)}</TD><TD>{row.comment || "—"}</TD><TD align="right"><div className="flex items-center justify-end gap-2"><b className={Number(row.balance || 0) > 0 ? "text-red-600" : Number(row.balance || 0) < 0 ? "text-emerald-700" : "text-gray-900"}>{money(row.balance)}</b><Badge className={`ring-1 ${status.cls}`}>{status.label}</Badge></div></TD></tr>; })])}</tbody></Table></TableShell>
+            <TableShell><Table><thead><tr><TH>№</TH><TH>Дата</TH><TH>Тип</TH><TH>Агент</TH><TH>Тип услуги</TH><TH>Направление</TH><TH>Traveller</TH><TH align="right">Тариф</TH><TH align="right">Таксы</TH><TH align="right">Комиссия</TH><TH align="right">Продажа</TH><TH align="right">Поставка</TH><TH align="right">Оплата</TH><TH align="right">Возврат</TH><TH>Комментарий</TH><TH align="right">Баланс</TH></tr></thead><tbody>{balanceLoading || balanceReport.length === 0 ? <EmptyRow loading={balanceLoading} colSpan={16} /> : balanceGroups.flatMap((group) => [<tr key={`bal-${group.date}`}><td colSpan={16} className="px-3 py-3"><div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"><b>{group.date}</b><span className="ml-3 text-xs text-slate-500">Операций: {group.items.length}</span><span className="ml-3 text-xs font-semibold text-emerald-700">Поставки: {money(group.items.reduce((s, r) => s + Number(r.supply_amount || 0), 0))}</span><span className="ml-3 text-xs font-semibold text-sky-700">Оплаты: {money(group.items.reduce((s, r) => s + Number(r.payment_amount || 0), 0))}</span></div></td></tr>, ...group.items.map((row, idx) => { const status = balanceStatus(row.balance); return <tr key={row.row_key || `${row.entry_type}-${idx}`} className={`border-b border-gray-100 ${status.rowCls}`}><TD>{idx + 1}</TD><TD>{iso(row.txn_date)}</TD><TD><Badge className={badgeClassByLedgerType(row.entry_type)}>{ledgerTypeLabel(row.entry_type)}</Badge></TD><TD><b>{row.agent}</b></TD><TD>{row.service_type ? <Badge className={badgeClassByServiceType(row.service_type)}>{typeLabel(row.service_type)}</Badge> : "—"}</TD><TD>{row.direction || "—"}</TD><TD>{row.traveller_name || "—"}</TD><TD align="right">{money(row.fare_amount)}</TD><TD align="right">{money(row.taxes_amount)}</TD><TD align="right">{money(row.commission_amount)}</TD><TD align="right">{money(row.sale_amount)}</TD><TD align="right"><b>{money(row.supply_amount)}</b></TD><TD align="right">{money(row.payment_amount)}</TD><TD align="right">{money(row.refund_amount)}</TD><TD>{cleanText(row.comment) || "—"}</TD><TD align="right"><div className="flex items-center justify-end gap-2"><b className={Number(row.balance || 0) > 0 ? "text-red-600" : Number(row.balance || 0) < 0 ? "text-emerald-700" : "text-gray-900"}>{money(row.balance)}</b><Badge className={`ring-1 ${status.cls}`}>{status.label}</Badge></div></TD></tr>; })])}</tbody></Table></TableShell>
           </Card>
         </>
       )}
