@@ -24,6 +24,7 @@ const publicDonasRoutes = require("./routes/publicDonasRoutes");
 const adminDonasInventoryRoutes = require("./routes/adminDonasInventoryRoutes");
 const adminContactBalanceRoutes = require("./routes/adminContactBalanceRoutes");
 const paymeMerchantRoutes = require("./routes/paymeMerchantRoutes");
+const clickMerchantRoutes = require("./routes/clickMerchantRoutes");
 const adminPaymeHealthRoutes = require("./routes/adminPaymeHealthRoutes");
 const { runPaymeHealthCheck } = require("./jobs/paymeHealthJob");
 const adminPaymeEventsRoutes = require("./routes/adminPaymeEventsRoutes");
@@ -966,6 +967,7 @@ app.use("/api/admin/clients", adminContactBalanceRoutes);
 
 /** ===================== payment systems ===================== */
 app.use("/api", paymeMerchantRoutes);
+app.use("/api", clickMerchantRoutes);
 app.use("/api/admin/payme", adminPaymeHealthRoutes);
 app.use("/api/admin/payme", adminPaymeEventsRoutes);
 app.use("/api/admin/payme", adminPaymePaymentsRoutes);
