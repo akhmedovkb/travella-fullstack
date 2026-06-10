@@ -105,7 +105,7 @@ function calculateSaleFinance(body = {}) {
 
   if (operationType === "refund") {
     const supplierRefundTotal = roundMoney(Math.max(0, refundFare + refundTaxes - penalty - refundCommission));
-    const agentRefundTotal = roundMoney(Math.max(0, supplierRefundTotal + refundFee));
+    const agentRefundTotal = roundMoney(Math.max(0, supplierRefundTotal - refundFee));
     return {
       operationType,
       originalSaleDate: validateDate(body.original_sale_date),
@@ -785,8 +785,8 @@ async function getAgentBalanceReport(req, res) {
           0::numeric(14,2) AS payment_amount,
           CASE WHEN s.op = 'refund' THEN s.net_abs ELSE 0::numeric(14,2) END AS refund_amount,
           CASE
-            WHEN s.op = 'refund' THEN CONCAT('Возврат от поставщика: ', COALESCE(NULLIF(s.original_ticket_info, ''), 'без описания'))
-            WHEN s.op = 'rebook' THEN CONCAT('Перебронирование поставщика: ', COALESCE(NULLIF(s.original_ticket_info, ''), 'без описания'))
+            WHEN s.op = 'refund' THEN CONCAT('Р’РѕР·РІСЂР°С‚ РѕС‚ РїРѕСЃС‚Р°РІС‰РёРєР°: ', COALESCE(NULLIF(s.original_ticket_info, ''), 'Р±РµР· РѕРїРёСЃР°РЅРёСЏ'))
+            WHEN s.op = 'rebook' THEN CONCAT('РџРµСЂРµР±СЂРѕРЅРёСЂРѕРІР°РЅРёРµ РїРѕСЃС‚Р°РІС‰РёРєР°: ', COALESCE(NULLIF(s.original_ticket_info, ''), 'Р±РµР· РѕРїРёСЃР°РЅРёСЏ'))
             ELSE NULL::text
           END AS comment,
           CASE WHEN s.op = 'refund' THEN (0 - s.net_abs) ELSE s.net_abs END AS delta_amount,
@@ -838,8 +838,8 @@ async function getAgentBalanceReport(req, res) {
           0::numeric(14,2) AS payment_amount,
           CASE WHEN s.op = 'refund' THEN s.sale_abs ELSE 0::numeric(14,2) END AS refund_amount,
           CASE
-            WHEN s.op = 'refund' THEN CONCAT('Возврат агенту. Сбор: ', COALESCE(s.refund_fee_amount, 0)::text)
-            WHEN s.op = 'rebook' THEN CONCAT('Перебронирование агента: ', COALESCE(NULLIF(s.original_ticket_info, ''), 'без описания'))
+            WHEN s.op = 'refund' THEN CONCAT('Р’РѕР·РІСЂР°С‚ Р°РіРµРЅС‚Сѓ (СѓРґРµСЂР¶Р°РЅ СЃР±РѕСЂ ', COALESCE(s.refund_fee_amount, 0)::text, ')')
+            WHEN s.op = 'rebook' THEN CONCAT('РџРµСЂРµР±СЂРѕРЅРёСЂРѕРІР°РЅРёРµ Р°РіРµРЅС‚Р°: ', COALESCE(NULLIF(s.original_ticket_info, ''), 'Р±РµР· РѕРїРёСЃР°РЅРёСЏ'))
             ELSE NULL::text
           END AS comment,
           CASE WHEN s.op = 'refund' THEN (0 - s.sale_abs) ELSE s.sale_abs END AS delta_amount,
@@ -926,7 +926,11 @@ async function getAgentBalanceReport(req, res) {
           0::numeric(14,2) AS markup_amount
         FROM travel_agent_payments p
         JOIN travel_agents a ON a.id = p.agent_id
-        WHERE ($1::bigint IS NULL OR p.agent_id = $1)
+        WHERE NOT (
+            COALESCE(NULLIF(p.entry_type, ''), 'payment') = 'refund'
+            AND COALESCE(NULLIF(a.agent_kind, ''), 'agent') NOT IN ('supplier', 'both')
+          )
+          AND ($1::bigint IS NULL OR p.agent_id = $1)
           AND ($2::date IS NULL OR p.payment_date >= $2::date)
           AND ($3::date IS NULL OR p.payment_date <= $3::date)
       ),
