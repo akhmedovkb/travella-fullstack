@@ -68,6 +68,7 @@ const emptySaleForm = {
   refund_taxes_amount: "",
   penalty_amount: "",
   refund_commission_amount: "",
+  refund_fee_amount: "",
   rebooking_amount: "",
 };
 
@@ -103,28 +104,32 @@ function calculateSaleFinance(form) {
   const refundTaxes = Math.max(0, numeric(form.refund_taxes_amount));
   const penalty = Math.max(0, numeric(form.penalty_amount));
   const refundCommission = Math.max(0, numeric(form.refund_commission_amount));
+  const refundFee = Math.max(0, numeric(form.refund_fee_amount));
   const rebookingAmount = Math.max(0, numeric(form.rebooking_amount));
 
   if (operationType === "refund") {
-    const refundTotal = roundMoney(Math.max(0, refundFare + refundTaxes - penalty - refundCommission));
+    const supplierRefundTotal = roundMoney(Math.max(0, refundFare + refundTaxes - penalty - refundCommission));
+    const clientRefundTotal = roundMoney(Math.max(0, supplierRefundTotal - refundFee));
     return {
       operation_type: operationType,
       fare_amount: 0,
       taxes_amount: 0,
       commission_percent: 0,
       commission_amount: 0,
-      net_amount: roundMoney(0 - refundTotal),
-      sale_amount: roundMoney(0 - refundTotal),
+      net_amount: roundMoney(0 - supplierRefundTotal),
+      sale_amount: roundMoney(0 - clientRefundTotal),
       vat_percent: 0,
       vat_amount: 0,
-      markup_amount: 0,
+      markup_amount: refundFee,
       refund_fare_amount: refundFare,
       refund_taxes_amount: refundTaxes,
       penalty_amount: penalty,
       refund_commission_amount: refundCommission,
+      refund_fee_amount: refundFee,
       rebooking_amount: 0,
-      refund_total: refundTotal,
-      margin: 0,
+      refund_total: supplierRefundTotal,
+      client_refund_total: clientRefundTotal,
+      margin: refundFee,
     };
   }
 
@@ -144,8 +149,10 @@ function calculateSaleFinance(form) {
       refund_taxes_amount: 0,
       penalty_amount: 0,
       refund_commission_amount: 0,
+      refund_fee_amount: 0,
       rebooking_amount: rebookingAmount,
       refund_total: 0,
+      client_refund_total: 0,
       margin: 0,
     };
   }
@@ -171,8 +178,10 @@ function calculateSaleFinance(form) {
     refund_taxes_amount: 0,
     penalty_amount: 0,
     refund_commission_amount: 0,
+    refund_fee_amount: 0,
     rebooking_amount: 0,
     refund_total: 0,
+    client_refund_total: 0,
     margin: markupAmount,
   };
 }
@@ -220,9 +229,7 @@ function agentKindLabel(v) {
 }
 
 function ledgerTypeLabel(v) {
-  if (v === "agent_sale") return "Продажа агента";
-  if (v === "agent_sale_refund") return "Возврат продажи";
-  if (v === "agent_sale_rebook") return "Перебронирование продажи";
+  if (v === "sale") return "Продажа";
   if (v === "supply") return "Поставка";
   if (v === "sale_refund") return "Возврат";
   if (v === "sale_rebook") return "Перебронирование";
@@ -242,9 +249,7 @@ function badgeClassByServiceType(v) {
 }
 
 function badgeClassByLedgerType(v) {
-  if (v === "agent_sale") return "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200";
-  if (v === "agent_sale_refund") return "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200";
-  if (v === "agent_sale_rebook") return "bg-indigo-50 text-indigo-700 ring-1 ring-inset ring-indigo-200";
+  if (v === "sale") return "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200";
   if (v === "supply") return "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200";
   if (v === "sale_refund") return "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200";
   if (v === "sale_rebook") return "bg-indigo-50 text-indigo-700 ring-1 ring-inset ring-indigo-200";
@@ -601,6 +606,7 @@ export default function AdminTravelSales() {
       refund_taxes_amount: calculated.refund_taxes_amount,
       penalty_amount: calculated.penalty_amount,
       refund_commission_amount: calculated.refund_commission_amount,
+      refund_fee_amount: calculated.refund_fee_amount,
       rebooking_amount: calculated.rebooking_amount,
       agent_id: Number(saleForm.agent_id),
       supplier_agent_id: Number(saleForm.supplier_agent_id),
@@ -653,6 +659,7 @@ export default function AdminTravelSales() {
       refund_taxes_amount: row.refund_taxes_amount ?? "",
       penalty_amount: row.penalty_amount ?? "",
       refund_commission_amount: row.refund_commission_amount ?? "",
+      refund_fee_amount: row.refund_fee_amount ?? "",
       rebooking_amount: row.rebooking_amount ?? "",
       agent_id: String(row.agent_id || ""),
       supplier_agent_id: String(row.supplier_agent_id || ""),
@@ -763,6 +770,8 @@ export default function AdminTravelSales() {
       "Таксы возврата": Number(row.refund_taxes_amount || 0),
       Штраф: Number(row.penalty_amount || 0),
       "Комиссия возврата": Number(row.refund_commission_amount || 0),
+      "Сбор": Number(row.refund_fee_amount || 0),
+      "Возврат клиенту": Math.abs(Number(row.sale_amount || 0)),
       Перебронирование: Number(row.rebooking_amount || 0),
     })));
   }
@@ -780,6 +789,7 @@ export default function AdminTravelSales() {
       Тариф: Number(row.fare_amount || 0),
       Таксы: Number(row.taxes_amount || 0),
       "Комиссия сумма": Number(row.commission_amount || 0),
+      Продажа: Number(row.sale_amount || 0),
       Поставка: Number(row.supply_amount || 0),
       Оплата: Number(row.payment_amount || 0),
       Возврат: Number(row.refund_amount || 0),
@@ -892,9 +902,17 @@ export default function AdminTravelSales() {
                     </div>
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                       <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Штраф</label><input type="number" className={inputClass()} value={saleForm.penalty_amount} onChange={(e) => setSaleForm((p) => ({ ...p, penalty_amount: e.target.value }))} placeholder="0" /></div>
-                      <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Комиссия к возврату</label><input type="number" className={inputClass()} value={saleForm.refund_commission_amount} onChange={(e) => setSaleForm((p) => ({ ...p, refund_commission_amount: e.target.value }))} placeholder="0" /></div>
+                      <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Комиссия</label><input type="number" className={inputClass()} value={saleForm.refund_commission_amount} onChange={(e) => setSaleForm((p) => ({ ...p, refund_commission_amount: e.target.value }))} placeholder="0" /></div>
                     </div>
-                    <div className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm"><div className="text-xs text-rose-600">Итого возврат поставщика</div><b className="text-rose-700">-{money(finance.refund_total)}</b><p className="mt-2 text-xs text-rose-500">Формула: тариф возврата + таксы возврата − штраф − комиссия возврата.</p></div>
+                    <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Сбор</label><input type="number" className={inputClass()} value={saleForm.refund_fee_amount} onChange={(e) => setSaleForm((p) => ({ ...p, refund_fee_amount: e.target.value }))} placeholder="0" /></div>
+                    <div className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm">
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                        <div><div className="text-xs text-rose-600">Возврат от поставщика</div><b className="text-rose-700">-{money(finance.refund_total)}</b></div>
+                        <div><div className="text-xs text-rose-600">Возврат клиенту</div><b className="text-rose-700">-{money(finance.client_refund_total)}</b></div>
+                        <div><div className="text-xs text-rose-600">Сбор</div><b className="text-rose-700">{money(finance.refund_fee_amount)}</b></div>
+                      </div>
+                      <p className="mt-2 text-xs text-rose-500">Формулы: возврат от поставщика = тариф + таксы − штраф − комиссия. Возврат клиенту = возврат от поставщика − сбор.</p>
+                    </div>
                   </>
                 )}
                 {saleForm.operation_type === "rebook" && (
@@ -969,12 +987,11 @@ export default function AdminTravelSales() {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             <StatCard title="Общий баланс" value={money(totalBalance)} hint={`≈ ${moneyCompact(totalBalance)}`} accent="rose" />
             <StatCard title="Строк" value={String(balanceReport.length)} hint="По текущим фильтрам" accent="blue" />
-            <StatCard title="Продажи агентов" value={money(balanceReport.reduce((s, r) => s + Number(r.sale_amount || 0), 0))} hint="Продажа по агенту" accent="blue" />
-            <StatCard title="Поставки" value={money(balanceReport.reduce((s, r) => s + Number(r.supply_amount || 0), 0))} hint="Нетто поставщику" accent="emerald" />
+            <StatCard title="Поставки" value={money(balanceReport.reduce((s, r) => s + Number(r.supply_amount || 0), 0))} hint="Нетто из дневных продаж" accent="emerald" />
             <StatCard title="Оплаты + возвраты" value={money(balanceReport.reduce((s, r) => s + Number(r.payment_amount || 0) + Number(r.refund_amount || 0), 0))} hint="Реальные движения денег" accent="amber" />
           </div>
-          <Card title="Баланс агентов" subtitle="Продажи попадают на агента продажи, поставки — на поставщика, оплаты — из перечислений" right={<div className="flex flex-wrap gap-2"><select className={inputClass("w-[190px]")} value={balanceAgentId} onChange={(e) => setBalanceAgentId(e.target.value)}><option value="">Все агенты</option>{sortedAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select><select className={inputClass("w-[150px]")} value={balanceServiceType} onChange={(e) => setBalanceServiceType(e.target.value)}><option value="">Все типы</option>{SERVICE_TYPE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select><input type="date" className={inputClass("w-[150px]")} value={balanceDateFrom} onChange={(e) => setBalanceDateFrom(e.target.value)} /><input type="date" className={inputClass("w-[150px]")} value={balanceDateTo} onChange={(e) => setBalanceDateTo(e.target.value)} /><ActionButton type="button" onClick={loadBalanceReport}>Фильтр</ActionButton><ActionButton type="button" variant="primary" onClick={exportBalanceReport}>Excel</ActionButton></div>}>
-            <TableShell><Table><thead><tr><TH>№</TH><TH>Дата</TH><TH>Тип</TH><TH>Агент</TH><TH>Тип услуги</TH><TH>Направление</TH><TH>Traveller</TH><TH align="right">Тариф</TH><TH align="right">Таксы</TH><TH align="right">Комиссия</TH><TH align="right">Продажа</TH><TH align="right">Поставка</TH><TH align="right">Оплата</TH><TH align="right">Возврат</TH><TH>Комментарий</TH><TH align="right">Баланс</TH></tr></thead><tbody>{balanceLoading || balanceReport.length === 0 ? <EmptyRow loading={balanceLoading} colSpan={16} /> : balanceGroups.flatMap((group) => [<tr key={`bal-${group.date}`}><td colSpan={16} className="px-3 py-3"><div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"><b>{group.date}</b><span className="ml-3 text-xs text-slate-500">Операций: {group.items.length}</span><span className="ml-3 text-xs font-semibold text-blue-700">Продажи: {money(group.items.reduce((s, r) => s + Number(r.sale_amount || 0), 0))}</span><span className="ml-3 text-xs font-semibold text-emerald-700">Поставки: {money(group.items.reduce((s, r) => s + Number(r.supply_amount || 0), 0))}</span><span className="ml-3 text-xs font-semibold text-sky-700">Оплаты: {money(group.items.reduce((s, r) => s + Number(r.payment_amount || 0), 0))}</span></div></td></tr>, ...group.items.map((row, idx) => { const status = balanceStatus(row.balance); return <tr key={row.row_key || `${row.entry_type}-${idx}`} className={`border-b border-gray-100 ${status.rowCls}`}><TD>{idx + 1}</TD><TD>{iso(row.txn_date)}</TD><TD><Badge className={badgeClassByLedgerType(row.entry_type)}>{ledgerTypeLabel(row.entry_type)}</Badge></TD><TD><b>{row.agent}</b></TD><TD>{row.service_type ? <Badge className={badgeClassByServiceType(row.service_type)}>{typeLabel(row.service_type)}</Badge> : "—"}</TD><TD>{row.direction || "—"}</TD><TD>{row.traveller_name || "—"}</TD><TD align="right">{money(row.fare_amount)}</TD><TD align="right">{money(row.taxes_amount)}</TD><TD align="right">{money(row.commission_amount)}</TD><TD align="right"><b>{money(row.sale_amount)}</b></TD><TD align="right"><b>{money(row.supply_amount)}</b></TD><TD align="right">{money(row.payment_amount)}</TD><TD align="right">{money(row.refund_amount)}</TD><TD>{row.comment || "—"}</TD><TD align="right"><div className="flex items-center justify-end gap-2"><b className={Number(row.balance || 0) > 0 ? "text-red-600" : Number(row.balance || 0) < 0 ? "text-emerald-700" : "text-gray-900"}>{money(row.balance)}</b><Badge className={`ring-1 ${status.cls}`}>{status.label}</Badge></div></TD></tr>; })])}</tbody></Table></TableShell>
+          <Card title="Баланс агентов" subtitle="Поставки приходят из дневной продажи, оплаты — из перечислений" right={<div className="flex flex-wrap gap-2"><select className={inputClass("w-[190px]")} value={balanceAgentId} onChange={(e) => setBalanceAgentId(e.target.value)}><option value="">Все агенты</option>{sortedAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select><select className={inputClass("w-[150px]")} value={balanceServiceType} onChange={(e) => setBalanceServiceType(e.target.value)}><option value="">Все типы</option>{SERVICE_TYPE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select><input type="date" className={inputClass("w-[150px]")} value={balanceDateFrom} onChange={(e) => setBalanceDateFrom(e.target.value)} /><input type="date" className={inputClass("w-[150px]")} value={balanceDateTo} onChange={(e) => setBalanceDateTo(e.target.value)} /><ActionButton type="button" onClick={loadBalanceReport}>Фильтр</ActionButton><ActionButton type="button" variant="primary" onClick={exportBalanceReport}>Excel</ActionButton></div>}>
+            <TableShell><Table><thead><tr><TH>№</TH><TH>Дата</TH><TH>Тип</TH><TH>Агент</TH><TH>Тип услуги</TH><TH>Направление</TH><TH>Traveller</TH><TH align="right">Тариф</TH><TH align="right">Таксы</TH><TH align="right">Комиссия</TH><TH align="right">Продажа</TH><TH align="right">Поставка</TH><TH align="right">Оплата</TH><TH align="right">Возврат</TH><TH>Комментарий</TH><TH align="right">Баланс</TH></tr></thead><tbody>{balanceLoading || balanceReport.length === 0 ? <EmptyRow loading={balanceLoading} colSpan={16} /> : balanceGroups.flatMap((group) => [<tr key={`bal-${group.date}`}><td colSpan={16} className="px-3 py-3"><div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"><b>{group.date}</b><span className="ml-3 text-xs text-slate-500">Операций: {group.items.length}</span><span className="ml-3 text-xs font-semibold text-emerald-700">Поставки: {money(group.items.reduce((s, r) => s + Number(r.supply_amount || 0), 0))}</span><span className="ml-3 text-xs font-semibold text-sky-700">Оплаты: {money(group.items.reduce((s, r) => s + Number(r.payment_amount || 0), 0))}</span></div></td></tr>, ...group.items.map((row, idx) => { const status = balanceStatus(row.balance); return <tr key={row.row_key || `${row.entry_type}-${idx}`} className={`border-b border-gray-100 ${status.rowCls}`}><TD>{idx + 1}</TD><TD>{iso(row.txn_date)}</TD><TD><Badge className={badgeClassByLedgerType(row.entry_type)}>{ledgerTypeLabel(row.entry_type)}</Badge></TD><TD><b>{row.agent}</b></TD><TD>{row.service_type ? <Badge className={badgeClassByServiceType(row.service_type)}>{typeLabel(row.service_type)}</Badge> : "—"}</TD><TD>{row.direction || "—"}</TD><TD>{row.traveller_name || "—"}</TD><TD align="right">{money(row.fare_amount)}</TD><TD align="right">{money(row.taxes_amount)}</TD><TD align="right">{money(row.commission_amount)}</TD><TD align="right">{money(row.sale_amount)}</TD><TD align="right"><b>{money(row.supply_amount)}</b></TD><TD align="right">{money(row.payment_amount)}</TD><TD align="right">{money(row.refund_amount)}</TD><TD>{row.comment || "—"}</TD><TD align="right"><div className="flex items-center justify-end gap-2"><b className={Number(row.balance || 0) > 0 ? "text-red-600" : Number(row.balance || 0) < 0 ? "text-emerald-700" : "text-gray-900"}>{money(row.balance)}</b><Badge className={`ring-1 ${status.cls}`}>{status.label}</Badge></div></TD></tr>; })])}</tbody></Table></TableShell>
           </Card>
         </>
       )}
