@@ -109,7 +109,7 @@ function calculateSaleFinance(form) {
 
   if (operationType === "refund") {
     const supplierRefundTotal = roundMoney(Math.max(0, refundFare + refundTaxes - penalty - refundCommission));
-    const agentRefundTotal = roundMoney(Math.max(0, supplierRefundTotal + refundFee));
+    const agentRefundTotal = roundMoney(Math.max(0, supplierRefundTotal - refundFee));
     return {
       operation_type: operationType,
       fare_amount: 0,
@@ -949,7 +949,7 @@ export default function AdminTravelSales() {
                         <div><div className="text-xs text-rose-600">Возврат агенту</div><b className="text-rose-700">-{money(finance.agent_refund_total)}</b></div>
                         <div><div className="text-xs text-rose-600">Сбор</div><b className="text-rose-700">{money(finance.refund_fee_amount)}</b></div>
                       </div>
-                      <p className="mt-2 text-xs text-rose-500">Формулы: возврат от поставщика = тариф + таксы − штраф − комиссия. Возврат агенту = возврат от поставщика + сбор.</p>
+                      <p className="mt-2 text-xs text-rose-500">Формулы: возврат от поставщика = тариф + таксы − штраф − комиссия. Возврат агенту = возврат от поставщика − сбор.</p>
                     </div>
                   </>
                 )}
