@@ -750,7 +750,25 @@ async function getAgentBalanceReport(req, res) {
           s.*,
           COALESCE(NULLIF(s.operation_type, ''), 'sale') AS op,
           ABS(COALESCE(s.sale_amount, 0))::numeric(14,2) AS sale_abs,
-          ABS(COALESCE(s.net_amount, 0))::numeric(14,2) AS net_abs
+          ABS(COALESCE(s.net_amount, 0))::numeric(14,2) AS net_abs,
+          GREATEST(
+            0,
+            COALESCE(s.refund_fare_amount, 0)
+            + COALESCE(s.refund_taxes_amount, 0)
+            - COALESCE(s.penalty_amount, 0)
+            - COALESCE(s.refund_commission_amount, 0)
+          )::numeric(14,2) AS supplier_refund_abs,
+          GREATEST(
+            0,
+            GREATEST(
+              0,
+              COALESCE(s.refund_fare_amount, 0)
+              + COALESCE(s.refund_taxes_amount, 0)
+              - COALESCE(s.penalty_amount, 0)
+              - COALESCE(s.refund_commission_amount, 0)
+            )
+            - COALESCE(s.refund_fee_amount, 0)
+          )::numeric(14,2) AS agent_refund_abs
         FROM travel_daily_sales s
       ),
       ledger_source AS (
@@ -761,7 +779,7 @@ async function getAgentBalanceReport(req, res) {
           For rows where a supplier is selected, daily sales create the supplier side:
           - sale   -> supply_amount increases balance by net amount
           - rebook -> supply_amount increases balance by rebooking/net amount
-          - refund -> refund_amount decreases balance by supplier refund amount
+          - refund -> refund_amount decreases balance by full supplier refund amount
         */
         SELECT
           ('supplier-' || s.id::text) AS row_key,
@@ -783,13 +801,13 @@ async function getAgentBalanceReport(req, res) {
           0::numeric(14,2) AS sale_amount,
           CASE WHEN s.op IN ('sale', 'rebook') THEN s.net_abs ELSE 0::numeric(14,2) END AS supply_amount,
           0::numeric(14,2) AS payment_amount,
-          CASE WHEN s.op = 'refund' THEN s.net_abs ELSE 0::numeric(14,2) END AS refund_amount,
+          CASE WHEN s.op = 'refund' THEN s.supplier_refund_abs ELSE 0::numeric(14,2) END AS refund_amount,
           CASE
             WHEN s.op = 'refund' THEN CONCAT('Р’РѕР·РІСЂР°С‚ РѕС‚ РїРѕСЃС‚Р°РІС‰РёРєР°: ', COALESCE(NULLIF(s.original_ticket_info, ''), 'Р±РµР· РѕРїРёСЃР°РЅРёСЏ'))
             WHEN s.op = 'rebook' THEN CONCAT('РџРµСЂРµР±СЂРѕРЅРёСЂРѕРІР°РЅРёРµ РїРѕСЃС‚Р°РІС‰РёРєР°: ', COALESCE(NULLIF(s.original_ticket_info, ''), 'Р±РµР· РѕРїРёСЃР°РЅРёСЏ'))
             ELSE NULL::text
           END AS comment,
-          CASE WHEN s.op = 'refund' THEN (0 - s.net_abs) ELSE s.net_abs END AS delta_amount,
+          CASE WHEN s.op = 'refund' THEN (0 - s.supplier_refund_abs) ELSE s.net_abs END AS delta_amount,
           s.fare_amount,
           s.taxes_amount,
           s.commission_percent,
@@ -814,7 +832,7 @@ async function getAgentBalanceReport(req, res) {
           The same daily sale creates the agent side too:
           - sale   -> sale_amount increases balance by client sale amount
           - rebook -> sale_amount increases balance by rebooking amount
-          - refund -> refund_amount decreases balance by agent refund amount
+          - refund -> refund_amount decreases balance by supplier refund minus Travella fee
         */
         SELECT
           ('agent-' || s.id::text) AS row_key,
@@ -836,13 +854,13 @@ async function getAgentBalanceReport(req, res) {
           CASE WHEN s.op IN ('sale', 'rebook') THEN s.sale_abs ELSE 0::numeric(14,2) END AS sale_amount,
           0::numeric(14,2) AS supply_amount,
           0::numeric(14,2) AS payment_amount,
-          CASE WHEN s.op = 'refund' THEN s.sale_abs ELSE 0::numeric(14,2) END AS refund_amount,
+          CASE WHEN s.op = 'refund' THEN s.agent_refund_abs ELSE 0::numeric(14,2) END AS refund_amount,
           CASE
-            WHEN s.op = 'refund' THEN CONCAT('Р’РѕР·РІСЂР°С‚ Р°РіРµРЅС‚Сѓ (СѓРґРµСЂР¶Р°РЅ СЃР±РѕСЂ ', COALESCE(s.refund_fee_amount, 0)::text, ')')
+            WHEN s.op = 'refund' THEN CONCAT('Р’РѕР·РІСЂР°С‚ Р°РіРµРЅС‚Сѓ (СѓРґРµСЂР¶Р°РЅ СЃР±РѕСЂ ', COALESCE(s.refund_fee_amount, 0)::text, '): ', COALESCE(NULLIF(s.original_ticket_info, ''), 'Р±РµР· РѕРїРёСЃР°РЅРёСЏ'))
             WHEN s.op = 'rebook' THEN CONCAT('РџРµСЂРµР±СЂРѕРЅРёСЂРѕРІР°РЅРёРµ Р°РіРµРЅС‚Р°: ', COALESCE(NULLIF(s.original_ticket_info, ''), 'Р±РµР· РѕРїРёСЃР°РЅРёСЏ'))
             ELSE NULL::text
           END AS comment,
-          CASE WHEN s.op = 'refund' THEN (0 - s.sale_abs) ELSE s.sale_abs END AS delta_amount,
+          CASE WHEN s.op = 'refund' THEN (0 - s.agent_refund_abs) ELSE s.sale_abs END AS delta_amount,
           s.fare_amount,
           s.taxes_amount,
           s.commission_percent,
