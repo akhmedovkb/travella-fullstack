@@ -745,13 +745,34 @@ async function getAgentBalanceReport(req, res) {
 
     const { rows } = await db.query(
       `
-      WITH ledger_source AS (
+      WITH normalized_sales AS (
         SELECT
-          ('supply-' || s.id::text) AS row_key,
+          s.*,
+          COALESCE(NULLIF(s.operation_type, ''), 'sale') AS op,
+          ABS(COALESCE(s.sale_amount, 0))::numeric(14,2) AS sale_abs,
+          ABS(COALESCE(s.net_amount, 0))::numeric(14,2) AS net_abs
+        FROM travel_daily_sales s
+      ),
+      ledger_source AS (
+        /*
+          Supplier formula:
+          balance = supply + rebook - payment - refund
+
+          For rows where a supplier is selected, daily sales create the supplier side:
+          - sale   -> supply_amount increases balance by net amount
+          - rebook -> supply_amount increases balance by rebooking/net amount
+          - refund -> refund_amount decreases balance by supplier refund amount
+        */
+        SELECT
+          ('supplier-' || s.id::text) AS row_key,
           s.supplier_agent_id AS agent_id,
           sup.name AS agent,
           s.sale_date AS txn_date,
-          CASE WHEN COALESCE(NULLIF(s.operation_type, ''), 'sale') = 'refund' THEN 'sale_refund' WHEN COALESCE(NULLIF(s.operation_type, ''), 'sale') = 'rebook' THEN 'sale_rebook' ELSE 'supply' END::text AS entry_type,
+          CASE
+            WHEN s.op = 'refund' THEN 'supplier_refund'
+            WHEN s.op = 'rebook' THEN 'supplier_rebook'
+            ELSE 'supply'
+          END::text AS entry_type,
           s.id AS sale_id,
           NULL::bigint AS payment_id,
           s.sale_date,
@@ -759,16 +780,16 @@ async function getAgentBalanceReport(req, res) {
           s.service_type,
           s.direction,
           s.traveller_name,
-          s.sale_amount::numeric(14,2) AS sale_amount,
-          s.net_amount::numeric(14,2) AS supply_amount,
+          0::numeric(14,2) AS sale_amount,
+          CASE WHEN s.op IN ('sale', 'rebook') THEN s.net_abs ELSE 0::numeric(14,2) END AS supply_amount,
           0::numeric(14,2) AS payment_amount,
-          0::numeric(14,2) AS refund_amount,
+          CASE WHEN s.op = 'refund' THEN s.net_abs ELSE 0::numeric(14,2) END AS refund_amount,
           CASE
-            WHEN COALESCE(NULLIF(s.operation_type, ''), 'sale') = 'refund' THEN CONCAT('Р’РѕР·РІСЂР°С‚ РѕС‚ РїРѕСЃС‚Р°РІС‰РёРєР°: ', COALESCE(NULLIF(s.original_ticket_info, ''), 'Р±РµР· РѕРїРёСЃР°РЅРёСЏ'))
-            WHEN COALESCE(NULLIF(s.operation_type, ''), 'sale') = 'rebook' THEN CONCAT('РџРµСЂРµР±СЂРѕРЅРёСЂРѕРІР°РЅРёРµ: ', COALESCE(NULLIF(s.original_ticket_info, ''), 'Р±РµР· РѕРїРёСЃР°РЅРёСЏ'))
+            WHEN s.op = 'refund' THEN CONCAT('Р’РѕР·РІСЂР°С‚ РѕС‚ РїРѕСЃС‚Р°РІС‰РёРєР°: ', COALESCE(NULLIF(s.original_ticket_info, ''), 'Р±РµР· РѕРїРёСЃР°РЅРёСЏ'))
+            WHEN s.op = 'rebook' THEN CONCAT('РџРµСЂРµР±СЂРѕРЅРёСЂРѕРІР°РЅРёРµ РїРѕСЃС‚Р°РІС‰РёРєР°: ', COALESCE(NULLIF(s.original_ticket_info, ''), 'Р±РµР· РѕРїРёСЃР°РЅРёСЏ'))
             ELSE NULL::text
           END AS comment,
-          s.net_amount::numeric(14,2) AS delta_amount,
+          CASE WHEN s.op = 'refund' THEN (0 - s.net_abs) ELSE s.net_abs END AS delta_amount,
           s.fare_amount,
           s.taxes_amount,
           s.commission_percent,
@@ -776,7 +797,7 @@ async function getAgentBalanceReport(req, res) {
           s.vat_percent,
           s.vat_amount,
           s.markup_amount
-        FROM travel_daily_sales s
+        FROM normalized_sales s
         JOIN travel_agents sup ON sup.id = s.supplier_agent_id
         WHERE s.supplier_agent_id IS NOT NULL
           AND ($1::bigint IS NULL OR s.supplier_agent_id = $1)
@@ -786,12 +807,25 @@ async function getAgentBalanceReport(req, res) {
 
         UNION ALL
 
+        /*
+          Agent formula:
+          balance = sale + rebook - payment - refund
+
+          The same daily sale creates the agent side too:
+          - sale   -> sale_amount increases balance by client sale amount
+          - rebook -> sale_amount increases balance by rebooking amount
+          - refund -> refund_amount decreases balance by agent refund amount
+        */
         SELECT
-          ('agent-sale-' || s.id::text) AS row_key,
+          ('agent-' || s.id::text) AS row_key,
           s.agent_id,
           a.name AS agent,
           s.sale_date AS txn_date,
-          CASE WHEN COALESCE(NULLIF(s.operation_type, ''), 'sale') = 'refund' THEN 'sale_refund' WHEN COALESCE(NULLIF(s.operation_type, ''), 'sale') = 'rebook' THEN 'sale_rebook' ELSE 'sale' END::text AS entry_type,
+          CASE
+            WHEN s.op = 'refund' THEN 'agent_refund'
+            WHEN s.op = 'rebook' THEN 'agent_rebook'
+            ELSE 'sale'
+          END::text AS entry_type,
           s.id AS sale_id,
           NULL::bigint AS payment_id,
           s.sale_date,
@@ -799,16 +833,16 @@ async function getAgentBalanceReport(req, res) {
           s.service_type,
           s.direction,
           s.traveller_name,
-          s.sale_amount::numeric(14,2) AS sale_amount,
+          CASE WHEN s.op IN ('sale', 'rebook') THEN s.sale_abs ELSE 0::numeric(14,2) END AS sale_amount,
           0::numeric(14,2) AS supply_amount,
           0::numeric(14,2) AS payment_amount,
-          CASE WHEN COALESCE(NULLIF(s.operation_type, ''), 'sale') = 'refund' THEN ABS(s.sale_amount)::numeric(14,2) ELSE 0::numeric(14,2) END AS refund_amount,
+          CASE WHEN s.op = 'refund' THEN s.sale_abs ELSE 0::numeric(14,2) END AS refund_amount,
           CASE
-            WHEN COALESCE(NULLIF(s.operation_type, ''), 'sale') = 'refund' THEN CONCAT('Р’РѕР·РІСЂР°С‚ Р°РіРµРЅС‚Сѓ. РЎР±РѕСЂ: ', COALESCE(s.refund_fee_amount, 0)::text)
-            WHEN COALESCE(NULLIF(s.operation_type, ''), 'sale') = 'rebook' THEN CONCAT('РџРµСЂРµР±СЂРѕРЅРёСЂРѕРІР°РЅРёРµ: ', COALESCE(NULLIF(s.original_ticket_info, ''), 'Р±РµР· РѕРїРёСЃР°РЅРёСЏ'))
+            WHEN s.op = 'refund' THEN CONCAT('Р’РѕР·РІСЂР°С‚ Р°РіРµРЅС‚Сѓ. РЎР±РѕСЂ: ', COALESCE(s.refund_fee_amount, 0)::text)
+            WHEN s.op = 'rebook' THEN CONCAT('РџРµСЂРµР±СЂРѕРЅРёСЂРѕРІР°РЅРёРµ Р°РіРµРЅС‚Р°: ', COALESCE(NULLIF(s.original_ticket_info, ''), 'Р±РµР· РѕРїРёСЃР°РЅРёСЏ'))
             ELSE NULL::text
           END AS comment,
-          s.sale_amount::numeric(14,2) AS delta_amount,
+          CASE WHEN s.op = 'refund' THEN (0 - s.sale_abs) ELSE s.sale_abs END AS delta_amount,
           s.fare_amount,
           s.taxes_amount,
           s.commission_percent,
@@ -816,52 +850,16 @@ async function getAgentBalanceReport(req, res) {
           s.vat_percent,
           s.vat_amount,
           s.markup_amount
-        FROM travel_daily_sales s
+        FROM normalized_sales s
         JOIN travel_agents a ON a.id = s.agent_id
-        WHERE s.supplier_agent_id IS NOT NULL
-          AND ($1::bigint IS NULL OR s.agent_id = $1)
+        WHERE ($1::bigint IS NULL OR s.agent_id = $1)
           AND ($2::date IS NULL OR s.sale_date >= $2::date)
           AND ($3::date IS NULL OR s.sale_date <= $3::date)
           AND ($4::text = '' OR s.service_type = $4)
 
         UNION ALL
 
-        SELECT
-          ('legacy-sale-' || s.id::text) AS row_key,
-          s.agent_id,
-          a.name AS agent,
-          s.sale_date AS txn_date,
-          'legacy_sale'::text AS entry_type,
-          s.id AS sale_id,
-          NULL::bigint AS payment_id,
-          s.sale_date,
-          NULL::date AS payment_date,
-          s.service_type,
-          s.direction,
-          s.traveller_name,
-          s.sale_amount::numeric(14,2) AS sale_amount,
-          0::numeric(14,2) AS supply_amount,
-          0::numeric(14,2) AS payment_amount,
-          0::numeric(14,2) AS refund_amount,
-          NULL::text AS comment,
-          s.sale_amount::numeric(14,2) AS delta_amount,
-          s.fare_amount,
-          s.taxes_amount,
-          s.commission_percent,
-          s.commission_amount,
-          s.vat_percent,
-          s.vat_amount,
-          s.markup_amount
-        FROM travel_daily_sales s
-        JOIN travel_agents a ON a.id = s.agent_id
-        WHERE s.supplier_agent_id IS NULL
-          AND ($1::bigint IS NULL OR s.agent_id = $1)
-          AND ($2::date IS NULL OR s.sale_date >= $2::date)
-          AND ($3::date IS NULL OR s.sale_date <= $3::date)
-          AND ($4::text = '' OR s.service_type = $4)
-
-        UNION ALL
-
+        /* Legacy payment inside old daily sale rows. */
         SELECT
           ('legacy-payment-' || s.id::text) AS row_key,
           s.agent_id,
@@ -877,10 +875,10 @@ async function getAgentBalanceReport(req, res) {
           s.traveller_name,
           0::numeric(14,2) AS sale_amount,
           0::numeric(14,2) AS supply_amount,
-          s.payment::numeric(14,2) AS payment_amount,
+          ABS(COALESCE(s.payment, 0))::numeric(14,2) AS payment_amount,
           0::numeric(14,2) AS refund_amount,
           s.comment,
-          (0 - s.payment)::numeric(14,2) AS delta_amount,
+          (0 - ABS(COALESCE(s.payment, 0)))::numeric(14,2) AS delta_amount,
           s.fare_amount,
           s.taxes_amount,
           s.commission_percent,
@@ -888,10 +886,10 @@ async function getAgentBalanceReport(req, res) {
           s.vat_percent,
           s.vat_amount,
           s.markup_amount
-        FROM travel_daily_sales s
+        FROM normalized_sales s
         JOIN travel_agents a ON a.id = s.agent_id
         WHERE s.supplier_agent_id IS NULL
-          AND COALESCE(s.payment, 0) > 0
+          AND COALESCE(s.payment, 0) <> 0
           AND ($1::bigint IS NULL OR s.agent_id = $1)
           AND ($2::date IS NULL OR s.payment_date >= $2::date)
           AND ($3::date IS NULL OR s.payment_date <= $3::date)
@@ -899,6 +897,7 @@ async function getAgentBalanceReport(req, res) {
 
         UNION ALL
 
+        /* Manual money movements: payment decreases balance; refund also decreases balance. */
         SELECT
           ('payment-' || p.id::text) AS row_key,
           p.agent_id,
@@ -914,10 +913,10 @@ async function getAgentBalanceReport(req, res) {
           ''::text AS traveller_name,
           0::numeric(14,2) AS sale_amount,
           0::numeric(14,2) AS supply_amount,
-          CASE WHEN COALESCE(NULLIF(p.entry_type, ''), 'payment') = 'refund' THEN 0::numeric(14,2) ELSE p.amount::numeric(14,2) END AS payment_amount,
-          CASE WHEN COALESCE(NULLIF(p.entry_type, ''), 'payment') = 'refund' THEN p.amount::numeric(14,2) ELSE 0::numeric(14,2) END AS refund_amount,
+          CASE WHEN COALESCE(NULLIF(p.entry_type, ''), 'payment') = 'payment' THEN ABS(COALESCE(p.amount, 0))::numeric(14,2) ELSE 0::numeric(14,2) END AS payment_amount,
+          CASE WHEN COALESCE(NULLIF(p.entry_type, ''), 'payment') = 'refund' THEN ABS(COALESCE(p.amount, 0))::numeric(14,2) ELSE 0::numeric(14,2) END AS refund_amount,
           p.comment,
-          CASE WHEN COALESCE(NULLIF(p.entry_type, ''), 'payment') = 'refund' THEN p.amount::numeric(14,2) ELSE (0 - p.amount)::numeric(14,2) END AS delta_amount,
+          (0 - ABS(COALESCE(p.amount, 0)))::numeric(14,2) AS delta_amount,
           0::numeric(14,2) AS fare_amount,
           0::numeric(14,2) AS taxes_amount,
           0::numeric(5,2) AS commission_percent,
