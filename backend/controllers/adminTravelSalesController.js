@@ -105,7 +105,7 @@ function calculateSaleFinance(body = {}) {
 
   if (operationType === "refund") {
     const supplierRefundTotal = roundMoney(Math.max(0, refundFare + refundTaxes - penalty - refundCommission));
-    const clientRefundTotal = roundMoney(Math.max(0, supplierRefundTotal - refundFee));
+    const agentRefundTotal = roundMoney(Math.max(0, supplierRefundTotal + refundFee));
     return {
       operationType,
       originalSaleDate: validateDate(body.original_sale_date),
@@ -118,7 +118,7 @@ function calculateSaleFinance(body = {}) {
       vatPercent: 0,
       vatAmount: 0,
       markupAmount: roundMoney(refundFee),
-      saleAmount: roundMoney(0 - clientRefundTotal),
+      saleAmount: roundMoney(0 - agentRefundTotal),
       refundFareAmount: roundMoney(refundFare),
       refundTaxesAmount: roundMoney(refundTaxes),
       penaltyAmount: roundMoney(penalty),
@@ -804,7 +804,7 @@ async function getAgentBalanceReport(req, res) {
           0::numeric(14,2) AS payment_amount,
           CASE WHEN COALESCE(NULLIF(s.operation_type, ''), 'sale') = 'refund' THEN ABS(s.sale_amount)::numeric(14,2) ELSE 0::numeric(14,2) END AS refund_amount,
           CASE
-            WHEN COALESCE(NULLIF(s.operation_type, ''), 'sale') = 'refund' THEN CONCAT('Р’РѕР·РІСЂР°С‚ РєР»РёРµРЅС‚Сѓ. РЎР±РѕСЂ: ', COALESCE(s.refund_fee_amount, 0)::text)
+            WHEN COALESCE(NULLIF(s.operation_type, ''), 'sale') = 'refund' THEN CONCAT('Р’РѕР·РІСЂР°С‚ Р°РіРµРЅС‚Сѓ. РЎР±РѕСЂ: ', COALESCE(s.refund_fee_amount, 0)::text)
             WHEN COALESCE(NULLIF(s.operation_type, ''), 'sale') = 'rebook' THEN CONCAT('РџРµСЂРµР±СЂРѕРЅРёСЂРѕРІР°РЅРёРµ: ', COALESCE(NULLIF(s.original_ticket_info, ''), 'Р±РµР· РѕРїРёСЃР°РЅРёСЏ'))
             ELSE NULL::text
           END AS comment,
