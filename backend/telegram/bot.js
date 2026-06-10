@@ -13,6 +13,11 @@ const { handleServiceActualCallback } = require("./handlers/serviceActualHandler
 const { buildServiceMessage } = require("../utils/telegramServiceCard");
 const { getContactUnlockSettings } = require("../utils/contactUnlockSettings");
 const {
+  isClickConfigured,
+  normalizePhone: normalizeClickPhone,
+  createClickOrderAndInvoice,
+} = require("../utils/clickMerchant");
+const {
   createProviderSupportDonationOrder,
   getProviderSupportSettings,
 } = require("../controllers/providerSupportController");
@@ -247,6 +252,10 @@ const PAYMENTS_PROVIDER_TOKEN =
   process.env.PAYMENTS_PROVIDER_TOKEN ||
   "";
 const PAYMENTS_CURRENCY = String(process.env.TELEGRAM_PAYMENTS_CURRENCY || "UZS");
+const CLICK_TELEGRAM_PAYMENTS_ENABLED = String(process.env.CLICK_TELEGRAM_PAYMENTS_ENABLED || "1") !== "0";
+function shouldUseClickTelegramPayments() {
+  return CLICK_TELEGRAM_PAYMENTS_ENABLED && isClickConfigured();
+}
 const TOPUP_AMOUNTS = [10000, 50000, 100000];
 function currencyMinorFactor(ccy) {
   const c = String(ccy || "").toUpperCase().trim();
@@ -11283,7 +11292,176 @@ bot.action("support_project:skip", async (ctx) => {
   }
 });
 
+
+async function getProviderClickPhone(providerId) {
+  try {
+    const pid = Number(providerId || 0);
+    if (!pid || !pool) return "";
+    const { rows } = await pool.query(
+      `SELECT phone, contact, telegram_phone FROM providers WHERE id=$1 LIMIT 1`,
+      [pid]
+    ).catch(async () => {
+      return pool.query(`SELECT phone, contact FROM providers WHERE id=$1 LIMIT 1`, [pid]);
+    });
+    const row = rows?.[0] || {};
+    return normalizeClickPhone(row.phone || row.telegram_phone || row.contact || "");
+  } catch {
+    return "";
+  }
+}
+
+async function getClientClickPhone(clientId) {
+  try {
+    const cid = Number(clientId || 0);
+    if (!cid || !pool) return "";
+    const { rows } = await pool.query(
+      `SELECT phone, phone_number, telegram_phone FROM clients WHERE id=$1 LIMIT 1`,
+      [cid]
+    ).catch(async () => {
+      return pool.query(`SELECT phone FROM clients WHERE id=$1 LIMIT 1`, [cid]);
+    });
+    const row = rows?.[0] || {};
+    return normalizeClickPhone(row.phone || row.phone_number || row.telegram_phone || "");
+  } catch {
+    return "";
+  }
+}
+
+async function sendClickProviderSupportInvoice(ctx, { providerId, serviceId = null, amountSum }) {
+  const pid = Number(providerId || 0);
+  const sid = Number(serviceId || 0) || 0;
+  const amount = Math.trunc(Number(amountSum || 0));
+
+  if (!Number.isFinite(pid) || pid <= 0) {
+    await safeReply(ctx, "⚠️ Не удалось определить поставщика. Откройте бота через /start.");
+    return { ok: false, reason: "bad_provider" };
+  }
+  if (!Number.isFinite(amount) || amount <= 0) {
+    await safeReply(ctx, "⚠️ Некорректная сумма поддержки проекта.");
+    return { ok: false, reason: "bad_amount" };
+  }
+
+  const phone = await getProviderClickPhone(pid);
+  if (!phone) {
+    await safeReply(ctx, "⚠️ Для оплаты через Click нужен номер телефона в профиле поставщика. Добавьте телефон в кабинете или сообщите его менеджеру.");
+    return { ok: false, reason: "no_phone" };
+  }
+
+  await ensureTelegramPaymentsTables(pool);
+  const supportContext = getProviderSupportContext(ctx);
+  const amountMinor = amount * currencyMinorFactor(PAYMENTS_CURRENCY);
+
+  const donationQ = await pool.query(
+    `
+    INSERT INTO provider_support_donations (
+      provider_id, telegram_chat_id, service_id, amount_tiyin,
+      status, source, note, expires_at
+    )
+    VALUES ($1, $2, $3, $4, 'created', 'click_invoice', $5, NOW() + INTERVAL '45 minutes')
+    RETURNING id
+    `,
+    [pid, Number(ctx.from?.id || ctx.chat?.id || 0) || null, sid || null, amountMinor, supportContext]
+  );
+
+  const donationId = Number(donationQ.rows?.[0]?.id || 0) || 0;
+  const merchantTransId = `tg-support-${pid}-${donationId || Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+  const result = await createClickOrderAndInvoice(pool, {
+    merchantTransId,
+    orderType: "support_project",
+    actorRole: "provider",
+    actorId: pid,
+    telegramChatId: Number(ctx.from?.id || ctx.chat?.id || 0) || null,
+    serviceId: sid || null,
+    donationId: donationId || null,
+    amountSum: amount,
+    phoneNumber: phone,
+    meta: { support_context: supportContext, source: "telegram_bot" },
+  });
+
+  await safeReply(
+    ctx,
+    `✅ Счёт Click создан.\n\n📲 Откройте приложение <b>Click Up</b> и оплатите выставленный счёт.\n\nСумма: <b>${amount.toLocaleString("ru-RU")} сум</b>`,
+    { parse_mode: "HTML" }
+  );
+
+  return { ok: true, click: true, invoice: result.invoice };
+}
+
+async function sendClickUnlockContactInvoice(ctx, { clientId, serviceId, amountSum }) {
+  const cid = Number(clientId || 0);
+  const sid = Number(serviceId || 0);
+  const amount = Math.trunc(Number(amountSum || 0));
+
+  if (!Number.isFinite(cid) || cid <= 0 || !Number.isFinite(sid) || sid <= 0) {
+    await safeReply(ctx, "⚠️ Не удалось подготовить оплату. Откройте карточку услуги заново.");
+    return { ok: false, reason: "bad_payload" };
+  }
+  if (!Number.isFinite(amount) || amount <= 0) {
+    await safeReply(ctx, "⚠️ Некорректная сумма открытия контактов.");
+    return { ok: false, reason: "bad_amount" };
+  }
+
+  const serviceCheck = await validateServiceForTelegramUnlock(pool, sid);
+  if (!serviceCheck.ok) {
+    await trackTelegramBotEvent('tg_click_unlock_invoice_blocked', {
+      clientId: cid,
+      serviceId: sid,
+      chatId: ctx.from?.id,
+      meta: { reason: serviceCheck.reason },
+    });
+    await safeReply(ctx, "⚠️ Эта услуга уже недоступна для открытия контактов.");
+    return { ok: false, reason: serviceCheck.reason };
+  }
+
+  const phone = await getClientClickPhone(cid);
+  if (!phone) {
+    await safeReply(ctx, "⚠️ Для оплаты через Click нужен номер телефона в профиле клиента. Укажите телефон в профиле и откройте оплату заново.");
+    return { ok: false, reason: "no_phone" };
+  }
+
+  const settings = await getContactUnlockSettings(pool).catch(() => null);
+  const currentPrice = Math.trunc(Number(settings?.effective_price ?? CONTACT_UNLOCK_PRICE ?? 0));
+  if (currentPrice > 0 && amount !== currentPrice) {
+    await safeReply(ctx, "⚠️ Цена открытия изменилась. Откройте карточку услуги заново.");
+    return { ok: false, reason: "stale_price" };
+  }
+
+  const merchantTransId = `tg-unlock-${cid}-${sid}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const result = await createClickOrderAndInvoice(pool, {
+    merchantTransId,
+    orderType: "unlock_contact",
+    actorRole: "client",
+    actorId: cid,
+    telegramChatId: Number(ctx.from?.id || ctx.chat?.id || 0) || null,
+    serviceId: sid,
+    amountSum: amount,
+    phoneNumber: phone,
+    meta: { source: "telegram_bot", provider_id: serviceCheck.service?.provider_id || null },
+  });
+
+  await trackTelegramBotEvent('tg_click_unlock_invoice_open', {
+    clientId: cid,
+    serviceId: sid,
+    providerId: serviceCheck.service?.provider_id || null,
+    chatId: ctx.from?.id,
+    meta: { amount_sum: amount, currency: "UZS", invoice_id: result.invoice?.invoice_id || null },
+  });
+
+  await safeReply(
+    ctx,
+    `✅ Счёт Click создан.\n\n📲 Откройте приложение <b>Click Up</b> и оплатите выставленный счёт. После успешной оплаты контакты откроются автоматически.\n\nСумма: <b>${amount.toLocaleString("ru-RU")} сум</b>`,
+    { parse_mode: "HTML" }
+  );
+
+  return { ok: true, click: true, invoice: result.invoice };
+}
+
 async function sendProviderSupportInvoice(ctx, { providerId, serviceId = null, amountSum }) {
+  if (shouldUseClickTelegramPayments()) {
+    return sendClickProviderSupportInvoice(ctx, { providerId, serviceId, amountSum });
+  }
+
   const pid = Number(providerId || 0);
   const sid = Number(serviceId || 0) || 0;
   const amount = Math.trunc(Number(amountSum || 0));
@@ -11838,6 +12016,10 @@ async function sendUnlockPaywallCard(ctx, { serviceId, balanceSum, priceSum }) {
 }
 
 async function sendUnlockContactInvoice(ctx, { clientId, serviceId, amountSum }) {
+  if (shouldUseClickTelegramPayments()) {
+    return sendClickUnlockContactInvoice(ctx, { clientId, serviceId, amountSum });
+  }
+
   const cid = Number(clientId);
   const sid = Number(serviceId);
   const amount = Math.trunc(Number(amountSum || 0));
