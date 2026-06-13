@@ -44,6 +44,7 @@ const adminProviderFunnelRoutes = require("./routes/adminProviderFunnelRoutes");
 const serviceStatsRoutes = require("./routes/serviceStatsRoutes");
 const providerSupportRoutes = require("./routes/providerSupportRoutes");
 const activityEventsRoutes = require("./routes/activityEventsRoutes");
+const socialRoutes = require("./routes/socialRoutes");
 
 dotenv.config();
 const app = express();
@@ -153,6 +154,9 @@ const hotels = require("./controllers/hotelsController");
 
 const marketplaceRoutes = require("./routes/marketplaceRoutes");
 app.use("/api/marketplace", marketplaceRoutes);
+
+// Social network layer: provider posts, feed, follows, comments
+app.use("/api/social", socialRoutes);
 
 const clientRoutes = require("./routes/clientRoutes");
 app.use("/api/clients", clientRoutes);
