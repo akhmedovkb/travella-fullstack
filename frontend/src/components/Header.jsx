@@ -477,6 +477,13 @@ export default function Header() {
                         description="Отказные туры, отели, билеты и услуги"
                         icon={<IconChecklist />}
                       />
+
+                      <DropdownItem
+                        to="/community"
+                        label="Travella Community"
+                        description="Лента поставщиков, новости, обзоры и предложения"
+                        icon={<IconDoc />}
+                      />
               
                       {role === "provider" && (
                         <DropdownItem
@@ -593,6 +600,13 @@ export default function Header() {
                         label={`${t("nav.provider_finance", "📈 Спрос и клиенты")}${demandNewCount > 0 ? ` · ${demandNewCount}` : ""}`}
                         description={t("nav.provider_finance_desc", "Открытия контактов, горячие клиенты и быстрые запросы")}
                         icon={<IconWallet />}
+                      />
+
+                      <DropdownItem
+                        to="/dashboard/social"
+                        label="🧭 Публикации"
+                        description="Посты, фото, видео и новости для ленты Travella"
+                        icon={<IconDoc />}
                       />
                   
                     </DropdownPanel>
@@ -716,6 +730,7 @@ export default function Header() {
           <nav className="space-y-2 pb-3">
             <RowGroupDark title={t("nav.products", "Продукты")}>
               <NavItemMobileDark to="/" label="MARKETPLACE" end />
+              <NavItemMobileDark to="/community" label="Travella Community" icon={<IconDoc />} />
               {role === "provider" && <NavItemMobileDark to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />}
               <NavItemMobileDark to="/hotels" label={t("nav.hotels", "Отели")} icon={<IconHotel />} />
             </RowGroupDark>
@@ -730,6 +745,7 @@ export default function Header() {
                 <NavItemMobileDark to="/dashboard/favorites" label={t("nav.favorites", "Избранное")} icon={<IconHeart />} badge={favCount} />
                 <NavItemMobileDark to="/dashboard/bookings" label={t("nav.bookings", "Брони")} icon={<IconBookings />} badge={bookingsBadge} loading={loading} />
                 <NavItemMobileDark to="/dashboard/finance" label={`${t("nav.provider_finance", "📈 Спрос и клиенты")}${demandNewCount > 0 ? ` · ${demandNewCount}` : ""}`} icon={<IconWallet />} badge={demandNewCount} />
+                <NavItemMobileDark to="/dashboard/social" label="🧭 Публикации" icon={<IconDoc />} />
                 <NavItemMobileDark to="/dashboard/passport-parser" label="Passport Parser" icon={<IconDoc />} />
               </RowGroupDark>
             )}
