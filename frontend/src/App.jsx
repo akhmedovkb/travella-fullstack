@@ -9,6 +9,7 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import PrivateRoute from "./pages/PrivateRoute";
 import Marketplace from "./pages/Marketplace";
+import Community from "./pages/Community";
 import ProviderFavorites from "./pages/ProviderFavorites";
 import ProviderProfile from "./pages/ProviderProfile";          // публичный профиль провайдера
 import ProviderProfileCabinet from "./components/ProviderProfile"; // кабинет провайдера (/dashboard/profile)
@@ -64,6 +65,7 @@ import ClientBalance from "./pages/ClientBalance";
 import ProviderRequests from "./pages/ProviderRequests";
 import ProviderBookings from "./pages/ProviderBookings";
 import ProviderFinance from "./pages/ProviderFinance";
+import ProviderSocialPosts from "./pages/ProviderSocialPosts";
 
 // 🔹 Новые провайдерские страницы «услуг» + календарь
 import ProviderServicesTourBuilder from "./pages/ProviderServicesTourBuilder";
@@ -163,6 +165,7 @@ export default function App() {
           <Routes>
             {/* --- Главная: сразу MARKETPLACE --- */}
             <Route path="/" element={<Marketplace />} />
+            <Route path="/community" element={<Community />} />
 
 
             <Route path="/support/success" element={<SupportSuccess />} />
@@ -291,6 +294,14 @@ export default function App() {
               element={
                 <PrivateRoute>
                   <ProviderFinance />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/dashboard/social"
+              element={
+                <PrivateRoute>
+                  <ProviderSocialPosts />
                 </PrivateRoute>
               }
             />
