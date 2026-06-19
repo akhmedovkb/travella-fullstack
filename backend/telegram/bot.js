@@ -8077,12 +8077,6 @@ bot.on("contact", async (ctx) => {
   }
 
   const phone = contact.phone_number;
-
-  if (ctx.session?.pendingClickUnlock) {
-    await continuePendingClickUnlockWithPhone(ctx, phone);
-    return;
-  }
-
   const requestedRole = ctx.session?.requestedRole || "client";
   await handlePhoneRegistration(ctx, requestedRole, phone);
 });
@@ -8102,11 +8096,6 @@ bot.hears(/^\+?\d[\d\s\-()]{5,}$/i, async (ctx, next) => {
 
   const t = String(ctx.message?.text || "").trim();
   if (normalizeDateInput(t)) return next();
-
-  if (ctx.session?.pendingClickUnlock) {
-    await continuePendingClickUnlockWithPhone(ctx, t);
-    return;
-  }
 
   if (!ctx.session || !ctx.session.requestedRole) return next();
 
@@ -11399,35 +11388,6 @@ async function sendClickProviderSupportInvoice(ctx, { providerId, serviceId = nu
   return { ok: true, click: true, invoice: result.invoice };
 }
 
-async function continuePendingClickUnlockWithPhone(ctx, rawPhone) {
-  const pending = ctx.session?.pendingClickUnlock || null;
-  if (!pending) return false;
-
-  const phone = normalizeClickPhone(rawPhone);
-  if (!phone) {
-    await safeReply(ctx, "⚠️ Не удалось прочитать номер Click. Отправьте номер в формате +998901234567.");
-    return true;
-  }
-
-  const cid = Number(pending.clientId || 0);
-  try {
-    await pool.query(`UPDATE clients SET phone=COALESCE(NULLIF(phone,''), $2) WHERE id=$1`, [cid, phone]);
-  } catch (e) {
-    console.warn("[tg-bot] save click phone skipped:", e?.message || e);
-  }
-
-  const copy = { ...pending };
-  delete ctx.session.pendingClickUnlock;
-
-  await safeReply(ctx, "✅ Номер Click принят. Создаю счёт…", { reply_markup: { remove_keyboard: true } });
-
-  return sendClickUnlockContactInvoice(ctx, {
-    clientId: copy.clientId,
-    serviceId: copy.serviceId,
-    amountSum: copy.amountSum,
-  });
-}
-
 async function sendClickUnlockContactInvoice(ctx, { clientId, serviceId, amountSum }) {
   const cid = Number(clientId || 0);
   const sid = Number(serviceId || 0);
@@ -11456,19 +11416,7 @@ async function sendClickUnlockContactInvoice(ctx, { clientId, serviceId, amountS
 
   const phone = await getClientClickPhone(cid);
   if (!phone) {
-    ctx.session = ctx.session || {};
-    ctx.session.pendingClickUnlock = { clientId: cid, serviceId: sid, amountSum: amount };
-    await safeReply(
-      ctx,
-      "📲 Для Click нужно знать номер телефона, привязанный к Click.\n\nОтправьте номер кнопкой ниже или напишите его текстом в формате +998901234567.",
-      {
-        reply_markup: {
-          keyboard: [[{ text: "📲 Отправить номер для Click", request_contact: true }]],
-          resize_keyboard: true,
-          one_time_keyboard: true,
-        },
-      }
-    );
+    await safeReply(ctx, "⚠️ Для оплаты через Click нужен номер телефона в профиле клиента. Укажите телефон в профиле и откройте оплату заново.");
     return { ok: false, reason: "no_phone" };
   }
 
@@ -12041,13 +11989,25 @@ async function sendUnlockPaywallCard(ctx, { serviceId, balanceSum, priceSum }) {
     priceSum,
   });
 
+  const paymentRows = [];
+  if (PAYMENTS_PROVIDER_TOKEN) {
+    paymentRows.push([
+      { text: `💳 Payme: оплатить и открыть (${price} сум)`, callback_data: `unlock:payme:${serviceId}` },
+    ]);
+  } else {
+    paymentRows.push([
+      { text: "💳 Пополнить баланс", url: `${SITE_URL}/client/balance` },
+    ]);
+  }
+  if (isClickConfigured()) {
+    paymentRows.push([
+      { text: `🟣 Click: оплатить и открыть (${price} сум)`, callback_data: `unlock:click:${serviceId}` },
+    ]);
+  }
+
   const replyMarkup = {
     inline_keyboard: [
-      [
-        (PAYMENTS_PROVIDER_TOKEN || shouldUseClickTelegramPayments())
-          ? { text: shouldUseClickTelegramPayments() ? `🟣 Click: оплатить и открыть (${price} сум)` : `💳 Payme: оплатить и открыть (${price} сум)`, callback_data: `unlock:pay:${serviceId}` }
-          : { text: "💳 Пополнить баланс", url: `${SITE_URL}/client/balance` },
-      ],
+      ...paymentRows,
       [{ text: "🔓 Повторить открытие", callback_data: "balance:retry" }],
     ],
   };
@@ -12067,11 +12027,7 @@ async function sendUnlockPaywallCard(ctx, { serviceId, balanceSum, priceSum }) {
   });
 }
 
-async function sendUnlockContactInvoice(ctx, { clientId, serviceId, amountSum }) {
-  if (shouldUseClickTelegramPayments()) {
-    return sendClickUnlockContactInvoice(ctx, { clientId, serviceId, amountSum });
-  }
-
+async function sendPaymeUnlockContactInvoice(ctx, { clientId, serviceId, amountSum }) {
   const cid = Number(clientId);
   const sid = Number(serviceId);
   const amount = Math.trunc(Number(amountSum || 0));
@@ -12134,6 +12090,10 @@ async function sendUnlockContactInvoice(ctx, { clientId, serviceId, amountSum })
   });
 
   return { ok: true };
+}
+
+async function sendUnlockContactInvoice(ctx, { clientId, serviceId, amountSum }) {
+  return sendPaymeUnlockContactInvoice(ctx, { clientId, serviceId, amountSum });
 }
 
 
@@ -12284,7 +12244,7 @@ bot.on("pre_checkout_query", async (ctx) => {
       }
 
       const settings = await getContactUnlockSettings(pool).catch(() => null);
-      const currentPrice = tiyinToSum(settings?.effective_price || 0) || CONTACT_UNLOCK_PRICE || 10000;
+      const currentPrice = Math.trunc(Number(settings?.effective_price ?? CONTACT_UNLOCK_PRICE ?? 0));
       if (currentPrice > 0 && Number(parsed.amountSum) !== currentPrice) {
         console.warn("[tg-bot] pre_checkout stale invoice rejected", {
           payloadAmount: parsed.amountSum,
@@ -12939,16 +12899,17 @@ bot.on("successful_payment", async (ctx) => {
   }
 });
 
-bot.action(/^unlock:pay:(\d+)$/, async (ctx) => {
+bot.action(/^unlock:(pay|payme|click):(\d+)$/, async (ctx) => {
   try {
     await safeCb(ctx);
+    const paymentMethod = String(ctx.match?.[1] || "payme").toLowerCase();
 
     if (ctx.chat?.type !== "private") {
       await safeReply(ctx, "🔒 Оплата и показ контактов доступны только в личном чате с ботом.");
       return;
     }
 
-    const serviceId = Number(ctx.match?.[1] || 0);
+    const serviceId = Number(ctx.match?.[2] || 0);
     if (!Number.isFinite(serviceId) || serviceId <= 0) {
       await safeReply(ctx, "⚠️ Некорректный ID услуги. Откройте карточку заново.");
       return;
@@ -12989,13 +12950,21 @@ bot.action(/^unlock:pay:(\d+)$/, async (ctx) => {
     ctx.session = ctx.session || {};
     ctx.session.lastUnlockServiceId = serviceId;
 
-    await sendUnlockContactInvoice(ctx, {
-      clientId: clientRow.id,
-      serviceId,
-      amountSum: priceSum,
-    });
+    if (paymentMethod === "click") {
+      await sendClickUnlockContactInvoice(ctx, {
+        clientId: clientRow.id,
+        serviceId,
+        amountSum: priceSum,
+      });
+    } else {
+      await sendPaymeUnlockContactInvoice(ctx, {
+        clientId: clientRow.id,
+        serviceId,
+        amountSum: priceSum,
+      });
+    }
   } catch (e) {
-    console.error("[tg-bot] unlock:pay error:", e?.message || e);
+    console.error("[tg-bot] unlock payment error:", e?.message || e);
     try { await safeReply(ctx, "⚠️ Не удалось создать оплату. Попробуйте позже."); } catch {}
   }
 });
