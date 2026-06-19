@@ -367,9 +367,25 @@ async function handleClickCallback(db, raw) {
     return { ...clickResponse(params, -9, "Transaction cancelled") };
   }
 
-  await db.query("BEGIN");
+  const tx = await db.connect();
   try {
-    const paidQ = await db.query(
+    await tx.query("BEGIN");
+
+    const lockedQ = await tx.query(
+      `SELECT * FROM click_orders WHERE merchant_trans_id=$1 FOR UPDATE`,
+      [merchantTransId]
+    );
+    const lockedOrder = lockedQ.rows[0];
+    if (!lockedOrder) {
+      await tx.query("ROLLBACK");
+      return { ...clickResponse(params, -5, "User does not exist") };
+    }
+    if (String(lockedOrder.status || "") === "paid") {
+      await tx.query("COMMIT");
+      return { ...clickResponse(params, 0, "Success"), merchant_confirm_id: Number(lockedOrder.id) };
+    }
+
+    const paidQ = await tx.query(
       `UPDATE click_orders
           SET status='paid',
               click_trans_id=$2,
@@ -381,13 +397,15 @@ async function handleClickCallback(db, raw) {
               error_note=NULL
         WHERE id=$1
         RETURNING *`,
-      [order.id, params.click_trans_id || null, params.click_paydoc_id || null, merchantPrepareId]
+      [lockedOrder.id, params.click_trans_id || null, params.click_paydoc_id || null, merchantPrepareId]
     );
-    await applyClickSuccessEffect(db, paidQ.rows[0]);
-    await db.query("COMMIT");
+    await applyClickSuccessEffect(tx, paidQ.rows[0]);
+    await tx.query("COMMIT");
   } catch (e) {
-    await db.query("ROLLBACK");
+    try { await tx.query("ROLLBACK"); } catch {}
     throw e;
+  } finally {
+    tx.release();
   }
 
   return { ...clickResponse(params, 0, "Success"), merchant_confirm_id: Number(order.id) };
