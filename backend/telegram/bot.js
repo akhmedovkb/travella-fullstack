@@ -11421,7 +11421,7 @@ async function sendClickUnlockContactInvoice(ctx, { clientId, serviceId, amountS
   }
 
   const settings = await getContactUnlockSettings(pool).catch(() => null);
-  const currentPrice = Math.trunc(Number(settings?.effective_price ?? CONTACT_UNLOCK_PRICE ?? 0));
+  const currentPrice = tiyinToSum(settings?.effective_price || 0) || CONTACT_UNLOCK_PRICE || 10000;
   if (currentPrice > 0 && amount !== currentPrice) {
     await safeReply(ctx, "⚠️ Цена открытия изменилась. Откройте карточку услуги заново.");
     return { ok: false, reason: "stale_price" };
@@ -12232,7 +12232,7 @@ bot.on("pre_checkout_query", async (ctx) => {
       }
 
       const settings = await getContactUnlockSettings(pool).catch(() => null);
-      const currentPrice = Math.trunc(Number(settings?.effective_price ?? CONTACT_UNLOCK_PRICE ?? 0));
+      const currentPrice = tiyinToSum(settings?.effective_price || 0) || CONTACT_UNLOCK_PRICE || 10000;
       if (currentPrice > 0 && Number(parsed.amountSum) !== currentPrice) {
         console.warn("[tg-bot] pre_checkout stale invoice rejected", {
           payloadAmount: parsed.amountSum,
