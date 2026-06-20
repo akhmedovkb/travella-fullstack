@@ -1029,6 +1029,11 @@ const [unlockPayModal, setUnlockPayModal] = useState({
   orderId: null,
   serviceId: null,
 });
+const [clickPhone, setClickPhone] = useState("");
+const [clickPayLoading, setClickPayLoading] = useState(false);
+const [clickPayMessage, setClickPayMessage] = useState("");
+const [clickPayError, setClickPayError] = useState("");
+const [clickPollUntil, setClickPollUntil] = useState(0);
 const [showUnlockIntroModal, setShowUnlockIntroModal] = useState(false);
 const [unlockIntroPriceSum, setUnlockIntroPriceSum] = useState(null);
 const [unlockIntroLoading, setUnlockIntroLoading] = useState(false);
@@ -1088,7 +1093,117 @@ const closeUnlockPayModal = async () => {
     orderId: null,
     serviceId: null,
   });
+  setClickPayMessage("");
+  setClickPayError("");
+  setClickPollUntil(0);
 };
+
+const normalizeClickPhoneInput = (value) => {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (digits.length === 9) return `998${digits}`;
+  if (digits.length === 12 && digits.startsWith("998")) return digits;
+  if (digits.length === 13 && digits.startsWith("+998")) return digits.slice(1);
+  return digits;
+};
+
+const createClickUnlockInvoice = async () => {
+  const serviceId = Number(unlockPayModal.serviceId || id || 0);
+  const phone = normalizeClickPhoneInput(clickPhone);
+
+  setClickPayError("");
+  setClickPayMessage("");
+
+  if (!serviceId) {
+    setClickPayError("Услуга не найдена. Откройте карточку заново.");
+    return;
+  }
+
+  if (!phone || phone.length < 12) {
+    setClickPayError("Введите номер Click в формате 998901234567.");
+    return;
+  }
+
+  try {
+    setClickPayLoading(true);
+
+    const res = await apiPost(
+      "/api/client/unlock-click-invoice",
+      {
+        service_id: serviceId,
+        phone_number: phone,
+      },
+      "client"
+    );
+
+    if (res?.unlocked || res?.alreadyUnlocked) {
+      if (typeof window !== "undefined" && unlockStorageKey) {
+        window.localStorage.setItem(unlockStorageKey, "1");
+      }
+      setUnlocked(true);
+      setShowUnlockSuccessModal(true);
+      await closeUnlockPayModal();
+      return;
+    }
+
+    setClickPayMessage(
+      res?.message ||
+        "Click-счёт выставлен. Откройте приложение Click и оплатите счёт. Контакты откроются автоматически после оплаты."
+    );
+    setClickPollUntil(Date.now() + 10 * 60 * 1000);
+
+    await postUnlockStep("click_invoice_created_from_web", {
+      click_order_id: res?.click_order_id || res?.order_id || null,
+      click_invoice_id: res?.click_invoice_id || null,
+      amount_sum: Number(res?.amount_sum || unlockPayModal.shortfallSum || 0),
+    });
+  } catch (err) {
+    const data = err?.response?.data || err?.data || {};
+    const msg =
+      data?.click_error_note ||
+      data?.message ||
+      data?.error ||
+      err?.message ||
+      "Не удалось выставить Click-счёт";
+    setClickPayError(String(msg));
+  } finally {
+    setClickPayLoading(false);
+  }
+};
+
+useEffect(() => {
+  if (!clickPollUntil || !unlockPayModal.open || !unlockPayModal.serviceId) return;
+
+  let cancelled = false;
+  const serviceId = Number(unlockPayModal.serviceId || id || 0);
+
+  const check = async () => {
+    if (cancelled || Date.now() > clickPollUntil) return;
+
+    try {
+      const res = await apiGet(`/api/client/unlock-status?service_id=${serviceId}`, "client");
+      if (res?.unlocked) {
+        if (typeof window !== "undefined" && unlockStorageKey) {
+          window.localStorage.setItem(unlockStorageKey, "1");
+        }
+        setUnlocked(true);
+        setShowUnlockSuccessModal(true);
+        window.dispatchEvent(new Event("client:balance:changed"));
+        tSuccess("Контакты разблокированы");
+        setClickPollUntil(0);
+        await closeUnlockPayModal();
+      }
+    } catch (err) {
+      console.error("click unlock status poll error:", err);
+    }
+  };
+
+  check();
+  const timer = setInterval(check, 5000);
+  return () => {
+    cancelled = true;
+    clearInterval(timer);
+  };
+}, [clickPollUntil, unlockPayModal.open, unlockPayModal.serviceId, id, unlockStorageKey]);
 
 const copyTextSafe = async (text, type) => {
   try {
@@ -2851,6 +2966,39 @@ return (
                   </div>
                 </div>
 
+                <div className="mt-5 rounded-2xl border border-violet-100 bg-violet-50/70 px-4 py-4">
+                  <div className="text-sm font-black text-violet-900">🟣 Click invoice</div>
+                  <p className="mt-1 text-xs font-semibold leading-5 text-violet-800/80">
+                    Введите номер, привязанный к Click. Счёт придёт в приложение Click.
+                  </p>
+                  <input
+                    type="tel"
+                    inputMode="numeric"
+                    value={clickPhone}
+                    onChange={(e) => setClickPhone(e.target.value)}
+                    placeholder="998901234567"
+                    className="mt-3 w-full rounded-2xl border border-violet-200 bg-white px-4 py-3 text-sm font-bold text-gray-900 outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+                  />
+                  {!!clickPayError && (
+                    <div className="mt-2 rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 ring-1 ring-red-100">
+                      {clickPayError}
+                    </div>
+                  )}
+                  {!!clickPayMessage && (
+                    <div className="mt-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-semibold leading-5 text-emerald-800 ring-1 ring-emerald-100">
+                      {clickPayMessage}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={createClickUnlockInvoice}
+                    disabled={clickPayLoading}
+                    className="mt-3 inline-flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-500 px-4 py-3 text-sm font-black text-white shadow-[0_14px_32px_rgba(124,58,237,0.24)] transition hover:-translate-y-0.5 hover:shadow-[0_22px_48px_rgba(124,58,237,0.34)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
+                  >
+                    {clickPayLoading ? "Выставляем счёт..." : "🟣 Click: выставить счёт"}
+                  </button>
+                </div>
+
                 <div className="mt-6 flex flex-col gap-3 sm:flex-row">
                   <button
                     type="button"
@@ -2984,6 +3132,39 @@ return (
                   })}</span>
                 </div>
 
+                <div className="mt-5 rounded-2xl border border-violet-100 bg-violet-50/70 px-4 py-4">
+                  <div className="text-sm font-black text-violet-900">🟣 Click invoice</div>
+                  <p className="mt-1 text-xs font-semibold leading-5 text-violet-800/80">
+                    Введите номер, привязанный к Click. Счёт придёт в приложение Click.
+                  </p>
+                  <input
+                    type="tel"
+                    inputMode="numeric"
+                    value={clickPhone}
+                    onChange={(e) => setClickPhone(e.target.value)}
+                    placeholder="998901234567"
+                    className="mt-3 w-full rounded-2xl border border-violet-200 bg-white px-4 py-3 text-sm font-bold text-gray-900 outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+                  />
+                  {!!clickPayError && (
+                    <div className="mt-2 rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 ring-1 ring-red-100">
+                      {clickPayError}
+                    </div>
+                  )}
+                  {!!clickPayMessage && (
+                    <div className="mt-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-semibold leading-5 text-emerald-800 ring-1 ring-emerald-100">
+                      {clickPayMessage}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={createClickUnlockInvoice}
+                    disabled={clickPayLoading}
+                    className="mt-3 inline-flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-500 px-4 py-3 text-sm font-black text-white shadow-[0_14px_32px_rgba(124,58,237,0.24)] transition hover:-translate-y-0.5 hover:shadow-[0_22px_48px_rgba(124,58,237,0.34)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
+                  >
+                    {clickPayLoading ? "Выставляем счёт..." : "🟣 Click: выставить счёт"}
+                  </button>
+                </div>
+
                 <div className="mt-6 flex flex-col gap-3 sm:flex-row">
                   <button
                     type="button"
@@ -3016,7 +3197,7 @@ return (
                     <span className="pointer-events-none absolute inset-0 bg-orange-200/25 opacity-0 blur-xl transition-opacity duration-300 group-hover/pay:opacity-100" />
                     <span className="relative z-10">
                       {t("marketplace.go_to_payment", {
-                        defaultValue: "Оплатить и открыть",
+                        defaultValue: "Payme: оплатить и открыть",
                       })}
                     </span>
                   </button>
