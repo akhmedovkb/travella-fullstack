@@ -2,6 +2,11 @@
 
 const pool = require("../db");
 
+const {
+  isClickConfigured,
+  normalizePhone: normalizeClickPhone,
+  createClickOrderAndInvoice,
+} = require("../utils/clickMerchant");
 const { getContactUnlockSettings } = require("../utils/contactUnlockSettings");
 const { logUnlockFunnel } = require("../utils/contactUnlockFunnel");
 const {
@@ -804,6 +809,222 @@ async function autoUnlockAfterTopup(req, res) {
   }
 }
 
+
+async function createClickUnlockInvoice(req, res) {
+  const clientId = await findClientId(req);
+
+  if (!clientId) {
+    return res.status(401).json({ ok: false, error: "client_auth_required" });
+  }
+
+  if (!isClickConfigured("web")) {
+    return res.status(500).json({ ok: false, error: "click_web_not_configured" });
+  }
+
+  const serviceId = toIntOrNull(req.body?.service_id || req.body?.serviceId);
+  const rawPhone = req.body?.phone_number || req.body?.phoneNumber || req.body?.phone || "";
+  const phoneNumber = normalizeClickPhone(rawPhone);
+
+  if (!serviceId) {
+    return res.status(400).json({ ok: false, error: "service_required" });
+  }
+
+  if (!phoneNumber) {
+    return res.status(400).json({
+      ok: false,
+      error: "click_phone_required",
+      message: "Укажите номер телефона Click в формате 998901234567",
+    });
+  }
+
+  const db = await pool.connect();
+
+  try {
+    await ensureBillingShape(db);
+    await db.query("BEGIN");
+
+    await advisoryLock(db, `web:click-unlock:${clientId}:${serviceId}`);
+    await expireOldOrders(db, clientId);
+
+    const alreadyUnlocked = await db.query(
+      `
+        SELECT id
+        FROM client_service_contact_unlocks
+        WHERE client_id = $1
+          AND service_id = $2
+        LIMIT 1
+      `,
+      [clientId, serviceId]
+    );
+
+    if (alreadyUnlocked.rows[0]) {
+      await db.query("COMMIT");
+      return res.json({ ok: true, unlocked: true, alreadyUnlocked: true });
+    }
+
+    const serviceCheck = await db.query(
+      `
+        SELECT id, provider_id, status, expiration_at, deleted_at
+        FROM services
+        WHERE id = $1
+          AND deleted_at IS NULL
+          AND status IN ('published', 'approved', 'active')
+          AND (expiration_at IS NULL OR expiration_at > now())
+          AND COALESCE(NULLIF(LOWER(details->>'isActive'), ''), 'true') <> 'false'
+        LIMIT 1
+      `,
+      [serviceId]
+    );
+
+    if (!serviceCheck.rows[0]) {
+      await db.query("COMMIT");
+      return res.status(404).json({
+        ok: false,
+        error: "service_not_available",
+        message: "Услуга недоступна для открытия контактов",
+      });
+    }
+
+    const settings = await getContactUnlockSettings(db);
+    const unlockPriceTiyin = normalizePositiveTiyin(settings.unlockPriceTiyin);
+    const unlockPriceSum = tiyinToSum(unlockPriceTiyin);
+
+    if (!settings.unlockIsPaid || unlockPriceTiyin <= 0) {
+      const result = await unlockContactTx(db, {
+        clientId,
+        serviceId,
+        source: "web_click_free_unlock",
+      });
+      await syncClientBalanceMirrorLocal(db, clientId);
+      await db.query("COMMIT");
+      return res.json({ ok: true, unlocked: true, result });
+    }
+
+    const service = serviceCheck.rows[0];
+    const merchantTransId = `web-unlock-${clientId}-${serviceId}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+
+    const clickResult = await createClickOrderAndInvoice(db, {
+      merchantTransId,
+      orderType: "unlock_contact",
+      clickProfile: "web",
+      actorRole: "client",
+      actorId: clientId,
+      telegramChatId: null,
+      serviceId,
+      amountSum: unlockPriceSum,
+      phoneNumber,
+      meta: {
+        source: "web_marketplace",
+        provider_id: service.provider_id || null,
+        ip: req.ip,
+        ua: req.headers["user-agent"] || null,
+      },
+    });
+
+    await safeLogUnlockFunnel(pool, {
+      clientId,
+      serviceId,
+      source: "web_click_invoice",
+      step: "click_invoice_created",
+      meta: {
+        merchant_trans_id: merchantTransId,
+        click_invoice_id: clickResult?.order?.click_invoice_id || null,
+      },
+    });
+
+    await db.query("COMMIT");
+
+    return res.json({
+      ok: true,
+      provider: "click",
+      requires_payment: true,
+      order_id: clickResult?.order?.id || null,
+      click_order_id: clickResult?.order?.id || null,
+      click_invoice_id: clickResult?.order?.click_invoice_id || clickResult?.invoice?.invoice_id || null,
+      merchant_trans_id: merchantTransId,
+      amount_tiyin: unlockPriceTiyin,
+      amount_sum: unlockPriceSum,
+      phone_number: phoneNumber,
+      message: "Click-счёт выставлен. Откройте приложение Click и оплатите счёт.",
+    });
+  } catch (e) {
+    try {
+      await db.query("ROLLBACK");
+    } catch {}
+
+    const clickData = e?.click || null;
+    const clickNote = clickData?.error_note || e?.message || "click_invoice_failed";
+    console.error("[client-billing] createClickUnlockInvoice:", clickNote, clickData || "");
+
+    return res.status(e?.status && e.status >= 400 && e.status < 600 ? e.status : 500).json({
+      ok: false,
+      error: "click_invoice_failed",
+      message: clickNote,
+      click_error_code: clickData?.error_code ?? null,
+      click_error_note: clickData?.error_note ?? null,
+    });
+  } finally {
+    db.release();
+  }
+}
+
+async function getUnlockStatus(req, res) {
+  const clientId = await findClientId(req);
+
+  if (!clientId) {
+    return res.status(401).json({ ok: false, error: "client_auth_required" });
+  }
+
+  const serviceId = toIntOrNull(req.query?.service_id || req.query?.serviceId);
+
+  if (!serviceId) {
+    return res.status(400).json({ ok: false, error: "service_required" });
+  }
+
+  const db = await pool.connect();
+
+  try {
+    await ensureBillingShape(db);
+
+    const unlockedQ = await db.query(
+      `
+        SELECT id, created_at
+        FROM client_service_contact_unlocks
+        WHERE client_id = $1
+          AND service_id = $2
+        LIMIT 1
+      `,
+      [clientId, serviceId]
+    );
+
+    const clickQ = await db.query(
+      `
+        SELECT id, merchant_trans_id, click_invoice_id, status, paid_at, created_at, error_code, error_note
+        FROM click_orders
+        WHERE actor_role = 'client'
+          AND actor_id = $1
+          AND service_id = $2
+          AND order_type = 'unlock_contact'
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+      `,
+      [clientId, serviceId]
+    ).catch(() => ({ rows: [] }));
+
+    return res.json({
+      ok: true,
+      unlocked: !!unlockedQ.rows[0],
+      unlock: unlockedQ.rows[0] || null,
+      click_order: clickQ.rows[0] || null,
+    });
+  } catch (e) {
+    console.error("[client-billing] getUnlockStatus:", e);
+    return res.status(500).json({ ok: false, error: "unlock_status_failed" });
+  } finally {
+    db.release();
+  }
+}
+
 async function unlockContact(req, res) {
   const clientId = await findClientId(req);
 
@@ -872,6 +1093,9 @@ module.exports = {
 
   autoUnlockAfterTopup,
   unlockAuto: autoUnlockAfterTopup,
+
+  createClickUnlockInvoice,
+  getUnlockStatus,
 
   unlockContact,
 };
