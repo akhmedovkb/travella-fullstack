@@ -10,8 +10,8 @@ import WishHeart from "./WishHeart";
 const SHOW_REVIEWS = false;
 
 const PAYMENT_ICONS = {
-  payme: "/payments/payme.svg",
-  click: "/payments/click.svg",
+  payme: "/payments/payme.png",
+  click: "/payments/click.png",
 };
 
 function PaymentLogo({ type, className = "h-5 w-auto" }) {
