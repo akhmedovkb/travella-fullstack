@@ -8078,6 +8078,11 @@ bot.on("contact", async (ctx) => {
 
   const phone = contact.phone_number;
 
+  if (ctx.session?.state === "awaiting_provider_support_click_phone" || ctx.session?.pendingProviderSupportClick) {
+    await handleProviderSupportClickPhoneInput(ctx, phone);
+    return;
+  }
+
   if (ctx.session?.state === "awaiting_click_unlock_phone" || ctx.session?.pendingClickUnlock) {
     await handleClickUnlockPhoneInput(ctx, phone);
     return;
@@ -8102,6 +8107,11 @@ bot.hears(/^\+?\d[\d\s\-()]{5,}$/i, async (ctx, next) => {
 
   const t = String(ctx.message?.text || "").trim();
   if (normalizeDateInput(t)) return next();
+
+  if (ctx.session?.state === "awaiting_provider_support_click_phone" || ctx.session?.pendingProviderSupportClick) {
+    await handleProviderSupportClickPhoneInput(ctx, t);
+    return;
+  }
 
   if (!ctx.session || !ctx.session.requestedRole) return next();
 
@@ -11239,10 +11249,16 @@ async function replyProviderSupportPrompt(ctx, serviceId = null) {
       .map((x) => Math.trunc(Number(x)))
       .filter((x) => Number.isFinite(x) && x > 0)
       .slice(0, 8)
-      .map((x) => [{
-        text: `💛 ${x.toLocaleString("ru-RU")} сум`,
-        callback_data: `support_project:pay:${x}:${Number(serviceId || 0)}`,
-      }]);
+      .map((x) => ([
+        {
+          text: `💳 Payme ${x.toLocaleString("ru-RU")} сум`,
+          callback_data: `support_project:pay_payme:${x}:${Number(serviceId || 0)}`,
+        },
+        {
+          text: `🟣 Click ${x.toLocaleString("ru-RU")} сум`,
+          callback_data: `support_project:pay_click:${x}:${Number(serviceId || 0)}`,
+        },
+      ]));
 
     if (!rows.length) return;
 
@@ -11303,14 +11319,15 @@ async function getProviderClickPhone(providerId) {
   try {
     const pid = Number(providerId || 0);
     if (!pid || !pool) return "";
+    await pool.query(`ALTER TABLE providers ADD COLUMN IF NOT EXISTS click_phone TEXT`).catch(() => {});
     const { rows } = await pool.query(
-      `SELECT phone, contact, telegram_phone FROM providers WHERE id=$1 LIMIT 1`,
+      `SELECT click_phone, phone, contact, telegram_phone FROM providers WHERE id=$1 LIMIT 1`,
       [pid]
     ).catch(async () => {
       return pool.query(`SELECT phone, contact FROM providers WHERE id=$1 LIMIT 1`, [pid]);
     });
     const row = rows?.[0] || {};
-    return normalizeClickPhone(row.phone || row.telegram_phone || row.contact || "");
+    return normalizeClickPhone(row.click_phone || row.phone || row.telegram_phone || row.contact || "");
   } catch {
     return "";
   }
@@ -11320,16 +11337,42 @@ async function getClientClickPhone(clientId) {
   try {
     const cid = Number(clientId || 0);
     if (!cid || !pool) return "";
+
+    // click_phone хранит номер, который клиент сам указал именно для Click invoice.
+    // Если колонки ещё нет — fallback сохранит старое поведение без падения.
     const { rows } = await pool.query(
-      `SELECT phone, phone_number, telegram_phone FROM clients WHERE id=$1 LIMIT 1`,
+      `SELECT click_phone, phone, phone_number, telegram_phone FROM clients WHERE id=$1 LIMIT 1`,
       [cid]
     ).catch(async () => {
+      return pool.query(`SELECT phone, phone_number, telegram_phone FROM clients WHERE id=$1 LIMIT 1`, [cid]);
+    }).catch(async () => {
       return pool.query(`SELECT phone FROM clients WHERE id=$1 LIMIT 1`, [cid]);
     });
+
     const row = rows?.[0] || {};
-    return normalizeClickPhone(row.phone || row.phone_number || row.telegram_phone || "");
+    return normalizeClickPhone(row.click_phone || row.phone || row.phone_number || row.telegram_phone || "");
   } catch {
     return "";
+  }
+}
+
+async function saveClientClickPhone(clientId, phoneNumber) {
+  try {
+    const cid = Number(clientId || 0);
+    const phone = normalizeClickPhone(phoneNumber);
+    if (!cid || !/^998\d{9}$/.test(phone) || !pool) return false;
+
+    await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS click_phone TEXT`);
+    await pool.query(
+      `UPDATE clients
+          SET click_phone = $2
+        WHERE id = $1`,
+      [cid, phone]
+    );
+    return true;
+  } catch (e) {
+    console.error("[tg-bot] saveClientClickPhone error:", e?.message || e);
+    return false;
   }
 }
 
@@ -11348,7 +11391,7 @@ function isClickClientNotFoundError(err) {
 
 function buildClickPhoneKeyboard() {
   return {
-    keyboard: [[{ text: "📲 Отправить номер Click", request_contact: true }]],
+    keyboard: [[{ text: "📲 Отправить мой Telegram-номер", request_contact: true }]],
     resize_keyboard: true,
     one_time_keyboard: true,
   };
@@ -11370,12 +11413,12 @@ async function askClickUnlockPhone(ctx, { clientId, serviceId, amountSum, badPho
   touchSessionState(ctx, "awaiting_click_unlock_phone");
 
   const prefix = reason === "not_click_user"
-    ? "⚠️ Этот номер не найден среди пользователей Click."
-    : "📱 Для оплаты через Click нужен номер, привязанный к Click.";
+    ? "⚠️ Click ответил: этот номер не найден среди пользователей Click."
+    : "📱 Для оплаты через Click нужен номер телефона, зарегистрированный в Click Up.";
 
   await safeReply(
     ctx,
-    `${prefix}\n\nОтправьте номер телефона Click в формате:\n<code>998901234567</code>\n\nМожно нажать кнопку ниже, если ваш Telegram-номер привязан к Click.`,
+    `${prefix}\n\nОтправьте другой номер Click в формате:\n<code>998901234567</code>\n\nКнопка ниже отправит ваш Telegram-номер. Нажимайте её только если именно этот номер зарегистрирован в Click Up.`,
     {
       parse_mode: "HTML",
       reply_markup: buildClickPhoneKeyboard(),
@@ -11425,6 +11468,7 @@ async function handleClickUnlockPhoneInput(ctx, rawPhone) {
       return true;
     }
 
+    await saveClientClickPhone(cid, phone);
     ctx.session.pendingClickUnlock = null;
     ctx.session.state = null;
   } catch (e) {
@@ -11446,7 +11490,107 @@ async function handleClickUnlockPhoneInput(ctx, rawPhone) {
   return true;
 }
 
-async function sendClickProviderSupportInvoice(ctx, { providerId, serviceId = null, amountSum }) {
+
+async function saveProviderClickPhone(providerId, phone) {
+  try {
+    const pid = Number(providerId || 0);
+    const normalized = normalizeClickPhone(phone);
+    if (!pid || !normalized || !pool) return false;
+    await pool.query(`ALTER TABLE providers ADD COLUMN IF NOT EXISTS click_phone TEXT`).catch(() => {});
+    await pool.query(`UPDATE providers SET click_phone=$2 WHERE id=$1`, [pid, normalized]);
+    return true;
+  } catch (e) {
+    console.error("[tg-bot] saveProviderClickPhone error:", e?.message || e);
+    return false;
+  }
+}
+
+async function askProviderSupportClickPhone(ctx, { providerId, serviceId = null, amountSum, note = "" }) {
+  if (!ctx.session) ctx.session = {};
+  ctx.session.state = "awaiting_provider_support_click_phone";
+  ctx.session.pendingProviderSupportClick = {
+    providerId: Number(providerId || 0),
+    serviceId: Number(serviceId || 0) || null,
+    amountSum: Math.trunc(Number(amountSum || 0)),
+  };
+  ctx.session._state_ts = Date.now();
+
+  const prefix = note ? `⚠️ ${note}\n\n` : "";
+  await safeReply(
+    ctx,
+    prefix +
+      "📱 Отправьте номер телефона, привязанный к Click, в формате:\n" +
+      "<code>998901234567</code>\n\n" +
+      "Можно нажать кнопку ниже, если ваш Telegram-номер привязан к Click.",
+    {
+      parse_mode: "HTML",
+      reply_markup: {
+        keyboard: [[{ text: "📲 Отправить мой Click-номер", request_contact: true }]],
+        resize_keyboard: true,
+        one_time_keyboard: true,
+      },
+    }
+  );
+}
+
+async function handleProviderSupportClickPhoneInput(ctx, phoneRaw) {
+  const pending = ctx.session?.pendingProviderSupportClick || null;
+  if (!pending?.providerId || !pending?.amountSum) {
+    if (ctx.session) {
+      ctx.session.state = null;
+      ctx.session.pendingProviderSupportClick = null;
+      ctx.session._state_ts = null;
+    }
+    await safeReply(ctx, "⚠️ Данные платежа устарели. Выберите сумму поддержки заново.", {
+      reply_markup: { remove_keyboard: true },
+    });
+    return true;
+  }
+
+  const phone = normalizeClickPhone(phoneRaw);
+  if (!phone) {
+    await askProviderSupportClickPhone(ctx, {
+      providerId: pending.providerId,
+      serviceId: pending.serviceId,
+      amountSum: pending.amountSum,
+      note: "Номер не распознан.",
+    });
+    return true;
+  }
+
+  try {
+    const result = await sendClickProviderSupportInvoice(ctx, {
+      providerId: pending.providerId,
+      serviceId: pending.serviceId,
+      amountSum: pending.amountSum,
+      phoneOverride: phone,
+      promptOnPhoneError: true,
+    });
+
+    if (result?.ok) {
+      await saveProviderClickPhone(pending.providerId, phone);
+      ctx.session.state = null;
+      ctx.session.pendingProviderSupportClick = null;
+      ctx.session._state_ts = null;
+      await safeReply(ctx, "✅ Номер Click сохранён для следующих оплат.", {
+        reply_markup: { remove_keyboard: true },
+      });
+    }
+  } catch (e) {
+    const msg = e?.click?.error_note || e?.message || "";
+    console.error("[tg-bot] provider support click phone input error:", msg);
+    await askProviderSupportClickPhone(ctx, {
+      providerId: pending.providerId,
+      serviceId: pending.serviceId,
+      amountSum: pending.amountSum,
+      note: "Этот номер не найден среди пользователей Click.",
+    });
+  }
+
+  return true;
+}
+
+async function sendClickProviderSupportInvoice(ctx, { providerId, serviceId = null, amountSum, phoneOverride = "", promptOnPhoneError = true }) {
   const pid = Number(providerId || 0);
   const sid = Number(serviceId || 0) || 0;
   const amount = Math.trunc(Number(amountSum || 0));
@@ -11460,9 +11604,17 @@ async function sendClickProviderSupportInvoice(ctx, { providerId, serviceId = nu
     return { ok: false, reason: "bad_amount" };
   }
 
-  const phone = await getProviderClickPhone(pid);
+  const phone = normalizeClickPhone(phoneOverride) || await getProviderClickPhone(pid);
   if (!phone) {
-    await safeReply(ctx, "⚠️ Для оплаты через Click нужен номер телефона в профиле поставщика. Добавьте телефон в кабинете или сообщите его менеджеру.");
+    if (promptOnPhoneError) {
+      await askProviderSupportClickPhone(ctx, {
+        providerId: pid,
+        serviceId: sid || null,
+        amountSum: amount,
+      });
+    } else {
+      await safeReply(ctx, "⚠️ Для оплаты через Click нужен номер телефона, привязанный к Click.");
+    }
     return { ok: false, reason: "no_phone" };
   }
 
@@ -11485,18 +11637,34 @@ async function sendClickProviderSupportInvoice(ctx, { providerId, serviceId = nu
   const donationId = Number(donationQ.rows?.[0]?.id || 0) || 0;
   const merchantTransId = `tg-support-${pid}-${donationId || Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
-  const result = await createClickOrderAndInvoice(pool, {
-    merchantTransId,
-    orderType: "support_project",
-    actorRole: "provider",
-    actorId: pid,
-    telegramChatId: Number(ctx.from?.id || ctx.chat?.id || 0) || null,
-    serviceId: sid || null,
-    donationId: donationId || null,
-    amountSum: amount,
-    phoneNumber: phone,
-    meta: { support_context: supportContext, source: "telegram_bot" },
-  });
+  let result;
+  try {
+    result = await createClickOrderAndInvoice(pool, {
+      merchantTransId,
+      orderType: "support_project",
+      actorRole: "provider",
+      actorId: pid,
+      telegramChatId: Number(ctx.from?.id || ctx.chat?.id || 0) || null,
+      serviceId: sid || null,
+      donationId: donationId || null,
+      amountSum: amount,
+      phoneNumber: phone,
+      meta: { support_context: supportContext, source: "telegram_bot" },
+    });
+  } catch (e) {
+    const clickNote = e?.click?.error_note || e?.message || "";
+    console.error("[tg-bot] provider support click invoice error:", clickNote);
+    if (promptOnPhoneError && /клиент|пользовател|phone|номер|CLICK_PHONE/i.test(String(clickNote))) {
+      await askProviderSupportClickPhone(ctx, {
+        providerId: pid,
+        serviceId: sid || null,
+        amountSum: amount,
+        note: "Этот номер не найден среди пользователей Click.",
+      });
+      return { ok: false, reason: "click_phone_not_found" };
+    }
+    throw e;
+  }
 
   await safeReply(
     ctx,
@@ -11583,17 +11751,13 @@ async function sendClickUnlockContactInvoice(ctx, { clientId, serviceId, amountS
   await safeReply(
     ctx,
     `✅ Счёт Click создан.\n\n📲 Откройте приложение <b>Click Up</b> и оплатите выставленный счёт. После успешной оплаты контакты откроются автоматически.\n\nСумма: <b>${amount.toLocaleString("ru-RU")} сум</b>`,
-    { parse_mode: "HTML" }
+    { parse_mode: "HTML", reply_markup: { remove_keyboard: true } }
   );
 
   return { ok: true, click: true, invoice: result.invoice };
 }
 
 async function sendProviderSupportInvoice(ctx, { providerId, serviceId = null, amountSum }) {
-  if (shouldUseClickTelegramPayments()) {
-    return sendClickProviderSupportInvoice(ctx, { providerId, serviceId, amountSum });
-  }
-
   const pid = Number(providerId || 0);
   const sid = Number(serviceId || 0) || 0;
   const amount = Math.trunc(Number(amountSum || 0));
@@ -11695,28 +11859,62 @@ async function sendProviderSupportInvoice(ctx, { providerId, serviceId = null, a
   return { ok: true };
 }
 
+async function resolveProviderForSupportAction(ctx) {
+  const telegramChatId = getActorId(ctx) || ctx.from?.id || null;
+  const providerId = await resolveProviderIdByTelegramChatId(telegramChatId);
+  if (!providerId) {
+    await safeReply(ctx, "⚠️ Не удалось определить ваш аккаунт поставщика. Откройте бота через /start.");
+    return null;
+  }
+  return providerId;
+}
+
+bot.action(/^support_project:pay_payme:(\d+):(\d+)$/, async (ctx) => {
+  try {
+    await safeCb(ctx);
+
+    const amountSum = Number(ctx.match?.[1] || 0);
+    const serviceId = Number(ctx.match?.[2] || 0) || null;
+    const providerId = await resolveProviderForSupportAction(ctx);
+    if (!providerId) return;
+
+    await sendProviderSupportInvoice(ctx, { providerId, serviceId, amountSum });
+  } catch (e) {
+    console.error("[tg-bot] support_project:pay_payme error:", e?.message || e);
+    await safeReply(ctx, "⚠️ Не удалось создать Payme оплату поддержки проекта. Попробуйте позже.");
+  }
+});
+
+bot.action(/^support_project:pay_click:(\d+):(\d+)$/, async (ctx) => {
+  try {
+    await safeCb(ctx);
+
+    const amountSum = Number(ctx.match?.[1] || 0);
+    const serviceId = Number(ctx.match?.[2] || 0) || null;
+    const providerId = await resolveProviderForSupportAction(ctx);
+    if (!providerId) return;
+
+    await sendClickProviderSupportInvoice(ctx, { providerId, serviceId, amountSum });
+  } catch (e) {
+    console.error("[tg-bot] support_project:pay_click error:", e?.click?.error_note || e?.message || e);
+    await safeReply(ctx, "⚠️ Не удалось создать Click-счёт поддержки проекта. Попробуйте позже.");
+  }
+});
+
+// Backward compatibility for old buttons already sent before this update.
 bot.action(/^support_project:pay:(\d+):(\d+)$/, async (ctx) => {
   try {
     await safeCb(ctx);
 
     const amountSum = Number(ctx.match?.[1] || 0);
     const serviceId = Number(ctx.match?.[2] || 0) || null;
-    const telegramChatId = getActorId(ctx) || ctx.from?.id || null;
+    const providerId = await resolveProviderForSupportAction(ctx);
+    if (!providerId) return;
 
-    const providerId = await resolveProviderIdByTelegramChatId(telegramChatId);
-    if (!providerId) {
-      await safeReply(ctx, "⚠️ Не удалось определить ваш аккаунт поставщика. Откройте бота через /start.");
-      return;
-    }
-
-    await sendProviderSupportInvoice(ctx, {
-      providerId,
-      serviceId,
-      amountSum,
-    });
+    await sendProviderSupportInvoice(ctx, { providerId, serviceId, amountSum });
   } catch (e) {
-    console.error("[tg-bot] support_project:pay error:", e?.message || e);
-    await safeReply(ctx, "⚠️ Не удалось создать Telegram Payme оплату поддержки проекта. Попробуйте позже.");
+    console.error("[tg-bot] support_project:pay legacy error:", e?.message || e);
+    await safeReply(ctx, "⚠️ Не удалось создать Payme оплату поддержки проекта. Попробуйте позже.");
   }
 });
 
@@ -14229,6 +14427,11 @@ bot.on("text", async (ctx, next) => {
     // Важно: bot.on("text") стоит раньше bot.hears(/готово/), поэтому
     // сообщение «ГОТОВО» нужно обработать здесь, иначе оно уходит в wizard.
     const rawText = String(ctx.message?.text || "").trim();
+
+    if (ctx.session?.state === "awaiting_provider_support_click_phone" || ctx.session?.pendingProviderSupportClick) {
+      await handleProviderSupportClickPhoneInput(ctx, rawText);
+      return;
+    }
 
     if (ctx.session?.state === "awaiting_click_unlock_phone" || ctx.session?.pendingClickUnlock) {
       await handleClickUnlockPhoneInput(ctx, rawText);
