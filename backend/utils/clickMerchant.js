@@ -4,14 +4,33 @@ const axios = require("axios");
 const { unlockContactSafe } = require("./contactUnlock");
 
 const CLICK_API_BASE = (process.env.CLICK_API_BASE || "https://api.click.uz/v2/merchant").replace(/\/+$/, "");
-const CLICK_SERVICE_ID = String(process.env.CLICK_SERVICE_ID || process.env.CLICK_BOT_SERVICE_ID || "").trim();
-const CLICK_MERCHANT_ID = String(process.env.CLICK_MERCHANT_ID || process.env.CLICK_BOT_MERCHANT_ID || "").trim();
-const CLICK_MERCHANT_USER_ID = String(process.env.CLICK_MERCHANT_USER_ID || process.env.CLICK_BOT_MERCHANT_USER_ID || "").trim();
-const CLICK_SECRET_KEY = String(process.env.CLICK_SECRET_KEY || process.env.CLICK_BOT_SECRET_KEY || "").trim();
 const TELEGRAM_CLIENT_BOT_TOKEN = String(process.env.TELEGRAM_CLIENT_BOT_TOKEN || "").trim();
 
-function isClickConfigured() {
-  return !!(CLICK_SERVICE_ID && CLICK_MERCHANT_USER_ID && CLICK_SECRET_KEY);
+function getClickConfig(profile = "bot") {
+  const p = String(profile || "bot").toLowerCase() === "web" ? "web" : "bot";
+
+  if (p === "web") {
+    return {
+      profile: "web",
+      serviceId: String(process.env.CLICK_WEB_SERVICE_ID || process.env.CLICK_SITE_SERVICE_ID || process.env.CLICK_SERVICE_ID || "").trim(),
+      merchantId: String(process.env.CLICK_WEB_MERCHANT_ID || process.env.CLICK_SITE_MERCHANT_ID || process.env.CLICK_MERCHANT_ID || "").trim(),
+      merchantUserId: String(process.env.CLICK_WEB_MERCHANT_USER_ID || process.env.CLICK_SITE_MERCHANT_USER_ID || process.env.CLICK_MERCHANT_USER_ID || "").trim(),
+      secretKey: String(process.env.CLICK_WEB_SECRET_KEY || process.env.CLICK_SITE_SECRET_KEY || process.env.CLICK_SECRET_KEY || "").trim(),
+    };
+  }
+
+  return {
+    profile: "bot",
+    serviceId: String(process.env.CLICK_BOT_SERVICE_ID || process.env.CLICK_SERVICE_ID || "").trim(),
+    merchantId: String(process.env.CLICK_BOT_MERCHANT_ID || process.env.CLICK_MERCHANT_ID || "").trim(),
+    merchantUserId: String(process.env.CLICK_BOT_MERCHANT_USER_ID || process.env.CLICK_MERCHANT_USER_ID || "").trim(),
+    secretKey: String(process.env.CLICK_BOT_SECRET_KEY || process.env.CLICK_SECRET_KEY || "").trim(),
+  };
+}
+
+function isClickConfigured(profile = "bot") {
+  const cfg = getClickConfig(profile);
+  return !!(cfg.serviceId && cfg.merchantUserId && cfg.secretKey);
 }
 
 function sha1(s) {
@@ -22,9 +41,10 @@ function md5(s) {
   return crypto.createHash("md5").update(String(s)).digest("hex");
 }
 
-function clickAuthHeader() {
+function clickAuthHeader(profile = "bot") {
+  const cfg = getClickConfig(profile);
   const ts = Math.floor(Date.now() / 1000);
-  return `${CLICK_MERCHANT_USER_ID}:${sha1(`${ts}${CLICK_SECRET_KEY}`)}:${ts}`;
+  return `${cfg.merchantUserId}:${sha1(`${ts}${cfg.secretKey}`)}:${ts}`;
 }
 
 function normalizePhone(phone) {
@@ -56,6 +76,7 @@ async function ensureClickTables(db) {
       click_paydoc_id BIGINT,
       merchant_prepare_id BIGINT,
       order_type TEXT NOT NULL,
+      click_profile TEXT NOT NULL DEFAULT 'bot',
       actor_role TEXT,
       actor_id BIGINT,
       telegram_chat_id BIGINT,
@@ -83,6 +104,7 @@ async function ensureClickTables(db) {
   await db.query(`ALTER TABLE click_orders ADD COLUMN IF NOT EXISTS merchant_prepare_id BIGINT`);
   await db.query(`ALTER TABLE click_orders ADD COLUMN IF NOT EXISTS donation_id BIGINT`);
   await db.query(`ALTER TABLE click_orders ADD COLUMN IF NOT EXISTS meta JSONB NOT NULL DEFAULT '{}'::jsonb`);
+  await db.query(`ALTER TABLE click_orders ADD COLUMN IF NOT EXISTS click_profile TEXT NOT NULL DEFAULT 'bot'`);
 
   await db.query(`CREATE INDEX IF NOT EXISTS idx_click_orders_status ON click_orders(status)`);
   await db.query(`CREATE INDEX IF NOT EXISTS idx_click_orders_actor ON click_orders(actor_role, actor_id)`);
@@ -107,8 +129,11 @@ async function ensureClickTables(db) {
 }
 
 async function createClickInvoice(order) {
-  if (!isClickConfigured()) {
-    const e = new Error("CLICK_NOT_CONFIGURED");
+  const profile = String(order.clickProfile || order.profile || "bot").toLowerCase() === "web" ? "web" : "bot";
+  const cfg = getClickConfig(profile);
+
+  if (!isClickConfigured(profile)) {
+    const e = new Error(`CLICK_${profile.toUpperCase()}_NOT_CONFIGURED`);
     e.status = 500;
     throw e;
   }
@@ -127,7 +152,7 @@ async function createClickInvoice(order) {
   }
 
   const body = {
-    service_id: Number(CLICK_SERVICE_ID),
+    service_id: Number(cfg.serviceId),
     amount,
     phone_number: phone,
     merchant_trans_id: String(order.merchantTransId),
@@ -138,7 +163,7 @@ async function createClickInvoice(order) {
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
-      Auth: clickAuthHeader(),
+      Auth: clickAuthHeader(profile),
     },
   });
 
@@ -160,14 +185,16 @@ async function createClickOrderAndInvoice(db, payload) {
   const amountTiyin = minorFromSum(amount);
   const mti = String(payload.merchantTransId || `travella-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
   const phone = normalizePhone(payload.phoneNumber);
+  const clickProfile = String(payload.clickProfile || payload.profile || "bot").toLowerCase() === "web" ? "web" : "bot";
+  const meta = { ...(payload.meta || {}), click_profile: clickProfile };
 
   const inserted = await db.query(
     `
     INSERT INTO click_orders (
-      merchant_trans_id, order_type, actor_role, actor_id, telegram_chat_id,
+      merchant_trans_id, order_type, click_profile, actor_role, actor_id, telegram_chat_id,
       service_id, donation_id, amount_sum, amount_tiyin, phone_number, status, meta, expires_at
     )
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'created',$11::jsonb,NOW() + INTERVAL '45 minutes')
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'created',$12::jsonb,NOW() + INTERVAL '45 minutes')
     ON CONFLICT (merchant_trans_id) DO UPDATE
       SET updated_at=NOW()
     RETURNING *
@@ -175,6 +202,7 @@ async function createClickOrderAndInvoice(db, payload) {
     [
       mti,
       String(payload.orderType),
+      clickProfile,
       payload.actorRole || null,
       payload.actorId || null,
       payload.telegramChatId || null,
@@ -183,11 +211,11 @@ async function createClickOrderAndInvoice(db, payload) {
       amount,
       amountTiyin,
       phone,
-      JSON.stringify(payload.meta || {}),
+      JSON.stringify(meta),
     ]
   );
 
-  const invoice = await createClickInvoice({ merchantTransId: mti, amountSum: amount, phoneNumber: phone });
+  const invoice = await createClickInvoice({ merchantTransId: mti, amountSum: amount, phoneNumber: phone, clickProfile });
   const invoiceId = Number(invoice?.invoice_id || 0) || null;
 
   const updated = await db.query(
@@ -207,7 +235,8 @@ async function createClickOrderAndInvoice(db, payload) {
   return { ok: true, order: updated.rows[0] || inserted.rows[0], invoice };
 }
 
-function verifyClickSign(params, action) {
+function verifyClickSign(params, action, profile = "bot") {
+  const cfg = getClickConfig(profile);
   const clickTransId = String(params.click_trans_id || "");
   const serviceId = String(params.service_id || "");
   const merchantTransId = String(params.merchant_trans_id || "");
@@ -217,10 +246,10 @@ function verifyClickSign(params, action) {
 
   let base;
   if (Number(action) === 0) {
-    base = `${clickTransId}${serviceId}${CLICK_SECRET_KEY}${merchantTransId}${amount}${action}${signTime}`;
+    base = `${clickTransId}${serviceId}${cfg.secretKey}${merchantTransId}${amount}${action}${signTime}`;
   } else {
     const merchantPrepareId = String(params.merchant_prepare_id || "");
-    base = `${clickTransId}${serviceId}${CLICK_SECRET_KEY}${merchantTransId}${merchantPrepareId}${amount}${action}${signTime}`;
+    base = `${clickTransId}${serviceId}${cfg.secretKey}${merchantTransId}${merchantPrepareId}${amount}${action}${signTime}`;
   }
 
   return md5(base).toLowerCase() === signString;
@@ -320,12 +349,16 @@ async function handleClickCallback(db, raw) {
 
   if (![0, 1].includes(action)) return { ...clickResponse(params, -3, "Action not found") };
   if (!merchantTransId) return { ...clickResponse(params, -5, "User does not exist") };
-  if (String(params.service_id || "") !== String(CLICK_SERVICE_ID)) return { ...clickResponse(params, -2, "Service not found") };
-  if (!verifyClickSign(params, action)) return { ...clickResponse(params, -1, "SIGN CHECK FAILED") };
 
   const orderQ = await db.query(`SELECT * FROM click_orders WHERE merchant_trans_id=$1 FOR UPDATE`, [merchantTransId]);
   const order = orderQ.rows[0];
   if (!order) return { ...clickResponse(params, -5, "User does not exist") };
+
+  const clickProfile = String(order.click_profile || order.meta?.click_profile || "bot").toLowerCase() === "web" ? "web" : "bot";
+  const cfg = getClickConfig(clickProfile);
+
+  if (String(params.service_id || "") !== String(cfg.serviceId)) return { ...clickResponse(params, -2, "Service not found") };
+  if (!verifyClickSign(params, action, clickProfile)) return { ...clickResponse(params, -1, "SIGN CHECK FAILED") };
 
   const callbackAmount = toAmount(params.amount);
   if (toAmount(order.amount_sum) !== callbackAmount) return { ...clickResponse(params, -2, "Incorrect parameter amount") };
@@ -367,25 +400,9 @@ async function handleClickCallback(db, raw) {
     return { ...clickResponse(params, -9, "Transaction cancelled") };
   }
 
-  const tx = await db.connect();
+  await db.query("BEGIN");
   try {
-    await tx.query("BEGIN");
-
-    const lockedQ = await tx.query(
-      `SELECT * FROM click_orders WHERE merchant_trans_id=$1 FOR UPDATE`,
-      [merchantTransId]
-    );
-    const lockedOrder = lockedQ.rows[0];
-    if (!lockedOrder) {
-      await tx.query("ROLLBACK");
-      return { ...clickResponse(params, -5, "User does not exist") };
-    }
-    if (String(lockedOrder.status || "") === "paid") {
-      await tx.query("COMMIT");
-      return { ...clickResponse(params, 0, "Success"), merchant_confirm_id: Number(lockedOrder.id) };
-    }
-
-    const paidQ = await tx.query(
+    const paidQ = await db.query(
       `UPDATE click_orders
           SET status='paid',
               click_trans_id=$2,
@@ -397,21 +414,20 @@ async function handleClickCallback(db, raw) {
               error_note=NULL
         WHERE id=$1
         RETURNING *`,
-      [lockedOrder.id, params.click_trans_id || null, params.click_paydoc_id || null, merchantPrepareId]
+      [order.id, params.click_trans_id || null, params.click_paydoc_id || null, merchantPrepareId]
     );
-    await applyClickSuccessEffect(tx, paidQ.rows[0]);
-    await tx.query("COMMIT");
+    await applyClickSuccessEffect(db, paidQ.rows[0]);
+    await db.query("COMMIT");
   } catch (e) {
-    try { await tx.query("ROLLBACK"); } catch {}
+    await db.query("ROLLBACK");
     throw e;
-  } finally {
-    tx.release();
   }
 
   return { ...clickResponse(params, 0, "Success"), merchant_confirm_id: Number(order.id) };
 }
 
 module.exports = {
+  getClickConfig,
   isClickConfigured,
   normalizePhone,
   ensureClickTables,
