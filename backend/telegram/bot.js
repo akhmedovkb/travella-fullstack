@@ -11249,16 +11249,19 @@ async function replyProviderSupportPrompt(ctx, serviceId = null) {
       .map((x) => Math.trunc(Number(x)))
       .filter((x) => Number.isFinite(x) && x > 0)
       .slice(0, 8)
-      .map((x) => ([
-        {
-          text: `💳 Payme ${x.toLocaleString("ru-RU")} сум`,
-          callback_data: `support_project:pay_payme:${x}:${Number(serviceId || 0)}`,
-        },
-        {
-          text: `🟣 Click ${x.toLocaleString("ru-RU")} сум`,
-          callback_data: `support_project:pay_click:${x}:${Number(serviceId || 0)}`,
-        },
-      ]));
+      .map((x) => {
+        const amountLabel = x.toLocaleString("ru-RU");
+        return [
+          {
+            text: `💳 Payme · ${amountLabel} сум`,
+            callback_data: `support_project:pay_payme:${x}:${Number(serviceId || 0)}`,
+          },
+          {
+            text: `🟣 Click · ${amountLabel} сум`,
+            callback_data: `support_project:pay_click:${x}:${Number(serviceId || 0)}`,
+          },
+        ];
+      });
 
     if (!rows.length) return;
 
@@ -11270,22 +11273,26 @@ async function replyProviderSupportPrompt(ctx, serviceId = null) {
     rows.push([{ text: "📈 Спрос и клиенты", url: `${SITE_URL}/dashboard/finance` }]);
 
     const text =
-      `❤️ <b>Спасибо, что помогаете держать базу отказов актуальной.</b>
+      `💛 <b>Спасибо, что помогаете развивать Travella</b>
 
 ` +
-      `Поддержка проекта — добровольная. Она помогает развивать <b>Bot Otkaznyx Turov</b> и делает базу отказных предложений удобнее для всех.
+      `Поддержка проекта добровольная. Она помогает держать базу отказных предложений актуальной и удобной для всех.
 
 ` +
-      `Ваш вклад помогает нам:
+      `<b>Ваш вклад помогает:</b>
 ` +
       `• улучшать поиск и карточки
 ` +
-      `• поддерживать Telegram-бота и веб-кабинет
+      `• развивать Telegram-бота и веб-кабинет
 ` +
-      `• быстрее дорабатывать инструменты для поставщиков
+      `• быстрее внедрять новые инструменты для поставщиков
 
 ` +
-      `Выберите комфортную сумму или продолжайте работу с услугами.`;
+      `💳 <b>Выберите сумму и удобный способ оплаты:</b>
+` +
+      `Payme — быстрая оплата картой
+` +
+      `Click — счёт придёт в приложение Click Up.`;
 
     ctx.session.__providerSupportPromptAt = now;
 
@@ -11413,12 +11420,12 @@ async function askClickUnlockPhone(ctx, { clientId, serviceId, amountSum, badPho
   touchSessionState(ctx, "awaiting_click_unlock_phone");
 
   const prefix = reason === "not_click_user"
-    ? "⚠️ Click ответил: этот номер не найден среди пользователей Click."
-    : "📱 Для оплаты через Click нужен номер телефона, зарегистрированный в Click Up.";
+    ? "⚠️ <b>Этот номер не найден среди пользователей Click.</b>"
+    : "🟣 <b>Для Click нужен номер, привязанный к Click Up.</b>";
 
   await safeReply(
     ctx,
-    `${prefix}\n\nОтправьте другой номер Click в формате:\n<code>998901234567</code>\n\nКнопка ниже отправит ваш Telegram-номер. Нажимайте её только если именно этот номер зарегистрирован в Click Up.`,
+    `${prefix}\n\nОтправьте номер в формате:\n<code>998901234567</code>\n\nКнопка ниже отправит ваш Telegram-номер. Нажимайте её только если именно этот номер зарегистрирован в Click Up.`,
     {
       parse_mode: "HTML",
       reply_markup: buildClickPhoneKeyboard(),
@@ -11515,13 +11522,14 @@ async function askProviderSupportClickPhone(ctx, { providerId, serviceId = null,
   };
   ctx.session._state_ts = Date.now();
 
-  const prefix = note ? `⚠️ ${note}\n\n` : "";
+  const prefix = note ? `⚠️ <b>${escapeHtml(note)}</b>\n\n` : "";
   await safeReply(
     ctx,
     prefix +
-      "📱 Отправьте номер телефона, привязанный к Click, в формате:\n" +
+      "🟣 <b>Для Click нужен номер, привязанный к Click Up.</b>\n\n" +
+      "Отправьте номер в формате:\n" +
       "<code>998901234567</code>\n\n" +
-      "Можно нажать кнопку ниже, если ваш Telegram-номер привязан к Click.",
+      "Кнопка ниже отправит ваш Telegram-номер. Нажимайте её только если именно этот номер зарегистрирован в Click Up.",
     {
       parse_mode: "HTML",
       reply_markup: {
@@ -11668,7 +11676,7 @@ async function sendClickProviderSupportInvoice(ctx, { providerId, serviceId = nu
 
   await safeReply(
     ctx,
-    `✅ Счёт Click создан.\n\n📲 Откройте приложение <b>Click Up</b> и оплатите выставленный счёт.\n\nСумма: <b>${amount.toLocaleString("ru-RU")} сум</b>`,
+    `🟣 <b>Счёт Click успешно выставлен</b>\n\n📱 Откройте приложение <b>Click Up</b>.\nВ разделе уведомлений уже появился счёт на оплату.\n\n💰 Сумма: <b>${amount.toLocaleString("ru-RU")} сум</b>\n\nПосле оплаты поддержка проекта будет зафиксирована автоматически.`,
     { parse_mode: "HTML" }
   );
 
@@ -11750,7 +11758,7 @@ async function sendClickUnlockContactInvoice(ctx, { clientId, serviceId, amountS
 
   await safeReply(
     ctx,
-    `✅ Счёт Click создан.\n\n📲 Откройте приложение <b>Click Up</b> и оплатите выставленный счёт. После успешной оплаты контакты откроются автоматически.\n\nСумма: <b>${amount.toLocaleString("ru-RU")} сум</b>`,
+    `🟣 <b>Счёт Click успешно выставлен</b>\n\n📱 Откройте приложение <b>Click Up</b>.\nВ разделе уведомлений уже появился счёт на оплату.\n\n💰 Сумма: <b>${amount.toLocaleString("ru-RU")} сум</b>\n\nПосле успешной оплаты контакты откроются автоматически.`,
     { parse_mode: "HTML", reply_markup: { remove_keyboard: true } }
   );
 
@@ -12299,14 +12307,17 @@ function buildUnlockPaywallText({ title, balanceSum, priceSum }) {
   return (
     `🔓 <b>Открытие контактов поставщика</b>\n\n` +
     `📌 <b>${safeTitle}</b>\n\n` +
-    `После оплаты вы сразу получите:\n` +
+    `<b>После оплаты вы сразу получите:</b>\n` +
     `📞 телефон поставщика\n` +
     `💬 Telegram / прямую связь\n` +
     `⚡ возможность быстро забронировать вариант без ожидания\n\n` +
     `🔥 Отказные предложения часто уходят быстро — лучше связаться сразу после открытия контактов.\n\n` +
     `💰 Ваш баланс: <b>${bal}</b> сум\n` +
     `🔐 Стоимость открытия: <b>${price}</b> сум\n\n` +
-    `✅ Контакты откроются автоматически сразу после успешной оплаты.`
+    `💳 <b>Выберите удобный способ оплаты:</b>\n` +
+    `Payme — мгновенная оплата картой\n` +
+    `Click — счёт придёт в приложение Click Up\n\n` +
+    `✅ Контакты откроются автоматически после успешной оплаты.`
   );
 }
 
@@ -12321,18 +12332,18 @@ async function sendUnlockPaywallCard(ctx, { serviceId, balanceSum, priceSum }) {
 
   const paymentRows = [];
   if (PAYMENTS_PROVIDER_TOKEN) {
-    paymentRows.push([{ text: `💳 Payme: оплатить и открыть (${price} сум)`, callback_data: `unlock:pay:${serviceId}` }]);
+    paymentRows.push([{ text: `💳 Payme · оплатить картой (${price} сум)`, callback_data: `unlock:pay:${serviceId}` }]);
   } else {
     paymentRows.push([{ text: "💳 Пополнить баланс", url: `${SITE_URL}/client/balance` }]);
   }
   if (isClickConfigured()) {
-    paymentRows.push([{ text: `🟣 Click: оплатить и открыть (${price} сум)`, callback_data: `unlock:click:${serviceId}` }]);
+    paymentRows.push([{ text: `🟣 Click · выставить счёт (${price} сум)`, callback_data: `unlock:click:${serviceId}` }]);
   }
 
   const replyMarkup = {
     inline_keyboard: [
       ...paymentRows,
-      [{ text: "🔓 Повторить открытие", callback_data: "balance:retry" }],
+      [{ text: "🔄 Повторить открытие", callback_data: "balance:retry" }],
     ],
   };
 
@@ -13037,10 +13048,11 @@ bot.on("successful_payment", async (ctx) => {
 
         await safeReply(
           ctx,
-          `✅ <b>Оплата прошла успешно!</b>\n\n` +
-            `🔓 Контакты поставщика открыты автоматически.\n` +
+          `✅ <b>Оплата получена</b>\n\n` +
+            `🔓 Контакты поставщика успешно открыты.\n` +
             `💸 Оплачено: <b>${Number(paidAmount || 0).toLocaleString("ru-RU")}</b> сум\n\n` +
-            `👇 Ниже отправляю карточку уже с открытыми контактами. Напишите поставщику сразу — отказные варианты часто уходят быстро.`,
+            `👇 Ниже отправляю карточку уже с открытыми контактами. Напишите поставщику сразу — отказные варианты часто уходят быстро.\n\n` +
+            `Спасибо за использование Travella 💙`,
           { parse_mode: "HTML" }
         );
 
@@ -13602,7 +13614,7 @@ if (result.already) {
   try {
     await bot.telegram.sendMessage(
       ctx.from.id,
-      `✅ Контакты открыты\n💸 Списано: ${charged.toLocaleString("ru-RU")} сум`,
+      `✅ Контакты открыты\n💸 Списано: ${charged.toLocaleString("ru-RU")} сум\n\nСпасибо за использование Travella 💙`,
       { disable_web_page_preview: true }
     );
   } catch {}
