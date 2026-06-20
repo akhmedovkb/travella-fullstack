@@ -14,10 +14,41 @@ const PAYMENT_ICONS = {
   click: "/payments/click.png",
 };
 
-function PaymentLogo({ type, className = "h-5 w-auto" }) {
+function PaymentLogo({
+  type,
+  className = "h-6 w-6 object-contain shrink-0",
+}) {
   const src = PAYMENT_ICONS[type];
   const alt = type === "payme" ? "Payme" : "Click";
-  return <img src={src} alt={alt} className={className} loading="lazy" />;
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className={className}
+      loading="lazy"
+      decoding="async"
+      style={{
+        display: "block",
+        width: "24px",
+        height: "24px",
+        objectFit: "contain",
+        flexShrink: 0,
+      }}
+      onError={(e) => {
+        console.error("Payment logo not found:", src);
+        e.currentTarget.style.display = "none";
+      }}
+    />
+  );
+}
+
+function PaymentButtonLogo({ type }) {
+  return (
+    <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white/95 shadow-sm ring-1 ring-white/50">
+      <PaymentLogo type={type} className="h-6 w-6 object-contain shrink-0" />
+    </span>
+  );
 }
 
 /* ============== small utils ============== */
@@ -3145,9 +3176,9 @@ return (
                       }}
                       className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-sky-500 px-4 py-3 text-sm font-black text-white shadow-[0_14px_32px_rgba(14,165,233,0.24)] transition hover:-translate-y-0.5 hover:bg-sky-600 hover:shadow-[0_22px_48px_rgba(14,165,233,0.34)] active:translate-y-0"
                     >
-                      <PaymentLogo type="payme" className="h-5 w-auto brightness-0 invert" />
+                      <PaymentButtonLogo type="payme" />
                       {t("marketplace.go_to_payment", {
-                        defaultValue: "Payme: оплатить и открыть",
+                        defaultValue: "Оплатить и открыть",
                       })}
                     </button>
                   </div>
@@ -3188,7 +3219,7 @@ return (
                       disabled={clickPayLoading}
                       className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-violet-600 px-4 py-3 text-sm font-black text-white shadow-[0_14px_32px_rgba(124,58,237,0.24)] transition hover:-translate-y-0.5 hover:bg-violet-700 hover:shadow-[0_22px_48px_rgba(124,58,237,0.34)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
                     >
-                      <PaymentLogo type="click" className="h-5 w-auto brightness-0 invert" />
+                      <PaymentButtonLogo type="click" />
                       {clickPayLoading ? "Выставляем счёт..." : "Click: выставить счёт"}
                     </button>
                   </div>
