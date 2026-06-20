@@ -9,6 +9,17 @@ import { redirectToPaymeGuide } from "../utils/paymeGuide";
 import WishHeart from "./WishHeart";
 const SHOW_REVIEWS = false;
 
+const PAYMENT_ICONS = {
+  payme: "/payments/payme.svg",
+  click: "/payments/click.svg",
+};
+
+function PaymentLogo({ type, className = "h-5 w-auto" }) {
+  const src = PAYMENT_ICONS[type];
+  const alt = type === "payme" ? "Payme" : "Click";
+  return <img src={src} alt={alt} className={className} loading="lazy" />;
+}
+
 /* ============== small utils ============== */
 const firstNonEmpty = (...vals) => {
   for (const v of vals) {
@@ -2966,39 +2977,6 @@ return (
                   </div>
                 </div>
 
-                <div className="mt-5 rounded-2xl border border-violet-100 bg-violet-50/70 px-4 py-4">
-                  <div className="text-sm font-black text-violet-900">🟣 Click invoice</div>
-                  <p className="mt-1 text-xs font-semibold leading-5 text-violet-800/80">
-                    Введите номер, привязанный к Click. Счёт придёт в приложение Click.
-                  </p>
-                  <input
-                    type="tel"
-                    inputMode="numeric"
-                    value={clickPhone}
-                    onChange={(e) => setClickPhone(e.target.value)}
-                    placeholder="998901234567"
-                    className="mt-3 w-full rounded-2xl border border-violet-200 bg-white px-4 py-3 text-sm font-bold text-gray-900 outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
-                  />
-                  {!!clickPayError && (
-                    <div className="mt-2 rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 ring-1 ring-red-100">
-                      {clickPayError}
-                    </div>
-                  )}
-                  {!!clickPayMessage && (
-                    <div className="mt-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-semibold leading-5 text-emerald-800 ring-1 ring-emerald-100">
-                      {clickPayMessage}
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={createClickUnlockInvoice}
-                    disabled={clickPayLoading}
-                    className="mt-3 inline-flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-500 px-4 py-3 text-sm font-black text-white shadow-[0_14px_32px_rgba(124,58,237,0.24)] transition hover:-translate-y-0.5 hover:shadow-[0_22px_48px_rgba(124,58,237,0.34)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
-                  >
-                    {clickPayLoading ? "Выставляем счёт..." : "🟣 Click: выставить счёт"}
-                  </button>
-                </div>
-
                 <div className="mt-6 flex flex-col gap-3 sm:flex-row">
                   <button
                     type="button"
@@ -3132,74 +3110,97 @@ return (
                   })}</span>
                 </div>
 
-                <div className="mt-5 rounded-2xl border border-violet-100 bg-violet-50/70 px-4 py-4">
-                  <div className="text-sm font-black text-violet-900">🟣 Click invoice</div>
-                  <p className="mt-1 text-xs font-semibold leading-5 text-violet-800/80">
-                    Введите номер, привязанный к Click. Счёт придёт в приложение Click.
-                  </p>
-                  <input
-                    type="tel"
-                    inputMode="numeric"
-                    value={clickPhone}
-                    onChange={(e) => setClickPhone(e.target.value)}
-                    placeholder="998901234567"
-                    className="mt-3 w-full rounded-2xl border border-violet-200 bg-white px-4 py-3 text-sm font-bold text-gray-900 outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
-                  />
-                  {!!clickPayError && (
-                    <div className="mt-2 rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 ring-1 ring-red-100">
-                      {clickPayError}
+                <div className="mt-5 grid grid-cols-1 gap-4">
+                  <div className="rounded-2xl border border-sky-100 bg-sky-50/80 px-4 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-sky-100">
+                        <PaymentLogo type="payme" className="h-7 w-auto" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-black text-sky-950">Payme</div>
+                        <p className="mt-0.5 text-xs font-semibold leading-5 text-sky-800/80">
+                          Оплата картой через Payme. После успешной оплаты контакты откроются автоматически.
+                        </p>
+                      </div>
                     </div>
-                  )}
-                  {!!clickPayMessage && (
-                    <div className="mt-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-semibold leading-5 text-emerald-800 ring-1 ring-emerald-100">
-                      {clickPayMessage}
+
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const url = String(unlockPayModal.payUrl || "").trim();
+                        if (!url) return;
+
+                        await postUnlockStep("unlock_pay_modal_continue_clicked", {
+                          provider: "payme",
+                          order_id: unlockPayModal.orderId || null,
+                          shortfall_sum: Number(unlockPayModal.shortfallSum || 0),
+                        });
+
+                        redirectToPaymeGuide(url, {
+                          purpose: "unlock_contact",
+                          amount: Number(unlockPayModal.shortfallSum || 0),
+                          orderId: unlockPayModal.orderId || null,
+                          serviceId: unlockPayModal.serviceId || null,
+                        });
+                      }}
+                      className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-sky-500 px-4 py-3 text-sm font-black text-white shadow-[0_14px_32px_rgba(14,165,233,0.24)] transition hover:-translate-y-0.5 hover:bg-sky-600 hover:shadow-[0_22px_48px_rgba(14,165,233,0.34)] active:translate-y-0"
+                    >
+                      <PaymentLogo type="payme" className="h-5 w-auto brightness-0 invert" />
+                      {t("marketplace.go_to_payment", {
+                        defaultValue: "Payme: оплатить и открыть",
+                      })}
+                    </button>
+                  </div>
+
+                  <div className="rounded-2xl border border-violet-100 bg-violet-50/70 px-4 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-violet-100">
+                        <PaymentLogo type="click" className="h-7 w-auto" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-black text-violet-900">Click invoice</div>
+                        <p className="mt-0.5 text-xs font-semibold leading-5 text-violet-800/80">
+                          Введите номер, привязанный к Click. Счёт придёт в приложение Click Up.
+                        </p>
+                      </div>
                     </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={createClickUnlockInvoice}
-                    disabled={clickPayLoading}
-                    className="mt-3 inline-flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-500 px-4 py-3 text-sm font-black text-white shadow-[0_14px_32px_rgba(124,58,237,0.24)] transition hover:-translate-y-0.5 hover:shadow-[0_22px_48px_rgba(124,58,237,0.34)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
-                  >
-                    {clickPayLoading ? "Выставляем счёт..." : "🟣 Click: выставить счёт"}
-                  </button>
+                    <input
+                      type="tel"
+                      inputMode="numeric"
+                      value={clickPhone}
+                      onChange={(e) => setClickPhone(e.target.value)}
+                      placeholder="998901234567"
+                      className="mt-3 w-full rounded-2xl border border-violet-200 bg-white px-4 py-3 text-sm font-bold text-gray-900 outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+                    />
+                    {!!clickPayError && (
+                      <div className="mt-2 rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 ring-1 ring-red-100">
+                        {clickPayError}
+                      </div>
+                    )}
+                    {!!clickPayMessage && (
+                      <div className="mt-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-semibold leading-5 text-emerald-800 ring-1 ring-emerald-100">
+                        {clickPayMessage}
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={createClickUnlockInvoice}
+                      disabled={clickPayLoading}
+                      className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-violet-600 px-4 py-3 text-sm font-black text-white shadow-[0_14px_32px_rgba(124,58,237,0.24)] transition hover:-translate-y-0.5 hover:bg-violet-700 hover:shadow-[0_22px_48px_rgba(124,58,237,0.34)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
+                    >
+                      <PaymentLogo type="click" className="h-5 w-auto brightness-0 invert" />
+                      {clickPayLoading ? "Выставляем счёт..." : "Click: выставить счёт"}
+                    </button>
+                  </div>
                 </div>
 
-                <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+                <div className="mt-6">
                   <button
                     type="button"
                     onClick={closeUnlockPayModal}
                     className="inline-flex w-full items-center justify-center rounded-2xl border border-gray-200 px-4 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
                   >
                     {t("common.cancel", { defaultValue: "Отмена" })}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const url = String(unlockPayModal.payUrl || "").trim();
-                      if (!url) return;
-
-                      await postUnlockStep("unlock_pay_modal_continue_clicked", {
-                        order_id: unlockPayModal.orderId || null,
-                        shortfall_sum: Number(unlockPayModal.shortfallSum || 0),
-                      });
-
-                      redirectToPaymeGuide(url, {
-                        purpose: "unlock_contact",
-                        amount: Number(unlockPayModal.shortfallSum || 0),
-                        orderId: unlockPayModal.orderId || null,
-                        serviceId: unlockPayModal.serviceId || null,
-                      });
-                    }}
-                    className="group/pay relative inline-flex w-full overflow-hidden items-center justify-center rounded-2xl bg-gradient-to-r from-orange-500 via-amber-500 to-orange-400 px-4 py-3 text-sm font-black text-white shadow-[0_16px_36px_rgba(249,115,22,0.32)] ring-1 ring-orange-200/70 transition-all duration-300 hover:-translate-y-0.5 hover:scale-[1.03] hover:shadow-[0_24px_54px_rgba(249,115,22,0.48)] active:translate-y-0 active:scale-[0.98] animate-[pulse_2.4s_ease-in-out_infinite]"
-                  >
-                    <span className="pointer-events-none absolute inset-0 bg-orange-200/25 opacity-0 blur-xl transition-opacity duration-300 group-hover/pay:opacity-100" />
-                    <span className="relative z-10">
-                      {t("marketplace.go_to_payment", {
-                        defaultValue: "Payme: оплатить и открыть",
-                      })}
-                    </span>
                   </button>
                 </div>
               </div>
