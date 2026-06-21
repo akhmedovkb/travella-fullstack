@@ -375,7 +375,17 @@ function normalizeRefusedBotDetails(category, details = {}) {
       d.flightDate ||
       d.flight_date ||
       null;
+    const flightType = String(d.flightType || d.flight_type || (d.oneWay === false ? "round_trip" : "one_way")).trim();
+    d.flightType = flightType === "round_trip" ? "round_trip" : "one_way";
+    d.oneWay = d.flightType !== "round_trip";
+    if (d.flightType !== "round_trip") {
+      d.returnFlightDate = null;
+      delete d.returnDate;
+      delete d.endFlightDate;
+      delete d.end_flight_date;
+    }
     if (start) d.startDate = start;
+    delete d.flight_type;
     delete d.start_date;
   }
 
