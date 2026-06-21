@@ -4263,13 +4263,16 @@ async function finishEditWizard(ctx) {
       chd: isHotel ? Number(draft.chd ?? 0) : 0,
       inf: isHotel ? Number(draft.inf ?? 0) : 0,
 
+      flightType: isFlight ? (draft.flightType === "round_trip" ? "round_trip" : "one_way") : null,
+      oneWay: isFlight ? draft.flightType !== "round_trip" : null,
+
       departureFlightDate:
         isTicket || isHotel
           ? null
           : String(draft.departureFlightDate || "").trim() || null,
 
       returnFlightDate:
-        isTicket || isHotel
+        isTicket || isHotel || (isFlight && draft.flightType !== "round_trip")
           ? null
           : String(draft.returnFlightDate || "").trim() || null,
 
@@ -5200,6 +5203,7 @@ async function replyProviderDraftResumePrompt(ctx, row) {
     svc_create_tour_to: "Город прибытия",
     svc_create_tour_start: "Дата начала тура",
     svc_create_tour_end: "Дата окончания тура",
+    svc_create_flight_type: "Тип перелёта",
     svc_create_flight_departure: "Дата рейса вылета",
     svc_create_flight_return: "Дата рейса обратно",
     svc_ticket_event_date: "Дата мероприятия / билета",
@@ -5464,8 +5468,10 @@ function buildDetailsForRefusedFlight(draft, netPriceNum) {
     directionFrom: draft.fromCity || null,
     directionTo: draft.toCity || null,
 
+    flightType: draft.flightType === "round_trip" ? "round_trip" : "one_way",
+    oneWay: draft.flightType !== "round_trip",
     departureFlightDate: draft.departureFlightDate || null,
-    returnFlightDate: draft.returnFlightDate || null,
+    returnFlightDate: draft.flightType === "round_trip" ? (draft.returnFlightDate || null) : null,
     flightDetails: draft.flightDetails || null,
 
     netPrice: netPriceNum,
@@ -5957,6 +5963,7 @@ function getServiceWizardOrder(category = "", state = "") {
     "svc_create_tour_country",
     "svc_create_tour_from",
     "svc_create_tour_to",
+    "svc_create_flight_type",
     "svc_create_flight_departure",
     "svc_create_flight_return",
     "svc_create_flight_details",
@@ -6501,7 +6508,13 @@ function getCalendarConfig(state, draft = {}) {
     case "svc_create_tour_end":
       return { title: "📅 Выберите дату окончания тура", field: "endDate", next: "svc_create_flight_departure", kind: "date", required: true };
     case "svc_create_flight_departure":
-      return { title: "🛫 Выберите дату рейса вылета", field: "departureFlightDate", next: "svc_create_flight_return", kind: "date", required: false };
+      return {
+        title: "🛫 Выберите дату рейса вылета",
+        field: "departureFlightDate",
+        next: draft.flightType === "round_trip" ? "svc_create_flight_return" : "svc_create_flight_details",
+        kind: "date",
+        required: false
+      };
     case "svc_create_flight_return":
       return { title: "🛬 Выберите дату рейса обратно", field: "returnFlightDate", next: "svc_create_flight_details", kind: "date", required: false };
     case "svc_hotel_checkin":
@@ -7181,6 +7194,25 @@ async function promptWizardState(ctx, state) {
 
     case "svc_create_tour_end":
       await replyWizardCalendar(ctx, "svc_create_tour_end");
+      return;
+
+    case "svc_create_flight_type":
+      await ctx.reply(
+        "✈️ Выберите *тип перелёта*:",
+        {
+          parse_mode: "Markdown",
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "➡️ В одну сторону", callback_data: "svc_flight_type:one_way" }],
+              [{ text: "🔁 Туда-обратно", callback_data: "svc_flight_type:round_trip" }],
+              [
+                { text: "⬅️ Назад", callback_data: "svc_wiz:back" },
+                { text: "❌ Отмена", callback_data: "svc_wiz:cancel" },
+              ],
+            ],
+          },
+        }
+      );
       return;
 
     case "svc_create_flight_departure":
@@ -9537,6 +9569,29 @@ bot.action("svc_wiz:back", async (ctx) => {
   }
 });
 
+
+// ✈️ Тип перелёта для отказного авиабилета.
+bot.action(/^svc_flight_type:(one_way|round_trip)$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    if (!ctx.session) ctx.session = {};
+    const draft = ctx.session.serviceDraft || {};
+    ctx.session.serviceDraft = draft;
+
+    const type = ctx.match?.[1] === "round_trip" ? "round_trip" : "one_way";
+    draft.flightType = type;
+    draft.oneWay = type !== "round_trip";
+    if (type !== "round_trip") draft.returnFlightDate = null;
+
+    pushWizardState(ctx, "svc_create_flight_type");
+    ctx.session.state = "svc_create_flight_departure";
+    await promptWizardState(ctx, "svc_create_flight_departure");
+    await persistProviderCreateWizard(ctx);
+  } catch (e) {
+    console.error("[tg-bot] svc_flight_type error:", e?.response?.data || e);
+  }
+});
+
 // ⏭ Пропустить шаг при СОЗДАНИИ услуги.
 // Важно: пропуск разрешён только для опциональных полей.
 bot.action("svc_wiz:skip", async (ctx) => {
@@ -9599,6 +9654,7 @@ bot.action("svc_wiz:skip", async (ctx) => {
       "svc_create_tour_country",
       "svc_create_tour_from",
       "svc_create_tour_to",
+      "svc_create_flight_type",
       "svc_create_flight_departure",
       "svc_create_flight_return",
       "svc_create_flight_details",
@@ -9659,6 +9715,7 @@ bot.action("svc_wiz:skip", async (ctx) => {
       "author_day_date",
       "author_day_route",
       "author_day_title",
+      "svc_create_flight_type",
       "svc_create_flight_departure",
       "svc_create_flight_return",
       "svc_create_flight_details",
@@ -9703,6 +9760,11 @@ bot.action("svc_wiz:skip", async (ctx) => {
       if (state === "svc_create_expiration") {
         draft.expiration = null;
       }
+      if (state === "svc_create_flight_type") {
+        draft.flightType = "one_way";
+        draft.oneWay = true;
+        draft.returnFlightDate = null;
+      }
       if (state === "svc_create_flight_departure") {
         draft.departureFlightDate = null;
       }
@@ -9730,8 +9792,10 @@ bot.action("svc_wiz:skip", async (ctx) => {
         ? "svc_author_pax"
         : state === "svc_author_cancel"
           ? "svc_create_price"
-          : state === "svc_create_flight_departure"
-      ? "svc_create_flight_return"
+          : state === "svc_create_flight_type"
+      ? "svc_create_flight_departure"
+      : state === "svc_create_flight_departure"
+      ? (draft.flightType === "round_trip" ? "svc_create_flight_return" : "svc_create_flight_details")
       : state === "svc_create_flight_return"
         ? "svc_create_flight_details"
         : state === "svc_create_flight_details"
@@ -15372,8 +15436,8 @@ bot.on("text", async (ctx, next) => {
         
           const cat = String(draft.category || "");
           if (cat === "refused_flight") {
-            ctx.session.state = "svc_create_flight_departure";
-            await promptWizardState(ctx, "svc_create_flight_departure");
+            ctx.session.state = "svc_create_flight_type";
+            await promptWizardState(ctx, "svc_create_flight_type");
             return;
           }
 
@@ -15442,13 +15506,30 @@ bot.on("text", async (ctx, next) => {
           return;
         }
 
+        case "svc_create_flight_type": {
+          const low = text.toLowerCase();
+          const isRoundTrip = ["туда-обратно", "туда обратно", "round_trip", "round trip", "обратно", "2", "return"].includes(low);
+          const isOneWay = ["в одну сторону", "одна сторона", "one_way", "one way", "1", "без обратно"].includes(low);
+          if (!isRoundTrip && !isOneWay) {
+            await ctx.reply("Выберите тип перелёта кнопкой: ➡️ В одну сторону или 🔁 Туда-обратно.", { ...wizNavKeyboard() });
+            return;
+          }
+          draft.flightType = isRoundTrip ? "round_trip" : "one_way";
+          draft.oneWay = !isRoundTrip;
+          if (!isRoundTrip) draft.returnFlightDate = null;
+          pushWizardState(ctx, "svc_create_flight_type");
+          ctx.session.state = "svc_create_flight_departure";
+          await promptWizardState(ctx, "svc_create_flight_departure");
+          return;
+        }
+
         case "svc_create_flight_departure": {
           const low = text.toLowerCase();
           if (["пропустить", "skip", "-", "нет"].includes(low)) {
             draft.departureFlightDate = null;
             pushWizardState(ctx, "svc_create_flight_departure");
-            ctx.session.state = "svc_create_flight_return";
-            await promptWizardState(ctx, "svc_create_flight_return");
+            ctx.session.state = draft.flightType === "round_trip" ? "svc_create_flight_return" : "svc_create_flight_details";
+            await promptWizardState(ctx, ctx.session.state);
             return;
           }
 
@@ -15469,8 +15550,8 @@ bot.on("text", async (ctx, next) => {
           }
           draft.departureFlightDate = norm;
           pushWizardState(ctx, "svc_create_flight_departure");
-          ctx.session.state = "svc_create_flight_return";
-          await promptWizardState(ctx, "svc_create_flight_return");
+          ctx.session.state = draft.flightType === "round_trip" ? "svc_create_flight_return" : "svc_create_flight_details";
+          await promptWizardState(ctx, ctx.session.state);
           return;
         }
 
