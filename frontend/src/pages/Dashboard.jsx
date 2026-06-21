@@ -1374,16 +1374,20 @@ useEffect(() => {
         return;
       }
     }
-    if (category === "refused_flight" && details.flightType === "round_trip") {
-  if (!details.returnDate) {
-    tWarn(t("fill_all_fields") || "Заполните все обязательные поля");
-    return;
-  }
-  if (new Date(details.returnDate) < new Date(details.startDate)) {
-    tError(t("validation.dates_range", { defaultValue: "Дата возврата не может быть раньше вылета" }));
-    return;
-  }
-}
+    const flightDepartureDate = details.startDate || details.departureFlightDate || details.startFlightDate || "";
+    const flightReturnDate = details.returnDate || details.returnFlightDate || details.endFlightDate || details.endDate || "";
+    const isRoundTripFlight = category === "refused_flight" && details.flightType === "round_trip";
+
+    if (isRoundTripFlight) {
+      if (!flightReturnDate) {
+        tWarn(t("fill_all_fields") || "Заполните все обязательные поля");
+        return;
+      }
+      if (flightDepartureDate && new Date(flightReturnDate) < new Date(flightDepartureDate)) {
+        tError(t("validation.dates_range", { defaultValue: "Дата возврата не может быть раньше вылета" }));
+        return;
+      }
+    }
 
     
     const requiredFieldsByCategory = {
@@ -1397,18 +1401,17 @@ useEffect(() => {
     const isExtendedCategory = category in requiredFieldsByCategory;
     const requiredFields = requiredFieldsByCategory[category] || ["title", "description", "category", "price"];
 
-    const getFieldValue = (path) =>
-      path.split(".").reduce((obj, key) => obj?.[key], { title, description, category, price, details });
+    const getFieldValue = (path) => {
+      if (category === "refused_flight" && path === "details.startDate") return flightDepartureDate;
+      return path.split(".").reduce((obj, key) => obj?.[key], { title, description, category, price, details });
+    };
 
     const hasEmpty = requiredFields.some((field) => {
       const value = getFieldValue(field);
       return value === "" || value === undefined || value === null;
     });
 
-    const needsReturnDate =
-      category === "refused_flight" &&
-      details.flightType === "round_trip" &&
-      (!details.returnDate || details.returnDate === "");
+    const needsReturnDate = isRoundTripFlight && !flightReturnDate;
 
     if (hasEmpty || needsReturnDate) {
       tWarn(t("fill_all_fields") || "Заполните все обязательные поля");
@@ -1454,21 +1457,49 @@ useEffect(() => {
 };
 
 
+    const detailsForSubmit = (() => {
+      const next = { ...(details || {}) };
+      if (category === "refused_flight") {
+        const isRoundTrip = next.flightType === "round_trip" || next.oneWay === false;
+        next.flightType = isRoundTrip ? "round_trip" : "one_way";
+        next.oneWay = !isRoundTrip;
+
+        const departure = next.departureFlightDate || next.startFlightDate || next.startDate || "";
+        next.departureFlightDate = departure;
+        next.startFlightDate = departure;
+        next.startDate = departure;
+
+        if (isRoundTrip) {
+          const ret = next.returnFlightDate || next.returnDate || next.endFlightDate || next.endDate || "";
+          next.returnFlightDate = ret;
+          next.returnDate = ret;
+          next.endFlightDate = ret;
+          next.endDate = ret;
+        } else {
+          next.returnFlightDate = "";
+          next.returnDate = "";
+          next.endFlightDate = "";
+          next.endDate = "";
+        }
+      }
+      return next;
+    })();
+
     const __grossNum = (() => {
-      const g = details?.grossPrice;
+      const g = detailsForSubmit?.grossPrice;
       if (!hasVal(g)) return undefined;
       const n = parseMoneySafe(g); // поддерживает "1 200,50"
       return Number.isFinite(n) ? n : undefined;
     })();
 
     const __netNum = (() => {
-      const n = parseMoneySafe(details?.netPrice);
+      const n = parseMoneySafe(detailsForSubmit?.netPrice);
       return Number.isFinite(n) ? n : undefined;
     })();
 
      const __expTs = (() => {
-       if (!hasVal(details?.expiration)) return undefined;
-       const d = new Date(details.expiration);
+       if (!hasVal(detailsForSubmit?.expiration)) return undefined;
+       const d = new Date(detailsForSubmit.expiration);
        return Number.isFinite(d.getTime()) ? d.getTime() : undefined;
      })();
 
@@ -1482,10 +1513,10 @@ useEffect(() => {
       availability: isExtendedCategory ? undefined : availability,
       details: isExtendedCategory
       ? {
-          ...details,
-             hotel: typeof details.hotel === "object"
-       ? (details.hotel?.label || details.hotel?.name || "")
-       : (details.hotel || ""),
+          ...detailsForSubmit,
+             hotel: typeof detailsForSubmit.hotel === "object"
+       ? (detailsForSubmit.hotel?.label || detailsForSubmit.hotel?.name || "")
+       : (detailsForSubmit.hotel || ""),
           ...(__grossNum !== undefined ? { grossPrice: __grossNum } : {}),
           ...(__netNum   !== undefined ? { netPrice:  __netNum   } : {}),
           // NOTE: if API expects seconds, use Math.floor(__expTs/1000)
@@ -1504,7 +1535,7 @@ useEffect(() => {
     }
         
         // Приводим seats к числу и включаем в details для простых категорий
-    const seatsNum = hasVal(details?.seats) ? parseInt(details.seats, 10) : undefined;
+    const seatsNum = hasVal(detailsForSubmit?.seats) ? parseInt(detailsForSubmit.seats, 10) : undefined;
     if (Number.isFinite(seatsNum)) {
       if (!raw.details) raw.details = {};
       raw.details.seats = seatsNum;
@@ -2438,7 +2469,7 @@ useEffect(() => {
                               type="radio"
                               checked={details.flightType === "one_way"}
                               onChange={() =>
-                                setDetails({ ...details, flightType: "one_way", oneWay: true, returnDate: "" })
+                                setDetails({ ...details, flightType: "one_way", oneWay: true, returnDate: "", returnFlightDate: "", endFlightDate: "", endDate: "" })
                               }
                               className="mr-2 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-200"
                             />
@@ -3375,7 +3406,7 @@ useEffect(() => {
                               type="radio"
                               checked={details.flightType === "one_way"}
                               onChange={() =>
-                                setDetails({ ...details, flightType: "one_way", oneWay: true, returnDate: "" })
+                                setDetails({ ...details, flightType: "one_way", oneWay: true, returnDate: "", returnFlightDate: "", endFlightDate: "", endDate: "" })
                               }
                               className="mr-2 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-200"
                             />
