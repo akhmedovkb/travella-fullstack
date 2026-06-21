@@ -1,4 +1,13 @@
 // backend/index.js
+process.on("uncaughtException", (err) => {
+  console.error("[fatal] uncaughtException:", err?.stack || err);
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (reason) => {
+  console.error("[fatal] unhandledRejection:", reason?.stack || reason);
+});
+
 const pool = require("./db");
 const express = require("express");
 const cors = require("cors");
