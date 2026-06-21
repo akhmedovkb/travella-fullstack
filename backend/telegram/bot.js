@@ -3594,6 +3594,7 @@ bot.action("svc_edit:skip", async (ctx) => {
       "svc_edit_flight_country",
       "svc_edit_flight_from",
       "svc_edit_flight_to",
+      "svc_edit_flight_type",
       "svc_edit_flight_departure",
       "svc_edit_flight_return",
       "svc_edit_flight_details",
@@ -9589,6 +9590,35 @@ bot.action(/^svc_flight_type:(one_way|round_trip)$/, async (ctx) => {
     await persistProviderCreateWizard(ctx);
   } catch (e) {
     console.error("[tg-bot] svc_flight_type error:", e?.response?.data || e);
+  }
+});
+
+// ✈️ Тип перелёта при редактировании отказного авиабилета.
+bot.action(/^svc_edit_flight_type:(one_way|round_trip)$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    if (!ctx.session) ctx.session = {};
+    const draft = ctx.session.serviceDraft || {};
+    ctx.session.serviceDraft = draft;
+
+    const type = ctx.match?.[1] === "round_trip" ? "round_trip" : "one_way";
+    draft.flightType = type;
+    draft.oneWay = type !== "round_trip";
+    if (type !== "round_trip") {
+      draft.returnFlightDate = "";
+      draft.returnDate = "";
+      draft.endFlightDate = "";
+      draft.endDate = "";
+    }
+
+    ctx.session.wizardStack = Array.isArray(ctx.session.wizardStack) ? ctx.session.wizardStack : [];
+    ctx.session.wizardStack.push("svc_edit_flight_type");
+    ctx.session.editWiz = ctx.session.editWiz || {};
+    ctx.session.editWiz.step = "svc_edit_flight_departure";
+    ctx.session.state = "svc_edit_flight_departure";
+    await promptEditState(ctx, "svc_edit_flight_departure");
+  } catch (e) {
+    console.error("[tg-bot] svc_edit_flight_type error:", e?.response?.data || e);
   }
 });
 
@@ -16303,9 +16333,13 @@ async function finishProofSubmissionFromBot(ctx) {
     );
 
     if (!data || data.success === false) {
+      const details = Array.isArray(data?.blockerDetails) ? data.blockerDetails : [];
+      const labels = details.map((b) => b?.label).filter(Boolean);
       await safeReply(
         ctx,
-        "⚠️ Не удалось отправить услугу на модерацию. Попробуйте позже."
+        labels.length
+          ? `⚠️ Пока нельзя отправить на модерацию.\n\nИсправьте:\n${labels.map((x) => `• ${x}`).join("\n")}`
+          : "⚠️ Не удалось отправить услугу на модерацию. Попробуйте позже."
       );
       return;
     }
@@ -16339,10 +16373,14 @@ async function finishProofSubmissionFromBot(ctx) {
 
     await replyProviderSupportPrompt(ctx, serviceId);
   } catch (e) {
-    console.error("[tg-bot] proof done error:", e?.response?.data || e);
+    const payload = e?.response?.data || null;
+    const labels = Array.isArray(payload?.blockerDetails) ? payload.blockerDetails.map((b) => b?.label).filter(Boolean) : [];
+    console.error("[tg-bot] proof done error:", payload || e);
     await safeReply(
       ctx,
-      "⚠️ Ошибка при завершении отправки на модерацию. Попробуйте ещё раз."
+      labels.length
+        ? `⚠️ Пока нельзя отправить на модерацию.\n\nИсправьте:\n${labels.map((x) => `• ${x}`).join("\n")}`
+        : "⚠️ Ошибка при завершении отправки на модерацию. Попробуйте ещё раз."
     );
   }
 }
