@@ -702,10 +702,15 @@ router.post(
 
       return res.json({ ok: true, service: applied.service });
     } catch (e) {
-      if (e?.code === "PROOF_IMAGES_REQUIRED") {
+      if (e?.code === "PROOF_IMAGES_REQUIRED" || e?.code === "SERVICE_SUBMIT_BLOCKED") {
+        const labels = Array.isArray(e?.blockerDetails) ? e.blockerDetails.map((b) => b.label).filter(Boolean) : [];
         return res.status(400).json({
-          message: "Before sending to moderation, upload screenshots confirming the authenticity of the booking/ticket.",
-          code: "PROOF_IMAGES_REQUIRED",
+          message: labels.length
+            ? `Перед отправкой на модерацию исправьте: ${labels.join("; ")}`
+            : "Перед отправкой на модерацию заполните обязательные поля и загрузите proof.",
+          code: e.code,
+          blockers: e?.blockers || [],
+          blockerDetails: e?.blockerDetails || [],
         });
       }
 
