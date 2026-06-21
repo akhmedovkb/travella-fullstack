@@ -51,6 +51,7 @@ const { notifyModerationNew } = require("../utils/telegram");
 const { logProviderServiceAction } = require("../utils/serviceAuditLog");
 const { applyServiceLifecycleAction } = require("../utils/serviceLifecycle");
 const { logProviderFunnelEvent } = require("../utils/providerFunnel");
+const { buildRefusedQuality } = require("../utils/refusedQuality");
 
 function requireProvider(req, res, next) {
   if (!req.user || !req.user.id) {
@@ -700,7 +701,7 @@ router.post(
         await notifyModerationNew({ service: id });
       } catch {}
 
-      return res.json({ ok: true, service: applied.service });
+      return res.json({ ok: true, service: applied.service, quality: buildRefusedQuality(applied.service) });
     } catch (e) {
       if (e?.code === "PROOF_IMAGES_REQUIRED" || e?.code === "SERVICE_SUBMIT_BLOCKED") {
         const labels = Array.isArray(e?.blockerDetails) ? e.blockerDetails.map((b) => b.label).filter(Boolean) : [];
