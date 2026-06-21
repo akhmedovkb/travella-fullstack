@@ -4,8 +4,13 @@ WORKDIR /app
 
 COPY package*.json ./
 
-# package-lock.json может отсутствовать -> используем npm install
-RUN npm install --no-audit --no-fund
+# Важно для Railway/Docker: ставим зависимости внутри Linux-контейнера.
+# --include=optional нужен для native/optional пакетов вроде sharp.
+RUN if [ -f package-lock.json ]; then \
+      npm ci --include=optional --no-audit --no-fund; \
+    else \
+      npm install --include=optional --no-audit --no-fund; \
+    fi
 
 COPY . .
 
