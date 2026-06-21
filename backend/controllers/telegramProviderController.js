@@ -5,6 +5,7 @@ const { tgSend, notifyModerationNew } = require("../utils/telegram");
 const { logProviderServiceAction } = require("../utils/serviceAuditLog");
 const { applyServiceLifecycleAction } = require("../utils/serviceLifecycle");
 const { logProviderFunnelEvent } = require("../utils/providerFunnel");
+const { buildRefusedQuality } = require("../utils/refusedQuality");
 const { REFUSED_CATEGORIES } = require("../utils/serviceCategories");
 const MAX_TITLE_LEN = 100;
 const {
@@ -1777,7 +1778,7 @@ async function submitServiceFromBot(req, res) {
       console.error("[telegram] notifyModerationNew failed:", e);
     }
 
-    return res.json({ success: true, service: applied.service });
+    return res.json({ success: true, service: applied.service, quality: buildRefusedQuality(applied.service) });
   } catch (err) {
     console.error("[telegram] submitServiceFromBot error:", err);
     const labels = Array.isArray(err?.blockerDetails) ? err.blockerDetails.map((b) => b.label).filter(Boolean) : [];
