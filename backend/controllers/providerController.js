@@ -342,6 +342,7 @@ const EXT_CATS = new Set([
   "author_tour",
   "refused_hotel",
   "refused_flight",
+  "refused_ticket",
   "refused_event_ticket",
   "visa_support",
 ]);
