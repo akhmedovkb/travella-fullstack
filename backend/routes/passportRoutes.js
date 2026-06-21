@@ -3,7 +3,23 @@
 const express = require("express");
 const multer = require("multer");
 const fs = require("fs");
-const sharp = require("sharp");
+let sharp = null;
+function getSharp() {
+  if (sharp) return sharp;
+  try {
+    sharp = require("sharp");
+    return sharp;
+  } catch (e) {
+    const msg = e?.message || String(e);
+    console.error("[passport/parse] sharp module is not available:", msg);
+    const err = new Error(
+      "Passport OCR is temporarily unavailable: image processor failed to load"
+    );
+    err.cause = e;
+    err.code = "SHARP_NOT_AVAILABLE";
+    throw err;
+  }
+}
 const Tesseract = require("tesseract.js");
 const { parse } = require("mrz");
 
@@ -113,7 +129,8 @@ router.post("/parse", upload.array("files", 100), async (req, res) => {
 });
 
 async function buildMrzVariants(filePath) {
-  const meta = await sharp(filePath).metadata();
+  const image = getSharp();
+  const meta = await image(filePath).metadata();
   const width = meta.width || 0;
   const height = meta.height || 0;
 
@@ -140,7 +157,7 @@ async function buildMrzVariants(filePath) {
     for (const angle of rotations) {
       const outPath = `${filePath}-${cropSpec.label}-rot${String(angle).replace("-", "m")}.png`;
 
-      await sharp(filePath)
+      await image(filePath)
         .extract({
           left: 0,
           top,
