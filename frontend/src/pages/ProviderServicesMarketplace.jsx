@@ -1379,6 +1379,56 @@ useEffect(() => {
     }
   };
 
+
+  const getRefusedQuality = () => {
+    const has = (...values) => values.some((v) => v !== undefined && v !== null && String(v).trim() !== "");
+    const checks = [];
+    const add = (label, ok, weight = 1) => checks.push({ label, ok: Boolean(ok), weight });
+    const proofCount = Array.isArray(details?.proofImages) ? details.proofImages.filter(Boolean).length : 0;
+    const imageCount = Array.isArray(images) ? images.filter(Boolean).length : 0;
+    const isRefused = ["refused_tour", "author_tour", "refused_hotel", "refused_flight", "refused_event_ticket", "refused_ticket"].includes(category);
+    if (!isRefused) return null;
+
+    add("Название", has(title, details?.title, details?.eventName, details?.hotel, details?.hotelName), 2);
+    add("Цена", has(details?.netPrice, details?.price, price) && has(details?.grossPrice, details?.clientPrice, details?.price, price), 3);
+    add("Proof / фото", proofCount > 0 || imageCount > 0, 3);
+
+    if (category === "refused_flight") {
+      const dep = details?.startDate || details?.departureFlightDate || details?.startFlightDate || "";
+      const ret = details?.returnDate || details?.returnFlightDate || details?.endFlightDate || details?.endDate || "";
+      const isRound = details?.flightType === "round_trip" || details?.oneWay === false;
+      add("Маршрут", has(details?.directionFrom, details?.fromCity) && has(details?.directionTo, details?.toCity), 3);
+      add("Дата вылета", has(dep), 3);
+      add(isRound ? "Дата обратного рейса" : "Тип перелёта: в одну сторону", isRound ? has(ret) : true, 2);
+      add("Авиакомпания", has(details?.airline), 2);
+      add("Номер/детали рейса", has(details?.flightDetails, details?.flightNumber), 1);
+      add("Багаж", has(details?.baggage, details?.flightDetails), 1);
+      add("Количество мест", has(details?.seats, details?.quantity, details?.pax), 1);
+    } else if (category === "refused_event_ticket" || category === "refused_ticket") {
+      add("Город/площадка", has(details?.directionTo, details?.toCity, details?.city, details?.location), 3);
+      add("Дата мероприятия", has(details?.startDate, details?.eventDate, details?.date), 3);
+      add("Сектор/ряд/место или тип билета", has(details?.ticketDetails, details?.eventCategory, details?.sector, details?.row, details?.seat), 2);
+      add("Количество билетов", has(details?.quantity, details?.seats, details?.ticketCount), 1);
+    } else if (category === "refused_hotel") {
+      add("Страна и город", has(details?.directionCountry, details?.country) && has(details?.directionTo, details?.toCity, details?.city), 3);
+      add("Заезд и выезд", has(details?.startDate, details?.checkinDate, details?.checkInDate) && has(details?.endDate, details?.checkoutDate, details?.checkOutDate), 3);
+      add("Отель", has(details?.hotel, details?.hotelName), 3);
+      add("Номер/размещение", has(details?.accommodationCategory, details?.accommodation, details?.roomCategory), 2);
+    } else {
+      add("Маршрут", has(details?.directionFrom, details?.fromCity) && has(details?.directionTo, details?.toCity, details?.city), 3);
+      add("Даты", has(details?.startDate, details?.start_date) && (has(details?.endDate, details?.end_date) || category === "author_tour"), 3);
+      add("Основные детали", has(details?.hotel, details?.hotelName, details?.accommodation, details?.program, details?.description, description), 2);
+    }
+
+    const total = checks.reduce((sum, x) => sum + x.weight, 0) || 1;
+    const done = checks.filter((x) => x.ok).reduce((sum, x) => sum + x.weight, 0);
+    const score = Math.max(0, Math.min(100, Math.round((done / total) * 100)));
+    const level = score >= 90 ? "excellent" : score >= 70 ? "good" : "needs_work";
+    return { score, level, missing: checks.filter((x) => !x.ok).slice(0, 5) };
+  };
+
+  const refusedQuality = getRefusedQuality();
+
   /** ===== Save service (create/update) ===== */
   const handleSaveService = () => {
         const badRange = (a,b) => !!a && !!b && new Date(a).getTime() > new Date(b).getTime();
