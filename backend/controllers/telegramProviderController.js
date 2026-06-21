@@ -1780,11 +1780,17 @@ async function submitServiceFromBot(req, res) {
     return res.json({ success: true, service: applied.service });
   } catch (err) {
     console.error("[telegram] submitServiceFromBot error:", err);
+    const labels = Array.isArray(err?.blockerDetails) ? err.blockerDetails.map((b) => b.label).filter(Boolean) : [];
     return res.status(err?.status || 500).json({
       success: false,
       error: err?.code || "SERVER_ERROR",
-      message: err?.code === "PROOF_IMAGES_REQUIRED" ? "Proof images are required" : undefined,
+      message: labels.length
+        ? `Перед отправкой на модерацию исправьте: ${labels.join("; ")}`
+        : err?.code === "PROOF_IMAGES_REQUIRED"
+          ? "Proof images are required"
+          : undefined,
       blockers: err?.blockers || undefined,
+      blockerDetails: err?.blockerDetails || undefined,
     });
   }
 }
