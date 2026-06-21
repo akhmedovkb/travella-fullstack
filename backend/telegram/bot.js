@@ -84,6 +84,7 @@ const PRICE_CURRENCY = (process.env.PRICE_CURRENCY || "USD").trim();
 
 // Для /tour_123 и inline-поиска — работаем с отказными категориями
 const { REFUSED_CATEGORIES, PROOF_REQUIRED_CATEGORIES } = require("../utils/serviceCategories");
+const { buildRefusedQuality, formatQualityText } = require("../utils/refusedQuality");
 const { logProviderFunnelEvent } = require("../utils/providerFunnel");
 
 const API_BASE = (
@@ -6063,6 +6064,14 @@ function buildProofKeyboard(serviceId, count = 0) {
 
   if (count > 0) {
     rows.push([{ text: "🧾 Предпросмотр карточки", callback_data: `proof:card:${Number(serviceId || 0)}` }]);
+    rows.push([
+      { text: "💰 Цена", callback_data: `proof:edit:${Number(serviceId || 0)}:price` },
+      { text: "📅 Даты", callback_data: `proof:edit:${Number(serviceId || 0)}:dates` },
+    ]);
+    rows.push([
+      { text: "✏️ Детали", callback_data: `proof:edit:${Number(serviceId || 0)}:details` },
+      { text: "🖼 Proof", callback_data: "proof:add_more" },
+    ]);
     rows.push([{ text: "👀 Просмотреть proof", callback_data: `proof:view:${Number(serviceId || 0)}` }]);
     rows.push([{ text: "🗑 Удалить последнее", callback_data: "proof:delete_last" }]);
     rows.push([{ text: "✅ Отправить на модерацию", callback_data: "proof:submit" }]);
@@ -16322,6 +16331,18 @@ async function finishProofSubmissionFromBot(ctx) {
       return;
     }
 
+    const quality = buildRefusedQuality(svcRes.rows[0]);
+    if (!quality.canSubmit) {
+      await safeReply(
+        ctx,
+        `${formatQualityText(svcRes.rows[0])}
+
+Нажмите <b>🧾 Предпросмотр карточки</b> или быстрые кнопки редактирования, затем отправьте повторно.`,
+        { parse_mode: "HTML", ...buildProofKeyboard(serviceId, proofImages.length) }
+      );
+      return;
+    }
+
     const chatId = getActorId(ctx);
     if (!chatId) {
       await safeReply(ctx, "⚠️ Не удалось определить пользователя. Попробуйте ещё раз.");
@@ -16401,6 +16422,101 @@ bot.action("proof:add_more", async (ctx) => {
   );
 });
 
+
+
+async function startQuickProofEdit(ctx, serviceId, group) {
+  try {
+    const role = await ensureProviderRole(ctx);
+    if (role !== "provider") {
+      await safeReply(ctx, "⚠️ Редактирование доступно только поставщикам.");
+      return;
+    }
+    const actorId = getActorId(ctx);
+    if (!actorId) {
+      await safeReply(ctx, "⚠️ Не удалось определить пользователя. Откройте бота в ЛС и попробуйте ещё раз.");
+      return;
+    }
+    const { data } = await axios.get(`/api/telegram/provider/${actorId}/services/${serviceId}`);
+    const svc = data?.service || data?.item || data?.data || null;
+    if (!svc || Number(svc.id) !== Number(serviceId)) {
+      await safeReply(ctx, "⚠️ Услуга не найдена.");
+      return;
+    }
+    const category = String(svc.category || svc.type || "refused_tour").trim();
+    const det = parseDetailsAny(svc.details);
+    const draft = {
+      id: svc.id,
+      category,
+      title: svc.title || det.title || det.eventName || det.hotel || "",
+      price: det.netPrice ?? det.price ?? svc.price ?? "",
+      grossPrice: det.grossPrice ?? svc.grossPrice ?? "",
+      expiration: det.expiration || svc.expiration || "",
+      isActive: typeof det.isActive === "boolean" ? det.isActive : true,
+      country: det.directionCountry || det.country || "",
+      fromCity: det.directionFrom || det.fromCity || "",
+      toCity: det.directionTo || det.toCity || det.city || det.location || "",
+      startDate: det.startDate || det.eventDate || det.checkinDate || "",
+      endDate: det.endDate || det.checkoutDate || "",
+      flightType: det.flightType || (det.oneWay === false ? "round_trip" : "one_way"),
+      oneWay: det.oneWay ?? det.flightType !== "round_trip",
+      airline: det.airline || "",
+      departureFlightDate: det.departureFlightDate || det.startFlightDate || det.startDate || "",
+      returnFlightDate: det.returnFlightDate || det.returnDate || det.endFlightDate || det.endDate || "",
+      flightDetails: det.flightDetails || det.flightNumber || det.baggage || "",
+      hotel: det.hotel || det.hotelName || "",
+      accommodation: det.accommodation || "",
+      roomCategory: det.roomCategory || det.accommodationCategory || "",
+      food: det.food || "",
+      halal: typeof det.halal === "boolean" ? det.halal : false,
+      transfer: det.transfer || "",
+      changeable: typeof det.changeable === "boolean" ? det.changeable : false,
+      insuranceIncluded: !!det.insuranceIncluded,
+      earlyCheckIn: !!det.earlyCheckIn,
+      arrivalFastTrack: !!det.arrivalFastTrack,
+      adt: det.adt || 0,
+      chd: det.chd || 0,
+      inf: det.inf || 0,
+      eventName: det.eventName || svc.title || "",
+      eventCategory: det.eventCategory || "",
+      ticketDetails: det.ticketDetails || "",
+      location: det.location || det.city || det.directionTo || "",
+      images: parseImagesAny(svc.images),
+    };
+
+    let step = "svc_edit_title";
+    if (group === "price") step = "svc_edit_price";
+    else if (group === "dates") {
+      if (category === "refused_flight") step = "svc_edit_flight_type";
+      else if (category === "refused_ticket" || category === "refused_event_ticket") step = "svc_edit_ticket_date";
+      else if (category === "refused_hotel") step = "svc_edit_hotel_checkin";
+      else step = "svc_edit_tour_start";
+    } else if (group === "details") {
+      if (category === "refused_flight") step = "svc_edit_flight_details";
+      else if (category === "refused_ticket" || category === "refused_event_ticket") step = "svc_edit_ticket_city";
+      else if (category === "refused_hotel") step = "svc_edit_hotel_name";
+      else step = "svc_edit_title";
+    }
+
+    if (!ctx.session) ctx.session = {};
+    ctx.session.serviceDraft = draft;
+    ctx.session.editingServiceId = svc.id;
+    ctx.session.wizardStack = [];
+    ctx.session.state = step;
+    ctx.session.editWiz = ctx.session.editWiz || {};
+    ctx.session.editWiz.step = step;
+
+    await safeReply(ctx, `✏️ Быстрое редактирование #${svc.id}\n\nПосле правки нажмите сохранить, затем снова откройте предпросмотр.`, editWizNavKeyboard());
+    await promptEditState(ctx, step);
+  } catch (e) {
+    console.error("[tg-bot] proof quick edit error:", e?.response?.data || e?.message || e);
+    await safeReply(ctx, "⚠️ Не удалось открыть быстрое редактирование. Используйте кнопку ✏️ Редактировать в карточке услуги.");
+  }
+}
+
+bot.action(/^proof:edit:(\d+):(price|dates|details)$/, async (ctx) => {
+  await safeCb(ctx, "Открываю редактирование…");
+  await startQuickProofEdit(ctx, Number(ctx.match[1]), String(ctx.match[2]));
+});
 
 bot.action(/^proof:card:(\d+)$/, async (ctx) => {
   await safeCb(ctx);
