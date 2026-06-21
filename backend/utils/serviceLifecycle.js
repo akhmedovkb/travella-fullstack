@@ -1,6 +1,6 @@
 // backend/utils/serviceLifecycle.js
 
-const { isProofRequiredCategory } = require("./serviceCategories");
+const { assertServiceSubmittable, getProofImages } = require("./serviceSubmitValidation");
 
 const DEFAULT_RETURNING = `
   id,
@@ -51,25 +51,6 @@ function assertLifecycleAction(action) {
     throw err;
   }
   return normalized;
-}
-
-function normalizeDetails(details) {
-  if (!details) return {};
-  if (typeof details === "object" && !Array.isArray(details)) return details;
-  if (typeof details === "string") {
-    try {
-      const parsed = JSON.parse(details);
-      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
-    } catch {
-      return {};
-    }
-  }
-  return {};
-}
-
-function getProofImages(details) {
-  const d = normalizeDetails(details);
-  return Array.isArray(d.proofImages) ? d.proofImages.filter(Boolean) : [];
 }
 
 async function fetchServiceForLifecycle(pool, providerId, serviceId) {
@@ -146,12 +127,7 @@ async function applyServiceLifecycleAction(pool, { providerId, serviceId, action
       throw err;
     }
 
-    if (isProofRequiredCategory(before.category) && !getProofImages(before.details).length) {
-      const err = new Error("PROOF_IMAGES_REQUIRED");
-      err.code = "PROOF_IMAGES_REQUIRED";
-      err.status = 400;
-      throw err;
-    }
+    assertServiceSubmittable(before);
 
     result = await pool.query(
       `UPDATE services
