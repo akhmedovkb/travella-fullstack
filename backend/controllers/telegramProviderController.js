@@ -360,6 +360,38 @@ function isExpirationAfterTripStartForStorage(category, details, expirationIso) 
   return exp.getTime() > tripStartEnd.getTime();
 }
 
+
+function normalizeRefusedBotDetails(category, details = {}) {
+  const cat = String(category || "").trim().toLowerCase();
+  const d = details && typeof details === "object" && !Array.isArray(details) ? { ...details } : {};
+
+  if (cat === "refused_flight") {
+    const start =
+      d.startDate ||
+      d.start_date ||
+      d.departureFlightDate ||
+      d.departureDate ||
+      d.departure_date ||
+      d.flightDate ||
+      d.flight_date ||
+      null;
+    if (start) d.startDate = start;
+    delete d.start_date;
+  }
+
+  if (cat === "refused_ticket" || cat === "refused_event_ticket") {
+    const eventDate = d.eventDate || d.event_date || d.startDate || d.start_date || d.date || null;
+    if (eventDate) {
+      d.eventDate = eventDate;
+      d.startDate = eventDate;
+    }
+    delete d.event_date;
+    delete d.start_date;
+  }
+
+  return d;
+}
+
 function parseExpirationForStorage(value) {
   if (value === undefined) {
     return { provided: false, valid: true, value: undefined };
@@ -1151,10 +1183,12 @@ async function createServiceFromBot(req, res) {
       }
     }
 
-    const safeDetails =
+    let safeDetails =
       details && typeof details === "object" && !Array.isArray(details)
         ? { ...details }
         : {};
+
+    safeDetails = normalizeRefusedBotDetails(category, safeDetails);
 
     const safeImagesArr = Array.isArray(images) ? images : [];
     const normalizedImages = await normalizeImagesForDb(safeImagesArr);
