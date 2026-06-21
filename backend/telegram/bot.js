@@ -7981,7 +7981,7 @@ bot.start(async (ctx) => {
               [{ text: "📍 Отказной тур", switch_inline_query_current_chat: "#tour refused_tour" }],
               [{ text: "🏨 Отказной отель", switch_inline_query_current_chat: "#tour refused_hotel" }],
               [{ text: "✈️ Отказной авиабилет", switch_inline_query_current_chat: "#tour refused_flight" }],
-              [{ text: "🎫 Отказной билет", switch_inline_query_current_chat: "#tour refused_ticket" }],
+              [{ text: "🎫 Отказной билет", switch_inline_query_current_chat: "#tour refused_event_ticket" }],
             ],
           },
         });
@@ -8300,7 +8300,7 @@ bot.hears(/🔍 Найти услугу/i, async (ctx) => {
           [{ text: "🧭 Авторский тур", switch_inline_query_current_chat: "#author" }],
           [{ text: "🏨 Отказной отель", switch_inline_query_current_chat: "#tour refused_hotel" }],
           [{ text: "✈️ Отказной авиабилет", switch_inline_query_current_chat: "#tour refused_flight" }],
-          [{ text: "🎫 Билет / мероприятие", switch_inline_query_current_chat: "#tour refused_ticket" }],
+          [{ text: "🎫 Билет / мероприятие", switch_inline_query_current_chat: "#tour refused_event_ticket" }],
         ],
       },
       disable_web_page_preview: true,
@@ -8633,7 +8633,7 @@ bot.action("prov_services:create", async (ctx) => {
           [{ text: "🧭 Авторский тур", callback_data: "svc_new_cat:author_tour" }],
           [{ text: "🏨 Отказной отель", callback_data: "svc_new_cat:refused_hotel" }],
           [{ text: "✈️ Отказной авиабилет", callback_data: "svc_new_cat:refused_flight" }],
-          [{ text: "🎫 Отказной билет", callback_data: "svc_new_cat:refused_ticket" }],
+          [{ text: "🎫 Отказной билет", callback_data: "svc_new_cat:refused_event_ticket" }],
           [{ text: "⬅️ Назад", callback_data: "prov_services:list" }],
         ],
       },
@@ -9373,7 +9373,7 @@ bot.action("tg_draft:continue", async (ctx) => {
             [{ text: "🧭 Авторский тур", callback_data: "svc_new_cat:author_tour" }],
             [{ text: "🏨 Отказной отель", callback_data: "svc_new_cat:refused_hotel" }],
             [{ text: "✈️ Отказной авиабилет", callback_data: "svc_new_cat:refused_flight" }],
-            [{ text: "🎫 Отказной билет", callback_data: "svc_new_cat:refused_ticket" }],
+            [{ text: "🎫 Отказной билет", callback_data: "svc_new_cat:refused_event_ticket" }],
             [{ text: "⬅️ Назад", callback_data: "prov_services:list" }],
           ],
         },
@@ -15374,6 +15374,12 @@ bot.on("text", async (ctx, next) => {
           if (cat === "refused_flight") {
             ctx.session.state = "svc_create_flight_departure";
             await promptWizardState(ctx, "svc_create_flight_departure");
+            return;
+          }
+
+          if (cat === "refused_ticket" || cat === "refused_event_ticket") {
+            ctx.session.state = "svc_ticket_event_date";
+            await promptWizardState(ctx, "svc_ticket_event_date");
             return;
           }
         
