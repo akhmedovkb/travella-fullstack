@@ -115,15 +115,19 @@ function normalizeRefusedStartDate(details = {}, category = "") {
   const d = { ...toPlainObject(details) };
   const cat = String(category || d.category || "").trim().toLowerCase();
 
-  const already = firstNonEmptyValue(d.startDate, d.start_date);
-  if (already) {
-    d.startDate = already;
-    delete d.start_date;
-    return d;
-  }
-
   if (cat === "refused_flight") {
-    d.startDate = firstNonEmptyValue(
+    const flightType = String(d.flightType || d.flight_type || (d.oneWay === false ? "round_trip" : "one_way")).trim();
+    d.flightType = flightType === "round_trip" ? "round_trip" : "one_way";
+    d.oneWay = d.flightType !== "round_trip";
+    if (d.flightType !== "round_trip") {
+      d.returnFlightDate = "";
+      d.returnDate = "";
+      d.endFlightDate = "";
+      d.endDate = "";
+    }
+    delete d.flight_type;
+    const already = firstNonEmptyValue(d.startDate, d.start_date);
+    d.startDate = already || firstNonEmptyValue(
       d.departureFlightDate,
       d.departureDate,
       d.departure_date,
@@ -134,7 +138,16 @@ function normalizeRefusedStartDate(details = {}, category = "") {
       d.date_from,
       d.date
     );
-  } else if (cat === "refused_hotel") {
+  } else {
+    const already = firstNonEmptyValue(d.startDate, d.start_date);
+    if (already) {
+      d.startDate = already;
+      delete d.start_date;
+      return d;
+    }
+  }
+
+  if (cat === "refused_hotel") {
     d.startDate = firstNonEmptyValue(
       d.checkinDate,
       d.checkInDate,
