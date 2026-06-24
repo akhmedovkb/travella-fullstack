@@ -1073,6 +1073,7 @@ const [unlockPayModal, setUnlockPayModal] = useState({
 });
 const [clickPhone, setClickPhone] = useState("");
 const [clickPayLoading, setClickPayLoading] = useState(false);
+const [paymentStatusLoading, setPaymentStatusLoading] = useState(false);
 const [clickPayMessage, setClickPayMessage] = useState("");
 const [clickPayError, setClickPayError] = useState("");
 const [clickPollUntil, setClickPollUntil] = useState(0);
@@ -1212,6 +1213,54 @@ const createClickUnlockInvoice = async () => {
   }
 };
 
+const checkUnlockPaymentStatus = async ({ silent = false } = {}) => {
+  const serviceId = Number(unlockPayModal.serviceId || id || 0);
+
+  if (!serviceId) {
+    if (!silent) setClickPayError("Услуга не найдена. Откройте карточку заново.");
+    return false;
+  }
+
+  try {
+    if (!silent) {
+      setPaymentStatusLoading(true);
+      setClickPayError("");
+    }
+
+    const res = await apiGet(`/api/client/unlock-status?service_id=${serviceId}`, "client");
+
+    if (res?.unlocked) {
+      if (typeof window !== "undefined" && unlockStorageKey) {
+        window.localStorage.setItem(unlockStorageKey, "1");
+      }
+      setUnlocked(true);
+      setShowUnlockSuccessModal(true);
+      window.dispatchEvent(new Event("client:balance:changed"));
+      tSuccess(res?.reconciled ? "Оплата найдена, контакты открыты" : "Контакты разблокированы");
+      setClickPollUntil(0);
+      await closeUnlockPayModal();
+      return true;
+    }
+
+    if (!silent) {
+      setClickPayMessage(
+        res?.message ||
+          "Оплата пока не найдена. Если вы оплатили только что, проверьте ещё раз через несколько секунд."
+      );
+    }
+    return false;
+  } catch (err) {
+    console.error("unlock payment status check error:", err);
+    if (!silent) {
+      const data = err?.response?.data || err?.data || {};
+      setClickPayError(data?.message || data?.error || err?.message || "Не удалось проверить оплату");
+    }
+    return false;
+  } finally {
+    if (!silent) setPaymentStatusLoading(false);
+  }
+};
+
 useEffect(() => {
   if (!clickPollUntil || !unlockPayModal.open || !unlockPayModal.serviceId) return;
 
@@ -1220,23 +1269,7 @@ useEffect(() => {
 
   const check = async () => {
     if (cancelled || Date.now() > clickPollUntil) return;
-
-    try {
-      const res = await apiGet(`/api/client/unlock-status?service_id=${serviceId}`, "client");
-      if (res?.unlocked) {
-        if (typeof window !== "undefined" && unlockStorageKey) {
-          window.localStorage.setItem(unlockStorageKey, "1");
-        }
-        setUnlocked(true);
-        setShowUnlockSuccessModal(true);
-        window.dispatchEvent(new Event("client:balance:changed"));
-        tSuccess("Контакты разблокированы");
-        setClickPollUntil(0);
-        await closeUnlockPayModal();
-      }
-    } catch (err) {
-      console.error("click unlock status poll error:", err);
-    }
+    await checkUnlockPaymentStatus({ silent: true });
   };
 
   check();
@@ -3221,6 +3254,14 @@ return (
                     >
                       <PaymentButtonLogo type="click" />
                       {clickPayLoading ? "Выставляем счёт..." : "Click: выставить счёт"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => checkUnlockPaymentStatus({ silent: false })}
+                      disabled={paymentStatusLoading}
+                      className="mt-2 inline-flex w-full items-center justify-center rounded-2xl border border-violet-200 bg-white px-4 py-3 text-sm font-black text-violet-700 transition hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {paymentStatusLoading ? "Проверяем оплату..." : "Проверить оплату Payme/Click"}
                     </button>
                   </div>
                 </div>
