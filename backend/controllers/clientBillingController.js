@@ -985,8 +985,12 @@ async function getUnlockStatus(req, res) {
 
   try {
     await ensureBillingShape(db);
+    await expireOldOrders(db, clientId);
 
-    const unlockedQ = await db.query(
+    await db.query("BEGIN");
+    await advisoryLock(db, `unlock:status:${clientId}:${serviceId}`);
+
+    let unlockedQ = await db.query(
       `
         SELECT id, created_at
         FROM client_service_contact_unlocks
@@ -996,6 +1000,90 @@ async function getUnlockStatus(req, res) {
       `,
       [clientId, serviceId]
     );
+
+    let reconciled = false;
+    let reconciledProvider = null;
+    let reconciledOrder = null;
+
+    if (!unlockedQ.rows[0]) {
+      const paidPaymeOrder = await db.query(
+        `
+          SELECT *
+          FROM topup_orders
+          WHERE client_id = $1
+            AND service_id = $2
+            AND order_type = 'unlock_contact'
+            AND status = 'paid'
+          ORDER BY paid_at DESC NULLS LAST, id DESC
+          LIMIT 1
+        `,
+        [clientId, serviceId]
+      );
+
+      if (paidPaymeOrder.rows[0]) {
+        const order = paidPaymeOrder.rows[0];
+        await unlockContactTx(db, {
+          clientId,
+          serviceId,
+          source: "web_payment_status_payme_reconcile",
+          skipBalanceDeduction: true,
+          note: `Manual/payment status check after Payme order #${order.id}`,
+        });
+        reconciled = true;
+        reconciledProvider = "payme";
+        reconciledOrder = { id: order.id, status: order.status, paid_at: order.paid_at };
+      }
+    }
+
+    if (!unlockedQ.rows[0] && !reconciled) {
+      const paidClickOrder = await db.query(
+        `
+          SELECT *
+          FROM click_orders
+          WHERE actor_role = 'client'
+            AND actor_id = $1
+            AND service_id = $2
+            AND order_type = 'unlock_contact'
+            AND status = 'paid'
+          ORDER BY paid_at DESC NULLS LAST, id DESC
+          LIMIT 1
+        `,
+        [clientId, serviceId]
+      ).catch(() => ({ rows: [] }));
+
+      if (paidClickOrder.rows[0]) {
+        const order = paidClickOrder.rows[0];
+        await unlockContactTx(db, {
+          clientId,
+          serviceId,
+          source: "web_payment_status_click_reconcile",
+          skipBalanceDeduction: true,
+          note: `Manual/payment status check after Click order #${order.id}`,
+        });
+        reconciled = true;
+        reconciledProvider = "click";
+        reconciledOrder = {
+          id: order.id,
+          status: order.status,
+          paid_at: order.paid_at,
+          click_invoice_id: order.click_invoice_id || null,
+        };
+      }
+    }
+
+    if (reconciled) {
+      unlockedQ = await db.query(
+        `
+          SELECT id, created_at
+          FROM client_service_contact_unlocks
+          WHERE client_id = $1
+            AND service_id = $2
+          LIMIT 1
+        `,
+        [clientId, serviceId]
+      );
+      await syncClientBalanceMirrorLocal(db, clientId);
+    }
 
     const clickQ = await db.query(
       `
@@ -1011,13 +1099,41 @@ async function getUnlockStatus(req, res) {
       [clientId, serviceId]
     ).catch(() => ({ rows: [] }));
 
+    const paymeQ = await db.query(
+      `
+        SELECT id, status, paid_at, created_at, expires_at, payme_transaction_id, pay_url
+        FROM topup_orders
+        WHERE client_id = $1
+          AND service_id = $2
+          AND order_type = 'unlock_contact'
+          AND provider = 'payme'
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+      `,
+      [clientId, serviceId]
+    ).catch(() => ({ rows: [] }));
+
+    await db.query("COMMIT");
+
     return res.json({
       ok: true,
       unlocked: !!unlockedQ.rows[0],
       unlock: unlockedQ.rows[0] || null,
+      reconciled,
+      reconciled_provider: reconciledProvider,
+      reconciled_order: reconciledOrder,
       click_order: clickQ.rows[0] || null,
+      payme_order: paymeQ.rows[0] || null,
+      message: reconciled
+        ? "Оплата найдена, контакты открыты."
+        : unlockedQ.rows[0]
+          ? "Контакты уже открыты."
+          : "Оплата пока не найдена. Если вы оплатили только что, проверьте ещё раз через несколько секунд.",
     });
   } catch (e) {
+    try {
+      await db.query("ROLLBACK");
+    } catch {}
     console.error("[client-billing] getUnlockStatus:", e);
     return res.status(500).json({ ok: false, error: "unlock_status_failed" });
   } finally {
