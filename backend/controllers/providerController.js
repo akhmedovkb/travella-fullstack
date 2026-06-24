@@ -1078,6 +1078,13 @@ const updateService = async (req, res) => {
       return res.status(404).json({ message: "Услуга не найдена" });
     }
 
+    if (cur.rows[0].deleted_at) {
+      return res.status(409).json({
+        message: "Услуга находится в корзине. Сначала восстановите её.",
+        code: "SERVICE_DELETED",
+      });
+    }
+
     const currentStatus = cur.rows[0].status;
 
     const prevSvcRow = cur.rows[0];
@@ -2120,20 +2127,15 @@ const deleteProviderService = async (req, res) => {
     }
     const del = await pool.query(
       `
-      UPDATE services
-         SET
-           status = 'deleted',
-           deleted_at = NOW(),
-           deleted_by = $2,
-           updated_at = NOW()
+      DELETE FROM provider_services
        WHERE id = $1
          AND provider_id = $2
-         AND deleted_at IS NULL
+       RETURNING id
       `,
       [id, providerId]
     );
     if (!del.rowCount) return res.status(404).json({ message: "Услуга не найдена" });
-    res.json({ ok: true });
+    res.json({ ok: true, deletedId: id });
   } catch (err) {
     console.error("deleteProviderService error:", err);
     res.status(500).json({ message: "Ошибка сервера" });
