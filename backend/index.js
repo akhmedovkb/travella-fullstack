@@ -257,6 +257,14 @@ try {
   console.warn("[tg-health] routes not mounted:", e?.message || e);
 }
 
+// ✅ Payment/DB/Telegram health-check (protected by ADMIN_JOB_TOKEN)
+try {
+  const paymentHealthRoutes = require("./routes/paymentHealthRoutes");
+  app.use("/api/_debug", paymentHealthRoutes);
+} catch (e) {
+  console.warn("[payment-health] routes not mounted:", e?.message || e);
+}
+
 /** ===================== Aliases (Back-compat) ===================== */
 app.post(
   "/api/providers/cleanup-expired",
