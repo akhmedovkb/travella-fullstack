@@ -1,0 +1,32 @@
+# Keep Railway/Docker builds deterministic: never copy host-installed dependencies.
+node_modules
+**/node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-store
+
+# Local/dev/runtime noise
+.git
+.gitignore
+.github
+.husky
+.vscode
+.idea
+.env
+.env.*
+!.env.example
+.DS_Store
+*.local
+
+# Build/cache artifacts
+frontend/dist
+frontend/build
+backend/.tmp
+backend/tmp
+backend/logs
+*.log
+coverage
+.nyc_output
+.cache
+.vercel
