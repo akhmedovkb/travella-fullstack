@@ -1558,6 +1558,10 @@ async function updateServiceFromBot(req, res) {
     const existing = svcRes.rows[0];
     const prevPrices = extractPrices(existing);
 
+    if (existing.deleted_at) {
+      return res.status(409).json({ success: false, error: "SERVICE_DELETED" });
+    }
+
     if (!REFUSED_CATEGORIES.includes(existing.category)) {
       return res
         .status(400)
@@ -1613,10 +1617,10 @@ async function updateServiceFromBot(req, res) {
       patchDetails.expiration = parsed.value;
     }
 
-    const mergedDetails = {
+    const mergedDetails = normalizeRefusedBotDetails(existing.category, {
       ...(prevDetails || {}),
       ...(patchDetails || {}),
-    };
+    });
 
     let nextExpirationAt = existing.expiration_at || null;
 
