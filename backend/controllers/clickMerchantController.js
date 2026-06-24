@@ -3,9 +3,11 @@ const pool = require("../db");
 const { handleClickCallback } = require("../utils/clickMerchant");
 
 async function handleClickMerchant(req, res) {
+  const client = await pool.connect();
+
   try {
     const payload = req.method === "GET" ? req.query : req.body;
-    const result = await handleClickCallback(pool, payload || {});
+    const result = await handleClickCallback(client, payload || {});
     return res.json(result);
   } catch (e) {
     console.error("[click] callback error:", e?.message || e);
@@ -15,6 +17,8 @@ async function handleClickMerchant(req, res) {
       error: -7,
       error_note: "Failed to update user",
     });
+  } finally {
+    client.release();
   }
 }
 
