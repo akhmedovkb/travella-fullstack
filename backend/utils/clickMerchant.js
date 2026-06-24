@@ -215,7 +215,24 @@ async function createClickOrderAndInvoice(db, payload) {
     ]
   );
 
-  const invoice = await createClickInvoice({ merchantTransId: mti, amountSum: amount, phoneNumber: phone, clickProfile });
+  let invoice;
+  try {
+    invoice = await createClickInvoice({ merchantTransId: mti, amountSum: amount, phoneNumber: phone, clickProfile });
+  } catch (e) {
+    await db.query(
+      `
+      UPDATE click_orders
+         SET status='invoice_error',
+             error_code=$2,
+             error_note=$3,
+             updated_at=NOW()
+       WHERE merchant_trans_id=$1
+      `,
+      [mti, e?.click?.error_code ?? null, String(e?.click?.error_note || e?.message || "CLICK_INVOICE_FAILED").slice(0, 500)]
+    ).catch(() => {});
+    throw e;
+  }
+
   const invoiceId = Number(invoice?.invoice_id || 0) || null;
 
   const updated = await db.query(
@@ -350,58 +367,88 @@ async function handleClickCallback(db, raw) {
   if (![0, 1].includes(action)) return { ...clickResponse(params, -3, "Action not found") };
   if (!merchantTransId) return { ...clickResponse(params, -5, "User does not exist") };
 
-  const orderQ = await db.query(`SELECT * FROM click_orders WHERE merchant_trans_id=$1 FOR UPDATE`, [merchantTransId]);
-  const order = orderQ.rows[0];
-  if (!order) return { ...clickResponse(params, -5, "User does not exist") };
+  await db.query("BEGIN");
+  let txOpen = true;
 
-  const clickProfile = String(order.click_profile || order.meta?.click_profile || "bot").toLowerCase() === "web" ? "web" : "bot";
-  const cfg = getClickConfig(clickProfile);
+  try {
+    const orderQ = await db.query(`SELECT * FROM click_orders WHERE merchant_trans_id=$1 FOR UPDATE`, [merchantTransId]);
+    const order = orderQ.rows[0];
+    if (!order) {
+      await db.query("ROLLBACK");
+      txOpen = false;
+      return { ...clickResponse(params, -5, "User does not exist") };
+    }
 
-  if (String(params.service_id || "") !== String(cfg.serviceId)) return { ...clickResponse(params, -2, "Service not found") };
-  if (!verifyClickSign(params, action, clickProfile)) return { ...clickResponse(params, -1, "SIGN CHECK FAILED") };
+    const clickProfile = String(order.click_profile || order.meta?.click_profile || "bot").toLowerCase() === "web" ? "web" : "bot";
+    const cfg = getClickConfig(clickProfile);
 
-  const callbackAmount = toAmount(params.amount);
-  if (toAmount(order.amount_sum) !== callbackAmount) return { ...clickResponse(params, -2, "Incorrect parameter amount") };
+    if (String(params.service_id || "") !== String(cfg.serviceId)) {
+      await db.query("ROLLBACK");
+      txOpen = false;
+      return { ...clickResponse(params, -2, "Service not found") };
+    }
+    if (!verifyClickSign(params, action, clickProfile)) {
+      await db.query("ROLLBACK");
+      txOpen = false;
+      return { ...clickResponse(params, -1, "SIGN CHECK FAILED") };
+    }
 
-  if (action === 0) {
+    const callbackAmount = toAmount(params.amount);
+    if (toAmount(order.amount_sum) !== callbackAmount) {
+      await db.query("ROLLBACK");
+      txOpen = false;
+      return { ...clickResponse(params, -2, "Incorrect parameter amount") };
+    }
+
+    if (action === 0) {
+      if (Number(params.error || 0) !== 0) {
+        await db.query(`UPDATE click_orders SET status='prepare_error', error_code=$2, error_note=$3, updated_at=NOW() WHERE id=$1`, [order.id, params.error || null, params.error_note || null]);
+        await db.query("COMMIT");
+        txOpen = false;
+        return { ...clickResponse(params, -9, "Transaction cancelled") };
+      }
+
+      const prepareId = Number(order.id);
+      await db.query(
+        `UPDATE click_orders
+            SET status=CASE WHEN status='paid' THEN status ELSE 'prepared' END,
+                click_trans_id=$2,
+                click_paydoc_id=$3,
+                merchant_prepare_id=$4,
+                prepared_at=COALESCE(prepared_at,NOW()),
+                updated_at=NOW()
+          WHERE id=$1`,
+        [order.id, params.click_trans_id || null, params.click_paydoc_id || null, prepareId]
+      );
+
+      await db.query("COMMIT");
+      txOpen = false;
+      return { ...clickResponse(params, 0, "Success"), merchant_prepare_id: prepareId };
+    }
+
+    const merchantPrepareId = Number(params.merchant_prepare_id || 0);
+    if (merchantPrepareId !== Number(order.id)) {
+      await db.query("ROLLBACK");
+      txOpen = false;
+      return { ...clickResponse(params, -6, "Transaction not found") };
+    }
+
+    if (String(order.status || "") === "paid") {
+      await db.query("COMMIT");
+      txOpen = false;
+      return { ...clickResponse(params, 0, "Success"), merchant_confirm_id: Number(order.id) };
+    }
+
     if (Number(params.error || 0) !== 0) {
-      await db.query(`UPDATE click_orders SET status='prepare_error', error_code=$2, error_note=$3, updated_at=NOW() WHERE id=$1`, [order.id, params.error || null, params.error_note || null]);
+      await db.query(
+        `UPDATE click_orders SET status='cancelled', error_code=$2, error_note=$3, cancelled_at=COALESCE(cancelled_at,NOW()), updated_at=NOW() WHERE id=$1`,
+        [order.id, params.error || null, params.error_note || null]
+      );
+      await db.query("COMMIT");
+      txOpen = false;
       return { ...clickResponse(params, -9, "Transaction cancelled") };
     }
 
-    const prepareId = Number(order.id);
-    await db.query(
-      `UPDATE click_orders
-          SET status=CASE WHEN status='paid' THEN status ELSE 'prepared' END,
-              click_trans_id=$2,
-              click_paydoc_id=$3,
-              merchant_prepare_id=$4,
-              prepared_at=COALESCE(prepared_at,NOW()),
-              updated_at=NOW()
-        WHERE id=$1`,
-      [order.id, params.click_trans_id || null, params.click_paydoc_id || null, prepareId]
-    );
-
-    return { ...clickResponse(params, 0, "Success"), merchant_prepare_id: prepareId };
-  }
-
-  const merchantPrepareId = Number(params.merchant_prepare_id || 0);
-  if (merchantPrepareId !== Number(order.id)) return { ...clickResponse(params, -6, "Transaction not found") };
-
-  if (String(order.status || "") === "paid") {
-    return { ...clickResponse(params, 0, "Success"), merchant_confirm_id: Number(order.id) };
-  }
-
-  if (Number(params.error || 0) !== 0) {
-    await db.query(
-      `UPDATE click_orders SET status='cancelled', error_code=$2, error_note=$3, cancelled_at=COALESCE(cancelled_at,NOW()), updated_at=NOW() WHERE id=$1`,
-      [order.id, params.error || null, params.error_note || null]
-    );
-    return { ...clickResponse(params, -9, "Transaction cancelled") };
-  }
-
-  await db.query("BEGIN");
-  try {
     const paidQ = await db.query(
       `UPDATE click_orders
           SET status='paid',
@@ -418,12 +465,15 @@ async function handleClickCallback(db, raw) {
     );
     await applyClickSuccessEffect(db, paidQ.rows[0]);
     await db.query("COMMIT");
+    txOpen = false;
+
+    return { ...clickResponse(params, 0, "Success"), merchant_confirm_id: Number(order.id) };
   } catch (e) {
-    await db.query("ROLLBACK");
+    if (txOpen) {
+      try { await db.query("ROLLBACK"); } catch {}
+    }
     throw e;
   }
-
-  return { ...clickResponse(params, 0, "Success"), merchant_confirm_id: Number(order.id) };
 }
 
 module.exports = {
