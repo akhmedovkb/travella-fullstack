@@ -7,7 +7,7 @@ COPY package*.json ./
 # Важно для Railway/Docker: ставим зависимости внутри Linux-контейнера.
 # --include=optional нужен для native/optional пакетов вроде sharp.
 RUN if [ -f package-lock.json ]; then \
-      npm ci --include=optional --no-audit --no-fund; \
+      npm ci --include=optional --no-audit --no-fund || npm install --include=optional --no-audit --no-fund; \
     else \
       npm install --include=optional --no-audit --no-fund; \
     fi
