@@ -287,6 +287,12 @@ async function applyServiceLifecycleAction(pool, { providerId, serviceId, action
               approved_at = NULL,
               rejected_at = NULL,
               rejected_reason = NULL,
+              expiration_at = NOW() + interval '7 days',
+              details = jsonb_set(
+                jsonb_set(COALESCE(details::jsonb, '{}'::jsonb),
+                          '{isActive}', 'true'::jsonb, true),
+                '{expiration}', to_jsonb((NOW() + interval '7 days')::timestamp)::jsonb, true
+              ),
               updated_at = NOW()
         WHERE id = $1
           AND provider_id = $2
