@@ -16,6 +16,7 @@ const {
 } = require("../utils/telegram");
 
 const { buildServiceMessage } = require("../utils/telegramServiceCard");
+const { logServiceModerationEvent, listServiceModerationEvents } = require("../utils/serviceModerationEvents");
 
 function phoneToDigits(phone) {
   return String(phone || "").replace(/\D/g, "");
@@ -29,7 +30,7 @@ router.get("/services/pending", authenticateToken, requireAdmin, async (req, res
     `SELECT s.*, p.name AS provider_name, p.type AS provider_type
        FROM services s
        JOIN providers p ON p.id = s.provider_id
-      WHERE s.moderation_status = 'pending'
+      WHERE COALESCE(s.moderation_status, s.status) = 'pending' AND s.deleted_at IS NULL
       ORDER BY s.submitted_at ASC NULLS LAST, s.updated_at DESC`
   );
   res.json(q.rows);
@@ -41,7 +42,7 @@ router.get("/services/rejected", authenticateToken, requireAdmin, async (req, re
     `SELECT s.*, p.name AS provider_name, p.type AS provider_type
        FROM services s
        JOIN providers p ON p.id = s.provider_id
-      WHERE s.moderation_status = 'rejected'
+      WHERE COALESCE(s.moderation_status, s.status) = 'rejected' AND s.deleted_at IS NULL
       ORDER BY COALESCE(s.rejected_at, s.updated_at) DESC`
   );
   res.json(q.rows);
@@ -66,6 +67,16 @@ router.get("/services/:id(\\d+)", authenticateToken, requireAdmin, async (req, r
   );
   if (!q.rows.length) return res.status(404).json({ message: "Not found" });
   res.json(q.rows[0]);
+});
+
+router.get("/services/:id(\\d+)/moderation-events", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const events = await listServiceModerationEvents(pool, req.params.id, req.query?.limit || 30);
+    res.json({ ok: true, items: events });
+  } catch (e) {
+    console.error("[admin moderation-events] error:", e?.message || e);
+    res.status(500).json({ ok: false, message: "moderation events error" });
+  }
 });
 
 // полное редактирование услуги админом без ломания модерации
@@ -341,14 +352,23 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
             rejected_by       = NULL,
             rejected_reason   = NULL,
             updated_at        = NOW()
-      WHERE id = $1 AND moderation_status IN ('pending','approved')
+      WHERE id = $1 AND COALESCE(moderation_status, status) IN ('pending','rejected','approved') AND deleted_at IS NULL
       RETURNING id, status, moderation_status, published_at`,
     [req.params.id, adminId]
   );
 
   if (!rows.length) {
-    return res.status(400).json({ message: "Service not in pending" });
+    return res.status(400).json({ message: "Service is not available for this moderation action" });
   }
+
+  await logServiceModerationEvent(pool, {
+    serviceId: rows[0].id,
+    actorId: adminId,
+    actorRole: "admin",
+    action: "approved",
+    before,
+    after: rows[0],
+  });
 
   // TG → поставщику (выбор правильного чата + правильного бота)
   try {
@@ -603,10 +623,19 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
   res.json({ ok: true, service: rows[0] });
 });
 
-// reject (только для pending)
+// reject / request correction (только для pending)
 router.post("/services/:id(\\d+)/reject", authenticateToken, requireAdmin, async (req, res) => {
   const adminId = req.user.id;
-  const { reason = "" } = req.body || {};
+  const body = req.body || {};
+  const reason = String(body.reason || "").trim();
+  const reasonCode = String(body.reasonCode || body.reason_code || "OTHER").trim().toUpperCase();
+
+  if (reason.length < 5) {
+    return res.status(400).json({ message: "Reason is required", code: "REJECT_REASON_REQUIRED" });
+  }
+
+  const beforeRes = await pool.query(`SELECT id, status, moderation_status, details FROM services WHERE id = $1`, [req.params.id]);
+  const before = beforeRes.rows[0] || null;
 
   const { rows } = await pool.query(
     `UPDATE services
@@ -615,15 +644,32 @@ router.post("/services/:id(\\d+)/reject", authenticateToken, requireAdmin, async
             rejected_at       = NOW(),
             rejected_by       = $2,
             rejected_reason   = $3,
+            details           = jsonb_set(
+                                  jsonb_set(COALESCE(details, '{}'::jsonb), '{meta,moderation_rejection_code}', to_jsonb($4::text), true),
+                                  '{meta,moderation_rejected_at}', to_jsonb(NOW()), true
+                                ),
             updated_at        = NOW()
-      WHERE id = $1 AND moderation_status = 'pending'
-      RETURNING id, status, moderation_status, rejected_at, rejected_reason`,
-    [req.params.id, adminId, reason]
+      WHERE id = $1
+        AND COALESCE(moderation_status, status) = 'pending'
+        AND deleted_at IS NULL
+      RETURNING id, status, moderation_status, rejected_at, rejected_reason, details`,
+    [req.params.id, adminId, reason, reasonCode]
   );
 
   if (!rows.length) {
-    return res.status(400).json({ message: "Service not in pending" });
+    return res.status(400).json({ message: "Service is not pending", code: "SERVICE_NOT_PENDING" });
   }
+
+  await logServiceModerationEvent(pool, {
+    serviceId: rows[0].id,
+    actorId: adminId,
+    actorRole: "admin",
+    action: "rejected",
+    reasonCode,
+    reason,
+    before,
+    after: rows[0],
+  });
 
   // TG → поставщику (выбор правильного чата + правильного бота)
   try {
@@ -651,7 +697,7 @@ router.post("/services/:id(\\d+)/reject", authenticateToken, requireAdmin, async
       : null;
 
     if (chatId) {
-      const text = `❌ Ваша услуга отклонена\n\n📌 ${row.title || ""}\n\nПричина:\n${reason || "Не указана"}`;
+      const text = `❌ Ваша услуга отклонена\n\n📌 ${row.title || ""}\n\nПричина:\n${reason || "Не указана"}\n\nИсправьте замечания в разделе «Мои услуги» и отправьте услугу на модерацию повторно.`;
       tokenOverride ? await tgSend(chatId, text, {}, tokenOverride) : await tgSend(chatId, text, {});
     }
   } catch (e) {
