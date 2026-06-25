@@ -35,7 +35,13 @@ function parsePagination(req) {
 }
 
 function whereBaseFilters({ category, providerType }) {
-  const clauses = [`s.status IN ('published','approved')`];
+  const clauses = [
+    `s.status IN ('published','approved','active')`,
+    `COALESCE(lower(s.moderation_status), 'approved') IN ('approved','published','active')`,
+    `s.deleted_at IS NULL`,
+    `(s.expiration_at IS NULL OR s.expiration_at > NOW())`,
+    `COALESCE(NULLIF(lower(s.details->>'isActive'), ''), 'true') <> 'false'`,
+  ];
   const params = [];
   if (category) {
     params.push(category);
