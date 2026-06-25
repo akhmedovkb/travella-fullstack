@@ -499,12 +499,9 @@ function normalizeServicePayload(body = {}) {
     }
   }
 
-  // seats — у транспорта это посадочные места, у отказных авиабилетов/билетов — количество мест/билетов.
-  // Раньше seats удалялся для refused_flight/refused_event_ticket, из-за чего web мог принять поле,
-  // а backend молча терял его при create/update.
+  // seats — только у транспорта
   if (detailsObj && Object.prototype.hasOwnProperty.call(detailsObj, "seats")) {
-    const allowSeats = isTransportCategory(catStr) || ["refused_flight", "refused_ticket", "refused_event_ticket"].includes(catStr);
-    if (allowSeats) {
+    if (isTransportCategory(catStr)) {
       const n = Number(detailsObj.seats);
       if (Number.isFinite(n) && n > 0) {
         detailsObj.seats = Math.trunc(n);
@@ -513,17 +510,6 @@ function normalizeServicePayload(body = {}) {
       }
     } else {
       delete detailsObj.seats;
-    }
-  }
-
-  if (detailsObj && Object.prototype.hasOwnProperty.call(detailsObj, "quantity")) {
-    const allowQuantity = ["refused_flight", "refused_ticket", "refused_event_ticket"].includes(catStr);
-    if (allowQuantity) {
-      const n = Number(detailsObj.quantity);
-      if (Number.isFinite(n) && n > 0) detailsObj.quantity = Math.trunc(n);
-      else delete detailsObj.quantity;
-    } else {
-      delete detailsObj.quantity;
     }
   }
 
@@ -1099,8 +1085,8 @@ const updateService = async (req, res) => {
       });
     }
 
-    const currentStatus = cur.rows[0].status;
-    const currentModerationStatus = cur.rows[0].moderation_status;
+    const currentStatus = String(cur.rows[0].status || "").toLowerCase();
+    const currentModerationStatus = String(cur.rows[0].moderation_status || "").toLowerCase();
 
     const prevSvcRow = cur.rows[0];
     const prevPrices = extractPrices(prevSvcRow);
@@ -1113,7 +1099,7 @@ const updateService = async (req, res) => {
       });
     }
 
-    if (currentStatus === "published" || currentStatus === "rejected") {
+    if (currentStatus === "published" || currentStatus === "approved" || currentStatus === "active" || currentStatus === "rejected" || currentModerationStatus === "approved" || currentModerationStatus === "rejected") {
       const resetRes = await pool.query(
         `UPDATE services
             SET status='draft',
@@ -1501,21 +1487,33 @@ const updateServiceImagesOnly = async (req, res) => {
     const imagesArr = sanitizeImages(req.body.images);
 
     const cur = await pool.query(
-      `SELECT id, provider_id, category, status, moderation_status, deleted_at
+      `SELECT id, status, moderation_status, deleted_at
          FROM services
-        WHERE id=$1 AND provider_id=$2
-        LIMIT 1`,
+        WHERE id=$1 AND provider_id=$2`,
       [serviceId, providerId]
     );
     if (!cur.rowCount) return res.status(404).json({ message: "Услуга не найдена" });
-    if (cur.rows[0].deleted_at) {
-      return res.status(409).json({ message: "Услуга находится в корзине. Сначала восстановите её.", code: "SERVICE_DELETED" });
-    }
-    if (cur.rows[0].status === "pending" || cur.rows[0].moderation_status === "pending") {
-      return res.status(409).json({ message: "Услуга на модерации. Дождитесь решения или снимите с модерации.", code: "SERVICE_PENDING" });
+
+    const row = cur.rows[0];
+    const status = String(row.status || "").toLowerCase();
+    const moderationStatus = String(row.moderation_status || "").toLowerCase();
+
+    if (row.deleted_at || status === "deleted") {
+      return res.status(409).json({
+        message: "Услуга находится в корзине. Сначала восстановите её.",
+        code: "SERVICE_DELETED",
+      });
     }
 
-    const needsDraftReset = cur.rows[0].status === "published" || cur.rows[0].status === "rejected" || cur.rows[0].moderation_status === "approved" || cur.rows[0].moderation_status === "rejected";
+    if (status === "pending" || moderationStatus === "pending") {
+      return res.status(409).json({
+        message: "Услуга на модерации. Дождитесь решения или снимите с модерации.",
+        code: "SERVICE_PENDING",
+      });
+    }
+
+    const shouldResetToDraft = ["published", "approved", "active", "rejected"].includes(status) || ["approved", "rejected"].includes(moderationStatus);
+
     const upd = await pool.query(
       `UPDATE services
           SET images=$1::jsonb,
@@ -1527,9 +1525,9 @@ const updateServiceImagesOnly = async (req, res) => {
               rejected_at = CASE WHEN $4::boolean THEN NULL ELSE rejected_at END,
               rejected_reason = CASE WHEN $4::boolean THEN NULL ELSE rejected_reason END,
               updated_at=NOW()
-        WHERE id=$2 AND provider_id=$3
+        WHERE id=$2 AND provider_id=$3 AND deleted_at IS NULL
         RETURNING *`,
-      [JSON.stringify(imagesArr), serviceId, providerId, needsDraftReset]
+      [JSON.stringify(imagesArr), serviceId, providerId, shouldResetToDraft]
     );
     if (!upd.rowCount) return res.status(404).json({ message: "Услуга не найдена" });
 
