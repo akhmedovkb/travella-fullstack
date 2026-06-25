@@ -1,6 +1,8 @@
 // backend/controllers/requestController.js
 const db = require("../db");
 const tg = require("../utils/telegram");
+const { logProviderFunnelEvent } = require("../utils/providerFunnel");
+const { upsertProviderLeadCrm, updateProviderLeadCrmStatus } = require("../utils/providerLeadCrm");
 
 /* ===================== Helpers ===================== */
 
@@ -329,13 +331,23 @@ exports.createQuickRequest = async (req, res) => {
       return res.status(400).json({ error: "service_id_required" });
     }
 
-    // сервис существует?
+    // сервис существует и доступен клиенту?
     const svcQ = await db.query(
-      `SELECT id, provider_id FROM services WHERE id = $1`,
+      `
+      SELECT id, provider_id, category, title, status, moderation_status, expiration_at, deleted_at
+      FROM services
+      WHERE id = $1
+        AND deleted_at IS NULL
+        AND status IN ('published', 'approved', 'active')
+        AND COALESCE(LOWER(moderation_status), 'approved') IN ('approved', 'published', 'active')
+        AND (expiration_at IS NULL OR expiration_at > now())
+        AND COALESCE(NULLIF(LOWER(details->>'isActive'), ''), 'true') <> 'false'
+      LIMIT 1
+      `,
       [service_id]
     );
     const svc = svcQ.rows[0];
-    if (!svc) return res.status(404).json({ error: "service_not_found" });
+    if (!svc) return res.status(404).json({ error: "service_not_available" });
 
     // запрет самозаявки (если зашёл провайдер — на свой же сервис)
     if (Number(svc.provider_id) === Number(userId)) {
@@ -387,6 +399,46 @@ exports.createQuickRequest = async (req, res) => {
     );
     const newId = ins.rows?.[0]?.id;
     if (newId) {
+      await logProviderFunnelEvent({
+        source: source || "web_quick_request",
+        actorRole: req.user?.role || "client",
+        actorId: userId,
+        providerId: svc.provider_id,
+        serviceId: service_id,
+        category: svc.category,
+        eventName: "quick_request_created",
+        step: "quick_request",
+        status: "created",
+        meta: {
+          request_id: newId,
+          client_id: clientId,
+          has_message: !!(message || note),
+          city: city || null,
+          language: language || null,
+          pax_adult: pax_adult || null,
+          pax_child: pax_child || null,
+        },
+      });
+
+      await upsertProviderLeadCrm({
+        source: "web_request",
+        requestTable: "requests",
+        requestId: newId,
+        providerId: svc.provider_id,
+        clientId,
+        serviceId: service_id,
+        status: "new",
+        note: note || composedNote,
+        meta: {
+          category: svc.category,
+          service_title: svc.title,
+          city: city || null,
+          language: language || null,
+          pax_adult: pax_adult || null,
+          pax_child: pax_child || null,
+        },
+      });
+
       tg.notifyReqNew({ request_id: newId }).catch(e => {
         console.error("tg.notifyReqNew failed:", e?.response?.data || e?.message || e);
       });
@@ -709,6 +761,7 @@ exports.updateStatusByProvider = async (req, res) => {
 
     if (!q.rowCount) return res.status(404).json({ error: "not_found_or_forbidden" });
     const reqId = String(id);
+    await updateProviderLeadCrmStatus({ source: "web_request", requestTable: "requests", requestId: reqId }, status);
       tg.notifyReqStatusChanged({ request_id: reqId, status }).catch(e => {
         console.error("tg.notifyReqStatusChanged failed:", e?.response?.data || e?.message || e);
       });
