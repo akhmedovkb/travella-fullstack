@@ -2770,10 +2770,26 @@ export default function DashboardServices() {
                                   <TextInput value={details.airline} onChange={(e) => patchDetails({ airline: e.target.value.toUpperCase() })} placeholder={t("service_form.ph_airline", { defaultValue: "Например: HH" })} />
                                 </Field>
                                 <Field label={t("flight_type", { defaultValue: "Тип рейса" })}>
-                                  <SelectInput value={details.flightType} onChange={(e) => patchDetails({ flightType: e.target.value })}>
+                                  <SelectInput value={details.flightType} onChange={(e) => {
+                                    const nextType = e.target.value;
+                                    patchDetails({
+                                      flightType: nextType,
+                                      oneWay: nextType !== "round_trip",
+                                      returnDate: nextType === "round_trip" ? details.returnDate : "",
+                                      endDate: nextType === "round_trip" ? details.endDate : "",
+                                      returnFlightDate: nextType === "round_trip" ? details.returnFlightDate : "",
+                                      endFlightDate: nextType === "round_trip" ? details.endFlightDate : "",
+                                    });
+                                  }}>
                                     <option value="one_way">{t("one_way", { defaultValue: "В одну сторону" })}</option>
                                     <option value="round_trip">{t("round_trip", { defaultValue: "Туда-обратно" })}</option>
                                   </SelectInput>
+                                </Field>
+                                <Field label={t("baggage", { defaultValue: "Багаж" })} hint={t("service_form.hint_baggage", { defaultValue: "Например: 23 кг + ручная кладь 8 кг, только ручная кладь или без багажа." })}>
+                                  <TextInput value={details.baggage || ""} onChange={(e) => patchDetails({ baggage: e.target.value })} placeholder={t("service_form.ph_baggage", { defaultValue: "23KG + 8KG" })} />
+                                </Field>
+                                <Field label={t("seats_count", { defaultValue: "Количество мест" })} hint={t("service_form.hint_flight_seats", { defaultValue: "Сколько авиабилетов осталось у поставщика." })}>
+                                  <TextInput type="number" min="1" value={details.seats || details.quantity || ""} onChange={(e) => patchDetails({ seats: e.target.value, quantity: e.target.value })} placeholder="1" />
                                 </Field>
                               </>
                             )}
@@ -2782,6 +2798,9 @@ export default function DashboardServices() {
                               <>
                                 <Field label={t("ticketDetails", { defaultValue: "Детали билета" })} hint={t("service_form.hint_ticket_details", { defaultValue: "Сектор, ряд, место, категория, количество билетов." })}>
                                   <TextArea value={details.ticketDetails} onChange={(e) => patchDetails({ ticketDetails: e.target.value })} placeholder={t("service_form.ph_ticket_details", { defaultValue: "Например: Sector A, Row 5, Seat 12–13, 2 tickets" })} />
+                                </Field>
+                                <Field label={t("tickets_count", { defaultValue: "Количество билетов" })} hint={t("service_form.hint_ticket_quantity", { defaultValue: "Сколько билетов можно продать клиенту." })}>
+                                  <TextInput type="number" min="1" value={details.quantity || details.seats || ""} onChange={(e) => patchDetails({ quantity: e.target.value, seats: e.target.value })} placeholder="2" />
                                 </Field>
                               </>
                             )}
