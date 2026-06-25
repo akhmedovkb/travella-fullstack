@@ -9,6 +9,17 @@ import { tSuccess, tError, tInfo } from "../shared/toast";
 const fmt = (n) => new Intl.NumberFormat().format(Number(n || 0));
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
+const REJECT_REASON_OPTIONS = [
+  { code: "NO_PROOF", label: "Нет proof/подтверждения", text: "Загрузите фото или документ, подтверждающий отказную услугу." },
+  { code: "BAD_PROOF", label: "Proof нечитаемый", text: "Proof нечитаемый или не подтверждает данные услуги. Загрузите более понятное подтверждение." },
+  { code: "NO_DATES", label: "Не хватает дат", text: "Укажите корректные даты услуги: вылет/заезд/дату мероприятия." },
+  { code: "BAD_PRICE", label: "Нужно уточнить цену", text: "Проверьте цену и укажите, за одного человека/билет или за весь пакет." },
+  { code: "MISSING_DETAILS", label: "Не хватает деталей", text: "Добавьте недостающие детали услуги, чтобы клиент мог принять решение." },
+  { code: "WRONG_CATEGORY", label: "Неверная категория", text: "Услуга выбрана не в той категории. Исправьте категорию и отправьте повторно." },
+  { code: "DUPLICATE", label: "Похоже на дубль", text: "Похожая услуга уже есть. Обновите существующую карточку или уточните отличие." },
+  { code: "OTHER", label: "Другая причина", text: "Уточните данные услуги и отправьте её на модерацию повторно." },
+];
+
 function isRefusedCategory(cat) {
   return String(cat || "").toLowerCase().startsWith("refused_");
 }
@@ -119,6 +130,7 @@ function Card({
   onEdit,
   onApprove,
   onReject,
+  onRejectClick,
   onUnpublish,
   t,
   onOpenProof,
@@ -747,14 +759,7 @@ function Card({
 
         {tab === "pending" && (
           <button
-            onClick={() => {
-              const reason = prompt(
-                t("moderation.enter_reason", {
-                  defaultValue: "Причина отклонения:",
-                })
-              );
-              if (reason != null) onReject(s.id, reason);
-            }}
+            onClick={() => (onRejectClick ? onRejectClick(s) : onReject(s.id, "Нужно исправить данные услуги"))}
             className="px-3 py-1.5 rounded bg-rose-600 text-white text-sm hover:bg-rose-700"
           >
             {t("moderation.reject", { defaultValue: "Reject" })}
@@ -782,6 +787,8 @@ export default function AdminModeration() {
   const [loading, setLoading] = useState(true);
   const [counts, setCounts] = useState({ pending: 0, rejected: 0 });
   const [proofViewer, setProofViewer] = useState(null);
+  const [rejectTarget, setRejectTarget] = useState(null);
+  const [rejectForm, setRejectForm] = useState({ reasonCode: "NO_PROOF", reason: REJECT_REASON_OPTIONS[0].text });
   const [editOpen, setEditOpen] = useState(false);
   const [editLoading, setEditLoading] = useState(false);
   const [editSaving, setEditSaving] = useState(false);
@@ -798,6 +805,7 @@ export default function AdminModeration() {
   });
   const [editImages, setEditImages] = useState([]);
   const [newImageUrl, setNewImageUrl] = useState("");
+  const [moderationEvents, setModerationEvents] = useState([]);
 
   const token = localStorage.getItem("token");
   const cfg = { headers: { Authorization: `Bearer ${token}` } };
@@ -891,7 +899,18 @@ export default function AdminModeration() {
     }
   };
 
-  const reject = async (id, reason) => {
+  const openReject = (svc) => {
+    const first = REJECT_REASON_OPTIONS[0];
+    setRejectTarget(svc);
+    setRejectForm({ reasonCode: first.code, reason: first.text });
+  };
+
+  const changeRejectReasonCode = (code) => {
+    const opt = REJECT_REASON_OPTIONS.find((x) => x.code === code) || REJECT_REASON_OPTIONS[REJECT_REASON_OPTIONS.length - 1];
+    setRejectForm({ reasonCode: opt.code, reason: opt.text });
+  };
+
+  const reject = async (id, reason, reasonCode = "OTHER") => {
     if (!reason || !reason.trim()) {
       return tInfo(
         t("moderation.enter_reason_short", {
@@ -903,10 +922,11 @@ export default function AdminModeration() {
     try {
       await axios.post(
         `${API_BASE}/api/admin/services/${id}/reject`,
-        { reason },
+        { reason, reasonCode },
         cfg
       );
       tSuccess(t("moderation.rejected", { defaultValue: "Отклонено" }));
+      setRejectTarget(null);
       setItems((prev) => prev.filter((x) => x.id !== id));
       setCounts((c) => ({
         ...c,
@@ -943,8 +963,12 @@ export default function AdminModeration() {
   const openEdit = async (id) => {
     setEditLoading(true);
     try {
-      const res = await axios.get(`${API_BASE}/api/admin/services/${id}`, cfg);
+      const [res, eventsRes] = await Promise.all([
+        axios.get(`${API_BASE}/api/admin/services/${id}`, cfg),
+        axios.get(`${API_BASE}/api/admin/services/${id}/moderation-events`, cfg).catch(() => ({ data: { items: [] } })),
+      ]);
       const s = res.data || {};
+      setModerationEvents(Array.isArray(eventsRes?.data?.items) ? eventsRes.data.items : []);
       const details = normalizeDetails(s.details);
       const images = normalizeImages(s.images);
       const availability = Array.isArray(s.availability)
@@ -1039,6 +1063,7 @@ export default function AdminModeration() {
       );
       setEditOpen(false);
       setEditItemId(null);
+      setModerationEvents([]);
       await load(tab);
       await refreshCounts();
     } catch {
@@ -1133,6 +1158,7 @@ export default function AdminModeration() {
                 onEdit={openEdit}
                 onApprove={approve}
                 onReject={reject}
+                onRejectClick={openReject}
                 onUnpublish={unpublish}
                 onOpenProof={setProofViewer}
                 t={t}
@@ -1141,6 +1167,73 @@ export default function AdminModeration() {
           </div>
         )}
       </div>
+      {rejectTarget &&
+        createPortal(
+          <div className="fixed inset-0 z-[5200] bg-black/60 flex items-center justify-center p-4">
+            <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
+              <div className="flex items-center justify-between px-5 py-4 border-b">
+                <div>
+                  <div className="text-lg font-semibold">
+                    {t("moderation.reject_modal_title", { defaultValue: "Отклонить / запросить исправление" })}
+                  </div>
+                  <div className="mt-1 text-sm text-gray-500">
+                    #{rejectTarget.id} · {rejectTarget.title || rejectTarget.category || "service"}
+                  </div>
+                </div>
+                <button type="button" onClick={() => setRejectTarget(null)} className="text-2xl leading-none text-gray-500 hover:text-black">×</button>
+              </div>
+
+              <div className="p-5 space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    {t("moderation.reject_reason_type", { defaultValue: "Тип причины" })}
+                  </label>
+                  <select
+                    value={rejectForm.reasonCode}
+                    onChange={(e) => changeRejectReasonCode(e.target.value)}
+                    className="w-full rounded-lg border px-3 py-2 text-sm"
+                  >
+                    {REJECT_REASON_OPTIONS.map((opt) => (
+                      <option key={opt.code} value={opt.code}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    {t("moderation.reject_reason_message", { defaultValue: "Сообщение поставщику" })}
+                  </label>
+                  <textarea
+                    value={rejectForm.reason}
+                    onChange={(e) => setRejectForm((prev) => ({ ...prev, reason: e.target.value }))}
+                    rows={5}
+                    className="w-full rounded-lg border px-3 py-2 text-sm"
+                    placeholder="Что нужно исправить?"
+                  />
+                </div>
+
+                <div className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800 border border-amber-200">
+                  {t("moderation.reject_modal_hint", { defaultValue: "После отклонения поставщик увидит причину и сможет исправить карточку, затем отправить её на модерацию повторно." })}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 px-5 py-4 border-t">
+                <button type="button" onClick={() => setRejectTarget(null)} className="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 text-sm font-semibold">
+                  {t("common.cancel", { defaultValue: "Отмена" })}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => reject(rejectTarget.id, rejectForm.reason, rejectForm.reasonCode)}
+                  className="px-4 py-2 rounded-lg bg-rose-600 text-white text-sm font-semibold hover:bg-rose-700"
+                >
+                  {t("moderation.reject_and_notify", { defaultValue: "Отклонить и уведомить" })}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+
       {editOpen &&
         createPortal(
           <div className="fixed inset-0 z-[5000] bg-black/60 flex items-center justify-center p-4">
@@ -1161,6 +1254,23 @@ export default function AdminModeration() {
               </div>
 
               <div className="p-5 space-y-4">
+                {moderationEvents.length > 0 && (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <div className="mb-2 text-sm font-semibold text-slate-700">
+                      {t("moderation.history", { defaultValue: "История модерации" })}
+                    </div>
+                    <div className="space-y-1 text-xs text-slate-600">
+                      {moderationEvents.slice(0, 5).map((ev) => (
+                        <div key={ev.id} className="flex flex-wrap gap-x-2 gap-y-1">
+                          <span className="font-semibold">{ev.action}</span>
+                          {ev.reason_code ? <span>· {ev.reason_code}</span> : null}
+                          {ev.reason ? <span>· {ev.reason}</span> : null}
+                          {ev.created_at ? <span>· {formatDt(ev.created_at)}</span> : null}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium mb-1">
