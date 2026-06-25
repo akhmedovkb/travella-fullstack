@@ -607,11 +607,12 @@ async function autoUnlockAfterTopup(req, res) {
 
     const serviceCheck = await db.query(
       `
-        SELECT id, provider_id, status, expiration_at, deleted_at
+        SELECT id, provider_id, status, moderation_status, expiration_at, deleted_at
         FROM services
         WHERE id = $1
           AND deleted_at IS NULL
           AND status IN ('published', 'approved', 'active')
+          AND COALESCE(LOWER(moderation_status), 'approved') IN ('approved', 'published', 'active')
           AND (expiration_at IS NULL OR expiration_at > now())
           AND COALESCE(NULLIF(LOWER(details->>'isActive'), ''), 'true') <> 'false'
         LIMIT 1
@@ -864,11 +865,12 @@ async function createClickUnlockInvoice(req, res) {
 
     const serviceCheck = await db.query(
       `
-        SELECT id, provider_id, status, expiration_at, deleted_at
+        SELECT id, provider_id, status, moderation_status, expiration_at, deleted_at
         FROM services
         WHERE id = $1
           AND deleted_at IS NULL
           AND status IN ('published', 'approved', 'active')
+          AND COALESCE(LOWER(moderation_status), 'approved') IN ('approved', 'published', 'active')
           AND (expiration_at IS NULL OR expiration_at > now())
           AND COALESCE(NULLIF(LOWER(details->>'isActive'), ''), 'true') <> 'false'
         LIMIT 1
