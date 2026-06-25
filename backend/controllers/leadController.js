@@ -151,6 +151,7 @@ async function fetchClientHotOffers(limit = 3) {
     FROM services
     WHERE deleted_at IS NULL
       AND status IN ('published', 'approved', 'active')
+      AND COALESCE(LOWER(moderation_status), 'approved') IN ('approved', 'published', 'active')
       AND category = ANY($1::text[])
       AND (expiration_at IS NULL OR expiration_at > NOW())
       AND COALESCE(NULLIF(LOWER(details->>'isActive'), ''), 'true') <> 'false'
