@@ -8190,6 +8190,7 @@ async function fetchClientHotOffersForBot(limit = 3) {
     FROM services
     WHERE deleted_at IS NULL
       AND status IN ('published', 'approved', 'active')
+      AND COALESCE(LOWER(moderation_status), 'approved') IN ('approved', 'published', 'active')
       AND category = ANY($1::text[])
       AND (expiration_at IS NULL OR expiration_at > NOW())
       AND COALESCE(NULLIF(LOWER(details->>'isActive'), ''), 'true') <> 'false'
@@ -12306,6 +12307,7 @@ async function validateServiceForTelegramUnlock(poolArg, serviceId) {
     WHERE s.id = $1
       AND s.deleted_at IS NULL
       AND s.status IN ('published', 'approved', 'active')
+      AND COALESCE(LOWER(s.moderation_status), 'approved') IN ('approved', 'published', 'active')
       AND (s.expiration_at IS NULL OR s.expiration_at > NOW())
       AND COALESCE(NULLIF(LOWER(s.details->>'isActive'), ''), 'true') <> 'false'
     LIMIT 1
