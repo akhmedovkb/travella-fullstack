@@ -671,6 +671,7 @@ async function getProviderServices(req, res) {
           AND s.category = ANY($2::text[])
           AND s.deleted_at IS NULL
           AND s.status IN ('published', 'approved', 'active')
+          AND COALESCE(LOWER(s.moderation_status), 'approved') IN ('approved', 'published', 'active')
           AND (
             s.expiration_at IS NULL
             OR s.expiration_at > NOW()
@@ -728,6 +729,7 @@ async function getProviderServicesAll(req, res) {
       WHERE s.provider_id = $1
         AND s.deleted_at IS NULL
         AND s.status IN ('published', 'approved', 'active')
+        AND COALESCE(LOWER(s.moderation_status), 'approved') IN ('approved', 'published', 'active')
         AND (
           s.expiration_at IS NULL
           OR s.expiration_at > NOW()
