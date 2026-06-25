@@ -84,6 +84,12 @@ async function ensureProviderFunnelTables(db = pool) {
   await db.query(`CREATE INDEX IF NOT EXISTS idx_provider_funnel_category ON provider_funnel_events(category, created_at DESC)`);
   await db.query(`CREATE INDEX IF NOT EXISTS idx_provider_funnel_source ON provider_funnel_events(source, created_at DESC)`);
 
+  // Индексы для Telegram-заявок: эта таблица есть в проде и быстро попадает в CRM/аналитику.
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_tqr_provider ON telegram_quick_requests(provider_id, created_at DESC)`).catch(() => {});
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_tqr_service ON telegram_quick_requests(service_id, created_at DESC)`).catch(() => {});
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_tqr_requester ON telegram_quick_requests(requester_chat_id, created_at DESC)`).catch(() => {});
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_tqr_awaiting ON telegram_quick_requests(awaiting_reply, created_at DESC)`).catch(() => {});
+
   _providerFunnelReady = true;
 }
 
