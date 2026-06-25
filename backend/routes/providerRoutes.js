@@ -52,6 +52,7 @@ const { logProviderServiceAction } = require("../utils/serviceAuditLog");
 const { applyServiceLifecycleAction } = require("../utils/serviceLifecycle");
 const { logProviderFunnelEvent } = require("../utils/providerFunnel");
 const { buildRefusedQuality } = require("../utils/refusedQuality");
+const { ensureProviderLeadCrmTable } = require("../utils/providerLeadCrm");
 
 function requireProvider(req, res, next) {
   if (!req.user || !req.user.id) {
@@ -141,6 +142,7 @@ router.get("/finance", authenticateToken, requireProvider, async (req, res) => {
 
   try {
     await ensureLeadCrmTable();
+    await ensureProviderLeadCrmTable();
 
     const clientsCols = await hasColumns("clients", ["name", "full_name", "phone", "telegram", "telegram_username", "username", "first_name", "last_name"]);
     const unlockCols = await hasColumns("client_service_contact_unlocks", ["id", "client_id", "service_id", "source", "created_at", "price_charged"]);
@@ -314,7 +316,7 @@ router.get("/finance", authenticateToken, requireProvider, async (req, res) => {
     async function loadQuickRequestsFrom(table) {
       if (!(await hasTable(table))) return [];
       const cols = await hasColumns(table, [
-        "id", "service_id", "client_id", "name", "client_name", "message", "status", "created_at",
+        "id", "service_id", "client_id", "name", "client_name", "message", "note", "status", "created_at",
         "requester_chat_id", "username", "first_name", "last_name", "provider_id"
       ]);
       if (!cols.has("service_id")) return [];
@@ -330,10 +332,10 @@ router.get("/finance", authenticateToken, requireProvider, async (req, res) => {
             : cols.has("requester_chat_id")
               ? "'TG #' || qr.requester_chat_id::text"
               : "NULL::text";
-      const messageExpr = cols.has("message") ? "qr.message" : "NULL::text";
+      const messageExpr = cols.has("message") ? "qr.message" : cols.has("note") ? "qr.note" : "NULL::text";
       const statusExpr = cols.has("status") ? "qr.status" : "'new'::text";
       const createdExpr = cols.has("created_at") ? "qr.created_at" : "NOW()";
-      const sourceExpr = table === "telegram_quick_requests" ? "'telegram'::text" : "'site'::text";
+      const sourceExpr = table === "telegram_quick_requests" ? "'telegram'::text" : table === "requests" ? "'web_request'::text" : "'site'::text";
       const quickWhereExtra = `${cols.has("created_at") ? periodSql("qr") : ""} ${hasServiceFilter ? " AND s.id = $2 " : ""}`;
 
       const quickQ = await pool.query(
@@ -361,14 +363,48 @@ router.get("/finance", authenticateToken, requireProvider, async (req, res) => {
       return quickQ.rows || [];
     }
 
+    const qr0 = await loadQuickRequestsFrom("requests");
     const qr1 = await loadQuickRequestsFrom("quick_requests");
     const qr2 = await loadQuickRequestsFrom("telegram_quick_requests");
-    quickRequests = [...qr1, ...qr2]
+    quickRequests = [...qr0, ...qr1, ...qr2]
       .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
       .slice(0, 40);
     for (const row of quickRequests) {
       const sid = Number(row.service_id);
       if (Number.isFinite(sid)) quickByService.set(sid, (quickByService.get(sid) || 0) + 1);
+    }
+
+    let crmLeads = [];
+    let crmLeadsCount = 0;
+    if (await hasTable("provider_lead_crm")) {
+      const crmWhereExtra = `${periodSql("l")} ${hasServiceFilter ? " AND l.service_id = $2 " : ""}`;
+      const crmQ = await pool.query(
+        `
+        SELECT
+          l.id,
+          l.provider_id,
+          l.client_id,
+          l.service_id,
+          l.status,
+          l.note,
+          l.source,
+          l.request_table,
+          l.request_id,
+          l.telegram_chat_id,
+          COALESCE(l.last_event_at, l.updated_at, l.created_at) AS created_at,
+          s.title AS service_title,
+          s.category AS service_category
+        FROM provider_lead_crm l
+        LEFT JOIN services s ON s.id = l.service_id
+        WHERE l.provider_id = $1
+          ${crmWhereExtra}
+        ORDER BY COALESCE(l.last_event_at, l.updated_at, l.created_at) DESC NULLS LAST, l.id DESC
+        LIMIT 60
+        `,
+        params
+      );
+      crmLeads = crmQ.rows || [];
+      crmLeadsCount = crmLeads.length;
     }
 
     const topServicesQ = await pool.query(
@@ -429,12 +465,14 @@ router.get("/finance", authenticateToken, requireProvider, async (req, res) => {
         views_count: Number(viewsCount || 0),
         favorite_count: Number(favoriteCount || 0),
         quick_requests_count: quickRequests.length,
-        new_leads_count: (unlocksQ.rows || []).filter((x) => String(x.lead_status || "new") === "new").length,
+        crm_leads_count: crmLeadsCount,
+        new_leads_count: (unlocksQ.rows || []).filter((x) => String(x.lead_status || "new") === "new").length + crmLeads.filter((x) => String(x.status || "new") === "new").length,
       },
       recent_unlocks: unlocksQ.rows || [],
       hot_clients: hotClientsQ.rows || [],
       top_services: topServices,
       quick_requests: quickRequests,
+      crm_leads: crmLeads,
       services: servicesQ.rows || [],
     });
   } catch (e) {
@@ -454,6 +492,7 @@ router.post("/finance/leads/status", authenticateToken, requireProvider, async (
   if (!Number.isFinite(serviceId) || serviceId <= 0) return res.status(400).json({ ok: false, message: "Некорректная услуга" });
 
   try {
+    await ensureProviderLeadCrmTable();
     const own = await pool.query(`SELECT 1 FROM services WHERE id=$1 AND provider_id=$2 LIMIT 1`, [serviceId, providerId]);
     if (!own.rowCount) return res.status(404).json({ ok: false, message: "Услуга не найдена" });
     await pool.query(`
@@ -495,6 +534,7 @@ router.post("/finance/leads/note", authenticateToken, requireProvider, async (re
   if (!Number.isFinite(serviceId) || serviceId <= 0) return res.status(400).json({ ok: false, message: "Некорректная услуга" });
 
   try {
+    await ensureProviderLeadCrmTable();
     const own = await pool.query(`SELECT 1 FROM services WHERE id=$1 AND provider_id=$2 LIMIT 1`, [serviceId, providerId]);
     if (!own.rowCount) return res.status(404).json({ ok: false, message: "Услуга не найдена" });
     await pool.query(`
