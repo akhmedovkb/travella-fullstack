@@ -322,7 +322,7 @@ module.exports.getById = async (req, res, next) => {
     const sql = `
       SELECT
         s.id, s.provider_id, s.title, s.description, s.category, s.price, s.images, s.availability,
-        s.created_at, s.status, s.details, s.expiration_at,
+        s.created_at, s.status, s.moderation_status, s.details, s.expiration_at,
         EXISTS (
           SELECT 1
           FROM provider_support_donations psd
@@ -337,6 +337,9 @@ module.exports.getById = async (req, res, next) => {
       WHERE s.id = $1
         AND s.deleted_at IS NULL
         AND (s.status IS NULL OR lower(s.status) IN ('published','active','approved'))
+        AND COALESCE(lower(s.moderation_status), 'approved') IN ('approved','published','active')
+        AND (s.expiration_at IS NULL OR s.expiration_at > NOW())
+        AND COALESCE(NULLIF(lower(s.details->>'isActive'), ''), 'true') <> 'false'
       LIMIT 1
     `;
 
@@ -431,6 +434,7 @@ module.exports.search = async (req, res, next) => {
     let p = 1;
 
     where.push(`(s.status IS NULL OR lower(s.status) IN ('published','active','approved'))`);
+    where.push(`COALESCE(lower(s.moderation_status), 'approved') IN ('approved','published','active')`);
     where.push(`s.deleted_at IS NULL`);
     if (only_active) {
       where.push(`COALESCE((s.details->>'isActive')::boolean, TRUE) = TRUE`);
@@ -477,7 +481,7 @@ module.exports.search = async (req, res, next) => {
     const sql = `
       SELECT
         s.id, s.provider_id, s.title, s.description, s.category, s.price, s.images, s.availability,
-        s.created_at, s.status, s.details, s.expiration_at,
+        s.created_at, s.status, s.moderation_status, s.details, s.expiration_at,
         EXISTS (
           SELECT 1
           FROM provider_support_donations psd
