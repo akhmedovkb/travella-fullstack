@@ -30,12 +30,27 @@ const {
 } = require("../utils/telegram");
 
 // ---------- ENV / секреты ----------
-const SECRET_PATH = process.env.TELEGRAM_WEBHOOK_SECRET || "devsecret"; // для URL /webhook/<SECRET>
-const HEADER_TOKEN = process.env.TELEGRAM_WEBHOOK_TOKEN || ""; // если задашь при setWebhook: secret_token=...
+const SECRET_PATH = (
+  process.env.TELEGRAM_WEBHOOK_SECRET ||
+  process.env.TELEGRAM_BOT_WEBHOOK_SECRET ||
+  "Travella2025"
+).trim(); // для URL /webhook/<SECRET>
+const HEADER_TOKEN = (
+  process.env.TELEGRAM_WEBHOOK_TOKEN ||
+  process.env.TELEGRAM_BOT_WEBHOOK_TOKEN ||
+  ""
+).trim(); // если задашь при setWebhook: secret_token=...
+
+function maskSecret(value) {
+  const v = String(value || "");
+  if (!v) return "EMPTY";
+  if (v.length <= 4) return "****";
+  return `${v.slice(0, 2)}***${v.slice(-2)}`;
+}
+
 console.log(
-  `[tg] routes mounted: /api/telegram/webhook/${SECRET_PATH} (header token ${
-    HEADER_TOKEN ? "ON" : "OFF"
-  })`
+  `[tg] routes mounted: /api/telegram/webhook/${maskSecret(SECRET_PATH)} ` +
+    `(path secret ${SECRET_PATH ? "ON" : "OFF"}, header token ${HEADER_TOKEN ? "ON" : "OFF"})`
 );
 
 // RU/UZ/EN привет после привязки
@@ -61,17 +76,18 @@ const API_PUBLIC_URL = (
 
 // ---------- Общая проверка секрета (path || query || header) ----------
 function verifySecret(req) {
-  const hdr =
+  const hdr = String(
     req.get("X-Telegram-Bot-Api-Secret-Token") ||
-    req.get("x-telegram-bot-api-secret-token") ||
-    "";
+      req.get("x-telegram-bot-api-secret-token") ||
+      ""
+  ).trim();
   if (HEADER_TOKEN && hdr === HEADER_TOKEN) return true;
 
-  if (req.params && req.params.secret && req.params.secret === SECRET_PATH)
-    return true;
+  const pathSecret = String(req.params?.secret || "").trim();
+  if (SECRET_PATH && pathSecret === SECRET_PATH) return true;
 
-  const q = req.query || {};
-  if (q.secret && q.secret === SECRET_PATH) return true;
+  const querySecret = String((req.query || {}).secret || "").trim();
+  if (SECRET_PATH && querySecret === SECRET_PATH) return true;
 
   return false;
 }
@@ -91,7 +107,12 @@ async function handleWebhook(req, res) {
     });
 
     if (!verifySecret(req)) {
-      console.warn("[tg] 403: bad secret");
+      console.warn("[tg] 403: bad secret", {
+        pathSecret: maskSecret(req.params?.secret || ""),
+        querySecret: maskSecret((req.query || {}).secret || ""),
+        expectedPathSecret: maskSecret(SECRET_PATH),
+        hasHeaderTokenConfigured: !!HEADER_TOKEN,
+      });
       return res.sendStatus(403);
     }
 
@@ -620,25 +641,66 @@ router.get("/setWebhook", async (req, res) => {
         .status(500)
         .json({ ok: false, error: "api_base_missing" });
 
-    const secret = req.query.secret || SECRET_PATH;
+    const mode = String(req.query.mode || "path").toLowerCase();
+    const secret = String(req.query.secret || SECRET_PATH).trim();
     const useHeader = String(req.query.useHeader || "0") === "1";
 
-    const url = `${base}/api/telegram/webhook?secret=${encodeURIComponent(
-      secret
-    )}`;
+    // По умолчанию регистрируем тот же формат, который уже приходит в логах Telegram:
+    // /api/telegram/webhook/<secret>
+    // Query-формат оставлен только для обратной совместимости: ?mode=query
+    const url =
+      mode === "query"
+        ? `${base}/api/telegram/webhook?secret=${encodeURIComponent(secret)}`
+        : `${base}/api/telegram/webhook/${encodeURIComponent(secret)}`;
 
     const axios = (await import("axios")).default;
-    const payload = { url };
+    const payload = {
+      url,
+      drop_pending_updates: String(req.query.drop || "0") === "1",
+    };
     if (useHeader && HEADER_TOKEN) payload.secret_token = HEADER_TOKEN;
 
     const resp = await axios.post(
       `https://api.telegram.org/bot${token}/setWebhook`,
       payload
     );
-    res.json(resp.data);
+    res.json({
+      ...resp.data,
+      webhook_url_masked: url.replace(secret, maskSecret(secret)),
+      mode,
+      header_token_enabled: !!(useHeader && HEADER_TOKEN),
+    });
   } catch (e) {
     console.error("setWebhook error:", e?.response?.data || e?.message || e);
     res.status(500).json({ ok: false, error: "set_webhook_failed" });
+  }
+});
+
+router.get("/webhookInfo", async (_req, res) => {
+  try {
+    const token = process.env.TELEGRAM_BOT_TOKEN || "";
+    if (!token) return res.status(500).json({ ok: false, error: "token_missing" });
+    const axios = (await import("axios")).default;
+    const resp = await axios.get(`https://api.telegram.org/bot${token}/getWebhookInfo`);
+    res.json(resp.data);
+  } catch (e) {
+    console.error("webhookInfo error:", e?.response?.data || e?.message || e);
+    res.status(500).json({ ok: false, error: "webhook_info_failed" });
+  }
+});
+
+router.get("/deleteWebhook", async (req, res) => {
+  try {
+    const token = process.env.TELEGRAM_BOT_TOKEN || "";
+    if (!token) return res.status(500).json({ ok: false, error: "token_missing" });
+    const axios = (await import("axios")).default;
+    const resp = await axios.post(`https://api.telegram.org/bot${token}/deleteWebhook`, {
+      drop_pending_updates: String(req.query.drop || "0") === "1",
+    });
+    res.json(resp.data);
+  } catch (e) {
+    console.error("deleteWebhook error:", e?.response?.data || e?.message || e);
+    res.status(500).json({ ok: false, error: "delete_webhook_failed" });
   }
 });
 
