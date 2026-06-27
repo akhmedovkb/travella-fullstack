@@ -2235,7 +2235,14 @@ function buildDraftDetailText(svc) {
     `<code>${escapeHtml(bar)}</code>\n`;
 
   if (route) html += `\n🌍 <b>Маршрут:</b> ${escapeHtml(route)}`;
-  if (hotel) html += `\n🏨 <b>Отель/объект:</b> ${escapeHtml(hotel)}`;
+  if (objectLabel) {
+    const objectCaption = category === "refused_flight"
+      ? "✈️ <b>Авиаданные:</b>"
+      : category === "refused_event_ticket" || category === "refused_ticket"
+        ? "🎫 <b>Мероприятие/локация:</b>"
+        : "🏨 <b>Отель/объект:</b>";
+    html += `\n${objectCaption} ${escapeHtml(objectLabel)}`;
+  }
   if (dates) html += `\n🗓 <b>Даты:</b> ${escapeHtml(dates)}`;
   if (price) html += `\n💰 <b>Цена:</b> ${escapeHtml(String(price))} ${escapeHtml(currency)}`;
   if (created) html += `\n🕒 <b>Создан:</b> ${escapeHtml(created)}`;
