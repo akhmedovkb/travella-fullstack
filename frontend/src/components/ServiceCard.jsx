@@ -59,6 +59,20 @@ const firstNonEmpty = (...vals) => {
   }
   return null;
 };
+
+const accommodationLabel = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const upper = raw.toUpperCase();
+  const map = {
+    SGL: "одноместное размещение",
+    DBL: "двухместное размещение",
+    TRIPLE: "трёхместное размещение",
+    QUADRUPLE: "четырёхместное размещение",
+  };
+  return map[upper] ? `${upper} (${map[upper]})` : raw;
+};
+
 const maybeParse = (x) => {
   if (!x) return null;
   if (typeof x === "object") return x;
@@ -2331,7 +2345,7 @@ return (
                       <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
                         {t("marketplace.accommodation", { defaultValue: "Размещение" })}
                       </div>
-                      <div className="mt-1 text-sm font-black text-slate-900">🛏 {accommodation}</div>
+                      <div className="mt-1 text-sm font-black text-slate-900">🛏 {accommodationLabel(accommodation)}</div>
                     </div>
                   )}
                   {transfer && (
