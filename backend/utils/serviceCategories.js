@@ -19,7 +19,25 @@ const PROOF_REQUIRED_CATEGORIES = Object.freeze([
 ]);
 
 function normalizeCategory(category) {
-  return String(category || "").trim().toLowerCase();
+  const c = String(category || "").trim().toLowerCase();
+  const aliases = {
+    refused_tickets: "refused_ticket",
+    refused_event_tickets: "refused_event_ticket",
+    event_ticket: "refused_event_ticket",
+    event_tickets: "refused_event_ticket",
+    ticket: "refused_event_ticket",
+    tickets: "refused_event_ticket",
+    flight: "refused_flight",
+    flights: "refused_flight",
+    avia: "refused_flight",
+    airline_ticket: "refused_flight",
+    air_ticket: "refused_flight",
+    hotel: "refused_hotel",
+    hotels: "refused_hotel",
+    tour: "refused_tour",
+    refused: "refused_tour",
+  };
+  return aliases[c] || c;
 }
 
 function isRefusedCategory(category) {
