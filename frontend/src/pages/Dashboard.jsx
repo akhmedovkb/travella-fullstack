@@ -31,6 +31,33 @@ function dataUrlToBlobUrl(dataUrl) {
   }
 }
 
+
+const ACCOMMODATION_OPTIONS = [
+  { code: "SGL", label: "одноместное" },
+  { code: "DBL", label: "двухместное" },
+  { code: "TRIPLE", label: "трёхместное" },
+  { code: "QUADRUPLE", label: "четырёхместное" },
+];
+
+function AccommodationQuickButtons({ value, onChange }) {
+  return (
+    <div className="mb-2 flex flex-wrap gap-2">
+      {ACCOMMODATION_OPTIONS.map((opt) => (
+        <button
+          key={opt.code}
+          type="button"
+          onClick={() => onChange(opt.code)}
+          className={`rounded-xl border px-3 py-2 text-xs font-black transition ${String(value || "").toUpperCase() === opt.code ? "border-orange-400 bg-orange-50 text-orange-700" : "border-gray-200 bg-white text-gray-700 hover:border-orange-300 hover:bg-orange-50"}`}
+          title={`${opt.code} — ${opt.label} размещение`}
+        >
+          {opt.code}
+          <span className="ml-1 font-semibold text-gray-400">({opt.label})</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 const statusBadgeClass = (status) => {
   switch (status) {
     case "published":
@@ -2107,6 +2134,10 @@ useEffect(() => {
                       placeholder={t("enter_category")}
                     />
                     <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("accommodation")}</label>
+                    <AccommodationQuickButtons
+                      value={details.accommodation || ""}
+                      onChange={(code) => setDetails({ ...details, accommodation: code })}
+                    />
                     <input
                       type="text"
                       value={details.accommodation || ""}
@@ -2124,11 +2155,9 @@ useEffect(() => {
                       className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                     >
                       <option value="">{t("food_options.select")}</option>
-                      <option value="RO">RO - {t("food_options.ro", { defaultValue: "Без питания" })}</option>
                       <option value="BB">BB - {t("food_options.bb")}</option>
                       <option value="HB">HB - {t("food_options.hb")}</option>
                       <option value="FB">FB - {t("food_options.fb")}</option>
-                      <option value="FBT">FBT - {t("food_options.fbt", { defaultValue: "3-разовое + базовый терапевтический пакет" })}</option>
                       <option value="AI">AI - {t("food_options.ai")}</option>
                       <option value="UAI">UAI - {t("food_options.uai")}</option>
                     </select>
@@ -2325,6 +2354,10 @@ useEffect(() => {
 
                   <div className="mb-2">
                     <label className="block text-sm font-semibold text-gray-700 mb-1.5">{tr("accommodation", "Размещение")}</label>
+                    <AccommodationQuickButtons
+                      value={details.accommodation || ""}
+                      onChange={(code) => setDetails({ ...details, accommodation: code })}
+                    />
                     <input
                       type="text"
                       value={details.accommodation || ""}
@@ -2342,11 +2375,9 @@ useEffect(() => {
                       className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                     >
                       <option value="">{t("food_options.select")}</option>
-                      <option value="RO">RO - {t("food_options.ro", { defaultValue: "Без питания" })}</option>
-                      <option value="BB">BB - {t("food_options.bb")}</option>
+                      <option value="BB">{t("food_options.bb")}</option>
                       <option value="HB">{t("food_options.hb")}</option>
-                      <option value="FB">FB - {t("food_options.fb")}</option>
-                      <option value="FBT">FBT - {t("food_options.fbt", { defaultValue: "3-разовое + базовый терапевтический пакет" })}</option>
+                      <option value="FB">{t("food_options.fb")}</option>
                       <option value="AI">{t("food_options.ai")}</option>
                       <option value="UAI">{t("food_options.uai")}</option>
                     </select>
@@ -3080,6 +3111,10 @@ useEffect(() => {
                             </div>
                             <div>
                               <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("accommodation")}</label>
+                              <AccommodationQuickButtons
+                                value={details.accommodation || ""}
+                                onChange={(code) => setDetails({ ...details, accommodation: code })}
+                              />
                               <input
                                 type="text"
                                 value={details.accommodation || ""}
@@ -3099,11 +3134,9 @@ useEffect(() => {
                                 className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                               >
                                 <option value="">{t("food_options.select")}</option>
-                                <option value="RO">RO - {t("food_options.ro", { defaultValue: "Без питания" })}</option>
-                      <option value="BB">BB - {t("food_options.bb")}</option>
+                                <option value="BB">BB - {t("food_options.bb")}</option>
                                 <option value="HB">HB - {t("food_options.hb")}</option>
                                 <option value="FB">FB - {t("food_options.fb")}</option>
-                      <option value="FBT">FBT - {t("food_options.fbt", { defaultValue: "3-разовое + базовый терапевтический пакет" })}</option>
                                 <option value="AI">AI - {t("food_options.ai")}</option>
                                 <option value="UAI">UAI - {t("food_options.uai")}</option>
                               </select>
@@ -3316,11 +3349,9 @@ useEffect(() => {
                           className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                         >
                           <option value="">{t("food_options.select")}</option>
-                          <option value="RO">RO - {t("food_options.ro", { defaultValue: "Без питания" })}</option>
-                      <option value="BB">BB - {t("food_options.bb")}</option>
+                          <option value="BB">{t("food_options.bb")}</option>
                           <option value="HB">{t("food_options.hb")}</option>
-                          <option value="FB">FB - {t("food_options.fb")}</option>
-                      <option value="FBT">FBT - {t("food_options.fbt", { defaultValue: "3-разовое + базовый терапевтический пакет" })}</option>
+                          <option value="FB">{t("food_options.fb")}</option>
                           <option value="AI">{t("food_options.ai")}</option>
                           <option value="UAI">{t("food_options.uai")}</option>
                         </select>
