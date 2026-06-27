@@ -56,13 +56,14 @@ const CATEGORY_EMOJI = {
 function foodLabel(x) {
   const s = String(x || "").trim().toUpperCase();
   const map = {
-    RO: "Без питания (RO)",
-    BB: "Завтраки (BB)",
-    HB: "Завтрак+ужин (HB)",
-    FB: "Полный пансион (FB)",
-    AI: "Все включено (AI)",
-    UAI: "Ультра все включено (UAI)",
-    HALAL: "Халяль (HALAL)",
+    RO: "RO (без питания)",
+    BB: "BB (завтраки)",
+    HB: "HB (завтрак + ужин)",
+    FB: "FB (полный пансион)",
+    FBT: "FBT (3-разовое + базовый терапевтический пакет)",
+    AI: "AI (всё включено)",
+    UAI: "UAI (ультра всё включено)",
+    HALAL: "Halal (халяль)",
   };
   return map[s] || (s ? `${s}` : "");
 }
@@ -889,21 +890,23 @@ const priceKind =
     if (!raw) return "";
     const up = raw.toUpperCase();
     const map = {
-      RO: "RO",
-      BB: "BB",
-      HB: "HB",
-      FB: "FB",
-      AI: "AI",
-      UAI: "UAI",
-      FBT: "FBT",
+      RO: "RO (без питания)",
+      BB: "BB (завтраки)",
+      HB: "HB (завтрак + ужин)",
+      FB: "FB (полный пансион)",
+      FBT: "FBT (3-разовое + базовый терапевтический пакет)",
+      AI: "AI (всё включено)",
+      UAI: "UAI (ультра всё включено)",
       HALAL: "Halal",
     };
     if (map[up]) return map[up];
-    if (/ULTRA|УЛЬТРА|UAI/.test(up)) return "UAI";
-    if (/ALL\s*INCLUSIVE|ВС[ЕЁ]\s*ВКЛ|AI/.test(up)) return "AI";
-    if (/FULL\s*BOARD|ПОЛН|FB/.test(up)) return "FB";
-    if (/HALF\s*BOARD|ПОЛУ|HB/.test(up)) return "HB";
-    if (/BREAKFAST|ЗАВТРАК|BB/.test(up)) return "BB";
+    if (/ULTRA|УЛЬТРА|UAI/.test(up)) return "UAI (ультра всё включено)";
+    if (/ALL\s*INCLUSIVE|ВС[ЕЁ]\s*ВКЛ|AI/.test(up)) return "AI (всё включено)";
+    if (/FBT|THERAP|ТЕРАП|ЛЕЧЕН/.test(up)) return "FBT (3-разовое + базовый терапевтический пакет)";
+    if (/FULL\s*BOARD|ПОЛН|FB/.test(up)) return "FB (полный пансион)";
+    if (/HALF\s*BOARD|ПОЛУ|HB/.test(up)) return "HB (завтрак + ужин)";
+    if (/ROOM\s*ONLY|БЕЗ\s*ПИТ|RO/.test(up)) return "RO (без питания)";
+    if (/BREAKFAST|ЗАВТРАК|BB/.test(up)) return "BB (завтраки)";
     return raw;
   };
 
