@@ -934,11 +934,20 @@ const priceKind =
   const transferItems = () => {
     const out = [];
     const add = (label) => {
+      if (label === true) {
+        if (!out.some((x) => /^(включ[её]н|included)$/i.test(String(x)))) out.push("Включён");
+        return;
+      }
+      if (label === false) return;
       const v0 = firstValue(label);
       if (!v0) return;
       const v = transferLabel(v0) || v0;
       const low = String(v).toLowerCase();
-      if (/без трансфера|нет|none|no|absent/.test(low)) return;
+      if (/без трансфера|нет|none|no|absent|false/.test(low)) return;
+      if (/^(true|yes|да)$/i.test(String(v).trim())) {
+        if (!out.some((x) => /^(включ[её]н|included)$/i.test(String(x)))) out.push("Включён");
+        return;
+      }
       if (!out.some((x) => x.toLowerCase() === v.toLowerCase())) out.push(v);
     };
 
@@ -1453,8 +1462,10 @@ const priceKind =
     if (roomCat || hotelName || accommodation) included.push("проживание");
     if (foodPretty) included.push(`питание ${foodPretty}`);
 
-    if (transfers.length) included.push(`трансфер${transfers.length ? `: ${transfers.join(" / ")}` : ""}`);
-    else if (hasPositiveFlag(d.transferIncluded, d.hasTransfer, d.airportTransferIncluded)) included.push("трансфер");
+    if (transfers.length) {
+      const namedTransfers = transfers.filter((x) => !/^(включ[её]н|included|yes|да)$/i.test(String(x || "").trim()));
+      included.push(namedTransfers.length ? `трансфер: ${namedTransfers.join(" / ")}` : "трансфер");
+    } else if (hasPositiveFlag(d.transferIncluded, d.hasTransfer, d.airportTransferIncluded)) included.push("трансфер");
 
     if (hasPositiveFlag(d.insuranceIncluded, d.insurance, d.hasInsurance)) included.push("страховка");
     if (hasPositiveFlag(d.visaIncluded, d.visa, d.hasVisa)) included.push("виза");
