@@ -12,6 +12,15 @@ const { buildSvcActualKeyboard } = require("./keyboards/serviceActual");
 const { handleServiceActualCallback } = require("./handlers/serviceActualHandler");
 const { buildServiceMessage } = require("../utils/telegramServiceCard");
 const { getDraftProgress } = require("../utils/serviceFieldMatrix");
+const {
+  getServiceWizardSteps,
+  getNextWizardStep,
+  getPreviousWizardStep,
+  getEditWizardSteps,
+  getNextEditWizardStep,
+  isOptionalWizardStep,
+  isWizardStep,
+} = require("../utils/serviceWizardEngine");
 const { getServiceDisplayTitle: getCanonicalServiceDisplayTitle } = require("../utils/serviceDisplay");
 const { getContactUnlockSettings } = require("../utils/contactUnlockSettings");
 const {
@@ -3200,6 +3209,26 @@ async function promptEditState(ctx, state) {
       );
       return;
 
+    case "svc_edit_flight_type":
+      await safeReply(
+        ctx,
+        `✈️ Тип перелёта (текущее: ${draft.flightType === "round_trip" ? "туда-обратно" : "в одну сторону"}).\nВыберите тип или нажмите «⏭ Пропустить»:`,
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "➡️ В одну сторону", callback_data: "svc_edit_flight_type:one_way" }],
+              [{ text: "🔁 Туда-обратно", callback_data: "svc_edit_flight_type:round_trip" }],
+              [{ text: "⏭ Пропустить", callback_data: "svc_edit:skip" }],
+              [
+                { text: "⬅️ Назад", callback_data: "svc_edit_back" },
+                { text: "❌ Отмена", callback_data: "svc_edit_cancel" },
+              ],
+            ],
+          },
+        }
+      );
+      return;
+
     case "svc_edit_flight_departure":
       await safeReply(
         ctx,
@@ -3580,95 +3609,7 @@ bot.action("svc_edit:skip", async (ctx) => {
     const state = currentState;
     const category = String(ctx.session.serviceDraft?.category || "").trim();
 
-    const ticketOrder = [
-      "svc_edit_title",
-      "svc_edit_ticket_country",
-      "svc_edit_ticket_city",
-      "svc_edit_ticket_date",
-      "svc_edit_price",
-      "svc_edit_grossPrice",
-      "svc_edit_expiration",
-      "svc_edit_isActive",
-      "svc_edit_images",
-    ];
-
-    const flightOrder = [
-      "svc_edit_title",
-      "svc_edit_flight_country",
-      "svc_edit_flight_from",
-      "svc_edit_flight_to",
-      "svc_edit_flight_type",
-      "svc_edit_flight_departure",
-      "svc_edit_flight_return",
-      "svc_edit_flight_airline",
-      "svc_edit_flight_details",
-      "svc_edit_price",
-      "svc_edit_grossPrice",
-      "svc_edit_expiration",
-      "svc_edit_isActive",
-      "svc_edit_images",
-    ];
-
-    const hotelOrder = [
-      "svc_edit_title",
-      "svc_edit_hotel_country",
-      "svc_edit_hotel_city",
-      "svc_edit_hotel_name",
-      "svc_edit_hotel_checkin",
-      "svc_edit_hotel_checkout",
-      "svc_edit_hotel_roomcat",
-      "svc_edit_hotel_accommodation",
-      "svc_edit_hotel_food",
-      "svc_edit_hotel_halal",
-      "svc_edit_hotel_transfer",
-      "svc_edit_hotel_changeable",
-      "svc_edit_hotel_pax",
-      "svc_edit_hotel_insurance",
-      "svc_edit_hotel_early_checkin",
-      "svc_edit_hotel_fast_track",
-      "svc_edit_price",
-      "svc_edit_grossPrice",
-      "svc_edit_expiration",
-      "svc_edit_isActive",
-      "svc_edit_images",
-    ];
-
-    const tourOrder = [
-      "svc_edit_title",
-      "svc_edit_tour_country",
-      "svc_edit_tour_from",
-      "svc_edit_tour_to",
-      "svc_edit_tour_start",
-      "svc_edit_tour_end",
-      "svc_edit_flight_departure",
-      "svc_edit_flight_return",
-      "svc_edit_flight_airline",
-      "svc_edit_flight_details",
-      "svc_edit_tour_hotel",
-      "svc_edit_tour_accommodation",
-      "svc_edit_tour_roomcat",
-      "svc_edit_tour_food",
-      "svc_edit_tour_insurance",
-      "svc_edit_tour_early_checkin",
-      "svc_edit_tour_fast_track",
-      "svc_edit_price",
-      "svc_edit_grossPrice",
-      "svc_edit_expiration",
-      "svc_edit_isActive",
-      "svc_edit_images",
-    ];
-
-    let order = tourOrder;
-
-    if (category === "refused_ticket" || category === "refused_event_ticket") {
-      order = ticketOrder;
-    } else if (category === "refused_flight") {
-      order = flightOrder;
-    } else if (category === "refused_hotel") {
-      order = hotelOrder;
-    } else {
-      order = tourOrder;
-    }
+    const order = getServiceEditWizardOrder(category, state);
 
     if (state === "svc_edit_confirm") {
       await safeReply(
@@ -3691,8 +3632,7 @@ bot.action("svc_edit:skip", async (ctx) => {
       return;
     }
 
-    const idx = order.indexOf(state);
-    const nextState = idx >= 0 ? order[idx + 1] : null;
+    const nextState = getNextEditWizardStep(category, state, ctx.session.serviceDraft);
 
     if (!nextState) {
       await safeReply(ctx, "⚠️ Уже нечего пропускать на этом шаге.");
@@ -3912,10 +3852,17 @@ bot.action(/^draft:continue:(\d+)$/, async (ctx) => {
       toCity: det.directionTo || "",
       startDate: det.startDate || "",
       endDate: det.endDate || "",
-      departureFlightDate: det.departureFlightDate || "",
-      returnFlightDate: det.returnFlightDate || "",
-      flightDetails: det.flightDetails || "",
-      hotel: det.hotel || "",
+      flightType: det.flightType || det.flight_type || (det.oneWay === false || det.one_way === false ? "round_trip" : "one_way"),
+      oneWay: det.oneWay ?? det.one_way ?? !(det.returnFlightDate || det.returnDate || det.endFlightDate),
+      departureFlightDate: det.departureFlightDate || det.startFlightDate || det.flightDate || det.startDate || "",
+      returnFlightDate: det.returnFlightDate || det.returnDate || det.endFlightDate || det.endDate || "",
+      airline: det.airline || det.airCompany || det.carrier || "",
+      flightNumber: det.flightNumber || "",
+      flightDetails: det.flightDetails || det.flightNumber || "",
+      eventName: det.eventName || det.eventTitle || det.ticketTitle || "",
+      ticketDetails: det.ticketDetails || det.eventCategory || det.sector || det.row || det.seat || det.ticketType || "",
+      quantity: det.quantity || det.seats || det.ticketCount || "",
+      hotel: det.hotel || det.hotelName || "",
       accommodation: det.accommodation || "",
       roomCategory: det.roomCategory || det.accommodationCategory || "",
       food: det.food || "",
@@ -4006,10 +3953,17 @@ bot.action(/^svc_edit_start:(\d+)$/, async (ctx) => {
       toCity: det.directionTo || "",
       startDate: det.startDate || "",
       endDate: det.endDate || "",
-      departureFlightDate: det.departureFlightDate || "",
-      returnFlightDate: det.returnFlightDate || "",
-      flightDetails: det.flightDetails || "",
-      hotel: det.hotel || "",
+      flightType: det.flightType || det.flight_type || (det.oneWay === false || det.one_way === false ? "round_trip" : "one_way"),
+      oneWay: det.oneWay ?? det.one_way ?? !(det.returnFlightDate || det.returnDate || det.endFlightDate),
+      departureFlightDate: det.departureFlightDate || det.startFlightDate || det.flightDate || det.startDate || "",
+      returnFlightDate: det.returnFlightDate || det.returnDate || det.endFlightDate || det.endDate || "",
+      airline: det.airline || det.airCompany || det.carrier || "",
+      flightNumber: det.flightNumber || "",
+      flightDetails: det.flightDetails || det.flightNumber || "",
+      eventName: det.eventName || det.eventTitle || det.ticketTitle || "",
+      ticketDetails: det.ticketDetails || det.eventCategory || det.sector || det.row || det.seat || det.ticketType || "",
+      quantity: det.quantity || det.seats || det.ticketCount || "",
+      hotel: det.hotel || det.hotelName || "",
       accommodation: det.accommodation || "",
 
       // отели (wizard использует roomCategory / halal / transfer / changeable / adt/chd/inf)
@@ -4130,13 +4084,11 @@ async function finishEditWizard(ctx) {
       return;
     }
 
-    if (!country) {
+    if (!country && !isFlight) {
       const next = isHotel
         ? "svc_edit_hotel_country"
         : isTicket
         ? "svc_edit_ticket_country"
-        : isFlight
-        ? "svc_edit_flight_country"
         : "svc_edit_tour_country";
 
       await safeReply(ctx, "⚠️ Укажите *Страну* (обязательное поле).", {
@@ -5977,110 +5929,13 @@ function accommodationChoiceKeyboard(mode = "create", flow = "tour") {
 }
 
 function getServiceWizardOrder(category = "", state = "") {
-  const c = String(category || "").toLowerCase();
-  const st = String(state || "");
-
-  const tourOrder = [
-    "svc_create_title",
-    "svc_create_tour_country",
-    "svc_create_tour_from",
-    "svc_create_tour_to",
-    "svc_create_tour_start",
-    "svc_create_tour_end",
-    "svc_create_flight_departure",
-    "svc_create_flight_return",
-    "svc_create_flight_airline",
-    "svc_create_flight_details",
-    "svc_create_tour_hotel",
-    "svc_create_tour_accommodation",
-    "svc_create_tour_roomcat",
-    "svc_create_tour_food",
-    "svc_create_price",
-    "svc_create_grossPrice",
-    "svc_create_urgency",
-    "svc_create_expiration",
-    "svc_create_photo",
-  ];
-
-  const hotelOrder = [
-    "svc_hotel_country",
-    "svc_hotel_city",
-    "svc_hotel_name",
-    "svc_hotel_checkin",
-    "svc_hotel_checkout",
-    "svc_hotel_roomcat",
-    "svc_hotel_accommodation",
-    "svc_hotel_food",
-    "svc_hotel_halal",
-    "svc_hotel_transfer",
-    "svc_hotel_changeable",
-    "svc_hotel_pax",
-    "svc_create_price",
-    "svc_create_grossPrice",
-    "svc_create_urgency",
-    "svc_create_expiration",
-    "svc_create_photo",
-  ];
-
-  const flightOrder = [
-    "svc_create_title",
-    "svc_create_tour_country",
-    "svc_create_tour_from",
-    "svc_create_tour_to",
-    "svc_create_flight_type",
-    "svc_create_flight_departure",
-    "svc_create_flight_return",
-    "svc_create_flight_airline",
-    "svc_create_flight_details",
-    "svc_create_price",
-    "svc_create_grossPrice",
-    "svc_create_urgency",
-    "svc_create_expiration",
-    "svc_create_photo",
-  ];
-
-  const ticketOrder = [
-    "svc_create_title",
-    "svc_create_tour_country",
-    "svc_create_tour_from",
-    "svc_create_tour_to",
-    "svc_ticket_event_date",
-    "svc_create_price",
-    "svc_create_grossPrice",
-    "svc_create_urgency",
-    "svc_create_expiration",
-    "svc_create_photo",
-  ];
-
-  const authorOrder = [
-    "svc_author_title",
-    "svc_author_country",
-    "svc_author_from",
-    "svc_author_to",
-    "svc_author_start",
-    "svc_author_end",
-    "svc_author_format",
-    "svc_author_stays",
-    "svc_author_program_days",
-    "svc_author_included",
-    "svc_author_not_included",
-    "svc_author_pax",
-    "svc_author_language",
-    "svc_author_meeting",
-    "svc_author_cancel",
-    "svc_create_price",
-    "svc_create_grossPrice",
-    "svc_create_urgency",
-    "svc_create_expiration",
-    "svc_create_photo",
-  ];
-
-  if (c === "author_tour" || st.startsWith("svc_author_") || st.startsWith("author_")) return authorOrder;
-  if (c === "refused_hotel" || st.startsWith("svc_hotel_")) return hotelOrder;
-  if (c === "refused_flight") return flightOrder;
-  if (c === "refused_ticket" || c === "refused_event_ticket" || st === "svc_ticket_event_date") return ticketOrder;
-  return tourOrder;
+  return getServiceWizardSteps(category, state);
 }
+
+function getServiceEditWizardOrder(category = "", state = "") {
+  return getEditWizardSteps(category, state);
+}
+
 
 function wizardProgressText(ctx, state) {
   const draft = ctx.session?.serviceDraft || {};
@@ -9571,20 +9426,7 @@ bot.action("svc_wiz:back", async (ctx) => {
     await ctx.answerCbQuery();
 
     const cur = ctx.session?.state || null;
-    if (
-          !cur ||
-          !(
-            String(cur).startsWith("svc_create_") ||
-            String(cur).startsWith("svc_hotel_") ||
-            String(cur).startsWith("svc_author_") ||
-            String(cur).startsWith("author_stay_") ||
-            String(cur).startsWith("author_day_") ||
-            String(cur).startsWith("author_included_") ||
-            state.startsWith("author_excluded_") ||
-            state.startsWith("author_language_")
-          )
-        )
-      return;
+    if (!cur || !isWizardStep(cur)) return;
 
     if (String(cur).startsWith("author_day_")) {
       const localBackMap = {
@@ -9788,132 +9630,15 @@ bot.action("svc_wiz:skip", async (ctx) => {
     const category = String(draft.category || "");
     const isEditFlow = !!ctx.session?.editingServiceId || !!draft?.id;
 
-    const tourOrder = [
-      "svc_create_title",
-      "svc_create_tour_country",
-      "svc_create_tour_from",
-      "svc_create_tour_to",
-      "svc_create_tour_start",
-      "svc_create_tour_end",
-      "svc_create_flight_departure",
-      "svc_create_flight_return",
-      "svc_create_flight_airline",
-      "svc_create_flight_details",
-      "svc_create_tour_hotel",
-      "svc_create_tour_accommodation",
-      "svc_create_tour_roomcat",   
-      "svc_create_tour_food",   
-      "svc_create_price",
-      "svc_create_grossPrice",
-      "svc_create_urgency",
-      "svc_create_expiration",
-      "svc_create_photo",
-    ];
+    const order = getServiceWizardOrder(category, state);
+    const nextByEngine = () => getNextWizardStep(category, state, draft);
 
-    const hotelOrder = [
-      "svc_hotel_country",
-      "svc_hotel_city",
-      "svc_hotel_name",
-      "svc_hotel_checkin",
-      "svc_hotel_checkout",
-      "svc_hotel_roomcat",
-      "svc_hotel_accommodation",
-      "svc_hotel_food",
-      "svc_hotel_halal",
-      "svc_hotel_transfer",
-      "svc_hotel_changeable",
-      "svc_hotel_pax",
-      "svc_create_price",
-      "svc_create_grossPrice",
-      "svc_create_urgency",
-      "svc_create_expiration",
-      "svc_create_photo",
-    ];
-
-    const flightOrder = [
-      "svc_create_title",
-      "svc_create_tour_country",
-      "svc_create_tour_from",
-      "svc_create_tour_to",
-      "svc_create_flight_type",
-      "svc_create_flight_departure",
-      "svc_create_flight_return",
-      "svc_create_flight_airline",
-      "svc_create_flight_details",
-      "svc_create_price",
-      "svc_create_grossPrice",
-      "svc_create_urgency",
-      "svc_create_expiration",
-      "svc_create_photo",
-    ];
-
-    const ticketOrder = [
-      "svc_create_title",
-      "svc_create_tour_country",
-      "svc_create_tour_from",
-      "svc_create_tour_to",
-      "svc_ticket_event_date",
-      "svc_create_price",
-      "svc_create_grossPrice",
-      "svc_create_urgency",
-      "svc_create_expiration",
-      "svc_create_photo",
-    ];
-
-    const authorOrder = [
-      "svc_author_title",
-      "svc_author_country",
-      "svc_author_from",
-      "svc_author_to",
-      "svc_author_start",
-      "svc_author_end",
-      "svc_author_format",
-      "svc_author_stays",
-      "svc_author_program_days",
-      "svc_author_included",
-      "svc_author_not_included",
-      "svc_author_pax",
-      "svc_author_language",
-      "svc_author_meeting",
-      "svc_author_cancel",
-      "svc_create_price",
-      "svc_create_grossPrice",
-      "svc_create_urgency",
-      "svc_create_expiration",
-      "svc_create_photo",
-    ];
-
-    const isAuthorFlow = category === "author_tour" || state.startsWith("svc_author_");
-    const isHotelFlow = category === "refused_hotel" || state.startsWith("svc_hotel_");
-    const isFlightFlow = category === "refused_flight";
-    const isTicketFlow = category === "refused_ticket" || category === "refused_event_ticket" || state === "svc_ticket_event_date";
-    const order = isAuthorFlow ? authorOrder : (isTicketFlow ? ticketOrder : (isFlightFlow ? flightOrder : (isHotelFlow ? hotelOrder : tourOrder)));
-
-    // какие шаги реально можно пропустить кнопкой
-    const optional = new Set([
-      "svc_author_title",
-      "svc_author_not_included",
-      "svc_author_cancel",
-      "author_day_date",
-      "author_day_route",
-      "author_day_title",
-      "svc_create_flight_type",
-      "svc_create_flight_departure",
-      "svc_create_flight_return",
-      "svc_create_flight_airline",
-      "svc_create_flight_details",
-      "svc_create_tour_roomcat",
-      "svc_create_tour_food",
-      "svc_create_grossPrice",
-      "svc_create_urgency",
-      "svc_create_expiration", // можно поставить "нет" (кнопка = быстрый переход)
-      "svc_create_photo",
-    ]);
+    // Какие шаги можно пропустить: теперь берём из Travella Wizard Engine v2.
 
     // При создании часть шагов обязательная.
     // При редактировании кнопка «Пропустить» означает «оставить сохранённое значение»
     // и всегда должна переводить на следующий шаг.
-    if (!isEditFlow && !optional.has(state)) {
+    if (!isEditFlow && !isOptionalWizardStep(state)) {
       await safeReply(ctx, "⚠️ Этот шаг обязателен — его нельзя пропустить.", wizNavKeyboard());
       return;
     }
@@ -9962,37 +9687,16 @@ bot.action("svc_wiz:skip", async (ctx) => {
     // Иногда пользователи нажимают кнопку «Пропустить» под старым сообщением,
     // когда ctx.session.state уже успел измениться. Чтобы не получать
     // «Уже нечего пропускать», делаем явные переходы для optional-шагов.
-  const forcedNext =
-    state === "author_day_date"
-      ? "author_day_route"
-      : state === "author_day_route"
-        ? "author_day_title"
-        : state === "author_day_title"
-          ? "author_day_items"
-          : state === "svc_author_title"
-      ? "svc_author_country"
-      : state === "svc_author_not_included"
-        ? "svc_author_pax"
-        : state === "svc_author_cancel"
-          ? "svc_create_price"
-          : state === "svc_create_flight_type"
-      ? "svc_create_flight_departure"
-      : state === "svc_create_flight_departure"
-      ? (draft.flightType === "round_trip" ? "svc_create_flight_return" : "svc_create_flight_details")
-      : state === "svc_create_flight_return"
-        ? "svc_create_flight_details"
-        : state === "svc_create_flight_details"
-          ? (category === "refused_flight" ? "svc_create_price" : "svc_create_tour_hotel")
-          : state === "svc_create_grossPrice"
-            ? "svc_create_urgency"
-            : state === "svc_create_urgency"
-              ? "svc_create_expiration"
-              : state === "svc_create_expiration"
-                ? "svc_create_photo"
-              : null;
+    const forcedNext =
+      state === "author_day_date"
+        ? "author_day_route"
+        : state === "author_day_route"
+          ? "author_day_title"
+          : state === "author_day_title"
+            ? "author_day_items"
+            : null;
 
-    const idx = order.indexOf(state);
-    const nextState = forcedNext || (idx >= 0 ? order[idx + 1] : null);
+    const nextState = forcedNext || nextByEngine();
 
     // Если пропускаем фото — финализируем.
     // В создании очищаем фото, в редактировании оставляем уже сохранённые фото.
