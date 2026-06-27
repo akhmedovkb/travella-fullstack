@@ -16,6 +16,7 @@ const { getContactUnlockSettings } = require("../utils/contactUnlockSettings");
 const { logProviderServiceAction } = require("../utils/serviceAuditLog");
 const { applyServiceLifecycleAction } = require("../utils/serviceLifecycle");
 const { logProviderFunnelEvent } = require("../utils/providerFunnel");
+const { normalizeRefusedFlightDetails } = require("../utils/flightDetailsNormalizer");
 
 require("../utils/refusedPriceDropBroadcast");
 
@@ -116,6 +117,7 @@ function normalizeRefusedStartDate(details = {}, category = "") {
   const cat = String(category || d.category || "").trim().toLowerCase();
 
   if (cat === "refused_flight") {
+    Object.assign(d, normalizeRefusedFlightDetails(d));
     const flightType = String(d.flightType || d.flight_type || (d.oneWay === false ? "round_trip" : "one_way")).trim();
     d.flightType = flightType === "round_trip" ? "round_trip" : "one_way";
     d.oneWay = d.flightType !== "round_trip";
