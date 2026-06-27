@@ -865,6 +865,116 @@ const priceKind =
     return "";
   };
 
+  const normalizeCompareText = (value) =>
+    String(value || "")
+      .replace(/<[^>]*>/g, "")
+      .replace(/[#№]R?\d+/gi, "")
+      .replace(/[🔥🆕🏨✈️🎫🧭🌍📍⭐️]/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
+
+  const shortenCardTitle = (value, max = 62) => {
+    const raw = normalizeTitleSoft(String(value || "").trim()).replace(/\s+/g, " ");
+    if (!raw) return "";
+    if (raw.length <= max) return raw;
+    return `${raw.slice(0, max - 1).trim()}…`;
+  };
+
+  const isGenericCardTitle = (value) => {
+    const s = normalizeCompareText(value);
+    if (!s) return true;
+    return new Set([
+      "услуга",
+      "отказной тур",
+      "горящий отказной тур",
+      "новый отказной тур",
+      "отказной отель",
+      "горящий отказной отель",
+      "новый отказной отель",
+      "отказной авиабилет",
+      "горящий отказной авиабилет",
+      "новый отказной авиабилет",
+      "отказной билет",
+      "билет на мероприятие",
+      "отказной билет на мероприятие",
+      "авторский тур",
+    ]).has(s);
+  };
+
+  const buildMarketingTitle = (mode = "generic", fallback = "Услуга") => {
+    const directTitle = firstValue(
+      svc.title,
+      svc.name,
+      d.title,
+      d.name,
+      d.serviceTitle,
+      d.marketingTitle
+    );
+    if (directTitle && !isGenericCardTitle(directTitle)) {
+      return shortenCardTitle(directTitle);
+    }
+
+    if (mode === "tour") {
+      const destination = firstValue(d.directionTo, d.toCity, d.cityTo, d.resort, d.city);
+      const country2 = firstValue(d.directionCountry, d.country, d.destinationCountry);
+      const tourName = firstValue(d.tourName, d.packageName, d.destinationName);
+      return shortenCardTitle(
+        firstValue(
+          tourName,
+          destination && country2 ? `${destination}, ${country2}` : destination || country2,
+          route,
+          d.hotel,
+          d.hotelName,
+          fallback
+        )
+      );
+    }
+
+    if (mode === "hotel") {
+      const hotelName = firstValue(d.hotel, d.hotelName);
+      const city = firstValue(d.directionTo, d.city, d.locationCity, d.toCity);
+      const country2 = firstValue(d.directionCountry, d.country, d.locationCountry);
+      return shortenCardTitle(
+        firstValue(
+          hotelName,
+          city && country2 ? `${city}, ${country2}` : city || country2,
+          route,
+          fallback
+        )
+      );
+    }
+
+    if (mode === "flight") {
+      const fromCity = firstValue(d.directionFrom, d.fromCity, d.cityFrom, d.departureCity);
+      const toCity = firstValue(d.directionTo, d.toCity, d.cityTo, d.arrivalCity);
+      const airline = firstValue(d.airline, d.airCompany, d.carrier);
+      const routeTitle = fromCity && toCity ? `${fromCity} → ${toCity}` : firstValue(route, toCity, fromCity);
+      return shortenCardTitle(firstValue(routeTitle, airline, fallback));
+    }
+
+    if (mode === "ticket") {
+      const eventName = firstValue(d.eventName, d.eventTitle, d.concertName, d.showName, d.title, svc.title);
+      const eventType = firstValue(d.eventCategory, d.ticketType, d.type);
+      const city = firstValue(d.city, d.locationCity, d.directionTo, d.toCity);
+      return shortenCardTitle(firstValue(eventName, [eventType, city].filter(Boolean).join(" • "), fallback));
+    }
+
+    return shortenCardTitle(firstValue(fallback, CATEGORY_LABELS?.[category], "Услуга"));
+  };
+
+  const buildCardHeader = (icon, mode, fallback) => {
+    const title = buildMarketingTitle(mode, fallback);
+    return `${icon} <b>${escapeHtml(title)}</b> <code>#R${serviceId}</code>`;
+  };
+
+  const pushDistinctLine = (parts, line, value, headingTitle) => {
+    const v = firstValue(value);
+    if (!v) return;
+    if (normalizeCompareText(v) === normalizeCompareText(headingTitle)) return;
+    parts.push(line);
+  };
+
   const hasPositiveFlag = (...values) => {
     for (const value of values) {
       if (value === true) return true;
@@ -1415,7 +1525,8 @@ const priceKind =
     const parts = [];
     if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
 
-    parts.push(`🔥 <b>ОТКАЗНОЙ ТУР</b> <code>#R${serviceId}</code>`);
+    const headingTitle = buildMarketingTitle("tour", "Отказной тур");
+    parts.push(`🔥 <b>${escapeHtml(headingTitle)}</b> <code>#R${serviceId}</code>`);
 
     const destination = firstValue(d.directionTo, d.toCity, d.cityTo, d.resort, d.city);
     const country2 = firstValue(d.directionCountry, d.country, d.destinationCountry);
@@ -1425,8 +1536,8 @@ const priceKind =
       route,
       titlePretty
     );
-    if (heroTitle) parts.push(`🌍 <b>${escapeHtml(heroTitle)}</b>`);
-    if (hotelName) parts.push(`🏨 <b>${escapeHtml(hotelName)}</b>`);
+    pushDistinctLine(parts, `🌍 <b>${escapeHtml(heroTitle)}</b>`, heroTitle, headingTitle);
+    pushDistinctLine(parts, `🏨 <b>${escapeHtml(hotelName)}</b>`, hotelName, headingTitle);
 
     const mainBits = [];
     if (dates) mainBits.push(`${dates}${nights ? ` • ${nights} ноч.` : ""}`);
@@ -1482,12 +1593,13 @@ const priceKind =
     const parts = [];
     if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
 
-    parts.push(`🏨 <b>ОТКАЗНОЙ ОТЕЛЬ</b> <code>#R${serviceId}</code>`);
+    const headingTitle = buildMarketingTitle("hotel", "Отказной отель");
+    parts.push(`🏨 <b>${escapeHtml(headingTitle)}</b> <code>#R${serviceId}</code>`);
 
     const hotelName = firstValue(d.hotel, d.hotelName, titlePretty);
     const city = firstValue(d.directionTo, d.city, d.locationCity, d.toCity);
     const country2 = firstValue(d.directionCountry, d.country, d.locationCountry);
-    if (hotelName) parts.push(`🏨 <b>${escapeHtml(hotelName)}</b>`);
+    pushDistinctLine(parts, `🏨 <b>${escapeHtml(hotelName)}</b>`, hotelName, headingTitle);
     const place = [city, country2].filter(Boolean).join(", ");
     if (place) parts.push(`📍 ${escapeHtml(place)}`);
 
@@ -1540,13 +1652,14 @@ const priceKind =
     const parts = [];
     if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
 
-    parts.push(`✈️ <b>ОТКАЗНОЙ АВИАБИЛЕТ</b> <code>#R${serviceId}</code>`);
+    const headingTitle = buildMarketingTitle("flight", "Отказной авиабилет");
+    parts.push(`✈️ <b>${escapeHtml(headingTitle)}</b> <code>#R${serviceId}</code>`);
 
     const fromCity = firstValue(d.directionFrom, d.fromCity, d.cityFrom, d.departureCity);
     const toCity = firstValue(d.directionTo, d.toCity, d.cityTo, d.arrivalCity);
     const country2 = firstValue(d.directionCountry, d.country);
     const routeLine = fromCity && toCity ? `${fromCity} → ${toCity}` : firstValue(route, toCity, fromCity);
-    if (routeLine) parts.push(`📍 <b>${escapeHtml(routeLine)}</b>`);
+    pushDistinctLine(parts, `📍 <b>${escapeHtml(routeLine)}</b>`, routeLine, headingTitle);
     if (country2 && !routeLine.includes(country2)) parts.push(`🌍 ${escapeHtml(country2)}`);
 
     const fd = flightDateLabel();
@@ -1613,10 +1726,16 @@ const priceKind =
     if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
 
     const evEmoji = ticketEmoji(d.eventCategory || d.ticketType || d.type || svc.title);
-    parts.push(`${evEmoji} <b>ОТКАЗНОЙ БИЛЕТ</b> <code>#R${serviceId}</code>`);
+    const headingTitle = buildMarketingTitle("ticket", "Билет на мероприятие");
+    parts.push(`${evEmoji} <b>${escapeHtml(headingTitle)}</b> <code>#R${serviceId}</code>`);
 
     const eventName = firstValue(d.eventName, d.title, svc.title);
-    if (eventName) parts.push(`${evEmoji} <b>${escapeHtml(normalizeTitleSoft(eventName))}</b>`);
+    pushDistinctLine(
+      parts,
+      `${evEmoji} <b>${escapeHtml(normalizeTitleSoft(eventName))}</b>`,
+      eventName,
+      headingTitle
+    );
 
     const eventCat = firstValue(d.eventCategory, d.ticketType, d.type);
     const city = firstValue(d.city, d.locationCity, d.directionTo, d.toCity);
