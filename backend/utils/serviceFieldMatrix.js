@@ -157,7 +157,7 @@ function getServiceFieldChecks(service = {}) {
     add("eventName", "Название мероприятия", hasFilled(d.eventName, d.eventTitle, d.ticketTitle, service.title), { code: "EVENT_NAME_REQUIRED", weight: 3 });
     add("eventCity", "Город / площадка", hasFilled(d.directionTo, d.toCity, d.city, d.location, d.venue), { code: "EVENT_CITY_REQUIRED", weight: 2 });
     add("eventDate", "Дата мероприятия", hasFilled(d.startDate, d.eventDate, d.date), { code: "EVENT_DATE_REQUIRED", weight: 3 });
-    add("ticketDetails", "Сектор/ряд/место или тип билета", hasFilled(d.ticketDetails, d.eventCategory, d.sector, d.row, d.seat, d.ticketType), { code: "TICKET_DETAILS_REQUIRED", weight: 2 });
+    checks.push(field("ticketDetails", "Сектор/ряд/место или тип билета", hasFilled(d.ticketDetails, d.eventCategory, d.sector, d.row, d.seat, d.ticketType, d.description, service.description), { required: false, recommended: true, code: "TICKET_DETAILS_RECOMMENDED", weight: 1 }));
     checks.push(field("quantity", "Количество билетов", hasFilled(d.quantity, d.seats, d.ticketCount), { required: false, recommended: true, weight: 1 }));
   } else if (category === "author_tour") {
     add("country", "Страна / направление", hasFilled(d.directionCountry, d.country), { code: "COUNTRY_REQUIRED", weight: 2 });
