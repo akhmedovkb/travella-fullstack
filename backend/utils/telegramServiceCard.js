@@ -1450,16 +1450,10 @@ const priceKind =
     // Show авиабилеты by default for refused_tour unless explicitly marked as no-flight.
     if (!explicitNoFlight) included.push("авиабилеты");
 
-    const stayParts = [];
-    if (roomCat) stayParts.push(roomCat);
-    if (foodPretty) stayParts.push(`питание ${foodPretty}`);
-    if (stayParts.length) {
-      included.push(`проживание на базе системы питания: ${stayParts.join(" • ")}`);
-    } else if (hotelName || accommodation) {
-      included.push("проживание");
-    }
+    if (roomCat || hotelName || accommodation) included.push("проживание");
+    if (foodPretty) included.push(`питание ${foodPretty}`);
 
-    if (transfers.length) included.push(`трансфер: ${transfers.join(" / ")}`);
+    if (transfers.length) included.push(`трансфер${transfers.length ? `: ${transfers.join(" / ")}` : ""}`);
     else if (hasPositiveFlag(d.transferIncluded, d.hasTransfer, d.airportTransferIncluded)) included.push("трансфер");
 
     if (hasPositiveFlag(d.insuranceIncluded, d.insurance, d.hasInsurance)) included.push("страховка");
