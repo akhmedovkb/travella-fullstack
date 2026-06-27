@@ -135,6 +135,9 @@ function getServiceFieldChecks(service = {}) {
     checks.push(field("meal", "Питание", hasFilled(d.meal, d.mealType, d.food), { required: false, recommended: true, weight: 1 }));
     checks.push(field("transfer", "Трансфер", hasFilled(d.transfer, d.transferType, d.transferIncluded), { required: false, recommended: true, weight: 1 }));
     checks.push(field("insurance", "Страховка", hasFilled(d.insurance, d.insuranceIncluded), { required: false, recommended: true, weight: 1 }));
+    checks.push(field("visa", "Виза", hasFilled(d.visa, d.visaIncluded), { required: false, recommended: true, weight: 1 }));
+    checks.push(field("earlyCheckIn", "Раннее заселение", hasFilled(d.earlyCheckIn, d.earlyCheckInIncluded), { required: false, recommended: true, weight: 1 }));
+    checks.push(field("arrivalFastTrack", "Fast Track", hasFilled(d.arrivalFastTrack, d.fastTrack, d.fastTrackIncluded), { required: false, recommended: true, weight: 1 }));
   } else if (category === "refused_hotel") {
     add("country", "Страна", hasFilled(d.directionCountry, d.country), { code: "COUNTRY_REQUIRED", weight: 2 });
     add("city", "Город / курорт", hasFilled(d.directionTo, d.toCity, d.city), { code: "CITY_REQUIRED", weight: 2 });
