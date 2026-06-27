@@ -402,6 +402,25 @@ function normalizeRefusedBotDetails(category, details = {}) {
     delete d.start_date;
   }
 
+  const boolishTrue = (v) => v === true || String(v ?? "").trim().toLowerCase() === "true" || String(v ?? "").trim() === "1" || /^(да|yes|included|включено)$/i.test(String(v ?? "").trim());
+  const boolishFalse = (v) => v === false || String(v ?? "").trim().toLowerCase() === "false" || String(v ?? "").trim() === "0" || /^(нет|no|none|absent|без|не включено)$/i.test(String(v ?? "").trim());
+  d.insuranceIncluded = boolishTrue(d.insuranceIncluded) || boolishTrue(d.insurance_included);
+  d.earlyCheckIn = boolishTrue(d.earlyCheckIn) || boolishTrue(d.early_check_in);
+  d.arrivalFastTrack = boolishTrue(d.arrivalFastTrack) || boolishTrue(d.arrival_fast_track) || boolishTrue(d.fastTrackIncluded);
+  d.visaIncluded = boolishTrue(d.visaIncluded) || boolishTrue(d.visa_included);
+  const transferRaw = d.transfer ?? d.transferType ?? d.transferIncluded ?? d.hasTransfer;
+  if (boolishFalse(transferRaw)) {
+    d.transferIncluded = false;
+    d.transfer = d.transfer || "none";
+  } else if (boolishTrue(transferRaw) || (typeof transferRaw === "string" && transferRaw.trim())) {
+    d.transferIncluded = true;
+    if (!d.transfer || boolishTrue(d.transfer)) d.transfer = "included";
+  }
+  delete d.insurance_included;
+  delete d.early_check_in;
+  delete d.arrival_fast_track;
+  delete d.visa_included;
+
   return d;
 }
 
