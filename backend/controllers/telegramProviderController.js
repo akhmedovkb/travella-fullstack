@@ -7,6 +7,7 @@ const { applyServiceLifecycleAction } = require("../utils/serviceLifecycle");
 const { logProviderFunnelEvent } = require("../utils/providerFunnel");
 const { buildRefusedQuality } = require("../utils/refusedQuality");
 const { REFUSED_CATEGORIES } = require("../utils/serviceCategories");
+const { normalizeRefusedFlightDetails } = require("../utils/flightDetailsNormalizer");
 const MAX_TITLE_LEN = 100;
 const {
   extractPrices,
@@ -367,6 +368,7 @@ function normalizeRefusedBotDetails(category, details = {}) {
   const d = details && typeof details === "object" && !Array.isArray(details) ? { ...details } : {};
 
   if (cat === "refused_flight") {
+    Object.assign(d, normalizeRefusedFlightDetails(d));
     const start =
       d.startDate ||
       d.start_date ||
