@@ -2042,9 +2042,11 @@ useEffect(() => {
                       className="w-full border px-3 py-2 rounded"
                     >
                       <option value="">{t("food_options.select")}</option>
+                      <option value="RO">RO - {t("food_options.ro", { defaultValue: "Без питания" })}</option>
                       <option value="BB">BB - {t("food_options.bb")}</option>
                       <option value="HB">HB - {t("food_options.hb")}</option>
                       <option value="FB">FB - {t("food_options.fb")}</option>
+                      <option value="FBT">FBT - {t("food_options.fbt", { defaultValue: "3-разовое + базовый терапевтический пакет" })}</option>
                       <option value="AI">AI - {t("food_options.ai")}</option>
                       <option value="UAI">UAI - {t("food_options.uai")}</option>
                     </select>
@@ -2256,9 +2258,11 @@ useEffect(() => {
                       className="w-full border px-3 py-2 rounded"
                     >
                       <option value="">{t("food_options.select")}</option>
-                      <option value="BB">{t("food_options.bb")}</option>
+                      <option value="RO">RO - {t("food_options.ro", { defaultValue: "Без питания" })}</option>
+                      <option value="BB">BB - {t("food_options.bb")}</option>
                       <option value="HB">{t("food_options.hb")}</option>
-                      <option value="FB">{t("food_options.fb")}</option>
+                      <option value="FB">FB - {t("food_options.fb")}</option>
+                      <option value="FBT">FBT - {t("food_options.fbt", { defaultValue: "3-разовое + базовый терапевтический пакет" })}</option>
                       <option value="AI">{t("food_options.ai")}</option>
                       <option value="UAI">{t("food_options.uai")}</option>
                     </select>
@@ -2910,9 +2914,11 @@ useEffect(() => {
                           className="w-full border px-3 py-2 rounded"
                         >
                           <option value="">{t("food_options.select")}</option>
-                          <option value="BB">BB - {t("food_options.bb")}</option>
+                          <option value="RO">RO - {t("food_options.ro", { defaultValue: "Без питания" })}</option>
+                      <option value="BB">BB - {t("food_options.bb")}</option>
                           <option value="HB">HB - {t("food_options.hb")}</option>
                           <option value="FB">FB - {t("food_options.fb")}</option>
+                      <option value="FBT">FBT - {t("food_options.fbt", { defaultValue: "3-разовое + базовый терапевтический пакет" })}</option>
                           <option value="AI">AI - {t("food_options.ai")}</option>
                           <option value="UAI">UAI - {t("food_options.uai")}</option>
                         </select>
@@ -3130,9 +3136,11 @@ useEffect(() => {
                           className="w-full border px-3 py-2 rounded"
                         >
                           <option value="">{t("food_options.select")}</option>
-                          <option value="BB">{t("food_options.bb")}</option>
+                          <option value="RO">RO - {t("food_options.ro", { defaultValue: "Без питания" })}</option>
+                      <option value="BB">BB - {t("food_options.bb")}</option>
                           <option value="HB">{t("food_options.hb")}</option>
-                          <option value="FB">{t("food_options.fb")}</option>
+                          <option value="FB">FB - {t("food_options.fb")}</option>
+                      <option value="FBT">FBT - {t("food_options.fbt", { defaultValue: "3-разовое + базовый терапевтический пакет" })}</option>
                           <option value="AI">{t("food_options.ai")}</option>
                           <option value="UAI">{t("food_options.uai")}</option>
                         </select>
