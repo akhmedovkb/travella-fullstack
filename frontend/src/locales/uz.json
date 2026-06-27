@@ -407,7 +407,9 @@
     "halal": "Halol",
     "hb": "Nonushta va kechki ovqat",
     "select": "Variantni tanlang",
-    "uai": "Ultra hammasi kiritilgan"
+    "uai": "Ultra hammasi kiritilgan",
+    "ro": "Ovqatlanishsiz",
+    "fbt": "3 mahal ovqat + bazaviy davolash paketi"
   },
   "guide": "Gid",
   "hall_rent": "Zal ijarasi",
