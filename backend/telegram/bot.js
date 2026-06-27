@@ -11,6 +11,7 @@ const {
 const { buildSvcActualKeyboard } = require("./keyboards/serviceActual");
 const { handleServiceActualCallback } = require("./handlers/serviceActualHandler");
 const { buildServiceMessage } = require("../utils/telegramServiceCard");
+const { getServiceDisplayTitle: getCanonicalServiceDisplayTitle } = require("../utils/serviceDisplay");
 const { getContactUnlockSettings } = require("../utils/contactUnlockSettings");
 const {
   isClickConfigured,
@@ -3307,7 +3308,7 @@ async function promptEditState(ctx, state) {
     case "svc_edit_tour_food":
       await safeReply(
         ctx,
-        `🍽 Питание (текущее: ${draft.food || "(пусто)"}).\nВведите (BB/HB/FB/AI/UAI) или нажмите «⏭ Пропустить»:`,
+        `🍽 Питание (текущее: ${draft.food || "(пусто)"}).\nВведите или выберите питание (RO/BB/HB/FB/FBT/AI/UAI) или нажмите «⏭ Пропустить»:`,
         editWizNavKeyboard()
       );
       return;
@@ -7344,7 +7345,7 @@ async function promptWizardState(ctx, state) {
 
     case "svc_create_tour_food":
       await ctx.reply(
-        "🍽 Укажите *питание* (например: BB / HB / FB / AI / UAI):\nЕсли не нужно — нажмите «⏭ Пропустить».",
+        "🍽 Укажите *питание* (RO / BB / HB / FB / FBT / AI / UAI):\nЕсли не нужно — нажмите «⏭ Пропустить».",
         { parse_mode: "Markdown", ...wizNavKeyboard() }
       );
       return;
@@ -7416,7 +7417,7 @@ async function promptWizardState(ctx, state) {
 
     case "svc_hotel_food":
       await ctx.reply(
-        "🍽 Укажите *питание* (например: BB / HB / FB / AI / UAI):",
+        "🍽 Укажите *питание* (RO / BB / HB / FB / FBT / AI / UAI):",
         { parse_mode: "Markdown", ...wizNavKeyboard() }
       );
       return;
@@ -14231,7 +14232,7 @@ async function handleSvcEditWizardText(ctx) {
         if (!keep()) draft.roomCategory = text;
         await go(
           "svc_edit_tour_food",
-          `🍽 Питание (текущее: ${draft.food || "(пусто)"}).\nВведите (BB/HB/FB/AI/UAI) или нажмите «⏭ Пропустить»:`
+          `🍽 Питание (текущее: ${draft.food || "(пусто)"}).\nВведите или выберите питание (RO/BB/HB/FB/FBT/AI/UAI) или нажмите «⏭ Пропустить»:`
         );
         return true;
       }
@@ -16690,7 +16691,6 @@ async function startQuickProofEdit(ctx, serviceId, group) {
     ctx.session.editWiz = ctx.session.editWiz || {};
     ctx.session.editWiz.step = step;
 
-    await safeReply(ctx, `✏️ Быстрое редактирование #${svc.id}\n\nПосле правки нажмите сохранить, затем снова откройте предпросмотр.`, editWizNavKeyboard());
     await promptEditState(ctx, step);
   } catch (e) {
     console.error("[tg-bot] proof quick edit error:", e?.response?.data || e?.message || e);
@@ -16824,7 +16824,7 @@ bot.on("inline_query", async (ctx) => {
       `${roleForInline}:` +
       `${userId}:` +
       `${category || "all"}:` +
-      `v6`;
+      `v7`;
 
     // отдельно кэшируем:
     // 1) сырой ответ API (короткий TTL)
@@ -16832,7 +16832,7 @@ bot.on("inline_query", async (ctx) => {
     const apiKey = `${baseKey}:api`;
 
     // ✅ resKey теперь зависит от unlockStamp, иначе после оплаты липнет старый текст/markup
-    const resKey = `${baseKey}:res:v6:u${unlockStamp}:o${offset}`;
+    const resKey = `${baseKey}:res:v7:u${unlockStamp}:o${offset}`;
 
     // ✅ Для client-search results-cache можно использовать только если stamp учтён (мы учли)
 const cachedRes = cacheGet(resKey);
@@ -17106,16 +17106,8 @@ const data = await getOrFetchCached(
           ? thumbUrl
           : TG_PLACEHOLDER(phKind);
 
-      // ✅ Точечный фикс: заголовок
-      const det = parseDetailsAny(svc.details);
-      const hotelForTitle = (det.hotel || det.hotelName || "").trim();
-
-      const titleSource =
-        hotelForTitle ||
-        (typeof svc.title === "string" ? svc.title.trim() : "") ||
-        "Услуга";
-
-      const title = truncate(normalizeTitleSoft(titleSource), 60);
+      // ✅ Единый источник заголовка: inline использует тот же display-title, что карточка/валидация/модерация
+      const title = truncate(getCanonicalServiceDisplayTitle(svc, { maxLength: 60 }) || "Услуга", 60);
 
       console.log("[inline]", {
         svcId: svc.id,
@@ -17127,7 +17119,7 @@ const data = await getOrFetchCached(
       });
 
       results.push({
-        id: `${svcCategory}:${svc.id}:v6`,
+        id: `${svcCategory}:${svc.id}:v7`,
         type: "article",
         title,
         description,
