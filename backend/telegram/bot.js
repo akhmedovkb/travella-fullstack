@@ -1,5 +1,5 @@
-
-const { normalizeRefusedFlightDetails } = require("../utils/flightDetailsNormalizer");// backend/telegram/bot.js
+// backend/telegram/bot.js
+const { normalizeRefusedFlightDetails } = require("../utils/flightDetailsNormalizer");
 require("dotenv").config();
 
 const { Telegraf, session, Markup } = require("telegraf");
