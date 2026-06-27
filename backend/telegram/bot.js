@@ -11,6 +11,7 @@ const {
 const { buildSvcActualKeyboard } = require("./keyboards/serviceActual");
 const { handleServiceActualCallback } = require("./handlers/serviceActualHandler");
 const { buildServiceMessage } = require("../utils/telegramServiceCard");
+const { getDraftProgress } = require("../utils/serviceFieldMatrix");
 const { getServiceDisplayTitle: getCanonicalServiceDisplayTitle } = require("../utils/serviceDisplay");
 const { getContactUnlockSettings } = require("../utils/contactUnlockSettings");
 const {
@@ -2190,24 +2191,7 @@ function buildDraftListKeyboard(items) {
 }
 
 function countDraftFilledFields(svc) {
-  const d = pickDetails(svc);
-  const category = String(svc?.category || "").toLowerCase();
-  const images = parseImagesAny(svc?.images);
-  const proofImages = Array.isArray(d.proofImages) ? d.proofImages : Array.isArray(d.proof_images) ? d.proof_images : [];
-
-  const has = (...values) => values.some((v) => v !== undefined && v !== null && String(v).trim() !== "");
-  const checks = [
-    { key: "title", label: "Название", ok: has(svc?.title, d.title) },
-    { key: "route", label: "Маршрут", ok: has(d.directionFrom, d.fromCity) && has(d.directionTo, d.toCity) },
-    { key: "dates", label: category === "refused_event_ticket" ? "Дата события" : "Даты", ok: has(d.startDate, d.start_date, d.startFlightDate, d.departureFlightDate, d.eventDate) },
-    { key: "hotel", label: category === "refused_hotel" ? "Отель" : "Отель / объект", ok: has(d.hotel, d.hotelName, d.eventName) },
-    { key: "accommodation", label: "Размещение", ok: has(d.accommodation, d.accommodationCategory, d.roomCategory, d.ticketDetails) },
-    { key: "price", label: "Цена", ok: has(d.netPrice, d.grossPrice, d.price, svc?.price) },
-    { key: "proof", label: "Proof / фото", ok: proofImages.filter(Boolean).length > 0 || images.length > 0 },
-  ];
-
-  const filled = checks.filter((x) => x.ok).length;
-  return { filled, total: checks.length, checks };
+  return getDraftProgress(svc);
 }
 
 function buildDraftProgressBar(filled, total) {
@@ -2221,12 +2205,14 @@ function buildDraftDetailText(svc) {
   const d = pickDetails(svc);
   const category = String(svc?.category || "refused_tour").toLowerCase();
   const categoryLabel = CATEGORY_LABELS?.[category] || category || "Услуга";
-  const title = firstNonEmptyValue(svc?.title, d.title, d.hotel, d.hotelName, "Без названия");
+  const title = getCanonicalServiceDisplayTitle(svc, { maxLength: 80 }) || "Без названия";
   const route = [
     firstNonEmptyValue(d.directionFrom, d.fromCity),
     firstNonEmptyValue(d.directionTo, d.toCity, d.city, d.location),
   ].filter(Boolean).join(" → ");
-  const hotel = firstNonEmptyValue(d.hotel, d.hotelName, d.eventName);
+  const objectLabel = category === "refused_flight"
+    ? firstNonEmptyValue(d.airline, d.flightNumber, d.flightDetails)
+    : firstNonEmptyValue(d.hotel, d.hotelName, d.eventName, d.venue, d.location);
   const dates = [
     firstNonEmptyValue(d.startDate, d.start_date, d.startFlightDate, d.departureFlightDate, d.eventDate),
     firstNonEmptyValue(d.endDate, d.end_date, d.returnDate, d.returnFlightDate, d.endFlightDate),
@@ -3308,7 +3294,7 @@ async function promptEditState(ctx, state) {
     case "svc_edit_tour_food":
       await safeReply(
         ctx,
-        `🍽 Питание (текущее: ${draft.food || "(пусто)"}).\nВведите или выберите питание (RO/BB/HB/FB/FBT/AI/UAI) или нажмите «⏭ Пропустить»:`,
+        `🍽 Питание (текущее: ${draft.food || "(пусто)"}).\nВведите (BB/HB/FB/AI/UAI) или нажмите «⏭ Пропустить»:`,
         editWizNavKeyboard()
       );
       return;
@@ -7345,7 +7331,7 @@ async function promptWizardState(ctx, state) {
 
     case "svc_create_tour_food":
       await ctx.reply(
-        "🍽 Укажите *питание* (RO / BB / HB / FB / FBT / AI / UAI):\nЕсли не нужно — нажмите «⏭ Пропустить».",
+        "🍽 Укажите *питание* (например: BB / HB / FB / AI / UAI):\nЕсли не нужно — нажмите «⏭ Пропустить».",
         { parse_mode: "Markdown", ...wizNavKeyboard() }
       );
       return;
@@ -7417,7 +7403,7 @@ async function promptWizardState(ctx, state) {
 
     case "svc_hotel_food":
       await ctx.reply(
-        "🍽 Укажите *питание* (RO / BB / HB / FB / FBT / AI / UAI):",
+        "🍽 Укажите *питание* (например: BB / HB / FB / AI / UAI):",
         { parse_mode: "Markdown", ...wizNavKeyboard() }
       );
       return;
@@ -14232,7 +14218,7 @@ async function handleSvcEditWizardText(ctx) {
         if (!keep()) draft.roomCategory = text;
         await go(
           "svc_edit_tour_food",
-          `🍽 Питание (текущее: ${draft.food || "(пусто)"}).\nВведите или выберите питание (RO/BB/HB/FB/FBT/AI/UAI) или нажмите «⏭ Пропустить»:`
+          `🍽 Питание (текущее: ${draft.food || "(пусто)"}).\nВведите (BB/HB/FB/AI/UAI) или нажмите «⏭ Пропустить»:`
         );
         return true;
       }
@@ -16691,6 +16677,7 @@ async function startQuickProofEdit(ctx, serviceId, group) {
     ctx.session.editWiz = ctx.session.editWiz || {};
     ctx.session.editWiz.step = step;
 
+    await safeReply(ctx, `✏️ Быстрое редактирование #${svc.id}\n\nПосле правки нажмите сохранить, затем снова откройте предпросмотр.`, editWizNavKeyboard());
     await promptEditState(ctx, step);
   } catch (e) {
     console.error("[tg-bot] proof quick edit error:", e?.response?.data || e?.message || e);
@@ -16824,7 +16811,7 @@ bot.on("inline_query", async (ctx) => {
       `${roleForInline}:` +
       `${userId}:` +
       `${category || "all"}:` +
-      `v7`;
+      `v6`;
 
     // отдельно кэшируем:
     // 1) сырой ответ API (короткий TTL)
@@ -16832,7 +16819,7 @@ bot.on("inline_query", async (ctx) => {
     const apiKey = `${baseKey}:api`;
 
     // ✅ resKey теперь зависит от unlockStamp, иначе после оплаты липнет старый текст/markup
-    const resKey = `${baseKey}:res:v7:u${unlockStamp}:o${offset}`;
+    const resKey = `${baseKey}:res:v6:u${unlockStamp}:o${offset}`;
 
     // ✅ Для client-search results-cache можно использовать только если stamp учтён (мы учли)
 const cachedRes = cacheGet(resKey);
@@ -17106,8 +17093,16 @@ const data = await getOrFetchCached(
           ? thumbUrl
           : TG_PLACEHOLDER(phKind);
 
-      // ✅ Единый источник заголовка: inline использует тот же display-title, что карточка/валидация/модерация
-      const title = truncate(getCanonicalServiceDisplayTitle(svc, { maxLength: 60 }) || "Услуга", 60);
+      // ✅ Точечный фикс: заголовок
+      const det = parseDetailsAny(svc.details);
+      const hotelForTitle = (det.hotel || det.hotelName || "").trim();
+
+      const titleSource =
+        hotelForTitle ||
+        (typeof svc.title === "string" ? svc.title.trim() : "") ||
+        "Услуга";
+
+      const title = truncate(normalizeTitleSoft(titleSource), 60);
 
       console.log("[inline]", {
         svcId: svc.id,
@@ -17119,7 +17114,7 @@ const data = await getOrFetchCached(
       });
 
       results.push({
-        id: `${svcCategory}:${svc.id}:v7`,
+        id: `${svcCategory}:${svc.id}:v6`,
         type: "article",
         title,
         description,
