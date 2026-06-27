@@ -1,5 +1,7 @@
 // backend/utils/telegramServiceCard.js
 
+const { getServiceDisplayTitle } = require("./serviceDisplay");
+
 /* ===================== CONFIG (как в bot.js) ===================== */
 
 const BOT_USERNAME = (
@@ -500,7 +502,7 @@ function buildServiceMessage(svc, category, role = "client", options = {}) {
 
   const norm = (v) => (v ? normalizeWeirdSeparator(String(v)) : "");
 
-  const titleRaw = (svc.title || CATEGORY_LABELS?.[category] || "Услуга").trim();
+  const titleRaw = getServiceDisplayTitle({ ...svc, category }, { allowFallback: true, maxLength: 60 });
   const titlePretty = normalizeTitleSoft(titleRaw);
 
   const emoji = CATEGORY_EMOJI?.[category] || "";
@@ -615,15 +617,9 @@ const priceKind =
   }
 
   const titleLine = (mode = "generic") => {
-    const raw = String(svc.title || "").trim();
+    const raw = getServiceDisplayTitle({ ...svc, category }, { allowFallback: false, maxLength: 60 });
 
-    const isGeneric =
-      raw &&
-      ["отказной тур", "отказной отель", "отказной авиабилет", "отказной билет"].includes(
-        raw.toLowerCase()
-      );
-
-    if (raw && !isGeneric) {
+    if (raw) {
       return `📝 <b>${escapeHtml(normalizeTitleSoft(raw))}</b>`;
     }
 
