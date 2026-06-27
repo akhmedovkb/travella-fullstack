@@ -53,17 +53,30 @@ const CATEGORY_EMOJI = {
 
 /* ===================== pretty labels ===================== */
 
+
+function accommodationLabel(x) {
+  const raw = String(x || "").trim();
+  if (!raw) return "";
+  const upper = raw.toUpperCase();
+  const map = {
+    SGL: "одноместное размещение",
+    DBL: "двухместное размещение",
+    TRIPLE: "трёхместное размещение",
+    QUADRUPLE: "четырёхместное размещение",
+  };
+  return map[upper] ? `${upper} (${map[upper]})` : raw;
+}
+
 function foodLabel(x) {
   const s = String(x || "").trim().toUpperCase();
   const map = {
-    RO: "RO (без питания)",
-    BB: "BB (завтраки)",
-    HB: "HB (завтрак + ужин)",
-    FB: "FB (полный пансион)",
-    FBT: "FBT (3-разовое + базовый терапевтический пакет)",
-    AI: "AI (всё включено)",
-    UAI: "UAI (ультра всё включено)",
-    HALAL: "Halal (халяль)",
+    RO: "Без питания (RO)",
+    BB: "Завтраки (BB)",
+    HB: "Завтрак+ужин (HB)",
+    FB: "Полный пансион (FB)",
+    AI: "Все включено (AI)",
+    UAI: "Ультра все включено (UAI)",
+    HALAL: "Халяль (HALAL)",
   };
   return map[s] || (s ? `${s}` : "");
 }
@@ -849,295 +862,6 @@ const priceKind =
     d.projectSupportPaid === true ||
     d.supportProjectPaid === true;
 
-  /* ===================== TELEGRAM CARD v4 SELLING HELPERS ===================== */
-
-  const firstValue = (...values) => {
-    for (const value of values) {
-      if (value === null || value === undefined) continue;
-      if (Array.isArray(value)) {
-        const cleaned = value.map((x) => String(x || "").trim()).filter(Boolean);
-        if (cleaned.length) return cleaned.join(", ");
-        continue;
-      }
-      const s = norm(value);
-      if (s) return s;
-    }
-    return "";
-  };
-
-  const normalizeCompareText = (value) =>
-    String(value || "")
-      .replace(/<[^>]*>/g, "")
-      .replace(/[#№]R?\d+/gi, "")
-      .replace(/[🔥🆕🏨✈️🎫🧭🌍📍⭐️]/g, "")
-      .replace(/\s+/g, " ")
-      .trim()
-      .toLowerCase();
-
-  const shortenCardTitle = (value, max = 62) => {
-    const raw = normalizeTitleSoft(String(value || "").trim()).replace(/\s+/g, " ");
-    if (!raw) return "";
-    if (raw.length <= max) return raw;
-    return `${raw.slice(0, max - 1).trim()}…`;
-  };
-
-  const isGenericCardTitle = (value) => {
-    const s = normalizeCompareText(value);
-    if (!s) return true;
-    return new Set([
-      "услуга",
-      "отказной тур",
-      "горящий отказной тур",
-      "новый отказной тур",
-      "отказной отель",
-      "горящий отказной отель",
-      "новый отказной отель",
-      "отказной авиабилет",
-      "горящий отказной авиабилет",
-      "новый отказной авиабилет",
-      "отказной билет",
-      "билет на мероприятие",
-      "отказной билет на мероприятие",
-      "авторский тур",
-    ]).has(s);
-  };
-
-  const buildMarketingTitle = (mode = "generic", fallback = "Услуга") => {
-    const directTitle = firstValue(
-      svc.title,
-      svc.name,
-      d.title,
-      d.name,
-      d.serviceTitle,
-      d.marketingTitle
-    );
-    if (directTitle && !isGenericCardTitle(directTitle)) {
-      return shortenCardTitle(directTitle);
-    }
-
-    if (mode === "tour") {
-      const destination = firstValue(d.directionTo, d.toCity, d.cityTo, d.resort, d.city);
-      const country2 = firstValue(d.directionCountry, d.country, d.destinationCountry);
-      const tourName = firstValue(d.tourName, d.packageName, d.destinationName);
-      return shortenCardTitle(
-        firstValue(
-          tourName,
-          destination && country2 ? `${destination}, ${country2}` : destination || country2,
-          route,
-          d.hotel,
-          d.hotelName,
-          fallback
-        )
-      );
-    }
-
-    if (mode === "hotel") {
-      const hotelName = firstValue(d.hotel, d.hotelName);
-      const city = firstValue(d.directionTo, d.city, d.locationCity, d.toCity);
-      const country2 = firstValue(d.directionCountry, d.country, d.locationCountry);
-      return shortenCardTitle(
-        firstValue(
-          hotelName,
-          city && country2 ? `${city}, ${country2}` : city || country2,
-          route,
-          fallback
-        )
-      );
-    }
-
-    if (mode === "flight") {
-      const fromCity = firstValue(d.directionFrom, d.fromCity, d.cityFrom, d.departureCity);
-      const toCity = firstValue(d.directionTo, d.toCity, d.cityTo, d.arrivalCity);
-      const airline = firstValue(d.airline, d.airCompany, d.carrier);
-      const routeTitle = fromCity && toCity ? `${fromCity} → ${toCity}` : firstValue(route, toCity, fromCity);
-      return shortenCardTitle(firstValue(routeTitle, airline, fallback));
-    }
-
-    if (mode === "ticket") {
-      const eventName = firstValue(d.eventName, d.eventTitle, d.concertName, d.showName, d.title, svc.title);
-      const eventType = firstValue(d.eventCategory, d.ticketType, d.type);
-      const city = firstValue(d.city, d.locationCity, d.directionTo, d.toCity);
-      return shortenCardTitle(firstValue(eventName, [eventType, city].filter(Boolean).join(" • "), fallback));
-    }
-
-    return shortenCardTitle(firstValue(fallback, CATEGORY_LABELS?.[category], "Услуга"));
-  };
-
-  const buildCardHeader = (icon, mode, fallback) => {
-    const title = buildMarketingTitle(mode, fallback);
-    return `${icon} <b>${escapeHtml(title)}</b> <code>#R${serviceId}</code>`;
-  };
-
-  const pushDistinctLine = (parts, line, value, headingTitle) => {
-    const v = firstValue(value);
-    if (!v) return;
-    if (normalizeCompareText(v) === normalizeCompareText(headingTitle)) return;
-    parts.push(line);
-  };
-
-  const hasPositiveFlag = (...values) => {
-    for (const value of values) {
-      if (value === true) return true;
-      const s = String(value ?? "").trim().toLowerCase();
-      if (!s) continue;
-      if (["true", "yes", "y", "1", "да", "включено", "included", "include"].includes(s)) return true;
-    }
-    return false;
-  };
-
-  const hasNegativeFlag = (...values) => {
-    for (const value of values) {
-      if (value === false) return true;
-      const s = String(value ?? "").trim().toLowerCase();
-      if (!s) continue;
-      if (["false", "no", "n", "0", "нет", "не включено", "none", "absent"].includes(s)) return true;
-    }
-    return false;
-  };
-
-  const shortMealLabel = (value) => {
-    const raw = firstValue(value);
-    if (!raw) return "";
-    const up = raw.toUpperCase();
-    const map = {
-      RO: "RO (без питания)",
-      BB: "BB (завтраки)",
-      HB: "HB (завтрак + ужин)",
-      FB: "FB (полный пансион)",
-      FBT: "FBT (3-разовое + базовый терапевтический пакет)",
-      AI: "AI (всё включено)",
-      UAI: "UAI (ультра всё включено)",
-      HALAL: "Halal",
-    };
-    if (map[up]) return map[up];
-    if (/ULTRA|УЛЬТРА|UAI/.test(up)) return "UAI (ультра всё включено)";
-    if (/ALL\s*INCLUSIVE|ВС[ЕЁ]\s*ВКЛ|AI/.test(up)) return "AI (всё включено)";
-    if (/FBT|THERAP|ТЕРАП|ЛЕЧЕН/.test(up)) return "FBT (3-разовое + базовый терапевтический пакет)";
-    if (/FULL\s*BOARD|ПОЛН|FB/.test(up)) return "FB (полный пансион)";
-    if (/HALF\s*BOARD|ПОЛУ|HB/.test(up)) return "HB (завтрак + ужин)";
-    if (/ROOM\s*ONLY|БЕЗ\s*ПИТ|RO/.test(up)) return "RO (без питания)";
-    if (/BREAKFAST|ЗАВТРАК|BB/.test(up)) return "BB (завтраки)";
-    return raw;
-  };
-
-  const shortRoomLabel = (value) => {
-    const raw = firstValue(value);
-    if (!raw) return "";
-    return raw
-      .replace(/Deluxe\s+Room/gi, "Deluxe")
-      .replace(/Standard\s+Room/gi, "Standard")
-      .replace(/Room/gi, "")
-      .replace(/Select\s+Sea\s+view\s+room/gi, "Sea View")
-      .replace(/Sea\s+View/gi, "Sea View")
-      .replace(/\s{2,}/g, " ")
-      .trim();
-  };
-
-  const transferItems = () => {
-    const out = [];
-    const add = (label) => {
-      const v0 = firstValue(label);
-      if (!v0) return;
-      const v = transferLabel(v0) || v0;
-      const low = String(v).toLowerCase();
-      if (/без трансфера|нет|none|no|absent/.test(low)) return;
-      if (!out.some((x) => x.toLowerCase() === v.toLowerCase())) out.push(v);
-    };
-
-    add(d.transfer);
-    add(d.transferType);
-    add(d.transferIncluded);
-    add(d.transfers);
-    add(d.airportTransfer);
-    add(d.airport_transfer);
-    add(d.hotelTransfer);
-    add(d.hotel_transfer);
-    add(d.groupTransfer);
-    add(d.privateTransfer);
-    add(d.individualTransfer);
-
-    if (hasPositiveFlag(d.transferIncluded, d.hasTransfer, d.airportTransferIncluded)) add("Включён");
-    if (hasPositiveFlag(d.privateTransfer, d.individualTransfer)) add("Индивидуальный");
-    if (hasPositiveFlag(d.groupTransfer, d.sharedTransfer)) add("Групповой");
-
-    return out.slice(0, 3);
-  };
-
-  const compactIncludedLine = (items, maxItems = 6) => {
-    const cleaned = [];
-    for (const item of items) {
-      const s = String(item || "").trim();
-      if (!s) continue;
-      if (!cleaned.some((x) => x.toLowerCase() === s.toLowerCase())) cleaned.push(s);
-    }
-    return cleaned.slice(0, maxItems).join(" • ");
-  };
-
-  const priceHeroLine = () => {
-    if (priceWithCur == null || !String(priceWithCur).trim()) return "";
-    const audience = firstValue(
-      d.priceFor,
-      d.pricePer,
-      d.priceDescription,
-      d.priceComment,
-      d.priceNote,
-      d.passengersCount ? `за ${d.passengersCount} пассаж.` : "",
-      d.ticketsCount ? `за ${d.ticketsCount} билет.` : ""
-    );
-    return audience
-      ? `💵 <b>${escapeHtml(String(priceWithCur))}</b> <i>${escapeHtml(audience)}</i>`
-      : `💵 <b>${escapeHtml(String(priceWithCur))}</b>`;
-  };
-
-  const smartBadges = (kind = "refused") => {
-    const arr = [];
-    if (kind === "refused") arr.push("🔥 отказное");
-    if (kind === "flight") arr.push("✈️ билет");
-    if (kind === "ticket") arr.push("🎫 мероприятие");
-    if (d.changeable === false || d.fixedPackage === true || d.isFixedPackage === true) arr.push("🔒 фикс-пакет");
-    if (d.changeable === true) arr.push("🔁 можно менять");
-    if (badgeClean) arr.push(`⏳ ${badgeClean}`);
-    arr.push("⚡ срочно");
-    return arr.join(" • ");
-  };
-
-  const providerCompactBlock = (parts) => {
-    pushDivider(parts);
-    if (shouldShowProviderContacts(role, unlocked)) {
-      parts.push(`🤝 <b>${escapeHtml(providerNameRaw)}</b>`);
-      if (telegramLine) parts.push(telegramLine);
-    } else {
-      parts.push(`🤝 <b>Поставщик:</b> 🔒 скрыт до открытия`);
-    }
-  };
-
-  const normalizedRole = String(role || "").toLowerCase();
-  const isClientViewer = normalizedRole === "client";
-  const isProviderViewer = normalizedRole === "provider";
-  const canQuickRequest = isClientViewer || isProviderViewer;
-
-  const sellingKb = (extraRows = []) => {
-    const rows = [];
-
-    // «Открыть контакты» — только клиенту.
-    // «Быстрый запрос» нужен и клиенту, и поставщику.
-    if (isClientViewer) rows.push([{ text: "🔓 Открыть контакты", callback_data: `contacts:${serviceId}` }]);
-    if (canQuickRequest) rows.push([{ text: "⚡ Быстрый запрос", callback_data: `quick:${serviceId}` }]);
-
-    for (const row of extraRows || []) {
-      if (Array.isArray(row) && row.length) rows.push(row);
-    }
-
-    if (serviceUrl) rows.push([{ text: "🌐 Подробнее на сайте", url: serviceUrl }]);
-
-    return { inline_keyboard: rows, replaceDefault: true };
-  };
-
-  const line = (icon, value) => {
-    const v = firstValue(value);
-    return v ? `${icon} ${escapeHtml(v)}` : "";
-  };
-
   /* ===================== SPECIAL TEMPLATES ===================== */
 
 
@@ -1502,16 +1226,11 @@ const priceKind =
         { text: "🗓 Программа тура", callback_data: `atp:${serviceId}` },
         { text: "🌐 Подробнее на сайте", url: serviceUrl },
       ],
-    ];
-
-    if (isClientViewer) {
-      kbRows.push([
-        { text: "👤 Контакты", callback_data: `contacts:${serviceId}` },
+      [
         { text: "💬 Быстрый запрос", callback_data: `quick:${serviceId}` },
-      ]);
-    } else if (isProviderViewer) {
-      kbRows.push([{ text: "💬 Быстрый запрос", callback_data: `quick:${serviceId}` }]);
-    }
+        { text: "👤 Контакты", callback_data: `contacts:${serviceId}` },
+      ],
+    ];
 
     return {
       text: parts.join("\n"),
@@ -1523,128 +1242,156 @@ const priceKind =
 
   if ((role !== "provider" || options?.forceRefused === true) && String(category) === "refused_tour") {
     const parts = [];
+
     if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
+    parts.push(refusedHeading("ОТКАЗНОЙ ТУР"));
 
-    const headingTitle = buildMarketingTitle("tour", "Отказной тур");
-    parts.push(`🔥 <b>${escapeHtml(headingTitle)}</b> <code>#R${serviceId}</code>`);
+    const tl = titleLine("generic");
+    if (tl) parts.push(tl);
 
-    const destination = firstValue(d.directionTo, d.toCity, d.cityTo, d.resort, d.city);
-    const country2 = firstValue(d.directionCountry, d.country, d.destinationCountry);
-    const hotelName = firstValue(d.hotel, d.hotelName, hotel);
-    const heroTitle = firstValue(
-      destination && country2 ? `${destination}, ${country2}` : destination || country2,
-      route,
-      titlePretty
-    );
-    pushDistinctLine(parts, `🌍 <b>${escapeHtml(heroTitle)}</b>`, heroTitle, headingTitle);
-    pushDistinctLine(parts, `🏨 <b>${escapeHtml(hotelName)}</b>`, hotelName, headingTitle);
+    pushPriceDrop(parts);
 
-    const mainBits = [];
-    if (dates) mainBits.push(`${dates}${nights ? ` • ${nights} ноч.` : ""}`);
-    if (accommodation) mainBits.push(accommodation);
-    if (mainBits.length) parts.push(`📅 ${escapeHtml(mainBits.join(" • "))}`);
+    const locLines = tourLocationLines();
+    for (const line of locLines) parts.push(line);
 
-    const priceLine = priceHeroLine();
-    if (priceLine) parts.push(priceLine);
+    if (dates) {
+      const dv = `${dates}${nights ? ` (${nights} ноч.)` : ""}`;
+      parts.push(labelLine("🗓", "Даты", dv));
+    }
+    const flightDetails = norm(d.flightDetails);
+    if (flightDetails) parts.push(labelLine("ℹ️", "Детали рейса", "нажмите кнопку ниже"));
 
-    const roomCatRaw = d.accommodationCategory || d.roomCategory || d.room || d.roomType || "";
-    const roomCat = shortRoomLabel(stripStarsFromRoomCat(roomCatRaw));
-    const foodPretty = shortMealLabel(d.food || d.meal || d.mealType);
-    const transfers = transferItems();
+    if (hotel) parts.push(labelLine("🏨", "Отель", hotel));
 
-    const included = [];
-    if (firstValue(d.flightIncluded, d.flightsIncluded) || firstValue(d.flightDetails) || hasPositiveFlag(d.includesFlight)) included.push("✈️ перелёт");
-    if (transfers.length) included.push(`🚐 ${transfers.join(" / ")}`);
-    if (foodPretty) included.push(`🍽 ${foodPretty}`);
-    if (roomCat) included.push(`🛏 ${roomCat}`);
     const starsPretty = extractStars(d);
-    if (starsPretty) included.push(starsPretty.replace("⭐️", "⭐"));
-    if (hasPositiveFlag(d.insuranceIncluded, d.insurance, d.hasInsurance)) included.push("🛡 страховка");
-    if (hasPositiveFlag(d.earlyCheckIn)) included.push("🏨 ранний заезд");
-    if (hasPositiveFlag(d.lateCheckOut)) included.push("🕘 поздний выезд");
-    if (hasPositiveFlag(d.arrivalFastTrack)) included.push("🛬 fast track");
+    if (starsPretty) parts.push(`${escapeHtml(starsPretty)}`);
 
-    const includedLine = compactIncludedLine(included, 8);
-    if (includedLine) {
-      pushDivider(parts);
-      parts.push(`✅ <b>Включено:</b> ${escapeHtml(includedLine)}`);
+    const roomCatRaw = d.accommodationCategory || d.roomCategory || "";
+    const roomCatClean = stripStarsFromRoomCat(roomCatRaw);
+    const roomCat = norm(roomCatClean);
+    parts.push(labelLine("🛏", "Категория номера", roomCat || "—"));
+    
+    if (accommodation) parts.push(labelLine("👥", "Размещение", accommodationLabel(accommodation)));
+
+    const foodPretty = foodLabel(d.food);
+    parts.push(labelLine("🍽", "Питание", foodPretty || "—"));
+    if (d.insuranceIncluded) {
+      parts.push(labelLine("🛡", "Страховка", "Включена"));
+    }
+    
+    if (d.earlyCheckIn) {
+      parts.push(labelLine("🏨", "Раннее заселение", "Доступно"));
+    }
+    
+    if (d.arrivalFastTrack) {
+      parts.push(labelLine("🛬", "Arrival Fast Track", "Включён"));
+    }
+    if (priceWithCur != null && String(priceWithCur).trim()) {
+      parts.push(`💸 <b>Цена</b>: ${escapeHtml(String(priceWithCur))} (${priceKind})`);
     }
 
-    const flightDetails = norm(d.flightDetails);
-    if (flightDetails) parts.push("ℹ️ Детали рейса — по кнопке ниже");
+    if (badgeClean) parts.push(labelLine("⏳", "Срок", badgeClean));
+
+    if (d.changeable === true) parts.push(labelLine("🔁", "Изменения", "Можно вносить изменения"));
+    else parts.push(labelLine("✅", "Фикс-пакет", "Без замен (отель/даты/размещение)"));
+    
+    pushRefusedUrgency(parts);
 
     pushDivider(parts);
-    parts.push(smartBadges("refused"));
+    if (shouldShowProviderContacts(role, unlocked)) {
+      parts.push(providerLine);
+      if (telegramLine) parts.push(telegramLine);
+    } else {
+      parts.push(labelLine("🏢", "Поставщик", "🔒 скрыт"));
+      parts.push("🔓 Откройте контакты для связи");
+    }
 
-    providerCompactBlock(parts);
+    pushDivider(parts);
+    parts.push(`👉 Подробнее и бронирование: ${a(serviceUrl, "открыть")}`);
 
-    const extraRows = [];
-    if (flightDetails) extraRows.push([{ text: "✈️ Детали рейса", callback_data: `fd:${serviceId}` }]);
-
-    return {
-      text: parts.join("\n"),
-      photoUrl: getFirstImageUrl(svc),
-      serviceUrl,
-      kbExtra: sellingKb(extraRows),
-    };
+    const kbExtra = flightDetails
+      ? { inline_keyboard: [[{ text: "ℹ️ Детали рейса", callback_data: `fd:${serviceId}` }]] }
+      : null;
+    
+    return { text: parts.join("\n"), photoUrl: getFirstImageUrl(svc), serviceUrl, kbExtra };
   }
 
   if ((role !== "provider" || options?.forceRefused === true) && String(category) === "refused_hotel") {
     const parts = [];
     if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
 
-    const headingTitle = buildMarketingTitle("hotel", "Отказной отель");
-    parts.push(`🏨 <b>${escapeHtml(headingTitle)}</b> <code>#R${serviceId}</code>`);
+    parts.push(refusedHeading("ОТКАЗНОЙ ОТЕЛЬ"));
 
-    const hotelName = firstValue(d.hotel, d.hotelName, titlePretty);
-    const city = firstValue(d.directionTo, d.city, d.locationCity, d.toCity);
-    const country2 = firstValue(d.directionCountry, d.country, d.locationCountry);
-    pushDistinctLine(parts, `🏨 <b>${escapeHtml(hotelName)}</b>`, hotelName, headingTitle);
-    const place = [city, country2].filter(Boolean).join(", ");
-    if (place) parts.push(`📍 ${escapeHtml(place)}`);
+    const tl = titleLine("hotel");
+    if (tl) parts.push(tl);
 
-    const dateBits = [];
-    if (dates) dateBits.push(`${dates}${nights ? ` • ${nights} ноч.` : ""}`);
-    if (accommodation) dateBits.push(accommodation);
-    if (dateBits.length) parts.push(`📅 ${escapeHtml(dateBits.join(" • "))}`);
+    pushPriceDrop(parts);
 
-    const priceLine = priceHeroLine();
-    if (priceLine) parts.push(priceLine);
+    const hl = hotelLocationLines();
+    for (const line of hl) parts.push(line);
 
-    const roomCatRaw = d.accommodationCategory || d.roomCategory || d.room || d.roomType || "";
-    const roomCat = shortRoomLabel(stripStarsFromRoomCat(roomCatRaw));
-    const foodPretty = shortMealLabel(d.food || d.meal || d.mealType);
-    const transfers = transferItems();
+    const hd = hotelDatesLines();
+    for (const line of hd) parts.push(line);
 
-    const included = [];
+    if (hotel) parts.push(labelLine("🏨", "Отель", hotel));
+
     const starsPretty = extractStars(d);
-    if (starsPretty) included.push(starsPretty.replace("⭐️", "⭐"));
-    if (roomCat) included.push(`🛏 ${roomCat}`);
-    if (foodPretty) included.push(`🍽 ${foodPretty}${d.halal ? " Halal" : ""}`);
-    if (transfers.length) included.push(`🚐 ${transfers.join(" / ")}`);
-    if (hasPositiveFlag(d.insuranceIncluded, d.insurance, d.hasInsurance)) included.push("🛡 страховка");
-    if (hasPositiveFlag(d.earlyCheckIn)) included.push("🏨 ранний заезд");
-    if (hasPositiveFlag(d.lateCheckOut)) included.push("🕘 поздний выезд");
-    if (hasPositiveFlag(d.arrivalFastTrack)) included.push("🛬 fast track");
-    if (firstValue(d.spa, d.spaIncluded)) included.push(`💆 ${firstValue(d.spa, d.spaIncluded)}`);
-    if (firstValue(d.treatment, d.medicalPackage, d.therapyPackage)) included.push(`🩺 ${firstValue(d.treatment, d.medicalPackage, d.therapyPackage)}`);
+    if (starsPretty) parts.push(`${escapeHtml(starsPretty)}`);
 
-    const includedLine = compactIncludedLine(included, 8);
-    if (includedLine) {
-      pushDivider(parts);
-      parts.push(`✅ <b>Главное:</b> ${escapeHtml(includedLine)}`);
+    const roomCatRaw = d.accommodationCategory || d.roomCategory || "";
+    const roomCatClean = stripStarsFromRoomCat(roomCatRaw);
+    const roomCat = norm(roomCatClean);
+    parts.push(labelLine("🛏", "Категория номера", roomCat || "—", false));
+    
+    if (accommodation) parts.push(labelLine("👥", "Размещение", accommodationLabel(accommodation)));
+    
+    const foodPretty = foodLabel(d.food);
+    const halalTag = foodPretty && d.halal ? " • Halal" : "";
+    parts.push(
+      labelLine("🍽", "Питание", foodPretty ? `${foodPretty}${halalTag}` : "—", false)
+    );
+
+    const transferPretty = transferLabel(d.transfer);
+    if (transferPretty) parts.push(labelLine("🚗", "Трансфер", transferPretty, false));
+
+    if (d.changeable === true) parts.push(labelLine("🔁", "Изменения", "Можно вносить изменения"));
+    if (d.changeable === false) parts.push(labelLine("⛔", "Изменения", "Без изменений"));
+
+    if (d.insuranceIncluded) {
+      parts.push(labelLine("🛡", "Страховка", "Включена"));
+    }
+    
+    if (d.earlyCheckIn) {
+      parts.push(labelLine("🏨", "Раннее заселение", "Доступно"));
+    }
+    
+    if (d.arrivalFastTrack) {
+      parts.push(labelLine("🛬", "Arrival Fast Track", "Включён"));
+    }
+
+    if (priceWithCur != null && String(priceWithCur).trim()) {
+      parts.push(`💸 <b>Цена</b>: ${escapeHtml(String(priceWithCur))} (${priceKind})`);
+    }
+    if (badgeClean) parts.push(labelLine("⏳", "Срок", badgeClean, false));
+
+    pushRefusedUrgency(parts);
+
+    pushDivider(parts);
+    if (shouldShowProviderContacts(role, unlocked)) {
+      parts.push(providerLine);
+      if (telegramLine) parts.push(telegramLine);
+    } else {
+      parts.push(labelLine("🏢", "Поставщик", "🔒 скрыт"));
+      parts.push("🔓 Откройте контакты для связи");
     }
 
     pushDivider(parts);
-    parts.push(smartBadges("refused"));
-
-    providerCompactBlock(parts);
+    parts.push(`👉 Подробнее и бронирование: ${a(serviceUrl, "открыть")}`);
 
     return {
       text: parts.join("\n"),
       photoUrl: getFirstImageUrl(svc),
       serviceUrl,
-      kbExtra: sellingKb(),
     };
   }
 
@@ -1652,70 +1399,53 @@ const priceKind =
     const parts = [];
     if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
 
-    const headingTitle = buildMarketingTitle("flight", "Отказной авиабилет");
-    parts.push(`✈️ <b>${escapeHtml(headingTitle)}</b> <code>#R${serviceId}</code>`);
+    parts.push(refusedHeading("ОТКАЗНОЙ АВИАБИЛЕТ"));
 
-    const fromCity = firstValue(d.directionFrom, d.fromCity, d.cityFrom, d.departureCity);
-    const toCity = firstValue(d.directionTo, d.toCity, d.cityTo, d.arrivalCity);
-    const country2 = firstValue(d.directionCountry, d.country);
-    const routeLine = fromCity && toCity ? `${fromCity} → ${toCity}` : firstValue(route, toCity, fromCity);
-    pushDistinctLine(parts, `📍 <b>${escapeHtml(routeLine)}</b>`, routeLine, headingTitle);
-    if (country2 && !routeLine.includes(country2)) parts.push(`🌍 ${escapeHtml(country2)}`);
+    const tl = titleLine("flight");
+    if (tl) parts.push(tl);
+
+    pushPriceDrop(parts);
+
+    const fl = flightLocationLines();
+    for (const line of fl) parts.push(line);
 
     const fd = flightDateLabel();
-    const tripType = hasReturnFlight() || String(d.tripType || d.flightType || "").toLowerCase().includes("round")
-      ? "туда-обратно"
-      : "в одну сторону";
-    if (fd) parts.push(`📅 ${escapeHtml(fd.value)} • ${escapeHtml(tripType)}`);
-
-    const airline = firstValue(d.airline, d.airCompany, d.carrier);
-    const flightNumber = firstValue(d.flightNumber, d.flightNo, d.departureFlightNumber, d.outboundFlightNumber);
-    const departureTime = firstValue(d.departureTime, d.departureFlightTime, d.outboundTime, d.timeFrom);
-    const arrivalTime = firstValue(d.arrivalTime, d.arrivalFlightTime, d.timeTo);
-    const baggage = firstValue(d.baggage, d.luggage, d.baggageInfo, d.baggageAllowance);
-    const cabin = firstValue(d.cabinClass, d.class, d.ticketClass, d.serviceClass);
-    const seats = firstValue(d.seats, d.quantity, d.passengersCount, d.availableSeats, d.places);
-
-    const flightBits = [];
-    if (airline) flightBits.push(`🛫 ${airline}`);
-    if (flightNumber) flightBits.push(`№ ${flightNumber}`);
-    if (departureTime || arrivalTime) flightBits.push(`🕘 ${[departureTime, arrivalTime].filter(Boolean).join(" → ")}`);
-    if (cabin) flightBits.push(`💺 ${cabin}`);
-    if (baggage) flightBits.push(`🧳 ${baggage}`);
-    if (seats) flightBits.push(`👤 ${seats} мест.`);
-
-    const priceLine = priceHeroLine();
-    if (priceLine) parts.push(priceLine);
-
-    const flightLine = compactIncludedLine(flightBits, 8);
-    if (flightLine) {
-      pushDivider(parts);
-      parts.push(`✅ <b>Детали:</b> ${escapeHtml(flightLine)}`);
+    if (fd) parts.push(labelLine("🗓", fd.label, fd.value));
+    
+    if (hasReturnFlight()) {
+      parts.push(labelLine("🔁", "Тип", "Туда-обратно"));
     }
 
-    const returnFlightNumber = firstValue(d.returnFlightNumber, d.inboundFlightNumber);
-    const returnTime = firstValue(d.returnFlightTime, d.inboundTime, d.returnDepartureTime);
-    if (returnFlightNumber || returnTime) {
-      parts.push(`🔁 <b>Обратно:</b> ${escapeHtml([returnFlightNumber && `№ ${returnFlightNumber}`, returnTime].filter(Boolean).join(" • "))}`);
-    }
+    const airline = norm(d.airline);
+    if (airline) parts.push(labelLine("🛫", "Авиакомпания", airline, false));
 
     const flightDetails = norm(d.flightDetails);
-    if (flightDetails) parts.push("ℹ️ Полные детали рейса — по кнопке ниже");
+    if (flightDetails) parts.push(labelLine("📝", "Детали рейса", "нажмите кнопку ниже"));
+
+    if (priceWithCur != null && String(priceWithCur).trim()) {
+      parts.push(`💸 <b>Цена</b>: ${escapeHtml(String(priceWithCur))} (${priceKind})`);
+    }
+    if (badgeClean) parts.push(labelLine("⏳", "Срок", badgeClean, false));
+
+    pushRefusedUrgency(parts);
 
     pushDivider(parts);
-    parts.push(smartBadges("flight"));
+    if (shouldShowProviderContacts(role, unlocked)) {
+      parts.push(providerLine);
+      if (telegramLine) parts.push(telegramLine);
+    } else {
+      parts.push(labelLine("🏢", "Поставщик", "🔒 скрыт"));
+      parts.push("🔓 Откройте контакты для связи");
+    }
 
-    providerCompactBlock(parts);
+    pushDivider(parts);
+    parts.push(`👉 Подробнее и бронирование: ${a(serviceUrl, "открыть")}`);
 
-    const extraRows = [];
-    if (flightDetails) extraRows.push([{ text: "✈️ Детали рейса", callback_data: `fd:${serviceId}` }]);
-
-    return {
-      text: parts.join("\n"),
-      photoUrl: getFirstImageUrl(svc),
-      serviceUrl,
-      kbExtra: sellingKb(extraRows),
-    };
+    const kbExtra = flightDetails
+      ? { inline_keyboard: [[{ text: "ℹ️ Детали рейса", callback_data: `fd:${serviceId}` }]] }
+      : null;
+    
+    return { text: parts.join("\n"), photoUrl: getFirstImageUrl(svc), serviceUrl, kbExtra };
   }
 
     if (
@@ -1725,64 +1455,46 @@ const priceKind =
     const parts = [];
     if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
 
-    const evEmoji = ticketEmoji(d.eventCategory || d.ticketType || d.type || svc.title);
-    const headingTitle = buildMarketingTitle("ticket", "Билет на мероприятие");
-    parts.push(`${evEmoji} <b>${escapeHtml(headingTitle)}</b> <code>#R${serviceId}</code>`);
+    const evEmoji = ticketEmoji(d.eventCategory || d.ticketType || d.type);
+    parts.push(refusedHeading(`ОТКАЗНОЙ БИЛЕТ ${evEmoji}`));
 
-    const eventName = firstValue(d.eventName, d.title, svc.title);
-    pushDistinctLine(
-      parts,
-      `${evEmoji} <b>${escapeHtml(normalizeTitleSoft(eventName))}</b>`,
-      eventName,
-      headingTitle
-    );
+    const tl = titleLine("ticket");
+    if (tl) parts.push(tl);
 
-    const eventCat = firstValue(d.eventCategory, d.ticketType, d.type);
-    const city = firstValue(d.city, d.locationCity, d.directionTo, d.toCity);
-    const venue = firstValue(d.venue, d.place, d.location, d.eventPlace, d.hall, d.stadium);
-    const placeLine = [city, venue].filter(Boolean).join(" • ");
-    if (eventCat) parts.push(`🏷 ${escapeHtml(eventCat)}`);
-    if (placeLine) parts.push(`📍 ${escapeHtml(placeLine)}`);
+    pushPriceDrop(parts);
+
+    const eventCat = norm(d.eventCategory);
+    if (eventCat) parts.push(labelLine(evEmoji, "Категория", eventCat));
+
+    const tlc = ticketLocationLines();
+    for (const line of tlc) parts.push(line);
 
     const ed = eventDateLabel();
-    const eventTime = firstValue(d.eventTime, d.time, d.startTime);
-    if (ed || eventTime) parts.push(`📅 ${escapeHtml([ed?.value, eventTime].filter(Boolean).join(" • "))}`);
+    if (ed) parts.push(labelLine("🗓", ed.label, ed.value));
 
-    const priceLine = priceHeroLine();
-    if (priceLine) parts.push(priceLine);
+    const ticketDetails = norm(d.ticketDetails);
+    if (ticketDetails) parts.push(labelLine("📝", "Детали", ticketDetails, false));
 
-    const sector = firstValue(d.sector, d.block, d.zone);
-    const row = firstValue(d.row, d.seatRow);
-    const seat = firstValue(d.seat, d.placeNumber, d.seatsNumbers);
-    const qty = firstValue(d.ticketsCount, d.quantity, d.seats, d.count);
-    const format = firstValue(d.ticketFormat, d.deliveryType, d.ticketDelivery, d.format);
-    const ticketDetails = firstValue(d.ticketDetails, d.details, d.description);
+    if (priceWithCur != null && String(priceWithCur).trim()) {
+      parts.push(`💸 <b>Цена</b>: ${escapeHtml(String(priceWithCur))} (${priceKind})`);
+    }
+    if (badgeClean) parts.push(labelLine("⏳", "Срок", badgeClean, false));
 
-    const detailBits = [];
-    if (sector) detailBits.push(`🪑 сектор ${sector}`);
-    if (row) detailBits.push(`ряд ${row}`);
-    if (seat) detailBits.push(`место ${seat}`);
-    if (qty) detailBits.push(`🎟 ${qty} билет.`);
-    if (format) detailBits.push(`📲 ${format}`);
-    if (ticketDetails && detailBits.length < 5) detailBits.push(ticketDetails);
+    pushRefusedUrgency(parts);
 
-    const detailLine = compactIncludedLine(detailBits, 7);
-    if (detailLine) {
-      pushDivider(parts);
-      parts.push(`✅ <b>Детали:</b> ${escapeHtml(detailLine)}`);
+    pushDivider(parts);
+    if (shouldShowProviderContacts(role, unlocked)) {
+      parts.push(providerLine);
+      if (telegramLine) parts.push(telegramLine);
+    } else {
+      parts.push(labelLine("🏢", "Поставщик", "🔒 скрыт"));
+      parts.push("🔓 Откройте контакты для связи");
     }
 
     pushDivider(parts);
-    parts.push(smartBadges("ticket"));
+    parts.push(`👉 Подробнее и бронирование: ${a(serviceUrl, "открыть")}`);
 
-    providerCompactBlock(parts);
-
-    return {
-      text: parts.join("\n"),
-      photoUrl: getFirstImageUrl(svc),
-      serviceUrl,
-      kbExtra: sellingKb(),
-    };
+    return { text: parts.join("\n"), photoUrl: getFirstImageUrl(svc), serviceUrl };
   }
 
   /* ===================== DEFAULT ===================== */
@@ -1793,7 +1505,7 @@ const priceKind =
   if (route) parts.push(`✈️ ${escapeHtml(route)}`);
   if (dates) parts.push(`🗓 ${escapeHtml(dates)}${nights ? ` (${nights} ноч.)` : ""}`);
   if (hotel) parts.push(`🏨 ${escapeHtml(hotel)}`);
-  if (accommodation) parts.push(`🛏 ${escapeHtml(accommodation)}`);
+  if (accommodation) parts.push(`🛏 ${escapeHtml(accommodationLabel(accommodation))}`);
 
   if (priceWithCur != null && String(priceWithCur).trim()) {
     const kind = role === "provider" ? "нетто" : "брутто";
