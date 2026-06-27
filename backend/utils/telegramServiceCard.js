@@ -998,13 +998,25 @@ const priceKind =
     }
   };
 
+  const normalizedRole = String(role || "").toLowerCase();
+  const isClientViewer = normalizedRole === "client";
+  const isProviderViewer = normalizedRole === "provider";
+  const canQuickRequest = isClientViewer || isProviderViewer;
+
   const sellingKb = (extraRows = []) => {
-    const rows = [
-      [{ text: "🔓 Открыть контакты", callback_data: `contacts:${serviceId}` }],
-      [{ text: "⚡ Быстрый запрос", callback_data: `quick:${serviceId}` }],
-      ...extraRows,
-      [{ text: "🌐 Подробнее на сайте", url: serviceUrl }],
-    ];
+    const rows = [];
+
+    // «Открыть контакты» — только клиенту.
+    // «Быстрый запрос» нужен и клиенту, и поставщику.
+    if (isClientViewer) rows.push([{ text: "🔓 Открыть контакты", callback_data: `contacts:${serviceId}` }]);
+    if (canQuickRequest) rows.push([{ text: "⚡ Быстрый запрос", callback_data: `quick:${serviceId}` }]);
+
+    for (const row of extraRows || []) {
+      if (Array.isArray(row) && row.length) rows.push(row);
+    }
+
+    if (serviceUrl) rows.push([{ text: "🌐 Подробнее на сайте", url: serviceUrl }]);
+
     return { inline_keyboard: rows, replaceDefault: true };
   };
 
@@ -1377,11 +1389,16 @@ const priceKind =
         { text: "🗓 Программа тура", callback_data: `atp:${serviceId}` },
         { text: "🌐 Подробнее на сайте", url: serviceUrl },
       ],
-      [
-        { text: "💬 Быстрый запрос", callback_data: `quick:${serviceId}` },
-        { text: "👤 Контакты", callback_data: `contacts:${serviceId}` },
-      ],
     ];
+
+    if (isClientViewer) {
+      kbRows.push([
+        { text: "👤 Контакты", callback_data: `contacts:${serviceId}` },
+        { text: "💬 Быстрый запрос", callback_data: `quick:${serviceId}` },
+      ]);
+    } else if (isProviderViewer) {
+      kbRows.push([{ text: "💬 Быстрый запрос", callback_data: `quick:${serviceId}` }]);
+    }
 
     return {
       text: parts.join("\n"),
