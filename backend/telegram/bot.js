@@ -16200,7 +16200,7 @@ async function finishProofSubmissionFromBot(ctx) {
 
     const svcRes = await pool.query(
       `
-        SELECT id, details
+        SELECT id, provider_id, category, title, price, details, images, expiration_at, status, moderation_status
           FROM services
          WHERE id = $1
          LIMIT 1
