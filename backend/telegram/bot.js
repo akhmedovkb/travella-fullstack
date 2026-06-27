@@ -5176,6 +5176,7 @@ async function replyProviderDraftResumePrompt(ctx, row) {
     svc_create_tour_accommodation: "Размещение",
     svc_create_tour_roomcat: "Категория номера",
     svc_create_tour_food: "Питание",
+    svc_create_tour_transfer: "Трансфер",
     svc_create_tour_insurance: "Страховка",
     svc_create_tour_early_checkin: "Ранний заезд",
     svc_create_tour_fast_track: "Fast Track",
@@ -7208,6 +7209,13 @@ async function promptWizardState(ctx, state) {
         "🍽 Укажите *питание* (например: BB / HB / FB / AI / UAI):\nЕсли не нужно — нажмите «⏭ Пропустить».",
         { parse_mode: "Markdown", ...wizNavKeyboard() }
       );
+      return;
+
+    case "svc_create_tour_transfer":
+      await ctx.reply("🚐 *Трансфер включён?*", {
+        parse_mode: "Markdown",
+        ...yesNoWizardKeyboard(),
+      });
       return;
 
     case "svc_create_tour_insurance":
@@ -10434,6 +10442,8 @@ async function applyWizardBooleanChoice(ctx, value) {
   };
 
   switch (state) {
+    case "svc_create_tour_transfer":
+      return move("transferIncluded", "svc_create_tour_insurance");
     case "svc_create_tour_insurance":
       return move("insuranceIncluded", "svc_create_tour_early_checkin");
     case "svc_create_tour_early_checkin":
@@ -13949,6 +13959,27 @@ async function handleSvcEditWizardText(ctx) {
       case "svc_edit_tour_food": {
         if (!keep()) draft.food = text;
         await go(
+          "svc_edit_tour_transfer",
+          `🚐 Трансфер включён? (текущее: ${draft.transferIncluded ? "да" : "нет"}).\nОтветьте да/нет или нажмите «⏭ Пропустить»:`
+        );
+        return true;
+      }
+
+      case "svc_edit_tour_transfer": {
+        if (!keep()) {
+          const b = parseYesNoLocal();
+          if (b === null) {
+            await safeReply(
+              ctx,
+              "⚠️ Ответьте да/нет или «пропустить».",
+              editWizNavKeyboard()
+            );
+            return true;
+          }
+          draft.transferIncluded = b;
+        }
+
+        await go(
           "svc_edit_tour_insurance",
           `🛡 Страховка включена? (текущее: ${draft.insuranceIncluded ? "да" : "нет"}).\nОтветьте да/нет или нажмите «⏭ Пропустить»:`
         );
@@ -15622,8 +15653,8 @@ bot.on("text", async (ctx, next) => {
           if (["пропустить", "skip", "-", "нет"].includes(low)) {
             draft.food = "";
             pushWizardState(ctx, "svc_create_tour_food");
-            ctx.session.state = "svc_create_price";
-            await promptWizardState(ctx, "svc_create_price");
+            ctx.session.state = "svc_create_tour_transfer";
+            await promptWizardState(ctx, "svc_create_tour_transfer");
             return;
           }
         
@@ -15632,11 +15663,27 @@ bot.on("text", async (ctx, next) => {
           draft.food = v;
         
           pushWizardState(ctx, "svc_create_tour_food");
+          ctx.session.state = "svc_create_tour_transfer";
+          await promptWizardState(ctx, "svc_create_tour_transfer");
+          return;
+        }
+          
+        case "svc_create_tour_transfer": {
+          const yn = parseYesNo(text);
+          if (yn === null) {
+            await ctx.reply("😕 Ответьте `да` или `нет`.", {
+              parse_mode: "Markdown",
+              ...wizNavKeyboard(),
+            });
+            return;
+          }
+          draft.transferIncluded = yn;
+          pushWizardState(ctx, "svc_create_tour_transfer");
           ctx.session.state = "svc_create_tour_insurance";
           await promptWizardState(ctx, "svc_create_tour_insurance");
           return;
         }
-          
+
         case "svc_create_tour_insurance": {
           const yn = parseYesNo(text);
           if (yn === null) {
