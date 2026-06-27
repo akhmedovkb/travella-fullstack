@@ -1,6 +1,7 @@
 // backend/utils/serviceSubmitValidation.js
 
 const { normalizeCategory, isProofRequiredCategory } = require("./serviceCategories");
+const { hasServiceDisplayTitle } = require("./serviceDisplay");
 
 function normalizeDetails(details) {
   if (!details) return {};
@@ -72,7 +73,7 @@ function buildSubmitValidationBlockers(service = {}) {
     if (!ok) blockers.push({ code, label });
   };
 
-  add("TITLE_REQUIRED", "Укажите название услуги", hasFilled(service.title, d.title, d.eventName, d.hotel, d.hotelName));
+  add("TITLE_REQUIRED", "Укажите название услуги", hasServiceDisplayTitle(service));
 
   if (category === "refused_tour") {
     add("COUNTRY_REQUIRED", "Укажите страну направления", hasFilled(d.directionCountry, d.country));
