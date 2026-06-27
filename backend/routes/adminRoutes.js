@@ -6,8 +6,6 @@ const authenticateToken = require("../middleware/authenticateToken");
 const requireAdmin = require("../middleware/requireAdmin");
 const leadController = require("../controllers/leadController");
 
-const axios = require("axios");
-
 const {
   tgSend,
   notifyModerationApproved,
@@ -15,7 +13,7 @@ const {
   notifyModerationUnpublished,
 } = require("../utils/telegram");
 
-const { buildServiceMessage } = require("../utils/telegramServiceCard");
+const { broadcastApprovedService } = require("../utils/serviceApprovalBroadcast");
 const { logServiceModerationEvent, listServiceModerationEvents } = require("../utils/serviceModerationEvents");
 
 function phoneToDigits(phone) {
@@ -409,219 +407,15 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
     console.error("[admin approve] tg notify failed:", e?.message || e);
   }
 
-  // TG → всем: уведомление о новом отказе (после одобрения модератором)
-  // Требование:
-  // 1) audience: all
-  // 2) кнопка: "Открыть в боте"
-  // Публикуем только отказные категории и авторские туры.
+  // TG → всем: уведомление о новом отказе/авторском туре после одобрения.
+  // Вынесено в hardened utility:
+  // - берёт только chat_id нового refused/client-бота;
+  // - не подмешивает provider.telegram_web_chat_id старого бота;
+  // - если sendPhoto не проходит, делает fallback на текст;
+  // - считает реальную доставку, а не fulfilled Promise с false.
   try {
-    const info2 = await pool.query(
-      `SELECT s.*, 
-              COALESCE(p.name,'') AS provider_name,
-              p.type AS provider_type
-         FROM services s
-         JOIN providers p ON p.id = s.provider_id
-        WHERE s.id = $1`,
-      [rows[0].id]
-    );
-
-    const svc = info2.rows[0] || null;
-    const cat = String(svc?.category || "").toLowerCase();
-
-    const isRefused = [
-                        "refused_tour",
-                        "author_tour",
-                        "refused_hotel",
-                        "refused_flight",
-                        "refused_ticket",
-                        "refused_event_ticket",
-                      ].includes(cat);
-    
-    if (svc && isRefused) {
-      // ВАЖНО: users/provs жмут /start именно в новом боте
-      const botUsername = String(
-        process.env.TELEGRAM_CLIENT_BOT_USERNAME || process.env.TELEGRAM_BOT_USERNAME || ""
-      ).trim();
-
-      const startPayload = encodeURIComponent(`refused_${svc.id}`);
-      const openBotUrl = botUsername
-        ? `https://t.me/${botUsername}?start=${startPayload}`
-        : process.env.SITE_PUBLIC_URL || "";
-      
-      // ✅ ЕДИНЫЙ шаблон карточки + 🆕 только один раз (первый broadcast после approve)
-      let detailsObj = svc?.details;
-      if (typeof detailsObj === "string") {
-        try { detailsObj = JSON.parse(detailsObj); } catch { detailsObj = {}; }
-      }
-      
-      const alreadyNewBroadcasted = Boolean(detailsObj?.meta?.new_badge_sent_at);
-      const needNewBadgeOnce = !alreadyNewBroadcasted;
-      
-      const card = buildServiceMessage(svc, cat, "client", { newBadge: needNewBadgeOnce });
-      const msg = card.text; // HTML
-      const photoUrl = card.photoUrl || null;
-
-      const kb = {
-        inline_keyboard: [[{ text: "Открыть в боте", url: openBotUrl }]],
-      };
-
-      // recipients: providers.telegram_refused_chat_id + clients.telegram_chat_id
-      const recProv = await pool.query(
-        `SELECT COALESCE(telegram_refused_chat_id, telegram_web_chat_id, telegram_chat_id) AS chat_id
-           FROM providers
-          WHERE COALESCE(telegram_refused_chat_id, telegram_web_chat_id, telegram_chat_id) IS NOT NULL
-            AND TRIM(COALESCE(telegram_refused_chat_id, telegram_web_chat_id, telegram_chat_id)::text) <> ''`
-      );
-
-      const recCli = await pool.query(
-        `SELECT telegram_chat_id AS chat_id
-           FROM clients
-          WHERE telegram_chat_id IS NOT NULL
-            AND TRIM(telegram_chat_id::text) <> ''`
-      );
-
-      const chatIds = [
-        ...recProv.rows.map((r) => r.chat_id),
-        ...recCli.rows.map((r) => r.chat_id),
-      ];
-
-      const normalized = chatIds
-        .map((v) => String(v || "").trim())
-        .filter((s) => /^-?\d+$/.test(s))
-        .map((s) => Number(s));
-
-      const unique = Array.from(new Set(normalized));
-
-      // Для текущей схемы: рассылаем новым ботом, иначе люди не получат
-      const tokenOverrideAll = (process.env.TELEGRAM_CLIENT_BOT_TOKEN || "").trim() || null;
-
-      if (!tokenOverrideAll) {
-        console.warn("[admin approve] broadcast skipped: TELEGRAM_CLIENT_BOT_TOKEN is missing");
-      } else if (!unique.length) {
-        console.warn("[admin approve] broadcast skipped: no recipients");
-      } else {
-        console.log("[admin approve] broadcast audience:", {
-          providers: recProv.rows.length,
-          clients: recCli.rows.length,
-          totalUnique: unique.length,
-        });
-
-        // admins report (optional)
-        const adminChatIds = String(process.env.TELEGRAM_ADMIN_CHAT_IDS || "")
-          .split(/[,\s]+/g)
-          .map((s) => s.trim())
-          .filter((s) => /^-?\d+$/.test(s))
-          .map((s) => Number(s));
-
-        async function tgSendPhoto(chatId, photo, caption, opts = {}, tokenOverride = null) {
-          const token =
-            tokenOverride ||
-            (process.env.TELEGRAM_CLIENT_BOT_TOKEN || "").trim() ||
-            (process.env.TELEGRAM_BOT_TOKEN || "").trim() ||
-            null;
-
-          if (!token) throw new Error("TELEGRAM_TOKEN_MISSING");
-
-          const api = `https://api.telegram.org/bot${token}`;
-
-          const payload = {
-            chat_id: chatId,
-            photo: String(photo || "").startsWith("tgfile:")
-              ? String(photo).replace(/^tgfile:/, "").trim()
-              : photo,
-            caption: String(caption || "").slice(0, 1024),
-            parse_mode: "HTML",
-            reply_markup: opts.reply_markup,
-          };
-
-          return axios.post(`${api}/sendPhoto`, payload);
-        }
-
-        const BATCH = 25;
-        let delivered = 0;
-        let failed = 0;
-        const failedSample = [];
-
-        for (let i = 0; i < unique.length; i += BATCH) {
-          const batch = unique.slice(i, i + BATCH);
-
-          const results = await Promise.allSettled(
-            batch.map((cid) => {
-              if (photoUrl) {
-                return tgSendPhoto(cid, photoUrl, msg, { reply_markup: kb }, tokenOverrideAll);
-              }
-              return tgSend(cid, msg, { parse_mode: "HTML", reply_markup: kb }, tokenOverrideAll);
-            })
-          );
-
-          const ok = results.filter((r) => r.status === "fulfilled").length;
-          const fail = results.length - ok;
-          delivered += ok;
-          failed += fail;
-
-          if (fail && failedSample.length < 10) {
-            results.forEach((r, idx) => {
-              if (r.status === "rejected" && failedSample.length < 10) {
-                failedSample.push(batch[idx]);
-              }
-            });
-          }
-
-          if (fail) {
-            const sampleErr = results.find((r) => r.status === "rejected")?.reason;
-            console.warn("[admin approve] broadcast batch errors:", {
-              batchFrom: i,
-              batchSize: results.length,
-              ok,
-              fail,
-              sample: sampleErr?.message || String(sampleErr || ""),
-            });
-          } else {
-            console.log("[admin approve] broadcast batch ok:", {
-              batchFrom: i,
-              batchSize: results.length,
-            });
-          }
-        }
-        
-        // ✅🆕 фиксируем, что NEW badge уже был показан (ТОЛЬКО 1 раз)
-        if (needNewBadgeOnce && delivered > 0) {
-          try {
-            await pool.query(
-              `UPDATE services
-                  SET details = jsonb_set(
-                      COALESCE(details, '{}'::jsonb),
-                      '{meta,new_badge_sent_at}',
-                      to_jsonb(NOW()),
-                      true
-                  )
-                WHERE id = $1
-                  AND (details->'meta'->>'new_badge_sent_at') IS NULL`,
-              [svc.id]
-            );
-          } catch (e) {
-            console.error("[admin approve] failed to mark new_badge_sent_at:", e?.message || e);
-          }
-        }
-
-        if (adminChatIds.length) {
-          const report =
-            `📣 <b>Broadcast report</b>\n` +
-            `Service: <code>${svc.id}</code>\n` +
-            `Category: <code>${cat}</code>\n` +
-            `Recipients: <b>${unique.length}</b>\n` +
-            `Delivered: <b>${delivered}</b>\n` +
-            `Failed: <b>${failed}</b>` +
-            (failedSample.length
-              ? `\n\n❌ Failed chatIds (sample):\n<code>${failedSample.join(", ")}</code>`
-              : "");
-
-          await Promise.allSettled(
-            adminChatIds.map((aid) => tgSend(aid, report, { parse_mode: "HTML" }, tokenOverrideAll))
-          );
-        }
-      }
-    }
+    const broadcastResult = await broadcastApprovedService(rows[0].id, { db: pool });
+    console.log("[admin approve] service approval broadcast result:", broadcastResult);
   } catch (e) {
     console.error("[admin approve] broadcast failed:", e?.message || e);
   }
