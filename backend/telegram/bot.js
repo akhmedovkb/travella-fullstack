@@ -3283,8 +3283,8 @@ async function promptEditState(ctx, state) {
     case "svc_edit_tour_accommodation":
       await safeReply(
         ctx,
-        `🛏 Размещение (текущее: ${draft.accommodation || "(пусто)"}).\nВведите новое или нажмите «⏭ Пропустить»:`,
-        editWizNavKeyboard()
+        `🛏 Размещение (текущее: ${accommodationFullLabel(draft.accommodation) || "(пусто)"}).\nВыберите вариант или нажмите «✍️ Свой вариант»:`,
+        accommodationChoiceKeyboard("edit", "tour")
       );
       return;
 
@@ -3299,7 +3299,7 @@ async function promptEditState(ctx, state) {
     case "svc_edit_tour_food":
       await safeReply(
         ctx,
-        `🍽 Питание (текущее: ${draft.food || "(пусто)"}).\nВведите (RO/BB/HB/FB/FBT/AI/UAI) или нажмите «⏭ Пропустить»:\n\nBB — завтраки; HB — завтрак + ужин; FB — полный пансион; FBT — 3-разовое + базовый терапевтический пакет; AI — всё включено; UAI — ультра всё включено; RO — без питания`,
+        `🍽 Питание (текущее: ${draft.food || "(пусто)"}).\nВведите (BB/HB/FB/AI/UAI) или нажмите «⏭ Пропустить»:`,
         editWizNavKeyboard()
       );
       return;
@@ -3381,8 +3381,8 @@ async function promptEditState(ctx, state) {
     case "svc_edit_hotel_accommodation":
       await safeReply(
         ctx,
-        `🛏 Размещение (текущее: ${draft.accommodation || "(пусто)"}).\nВведите или нажмите «⏭ Пропустить»:`,
-        editWizNavKeyboard()
+        `🛏 Размещение (текущее: ${accommodationFullLabel(draft.accommodation) || "(пусто)"}).\nВыберите вариант или нажмите «✍️ Свой вариант»:`,
+        accommodationChoiceKeyboard("edit", "hotel")
       );
       return;
     
@@ -4939,65 +4939,6 @@ async function ensureClientRole(ctx) {
   return ctx.session?.role || null;
 }
 
-function getTelegramChatType(ctx) {
-  return (
-    ctx?.chat?.type ||
-    ctx?.callbackQuery?.message?.chat?.type ||
-    ctx?.update?.callback_query?.message?.chat?.type ||
-    null
-  );
-}
-
-function getTelegramChatId(ctx) {
-  return (
-    ctx?.chat?.id ??
-    ctx?.callbackQuery?.message?.chat?.id ??
-    ctx?.update?.callback_query?.message?.chat?.id ??
-    null
-  );
-}
-
-function isInlineCallbackWithoutChat(ctx) {
-  return !!(
-    ctx?.callbackQuery?.inline_message_id ||
-    ctx?.update?.callback_query?.inline_message_id
-  );
-}
-
-function isPrivateTelegramChat(ctx) {
-  const type = getTelegramChatType(ctx);
-  if (type === "private") return true;
-
-  const chatId = getTelegramChatId(ctx);
-  const fromId = ctx?.from?.id ?? ctx?.callbackQuery?.from?.id ?? null;
-
-  // Telegraf/Telegram inline callback может прийти без message.chat,
-  // даже если карточка нажата в личке с ботом. В этом случае нельзя
-  // использовать ctx.chat как доказательство "не лички".
-  // Контакты всё равно отправляются только пользователю в DM через ctx.from.id.
-  if (!chatId && fromId && isInlineCallbackWithoutChat(ctx)) return true;
-
-  // Fallback для обычных callback: в личном чате chat.id обычно равен from.id.
-  return !!chatId && !!fromId && Number(chatId) === Number(fromId);
-}
-
-async function getCurrentTelegramRole(ctx) {
-  if (ctx?.session?.role) return ctx.session.role;
-  const userId = ctx?.from?.id || ctx?.callbackQuery?.from?.id;
-  if (!userId) return null;
-  return await resolveRoleByUserId(userId, ctx);
-}
-
-async function requireClientAction(ctx, actionLabel = "Это действие") {
-  const role = await getCurrentTelegramRole(ctx);
-  if (role === "client") return true;
-
-  try {
-    await ctx.answerCbQuery(`${actionLabel} доступно только клиенту`, { show_alert: true });
-  } catch {}
-  return false;
-}
-
 async function resolveRoleByUserId(userId, ctx) {
   try {
     const resProv = await axios.get(`/api/telegram/profile/provider/${userId}`);
@@ -5973,6 +5914,62 @@ function wizNavKeyboard() {
   };
 }
 
+
+
+const ACCOMMODATION_OPTIONS = [
+  { code: "SGL", label: "одноместное размещение" },
+  { code: "DBL", label: "двухместное размещение" },
+  { code: "TRIPLE", label: "трёхместное размещение" },
+  { code: "QUADRUPLE", label: "четырёхместное размещение" },
+];
+
+function accommodationFullLabel(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const upper = raw.toUpperCase();
+  const found = ACCOMMODATION_OPTIONS.find((x) => x.code === upper);
+  return found ? `${found.code} (${found.label})` : raw;
+}
+
+function normalizeAccommodationInput(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const upper = raw.toUpperCase();
+  const found = ACCOMMODATION_OPTIONS.find((x) => x.code === upper);
+  return found ? found.code : raw;
+}
+
+function accommodationChoiceKeyboard(mode = "create", flow = "tour") {
+  const prefix = mode === "edit" ? "svc_edit_accommodation" : "svc_accommodation";
+  const nav = mode === "edit"
+    ? [
+        { text: "⏭ Пропустить", callback_data: "svc_edit:skip" },
+        { text: "⬅️ Назад", callback_data: "svc_edit_back" },
+        { text: "❌ Отмена", callback_data: "svc_edit_cancel" },
+      ]
+    : [
+        { text: "⏭ Пропустить", callback_data: "svc_wiz:skip" },
+        { text: "⬅️ Назад", callback_data: "svc_wiz:back" },
+        { text: "❌ Отмена", callback_data: "svc_wiz:cancel" },
+      ];
+
+  return {
+    reply_markup: {
+      inline_keyboard: [
+        ACCOMMODATION_OPTIONS.slice(0, 2).map((x) => ({
+          text: `${x.code} (${x.label})`,
+          callback_data: `${prefix}:${flow}:${x.code}`,
+        })),
+        ACCOMMODATION_OPTIONS.slice(2).map((x) => ({
+          text: `${x.code} (${x.label})`,
+          callback_data: `${prefix}:${flow}:${x.code}`,
+        })),
+        [{ text: "✍️ Свой вариант", callback_data: `${prefix}:${flow}:custom` }],
+        nav,
+      ],
+    },
+  };
+}
 
 function getServiceWizardOrder(category = "", state = "") {
   const c = String(category || "").toLowerCase();
@@ -7312,8 +7309,8 @@ async function promptWizardState(ctx, state) {
 
     case "svc_create_tour_accommodation":
       await ctx.reply(
-        "🛏 Укажите *размещение*\nНапример: *DBL*, *SGL*, *2ADL+1CHD* и т.д.",
-        { parse_mode: "Markdown", ...wizNavKeyboard() }
+        "🛏 Выберите *размещение* или нажмите «✍️ Свой вариант».\n\nSGL — одноместное, DBL — двухместное, TRIPLE — трёхместное, QUADRUPLE — четырёхместное.",
+        { parse_mode: "Markdown", ...accommodationChoiceKeyboard("create", "tour") }
       );
       return;
         case "svc_create_tour_roomcat":
@@ -7325,7 +7322,7 @@ async function promptWizardState(ctx, state) {
 
     case "svc_create_tour_food":
       await ctx.reply(
-        "🍽 Укажите *питание* (например: RO / BB / HB / FB / FBT / AI / UAI):\n\nРасшифровка:\nBB — завтраки\nHB — завтрак + ужин\nFB — полный пансион\nFBT — 3-разовое питание + базовый терапевтический пакет\nAI — всё включено\nUAI — ультра всё включено\nRO — без питания\n\nЕсли не нужно — нажмите «⏭ Пропустить».",
+        "🍽 Укажите *питание* (например: BB / HB / FB / AI / UAI):\nЕсли не нужно — нажмите «⏭ Пропустить».",
         { parse_mode: "Markdown", ...wizNavKeyboard() }
       );
       return;
@@ -7390,14 +7387,14 @@ async function promptWizardState(ctx, state) {
 
     case "svc_hotel_accommodation":
       await ctx.reply(
-        "🛏 Укажите *размещение*\nНапример: *DBL*, *SGL*, *2ADL+1CHD* и т.д.",
-        { parse_mode: "Markdown", ...wizNavKeyboard() }
+        "🛏 Выберите *размещение* или нажмите «✍️ Свой вариант».\n\nSGL — одноместное, DBL — двухместное, TRIPLE — трёхместное, QUADRUPLE — четырёхместное.",
+        { parse_mode: "Markdown", ...accommodationChoiceKeyboard("create", "hotel") }
       );
       return;
 
     case "svc_hotel_food":
       await ctx.reply(
-        "🍽 Укажите *питание* (например: RO / BB / HB / FB / FBT / AI / UAI):\n\nРасшифровка:\nBB — завтраки\nHB — завтрак + ужин\nFB — полный пансион\nFBT — 3-разовое питание + базовый терапевтический пакет\nAI — всё включено\nUAI — ультра всё включено\nRO — без питания",
+        "🍽 Укажите *питание* (например: BB / HB / FB / AI / UAI):",
         { parse_mode: "Markdown", ...wizNavKeyboard() }
       );
       return;
@@ -9691,6 +9688,74 @@ bot.action(/^svc_edit_flight_type:(one_way|round_trip)$/, async (ctx) => {
   }
 });
 
+
+// 🛏 Быстрый выбор размещения при создании отказного тура/отеля.
+bot.action(/^svc_accommodation:(tour|hotel):(SGL|DBL|TRIPLE|QUADRUPLE|custom)$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    if (!ctx.session) ctx.session = {};
+    const draft = ctx.session.serviceDraft || {};
+    ctx.session.serviceDraft = draft;
+
+    const flow = ctx.match?.[1] === "hotel" ? "hotel" : "tour";
+    const value = String(ctx.match?.[2] || "");
+    const state = flow === "hotel" ? "svc_hotel_accommodation" : "svc_create_tour_accommodation";
+
+    if (value === "custom") {
+      ctx.session.state = state;
+      await safeReply(
+        ctx,
+        "✍️ Введите свой вариант размещения.\nНапример: DBL+CHD, 2ADL+2CHD, DBL+EB.",
+        wizNavKeyboard()
+      );
+      return;
+    }
+
+    draft.accommodation = normalizeAccommodationInput(value);
+    pushWizardState(ctx, state);
+    ctx.session.state = flow === "hotel" ? "svc_hotel_food" : "svc_create_tour_roomcat";
+    await promptWizardState(ctx, ctx.session.state);
+    await persistProviderCreateWizard(ctx);
+  } catch (e) {
+    console.error("[tg-bot] svc_accommodation error:", e?.response?.data || e);
+  }
+});
+
+// 🛏 Быстрый выбор размещения при редактировании отказного тура/отеля.
+bot.action(/^svc_edit_accommodation:(tour|hotel):(SGL|DBL|TRIPLE|QUADRUPLE|custom)$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    if (!ctx.session) ctx.session = {};
+    const draft = ctx.session.serviceDraft || {};
+    ctx.session.serviceDraft = draft;
+
+    const flow = ctx.match?.[1] === "hotel" ? "hotel" : "tour";
+    const value = String(ctx.match?.[2] || "");
+    const state = flow === "hotel" ? "svc_edit_hotel_accommodation" : "svc_edit_tour_accommodation";
+
+    if (value === "custom") {
+      ctx.session.state = state;
+      ctx.session.editWiz = ctx.session.editWiz || {};
+      ctx.session.editWiz.step = state;
+      await safeReply(
+        ctx,
+        "✍️ Введите свой вариант размещения.\nНапример: DBL+CHD, 2ADL+2CHD, DBL+EB.",
+        editWizNavKeyboard()
+      );
+      return;
+    }
+
+    draft.accommodation = normalizeAccommodationInput(value);
+    ctx.session.editWiz = ctx.session.editWiz || {};
+    const next = flow === "hotel" ? "svc_edit_hotel_food" : "svc_edit_tour_roomcat";
+    ctx.session.editWiz.step = next;
+    ctx.session.state = next;
+    await promptEditState(ctx, next);
+  } catch (e) {
+    console.error("[tg-bot] svc_edit_accommodation error:", e?.response?.data || e);
+  }
+});
+
 // ⏭ Пропустить шаг при СОЗДАНИИ услуги.
 // Важно: пропуск разрешён только для опциональных полей.
 bot.action("svc_wiz:skip", async (ctx) => {
@@ -10011,7 +10076,6 @@ bot.action(
 bot.action(/^request:(\d+)$/, async (ctx) => {
   try {
     const serviceId = Number(ctx.match[1]);
-    if (!(await requireClientAction(ctx, "Быстрый запрос"))) return;
     if (!ctx.session) ctx.session = {};
     ctx.session.pendingRequestServiceId = serviceId;
     ctx.session.pendingRequestSource = "inline";
@@ -10991,8 +11055,6 @@ bot.action(/^contacts:(\d+)$/, async (ctx) => {
       return;
     }
 
-    if (!(await requireClientAction(ctx, "Открытие контактов"))) return;
-
     await doUnlockFlow(ctx, serviceId);
   } catch (e) {
     console.error("[tg-bot] contacts action error:", e?.message || e);
@@ -11941,7 +12003,7 @@ async function sendProviderSupportInvoice(ctx, { providerId, serviceId = null, a
     return { ok: false, reason: "no_provider_token" };
   }
 
-  if (!isPrivateTelegramChat(ctx)) {
+  if (ctx.chat?.type !== "private") {
     await safeReply(ctx, "🔒 Поддержать проект через Telegram Payme можно только в личном чате с ботом.");
     return { ok: false, reason: "not_private" };
   }
@@ -13402,7 +13464,7 @@ bot.action(/^unlock:pay:(\d+)$/, async (ctx) => {
   try {
     await safeCb(ctx);
 
-    if (!isPrivateTelegramChat(ctx)) {
+    if (ctx.chat?.type !== "private") {
       await safeReply(ctx, "🔒 Оплата и показ контактов доступны только в личном чате с ботом.");
       return;
     }
@@ -13412,8 +13474,6 @@ bot.action(/^unlock:pay:(\d+)$/, async (ctx) => {
       await safeReply(ctx, "⚠️ Некорректный ID услуги. Откройте карточку заново.");
       return;
     }
-
-    if (!(await requireClientAction(ctx, "Открытие контактов"))) return;
 
     const chatId = ctx.from?.id;
     const clientRow = await getClientRowByChatId(pool, chatId);
@@ -13466,7 +13526,7 @@ bot.action(/^unlock:click:(\d+)$/, async (ctx) => {
   try {
     await safeCb(ctx);
 
-    if (!isPrivateTelegramChat(ctx)) {
+    if (ctx.chat?.type !== "private") {
       await safeReply(ctx, "🔒 Оплата и показ контактов доступны только в личном чате с ботом.");
       return;
     }
@@ -13481,8 +13541,6 @@ bot.action(/^unlock:click:(\d+)$/, async (ctx) => {
       await safeReply(ctx, "⚠️ Некорректный ID услуги. Откройте карточку заново.");
       return;
     }
-
-    if (!(await requireClientAction(ctx, "Открытие контактов"))) return;
 
     const chatId = ctx.from?.id;
     const clientRow = await getClientRowByChatId(pool, chatId);
@@ -13562,10 +13620,6 @@ async function doUnlockFlow(ctx, serviceId) {
     return { ok: false };
   }
 
-  if (!(await requireClientAction(ctx, "Открытие контактов"))) {
-    return { ok: false, reason: "not_client" };
-  }
-
 const clientRow = await getClientRowByChatId(pool, chatId);
 
 if (!clientRow?.id) {
@@ -13592,7 +13646,7 @@ try {
     } catch {}
 
     // 🔒 bank-grade: обновлять unlocked-карточку только в личке
-    if (isPrivateTelegramChat(ctx)) {
+    if (ctx.chat?.type === "private") {
       try {
         await refreshUnlockedCard(ctx, serviceId);
       } catch {}
@@ -13628,7 +13682,7 @@ if (!offerCheck.rowCount) {
   return await showOfferGate(ctx, serviceId);
 }
   // 🔒 BANK-GRADE: контакты/обновление unlocked карточки — только в личке
-if (!isPrivateTelegramChat(ctx)) {
+if (ctx.chat?.type !== "private") {
   try {
     await ctx.answerCbQuery("🔒 Откройте в личке с ботом", { show_alert: true });
   } catch {}
@@ -13759,7 +13813,7 @@ try {
   await ctx.answerCbQuery("⏳ Открываем контакты...", { show_alert: false });
 } catch {}
 
-if (isPrivateTelegramChat(ctx)) {
+if (ctx.chat?.type === "private") {
   try {
     await refreshUnlockedCard(ctx, serviceId);
   } catch (e) {
@@ -14114,13 +14168,13 @@ async function handleSvcEditWizardText(ctx) {
         if (!keep()) draft.hotel = text;
         await go(
           "svc_edit_tour_accommodation",
-          `🛏 Размещение (текущее: ${draft.accommodation || "(пусто)"}).\nВведите новое или нажмите «⏭ Пропустить»:`
+          `🛏 Размещение (текущее: ${accommodationFullLabel(draft.accommodation) || "(пусто)"}).\nВыберите вариант или нажмите «✍️ Свой вариант»:`
         );
         return true;
       }
 
       case "svc_edit_tour_accommodation": {
-        if (!keep()) draft.accommodation = text;
+        if (!keep()) draft.accommodation = normalizeAccommodationInput(text);
         await go(
           "svc_edit_tour_roomcat",
           `⭐️ Категория номера (текущее: ${draft.roomCategory || "(пусто)"}).\nВведите или нажмите «⏭ Пропустить»:`
@@ -14132,7 +14186,7 @@ async function handleSvcEditWizardText(ctx) {
         if (!keep()) draft.roomCategory = text;
         await go(
           "svc_edit_tour_food",
-          `🍽 Питание (текущее: ${draft.food || "(пусто)"}).\nВведите (RO/BB/HB/FB/FBT/AI/UAI) или нажмите «⏭ Пропустить»:\n\nBB — завтраки; HB — завтрак + ужин; FB — полный пансион; FBT — 3-разовое + базовый терапевтический пакет; AI — всё включено; UAI — ультра всё включено; RO — без питания`
+          `🍽 Питание (текущее: ${draft.food || "(пусто)"}).\nВведите (BB/HB/FB/AI/UAI) или нажмите «⏭ Пропустить»:`
         );
         return true;
       }
@@ -14282,13 +14336,13 @@ async function handleSvcEditWizardText(ctx) {
         if (!keep()) draft.roomCategory = text;
         await go(
           "svc_edit_hotel_accommodation",
-          `🛏 Размещение (текущее: ${draft.accommodation || "(пусто)"}).\nВведите или нажмите «⏭ Пропустить»:`
+          `🛏 Размещение (текущее: ${accommodationFullLabel(draft.accommodation) || "(пусто)"}).\nВыберите вариант или нажмите «✍️ Свой вариант»:`
         );
         return true;
       }
 
       case "svc_edit_hotel_accommodation": {
-        if (!keep()) draft.accommodation = text;
+        if (!keep()) draft.accommodation = normalizeAccommodationInput(text);
         await go(
           "svc_edit_hotel_food",
           `🍽 Питание (текущее: ${draft.food || "(пусто)"}).\nВведите или нажмите «⏭ Пропустить»:`
@@ -15756,7 +15810,7 @@ bot.on("text", async (ctx, next) => {
         case "svc_create_tour_accommodation": {
           const v = await requireTextField(ctx, text, "Размещение", { min: 1 });
           if (!v) return;
-          draft.accommodation = v;
+          draft.accommodation = normalizeAccommodationInput(v);
         
           pushWizardState(ctx, "svc_create_tour_accommodation");
           ctx.session.state = "svc_create_tour_roomcat";
@@ -15943,7 +15997,7 @@ bot.on("text", async (ctx, next) => {
           return;
 
         case "svc_hotel_accommodation":
-          draft.accommodation = text;
+          draft.accommodation = normalizeAccommodationInput(text);
           pushWizardState(ctx, "svc_hotel_accommodation");
           ctx.session.state = "svc_hotel_food";
           await promptWizardState(ctx, "svc_hotel_food");
