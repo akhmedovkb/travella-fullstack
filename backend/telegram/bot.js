@@ -3335,11 +3335,27 @@ async function promptEditState(ctx, state) {
         editWizNavKeyboard()
       );
       return;
+
+    case "svc_edit_tour_transfer":
+      await safeReply(
+        ctx,
+        `🚐 Трансфер включён? (текущее: ${draft.transferIncluded || draft.transfer ? "да" : "нет"}).\nОтветьте да/нет или нажмите «⏭ Пропустить»:`,
+        editWizNavKeyboard()
+      );
+      return;
       
     case "svc_edit_tour_insurance":
       await safeReply(
         ctx,
         `🛡 Страховка включена? (текущее: ${draft.insuranceIncluded ? "да" : "нет"}).\nОтветьте да/нет или нажмите «⏭ Пропустить»:`,
+        editWizNavKeyboard()
+      );
+      return;
+
+    case "svc_edit_tour_visa":
+      await safeReply(
+        ctx,
+        `🛂 Виза включена? (текущее: ${draft.visaIncluded ? "да" : "нет"}).\nОтветьте да/нет или нажмите «⏭ Пропустить»:`,
         editWizNavKeyboard()
       );
       return;
@@ -5178,6 +5194,7 @@ async function replyProviderDraftResumePrompt(ctx, row) {
     svc_create_tour_food: "Питание",
     svc_create_tour_transfer: "Трансфер",
     svc_create_tour_insurance: "Страховка",
+    svc_create_tour_visa: "Виза",
     svc_create_tour_early_checkin: "Ранний заезд",
     svc_create_tour_fast_track: "Fast Track",
   
@@ -7220,6 +7237,13 @@ async function promptWizardState(ctx, state) {
 
     case "svc_create_tour_insurance":
       await ctx.reply("🛡 *Страховка включена?*", {
+        parse_mode: "Markdown",
+        ...yesNoWizardKeyboard(),
+      });
+      return;
+
+    case "svc_create_tour_visa":
+      await ctx.reply("🛂 *Виза включена?*", {
         parse_mode: "Markdown",
         ...yesNoWizardKeyboard(),
       });
@@ -10445,7 +10469,9 @@ async function applyWizardBooleanChoice(ctx, value) {
     case "svc_create_tour_transfer":
       return move("transferIncluded", "svc_create_tour_insurance");
     case "svc_create_tour_insurance":
-      return move("insuranceIncluded", "svc_create_tour_early_checkin");
+      return move("insuranceIncluded", "svc_create_tour_visa");
+    case "svc_create_tour_visa":
+      return move("visaIncluded", "svc_create_tour_early_checkin");
     case "svc_create_tour_early_checkin":
       return move("earlyCheckIn", "svc_create_tour_fast_track");
     case "svc_create_tour_fast_track":
@@ -14001,6 +14027,27 @@ async function handleSvcEditWizardText(ctx) {
         }
       
         await go(
+          "svc_edit_tour_visa",
+          `🛂 Виза включена? (текущее: ${draft.visaIncluded ? "да" : "нет"}).\nОтветьте да/нет или нажмите «⏭ Пропустить»:`
+        );
+        return true;
+      }
+
+      case "svc_edit_tour_visa": {
+        if (!keep()) {
+          const b = parseYesNoLocal();
+          if (b === null) {
+            await safeReply(
+              ctx,
+              "⚠️ Ответьте да/нет или «пропустить».",
+              editWizNavKeyboard()
+            );
+            return true;
+          }
+          draft.visaIncluded = b;
+        }
+
+        await go(
           "svc_edit_tour_early_checkin",
           `🏨 Раннее заселение? (текущее: ${draft.earlyCheckIn ? "да" : "нет"}).\nОтветьте да/нет или нажмите «⏭ Пропустить»:`
         );
@@ -15695,6 +15742,22 @@ bot.on("text", async (ctx, next) => {
           }
           draft.insuranceIncluded = yn;
           pushWizardState(ctx, "svc_create_tour_insurance");
+          ctx.session.state = "svc_create_tour_visa";
+          await promptWizardState(ctx, "svc_create_tour_visa");
+          return;
+        }
+
+        case "svc_create_tour_visa": {
+          const yn = parseYesNo(text);
+          if (yn === null) {
+            await ctx.reply("😕 Ответьте `да` или `нет`.", {
+              parse_mode: "Markdown",
+              ...wizNavKeyboard(),
+            });
+            return;
+          }
+          draft.visaIncluded = yn;
+          pushWizardState(ctx, "svc_create_tour_visa");
           ctx.session.state = "svc_create_tour_early_checkin";
           await promptWizardState(ctx, "svc_create_tour_early_checkin");
           return;
