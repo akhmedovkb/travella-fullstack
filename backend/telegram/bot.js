@@ -1,4 +1,5 @@
-// backend/telegram/bot.js
+
+const { normalizeRefusedFlightDetails } = require("../utils/flightDetailsNormalizer");// backend/telegram/bot.js
 require("dotenv").config();
 
 const { Telegraf, session, Markup } = require("telegraf");
@@ -4245,6 +4246,10 @@ async function finishEditWizard(ctx) {
       isActive: !!draft.isActive,
     };
 
+    if (category === "refused_flight") {
+      Object.assign(details, normalizeRefusedFlightDetails(details));
+    }
+
     const payload = {
       title,
       category: category || undefined,
@@ -5422,7 +5427,7 @@ function autoTitleRefusedFlight(draft) {
 
 function buildDetailsForRefusedFlight(draft, netPriceNum) {
   // ВАЖНО: netPriceNum = уже нормализованная priceNum
-  return {
+  return normalizeRefusedFlightDetails({
     directionCountry: draft.country || null,
     directionFrom: draft.fromCity || null,
     directionTo: draft.toCity || null,
@@ -5445,7 +5450,7 @@ function buildDetailsForRefusedFlight(draft, netPriceNum) {
     expiration: draft.expiration || null,
 
     isActive: true,
-  };
+  });
 }
 
 function autoTitleRefusedTicket(draft) {
@@ -15527,6 +15532,16 @@ bot.on("text", async (ctx, next) => {
         case "svc_create_flight_details": {
           const low = text.toLowerCase();
           draft.flightDetails = ["пропустить", "skip", "-", "нет"].includes(low) ? null : text;
+          if (draft.category === "refused_flight" && draft.flightDetails) {
+            const normalizedFlight = normalizeRefusedFlightDetails({
+              airline: draft.airline,
+              flightNumber: draft.flightNumber,
+              flightDetails: draft.flightDetails,
+            });
+            draft.airline = draft.airline || normalizedFlight.airline || "";
+            draft.flightNumber = draft.flightNumber || normalizedFlight.flightNumber || "";
+            draft.flightCode = draft.flightCode || normalizedFlight.flightCode || "";
+          }
           pushWizardState(ctx, "svc_create_flight_details");
         
           const cat = String(ctx.session?.serviceDraft?.category || "");
