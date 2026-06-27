@@ -4939,6 +4939,48 @@ async function ensureClientRole(ctx) {
   return ctx.session?.role || null;
 }
 
+function getTelegramChatType(ctx) {
+  return (
+    ctx?.chat?.type ||
+    ctx?.callbackQuery?.message?.chat?.type ||
+    ctx?.update?.callback_query?.message?.chat?.type ||
+    null
+  );
+}
+
+function isPrivateTelegramChat(ctx) {
+  const type = getTelegramChatType(ctx);
+  if (type === "private") return true;
+
+  // Telegraf иногда не заполняет ctx.chat для callback из inline-карточки.
+  // В личном чате chat.id обычно равен from.id — используем это как безопасный fallback.
+  const chatId =
+    ctx?.chat?.id ??
+    ctx?.callbackQuery?.message?.chat?.id ??
+    ctx?.update?.callback_query?.message?.chat?.id ??
+    null;
+  const fromId = ctx?.from?.id ?? ctx?.callbackQuery?.from?.id ?? null;
+
+  return !!chatId && !!fromId && Number(chatId) === Number(fromId);
+}
+
+async function getCurrentTelegramRole(ctx) {
+  if (ctx?.session?.role) return ctx.session.role;
+  const userId = ctx?.from?.id || ctx?.callbackQuery?.from?.id;
+  if (!userId) return null;
+  return await resolveRoleByUserId(userId, ctx);
+}
+
+async function requireClientAction(ctx, actionLabel = "Это действие") {
+  const role = await getCurrentTelegramRole(ctx);
+  if (role === "client") return true;
+
+  try {
+    await ctx.answerCbQuery(`${actionLabel} доступно только клиенту`, { show_alert: true });
+  } catch {}
+  return false;
+}
+
 async function resolveRoleByUserId(userId, ctx) {
   try {
     const resProv = await axios.get(`/api/telegram/profile/provider/${userId}`);
@@ -9952,6 +9994,7 @@ bot.action(
 bot.action(/^request:(\d+)$/, async (ctx) => {
   try {
     const serviceId = Number(ctx.match[1]);
+    if (!(await requireClientAction(ctx, "Быстрый запрос"))) return;
     if (!ctx.session) ctx.session = {};
     ctx.session.pendingRequestServiceId = serviceId;
     ctx.session.pendingRequestSource = "inline";
@@ -10931,6 +10974,8 @@ bot.action(/^contacts:(\d+)$/, async (ctx) => {
       return;
     }
 
+    if (!(await requireClientAction(ctx, "Открытие контактов"))) return;
+
     await doUnlockFlow(ctx, serviceId);
   } catch (e) {
     console.error("[tg-bot] contacts action error:", e?.message || e);
@@ -11879,7 +11924,7 @@ async function sendProviderSupportInvoice(ctx, { providerId, serviceId = null, a
     return { ok: false, reason: "no_provider_token" };
   }
 
-  if (ctx.chat?.type !== "private") {
+  if (!isPrivateTelegramChat(ctx)) {
     await safeReply(ctx, "🔒 Поддержать проект через Telegram Payme можно только в личном чате с ботом.");
     return { ok: false, reason: "not_private" };
   }
@@ -13340,7 +13385,7 @@ bot.action(/^unlock:pay:(\d+)$/, async (ctx) => {
   try {
     await safeCb(ctx);
 
-    if (ctx.chat?.type !== "private") {
+    if (!isPrivateTelegramChat(ctx)) {
       await safeReply(ctx, "🔒 Оплата и показ контактов доступны только в личном чате с ботом.");
       return;
     }
@@ -13350,6 +13395,8 @@ bot.action(/^unlock:pay:(\d+)$/, async (ctx) => {
       await safeReply(ctx, "⚠️ Некорректный ID услуги. Откройте карточку заново.");
       return;
     }
+
+    if (!(await requireClientAction(ctx, "Открытие контактов"))) return;
 
     const chatId = ctx.from?.id;
     const clientRow = await getClientRowByChatId(pool, chatId);
@@ -13402,7 +13449,7 @@ bot.action(/^unlock:click:(\d+)$/, async (ctx) => {
   try {
     await safeCb(ctx);
 
-    if (ctx.chat?.type !== "private") {
+    if (!isPrivateTelegramChat(ctx)) {
       await safeReply(ctx, "🔒 Оплата и показ контактов доступны только в личном чате с ботом.");
       return;
     }
@@ -13417,6 +13464,8 @@ bot.action(/^unlock:click:(\d+)$/, async (ctx) => {
       await safeReply(ctx, "⚠️ Некорректный ID услуги. Откройте карточку заново.");
       return;
     }
+
+    if (!(await requireClientAction(ctx, "Открытие контактов"))) return;
 
     const chatId = ctx.from?.id;
     const clientRow = await getClientRowByChatId(pool, chatId);
@@ -13496,6 +13545,10 @@ async function doUnlockFlow(ctx, serviceId) {
     return { ok: false };
   }
 
+  if (!(await requireClientAction(ctx, "Открытие контактов"))) {
+    return { ok: false, reason: "not_client" };
+  }
+
 const clientRow = await getClientRowByChatId(pool, chatId);
 
 if (!clientRow?.id) {
@@ -13522,7 +13575,7 @@ try {
     } catch {}
 
     // 🔒 bank-grade: обновлять unlocked-карточку только в личке
-    if (ctx.chat?.type === "private") {
+    if (isPrivateTelegramChat(ctx)) {
       try {
         await refreshUnlockedCard(ctx, serviceId);
       } catch {}
@@ -13558,7 +13611,7 @@ if (!offerCheck.rowCount) {
   return await showOfferGate(ctx, serviceId);
 }
   // 🔒 BANK-GRADE: контакты/обновление unlocked карточки — только в личке
-if (ctx.chat?.type !== "private") {
+if (!isPrivateTelegramChat(ctx)) {
   try {
     await ctx.answerCbQuery("🔒 Откройте в личке с ботом", { show_alert: true });
   } catch {}
@@ -13689,7 +13742,7 @@ try {
   await ctx.answerCbQuery("⏳ Открываем контакты...", { show_alert: false });
 } catch {}
 
-if (ctx.chat?.type === "private") {
+if (isPrivateTelegramChat(ctx)) {
   try {
     await refreshUnlockedCard(ctx, serviceId);
   } catch (e) {
