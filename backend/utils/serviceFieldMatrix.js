@@ -84,8 +84,13 @@ function grossNotBelowNet(service, d) {
   return !Number.isFinite(net) || !Number.isFinite(gross) || gross >= net;
 }
 
+function getEffectiveCategory(service = {}, details = {}) {
+  return normalizeCategory(service.category || details.category || service.service_category || "");
+}
+
 function proofOk(service, d) {
-  return !isProofRequiredCategory(normalizeCategory(service.category)) || getProofImages(d).length > 0 || getImages(service.images).length > 0;
+  const category = getEffectiveCategory(service, d);
+  return !isProofRequiredCategory(category) || getProofImages(d).length > 0 || getImages(service.images).length > 0;
 }
 
 function field(key, label, ok, opts = {}) {
@@ -107,15 +112,15 @@ function commonCommercialFields(service, d) {
     field("grossPrice", "Цена для клиента", priceGrossOk(service, d), { code: "GROSS_PRICE_REQUIRED", weight: 3 }),
     field("grossPriceNotBelowNet", "Цена для клиента не ниже нетто", grossNotBelowNet(service, d), { code: "GROSS_PRICE_TOO_LOW", weight: 1 }),
   ];
-  if (isProofRequiredCategory(normalizeCategory(service.category))) {
+  if (isProofRequiredCategory(getEffectiveCategory(service, d))) {
     out.push(field("proof", "Proof / подтверждение", proofOk(service, d), { code: "PROOF_IMAGES_REQUIRED", weight: 3 }));
   }
   return out;
 }
 
 function getServiceFieldChecks(service = {}) {
-  const category = normalizeCategory(service.category);
   const d = normalizeDetails(service.details);
+  const category = getEffectiveCategory(service, d);
   const checks = [];
   const add = (...args) => checks.push(field(...args));
 
@@ -205,6 +210,7 @@ module.exports = {
   getProofImages,
   getImages,
   isRoundTripFlight,
+  getEffectiveCategory,
   getServiceFieldChecks,
   getRequiredFieldChecks,
   getRecommendedFieldChecks,
