@@ -1,6 +1,7 @@
 // backend/utils/refusedQuality.js
 
 const { normalizeCategory } = require("./serviceCategories");
+const { hasServiceDisplayTitle } = require("./serviceDisplay");
 const {
   buildSubmitValidationBlockers,
   getProofImages,
@@ -40,7 +41,7 @@ function buildRefusedQuality(service = {}) {
   const d = normalizeDetails(service.details);
   const checks = [];
 
-  addCheck(checks, "title", "Название", hasFilled(service.title, d.title, d.eventName, d.hotel, d.hotelName), 2);
+  addCheck(checks, "title", "Название", hasServiceDisplayTitle(service), 2);
   addCheck(checks, "price", "Цена нетто и цена клиенту", hasFilled(d.netPrice, d.price, service.price) && hasFilled(d.grossPrice, d.clientPrice, d.price, service.price), 3);
   addCheck(checks, "proof", "Proof / подтверждение", getProofImages(d).length > 0 || getImages(service.images).length > 0, 3);
 
