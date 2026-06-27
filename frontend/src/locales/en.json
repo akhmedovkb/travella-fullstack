@@ -407,7 +407,9 @@
     "halal": "Halal",
     "hb": "Breakfast and dinner",
     "select": "Select an option",
-    "uai": "Ultra all inclusive"
+    "uai": "Ultra all inclusive",
+    "ro": "Room only / no meals",
+    "fbt": "Full board + basic treatment package"
   },
   "guide": "Guide",
   "hall_rent": "Hall rental",
