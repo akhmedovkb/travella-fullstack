@@ -1010,12 +1010,25 @@ const priceKind =
   };
 
   const sellingKb = (extraRows = []) => {
-    const rows = [
-      [{ text: "🔓 Открыть контакты", callback_data: `contacts:${serviceId}` }],
-      [{ text: "⚡ Быстрый запрос", callback_data: `quick:${serviceId}` }],
-      ...extraRows,
-      [{ text: "🌐 Подробнее на сайте", url: serviceUrl }],
-    ];
+    const rows = [];
+    const currentRole = String(role || "client").toLowerCase();
+    const isProviderView =
+      currentRole === "provider" ||
+      currentRole === "admin" ||
+      options?.isOwnerPreview === true ||
+      options?.providerPreview === true;
+
+    if (!isProviderView) {
+      if (shouldRenderUnlockButton(currentRole, options)) {
+        rows.push([{ text: "🔓 Открыть контакты", callback_data: `contacts:${serviceId}` }]);
+      }
+
+      rows.push([{ text: "⚡ Быстрый запрос", callback_data: `quick:${serviceId}` }]);
+    }
+
+    rows.push(...extraRows);
+    rows.push([{ text: "🌐 Подробнее на сайте", url: serviceUrl }]);
+
     return { inline_keyboard: rows, replaceDefault: true };
   };
 
@@ -1384,16 +1397,26 @@ const priceKind =
     // ВАЖНО: программу тура НЕ вставляем в основную карточку.
     // Она открывается отдельной кнопкой «🗓 Программа тура» через handler atp:<serviceId> в bot.js.
 
+    const currentRoleForAuthorKb = String(role || "client").toLowerCase();
+    const isProviderAuthorView =
+      currentRoleForAuthorKb === "provider" ||
+      currentRoleForAuthorKb === "admin" ||
+      options?.isOwnerPreview === true ||
+      options?.providerPreview === true;
+
     const kbRows = [
       [
         { text: "🗓 Программа тура", callback_data: `atp:${serviceId}` },
         { text: "🌐 Подробнее на сайте", url: serviceUrl },
       ],
-      [
+    ];
+
+    if (!isProviderAuthorView) {
+      kbRows.push([
         { text: "💬 Быстрый запрос", callback_data: `quick:${serviceId}` },
         { text: "👤 Контакты", callback_data: `contacts:${serviceId}` },
-      ],
-    ];
+      ]);
+    }
 
     return {
       text: parts.join("\n"),
