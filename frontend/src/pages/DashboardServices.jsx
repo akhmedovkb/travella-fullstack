@@ -78,7 +78,16 @@ const HISTORICAL_REFUSED_CATEGORIES = [
   "refused_event_ticket",
 ];
 
-const foodOptions = ["BB", "HB", "FB", "AI", "UAI", "HALAL"];
+const foodOptions = [
+  ["RO", "RO — без питания"],
+  ["BB", "BB — завтраки"],
+  ["HB", "HB — завтрак + ужин"],
+  ["FB", "FB — полный пансион"],
+  ["FBT", "FBT — 3-разовое + базовый терапевтический пакет"],
+  ["AI", "AI — всё включено"],
+  ["UAI", "UAI — ультра всё включено"],
+  ["HALAL", "HALAL — халяль"],
+];
 const transferOptions = ["group", "individual", "none"];
 
 const FLIGHT_DETAILS_EXAMPLE =
@@ -2674,7 +2683,7 @@ export default function DashboardServices() {
                                 <Field label={t("food", { defaultValue: "Питание" })} hint={t("service_form.hint_food", { defaultValue: "Выберите тип питания из ваучера или заявки." })}>
                                   <SelectInput value={details.food} onChange={(e) => patchDetails({ food: e.target.value })}>
                                     <option value="">{t("food_options.select", { defaultValue: "Выберите вариант" })}</option>
-                                    {foodOptions.map((x) => <option key={x} value={x}>{x}</option>)}
+                                    {foodOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                                   </SelectInput>
                                 </Field>
                               </>
@@ -2758,7 +2767,7 @@ export default function DashboardServices() {
                                 <Field label={t("food", { defaultValue: "Питание" })}>
                                   <SelectInput value={details.food} onChange={(e) => patchDetails({ food: e.target.value })}>
                                     <option value="">{t("food_options.select", { defaultValue: "Выберите вариант" })}</option>
-                                    {foodOptions.map((x) => <option key={x} value={x}>{x}</option>)}
+                                    {foodOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                                   </SelectInput>
                                 </Field>
                               </>
