@@ -4948,19 +4948,36 @@ function getTelegramChatType(ctx) {
   );
 }
 
+function getTelegramChatId(ctx) {
+  return (
+    ctx?.chat?.id ??
+    ctx?.callbackQuery?.message?.chat?.id ??
+    ctx?.update?.callback_query?.message?.chat?.id ??
+    null
+  );
+}
+
+function isInlineCallbackWithoutChat(ctx) {
+  return !!(
+    ctx?.callbackQuery?.inline_message_id ||
+    ctx?.update?.callback_query?.inline_message_id
+  );
+}
+
 function isPrivateTelegramChat(ctx) {
   const type = getTelegramChatType(ctx);
   if (type === "private") return true;
 
-  // Telegraf иногда не заполняет ctx.chat для callback из inline-карточки.
-  // В личном чате chat.id обычно равен from.id — используем это как безопасный fallback.
-  const chatId =
-    ctx?.chat?.id ??
-    ctx?.callbackQuery?.message?.chat?.id ??
-    ctx?.update?.callback_query?.message?.chat?.id ??
-    null;
+  const chatId = getTelegramChatId(ctx);
   const fromId = ctx?.from?.id ?? ctx?.callbackQuery?.from?.id ?? null;
 
+  // Telegraf/Telegram inline callback может прийти без message.chat,
+  // даже если карточка нажата в личке с ботом. В этом случае нельзя
+  // использовать ctx.chat как доказательство "не лички".
+  // Контакты всё равно отправляются только пользователю в DM через ctx.from.id.
+  if (!chatId && fromId && isInlineCallbackWithoutChat(ctx)) return true;
+
+  // Fallback для обычных callback: в личном чате chat.id обычно равен from.id.
   return !!chatId && !!fromId && Number(chatId) === Number(fromId);
 }
 
