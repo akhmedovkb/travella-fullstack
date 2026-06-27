@@ -5431,7 +5431,14 @@ function buildDetailsForRefusedFlight(draft, netPriceNum) {
     oneWay: draft.flightType !== "round_trip",
     departureFlightDate: draft.departureFlightDate || null,
     returnFlightDate: draft.flightType === "round_trip" ? (draft.returnFlightDate || null) : null,
-    flightDetails: draft.flightDetails || null,
+
+    // Wizard Engine v2: keep flight-specific fields in the same details JSON
+    // that quality, moderation, cards and draft continuation read from.
+    airline: draft.airline || draft.airCompany || draft.carrier || null,
+    airCompany: draft.airline || draft.airCompany || draft.carrier || null,
+    carrier: draft.airline || draft.airCompany || draft.carrier || null,
+    flightNumber: draft.flightNumber || draft.flightDetails || null,
+    flightDetails: draft.flightDetails || draft.flightNumber || null,
 
     netPrice: netPriceNum,
     grossPrice: draft.grossPriceNum ?? null,
