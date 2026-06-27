@@ -3299,7 +3299,7 @@ async function promptEditState(ctx, state) {
     case "svc_edit_tour_food":
       await safeReply(
         ctx,
-        `🍽 Питание (текущее: ${draft.food || "(пусто)"}).\nВведите (BB/HB/FB/AI/UAI) или нажмите «⏭ Пропустить»:`,
+        `🍽 Питание (текущее: ${draft.food || "(пусто)"}).\nВведите (RO/BB/HB/FB/FBT/AI/UAI) или нажмите «⏭ Пропустить»:\n\nBB — завтраки; HB — завтрак + ужин; FB — полный пансион; FBT — 3-разовое + базовый терапевтический пакет; AI — всё включено; UAI — ультра всё включено; RO — без питания`,
         editWizNavKeyboard()
       );
       return;
@@ -7325,7 +7325,7 @@ async function promptWizardState(ctx, state) {
 
     case "svc_create_tour_food":
       await ctx.reply(
-        "🍽 Укажите *питание* (например: BB / HB / FB / AI / UAI):\nЕсли не нужно — нажмите «⏭ Пропустить».",
+        "🍽 Укажите *питание* (например: RO / BB / HB / FB / FBT / AI / UAI):\n\nРасшифровка:\nBB — завтраки\nHB — завтрак + ужин\nFB — полный пансион\nFBT — 3-разовое питание + базовый терапевтический пакет\nAI — всё включено\nUAI — ультра всё включено\nRO — без питания\n\nЕсли не нужно — нажмите «⏭ Пропустить».",
         { parse_mode: "Markdown", ...wizNavKeyboard() }
       );
       return;
@@ -7397,7 +7397,7 @@ async function promptWizardState(ctx, state) {
 
     case "svc_hotel_food":
       await ctx.reply(
-        "🍽 Укажите *питание* (например: BB / HB / FB / AI / UAI):",
+        "🍽 Укажите *питание* (например: RO / BB / HB / FB / FBT / AI / UAI):\n\nРасшифровка:\nBB — завтраки\nHB — завтрак + ужин\nFB — полный пансион\nFBT — 3-разовое питание + базовый терапевтический пакет\nAI — всё включено\nUAI — ультра всё включено\nRO — без питания",
         { parse_mode: "Markdown", ...wizNavKeyboard() }
       );
       return;
@@ -14132,7 +14132,7 @@ async function handleSvcEditWizardText(ctx) {
         if (!keep()) draft.roomCategory = text;
         await go(
           "svc_edit_tour_food",
-          `🍽 Питание (текущее: ${draft.food || "(пусто)"}).\nВведите (BB/HB/FB/AI/UAI) или нажмите «⏭ Пропустить»:`
+          `🍽 Питание (текущее: ${draft.food || "(пусто)"}).\nВведите (RO/BB/HB/FB/FBT/AI/UAI) или нажмите «⏭ Пропустить»:\n\nBB — завтраки; HB — завтрак + ужин; FB — полный пансион; FBT — 3-разовое + базовый терапевтический пакет; AI — всё включено; UAI — ультра всё включено; RO — без питания`
         );
         return true;
       }
