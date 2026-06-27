@@ -341,6 +341,12 @@ router.patch("/services/:id(\\d+)/price", authenticateToken, requireAdmin, async
 router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, async (req, res) => {
   const adminId = req.user.id;
 
+  const beforeRes = await pool.query(
+    `SELECT id, status, moderation_status, details FROM services WHERE id = $1`,
+    [req.params.id]
+  );
+  const before = beforeRes.rows[0] || null;
+
   const { rows } = await pool.query(
     `UPDATE services
         SET moderation_status = 'approved',
