@@ -1,10 +1,24 @@
 // backend/utils/serviceFieldMatrix.js
-// Единая матрица полей услуг: creation/edit/quality/submit/card должны ссылаться на один смысл поля.
-// Важно: это не заменяет wizard полностью за один шаг, но фиксирует канонические поля,
-// чтобы валидаторы и качество не требовали то, что мастер не собирает.
+// Single category-aware field matrix for refused services.
+// Used by draft progress, quality score and submit validation so the same fields
+// are evaluated consistently across creation/edit/moderation/card flows.
 
-const { normalizeCategory } = require("./serviceCategories");
-const { normalizeDetails, hasServiceDisplayTitle } = require("./serviceDisplay");
+const { normalizeCategory, isProofRequiredCategory } = require("./serviceCategories");
+const { hasServiceDisplayTitle } = require("./serviceDisplay");
+
+function normalizeDetails(details) {
+  if (!details) return {};
+  if (typeof details === "object" && !Array.isArray(details)) return details;
+  if (typeof details === "string") {
+    try {
+      const parsed = JSON.parse(details);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
 
 function hasFilled(...values) {
   return values.some((v) => {
@@ -30,11 +44,6 @@ function first(...values) {
   return "";
 }
 
-function isRoundTripFlight(details = {}) {
-  const type = String(details.flightType || details.flight_type || "").trim().toLowerCase();
-  return type === "round_trip" || details.oneWay === false || details.one_way === false;
-}
-
 function getProofImages(details) {
   const d = normalizeDetails(details);
   const proof = Array.isArray(d.proofImages) ? d.proofImages : Array.isArray(d.proof_images) ? d.proof_images : [];
@@ -54,85 +63,151 @@ function getImages(images) {
   return [];
 }
 
-function baseChecks(service = {}) {
-  const d = normalizeDetails(service.details);
+function isRoundTripFlight(details = {}) {
+  const type = String(details.flightType || details.flight_type || "").trim().toLowerCase();
+  return type === "round_trip" || details.oneWay === false || details.one_way === false;
+}
+
+function priceNetOk(service, d) {
+  const net = parseMoney(first(d.netPrice, d.price, service.price));
+  return Number.isFinite(net) && net > 0;
+}
+
+function priceGrossOk(service, d) {
+  const gross = parseMoney(first(d.grossPrice, d.clientPrice, d.price, service.price));
+  return Number.isFinite(gross) && gross > 0;
+}
+
+function grossNotBelowNet(service, d) {
   const net = parseMoney(first(d.netPrice, d.price, service.price));
   const gross = parseMoney(first(d.grossPrice, d.clientPrice, d.price, service.price));
-  return [
-    { key: "title", code: "TITLE_REQUIRED", label: "Название услуги", weight: 2, ok: hasServiceDisplayTitle(service), submit: true },
-    { key: "netPrice", code: "NET_PRICE_REQUIRED", label: "Корректная цена нетто", weight: 2, ok: Number.isFinite(net) && net > 0, submit: true },
-    { key: "grossPrice", code: "GROSS_PRICE_REQUIRED", label: "Корректная цена для клиента", weight: 2, ok: Number.isFinite(gross) && gross > 0, submit: true },
-    { key: "grossNotLower", code: "GROSS_PRICE_TOO_LOW", label: "Цена для клиента не ниже нетто", weight: 1, ok: !Number.isFinite(net) || !Number.isFinite(gross) || gross >= net, submit: true },
-  ];
+  return !Number.isFinite(net) || !Number.isFinite(gross) || gross >= net;
 }
 
-function getCategoryChecks(service = {}) {
+function proofOk(service, d) {
+  return !isProofRequiredCategory(normalizeCategory(service.category)) || getProofImages(d).length > 0 || getImages(service.images).length > 0;
+}
+
+function field(key, label, ok, opts = {}) {
+  return {
+    key,
+    code: opts.code || `${String(key || "FIELD").toUpperCase()}_REQUIRED`,
+    label,
+    ok: Boolean(ok),
+    required: opts.required !== false,
+    recommended: opts.recommended === true,
+    weight: Number(opts.weight || (opts.required === false ? 1 : 2)),
+  };
+}
+
+function commonCommercialFields(service, d) {
+  const out = [
+    field("title", "Название", hasServiceDisplayTitle(service), { code: "TITLE_REQUIRED", weight: 2 }),
+    field("netPrice", "Цена нетто", priceNetOk(service, d), { code: "NET_PRICE_REQUIRED", weight: 3 }),
+    field("grossPrice", "Цена для клиента", priceGrossOk(service, d), { code: "GROSS_PRICE_REQUIRED", weight: 3 }),
+    field("grossPriceNotBelowNet", "Цена для клиента не ниже нетто", grossNotBelowNet(service, d), { code: "GROSS_PRICE_TOO_LOW", weight: 1 }),
+  ];
+  if (isProofRequiredCategory(normalizeCategory(service.category))) {
+    out.push(field("proof", "Proof / подтверждение", proofOk(service, d), { code: "PROOF_IMAGES_REQUIRED", weight: 3 }));
+  }
+  return out;
+}
+
+function getServiceFieldChecks(service = {}) {
   const category = normalizeCategory(service.category);
   const d = normalizeDetails(service.details);
-  const checks = [...baseChecks(service)];
+  const checks = [];
+  const add = (...args) => checks.push(field(...args));
 
-  if (category === "refused_flight") {
-    const roundTrip = isRoundTripFlight(d);
-    checks.push(
-      { key: "route", code: "ROUTE_REQUIRED", label: "Маршрут", weight: 3, ok: hasFilled(d.directionFrom, d.fromCity) && hasFilled(d.directionTo, d.toCity), submit: true },
-      { key: "departureDate", code: "DEPARTURE_DATE_REQUIRED", label: "Дата вылета", weight: 3, ok: hasFilled(d.startDate, d.startFlightDate, d.departureFlightDate, d.flightDate), submit: true },
-      { key: "returnDate", code: "RETURN_DATE_REQUIRED", label: roundTrip ? "Дата обратного рейса" : "Тип перелёта: в одну сторону", weight: 2, ok: roundTrip ? hasFilled(d.returnFlightDate, d.returnDate, d.endFlightDate, d.endDate) : true, submit: roundTrip },
-      // airline собирается мастером создания и редактирования, поэтому может быть submit-блокером.
-      { key: "airline", code: "AIRLINE_REQUIRED", label: "Авиакомпания", weight: 2, ok: hasFilled(d.airline), submit: true },
-      { key: "flightDetails", code: "FLIGHT_DETAILS_REQUIRED", label: "Детали рейса: номер/время/багаж", weight: 1, ok: hasFilled(d.flightDetails, d.flightNumber, d.baggage), submit: true },
-      { key: "seats", code: "SEATS_RECOMMENDED", label: "Количество мест", weight: 1, ok: hasFilled(d.seats, d.quantity, d.pax), submit: false }
-    );
-  } else if (category === "refused_ticket" || category === "refused_event_ticket") {
-    checks.push(
-      { key: "eventName", code: "EVENT_NAME_REQUIRED", label: "Название мероприятия", weight: 2, ok: hasFilled(d.eventName, service.title), submit: true },
-      { key: "eventCity", code: "EVENT_CITY_REQUIRED", label: "Город/площадка", weight: 3, ok: hasFilled(d.directionTo, d.toCity, d.city, d.location), submit: true },
-      { key: "eventDate", code: "EVENT_DATE_REQUIRED", label: "Дата мероприятия", weight: 3, ok: hasFilled(d.startDate, d.eventDate, d.date), submit: true },
-      { key: "ticketDetails", code: "TICKET_DETAILS_REQUIRED", label: "Сектор/ряд/место или тип билета", weight: 2, ok: hasFilled(d.ticketDetails, d.eventCategory, d.sector, d.row, d.seat), submit: true },
-      { key: "quantity", code: "TICKET_QUANTITY_RECOMMENDED", label: "Количество билетов", weight: 1, ok: hasFilled(d.quantity, d.seats, d.ticketCount), submit: false }
-    );
+  if (category === "refused_tour") {
+    add("country", "Страна направления", hasFilled(d.directionCountry, d.country), { code: "COUNTRY_REQUIRED", weight: 2 });
+    add("from", "Город вылета", hasFilled(d.directionFrom, d.fromCity), { code: "FROM_REQUIRED", weight: 2 });
+    add("to", "Город прибытия / курорт", hasFilled(d.directionTo, d.toCity, d.city), { code: "TO_REQUIRED", weight: 2 });
+    add("startDate", "Дата начала тура", hasFilled(d.startDate, d.start_date), { code: "START_DATE_REQUIRED", weight: 2 });
+    add("endDate", "Дата окончания тура", hasFilled(d.endDate, d.end_date), { code: "END_DATE_REQUIRED", weight: 2 });
+    add("hotel", "Отель", hasFilled(d.hotel, d.hotelName), { code: "HOTEL_REQUIRED", weight: 3 });
+    add("accommodation", "Размещение / категория номера", hasFilled(d.accommodation, d.accommodationCategory, d.roomCategory), { code: "ACCOMMODATION_REQUIRED", weight: 2 });
+    checks.push(field("meal", "Питание", hasFilled(d.meal, d.mealType, d.food), { required: false, recommended: true, weight: 1 }));
+    checks.push(field("transfer", "Трансфер", hasFilled(d.transfer, d.transferType, d.transferIncluded), { required: false, recommended: true, weight: 1 }));
+    checks.push(field("insurance", "Страховка", hasFilled(d.insurance, d.insuranceIncluded), { required: false, recommended: true, weight: 1 }));
   } else if (category === "refused_hotel") {
-    checks.push(
-      { key: "location", code: "LOCATION_REQUIRED", label: "Страна и город", weight: 3, ok: hasFilled(d.directionCountry, d.country) && hasFilled(d.directionTo, d.toCity, d.city), submit: true },
-      { key: "hotel", code: "HOTEL_REQUIRED", label: "Отель", weight: 3, ok: hasFilled(d.hotel, d.hotelName), submit: true },
-      { key: "dates", code: "HOTEL_DATES_REQUIRED", label: "Заезд и выезд", weight: 3, ok: hasFilled(d.startDate, d.checkinDate, d.checkInDate) && hasFilled(d.endDate, d.checkoutDate, d.checkOutDate), submit: true },
-      { key: "room", code: "ROOM_REQUIRED", label: "Номер/размещение", weight: 2, ok: hasFilled(d.accommodationCategory, d.accommodation, d.roomCategory), submit: true },
-      { key: "meal", code: "MEAL_RECOMMENDED", label: "Питание", weight: 1, ok: hasFilled(d.food, d.meal), submit: false },
-      { key: "transfer", code: "TRANSFER_RECOMMENDED", label: "Трансфер", weight: 1, ok: hasFilled(d.transfer), submit: false }
-    );
-  } else if (category === "refused_tour") {
-    checks.push(
-      { key: "country", code: "COUNTRY_REQUIRED", label: "Страна направления", weight: 2, ok: hasFilled(d.directionCountry, d.country), submit: true },
-      { key: "route", code: "ROUTE_REQUIRED", label: "Город вылета и прибытия", weight: 3, ok: hasFilled(d.directionFrom, d.fromCity) && hasFilled(d.directionTo, d.toCity, d.city), submit: true },
-      { key: "dates", code: "TOUR_DATES_REQUIRED", label: "Даты тура", weight: 3, ok: hasFilled(d.startDate, d.start_date) && hasFilled(d.endDate, d.end_date), submit: true },
-      { key: "hotel", code: "HOTEL_REQUIRED", label: "Отель", weight: 3, ok: hasFilled(d.hotel, d.hotelName), submit: true },
-      { key: "room", code: "ROOM_REQUIRED", label: "Номер/размещение", weight: 2, ok: hasFilled(d.accommodation, d.accommodationCategory, d.roomCategory), submit: true },
-      { key: "meal", code: "MEAL_RECOMMENDED", label: "Питание", weight: 1, ok: hasFilled(d.food, d.meal), submit: false },
-      { key: "transfer", code: "TRANSFER_RECOMMENDED", label: "Трансфер", weight: 1, ok: hasFilled(d.transfer), submit: false }
-    );
+    add("country", "Страна", hasFilled(d.directionCountry, d.country), { code: "COUNTRY_REQUIRED", weight: 2 });
+    add("city", "Город / курорт", hasFilled(d.directionTo, d.toCity, d.city), { code: "CITY_REQUIRED", weight: 2 });
+    add("hotel", "Отель", hasFilled(d.hotel, d.hotelName), { code: "HOTEL_REQUIRED", weight: 3 });
+    add("checkin", "Дата заезда", hasFilled(d.startDate, d.checkinDate, d.checkInDate), { code: "CHECKIN_REQUIRED", weight: 2 });
+    add("checkout", "Дата выезда", hasFilled(d.endDate, d.checkoutDate, d.checkOutDate), { code: "CHECKOUT_REQUIRED", weight: 2 });
+    add("room", "Номер / размещение", hasFilled(d.accommodationCategory, d.accommodation, d.roomCategory), { code: "ROOM_REQUIRED", weight: 2 });
+    checks.push(field("meal", "Питание", hasFilled(d.meal, d.mealType, d.food), { required: false, recommended: true, weight: 1 }));
+    checks.push(field("transfer", "Трансфер", hasFilled(d.transfer, d.transferType, d.transferIncluded), { required: false, recommended: true, weight: 1 }));
+    checks.push(field("insurance", "Страховка", hasFilled(d.insurance, d.insuranceIncluded), { required: false, recommended: true, weight: 1 }));
+  } else if (category === "refused_flight") {
+    add("from", "Город вылета", hasFilled(d.directionFrom, d.fromCity), { code: "FROM_REQUIRED", weight: 2 });
+    add("to", "Город прибытия", hasFilled(d.directionTo, d.toCity), { code: "TO_REQUIRED", weight: 2 });
+    add("departureDate", "Дата вылета", hasFilled(d.startDate, d.startFlightDate, d.departureFlightDate, d.flightDate), { code: "DEPARTURE_DATE_REQUIRED", weight: 3 });
+    if (isRoundTripFlight(d)) {
+      add("returnDate", "Дата обратного рейса", hasFilled(d.returnFlightDate, d.returnDate, d.endFlightDate, d.endDate), { code: "RETURN_DATE_REQUIRED", weight: 2 });
+    } else {
+      checks.push(field("flightType", "Тип перелёта", true, { required: false, recommended: true, weight: 1 }));
+    }
+    add("airline", "Авиакомпания", hasFilled(d.airline, d.airCompany, d.carrier), { code: "AIRLINE_REQUIRED", weight: 2 });
+    add("flightDetails", "Номер/время рейса", hasFilled(d.flightDetails, d.flightNumber, d.departureTime, d.arrivalTime), { code: "FLIGHT_DETAILS_REQUIRED", weight: 2 });
+    checks.push(field("baggage", "Багаж", hasFilled(d.baggage, d.handLuggage, d.cabinBaggage, d.checkedBaggage), { required: false, recommended: true, weight: 1 }));
+    checks.push(field("seats", "Количество мест", hasFilled(d.seats, d.quantity, d.pax), { required: false, recommended: true, weight: 1 }));
+  } else if (category === "refused_ticket" || category === "refused_event_ticket") {
+    add("eventName", "Название мероприятия", hasFilled(d.eventName, d.eventTitle, d.ticketTitle, service.title), { code: "EVENT_NAME_REQUIRED", weight: 3 });
+    add("eventCity", "Город / площадка", hasFilled(d.directionTo, d.toCity, d.city, d.location, d.venue), { code: "EVENT_CITY_REQUIRED", weight: 2 });
+    add("eventDate", "Дата мероприятия", hasFilled(d.startDate, d.eventDate, d.date), { code: "EVENT_DATE_REQUIRED", weight: 3 });
+    add("ticketDetails", "Сектор/ряд/место или тип билета", hasFilled(d.ticketDetails, d.eventCategory, d.sector, d.row, d.seat, d.ticketType), { code: "TICKET_DETAILS_REQUIRED", weight: 2 });
+    checks.push(field("quantity", "Количество билетов", hasFilled(d.quantity, d.seats, d.ticketCount), { required: false, recommended: true, weight: 1 }));
   } else if (category === "author_tour") {
-    checks.push(
-      { key: "country", code: "COUNTRY_REQUIRED", label: "Страна / направление", weight: 2, ok: hasFilled(d.directionCountry, d.country), submit: true },
-      { key: "route", code: "ROUTE_REQUIRED", label: "Маршрут авторского тура", weight: 3, ok: hasFilled(d.directionFrom, d.fromCity) && hasFilled(d.directionTo, d.toCity), submit: true },
-      { key: "dates", code: "DATES_REQUIRED", label: "Даты или даты по запросу", weight: 2, ok: d.flexibleDates || (hasFilled(d.startDate) && hasFilled(d.endDate)), submit: true },
-      { key: "program", code: "PROGRAM_REQUIRED", label: "Программа авторского тура", weight: 3, ok: hasFilled(d.program, d.programDaysText) || (Array.isArray(d.programDays) && d.programDays.length > 0), submit: true },
-      { key: "included", code: "INCLUDED_REQUIRED", label: "Что включено", weight: 2, ok: hasFilled(d.included), submit: true }
-    );
+    add("country", "Страна / направление", hasFilled(d.directionCountry, d.country), { code: "COUNTRY_REQUIRED", weight: 2 });
+    add("route", "Маршрут авторского тура", hasFilled(d.directionFrom, d.fromCity) && hasFilled(d.directionTo, d.toCity), { code: "ROUTE_REQUIRED", weight: 3 });
+    add("dates", "Даты или даты по запросу", d.flexibleDates || (hasFilled(d.startDate) && hasFilled(d.endDate)), { code: "DATES_REQUIRED", weight: 2 });
+    add("program", "Программа авторского тура", hasFilled(d.program, d.programDaysText) || (Array.isArray(d.programDays) && d.programDays.length > 0), { code: "PROGRAM_REQUIRED", weight: 3 });
+    add("included", "Что включено", hasFilled(d.included), { code: "INCLUDED_REQUIRED", weight: 2 });
+    checks.push(field("language", "Язык тура", hasFilled(d.language, d.languages), { required: false, recommended: true, weight: 1 }));
+    checks.push(field("groupSize", "Размер группы", hasFilled(d.minPax, d.maxPax), { required: false, recommended: true, weight: 1 }));
+  } else {
+    add("route", "Маршрут/направление", hasFilled(d.directionFrom, d.fromCity) && hasFilled(d.directionTo, d.toCity, d.city), { code: "ROUTE_REQUIRED", weight: 2 });
+    add("dates", "Даты", hasFilled(d.startDate, d.start_date), { code: "DATES_REQUIRED", weight: 2 });
+    add("details", "Основные детали", hasFilled(d.hotel, d.hotelName, d.accommodation, d.program, d.description, service.description), { code: "DETAILS_REQUIRED", weight: 2 });
   }
 
-  return checks;
+  return [...checks, ...commonCommercialFields(service, d)];
 }
 
-function getSubmitChecks(service = {}) {
-  return getCategoryChecks(service).filter((x) => x.submit !== false);
+function getRequiredFieldChecks(service = {}) {
+  return getServiceFieldChecks(service).filter((x) => x.required !== false);
+}
+
+function getRecommendedFieldChecks(service = {}) {
+  return getServiceFieldChecks(service).filter((x) => x.required === false || x.recommended);
+}
+
+function getSubmitBlockers(service = {}) {
+  return getRequiredFieldChecks(service)
+    .filter((x) => !x.ok)
+    .map((x) => ({ code: x.code, label: x.label, key: x.key }));
+}
+
+function getDraftProgress(service = {}) {
+  const checks = getServiceFieldChecks(service).filter((x) => x.key !== "grossPriceNotBelowNet");
+  const total = checks.length || 1;
+  const filled = checks.filter((x) => x.ok).length;
+  return { filled, total, checks };
 }
 
 module.exports = {
+  normalizeDetails,
   hasFilled,
   parseMoney,
   first,
-  isRoundTripFlight,
   getProofImages,
   getImages,
-  getCategoryChecks,
-  getSubmitChecks,
+  isRoundTripFlight,
+  getServiceFieldChecks,
+  getRequiredFieldChecks,
+  getRecommendedFieldChecks,
+  getSubmitBlockers,
+  getDraftProgress,
 };
