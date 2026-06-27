@@ -1010,27 +1010,12 @@ const priceKind =
   };
 
   const sellingKb = (extraRows = []) => {
-    const rows = [];
-    const viewerRole = String(role || "client").toLowerCase();
-    const isProviderPreview = viewerRole === "provider" || viewerRole === "admin";
-
-    // Provider/admin preview must never show client actions.
-    // These callbacks require a client-linked account and are only for public/client cards.
-    if (!isProviderPreview) {
-      if (shouldRenderUnlockButton(role, options)) {
-        rows.push([
-          { text: "🔓 Открыть контакты", callback_data: `contacts:${serviceId}` },
-        ]);
-      }
-
-      rows.push([
-        { text: "⚡ Быстрый запрос", callback_data: `quick:${serviceId}` },
-      ]);
-    }
-
-    rows.push(...extraRows);
-    rows.push([{ text: "🌐 Подробнее на сайте", url: serviceUrl }]);
-
+    const rows = [
+      [{ text: "🔓 Открыть контакты", callback_data: `contacts:${serviceId}` }],
+      [{ text: "⚡ Быстрый запрос", callback_data: `quick:${serviceId}` }],
+      ...extraRows,
+      [{ text: "🌐 Подробнее на сайте", url: serviceUrl }],
+    ];
     return { inline_keyboard: rows, replaceDefault: true };
   };
 
