@@ -961,14 +961,56 @@ const priceKind =
     return out.slice(0, 3);
   };
 
-  const compactIncludedLine = (items, maxItems = 6) => {
+  const uniqueCleanItems = (items, maxItems = 12) => {
     const cleaned = [];
     for (const item of items) {
       const s = String(item || "").trim();
       if (!s) continue;
       if (!cleaned.some((x) => x.toLowerCase() === s.toLowerCase())) cleaned.push(s);
     }
-    return cleaned.slice(0, maxItems).join(" • ");
+    return cleaned.slice(0, maxItems);
+  };
+
+  const compactIncludedLine = (items, maxItems = 6) => {
+    return uniqueCleanItems(items, maxItems).join(" • ");
+  };
+
+  const pushIncludedBulletBlock = (parts, items, maxItems = 12) => {
+    const cleaned = uniqueCleanItems(items, maxItems);
+    if (!cleaned.length) return;
+    pushDivider(parts);
+    parts.push("✅ <b>Включено:</b>");
+    for (const item of cleaned) parts.push(`• ${escapeHtml(item)}`);
+  };
+
+  const includedTourItems = ({ roomCat = "", foodPretty = "", transfers = [] } = {}) => {
+    const items = [];
+
+    if (
+      firstValue(d.flightIncluded, d.flightsIncluded, d.flightDetails, d.airline, d.flightNumber) ||
+      hasPositiveFlag(d.includesFlight, d.flightIncluded, d.flightsIncluded)
+    ) {
+      items.push("авиабилеты");
+    }
+
+    const stayBits = [];
+    if (roomCat) stayBits.push(roomCat);
+    if (foodPretty) stayBits.push(`питание ${foodPretty}`);
+    if (hotel || d.hotelName || d.hotel || roomCat || foodPretty) {
+      items.push(stayBits.length ? `проживание на базе системы питания: ${stayBits.join(" • ")}` : "проживание");
+    }
+
+    if (transfers.length) items.push(`трансфер: ${transfers.join(" / ")}`);
+    else if (hasPositiveFlag(d.transferIncluded, d.hasTransfer, d.airportTransferIncluded)) items.push("трансфер");
+
+    if (hasPositiveFlag(d.insuranceIncluded, d.insurance, d.hasInsurance)) items.push("страховка");
+    if (hasPositiveFlag(d.visaIncluded, d.visa, d.hasVisa)) items.push("виза");
+    if (hasPositiveFlag(d.arrivalFastTrack, d.fastTrack, d.fast_track)) items.push("fast track");
+    if (hasPositiveFlag(d.earlyCheckIn, d.early_check_in)) items.push("раннее заселение");
+    if (hasPositiveFlag(d.lateCheckOut, d.late_check_out)) items.push("поздний выезд");
+    if (hasPositiveFlag(d.halal)) items.push("halal питание");
+
+    return items;
   };
 
   const priceHeroLine = () => {
@@ -1011,18 +1053,12 @@ const priceKind =
 
   const sellingKb = (extraRows = []) => {
     const rows = [];
-    const currentRole = String(role || "client").toLowerCase();
-    const isProviderView =
-      currentRole === "provider" ||
-      currentRole === "admin" ||
-      options?.isOwnerPreview === true ||
-      options?.providerPreview === true;
+    const viewerRole = String(role || "client").toLowerCase();
 
-    if (!isProviderView) {
-      if (shouldRenderUnlockButton(currentRole, options)) {
+    if (viewerRole !== "provider" && viewerRole !== "admin") {
+      if (shouldRenderUnlockButton(role, options)) {
         rows.push([{ text: "🔓 Открыть контакты", callback_data: `contacts:${serviceId}` }]);
       }
-
       rows.push([{ text: "⚡ Быстрый запрос", callback_data: `quick:${serviceId}` }]);
     }
 
@@ -1397,26 +1433,16 @@ const priceKind =
     // ВАЖНО: программу тура НЕ вставляем в основную карточку.
     // Она открывается отдельной кнопкой «🗓 Программа тура» через handler atp:<serviceId> в bot.js.
 
-    const currentRoleForAuthorKb = String(role || "client").toLowerCase();
-    const isProviderAuthorView =
-      currentRoleForAuthorKb === "provider" ||
-      currentRoleForAuthorKb === "admin" ||
-      options?.isOwnerPreview === true ||
-      options?.providerPreview === true;
-
     const kbRows = [
       [
         { text: "🗓 Программа тура", callback_data: `atp:${serviceId}` },
         { text: "🌐 Подробнее на сайте", url: serviceUrl },
       ],
-    ];
-
-    if (!isProviderAuthorView) {
-      kbRows.push([
+      [
         { text: "💬 Быстрый запрос", callback_data: `quick:${serviceId}` },
         { text: "👤 Контакты", callback_data: `contacts:${serviceId}` },
-      ]);
-    }
+      ],
+    ];
 
     return {
       text: parts.join("\n"),
@@ -1456,23 +1482,8 @@ const priceKind =
     const foodPretty = shortMealLabel(d.food || d.meal || d.mealType);
     const transfers = transferItems();
 
-    const included = [];
-    if (firstValue(d.flightIncluded, d.flightsIncluded) || firstValue(d.flightDetails) || hasPositiveFlag(d.includesFlight)) included.push("✈️ перелёт");
-    if (transfers.length) included.push(`🚐 ${transfers.join(" / ")}`);
-    if (foodPretty) included.push(`🍽 ${foodPretty}`);
-    if (roomCat) included.push(`🛏 ${roomCat}`);
-    const starsPretty = extractStars(d);
-    if (starsPretty) included.push(starsPretty.replace("⭐️", "⭐"));
-    if (hasPositiveFlag(d.insuranceIncluded, d.insurance, d.hasInsurance)) included.push("🛡 страховка");
-    if (hasPositiveFlag(d.earlyCheckIn)) included.push("🏨 ранний заезд");
-    if (hasPositiveFlag(d.lateCheckOut)) included.push("🕘 поздний выезд");
-    if (hasPositiveFlag(d.arrivalFastTrack)) included.push("🛬 fast track");
-
-    const includedLine = compactIncludedLine(included, 8);
-    if (includedLine) {
-      pushDivider(parts);
-      parts.push(`✅ <b>Включено:</b> ${escapeHtml(includedLine)}`);
-    }
+    const included = includedTourItems({ roomCat, foodPretty, transfers });
+    pushIncludedBulletBlock(parts, included, 12);
 
     const flightDetails = norm(d.flightDetails);
     if (flightDetails) parts.push("ℹ️ Детали рейса — по кнопке ниже");
@@ -1519,24 +1530,12 @@ const priceKind =
     const foodPretty = shortMealLabel(d.food || d.meal || d.mealType);
     const transfers = transferItems();
 
-    const included = [];
+    const included = includedTourItems({ roomCat, foodPretty, transfers });
     const starsPretty = extractStars(d);
-    if (starsPretty) included.push(starsPretty.replace("⭐️", "⭐"));
-    if (roomCat) included.push(`🛏 ${roomCat}`);
-    if (foodPretty) included.push(`🍽 ${foodPretty}${d.halal ? " Halal" : ""}`);
-    if (transfers.length) included.push(`🚐 ${transfers.join(" / ")}`);
-    if (hasPositiveFlag(d.insuranceIncluded, d.insurance, d.hasInsurance)) included.push("🛡 страховка");
-    if (hasPositiveFlag(d.earlyCheckIn)) included.push("🏨 ранний заезд");
-    if (hasPositiveFlag(d.lateCheckOut)) included.push("🕘 поздний выезд");
-    if (hasPositiveFlag(d.arrivalFastTrack)) included.push("🛬 fast track");
-    if (firstValue(d.spa, d.spaIncluded)) included.push(`💆 ${firstValue(d.spa, d.spaIncluded)}`);
-    if (firstValue(d.treatment, d.medicalPackage, d.therapyPackage)) included.push(`🩺 ${firstValue(d.treatment, d.medicalPackage, d.therapyPackage)}`);
-
-    const includedLine = compactIncludedLine(included, 8);
-    if (includedLine) {
-      pushDivider(parts);
-      parts.push(`✅ <b>Главное:</b> ${escapeHtml(includedLine)}`);
-    }
+    if (starsPretty) included.unshift(`отель ${starsPretty.replace("⭐️", "⭐")}`);
+    if (firstValue(d.spa, d.spaIncluded)) included.push(`СПА: ${firstValue(d.spa, d.spaIncluded)}`);
+    if (firstValue(d.treatment, d.medicalPackage, d.therapyPackage)) included.push(`лечение: ${firstValue(d.treatment, d.medicalPackage, d.therapyPackage)}`);
+    pushIncludedBulletBlock(parts, included, 12);
 
     pushDivider(parts);
     parts.push(smartBadges("refused"));
