@@ -1010,6 +1010,88 @@ if (kbExtra?.inline_keyboard?.length) {
   } catch {}
 }
 
+
+function getCallbackChatType(ctx) {
+  return String(
+    ctx?.chat?.type ||
+      ctx?.callbackQuery?.message?.chat?.type ||
+      ""
+  ).trim();
+}
+
+function isInlineMessageCallback(ctx) {
+  return !!ctx?.callbackQuery?.inline_message_id;
+}
+
+function buildUnlockedCardKeyboard(serviceUrl, serviceId, kbExtra, svc = {}) {
+  const rows = [];
+  const category = String(svc?.category || "").toLowerCase();
+  const isAuthorTour = category === "author_tour";
+
+  if (kbExtra?.inline_keyboard?.length) {
+    if (kbExtra.replaceDefault || isAuthorTour) {
+      return { inline_keyboard: kbExtra.inline_keyboard };
+    }
+    rows.push(...kbExtra.inline_keyboard);
+  }
+
+  if (serviceUrl) rows.push([{ text: "🌐 Подробнее на сайте", url: serviceUrl }]);
+  rows.push([{ text: "💬 Быстрый запрос", callback_data: `quick:${serviceId}` }]);
+  return { inline_keyboard: rows };
+}
+
+async function sendUnlockedCardToPrivate(ctx, serviceId) {
+  const chatId = Number(ctx?.from?.id);
+  if (!Number.isFinite(chatId) || chatId <= 0) return false;
+
+  const { data } = await axios.get(
+    `/api/telegram/service/${serviceId}`,
+    { params: { role: "client", chatId } }
+  );
+
+  if (!data?.success || !data?.service) return false;
+
+  const svc = data.service;
+  const category = String(svc.category || "").toLowerCase();
+  const { text, photoUrl, serviceUrl, kbExtra } = buildServiceMessage(
+    svc,
+    category,
+    "client",
+    { unlocked: true }
+  );
+  const kb = buildUnlockedCardKeyboard(serviceUrl, serviceId, kbExtra, svc);
+
+  try {
+    if (photoUrl) {
+      await bot.telegram.sendPhoto(chatId, photoUrl, {
+        caption: text,
+        parse_mode: "HTML",
+        reply_markup: kb,
+      });
+    } else {
+      await bot.telegram.sendMessage(chatId, text, {
+        parse_mode: "HTML",
+        reply_markup: kb,
+        disable_web_page_preview: true,
+      });
+    }
+    return true;
+  } catch (e) {
+    console.error("[tg-bot] sendUnlockedCardToPrivate failed:", e?.message || e);
+    try {
+      await bot.telegram.sendMessage(chatId, text, {
+        parse_mode: "HTML",
+        reply_markup: kb,
+        disable_web_page_preview: true,
+      });
+      return true;
+    } catch (e2) {
+      console.error("[tg-bot] sendUnlockedCardToPrivate fallback failed:", e2?.message || e2);
+      return false;
+    }
+  }
+}
+
 // Убираем из текста любые "Подробнее ... открыть(ссылка)" до оплаты
 function stripLockedLinks(text, options = {}) {
   const unlockPrice = Number(
@@ -13432,10 +13514,17 @@ try {
       await ctx.answerCbQuery("✅ Контакты уже открыты", { show_alert: false });
     } catch {}
 
-    // 🔒 bank-grade: обновлять unlocked-карточку только в личке
-    if (ctx.chat?.type === "private") {
+    // 🔒 bank-grade: редактируем сообщение только если есть настоящий private chat.
+    // Inline-кнопки в личке часто приходят без ctx.chat, поэтому в этом случае
+    // отправляем открытую карточку отдельным сообщением в личку пользователя.
+    const callbackChatType = getCallbackChatType(ctx);
+    if (callbackChatType === "private") {
       try {
         await refreshUnlockedCard(ctx, serviceId);
+      } catch {}
+    } else if (isInlineMessageCallback(ctx)) {
+      try {
+        await sendUnlockedCardToPrivate(ctx, serviceId);
       } catch {}
     } else {
       // если нажали в группе — уводим в личку
@@ -13468,8 +13557,13 @@ try {
 if (!offerCheck.rowCount) {
   return await showOfferGate(ctx, serviceId);
 }
-  // 🔒 BANK-GRADE: контакты/обновление unlocked карточки — только в личке
-if (ctx.chat?.type !== "private") {
+  // 🔒 BANK-GRADE: контакты не раскрываем в группах.
+  // Важно: callback от inline-сообщения в личке Telegram часто приходит без ctx.chat.
+  // Поэтому inline callback разрешаем, но открытую карточку отправляем отдельным DM,
+  // не редактируя inline-сообщение в потенциальной группе.
+const callbackChatTypeForGate = getCallbackChatType(ctx);
+const inlineCallbackForGate = isInlineMessageCallback(ctx);
+if (callbackChatTypeForGate && callbackChatTypeForGate !== "private") {
   try {
     await ctx.answerCbQuery("🔒 Откройте в личке с ботом", { show_alert: true });
   } catch {}
@@ -13483,6 +13577,13 @@ if (ctx.chat?.type !== "private") {
   } catch {}
 
   return { ok: false, reason: "not_private" };
+}
+
+if (!callbackChatTypeForGate && !inlineCallbackForGate) {
+  try {
+    await ctx.answerCbQuery("🔒 Откройте в личке с ботом", { show_alert: true });
+  } catch {}
+  return { ok: false, reason: "unknown_chat" };
 }
 
   // === BLACK-HOLE++ / anti-fraud gates (BANK-GRADE) ===
@@ -13600,11 +13701,18 @@ try {
   await ctx.answerCbQuery("⏳ Открываем контакты...", { show_alert: false });
 } catch {}
 
-if (ctx.chat?.type === "private") {
+const callbackChatTypeAfterUnlock = getCallbackChatType(ctx);
+if (callbackChatTypeAfterUnlock === "private") {
   try {
     await refreshUnlockedCard(ctx, serviceId);
   } catch (e) {
     console.error("[tg-bot] refreshUnlockedCard failed:", e?.message || e);
+  }
+} else if (isInlineMessageCallback(ctx)) {
+  try {
+    await sendUnlockedCardToPrivate(ctx, serviceId);
+  } catch (e) {
+    console.error("[tg-bot] send unlocked card after inline unlock failed:", e?.message || e);
   }
 } else {
   try {
