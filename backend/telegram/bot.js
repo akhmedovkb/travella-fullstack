@@ -684,6 +684,58 @@ async function getUnlockedServiceIdSet(pool, { clientId, serviceIds }) {
   return out;
 }
 
+async function canUseQuickRequestForService(ctx, serviceId) {
+  const sid = Number(serviceId);
+  if (!Number.isFinite(sid) || sid <= 0) {
+    return { ok: false, reason: "bad_service" };
+  }
+
+  const actorId = Number(ctx?.from?.id || ctx?.chat?.id || 0);
+  if (!Number.isFinite(actorId) || actorId <= 0) {
+    return { ok: false, reason: "bad_user" };
+  }
+
+  const unlockSettings = await getContactUnlockSettings(pool);
+  const unlockPrice = tiyinToSum(unlockSettings?.effective_price || 0);
+  if (unlockPrice <= 0) {
+    return { ok: true, free: true, unlockPrice: 0 };
+  }
+
+  const clientRow = await getClientRowByChatId(pool, actorId);
+  if (!clientRow?.id) {
+    return { ok: false, reason: "client_not_linked", unlockPrice };
+  }
+
+  const unlocked = await isContactsUnlocked(pool, {
+    clientId: clientRow.id,
+    serviceId: sid,
+  });
+
+  return {
+    ok: unlocked === true,
+    reason: unlocked ? null : "contacts_locked",
+    unlockPrice,
+    clientId: clientRow.id,
+  };
+}
+
+async function requireQuickRequestUnlocked(ctx, serviceId) {
+  const allowed = await canUseQuickRequestForService(ctx, serviceId);
+  if (allowed.ok) return true;
+
+  if (allowed.reason === "client_not_linked") {
+    await safeCb(ctx, "Сначала привяжите аккаунт через /start", true);
+    return false;
+  }
+
+  const priceText = Number(allowed.unlockPrice || 0) > 0
+    ? ` (${Number(allowed.unlockPrice).toLocaleString("ru-RU")} сум)`
+    : "";
+
+  await safeCb(ctx, `Сначала откройте контакты${priceText}`, true);
+  return false;
+}
+
 /* ===================== UNLOCK HELPERS (UI gating) ===================== */
 
 /* ===================== ENTERPRISE SAFE HELPERS ===================== */
@@ -9843,6 +9895,7 @@ bot.action(
 bot.action(/^request:(\d+)$/, async (ctx) => {
   try {
     const serviceId = Number(ctx.match[1]);
+    if (!(await requireQuickRequestUnlocked(ctx, serviceId))) return;
     if (!ctx.session) ctx.session = {};
     ctx.session.pendingRequestServiceId = serviceId;
     ctx.session.pendingRequestSource = "inline";
@@ -10797,6 +10850,7 @@ bot.action("author_excluded:done", async (ctx) => {
 bot.action(/^quick:(\d+)$/, async (ctx) => {
   try {
     const serviceId = Number(ctx.match[1]);
+    if (!(await requireQuickRequestUnlocked(ctx, serviceId))) return;
     if (!ctx.session) ctx.session = {};
     ctx.session.pendingRequestServiceId = serviceId;
     ctx.session.pendingRequestSource = "deeplink";
