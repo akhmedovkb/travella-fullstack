@@ -968,13 +968,12 @@ async function refreshUnlockedCard(ctx, serviceId) {
   const { text, photoUrl, serviceUrl, kbExtra } =
     buildServiceMessage(svc, category, "client", { unlocked: isUnlocked });
   
-const defaultRows = [
-  [{ text: "Подробнее на сайте", url: serviceUrl }],
-];
-if (isUnlocked) {
-  defaultRows.push([{ text: "📩 Быстрый запрос", callback_data: `quick:${serviceId}` }]);
-}
-let kb = { inline_keyboard: defaultRows };
+let kb = {
+  inline_keyboard: [
+    [{ text: "Подробнее на сайте", url: serviceUrl }],
+    [{ text: "📩 Быстрый запрос", callback_data: `quick:${serviceId}` }],
+  ],
+};
 
 const isAuthorTour =
   String(svc?.category || "").toLowerCase() === "author_tour";
@@ -3886,10 +3885,10 @@ bot.action(/^draft:continue:(\d+)$/, async (ctx) => {
       food: det.food || "",
       halal: typeof det.halal === "boolean" ? det.halal : false,
       transfer: det.transfer || "",
-      transferIncluded: det.transferIncluded === true || /^(да|yes|true|1|included|включено)$/i.test(String(det.transfer || det.hasTransfer || "").trim()),
+      transferIncluded: !!det.transferIncluded || !!det.transfer || /^(да|yes|true|1|included|включено)$/i.test(String(det.transfer || "").trim()),
       changeable: typeof det.changeable === "boolean" ? det.changeable : false,
       insuranceIncluded: !!det.insuranceIncluded,
-      visaIncluded: !!det.visaIncluded || /^(да|yes|true|1|included|включено)$/i.test(String(det.visa || det.hasVisa || "").trim()),
+      visaIncluded: !!det.visaIncluded,
       earlyCheckIn: !!det.earlyCheckIn,
       arrivalFastTrack: !!det.arrivalFastTrack,
       adt: Number.isFinite(det.adt) ? det.adt : (Number.isFinite(det.accommodationADT) ? det.accommodationADT : 0),
@@ -3904,7 +3903,6 @@ bot.action(/^draft:continue:(\d+)$/, async (ctx) => {
     ctx.session.wizardStack = [];
     ctx.session.state = "svc_edit_title";
 
-    await safeReply(ctx, `✏️ Продолжаем черновик #${svc.id}\n\nНачнём с названия 👇`);
     await promptEditState(ctx, "svc_edit_title");
   } catch (e) {
     console.error("[tg-bot] draft:continue error:", e?.response?.data || e?.message || e);
@@ -3991,9 +3989,11 @@ bot.action(/^svc_edit_start:(\d+)$/, async (ctx) => {
       food: det.food || "",
       halal: typeof det.halal === "boolean" ? det.halal : false,
       transfer: det.transfer || "",
+      transferIncluded: !!det.transferIncluded || !!det.transfer || /^(да|yes|true|1|included|включено)$/i.test(String(det.transfer || "").trim()),
       changeable: typeof det.changeable === "boolean" ? det.changeable : false,
 
       insuranceIncluded: !!det.insuranceIncluded,
+      visaIncluded: !!det.visaIncluded,
       earlyCheckIn: !!det.earlyCheckIn,
       arrivalFastTrack: !!det.arrivalFastTrack,
 
@@ -4230,10 +4230,13 @@ async function finishEditWizard(ctx) {
 
       food: isTicket || isFlight ? "" : String(draft.food || "").trim(),
       halal: isHotel ? !!draft.halal : false,
-      transfer: isTicket ? "" : String(draft.transfer || "").trim(),
+      transfer: isTicket ? "" : (draft.transferIncluded ? (String(draft.transfer || "").trim() || "included") : (String(draft.transfer || "").trim() || "none")),
+      transferIncluded: !isTicket && !isFlight ? !!draft.transferIncluded : false,
       changeable: isHotel ? !!draft.changeable : false,
 
       insuranceIncluded: !isTicket && !isFlight ? !!draft.insuranceIncluded : false,
+      visaIncluded: !isTicket && !isFlight ? !!draft.visaIncluded : false,
+      visa: !isTicket && !isFlight ? (draft.visaIncluded ? (draft.visa || "included") : (draft.visa || "none")) : "none",
       earlyCheckIn: !isTicket && !isFlight ? !!draft.earlyCheckIn : false,
       arrivalFastTrack: !isTicket && !isFlight ? !!draft.arrivalFastTrack : false,
 
@@ -5844,14 +5847,15 @@ function buildDetailsForRefusedTour(draft, netPriceNum) {
     roomCategory: draft.roomCategory || "", // legacy-совместимость
     food: draft.food || "",
 
-    // ✅ единые included-флаги refused_tour: wizard -> details -> quality/card
     transferIncluded: !!draft.transferIncluded,
-    transfer: draft.transferIncluded ? (draft.transfer || "included") : (draft.transfer || ""),
-    insuranceIncluded: !!draft.insuranceIncluded,
+    transfer: draft.transferIncluded ? (draft.transfer || "included") : (draft.transfer || "none"),
     visaIncluded: !!draft.visaIncluded,
-    visa: draft.visaIncluded ? (draft.visa || "included") : (draft.visa || ""),
+    visa: draft.visaIncluded ? (draft.visa || "included") : (draft.visa || "none"),
+
+    insuranceIncluded: !!draft.insuranceIncluded,
     earlyCheckIn: !!draft.earlyCheckIn,
     arrivalFastTrack: !!draft.arrivalFastTrack,
+    
     netPrice: netPriceNum,
     grossPrice: typeof draft.grossPriceNum === "number" ? draft.grossPriceNum : null,
     expiration: draft.expiration || null,
@@ -10804,30 +10808,14 @@ bot.action("author_excluded:done", async (ctx) => {
 bot.action(/^quick:(\d+)$/, async (ctx) => {
   try {
     const serviceId = Number(ctx.match[1]);
-
-    if (!Number.isFinite(serviceId) || serviceId <= 0) {
-      await ctx.answerCbQuery("⚠️ Некорректная кнопка", { show_alert: true });
-      return;
-    }
-
-    const clientRow = await getClientRowByChatId(pool, ctx.from?.id);
-    if (!clientRow?.id) {
+    const client = await getClientRowByChatId(pool, ctx.from?.id);
+    if (!client?.id) {
       await ctx.answerCbQuery("Сначала привяжите аккаунт через /start", { show_alert: true });
       return;
     }
-
-    const unlockSettings = await getContactUnlockSettings(pool).catch(() => null);
-    const unlockPrice = tiyinToSum(unlockSettings?.effective_price || 0);
-    const alreadyUnlocked =
-      unlockPrice <= 0 ||
-      (await isContactsUnlocked(pool, {
-        clientId: clientRow.id,
-        serviceId,
-      }));
-
-    // Backend-gate: старая кнопка в Telegram не должна обходить открытие контактов.
-    if (!alreadyUnlocked) {
-      await ctx.answerCbQuery("Быстрый запрос доступен после открытия контактов.", { show_alert: true });
+    const unlocked = await isContactsUnlocked(pool, { clientId: client.id, serviceId });
+    if (!unlocked) {
+      await ctx.answerCbQuery("Сначала откройте контакты поставщика", { show_alert: true });
       return;
     }
 
@@ -16518,10 +16506,10 @@ async function startQuickProofEdit(ctx, serviceId, group) {
       food: det.food || "",
       halal: typeof det.halal === "boolean" ? det.halal : false,
       transfer: det.transfer || "",
-      transferIncluded: det.transferIncluded === true || /^(да|yes|true|1|included|включено)$/i.test(String(det.transfer || det.hasTransfer || "").trim()),
+      transferIncluded: !!det.transferIncluded || !!det.transfer || /^(да|yes|true|1|included|включено)$/i.test(String(det.transfer || "").trim()),
       changeable: typeof det.changeable === "boolean" ? det.changeable : false,
       insuranceIncluded: !!det.insuranceIncluded,
-      visaIncluded: !!det.visaIncluded || /^(да|yes|true|1|included|включено)$/i.test(String(det.visa || det.hasVisa || "").trim()),
+      visaIncluded: !!det.visaIncluded,
       earlyCheckIn: !!det.earlyCheckIn,
       arrivalFastTrack: !!det.arrivalFastTrack,
       adt: det.adt || 0,
@@ -16556,8 +16544,6 @@ async function startQuickProofEdit(ctx, serviceId, group) {
     ctx.session.editWiz = ctx.session.editWiz || {};
     ctx.session.editWiz.step = step;
 
-    // UX v2: без промежуточного служебного сообщения.
-    // Нажал "редактировать" -> сразу первый рабочий шаг.
     await promptEditState(ctx, step);
   } catch (e) {
     console.error("[tg-bot] proof quick edit error:", e?.response?.data || e?.message || e);
@@ -16566,7 +16552,7 @@ async function startQuickProofEdit(ctx, serviceId, group) {
 }
 
 bot.action(/^proof:edit:(\d+):(price|dates|details)$/, async (ctx) => {
-  await safeCb(ctx);
+  await safeCb(ctx, "Открываю редактирование…");
   await startQuickProofEdit(ctx, Number(ctx.match[1]), String(ctx.match[2]));
 });
 
