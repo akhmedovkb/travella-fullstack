@@ -684,58 +684,6 @@ async function getUnlockedServiceIdSet(pool, { clientId, serviceIds }) {
   return out;
 }
 
-async function canUseQuickRequestForService(ctx, serviceId) {
-  const sid = Number(serviceId);
-  if (!Number.isFinite(sid) || sid <= 0) {
-    return { ok: false, reason: "bad_service" };
-  }
-
-  const actorId = Number(ctx?.from?.id || ctx?.chat?.id || 0);
-  if (!Number.isFinite(actorId) || actorId <= 0) {
-    return { ok: false, reason: "bad_user" };
-  }
-
-  const unlockSettings = await getContactUnlockSettings(pool);
-  const unlockPrice = tiyinToSum(unlockSettings?.effective_price || 0);
-  if (unlockPrice <= 0) {
-    return { ok: true, free: true, unlockPrice: 0 };
-  }
-
-  const clientRow = await getClientRowByChatId(pool, actorId);
-  if (!clientRow?.id) {
-    return { ok: false, reason: "client_not_linked", unlockPrice };
-  }
-
-  const unlocked = await isContactsUnlocked(pool, {
-    clientId: clientRow.id,
-    serviceId: sid,
-  });
-
-  return {
-    ok: unlocked === true,
-    reason: unlocked ? null : "contacts_locked",
-    unlockPrice,
-    clientId: clientRow.id,
-  };
-}
-
-async function requireQuickRequestUnlocked(ctx, serviceId) {
-  const allowed = await canUseQuickRequestForService(ctx, serviceId);
-  if (allowed.ok) return true;
-
-  if (allowed.reason === "client_not_linked") {
-    await safeCb(ctx, "Сначала привяжите аккаунт через /start", true);
-    return false;
-  }
-
-  const priceText = Number(allowed.unlockPrice || 0) > 0
-    ? ` (${Number(allowed.unlockPrice).toLocaleString("ru-RU")} сум)`
-    : "";
-
-  await safeCb(ctx, `Сначала откройте контакты${priceText}`, true);
-  return false;
-}
-
 /* ===================== UNLOCK HELPERS (UI gating) ===================== */
 
 /* ===================== ENTERPRISE SAFE HELPERS ===================== */
@@ -1020,12 +968,13 @@ async function refreshUnlockedCard(ctx, serviceId) {
   const { text, photoUrl, serviceUrl, kbExtra } =
     buildServiceMessage(svc, category, "client", { unlocked: isUnlocked });
   
-let kb = {
-  inline_keyboard: [
-    [{ text: "Подробнее на сайте", url: serviceUrl }],
-    [{ text: "📩 Быстрый запрос", callback_data: `quick:${serviceId}` }],
-  ],
-};
+const defaultRows = [
+  [{ text: "Подробнее на сайте", url: serviceUrl }],
+];
+if (isUnlocked) {
+  defaultRows.push([{ text: "📩 Быстрый запрос", callback_data: `quick:${serviceId}` }]);
+}
+let kb = { inline_keyboard: defaultRows };
 
 const isAuthorTour =
   String(svc?.category || "").toLowerCase() === "author_tour";
@@ -3937,8 +3886,10 @@ bot.action(/^draft:continue:(\d+)$/, async (ctx) => {
       food: det.food || "",
       halal: typeof det.halal === "boolean" ? det.halal : false,
       transfer: det.transfer || "",
+      transferIncluded: det.transferIncluded === true || /^(да|yes|true|1|included|включено)$/i.test(String(det.transfer || det.hasTransfer || "").trim()),
       changeable: typeof det.changeable === "boolean" ? det.changeable : false,
       insuranceIncluded: !!det.insuranceIncluded,
+      visaIncluded: !!det.visaIncluded || /^(да|yes|true|1|included|включено)$/i.test(String(det.visa || det.hasVisa || "").trim()),
       earlyCheckIn: !!det.earlyCheckIn,
       arrivalFastTrack: !!det.arrivalFastTrack,
       adt: Number.isFinite(det.adt) ? det.adt : (Number.isFinite(det.accommodationADT) ? det.accommodationADT : 0),
@@ -5893,15 +5844,14 @@ function buildDetailsForRefusedTour(draft, netPriceNum) {
     roomCategory: draft.roomCategory || "", // legacy-совместимость
     food: draft.food || "",
 
-    // included options must be persisted with the same keys used by card/quality/matrix
+    // ✅ единые included-флаги refused_tour: wizard -> details -> quality/card
     transferIncluded: !!draft.transferIncluded,
-    transfer: draft.transferIncluded ? "included" : "",
+    transfer: draft.transferIncluded ? (draft.transfer || "included") : (draft.transfer || ""),
     insuranceIncluded: !!draft.insuranceIncluded,
     visaIncluded: !!draft.visaIncluded,
-    visa: draft.visaIncluded ? "included" : "",
+    visa: draft.visaIncluded ? (draft.visa || "included") : (draft.visa || ""),
     earlyCheckIn: !!draft.earlyCheckIn,
     arrivalFastTrack: !!draft.arrivalFastTrack,
-    
     netPrice: netPriceNum,
     grossPrice: typeof draft.grossPriceNum === "number" ? draft.grossPriceNum : null,
     expiration: draft.expiration || null,
@@ -6826,9 +6776,7 @@ function wizardCurrentPreview(ctx, state) {
     svc_create_tour_accommodation: ["Размещение", d.accommodation],
     svc_create_tour_roomcat: ["Категория номера", d.roomCategory],
     svc_create_tour_food: ["Питание", d.food],
-    svc_create_tour_transfer: ["Трансфер", bool(d.transferIncluded || d.transfer)],
     svc_create_tour_insurance: ["Страховка", bool(d.insuranceIncluded)],
-    svc_create_tour_visa: ["Виза", bool(d.visaIncluded || d.visa)],
     svc_create_tour_early_checkin: ["Ранний заезд", bool(d.earlyCheckIn)],
     svc_create_tour_fast_track: ["Fast Track", bool(d.arrivalFastTrack)],
 
@@ -9902,7 +9850,6 @@ bot.action(
 bot.action(/^request:(\d+)$/, async (ctx) => {
   try {
     const serviceId = Number(ctx.match[1]);
-    if (!(await requireQuickRequestUnlocked(ctx, serviceId))) return;
     if (!ctx.session) ctx.session = {};
     ctx.session.pendingRequestServiceId = serviceId;
     ctx.session.pendingRequestSource = "inline";
@@ -10857,7 +10804,33 @@ bot.action("author_excluded:done", async (ctx) => {
 bot.action(/^quick:(\d+)$/, async (ctx) => {
   try {
     const serviceId = Number(ctx.match[1]);
-    if (!(await requireQuickRequestUnlocked(ctx, serviceId))) return;
+
+    if (!Number.isFinite(serviceId) || serviceId <= 0) {
+      await ctx.answerCbQuery("⚠️ Некорректная кнопка", { show_alert: true });
+      return;
+    }
+
+    const clientRow = await getClientRowByChatId(pool, ctx.from?.id);
+    if (!clientRow?.id) {
+      await ctx.answerCbQuery("Сначала привяжите аккаунт через /start", { show_alert: true });
+      return;
+    }
+
+    const unlockSettings = await getContactUnlockSettings(pool).catch(() => null);
+    const unlockPrice = tiyinToSum(unlockSettings?.effective_price || 0);
+    const alreadyUnlocked =
+      unlockPrice <= 0 ||
+      (await isContactsUnlocked(pool, {
+        clientId: clientRow.id,
+        serviceId,
+      }));
+
+    // Backend-gate: старая кнопка в Telegram не должна обходить открытие контактов.
+    if (!alreadyUnlocked) {
+      await ctx.answerCbQuery("Быстрый запрос доступен после открытия контактов.", { show_alert: true });
+      return;
+    }
+
     if (!ctx.session) ctx.session = {};
     ctx.session.pendingRequestServiceId = serviceId;
     ctx.session.pendingRequestSource = "deeplink";
@@ -16545,8 +16518,10 @@ async function startQuickProofEdit(ctx, serviceId, group) {
       food: det.food || "",
       halal: typeof det.halal === "boolean" ? det.halal : false,
       transfer: det.transfer || "",
+      transferIncluded: det.transferIncluded === true || /^(да|yes|true|1|included|включено)$/i.test(String(det.transfer || det.hasTransfer || "").trim()),
       changeable: typeof det.changeable === "boolean" ? det.changeable : false,
       insuranceIncluded: !!det.insuranceIncluded,
+      visaIncluded: !!det.visaIncluded || /^(да|yes|true|1|included|включено)$/i.test(String(det.visa || det.hasVisa || "").trim()),
       earlyCheckIn: !!det.earlyCheckIn,
       arrivalFastTrack: !!det.arrivalFastTrack,
       adt: det.adt || 0,
@@ -16581,7 +16556,8 @@ async function startQuickProofEdit(ctx, serviceId, group) {
     ctx.session.editWiz = ctx.session.editWiz || {};
     ctx.session.editWiz.step = step;
 
-    await safeReply(ctx, `✏️ Быстрое редактирование #${svc.id}\n\nПосле правки нажмите сохранить, затем снова откройте предпросмотр.`, editWizNavKeyboard());
+    // UX v2: без промежуточного служебного сообщения.
+    // Нажал "редактировать" -> сразу первый рабочий шаг.
     await promptEditState(ctx, step);
   } catch (e) {
     console.error("[tg-bot] proof quick edit error:", e?.response?.data || e?.message || e);
@@ -16590,7 +16566,7 @@ async function startQuickProofEdit(ctx, serviceId, group) {
 }
 
 bot.action(/^proof:edit:(\d+):(price|dates|details)$/, async (ctx) => {
-  await safeCb(ctx, "Открываю редактирование…");
+  await safeCb(ctx);
   await startQuickProofEdit(ctx, Number(ctx.match[1]), String(ctx.match[2]));
 });
 
