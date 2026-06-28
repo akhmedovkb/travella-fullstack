@@ -1018,6 +1018,23 @@ const priceKind =
     }
   };
 
+  const isClientActionsUnlocked = () => {
+    const r = String(role || "client").toLowerCase();
+    if (r === "provider" || r === "admin") return false;
+    if (options?.isOwnerPreview === true || options?.hideClientActions === true) return false;
+    if (options?.unlocked === true) return true;
+
+    const unlockPrice = Number(
+      options?.unlockPrice ??
+      options?.effectivePrice ??
+      options?.contactUnlockPrice ??
+      0
+    );
+
+    // бесплатный режим: контакты не продаются, быстрый запрос разрешён сразу
+    return unlockPrice <= 0;
+  };
+
   const sellingKb = (extraRows = []) => {
     const rows = [];
     const r = String(role || "client").toLowerCase();
@@ -1027,7 +1044,12 @@ const priceKind =
       if (shouldRenderUnlockButton(role, options)) {
         rows.push([{ text: "🔓 Открыть контакты", callback_data: `contacts:${serviceId}` }]);
       }
-      rows.push([{ text: "⚡ Быстрый запрос", callback_data: `quick:${serviceId}` }]);
+
+      // Быстрый запрос не должен обходить платное открытие контактов.
+      // Показываем его только после unlock или в бесплатном режиме.
+      if (isClientActionsUnlocked()) {
+        rows.push([{ text: "⚡ Быстрый запрос", callback_data: `quick:${serviceId}` }]);
+      }
     }
 
     rows.push(...extraRows);
@@ -1405,11 +1427,16 @@ const priceKind =
         { text: "🗓 Программа тура", callback_data: `atp:${serviceId}` },
         { text: "🌐 Подробнее на сайте", url: serviceUrl },
       ],
-      [
-        { text: "💬 Быстрый запрос", callback_data: `quick:${serviceId}` },
-        { text: "👤 Контакты", callback_data: `contacts:${serviceId}` },
-      ],
     ];
+
+    if (role !== "provider" && role !== "admin") {
+      if (shouldRenderUnlockButton(role, options)) {
+        kbRows.push([{ text: "👤 Контакты", callback_data: `contacts:${serviceId}` }]);
+      }
+      if (isClientActionsUnlocked()) {
+        kbRows.push([{ text: "💬 Быстрый запрос", callback_data: `quick:${serviceId}` }]);
+      }
+    }
 
     return {
       text: parts.join("\n"),
