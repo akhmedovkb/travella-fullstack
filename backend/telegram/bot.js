@@ -5893,7 +5893,12 @@ function buildDetailsForRefusedTour(draft, netPriceNum) {
     roomCategory: draft.roomCategory || "", // legacy-совместимость
     food: draft.food || "",
 
+    // included options must be persisted with the same keys used by card/quality/matrix
+    transferIncluded: !!draft.transferIncluded,
+    transfer: draft.transferIncluded ? "included" : "",
     insuranceIncluded: !!draft.insuranceIncluded,
+    visaIncluded: !!draft.visaIncluded,
+    visa: draft.visaIncluded ? "included" : "",
     earlyCheckIn: !!draft.earlyCheckIn,
     arrivalFastTrack: !!draft.arrivalFastTrack,
     
@@ -6821,7 +6826,9 @@ function wizardCurrentPreview(ctx, state) {
     svc_create_tour_accommodation: ["Размещение", d.accommodation],
     svc_create_tour_roomcat: ["Категория номера", d.roomCategory],
     svc_create_tour_food: ["Питание", d.food],
+    svc_create_tour_transfer: ["Трансфер", bool(d.transferIncluded || d.transfer)],
     svc_create_tour_insurance: ["Страховка", bool(d.insuranceIncluded)],
+    svc_create_tour_visa: ["Виза", bool(d.visaIncluded || d.visa)],
     svc_create_tour_early_checkin: ["Ранний заезд", bool(d.earlyCheckIn)],
     svc_create_tour_fast_track: ["Fast Track", bool(d.arrivalFastTrack)],
 
