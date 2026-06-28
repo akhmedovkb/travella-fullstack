@@ -105,9 +105,12 @@ function field(key, label, ok, opts = {}) {
   };
 }
 
-function commonCommercialFields(service, d) {
+function titleField(service) {
+  return field("title", "Название", hasServiceDisplayTitle(service), { code: "TITLE_REQUIRED", weight: 2 });
+}
+
+function commercialTailFields(service, d) {
   const out = [
-    field("title", "Название", hasServiceDisplayTitle(service), { code: "TITLE_REQUIRED", weight: 2 }),
     field("netPrice", "Цена нетто", priceNetOk(service, d), { code: "NET_PRICE_REQUIRED", weight: 3 }),
     field("grossPrice", "Цена для клиента", priceGrossOk(service, d), { code: "GROSS_PRICE_REQUIRED", weight: 3 }),
     field("grossPriceNotBelowNet", "Цена для клиента не ниже нетто", grossNotBelowNet(service, d), { code: "GROSS_PRICE_TOO_LOW", weight: 1 }),
@@ -121,7 +124,7 @@ function commonCommercialFields(service, d) {
 function getServiceFieldChecks(service = {}) {
   const d = normalizeDetails(service.details);
   const category = getEffectiveCategory(service, d);
-  const checks = [];
+  const checks = [titleField(service)];
   const add = (...args) => checks.push(field(...args));
 
   if (category === "refused_tour") {
@@ -181,7 +184,7 @@ function getServiceFieldChecks(service = {}) {
     add("details", "Основные детали", hasFilled(d.hotel, d.hotelName, d.accommodation, d.program, d.description, service.description), { code: "DETAILS_REQUIRED", weight: 2 });
   }
 
-  return [...checks, ...commonCommercialFields(service, d)];
+  return [...checks, ...commercialTailFields(service, d)];
 }
 
 function getRequiredFieldChecks(service = {}) {
