@@ -6780,7 +6780,9 @@ function wizardCurrentPreview(ctx, state) {
     svc_create_tour_accommodation: ["Размещение", d.accommodation],
     svc_create_tour_roomcat: ["Категория номера", d.roomCategory],
     svc_create_tour_food: ["Питание", d.food],
+    svc_create_tour_transfer: ["Трансфер", bool(d.transferIncluded)],
     svc_create_tour_insurance: ["Страховка", bool(d.insuranceIncluded)],
+    svc_create_tour_visa: ["Виза", bool(d.visaIncluded)],
     svc_create_tour_early_checkin: ["Ранний заезд", bool(d.earlyCheckIn)],
     svc_create_tour_fast_track: ["Fast Track", bool(d.arrivalFastTrack)],
 
@@ -9830,15 +9832,7 @@ bot.action(
         return;
       }
 
-      // refused_hotel — отдельный поток
-      if (category === "refused_hotel") {
-        ctx.session.state = "svc_hotel_country";
-        await promptWizardState(ctx, "svc_hotel_country");
-        await persistProviderCreateWizard(ctx);
-        return;
-      }
-
-      // refused_tour и refused_flight начинаем одинаково (с title)
+      // Wizard Engine v2: all refused categories start from the first contract step.
       ctx.session.state = "svc_create_title";
       await promptWizardState(ctx, "svc_create_title");
       await persistProviderCreateWizard(ctx);
