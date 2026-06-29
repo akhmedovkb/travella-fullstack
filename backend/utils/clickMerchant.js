@@ -352,16 +352,39 @@ async function applyClickSuccessEffect(db, order) {
   }
 }
 
+function parseClickAction(value) {
+  const raw = String(value ?? "").trim();
+  if (!/^-?\d+$/.test(raw)) return null;
+  const n = Number(raw);
+  return Number.isInteger(n) ? n : null;
+}
+
+function normalizeClickEventBigint(value) {
+  const raw = String(value ?? "").trim();
+  if (!/^-?\d+$/.test(raw)) return null;
+  return raw;
+}
+
 async function handleClickCallback(db, raw) {
   await ensureClickTables(db);
   const params = raw || {};
-  const action = Number(params.action);
-  const merchantTransId = String(params.merchant_trans_id || "");
+  const action = parseClickAction(params.action);
+  const merchantTransId = String(params.merchant_trans_id || "").trim();
+  const stage = action === 0 ? "prepare" : action === 1 ? "complete" : "unknown";
 
   await db.query(
     `INSERT INTO click_events (action, stage, merchant_trans_id, click_trans_id, click_paydoc_id, error, error_note, payload)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb)`,
-    [action, action === 0 ? "prepare" : action === 1 ? "complete" : "unknown", merchantTransId, params.click_trans_id || null, params.click_paydoc_id || null, params.error || null, params.error_note || null, JSON.stringify(params)]
+    [
+      action,
+      stage,
+      merchantTransId || null,
+      normalizeClickEventBigint(params.click_trans_id),
+      normalizeClickEventBigint(params.click_paydoc_id),
+      parseClickAction(params.error),
+      params.error_note || null,
+      JSON.stringify(params),
+    ]
   );
 
   if (![0, 1].includes(action)) return { ...clickResponse(params, -3, "Action not found") };
