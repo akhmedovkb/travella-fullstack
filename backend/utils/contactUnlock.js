@@ -191,11 +191,13 @@ async function syncClientBalanceMirror(db, clientId) {
 }
 
 async function resolveUnlockPrice(db, explicitPrice, skipBalanceDeduction = false) {
-  if (skipBalanceDeduction) return 0;
-
   if (typeof explicitPrice !== "undefined" && explicitPrice !== null) {
     return positiveInt(explicitPrice, 0);
   }
+
+  // If payment was already collected by Payme/Click, do not debit balance again.
+  // When an explicit paid price is not available, keep the unlock row free/zero.
+  if (skipBalanceDeduction) return 0;
 
   const settings = await getContactUnlockSettings(db);
   const isPaid =
