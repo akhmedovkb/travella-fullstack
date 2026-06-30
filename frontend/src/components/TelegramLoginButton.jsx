@@ -15,9 +15,16 @@ export default function TelegramLoginButton({
   const [enabled, setEnabled] = useState(!lazy);
 
   const botUsername =
-    (import.meta.env.VITE_TG_BOT_USERNAME ||
-      import.meta.env.VITE_TELEGRAM_BOT_USERNAME ||
-      "").replace(/^@/, "");
+    (role === "provider"
+      ? (import.meta.env.VITE_TELEGRAM_PROVIDER_BOT_USERNAME ||
+          import.meta.env.VITE_TG_BOT_USERNAME ||
+          import.meta.env.VITE_TELEGRAM_BOT_USERNAME ||
+          "")
+      : (import.meta.env.VITE_TG_BOT_USERNAME ||
+          import.meta.env.VITE_TELEGRAM_BOT_USERNAME ||
+          import.meta.env.VITE_TELEGRAM_CLIENT_BOT_USERNAME ||
+          "")
+    ).replace(/^@/, "");
 
   const callbackName = useMemo(
     () => `TravellaTelegramLogin_${role}_${Math.random().toString(36).slice(2)}`,
