@@ -20,9 +20,9 @@ export default function TelegramLoginButton({
           import.meta.env.VITE_TG_BOT_USERNAME ||
           import.meta.env.VITE_TELEGRAM_BOT_USERNAME ||
           "")
-      : (import.meta.env.VITE_TG_BOT_USERNAME ||
+      : (import.meta.env.VITE_TELEGRAM_CLIENT_BOT_USERNAME ||
+          import.meta.env.VITE_TG_BOT_USERNAME ||
           import.meta.env.VITE_TELEGRAM_BOT_USERNAME ||
-          import.meta.env.VITE_TELEGRAM_CLIENT_BOT_USERNAME ||
           "")
     ).replace(/^@/, "");
 
