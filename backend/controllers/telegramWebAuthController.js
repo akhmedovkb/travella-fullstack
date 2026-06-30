@@ -8,22 +8,20 @@ const LOGIN_MAX_AGE_SEC = Number(process.env.TELEGRAM_LOGIN_MAX_AGE_SEC || 86400
 
 function getTelegramBotToken(role = "client") {
   const requestedRole = String(role || "client").trim().toLowerCase();
-
   if (requestedRole === "provider") {
     return (
       process.env.TELEGRAM_PROVIDER_BOT_TOKEN ||
+      process.env.TELEGRAM_LOGIN_BOT_TOKEN ||
       process.env.TELEGRAM_BOT_TOKEN ||
-      process.env.TG_BOT_TOKEN ||
       process.env.TELEGRAM_CLIENT_BOT_TOKEN ||
       ""
     );
   }
 
   return (
-    process.env.TELEGRAM_LOGIN_BOT_TOKEN ||
     process.env.TELEGRAM_CLIENT_BOT_TOKEN ||
+    process.env.TELEGRAM_LOGIN_BOT_TOKEN ||
     process.env.TELEGRAM_BOT_TOKEN ||
-    process.env.TG_BOT_TOKEN ||
     ""
   );
 }
@@ -39,11 +37,13 @@ function safeEqHex(a, b) {
   }
 }
 
-function verifyTelegramAuth(payload, role = "client") {
+function verifyTelegramAuth(payload) {
   const hash = String(payload?.hash || "");
+  const role = String(payload?.role || "client").trim().toLowerCase();
   const botToken = getTelegramBotToken(role);
 
-  console.log("[tg-web-login] role:", role, "tg user id:", payload?.id, "username:", payload?.username);
+  console.log("[tg-web-login] role:", role, "bot token prefix:", String(botToken || "").slice(0, 12));
+  console.log("[tg-web-login] tg user id:", payload?.id, "username:", payload?.username);
 
   if (!hash || !botToken) {
     return { ok: false, error: "telegram_login_not_configured" };
@@ -449,7 +449,7 @@ async function loginWithTelegram(req, res) {
   const tgUser = req.body || {};
   const requestedRole = String(tgUser.role || "").trim().toLowerCase();
 
-  const verified = verifyTelegramAuth(tgUser, requestedRole || "client");
+  const verified = verifyTelegramAuth(tgUser);
   if (!verified.ok) {
     return res.status(401).json({ ok: false, error: verified.error });
   }
