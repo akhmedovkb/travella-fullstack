@@ -724,14 +724,14 @@ export default function Header() {
         </div>
 
         <div
-          className={`md:hidden overflow-hidden transition-[max-height] duration-300 ${mobileOpen ? "max-h-[82vh]" : "max-h-0"}`}
+          className={`2xl:hidden transition-[max-height] duration-300 ${mobileOpen ? "max-h-[82vh] overflow-y-auto overscroll-contain" : "max-h-0 overflow-hidden"}`}
           aria-hidden={!mobileOpen}
         >
           <nav className="space-y-2 pb-3">
             <RowGroupDark title={t("nav.products", "Продукты")}>
-              <NavItemMobileDark to="/" label="MARKETPLACE" end />
+              <NavItemMobileDark to="/" label="MARKETPLACE" icon={<IconChecklist />} end />
               <NavItemMobileDark to="/community" label="Travella Community" icon={<IconDoc />} />
-              {role === "provider" && <NavItemMobileDark to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />}
+              {role === "provider" && <NavItemMobileDark to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} icon={<IconDoc />} />}
               <NavItemMobileDark to="/hotels" label={t("nav.hotels", "Отели")} icon={<IconHotel />} />
             </RowGroupDark>
 
