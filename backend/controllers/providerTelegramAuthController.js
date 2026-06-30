@@ -8,10 +8,16 @@ const jwt = require("jsonwebtoken");
 const pool = require("../db");
 
 function getBotToken() {
+  // Provider web-login must be verified with the same bot that renders
+  // the Telegram Login Widget on provider pages. In production this is
+  // VITE_TELEGRAM_PROVIDER_BOT_USERNAME (usually @OTKAZNYX_TUROV_UZB_BOT).
+  // Keep TELEGRAM_CLIENT_BOT_TOKEN only as a last fallback so client and
+  // provider bot signatures are not accidentally mixed.
   return (
-    process.env.TELEGRAM_CLIENT_BOT_TOKEN ||
+    process.env.TELEGRAM_PROVIDER_BOT_TOKEN ||
     process.env.TELEGRAM_BOT_TOKEN ||
     process.env.TG_BOT_TOKEN ||
+    process.env.TELEGRAM_CLIENT_BOT_TOKEN ||
     ""
   );
 }
