@@ -9,7 +9,11 @@ function getApiBase() {
 }
 
 function getBotUsername() {
+  // Provider login must render the provider bot. If the widget is rendered
+  // with the client bot but backend verifies with provider token, Telegram
+  // hash verification will fail.
   return (
+    import.meta.env.VITE_TELEGRAM_PROVIDER_BOT_USERNAME ||
     import.meta.env.VITE_TG_BOT_USERNAME ||
     import.meta.env.VITE_TELEGRAM_BOT_USERNAME ||
     import.meta.env.VITE_TELEGRAM_CLIENT_BOT_USERNAME ||
