@@ -67,7 +67,7 @@ export default function AdminFinance() {
           <TabBtn id="audit">Audit</TabBtn>
           <TabBtn id="health">Health</TabBtn>
           <TabBtn id="travel">Travel Sales</TabBtn>
-          <TabBtn id="activity">Clicks</TabBtn>
+          <TabBtn id="activity">Event Bus</TabBtn>
         </div>
       </div>
 
