@@ -54,6 +54,7 @@ const serviceStatsRoutes = require("./routes/serviceStatsRoutes");
 const providerSupportRoutes = require("./routes/providerSupportRoutes");
 const activityEventsRoutes = require("./routes/activityEventsRoutes");
 const socialRoutes = require("./routes/socialRoutes");
+const { activityAuditMiddleware } = require("./utils/activityLogger");
 
 dotenv.config();
 const app = express();
@@ -142,6 +143,7 @@ app.options("*", cors(corsOptions));
 /** ===================== Body ===================== */
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
+app.use(activityAuditMiddleware());
 
 // ✅ static для /api (в т.ч. /api/telegram/placeholder/*.png если нужно отдавать файлы из public)
 app.use("/api", express.static(path.join(__dirname, "public")));
