@@ -1,8 +1,8 @@
 // backend/controllers/activityEventsController.js
 
 const pool = require("../db");
+const { ensureActivityEventsTable, logActivityEvent } = require("../utils/activityLogger");
 
-let ensured = false;
 
 function clampInt(x, def, min, max) {
   const n = Number(x);
@@ -31,43 +31,6 @@ function safeJsonObject(x) {
 function pickIp(req) {
   const xf = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
   return xf || req.ip || req.socket?.remoteAddress || null;
-}
-
-async function ensureActivityEventsTable() {
-  if (ensured) return;
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS activity_events (
-      id BIGSERIAL PRIMARY KEY,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      actor_role TEXT,
-      actor_id BIGINT,
-      actor_name TEXT,
-      actor_phone TEXT,
-      session_id TEXT,
-      event_type TEXT NOT NULL,
-      event_name TEXT NOT NULL,
-      page_path TEXT,
-      page_title TEXT,
-      element_text TEXT,
-      element_tag TEXT,
-      element_role TEXT,
-      element_href TEXT,
-      service_id BIGINT,
-      provider_id BIGINT,
-      client_id BIGINT,
-      source TEXT,
-      user_agent TEXT,
-      ip INET,
-      meta JSONB NOT NULL DEFAULT '{}'::jsonb
-    )
-  `);
-
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_activity_events_created_at ON activity_events (created_at DESC)`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_activity_events_actor ON activity_events (actor_role, actor_id, created_at DESC)`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_activity_events_service ON activity_events (service_id, created_at DESC)`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_activity_events_event_name ON activity_events (event_name, created_at DESC)`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_activity_events_session ON activity_events (session_id, created_at DESC)`);
-  ensured = true;
 }
 
 async function enrichActor(req, payload) {
@@ -117,46 +80,30 @@ async function trackActivityEvent(req, res) {
     const providerId = safeInt(body.providerId || meta.provider_id || meta.providerId);
     const clientId = safeInt(body.clientId || meta.client_id || meta.clientId || (actorRole === "client" ? actorId : null));
 
-    const insert = await pool.query(
-      `
-      INSERT INTO activity_events (
-        actor_role, actor_id, actor_name, actor_phone,
-        session_id, event_type, event_name,
-        page_path, page_title,
-        element_text, element_tag, element_role, element_href,
-        service_id, provider_id, client_id,
-        source, user_agent, ip, meta
-      )
-      VALUES (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb
-      )
-      RETURNING id, created_at
-      `,
-      [
-        actorRole,
-        actorId,
-        actorName || null,
-        actorPhone || null,
-        safeText(body.sessionId, 120, null),
-        eventType,
-        eventName,
-        safeText(body.pagePath, 500, null),
-        safeText(body.pageTitle, 250, null),
-        safeText(body.elementText, 400, null),
-        safeText(body.elementTag, 60, null),
-        safeText(body.elementRole, 80, null),
-        safeText(body.elementHref, 700, null),
-        serviceId,
-        providerId,
-        clientId,
-        safeText(body.source, 80, "web"),
-        safeText(req.headers["user-agent"], 1000, null),
-        pickIp(req),
-        JSON.stringify(meta),
-      ]
-    );
+    const ok = await logActivityEvent({
+      actorRole,
+      actorId,
+      actorName: actorName || null,
+      actorPhone: actorPhone || null,
+      sessionId: safeText(body.sessionId, 120, null),
+      eventType,
+      eventName,
+      pagePath: safeText(body.pagePath, 500, null),
+      pageTitle: safeText(body.pageTitle, 250, null),
+      elementText: safeText(body.elementText, 400, null),
+      elementTag: safeText(body.elementTag, 60, null),
+      elementRole: safeText(body.elementRole, 80, null),
+      elementHref: safeText(body.elementHref, 700, null),
+      serviceId,
+      providerId,
+      clientId,
+      source: safeText(body.source, 80, "web"),
+      userAgent: safeText(req.headers["user-agent"], 1000, null),
+      ip: pickIp(req),
+      meta,
+    });
 
-    return res.json({ ok: true, event: insert.rows[0] });
+    return res.json({ ok: !!ok });
   } catch (e) {
     console.error("trackActivityEvent error:", e);
     return res.status(500).json({ ok: false, error: "activity_track_failed" });
@@ -173,6 +120,11 @@ async function getActivityEvents(req, res) {
     const q = safeText(req.query.q, 160);
     const serviceId = safeInt(req.query.service_id || req.query.serviceId);
     const actorId = safeInt(req.query.actor_id || req.query.actorId);
+    const providerId = safeInt(req.query.provider_id || req.query.providerId);
+    const clientId = safeInt(req.query.client_id || req.query.clientId);
+    const source = safeText(req.query.source, 80).toLowerCase();
+    const eventName = safeText(req.query.event_name || req.query.eventName, 120).toLowerCase();
+    const sinceHours = clampInt(req.query.since_hours || req.query.sinceHours, 168, 1, 24 * 90);
 
     const values = [];
     const where = [];
@@ -193,6 +145,24 @@ async function getActivityEvents(req, res) {
       values.push(actorId);
       where.push(`actor_id = $${values.length}`);
     }
+    if (providerId) {
+      values.push(providerId);
+      where.push(`provider_id = $${values.length}`);
+    }
+    if (clientId) {
+      values.push(clientId);
+      where.push(`client_id = $${values.length}`);
+    }
+    if (source) {
+      values.push(source);
+      where.push(`LOWER(COALESCE(source,'')) = $${values.length}`);
+    }
+    if (eventName) {
+      values.push(eventName);
+      where.push(`LOWER(COALESCE(event_name,'')) = $${values.length}`);
+    }
+    values.push(sinceHours);
+    where.push(`ae.created_at >= NOW() - ($${values.length}::int || ' hours')::interval`);
     if (q) {
       values.push(`%${q.toLowerCase()}%`);
       where.push(`(
@@ -242,7 +212,7 @@ async function getActivityEvents(req, res) {
       `
     );
 
-    return res.json({ ok: true, rows, summary: stats.rows[0] || {}, filters: { limit, role, type, q, serviceId, actorId } });
+    return res.json({ ok: true, rows, summary: stats.rows[0] || {}, filters: { limit, role, type, q, serviceId, actorId, providerId, clientId, source, eventName, sinceHours } });
   } catch (e) {
     console.error("getActivityEvents error:", e);
     return res.status(500).json({ ok: false, error: "activity_events_failed" });
@@ -253,7 +223,8 @@ async function getActivitySessions(req, res) {
   try {
     await ensureActivityEventsTable();
     const limit = clampInt(req.query.limit, 100, 1, 500);
-    const values = [limit];
+    const sinceHours = clampInt(req.query.since_hours || req.query.sinceHours, 336, 1, 24 * 90);
+    const values = [limit, sinceHours];
 
     const { rows } = await pool.query(
       `
@@ -271,7 +242,7 @@ async function getActivitySessions(req, res) {
           (ARRAY_AGG(page_path ORDER BY created_at DESC, id DESC))[1] AS last_page,
           (ARRAY_AGG(service_id ORDER BY created_at DESC, id DESC))[1] AS last_service_id
         FROM activity_events
-        WHERE session_id IS NOT NULL AND created_at >= NOW() - INTERVAL '14 days'
+        WHERE session_id IS NOT NULL AND created_at >= NOW() - ($2::int || ' hours')::interval
         GROUP BY session_id
       )
       SELECT *
