@@ -12,6 +12,7 @@ const {
 const { buildSvcActualKeyboard } = require("./keyboards/serviceActual");
 const { handleServiceActualCallback } = require("./handlers/serviceActualHandler");
 const { buildServiceMessage } = require("../utils/telegramServiceCard");
+const { telegramActivityMiddleware } = require("../utils/activityLogger");
 const { getDraftProgress } = require("../utils/serviceFieldMatrix");
 const {
   getServiceWizardSteps,
@@ -1628,6 +1629,10 @@ bot.use(
     getSessionKey: (ctx) => String(ctx?.from?.id || ctx?.chat?.id || "anon"),
   })
 );
+
+// Unified activity/audit log for all Telegram updates. Must be after session middleware
+// so actor role/state can be attached, and before business handlers.
+bot.use(telegramActivityMiddleware());
 
 // ===================== PERSISTENT PROVIDER SERVICE DRAFTS =====================
 // Railway redeploy restarts the Node process, so Telegraf session can be lost.
