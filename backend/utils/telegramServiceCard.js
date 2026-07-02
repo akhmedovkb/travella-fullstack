@@ -33,8 +33,32 @@ function publicProviderLabel() {
   return PUBLIC_PROVIDER_LABEL || "Проверенный поставщик Travella";
 }
 
-function canRevealProviderIdentity(role, unlocked) {
-  return shouldShowProviderContacts(role, unlocked);
+function isPublicCardOptions(options = {}) {
+  const audience = String(options?.audience || options?.mode || "").toLowerCase();
+  return (
+    options?.publicCard === true ||
+    options?.hideProviderIdentity === true ||
+    options?.forwardSafe === true ||
+    options?.broadcast === true ||
+    audience === "public" ||
+    audience === "broadcast" ||
+    audience === "channel"
+  );
+}
+
+function canRevealProviderIdentity(role, unlocked, options = {}) {
+  if (isPublicCardOptions(options)) return false;
+
+  const r = String(role || "client").toLowerCase();
+
+  // Client contacts are revealed only after paid/free unlock.
+  if (r === "client" || r === "guest" || r === "user") return unlocked === true;
+
+  // Provider/admin Telegram cards are forwardable, so keep identity hidden by default.
+  // Internal screens that explicitly need identity can opt in with revealProviderIdentity=true.
+  if (r === "provider" || r === "admin") return options?.revealProviderIdentity === true;
+
+  return unlocked === true;
 }
 
 
@@ -1024,7 +1048,7 @@ const priceKind =
 
   const providerCompactBlock = (parts) => {
     pushDivider(parts);
-    if (shouldShowProviderContacts(role, unlocked)) {
+    if (canRevealProviderIdentity(role, unlocked, options)) {
       parts.push(`🤝 <b>${escapeHtml(providerNameRaw)}</b>`);
       if (telegramLine) parts.push(telegramLine);
     } else {
@@ -1408,7 +1432,7 @@ const priceKind =
 
     // В публичных карточках НЕ раскрываем имя/Telegram поставщика.
     // Иначе лиды обходят Travella через Google/Telegram.
-    if (canRevealProviderIdentity(role, unlocked)) {
+    if (canRevealProviderIdentity(role, unlocked, options)) {
       const authorName =
         providerNameRaw && providerNameRaw !== "Поставщик"
           ? providerNameRaw
@@ -1751,7 +1775,7 @@ const priceKind =
   if (badgeClean) parts.push(`⏳ ${escapeHtml(badgeClean)}`);
 
   pushDivider(parts);
-  if (shouldShowProviderContacts(role, unlocked)) {
+  if (canRevealProviderIdentity(role, unlocked, options)) {
     parts.push(providerLine);
     if (telegramLine) parts.push(telegramLine);
   } else {
