@@ -967,7 +967,7 @@ async function refreshUnlockedCard(ctx, serviceId) {
   const isUnlocked = data?.unlocked === true;
   
   const { text, photoUrl, serviceUrl, kbExtra } =
-    buildServiceMessage(svc, category, "client", { unlocked: isUnlocked });
+    buildServiceMessage(svc, category, "client", { unlocked: isUnlocked, audience: "client" });
   
 let kb = {
   inline_keyboard: [
@@ -1058,7 +1058,7 @@ async function sendUnlockedCardToPrivate(ctx, serviceId) {
     svc,
     category,
     "client",
-    { unlocked: true }
+    { unlocked: true, audience: "client" }
   );
   const kb = buildUnlockedCardKeyboard(serviceUrl, serviceId, kbExtra, svc);
 
@@ -6217,7 +6217,7 @@ async function sendProofCardPreview(ctx, serviceId) {
   } catch {}
 
   const category = String(svc.category || svc.type || "refused_tour").toLowerCase();
-  const built = buildServiceMessage(svc, category, "provider", { forceRefused: true });
+  const built = buildServiceMessage(svc, category, "provider", { forceRefused: true, audience: "owner" });
   const caption =
     `🧾 <b>Предпросмотр перед модерацией</b>\n\n` +
     `${built.text || "Карточка сформирована."}\n\n` +
@@ -7979,6 +7979,7 @@ bot.start(async (ctx) => {
             unlockPrice,
             isInline: false,
             forceRefused: isRefused,
+            audience: role === "client" ? "client" : (role === "admin" ? "admin" : "owner"),
           });
 
         let textFinal = text;
@@ -7994,10 +7995,7 @@ bot.start(async (ctx) => {
                   inline_keyboard: [
                     [
                       {
-                        text:
-                          unlockPrice > 0
-                            ? `🔓 Открыть контакты (${unlockPrice.toLocaleString("ru-RU")} сум)`
-                            : "🔓 Открыть контакты",
+                        text: "💬 Связаться с поставщиком",
                         callback_data: buildUnlockCbData(ctx.from.id, serviceId),
                       },
                     ],
@@ -8867,7 +8865,7 @@ bot.action(/^prov_services:list_cards(?::more)?$/, async (ctx) => {
       const category = svc.category || svc.type || "refused_tour";
       const details = parseDetailsAny(svc.details);
 
-      const { photoUrl, serviceUrl } = buildServiceMessage(svc, category, "provider", { forceRefused: true });
+      const { photoUrl, serviceUrl } = buildServiceMessage(svc, category, "provider", { forceRefused: true, audience: "owner" });
       const msg = buildProviderCompactManageCardHtml(svc, category, details);
       const manageUrl = `${SITE_URL}/dashboard?from=tg&service=${svc.id}`;
       const detailsUrl = serviceUrl || buildServiceUrl(svc.id);
@@ -9202,7 +9200,7 @@ bot.action(/^archive:item:(\d+)$/, async (ctx) => {
     }
 
     const category = svc.category || svc.type || "refused_tour";
-    const built = buildServiceMessage(svc, category, "provider", { forceRefused: true });
+    const built = buildServiceMessage(svc, category, "provider", { forceRefused: true, audience: "owner" });
     const introHtml = buildArchiveItemIntroHtml(svc, serviceId);
     const msg = `${introHtml}\n\n${built.text}`;
 
@@ -12045,6 +12043,7 @@ async function sendUnlockedServiceCard(ctx, serviceId) {
       unlocked: true,
       isInline: false,
       forceRefused: String(category || "").startsWith("refused_") || category === "author_tour",
+      audience: "client",
     });
 
     const kb = kbExtra?.replaceDefault && kbExtra?.inline_keyboard?.length
@@ -12384,6 +12383,7 @@ async function getUnlockPaymentPreview(ctx, serviceId) {
           unlocked: false,
           isInline: false,
           forceRefused: String(category || "").startsWith("refused_") || category === "author_tour",
+          audience: "client",
         });
         if (built?.photoUrl) out.photoUrl = built.photoUrl;
       } catch {}
@@ -16974,6 +16974,7 @@ const data = await getOrFetchCached(
           forceShowProviderContacts: roleForInline === "provider" || roleForInline === "admin",
           publicSafe: mustHideContactsForInline,
           publicOpenBotUrl: publicDeepLink,
+          audience: mustHideContactsForInline ? "public" : (roleForInline === "admin" ? "admin" : "owner"),
         }
       );
       
@@ -17003,7 +17004,7 @@ const data = await getOrFetchCached(
           ? {
               inline_keyboard: [
                 [
-                  { text: "👤 Контакты в боте", url: deepLink },
+                  { text: "💬 Связаться с поставщиком", url: deepLink },
                   { text: "Подробнее на сайте", url: serviceUrl },
                 ],
                 [
