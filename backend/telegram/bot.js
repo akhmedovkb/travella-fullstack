@@ -53,15 +53,6 @@ const BOT_USERNAME = (process.env.TELEGRAM_BOT_USERNAME || "")
   .replace(/^@/, "")
   .trim();
 
-// Optional: канал/группа для безопасной публичной публикации карточек.
-// Пример: TELEGRAM_PUBLIC_CHANNEL_ID=@my_channel или -1001234567890
-const TELEGRAM_PUBLIC_CHANNEL_ID = String(
-  process.env.TELEGRAM_PUBLIC_CHANNEL_ID ||
-  process.env.TG_PUBLIC_CHANNEL_ID ||
-  process.env.PUBLIC_CHANNEL_ID ||
-  ""
-).trim();
-
 // Шаблон ссылки на карточку услуги на сайте.
 const SERVICE_URL_TEMPLATE = (
   process.env.SERVICE_URL_TEMPLATE || "{SITE_URL}?service={id}"
@@ -141,7 +132,6 @@ console.log("[tg-bot] API_PUBLIC_BASE =", API_PUBLIC_BASE || "(not set)");
 console.log("[tg-bot] TG_IMAGE_BASE =", TG_IMAGE_BASE || "(not set)");
 console.log("[tg-bot] SITE_URL =", SITE_URL);
 console.log("[tg-bot] BOT_USERNAME =", BOT_USERNAME || "(not set)");
-console.log("[tg-bot] TELEGRAM_PUBLIC_CHANNEL_ID =", TELEGRAM_PUBLIC_CHANNEL_ID || "(not set)");
 console.log("[tg-bot] SERVICE_URL_TEMPLATE =", SERVICE_URL_TEMPLATE);
 console.log(
   "[tg-bot] MANAGER_CHAT_ID =",
@@ -7935,19 +7925,6 @@ bot.start(async (ctx) => {
       ctx.session.role = role;
       ctx.session.linked = true;
 
-      // ✅ Deep-link: unlock_<serviceId> => сразу открыть paywall/оплату контактов
-      const mUnlock = startPayloadRaw.match(/^unlock_(\d+)$/i);
-      if (mUnlock) {
-        const serviceId = Number(mUnlock[1]);
-        if (role !== "client") {
-          await ctx.reply("ℹ️ Открытие контактов по оплате доступно клиентам. Поставщики и админы видят контакты в карточке напрямую.");
-          await ctx.reply("🏠 Главное меню:", getMainMenuKeyboard(role));
-          return;
-        }
-        await doUnlockFlow(ctx, serviceId);
-        return;
-      }
-
       // ✅ Deep-link: refused_<serviceId> => показать конкретную услугу
       const mRef = startPayloadRaw.match(/^refused_(\d+)$/i);
       if (mRef) {
@@ -8019,8 +7996,8 @@ bot.start(async (ctx) => {
                       {
                         text:
                           unlockPrice > 0
-                            ? `💬 Связаться с поставщиком (${unlockPrice.toLocaleString("ru-RU")} сум)`
-                            : "💬 Связаться с поставщиком",
+                            ? `🔓 Открыть контакты (${unlockPrice.toLocaleString("ru-RU")} сум)`
+                            : "🔓 Открыть контакты",
                         callback_data: buildUnlockCbData(ctx.from.id, serviceId),
                       },
                     ],
@@ -10944,61 +10921,144 @@ bot.action(/^quick:(\d+)$/, async (ctx) => {
 
 
 
-/* ===================== PUBLIC-SAFE CARD FOR CHANNELS/GROUPS ===================== */
-bot.action(/^public_card:(\d+)$/, async (ctx) => {
-  try {
-    const serviceId = Number(ctx.match?.[1]);
-    if (!Number.isFinite(serviceId) || serviceId <= 0) {
-      await safeCb(ctx, "⚠️ Некорректная карточка", true);
-      return;
-    }
+async function resolveContactButtonAudience(ctx) {
+  const fromId = Number(ctx?.from?.id || 0);
+  const chatId = Number(ctx?.chat?.id || ctx?.callbackQuery?.message?.chat?.id || 0);
 
-    await safeCb(ctx, "Готовлю безопасную карточку", false);
-
-    // Отправляем safe-copy в личный чат админа/поставщика: именно это сообщение можно пересылать в канал.
-    await sendPublicSafeServiceCardToChat(ctx.from.id, serviceId);
-
-    const rows = [];
-    if (TELEGRAM_PUBLIC_CHANNEL_ID) {
-      rows.push([{ text: "📢 Опубликовать в настроенный канал", callback_data: `publish_public:${serviceId}` }]);
-    }
-
-    await bot.telegram.sendMessage(
-      ctx.from.id,
-      "✅ <b>Безопасная публичная карточка создана.</b>\n\n" +
-        "Пересылайте в канал/группу именно <b>это новое сообщение</b>. В нём нет имени, Telegram и телефона поставщика.\n\n" +
-        "⚠️ Обычный Forward полной admin/provider-карточки Telegram пересылает исходный текст и может раскрыть контакты.",
-      {
-        parse_mode: "HTML",
-        disable_web_page_preview: true,
-        reply_markup: rows.length ? { inline_keyboard: rows } : undefined,
-      }
-    );
-  } catch (e) {
-    console.error("[tg-bot] public_card error:", e?.response?.data || e?.message || e);
-    try { await safeCb(ctx, "⚠️ Не удалось создать публичную карточку", true); } catch {}
+  if (MANAGER_CHAT_ID && (String(fromId) === String(MANAGER_CHAT_ID) || String(chatId) === String(MANAGER_CHAT_ID))) {
+    return { role: "admin", privileged: true, reason: "manager_chat" };
   }
-});
 
-bot.action(/^publish_public:(\d+)$/, async (ctx) => {
-  try {
-    const serviceId = Number(ctx.match?.[1]);
-    if (!Number.isFinite(serviceId) || serviceId <= 0) {
-      await safeCb(ctx, "⚠️ Некорректная карточка", true);
-      return;
-    }
-    if (!TELEGRAM_PUBLIC_CHANNEL_ID) {
-      await safeCb(ctx, "⚠️ TELEGRAM_PUBLIC_CHANNEL_ID не настроен", true);
-      return;
-    }
-
-    await sendPublicSafeServiceCardToChat(TELEGRAM_PUBLIC_CHANNEL_ID, serviceId);
-    await safeCb(ctx, "✅ Опубликовано безопасно", false);
-  } catch (e) {
-    console.error("[tg-bot] publish_public error:", e?.response?.data || e?.message || e);
-    try { await safeCb(ctx, "⚠️ Не удалось опубликовать", true); } catch {}
+  if (String(ctx?.session?.role || "").toLowerCase() === "provider") {
+    return { role: "provider", privileged: true, reason: "session_provider" };
   }
-});
+
+  const providerId = await resolveProviderIdByTelegramChatId(fromId).catch(() => null);
+  if (providerId) return { role: "provider", privileged: true, providerId, reason: "provider_chat" };
+
+  return { role: "client", privileged: false };
+}
+
+function normalizeTelegramUsernameForLink(value) {
+  let u = String(value || "").trim();
+  if (!u) return "";
+  u = u.replace(/^@/, "");
+  u = u.replace(/^https?:\/\/t\.me\//i, "");
+  u = u.replace(/^tg:\/\/resolve\?domain=/i, "");
+  u = u.split(/[/?#]/)[0].trim();
+  return /^[A-Za-z0-9_]{3,64}$/.test(u) ? u : "";
+}
+
+function pickServiceProviderContactFields(svc = {}) {
+  const details = parseDetailsAny(svc.details);
+  const provider = svc.provider && typeof svc.provider === "object" ? svc.provider : {};
+  const name =
+    svc.provider_name ||
+    svc.providerName ||
+    svc.provider_title ||
+    svc.providerTitle ||
+    provider.name ||
+    provider.title ||
+    details.providerName ||
+    "Поставщик";
+
+  const telegram =
+    svc.provider_telegram ||
+    svc.providerTelegram ||
+    svc.telegram ||
+    svc.telegram_username ||
+    provider.telegram ||
+    provider.telegram_username ||
+    provider.username ||
+    details.providerTelegram ||
+    details.telegram ||
+    "";
+
+  const phone =
+    svc.provider_phone ||
+    svc.providerPhone ||
+    svc.provider_contact ||
+    svc.providerContact ||
+    provider.phone ||
+    provider.contact ||
+    provider.telegram_phone ||
+    details.providerPhone ||
+    details.phone ||
+    "";
+
+  const whatsapp =
+    svc.provider_whatsapp ||
+    svc.providerWhatsapp ||
+    provider.whatsapp ||
+    provider.whatsapp_phone ||
+    details.whatsapp ||
+    "";
+
+  return {
+    name: String(name || "Поставщик").trim(),
+    telegram: String(telegram || "").trim(),
+    phone: String(phone || "").trim(),
+    whatsapp: String(whatsapp || "").trim(),
+  };
+}
+
+async function sendPrivilegedProviderContacts(ctx, serviceId, audience = {}) {
+  const sid = Number(serviceId || 0);
+  const targetChatId = Number(ctx?.from?.id || 0);
+  if (!Number.isFinite(sid) || sid <= 0 || !Number.isFinite(targetChatId) || targetChatId <= 0) return false;
+
+  const { data } = await axios.get(`/api/telegram/service/${sid}`, {
+    params: { role: audience?.role || "provider", chatId: targetChatId },
+  });
+
+  if (!data?.success || !data?.service) {
+    await safeReply(ctx, "❗️Услуга не найдена или уже снята с публикации.");
+    return false;
+  }
+
+  const svc = data.service;
+  const contacts = pickServiceProviderContactFields(svc);
+  const tgUsername = normalizeTelegramUsernameForLink(contacts.telegram);
+  const serviceUrl = buildServiceUrl(sid);
+  const title =
+    getCanonicalServiceDisplayTitle({ ...svc, category: svc.category || svc.type }, { allowFallback: true, maxLength: 90 }) ||
+    svc.title ||
+    `Услуга #${sid}`;
+
+  const lines = [
+    `📞 <b>Контакты поставщика</b>`,
+    ``,
+    `📌 <b>${escapeHtml(String(title))}</b>`,
+    `🤝 <b>${escapeHtml(contacts.name || "Поставщик")}</b>`,
+  ];
+
+  if (tgUsername) {
+    lines.push(`📲 <b>Telegram:</b> <a href="https://t.me/${encodeURIComponent(tgUsername)}">@${escapeHtml(tgUsername)}</a>`);
+  } else if (contacts.telegram) {
+    lines.push(`📲 <b>Telegram:</b> ${escapeHtml(contacts.telegram)}`);
+  }
+
+  if (contacts.phone) lines.push(`☎️ <b>Телефон:</b> <code>${escapeHtml(contacts.phone)}</code>`);
+  if (contacts.whatsapp && contacts.whatsapp !== contacts.phone) lines.push(`🟢 <b>WhatsApp:</b> <code>${escapeHtml(contacts.whatsapp)}</code>`);
+
+  if (!contacts.telegram && !contacts.phone && !contacts.whatsapp) {
+    lines.push(``, `⚠️ В карточке не указаны отдельные контактные поля. Проверьте профиль поставщика.`);
+  }
+
+  const buttons = [];
+  if (tgUsername) buttons.push([{ text: "💬 Написать в Telegram", url: `https://t.me/${tgUsername}` }]);
+  buttons.push([{ text: "🌐 Подробнее на сайте", url: serviceUrl }]);
+
+  try { await ctx.answerCbQuery("✅ Контакты отправлены в личку", { show_alert: false }); } catch {}
+
+  await bot.telegram.sendMessage(targetChatId, lines.join("\n"), {
+    parse_mode: "HTML",
+    disable_web_page_preview: true,
+    reply_markup: { inline_keyboard: buttons },
+  });
+
+  return true;
+}
 
 /* ===================== AUTHOR TOUR / CARD CONTACTS ALIAS ===================== */
 bot.action(/^contacts:(\d+)$/, async (ctx) => {
@@ -11006,6 +11066,12 @@ bot.action(/^contacts:(\d+)$/, async (ctx) => {
     const serviceId = Number(ctx.match?.[1]);
     if (!Number.isFinite(serviceId) || serviceId <= 0) {
       await ctx.answerCbQuery("⚠️ Некорректная кнопка", { show_alert: true });
+      return;
+    }
+
+    const audience = await resolveContactButtonAudience(ctx);
+    if (audience.privileged) {
+      await sendPrivilegedProviderContacts(ctx, serviceId, audience);
       return;
     }
 
@@ -12543,103 +12609,6 @@ async function sendUnlockPaywallCard(ctx, { serviceId, balanceSum, priceSum }) {
     disable_web_page_preview: true,
     reply_markup: replyMarkup,
   });
-}
-
-
-function buildBotDeepLink(parameter) {
-  const p = String(parameter || "").trim();
-  if (!p) return SITE_URL;
-  if (BOT_USERNAME) return `https://t.me/${BOT_USERNAME}?start=${encodeURIComponent(p)}`;
-  return SITE_URL;
-}
-
-function normalizePublicCardReplyMarkup(serviceId, built = {}) {
-  const sid = Number(serviceId);
-  const rows = [];
-  const openUrl = buildBotDeepLink(`unlock_${sid}`);
-
-  rows.push([{ text: "💬 Связаться с поставщиком", url: openUrl }]);
-
-  const extraRows = Array.isArray(built?.kbExtra?.inline_keyboard)
-    ? built.kbExtra.inline_keyboard
-    : [];
-
-  for (const row of extraRows) {
-    const safeRow = (Array.isArray(row) ? row : [])
-      .filter((btn) => btn && typeof btn === "object")
-      .filter((btn) => {
-        const text = String(btn.text || "").toLowerCase();
-        const cb = String(btn.callback_data || "").toLowerCase();
-        // Не дублируем кнопки открытия контактов/быстрого запроса в public-card.
-        if (text.includes("связаться") || text.includes("контакт")) return false;
-        if (cb.startsWith("contacts:") || cb.startsWith("quick:")) return false;
-        if (cb.startsWith("public_card:") || cb.startsWith("publish_public:")) return false;
-        return true;
-      });
-    if (safeRow.length) rows.push(safeRow);
-  }
-
-  const serviceUrl = built?.serviceUrl || (Number.isFinite(sid) ? buildServiceUrl(sid) : SITE_URL);
-  if (serviceUrl && !rows.some((row) => row.some((btn) => String(btn.url || "") === String(serviceUrl)))) {
-    rows.push([{ text: "🌐 Подробнее на сайте", url: serviceUrl }]);
-  }
-
-  return { inline_keyboard: rows };
-}
-
-async function buildPublicSafeServiceCard(serviceId) {
-  const sid = Number(serviceId);
-  if (!Number.isFinite(sid) || sid <= 0) throw new Error("BAD_SERVICE_ID");
-
-  const { data } = await axios.get(`/api/telegram/service/${sid}`, {
-    params: { role: "client", publicSafe: 1 },
-  });
-
-  if (!data?.success || !data?.service) throw new Error("SERVICE_NOT_FOUND");
-
-  const svc = data.service;
-  const category = String(svc.category || svc.type || "refused_tour").toLowerCase();
-  const unlockSettings = await getContactUnlockSettings(pool);
-  const unlockPrice = tiyinToSum(unlockSettings.effective_price || 0);
-  const deepLink = buildBotDeepLink(`unlock_${sid}`);
-
-  const built = buildServiceMessage(svc, category, "client", {
-    audience: "public",
-    publicSafe: true,
-    unlocked: false,
-    unlockPrice,
-    forceHideProviderContacts: true,
-    hidePublicCardButton: true,
-    publicOpenBotUrl: deepLink,
-    forceRefused: String(category || "").startsWith("refused_") || category === "author_tour",
-  });
-
-  return {
-    text: stripLockedLinks(String(built?.text || ""), { unlockPrice }),
-    photoUrl: built?.photoUrl || null,
-    reply_markup: normalizePublicCardReplyMarkup(sid, built),
-  };
-}
-
-async function sendPublicSafeServiceCardToChat(chatId, serviceId) {
-  const card = await buildPublicSafeServiceCard(serviceId);
-  const target = chatId;
-
-  if (card.photoUrl) {
-    await bot.telegram.sendPhoto(target, card.photoUrl, {
-      caption: card.text,
-      parse_mode: "HTML",
-      reply_markup: card.reply_markup,
-    });
-    return true;
-  }
-
-  await bot.telegram.sendMessage(target, card.text, {
-    parse_mode: "HTML",
-    disable_web_page_preview: true,
-    reply_markup: card.reply_markup,
-  });
-  return true;
 }
 
 async function sendUnlockContactInvoice(ctx, { clientId, serviceId, amountSum }) {
@@ -17175,27 +17144,40 @@ const data = await getOrFetchCached(
       // вместо этого отправляем человека в ЛС боту по deep-link, где уже можно unlock'нуть безопасно
       const deepLink = publicDeepLink;
       
-      let keyboardForClient =
-        canSeeContacts || isFreeMode
-          ? {
-              inline_keyboard: [
-                [
-                  { text: "💬 Контакты в боте", url: deepLink },
-                  { text: "Подробнее на сайте", url: serviceUrl },
+      let keyboardForClient;
+      if (roleForInline === "provider" || roleForInline === "admin") {
+        keyboardForClient = {
+          inline_keyboard: [
+            [
+              { text: "📞 Показать контакты", callback_data: `contacts:${svc.id}` },
+              { text: "Подробнее на сайте", url: serviceUrl },
+            ],
+            [{ text: "📩 Быстрый запрос", callback_data: `request:${svc.id}` }],
+          ],
+        };
+      } else {
+        keyboardForClient =
+          canSeeContacts || isFreeMode
+            ? {
+                inline_keyboard: [
+                  [
+                    { text: "👤 Контакты в боте", url: deepLink },
+                    { text: "Подробнее на сайте", url: serviceUrl },
+                  ],
+                  [
+                    { text: "📩 Быстрый запрос", callback_data: `request:${svc.id}` },
+                  ],
                 ],
-                [
-                  { text: "📩 Быстрый запрос", callback_data: `request:${svc.id}` },
+              }
+            : {
+                inline_keyboard: [
+                  [
+                    { text: "💬 Связаться с поставщиком", url: deepLink },
+                    { text: "Подробнее на сайте", url: serviceUrl },
+                  ],
                 ],
-              ],
-            }
-          : {
-              inline_keyboard: [
-                [
-                  { text: "💬 Связаться с поставщиком", url: deepLink },
-                  { text: "Подробнее на сайте", url: serviceUrl },
-                ],
-              ],
-            };
+              };
+      }
       
       // ➜ добавляем дополнительные кнопки карточки.
       // Для author_tour brochure карточки telegramServiceCard.js возвращает replaceDefault,
