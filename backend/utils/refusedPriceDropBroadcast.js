@@ -78,7 +78,7 @@ async function broadcastPriceDropCard(serviceId, prefixHtml = "🔥 <b>ЦЕНА 
     : (process.env.SITE_PUBLIC_URL || "");
 
   // единый шаблон карточки (как в approve): viewerRole="client"
-  const card = buildServiceMessage(svc, cat, "client");
+  const card = buildServiceMessage(svc, cat, "client", { publicCard: true, hideProviderIdentity: true, broadcast: true, forwardSafe: true });
   const msg = `${prefixHtml}\n\n${card.text}`;
   const photoUrl = card.photoUrl || null;
 
