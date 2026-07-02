@@ -74,10 +74,16 @@ async function getClientBotAudience(db = pool) {
         AND TRIM(telegram_chat_id::text) <> ''`
   );
 
+  const providerChatIds = uniqueNumericChatIds(recProv.rows);
+  const clientChatIds = uniqueNumericChatIds(recCli.rows);
+  const chatIds = uniqueNumericChatIds([...recProv.rows, ...recCli.rows]);
+
   return {
     providerCount: recProv.rows.length,
     clientCount: recCli.rows.length,
-    chatIds: uniqueNumericChatIds([...recProv.rows, ...recCli.rows]),
+    providerChatIds,
+    clientChatIds,
+    chatIds,
   };
 }
 
@@ -130,7 +136,8 @@ async function broadcastApprovedService(serviceId, options = {}) {
   const q = await db.query(
     `SELECT s.*,
             COALESCE(p.name, '') AS provider_name,
-            p.type AS provider_type
+            p.type AS provider_type,
+            COALESCE(p.social, '') AS provider_telegram
        FROM services s
        JOIN providers p ON p.id = s.provider_id
       WHERE s.id = $1
@@ -162,14 +169,32 @@ async function broadcastApprovedService(serviceId, options = {}) {
   const detailsObj = parseJsonMaybe(svc.details);
   const needNewBadgeOnce = !Boolean(detailsObj?.meta?.new_badge_sent_at);
 
-  const card = buildServiceMessage(svc, cat, "client", { newBadge: needNewBadgeOnce, publicCard: true, hideProviderIdentity: true, broadcast: true, forwardSafe: true });
-  const text = String(card?.text || "").trim();
-  if (!text) return { ok: false, reason: "EMPTY_CARD_TEXT" };
-
   const openBotUrl = buildOpenBotUrl(svc.id);
-  const replyMarkup = {
-    inline_keyboard: [[{ text: "Открыть в боте", url: openBotUrl }]],
+
+  // Клиенты/каналы получают безопасную карточку без раскрытия поставщика.
+  const publicCard = buildServiceMessage(svc, cat, "client", {
+    newBadge: needNewBadgeOnce,
+    unlocked: false,
+    forceHideProviderContacts: true,
+    publicSafe: true,
+    publicOpenBotUrl: openBotUrl,
+  });
+
+  // Поставщики в боте получают полную карточку и видят контакты всегда.
+  const providerCard = buildServiceMessage(svc, cat, "provider", {
+    newBadge: needNewBadgeOnce,
+    unlocked: true,
+    forceShowProviderContacts: true,
+  });
+
+  const publicText = String(publicCard?.text || "").trim();
+  const providerText = String(providerCard?.text || "").trim();
+  if (!publicText && !providerText) return { ok: false, reason: "EMPTY_CARD_TEXT" };
+
+  const publicReplyMarkup = {
+    inline_keyboard: [[{ text: "🔓 Открыть контакты", url: openBotUrl }]],
   };
+  const providerReplyMarkup = providerCard?.kbExtra || { inline_keyboard: [] };
 
   const audience = await getClientBotAudience(db);
   if (!audience.chatIds.length) {
@@ -183,8 +208,28 @@ async function broadcastApprovedService(serviceId, options = {}) {
     providers: audience.providerCount,
     clients: audience.clientCount,
     totalUnique: audience.chatIds.length,
-    hasPhoto: Boolean(card.photoUrl),
+    hasPublicPhoto: Boolean(publicCard.photoUrl),
+    hasProviderPhoto: Boolean(providerCard.photoUrl),
   });
+
+  const jobs = [
+    ...audience.clientChatIds.map((chatId) => ({
+      chatId,
+      kind: "client",
+      text: publicText,
+      photoUrl: publicCard.photoUrl || null,
+      replyMarkup: publicReplyMarkup,
+    })),
+    ...audience.providerChatIds
+      .filter((chatId) => !audience.clientChatIds.includes(chatId))
+      .map((chatId) => ({
+        chatId,
+        kind: "provider",
+        text: providerText || publicText,
+        photoUrl: providerCard.photoUrl || publicCard.photoUrl || null,
+        replyMarkup: providerReplyMarkup,
+      })),
+  ];
 
   const batchSize = Number(options.batchSize || 20);
   let delivered = 0;
@@ -193,17 +238,17 @@ async function broadcastApprovedService(serviceId, options = {}) {
   let textDelivered = 0;
   const failedSample = [];
 
-  for (let i = 0; i < audience.chatIds.length; i += batchSize) {
-    const batch = audience.chatIds.slice(i, i + batchSize);
+  for (let i = 0; i < jobs.length; i += batchSize) {
+    const batch = jobs.slice(i, i + batchSize);
     const results = await Promise.all(
-      batch.map(async (chatId) => {
-        const r = await sendCardToChat(chatId, {
-          text,
-          photoUrl: card.photoUrl || null,
-          replyMarkup,
+      batch.map(async (job) => {
+        const r = await sendCardToChat(job.chatId, {
+          text: job.text,
+          photoUrl: job.photoUrl,
+          replyMarkup: job.replyMarkup,
           token,
         });
-        return { chatId, ...r };
+        return { chatId: job.chatId, kind: job.kind, ...r };
       })
     );
 
@@ -214,7 +259,7 @@ async function broadcastApprovedService(serviceId, options = {}) {
         else textDelivered += 1;
       } else {
         failed += 1;
-        if (failedSample.length < 10) failedSample.push({ chatId: r.chatId, error: r.error || "unknown" });
+        if (failedSample.length < 10) failedSample.push({ chatId: r.chatId, kind: r.kind, error: r.error || "unknown" });
       }
     }
 
@@ -231,6 +276,7 @@ async function broadcastApprovedService(serviceId, options = {}) {
       console.log(`${logPrefix} batch ok`, { serviceId: svc.id, batchFrom: i, batchSize: results.length });
     }
   }
+
 
   if (needNewBadgeOnce && delivered > 0) {
     try {
