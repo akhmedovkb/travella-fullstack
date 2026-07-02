@@ -138,11 +138,18 @@ async function canViewerSeeProviderContacts({ viewer, providerId, serviceId }) {
   return false;
 }
 
-function redactProviderContacts(provider) {
+const PUBLIC_PROVIDER_LABEL = (process.env.PUBLIC_PROVIDER_LABEL || "Проверенный поставщик Travella").trim();
+
+function redactProviderIdentity(provider) {
   if (!provider || typeof provider !== "object") return provider;
 
   return {
     ...provider,
+    name: PUBLIC_PROVIDER_LABEL,
+    title: PUBLIC_PROVIDER_LABEL,
+    display_name: PUBLIC_PROVIDER_LABEL,
+    company_name: PUBLIC_PROVIDER_LABEL,
+    brand: PUBLIC_PROVIDER_LABEL,
     phone: null,
     telegram: null,
     telegram_username: null,
@@ -151,6 +158,10 @@ function redactProviderContacts(provider) {
     social: null,
     contact_phone: null,
   };
+}
+
+function redactProviderContacts(provider) {
+  return redactProviderIdentity(provider);
 }
 
 async function redactMarketplaceRow(row, viewer) {
@@ -173,15 +184,23 @@ async function redactMarketplaceRow(row, viewer) {
   const safe = {
     ...row,
     contacts_unlocked: false,
+    provider_name: PUBLIC_PROVIDER_LABEL,
+    supplier_name: PUBLIC_PROVIDER_LABEL,
+    vendor_name: PUBLIC_PROVIDER_LABEL,
+    agency_name: PUBLIC_PROVIDER_LABEL,
+    company_name: PUBLIC_PROVIDER_LABEL,
     provider_phone: null,
     provider_telegram: null,
     supplier_phone: null,
     supplier_telegram: null,
+    provider_social: null,
+    supplier_social: null,
   };
 
-  if (safe.provider) {
-    safe.provider = redactProviderContacts(safe.provider);
-  }
+  if (safe.provider) safe.provider = redactProviderIdentity(safe.provider);
+  if (safe.supplier) safe.supplier = redactProviderIdentity(safe.supplier);
+  if (safe.vendor) safe.vendor = redactProviderIdentity(safe.vendor);
+  if (safe.agency) safe.agency = redactProviderIdentity(safe.agency);
 
   return safe;
 }
