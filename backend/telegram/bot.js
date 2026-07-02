@@ -6217,7 +6217,7 @@ async function sendProofCardPreview(ctx, serviceId) {
   } catch {}
 
   const category = String(svc.category || svc.type || "refused_tour").toLowerCase();
-  const built = buildServiceMessage(svc, category, "provider", { forceRefused: true, hideProviderIdentity: true, forwardSafe: true });
+  const built = buildServiceMessage(svc, category, "provider", { forceRefused: true });
   const caption =
     `🧾 <b>Предпросмотр перед модерацией</b>\n\n` +
     `${built.text || "Карточка сформирована."}\n\n` +
@@ -7979,8 +7979,6 @@ bot.start(async (ctx) => {
             unlockPrice,
             isInline: false,
             forceRefused: isRefused,
-            hideProviderIdentity: !(role === "client" && unlocked === true),
-            forwardSafe: !(role === "client" && unlocked === true),
           });
 
         let textFinal = text;
@@ -8869,7 +8867,7 @@ bot.action(/^prov_services:list_cards(?::more)?$/, async (ctx) => {
       const category = svc.category || svc.type || "refused_tour";
       const details = parseDetailsAny(svc.details);
 
-      const { photoUrl, serviceUrl } = buildServiceMessage(svc, category, "provider", { forceRefused: true, hideProviderIdentity: true, forwardSafe: true });
+      const { photoUrl, serviceUrl } = buildServiceMessage(svc, category, "provider", { forceRefused: true });
       const msg = buildProviderCompactManageCardHtml(svc, category, details);
       const manageUrl = `${SITE_URL}/dashboard?from=tg&service=${svc.id}`;
       const detailsUrl = serviceUrl || buildServiceUrl(svc.id);
@@ -9204,7 +9202,7 @@ bot.action(/^archive:item:(\d+)$/, async (ctx) => {
     }
 
     const category = svc.category || svc.type || "refused_tour";
-    const built = buildServiceMessage(svc, category, "provider", { forceRefused: true, hideProviderIdentity: true, forwardSafe: true });
+    const built = buildServiceMessage(svc, category, "provider", { forceRefused: true });
     const introHtml = buildArchiveItemIntroHtml(svc, serviceId);
     const msg = `${introHtml}\n\n${built.text}`;
 
@@ -16956,20 +16954,26 @@ const data = await getOrFetchCached(
       const unlockPrice = tiyinToSum(unlockSettings.effective_price || 0);
       const isFreeMode = unlockPrice <= 0;
 
+      const publicDeepLink =
+        BOT_USERNAME
+          ? `https://t.me/${BOT_USERNAME}?start=${encodeURIComponent(`refused_${svc.id}`)}`
+          : `${SITE_URL}/?service=${svc.id}`;
+
+      const mustHideContactsForInline = roleForInline === "client";
       const built = buildServiceMessage(
         svc,
         svcCategory,
         cardRole,
-        // 🔒 В INLINE контакты в сам текст не вшиваем.
-        // Но unlockPrice передаём, чтобы текст/заметки/логика были согласованы с режимом.
+        // Клиентские inline/public карточки безопасны для канала.
+        // Поставщики и админы в личном боте/поиске видят контакты всегда.
         {
           ...cardOptions,
-          unlocked: false,
+          unlocked: roleForInline === "client" ? false : true,
           unlockPrice,
-          publicCard: true,
-          hideProviderIdentity: true,
-          forwardSafe: true,
-          audience: "public",
+          forceHideProviderContacts: mustHideContactsForInline,
+          forceShowProviderContacts: roleForInline === "provider" || roleForInline === "admin",
+          publicSafe: mustHideContactsForInline,
+          publicOpenBotUrl: publicDeepLink,
         }
       );
       
@@ -16992,10 +16996,7 @@ const data = await getOrFetchCached(
 
       // 🔒 INLINE-безопасность: в чатах нельзя делать unlock callback'ом
       // вместо этого отправляем человека в ЛС боту по deep-link, где уже можно unlock'нуть безопасно
-      const deepLink =
-        BOT_USERNAME
-          ? `https://t.me/${BOT_USERNAME}?start=refused_${svc.id}`
-          : `${SITE_URL}/?service=${svc.id}`;
+      const deepLink = publicDeepLink;
       
       let keyboardForClient =
         canSeeContacts || isFreeMode
