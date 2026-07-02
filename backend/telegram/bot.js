@@ -6217,7 +6217,7 @@ async function sendProofCardPreview(ctx, serviceId) {
   } catch {}
 
   const category = String(svc.category || svc.type || "refused_tour").toLowerCase();
-  const built = buildServiceMessage(svc, category, "provider", { forceRefused: true });
+  const built = buildServiceMessage(svc, category, "provider", { forceRefused: true, hideProviderIdentity: true, forwardSafe: true });
   const caption =
     `🧾 <b>Предпросмотр перед модерацией</b>\n\n` +
     `${built.text || "Карточка сформирована."}\n\n` +
@@ -7979,6 +7979,8 @@ bot.start(async (ctx) => {
             unlockPrice,
             isInline: false,
             forceRefused: isRefused,
+            hideProviderIdentity: !(role === "client" && unlocked === true),
+            forwardSafe: !(role === "client" && unlocked === true),
           });
 
         let textFinal = text;
@@ -8867,7 +8869,7 @@ bot.action(/^prov_services:list_cards(?::more)?$/, async (ctx) => {
       const category = svc.category || svc.type || "refused_tour";
       const details = parseDetailsAny(svc.details);
 
-      const { photoUrl, serviceUrl } = buildServiceMessage(svc, category, "provider", { forceRefused: true });
+      const { photoUrl, serviceUrl } = buildServiceMessage(svc, category, "provider", { forceRefused: true, hideProviderIdentity: true, forwardSafe: true });
       const msg = buildProviderCompactManageCardHtml(svc, category, details);
       const manageUrl = `${SITE_URL}/dashboard?from=tg&service=${svc.id}`;
       const detailsUrl = serviceUrl || buildServiceUrl(svc.id);
@@ -9202,7 +9204,7 @@ bot.action(/^archive:item:(\d+)$/, async (ctx) => {
     }
 
     const category = svc.category || svc.type || "refused_tour";
-    const built = buildServiceMessage(svc, category, "provider", { forceRefused: true });
+    const built = buildServiceMessage(svc, category, "provider", { forceRefused: true, hideProviderIdentity: true, forwardSafe: true });
     const introHtml = buildArchiveItemIntroHtml(svc, serviceId);
     const msg = `${introHtml}\n\n${built.text}`;
 
@@ -16960,7 +16962,15 @@ const data = await getOrFetchCached(
         cardRole,
         // 🔒 В INLINE контакты в сам текст не вшиваем.
         // Но unlockPrice передаём, чтобы текст/заметки/логика были согласованы с режимом.
-        { ...cardOptions, unlocked: false, unlockPrice }
+        {
+          ...cardOptions,
+          unlocked: false,
+          unlockPrice,
+          publicCard: true,
+          hideProviderIdentity: true,
+          forwardSafe: true,
+          audience: "public",
+        }
       );
       
       // ✅ НИКОГДА не используем голые переменные text/serviceUrl/photoUrl/kbExtra
