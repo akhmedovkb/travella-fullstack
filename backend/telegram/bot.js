@@ -7925,6 +7925,25 @@ bot.start(async (ctx) => {
       ctx.session.role = role;
       ctx.session.linked = true;
 
+      // ✅ Deep-link: unlock_<serviceId> => сразу открыть paywall/оплату контактов,
+      // без повторной отправки карточки. Это нужно для inline-карточек и каналов:
+      // кнопка «💬 Связаться с поставщиком» открывает личку бота и сразу ведёт к оплате.
+      const mUnlock = startPayloadRaw.match(/^unlock_(\d+)$/i);
+      if (mUnlock) {
+        const serviceId = Number(mUnlock[1]);
+
+        if (role !== "client") {
+          await ctx.reply(
+            "🔒 Открытие контактов доступно клиентам. Переключитесь на клиентский аккаунт или откройте карточку как клиент."
+          );
+          await ctx.reply("🏠 Главное меню:", getMainMenuKeyboard(role));
+          return;
+        }
+
+        await doUnlockFlow(ctx, serviceId);
+        return;
+      }
+
       // ✅ Deep-link: refused_<serviceId> => показать конкретную услугу
       const mRef = startPayloadRaw.match(/^refused_(\d+)$/i);
       if (mRef) {
@@ -12076,114 +12095,6 @@ async function sendUnlockedServiceCard(ctx, serviceId) {
 }
 
 
-
-function pickFirstNonEmpty(...values) {
-  for (const v of values) {
-    if (v === 0) return v;
-    if (v !== undefined && v !== null && String(v).trim() !== "") return v;
-  }
-  return "";
-}
-
-function normalizeTelegramUsernameForButton(value) {
-  const raw = String(value || "").trim();
-  if (!raw) return "";
-  return raw
-    .replace(/^@/, "")
-    .replace(/^https?:\/\/t\.me\//i, "")
-    .replace(/^tg:\/\/resolve\?domain=/i, "")
-    .trim();
-}
-
-async function sendUnlockedContactSummary(ctx, serviceId, paidAmount = 0) {
-  try {
-    const { data } = await axios.get(`/api/telegram/service/${serviceId}`, {
-      params: { role: "client", chatId: ctx.from?.id },
-    });
-
-    if (!data?.success || !data?.service) {
-      await safeReply(ctx, "✅ Контакты открыты. Откройте карточку услуги повторно, чтобы увидеть контакты.");
-      return false;
-    }
-
-    const svc = data.service || {};
-    const d = parseDetailsAny(svc.details);
-    const title = pickFirstNonEmpty(svc.title, svc.name, d.title, d.name, `Услуга #${serviceId}`);
-    const providerName = pickFirstNonEmpty(
-      svc.provider_name,
-      svc.supplier_name,
-      svc.company_name,
-      svc.provider?.name,
-      svc.provider?.company_name,
-      d.providerName,
-      d.supplierName,
-      d.companyName,
-      d.provider?.name,
-      "Поставщик"
-    );
-    const phone = pickFirstNonEmpty(
-      svc.provider_phone,
-      svc.supplier_phone,
-      svc.contact_phone,
-      svc.phone,
-      svc.whatsapp,
-      svc.provider?.phone,
-      d.providerPhone,
-      d.supplierPhone,
-      d.phone,
-      d.whatsapp
-    );
-    const tgRaw = pickFirstNonEmpty(
-      svc.provider_telegram,
-      svc.supplier_telegram,
-      svc.telegram,
-      svc.tg,
-      svc.provider?.telegram,
-      svc.provider?.telegram_username,
-      d.providerTelegram,
-      d.supplierTelegram,
-      d.telegram,
-      d.tg
-    );
-    const tg = normalizeTelegramUsernameForButton(tgRaw);
-
-    const amountLine = Number(paidAmount || 0) > 0
-      ? `\n💸 Оплачено: <b>${Number(paidAmount || 0).toLocaleString("ru-RU")}</b> сум`
-      : "";
-
-    const lines = [
-      `✅ <b>Контакты открыты</b>`,
-      "",
-      `📌 ${escapeHtml(String(title).slice(0, 120))}`,
-      `👤 <b>${escapeHtml(providerName)}</b>`,
-      phone ? `📞 ${escapeHtml(phone)}` : "",
-      tg ? `💬 Telegram: @${escapeHtml(tg)}` : "",
-      amountLine.trim(),
-      "",
-      `Свяжитесь с поставщиком напрямую — отказные варианты часто уходят быстро.`,
-    ].filter(Boolean);
-
-    const rows = [];
-    if (phone) {
-      const phoneHref = String(phone).replace(/[^\d+]/g, "");
-      if (phoneHref) rows.push([{ text: "📞 Позвонить", url: `tel:${phoneHref}` }]);
-    }
-    if (tg) rows.push([{ text: "💬 Telegram", url: `https://t.me/${encodeURIComponent(tg)}` }]);
-    rows.push([{ text: "🔄 Вернуться к карточке", callback_data: `refused:${serviceId}` }]);
-
-    await safeReply(ctx, lines.join("\n"), {
-      parse_mode: "HTML",
-      disable_web_page_preview: true,
-      reply_markup: { inline_keyboard: rows },
-    });
-    return true;
-  } catch (e) {
-    console.error("[tg-bot] sendUnlockedContactSummary error:", e?.message || e);
-    try { await sendUnlockedServiceCard(ctx, serviceId); } catch {}
-    return false;
-  }
-}
-
 async function ensureTelegramPaymentsTables(poolArg = pool) {
   if (!poolArg) return false;
 
@@ -13257,7 +13168,17 @@ bot.on("successful_payment", async (ctx) => {
           source: 'telegram_payment',
         });
 
-        await sendUnlockedContactSummary(ctx, serviceId, paidAmount);
+        await safeReply(
+          ctx,
+          `✅ <b>Оплата получена</b>\n\n` +
+            `🔓 Контакты поставщика успешно открыты.\n` +
+            `💸 Оплачено: <b>${Number(paidAmount || 0).toLocaleString("ru-RU")}</b> сум\n\n` +
+            `👇 Ниже отправляю карточку уже с открытыми контактами. Напишите поставщику сразу — отказные варианты часто уходят быстро.\n\n` +
+            `Спасибо за использование Travella 💙`,
+          { parse_mode: "HTML" }
+        );
+
+        await sendUnlockedServiceCard(ctx, serviceId);
 
         await trackTelegramBotEvent('tg_unlock_success', {
           clientId: Number(clientRow.id),
@@ -13761,34 +13682,25 @@ if (!result.ok) {
       console.error("[tg-bot] pending unlock insert error:", e?.message || e);
     }
 
-    // На первом же нажатии ведём к оплате, без повторной карточки.
+    // 1) как и раньше: alert
     try {
       await ctx.answerCbQuery(
-        `💳 Готовлю оплату.
-Баланс: ${bal} сум
-Нужно: ${need} сум`,
-        { show_alert: false }
+        `💳 Недостаточно средств.\nБаланс: ${bal} сум\nНужно: ${need} сум`,
+        { show_alert: true }
       );
     } catch {}
 
+    // 1) как и раньше: alert
     try {
-      if (isClickConfigured()) {
-        await sendClickUnlockContactInvoice(ctx, {
-          clientId: clientRow.id,
-          serviceId,
-          amountSum: needNum,
-        });
-        return { ok: false, reason: "click_invoice_sent" };
-      }
+      await ctx.answerCbQuery(
+        `💳 Недостаточно средств.\nБаланс: ${bal} сум\nНужно: ${need} сум`,
+        { show_alert: true }
+      );
+    } catch {}
 
-      if (PAYMENTS_PROVIDER_TOKEN && getCallbackChatType(ctx) === "private") {
-        await sendUnlockContactInvoice(ctx, {
-          clientId: clientRow.id,
-          serviceId,
-          amountSum: needNum,
-        });
-        return { ok: false, reason: "telegram_invoice_sent" };
-      }
+    // 2) "окно" в чат с кнопками
+    try {
+      const topupUrl = `${SITE_URL}/client/balance`;
 
       await sendUnlockPaywallCard(ctx, {
         serviceId,
@@ -13796,16 +13708,7 @@ if (!result.ok) {
         priceSum: needNum,
       });
     } catch (e) {
-      console.error("[tg-bot] no_balance payment UI error:", e?.message || e);
-      try {
-        await sendUnlockPaywallCard(ctx, {
-          serviceId,
-          balanceSum: balNum,
-          priceSum: needNum,
-        });
-      } catch (e2) {
-        console.error("[tg-bot] no_balance fallback paywall error:", e2?.message || e2);
-      }
+      console.error("[tg-bot] no_balance UI error:", e?.message || e);
     }
 
     return { ok: false, reason: "no_balance" };
@@ -16842,12 +16745,6 @@ bot.on("inline_query", async (ctx) => {
     // роль для inline
     const roleForInline = await resolveRoleByUserId(userId, ctx);
 
-    // Telegram сообщает, из какого типа чата вызван inline-режим.
-    // Если карточку выбирают для группы/супергруппы/канала — это публичная зона:
-    // контакты поставщика должны быть скрыты даже для админа/поставщика.
-    const inlineChatType = String(ctx.inlineQuery?.chat_type || "").toLowerCase();
-    const isInlinePublicTarget = ["group", "supergroup", "channel"].includes(inlineChatType);
-
     // Требуем привязку аккаунта
     if (!roleForInline) {
       await ctx.answerInlineQuery([], {
@@ -16906,7 +16803,7 @@ bot.on("inline_query", async (ctx) => {
       `${roleForInline}:` +
       `${userId}:` +
       `${category || "all"}:` +
-      `v7`;
+      `v6`;
 
     // отдельно кэшируем:
     // 1) сырой ответ API (короткий TTL)
@@ -16914,7 +16811,7 @@ bot.on("inline_query", async (ctx) => {
     const apiKey = `${baseKey}:api`;
 
     // ✅ resKey теперь зависит от unlockStamp, иначе после оплаты липнет старый текст/markup
-    const resKey = `${baseKey}:res:v7:u${unlockStamp}:o${offset}`;
+    const resKey = `${baseKey}:res:v6:u${unlockStamp}:o${offset}`;
 
     // ✅ Для client-search results-cache можно использовать только если stamp учтён (мы учли)
 const cachedRes = cacheGet(resKey);
@@ -17057,21 +16954,15 @@ const data = await getOrFetchCached(
       const isUnlocked =
         roleForInline === "client" ? unlockedSet.has(Number(svc.id)) : false;
 
-      const canSeeContacts = isInlinePublicTarget
-        ? false
-        : roleForInline === "admin" || roleForInline === "provider"
+      const canSeeContacts =
+        roleForInline === "admin" || roleForInline === "provider"
           ? true
           : roleForInline === "client"
           ? isUnlocked
           : false;
 
-      // В публичной inline-зоне (канал/группа) всегда собираем public-safe карточку,
-      // даже если выбирает админ или поставщик. В личном боте они видят контакты как раньше.
-      const cardRole = isInlinePublicTarget
-        ? "client"
-        : roleForInline === "client"
-        ? "client"
-        : roleForInline;
+      // ✅ КЛЮЧЕВОЕ: telegramServiceCard должен получить client_unlocked, иначе в тексте будет "🔒 скрыт"
+      const cardRole = roleForInline === "client" ? "client" : roleForInline;
       
       const cardOptions =
         roleForInline === "provider" && !isMy
@@ -17084,23 +16975,22 @@ const data = await getOrFetchCached(
 
       const publicDeepLink =
         BOT_USERNAME
-          ? `https://t.me/${BOT_USERNAME}?start=${encodeURIComponent(`refused_${svc.id}`)}`
+          ? `https://t.me/${BOT_USERNAME}?start=${encodeURIComponent(`unlock_${svc.id}`)}`
           : `${SITE_URL}/?service=${svc.id}`;
 
-      const mustHideContactsForInline = roleForInline === "client" || isInlinePublicTarget;
+      const mustHideContactsForInline = roleForInline === "client";
       const built = buildServiceMessage(
         svc,
         svcCategory,
         cardRole,
-        // Клиентские и публичные inline-карточки безопасны для канала/группы.
+        // Клиентские inline/public карточки безопасны для канала.
         // Поставщики и админы в личном боте/поиске видят контакты всегда.
         {
           ...cardOptions,
-          audience: mustHideContactsForInline ? "public" : undefined,
-          unlocked: mustHideContactsForInline ? false : true,
+          unlocked: roleForInline === "client" ? false : true,
           unlockPrice,
           forceHideProviderContacts: mustHideContactsForInline,
-          forceShowProviderContacts: !mustHideContactsForInline && (roleForInline === "provider" || roleForInline === "admin"),
+          forceShowProviderContacts: roleForInline === "provider" || roleForInline === "admin",
           publicSafe: mustHideContactsForInline,
           publicOpenBotUrl: publicDeepLink,
         }
@@ -17132,7 +17022,7 @@ const data = await getOrFetchCached(
           ? {
               inline_keyboard: [
                 [
-                  { text: "💬 Контакты в боте", url: deepLink },
+                  { text: "👤 Контакты в боте", url: deepLink },
                   { text: "Подробнее на сайте", url: serviceUrl },
                 ],
                 [
@@ -17227,7 +17117,7 @@ const data = await getOrFetchCached(
       });
 
       results.push({
-        id: `${svcCategory}:${svc.id}:v7`,
+        id: `${svcCategory}:${svc.id}:v6`,
         type: "article",
         title,
         description,
@@ -17237,7 +17127,7 @@ const data = await getOrFetchCached(
           disable_web_page_preview: true,
         },
         thumb_url: finalThumbUrl,
-        reply_markup: isMy && !isInlinePublicTarget ? keyboardForMy : keyboardForClient,
+        reply_markup: isMy ? keyboardForMy : keyboardForClient,
       });
     }
 
