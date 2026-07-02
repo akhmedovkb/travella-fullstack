@@ -2076,13 +2076,13 @@ return (
                   <div>
                     <div className="font-black">
                       {t("marketplace.unlock_supplier_hint_title", {
-                        defaultValue: "Контакты закрыты",
+                        defaultValue: "Контакты проверенного поставщика защищены",
                       })}
                     </div>
                     <div className="mt-0.5 font-medium text-orange-700/90 line-clamp-2">
                       {t("marketplace.unlock_supplier_hint", {
                         defaultValue:
-                          "После открытия вы сможете связаться с поставщиком.",
+                          "После открытия вы сможете связаться с ним напрямую.",
                       })}
                     </div>
                   </div>
@@ -2105,7 +2105,7 @@ return (
                   ) : (
                     <span className="relative z-10 inline-flex items-center justify-center">
                       {t("marketplace.unlock_contacts_cta_primary", {
-                        defaultValue: "Открыть контакты",
+                        defaultValue: "💬 Связаться с поставщиком",
                       })}
                     </span>
                   )}
@@ -2113,7 +2113,7 @@ return (
 
                 <p className="mt-1 text-center text-[10px] font-medium leading-4 text-gray-400/85">
                   {t("marketplace.unlock_contacts_cta_hint", {
-                    defaultValue: "После оплаты контакты откроются автоматически",
+                    defaultValue: "После открытия вы сможете связаться с ним напрямую",
                   })}
                 </p>
               </>
@@ -3106,7 +3106,7 @@ return (
                     </h3>
                     <p className="text-sm text-white/90">
                       {t("marketplace.pay_modal_subtitle", {
-                        defaultValue: "После оплаты контакты откроются автоматически",
+                        defaultValue: "После открытия вы сможете связаться с ним напрямую",
                       })}
                     </p>
                   </div>
