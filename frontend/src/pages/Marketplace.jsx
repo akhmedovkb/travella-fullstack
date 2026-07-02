@@ -765,8 +765,8 @@ const lat2cyr = (s) => {
 };
 
 // обёртка над buildHaystack для нормализованных вариантов
-const buildSearchIndex = (it) => {
-  const raw = buildHaystack(it);      // ваша текущая сборка полей
+const buildSearchIndex = (it, role = getRole()) => {
+  const raw = buildHaystack(it, role);
   const n   = norm(raw);
   return { n, n_lat: cyr2lat(n), n_cyr: lat2cyr(n) };
 };
@@ -789,7 +789,7 @@ const matchQuery = (query, it) => {
 };
 
   
-  function buildHaystack(it) {
+  function buildHaystack(it, role = getRole()) {
     const s = it?.service || it || {};
     const d =
       (typeof s.details === "string"
@@ -817,6 +817,8 @@ const matchQuery = (query, it) => {
       d.supplier_name,
     ];
 
+    const canExposeProviderIdentity = ["admin", "provider"].includes(String(role || "").toLowerCase());
+
     return [
       s.title,
       s.name,
@@ -837,16 +839,20 @@ const matchQuery = (query, it) => {
       d.hotel,
       d.hotel_name,
       d.airline,
-      p.name,
-      p.title,
-      p.display_name,
-      p.company_name,
-      p.brand,
-      ...flatNames,
-      p.telegram,
-      p.tg,
-      p.telegram_username,
-      p.telegram_link,
+      ...(canExposeProviderIdentity
+        ? [
+            p.name,
+            p.title,
+            p.display_name,
+            p.company_name,
+            p.brand,
+            ...flatNames,
+            p.telegram,
+            p.tg,
+            p.telegram_username,
+            p.telegram_link,
+          ]
+        : []),
     ]
       .filter(Boolean)
       .join(" ")
@@ -940,14 +946,19 @@ function detectCategoryFromQuery(q) {
 
 /* ---------- скоринг результата ---------- */
 function scoreItem(query, it) {
-  const { title, hotel, inlineProvider, flatName, details, svc } = extractServiceFields(it, getRole());
-  const providerName =
-    flatName ||
-    inlineProvider?.display_name ||
-    inlineProvider?.company_name ||
-    inlineProvider?.brand ||
-    inlineProvider?.name ||
-    "";
+  const role = getRole();
+  const { title, hotel, inlineProvider, flatName, details, svc } = extractServiceFields(it, role);
+  // Публичный marketplace не должен находить услуги по названию поставщика:
+  // иначе клиент ищет поставщика напрямую и обходит оплату открытия контактов.
+  const canSearchProviderIdentity = ["admin", "provider"].includes(String(role || "").toLowerCase());
+  const providerName = canSearchProviderIdentity
+    ? (flatName ||
+        inlineProvider?.display_name ||
+        inlineProvider?.company_name ||
+        inlineProvider?.brand ||
+        inlineProvider?.name ||
+        "")
+    : "";
   const city =
     norm(
       _firstNonEmpty(
@@ -956,7 +967,7 @@ function scoreItem(query, it) {
       ) || ""
     );
 
-  const idx = buildSearchIndex(it); // { n, n_lat, n_cyr }
+  const idx = buildSearchIndex(it, role); // { n, n_lat, n_cyr }
   const tokens = norm(query).split(/\s+/).filter(Boolean);
   let score = 0;
 
