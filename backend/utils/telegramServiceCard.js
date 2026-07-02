@@ -323,15 +323,6 @@ function shouldShowProviderContacts(role, unlocked, options = {}) {
   return unlocked === true;
 }
 
-function pushProtectedProviderBlock(parts) {
-  parts.push(`🤝 <b>Контакты проверенного поставщика защищены</b>`);
-  parts.push(`🔓 После открытия вы сможете связаться с ним напрямую.`);
-}
-
-function unlockButtonLabel() {
-  return "💬 Связаться с поставщиком";
-}
-
 /**
  * В services.images могут быть:
  * - base64 data:image...
@@ -1036,7 +1027,8 @@ const priceKind =
       parts.push(`🤝 <b>${escapeHtml(providerNameRaw)}</b>`);
       if (telegramLine) parts.push(telegramLine);
     } else {
-      pushProtectedProviderBlock(parts);
+      parts.push(`🤝 <b>Контакты проверенного поставщика защищены</b>`);
+      parts.push(`🔓 После открытия вы сможете связаться с ним напрямую.`);
     }
   };
 
@@ -1066,9 +1058,9 @@ const priceKind =
       if (shouldRenderUnlockButton(role, options)) {
         const publicDeepLink = options?.publicOpenBotUrl || options?.deepLinkUrl || "";
         if (options?.forceHideProviderContacts === true && publicDeepLink) {
-          rows.push([{ text: unlockButtonLabel(), url: publicDeepLink }]);
+          rows.push([{ text: "💬 Связаться с поставщиком", url: publicDeepLink }]);
         } else {
-          rows.push([{ text: unlockButtonLabel(), callback_data: `contacts:${serviceId}` }]);
+          rows.push([{ text: "💬 Связаться с поставщиком", callback_data: `contacts:${serviceId}` }]);
         }
       }
 
@@ -1444,7 +1436,8 @@ const priceKind =
             : escapeHtml(authorName);
           parts.push(`🏢 <b>Поставщик:</b> ${providerValue}`);
         } else {
-          pushProtectedProviderBlock(parts);
+          parts.push(`🤝 <b>Контакты проверенного поставщика защищены</b>`);
+          parts.push(`🔓 После открытия вы сможете связаться с ним напрямую.`);
         }
       }
 
@@ -1461,7 +1454,7 @@ const priceKind =
 
     if (role !== "provider" && role !== "admin") {
       if (shouldRenderUnlockButton(role, options)) {
-        kbRows.push([{ text: "👤 Контакты", callback_data: `contacts:${serviceId}` }]);
+        kbRows.push([{ text: "💬 Связаться с поставщиком", callback_data: `contacts:${serviceId}` }]);
       }
       if (isClientActionsUnlocked()) {
         kbRows.push([{ text: "💬 Быстрый запрос", callback_data: `quick:${serviceId}` }]);
@@ -1765,7 +1758,8 @@ const priceKind =
     parts.push(providerLine);
     if (telegramLine) parts.push(telegramLine);
   } else {
-    pushProtectedProviderBlock(parts);
+    parts.push("🤝 <b>Проверенный поставщик Travella</b>");
+    parts.push("🔒 Название и контакты откроются после оплаты");
   }
 
   pushDivider(parts);
