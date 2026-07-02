@@ -24,44 +24,6 @@ const SITE_URL = (
 
 const PRICE_CURRENCY = (process.env.PRICE_CURRENCY || "USD").trim();
 
-const PUBLIC_PROVIDER_LABEL = (
-  process.env.PUBLIC_PROVIDER_LABEL ||
-  "Проверенный поставщик Travella"
-).trim();
-
-function publicProviderLabel() {
-  return PUBLIC_PROVIDER_LABEL || "Проверенный поставщик Travella";
-}
-
-function isPublicCardOptions(options = {}) {
-  const audience = String(options?.audience || options?.mode || "").toLowerCase();
-  return (
-    options?.publicCard === true ||
-    options?.hideProviderIdentity === true ||
-    options?.forwardSafe === true ||
-    options?.broadcast === true ||
-    audience === "public" ||
-    audience === "broadcast" ||
-    audience === "channel"
-  );
-}
-
-function canRevealProviderIdentity(role, unlocked, options = {}) {
-  if (isPublicCardOptions(options)) return false;
-
-  const r = String(role || "client").toLowerCase();
-
-  // Client contacts are revealed only after paid/free unlock.
-  if (r === "client" || r === "guest" || r === "user") return unlocked === true;
-
-  // Provider/admin Telegram cards are forwardable, so keep identity hidden by default.
-  // Internal screens that explicitly need identity can opt in with revealProviderIdentity=true.
-  if (r === "provider" || r === "admin") return options?.revealProviderIdentity === true;
-
-  return unlocked === true;
-}
-
-
 const TG_IMAGE_BASE = (
   process.env.TG_IMAGE_BASE ||
   process.env.API_PUBLIC_URL ||
@@ -339,12 +301,25 @@ function getExpiryBadge(detailsRaw, svc) {
   return null;
 }
 
-function shouldShowProviderContacts(role, unlocked) {
+function shouldShowProviderContacts(role, unlocked, options = {}) {
   const r = String(role || "").toLowerCase();
 
+  // Жесткий публичный режим. Использовать только для канала/клиентской
+  // рассылки/публичной карточки, которую можно переслать дальше.
+  if (options?.forceHideProviderContacts === true || options?.audience === "public") {
+    return false;
+  }
+
+  // Поставщик и админ в личном боте/поиске/рассылке должны видеть контакты
+  // всегда. Иначе они не могут оперативно работать с карточками.
+  if (options?.forceShowProviderContacts === true) return true;
   if (r === "admin" || r === "provider") return true;
 
-  // клиент/гость/прочие — только после unlock
+  // publicSafe сам по себе не должен ломать owner/provider/admin режим.
+  // Для публичного канала всегда передавайте forceHideProviderContacts:true.
+  if (options?.publicSafe === true) return false;
+
+  // Клиент/гость/прочие — только после unlock.
   return unlocked === true;
 }
 
@@ -1048,12 +1023,12 @@ const priceKind =
 
   const providerCompactBlock = (parts) => {
     pushDivider(parts);
-    if (canRevealProviderIdentity(role, unlocked, options)) {
+    if (shouldShowProviderContacts(role, unlocked, options)) {
       parts.push(`🤝 <b>${escapeHtml(providerNameRaw)}</b>`);
       if (telegramLine) parts.push(telegramLine);
     } else {
-      parts.push(`🤝 <b>${escapeHtml(publicProviderLabel())}</b>`);
-      parts.push("🔒 Название и контакты откроются после оплаты");
+      parts.push(`🤝 <b>Проверенный поставщик Travella</b>`);
+      parts.push(`🔒 Название и контакты откроются после оплаты`);
     }
   };
 
@@ -1081,7 +1056,12 @@ const priceKind =
 
     if (!isOwnerSide) {
       if (shouldRenderUnlockButton(role, options)) {
-        rows.push([{ text: "🔓 Открыть контакты", callback_data: `contacts:${serviceId}` }]);
+        const publicDeepLink = options?.publicOpenBotUrl || options?.deepLinkUrl || "";
+        if (options?.forceHideProviderContacts === true && publicDeepLink) {
+          rows.push([{ text: "🔓 Открыть контакты", url: publicDeepLink }]);
+        } else {
+          rows.push([{ text: "🔓 Открыть контакты", callback_data: `contacts:${serviceId}` }]);
+        }
       }
 
       // Быстрый запрос не должен обходить платное открытие контактов.
@@ -1430,38 +1410,37 @@ const priceKind =
       parts.push("💛 <b>Поддерживает проект</b>");
     }
 
-    // В публичных карточках НЕ раскрываем имя/Telegram поставщика.
-    // Иначе лиды обходят Travella через Google/Telegram.
-    if (canRevealProviderIdentity(role, unlocked, options)) {
-      const authorName =
-        providerNameRaw && providerNameRaw !== "Поставщик"
-          ? providerNameRaw
-          : norm(d.authorName || d.guideName || "");
+    const authorName =
+      providerNameRaw && providerNameRaw !== "Поставщик"
+        ? providerNameRaw
+        : norm(d.authorName || d.guideName || "");
 
-      const authorTelegramRaw = String(
-        d.authorTelegram ||
-          d.guideTelegram ||
-          svc.provider_telegram ||
-          svc.providerTelegram ||
-          ""
-      ).trim();
+    const authorTelegramRaw = String(
+      d.authorTelegram ||
+        d.guideTelegram ||
+        svc.provider_telegram ||
+        svc.providerTelegram ||
+        ""
+    ).trim();
 
-      const authorTelegram = authorTelegramRaw
-        .replace(/^@/, "")
-        .replace(/^https?:\/\/t\.me\//i, "")
-        .replace(/^tg:\/\/resolve\?domain=/i, "")
-        .trim();
+    const authorTelegram = authorTelegramRaw
+      .replace(/^@/, "")
+      .replace(/^https?:\/\/t\.me\//i, "")
+      .replace(/^tg:\/\/resolve\?domain=/i, "")
+      .trim();
 
       if (authorName) {
-        const providerValue = authorTelegram
-          ? a(`https://t.me/${encodeURIComponent(authorTelegram)}`, authorName)
-          : escapeHtml(authorName);
-        parts.push(`🏢 <b>Поставщик:</b> ${providerValue}`);
+        if (shouldShowProviderContacts(role, unlocked, options)) {
+          const providerValue = authorTelegram
+            ? a(`https://t.me/${encodeURIComponent(authorTelegram)}`, authorName)
+            : escapeHtml(authorName);
+          parts.push(`🏢 <b>Поставщик:</b> ${providerValue}`);
+        } else {
+          parts.push(`🤝 <b>Проверенный поставщик Travella</b>`);
+          parts.push(`🔒 Название и контакты откроются после оплаты`);
+        }
       }
-    } else {
-      parts.push(`🤝 <b>${escapeHtml(publicProviderLabel())}</b>`);
-      parts.push("🔒 Название и контакты откроются после оплаты");
-    }
+
 
     // ВАЖНО: программу тура НЕ вставляем в основную карточку.
     // Она открывается отдельной кнопкой «🗓 Программа тура» через handler atp:<serviceId> в bot.js.
@@ -1775,11 +1754,11 @@ const priceKind =
   if (badgeClean) parts.push(`⏳ ${escapeHtml(badgeClean)}`);
 
   pushDivider(parts);
-  if (canRevealProviderIdentity(role, unlocked, options)) {
+  if (shouldShowProviderContacts(role, unlocked, options)) {
     parts.push(providerLine);
     if (telegramLine) parts.push(telegramLine);
   } else {
-    parts.push(`🤝 <b>${escapeHtml(publicProviderLabel())}</b>`);
+    parts.push("🤝 <b>Проверенный поставщик Travella</b>");
     parts.push("🔒 Название и контакты откроются после оплаты");
   }
 
