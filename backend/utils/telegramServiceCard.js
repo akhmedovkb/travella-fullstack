@@ -24,6 +24,20 @@ const SITE_URL = (
 
 const PRICE_CURRENCY = (process.env.PRICE_CURRENCY || "USD").trim();
 
+const PUBLIC_PROVIDER_LABEL = (
+  process.env.PUBLIC_PROVIDER_LABEL ||
+  "Проверенный поставщик Travella"
+).trim();
+
+function publicProviderLabel() {
+  return PUBLIC_PROVIDER_LABEL || "Проверенный поставщик Travella";
+}
+
+function canRevealProviderIdentity(role, unlocked) {
+  return shouldShowProviderContacts(role, unlocked);
+}
+
+
 const TG_IMAGE_BASE = (
   process.env.TG_IMAGE_BASE ||
   process.env.API_PUBLIC_URL ||
@@ -1014,7 +1028,8 @@ const priceKind =
       parts.push(`🤝 <b>${escapeHtml(providerNameRaw)}</b>`);
       if (telegramLine) parts.push(telegramLine);
     } else {
-      parts.push(`🤝 <b>Поставщик:</b> 🔒 скрыт до открытия`);
+      parts.push(`🤝 <b>${escapeHtml(publicProviderLabel())}</b>`);
+      parts.push("🔒 Название и контакты откроются после оплаты");
     }
   };
 
@@ -1391,33 +1406,38 @@ const priceKind =
       parts.push("💛 <b>Поддерживает проект</b>");
     }
 
-    const authorName =
-      providerNameRaw && providerNameRaw !== "Поставщик"
-        ? providerNameRaw
-        : norm(d.authorName || d.guideName || "");
+    // В публичных карточках НЕ раскрываем имя/Telegram поставщика.
+    // Иначе лиды обходят Travella через Google/Telegram.
+    if (canRevealProviderIdentity(role, unlocked)) {
+      const authorName =
+        providerNameRaw && providerNameRaw !== "Поставщик"
+          ? providerNameRaw
+          : norm(d.authorName || d.guideName || "");
 
-    const authorTelegramRaw = String(
-      d.authorTelegram ||
-        d.guideTelegram ||
-        svc.provider_telegram ||
-        svc.providerTelegram ||
-        ""
-    ).trim();
+      const authorTelegramRaw = String(
+        d.authorTelegram ||
+          d.guideTelegram ||
+          svc.provider_telegram ||
+          svc.providerTelegram ||
+          ""
+      ).trim();
 
-    const authorTelegram = authorTelegramRaw
-      .replace(/^@/, "")
-      .replace(/^https?:\/\/t\.me\//i, "")
-      .replace(/^tg:\/\/resolve\?domain=/i, "")
-      .trim();
+      const authorTelegram = authorTelegramRaw
+        .replace(/^@/, "")
+        .replace(/^https?:\/\/t\.me\//i, "")
+        .replace(/^tg:\/\/resolve\?domain=/i, "")
+        .trim();
 
       if (authorName) {
         const providerValue = authorTelegram
           ? a(`https://t.me/${encodeURIComponent(authorTelegram)}`, authorName)
           : escapeHtml(authorName);
-      
         parts.push(`🏢 <b>Поставщик:</b> ${providerValue}`);
       }
-
+    } else {
+      parts.push(`🤝 <b>${escapeHtml(publicProviderLabel())}</b>`);
+      parts.push("🔒 Название и контакты откроются после оплаты");
+    }
 
     // ВАЖНО: программу тура НЕ вставляем в основную карточку.
     // Она открывается отдельной кнопкой «🗓 Программа тура» через handler atp:<serviceId> в bot.js.
@@ -1735,8 +1755,8 @@ const priceKind =
     parts.push(providerLine);
     if (telegramLine) parts.push(telegramLine);
   } else {
-    parts.push(labelLine("🏢", "Поставщик", "🔒 скрыт"));
-    parts.push("🔓 Откройте контакты для связи");
+    parts.push(`🤝 <b>${escapeHtml(publicProviderLabel())}</b>`);
+    parts.push("🔒 Название и контакты откроются после оплаты");
   }
 
   pushDivider(parts);
