@@ -162,7 +162,7 @@ async function broadcastApprovedService(serviceId, options = {}) {
   const detailsObj = parseJsonMaybe(svc.details);
   const needNewBadgeOnce = !Boolean(detailsObj?.meta?.new_badge_sent_at);
 
-  const card = buildServiceMessage(svc, cat, "client", { newBadge: needNewBadgeOnce });
+  const card = buildServiceMessage(svc, cat, "client", { newBadge: needNewBadgeOnce, publicCard: true, hideProviderIdentity: true, broadcast: true, forwardSafe: true });
   const text = String(card?.text || "").trim();
   if (!text) return { ok: false, reason: "EMPTY_CARD_TEXT" };
 
