@@ -301,41 +301,34 @@ function getExpiryBadge(detailsRaw, svc) {
   return null;
 }
 
-function resolveCardAudience(role, options = {}) {
-  const explicit = String(options?.audience || "").toLowerCase().trim();
-  if (["owner", "provider", "admin", "client", "public"].includes(explicit)) {
-    return explicit === "provider" ? "owner" : explicit;
+function shouldShowProviderContacts(role, unlocked, options = {}) {
+  const r = String(role || "").toLowerCase();
+
+  // Жесткий публичный режим. Использовать только для канала/клиентской
+  // рассылки/публичной карточки, которую можно переслать дальше.
+  if (options?.forceHideProviderContacts === true || options?.audience === "public") {
+    return false;
   }
 
-  const r = String(role || "client").toLowerCase().trim();
-  if (options?.forceHideProviderContacts === true || options?.publicSafe === true) return "public";
-  if (options?.forceShowProviderContacts === true) return r === "admin" ? "admin" : "owner";
-  if (r === "admin") return "admin";
-  if (r === "provider") return "owner";
-  return "client";
-}
+  // Поставщик и админ в личном боте/поиске/рассылке должны видеть контакты
+  // всегда. Иначе они не могут оперативно работать с карточками.
+  if (options?.forceShowProviderContacts === true) return true;
+  if (r === "admin" || r === "provider") return true;
 
-function shouldShowProviderContacts(role, unlocked, options = {}) {
-  const audience = resolveCardAudience(role, options);
+  // publicSafe сам по себе не должен ломать owner/provider/admin режим.
+  // Для публичного канала всегда передавайте forceHideProviderContacts:true.
+  if (options?.publicSafe === true) return false;
 
-  // owner/provider и admin в личном боте/поиске/рассылке всегда видят контакты.
-  if (audience === "owner" || audience === "admin") return true;
-
-  // public/card-for-channel/client-broadcast никогда не раскрывает поставщика.
-  if (audience === "public") return false;
-
-  // client: контакты видны только после открытия контактов/покупки.
+  // Клиент/гость/прочие — только после unlock.
   return unlocked === true;
 }
 
-function protectedProviderBlockLines() {
-  return [
-    "🤝 <b>Контакты проверенного поставщика защищены</b>",
-    "🔓 После открытия вы сможете связаться с ним напрямую.",
-  ];
+function pushProtectedProviderBlock(parts) {
+  parts.push(`🤝 <b>Контакты проверенного поставщика защищены</b>`);
+  parts.push(`🔓 После открытия вы сможете связаться с ним напрямую.`);
 }
 
-function unlockContactButtonLabel() {
+function unlockButtonLabel() {
   return "💬 Связаться с поставщиком";
 }
 
@@ -1043,7 +1036,7 @@ const priceKind =
       parts.push(`🤝 <b>${escapeHtml(providerNameRaw)}</b>`);
       if (telegramLine) parts.push(telegramLine);
     } else {
-      parts.push(...protectedProviderBlockLines());
+      pushProtectedProviderBlock(parts);
     }
   };
 
@@ -1073,9 +1066,9 @@ const priceKind =
       if (shouldRenderUnlockButton(role, options)) {
         const publicDeepLink = options?.publicOpenBotUrl || options?.deepLinkUrl || "";
         if (options?.forceHideProviderContacts === true && publicDeepLink) {
-          rows.push([{ text: unlockContactButtonLabel(), url: publicDeepLink }]);
+          rows.push([{ text: unlockButtonLabel(), url: publicDeepLink }]);
         } else {
-          rows.push([{ text: unlockContactButtonLabel(), callback_data: `contacts:${serviceId}` }]);
+          rows.push([{ text: unlockButtonLabel(), callback_data: `contacts:${serviceId}` }]);
         }
       }
 
@@ -1451,7 +1444,7 @@ const priceKind =
             : escapeHtml(authorName);
           parts.push(`🏢 <b>Поставщик:</b> ${providerValue}`);
         } else {
-          parts.push(...protectedProviderBlockLines());
+          pushProtectedProviderBlock(parts);
         }
       }
 
@@ -1468,7 +1461,7 @@ const priceKind =
 
     if (role !== "provider" && role !== "admin") {
       if (shouldRenderUnlockButton(role, options)) {
-        kbRows.push([{ text: unlockContactButtonLabel(), callback_data: `contacts:${serviceId}` }]);
+        kbRows.push([{ text: "👤 Контакты", callback_data: `contacts:${serviceId}` }]);
       }
       if (isClientActionsUnlocked()) {
         kbRows.push([{ text: "💬 Быстрый запрос", callback_data: `quick:${serviceId}` }]);
@@ -1772,7 +1765,7 @@ const priceKind =
     parts.push(providerLine);
     if (telegramLine) parts.push(telegramLine);
   } else {
-    parts.push(...protectedProviderBlockLines());
+    pushProtectedProviderBlock(parts);
   }
 
   pushDivider(parts);
