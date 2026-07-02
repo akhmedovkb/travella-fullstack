@@ -37,6 +37,15 @@ function hoursFilter(req, def = 168, max = 24 * 180) {
   return clampInt(req.query.since_hours || req.query.sinceHours || req.query.hours, def, 1, max);
 }
 
+function includeAdmin(req) {
+  const v = String(req.query.include_admin || req.query.includeAdmin || "").toLowerCase();
+  return ["1", "true", "yes", "on"].includes(v);
+}
+
+function statusCodeErrorSql(alias = "ae") {
+  return `((COALESCE(${alias}.meta->>'status_code','') ~ '^\\d+$') AND (${alias}.meta->>'status_code')::int >= 400)`;
+}
+
 async function enrichActor(req, payload) {
   const roleFromToken = safeText(req.user?.role, 40).toLowerCase();
   const roleFromPayload = safeText(payload.actorRole, 40).toLowerCase();
@@ -155,6 +164,14 @@ function buildWhere(req, values) {
   }
   values.push(sinceHours);
   where.push(`ae.created_at >= NOW() - ($${values.length}::int || ' hours')::interval`);
+  if (!includeAdmin(req)) {
+    where.push(`NOT (
+      LOWER(COALESCE(ae.actor_role,'')) IN ('admin','moderator')
+      OR (LOWER(COALESCE(ae.actor_role,'')) = 'provider' AND ae.actor_id = 5)
+      OR LOWER(COALESCE(ae.actor_name,'')) IN ('travella.uz','travella')
+      OR COALESCE(ae.meta->>'is_admin','') = 'true'
+    )`);
+  }
   if (q) {
     values.push(`%${q}%`);
     where.push(`(
@@ -210,6 +227,15 @@ async function getActivityOverview(req, res) {
     await ensureActivityEventsTable();
     const sinceHours = hoursFilter(req, 24 * 7);
     const values = [sinceHours];
+    const where = [`ae.created_at >= NOW() - ($1::int || ' hours')::interval`];
+    const role = safeText(req.query.role, 40).toLowerCase();
+    const source = safeText(req.query.source, 80).toLowerCase();
+    if (role) { values.push(role); where.push(`LOWER(COALESCE(ae.actor_role,'')) = $${values.length}`); }
+    if (source) { values.push(source); where.push(`LOWER(COALESCE(ae.source,'')) = $${values.length}`); }
+    if (!includeAdmin(req)) {
+      where.push(`NOT (LOWER(COALESCE(ae.actor_role,'')) IN ('admin','moderator') OR (LOWER(COALESCE(ae.actor_role,'')) = 'provider' AND ae.actor_id = 5) OR LOWER(COALESCE(ae.actor_name,'')) IN ('travella.uz','travella') OR COALESCE(ae.meta->>'is_admin','') = 'true')`);
+    }
+    const whereSql = `WHERE ${where.join(" AND ")}`;
 
     const summary = await pool.query(
       `
@@ -221,11 +247,12 @@ async function getActivityOverview(req, res) {
         COUNT(*) FILTER (WHERE source = 'telegram_bot')::int AS telegram_events,
         COUNT(*) FILTER (WHERE source = 'api')::int AS api_events,
         COUNT(*) FILTER (WHERE event_type = 'click')::int AS clicks,
-        COUNT(*) FILTER (WHERE event_type ILIKE '%error%' OR event_name ILIKE '%error%' OR (meta->>'status_code')::int >= 400)::int AS errors,
-        COUNT(*) FILTER (WHERE event_name ILIKE '%unlock%' OR event_name ILIKE '%payment%' OR event_name ILIKE '%payme%' OR event_name ILIKE '%click%')::int AS payment_related,
-        COUNT(*) FILTER (WHERE event_name ILIKE '%contact%' OR element_text ILIKE '%контакт%')::int AS contact_related
+        COUNT(*) FILTER (WHERE event_type ILIKE '%error%' OR event_name ILIKE '%error%' OR ${statusCodeErrorSql()})::int AS errors,
+        COUNT(*) FILTER (WHERE event_name ILIKE '%unlock%' OR event_name ILIKE '%payment%' OR event_name ILIKE '%payme%' OR event_name ILIKE '%click%' OR element_text ILIKE '%оплат%')::int AS payment_related,
+        COUNT(*) FILTER (WHERE event_name ILIKE '%contact%' OR element_text ILIKE '%контакт%' OR event_name ILIKE '%unlock%')::int AS contact_related,
+        COUNT(DISTINCT COALESCE(session_id, actor_role || ':' || actor_id::text)) FILTER (WHERE ae.created_at >= NOW() - interval '10 minutes')::int AS online_now
       FROM activity_events ae
-      WHERE ae.created_at >= NOW() - ($1::int || ' hours')::interval
+      ${whereSql}
       `,
       values
     );
@@ -233,7 +260,7 @@ async function getActivityOverview(req, res) {
     const bySource = await pool.query(
       `SELECT COALESCE(source,'unknown') AS source, COUNT(*)::int AS count
          FROM activity_events ae
-        WHERE ae.created_at >= NOW() - ($1::int || ' hours')::interval
+        ${whereSql}
         GROUP BY 1 ORDER BY count DESC`,
       values
     );
@@ -241,7 +268,7 @@ async function getActivityOverview(req, res) {
     const byType = await pool.query(
       `SELECT COALESCE(event_type,'unknown') AS event_type, COUNT(*)::int AS count
          FROM activity_events ae
-        WHERE ae.created_at >= NOW() - ($1::int || ' hours')::interval
+        ${whereSql}
         GROUP BY 1 ORDER BY count DESC LIMIT 20`,
       values
     );
@@ -249,7 +276,7 @@ async function getActivityOverview(req, res) {
     const byHour = await pool.query(
       `SELECT date_trunc('hour', created_at) AS hour, COUNT(*)::int AS count
          FROM activity_events ae
-        WHERE ae.created_at >= NOW() - ($1::int || ' hours')::interval
+        ${whereSql}
         GROUP BY 1 ORDER BY hour DESC LIMIT 72`,
       values
     );
@@ -257,7 +284,7 @@ async function getActivityOverview(req, res) {
     const topEvents = await pool.query(
       `SELECT event_name, COUNT(*)::int AS count
          FROM activity_events ae
-        WHERE ae.created_at >= NOW() - ($1::int || ' hours')::interval
+        ${whereSql}
         GROUP BY event_name ORDER BY count DESC LIMIT 25`,
       values
     );
@@ -274,7 +301,7 @@ async function getActivitySessions(req, res) {
     await ensureActivityEventsTable();
     const limit = clampInt(req.query.limit, 100, 1, 500);
     const sinceHours = hoursFilter(req, 336);
-    const values = [limit, sinceHours];
+    const values = [limit, sinceHours, includeAdmin(req)];
 
     const { rows } = await pool.query(
       `
@@ -296,6 +323,7 @@ async function getActivitySessions(req, res) {
           (ARRAY_AGG(provider_id ORDER BY created_at DESC, id DESC))[1] AS last_provider_id
         FROM activity_events
         WHERE session_id IS NOT NULL AND created_at >= NOW() - ($2::int || ' hours')::interval
+          AND ($3::boolean OR NOT (LOWER(COALESCE(actor_role,'')) IN ('admin','moderator') OR (LOWER(COALESCE(actor_role,'')) = 'provider' AND actor_id = 5) OR LOWER(COALESCE(actor_name,'')) IN ('travella.uz','travella')))
         GROUP BY session_id
       )
       SELECT *
@@ -329,6 +357,9 @@ async function getActivityTimeline(req, res) {
     const where = [];
     values.push(sinceHours);
     where.push(`ae.created_at >= NOW() - ($${values.length}::int || ' hours')::interval`);
+    if (!includeAdmin(req)) {
+      where.push(`NOT (LOWER(COALESCE(ae.actor_role,'')) IN ('admin','moderator') OR (LOWER(COALESCE(ae.actor_role,'')) = 'provider' AND ae.actor_id = 5) OR LOWER(COALESCE(ae.actor_name,'')) IN ('travella.uz','travella'))`);
+    }
     if (actorRole) { values.push(actorRole); where.push(`LOWER(COALESCE(ae.actor_role,'')) = $${values.length}`); }
     if (actorId) { values.push(actorId); where.push(`ae.actor_id = $${values.length}`); }
     if (sessionId) { values.push(sessionId); where.push(`ae.session_id = $${values.length}`); }
@@ -363,28 +394,36 @@ async function getActivityFunnel(req, res) {
     const sinceHours = hoursFilter(req, 24 * 7);
     const serviceId = safeInt(req.query.service_id || req.query.serviceId);
     const values = [sinceHours];
-    const extraWhere = [];
-    if (serviceId) { values.push(serviceId); extraWhere.push(`AND service_id = $${values.length}`); }
+    const where = [`created_at >= NOW() - ($1::int || ' hours')::interval`];
+    const role = safeText(req.query.role, 40).toLowerCase();
+    const source = safeText(req.query.source, 80).toLowerCase();
+    if (serviceId) { values.push(serviceId); where.push(`service_id = $${values.length}`); }
+    if (role) { values.push(role); where.push(`LOWER(COALESCE(actor_role,'')) = $${values.length}`); }
+    if (source) { values.push(source); where.push(`LOWER(COALESCE(source,'')) = $${values.length}`); }
+    if (!includeAdmin(req)) {
+      where.push(`NOT (LOWER(COALESCE(actor_role,'')) IN ('admin','moderator') OR (LOWER(COALESCE(actor_role,'')) = 'provider' AND actor_id = 5) OR LOWER(COALESCE(actor_name,'')) IN ('travella.uz','travella'))`);
+    }
+    const whereSql = `WHERE ${where.join(" AND ")}`;
+    const unit = `COALESCE(session_id, actor_role || ':' || actor_id::text, 'anon:' || id::text)`;
 
     const { rows } = await pool.query(
       `
       SELECT
-        COUNT(*) FILTER (WHERE event_name = 'page_view' OR event_type = 'page_view')::int AS page_views,
-        COUNT(*) FILTER (WHERE event_name ILIKE '%service_stats%' OR event_name ILIKE '%view%' OR page_path ILIKE '%service%')::int AS service_views,
-        COUNT(*) FILTER (WHERE element_text ILIKE '%подробнее%' OR event_name ILIKE '%detail%')::int AS details,
-        COUNT(*) FILTER (WHERE element_text ILIKE '%быстрый запрос%' OR event_name ILIKE '%request%')::int AS quick_requests,
-        COUNT(*) FILTER (WHERE element_text ILIKE '%контакт%' OR event_name ILIKE '%unlock%' OR event_name ILIKE '%contact%')::int AS contact_intents,
-        COUNT(*) FILTER (WHERE event_name ILIKE '%click%' OR element_text ILIKE '%click%' OR event_name ILIKE '%payme%' OR event_name ILIKE '%payment%')::int AS payment_intents,
-        COUNT(*) FILTER (WHERE event_name ILIKE '%successful_payment%' OR event_name ILIKE '%complete%' OR event_name ILIKE '%paid%' OR meta->>'status' = 'paid')::int AS paid_events
+        COUNT(DISTINCT ${unit}) FILTER (WHERE event_name = 'page_view' OR event_type = 'page_view')::int AS page_views,
+        COUNT(DISTINCT ${unit}) FILTER (WHERE event_name ILIKE '%service_stats%' OR event_name ILIKE '%view%' OR page_path ILIKE '%service%' OR page_path ILIKE '%marketplace%')::int AS service_views,
+        COUNT(DISTINCT ${unit}) FILTER (WHERE element_text ILIKE '%подробнее%' OR event_name ILIKE '%detail%')::int AS details,
+        COUNT(DISTINCT ${unit}) FILTER (WHERE element_text ILIKE '%быстрый запрос%' OR event_name ILIKE '%request%')::int AS quick_requests,
+        COUNT(DISTINCT ${unit}) FILTER (WHERE element_text ILIKE '%контакт%' OR event_name ILIKE '%unlock%' OR event_name ILIKE '%contact%')::int AS contact_intents,
+        COUNT(DISTINCT ${unit}) FILTER (WHERE event_name ILIKE '%click%' OR element_text ILIKE '%click%' OR event_name ILIKE '%payme%' OR event_name ILIKE '%payment%' OR element_text ILIKE '%оплат%')::int AS payment_intents,
+        COUNT(DISTINCT ${unit}) FILTER (WHERE event_name ILIKE '%successful_payment%' OR event_name ILIKE '%complete%' OR event_name ILIKE '%paid%' OR meta->>'status' = 'paid')::int AS paid_events
       FROM activity_events
-      WHERE created_at >= NOW() - ($1::int || ' hours')::interval
-      ${extraWhere.join("\n")}
+      ${whereSql}
       `,
       values
     );
 
     const r = rows[0] || {};
-    const steps = [
+    const raw = [
       { key: "page_views", label: "Открыли страницы", count: r.page_views || 0 },
       { key: "service_views", label: "Смотрели услуги", count: r.service_views || 0 },
       { key: "details", label: "Нажали подробнее", count: r.details || 0 },
@@ -393,7 +432,14 @@ async function getActivityFunnel(req, res) {
       { key: "payment_intents", label: "Перешли к оплате", count: r.payment_intents || 0 },
       { key: "paid_events", label: "Оплачено/успешно", count: r.paid_events || 0 },
     ];
-    return res.json({ ok: true, sinceHours, serviceId, steps });
+    let prev = null;
+    const steps = raw.map((x) => {
+      const conversion = prev ? Math.round((Number(x.count || 0) / Math.max(Number(prev.count || 0), 1)) * 1000) / 10 : 100;
+      const drop = prev ? Math.max(Number(prev.count || 0) - Number(x.count || 0), 0) : 0;
+      prev = x;
+      return { ...x, conversion, drop };
+    });
+    return res.json({ ok: true, sinceHours, serviceId, unit: "unique_sessions_or_actors", steps });
   } catch (e) {
     console.error("getActivityFunnel error:", e);
     return res.status(500).json({ ok: false, error: "activity_funnel_failed" });
@@ -405,11 +451,34 @@ async function getActivityHotLeads(req, res) {
     await ensureActivityEventsTable();
     const sinceHours = hoursFilter(req, 72);
     const limit = clampInt(req.query.limit, 100, 1, 300);
-    const values = [sinceHours, limit];
+    const values = [sinceHours, limit, includeAdmin(req)];
 
     const { rows } = await pool.query(
       `
-      WITH grouped AS (
+      WITH scored AS (
+        SELECT *,
+          CASE
+            WHEN event_name ILIKE '%successful_payment%' OR event_name ILIKE '%paid%' OR meta->>'status' = 'paid' THEN 100
+            WHEN event_name ILIKE '%payment%' OR event_name ILIKE '%payme%' OR event_name ILIKE '%click%' OR element_text ILIKE '%оплат%' THEN 60
+            WHEN element_text ILIKE '%контакт%' OR event_name ILIKE '%unlock%' OR event_name ILIKE '%contact%' THEN 35
+            WHEN element_text ILIKE '%быстрый запрос%' OR event_name ILIKE '%request%' THEN 15
+            WHEN element_text ILIKE '%избран%' OR event_name ILIKE '%favorite%' OR event_name ILIKE '%wishlist%' THEN 7
+            WHEN element_text ILIKE '%подробнее%' OR event_name ILIKE '%detail%' THEN 4
+            WHEN event_type = 'click' THEN 2
+            WHEN event_name ILIKE '%view%' OR event_type = 'page_view' THEN 1
+            WHEN event_type ILIKE '%error%' OR event_name ILIKE '%error%' OR ((COALESCE(meta->>'status_code','') ~ '^\\d+$') AND (meta->>'status_code')::int >= 400) THEN 25
+            ELSE 1
+          END
+          * CASE
+              WHEN created_at >= NOW() - interval '24 hours' THEN 1.0
+              WHEN created_at >= NOW() - interval '3 days' THEN 0.7
+              WHEN created_at >= NOW() - interval '7 days' THEN 0.4
+              ELSE 0.08
+            END AS weighted_points
+        FROM activity_events
+        WHERE created_at >= NOW() - ($1::int || ' hours')::interval
+          AND ($3::boolean OR NOT (LOWER(COALESCE(actor_role,'')) IN ('admin','moderator') OR (LOWER(COALESCE(actor_role,'')) = 'provider' AND actor_id = 5) OR LOWER(COALESCE(actor_name,'')) IN ('travella.uz','travella')))
+      ), grouped AS (
         SELECT
           COALESCE(actor_role,'unknown') AS actor_role,
           actor_id,
@@ -425,15 +494,14 @@ async function getActivityHotLeads(req, res) {
           COUNT(*) FILTER (WHERE event_type = 'click')::int AS clicks_count,
           COUNT(*) FILTER (WHERE element_text ILIKE '%контакт%' OR event_name ILIKE '%unlock%' OR event_name ILIKE '%contact%')::int AS contact_intents,
           COUNT(*) FILTER (WHERE element_text ILIKE '%быстрый запрос%' OR event_name ILIKE '%request%')::int AS quick_requests,
-          COUNT(*) FILTER (WHERE event_name ILIKE '%pay%' OR event_name ILIKE '%click%' OR event_name ILIKE '%payment%')::int AS payment_intents,
-          COUNT(*) FILTER (WHERE event_type ILIKE '%error%' OR event_name ILIKE '%error%' OR (meta->>'status_code')::int >= 400)::int AS errors_count,
+          COUNT(*) FILTER (WHERE event_name ILIKE '%pay%' OR event_name ILIKE '%click%' OR event_name ILIKE '%payment%' OR element_text ILIKE '%оплат%')::int AS payment_intents,
+          COUNT(*) FILTER (WHERE event_type ILIKE '%error%' OR event_name ILIKE '%error%' OR ((COALESCE(meta->>'status_code','') ~ '^\\d+$') AND (meta->>'status_code')::int >= 400))::int AS errors_count,
+          ROUND(SUM(weighted_points))::int AS lead_score,
           ARRAY_AGG(event_name ORDER BY created_at DESC, id DESC) AS recent_events
-        FROM activity_events
-        WHERE created_at >= NOW() - ($1::int || ' hours')::interval
+        FROM scored
         GROUP BY COALESCE(actor_role,'unknown'), actor_id, session_id
       )
-      SELECT *,
-        (events_count + clicks_count * 2 + contact_intents * 10 + quick_requests * 7 + payment_intents * 12 + errors_count * 5)::int AS lead_score
+      SELECT *
       FROM grouped
       ORDER BY lead_score DESC, last_seen_at DESC
       LIMIT $2
@@ -452,7 +520,7 @@ async function getActivityServices(req, res) {
     await ensureActivityEventsTable();
     const sinceHours = hoursFilter(req, 24 * 7);
     const limit = clampInt(req.query.limit, 100, 1, 300);
-    const values = [sinceHours, limit];
+    const values = [sinceHours, limit, includeAdmin(req)];
 
     const { rows } = await pool.query(
       `
@@ -463,11 +531,12 @@ async function getActivityServices(req, res) {
         COALESCE(ae.provider_id, s.provider_id) AS provider_id,
         p.name AS provider_name,
         COUNT(*)::int AS events_count,
-        COUNT(*) FILTER (WHERE ae.event_type = 'page_view' OR ae.event_name ILIKE '%view%')::int AS views,
-        COUNT(*) FILTER (WHERE ae.event_type = 'click')::int AS clicks,
-        COUNT(*) FILTER (WHERE ae.element_text ILIKE '%подробнее%' OR ae.event_name ILIKE '%detail%')::int AS details,
-        COUNT(*) FILTER (WHERE ae.element_text ILIKE '%быстрый запрос%' OR ae.event_name ILIKE '%request%')::int AS quick_requests,
-        COUNT(*) FILTER (WHERE ae.element_text ILIKE '%контакт%' OR ae.event_name ILIKE '%unlock%' OR ae.event_name ILIKE '%contact%')::int AS contact_intents,
+        COUNT(DISTINCT COALESCE(ae.session_id, ae.actor_role || ':' || ae.actor_id::text, 'anon:' || ae.id::text))::int AS unique_interest,
+        COUNT(DISTINCT COALESCE(ae.session_id, ae.actor_role || ':' || ae.actor_id::text, 'anon:' || ae.id::text)) FILTER (WHERE ae.event_type = 'page_view' OR ae.event_name ILIKE '%view%')::int AS views,
+        COUNT(DISTINCT COALESCE(ae.session_id, ae.actor_role || ':' || ae.actor_id::text, 'anon:' || ae.id::text)) FILTER (WHERE ae.element_text ILIKE '%подробнее%' OR ae.event_name ILIKE '%detail%')::int AS details,
+        COUNT(DISTINCT COALESCE(ae.session_id, ae.actor_role || ':' || ae.actor_id::text, 'anon:' || ae.id::text)) FILTER (WHERE ae.element_text ILIKE '%быстрый запрос%' OR ae.event_name ILIKE '%request%')::int AS quick_requests,
+        COUNT(DISTINCT COALESCE(ae.session_id, ae.actor_role || ':' || ae.actor_id::text, 'anon:' || ae.id::text)) FILTER (WHERE ae.element_text ILIKE '%контакт%' OR ae.event_name ILIKE '%unlock%' OR ae.event_name ILIKE '%contact%')::int AS contact_intents,
+        COUNT(DISTINCT COALESCE(ae.session_id, ae.actor_role || ':' || ae.actor_id::text, 'anon:' || ae.id::text)) FILTER (WHERE ae.event_name ILIKE '%paid%' OR ae.event_name ILIKE '%complete%' OR ae.event_name ILIKE '%successful_payment%' OR ae.meta->>'status' = 'paid')::int AS paid_events,
         COUNT(DISTINCT ae.session_id)::int AS sessions,
         MAX(ae.created_at) AS last_event_at
       FROM activity_events ae
@@ -475,8 +544,9 @@ async function getActivityServices(req, res) {
       LEFT JOIN providers p ON p.id = COALESCE(ae.provider_id, s.provider_id)
       WHERE ae.created_at >= NOW() - ($1::int || ' hours')::interval
         AND ae.service_id IS NOT NULL
+        AND ($3::boolean OR NOT (LOWER(COALESCE(ae.actor_role,'')) IN ('admin','moderator') OR (LOWER(COALESCE(ae.actor_role,'')) = 'provider' AND ae.actor_id = 5) OR LOWER(COALESCE(ae.actor_name,'')) IN ('travella.uz','travella')))
       GROUP BY ae.service_id, s.title, s.category, COALESCE(ae.provider_id, s.provider_id), p.name
-      ORDER BY contact_intents DESC, quick_requests DESC, events_count DESC
+      ORDER BY contact_intents DESC, quick_requests DESC, unique_interest DESC
       LIMIT $2
       `,
       values
@@ -485,6 +555,76 @@ async function getActivityServices(req, res) {
   } catch (e) {
     console.error("getActivityServices error:", e);
     return res.status(500).json({ ok: false, error: "activity_services_failed" });
+  }
+}
+
+async function getActivityOnline(req, res) {
+  try {
+    await ensureActivityEventsTable();
+    const minutes = clampInt(req.query.minutes, 10, 1, 120);
+    const limit = clampInt(req.query.limit, 80, 1, 200);
+    const values = [minutes, limit, includeAdmin(req)];
+    const { rows } = await pool.query(
+      `
+      WITH x AS (
+        SELECT
+          COALESCE(session_id, actor_role || ':' || actor_id::text, 'anon:' || id::text) AS online_key,
+          MAX(created_at) AS last_seen_at,
+          COUNT(*)::int AS events_count,
+          (ARRAY_AGG(session_id ORDER BY created_at DESC, id DESC))[1] AS session_id,
+          (ARRAY_AGG(actor_role ORDER BY created_at DESC, id DESC))[1] AS actor_role,
+          (ARRAY_AGG(actor_id ORDER BY created_at DESC, id DESC))[1] AS actor_id,
+          (ARRAY_AGG(actor_name ORDER BY created_at DESC, id DESC))[1] AS actor_name,
+          (ARRAY_AGG(actor_phone ORDER BY created_at DESC, id DESC))[1] AS actor_phone,
+          (ARRAY_AGG(source ORDER BY created_at DESC, id DESC))[1] AS source,
+          (ARRAY_AGG(page_path ORDER BY created_at DESC, id DESC))[1] AS current_page,
+          (ARRAY_AGG(service_id ORDER BY created_at DESC, id DESC))[1] AS service_id,
+          (ARRAY_AGG(event_name ORDER BY created_at DESC, id DESC))[1] AS last_event_name,
+          (ARRAY_AGG(event_type ORDER BY created_at DESC, id DESC))[1] AS last_event_type,
+          (ARRAY_AGG(element_text ORDER BY created_at DESC, id DESC))[1] AS last_element_text,
+          BOOL_OR(event_name ILIKE '%payment%' OR event_name ILIKE '%payme%' OR event_name ILIKE '%click%' OR element_text ILIKE '%оплат%') AS payment_interest,
+          BOOL_OR(event_name ILIKE '%contact%' OR event_name ILIKE '%unlock%' OR element_text ILIKE '%контакт%') AS contact_interest
+        FROM activity_events
+        WHERE created_at >= NOW() - ($1::int || ' minutes')::interval
+          AND ($3::boolean OR NOT (LOWER(COALESCE(actor_role,'')) IN ('admin','moderator') OR (LOWER(COALESCE(actor_role,'')) = 'provider' AND actor_id = 5) OR LOWER(COALESCE(actor_name,'')) IN ('travella.uz','travella')))
+        GROUP BY 1
+      )
+      SELECT * FROM x ORDER BY payment_interest DESC, contact_interest DESC, last_seen_at DESC LIMIT $2
+      `,
+      values
+    );
+    return res.json({ ok: true, minutes, rows });
+  } catch (e) {
+    console.error("getActivityOnline error:", e);
+    return res.status(500).json({ ok: false, error: "activity_online_failed" });
+  }
+}
+
+async function getActivityErrors(req, res) {
+  try {
+    await ensureActivityEventsTable();
+    const sinceHours = hoursFilter(req, 24 * 7);
+    const limit = clampInt(req.query.limit, 120, 1, 500);
+    const values = [sinceHours, limit, includeAdmin(req)];
+    const { rows } = await pool.query(
+      `
+      SELECT ae.*, s.title AS service_title, p.name AS provider_company_name, c.name AS client_name, c.phone AS client_phone
+        FROM activity_events ae
+        LEFT JOIN services s ON s.id = ae.service_id
+        LEFT JOIN providers p ON p.id = COALESCE(ae.provider_id, s.provider_id)
+        LEFT JOIN clients c ON c.id = COALESCE(ae.client_id, CASE WHEN ae.actor_role = 'client' THEN ae.actor_id ELSE NULL END)
+       WHERE ae.created_at >= NOW() - ($1::int || ' hours')::interval
+         AND (ae.event_type ILIKE '%error%' OR ae.event_name ILIKE '%error%' OR ((COALESCE(ae.meta->>'status_code','') ~ '^\\d+$') AND (ae.meta->>'status_code')::int >= 400))
+         AND ($3::boolean OR NOT (LOWER(COALESCE(ae.actor_role,'')) IN ('admin','moderator') OR (LOWER(COALESCE(ae.actor_role,'')) = 'provider' AND ae.actor_id = 5) OR LOWER(COALESCE(ae.actor_name,'')) IN ('travella.uz','travella')))
+       ORDER BY ae.created_at DESC, ae.id DESC
+       LIMIT $2
+      `,
+      values
+    );
+    return res.json({ ok: true, sinceHours, rows });
+  } catch (e) {
+    console.error("getActivityErrors error:", e);
+    return res.status(500).json({ ok: false, error: "activity_errors_failed" });
   }
 }
 
@@ -497,4 +637,6 @@ module.exports = {
   getActivityFunnel,
   getActivityHotLeads,
   getActivityServices,
+  getActivityOnline,
+  getActivityErrors,
 };
