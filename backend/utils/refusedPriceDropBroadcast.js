@@ -53,7 +53,8 @@ async function broadcastPriceDropCard(serviceId, prefixHtml = "🔥 <b>ЦЕНА 
   const info = await pool.query(
     `SELECT s.*,
             COALESCE(p.name,'') AS provider_name,
-            p.type AS provider_type
+            p.type AS provider_type,
+            COALESCE(p.social, '') AS provider_telegram
        FROM services s
        JOIN providers p ON p.id = s.provider_id
       WHERE s.id = $1
@@ -77,14 +78,31 @@ async function broadcastPriceDropCard(serviceId, prefixHtml = "🔥 <b>ЦЕНА 
     ? `https://t.me/${botUsername}?start=${startPayload}`
     : (process.env.SITE_PUBLIC_URL || "");
 
-  // единый шаблон карточки (как в approve): viewerRole="client"
-  const card = buildServiceMessage(svc, cat, "client", { publicCard: true, hideProviderIdentity: true, broadcast: true, forwardSafe: true });
-  const msg = `${prefixHtml}\n\n${card.text}`;
-  const photoUrl = card.photoUrl || null;
+  // Клиентская/канальная карточка: безопасная, без названия/telegram поставщика.
+  const publicCard = buildServiceMessage(svc, cat, "client", {
+    unlocked: false,
+    forceHideProviderContacts: true,
+    publicSafe: true,
+    publicOpenBotUrl: openBotUrl,
+  });
+  const publicMsg = `${prefixHtml}
 
-  const kb = {
-    inline_keyboard: [[{ text: "Открыть в боте", url: openBotUrl }]],
+${publicCard.text}`;
+
+  // Поставщики в боте получают полную карточку и видят контакты всегда.
+  const providerCard = buildServiceMessage(svc, cat, "provider", {
+    unlocked: true,
+    forceShowProviderContacts: true,
+  });
+  const providerMsg = `${prefixHtml}
+
+${providerCard.text}`;
+
+  const publicKb = {
+    inline_keyboard: [[{ text: "🔓 Открыть контакты", url: openBotUrl }]],
   };
+  const providerKb = providerCard?.kbExtra || { inline_keyboard: [] };
+
 
   const tokenOverrideAll = (process.env.TELEGRAM_CLIENT_BOT_TOKEN || "").trim() || null;
   if (!tokenOverrideAll) return { ok: false, reason: "CLIENT_BOT_TOKEN_MISSING" };
@@ -104,27 +122,50 @@ async function broadcastPriceDropCard(serviceId, prefixHtml = "🔥 <b>ЦЕНА 
         AND TRIM(telegram_chat_id::text) <> ''`
   );
 
-  const normalized = [...recProv.rows, ...recCli.rows]
+  const providerIds = Array.from(new Set(recProv.rows
     .map((r) => String(r.chat_id || "").trim())
     .filter((s) => /^-?\d+$/.test(s))
-    .map((s) => Number(s));
+    .map((s) => Number(s))));
 
-  const unique = Array.from(new Set(normalized));
-  if (!unique.length) return { ok: false, reason: "NO_RECIPIENTS" };
+  const clientIds = Array.from(new Set(recCli.rows
+    .map((r) => String(r.chat_id || "").trim())
+    .filter((s) => /^-?\d+$/.test(s))
+    .map((s) => Number(s))));
+
+  const jobs = [
+    ...clientIds.map((chatId) => ({
+      chatId,
+      kind: "client",
+      msg: publicMsg,
+      photoUrl: publicCard.photoUrl || null,
+      kb: publicKb,
+    })),
+    ...providerIds
+      .filter((chatId) => !clientIds.includes(chatId))
+      .map((chatId) => ({
+        chatId,
+        kind: "provider",
+        msg: providerMsg,
+        photoUrl: providerCard.photoUrl || publicCard.photoUrl || null,
+        kb: providerKb,
+      })),
+  ];
+
+  if (!jobs.length) return { ok: false, reason: "NO_RECIPIENTS" };
 
   const BATCH = 25;
   let delivered = 0;
   let failed = 0;
 
-  for (let i = 0; i < unique.length; i += BATCH) {
-    const batch = unique.slice(i, i + BATCH);
+  for (let i = 0; i < jobs.length; i += BATCH) {
+    const batch = jobs.slice(i, i + BATCH);
 
     const results = await Promise.allSettled(
-      batch.map((cid) => {
-        if (photoUrl) {
-          return tgSendPhoto(cid, photoUrl, msg, { reply_markup: kb }, tokenOverrideAll);
+      batch.map((job) => {
+        if (job.photoUrl) {
+          return tgSendPhoto(job.chatId, job.photoUrl, job.msg, { parse_mode: "HTML", reply_markup: job.kb }, tokenOverrideAll);
         }
-        return tgSend(cid, msg, { parse_mode: "HTML", reply_markup: kb }, tokenOverrideAll);
+        return tgSend(job.chatId, job.msg, { parse_mode: "HTML", reply_markup: job.kb }, tokenOverrideAll);
       })
     );
 
@@ -133,7 +174,8 @@ async function broadcastPriceDropCard(serviceId, prefixHtml = "🔥 <b>ЦЕНА 
     failed += (results.length - ok);
   }
 
-  return { ok: true, delivered, failed, recipients: unique.length, serviceId: svc.id, category: cat };
+
+  return { ok: true, delivered, failed, recipients: jobs.length, serviceId: svc.id, category: cat };
 }
 
 module.exports = {
