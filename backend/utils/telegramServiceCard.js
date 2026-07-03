@@ -1057,11 +1057,8 @@ const priceKind =
     if (isOwnerSide && (r === "provider" || r === "admin" || options?.forceShowProviderContacts === true)) {
       // Поставщик/админ не проходят paywall: контакты доступны сразу.
       rows.push([{ text: "📞 Показать контакты", callback_data: `contacts:${serviceId}` }]);
-
-      // Только админ может подготовить публичную safe-карточку для канала/группы.
-      // Поставщик эту кнопку не видит и не может публиковать в официальный канал.
-      if (r === "admin" && options?.hideAdminPublishButton !== true) {
-        rows.push([{ text: "📢 Безопасная карточка для канала", callback_data: `pubsafe:${serviceId}` }]);
+      if (r === "admin") {
+        rows.push([{ text: "📢 Опубликовать в канал", callback_data: `publish_public:${serviceId}` }]);
       }
     }
 
@@ -1448,7 +1445,7 @@ const priceKind =
           parts.push(`🏢 <b>Поставщик:</b> ${providerValue}`);
         } else {
           parts.push(`🤝 <b>Проверенный поставщик Travella</b>`);
-          parts.push(`🔒 Контакты откроются после оплаты.`);
+          parts.push(`🔒 Название и контакты откроются после оплаты`);
         }
       }
 
@@ -1465,9 +1462,17 @@ const priceKind =
 
     if (role === "provider" || role === "admin" || options?.forceShowProviderContacts === true) {
       kbRows.push([{ text: "📞 Показать контакты", callback_data: `contacts:${serviceId}` }]);
+      if (String(role || "").toLowerCase() === "admin") {
+        kbRows.push([{ text: "📢 Опубликовать в канал", callback_data: `publish_public:${serviceId}` }]);
+      }
     } else {
       if (shouldRenderUnlockButton(role, options)) {
-        kbRows.push([{ text: "💬 Связаться с поставщиком", callback_data: `contacts:${serviceId}` }]);
+        const publicDeepLink = options?.publicOpenBotUrl || options?.deepLinkUrl || "";
+        if (options?.forceHideProviderContacts === true && publicDeepLink) {
+          kbRows.push([{ text: "💬 Связаться с поставщиком", url: publicDeepLink }]);
+        } else {
+          kbRows.push([{ text: "💬 Связаться с поставщиком", callback_data: `contacts:${serviceId}` }]);
+        }
       }
       if (isClientActionsUnlocked()) {
         kbRows.push([{ text: "💬 Быстрый запрос", callback_data: `quick:${serviceId}` }]);
