@@ -139,6 +139,31 @@ console.log(
 );
 console.log("[tg-bot] PRICE_CURRENCY =", PRICE_CURRENCY);
 
+function parseAdminChatIdsEnv() {
+  const raw = [
+    process.env.TELEGRAM_ADMIN_CHAT_IDS,
+    process.env.ADMIN_TELEGRAM_CHAT_IDS,
+    process.env.TELEGRAM_MANAGER_CHAT_ID,
+    process.env.MANAGER_CHAT_ID,
+    MANAGER_CHAT_ID,
+  ]
+    .filter(Boolean)
+    .join(",");
+
+  return new Set(
+    String(raw || "")
+      .split(/[\s,;]+/)
+      .map((x) => x.trim())
+      .filter(Boolean)
+  );
+}
+
+function isTelegramAdminId(id) {
+  const sid = String(id || "").trim();
+  if (!sid) return false;
+  return parseAdminChatIdsEnv().has(sid);
+}
+
 // =====================
 // HMAC SIGN / VERIFY
 // =====================
@@ -5010,7 +5035,7 @@ async function ensureClientRole(ctx) {
 }
 
 async function resolveRoleByUserId(userId, ctx) {
-  if (MANAGER_CHAT_ID && String(userId || "") === String(MANAGER_CHAT_ID)) {
+  if (isTelegramAdminId(userId)) {
     if (ctx && ctx.session) {
       ctx.session.role = "admin";
       ctx.session.linked = true;
@@ -7906,8 +7931,12 @@ bot.start(async (ctx) => {
   try {
     let role = null;
 
+    // 👑 Админ должен определяться раньше provider/client, иначе админские кнопки
+    // могут случайно исчезать, если админ также есть в базе поставщиков.
+    if (isTelegramAdminId(actorId)) role = "admin";
+
     // ✅ ПРИОРИТЕТ: СНАЧАЛА provider, ПОТОМ client
-    try {
+    if (!role) try {
       const resProv = await axios.get(`/api/telegram/profile/provider/${actorId}`);
       if (resProv.data && resProv.data.success) role = "provider";
     } catch (e) {
@@ -7933,19 +7962,15 @@ bot.start(async (ctx) => {
       ctx.session.role = role;
       ctx.session.linked = true;
 
-      // ✅ Deep-link: unlock_<serviceId> => сразу открыть paywall/контакты
+      // ✅ Deep-link: unlock_<serviceId> => сразу открыть paywall/контакты.
+      // Используется public-safe карточкой в канале/группе.
       const mUnlock = startPayloadRaw.match(/^unlock_(\d+)$/i);
       if (mUnlock) {
         const serviceId = Number(mUnlock[1]);
-        try {
-          if (role === "provider" || role === "admin") {
-            await sendPrivilegedProviderContacts(ctx, serviceId, { role });
-          } else {
-            await doUnlockFlow(ctx, serviceId);
-          }
-        } catch (e) {
-          console.log("[tg-bot] unlock_<id> open error:", e?.response?.data || e?.message || e);
-          await ctx.reply("⚠️ Не удалось открыть контакты. Попробуйте позже.");
+        if (role === "admin" || role === "provider") {
+          await sendPrivilegedProviderContacts(ctx, serviceId, { role, privileged: true, reason: "start_unlock_privileged" });
+        } else {
+          await doUnlockFlow(ctx, serviceId);
         }
         return;
       }
@@ -8004,7 +8029,7 @@ bot.start(async (ctx) => {
             unlockPrice,
             isInline: false,
             forceRefused: isRefused,
-            canPublishPublicSafe: role === "admin",
+            forceShowProviderContacts: role === "admin" || role === "provider",
           });
 
         let textFinal = text;
@@ -10951,8 +10976,8 @@ async function resolveContactButtonAudience(ctx) {
   const fromId = Number(ctx?.from?.id || 0);
   const chatId = Number(ctx?.chat?.id || ctx?.callbackQuery?.message?.chat?.id || 0);
 
-  if (MANAGER_CHAT_ID && (String(fromId) === String(MANAGER_CHAT_ID) || String(chatId) === String(MANAGER_CHAT_ID))) {
-    return { role: "admin", privileged: true, reason: "manager_chat" };
+  if (isTelegramAdminId(fromId) || isTelegramAdminId(chatId)) {
+    return { role: "admin", privileged: true, reason: "admin_chat" };
   }
 
   if (String(ctx?.session?.role || "").toLowerCase() === "provider") {
@@ -11086,19 +11111,18 @@ async function sendPrivilegedProviderContacts(ctx, serviceId, audience = {}) {
   return true;
 }
 
-async function sendPublicSafeCardForChannel(ctx, serviceId) {
+async function sendPublicSafeServiceCard(ctx, serviceId) {
   const sid = Number(serviceId || 0);
-  const targetChatId = Number(ctx?.from?.id || 0);
-  if (!Number.isFinite(sid) || sid <= 0 || !Number.isFinite(targetChatId) || targetChatId <= 0) return false;
+  const adminChatId = Number(ctx?.from?.id || 0);
+  if (!Number.isFinite(sid) || sid <= 0 || !Number.isFinite(adminChatId) || adminChatId <= 0) return false;
 
-  const audience = await resolveContactButtonAudience(ctx);
-  if (audience.role !== "admin") {
-    try { await ctx.answerCbQuery("⛔️ Публикация в канал доступна только администратору", { show_alert: true }); } catch {}
+  if (!isTelegramAdminId(adminChatId)) {
+    try { await ctx.answerCbQuery("⛔ Только администратор", { show_alert: true }); } catch {}
     return false;
   }
 
   const { data } = await axios.get(`/api/telegram/service/${sid}`, {
-    params: { role: "client", chatId: targetChatId },
+    params: { role: "client", chatId: adminChatId },
   });
 
   if (!data?.success || !data?.service) {
@@ -11107,68 +11131,64 @@ async function sendPublicSafeCardForChannel(ctx, serviceId) {
   }
 
   const svc = data.service;
-  const category = String(svc.category || svc.type || "refused_tour").trim().toLowerCase();
+  const category = String(svc.category || svc.type || "refused_tour").toLowerCase();
   const unlockSettings = await getContactUnlockSettings(pool);
   const unlockPrice = tiyinToSum(unlockSettings.effective_price || 0);
-  const publicDeepLink = BOT_USERNAME
+  const deepLink = BOT_USERNAME
     ? `https://t.me/${BOT_USERNAME}?start=${encodeURIComponent(`unlock_${sid}`)}`
     : `${SITE_URL}/?service=${sid}`;
 
+  const isRefused = String(category || "").startsWith("refused_") || category === "author_tour";
   const built = buildServiceMessage(svc, category, "client", {
+    audience: "public",
     unlocked: false,
     unlockPrice,
-    forceRefused: String(category || "").startsWith("refused_") || category === "author_tour",
+    forceRefused: isRefused,
     forceHideProviderContacts: true,
     publicSafe: true,
-    audience: "public",
-    publicOpenBotUrl: publicDeepLink,
+    publicOpenBotUrl: deepLink,
   });
 
-  let text = stripLockedLinks(String(built.text || ""), { unlockPrice });
-  const kb = built.kbExtra?.replaceDefault && built.kbExtra?.inline_keyboard?.length
-    ? { inline_keyboard: built.kbExtra.inline_keyboard }
-    : {
-        inline_keyboard: [
-          [{ text: "💬 Связаться с поставщиком", url: publicDeepLink }],
-          ...(built.serviceUrl ? [[{ text: "🌐 Подробнее на сайте", url: built.serviceUrl }]] : []),
-        ],
-      };
+  const text = String(built?.text || "");
+  const photoUrl = built?.photoUrl || null;
+  const kbExtra = built?.kbExtra || null;
+  const replyMarkup = kbExtra?.inline_keyboard?.length
+    ? { inline_keyboard: kbExtra.inline_keyboard }
+    : { inline_keyboard: [[{ text: "💬 Связаться с поставщиком", url: deepLink }]] };
 
-  try { await ctx.answerCbQuery("✅ Безопасная карточка создана", { show_alert: false }); } catch {}
+  try { await ctx.answerCbQuery("📢 Safe-карточка готова", { show_alert: false }); } catch {}
 
-  const intro = "📢 <b>Безопасная карточка для канала/группы</b>\n\nПерешлите/скопируйте именно это сообщение: контакты скрыты, кнопка ведёт клиента к открытию контактов после оплаты.\n\n";
-
-  if (built.photoUrl) {
-    await safeReplyWithPhoto(ctx, built.photoUrl, intro + text, {
+  if (photoUrl) {
+    await safeReplyWithPhoto(ctx, photoUrl, text, {
       parse_mode: "HTML",
-      reply_markup: kb,
+      reply_markup: replyMarkup,
     });
   } else {
-    await safeReply(ctx, intro + text, {
+    await safeReply(ctx, text, {
       parse_mode: "HTML",
-      reply_markup: kb,
       disable_web_page_preview: true,
+      reply_markup: replyMarkup,
     });
   }
 
   return true;
 }
 
-/* ===================== AUTHOR TOUR / CARD CONTACTS ALIAS ===================== */
-bot.action(/^public_card:(\d+)$/, async (ctx) => {
+bot.action(/^pubsafe:(\d+)$/, async (ctx) => {
   try {
     const serviceId = Number(ctx.match?.[1]);
     if (!Number.isFinite(serviceId) || serviceId <= 0) {
       await ctx.answerCbQuery("⚠️ Некорректная кнопка", { show_alert: true });
       return;
     }
-    await sendPublicSafeCardForChannel(ctx, serviceId);
+    await sendPublicSafeServiceCard(ctx, serviceId);
   } catch (e) {
-    console.error("[tg-bot] public_card action error:", e?.message || e);
-    try { await ctx.answerCbQuery("⚠️ Не удалось создать безопасную карточку", { show_alert: true }); } catch {}
+    console.error("[tg-bot] pubsafe action error:", e?.message || e);
+    try { await ctx.answerCbQuery("⚠️ Ошибка safe-карточки", { show_alert: true }); } catch {}
   }
 });
 
+/* ===================== AUTHOR TOUR / CARD CONTACTS ALIAS ===================== */
 bot.action(/^contacts:(\d+)$/, async (ctx) => {
   try {
     const serviceId = Number(ctx.match?.[1]);
@@ -17228,7 +17248,6 @@ const data = await getOrFetchCached(
           forceShowProviderContacts: roleForInline === "provider" || roleForInline === "admin",
           publicSafe: mustHideContactsForInline,
           publicOpenBotUrl: publicDeepLink,
-          canPublishPublicSafe: roleForInline === "admin",
         }
       );
       
@@ -17261,9 +17280,6 @@ const data = await getOrFetchCached(
               { text: "📞 Показать контакты", callback_data: `contacts:${svc.id}` },
               { text: "Подробнее на сайте", url: serviceUrl },
             ],
-            ...(roleForInline === "admin"
-              ? [[{ text: "📢 Безопасная карточка для канала", callback_data: `public_card:${svc.id}` }]]
-              : []),
             [{ text: "📩 Быстрый запрос", callback_data: `request:${svc.id}` }],
           ],
         };
