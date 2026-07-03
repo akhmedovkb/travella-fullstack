@@ -5010,6 +5010,14 @@ async function ensureClientRole(ctx) {
 }
 
 async function resolveRoleByUserId(userId, ctx) {
+  if (MANAGER_CHAT_ID && String(userId || "") === String(MANAGER_CHAT_ID)) {
+    if (ctx && ctx.session) {
+      ctx.session.role = "admin";
+      ctx.session.linked = true;
+    }
+    return "admin";
+  }
+
   try {
     const resProv = await axios.get(`/api/telegram/profile/provider/${userId}`);
     if (resProv.data && resProv.data.success) {
@@ -7925,6 +7933,23 @@ bot.start(async (ctx) => {
       ctx.session.role = role;
       ctx.session.linked = true;
 
+      // ✅ Deep-link: unlock_<serviceId> => сразу открыть paywall/контакты
+      const mUnlock = startPayloadRaw.match(/^unlock_(\d+)$/i);
+      if (mUnlock) {
+        const serviceId = Number(mUnlock[1]);
+        try {
+          if (role === "provider" || role === "admin") {
+            await sendPrivilegedProviderContacts(ctx, serviceId, { role });
+          } else {
+            await doUnlockFlow(ctx, serviceId);
+          }
+        } catch (e) {
+          console.log("[tg-bot] unlock_<id> open error:", e?.response?.data || e?.message || e);
+          await ctx.reply("⚠️ Не удалось открыть контакты. Попробуйте позже.");
+        }
+        return;
+      }
+
       // ✅ Deep-link: refused_<serviceId> => показать конкретную услугу
       const mRef = startPayloadRaw.match(/^refused_(\d+)$/i);
       if (mRef) {
@@ -7979,6 +8004,7 @@ bot.start(async (ctx) => {
             unlockPrice,
             isInline: false,
             forceRefused: isRefused,
+            canPublishPublicSafe: role === "admin",
           });
 
         let textFinal = text;
@@ -11060,7 +11086,89 @@ async function sendPrivilegedProviderContacts(ctx, serviceId, audience = {}) {
   return true;
 }
 
+async function sendPublicSafeCardForChannel(ctx, serviceId) {
+  const sid = Number(serviceId || 0);
+  const targetChatId = Number(ctx?.from?.id || 0);
+  if (!Number.isFinite(sid) || sid <= 0 || !Number.isFinite(targetChatId) || targetChatId <= 0) return false;
+
+  const audience = await resolveContactButtonAudience(ctx);
+  if (audience.role !== "admin") {
+    try { await ctx.answerCbQuery("⛔️ Публикация в канал доступна только администратору", { show_alert: true }); } catch {}
+    return false;
+  }
+
+  const { data } = await axios.get(`/api/telegram/service/${sid}`, {
+    params: { role: "client", chatId: targetChatId },
+  });
+
+  if (!data?.success || !data?.service) {
+    await safeReply(ctx, "❗️Услуга не найдена или уже снята с публикации.");
+    return false;
+  }
+
+  const svc = data.service;
+  const category = String(svc.category || svc.type || "refused_tour").trim().toLowerCase();
+  const unlockSettings = await getContactUnlockSettings(pool);
+  const unlockPrice = tiyinToSum(unlockSettings.effective_price || 0);
+  const publicDeepLink = BOT_USERNAME
+    ? `https://t.me/${BOT_USERNAME}?start=${encodeURIComponent(`unlock_${sid}`)}`
+    : `${SITE_URL}/?service=${sid}`;
+
+  const built = buildServiceMessage(svc, category, "client", {
+    unlocked: false,
+    unlockPrice,
+    forceRefused: String(category || "").startsWith("refused_") || category === "author_tour",
+    forceHideProviderContacts: true,
+    publicSafe: true,
+    audience: "public",
+    publicOpenBotUrl: publicDeepLink,
+  });
+
+  let text = stripLockedLinks(String(built.text || ""), { unlockPrice });
+  const kb = built.kbExtra?.replaceDefault && built.kbExtra?.inline_keyboard?.length
+    ? { inline_keyboard: built.kbExtra.inline_keyboard }
+    : {
+        inline_keyboard: [
+          [{ text: "💬 Связаться с поставщиком", url: publicDeepLink }],
+          ...(built.serviceUrl ? [[{ text: "🌐 Подробнее на сайте", url: built.serviceUrl }]] : []),
+        ],
+      };
+
+  try { await ctx.answerCbQuery("✅ Безопасная карточка создана", { show_alert: false }); } catch {}
+
+  const intro = "📢 <b>Безопасная карточка для канала/группы</b>\n\nПерешлите/скопируйте именно это сообщение: контакты скрыты, кнопка ведёт клиента к открытию контактов после оплаты.\n\n";
+
+  if (built.photoUrl) {
+    await safeReplyWithPhoto(ctx, built.photoUrl, intro + text, {
+      parse_mode: "HTML",
+      reply_markup: kb,
+    });
+  } else {
+    await safeReply(ctx, intro + text, {
+      parse_mode: "HTML",
+      reply_markup: kb,
+      disable_web_page_preview: true,
+    });
+  }
+
+  return true;
+}
+
 /* ===================== AUTHOR TOUR / CARD CONTACTS ALIAS ===================== */
+bot.action(/^public_card:(\d+)$/, async (ctx) => {
+  try {
+    const serviceId = Number(ctx.match?.[1]);
+    if (!Number.isFinite(serviceId) || serviceId <= 0) {
+      await ctx.answerCbQuery("⚠️ Некорректная кнопка", { show_alert: true });
+      return;
+    }
+    await sendPublicSafeCardForChannel(ctx, serviceId);
+  } catch (e) {
+    console.error("[tg-bot] public_card action error:", e?.message || e);
+    try { await ctx.answerCbQuery("⚠️ Не удалось создать безопасную карточку", { show_alert: true }); } catch {}
+  }
+});
+
 bot.action(/^contacts:(\d+)$/, async (ctx) => {
   try {
     const serviceId = Number(ctx.match?.[1]);
@@ -17102,7 +17210,7 @@ const data = await getOrFetchCached(
 
       const publicDeepLink =
         BOT_USERNAME
-          ? `https://t.me/${BOT_USERNAME}?start=${encodeURIComponent(`refused_${svc.id}`)}`
+          ? `https://t.me/${BOT_USERNAME}?start=${encodeURIComponent(`unlock_${svc.id}`)}`
           : `${SITE_URL}/?service=${svc.id}`;
 
       const mustHideContactsForInline = roleForInline === "client";
@@ -17120,6 +17228,7 @@ const data = await getOrFetchCached(
           forceShowProviderContacts: roleForInline === "provider" || roleForInline === "admin",
           publicSafe: mustHideContactsForInline,
           publicOpenBotUrl: publicDeepLink,
+          canPublishPublicSafe: roleForInline === "admin",
         }
       );
       
@@ -17152,6 +17261,9 @@ const data = await getOrFetchCached(
               { text: "📞 Показать контакты", callback_data: `contacts:${svc.id}` },
               { text: "Подробнее на сайте", url: serviceUrl },
             ],
+            ...(roleForInline === "admin"
+              ? [[{ text: "📢 Безопасная карточка для канала", callback_data: `public_card:${svc.id}` }]]
+              : []),
             [{ text: "📩 Быстрый запрос", callback_data: `request:${svc.id}` }],
           ],
         };
