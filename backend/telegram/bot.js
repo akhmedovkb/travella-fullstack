@@ -94,13 +94,45 @@ const MANAGER_CHAT_ID = process.env.TELEGRAM_MANAGER_CHAT_ID || "";
 
 // Куда админ может публиковать public-safe карточки напрямую ботом.
 // Важно: бот должен быть администратором этого канала/группы.
-const PUBLIC_CHANNEL_CHAT_ID = (
+const PUBLIC_CHANNEL_CHAT_ID_RAW = (
   process.env.TELEGRAM_PUBLIC_CHANNEL_ID ||
   process.env.TG_PUBLIC_CHANNEL_ID ||
   process.env.TELEGRAM_ANNOUNCE_CHANNEL_ID ||
   process.env.TELEGRAM_CHANNEL_ID ||
   ""
 ).trim();
+
+function normalizeTelegramPublishChatId(value) {
+  let raw = String(value || "").trim();
+  if (!raw) return "";
+
+  // Разрешаем вставлять ссылку вида https://t.me/channel или t.me/channel
+  raw = raw
+    .replace(/^https?:\/\/t\.me\//i, "@")
+    .replace(/^t\.me\//i, "@")
+    .replace(/\?.*$/, "")
+    .replace(/\/.*$/, "")
+    .trim();
+
+  if (!raw) return "";
+
+  // Публичный username канала/группы.
+  if (raw.startsWith("@")) return raw;
+
+  // Уже готовый Bot API id канала/супергруппы.
+  if (/^-100\d+$/.test(raw)) return raw;
+
+  // Обычные отрицательные chat_id тоже оставляем как есть.
+  if (/^-\d+$/.test(raw)) return raw;
+
+  // В Telegram Desktop в профиле канала показывается id без -100.
+  // Bot API принимает такой канал только как -100<id>.
+  if (/^\d+$/.test(raw)) return `-100${raw}`;
+
+  return raw;
+}
+
+const PUBLIC_CHANNEL_CHAT_ID = normalizeTelegramPublishChatId(PUBLIC_CHANNEL_CHAT_ID_RAW);
 
 function isTelegramAdminUserId(userId) {
   const id = String(userId || "").trim();
@@ -159,6 +191,13 @@ console.log("[tg-bot] SERVICE_URL_TEMPLATE =", SERVICE_URL_TEMPLATE);
 console.log(
   "[tg-bot] MANAGER_CHAT_ID =",
   MANAGER_CHAT_ID ? MANAGER_CHAT_ID : "(not set)"
+);
+console.log(
+  "[tg-bot] PUBLIC_CHANNEL_CHAT_ID =",
+  PUBLIC_CHANNEL_CHAT_ID ? PUBLIC_CHANNEL_CHAT_ID : "(not set)",
+  PUBLIC_CHANNEL_CHAT_ID_RAW && PUBLIC_CHANNEL_CHAT_ID_RAW !== PUBLIC_CHANNEL_CHAT_ID
+    ? `(raw: ${PUBLIC_CHANNEL_CHAT_ID_RAW})`
+    : ""
 );
 console.log("[tg-bot] PRICE_CURRENCY =", PRICE_CURRENCY);
 
@@ -11201,7 +11240,10 @@ async function sendPublicSafeServiceCardToChannel(ctx, serviceId) {
   } catch (e) {
     console.error("[tg-bot] public safe publish failed:", e?.response?.data || e?.message || e);
     try { await ctx.answerCbQuery("⚠️ Не удалось опубликовать", { show_alert: true }); } catch {}
-    await safeReply(ctx, "⚠️ Не удалось опубликовать карточку. Проверьте, что бот добавлен админом в канал/группу и TELEGRAM_PUBLIC_CHANNEL_ID указан правильно.");
+    await safeReply(
+      ctx,
+      `⚠️ Не удалось опубликовать карточку. Проверьте, что бот добавлен админом в канал/группу и TELEGRAM_PUBLIC_CHANNEL_ID указан правильно.\n\nТекущий target: ${PUBLIC_CHANNEL_CHAT_ID || "(not set)"}${PUBLIC_CHANNEL_CHAT_ID_RAW && PUBLIC_CHANNEL_CHAT_ID_RAW !== PUBLIC_CHANNEL_CHAT_ID ? `\nRaw env: ${PUBLIC_CHANNEL_CHAT_ID_RAW}` : ""}`
+    );
     return false;
   }
 }
