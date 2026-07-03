@@ -1027,8 +1027,8 @@ const priceKind =
       parts.push(`🤝 <b>${escapeHtml(providerNameRaw)}</b>`);
       if (telegramLine) parts.push(telegramLine);
     } else {
-      parts.push(`🤝 <b>Контакты проверенного поставщика защищены</b>`);
-      parts.push(`🔓 После открытия вы сможете связаться с ним напрямую.`);
+      parts.push(`🤝 <b>Проверенный поставщик Travella</b>`);
+      parts.push(`🔒 Контакты откроются после оплаты.`);
     }
   };
 
@@ -1058,10 +1058,10 @@ const priceKind =
       // Поставщик/админ не проходят paywall: контакты доступны сразу.
       rows.push([{ text: "📞 Показать контакты", callback_data: `contacts:${serviceId}` }]);
 
-      // Только админ может подготовить публичную карточку для канала/группы.
-      // Поставщик эту кнопку не видит, чтобы не публиковать карточки от имени Travella.
-      if (r === "admin" || options?.canPublishPublicSafe === true) {
-        rows.push([{ text: "📢 Безопасная карточка для канала", callback_data: `public_card:${serviceId}` }]);
+      // Только админ может подготовить публичную safe-карточку для канала/группы.
+      // Поставщик эту кнопку не видит и не может публиковать в официальный канал.
+      if (r === "admin" && options?.hideAdminPublishButton !== true) {
+        rows.push([{ text: "📢 Безопасная карточка для канала", callback_data: `pubsafe:${serviceId}` }]);
       }
     }
 
@@ -1447,8 +1447,8 @@ const priceKind =
             : escapeHtml(authorName);
           parts.push(`🏢 <b>Поставщик:</b> ${providerValue}`);
         } else {
-          parts.push(`🤝 <b>Контакты проверенного поставщика защищены</b>`);
-          parts.push(`🔓 После открытия вы сможете связаться с ним напрямую.`);
+          parts.push(`🤝 <b>Проверенный поставщик Travella</b>`);
+          parts.push(`🔒 Контакты откроются после оплаты.`);
         }
       }
 
@@ -1465,17 +1465,9 @@ const priceKind =
 
     if (role === "provider" || role === "admin" || options?.forceShowProviderContacts === true) {
       kbRows.push([{ text: "📞 Показать контакты", callback_data: `contacts:${serviceId}` }]);
-      if (role === "admin" || options?.canPublishPublicSafe === true) {
-        kbRows.push([{ text: "📢 Безопасная карточка для канала", callback_data: `public_card:${serviceId}` }]);
-      }
     } else {
       if (shouldRenderUnlockButton(role, options)) {
-        const publicDeepLink = options?.publicOpenBotUrl || options?.deepLinkUrl || "";
-        if (options?.forceHideProviderContacts === true && publicDeepLink) {
-          kbRows.push([{ text: "💬 Связаться с поставщиком", url: publicDeepLink }]);
-        } else {
-          kbRows.push([{ text: "💬 Связаться с поставщиком", callback_data: `contacts:${serviceId}` }]);
-        }
+        kbRows.push([{ text: "💬 Связаться с поставщиком", callback_data: `contacts:${serviceId}` }]);
       }
       if (isClientActionsUnlocked()) {
         kbRows.push([{ text: "💬 Быстрый запрос", callback_data: `quick:${serviceId}` }]);
@@ -1779,8 +1771,8 @@ const priceKind =
     parts.push(providerLine);
     if (telegramLine) parts.push(telegramLine);
   } else {
-    parts.push("🤝 <b>Контакты проверенного поставщика защищены</b>");
-    parts.push("🔓 После открытия вы сможете связаться с ним напрямую.");
+    parts.push("🤝 <b>Проверенный поставщик Travella</b>");
+    parts.push("🔒 Контакты откроются после оплаты.");
   }
 
   pushDivider(parts);
