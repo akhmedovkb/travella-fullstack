@@ -1,4 +1,4 @@
-aiEmployeeRegistry.js// backend/ai/core/aiEmployeeRegistry.js
+// backend/ai/core/aiEmployeeRegistry.js
 
 const { getAiConfig } = require("./aiConfig");
 
