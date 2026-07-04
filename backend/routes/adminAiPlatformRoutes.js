@@ -1,75 +1,86 @@
 // backend/routes/adminAiPlatformRoutes.js
 
 const express = require("express");
-const authenticateToken = require("../middleware/authenticateToken");
-const requireAdmin = require("../middleware/requireAdmin");
-const { getPublicAiStatus } = require("../ai/core/aiConfig");
-const { listAiEmployees, getAiEmployee } = require("../ai/core/aiEmployeeRegistry");
-const {
-  prepareVideoOperatorScript,
-  createVideoOperatorVideo,
-  refreshVideoOperatorJob,
-  listVideoOperatorJobs,
-} = require("../ai/videoOperator/videoOperator.service");
-
 const router = express.Router();
 
-router.use(authenticateToken, requireAdmin);
+const authenticateToken = require("../middleware/authenticateToken");
+const requireAdmin = require("../middleware/requireAdmin");
+const { getAiConfig } = require("../ai/core/aiConfig");
+const { listAiEmployees } = require("../ai/core/aiEmployeeRegistry");
+const { listJobs, getJob } = require("../ai/core/aiJobStore");
+const {
+  runVideoOperatorTask,
+  createScriptFromManualContext,
+  listVideoOperatorJobs,
+} = require("../ai/videoOperator/videoOperator.runtime");
 
-router.get("/status", async (_req, res) => {
+router.use(authenticateToken);
+router.use(requireAdmin);
+
+router.get("/status", (req, res) => {
+  const config = getAiConfig();
+  const jobs = listJobs({ limit: 100 });
   res.json({
-    ...getPublicAiStatus(),
+    success: true,
     employees: listAiEmployees(),
+    video: {
+      enabled: config.video.enabled,
+      heygenReady: config.video.heygen.ready,
+      format: config.video.format,
+      resolution: config.video.resolution,
+    },
+    metrics: {
+      jobs: jobs.length,
+      activeJobs: jobs.filter((x) => ["created", "queued", "running", "processing"].includes(String(x.status || "").toLowerCase())).length,
+    },
   });
 });
 
-router.get("/employees", async (_req, res) => {
-  res.json({ ok: true, employees: listAiEmployees() });
+router.post("/tasks", async (req, res) => {
+  const command = String(req.body?.command || "").trim();
+  if (!command) return res.status(400).json({ success: false, message: "Command is required" });
+
+  const result = await runVideoOperatorTask({
+    command,
+    actor: { id: req.user?.id || req.user?.userId || null, role: req.user?.role || req.user?.roles || null },
+  });
+
+  const status = result.success ? 200 : result.error?.code === "SERVICE_CODE_REQUIRED" ? 400 : 404;
+  return res.status(status).json(result);
 });
 
-router.get("/employees/:id", async (req, res) => {
-  const employee = getAiEmployee(req.params.id);
-  if (!employee) return res.status(404).json({ ok: false, error: "employee_not_found" });
-  res.json({ ok: true, employee });
-});
-
-router.get("/video-operator/jobs", async (req, res) => {
-  const limit = Number(req.query.limit || 25);
-  res.json({ ok: true, jobs: listVideoOperatorJobs(limit) });
-});
-
+// Backward compatibility with previous frontend stage.
 router.post("/video-operator/script", async (req, res) => {
-  try {
-    const result = await prepareVideoOperatorScript(req.body || {});
-    res.json({ ok: true, ...result });
-  } catch (error) {
-    console.error("POST /api/admin/ai-platform/video-operator/script error:", error);
-    res.status(500).json({ ok: false, error: error.message || "script_failed" });
+  const code = String(req.body?.code || "").trim();
+  if (code && /^R\s*\d+/i.test(code)) {
+    const result = await runVideoOperatorTask({ command: `Создай сценарий для ${code}`, actor: { id: req.user?.id || null } });
+    return res.status(result.success ? 200 : 404).json(result);
   }
+  const result = await createScriptFromManualContext(req.body || {});
+  return res.json(result);
 });
 
 router.post("/video-operator/heygen-video", async (req, res) => {
-  try {
-    const result = await createVideoOperatorVideo(req.body || {});
-    if (result.error) {
-      return res.status(result.error.status || 500).json({ ok: false, ...result });
-    }
-    res.json({ ok: true, ...result });
-  } catch (error) {
-    console.error("POST /api/admin/ai-platform/video-operator/heygen-video error:", error);
-    res.status(error.status || 500).json({ ok: false, error: error.message || "heygen_failed", data: error.data || null });
-  }
+  const code = String(req.body?.code || "").trim();
+  const result = await runVideoOperatorTask({ command: `Подготовь видео для ${code || "отказного тура"}`, actor: { id: req.user?.id || null } });
+  if (!result.success) return res.status(404).json(result);
+  return res.json({
+    ...result,
+    output: {
+      ...result.output,
+      heygen: { status: "not_started", message: "HeyGen запуск будет подключён следующим этапом после утверждения реального data-flow." },
+    },
+  });
 });
 
-router.post("/video-operator/jobs/:jobId/refresh", async (req, res) => {
-  try {
-    const job = await refreshVideoOperatorJob(req.params.jobId);
-    if (!job) return res.status(404).json({ ok: false, error: "job_not_found" });
-    res.json({ ok: true, job });
-  } catch (error) {
-    console.error("POST /api/admin/ai-platform/video-operator/jobs/:jobId/refresh error:", error);
-    res.status(error.status || 500).json({ ok: false, error: error.message || "refresh_failed", data: error.data || null });
-  }
+router.get("/video-operator/jobs", (req, res) => {
+  res.json({ success: true, jobs: listVideoOperatorJobs({ limit: req.query.limit || 30 }) });
+});
+
+router.post("/video-operator/jobs/:id/refresh", (req, res) => {
+  const job = getJob(req.params.id);
+  if (!job) return res.status(404).json({ success: false, message: "Job not found" });
+  res.json({ success: true, job, message: "На этом этапе обновление статуса HeyGen ещё не подключено." });
 });
 
 module.exports = router;
