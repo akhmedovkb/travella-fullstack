@@ -8,6 +8,7 @@ const requireAdmin = require("../middleware/requireAdmin");
 const { getAiConfig } = require("../ai/core/aiConfig");
 const { listAiEmployees } = require("../ai/core/aiEmployeeRegistry");
 const { listJobs, getJob } = require("../ai/core/aiJobStore");
+const { runAiRuntime } = require("../ai/core/aiRuntime");
 const {
   runVideoOperatorTask,
   createScriptFromManualContext,
@@ -40,8 +41,9 @@ router.post("/tasks", async (req, res) => {
   const command = String(req.body?.command || "").trim();
   if (!command) return res.status(400).json({ success: false, message: "Command is required" });
 
-  const result = await runVideoOperatorTask({
+  const result = await runAiRuntime({
     command,
+    employeeId: req.body?.employeeId || "auto",
     actor: { id: req.user?.id || req.user?.userId || null, role: req.user?.role || req.user?.roles || null },
   });
 
