@@ -1,36 +1,40 @@
-// backend/ai/core/aiEmployeeRegistry.js
+aiEmployeeRegistry.js// backend/ai/core/aiEmployeeRegistry.js
 
 const { getAiConfig } = require("./aiConfig");
 
-const AI_EMPLOYEES = {
-  video_operator: {
+const AI_EMPLOYEES = [
+  {
     id: "video_operator",
     name: "Travella Video Operator",
+    department: "Marketing",
     version: "1.0.0",
-    department: "marketing",
-    description:
-      "Creates short promotional videos for refused tours using script generation and HeyGen avatar video generation.",
+    status: "beta",
+    mission:
+      "Получает данные отказного тура, пишет короткий продающий сценарий и запускает AI-аватар HeyGen для создания вертикального видео.",
+    capabilities: [
+      "Сценарий для отказного тура",
+      "Хук для первых 3 секунд",
+      "Вертикальный формат 9:16",
+      "Подготовка текста для AI-аватара",
+      "Запуск HeyGen video generation",
+    ],
   },
-};
+];
 
 function listAiEmployees() {
   const config = getAiConfig();
-
-  return Object.values(AI_EMPLOYEES).map((employee) => ({
+  return AI_EMPLOYEES.map((employee) => ({
     ...employee,
-    enabled:
-      employee.id === "video_operator"
-        ? Boolean(config.video.enabled)
-        : false,
+    enabled: employee.id === "video_operator" ? Boolean(config.video.enabled) : false,
+    ready: employee.id === "video_operator" ? Boolean(config.video.enabled && config.video.heygen.ready) : false,
   }));
 }
 
-function getAiEmployee(employeeId) {
-  return AI_EMPLOYEES[employeeId] || null;
+function getAiEmployee(id) {
+  return listAiEmployees().find((employee) => employee.id === id) || null;
 }
 
 module.exports = {
-  AI_EMPLOYEES,
   listAiEmployees,
   getAiEmployee,
 };
