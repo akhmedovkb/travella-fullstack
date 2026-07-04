@@ -53,8 +53,8 @@ const adminProviderFunnelRoutes = require("./routes/adminProviderFunnelRoutes");
 const serviceStatsRoutes = require("./routes/serviceStatsRoutes");
 const providerSupportRoutes = require("./routes/providerSupportRoutes");
 const activityEventsRoutes = require("./routes/activityEventsRoutes");
-const adminAiPlatformRoutes = require("./routes/adminAiPlatformRoutes");
 const socialRoutes = require("./routes/socialRoutes");
+const adminAiPlatformRoutes = require("./routes/adminAiPlatformRoutes");
 const { activityAuditMiddleware } = require("./utils/activityLogger");
 
 dotenv.config();
@@ -170,9 +170,6 @@ app.use("/api/marketplace", marketplaceRoutes);
 // Social network layer: provider posts, feed, follows, comments
 app.use("/api/social", socialRoutes);
 
-// Travella AI Platform: digital employees control center
-app.use("/api/admin/ai-platform", adminAiPlatformRoutes);
-
 const clientRoutes = require("./routes/clientRoutes");
 app.use("/api/clients", clientRoutes);
 
@@ -233,6 +230,9 @@ app.use("/api/admin", adminRoutes);
 // ✅ NEW: Admin reset tools (reset client/provider telegram binding, etc.)
 const adminResetRoutes = require("./routes/adminResetRoutes");
 app.use("/api/admin", adminResetRoutes);
+
+// Travella AI Operating System
+app.use("/api/admin/ai-platform", adminAiPlatformRoutes);
 
 // Секции маркетплейса
 const marketplaceSectionsRoutes = require("./routes/marketplaceSectionsRoutes");
