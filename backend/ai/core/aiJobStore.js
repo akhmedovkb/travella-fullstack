@@ -1,57 +1,61 @@
 // backend/ai/core/aiJobStore.js
+// MVP in-memory store. Later this becomes PostgreSQL ai_jobs / ai_job_events.
 
-const crypto = require("crypto");
-
-const jobs = new Map();
+const jobs = [];
+let seq = 1;
 
 function nowIso() {
   return new Date().toISOString();
 }
 
-function createAiJob({ employeeId, type, input = {}, output = {}, status = "created", provider = null }) {
-  const id = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString("hex");
+function createJob({ employeeId, type, command, input = {}, status = "created" }) {
   const job = {
-    id,
+    id: String(seq++),
     employeeId,
     type,
+    command,
     status,
-    provider,
     input,
-    output,
+    output: null,
     error: null,
+    events: [],
     createdAt: nowIso(),
     updatedAt: nowIso(),
   };
-  jobs.set(id, job);
+  jobs.unshift(job);
   return job;
 }
 
-function updateAiJob(id, patch = {}) {
-  const current = jobs.get(id);
-  if (!current) return null;
-  const next = {
-    ...current,
-    ...patch,
-    updatedAt: nowIso(),
+function addEvent(jobId, event) {
+  const job = getJob(jobId);
+  if (!job) return null;
+  const row = {
+    at: nowIso(),
+    level: event.level || "info",
+    step: event.step || "runtime",
+    message: event.message || "",
+    meta: event.meta || null,
   };
-  jobs.set(id, next);
-  return next;
+  job.events.push(row);
+  job.updatedAt = nowIso();
+  return row;
 }
 
-function getAiJob(id) {
-  return jobs.get(id) || null;
+function updateJob(jobId, patch = {}) {
+  const job = getJob(jobId);
+  if (!job) return null;
+  Object.assign(job, patch, { updatedAt: nowIso() });
+  return job;
 }
 
-function listAiJobs({ limit = 25, employeeId = null } = {}) {
-  const rows = Array.from(jobs.values())
-    .filter((job) => (!employeeId ? true : job.employeeId === employeeId))
-    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
-  return rows.slice(0, Math.max(1, Math.min(Number(limit) || 25, 100)));
+function getJob(jobId) {
+  return jobs.find((x) => String(x.id) === String(jobId)) || null;
 }
 
-module.exports = {
-  createAiJob,
-  updateAiJob,
-  getAiJob,
-  listAiJobs,
-};
+function listJobs({ employeeId = "", limit = 30 } = {}) {
+  let rows = jobs;
+  if (employeeId) rows = rows.filter((x) => x.employeeId === employeeId);
+  return rows.slice(0, Math.max(1, Math.min(Number(limit) || 30, 100)));
+}
+
+module.exports = { createJob, addEvent, updateJob, getJob, listJobs };
