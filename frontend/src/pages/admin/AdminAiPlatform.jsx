@@ -3,24 +3,6 @@
 import React from "react";
 import { apiGet, apiPost } from "../../api";
 
-const EMPTY_TOUR = {
-  code: "R857",
-  title: "Отказной тур в Нячанг",
-  fromCity: "Ташкент",
-  destination: "Нячанг, Вьетнам",
-  dates: "28.06–05.07.2026",
-  hotel: "Vinpearl Resort & Spa",
-  room: "Deluxe Room",
-  meal: "BB / Завтраки",
-  people: "2 взрослых",
-  price: "3710",
-  currency: "USD",
-  flight: "04JUL TAS–IKU 04:30–06:50; 11JUL IKU–TAS 08:10–08:30",
-  includes: "авиабилет, отель, трансфер, страховка",
-  supplier: "Название поставщика",
-  urgency: "предложение отказное, поэтому может уйти в любой момент",
-};
-
 const EMPLOYEE_MENU = [
   { id: "video_operator", icon: "🎬", title: "Video Operator", subtitle: "AI-видео для отказных туров", status: "active" },
   { id: "sales_manager", icon: "💼", title: "Sales Manager", subtitle: "Продажи и быстрые заявки", status: "planned" },
@@ -31,12 +13,12 @@ const EMPLOYEE_MENU = [
   { id: "settings", icon: "⚙️", title: "Settings", subtitle: "Ключи, роли, правила AI", status: "planned" },
 ];
 
-const OPERATING_STANDARD = [
-  { label: "Источник данных", text: "Получить данные из Travella или из ручного контекста." },
-  { label: "AI-анализ", text: "Понять оффер, срочность, цену, аудиторию и главный триггер." },
-  { label: "План", text: "Собрать хук, сценарий и структуру результата." },
-  { label: "Выполнение", text: "Запустить нужные сервисы: HeyGen, публикацию, CRM или отчёт." },
-  { label: "Результат", text: "Вернуть ссылку, статус, историю и следующий шаг." },
+const WORKFLOW = [
+  { key: "source", label: "Источник данных", text: "Найти реальный тур в базе Travella по R-коду." },
+  { key: "analysis", label: "AI-анализ", text: "Понять направление, цену, срочность и главный триггер." },
+  { key: "plan", label: "План", text: "Собрать хук, сценарий и структуру результата." },
+  { key: "execution", label: "Выполнение", text: "Подготовить запуск HeyGen / публикации / CRM." },
+  { key: "result", label: "Результат", text: "Вернуть результат, историю и следующий шаг." },
 ];
 
 function cn(...items) {
@@ -58,11 +40,6 @@ function isToday(value) {
   if (Number.isNaN(d.getTime())) return false;
   const now = new Date();
   return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
-}
-
-function getTourCodeFromText(text) {
-  const match = String(text || "").match(/\bR\s*\d{2,6}\b/i);
-  return match ? match[0].replace(/\s+/g, "").toUpperCase() : "";
 }
 
 function StatusPill({ children, tone = "slate" }) {
@@ -122,9 +99,9 @@ function EmployeeMenuItem({ item, selected, onClick }) {
   );
 }
 
-function StandardStep({ item, index, active }) {
+function WorkflowStep({ item, index, active }) {
   return (
-    <div className={cn("rounded-2xl border p-4", active ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 bg-white")}> 
+    <div className={cn("rounded-2xl border p-4", active ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 bg-white")}>
       <div className="flex items-center gap-3">
         <div className={cn("flex h-8 w-8 items-center justify-center rounded-full text-sm font-black", active ? "bg-white text-slate-950" : "bg-slate-100 text-slate-700")}>{index + 1}</div>
         <div className="font-black">{item.label}</div>
@@ -134,17 +111,28 @@ function StandardStep({ item, index, active }) {
   );
 }
 
-function Field({ label, value, onChange, placeholder, textarea = false }) {
-  const cls = "w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-100";
+function ServiceCard({ service }) {
+  if (!service) return null;
+  const ctx = service.videoContext || {};
   return (
-    <label className="block space-y-1.5">
-      <span className="text-[11px] font-black uppercase tracking-wide text-slate-500">{label}</span>
-      {textarea ? (
-        <textarea className={cn(cls, "min-h-[82px] resize-y")} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />
-      ) : (
-        <input className={cls} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />
-      )}
-    </label>
+    <div className="mt-4 rounded-3xl border border-blue-100 bg-blue-50/60 p-4 text-slate-950">
+      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+        <div>
+          <div className="text-xs font-black uppercase tracking-wide text-blue-700">Найдено в базе Travella</div>
+          <div className="mt-1 text-lg font-black">{ctx.code} · {ctx.title}</div>
+          <div className="mt-1 text-sm font-semibold text-slate-600">{ctx.category} · {service.status || "status unknown"}</div>
+        </div>
+        {ctx.price ? <StatusPill tone="blue">{ctx.price} {ctx.currency || "USD"}</StatusPill> : null}
+      </div>
+      <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
+        <div><b>Направление:</b> {ctx.destination || "—"}</div>
+        <div><b>Даты:</b> {ctx.dates || "—"}</div>
+        <div><b>Отель:</b> {ctx.hotel || "—"}</div>
+        <div><b>Размещение:</b> {ctx.people || "—"}</div>
+        <div><b>Питание:</b> {ctx.meal || "—"}</div>
+        <div><b>Поставщик:</b> {ctx.supplier || service.provider?.name || "—"}</div>
+      </div>
+    </div>
   );
 }
 
@@ -152,9 +140,23 @@ function ChatMessage({ message }) {
   const isUser = message.role === "user";
   return (
     <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
-      <div className={cn("max-w-[92%] rounded-3xl px-5 py-4 shadow-sm", isUser ? "bg-slate-950 text-white" : "border border-slate-200 bg-white text-slate-900")}> 
+      <div className={cn("max-w-[96%] rounded-3xl px-5 py-4 shadow-sm", isUser ? "bg-slate-950 text-white" : "border border-slate-200 bg-white text-slate-900")}>
         <div className={cn("mb-1 text-xs font-black uppercase tracking-wide", isUser ? "text-slate-300" : "text-slate-500")}>{isUser ? "Ты" : "Travella Video Operator"}</div>
         <div className="whitespace-pre-wrap text-sm font-semibold leading-7">{message.text}</div>
+        <ServiceCard service={message.output?.service} />
+        {message.events?.length ? (
+          <div className="mt-4 rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-100">
+            <div className="text-xs font-black uppercase tracking-wide text-slate-500">Ход работы</div>
+            <div className="mt-3 space-y-2">
+              {message.events.map((ev, idx) => (
+                <div key={`${ev.at}_${idx}`} className="flex gap-3 text-sm">
+                  <span className={cn("mt-1 h-2 w-2 rounded-full", ev.level === "error" ? "bg-rose-500" : "bg-emerald-500")} />
+                  <div><b>{ev.step}</b>: {ev.message}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
         {message.output?.hook ? (
           <div className="mt-4 rounded-2xl bg-amber-50 p-4 text-slate-950 ring-1 ring-amber-100">
             <div className="text-xs font-black uppercase tracking-wide text-amber-700">Хук первых 3 секунд</div>
@@ -172,33 +174,18 @@ function ChatMessage({ message }) {
   );
 }
 
-function JobCard({ job, onRefresh }) {
-  const videoUrl = job?.output?.videoUrl || job?.output?.heygenStatus?.data?.video_url || "";
+function JobCard({ job }) {
   const tone = job.status === "completed" ? "green" : job.status === "failed" ? "red" : "yellow";
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+      <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="text-sm font-black text-slate-950">{job.type || "AI job"}</div>
-            <StatusPill tone={tone}>{job.status || "created"}</StatusPill>
-          </div>
+          <div className="text-sm font-black text-slate-950">{job.type || "AI task"}</div>
           <div className="mt-1 text-xs font-semibold text-slate-500">{fmtDate(job.createdAt)}</div>
-          {job?.output?.videoId ? <div className="mt-1 text-xs font-semibold text-slate-500">HeyGen video_id: {job.output.videoId}</div> : null}
         </div>
-        <div className="flex flex-wrap gap-2">
-          {job?.output?.videoId ? (
-            <button type="button" onClick={() => onRefresh(job.id)} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-black hover:bg-slate-50">
-              Проверить статус
-            </button>
-          ) : null}
-          {videoUrl ? (
-            <a href={videoUrl} target="_blank" rel="noreferrer" className="rounded-xl bg-black px-3 py-2 text-xs font-black text-white">
-              Открыть видео
-            </a>
-          ) : null}
-        </div>
+        <StatusPill tone={tone}>{job.status || "created"}</StatusPill>
       </div>
+      {job.command ? <div className="mt-3 rounded-xl bg-slate-50 p-3 text-xs font-bold text-slate-600">{job.command}</div> : null}
       {job?.error?.message ? <div className="mt-3 rounded-xl bg-rose-50 p-3 text-xs font-bold text-rose-700">{job.error.message}</div> : null}
     </div>
   );
@@ -208,24 +195,20 @@ export default function AdminAiPlatform() {
   const [status, setStatus] = React.useState(null);
   const [jobs, setJobs] = React.useState([]);
   const [selectedEmployee, setSelectedEmployee] = React.useState("video_operator");
-  const [tour, setTour] = React.useState(EMPTY_TOUR);
-  const [command, setCommand] = React.useState("Создай сценарий для R857");
+  const [command, setCommand] = React.useState("Создай видео для R857");
   const [messages, setMessages] = React.useState([
     {
       id: "welcome",
       role: "assistant",
       text:
-        "Я Travella Video Operator. Напиши задачу обычным языком — например: “Создай сценарий для R857” или “Подготовь видео для отказного тура”. Сейчас я работаю через ручной контекст, следующим этапом подключим поиск тура прямо из базы Travella.",
+        "Я Travella Video Operator. Теперь я работаю не с тестовой формой, а с реальными данными Travella. Напиши: “Создай видео для R857” — я найду этот отказной тур в базе, покажу ход работы и подготовлю сценарий.",
     },
   ]);
-  const [showContext, setShowContext] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState("");
+  const [activeStep, setActiveStep] = React.useState(0);
+  const [currentTask, setCurrentTask] = React.useState(null);
   const chatEndRef = React.useRef(null);
-
-  function setField(name, value) {
-    setTour((prev) => ({ ...prev, [name]: value }));
-  }
 
   async function load() {
     setError("");
@@ -237,78 +220,49 @@ export default function AdminAiPlatform() {
       setStatus(s || null);
       setJobs(Array.isArray(j?.jobs) ? j.jobs : []);
     } catch (err) {
-      setError(err?.message || "Не удалось загрузить Travella AI Operating System");
+      setError(err?.message || "Не удалось загрузить Travella AI OS");
     }
   }
 
-  React.useEffect(() => {
-    load();
-  }, []);
-
-  React.useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages, loading]);
+  React.useEffect(() => { load(); }, []);
+  React.useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [messages, loading]);
 
   function pushMessage(message) {
     setMessages((prev) => [...prev, { id: `${Date.now()}_${Math.random()}`, ...message }]);
   }
 
-  async function runVideoOperator({ runHeygen = false } = {}) {
+  async function runTask() {
     const text = command.trim();
-    if (!text) return;
-
-    const requestedCode = getTourCodeFromText(text);
-    const normalizedTour = requestedCode ? { ...tour, code: requestedCode } : tour;
-    if (requestedCode && requestedCode !== tour.code) setTour(normalizedTour);
+    if (!text || loading) return;
 
     pushMessage({ role: "user", text });
     setCommand("");
     setLoading(true);
     setError("");
+    setActiveStep(0);
 
     try {
-      pushMessage({
-        role: "assistant",
-        text:
-          `Принял задачу.${requestedCode ? `\n\nКод тура: ${requestedCode}.` : ""}\n\nШаг 1/5: проверяю источник данных. Сейчас активен ручной контекст. Следующим этапом я буду сам находить тур в базе Travella по коду.`,
-      });
-
-      pushMessage({ role: "assistant", text: "Шаг 2/5: анализирую направление, цену, срочность и главный оффер." });
-      pushMessage({ role: "assistant", text: "Шаг 3/5: готовлю хук и сценарий для вертикального видео 9:16." });
-
-      const endpoint = runHeygen
-        ? "/api/admin/ai-platform/video-operator/heygen-video"
-        : "/api/admin/ai-platform/video-operator/script";
-      const res = await apiPost(endpoint, normalizedTour, "admin");
-      const output = res?.output || null;
+      pushMessage({ role: "assistant", text: "Принял задачу. Передаю её в Task Router Travella AI OS и начинаю работу с реальной базой." });
+      const res = await apiPost("/api/admin/ai-platform/tasks", { command: text }, "admin");
+      const job = res?.job || null;
+      const output = res?.output || job?.output || null;
+      const events = Array.isArray(job?.events) ? job.events : [];
+      setCurrentTask(job);
+      setActiveStep(output?.service ? 4 : 1);
 
       pushMessage({
         role: "assistant",
-        text: runHeygen
-          ? "Шаг 4/5: сценарий готов, задача отправлена в HeyGen. Проверь статус в блоке последних задач."
-          : "Шаг 4/5: сценарий готов. Я вывел хук и текст ниже. Следующий шаг — запуск HeyGen после утверждения.",
+        text: output?.nextStep || "Задача выполнена. Результат ниже.",
         output,
+        events,
       });
-
-      pushMessage({ role: "assistant", text: "Шаг 5/5: сохраняю результат в истории задач Travella AI Operating System." });
       await load();
     } catch (err) {
-      const message = err?.message || "Не удалось выполнить задачу Video Operator";
+      const message = err?.message || "Не удалось выполнить задачу";
       setError(message);
-      pushMessage({ role: "assistant", text: `Не смог выполнить задачу.\n\nПричина: ${message}` });
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function refreshJob(jobId) {
-    setLoading(true);
-    setError("");
-    try {
-      await apiPost(`/api/admin/ai-platform/video-operator/jobs/${jobId}/refresh`, {}, "admin");
+      setActiveStep(0);
+      pushMessage({ role: "assistant", text: `Не смог выполнить задачу.\n\nПричина: ${message}\n\nПроверь, существует ли такой R-код в базе и опубликована ли услуга.` });
       await load();
-    } catch (err) {
-      setError(err?.message || "Не удалось обновить статус");
     } finally {
       setLoading(false);
     }
@@ -318,10 +272,11 @@ export default function AdminAiPlatform() {
   const employees = Array.isArray(status?.employees) ? status.employees : [];
   const videoEmployee = employees.find((x) => x.id === "video_operator");
   const activeJobs = jobs.filter((job) => ["created", "queued", "processing", "running"].includes(String(job.status || "").toLowerCase())).length;
-  const videosToday = jobs.filter((job) => isToday(job.createdAt) && (job?.output?.videoId || job?.output?.videoUrl)).length;
+  const videosToday = jobs.filter((job) => isToday(job.createdAt) && String(job.type || "").includes("video")).length;
   const heygenReady = Boolean(video.heygenReady);
   const aiVideoEnabled = Boolean(video.enabled);
   const platformHealth = aiVideoEnabled && heygenReady ? "Online" : aiVideoEnabled ? "Needs ENV" : "Disabled";
+  const currentService = currentTask?.output?.service || null;
 
   return (
     <div className="min-h-screen space-y-6 p-4 md:p-6">
@@ -329,22 +284,13 @@ export default function AdminAiPlatform() {
         <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-800 p-6 text-white md:p-8">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <div className="inline-flex rounded-full bg-white/10 px-3 py-1 text-xs font-black uppercase tracking-wide text-white/80 ring-1 ring-white/15">
-                AI Operating System
-              </div>
+              <div className="inline-flex rounded-full bg-white/10 px-3 py-1 text-xs font-black uppercase tracking-wide text-white/80 ring-1 ring-white/15">AI Operating System</div>
               <h1 className="mt-4 text-3xl font-black tracking-tight md:text-5xl">🤖 Travella AI OS</h1>
               <p className="mt-3 max-w-3xl text-sm font-semibold leading-7 text-slate-200 md:text-base">
-                Рабочий стол цифровых сотрудников Travella: сотрудник получает задачу обычным языком, берёт данные, анализирует, выполняет и возвращает результат.
+                Рабочий стол цифровых сотрудников Travella: задача обычным языком → реальные данные Travella → анализ → результат.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={load}
-              disabled={loading}
-              className="rounded-2xl bg-white px-4 py-3 text-sm font-black text-slate-950 hover:bg-slate-100 disabled:opacity-60"
-            >
-              Обновить
-            </button>
+            <button type="button" onClick={load} disabled={loading} className="rounded-2xl bg-white px-4 py-3 text-sm font-black text-slate-950 hover:bg-slate-100 disabled:opacity-60">Обновить</button>
           </div>
         </div>
       </section>
@@ -358,24 +304,15 @@ export default function AdminAiPlatform() {
         <MetricCard label="AI Health" value={platformHealth} helper={heygenReady ? "HeyGen ENV готов" : "Проверь Railway ENV"} tone={heygenReady ? "green" : "yellow"} />
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[360px_1fr]">
+      <section className="grid gap-6 xl:grid-cols-[340px_1fr]">
         <aside className="space-y-4">
           <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="text-xs font-black uppercase tracking-wide text-slate-500">Digital Employees</div>
-            <div className="mt-4 space-y-3">
-              {EMPLOYEE_MENU.map((item) => (
-                <EmployeeMenuItem key={item.id} item={item} selected={selectedEmployee === item.id} onClick={setSelectedEmployee} />
-              ))}
-            </div>
+            <div className="mt-4 space-y-3">{EMPLOYEE_MENU.map((item) => <EmployeeMenuItem key={item.id} item={item} selected={selectedEmployee === item.id} onClick={setSelectedEmployee} />)}</div>
           </div>
-
           <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="text-xs font-black uppercase tracking-wide text-slate-500">Operating Standard</div>
-            <div className="mt-4 space-y-3">
-              {OPERATING_STANDARD.map((item, index) => (
-                <StandardStep key={item.label} item={item} index={index} active={index === 0} />
-              ))}
-            </div>
+            <div className="text-xs font-black uppercase tracking-wide text-slate-500">AI Workflow</div>
+            <div className="mt-4 space-y-3">{WORKFLOW.map((item, index) => <WorkflowStep key={item.key} item={item} index={index} active={index === activeStep} />)}</div>
           </div>
         </aside>
 
@@ -388,42 +325,33 @@ export default function AdminAiPlatform() {
                     <div className="text-xs font-black uppercase tracking-wide text-slate-500">Marketing Department</div>
                     <h2 className="mt-1 text-2xl font-black text-slate-950">🎬 Travella Video Operator</h2>
                     <p className="mt-2 max-w-4xl text-sm font-semibold leading-6 text-slate-600">
-                      Первый цифровой сотрудник. Теперь основное рабочее место — не форма, а диалог: ты ставишь задачу, сотрудник показывает ход работы и возвращает результат.
+                      Первый рабочий AI-сотрудник: получает команду, сам ищет отказной тур в базе Travella по R-коду и готовит сценарий на основе реальной карточки.
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <StatusPill tone={aiVideoEnabled ? "green" : "red"}>{aiVideoEnabled ? "AI Video включено" : "AI Video выключено"}</StatusPill>
                     <StatusPill tone={heygenReady ? "green" : "yellow"}>{heygenReady ? "HeyGen готов" : "Проверить ENV"}</StatusPill>
-                    <StatusPill tone="black">Beta</StatusPill>
+                    <StatusPill tone="black">Real data MVP</StatusPill>
                   </div>
                 </div>
-
-                {videoEmployee?.capabilities?.length ? (
-                  <div className="mt-5 flex flex-wrap gap-2">
-                    {videoEmployee.capabilities.map((item) => (
-                      <span key={item} className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-700">{item}</span>
-                    ))}
-                  </div>
-                ) : null}
+                {videoEmployee?.capabilities?.length ? <div className="mt-5 flex flex-wrap gap-2">{videoEmployee.capabilities.map((item) => <span key={item} className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-700">{item}</span>)}</div> : null}
               </section>
 
-              <section className="grid gap-6 2xl:grid-cols-[1fr_420px]">
+              <section className="grid gap-6 2xl:grid-cols-[1fr_400px]">
                 <div className="rounded-3xl border border-slate-200 bg-white shadow-sm">
                   <div className="border-b border-slate-100 p-5 md:p-6">
                     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                       <div>
-                        <h3 className="text-xl font-black text-slate-950">Рабочий чат сотрудника</h3>
-                        <p className="mt-1 text-sm font-semibold text-slate-500">Пиши задачу так, как написал бы реальному оператору.</p>
+                        <h3 className="text-xl font-black text-slate-950">AI Workspace</h3>
+                        <p className="mt-1 text-sm font-semibold text-slate-500">Пиши задачу как реальному сотруднику: “Создай видео для R857”.</p>
                       </div>
                       {loading ? <StatusPill tone="yellow">Сотрудник работает...</StatusPill> : <StatusPill tone="green">Готов к задаче</StatusPill>}
                     </div>
                   </div>
 
-                  <div className="max-h-[620px] min-h-[420px] space-y-4 overflow-y-auto bg-slate-50/60 p-4 md:p-6">
-                    {messages.map((message) => (
-                      <ChatMessage key={message.id} message={message} />
-                    ))}
-                    {loading ? <ChatMessage message={{ role: "assistant", text: "Выполняю задачу..." }} /> : null}
+                  <div className="max-h-[680px] min-h-[480px] space-y-4 overflow-y-auto bg-slate-50/60 p-4 md:p-6">
+                    {messages.map((message) => <ChatMessage key={message.id} message={message} />)}
+                    {loading ? <ChatMessage message={{ role: "assistant", text: "Ищу данные в Travella, анализирую и собираю результат..." }} /> : null}
                     <div ref={chatEndRef} />
                   </div>
 
@@ -433,95 +361,47 @@ export default function AdminAiPlatform() {
                         value={command}
                         onChange={(e) => setCommand(e.target.value)}
                         onKeyDown={(e) => {
-                          if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) runVideoOperator({ runHeygen: false });
+                          if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault();
+                            runTask();
+                          }
                         }}
-                        placeholder="Например: Создай сценарий для R857"
-                        className="min-h-[84px] w-full resize-none rounded-2xl border-0 px-3 py-2 text-sm font-semibold text-slate-900 outline-none placeholder:text-slate-400"
+                        placeholder="Например: Создай видео для R857"
+                        className="min-h-[76px] w-full resize-none rounded-2xl border-0 px-3 py-2 text-sm font-semibold text-slate-900 outline-none placeholder:text-slate-400"
                       />
                       <div className="flex flex-col gap-3 border-t border-slate-100 pt-3 sm:flex-row sm:items-center sm:justify-between">
-                        <button type="button" onClick={() => setShowContext((v) => !v)} className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-black text-slate-700 hover:bg-slate-50">
-                          {showContext ? "Скрыть контекст тура" : "Контекст тура"}
-                        </button>
-                        <div className="flex flex-col gap-2 sm:flex-row">
-                          <button
-                            type="button"
-                            onClick={() => runVideoOperator({ runHeygen: false })}
-                            disabled={loading || !command.trim()}
-                            className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white hover:bg-slate-800 disabled:opacity-40"
-                          >
-                            Создать сценарий
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => runVideoOperator({ runHeygen: true })}
-                            disabled={loading || !command.trim() || !heygenReady || !aiVideoEnabled}
-                            className="rounded-2xl bg-orange-600 px-5 py-3 text-sm font-black text-white hover:bg-orange-700 disabled:opacity-40"
-                          >
-                            Создать видео
-                          </button>
-                        </div>
+                        <div className="text-xs font-bold text-slate-400">Enter — выполнить, Shift+Enter — новая строка</div>
+                        <button type="button" onClick={runTask} disabled={loading || !command.trim()} className="rounded-2xl bg-slate-950 px-6 py-3 text-sm font-black text-white hover:bg-slate-800 disabled:opacity-40">▶ Выполнить задачу</button>
                       </div>
                     </div>
-
-                    {showContext ? (
-                      <div className="mt-5 rounded-3xl border border-slate-200 bg-slate-50 p-4">
-                        <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                          <div>
-                            <h4 className="text-base font-black text-slate-950">Ручной контекст тура</h4>
-                            <p className="mt-1 text-xs font-semibold text-slate-500">Временный режим. Следующий backend-этап — автоматический поиск отказного тура из базы по коду R857.</p>
-                          </div>
-                          <StatusPill tone="yellow">Debug mode</StatusPill>
-                        </div>
-                        <div className="grid gap-4 md:grid-cols-2">
-                          <Field label="Код" value={tour.code} onChange={(v) => setField("code", v)} placeholder="R857" />
-                          <Field label="Название" value={tour.title} onChange={(v) => setField("title", v)} placeholder="Отказной тур в Нячанг" />
-                          <Field label="Город вылета" value={tour.fromCity} onChange={(v) => setField("fromCity", v)} placeholder="Ташкент" />
-                          <Field label="Направление" value={tour.destination} onChange={(v) => setField("destination", v)} placeholder="Нячанг, Вьетнам" />
-                          <Field label="Даты" value={tour.dates} onChange={(v) => setField("dates", v)} placeholder="28.06–05.07.2026" />
-                          <Field label="Цена" value={tour.price} onChange={(v) => setField("price", v)} placeholder="3710" />
-                          <Field label="Валюта" value={tour.currency} onChange={(v) => setField("currency", v)} placeholder="USD" />
-                          <Field label="Размещение" value={tour.people} onChange={(v) => setField("people", v)} placeholder="2 взрослых" />
-                          <Field label="Отель" value={tour.hotel} onChange={(v) => setField("hotel", v)} placeholder="Vinpearl Resort & Spa" />
-                          <Field label="Номер" value={tour.room} onChange={(v) => setField("room", v)} placeholder="Deluxe Room" />
-                          <Field label="Питание" value={tour.meal} onChange={(v) => setField("meal", v)} placeholder="BB / Завтраки" />
-                          <Field label="Поставщик" value={tour.supplier} onChange={(v) => setField("supplier", v)} placeholder="Название поставщика" />
-                          <div className="md:col-span-2"><Field textarea label="Перелёт" value={tour.flight} onChange={(v) => setField("flight", v)} placeholder="04JUL TAS–IKU 04:30–06:50" /></div>
-                          <div className="md:col-span-2"><Field textarea label="Что входит" value={tour.includes} onChange={(v) => setField("includes", v)} placeholder="авиабилет, отель, трансфер, страховка" /></div>
-                          <div className="md:col-span-2"><Field textarea label="Срочность" value={tour.urgency} onChange={(v) => setField("urgency", v)} placeholder="предложение отказное, может уйти в любой момент" /></div>
-                        </div>
-                      </div>
-                    ) : null}
                   </div>
                 </div>
 
                 <aside className="space-y-6">
                   <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-                    <h3 className="text-xl font-black text-slate-950">Сегодня</h3>
-                    <div className="mt-4 space-y-3 text-sm font-semibold text-slate-600">
-                      <div className="flex items-center justify-between rounded-2xl bg-slate-50 p-4"><span>Сценарии</span><b className="text-slate-950">{jobs.length}</b></div>
-                      <div className="flex items-center justify-between rounded-2xl bg-slate-50 p-4"><span>Видео</span><b className="text-slate-950">{videosToday}</b></div>
-                      <div className="flex items-center justify-between rounded-2xl bg-slate-50 p-4"><span>В работе</span><b className="text-slate-950">{activeJobs}</b></div>
-                    </div>
+                    <h3 className="text-xl font-black text-slate-950">Контекст задачи</h3>
+                    {currentService ? (
+                      <div className="mt-4 space-y-3 text-sm font-semibold text-slate-600">
+                        <div className="flex items-center justify-between rounded-2xl bg-slate-50 p-4"><span>Источник</span><b className="text-slate-950">Travella DB</b></div>
+                        <div className="flex items-center justify-between rounded-2xl bg-slate-50 p-4"><span>Код</span><b className="text-slate-950">{currentService.videoContext?.code}</b></div>
+                        <div className="rounded-2xl bg-slate-50 p-4"><div className="text-slate-400">Название</div><b className="text-slate-950">{currentService.videoContext?.title}</b></div>
+                        <div className="rounded-2xl bg-slate-50 p-4"><div className="text-slate-400">Поставщик</div><b className="text-slate-950">{currentService.videoContext?.supplier || "—"}</b></div>
+                        <div className="rounded-2xl bg-slate-50 p-4"><div className="text-slate-400">Следующий шаг</div><b className="text-slate-950">Утвердить сценарий → HeyGen</b></div>
+                      </div>
+                    ) : (
+                      <div className="mt-4 rounded-2xl bg-slate-50 p-5 text-sm font-semibold text-slate-500">Пока нет активной задачи. Напиши команду с R-кодом.</div>
+                    )}
                   </div>
 
                   <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-                    <div className="flex items-center justify-between gap-3">
-                      <h3 className="text-xl font-black text-slate-950">Очередь задач</h3>
-                      <StatusPill>{jobs.length}</StatusPill>
-                    </div>
-                    <div className="mt-4 space-y-3">
-                      {jobs.length ? jobs.slice(0, 8).map((job) => <JobCard key={job.id} job={job} onRefresh={refreshJob} />) : <div className="rounded-2xl bg-slate-50 p-5 text-sm font-semibold text-slate-500">Пока задач нет.</div>}
-                    </div>
+                    <div className="flex items-center justify-between gap-3"><h3 className="text-xl font-black text-slate-950">Очередь задач</h3><StatusPill>{jobs.length}</StatusPill></div>
+                    <div className="mt-4 space-y-3">{jobs.length ? jobs.slice(0, 8).map((job) => <JobCard key={job.id} job={job} />) : <div className="rounded-2xl bg-slate-50 p-5 text-sm font-semibold text-slate-500">Пока задач нет.</div>}</div>
                   </div>
                 </aside>
               </section>
             </>
           ) : (
-            <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-              <div className="text-5xl">🚧</div>
-              <h2 className="mt-4 text-2xl font-black text-slate-950">Этот AI-сотрудник в roadmap</h2>
-              <p className="mt-2 text-sm font-semibold text-slate-500">Сейчас строим фундамент на Video Operator, затем подключим остальных сотрудников.</p>
-            </div>
+            <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm"><div className="text-5xl">🚧</div><h2 className="mt-4 text-2xl font-black text-slate-950">Этот AI-сотрудник в roadmap</h2><p className="mt-2 text-sm font-semibold text-slate-500">Сейчас строим фундамент на Video Operator, затем подключим остальных сотрудников.</p></div>
           )}
         </main>
       </section>
