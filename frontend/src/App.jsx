@@ -46,6 +46,7 @@ import PaymeLab from "./pages/admin/PaymeLab";
 import AdminBilling from "./pages/admin/AdminBilling";
 import AdminFinance from "./pages/admin/AdminFinance";
 import AdminOperations from "./pages/admin/AdminOperations";
+import AdminAiPlatform from "./pages/admin/AdminAiPlatform";
 import AdminProviderSupport from "./pages/admin/AdminProviderSupport";
 import AdminServiceAudit from "./pages/admin/AdminServiceAudit";
 import AdminProviderFunnel from "./pages/admin/AdminProviderFunnel";
@@ -359,6 +360,16 @@ export default function App() {
                 <PrivateRoute>
                   <AdminRoute>
                     <AdminOperations />
+                  </AdminRoute>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/admin/ai-platform"
+              element={
+                <PrivateRoute>
+                  <AdminRoute>
+                    <AdminAiPlatform />
                   </AdminRoute>
                 </PrivateRoute>
               }
