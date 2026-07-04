@@ -53,6 +53,7 @@ const adminProviderFunnelRoutes = require("./routes/adminProviderFunnelRoutes");
 const serviceStatsRoutes = require("./routes/serviceStatsRoutes");
 const providerSupportRoutes = require("./routes/providerSupportRoutes");
 const activityEventsRoutes = require("./routes/activityEventsRoutes");
+const adminAiPlatformRoutes = require("./routes/adminAiPlatformRoutes");
 const socialRoutes = require("./routes/socialRoutes");
 const { activityAuditMiddleware } = require("./utils/activityLogger");
 
@@ -168,6 +169,9 @@ app.use("/api/marketplace", marketplaceRoutes);
 
 // Social network layer: provider posts, feed, follows, comments
 app.use("/api/social", socialRoutes);
+
+// Travella AI Platform: digital employees control center
+app.use("/api/admin/ai-platform", adminAiPlatformRoutes);
 
 const clientRoutes = require("./routes/clientRoutes");
 app.use("/api/clients", clientRoutes);
