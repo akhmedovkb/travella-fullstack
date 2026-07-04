@@ -669,6 +669,7 @@ export default function Header() {
                 {adminOpen && (
                   <DropdownPanel align="right" width="w-80">
                     <DropdownCaption title={t("nav.admin_core", "Администрирование")} />
+                    <DropdownItem to="/admin/ai-platform" label="🤖 AI Platform" description="Цифровые сотрудники Travella" icon={<IconDashboard />}/>
                     <DropdownItem to="/admin/operations" label="Operations" description="Контроль отказных и настроек" icon={<IconModeration />} />
                     <DropdownItem to="/admin/finance" label={t("nav.finance_admin", "Finance")} description="Финансы платформы" icon={<IconDoc />} />
                     <DropdownItem to="/admin/billing" label={t("nav.billing_admin", "Billing")} description="Биллинг и открытия контактов" icon={<IconWallet />} />
@@ -764,6 +765,7 @@ export default function Header() {
 
             {isAdmin && (
               <RowGroupDark title={t("nav.admin", "Админ")}>
+                <NavItemMobileDark to="/admin/ai-platform" label="🤖 AI Platform" icon={<IconDashboard />}/>
                 <NavItemMobileDark to="/admin/operations" label="Operations" icon={<IconModeration />} />
                 <NavItemMobileDark to="/admin/finance" label={t("nav.finance_admin", "Finance")} icon={<IconDoc />} />
                 <NavItemMobileDark to="/admin/billing" label={t("nav.billing_admin", "Billing")} icon={<IconWallet />} />
