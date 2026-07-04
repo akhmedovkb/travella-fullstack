@@ -48,8 +48,8 @@ function buildAnalysis(ctx) {
   };
 }
 
-async function runVideoOperatorTask({ command, actor = {} }) {
-  const route = routeAiTask(command);
+async function runVideoOperatorTask({ command, actor = {}, runtimeRoute = null }) {
+  const route = runtimeRoute || routeAiTask(command);
   const job = createJob({
     employeeId: "video_operator",
     type: route.action,
@@ -59,7 +59,8 @@ async function runVideoOperatorTask({ command, actor = {} }) {
   });
 
   try {
-    addEvent(job.id, { step: "task_router", message: "Задача распознана и передана Video Operator.", meta: route });
+    addEvent(job.id, { step: "runtime", type: "thought", message: "Понял задачу и выбрал нужного цифрового сотрудника." });
+    addEvent(job.id, { step: "task_router", type: "tool_call", tool: "TaskRouter", message: "TaskRouter определил: сотрудник Video Operator, действие " + route.action + ".", meta: route });
 
     if (!route.serviceCode) {
       addEvent(job.id, { step: "source", level: "error", message: "В задаче не найден код отказного тура формата R857." });
@@ -68,7 +69,7 @@ async function runVideoOperatorTask({ command, actor = {} }) {
       return { success: false, job: getJob(job.id), error };
     }
 
-    addEvent(job.id, { step: "source", message: `Ищу реальный отказной тур ${route.serviceCode} в базе Travella.` });
+    addEvent(job.id, { step: "source", type: "tool_call", tool: "MarketplaceLookup", message: `Ищу реальный отказной тур ${route.serviceCode} в базе Travella.` });
     const lookup = await findRefusedServiceByCode(route.serviceCode);
 
     if (!lookup.found) {
@@ -80,16 +81,19 @@ async function runVideoOperatorTask({ command, actor = {} }) {
 
     const service = lookup.service;
     const ctx = service.videoContext;
-    addEvent(job.id, { step: "source", message: `Нашёл ${ctx.category}: ${ctx.title}.`, meta: { serviceId: service.id, code: service.code } });
+    addEvent(job.id, { step: "source", type: "tool_result", tool: "MarketplaceLookup", message: `Нашёл ${ctx.category}: ${ctx.title}.`, meta: { serviceId: service.id, code: service.code } });
 
     const analysis = buildAnalysis(ctx);
-    addEvent(job.id, { step: "analysis", message: "Проанализировал оффер, цену, срочность и главный триггер.", meta: analysis });
+    addEvent(job.id, { step: "analysis", type: "thought", message: "Анализирую направление, цену, срочность, аудиторию и главный триггер." });
+    addEvent(job.id, { step: "analysis", type: "tool_result", tool: "OfferAnalyzer", message: "Проанализировал оффер, цену, срочность и главный триггер.", meta: analysis });
 
     const hook = buildHook(ctx);
-    addEvent(job.id, { step: "plan", message: "Собрал хук для первых 3 секунд." });
+    addEvent(job.id, { step: "plan", type: "tool_call", tool: "HookBuilder", message: "Подбираю хук для первых 3 секунд." });
+    addEvent(job.id, { step: "plan", type: "tool_result", tool: "HookBuilder", message: "Хук готов." });
 
     const script = buildScript(ctx);
-    addEvent(job.id, { step: "plan", message: "Подготовил текст для AI-аватара." });
+    addEvent(job.id, { step: "plan", type: "tool_call", tool: "AvatarScriptBuilder", message: "Готовлю текст для AI-аватара." });
+    addEvent(job.id, { step: "plan", type: "tool_result", tool: "AvatarScriptBuilder", message: "Текст для AI-аватара готов." });
 
     const output = {
       route,
@@ -104,7 +108,7 @@ async function runVideoOperatorTask({ command, actor = {} }) {
     };
 
     updateJob(job.id, { status: "completed", output });
-    addEvent(job.id, { step: "result", message: "Результат сохранён в истории Travella AI OS." });
+    addEvent(job.id, { step: "result", type: "tool_result", tool: "AiJobStore", message: "Результат сохранён в истории Travella AI OS." });
 
     return { success: true, job: getJob(job.id), output };
   } catch (err) {
