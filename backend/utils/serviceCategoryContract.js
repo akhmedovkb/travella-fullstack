@@ -45,7 +45,6 @@ const STEP = Object.freeze({
   TICKET_EVENT_DATE: "svc_ticket_event_date",
   PRICE: "svc_create_price",
   GROSS_PRICE: "svc_create_grossPrice",
-  URGENCY: "svc_create_urgency",
   EXPIRATION: "svc_create_expiration",
   PHOTO: "svc_create_photo",
 });
@@ -113,7 +112,6 @@ const COMMERCIAL_FIELDS = Object.freeze([
   f("netPrice", "Цена нетто", STEP.PRICE, { code: "NET_PRICE_REQUIRED", weight: 3 }),
   f("grossPrice", "Цена для клиента", STEP.GROSS_PRICE, { code: "GROSS_PRICE_REQUIRED", weight: 3 }),
   f("grossPriceNotBelowNet", "Цена для клиента не ниже нетто", null, { code: "GROSS_PRICE_TOO_LOW", weight: 1 }),
-  f("urgency", "Срочность продажи", STEP.URGENCY, { required: false, recommended: true, weight: 1, editStep: null }),
   f("expiration", "Срок актуальности", STEP.EXPIRATION, { required: false, recommended: true, weight: 1 }),
   f("photo", "Фото услуги", STEP.PHOTO, { required: false, recommended: true, weight: 1 }),
   f("proof", "Proof / подтверждение", null, { code: "PROOF_IMAGES_REQUIRED", weight: 3 }),
