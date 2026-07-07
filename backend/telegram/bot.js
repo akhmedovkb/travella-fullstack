@@ -1746,6 +1746,11 @@ bot.use(async (ctx, next) => {
       typeof ctx.message?.text === "string" &&
       ctx.message.text.trim().startsWith("/start");
 
+    const isMenuCmd =
+      ctx.updateType === "message" &&
+      typeof ctx.message?.text === "string" &&
+      isMainMenuText(ctx.message.text);
+
     const isRolePick =
       ctx.updateType === "callback_query" &&
       typeof ctx.callbackQuery?.data === "string" &&
@@ -1765,7 +1770,7 @@ bot.use(async (ctx, next) => {
 
     // ✅ Если pending — режем всё, кроме /start / выбора роли / отправки телефона
     if (ctx.session?.pending) {
-      if (isStartCmd || isRolePick || isContact || isPhoneText) {
+      if (isStartCmd || isMenuCmd || isRolePick || isContact || isPhoneText) {
         return next();
       }
 
@@ -1802,7 +1807,7 @@ bot.use(async (ctx, next) => {
 
     if (!isLinked) {
       // разрешаем базовые шаги привязки
-      if (isStartCmd || isRolePick || isContact || isPhoneText) {
+      if (isStartCmd || isMenuCmd || isRolePick || isContact || isPhoneText) {
         return next();
       }
 
@@ -1824,7 +1829,7 @@ bot.use(async (ctx, next) => {
         return;
       }
 
-      await ctx.reply("🔐 Сначала привяжите аккаунт (номер телефона) через /start.");
+      await ctx.reply("🔐 Сначала привяжите аккаунт по номеру телефона. Напишите /menu или /start — бот покажет нужные кнопки.");
       return;
     }
 
@@ -2072,30 +2077,66 @@ function formatPriceWithCurrency(value) {
   return `${v} ${PRICE_CURRENCY}`;
 }
 
-function getMainMenuKeyboard(role) {
-  if (role === "provider") {
-    return {
-      reply_markup: {
-        keyboard: [
-          [{ text: "🔍 Найти услугу" }, { text: "🧳 Мои услуги" }],
-          [{ text: "🧺 Корзина" }, { text: "📄 Бронирования" }],
-          [{ text: "📨 Заявки" }, { text: "👤 Профиль" }],
-        ],
-        resize_keyboard: true,
-      },
-    };
-  }
+const MAIN_MENU_TEXT_RE = /^(?:\/menu(?:@\w+)?|(?:🏠\s*)?(?:меню|главное меню)|кнопки|старт|start)$/i;
 
+function isMainMenuText(text) {
+  return MAIN_MENU_TEXT_RE.test(String(text || "").trim());
+}
+
+function buildPersistentReplyKeyboard(keyboard) {
   return {
     reply_markup: {
-      keyboard: [
-        [{ text: "🔍 Найти услугу" }, { text: "❤️ Избранное" }],
-        [{ text: "📄 Бронирования" }, { text: "📨 Заявки" }],
-        [{ text: "👤 Профиль" }, { text: "🏢 Стать поставщиком" }],
-      ],
+      keyboard,
       resize_keyboard: true,
+      is_persistent: true,
+      one_time_keyboard: false,
+      input_field_placeholder: "Выберите действие в меню 👇",
     },
   };
+}
+
+function getMainMenuKeyboard(role) {
+  if (role === "provider") {
+    return buildPersistentReplyKeyboard([
+      [{ text: "🏠 Главное меню" }],
+      [{ text: "🔍 Найти услугу" }, { text: "🧳 Мои услуги" }],
+      [{ text: "🧺 Корзина" }, { text: "📄 Бронирования" }],
+      [{ text: "📨 Заявки" }, { text: "👤 Профиль" }],
+    ]);
+  }
+
+  return buildPersistentReplyKeyboard([
+    [{ text: "🏠 Главное меню" }],
+    [{ text: "🔍 Найти услугу" }, { text: "🔥 Горящие предложения" }],
+    [{ text: "❤️ Избранное" }, { text: "📄 Бронирования" }],
+    [{ text: "📨 Заявки" }, { text: "👤 Профиль" }],
+    [{ text: "🏢 Стать поставщиком" }],
+  ]);
+}
+
+async function showMainMenu(ctx, roleArg = null, options = {}) {
+  const role = roleArg || ctx.session?.role || "client";
+  const text = options.text ||
+    "🏠 Главное меню Travella\n\n" +
+    "Кнопки закреплены снизу. Если они пропали — напишите «меню» или /menu.";
+
+  await safeReply(ctx, text, getMainMenuKeyboard(role));
+}
+
+function hasActiveTelegramFlow(ctx) {
+  const s = ctx.session || {};
+  return !!(
+    s.awaitingProofForServiceId ||
+    s.pendingClickUnlock ||
+    s.pendingProviderSupportClick ||
+    s.requestedRole ||
+    s.awaitingClientPhone ||
+    s.awaitingProviderPhone ||
+    s.editWiz ||
+    s.serviceDraft ||
+    s.wiz ||
+    s.state
+  );
 }
 
 async function askRole(ctx) {
@@ -3398,8 +3439,8 @@ async function promptEditState(ctx, state) {
     case "svc_edit_flight_airline":
       await safeReply(
         ctx,
-        `🛫 Авиакомпания (текущее: ${draft.airline || "(пусто)"}).\nВведите новую или нажмите «⏭ Пропустить»:`,
-        editWizNavKeyboard()
+        `🛫 Авиакомпания (текущее: ${draft.airline || "(пусто)"}).\nВыберите вариант или нажмите «✍️ Свой вариант»:`,
+        airlineChoiceKeyboard("edit")
       );
       return;
 
@@ -3472,16 +3513,16 @@ async function promptEditState(ctx, state) {
     case "svc_edit_tour_roomcat":
       await safeReply(
         ctx,
-        `⭐️ Категория номера (текущее: ${draft.roomCategory || "(пусто)"}).\nВведите или нажмите «⏭ Пропустить»:`,
-        editWizNavKeyboard()
+        `⭐️ Категория номера (текущее: ${draft.roomCategory || "(пусто)"}).\nВыберите вариант или нажмите «✍️ Свой вариант»:`,
+        roomCategoryChoiceKeyboard("edit", "tour")
       );
       return;
 
     case "svc_edit_tour_food":
       await safeReply(
         ctx,
-        `🍽 Питание (текущее: ${draft.food || "(пусто)"}).\nВведите (BB/HB/FB/AI/UAI) или нажмите «⏭ Пропустить»:`,
-        editWizNavKeyboard()
+        `🍽 Питание (текущее: ${mealFullLabel(draft.food) || "(пусто)"}).\nВыберите вариант или нажмите «✍️ Свой вариант»:`,
+        mealChoiceKeyboard("edit", "tour")
       );
       return;
 
@@ -3570,8 +3611,8 @@ async function promptEditState(ctx, state) {
     case "svc_edit_hotel_roomcat":
       await safeReply(
         ctx,
-        `⭐️ Категория номера (текущее: ${draft.roomCategory || "(пусто)"}).\nВведите или нажмите «⏭ Пропустить»:`,
-        editWizNavKeyboard()
+        `⭐️ Категория номера (текущее: ${draft.roomCategory || "(пусто)"}).\nВыберите вариант или нажмите «✍️ Свой вариант»:`,
+        roomCategoryChoiceKeyboard("edit", "hotel")
       );
       return;
     
@@ -3586,8 +3627,8 @@ async function promptEditState(ctx, state) {
     case "svc_edit_hotel_food":
       await safeReply(
         ctx,
-        `🍽 Питание (текущее: ${draft.food || "(пусто)"}).\nВведите или нажмите «⏭ Пропустить»:`,
-        editWizNavKeyboard()
+        `🍽 Питание (текущее: ${mealFullLabel(draft.food) || "(пусто)"}).\nВыберите вариант или нажмите «✍️ Свой вариант»:`,
+        mealChoiceKeyboard("edit", "hotel")
       );
       return;
     
@@ -3602,8 +3643,8 @@ async function promptEditState(ctx, state) {
     case "svc_edit_hotel_transfer":
       await safeReply(
         ctx,
-        `🚗 Трансфер (текущее: ${draft.transfer || "(пусто)"}).\nВведите или нажмите «⏭ Пропустить»:`,
-        editWizNavKeyboard()
+        `🚗 Трансфер (текущее: ${draft.transfer || "(пусто)"}).\nВыберите вариант или нажмите «✍️ Свой вариант»:`,
+        hotelTransferChoiceKeyboard("edit")
       );
       return;
     
@@ -6126,6 +6167,169 @@ function accommodationChoiceKeyboard(mode = "create", flow = "tour") {
   };
 }
 
+
+const MEAL_OPTIONS = [
+  { code: "RO", label: "без питания" },
+  { code: "BB", label: "завтраки" },
+  { code: "HB", label: "завтрак + ужин" },
+  { code: "FB", label: "полный пансион" },
+  { code: "AI", label: "всё включено" },
+  { code: "UAI", label: "ультра всё включено" },
+];
+
+function mealFullLabel(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const upper = raw.toUpperCase();
+  const found = MEAL_OPTIONS.find((x) => x.code === upper);
+  return found ? `${found.code} (${found.label})` : raw;
+}
+
+function normalizeMealInput(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const upper = raw.toUpperCase();
+  const found = MEAL_OPTIONS.find((x) => x.code === upper);
+  return found ? found.code : raw;
+}
+
+function mealChoiceKeyboard(mode = "create", flow = "tour") {
+  const prefix = mode === "edit" ? "svc_edit_meal" : "svc_meal";
+  const nav = mode === "edit"
+    ? [
+        { text: "⏭ Пропустить", callback_data: "svc_edit:skip" },
+        { text: "⬅️ Назад", callback_data: "svc_edit_back" },
+        { text: "❌ Отмена", callback_data: "svc_edit_cancel" },
+      ]
+    : [
+        { text: "⏭ Пропустить", callback_data: "svc_wiz:skip" },
+        { text: "⬅️ Назад", callback_data: "svc_wiz:back" },
+        { text: "❌ Отмена", callback_data: "svc_wiz:cancel" },
+      ];
+
+  return {
+    reply_markup: {
+      inline_keyboard: [
+        MEAL_OPTIONS.slice(0, 3).map((x) => ({
+          text: `${x.code} — ${x.label}`,
+          callback_data: `${prefix}:${flow}:${x.code}`,
+        })),
+        MEAL_OPTIONS.slice(3).map((x) => ({
+          text: `${x.code} — ${x.label}`,
+          callback_data: `${prefix}:${flow}:${x.code}`,
+        })),
+        [{ text: "✍️ Свой вариант", callback_data: `${prefix}:${flow}:custom` }],
+        nav,
+      ],
+    },
+  };
+}
+
+const ROOM_CATEGORY_OPTIONS = [
+  "Standard",
+  "Superior",
+  "Deluxe",
+  "Suite",
+  "Family Room",
+  "Villa",
+];
+
+function roomCategoryChoiceKeyboard(mode = "create", flow = "tour") {
+  const prefix = mode === "edit" ? "svc_edit_roomcat" : "svc_roomcat";
+  const nav = mode === "edit"
+    ? [
+        { text: "⏭ Пропустить", callback_data: "svc_edit:skip" },
+        { text: "⬅️ Назад", callback_data: "svc_edit_back" },
+        { text: "❌ Отмена", callback_data: "svc_edit_cancel" },
+      ]
+    : [
+        { text: "⏭ Пропустить", callback_data: "svc_wiz:skip" },
+        { text: "⬅️ Назад", callback_data: "svc_wiz:back" },
+        { text: "❌ Отмена", callback_data: "svc_wiz:cancel" },
+      ];
+  return {
+    reply_markup: {
+      inline_keyboard: [
+        ROOM_CATEGORY_OPTIONS.slice(0, 2).map((x) => ({ text: x, callback_data: `${prefix}:${flow}:${encodeURIComponent(x)}` })),
+        ROOM_CATEGORY_OPTIONS.slice(2, 4).map((x) => ({ text: x, callback_data: `${prefix}:${flow}:${encodeURIComponent(x)}` })),
+        ROOM_CATEGORY_OPTIONS.slice(4).map((x) => ({ text: x, callback_data: `${prefix}:${flow}:${encodeURIComponent(x)}` })),
+        [{ text: "✍️ Свой вариант", callback_data: `${prefix}:${flow}:custom` }],
+        nav,
+      ],
+    },
+  };
+}
+
+const HOTEL_TRANSFER_OPTIONS = [
+  { code: "individual", label: "Индивидуальный" },
+  { code: "group", label: "Групповой" },
+  { code: "none", label: "Отсутствует" },
+];
+
+function hotelTransferChoiceKeyboard(mode = "create") {
+  const prefix = mode === "edit" ? "svc_edit_hotel_transfer_pick" : "svc_hotel_transfer_pick";
+  const nav = mode === "edit"
+    ? [
+        { text: "⏭ Пропустить", callback_data: "svc_edit:skip" },
+        { text: "⬅️ Назад", callback_data: "svc_edit_back" },
+        { text: "❌ Отмена", callback_data: "svc_edit_cancel" },
+      ]
+    : [
+        { text: "⏭ Пропустить", callback_data: "svc_wiz:skip" },
+        { text: "⬅️ Назад", callback_data: "svc_wiz:back" },
+        { text: "❌ Отмена", callback_data: "svc_wiz:cancel" },
+      ];
+  return {
+    reply_markup: {
+      inline_keyboard: [
+        HOTEL_TRANSFER_OPTIONS.map((x) => ({ text: x.label, callback_data: `${prefix}:${x.code}` })),
+        [{ text: "✍️ Свой вариант", callback_data: `${prefix}:custom` }],
+        nav,
+      ],
+    },
+  };
+}
+
+const AIRLINE_OPTIONS = [
+  { code: "HY", label: "Uzbekistan Airways" },
+  { code: "HH", label: "Qanot Sharq" },
+  { code: "C6", label: "Centrum Air" },
+  { code: "TK", label: "Turkish Airlines" },
+  { code: "LO", label: "LOT" },
+  { code: "KC", label: "Air Astana" },
+];
+
+function airlineChoiceKeyboard(mode = "create") {
+  const prefix = mode === "edit" ? "svc_edit_airline_pick" : "svc_airline_pick";
+  const nav = mode === "edit"
+    ? [
+        { text: "⏭ Пропустить", callback_data: "svc_edit:skip" },
+        { text: "⬅️ Назад", callback_data: "svc_edit_back" },
+        { text: "❌ Отмена", callback_data: "svc_edit_cancel" },
+      ]
+    : [
+        { text: "⏭ Пропустить", callback_data: "svc_wiz:skip" },
+        { text: "⬅️ Назад", callback_data: "svc_wiz:back" },
+        { text: "❌ Отмена", callback_data: "svc_wiz:cancel" },
+      ];
+  return {
+    reply_markup: {
+      inline_keyboard: [
+        AIRLINE_OPTIONS.slice(0, 2).map((x) => ({ text: `${x.code} — ${x.label}`, callback_data: `${prefix}:${x.code}` })),
+        AIRLINE_OPTIONS.slice(2, 4).map((x) => ({ text: `${x.code} — ${x.label}`, callback_data: `${prefix}:${x.code}` })),
+        AIRLINE_OPTIONS.slice(4).map((x) => ({ text: `${x.code} — ${x.label}`, callback_data: `${prefix}:${x.code}` })),
+        [{ text: "✍️ Свой вариант", callback_data: `${prefix}:custom` }],
+        nav,
+      ],
+    },
+  };
+}
+
+function airlineValueFromCode(code) {
+  const found = AIRLINE_OPTIONS.find((x) => x.code === String(code || "").toUpperCase());
+  return found ? `${found.code} — ${found.label}` : String(code || "").trim();
+}
+
 function getServiceWizardOrder(category = "", state = "") {
   return getServiceWizardSteps(category, state);
 }
@@ -7359,8 +7563,8 @@ async function promptWizardState(ctx, state) {
 
     case "svc_create_flight_airline":
       await ctx.reply(
-        "🛫 Укажите *авиакомпанию* (например: Uzbekistan Airways, Turkish Airlines, HH, HY):",
-        { parse_mode: "Markdown", ...wizNavKeyboard() }
+        "🛫 Выберите *авиакомпанию* или нажмите «✍️ Свой вариант».",
+        { parse_mode: "Markdown", ...airlineChoiceKeyboard("create") }
       );
       return;
 
@@ -7386,15 +7590,15 @@ async function promptWizardState(ctx, state) {
       return;
         case "svc_create_tour_roomcat":
       await ctx.reply(
-        "⭐️ Укажите *категорию номера* (например: Standard / Deluxe / Suite):\nЕсли не нужно — нажмите «⏭ Пропустить».",
-        { parse_mode: "Markdown", ...wizNavKeyboard() }
+        "⭐️ Выберите *категорию номера* или нажмите «✍️ Свой вариант».\nЕсли не нужно — нажмите «⏭ Пропустить».",
+        { parse_mode: "Markdown", ...roomCategoryChoiceKeyboard("create", "tour") }
       );
       return;
 
     case "svc_create_tour_food":
       await ctx.reply(
-        "🍽 Укажите *питание* (например: BB / HB / FB / AI / UAI):\nЕсли не нужно — нажмите «⏭ Пропустить».",
-        { parse_mode: "Markdown", ...wizNavKeyboard() }
+        "🍽 Выберите *питание* или нажмите «✍️ Свой вариант».\nЕсли не нужно — нажмите «⏭ Пропустить».",
+        { parse_mode: "Markdown", ...mealChoiceKeyboard("create", "tour") }
       );
       return;
 
@@ -7465,8 +7669,8 @@ async function promptWizardState(ctx, state) {
 
     case "svc_hotel_roomcat":
       await ctx.reply(
-        "⭐️ Укажите *категорию номера* (например: Standard / Deluxe / Suite):",
-        { parse_mode: "Markdown", ...wizNavKeyboard() }
+        "⭐️ Выберите *категорию номера* или нажмите «✍️ Свой вариант».",
+        { parse_mode: "Markdown", ...roomCategoryChoiceKeyboard("create", "hotel") }
       );
       return;
 
@@ -7479,8 +7683,8 @@ async function promptWizardState(ctx, state) {
 
     case "svc_hotel_food":
       await ctx.reply(
-        "🍽 Укажите *питание* (например: BB / HB / FB / AI / UAI):",
-        { parse_mode: "Markdown", ...wizNavKeyboard() }
+        "🍽 Выберите *питание* или нажмите «✍️ Свой вариант».",
+        { parse_mode: "Markdown", ...mealChoiceKeyboard("create", "hotel") }
       );
       return;
 
@@ -7493,8 +7697,8 @@ async function promptWizardState(ctx, state) {
 
     case "svc_hotel_transfer":
       await ctx.reply(
-        "🚗 Укажите *трансфер* (Индивидуальный / Групповой / Отсутствует):",
-        { parse_mode: "Markdown", ...wizNavKeyboard() }
+        "🚗 Выберите *трансфер* или нажмите «✍️ Свой вариант».",
+        { parse_mode: "Markdown", ...hotelTransferChoiceKeyboard("create") }
       );
       return;
 
@@ -7571,10 +7775,11 @@ async function promptWizardState(ctx, state) {
     }
 
     case "svc_create_urgency":
-      await ctx.reply(
-        "⚡ <b>Как быстро нужно продать?</b>\n\nЭто поможет Travella выделять самые срочные отказные предложения и правильнее сортировать карточки.",
-        { parse_mode: "HTML", ...buildUrgencyKeyboard() }
-      );
+      // Legacy fallback: старые сессии могли остановиться на этом шаге.
+      // Ручной выбор срочности больше не используется — переходим к сроку актуальности.
+      if (ctx.session?.serviceDraft) ctx.session.serviceDraft.urgency = null;
+      ctx.session.state = "svc_create_expiration";
+      await promptWizardState(ctx, "svc_create_expiration");
       return;
 
     case "svc_create_expiration":
@@ -7950,6 +8155,41 @@ bot.hears(/^\/testpay(?:@\w+)?$/i, async (ctx) => {
     console.error("[tg-bot] /testpay error:", e?.message || e);
     await ctx.reply("❌ Ошибка Telegram Payme testpay");
   }
+});
+
+/* ===================== /menu / главное меню ===================== */
+
+bot.command("menu", async (ctx) => {
+  logUpdate(ctx, "/menu");
+
+  if (!ctx.session?.linked) {
+    await ctx.reply(
+      "🔐 Сначала привяжите аккаунт по номеру телефона. После этого кнопки меню будут закреплены снизу."
+    );
+    await askRole(ctx);
+    return;
+  }
+
+  const role = ctx.session?.role || (await ensureProviderRole(ctx)) || (await ensureClientRole(ctx)) || "client";
+  await showMainMenu(ctx, role);
+});
+
+bot.hears(MAIN_MENU_TEXT_RE, async (ctx) => {
+  logUpdate(ctx, "hears main menu");
+
+  if (!ctx.session?.linked) {
+    await ctx.reply(
+      "🔐 Сначала привяжите аккаунт по номеру телефона. После этого меню будет доступно без /start."
+    );
+    await askRole(ctx);
+    return;
+  }
+
+  forceCloseEditWizard(ctx);
+  resetServiceWizard(ctx);
+
+  const role = ctx.session?.role || (await ensureProviderRole(ctx)) || (await ensureClientRole(ctx)) || "client";
+  await showMainMenu(ctx, role);
 });
 
 /* ===================== /start ===================== */
@@ -9845,6 +10085,231 @@ bot.action(/^svc_edit_accommodation:(tour|hotel):(SGL|DBL|TRIPLE|QUADRUPLE|custo
   }
 });
 
+
+// 🍽 Быстрый выбор питания при создании отказного тура/отеля.
+bot.action(/^svc_meal:(tour|hotel):(RO|BB|HB|FB|AI|UAI|custom)$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    if (!ctx.session) ctx.session = {};
+    const draft = ctx.session.serviceDraft || {};
+    ctx.session.serviceDraft = draft;
+
+    const flow = ctx.match?.[1] === "hotel" ? "hotel" : "tour";
+    const value = String(ctx.match?.[2] || "");
+    const state = flow === "hotel" ? "svc_hotel_food" : "svc_create_tour_food";
+
+    if (value === "custom") {
+      ctx.session.state = state;
+      await safeReply(ctx, "✍️ Введите свой вариант питания.\nНапример: FB + напитки, BB + ужин, без питания.", wizNavKeyboard());
+      return;
+    }
+
+    draft.food = normalizeMealInput(value);
+    pushWizardState(ctx, state);
+    ctx.session.state = flow === "hotel" ? "svc_hotel_halal" : "svc_create_tour_transfer";
+    await promptWizardState(ctx, ctx.session.state);
+    await persistProviderCreateWizard(ctx);
+  } catch (e) {
+    console.error("[tg-bot] svc_meal error:", e?.response?.data || e);
+  }
+});
+
+// 🍽 Быстрый выбор питания при редактировании отказного тура/отеля.
+bot.action(/^svc_edit_meal:(tour|hotel):(RO|BB|HB|FB|AI|UAI|custom)$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    if (!ctx.session) ctx.session = {};
+    const draft = ctx.session.serviceDraft || {};
+    ctx.session.serviceDraft = draft;
+
+    const flow = ctx.match?.[1] === "hotel" ? "hotel" : "tour";
+    const value = String(ctx.match?.[2] || "");
+    const state = flow === "hotel" ? "svc_edit_hotel_food" : "svc_edit_tour_food";
+
+    if (value === "custom") {
+      ctx.session.state = state;
+      ctx.session.editWiz = ctx.session.editWiz || {};
+      ctx.session.editWiz.step = state;
+      await safeReply(ctx, "✍️ Введите свой вариант питания.\nНапример: FB + напитки, BB + ужин, без питания.", editWizNavKeyboard());
+      return;
+    }
+
+    draft.food = normalizeMealInput(value);
+    ctx.session.editWiz = ctx.session.editWiz || {};
+    const next = flow === "hotel" ? "svc_edit_hotel_halal" : "svc_edit_tour_transfer";
+    ctx.session.editWiz.step = next;
+    ctx.session.state = next;
+    await promptEditState(ctx, next);
+  } catch (e) {
+    console.error("[tg-bot] svc_edit_meal error:", e?.response?.data || e);
+  }
+});
+
+// ⭐️ Быстрый выбор категории номера при создании отказного тура/отеля.
+bot.action(/^svc_roomcat:(tour|hotel):(.+)$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    if (!ctx.session) ctx.session = {};
+    const draft = ctx.session.serviceDraft || {};
+    ctx.session.serviceDraft = draft;
+
+    const flow = ctx.match?.[1] === "hotel" ? "hotel" : "tour";
+    const raw = String(ctx.match?.[2] || "");
+    const state = flow === "hotel" ? "svc_hotel_roomcat" : "svc_create_tour_roomcat";
+
+    if (raw === "custom") {
+      ctx.session.state = state;
+      await safeReply(ctx, "✍️ Введите свою категорию номера.\nНапример: Deluxe Sea View, DBL+EXB, Family Suite.", wizNavKeyboard());
+      return;
+    }
+
+    draft.roomCategory = decodeURIComponent(raw);
+    pushWizardState(ctx, state);
+    ctx.session.state = flow === "hotel" ? "svc_hotel_accommodation" : "svc_create_tour_food";
+    await promptWizardState(ctx, ctx.session.state);
+    await persistProviderCreateWizard(ctx);
+  } catch (e) {
+    console.error("[tg-bot] svc_roomcat error:", e?.response?.data || e);
+  }
+});
+
+// ⭐️ Быстрый выбор категории номера при редактировании отказного тура/отеля.
+bot.action(/^svc_edit_roomcat:(tour|hotel):(.+)$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    if (!ctx.session) ctx.session = {};
+    const draft = ctx.session.serviceDraft || {};
+    ctx.session.serviceDraft = draft;
+
+    const flow = ctx.match?.[1] === "hotel" ? "hotel" : "tour";
+    const raw = String(ctx.match?.[2] || "");
+    const state = flow === "hotel" ? "svc_edit_hotel_roomcat" : "svc_edit_tour_roomcat";
+
+    if (raw === "custom") {
+      ctx.session.state = state;
+      ctx.session.editWiz = ctx.session.editWiz || {};
+      ctx.session.editWiz.step = state;
+      await safeReply(ctx, "✍️ Введите свою категорию номера.\nНапример: Deluxe Sea View, DBL+EXB, Family Suite.", editWizNavKeyboard());
+      return;
+    }
+
+    draft.roomCategory = decodeURIComponent(raw);
+    ctx.session.editWiz = ctx.session.editWiz || {};
+    const next = flow === "hotel" ? "svc_edit_hotel_accommodation" : "svc_edit_tour_food";
+    ctx.session.editWiz.step = next;
+    ctx.session.state = next;
+    await promptEditState(ctx, next);
+  } catch (e) {
+    console.error("[tg-bot] svc_edit_roomcat error:", e?.response?.data || e);
+  }
+});
+
+// 🚗 Быстрый выбор трансфера отеля при создании.
+bot.action(/^svc_hotel_transfer_pick:(individual|group|none|custom)$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    if (!ctx.session) ctx.session = {};
+    const draft = ctx.session.serviceDraft || {};
+    ctx.session.serviceDraft = draft;
+    const value = String(ctx.match?.[1] || "");
+
+    if (value === "custom") {
+      ctx.session.state = "svc_hotel_transfer";
+      await safeReply(ctx, "✍️ Введите свой вариант трансфера.\nНапример: аэропорт-отель-аэропорт, шаттл, без трансфера.", wizNavKeyboard());
+      return;
+    }
+
+    const found = HOTEL_TRANSFER_OPTIONS.find((x) => x.code === value);
+    draft.transfer = found ? found.label : value;
+    pushWizardState(ctx, "svc_hotel_transfer");
+    ctx.session.state = "svc_hotel_changeable";
+    await promptWizardState(ctx, "svc_hotel_changeable");
+    await persistProviderCreateWizard(ctx);
+  } catch (e) {
+    console.error("[tg-bot] svc_hotel_transfer_pick error:", e?.response?.data || e);
+  }
+});
+
+// 🚗 Быстрый выбор трансфера отеля при редактировании.
+bot.action(/^svc_edit_hotel_transfer_pick:(individual|group|none|custom)$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    if (!ctx.session) ctx.session = {};
+    const draft = ctx.session.serviceDraft || {};
+    ctx.session.serviceDraft = draft;
+    const value = String(ctx.match?.[1] || "");
+
+    if (value === "custom") {
+      ctx.session.state = "svc_edit_hotel_transfer";
+      ctx.session.editWiz = ctx.session.editWiz || {};
+      ctx.session.editWiz.step = "svc_edit_hotel_transfer";
+      await safeReply(ctx, "✍️ Введите свой вариант трансфера.\nНапример: аэропорт-отель-аэропорт, шаттл, без трансфера.", editWizNavKeyboard());
+      return;
+    }
+
+    const found = HOTEL_TRANSFER_OPTIONS.find((x) => x.code === value);
+    draft.transfer = found ? found.label : value;
+    ctx.session.editWiz = ctx.session.editWiz || {};
+    ctx.session.editWiz.step = "svc_edit_hotel_changeable";
+    ctx.session.state = "svc_edit_hotel_changeable";
+    await promptEditState(ctx, "svc_edit_hotel_changeable");
+  } catch (e) {
+    console.error("[tg-bot] svc_edit_hotel_transfer_pick error:", e?.response?.data || e);
+  }
+});
+
+// 🛫 Быстрый выбор авиакомпании при создании.
+bot.action(/^svc_airline_pick:(HY|HH|C6|TK|LO|KC|custom)$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    if (!ctx.session) ctx.session = {};
+    const draft = ctx.session.serviceDraft || {};
+    ctx.session.serviceDraft = draft;
+
+    const value = String(ctx.match?.[1] || "");
+    if (value === "custom") {
+      ctx.session.state = "svc_create_flight_airline";
+      await safeReply(ctx, "✍️ Введите авиакомпанию.\nНапример: FlyDubai, Air Arabia, Turkish Airlines.", wizNavKeyboard());
+      return;
+    }
+
+    draft.airline = airlineValueFromCode(value);
+    pushWizardState(ctx, "svc_create_flight_airline");
+    ctx.session.state = "svc_create_flight_details";
+    await promptWizardState(ctx, "svc_create_flight_details");
+    await persistProviderCreateWizard(ctx);
+  } catch (e) {
+    console.error("[tg-bot] svc_airline_pick error:", e?.response?.data || e);
+  }
+});
+
+// 🛫 Быстрый выбор авиакомпании при редактировании.
+bot.action(/^svc_edit_airline_pick:(HY|HH|C6|TK|LO|KC|custom)$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    if (!ctx.session) ctx.session = {};
+    const draft = ctx.session.serviceDraft || {};
+    ctx.session.serviceDraft = draft;
+
+    const value = String(ctx.match?.[1] || "");
+    if (value === "custom") {
+      ctx.session.state = "svc_edit_flight_airline";
+      ctx.session.editWiz = ctx.session.editWiz || {};
+      ctx.session.editWiz.step = "svc_edit_flight_airline";
+      await safeReply(ctx, "✍️ Введите авиакомпанию.\nНапример: FlyDubai, Air Arabia, Turkish Airlines.", editWizNavKeyboard());
+      return;
+    }
+
+    draft.airline = airlineValueFromCode(value);
+    ctx.session.editWiz = ctx.session.editWiz || {};
+    ctx.session.editWiz.step = "svc_edit_flight_details";
+    ctx.session.state = "svc_edit_flight_details";
+    await promptEditState(ctx, "svc_edit_flight_details");
+  } catch (e) {
+    console.error("[tg-bot] svc_edit_airline_pick error:", e?.response?.data || e);
+  }
+});
+
 // ⏭ Пропустить шаг при СОЗДАНИИ услуги.
 // Важно: пропуск разрешён только для опциональных полей.
 bot.action("svc_wiz:skip", async (ctx) => {
@@ -9892,9 +10357,6 @@ bot.action("svc_wiz:skip", async (ctx) => {
 
       if (state === "svc_create_grossPrice") {
         draft.grossPrice = null;
-      }
-      if (state === "svc_create_urgency") {
-        draft.urgency = "normal";
       }
       if (state === "svc_create_expiration") {
         draft.expiration = null;
@@ -14161,7 +14623,11 @@ async function handleSvcEditWizardText(ctx) {
       ctx.session.editWiz.step = nextState;
 
       ctx.session.state = nextState;
-      await safeReply(ctx, message, editWizKeyboardForPrompt(message));
+      if (typeof promptEditState === "function") {
+        await promptEditState(ctx, nextState);
+      } else {
+        await safeReply(ctx, message, editWizKeyboardForPrompt(message));
+      }
     };
 
     switch (state) {
@@ -14454,7 +14920,7 @@ async function handleSvcEditWizardText(ctx) {
       }
 
       case "svc_edit_tour_food": {
-        if (!keep()) draft.food = text;
+        if (!keep()) draft.food = normalizeMealInput(text);
         await go(
           "svc_edit_tour_transfer",
           `🚐 Трансфер включён? (текущее: ${draft.transferIncluded ? "да" : "нет"}).\nОтветьте да/нет или нажмите «⏭ Пропустить»:`
@@ -14655,7 +15121,7 @@ async function handleSvcEditWizardText(ctx) {
       }
 
       case "svc_edit_hotel_food": {
-        if (!keep()) draft.food = text;
+        if (!keep()) draft.food = normalizeMealInput(text);
         await go(
           "svc_edit_hotel_halal",
           `🥗 Halal? (текущее: ${draft.halal ? "да" : "нет"}).\nОтветьте да/нет или нажмите «⏭ Пропустить»:`
@@ -16178,7 +16644,7 @@ bot.on("text", async (ctx, next) => {
         
           const v = await requireTextField(ctx, text, "Питание", { min: 1 });
           if (!v) return;
-          draft.food = v;
+          draft.food = normalizeMealInput(v);
         
           pushWizardState(ctx, "svc_create_tour_food");
           ctx.session.state = "svc_create_tour_transfer";
@@ -16364,7 +16830,7 @@ bot.on("text", async (ctx, next) => {
           return;
 
         case "svc_hotel_food":
-          draft.food = text;
+          draft.food = normalizeMealInput(text);
           pushWizardState(ctx, "svc_hotel_food");
           ctx.session.state = "svc_hotel_halal";
           await promptWizardState(ctx, "svc_hotel_halal");
@@ -16485,8 +16951,10 @@ bot.on("text", async (ctx, next) => {
           const lower = text.trim().toLowerCase();
           draft.grossPrice = lower === "пропустить" || lower === "нет" ? null : text;
           pushWizardState(ctx, "svc_create_grossPrice");
-          ctx.session.state = "svc_create_urgency";
-          await promptWizardState(ctx, "svc_create_urgency");
+          // Срочность больше не спрашиваем вручную: она вычисляется из срока актуальности.
+          draft.urgency = null;
+          ctx.session.state = "svc_create_expiration";
+          await promptWizardState(ctx, "svc_create_expiration");
           return;
         }
 
@@ -17030,6 +17498,35 @@ bot.action("proof:cancel", async (ctx) => {
 
 bot.hears(/^(готово|done)$/i, async (ctx) => {
   await finishProofSubmissionFromBot(ctx);
+});
+
+// Последний fallback для обычного текста: возвращает пользователю нижнее меню,
+// чтобы не приходилось каждый раз вспоминать /start. Активные wizard-сценарии не трогаем.
+bot.on("text", async (ctx) => {
+  try {
+    const raw = String(ctx.message?.text || "").trim();
+    if (!raw || raw.startsWith("/start")) return;
+    if (hasActiveTelegramFlow(ctx)) return;
+
+    const role = ctx.session?.role || (await ensureProviderRole(ctx)) || (await ensureClientRole(ctx)) || null;
+
+    if (!ctx.session?.linked && !role) {
+      await safeReply(
+        ctx,
+        "Я не совсем понял команду. Для начала привяжите аккаунт по номеру телефона 👇"
+      );
+      await askRole(ctx);
+      return;
+    }
+
+    await showMainMenu(ctx, role || "client", {
+      text:
+        "Я не совсем понял команду. Открыл главное меню ниже 👇\n\n" +
+        "Если кнопки пропали — напишите «меню» или /menu.",
+    });
+  } catch (e) {
+    console.error("[tg-bot] text fallback menu error:", e?.message || e);
+  }
 });
 
 bot.on("inline_query", async (ctx) => {
