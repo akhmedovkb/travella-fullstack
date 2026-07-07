@@ -15,6 +15,11 @@ const { buildServiceMessage } = require("../utils/telegramServiceCard");
 const { telegramActivityMiddleware } = require("../utils/activityLogger");
 const { getDraftProgress } = require("../utils/serviceFieldMatrix");
 const {
+  SERVICE_FIELD_OPTIONS,
+  findOptionByCode,
+  normalizeOptionValue,
+} = require("../utils/serviceFieldOptions");
+const {
   getServiceWizardSteps,
   getNextWizardStep,
   getPreviousWizardStep,
@@ -6112,27 +6117,17 @@ function wizNavKeyboard() {
 
 
 
-const ACCOMMODATION_OPTIONS = [
-  { code: "SGL", label: "одноместное размещение" },
-  { code: "DBL", label: "двухместное размещение" },
-  { code: "TRIPLE", label: "трёхместное размещение" },
-  { code: "QUADRUPLE", label: "четырёхместное размещение" },
-];
+const ACCOMMODATION_OPTIONS = SERVICE_FIELD_OPTIONS.accommodation;
 
 function accommodationFullLabel(value) {
   const raw = String(value || "").trim();
   if (!raw) return "";
-  const upper = raw.toUpperCase();
-  const found = ACCOMMODATION_OPTIONS.find((x) => x.code === upper);
+  const found = findOptionByCode("accommodation", raw);
   return found ? `${found.code} (${found.label})` : raw;
 }
 
 function normalizeAccommodationInput(value) {
-  const raw = String(value || "").trim();
-  if (!raw) return "";
-  const upper = raw.toUpperCase();
-  const found = ACCOMMODATION_OPTIONS.find((x) => x.code === upper);
-  return found ? found.code : raw;
+  return normalizeOptionValue("accommodation", value);
 }
 
 function accommodationChoiceKeyboard(mode = "create", flow = "tour") {
@@ -6168,29 +6163,17 @@ function accommodationChoiceKeyboard(mode = "create", flow = "tour") {
 }
 
 
-const MEAL_OPTIONS = [
-  { code: "RO", label: "без питания" },
-  { code: "BB", label: "завтраки" },
-  { code: "HB", label: "завтрак + ужин" },
-  { code: "FB", label: "полный пансион" },
-  { code: "AI", label: "всё включено" },
-  { code: "UAI", label: "ультра всё включено" },
-];
+const MEAL_OPTIONS = SERVICE_FIELD_OPTIONS.meal;
 
 function mealFullLabel(value) {
   const raw = String(value || "").trim();
   if (!raw) return "";
-  const upper = raw.toUpperCase();
-  const found = MEAL_OPTIONS.find((x) => x.code === upper);
+  const found = findOptionByCode("meal", raw);
   return found ? `${found.code} (${found.label})` : raw;
 }
 
 function normalizeMealInput(value) {
-  const raw = String(value || "").trim();
-  if (!raw) return "";
-  const upper = raw.toUpperCase();
-  const found = MEAL_OPTIONS.find((x) => x.code === upper);
-  return found ? found.code : raw;
+  return normalizeOptionValue("meal", value);
 }
 
 function mealChoiceKeyboard(mode = "create", flow = "tour") {
@@ -6225,14 +6208,7 @@ function mealChoiceKeyboard(mode = "create", flow = "tour") {
   };
 }
 
-const ROOM_CATEGORY_OPTIONS = [
-  "Standard",
-  "Superior",
-  "Deluxe",
-  "Suite",
-  "Family Room",
-  "Villa",
-];
+const ROOM_CATEGORY_OPTIONS = SERVICE_FIELD_OPTIONS.roomCategory;
 
 function roomCategoryChoiceKeyboard(mode = "create", flow = "tour") {
   const prefix = mode === "edit" ? "svc_edit_roomcat" : "svc_roomcat";
@@ -6260,11 +6236,7 @@ function roomCategoryChoiceKeyboard(mode = "create", flow = "tour") {
   };
 }
 
-const HOTEL_TRANSFER_OPTIONS = [
-  { code: "individual", label: "Индивидуальный" },
-  { code: "group", label: "Групповой" },
-  { code: "none", label: "Отсутствует" },
-];
+const HOTEL_TRANSFER_OPTIONS = SERVICE_FIELD_OPTIONS.hotelTransfer;
 
 function hotelTransferChoiceKeyboard(mode = "create") {
   const prefix = mode === "edit" ? "svc_edit_hotel_transfer_pick" : "svc_hotel_transfer_pick";
@@ -6290,14 +6262,7 @@ function hotelTransferChoiceKeyboard(mode = "create") {
   };
 }
 
-const AIRLINE_OPTIONS = [
-  { code: "HY", label: "Uzbekistan Airways" },
-  { code: "HH", label: "Qanot Sharq" },
-  { code: "C6", label: "Centrum Air" },
-  { code: "TK", label: "Turkish Airlines" },
-  { code: "LO", label: "LOT" },
-  { code: "KC", label: "Air Astana" },
-];
+const AIRLINE_OPTIONS = SERVICE_FIELD_OPTIONS.airline;
 
 function airlineChoiceKeyboard(mode = "create") {
   const prefix = mode === "edit" ? "svc_edit_airline_pick" : "svc_airline_pick";
@@ -6326,7 +6291,7 @@ function airlineChoiceKeyboard(mode = "create") {
 }
 
 function airlineValueFromCode(code) {
-  const found = AIRLINE_OPTIONS.find((x) => x.code === String(code || "").toUpperCase());
+  const found = findOptionByCode("airline", code);
   return found ? `${found.code} — ${found.label}` : String(code || "").trim();
 }
 
@@ -7584,7 +7549,7 @@ async function promptWizardState(ctx, state) {
 
     case "svc_create_tour_accommodation":
       await ctx.reply(
-        "🛏 Выберите *размещение* или нажмите «✍️ Свой вариант».\n\nSGL — одноместное, DBL — двухместное, TRIPLE — трёхместное, QUADRUPLE — четырёхместное.",
+        "🛏 Выберите *размещение* или нажмите «✍️ Свой вариант».\n\nSGL — одноместное, DBL — двухместное, TRPL — трёхместное, QDPL — четырёхместное.",
         { parse_mode: "Markdown", ...accommodationChoiceKeyboard("create", "tour") }
       );
       return;
@@ -7676,7 +7641,7 @@ async function promptWizardState(ctx, state) {
 
     case "svc_hotel_accommodation":
       await ctx.reply(
-        "🛏 Выберите *размещение* или нажмите «✍️ Свой вариант».\n\nSGL — одноместное, DBL — двухместное, TRIPLE — трёхместное, QUADRUPLE — четырёхместное.",
+        "🛏 Выберите *размещение* или нажмите «✍️ Свой вариант».\n\nSGL — одноместное, DBL — двухместное, TRPL — трёхместное, QDPL — четырёхместное.",
         { parse_mode: "Markdown", ...accommodationChoiceKeyboard("create", "hotel") }
       );
       return;
@@ -10019,7 +9984,7 @@ bot.action(/^svc_edit_flight_type:(one_way|round_trip)$/, async (ctx) => {
 
 
 // 🛏 Быстрый выбор размещения при создании отказного тура/отеля.
-bot.action(/^svc_accommodation:(tour|hotel):(SGL|DBL|TRIPLE|QUADRUPLE|custom)$/, async (ctx) => {
+bot.action(/^svc_accommodation:(tour|hotel):(SGL|DBL|TRPL|QDPL|custom)$/, async (ctx) => {
   try {
     await ctx.answerCbQuery();
     if (!ctx.session) ctx.session = {};
@@ -10051,7 +10016,7 @@ bot.action(/^svc_accommodation:(tour|hotel):(SGL|DBL|TRIPLE|QUADRUPLE|custom)$/,
 });
 
 // 🛏 Быстрый выбор размещения при редактировании отказного тура/отеля.
-bot.action(/^svc_edit_accommodation:(tour|hotel):(SGL|DBL|TRIPLE|QUADRUPLE|custom)$/, async (ctx) => {
+bot.action(/^svc_edit_accommodation:(tour|hotel):(SGL|DBL|TRPL|QDPL|custom)$/, async (ctx) => {
   try {
     await ctx.answerCbQuery();
     if (!ctx.session) ctx.session = {};
@@ -10259,7 +10224,7 @@ bot.action(/^svc_edit_hotel_transfer_pick:(individual|group|none|custom)$/, asyn
 });
 
 // 🛫 Быстрый выбор авиакомпании при создании.
-bot.action(/^svc_airline_pick:(HY|HH|C6|TK|LO|KC|custom)$/, async (ctx) => {
+bot.action(/^svc_airline_pick:(HY|HH|C6|TK|FZ|G9|LO|KC|custom)$/, async (ctx) => {
   try {
     await ctx.answerCbQuery();
     if (!ctx.session) ctx.session = {};
@@ -10284,7 +10249,7 @@ bot.action(/^svc_airline_pick:(HY|HH|C6|TK|LO|KC|custom)$/, async (ctx) => {
 });
 
 // 🛫 Быстрый выбор авиакомпании при редактировании.
-bot.action(/^svc_edit_airline_pick:(HY|HH|C6|TK|LO|KC|custom)$/, async (ctx) => {
+bot.action(/^svc_edit_airline_pick:(HY|HH|C6|TK|FZ|G9|LO|KC|custom)$/, async (ctx) => {
   try {
     await ctx.answerCbQuery();
     if (!ctx.session) ctx.session = {};
