@@ -17500,12 +17500,46 @@ bot.hears(/^(готово|done)$/i, async (ctx) => {
   await finishProofSubmissionFromBot(ctx);
 });
 
+function looksLikeInlineServiceCardText(text) {
+  const t = String(text || "").trim();
+  if (!t) return false;
+
+  const serviceMarkers = [
+    "🆕 НОВЫЙ ОТКАЗНОЙ",
+    "Новый отказной",
+    "#R",
+    "Проверенный поставщик Travella",
+    "Контакты откроются после оплаты",
+    "Подробнее на сайте",
+    "Детали рейса",
+  ];
+
+  let score = 0;
+  for (const marker of serviceMarkers) {
+    if (t.toLowerCase().includes(String(marker).toLowerCase())) score += 1;
+  }
+
+  return score >= 2;
+}
+
 // Последний fallback для обычного текста: возвращает пользователю нижнее меню,
 // чтобы не приходилось каждый раз вспоминать /start. Активные wizard-сценарии не трогаем.
 bot.on("text", async (ctx) => {
   try {
     const raw = String(ctx.message?.text || "").trim();
     if (!raw || raw.startsWith("/start")) return;
+
+    // Сообщение, вставленное пользователем через inline-режим этого же бота,
+    // Telegram присылает как обычный text-message с via_bot. Это не команда
+    // пользователя, поэтому fallback "я не понял" показывать нельзя.
+    const viaBotId = ctx.message?.via_bot?.id ? Number(ctx.message.via_bot.id) : null;
+    const selfBotId = ctx.botInfo?.id ? Number(ctx.botInfo.id) : null;
+    if (viaBotId && selfBotId && viaBotId === selfBotId) return;
+
+    // Дополнительная защита: если Telegram-клиент/обёртка не передал via_bot,
+    // но текст явно похож на опубликованную карточку услуги — не открываем меню.
+    if (looksLikeInlineServiceCardText(raw)) return;
+
     if (hasActiveTelegramFlow(ctx)) return;
 
     const role = ctx.session?.role || (await ensureProviderRole(ctx)) || (await ensureClientRole(ctx)) || null;
