@@ -7,7 +7,7 @@ const SERVICE_FIELD_OPTIONS = Object.freeze({
     { code: "SGL", label: "одноместное" },
     { code: "DBL", label: "двухместное" },
     { code: "TRPL", label: "трёхместное" },
-    { code: "QDPL", label: "четырёхместное" },
+    { code: "QDRPL", label: "четырёхместное" },
   ]),
 
   meal: Object.freeze([
