@@ -155,7 +155,6 @@ function okByContractKey(key, service, d) {
     case "netPrice": return priceNetOk(service, d);
     case "grossPrice": return priceGrossOk(service, d);
     case "grossPriceNotBelowNet": return grossNotBelowNet(service, d);
-    case "urgency": return hasFilled(d.urgency);
     case "expiration": return hasFilled(d.expiration, d.expiration_at, service.expiration_at);
     case "photo": return getImages(service.images).length > 0 || hasFilled(d.telegramPhotoFileId);
     case "proof": return proofOk(service, d);
