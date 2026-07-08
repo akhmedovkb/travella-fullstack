@@ -3443,10 +3443,12 @@ async function promptEditState(ctx, state) {
       return;
 
     case "svc_edit_flight_airline":
+      // Legacy state: airline is no longer a separate product step.
       await safeReply(
         ctx,
-        `🛫 Авиакомпания (текущее: ${draft.airline || "(пусто)"}).\nВыберите вариант или нажмите «✍️ Свой вариант»:`,
-        airlineChoiceKeyboard("edit")
+        `✈️ Детали рейса (текущее: ${draft.flightDetails || "(нет)"}).
+Укажите номер/дату/время/авиакомпанию в одном поле, или "нет" чтобы убрать, или нажмите «⏭ Пропустить»:`,
+        editWizNavKeyboard()
       );
       return;
 
@@ -6785,19 +6787,19 @@ function getCalendarConfig(state, draft = {}) {
     case "svc_create_tour_start":
       return { title: "📅 Выберите дату начала тура", field: "startDate", next: "svc_create_tour_end", kind: "date", required: true };
     case "svc_create_tour_end":
-      return { title: "📅 Выберите дату окончания тура", field: "endDate", next: "svc_create_flight_departure", kind: "date", required: true };
+      return { title: "📅 Выберите дату окончания тура", field: "endDate", next: "svc_create_flight_details", kind: "date", required: true };
     case "svc_create_flight_departure":
       return {
         title: "🛫 Выберите дату рейса вылета",
         field: "departureFlightDate",
-        next: draft.category === "refused_flight"
-          ? (draft.flightType === "round_trip" ? "svc_create_flight_return" : "svc_create_flight_airline")
-          : (draft.flightType === "round_trip" ? "svc_create_flight_return" : "svc_create_flight_details"),
+        next: draft.category === "refused_flight" && draft.flightType === "round_trip"
+          ? "svc_create_flight_return"
+          : "svc_create_flight_details",
         kind: "date",
         required: false
       };
     case "svc_create_flight_return":
-      return { title: "🛬 Выберите дату рейса обратно", field: "returnFlightDate", next: draft.category === "refused_flight" ? "svc_create_flight_airline" : "svc_create_flight_details", kind: "date", required: false };
+      return { title: "🛬 Выберите дату рейса обратно", field: "returnFlightDate", next: "svc_create_flight_details", kind: "date", required: false };
     case "svc_hotel_checkin":
       return { title: "📅 Выберите дату заезда", field: "startDate", next: "svc_hotel_checkout", kind: "date", required: true };
     case "svc_hotel_checkout":
@@ -7510,9 +7512,10 @@ async function promptWizardState(ctx, state) {
       return;
 
     case "svc_create_flight_airline":
+      // Legacy state: airline is no longer a separate product step.
       await ctx.reply(
-        "🛫 Выберите *авиакомпанию* или нажмите «✍️ Свой вариант».",
-        { parse_mode: "Markdown", ...airlineChoiceKeyboard("create") }
+        "✈️ Укажите *детали рейса* (номер/дата/время/авиакомпания)\nЕсли не нужно — нажмите «⏭ Пропустить».",
+        { parse_mode: "Markdown", ...wizNavKeyboard() }
       );
       return;
 
@@ -14780,15 +14783,6 @@ async function handleSvcEditWizardText(ctx) {
           }
         }
 
-        if (draft.category === "refused_flight") {
-          await go(
-            "svc_edit_flight_airline",
-            `🛫 Авиакомпания (текущее: ${draft.airline || "(пусто)"}).
-Введите новую или нажмите «⏭ Пропустить»:`
-          );
-          return true;
-        }
-
         await go(
           "svc_edit_flight_details",
           `✈️ Детали рейса (текущее: ${draft.flightDetails || "(нет)"}).
@@ -14798,7 +14792,6 @@ async function handleSvcEditWizardText(ctx) {
       }
 
       case "svc_edit_flight_airline": {
-        if (!keep()) draft.airline = text;
         await go(
           "svc_edit_flight_details",
           `✈️ Детали рейса (текущее: ${draft.flightDetails || "(нет)"}).
@@ -16369,8 +16362,8 @@ bot.on("text", async (ctx, next) => {
           }
           draft.endDate = normEnd;
           pushWizardState(ctx, "svc_create_tour_end");
-          ctx.session.state = "svc_create_flight_departure";
-          await promptWizardState(ctx, "svc_create_flight_departure");
+          ctx.session.state = "svc_create_flight_details";
+          await promptWizardState(ctx, "svc_create_flight_details");
           return;
         }
 
@@ -16396,9 +16389,9 @@ bot.on("text", async (ctx, next) => {
           if (["пропустить", "skip", "-", "нет"].includes(low)) {
             draft.departureFlightDate = null;
             pushWizardState(ctx, "svc_create_flight_departure");
-            ctx.session.state = draft.category === "refused_flight"
-              ? (draft.flightType === "round_trip" ? "svc_create_flight_return" : "svc_create_flight_airline")
-              : (draft.flightType === "round_trip" ? "svc_create_flight_return" : "svc_create_flight_details");
+            ctx.session.state = draft.category === "refused_flight" && draft.flightType === "round_trip"
+              ? "svc_create_flight_return"
+              : "svc_create_flight_details";
             await promptWizardState(ctx, ctx.session.state);
             return;
           }
@@ -16420,9 +16413,9 @@ bot.on("text", async (ctx, next) => {
           }
           draft.departureFlightDate = norm;
           pushWizardState(ctx, "svc_create_flight_departure");
-          ctx.session.state = draft.category === "refused_flight"
-            ? (draft.flightType === "round_trip" ? "svc_create_flight_return" : "svc_create_flight_airline")
-            : (draft.flightType === "round_trip" ? "svc_create_flight_return" : "svc_create_flight_details");
+          ctx.session.state = draft.category === "refused_flight" && draft.flightType === "round_trip"
+            ? "svc_create_flight_return"
+            : "svc_create_flight_details";
           await promptWizardState(ctx, ctx.session.state);
           return;
         }
@@ -16432,7 +16425,7 @@ bot.on("text", async (ctx, next) => {
           if (["пропустить", "skip", "-", "нет"].includes(low)) {
             draft.returnFlightDate = null;
             pushWizardState(ctx, "svc_create_flight_return");
-            ctx.session.state = draft.category === "refused_flight" ? "svc_create_flight_airline" : "svc_create_flight_details";
+            ctx.session.state = "svc_create_flight_details";
             await promptWizardState(ctx, ctx.session.state);
             return;
           }
@@ -16462,15 +16455,13 @@ bot.on("text", async (ctx, next) => {
           }
           draft.returnFlightDate = norm;
           pushWizardState(ctx, "svc_create_flight_return");
-          ctx.session.state = draft.category === "refused_flight" ? "svc_create_flight_airline" : "svc_create_flight_details";
+          ctx.session.state = "svc_create_flight_details";
           await promptWizardState(ctx, ctx.session.state);
           return;
         }
 
         case "svc_create_flight_airline": {
-          const v = await requireTextField(ctx, text, "Авиакомпания", { min: 2 });
-          if (!v) return;
-          draft.airline = v;
+          // Legacy state: do not store airline separately; continue to unified flight details.
           pushWizardState(ctx, "svc_create_flight_airline");
           ctx.session.state = "svc_create_flight_details";
           await promptWizardState(ctx, "svc_create_flight_details");
@@ -17370,7 +17361,7 @@ async function startQuickProofEdit(ctx, serviceId, group) {
       else if (category === "refused_hotel") step = "svc_edit_hotel_checkin";
       else step = "svc_edit_tour_start";
     } else if (group === "details") {
-      if (category === "refused_flight") step = "svc_edit_flight_airline";
+      if (category === "refused_flight") step = "svc_edit_flight_details";
       else if (category === "refused_ticket" || category === "refused_event_ticket") step = "svc_edit_ticket_city";
       else if (category === "refused_hotel") step = "svc_edit_hotel_name";
       else step = "svc_edit_title";
