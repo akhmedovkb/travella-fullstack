@@ -6,6 +6,8 @@ import ProviderServicesCard from "../components/ProviderServicesCard";
 import ConfirmModal from "../components/ConfirmModal";
 import { tSuccess, tError, tWarn } from "../shared/toast";
 import { redirectToPaymeGuide } from "../utils/paymeGuide";
+import { SERVICE_FIELD_OPTIONS } from "../constants/serviceFieldOptions";
+import { getServiceUrgency } from "../utils/serviceUrgency";
 
 const DEFAULT_DETAILS = {
   directionCountry: "",
@@ -78,17 +80,17 @@ const HISTORICAL_REFUSED_CATEGORIES = [
   "refused_event_ticket",
 ];
 
-const foodOptions = [
-  ["RO", "RO — без питания"],
-  ["BB", "BB — завтраки"],
-  ["HB", "HB — завтрак + ужин"],
-  ["FB", "FB — полный пансион"],
-  ["FBT", "FBT — 3-разовое + базовый терапевтический пакет"],
-  ["AI", "AI — всё включено"],
-  ["UAI", "UAI — ультра всё включено"],
-  ["HALAL", "HALAL — халяль"],
-];
-const transferOptions = ["group", "individual", "none"];
+const foodOptions = SERVICE_FIELD_OPTIONS.meal.map((x) => [x.code, `${x.code} — ${x.label}`]);
+const transferOptions = SERVICE_FIELD_OPTIONS.hotelTransfer;
+
+function optionValue(option) {
+  return typeof option === "string" ? option : option?.code || "";
+}
+
+function optionText(option) {
+  if (typeof option === "string") return option;
+  return option?.label ? `${option.code} — ${option.label}` : option?.code || "";
+}
 
 const FLIGHT_DETAILS_EXAMPLE =
   "15MAY HH-9911 TASDXB 18:00 21:00\n22MAY HH-9912 DXBTAS 22:00 05:00\n\n23KG/8KG";
@@ -1041,12 +1043,14 @@ function buildAutoDescription({ category, details, t }) {
 
 function MarketplacePreviewCard({ category, title, routeText, dateRangeText, priceText, images, details, includedPreview, t }) {
   const proofCount = Array.isArray(details.proofImages) ? details.proofImages.filter(Boolean).length : 0;
+  const urgency = getServiceUrgency(details?.expiration || details?.expiration_at || details?.expires_at);
   return (
     <div className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-[0_20px_55px_rgba(15,23,42,0.10)]">
       <div className="relative h-48 bg-gradient-to-br from-orange-100 via-amber-50 to-sky-50">
         {images?.[0] ? <img src={images[0]} alt="" className="h-full w-full object-cover" /> : <div className="flex h-full flex-col items-center justify-center gap-2 text-slate-400"><div className="text-4xl">🏝️</div><div className="text-xs font-black">{t("service_form.preview_photo_hint", { defaultValue: "Фото появится здесь" })}</div></div>}
         <div className="absolute left-3 top-3 rounded-full bg-white/95 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-orange-700 shadow ring-1 ring-orange-100">{categoryStickerText(category, t)}</div>
         <div className="absolute right-3 top-3 rounded-full bg-slate-950/85 px-3 py-1 text-[10px] font-black text-white shadow">{proofCount ? `Proof ${proofCount}` : t("service_form.no_proof", { defaultValue: "No proof" })}</div>
+        <div className="absolute bottom-3 left-3 rounded-full bg-white/95 px-3 py-1 text-[10px] font-black text-slate-800 shadow ring-1 ring-slate-100">{urgency.badge}</div>
       </div>
       <div className="space-y-3 p-4">
         <h3 className="line-clamp-2 text-lg font-black leading-snug text-slate-950">{title || t("service_form.preview_title_empty", { defaultValue: "Название услуги" })}</h3>
@@ -1108,6 +1112,26 @@ function SelectInput(props) {
         props.className
       )}
     />
+  );
+}
+
+function OptionTextInput({ value, onChange, options = [], placeholder, listId, className }) {
+  const normalizedOptions = (options || []).map((x) => ({ value: optionValue(x), label: optionText(x) })).filter((x) => x.value);
+  return (
+    <>
+      <TextInput
+        value={value || ""}
+        onChange={onChange}
+        placeholder={placeholder}
+        list={listId}
+        className={className}
+      />
+      <datalist id={listId}>
+        {normalizedOptions.map((x) => (
+          <option key={x.value} value={x.value}>{x.label}</option>
+        ))}
+      </datalist>
+    </>
   );
 }
 
@@ -2675,16 +2699,13 @@ export default function DashboardServices() {
                                   <TextInput value={details.hotel} onChange={(e) => patchDetails({ hotel: e.target.value })} placeholder={t("service_form.ph_hotel", { defaultValue: "Например: Rixos Radamis Sharm El Sheikh 5*" })} />
                                 </Field>
                                 <Field label={t("accommodation_category", { defaultValue: "Категория размещения" })} hint={t("service_form.hint_room", { defaultValue: "Категория номера или комнаты." })}>
-                                  <TextInput value={details.accommodationCategory} onChange={(e) => patchDetails({ accommodationCategory: e.target.value })} placeholder={t("service_form.ph_room", { defaultValue: "Например: Deluxe Sea View" })} />
+                                  <OptionTextInput listId="svc-room-category-options" options={SERVICE_FIELD_OPTIONS.roomCategory} value={details.accommodationCategory} onChange={(e) => patchDetails({ accommodationCategory: e.target.value })} placeholder={t("service_form.ph_room", { defaultValue: "Например: Deluxe Sea View" })} />
                                 </Field>
                                 <Field label={t("accommodation", { defaultValue: "Размещение" })} hint={t("service_form.hint_accommodation", { defaultValue: "Состав туристов: взрослые, дети, младенцы." })}>
-                                  <TextInput value={details.accommodation} onChange={(e) => patchDetails({ accommodation: e.target.value })} placeholder={t("service_form.ph_accommodation", { defaultValue: "Например: 2ADL+1CHD" })} />
+                                  <OptionTextInput listId="svc-accommodation-options" options={SERVICE_FIELD_OPTIONS.accommodation} value={details.accommodation} onChange={(e) => patchDetails({ accommodation: e.target.value })} placeholder={t("service_form.ph_accommodation", { defaultValue: "Например: DBL или 2ADL+1CHD" })} />
                                 </Field>
                                 <Field label={t("food", { defaultValue: "Питание" })} hint={t("service_form.hint_food", { defaultValue: "Выберите тип питания из ваучера или заявки." })}>
-                                  <SelectInput value={details.food} onChange={(e) => patchDetails({ food: e.target.value })}>
-                                    <option value="">{t("food_options.select", { defaultValue: "Выберите вариант" })}</option>
-                                    {foodOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                                  </SelectInput>
+                                  <OptionTextInput listId="svc-meal-options" options={SERVICE_FIELD_OPTIONS.meal} value={details.food} onChange={(e) => patchDetails({ food: e.target.value })} placeholder={t("food_options.select", { defaultValue: "RO / BB / HB / AI или свой вариант" })} />
                                 </Field>
                               </>
                             )}
@@ -2759,16 +2780,13 @@ export default function DashboardServices() {
                                   <TextInput value={details.hotel} onChange={(e) => patchDetails({ hotel: e.target.value })} placeholder={t("service_form.ph_hotel", { defaultValue: "Например: Rixos Radamis Sharm El Sheikh 5*" })} />
                                 </Field>
                                 <Field label={t("room_category", { defaultValue: "Категория номера" })}>
-                                  <TextInput value={details.accommodationCategory} onChange={(e) => patchDetails({ accommodationCategory: e.target.value })} placeholder={t("service_form.ph_room", { defaultValue: "Например: Deluxe Sea View" })} />
+                                  <OptionTextInput listId="svc-room-category-options" options={SERVICE_FIELD_OPTIONS.roomCategory} value={details.accommodationCategory} onChange={(e) => patchDetails({ accommodationCategory: e.target.value })} placeholder={t("service_form.ph_room", { defaultValue: "Например: Deluxe Sea View" })} />
                                 </Field>
                                 <Field label={t("accommodation", { defaultValue: "Размещение" })}>
                                   <TextInput value={details.accommodation} onChange={(e) => patchDetails({ accommodation: e.target.value })} placeholder={t("service_form.ph_accommodation", { defaultValue: "Например: DBL / 2ADL" })} />
                                 </Field>
                                 <Field label={t("food", { defaultValue: "Питание" })}>
-                                  <SelectInput value={details.food} onChange={(e) => patchDetails({ food: e.target.value })}>
-                                    <option value="">{t("food_options.select", { defaultValue: "Выберите вариант" })}</option>
-                                    {foodOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                                  </SelectInput>
+                                  <OptionTextInput listId="svc-meal-options" options={SERVICE_FIELD_OPTIONS.meal} value={details.food} onChange={(e) => patchDetails({ food: e.target.value })} placeholder={t("food_options.select", { defaultValue: "RO / BB / HB / AI или свой вариант" })} />
                                 </Field>
                               </>
                             )}
@@ -2776,7 +2794,7 @@ export default function DashboardServices() {
                             {category === "refused_flight" && (
                               <>
                                 <Field label={t("airline", { defaultValue: "Авиакомпания" })} hint={t("service_form.hint_airline", { defaultValue: "Код или название авиакомпании." })}>
-                                  <TextInput value={details.airline} onChange={(e) => patchDetails({ airline: e.target.value.toUpperCase() })} placeholder={t("service_form.ph_airline", { defaultValue: "Например: HH" })} />
+                                  <OptionTextInput listId="svc-airline-options" options={SERVICE_FIELD_OPTIONS.airline} value={details.airline} onChange={(e) => patchDetails({ airline: e.target.value.toUpperCase() })} placeholder={t("service_form.ph_airline", { defaultValue: "HY / C6 / TK или свой вариант" })} />
                                 </Field>
                                 <Field label={t("flight_type", { defaultValue: "Тип рейса" })}>
                                   <SelectInput value={details.flightType} onChange={(e) => {
@@ -2860,10 +2878,7 @@ export default function DashboardServices() {
                             </div>
                             <div className="grid gap-3 sm:grid-cols-2">
                               <Field label={t("transfer", { defaultValue: "Трансфер" })}>
-                                <SelectInput value={details.transfer} onChange={(e) => patchDetails({ transfer: e.target.value })}>
-                                  <option value="">{t("food_options.select", { defaultValue: "Выберите вариант" })}</option>
-                                  {transferOptions.map((x) => <option key={x} value={x}>{x}</option>)}
-                                </SelectInput>
+                                <OptionTextInput listId="svc-transfer-options" options={transferOptions} value={details.transfer} onChange={(e) => patchDetails({ transfer: e.target.value })} placeholder={t("food_options.select", { defaultValue: "individual / group / none или свой вариант" })} />
                               </Field>
                               <Toggle checked={details.visaIncluded} onChange={(v) => patchDetails({ visaIncluded: v })} label={t("visa_included", { defaultValue: "Виза включена" })} />
                               <Toggle checked={details.insuranceIncluded} onChange={(v) => patchDetails({ insuranceIncluded: v })} label={t("insurance_included", { defaultValue: "Страховка включена" })} />
