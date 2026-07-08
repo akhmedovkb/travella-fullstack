@@ -3393,8 +3393,8 @@ async function promptEditState(ctx, state) {
     case "svc_edit_flight_from":
       await safeReply(
         ctx,
-        `🛫 Город вылета (текущее: ${draft.fromCity || "(пусто)"}).\nВведите новый или нажмите «⏭ Пропустить»:`,
-        editWizNavKeyboard()
+        `🛫 Город вылета (текущее: ${draft.fromCity || "(пусто)"}).\nВыберите город или нажмите «✍️ Свой вариант»:`,
+        departureCityChoiceKeyboard("edit", "flight")
       );
       return;
 
@@ -3465,16 +3465,16 @@ async function promptEditState(ctx, state) {
     case "svc_edit_tour_country":
       await safeReply(
         ctx,
-        `🌍 Страна направления (текущее: ${draft.country || "(пусто)"}).\nВведите новую или нажмите «⏭ Пропустить»:`,
-        editWizNavKeyboard()
+        `🌍 Страна направления (текущее: ${draft.country || "(пусто)"}).\nВыберите страну или нажмите «✍️ Свой вариант»:`,
+        countryChoiceKeyboard("edit")
       );
       return;
 
     case "svc_edit_tour_from":
       await safeReply(
         ctx,
-        `🛫 Город вылета (текущее: ${draft.fromCity || "(пусто)"}).\nВведите новый или нажмите «⏭ Пропустить»:`,
-        editWizNavKeyboard()
+        `🛫 Город вылета (текущее: ${draft.fromCity || "(пусто)"}).\nВыберите город или нажмите «✍️ Свой вариант»:`,
+        departureCityChoiceKeyboard("edit", "tour")
       );
       return;
 
@@ -3579,8 +3579,8 @@ async function promptEditState(ctx, state) {
     case "svc_edit_hotel_country":
       await safeReply(
         ctx,
-        `🌍 Страна (текущее: ${draft.country || "(пусто)"}).\nВведите новую или нажмите «⏭ Пропустить»:`,
-        editWizNavKeyboard()
+        `🌍 Страна (текущее: ${draft.country || "(пусто)"}).\nВыберите страну или нажмите «✍️ Свой вариант»:`,
+        countryChoiceKeyboard("edit")
       );
       return;
 
@@ -6121,6 +6121,42 @@ function wizNavKeyboard() {
 
 
 
+
+function optionStringKeyboard(field, callbackPrefix, mode = "create") {
+  const list = Array.isArray(SERVICE_FIELD_OPTIONS[field]) ? SERVICE_FIELD_OPTIONS[field] : [];
+  const nav = mode === "edit"
+    ? [
+        { text: "⏭ Пропустить", callback_data: "svc_edit:skip" },
+        { text: "⬅️ Назад", callback_data: "svc_edit_back" },
+        { text: "❌ Отмена", callback_data: "svc_edit_cancel" },
+      ]
+    : [
+        { text: "⏭ Пропустить", callback_data: "svc_wiz:skip" },
+        { text: "⬅️ Назад", callback_data: "svc_wiz:back" },
+        { text: "❌ Отмена", callback_data: "svc_wiz:cancel" },
+      ];
+
+  const rows = [];
+  for (let i = 0; i < list.length; i += 2) {
+    rows.push(list.slice(i, i + 2).map((value) => ({
+      text: String(value),
+      callback_data: `${callbackPrefix}:${encodeURIComponent(String(value))}`,
+    })));
+  }
+  rows.push([{ text: "✍️ Свой вариант", callback_data: `${callbackPrefix}:custom` }]);
+  rows.push(nav);
+  return { reply_markup: { inline_keyboard: rows } };
+}
+
+function countryChoiceKeyboard(mode = "create") {
+  return optionStringKeyboard("destinationCountry", mode === "edit" ? "svc_edit_country_pick" : "svc_country_pick", mode);
+}
+
+function departureCityChoiceKeyboard(mode = "create", flow = "tour") {
+  const prefix = mode === "edit" ? `svc_edit_departure_city:${flow}` : `svc_departure_city:${flow}`;
+  return optionStringKeyboard("departureCity", prefix, mode);
+}
+
 const ACCOMMODATION_OPTIONS = SERVICE_FIELD_OPTIONS.accommodation;
 
 function accommodationFullLabel(value) {
@@ -7452,16 +7488,16 @@ async function promptWizardState(ctx, state) {
     }
 
     case "svc_create_tour_country":
-      await ctx.reply("🌍 Укажите *страну направления* (например: Таиланд):", {
+      await ctx.reply("🌍 Выберите *страну направления* или нажмите «✍️ Свой вариант».", {
         parse_mode: "Markdown",
-        ...wizNavKeyboard(),
+        ...countryChoiceKeyboard("create"),
       });
       return;
 
     case "svc_create_tour_from":
-      await ctx.reply("🛫 Укажите *город вылета* (например: Ташкент):", {
+      await ctx.reply("🛫 Выберите *город вылета* или нажмите «✍️ Свой вариант».", {
         parse_mode: "Markdown",
-        ...wizNavKeyboard(),
+        ...departureCityChoiceKeyboard("create", ctx.session?.serviceDraft?.category === "refused_flight" ? "flight" : "tour"),
       });
       return;
 
@@ -7590,9 +7626,9 @@ async function promptWizardState(ctx, state) {
 
     // ===== REFUSED HOTEL =====
     case "svc_hotel_country":
-      await ctx.reply("🌍 Укажите *страну* (например: Турция):", {
+      await ctx.reply("🌍 Выберите *страну* или нажмите «✍️ Свой вариант».", {
         parse_mode: "Markdown",
-        ...wizNavKeyboard(),
+        ...countryChoiceKeyboard("create"),
       });
       return;
 
@@ -9953,6 +9989,119 @@ bot.action(/^svc_edit_flight_type:(one_way|round_trip)$/, async (ctx) => {
   }
 });
 
+
+
+// 🌍 Быстрый выбор страны при создании отказного тура/отеля.
+bot.action(/^svc_country_pick:(.+)$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    if (!ctx.session) ctx.session = {};
+    const draft = ctx.session.serviceDraft || {};
+    ctx.session.serviceDraft = draft;
+    const raw = String(ctx.match?.[1] || "");
+    const state = ctx.session.state === "svc_hotel_country" ? "svc_hotel_country" : "svc_create_tour_country";
+
+    if (raw === "custom") {
+      ctx.session.state = state;
+      await safeReply(ctx, "✍️ Введите свою страну.", wizNavKeyboard());
+      return;
+    }
+
+    draft.country = decodeURIComponent(raw);
+    pushWizardState(ctx, state);
+    ctx.session.state = state === "svc_hotel_country" ? "svc_hotel_city" : "svc_create_tour_from";
+    await promptWizardState(ctx, ctx.session.state);
+    await persistProviderCreateWizard(ctx);
+  } catch (e) {
+    console.error("[tg-bot] svc_country_pick error:", e?.response?.data || e);
+  }
+});
+
+// 🌍 Быстрый выбор страны при редактировании отказного тура/отеля.
+bot.action(/^svc_edit_country_pick:(.+)$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    if (!ctx.session) ctx.session = {};
+    const draft = ctx.session.serviceDraft || {};
+    ctx.session.serviceDraft = draft;
+    const raw = String(ctx.match?.[1] || "");
+    const state = ctx.session.state === "svc_edit_hotel_country" ? "svc_edit_hotel_country" : "svc_edit_tour_country";
+
+    if (raw === "custom") {
+      ctx.session.state = state;
+      ctx.session.editWiz = ctx.session.editWiz || {};
+      ctx.session.editWiz.step = state;
+      await safeReply(ctx, "✍️ Введите свою страну.", editWizNavKeyboard());
+      return;
+    }
+
+    draft.country = decodeURIComponent(raw);
+    ctx.session.editWiz = ctx.session.editWiz || {};
+    const next = state === "svc_edit_hotel_country" ? "svc_edit_hotel_city" : "svc_edit_tour_from";
+    ctx.session.editWiz.step = next;
+    ctx.session.state = next;
+    await promptEditState(ctx, next);
+  } catch (e) {
+    console.error("[tg-bot] svc_edit_country_pick error:", e?.response?.data || e);
+  }
+});
+
+// 🛫 Быстрый выбор города вылета при создании отказного тура/авиабилета.
+bot.action(/^svc_departure_city:(tour|flight):(.+)$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    if (!ctx.session) ctx.session = {};
+    const draft = ctx.session.serviceDraft || {};
+    ctx.session.serviceDraft = draft;
+    const flow = ctx.match?.[1] === "flight" ? "flight" : "tour";
+    const raw = String(ctx.match?.[2] || "");
+    const state = "svc_create_tour_from";
+
+    if (raw === "custom") {
+      ctx.session.state = state;
+      await safeReply(ctx, "✍️ Введите свой город вылета.", wizNavKeyboard());
+      return;
+    }
+
+    draft.fromCity = decodeURIComponent(raw);
+    pushWizardState(ctx, state);
+    ctx.session.state = "svc_create_tour_to";
+    await promptWizardState(ctx, ctx.session.state);
+    await persistProviderCreateWizard(ctx);
+  } catch (e) {
+    console.error("[tg-bot] svc_departure_city error:", e?.response?.data || e);
+  }
+});
+
+// 🛫 Быстрый выбор города вылета при редактировании отказного тура/авиабилета.
+bot.action(/^svc_edit_departure_city:(tour|flight):(.+)$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    if (!ctx.session) ctx.session = {};
+    const draft = ctx.session.serviceDraft || {};
+    ctx.session.serviceDraft = draft;
+    const flow = ctx.match?.[1] === "flight" ? "flight" : "tour";
+    const raw = String(ctx.match?.[2] || "");
+    const state = flow === "flight" ? "svc_edit_flight_from" : "svc_edit_tour_from";
+
+    if (raw === "custom") {
+      ctx.session.state = state;
+      ctx.session.editWiz = ctx.session.editWiz || {};
+      ctx.session.editWiz.step = state;
+      await safeReply(ctx, "✍️ Введите свой город вылета.", editWizNavKeyboard());
+      return;
+    }
+
+    draft.fromCity = decodeURIComponent(raw);
+    ctx.session.editWiz = ctx.session.editWiz || {};
+    const next = flow === "flight" ? "svc_edit_flight_to" : "svc_edit_tour_to";
+    ctx.session.editWiz.step = next;
+    ctx.session.state = next;
+    await promptEditState(ctx, next);
+  } catch (e) {
+    console.error("[tg-bot] svc_edit_departure_city error:", e?.response?.data || e);
+  }
+});
 
 // 🛏 Быстрый выбор размещения при создании отказного тура/отеля.
 bot.action(/^svc_accommodation:(tour|hotel):(SGL|DBL|TRPL|QDPL|custom)$/, async (ctx) => {
