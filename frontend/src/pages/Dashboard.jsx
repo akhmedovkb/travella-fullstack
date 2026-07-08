@@ -1406,7 +1406,6 @@ useEffect(() => {
       add("Маршрут", has(details?.directionFrom, details?.fromCity) && has(details?.directionTo, details?.toCity), 3);
       add("Дата вылета", has(dep), 3);
       add(isRound ? "Дата обратного рейса" : "Тип перелёта: в одну сторону", isRound ? has(ret) : true, 2);
-      add("Авиакомпания", has(details?.airline), 2);
       add("Номер/детали рейса", has(details?.flightDetails, details?.flightNumber), 1);
       add("Багаж", has(details?.baggage, details?.flightDetails), 1);
       add("Количество мест", has(details?.seats, details?.quantity, details?.pax), 1);
@@ -2600,17 +2599,6 @@ useEffect(() => {
                       </div>
 
                       <div className="mb-2">
-                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("airline")}</label>
-                        <input
-                          type="text"
-                          value={details.airline || ""}
-                          onChange={(e) => setDetails({ ...details, airline: e.target.value })}
-                          placeholder={t("enter_airline")}
-                          className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
-                        />
-                      </div>
-
-                      <div className="mb-2">
                         <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("flight_details")}</label>
                         <textarea
                           value={details.flightDetails || ""}
@@ -3538,17 +3526,6 @@ useEffect(() => {
                             />
                           </div>
                         )}
-                      </div>
-
-                      <div className="mb-2">
-                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("airline")}</label>
-                        <input
-                          type="text"
-                          value={details.airline || ""}
-                          onChange={(e) => setDetails({ ...details, airline: e.target.value })}
-                          placeholder={t("enter_airline")}
-                          className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
-                        />
                       </div>
 
                       <div className="mb-2">
