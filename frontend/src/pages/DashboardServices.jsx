@@ -2566,7 +2566,7 @@ export default function DashboardServices() {
                             {category === "refused_hotel" && (
                               <>
                                 <Field label={t("direction_country", { defaultValue: "Страна" })} hint={t("service_form.hint_country_hotel", { defaultValue: "Страна, где находится отель." })}>
-                                  <TextInput value={details.directionCountry} onChange={(e) => patchDetails({ directionCountry: e.target.value })} placeholder={t("service_form.ph_country", { defaultValue: "Например: Египет" })} />
+                                  <OptionTextInput listId="svc-destination-country-options" options={SERVICE_FIELD_OPTIONS.destinationCountry} value={details.directionCountry} onChange={(e) => patchDetails({ directionCountry: e.target.value })} placeholder={t("service_form.ph_country", { defaultValue: "Например: Египет" })} />
                                 </Field>
                                 <Field label={t("city", { defaultValue: "Город / курорт" })} hint={t("service_form.hint_city_hotel", { defaultValue: "Город или курорт отеля." })}>
                                   <TextInput value={details.directionTo} onChange={(e) => patchDetails({ directionTo: e.target.value })} placeholder={t("service_form.ph_city_hotel", { defaultValue: "Например: Шарм-эль-Шейх" })} />
@@ -2600,7 +2600,7 @@ export default function DashboardServices() {
                             {category === "refused_flight" && (
                               <>
                                 <Field label={t("direction_from", { defaultValue: "Город вылета" })} hint={t("service_form.hint_from_flight", { defaultValue: "Откуда вылетает пассажир." })}>
-                                  <TextInput value={details.directionFrom} onChange={(e) => patchDetails({ directionFrom: e.target.value })} placeholder={t("service_form.ph_from", { defaultValue: "Например: Ташкент" })} />
+                                  <OptionTextInput listId="svc-departure-city-options" options={SERVICE_FIELD_OPTIONS.departureCity} value={details.directionFrom} onChange={(e) => patchDetails({ directionFrom: e.target.value })} placeholder={t("service_form.ph_from", { defaultValue: "Например: Ташкент" })} />
                                 </Field>
                                 <Field label={t("direction_to", { defaultValue: "Город прибытия" })} hint={t("service_form.hint_to_flight", { defaultValue: "Куда прилетает пассажир." })}>
                                   <TextInput value={details.directionTo} onChange={(e) => patchDetails({ directionTo: e.target.value })} placeholder={t("service_form.ph_to", { defaultValue: "Например: Дубай" })} />
@@ -2617,10 +2617,10 @@ export default function DashboardServices() {
                             {category === "refused_tour" && (
                               <>
                                 <Field label={t("direction_country", { defaultValue: "Страна назначения" })} hint={t("service_form.hint_country", { defaultValue: "Страна отдыха или назначения." })}>
-                                  <TextInput value={details.directionCountry} onChange={(e) => patchDetails({ directionCountry: e.target.value })} placeholder={t("service_form.ph_country", { defaultValue: "Например: Вьетнам" })} />
+                                  <OptionTextInput listId="svc-destination-country-options" options={SERVICE_FIELD_OPTIONS.destinationCountry} value={details.directionCountry} onChange={(e) => patchDetails({ directionCountry: e.target.value })} placeholder={t("service_form.ph_country", { defaultValue: "Например: Вьетнам" })} />
                                 </Field>
                                 <Field label={t("direction_from", { defaultValue: "Город вылета" })} hint={t("service_form.hint_from", { defaultValue: "Откуда начинается поездка." })}>
-                                  <TextInput value={details.directionFrom} onChange={(e) => patchDetails({ directionFrom: e.target.value })} placeholder={t("service_form.ph_from", { defaultValue: "Например: Ташкент" })} />
+                                  <OptionTextInput listId="svc-departure-city-options" options={SERVICE_FIELD_OPTIONS.departureCity} value={details.directionFrom} onChange={(e) => patchDetails({ directionFrom: e.target.value })} placeholder={t("service_form.ph_from", { defaultValue: "Например: Ташкент" })} />
                                 </Field>
                                 <Field label={t("direction_to", { defaultValue: "Город прибытия" })} hint={t("service_form.hint_to", { defaultValue: "Куда прилетает турист." })}>
                                   <TextInput value={details.directionTo} onChange={(e) => patchDetails({ directionTo: e.target.value })} placeholder={t("service_form.ph_to", { defaultValue: "Например: Нячанг" })} />
@@ -2781,7 +2781,7 @@ export default function DashboardServices() {
                                   <OptionTextInput listId="svc-room-category-options" options={SERVICE_FIELD_OPTIONS.roomCategory} value={details.accommodationCategory} onChange={(e) => patchDetails({ accommodationCategory: e.target.value })} placeholder={t("service_form.ph_room", { defaultValue: "Например: Deluxe Sea View" })} />
                                 </Field>
                                 <Field label={t("accommodation", { defaultValue: "Размещение" })}>
-                                  <TextInput value={details.accommodation} onChange={(e) => patchDetails({ accommodation: e.target.value })} placeholder={t("service_form.ph_accommodation", { defaultValue: "Например: DBL / 2ADL" })} />
+                                  <OptionTextInput listId="svc-accommodation-options" options={SERVICE_FIELD_OPTIONS.accommodation} value={details.accommodation} onChange={(e) => patchDetails({ accommodation: e.target.value })} placeholder={t("service_form.ph_accommodation", { defaultValue: "Например: DBL / 2ADL" })} />
                                 </Field>
                                 <Field label={t("food", { defaultValue: "Питание" })}>
                                   <OptionTextInput listId="svc-meal-options" options={SERVICE_FIELD_OPTIONS.meal} value={details.food} onChange={(e) => patchDetails({ food: e.target.value })} placeholder={t("food_options.select", { defaultValue: "RO / BB / HB / AI или свой вариант" })} />
