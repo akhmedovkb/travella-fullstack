@@ -3,6 +3,24 @@
 // Если меняете варианты в одном месте, синхронно обновите второе.
 
 export const SERVICE_FIELD_OPTIONS = Object.freeze({
+
+  destinationCountry: Object.freeze([
+    'Турция',
+    'ОАЭ',
+    'Вьетнам',
+    'Таиланд',
+    'Египет',
+    'Мальдивы',
+    'Узбекистан',
+  ]),
+  departureCity: Object.freeze([
+    'Ташкент',
+    'Самарканд',
+    'Бухара',
+    'Ургенч',
+    'Наманган',
+    'Фергана',
+  ]),
   accommodation: Object.freeze([
     { code: 'SGL', label: 'одноместное' },
     { code: 'DBL', label: 'двухместное' },
