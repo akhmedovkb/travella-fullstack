@@ -855,7 +855,7 @@ function buildReadinessItems({ category, title, images, details, isExtended, t }
   const specificOk = (() => {
     if (category === "author_tour") return hasFilled(authorProgramText(details)) && authorLines(details.included).length > 0 && hasFilled(details.duration) && getAuthorProgramValidationIssues(details).length === 0;
     if (category === "refused_tour") return hasFilled(details.hotel) && validateFlightDetailsFormat(details.flightDetails);
-    if (category === "refused_flight") return hasFilled(details.airline) && validateFlightDetailsFormat(details.flightDetails);
+    if (category === "refused_flight") return validateFlightDetailsFormat(details.flightDetails);
     if (category === "refused_hotel") return hasFilled(details.accommodationCategory) || hasFilled(details.accommodation);
     if (category === "refused_event_ticket") return hasFilled(details.ticketDetails) || hasFilled(details.eventCategory);
     return true;
@@ -929,7 +929,6 @@ function buildValidationIssues({ category, title, description, price, images, de
     add(hasFilled(details.directionFrom), t("validation.from_required", { defaultValue: "Укажите город вылета" }));
     add(hasFilled(details.directionTo), t("validation.to_required", { defaultValue: "Укажите город прибытия" }));
     add(hasFilled(details.startDate) || hasFilled(details.startFlightDate), t("validation.departure_date_required", { defaultValue: "Укажите дату вылета" }));
-    add(hasFilled(details.airline), t("validation.airline_required", { defaultValue: "Укажите авиакомпанию" }));
     add(validateFlightDetailsFormat(details.flightDetails), t("validation.flight_details_format", { defaultValue: "Заполните детали рейса в правильном формате" }));
   }
 
@@ -1016,7 +1015,6 @@ function buildAutoDescription({ category, details, t }) {
     push("Маршрут", [details.directionFrom, details.directionTo].filter(Boolean).join(" → "));
     push("Дата вылета", details.startDate || details.startFlightDate);
     push("Дата обратно", details.returnDate || details.endDate);
-    push("Авиакомпания", details.airline);
     push("Детали рейса", normalizeFlightDetails(details.flightDetails));
   } else if (category === "refused_event_ticket") {
     lines.push("Отказной билет на мероприятие");
@@ -2688,7 +2686,7 @@ export default function DashboardServices() {
                                 : category === "refused_event_ticket"
                                   ? t("service_form.step_details_event_hint", { defaultValue: "Категория билета, сектор, ряд, место и важные условия." })
                                   : category === "refused_flight"
-                                    ? t("service_form.step_details_flight_hint", { defaultValue: "Авиакомпания, тип рейса, детали рейса и багаж." })
+                                    ? t("service_form.step_details_flight_hint", { defaultValue: "Тип рейса, детали рейса и багаж." })
                                     : t("service_form.step_details_hint", { defaultValue: "Отель, рейс, размещение" })}
                             </div>
                           </div>
@@ -2793,9 +2791,6 @@ export default function DashboardServices() {
 
                             {category === "refused_flight" && (
                               <>
-                                <Field label={t("airline", { defaultValue: "Авиакомпания" })} hint={t("service_form.hint_airline", { defaultValue: "Код или название авиакомпании." })}>
-                                  <OptionTextInput listId="svc-airline-options" options={SERVICE_FIELD_OPTIONS.airline} value={details.airline} onChange={(e) => patchDetails({ airline: e.target.value.toUpperCase() })} placeholder={t("service_form.ph_airline", { defaultValue: "HY / C6 / TK или свой вариант" })} />
-                                </Field>
                                 <Field label={t("flight_type", { defaultValue: "Тип рейса" })}>
                                   <SelectInput value={details.flightType} onChange={(e) => {
                                     const nextType = e.target.value;
