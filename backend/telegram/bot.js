@@ -6122,6 +6122,24 @@ function wizNavKeyboard() {
 
 
 
+function optionButtonText(value) {
+  if (value && typeof value === "object") {
+    const code = String(value.code || "").trim();
+    const label = String(value.label || "").trim();
+    return code && label ? `${code} — ${label}` : (label || code || "Вариант");
+  }
+  return String(value || "").trim();
+}
+
+function optionValueByIndex(field, index) {
+  const list = Array.isArray(SERVICE_FIELD_OPTIONS[field]) ? SERVICE_FIELD_OPTIONS[field] : [];
+  const n = Number(index);
+  if (!Number.isInteger(n) || n < 0 || n >= list.length) return "";
+  const value = list[n];
+  if (value && typeof value === "object") return String(value.code || value.label || "").trim();
+  return String(value || "").trim();
+}
+
 function optionStringKeyboard(field, callbackPrefix, mode = "create") {
   const list = Array.isArray(SERVICE_FIELD_OPTIONS[field]) ? SERVICE_FIELD_OPTIONS[field] : [];
   const nav = mode === "edit"
@@ -6138,9 +6156,11 @@ function optionStringKeyboard(field, callbackPrefix, mode = "create") {
 
   const rows = [];
   for (let i = 0; i < list.length; i += 2) {
-    rows.push(list.slice(i, i + 2).map((value) => ({
-      text: String(value),
-      callback_data: `${callbackPrefix}:${encodeURIComponent(String(value))}`,
+    rows.push(list.slice(i, i + 2).map((value, offset) => ({
+      text: optionButtonText(value),
+      // Telegram callback_data has a hard 64-byte limit. Store only a short index,
+      // not a Cyrillic/URL-encoded value.
+      callback_data: `${callbackPrefix}:${i + offset}`,
     })));
   }
   rows.push([{ text: "✍️ Свой вариант", callback_data: `${callbackPrefix}:custom` }]);
@@ -10007,7 +10027,12 @@ bot.action(/^svc_country_pick:(.+)$/, async (ctx) => {
       return;
     }
 
-    draft.country = decodeURIComponent(raw);
+    const picked = optionValueByIndex("destinationCountry", raw);
+    if (!picked) {
+      await safeReply(ctx, "⚠️ Вариант страны устарел. Выберите страну ещё раз.", countryChoiceKeyboard("create"));
+      return;
+    }
+    draft.country = picked;
     pushWizardState(ctx, state);
     ctx.session.state = state === "svc_hotel_country" ? "svc_hotel_city" : "svc_create_tour_from";
     await promptWizardState(ctx, ctx.session.state);
@@ -10035,7 +10060,12 @@ bot.action(/^svc_edit_country_pick:(.+)$/, async (ctx) => {
       return;
     }
 
-    draft.country = decodeURIComponent(raw);
+    const picked = optionValueByIndex("destinationCountry", raw);
+    if (!picked) {
+      await safeReply(ctx, "⚠️ Вариант страны устарел. Выберите страну ещё раз.", countryChoiceKeyboard("edit"));
+      return;
+    }
+    draft.country = picked;
     ctx.session.editWiz = ctx.session.editWiz || {};
     const next = state === "svc_edit_hotel_country" ? "svc_edit_hotel_city" : "svc_edit_tour_from";
     ctx.session.editWiz.step = next;
@@ -10063,7 +10093,12 @@ bot.action(/^svc_departure_city:(tour|flight):(.+)$/, async (ctx) => {
       return;
     }
 
-    draft.fromCity = decodeURIComponent(raw);
+    const picked = optionValueByIndex("departureCity", raw);
+    if (!picked) {
+      await safeReply(ctx, "⚠️ Вариант города устарел. Выберите город вылета ещё раз.", departureCityChoiceKeyboard("create", flow));
+      return;
+    }
+    draft.fromCity = picked;
     pushWizardState(ctx, state);
     ctx.session.state = "svc_create_tour_to";
     await promptWizardState(ctx, ctx.session.state);
@@ -10092,7 +10127,12 @@ bot.action(/^svc_edit_departure_city:(tour|flight):(.+)$/, async (ctx) => {
       return;
     }
 
-    draft.fromCity = decodeURIComponent(raw);
+    const picked = optionValueByIndex("departureCity", raw);
+    if (!picked) {
+      await safeReply(ctx, "⚠️ Вариант города устарел. Выберите город вылета ещё раз.", departureCityChoiceKeyboard("edit", flow));
+      return;
+    }
+    draft.fromCity = picked;
     ctx.session.editWiz = ctx.session.editWiz || {};
     const next = flow === "flight" ? "svc_edit_flight_to" : "svc_edit_tour_to";
     ctx.session.editWiz.step = next;
@@ -10104,7 +10144,7 @@ bot.action(/^svc_edit_departure_city:(tour|flight):(.+)$/, async (ctx) => {
 });
 
 // 🛏 Быстрый выбор размещения при создании отказного тура/отеля.
-bot.action(/^svc_accommodation:(tour|hotel):(SGL|DBL|TRPL|QDPL|custom)$/, async (ctx) => {
+bot.action(/^svc_accommodation:(tour|hotel):(SGL|DBL|TRPL|QDRPL|QDPL|custom)$/, async (ctx) => {
   try {
     await ctx.answerCbQuery();
     if (!ctx.session) ctx.session = {};
@@ -10136,7 +10176,7 @@ bot.action(/^svc_accommodation:(tour|hotel):(SGL|DBL|TRPL|QDPL|custom)$/, async 
 });
 
 // 🛏 Быстрый выбор размещения при редактировании отказного тура/отеля.
-bot.action(/^svc_edit_accommodation:(tour|hotel):(SGL|DBL|TRPL|QDPL|custom)$/, async (ctx) => {
+bot.action(/^svc_edit_accommodation:(tour|hotel):(SGL|DBL|TRPL|QDRPL|QDPL|custom)$/, async (ctx) => {
   try {
     await ctx.answerCbQuery();
     if (!ctx.session) ctx.session = {};
