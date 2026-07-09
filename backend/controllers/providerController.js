@@ -1353,7 +1353,11 @@ const serviceAction = async (req, res) => {
     return res.json(applied.service);
   } catch (err) {
     console.error("❌ Ошибка действия с услугой:", err);
-    return res.status(err?.status || 500).json({ message: "Ошибка сервера" });
+    return res.status(err?.status || 500).json({
+      message: err?.message || "Ошибка сервера",
+      code: err?.code || "SERVICE_ACTION_ERROR",
+      blockers: err?.blockers || undefined,
+    });
   }
 };
 
