@@ -68,6 +68,7 @@ const EXTENDED_AGENT_CATEGORIES = [
   "author_tour",
   "refused_hotel",
   "refused_flight",
+  "refused_ticket",
   "refused_event_ticket",
   "visa_support",
 ];
@@ -77,6 +78,7 @@ const HISTORICAL_REFUSED_CATEGORIES = [
   "author_tour",
   "refused_hotel",
   "refused_flight",
+  "refused_ticket",
   "refused_event_ticket",
 ];
 
@@ -90,6 +92,10 @@ function optionValue(option) {
 function optionText(option) {
   if (typeof option === "string") return option;
   return option?.label ? `${option.code} — ${option.label}` : option?.code || "";
+}
+
+function isEventTicketCategory(category) {
+  return ["refused_ticket", "refused_event_ticket"].includes(String(category || "").toLowerCase());
 }
 
 const FLIGHT_DETAILS_EXAMPLE =
@@ -207,7 +213,7 @@ function getServiceRouteText(service, fallback = "—") {
       .join(" / ") || fallback;
   }
 
-  if (category === "refused_event_ticket") {
+  if (isEventTicketCategory(category)) {
     return [firstText(d.eventName, service?.title), firstText(d.location, d.directionTo, d.city), firstText(d.ticketDetails)]
       .filter(Boolean)
       .join(" / ") || fallback;
@@ -299,7 +305,7 @@ function isHistoricalRefusedService(service) {
 
   if (endValues.some((value) => isPastServiceDate(value))) return true;
 
-  if (category === "refused_event_ticket" || category === "refused_flight") {
+  if (isEventTicketCategory(category) || category === "refused_flight") {
     return [d.eventDate, d.startDate, d.start_date, d.startFlightDate, d.departureFlightDate].some((value) =>
       isPastServiceDate(value)
     );
@@ -840,24 +846,24 @@ function buildReadinessItems({ category, title, images, details, isExtended, t }
   const net = parseMoney(details.netPrice);
 
   const dateOk = (() => {
-    if (category === "refused_event_ticket") return hasFilled(details.startDate);
+    if (isEventTicketCategory(category)) return hasFilled(details.startDate);
     if (category === "refused_flight") return hasFilled(details.startDate) || hasFilled(details.startFlightDate);
     return hasFilled(details.startDate) && hasFilled(details.endDate);
   })();
 
   const routeOk = (() => {
     if (category === "refused_hotel") return hasFilled(details.directionCountry) && hasFilled(details.directionTo) && hasFilled(details.hotel);
-    if (category === "refused_event_ticket") return hasFilled(details.eventName || title) && hasFilled(details.location);
+    if (isEventTicketCategory(category)) return hasFilled(details.eventName || title) && hasFilled(details.location);
     if (category === "visa_support") return hasFilled(details.visaCountry || details.description);
     return hasFilled(details.directionFrom) && hasFilled(details.directionTo);
   })();
 
   const specificOk = (() => {
     if (category === "author_tour") return hasFilled(authorProgramText(details)) && authorLines(details.included).length > 0 && hasFilled(details.duration) && getAuthorProgramValidationIssues(details).length === 0;
-    if (category === "refused_tour") return hasFilled(details.hotel) && validateFlightDetailsFormat(details.flightDetails);
-    if (category === "refused_flight") return validateFlightDetailsFormat(details.flightDetails);
+    if (category === "refused_tour") return hasFilled(details.hotel);
+    if (category === "refused_flight") return hasFilled(details.flightDetails);
     if (category === "refused_hotel") return hasFilled(details.accommodationCategory) || hasFilled(details.accommodation);
-    if (category === "refused_event_ticket") return hasFilled(details.ticketDetails) || hasFilled(details.eventCategory);
+    if (isEventTicketCategory(category)) return true;
     return true;
   })();
 
@@ -913,7 +919,6 @@ function buildValidationIssues({ category, title, description, price, images, de
     add(hasFilled(details.startDate), t("validation.start_date_required", { defaultValue: "Укажите дату начала" }));
     add(hasFilled(details.endDate), t("validation.end_date_required", { defaultValue: "Укажите дату окончания" }));
     add(hasFilled(details.hotel), t("validation.hotel_required", { defaultValue: "Укажите отель" }));
-    add(validateFlightDetailsFormat(details.flightDetails), t("validation.flight_details_format", { defaultValue: "Заполните детали рейса в правильном формате" }));
   }
 
   if (category === "refused_hotel") {
@@ -929,14 +934,13 @@ function buildValidationIssues({ category, title, description, price, images, de
     add(hasFilled(details.directionFrom), t("validation.from_required", { defaultValue: "Укажите город вылета" }));
     add(hasFilled(details.directionTo), t("validation.to_required", { defaultValue: "Укажите город прибытия" }));
     add(hasFilled(details.startDate) || hasFilled(details.startFlightDate), t("validation.departure_date_required", { defaultValue: "Укажите дату вылета" }));
-    add(validateFlightDetailsFormat(details.flightDetails), t("validation.flight_details_format", { defaultValue: "Заполните детали рейса в правильном формате" }));
+    add(hasFilled(details.flightDetails), t("validation.flight_details_required", { defaultValue: "Укажите номер/время рейса" }));
   }
 
-  if (category === "refused_event_ticket") {
+  if (isEventTicketCategory(category)) {
     add(hasFilled(details.eventName || title), t("validation.event_name_required", { defaultValue: "Укажите название мероприятия" }));
     add(hasFilled(details.location), t("validation.location_required", { defaultValue: "Укажите локацию мероприятия" }));
     add(hasFilled(details.startDate), t("validation.event_date_required", { defaultValue: "Укажите дату мероприятия" }));
-    add(hasFilled(details.ticketDetails) || hasFilled(details.eventCategory), t("validation.ticket_details_required", { defaultValue: "Укажите детали билета" }));
   }
 
   if (category === "visa_support") {
@@ -946,7 +950,6 @@ function buildValidationIssues({ category, title, description, price, images, de
   add(Number.isFinite(net) && net > 0, t("validation.net_positive", { defaultValue: "Укажите корректную цену нетто" }));
   add(Number.isFinite(gross) && gross > 0, t("validation.gross_positive", { defaultValue: "Укажите корректную цену для клиента" }));
   add(!Number.isFinite(net) || !Number.isFinite(gross) || gross >= net, t("validation.gross_ge_net", { defaultValue: "Цена для клиента не может быть меньше нетто" }));
-  add(Array.isArray(images) && images.length > 0, t("validation.photo_required", { defaultValue: "Добавьте хотя бы одно фото" }));
   if (requireProof) add(proofCount > 0, t("validation.proof_required", { defaultValue: "Добавьте proof перед отправкой на модерацию" }));
 
   return issues;
@@ -965,6 +968,7 @@ function categoryStickerText(category, t) {
     author_tour: t("category.author_tour", { defaultValue: "АВТОРСКИЙ ТУР" }),
     refused_hotel: t("category.refused_hotel", { defaultValue: "ОТКАЗНОЙ ОТЕЛЬ" }),
     refused_flight: t("category.refused_flight", { defaultValue: "ОТКАЗНОЙ АВИАБИЛЕТ" }),
+    refused_ticket: t("category.refused_ticket", { defaultValue: "ОТКАЗНОЙ БИЛЕТ" }),
     refused_event_ticket: t("category.refused_event_ticket", { defaultValue: "ОТКАЗНОЙ БИЛЕТ НА МЕРОПРИЯТИЕ" }),
     visa_support: t("category.visa_support", { defaultValue: "ВИЗОВАЯ ПОДДЕРЖКА" }),
   };
@@ -983,7 +987,7 @@ function buildAutoTitle({ category, details, t }) {
   if (category === "author_tour") return ["Авторский тур", from && to ? `${from} → ${to}` : country, hotel, dates].filter(Boolean).join(" · ");
   if (category === "refused_hotel") return ["Отказной отель", hotel, to || country, dates].filter(Boolean).join(" · ");
   if (category === "refused_flight") return ["Отказной авиабилет", from && to ? `${from} → ${to}` : "", dates].filter(Boolean).join(" · ");
-  if (category === "refused_event_ticket") return ["Отказной билет", eventName, to, dates].filter(Boolean).join(" · ");
+  if (isEventTicketCategory(category)) return ["Отказной билет", eventName, to, dates].filter(Boolean).join(" · ");
   if (category === "visa_support") return ["Визовая поддержка", country].filter(Boolean).join(" · ");
   return t("service_form.auto_title_fallback", { defaultValue: "Новая услуга" });
 }
@@ -1016,7 +1020,7 @@ function buildAutoDescription({ category, details, t }) {
     push("Дата вылета", details.startDate || details.startFlightDate);
     push("Дата обратно", details.returnDate || details.endDate);
     push("Детали рейса", normalizeFlightDetails(details.flightDetails));
-  } else if (category === "refused_event_ticket") {
+  } else if (isEventTicketCategory(category)) {
     lines.push("Отказной билет на мероприятие");
     push("Событие", details.eventName);
     push("Локация", details.location);
@@ -1602,6 +1606,7 @@ export default function DashboardServices() {
         "refused_tour",
         "refused_hotel",
         "refused_flight",
+        "refused_ticket",
         "refused_event_ticket",
         "visa_support",
         "author_tour",
@@ -2524,7 +2529,7 @@ export default function DashboardServices() {
                             <div className="text-sm font-medium text-slate-500">
                               {category === "refused_hotel"
                                 ? t("service_form.step_main_hotel_hint", { defaultValue: "Для отеля показываем только направление, город, отель и даты проживания." })
-                                : category === "refused_event_ticket"
+                                : isEventTicketCategory(category)
                                   ? t("service_form.step_main_event_hint", { defaultValue: "Для мероприятия показываем событие, город/локацию и дату." })
                                   : category === "refused_flight"
                                     ? t("service_form.step_main_flight_hint", { defaultValue: "Для авиабилета показываем маршрут и даты рейса." })
@@ -2547,7 +2552,7 @@ export default function DashboardServices() {
                                       ? t("service_form.ph_title_hotel", { defaultValue: "Например: Отказной отель в Шарм-эль-Шейхе" })
                                       : category === "refused_flight"
                                         ? t("service_form.ph_title_flight", { defaultValue: "Например: Отказной авиабилет Ташкент → Дубай" })
-                                        : category === "refused_event_ticket"
+                                        : isEventTicketCategory(category)
                                           ? t("service_form.ph_title_event", { defaultValue: "Например: Отказной билет на концерт" })
                                           : t("service_form.ph_title", { defaultValue: "Например: Отказной тур в Нячанг" })
                                   }
@@ -2580,7 +2585,7 @@ export default function DashboardServices() {
                               </>
                             )}
 
-                            {category === "refused_event_ticket" && (
+                            {isEventTicketCategory(category) && (
                               <>
                                 <Field label={t("event_name", { defaultValue: "Название события" })} hint={t("service_form.hint_event_name", { defaultValue: "Концерт, матч, выставка или другое мероприятие." })}>
                                   <TextInput value={details.eventName} onChange={(e) => patchDetails({ eventName: e.target.value })} placeholder={t("service_form.ph_event_name", { defaultValue: "Например: Coldplay Live" })} />
@@ -2683,7 +2688,7 @@ export default function DashboardServices() {
                             <div className="text-sm font-medium text-slate-500">
                               {category === "refused_hotel"
                                 ? t("service_form.step_details_hotel_hint", { defaultValue: "Номер, размещение, питание и условия отеля." })
-                                : category === "refused_event_ticket"
+                                : isEventTicketCategory(category)
                                   ? t("service_form.step_details_event_hint", { defaultValue: "Категория билета, сектор, ряд, место и важные условия." })
                                   : category === "refused_flight"
                                     ? t("service_form.step_details_flight_hint", { defaultValue: "Тип рейса, детали рейса и багаж." })
@@ -2816,7 +2821,7 @@ export default function DashboardServices() {
                               </>
                             )}
 
-                            {category === "refused_event_ticket" && (
+                            {isEventTicketCategory(category) && (
                               <>
                                 <Field label={t("ticketDetails", { defaultValue: "Детали билета" })} hint={t("service_form.hint_ticket_details", { defaultValue: "Сектор, ряд, место, категория, количество билетов." })}>
                                   <TextArea value={details.ticketDetails} onChange={(e) => patchDetails({ ticketDetails: e.target.value })} placeholder={t("service_form.ph_ticket_details", { defaultValue: "Например: Sector A, Row 5, Seat 12–13, 2 tickets" })} />
