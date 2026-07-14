@@ -999,7 +999,7 @@ function VideoLibrary({ videos, jobs, onOpenJob, onSavePackage, onApprovePackage
 function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTelegram, packageLoading, publishLoading, publishFeedback, telegramReady }) {
   const approvedVideos = getApprovedVideos(videos);
   const initialPrefs = React.useMemo(readPublishingManagerPrefs, []);
-  const [workMode, setWorkMode] = React.useState(initialPrefs.workMode || "all");
+  const [workMode, setWorkMode] = React.useState(initialPrefs.workMode === "selected" ? "all" : initialPrefs.workMode || "all");
   const [statusFilter, setStatusFilter] = React.useState(initialPrefs.statusFilter || "all");
   const [deliveryFilter, setDeliveryFilter] = React.useState(initialPrefs.deliveryFilter || "all");
   const [query, setQuery] = React.useState("");
@@ -1025,7 +1025,8 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
       workMode === "all" ||
       (workMode === "today" && ["red", "yellow"].includes(nextAction.tone)) ||
       (workMode === "overdue" && nextAction.tone === "red") ||
-      (workMode === "unscheduled" && nextAction.tone === "slate");
+      (workMode === "unscheduled" && nextAction.tone === "slate") ||
+      (workMode === "selected" && selectedIds.includes(video.id));
     const queryOk = !normalizedQuery || haystack.includes(normalizedQuery);
     return modeOk && queryOk;
   }
@@ -1093,13 +1094,14 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
         today: acc.today + (["red", "yellow"].includes(action.tone) ? 1 : 0),
         overdue: acc.overdue + (action.tone === "red" ? 1 : 0),
         unscheduled: acc.unscheduled + (action.tone === "slate" ? 1 : 0),
+        selected: acc.selected + (selectedIds.includes(video.id) ? 1 : 0),
       };
     },
-    { all: 0, today: 0, overdue: 0, unscheduled: 0 }
+    { all: 0, today: 0, overdue: 0, unscheduled: 0, selected: 0 }
   );
 
   React.useEffect(() => {
-    writePublishingManagerPrefs({ workMode, statusFilter, deliveryFilter, sortMode, bulkChannel });
+    writePublishingManagerPrefs({ workMode: workMode === "selected" ? "all" : workMode, statusFilter, deliveryFilter, sortMode, bulkChannel });
   }, [workMode, statusFilter, deliveryFilter, sortMode, bulkChannel]);
 
   function updateChannel(video, channelId, patch) {
@@ -1328,6 +1330,7 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
             ["today", "Сегодня"],
             ["overdue", "Просрочено"],
             ["unscheduled", "Без плана"],
+            ["selected", "Выбранные"],
           ].map(([id, label]) => (
             <button
               key={id}
