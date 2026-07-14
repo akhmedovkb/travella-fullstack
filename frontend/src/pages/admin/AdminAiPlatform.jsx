@@ -535,14 +535,19 @@ function getPublishingTextForChannel(pkg = {}, channelId = "") {
 
 function buildPublishingQueueReport(videos = []) {
   const lines = videos.map((video, index) => {
+    const pkg = video.publishingPackage || {};
     const publicationStatus = video.publishingPackage?.publicationStatus || {};
     const channels = publicationStatus.channels || {};
-    const channelLines = PUBLICATION_CHANNELS.map((channel) => {
+    const channelLines = PUBLICATION_CHANNELS.flatMap((channel) => {
       const item = channels?.[channel.id] || {};
       const delivery = channel.id === "telegram" && item.deliveryMethod ? `, ${getDeliveryLogMethodLabel(item.deliveryMethod)}` : "";
       const planned = item.plannedAt ? `, план: ${fmtDate(item.plannedAt)}` : "";
       const url = item.url ? `, ${item.url}` : "";
-      return `  - ${channel.label}: ${item.published ? "опубликовано" : "ожидает"}${delivery}${planned}${url}`;
+      const text = getPublishingTextForChannel(pkg, channel.id);
+      return [
+        `  - ${channel.label}: ${item.published ? "опубликовано" : "ожидает"}${delivery}${planned}${url}`,
+        text ? `    Текст: ${text}` : "",
+      ].filter(Boolean);
     });
     return [
       `${index + 1}. ${video.code || "AI"} · ${video.title || "Без названия"} · ${getPublicationStatusLabel(publicationStatus)}`,
