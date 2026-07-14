@@ -115,16 +115,68 @@ function getPublicationStatus(channels = {}) {
   return "published_partial";
 }
 
+function buildPublicationHistory(prevChannels = {}, nextChannels = {}, actor = {}) {
+  const now = new Date().toISOString();
+  const labels = {
+    instagram: "Instagram",
+    telegram: "Telegram",
+    stories: "Stories",
+    reels: "Reels",
+  };
+  const changes = [];
+  Object.keys(labels).forEach((key) => {
+    const prev = prevChannels?.[key] || {};
+    const next = nextChannels?.[key] || {};
+    if (Boolean(prev.published) !== Boolean(next.published)) {
+      changes.push({
+        at: now,
+        by: actor?.id || null,
+        channel: key,
+        channelLabel: labels[key],
+        field: "published",
+        label: Boolean(next.published) ? "Отмечено опубликованным" : "Сброшена публикация",
+      });
+    }
+    if (String(prev.plannedAt || "") !== String(next.plannedAt || "")) {
+      changes.push({
+        at: now,
+        by: actor?.id || null,
+        channel: key,
+        channelLabel: labels[key],
+        field: "plannedAt",
+        label: next.plannedAt ? "Изменён план публикации" : "План публикации очищен",
+      });
+    }
+    if (String(prev.url || "") !== String(next.url || "")) {
+      changes.push({
+        at: now,
+        by: actor?.id || null,
+        channel: key,
+        channelLabel: labels[key],
+        field: "url",
+        label: next.url ? "Обновлена ссылка на пост" : "Ссылка на пост очищена",
+      });
+    }
+  });
+  return changes;
+}
+
 function savePublicationStatus(job, channels, actor) {
   const output = job.output || {};
   const ctx = getPublishingContext(job);
   const publishingPackage = output.publishingPackage || buildPublishingPackage(ctx);
+  const prevPublicationStatus = publishingPackage.publicationStatus || {};
   const normalizedChannels = normalizePublicationChannels(channels);
+  const history = [
+    ...buildPublicationHistory(prevPublicationStatus.channels || {}, normalizedChannels, actor),
+    ...(Array.isArray(prevPublicationStatus.history) ? prevPublicationStatus.history : []),
+  ].slice(0, 20);
   const publicationStatus = {
     status: getPublicationStatus(normalizedChannels),
     updatedAt: new Date().toISOString(),
     updatedBy: actor?.id || null,
     channels: normalizedChannels,
+    history,
   };
 
   const nextJob = updateJob(job.id, {
@@ -142,7 +194,7 @@ function savePublicationStatus(job, channels, actor) {
     type: "tool_result",
     tool: "ContentManager",
     message: "Статус ручной публикации обновлён.",
-    meta: { status: publicationStatus.status },
+    meta: { status: publicationStatus.status, changes: history.length },
   });
 
   return { success: true, job: nextJob, publicationStatus };

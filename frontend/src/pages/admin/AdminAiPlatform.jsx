@@ -499,6 +499,10 @@ function getNextPublicationAction(video = {}) {
   return { label: `Назначить план: ${next.channel.label}`, tone: "slate", channel: next.channel, plannedAt: "" };
 }
 
+function getPublicationHistoryItems(publicationStatus = {}) {
+  return Array.isArray(publicationStatus.history) ? publicationStatus.history.slice(0, 3) : [];
+}
+
 function buildPublishingQueueReport(videos = []) {
   const lines = videos.map((video, index) => {
     const publicationStatus = video.publishingPackage?.publicationStatus || {};
@@ -1209,6 +1213,7 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
           const loading = packageLoading === video.jobId;
           const mediaUrl = video.artifactUrl || video.mediaUrl || "";
           const nextAction = getNextPublicationAction(video);
+          const historyItems = getPublicationHistoryItems(publicationStatus);
           return (
             <article key={video.id} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
               <div className="grid gap-4 xl:grid-cols-[220px_1fr]">
@@ -1340,6 +1345,20 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
                       </div>
                     );
                   })}
+                  {historyItems.length ? (
+                    <div className="rounded-2xl bg-white px-3 py-2 text-xs font-bold text-slate-600 ring-1 ring-slate-100">
+                      <div className="mb-1 text-[10px] font-black uppercase tracking-wide text-slate-400">История изменений</div>
+                      <div className="flex flex-wrap gap-2">
+                        {historyItems.map((entry, index) => (
+                          <span key={`${entry.at || "history"}_${index}`} className="rounded-full bg-slate-50 px-2.5 py-1 ring-1 ring-slate-100">
+                            <b className="text-slate-900">{entry.channelLabel || entry.channel || "Канал"}</b>
+                            <span className="ml-1 text-slate-500">{entry.label || entry.field || "Изменение"}</span>
+                            {entry.at ? <span className="ml-1 text-slate-400">· {fmtDate(entry.at)}</span> : null}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </article>
