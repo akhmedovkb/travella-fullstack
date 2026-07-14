@@ -1201,6 +1201,14 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
               </button>
               <button
                 type="button"
+                onClick={() => applyBulkPatch(() => ({ plannedAt: "" }))}
+                disabled={!selectedVideos.length || bulkLoading}
+                className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-blue-700 ring-1 ring-blue-100 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Очистить план
+              </button>
+              <button
+                type="button"
                 onClick={() => applyBulkPatch((item) => ({ published: true, publishedAt: item.publishedAt || new Date().toISOString() }))}
                 disabled={!selectedVideos.length || bulkLoading}
                 className="rounded-2xl bg-emerald-700 px-3 py-2 text-xs font-black text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-40"
