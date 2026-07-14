@@ -385,7 +385,13 @@ function getFirstImageUrl(svc) {
   }
 
   if (v.startsWith("data:image")) {
-    return `${TG_IMAGE_BASE}/api/telegram/service-image/${svc.id}`;
+    const imageVersion = svc?.updated_at
+      ? new Date(svc.updated_at).getTime()
+      : svc?.created_at
+        ? new Date(svc.created_at).getTime()
+        : Date.now();
+
+    return `${TG_IMAGE_BASE}/api/telegram/service-image/${svc.id}?v=${imageVersion}`;
   }
 
   if (v.startsWith("http://") || v.startsWith("https://")) return encodeURI(v);
