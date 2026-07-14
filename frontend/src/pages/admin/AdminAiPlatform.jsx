@@ -384,6 +384,13 @@ function getPublicationStatusTone(publicationStatus = {}) {
   return "yellow";
 }
 
+function getTelegramDeliveryMeta(method = "") {
+  if (method === "sendVideo") return { label: "Видео URL", tone: "green" };
+  if (method === "sendVideoUpload") return { label: "Видео файлом", tone: "blue" };
+  if (method === "sendMessage") return { label: "Ссылка", tone: "yellow" };
+  return null;
+}
+
 const PUBLICATION_CHANNELS = [
   { id: "instagram", label: "Instagram" },
   { id: "telegram", label: "Telegram" },
@@ -820,6 +827,7 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
                     const item = channels?.[channel.id] || {};
                     const checked = Boolean(item.published);
                     const feedback = channel.id === "telegram" ? publishFeedback?.[video.jobId] : null;
+                    const telegramDelivery = channel.id === "telegram" ? getTelegramDeliveryMeta(item.deliveryMethod) : null;
                     return (
                       <div key={channel.id} className="rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-100">
                         <div className="grid gap-3 lg:grid-cols-[130px_190px_1fr_240px] lg:items-center">
@@ -861,6 +869,7 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
                               </button>
                             ) : null}
                             <Pill tone={checked ? "green" : item.plannedAt ? "blue" : "slate"}>{checked ? "Опубликовано" : item.plannedAt ? "Запланировано" : "Ожидает"}</Pill>
+                            {telegramDelivery ? <Pill tone={telegramDelivery.tone}>{telegramDelivery.label}</Pill> : null}
                           </div>
                         </div>
                         {feedback ? (
@@ -1105,9 +1114,11 @@ export default function AdminAiPlatform() {
     try {
       const res = await apiPost(`/api/admin/ai-platform/video-operator/jobs/${video.jobId}/publish/telegram`, {}, "admin");
       const link = res?.telegram?.url ? ` Ссылка: ${res.telegram.url}` : "";
+      const delivery = getTelegramDeliveryMeta(res?.telegram?.deliveryMethod);
+      const deliveryText = delivery ? ` Способ: ${delivery.label}.` : "";
       setPublishFeedback((prev) => ({
         ...prev,
-        [video.jobId]: { tone: "green", message: `Telegram опубликован.${link}` },
+        [video.jobId]: { tone: "green", message: `Telegram опубликован.${deliveryText}${link}` },
       }));
       await load();
     } catch (e) {
