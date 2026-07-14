@@ -302,6 +302,11 @@ function PublishingInspector({ videos }) {
   const nextActions = approved.map(getNextPublicationAction);
   const overdue = nextActions.filter((action) => action.tone === "red").length;
   const today = nextActions.filter((action) => action.tone === "yellow").length;
+  const historyItems = approved.flatMap((video) => {
+    const history = video.publishingPackage?.publicationStatus?.history || [];
+    return Array.isArray(history) ? history : [];
+  });
+  const latestHistory = [...historyItems].sort((a, b) => new Date(b.at || 0) - new Date(a.at || 0))[0] || null;
   const telegramDelivery = approved.reduce(
     (acc, video) => {
       const telegram = video.publishingPackage?.publicationStatus?.channels?.telegram || {};
@@ -324,6 +329,16 @@ function PublishingInspector({ videos }) {
           <div className="grid grid-cols-2 gap-2">
             <div className="rounded-2xl bg-rose-50 p-4"><div className="text-slate-400">Просрочено</div><b className="text-rose-700">{overdue}</b></div>
             <div className="rounded-2xl bg-amber-50 p-4"><div className="text-slate-400">Сегодня</div><b className="text-amber-700">{today}</b></div>
+          </div>
+          <div className="rounded-2xl bg-slate-50 p-4">
+            <div className="flex justify-between"><span>История изменений</span><b className="text-slate-950">{historyItems.length}</b></div>
+            {latestHistory ? (
+              <div className="mt-2 rounded-xl bg-white px-3 py-2 text-xs">
+                <b className="text-slate-900">{latestHistory.channelLabel || latestHistory.channel || "Канал"}</b>
+                <span className="ml-1 text-slate-500">{latestHistory.label || latestHistory.field || "Изменение"}</span>
+                {latestHistory.at ? <div className="mt-1 text-slate-400">{fmtDate(latestHistory.at)}</div> : null}
+              </div>
+            ) : null}
           </div>
           <div className="rounded-2xl bg-slate-50 p-4">
             <div className="text-slate-400">Telegram delivery</div>
