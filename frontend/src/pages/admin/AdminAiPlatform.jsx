@@ -557,6 +557,18 @@ function buildPublishingQueueReport(videos = []) {
   return [`Travella AI OS — очередь публикаций`, `Всего: ${videos.length}`, "", ...lines].join("\n");
 }
 
+function buildPublishingLinksReport(videos = []) {
+  const lines = videos.flatMap((video) => {
+    const channels = video.publishingPackage?.publicationStatus?.channels || {};
+    const links = PUBLICATION_CHANNELS.map((channel) => {
+      const url = String(channels?.[channel.id]?.url || "").trim();
+      return url ? `- ${video.code || "AI"} · ${channel.label}: ${url}` : "";
+    }).filter(Boolean);
+    return links;
+  });
+  return [`Travella AI OS — ссылки публикаций`, `Всего ссылок: ${lines.length}`, "", ...lines].join("\n");
+}
+
 function toDateTimeLocal(value) {
   if (!value) return "";
   const d = new Date(value);
@@ -933,6 +945,7 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
   const [query, setQuery] = React.useState("");
   const [sortMode, setSortMode] = React.useState(initialPrefs.sortMode || "schedule");
   const [copiedReport, setCopiedReport] = React.useState(false);
+  const [copiedLinks, setCopiedLinks] = React.useState(false);
   const [copiedUrlKey, setCopiedUrlKey] = React.useState("");
   const [copiedTextKey, setCopiedTextKey] = React.useState("");
   const [selectedIds, setSelectedIds] = React.useState([]);
@@ -1102,6 +1115,26 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
     window.setTimeout(() => setCopiedReport(false), 1800);
   }
 
+  async function copyLinksReport() {
+    const reportVideos = selectedVideos.length ? selectedVideos : filteredVideos;
+    const text = buildPublishingLinksReport(reportVideos);
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+    }
+    setCopiedLinks(true);
+    window.setTimeout(() => setCopiedLinks(false), 1800);
+  }
+
   async function copyChannelUrl(key, url) {
     if (!url) return;
     try {
@@ -1157,6 +1190,14 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
               className="rounded-2xl bg-slate-950 px-4 py-2 text-xs font-black text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {copiedReport ? "Отчёт скопирован" : selectedVideos.length ? "Скопировать выбранное" : "Скопировать отчёт"}
+            </button>
+            <button
+              type="button"
+              onClick={copyLinksReport}
+              disabled={!filteredVideos.length}
+              className="rounded-2xl bg-white px-4 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {copiedLinks ? "Ссылки скопированы" : "Скопировать ссылки"}
             </button>
             <button
               type="button"
