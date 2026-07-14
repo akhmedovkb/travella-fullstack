@@ -383,6 +383,30 @@ function categoryAccent(category) {
   return "from-slate-50 to-gray-50 border-slate-100 text-slate-700";
 }
 
+function getEditorTabs(editForm, validation) {
+  const imageCount = Array.isArray(editForm?.images)
+    ? editForm.images.length
+    : 0;
+
+  const proofCount = Array.isArray(editForm?.details?.proofImages)
+    ? editForm.details.proofImages.length
+    : 0;
+
+  const mainErrors = Object.keys(validation?.root || {}).length;
+  const detailErrors = Object.keys(validation?.details || {}).length;
+  const providerErrors = Object.keys(validation?.provider || {}).length;
+  const rawErrors = Object.keys(validation?.raw || {}).length;
+
+  return [
+    { id: "main", label: "Основное", icon: "✏️", errorCount: mainErrors },
+    { id: "details", label: "Параметры услуги", icon: "🧭", errorCount: detailErrors },
+    { id: "images", label: "Фото", icon: "📷", count: imageCount },
+    { id: "proof", label: "Подтверждение", icon: "🔐", count: proofCount },
+    { id: "provider", label: "Поставщик", icon: "👤", errorCount: providerErrors },
+    { id: "technical", label: "Техническое", icon: "⚙️", errorCount: rawErrors },
+  ];
+}
+
 function serviceMainTitle(it) {
   return (
     it?.title ||
@@ -1165,6 +1189,7 @@ export default function AdminRefusedActual() {
   const [editForm, setEditForm] = useState(null);
   const [originalEditForm, setOriginalEditForm] = useState(null);
   const [saveAndCloseRequested, setSaveAndCloseRequested] = useState(false);
+  const [editTab, setEditTab] = useState("main");
   const [hotelQuery, setHotelQuery] = useState("");
   const [hotelOptions, setHotelOptions] = useState([]);
   const [hotelLoading, setHotelLoading] = useState(false);
@@ -1191,6 +1216,11 @@ export default function AdminRefusedActual() {
       return false;
     }
   }, [editForm, originalEditForm]);
+
+  const editorTabs = useMemo(
+    () => getEditorTabs(editForm, editValidation),
+    [editForm, editValidation]
+  );
 
   const [sendingId, setSendingId] = useState(null);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -1591,6 +1621,7 @@ export default function AdminRefusedActual() {
       setEditForm(null);
       setOriginalEditForm(null);
       setSaveAndCloseRequested(false);
+      setEditTab("main");
       setHotelQuery("");
       setHotelOptions([]);
       setImageUrlDraft("");
@@ -1792,6 +1823,16 @@ export default function AdminRefusedActual() {
     const validation = validateEditForm(editForm);
   
     if (!validation.valid) {
+      if (Object.keys(validation.root || {}).length > 0) {
+        setEditTab("main");
+      } else if (Object.keys(validation.details || {}).length > 0) {
+        setEditTab("details");
+      } else if (Object.keys(validation.provider || {}).length > 0) {
+        setEditTab("provider");
+      } else if (Object.keys(validation.raw || {}).length > 0) {
+        setEditTab("technical");
+      }
+
       setEditError(
         validation.summary[0] ||
           "Исправь ошибки перед сохранением"
@@ -3535,6 +3576,58 @@ const sortLabel = useMemo(() => {
               </div>
             ) : null}
 
+            <div className="sticky top-0 z-20 -mx-5 -mt-5 border-b border-slate-200 bg-slate-50/95 px-5 py-3 backdrop-blur">
+              <div className="mx-auto flex max-w-[1600px] gap-2 overflow-x-auto">
+                {editorTabs.map((tab) => {
+                  const active = editTab === tab.id;
+                  const hasErrors = Number(tab.errorCount || 0) > 0;
+
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setEditTab(tab.id)}
+                      className={classNames(
+                        "inline-flex shrink-0 items-center gap-2 rounded-xl border px-3.5 py-2 text-sm font-bold transition",
+                        active
+                          ? "border-slate-950 bg-slate-950 text-white shadow-sm"
+                          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-950"
+                      )}
+                    >
+                      <span>{tab.icon}</span>
+                      <span>{tab.label}</span>
+
+                      {hasErrors ? (
+                        <span
+                          className={classNames(
+                            "inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-black",
+                            active
+                              ? "bg-red-500 text-white"
+                              : "bg-red-100 text-red-700"
+                          )}
+                        >
+                          {tab.errorCount}
+                        </span>
+                      ) : Number(tab.count || 0) > 0 ? (
+                        <span
+                          className={classNames(
+                            "inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-black",
+                            active
+                              ? "bg-white/20 text-white"
+                              : "bg-slate-100 text-slate-600"
+                          )}
+                        >
+                          {tab.count}
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {editTab === "main" ? (
+              <>
             <div className="rounded-2xl border border-gray-200 p-4">
               <div className="text-sm font-semibold text-gray-900">Общие поля услуги</div>
               <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -3588,7 +3681,11 @@ const sortLabel = useMemo(() => {
                 </div>
               </div>
             </div>
+              </>
+            ) : null}
 
+            {editTab === "provider" ? (
+              <>
             <div className="rounded-2xl border border-gray-200 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="text-sm font-semibold text-gray-900">TG / chat id провайдера</div>
@@ -3638,7 +3735,11 @@ const sortLabel = useMemo(() => {
                 </div>
               </div>
             </div>
+              </>
+            ) : null}
 
+            {editTab === "details" ? (
+              <>
             <div className="rounded-2xl border border-gray-200 p-4">
               <div className="flex items-center justify-between gap-3"><div className="text-sm font-semibold text-gray-900">Быстрое редактирование details по категории</div>{hotelQuery ? <div className="text-xs text-gray-500">Поиск отеля: {hotelQuery}</div> : null}</div>
               <div className="mt-4">{renderDetailFields(editForm, setEditForm, {
@@ -3715,8 +3816,11 @@ const sortLabel = useMemo(() => {
                 </button>
               </div>
             </div>
+              </>
+            ) : null}
 
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+            {editTab === "images" ? (
+              <>
               <div className="rounded-2xl border border-gray-200 p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -3867,26 +3971,11 @@ const sortLabel = useMemo(() => {
                   />
                 </div>
               </div>
+              </>
+            ) : null}
 
-              <div className="rounded-2xl border border-gray-200 p-4">
-                <div className="text-sm font-semibold text-gray-900">availability (JSON array)</div>
-                <div className={classNames("mt-3 text-xs", editValidation.raw?.availability ? "text-red-600" : "text-gray-500")}>
-                  {editValidation.raw?.availability || "Пока редактируется как сырой JSON-массив."}
-                </div>
-                <textarea
-                  rows={10}
-                  className={classNames(
-                    "mt-3 w-full rounded-xl px-3 py-2 font-mono text-xs outline-none focus:ring-2",
-                    editValidation.raw?.availability
-                      ? "border border-red-300 bg-red-50/40 focus:ring-red-100"
-                      : "border border-gray-200 bg-gray-50 focus:ring-gray-200"
-                  )}
-                  value={editForm.rawAvailabilityText || "[]"}
-                  onChange={(e) => handleRawAvailabilityChange(e.target.value)}
-                />
-              </div>
-            </div>
-
+            {editTab === "proof" ? (
+              <>
             <div className="rounded-2xl border border-gray-200 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
@@ -3974,7 +4063,29 @@ const sortLabel = useMemo(() => {
                 </div>
               )}
             </div>
+              </>
+            ) : null}
 
+            {editTab === "technical" ? (
+              <>
+              <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+              <div className="rounded-2xl border border-gray-200 p-4">
+                <div className="text-sm font-semibold text-gray-900">availability (JSON array)</div>
+                <div className={classNames("mt-3 text-xs", editValidation.raw?.availability ? "text-red-600" : "text-gray-500")}>
+                  {editValidation.raw?.availability || "Пока редактируется как сырой JSON-массив."}
+                </div>
+                <textarea
+                  rows={10}
+                  className={classNames(
+                    "mt-3 w-full rounded-xl px-3 py-2 font-mono text-xs outline-none focus:ring-2",
+                    editValidation.raw?.availability
+                      ? "border border-red-300 bg-red-50/40 focus:ring-red-100"
+                      : "border border-gray-200 bg-gray-50 focus:ring-gray-200"
+                  )}
+                  value={editForm.rawAvailabilityText || "[]"}
+                  onChange={(e) => handleRawAvailabilityChange(e.target.value)}
+                />
+              </div>
             <div className="rounded-2xl border border-gray-200 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="text-sm font-semibold text-gray-900">Raw details JSON</div>
@@ -4002,7 +4113,9 @@ const sortLabel = useMemo(() => {
                 onChange={(e) => handleRawDetailsChange(e.target.value)}
               />
             </div>
-          </div>
+              </div>
+              </>
+            ) : null}          </div>
         ) : (
           <div className="text-sm text-gray-600">Нет данных для редактирования.</div>
         )}
