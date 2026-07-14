@@ -1744,6 +1744,22 @@ bot.use(async (ctx, next) => {
 // Разрешает только: /start, выбор роли role:*, отправку номера (contact или текстом в режиме привязки).
 bot.use(async (ctx, next) => {
   try {
+    const chatType = String(ctx?.chat?.type || "").toLowerCase();
+
+    // Каналы не проходят пользовательскую авторизацию/moderation guard.
+    if (
+      ctx.updateType === "channel_post" ||
+      ctx.updateType === "edited_channel_post" ||
+      chatType === "channel"
+    ) {
+      return next();
+    }
+
+    // Боты не проходят пользовательскую авторизацию/moderation guard.
+    if (ctx?.from?.is_bot) {
+      return next();
+    }
+
     // ✅ FIX: если одобрили через сайт — обновим pending/linked из БД
     await rehydrateAuthSessionIfNeeded(ctx);
 
