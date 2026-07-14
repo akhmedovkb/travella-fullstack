@@ -569,6 +569,13 @@ function buildPublishingLinksReport(videos = []) {
   return [`Travella AI OS — ссылки публикаций`, `Всего ссылок: ${lines.length}`, "", ...lines].join("\n");
 }
 
+function countPublishingLinks(videos = []) {
+  return videos.reduce((sum, video) => {
+    const channels = video.publishingPackage?.publicationStatus?.channels || {};
+    return sum + PUBLICATION_CHANNELS.filter((channel) => String(channels?.[channel.id]?.url || "").trim()).length;
+  }, 0);
+}
+
 function toDateTimeLocal(value) {
   if (!value) return "";
   const d = new Date(value);
@@ -1019,6 +1026,8 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
   const visibleIds = filteredVideos.map((video) => video.id);
   const selectedVideos = filteredVideos.filter((video) => selectedIds.includes(video.id));
   const allVisibleSelected = Boolean(filteredVideos.length) && visibleIds.every((id) => selectedIds.includes(id));
+  const reportSourceVideos = selectedVideos.length ? selectedVideos : filteredVideos;
+  const reportLinksCount = countPublishingLinks(reportSourceVideos);
   const workModeCounts = approvedVideos.reduce(
     (acc, video) => {
       const action = getNextPublicationAction(video);
@@ -1096,8 +1105,7 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
   }
 
   async function copyQueueReport() {
-    const reportVideos = selectedVideos.length ? selectedVideos : filteredVideos;
-    const text = buildPublishingQueueReport(reportVideos);
+    const text = buildPublishingQueueReport(reportSourceVideos);
     try {
       await navigator.clipboard.writeText(text);
     } catch {
@@ -1116,8 +1124,8 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
   }
 
   async function copyLinksReport() {
-    const reportVideos = selectedVideos.length ? selectedVideos : filteredVideos;
-    const text = buildPublishingLinksReport(reportVideos);
+    if (!reportLinksCount) return;
+    const text = buildPublishingLinksReport(reportSourceVideos);
     try {
       await navigator.clipboard.writeText(text);
     } catch {
@@ -1194,10 +1202,10 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
             <button
               type="button"
               onClick={copyLinksReport}
-              disabled={!filteredVideos.length}
+              disabled={!reportLinksCount}
               className="rounded-2xl bg-white px-4 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {copiedLinks ? "Ссылки скопированы" : "Скопировать ссылки"}
+              {copiedLinks ? "Ссылки скопированы" : reportLinksCount ? `Скопировать ссылки (${reportLinksCount})` : "Ссылок нет"}
             </button>
             <button
               type="button"
