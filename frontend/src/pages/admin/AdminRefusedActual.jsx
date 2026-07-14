@@ -383,6 +383,30 @@ function categoryAccent(category) {
   return "from-slate-50 to-gray-50 border-slate-100 text-slate-700";
 }
 
+function getEditorTabs(editForm, validation) {
+  const imageCount = Array.isArray(editForm?.images)
+    ? editForm.images.length
+    : 0;
+
+  const proofCount = Array.isArray(editForm?.details?.proofImages)
+    ? editForm.details.proofImages.length
+    : 0;
+
+  const mainErrors = Object.keys(validation?.root || {}).length;
+  const detailErrors = Object.keys(validation?.details || {}).length;
+  const providerErrors = Object.keys(validation?.provider || {}).length;
+  const rawErrors = Object.keys(validation?.raw || {}).length;
+
+  return [
+    { id: "main", label: "Основное", icon: "✏️", errorCount: mainErrors },
+    { id: "details", label: "Параметры услуги", icon: "🧭", errorCount: detailErrors },
+    { id: "images", label: "Фото", icon: "📷", count: imageCount },
+    { id: "proof", label: "Подтверждение", icon: "🔐", count: proofCount },
+    { id: "provider", label: "Поставщик", icon: "👤", errorCount: providerErrors },
+    { id: "technical", label: "Техническое", icon: "⚙️", errorCount: rawErrors },
+  ];
+}
+
 function serviceMainTitle(it) {
   return (
     it?.title ||
@@ -468,30 +492,79 @@ function QuickChip({ active, children, onClick }) {
   );
 }
 
-function Modal({ open, title, onClose, children, footer }) {
+function Modal({
+  open,
+  title,
+  subtitle,
+  onClose,
+  children,
+  footer,
+  fullscreen = false,
+  headerExtra = null,
+}) {
   if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50">
       <div
-        className="absolute inset-0 bg-black/40"
+        className="absolute inset-0 bg-slate-950/55 backdrop-blur-[2px]"
         onClick={onClose}
         aria-hidden="true"
       />
-      <div className="absolute inset-0 flex items-center justify-center p-4">
-        <div className="w-full max-w-6xl overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl">
-          <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
-            <div className="text-base font-semibold text-gray-900">{title}</div>
-            <button
-              onClick={onClose}
-              className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm hover:bg-gray-50"
-            >
-              Закрыть
-            </button>
+
+      <div
+        className={classNames(
+          "absolute inset-0 flex items-center justify-center",
+          fullscreen ? "p-0" : "p-4"
+        )}
+      >
+        <div
+          className={classNames(
+            "flex w-full flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl",
+            fullscreen
+              ? "h-full max-h-full rounded-none"
+              : "max-w-6xl rounded-2xl"
+          )}
+        >
+          <div className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4">
+            <div className="min-w-0">
+              <div className="truncate text-base font-black text-slate-950">
+                {title}
+              </div>
+
+              {subtitle ? (
+                <div className="mt-1 truncate text-xs font-medium text-slate-500">
+                  {subtitle}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="flex shrink-0 items-center gap-3">
+              {headerExtra}
+
+              <button
+                type="button"
+                onClick={onClose}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-xl text-slate-500 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
+                aria-label="Закрыть"
+                title="Закрыть"
+              >
+                ×
+              </button>
+            </div>
           </div>
-          <div className="max-h-[78vh] overflow-auto p-5">{children}</div>
+
+          <div
+            className={classNames(
+              "min-h-0 flex-1 overflow-auto",
+              fullscreen ? "bg-slate-50 p-5" : "max-h-[78vh] p-5"
+            )}
+          >
+            {children}
+          </div>
+
           {footer ? (
-            <div className="border-t border-gray-200 bg-gray-50 px-5 py-4">
+            <div className="shrink-0 border-t border-slate-200 bg-white px-5 py-4 shadow-[0_-8px_24px_rgba(15,23,42,0.04)]">
               {footer}
             </div>
           ) : null}
@@ -500,7 +573,6 @@ function Modal({ open, title, onClose, children, footer }) {
     </div>
   );
 }
-
 function Field({ label, children, hint, error }) {
   return (
     <div>
@@ -889,39 +961,249 @@ function renderDetailFields(editForm, setEditForm, extra = {}) {
   }
 
   if (category === "refused_tour") {
+    const dateOnlyValue = (value) => String(value || "").slice(0, 10);
+
+    const updateDateOnly = (key) => (e) => {
+      const value = String(e.target.value || "").trim();
+      updateDetailsField(key, value ? `${value}T00:00` : "");
+    };
+
+    const dateOnlyInput = (key, label) => (
+      <Field label={label} key={key} error={detailErrors?.[key]}>
+        <TextInput
+          type="date"
+          value={dateOnlyValue(details?.[key])}
+          onChange={updateDateOnly(key)}
+          invalid={!!detailErrors?.[key]}
+        />
+      </Field>
+    );
+
+    const selectWithCurrent = (key, label, options) => {
+      const current = String(details?.[key] || "").trim();
+      const hasCurrent = options.some((opt) => String(opt.value) === current);
+      const finalOptions = hasCurrent || !current
+        ? options
+        : [{ value: current, label: current }, ...options];
+
+      return (
+        <Field label={label} key={key} error={detailErrors?.[key]}>
+          <SelectInput
+            value={current}
+            onChange={updateText(key)}
+            options={finalOptions}
+            invalid={!!detailErrors?.[key]}
+          />
+        </Field>
+      );
+    };
+
+    const startDate = Date.parse(details?.startDate || "");
+    const endDate = Date.parse(details?.endDate || "");
+    const nightsCount =
+      Number.isFinite(startDate) && Number.isFinite(endDate) && endDate > startDate
+        ? Math.round((endDate - startDate) / 86400000)
+        : null;
+
+    const margin = calcMargin(details);
+
     return (
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        {textField("directionCountry", "Страна направления")}
-        {textField("directionFrom", "Город вылета")}
-        {textField("directionTo", "Город прибытия")}
-        {dateField("startDate", "Дата начала")}
-        {dateField("endDate", "Дата конца")}
-        {dateField("departureFlightDate", "Дата рейса вылета")}
-        {dateField("returnFlightDate", "Дата рейса обратно")}
-        <div className="md:col-span-3">{hotelField("hotel", "Отель")}</div>
-        {textField("hotelName", "Hotel name / legacy")}
-        {textField("accommodationCategory", "Категория номера")}
-        {textField("roomCategory", "Room category / legacy")}
-        {textField("accommodation", "Размещение")}
-        {textField("food", "Питание")}
-        {textField("transfer", "Трансфер")}
-        {textField("netPrice", "Цена нетто")}
-        {textField("grossPrice", "Цена продажи")}
-        {textField("previousPrice", "Предыдущая цена")}
-        {dateField("expiration", "Срок актуальности")}
-        <div className="md:col-span-3">
-          <Field label="Детали рейса" error={detailErrors?.flightDetails}>
-            <TextArea value={details?.flightDetails || ""} onChange={updateText("flightDetails")} rows={3} invalid={!!detailErrors?.flightDetails} />
-          </Field>
-        </div>
-        <div className="md:col-span-3 flex flex-wrap gap-2">
-          <CheckboxField label="Можно менять" checked={details?.changeable} onChange={updateCheckbox("changeable")} />
-          <CheckboxField label="Виза включена" checked={details?.visaIncluded} onChange={updateCheckbox("visaIncluded")} />
-          <CheckboxField label="Страховка включена" checked={details?.insuranceIncluded} onChange={updateCheckbox("insuranceIncluded")} />
-          <CheckboxField label="Раннее заселение" checked={details?.earlyCheckIn} onChange={updateCheckbox("earlyCheckIn")} />
-          <CheckboxField label="Arrival Fast Track" checked={details?.arrivalFastTrack} onChange={updateCheckbox("arrivalFastTrack")} />
-          <CheckboxField label="Актуально" checked={details?.isActive} onChange={updateCheckbox("isActive")} />
-        </div>
+      <div className="space-y-5">
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-4">
+            <div className="text-sm font-black text-slate-950">Маршрут</div>
+            <div className="mt-1 text-xs text-slate-500">
+              Направление и города, которые будут показаны в карточке услуги.
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            {textField("directionCountry", "Страна направления", "Например: Кыргызстан")}
+            {textField("directionFrom", "Город вылета", "Например: Ташкент")}
+            {textField("directionTo", "Город прибытия", "Например: Иссык-Куль")}
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-sm font-black text-slate-950">Даты тура</div>
+              <div className="mt-1 text-xs text-slate-500">
+                Основные даты поездки и отдельные даты рейсов.
+              </div>
+            </div>
+
+            {nightsCount ? (
+              <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
+                {nightsCount} ноч.
+              </span>
+            ) : null}
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {dateOnlyInput("startDate", "Дата начала")}
+            {dateOnlyInput("endDate", "Дата окончания")}
+            {dateOnlyInput("departureFlightDate", "Дата рейса вылета")}
+            {dateOnlyInput("returnFlightDate", "Дата рейса обратно")}
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-4">
+            <div className="text-sm font-black text-slate-950">Отель и размещение</div>
+            <div className="mt-1 text-xs text-slate-500">
+              Отель, категория номера, размещение и питание.
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <div className="md:col-span-3">
+              <Field label="Отель" error={detailErrors?.hotel || detailErrors?.hotelName}>
+                <input
+                  list="admin-hotel-options"
+                  className={classNames(
+                    "w-full rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2",
+                    detailErrors?.hotel || detailErrors?.hotelName
+                      ? "border-red-300 bg-red-50/40 focus:ring-red-100"
+                      : "border-gray-200 focus:ring-gray-200"
+                  )}
+                  value={details?.hotel || details?.hotelName || ""}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setEditForm((prev) => {
+                      const nextDetails = {
+                        ...(prev?.details || {}),
+                        hotel: value,
+                        hotelName: value,
+                      };
+                      return {
+                        ...prev,
+                        details: nextDetails,
+                        rawDetailsText: JSON.stringify(nextDetails, null, 2),
+                      };
+                    });
+                    if (onHotelSearch) onHotelSearch(value);
+                  }}
+                  placeholder="Найдите отель или введите вручную"
+                />
+                <datalist id="admin-hotel-options">
+                  {hotelOptions.map((h, idx) => {
+                    const labelText = [h.name, h.city, h.country].filter(Boolean).join(" • ");
+                    return (
+                      <option key={`${h.id || h.name || "hotel"}-${idx}`} value={h.name || ""}>
+                        {labelText}
+                      </option>
+                    );
+                  })}
+                </datalist>
+              </Field>
+            </div>
+
+            <Field label="Категория номера" error={detailErrors?.accommodationCategory || detailErrors?.roomCategory}>
+              <TextInput
+                value={details?.accommodationCategory || details?.roomCategory || ""}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setEditForm((prev) => {
+                    const nextDetails = {
+                      ...(prev?.details || {}),
+                      accommodationCategory: value,
+                      roomCategory: value,
+                    };
+                    return {
+                      ...prev,
+                      details: nextDetails,
+                      rawDetailsText: JSON.stringify(nextDetails, null, 2),
+                    };
+                  });
+                }}
+                placeholder="Например: Standard Room"
+                invalid={!!(detailErrors?.accommodationCategory || detailErrors?.roomCategory)}
+              />
+            </Field>
+
+            {textField("accommodation", "Размещение", "Например: 2 ADT")}
+
+            {selectWithCurrent("food", "Питание", [
+              { value: "", label: "Не указано" },
+              { value: "RO", label: "RO — без питания" },
+              { value: "BB", label: "BB — завтраки" },
+              { value: "HB", label: "HB — завтрак и ужин" },
+              { value: "FB", label: "FB — полный пансион" },
+              { value: "AI", label: "AI — всё включено" },
+              { value: "UAI", label: "UAI — ультра всё включено" },
+            ])}
+
+            {selectWithCurrent("transfer", "Трансфер", [
+              { value: "", label: "Не указано" },
+              { value: "included", label: "Включён" },
+              { value: "group", label: "Групповой" },
+              { value: "individual", label: "Индивидуальный" },
+              { value: "none", label: "Не включён" },
+            ])}
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-sm font-black text-slate-950">Стоимость</div>
+              <div className="mt-1 text-xs text-slate-500">
+                Цена продажи синхронизируется с основной ценой услуги.
+              </div>
+            </div>
+
+            {margin !== null ? (
+              <span className={classNames(
+                "rounded-full border px-3 py-1 text-xs font-bold",
+                margin >= 0
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : "border-red-200 bg-red-50 text-red-700"
+              )}>
+                Маржа: {margin}
+              </span>
+            ) : null}
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            {textField("netPrice", "Цена нетто")}
+            {textField("grossPrice", "Цена продажи")}
+            {textField("previousPrice", "Предыдущая цена")}
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-4">
+            <div className="text-sm font-black text-slate-950">Рейс и актуальность</div>
+            <div className="mt-1 text-xs text-slate-500">
+              Детали перелёта и срок, до которого предложение считается актуальным.
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
+            <Field label="Детали рейса" error={detailErrors?.flightDetails}>
+              <TextArea
+                value={details?.flightDetails || ""}
+                onChange={updateText("flightDetails")}
+                rows={5}
+                invalid={!!detailErrors?.flightDetails}
+              />
+            </Field>
+
+            <div className="space-y-3">
+              {dateField("expiration", "Срок актуальности")}
+
+              <div className="flex flex-wrap gap-2">
+                <CheckboxField label="Можно менять" checked={details?.changeable} onChange={updateCheckbox("changeable")} />
+                <CheckboxField label="Виза включена" checked={details?.visaIncluded} onChange={updateCheckbox("visaIncluded")} />
+                <CheckboxField label="Страховка включена" checked={details?.insuranceIncluded} onChange={updateCheckbox("insuranceIncluded")} />
+                <CheckboxField label="Раннее заселение" checked={details?.earlyCheckIn} onChange={updateCheckbox("earlyCheckIn")} />
+                <CheckboxField label="Arrival Fast Track" checked={details?.arrivalFastTrack} onChange={updateCheckbox("arrivalFastTrack")} />
+                <CheckboxField label="Актуально" checked={details?.isActive} onChange={updateCheckbox("isActive")} />
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
     );
   }
@@ -1115,6 +1397,9 @@ export default function AdminRefusedActual() {
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState("");
   const [editForm, setEditForm] = useState(null);
+  const [originalEditForm, setOriginalEditForm] = useState(null);
+  const [saveAndCloseRequested, setSaveAndCloseRequested] = useState(false);
+  const [editTab, setEditTab] = useState("main");
   const [hotelQuery, setHotelQuery] = useState("");
   const [hotelOptions, setHotelOptions] = useState([]);
   const [hotelLoading, setHotelLoading] = useState(false);
@@ -1132,6 +1417,20 @@ export default function AdminRefusedActual() {
   }, [previewGallery, previewIndex]);
 
   const editValidation = useMemo(() => validateEditForm(editForm), [editForm]);
+  const hasUnsavedEditChanges = useMemo(() => {
+    if (!editForm || !originalEditForm) return false;
+  
+    try {
+      return JSON.stringify(editForm) !== JSON.stringify(originalEditForm);
+    } catch {
+      return false;
+    }
+  }, [editForm, originalEditForm]);
+
+  const editorTabs = useMemo(
+    () => getEditorTabs(editForm, editValidation),
+    [editForm, editValidation]
+  );
 
   const [sendingId, setSendingId] = useState(null);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -1525,25 +1824,58 @@ export default function AdminRefusedActual() {
     }
   }
 
-  async function openEdit(id) {
-    setEditOpen(true);
-    setEditLoading(true);
-    setEditError("");
-    setEditForm(null);
-    setHotelQuery("");
-    setHotelOptions([]);
-    setImageUrlDraft("");
-    setProofImageUrlDraft("");
-    try {
-      const resp = await http.get(apiPath(`/admin/services/${id}`));
-      const data = ensureJsonOrThrow(resp, "openEdit");
-      setEditForm(createEditFormFromService(data || {}));
-    } catch (e) {
-      const info = extractAxiosError(e);
-      setEditError(info.msg || "Ошибка загрузки услуги для редактирования");
-    } finally {
-      setEditLoading(false);
+    async function openEdit(id) {
+      setEditOpen(true);
+      setEditLoading(true);
+      setEditError("");
+      setEditForm(null);
+      setOriginalEditForm(null);
+      setSaveAndCloseRequested(false);
+      setEditTab("main");
+      setHotelQuery("");
+      setHotelOptions([]);
+      setImageUrlDraft("");
+      setProofImageUrlDraft("");
+    
+      try {
+        const resp = await http.get(apiPath(`/admin/services/${id}`));
+        const data = ensureJsonOrThrow(resp, "openEdit");
+    
+        const nextForm = createEditFormFromService(data || {});
+    
+        setEditForm(nextForm);
+        setOriginalEditForm(nextForm);
+      } catch (e) {
+        const info = extractAxiosError(e);
+        setEditError(
+          info.msg || "Ошибка загрузки услуги для редактирования"
+        );
+      } finally {
+        setEditLoading(false);
+      }
     }
+  
+    function closeEditEditor() {
+    if (editSaving) return;
+  
+    if (hasUnsavedEditChanges) {
+      const confirmed = window.confirm(
+        "Есть несохранённые изменения.\n\nЗакрыть редактор и потерять изменения?"
+      );
+  
+      if (!confirmed) return;
+    }
+  
+    closePreview();
+    setEditOpen(false);
+    setEditForm(null);
+    setOriginalEditForm(null);
+    setSaveAndCloseRequested(false);
+    setEditError("");
+  }
+  
+  function cancelEditEditor() {
+    closeEditEditor();
   }
 
   function updateEditRoot(field, value) {
@@ -1567,6 +1899,28 @@ export default function AdminRefusedActual() {
 
   function applyImagesToEditForm(nextImages) {
     setEditForm((prev) => syncEditFormImages(prev, nextImages));
+  }
+
+  function handleMakePrimaryImage(index) {
+    setEditForm((prev) => {
+      const current = normalizeImagesArray(
+        prev?.images ||
+          safeJsonParse(prev?.rawImagesText || "[]", [])
+      );
+  
+      if (
+        index <= 0 ||
+        index >= current.length
+      ) {
+        return prev;
+      }
+  
+      const nextImages = [...current];
+      const [selectedImage] = nextImages.splice(index, 1);
+      nextImages.unshift(selectedImage);
+  
+      return syncEditFormImages(prev, nextImages);
+    });
   }
 
   function handleRemoveImage(index) {
@@ -1673,94 +2027,175 @@ export default function AdminRefusedActual() {
     setEditForm((prev) => ({ ...(prev || {}), rawAvailabilityText: value }));
   }
 
-  async function saveEdit() {
+  async function saveEdit({ closeAfterSave = false } = {}) {
     if (!editForm?.id) return;
-
+  
     const validation = validateEditForm(editForm);
+  
     if (!validation.valid) {
-      setEditError(validation.summary[0] || "Исправь ошибки перед сохранением");
+      if (Object.keys(validation.root || {}).length > 0) {
+        setEditTab("main");
+      } else if (Object.keys(validation.details || {}).length > 0) {
+        setEditTab("details");
+      } else if (Object.keys(validation.provider || {}).length > 0) {
+        setEditTab("provider");
+      } else if (Object.keys(validation.raw || {}).length > 0) {
+        setEditTab("technical");
+      }
+
+      setEditError(
+        validation.summary[0] ||
+          "Исправь ошибки перед сохранением"
+      );
       return;
     }
-
+  
     let parsedDetails = {};
     let parsedImages = [];
     let parsedAvailability = [];
+  
     try {
-      parsedDetails = safeJsonParse(editForm.rawDetailsText || "{}", {});
-      parsedImages = safeJsonParse(editForm.rawImagesText || "[]", []);
-      parsedAvailability = safeJsonParse(editForm.rawAvailabilityText || "[]", []);
+      parsedDetails = safeJsonParse(
+        editForm.rawDetailsText || "{}",
+        {}
+      );
+  
+      parsedImages = safeJsonParse(
+        editForm.rawImagesText || "[]",
+        []
+      );
+  
+      parsedAvailability = safeJsonParse(
+        editForm.rawAvailabilityText || "[]",
+        []
+      );
     } catch (e) {
       setEditError(e?.message || "Невалидный JSON");
       return;
     }
-
+  
     setEditSaving(true);
+    setSaveAndCloseRequested(closeAfterSave);
     setEditError("");
-
+  
     try {
       const nextForm = {
         ...editForm,
         details: parsedDetails,
-        images: Array.isArray(parsedImages) ? parsedImages : [],
-        availability: Array.isArray(parsedAvailability) ? parsedAvailability : [],
-        rawDetailsText: JSON.stringify(parsedDetails, null, 2),
-        rawImagesText: JSON.stringify(Array.isArray(parsedImages) ? parsedImages : [], null, 2),
-        rawAvailabilityText: JSON.stringify(Array.isArray(parsedAvailability) ? parsedAvailability : [], null, 2),
+        images: Array.isArray(parsedImages)
+          ? parsedImages
+          : [],
+        availability: Array.isArray(parsedAvailability)
+          ? parsedAvailability
+          : [],
+        rawDetailsText: JSON.stringify(
+          parsedDetails,
+          null,
+          2
+        ),
+        rawImagesText: JSON.stringify(
+          Array.isArray(parsedImages)
+            ? parsedImages
+            : [],
+          null,
+          2
+        ),
+        rawAvailabilityText: JSON.stringify(
+          Array.isArray(parsedAvailability)
+            ? parsedAvailability
+            : [],
+          null,
+          2
+        ),
       };
+  
       const payload = {
         title: nextForm?.title || "",
         description: nextForm?.description || "",
         category: nextForm?.category || "",
         price:
-          nextForm?.price === null || typeof nextForm?.price === "undefined"
+          nextForm?.price === null ||
+          typeof nextForm?.price === "undefined"
             ? null
             : nextForm.price,
         vehicle_model: nextForm?.vehicle_model || "",
-        images: Array.isArray(nextForm?.images) ? nextForm.images : [],
-        availability: Array.isArray(nextForm?.availability) ? nextForm.availability : [],
+        images: Array.isArray(nextForm?.images)
+          ? nextForm.images
+          : [],
+        availability: Array.isArray(nextForm?.availability)
+          ? nextForm.availability
+          : [],
         details:
           nextForm?.details &&
           typeof nextForm.details === "object" &&
           !Array.isArray(nextForm.details)
             ? nextForm.details
             : {},
-        telegram_refused_chat_id: normalizeChatId(nextForm?.telegram_refused_chat_id),
-        telegram_web_chat_id: normalizeChatId(nextForm?.telegram_web_chat_id),
-        telegram_chat_id: normalizeChatId(nextForm?.telegram_chat_id),
+        telegram_refused_chat_id: normalizeChatId(
+          nextForm?.telegram_refused_chat_id
+        ),
+        telegram_web_chat_id: normalizeChatId(
+          nextForm?.telegram_web_chat_id
+        ),
+        telegram_chat_id: normalizeChatId(
+          nextForm?.telegram_chat_id
+        ),
       };
-
+  
       const resp = await http.put(
         apiPath(`/admin/services/${editForm.id}`),
         payload
       );
+  
       const data = ensureJsonOrThrow(resp, "saveEdit");
-
+  
       if (!data?.ok) {
-        throw new Error(data?.message || "Не удалось сохранить услугу");
+        throw new Error(
+          data?.message || "Не удалось сохранить услугу"
+        );
       }
-
-      setEditForm(
-        createEditFormFromService({
-          ...(data?.service || nextForm),
-          telegram_refused_chat_id: nextForm.telegram_refused_chat_id,
-          telegram_web_chat_id: nextForm.telegram_web_chat_id,
-          telegram_chat_id: nextForm.telegram_chat_id,
-          provider_id: nextForm.provider_id,
-          provider_name: nextForm.provider_name,
-        })
+  
+      const savedForm = createEditFormFromService({
+        ...(data?.service || nextForm),
+        telegram_refused_chat_id:
+          nextForm.telegram_refused_chat_id,
+        telegram_web_chat_id:
+          nextForm.telegram_web_chat_id,
+        telegram_chat_id:
+          nextForm.telegram_chat_id,
+        provider_id: nextForm.provider_id,
+        provider_name: nextForm.provider_name,
+      });
+  
+      setEditForm(savedForm);
+      setOriginalEditForm(savedForm);
+  
+      showToast(
+        "ok",
+        `✅ Услуга #${editForm.id} сохранена`
       );
-      setEditOpen(false);
-      showToast("ok", `✅ Услуга #${editForm.id} сохранена`);
+  
       await loadList(page);
-
+  
       if (detailsItem?.id === editForm.id) {
         await openDetails(editForm.id);
       }
+  
+      if (closeAfterSave) {
+        closePreview();
+        setEditOpen(false);
+        setEditForm(null);
+        setOriginalEditForm(null);
+      }
     } catch (e) {
       const info = extractAxiosError(e);
-      setEditError(info.msg || "Ошибка сохранения услуги");
+  
+      setEditError(
+        info.msg || "Ошибка сохранения услуги"
+      );
     } finally {
       setEditSaving(false);
+      setSaveAndCloseRequested(false);
     }
   }
 
@@ -3212,34 +3647,119 @@ const sortLabel = useMemo(() => {
 
       <Modal
         open={editOpen}
-        title={editForm ? `Редактирование услуги #${editForm.id}` : "Редактирование услуги"}
-        onClose={() => {
-          if (editSaving) return;
-          closePreview();
-          setEditOpen(false);
-        }}
-        footer={
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="text-xs text-gray-500">
-              Сохраняются общие поля услуги и весь объект <span className="font-mono">details</span>.
+        fullscreen
+        title={
+          editForm?.id
+            ? `Редактирование услуги #${editForm.id}`
+            : "Редактирование услуги"
+        }
+        subtitle={
+          editForm
+            ? [
+                categoryHumanLabel(editForm.category),
+                editForm.provider_name
+                  ? `Поставщик: ${editForm.provider_name}`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" • ")
+            : ""
+        }
+        onClose={closeEditEditor}
+        headerExtra={
+          editForm ? (
+            <div className="flex items-center gap-2">
+              {hasUnsavedEditChanges ? (
+                <span className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-800">
+                  <span className="h-2 w-2 rounded-full bg-amber-500" />
+                  Есть изменения
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                  Сохранено
+                </span>
+              )}
+      
+              <span
+                className={classNames(
+                  "hidden rounded-full border bg-gradient-to-r px-3 py-1.5 text-xs font-bold md:inline-flex",
+                  categoryAccent(editForm.category)
+                )}
+              >
+                {categoryHumanLabel(editForm.category)}
+              </span>
             </div>
-            <div className="flex flex-wrap gap-2">
+          ) : null
+        }
+        footer={
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="min-w-0">
+              {!editValidation.valid ? (
+                <div className="text-sm font-bold text-red-700">
+                  ⚠ {editValidation.summary.length}{" "}
+                  {editValidation.summary.length === 1
+                    ? "ошибка мешает"
+                    : "ошибки мешают"}{" "}
+                  сохранить
+                </div>
+              ) : hasUnsavedEditChanges ? (
+                <div className="text-sm font-bold text-amber-700">
+                  ● Есть несохранённые изменения
+                </div>
+              ) : (
+                <div className="text-sm font-bold text-emerald-700">
+                  ✓ Все изменения сохранены
+                </div>
+              )}
+        
+              <div className="mt-1 text-xs text-slate-500">
+                Изменения применяются к услуге, карточке сайта и данным Telegram.
+              </div>
+            </div>
+        
+            <div className="flex flex-wrap items-center gap-2">
               <button
-                onClick={() => {
-                  closePreview();
-                  setEditOpen(false);
-                }}
+                type="button"
+                onClick={cancelEditEditor}
                 disabled={editSaving}
-                className="rounded-xl border border-gray-200 px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-60"
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Отмена
+                Закрыть
               </button>
+        
               <button
-                onClick={saveEdit}
-                disabled={editLoading || editSaving || !editForm}
-                className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-2 text-sm text-violet-700 hover:bg-violet-100 disabled:opacity-60"
+                type="button"
+                onClick={() => saveEdit({ closeAfterSave: false })}
+                disabled={
+                  editLoading ||
+                  editSaving ||
+                  !editForm ||
+                  !editValidation.valid ||
+                  !hasUnsavedEditChanges
+                }
+                className="rounded-xl border border-violet-200 bg-violet-50 px-5 py-2.5 text-sm font-bold text-violet-700 transition hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {editSaving ? "Сохранение…" : "Сохранить изменения"}
+                {editSaving && !saveAndCloseRequested
+                  ? "Сохраняю…"
+                  : "Сохранить"}
+              </button>
+        
+              <button
+                type="button"
+                onClick={() => saveEdit({ closeAfterSave: true })}
+                disabled={
+                  editLoading ||
+                  editSaving ||
+                  !editForm ||
+                  !editValidation.valid ||
+                  !hasUnsavedEditChanges
+                }
+                className="rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {editSaving && saveAndCloseRequested
+                  ? "Сохраняю…"
+                  : "Сохранить и закрыть"}
               </button>
             </div>
           </div>
@@ -3247,8 +3767,8 @@ const sortLabel = useMemo(() => {
       >
         {editLoading ? (
           <div className="text-sm text-gray-600">Загрузка…</div>
-        ) : editForm ? (
-          <div className="space-y-5">
+      ) : editForm ? (
+        <div className="mx-auto max-w-[1600px] space-y-5">
             {editError ? (
               <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
                 {editError}
@@ -3266,6 +3786,58 @@ const sortLabel = useMemo(() => {
               </div>
             ) : null}
 
+            <div className="sticky top-0 z-20 -mx-5 -mt-5 border-b border-slate-200 bg-slate-50/95 px-5 py-3 backdrop-blur">
+              <div className="mx-auto flex max-w-[1600px] gap-2 overflow-x-auto">
+                {editorTabs.map((tab) => {
+                  const active = editTab === tab.id;
+                  const hasErrors = Number(tab.errorCount || 0) > 0;
+
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setEditTab(tab.id)}
+                      className={classNames(
+                        "inline-flex shrink-0 items-center gap-2 rounded-xl border px-3.5 py-2 text-sm font-bold transition",
+                        active
+                          ? "border-slate-950 bg-slate-950 text-white shadow-sm"
+                          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-950"
+                      )}
+                    >
+                      <span>{tab.icon}</span>
+                      <span>{tab.label}</span>
+
+                      {hasErrors ? (
+                        <span
+                          className={classNames(
+                            "inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-black",
+                            active
+                              ? "bg-red-500 text-white"
+                              : "bg-red-100 text-red-700"
+                          )}
+                        >
+                          {tab.errorCount}
+                        </span>
+                      ) : Number(tab.count || 0) > 0 ? (
+                        <span
+                          className={classNames(
+                            "inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-black",
+                            active
+                              ? "bg-white/20 text-white"
+                              : "bg-slate-100 text-slate-600"
+                          )}
+                        >
+                          {tab.count}
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {editTab === "main" ? (
+              <>
             <div className="rounded-2xl border border-gray-200 p-4">
               <div className="text-sm font-semibold text-gray-900">Общие поля услуги</div>
               <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -3319,7 +3891,11 @@ const sortLabel = useMemo(() => {
                 </div>
               </div>
             </div>
+              </>
+            ) : null}
 
+            {editTab === "provider" ? (
+              <>
             <div className="rounded-2xl border border-gray-200 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="text-sm font-semibold text-gray-900">TG / chat id провайдера</div>
@@ -3369,10 +3945,18 @@ const sortLabel = useMemo(() => {
                 </div>
               </div>
             </div>
+              </>
+            ) : null}
 
+            {editTab === "details" ? (
+              <>
             <div className="rounded-2xl border border-gray-200 p-4">
-              <div className="flex items-center justify-between gap-3"><div className="text-sm font-semibold text-gray-900">Быстрое редактирование details по категории</div>{hotelQuery ? <div className="text-xs text-gray-500">Поиск отеля: {hotelQuery}</div> : null}</div>
-              <div className="mt-4">{renderDetailFields(editForm, setEditForm, {
+              {hotelQuery ? (
+                <div className="mb-3 text-right text-xs text-gray-500">
+                  Поиск отеля: {hotelQuery}
+                </div>
+              ) : null}
+              <div>{renderDetailFields(editForm, setEditForm, {
                 hotelOptions,
                 hotelLoading,
                 onHotelSearch: searchHotels,
@@ -3446,15 +4030,32 @@ const sortLabel = useMemo(() => {
                 </button>
               </div>
             </div>
+              </>
+            ) : null}
 
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+            {editTab === "images" ? (
+              <>
               <div className="rounded-2xl border border-gray-200 p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <div className="text-sm font-semibold text-gray-900">Изображения услуги <span className="text-xs font-normal text-gray-500">({Array.isArray(editForm.images) ? editForm.images.length : 0})</span></div>
-                    <div className={classNames("mt-1 text-xs", editValidation.raw?.images ? "text-red-600" : "text-gray-500")}>
-                      {editValidation.raw?.images || "Можно удалять текущие изображения, добавлять новые файлы или вставлять ссылку/data URL."}
-                    </div>
+                  <div className="text-sm font-semibold text-gray-900">
+                    Фотографии карточки{" "}
+                    <span className="text-xs font-normal text-gray-500">
+                      ({Array.isArray(editForm.images) ? editForm.images.length : 0})
+                    </span>
+                  </div>
+                  
+                  <div
+                    className={classNames(
+                      "mt-1 text-xs",
+                      editValidation.raw?.images
+                        ? "text-red-600"
+                        : "text-gray-500"
+                    )}
+                  >
+                    {editValidation.raw?.images ||
+                      "Показываются клиентам на сайте и в Telegram. Первое изображение является главным."}
+                  </div>
                   </div>
                   <div className="text-xs text-gray-500">Максимум 20 изображений</div>
                 </div>
@@ -3494,31 +4095,73 @@ const sortLabel = useMemo(() => {
                 {Array.isArray(editForm.images) && editForm.images.length ? (
                   <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
                     {editForm.images.map((src, idx) => (
-                      <div key={`${idx}-${String(src).slice(0, 30)}`} className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
-                        <div className="aspect-[4/3] bg-gray-100">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              openPreview(editForm.images, idx, "Изображения услуги");
-                            }}
-                            className="block h-full w-full cursor-zoom-in"
-                          >
-                            <img src={src} alt={`service-${idx + 1}`} className="h-full w-full object-cover" />
-                          </button>
-                        </div>
-                        <div className="border-t border-gray-100 p-2">
-                          <div className="truncate text-[11px] text-gray-500">
-                            {String(src).startsWith("data:image/") ? `data:image #${idx + 1}` : short(String(src), 48)}
+                        <div
+                          key={`${idx}-${String(src).slice(0, 30)}`}
+                          className={classNames(
+                            "overflow-hidden rounded-2xl border bg-white transition",
+                            idx === 0
+                              ? "border-emerald-300 ring-2 ring-emerald-100"
+                              : "border-gray-200"
+                          )}
+                        >
+                          <div className="relative aspect-[4/3] bg-gray-100">
+                            {idx === 0 ? (
+                              <div className="absolute left-2 top-2 z-10 rounded-full bg-emerald-600 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white shadow">
+                                Главное фото
+                              </div>
+                            ) : null}
+                        
+                            <button
+                              type="button"
+                              onClick={() => {
+                                openPreview(
+                                  editForm.images,
+                                  idx,
+                                  "Фотографии карточки"
+                                );
+                              }}
+                              className="block h-full w-full cursor-zoom-in"
+                            >
+                              <img
+                                src={src}
+                                alt={`service-${idx + 1}`}
+                                className="h-full w-full object-cover"
+                              />
+                            </button>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveImage(idx)}
-                            className="mt-2 w-full rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 hover:bg-red-100"
-                          >
-                            Удалить
-                          </button>
+                        
+                          <div className="border-t border-gray-100 p-2">
+                            <div className="truncate text-[11px] text-gray-500">
+                              {String(src).startsWith("data:image/")
+                                ? `data:image #${idx + 1}`
+                                : short(String(src), 48)}
+                            </div>
+                        
+                            <div className="mt-2 grid grid-cols-1 gap-2">
+                              {idx !== 0 ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleMakePrimaryImage(idx)}
+                                  className="w-full rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100"
+                                >
+                                  Сделать главным
+                                </button>
+                              ) : (
+                                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-center text-sm font-medium text-emerald-700">
+                                  Используется в карточке
+                                </div>
+                              )}
+                        
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveImage(idx)}
+                                className="w-full rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 hover:bg-red-100"
+                              >
+                                Удалить
+                              </button>
+                            </div>
+                          </div>
                         </div>
-                      </div>
                     ))}
                   </div>
                 ) : (
@@ -3542,31 +4185,26 @@ const sortLabel = useMemo(() => {
                   />
                 </div>
               </div>
+              </>
+            ) : null}
 
-              <div className="rounded-2xl border border-gray-200 p-4">
-                <div className="text-sm font-semibold text-gray-900">availability (JSON array)</div>
-                <div className={classNames("mt-3 text-xs", editValidation.raw?.availability ? "text-red-600" : "text-gray-500")}>
-                  {editValidation.raw?.availability || "Пока редактируется как сырой JSON-массив."}
-                </div>
-                <textarea
-                  rows={10}
-                  className={classNames(
-                    "mt-3 w-full rounded-xl px-3 py-2 font-mono text-xs outline-none focus:ring-2",
-                    editValidation.raw?.availability
-                      ? "border border-red-300 bg-red-50/40 focus:ring-red-100"
-                      : "border border-gray-200 bg-gray-50 focus:ring-gray-200"
-                  )}
-                  value={editForm.rawAvailabilityText || "[]"}
-                  onChange={(e) => handleRawAvailabilityChange(e.target.value)}
-                />
-              </div>
-            </div>
-
+            {editTab === "proof" ? (
+              <>
             <div className="rounded-2xl border border-gray-200 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-sm font-semibold text-gray-900">Изображения пруфа <span className="text-xs font-normal text-gray-500">({Array.isArray(editForm?.details?.proofImages) ? editForm.details.proofImages.length : 0})</span></div>
-                  <div className="mt-1 text-xs text-gray-500">Можно добавлять и удалять proofImages прямо из модалки.</div>
+                <div className="text-sm font-semibold text-gray-900">
+                  Подтверждение услуги{" "}
+                  <span className="text-xs font-normal text-gray-500">
+                    ({Array.isArray(editForm?.details?.proofImages)
+                      ? editForm.details.proofImages.length
+                      : 0})
+                  </span>
+                </div>
+                
+                <div className="mt-1 text-xs text-gray-500">
+                  Эти изображения используются для проверки услуги и не показываются клиентам в публичной карточке.
+                </div>
                 </div>
                 <div className="text-xs text-gray-500">Максимум 20 изображений</div>
               </div>
@@ -3639,7 +4277,29 @@ const sortLabel = useMemo(() => {
                 </div>
               )}
             </div>
+              </>
+            ) : null}
 
+            {editTab === "technical" ? (
+              <>
+              <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+              <div className="rounded-2xl border border-gray-200 p-4">
+                <div className="text-sm font-semibold text-gray-900">availability (JSON array)</div>
+                <div className={classNames("mt-3 text-xs", editValidation.raw?.availability ? "text-red-600" : "text-gray-500")}>
+                  {editValidation.raw?.availability || "Пока редактируется как сырой JSON-массив."}
+                </div>
+                <textarea
+                  rows={10}
+                  className={classNames(
+                    "mt-3 w-full rounded-xl px-3 py-2 font-mono text-xs outline-none focus:ring-2",
+                    editValidation.raw?.availability
+                      ? "border border-red-300 bg-red-50/40 focus:ring-red-100"
+                      : "border border-gray-200 bg-gray-50 focus:ring-gray-200"
+                  )}
+                  value={editForm.rawAvailabilityText || "[]"}
+                  onChange={(e) => handleRawAvailabilityChange(e.target.value)}
+                />
+              </div>
             <div className="rounded-2xl border border-gray-200 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="text-sm font-semibold text-gray-900">Raw details JSON</div>
@@ -3667,7 +4327,9 @@ const sortLabel = useMemo(() => {
                 onChange={(e) => handleRawDetailsChange(e.target.value)}
               />
             </div>
-          </div>
+              </div>
+              </>
+            ) : null}          </div>
         ) : (
           <div className="text-sm text-gray-600">Нет данных для редактирования.</div>
         )}

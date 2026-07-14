@@ -385,7 +385,13 @@ function getFirstImageUrl(svc) {
   }
 
   if (v.startsWith("data:image")) {
-    return `${TG_IMAGE_BASE}/api/telegram/service-image/${svc.id}`;
+    const imageVersion = svc?.updated_at
+      ? new Date(svc.updated_at).getTime()
+      : svc?.created_at
+        ? new Date(svc.created_at).getTime()
+        : Date.now();
+
+    return `${TG_IMAGE_BASE}/api/telegram/service-image/${svc.id}?v=${imageVersion}`;
   }
 
   if (v.startsWith("http://") || v.startsWith("https://")) return encodeURI(v);
@@ -1493,16 +1499,52 @@ const priceKind =
 
     parts.push(`🔥 <b>${escapeHtml(titlePretty || "Отказной тур")}</b> <code>#R${serviceId}</code>`);
 
-    const destination = firstValue(d.directionTo, d.toCity, d.cityTo, d.resort, d.city);
-    const country2 = firstValue(d.directionCountry, d.country, d.destinationCountry);
-    const hotelName = firstValue(d.hotel, d.hotelName, hotel);
+    const departureCity = firstValue(
+      d.directionFrom,
+      d.fromCity,
+      d.cityFrom,
+      d.departureCity
+    );
+
+    const destination = firstValue(
+      d.directionTo,
+      d.toCity,
+      d.cityTo,
+      d.resort,
+      d.city
+    );
+
+    const country2 = firstValue(
+      d.directionCountry,
+      d.country,
+      d.destinationCountry
+    );
+
+    const hotelName = firstValue(
+      d.hotel,
+      d.hotelName,
+      hotel
+    );
+
     const heroTitle = firstValue(
-      destination && country2 ? `${destination}, ${country2}` : destination || country2,
+      destination && country2
+        ? `${destination}, ${country2}`
+        : destination || country2,
       route,
       titlePretty
     );
-    if (heroTitle) parts.push(`🌍 <b>${escapeHtml(heroTitle)}</b>`);
-    if (hotelName) parts.push(`🏨 <b>${escapeHtml(hotelName)}</b>`);
+
+    if (heroTitle) {
+      parts.push(`🌍 <b>${escapeHtml(heroTitle)}</b>`);
+    }
+
+    if (departureCity) {
+      parts.push(`🛫 Вылет из: <b>${escapeHtml(departureCity)}</b>`);
+    }
+
+    if (hotelName) {
+      parts.push(`🏨 <b>${escapeHtml(hotelName)}</b>`);
+    }
 
     const mainBits = [];
     if (dates) mainBits.push(`${dates}${nights ? ` • ${nights} ноч.` : ""}`);

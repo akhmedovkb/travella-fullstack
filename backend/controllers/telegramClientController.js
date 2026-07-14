@@ -756,6 +756,7 @@ async function searchClientServices(req, res) {
           s.images,
           s.expiration_at,
           s.created_at,
+          s.updated_at,
           p.name   AS provider_name,
           p.social AS provider_telegram
         FROM services s
@@ -809,8 +810,12 @@ async function searchClientServices(req, res) {
 
         const hasAny = imgs.some((x) => typeof x === "string" && x.trim());
 
+        const imageVersion = row.updated_at
+          ? new Date(row.updated_at).getTime()
+          : new Date(row.created_at).getTime();
+
         const imageUrl = hasAny
-          ? `${base}/api/telegram/service-image/${row.id}`
+          ? `${base}/api/telegram/service-image/${row.id}?v=${imageVersion}`
           : PLACEHOLDER;
 
         return {
