@@ -98,6 +98,10 @@ function normalizePublicationChannels(channels = {}) {
       publishedAt: published ? item.publishedAt || now : null,
       plannedAt: String(item.plannedAt || "").trim(),
       url: String(item.url || "").trim(),
+      messageId: item.messageId || null,
+      chatId: item.chatId || null,
+      deliveryMethod: String(item.deliveryMethod || "").trim(),
+      deliveryLog: Array.isArray(item.deliveryLog) ? item.deliveryLog : [],
     };
     return acc;
   }, {});

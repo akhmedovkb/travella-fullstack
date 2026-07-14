@@ -874,6 +874,11 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
   const [sortMode, setSortMode] = React.useState("schedule");
   const [copiedReport, setCopiedReport] = React.useState(false);
   const [copiedUrlKey, setCopiedUrlKey] = React.useState("");
+  const [selectedIds, setSelectedIds] = React.useState([]);
+  const [bulkChannel, setBulkChannel] = React.useState("telegram");
+  const [bulkDate, setBulkDate] = React.useState("");
+  const [bulkLoading, setBulkLoading] = React.useState(false);
+  const [bulkFeedback, setBulkFeedback] = React.useState("");
   const normalizedQuery = query.trim().toLowerCase();
   const filteredVideos = approvedVideos.filter((video) => {
     const publicationStatus = video.publishingPackage?.publicationStatus || {};
@@ -901,6 +906,9 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
     const bSchedule = getPublicationScheduleTime(b) || Number.MAX_SAFE_INTEGER;
     return aSchedule - bSchedule || new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0);
   });
+  const visibleIds = filteredVideos.map((video) => video.id);
+  const selectedVideos = filteredVideos.filter((video) => selectedIds.includes(video.id));
+  const allVisibleSelected = Boolean(filteredVideos.length) && visibleIds.every((id) => selectedIds.includes(id));
 
   function updateChannel(video, channelId, patch) {
     const current = video.publishingPackage?.publicationStatus?.channels || {};
@@ -912,6 +920,42 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
       },
     };
     onSavePublicationStatus?.(video, nextChannels);
+  }
+
+  function toggleSelected(videoId) {
+    setSelectedIds((current) => (current.includes(videoId) ? current.filter((id) => id !== videoId) : [...current, videoId]));
+  }
+
+  function toggleVisibleSelection() {
+    setSelectedIds((current) => {
+      if (allVisibleSelected) return current.filter((id) => !visibleIds.includes(id));
+      return Array.from(new Set([...current, ...visibleIds]));
+    });
+  }
+
+  async function applyBulkPatch(patch) {
+    if (!selectedVideos.length || bulkLoading) return;
+    setBulkLoading(true);
+    setBulkFeedback("");
+    try {
+      const targetChannels = bulkChannel === "all" ? PUBLICATION_CHANNELS.map((channel) => channel.id) : [bulkChannel];
+      for (const video of selectedVideos) {
+        const current = video.publishingPackage?.publicationStatus?.channels || {};
+        const nextChannels = { ...current };
+        targetChannels.forEach((channelId) => {
+          nextChannels[channelId] = {
+            ...(current?.[channelId] || {}),
+            ...patch(current?.[channelId] || {}),
+          };
+        });
+        await onSavePublicationStatus?.(video, nextChannels);
+      }
+      setBulkFeedback(`Обновлено: ${selectedVideos.length}`);
+    } catch (e) {
+      setBulkFeedback(e?.message || "Не удалось применить массовое действие");
+    } finally {
+      setBulkLoading(false);
+    }
   }
 
   async function copyQueueReport() {
@@ -1028,6 +1072,67 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
             ))}
           </div>
         </div>
+        <div className="mt-4 rounded-3xl bg-slate-50 p-3 ring-1 ring-slate-100">
+          <div className="flex flex-col gap-3 2xl:flex-row 2xl:items-center 2xl:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={toggleVisibleSelection}
+                disabled={!filteredVideos.length || bulkLoading}
+                className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-40"
+              >
+                {allVisibleSelected ? "Снять выбор" : "Выбрать экран"}
+              </button>
+              <Pill tone={selectedVideos.length ? "blue" : "slate"}>Выбрано: {selectedVideos.length}</Pill>
+              {bulkFeedback ? <Pill tone={bulkFeedback.startsWith("Обновлено") ? "green" : "red"}>{bulkFeedback}</Pill> : null}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={bulkChannel}
+                onChange={(e) => setBulkChannel(e.target.value)}
+                disabled={bulkLoading}
+                className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 outline-none focus:border-blue-300"
+              >
+                <option value="telegram">Telegram</option>
+                <option value="instagram">Instagram</option>
+                <option value="stories">Stories</option>
+                <option value="reels">Reels</option>
+                <option value="all">Все каналы</option>
+              </select>
+              <input
+                type="datetime-local"
+                value={bulkDate}
+                onChange={(e) => setBulkDate(e.target.value)}
+                disabled={bulkLoading}
+                className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-300"
+              />
+              <button
+                type="button"
+                onClick={() => applyBulkPatch(() => ({ plannedAt: fromDateTimeLocal(bulkDate) }))}
+                disabled={!selectedVideos.length || !bulkDate || bulkLoading}
+                className="rounded-2xl bg-blue-700 px-3 py-2 text-xs font-black text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Назначить план
+              </button>
+              <button
+                type="button"
+                onClick={() => applyBulkPatch((item) => ({ published: true, publishedAt: item.publishedAt || new Date().toISOString() }))}
+                disabled={!selectedVideos.length || bulkLoading}
+                className="rounded-2xl bg-emerald-700 px-3 py-2 text-xs font-black text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Отметить опубликовано
+              </button>
+              <button
+                type="button"
+                onClick={() => applyBulkPatch(() => ({ published: false, publishedAt: null }))}
+                disabled={!selectedVideos.length || bulkLoading}
+                className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Сбросить
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="space-y-4 bg-slate-50/60 p-4">
@@ -1044,7 +1149,16 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
                 <div>
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <div className="text-xs font-black uppercase tracking-wide text-slate-500">{video.code || "AI"}</div>
+                      <label className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-slate-500">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(video.id)}
+                          onChange={() => toggleSelected(video.id)}
+                          disabled={bulkLoading}
+                          className="h-4 w-4 accent-blue-700"
+                        />
+                        <span>{video.code || "AI"}</span>
+                      </label>
                       <h3 className="mt-1 text-lg font-black text-slate-950">{video.title}</h3>
                     </div>
                     <div className="flex flex-col items-end gap-2 text-right">
