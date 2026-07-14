@@ -154,4 +154,48 @@ async function findRefusedServiceByCode(code) {
   return { found: true, service: normalizeService(row) };
 }
 
-module.exports = { findRefusedServiceByCode, normalizeService, normalizeCode };
+async function listRecentRefusedServices({ limit = 8 } = {}) {
+  const safeLimit = Math.max(1, Math.min(Number(limit) || 8, 20));
+  const q = await db.query(
+    `
+      SELECT
+        s.id,
+        s.category,
+        s.status,
+        s.title,
+        s.provider_id,
+        s.details,
+        s.price,
+        s.currency,
+        s.created_at,
+        s.updated_at,
+        s.deleted_at,
+        p.id AS p_id,
+        p.name AS provider_name,
+        p.phone AS provider_phone,
+        p.social AS provider_social
+      FROM services s
+      LEFT JOIN providers p ON p.id = s.provider_id
+      WHERE ((s.category LIKE 'refused_%') OR s.category = 'author_tour')
+        AND s.deleted_at IS NULL
+      ORDER BY s.id DESC
+      LIMIT $1
+    `,
+    [safeLimit]
+  );
+  return (q.rows || []).map(normalizeService);
+}
+
+async function findLatestRefusedService() {
+  const services = await listRecentRefusedServices({ limit: 1 });
+  const service = services[0] || null;
+  return service ? { found: true, service } : { found: false, reason: "NO_REFUSED_SERVICES" };
+}
+
+module.exports = {
+  findRefusedServiceByCode,
+  findLatestRefusedService,
+  listRecentRefusedServices,
+  normalizeService,
+  normalizeCode,
+};

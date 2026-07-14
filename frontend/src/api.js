@@ -43,6 +43,19 @@ function pickTokenFromObject(obj) {
   );
 }
 
+function formatApiError(value) {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (value.message && typeof value.message === "string") return value.message;
+  if (value.error && typeof value.error === "string") return value.error;
+  if (value.code && typeof value.code === "string") return value.code;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
 function getTokenByRole(role) {
   const r = String(role || "").toLowerCase();
 
@@ -52,7 +65,9 @@ function getTokenByRole(role) {
     // иначе после входа в разные роли браузер может отправить неверный JWT.
     client: ["clientToken", "token"],
     provider: ["providerToken", "token", "adminToken"],
-    admin: ["adminToken", "token"],
+    // Админ в Travella обычно тот же provider JWT с is_admin/roles.
+    // Старый adminToken в браузере часто остаётся от другой среды и даёт Invalid token.
+    admin: ["token", "providerToken", "adminToken"],
   };
 
   const directKeysAll = [
@@ -111,12 +126,11 @@ async function handle(res) {
     data = null;
   }
   if (!res.ok) {
-    const err = new Error(
-      (data && (data.error || data.message)) || res.statusText || `HTTP ${res.status}`
-    );
+    const message = formatApiError(data?.message || data?.error || data) || res.statusText || `HTTP ${res.status}`;
+    const err = new Error(message);
     err.status = res.status;
     err.data = data || {};
-    if (data && (data.error || data.code)) err.code = data.error || data.code;
+    if (data && (data.code || data.error)) err.code = formatApiError(data.code || data.error);
     throw err;
   }
   return data === null ? {} : data;
@@ -203,6 +217,16 @@ export async function apiPut(path, body, withAuthOrRole = true) {
   return handle(res);
 }
 
+export async function apiPatch(path, body, withAuthOrRole = true) {
+  const res = await fetch(buildUrl(path), {
+    method: "PATCH",
+    headers: buildHeaders(withAuthOrRole, path),
+    body: safeJsonStringify(body),
+    credentials: "include",
+  });
+  return handle(res);
+}
+
 export async function apiDelete(path, bodyOrRole, withAuthOrRole = true) {
   // Поддержка:
   // apiDelete(url, {..})
@@ -230,4 +254,3 @@ export async function apiDelete(path, bodyOrRole, withAuthOrRole = true) {
   });
   return handle(res);
 }
-

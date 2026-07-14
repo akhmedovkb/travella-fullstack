@@ -13,6 +13,7 @@ const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
 const { startJobsScheduler } = require("./jobs/scheduler");
+const { startAiHeygenPoller } = require("./jobs/aiHeygenPollerJob");
 const tbTemplatesRoutes = require("./routes/TBtemplatesRoutes");
 const { getTelegramHealth } = require("./utils/telegram");
 const path = require("path");
@@ -55,6 +56,8 @@ const providerSupportRoutes = require("./routes/providerSupportRoutes");
 const activityEventsRoutes = require("./routes/activityEventsRoutes");
 const socialRoutes = require("./routes/socialRoutes");
 const adminAiPlatformRoutes = require("./routes/adminAiPlatformRoutes");
+const heygenWebhookRoutes = require("./routes/heygenWebhookRoutes");
+const { initAiJobStore } = require("./ai/core/aiJobStore");
 const { activityAuditMiddleware } = require("./utils/activityLogger");
 
 dotenv.config();
@@ -72,6 +75,8 @@ getTelegramHealth({ probe: false })
     );
   })
   .catch((e) => console.warn("[tg-health] failed:", e?.message || e));
+
+initAiJobStore().catch((e) => console.warn("[ai-jobs] init failed:", e?.message || e));
 
 /** ===================== CORS (унифицированный) ===================== */
 /**
@@ -232,6 +237,7 @@ const adminResetRoutes = require("./routes/adminResetRoutes");
 app.use("/api/admin", adminResetRoutes);
 
 // Travella AI Operating System
+app.use("/api/ai", heygenWebhookRoutes);
 app.use("/api/admin/ai-platform", adminAiPlatformRoutes);
 
 // Секции маркетплейса
@@ -878,6 +884,14 @@ if (
 }
 
 /** ===================== /Ask Actual Reminder Scheduler ===================== */
+
+/** ===================== Travella AI HeyGen Poller ===================== */
+try {
+  startAiHeygenPoller();
+} catch (e) {
+  console.warn("[ai-heygen-poller] start failed:", e?.message || e);
+}
+/** ===================== /Travella AI HeyGen Poller ===================== */
 
 const TG_DISABLED =
   process.env.DISABLE_TG_BOT === "1" || process.env.NODE_ENV === "test";

@@ -1,12 +1,13 @@
 // frontend/src/pages/admin/AdminAiPlatform.jsx
 
 import React from "react";
-import { apiGet, apiPost } from "../../api";
+import { apiGet, apiPatch, apiPost } from "../../api";
 
 const EMPLOYEES = [
   { id: "video_operator", icon: "🎬", name: "Video Operator", subtitle: "AI-видео для отказных туров", live: true },
   { id: "sales_manager", icon: "💼", name: "Sales Manager", subtitle: "Продажи и быстрые заявки", live: false },
-  { id: "content_manager", icon: "📝", name: "Content Manager", subtitle: "Посты, captions, сторис", live: false },
+  { id: "content_manager", icon: "📝", name: "Content Manager", subtitle: "Посты, captions, сторис", live: true },
+  { id: "publishing_manager", icon: "🗓️", name: "Publishing Manager", subtitle: "Очередь и статусы публикаций", live: true },
   { id: "support_manager", icon: "🎧", name: "Support Manager", subtitle: "Ответы клиентам и поставщикам", live: false },
   { id: "hotel_auditor", icon: "🏨", name: "Hotel Auditor", subtitle: "Инспекции отелей", live: false },
   { id: "finance_auditor", icon: "📊", name: "Finance Auditor", subtitle: "Балансы и сверки", live: false },
@@ -31,6 +32,21 @@ function Pill({ children, tone = "slate" }) {
     slate: "bg-slate-100 text-slate-700 ring-slate-200",
   };
   return <span className={cn("inline-flex rounded-full px-2.5 py-1 text-xs font-black ring-1", map[tone] || map.slate)}>{children}</span>;
+}
+
+function getJobStatusMeta(job = {}) {
+  const status = String(job.status || "").toLowerCase();
+  const hasScript = Boolean(job.output?.script);
+  const hasHeygen = Boolean(job.output?.heygen?.videoId);
+  const hasVideo = Boolean(job.output?.heygen?.videoUrl);
+
+  if (status === "failed") return { label: "Ошибка", tone: "red" };
+  if (status === "video_failed") return { label: "Видео: ошибка", tone: "red" };
+  if (status === "video_ready" || hasVideo) return { label: "Видео готово", tone: "green" };
+  if (status === "video_submitted" || hasHeygen) return { label: "HeyGen запущен", tone: "blue" };
+  if (status === "script_ready" || (status === "completed" && hasScript)) return { label: "Сценарий готов", tone: "blue" };
+  if (["created", "queued", "running", "processing"].includes(status)) return { label: "В работе", tone: "yellow" };
+  return { label: job.status || "—", tone: "slate" };
 }
 
 function EmployeeTabs({ selected, onSelect }) {
@@ -111,8 +127,58 @@ function ServicePreview({ service }) {
   );
 }
 
-function Message({ msg }) {
+function ScriptReview({ review }) {
+  if (!review) return null;
+  const checks = Array.isArray(review.checks) ? review.checks : [];
+  return (
+    <div className="mt-3 rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="text-xs font-black uppercase tracking-wide text-blue-700">Prompt quality check</div>
+          <div className="mt-1 text-sm font-black text-slate-950">
+            {review.status === "needs_review" ? "Нужна внимательная проверка" : "Готово к ручной проверке"}
+          </div>
+        </div>
+        <Pill tone={review.status === "needs_review" ? "yellow" : "blue"}>Перед HeyGen</Pill>
+      </div>
+      {checks.length ? (
+        <div className="mt-3 space-y-2">
+          {checks.map((check) => (
+            <div key={check.id || check.label} className="flex items-start gap-2 rounded-2xl bg-white px-3 py-2 text-xs font-bold text-slate-700 ring-1 ring-blue-100">
+              <span className={check.passed ? "text-emerald-600" : "text-amber-600"}>{check.passed ? "✓" : "!"}</span>
+              <span>{check.label}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {review.missingFields?.length ? (
+        <div className="mt-3 rounded-2xl bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800 ring-1 ring-amber-100">
+          Не хватает данных: {review.missingFields.join(", ")}. Сценарий не выдумывает эти поля.
+        </div>
+      ) : null}
+      <div className="mt-3 text-xs font-bold text-slate-500">{review.approvalGate || "HeyGen запускается только после ручного подтверждения сценария."}</div>
+    </div>
+  );
+}
+
+function findHeygenVideoIdFromEvents(events = []) {
+  for (const ev of [...events].reverse()) {
+    const fromMeta = ev?.meta?.videoId || ev?.meta?.video_id || "";
+    if (fromMeta) return String(fromMeta);
+    const match = String(ev?.message || "").match(/Video ID:\s*([a-zA-Z0-9_-]+)/i);
+    if (match?.[1]) return match[1];
+  }
+  return "";
+}
+
+function Message({ msg, onStartHeygen, onRefreshHeygen, canStartHeygen, heygenLoading, refreshLoading }) {
   const user = msg.role === "user";
+  const inferredVideoId = findHeygenVideoIdFromEvents(msg.events || []);
+  const heygen = msg.output?.heygen || (inferredVideoId ? { provider: "heygen", status: "submitted", videoId: inferredVideoId } : null);
+  const artifact = heygen?.artifact || null;
+  const jobStatus = String(msg.job?.status || "").toLowerCase();
+  const canShowHeygenAction = !user && msg.job?.id && msg.output?.script && !heygen?.videoId && !["video_submitted", "video_ready", "video_failed"].includes(jobStatus);
+  const canShowRefreshAction = !user && msg.job?.id && heygen?.videoId && !heygen?.videoUrl;
   return (
     <div className={cn("flex", user ? "justify-end" : "justify-start")}>
       <div className={cn("max-w-[92%] rounded-[1.6rem] px-5 py-4 shadow-sm", user ? "bg-slate-950 text-white" : "border border-slate-200 bg-white text-slate-900")}>
@@ -122,6 +188,63 @@ function Message({ msg }) {
         {msg.events?.length ? <div className="mt-4 space-y-2">{msg.events.map((ev, i) => <ToolEvent key={`${ev.at || i}_${i}`} ev={ev} />)}</div> : null}
         {msg.output?.hook ? <div className="mt-4 rounded-2xl bg-amber-50 p-4 ring-1 ring-amber-100"><div className="text-xs font-black uppercase tracking-wide text-amber-700">Хук</div><div className="mt-2 text-sm font-black leading-6 text-slate-950">{msg.output.hook}</div></div> : null}
         {msg.output?.script ? <div className="mt-3 rounded-2xl bg-slate-950 p-4 text-white"><div className="text-xs font-black uppercase tracking-wide text-slate-300">Сценарий для AI-аватара</div><div className="mt-3 whitespace-pre-wrap text-sm font-semibold leading-7 text-slate-100">{msg.output.script}</div></div> : null}
+        <ScriptReview review={msg.output?.scriptReview} />
+        {heygen ? (
+          <div className="mt-3 rounded-2xl bg-emerald-50 p-4 ring-1 ring-emerald-100">
+            <div className="text-xs font-black uppercase tracking-wide text-emerald-700">HeyGen</div>
+            <div className="mt-2 text-sm font-black leading-6 text-slate-950">Статус: {heygen.status || "submitted"}</div>
+            {heygen.videoId ? <div className="mt-1 text-xs font-bold text-slate-500">Video ID: {heygen.videoId}</div> : null}
+            {heygen.videoUrl ? (
+              <a
+                href={heygen.videoUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-3 inline-flex rounded-2xl bg-emerald-700 px-4 py-2 text-xs font-black text-white hover:bg-emerald-800"
+              >
+                Открыть видео
+              </a>
+            ) : null}
+            {artifact ? (
+              <div className={cn("mt-3 rounded-2xl p-3 ring-1", artifact.url ? "bg-white text-slate-700 ring-emerald-100" : "bg-amber-50 text-amber-800 ring-amber-100")}>
+                <div className="text-xs font-black uppercase tracking-wide">{artifact.url ? "Travella Media" : "Travella Media не сохранено"}</div>
+                {artifact.url ? (
+                  <a href={artifact.url} target="_blank" rel="noreferrer" className="mt-2 inline-flex rounded-2xl bg-slate-950 px-4 py-2 text-xs font-black text-white hover:bg-slate-800">
+                    Открыть сохранённый MP4
+                  </a>
+                ) : (
+                  <div className="mt-1 text-xs font-bold">{artifact.error || "media_storage_not_configured"}</div>
+                )}
+              </div>
+            ) : null}
+            {heygen.error ? <div className="mt-2 text-sm font-bold text-rose-700">{heygen.error}</div> : null}
+          </div>
+        ) : null}
+        {canShowRefreshAction ? (
+          <div className="mt-3 flex flex-col gap-2 rounded-2xl border border-emerald-100 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-xs font-bold text-slate-500">Видео отправлено в HeyGen. Можно проверить готовность.</div>
+            <button
+              type="button"
+              onClick={() => onRefreshHeygen?.(msg.job)}
+              disabled={refreshLoading === msg.job.id}
+              className="rounded-2xl bg-emerald-700 px-4 py-2 text-xs font-black text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {refreshLoading === msg.job.id ? "Обновляю..." : "Обновить статус"}
+            </button>
+          </div>
+        ) : null}
+        {canShowHeygenAction ? (
+          <div className="mt-4 flex flex-col gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-xs font-bold text-slate-500">Проверь сценарий выше. Только эта кнопка отправляет текст в HeyGen.</div>
+            <button
+              type="button"
+              onClick={() => onStartHeygen?.(msg.job)}
+              disabled={!canStartHeygen || heygenLoading === msg.job.id}
+              className="rounded-2xl bg-slate-950 px-4 py-2 text-xs font-black text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {canStartHeygen ? heygenLoading === msg.job.id ? "Отправляю..." : "Утвердить и отправить в HeyGen" : "HeyGen не настроен"}
+            </button>
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -130,6 +253,7 @@ function Message({ msg }) {
 function Inspector({ task }) {
   const service = task?.output?.service || null;
   const ctx = service?.videoContext || {};
+  const statusMeta = getJobStatusMeta(task || {});
   return (
     <aside className="space-y-4">
       <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -138,7 +262,7 @@ function Inspector({ task }) {
         {!task ? <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm font-semibold text-slate-500">Пока нет активной задачи. Напиши R857, “Создай видео R857” или “R857 Instagram”.</div> : null}
         {task ? <div className="mt-4 space-y-3 text-sm font-semibold text-slate-600">
           <div className="rounded-2xl bg-slate-50 p-4"><div className="text-slate-400">Задача</div><b className="text-slate-950">{task.command}</b></div>
-          <div className="flex justify-between rounded-2xl bg-slate-50 p-4"><span>Статус</span><b className="text-slate-950">{task.status}</b></div>
+          <div className="flex justify-between rounded-2xl bg-slate-50 p-4"><span>Статус</span><b className="text-slate-950">{statusMeta.label}</b></div>
           <div className="flex justify-between rounded-2xl bg-slate-50 p-4"><span>Источник</span><b className="text-slate-950">{service ? "Travella DB" : "—"}</b></div>
           <div className="flex justify-between rounded-2xl bg-slate-50 p-4"><span>Код</span><b className="text-slate-950">{ctx.code || "—"}</b></div>
           <div className="rounded-2xl bg-slate-50 p-4"><div className="text-slate-400">Объект</div><b className="text-slate-950">{ctx.title || "—"}</b></div>
@@ -149,12 +273,620 @@ function Inspector({ task }) {
   );
 }
 
-function JobList({ jobs }) {
+function ContentInspector({ videos }) {
+  const approvedCount = videos.filter((video) => video.publishingPackage?.status === "approved").length;
+  const publishedCount = videos.filter((video) => video.publishingPackage?.publicationStatus?.status === "published_all").length;
+  return (
+    <aside className="space-y-4">
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="text-xs font-black uppercase tracking-wide text-slate-500">Inspector</div>
+        <h3 className="mt-1 text-xl font-black text-slate-950">Контекст публикаций</h3>
+        <div className="mt-4 space-y-3 text-sm font-semibold text-slate-600">
+          <div className="flex justify-between rounded-2xl bg-slate-50 p-4"><span>Готовых видео</span><b className="text-slate-950">{videos.length}</b></div>
+          <div className="flex justify-between rounded-2xl bg-slate-50 p-4"><span>Утверждено</span><b className="text-slate-950">{approvedCount}</b></div>
+          <div className="flex justify-between rounded-2xl bg-slate-50 p-4"><span>Опубликовано везде</span><b className="text-slate-950">{publishedCount}</b></div>
+          <div className="rounded-2xl bg-slate-50 p-4"><div className="text-slate-400">Сотрудник</div><b className="text-slate-950">Content Manager</b></div>
+          <div className="rounded-2xl bg-slate-50 p-4"><div className="text-slate-400">Задача</div><b className="text-slate-950">Подготовить тексты для ручной публикации</b></div>
+          <div className="rounded-2xl bg-slate-50 p-4"><div className="text-slate-400">Следующий этап</div><b className="text-slate-950">Проверка текста → публикация вручную</b></div>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+function PublishingInspector({ videos }) {
+  const approved = getApprovedVideos(videos);
+  const partial = approved.filter((video) => video.publishingPackage?.publicationStatus?.status === "published_partial").length;
+  const complete = approved.filter((video) => video.publishingPackage?.publicationStatus?.status === "published_all").length;
+  const waiting = Math.max(0, approved.length - partial - complete);
+  return (
+    <aside className="space-y-4">
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="text-xs font-black uppercase tracking-wide text-slate-500">Inspector</div>
+        <h3 className="mt-1 text-xl font-black text-slate-950">Publishing Manager</h3>
+        <div className="mt-4 space-y-3 text-sm font-semibold text-slate-600">
+          <div className="flex justify-between rounded-2xl bg-slate-50 p-4"><span>В очереди</span><b className="text-slate-950">{approved.length}</b></div>
+          <div className="flex justify-between rounded-2xl bg-slate-50 p-4"><span>Не опубликовано</span><b className="text-slate-950">{waiting}</b></div>
+          <div className="flex justify-between rounded-2xl bg-slate-50 p-4"><span>Частично</span><b className="text-slate-950">{partial}</b></div>
+          <div className="flex justify-between rounded-2xl bg-slate-50 p-4"><span>Везде</span><b className="text-slate-950">{complete}</b></div>
+          <div className="rounded-2xl bg-slate-50 p-4"><div className="text-slate-400">Задача</div><b className="text-slate-950">Контроль ручных публикаций</b></div>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+function JobList({ jobs, activeJobId, onOpenJob }) {
   return (
     <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-center justify-between"><h3 className="text-lg font-black text-slate-950">Последние задачи</h3><Pill>{jobs.length}</Pill></div>
       <div className="mt-4 space-y-3">
-        {jobs.length ? jobs.slice(0, 7).map((j) => <div key={j.id} className="rounded-2xl bg-slate-50 p-4"><div className="flex items-start justify-between gap-3"><div><div className="text-sm font-black text-slate-950">{j.command || j.type}</div><div className="mt-1 text-xs font-bold text-slate-500">{fmtDate(j.createdAt)}</div></div><Pill tone={j.status === "completed" ? "green" : j.status === "failed" ? "red" : "yellow"}>{j.status}</Pill></div></div>) : <div className="rounded-2xl bg-slate-50 p-4 text-sm font-semibold text-slate-500">Пока задач нет.</div>}
+        {jobs.length ? jobs.slice(0, 7).map((j) => {
+          const statusMeta = getJobStatusMeta(j);
+          return (
+            <button
+              key={j.id}
+              type="button"
+              onClick={() => onOpenJob?.(j)}
+              className={cn(
+                "w-full rounded-2xl p-4 text-left transition hover:bg-slate-100",
+                activeJobId === j.id ? "bg-blue-50 ring-1 ring-blue-100" : "bg-slate-50"
+              )}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-black text-slate-950">{j.command || j.type}</div>
+                  <div className="mt-1 text-xs font-bold text-slate-500">{fmtDate(j.createdAt)}</div>
+                </div>
+                <Pill tone={statusMeta.tone}>{statusMeta.label}</Pill>
+              </div>
+            </button>
+          );
+        }) : <div className="rounded-2xl bg-slate-50 p-4 text-sm font-semibold text-slate-500">Пока задач нет.</div>}
+      </div>
+    </div>
+  );
+}
+
+function PublishingSummary({ videos }) {
+  const approvedVideos = videos.filter((video) => video.publishingPackage?.status === "approved");
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-black text-slate-950">Готово к публикации</h3>
+        <Pill tone="green">{approvedVideos.length}</Pill>
+      </div>
+      <div className="mt-4 space-y-3">
+        {approvedVideos.length ? approvedVideos.slice(0, 5).map((video) => (
+          <div key={video.id} className="rounded-2xl bg-slate-50 p-4">
+            <div className="text-sm font-black text-slate-950">{video.code || "AI"} · {video.title}</div>
+            <div className="mt-1 text-xs font-bold text-slate-500">{getPublicationStatusLabel(video.publishingPackage?.publicationStatus)}</div>
+          </div>
+        )) : (
+          <div className="rounded-2xl bg-slate-50 p-4 text-sm font-semibold text-slate-500">Пока нет утвержденных пакетов.</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function getPublicationStatusLabel(publicationStatus = {}) {
+  const status = publicationStatus?.status || "not_published";
+  if (status === "published_all") return "Опубликовано везде";
+  if (status === "published_partial") return "Опубликовано частично";
+  return "Не опубликовано";
+}
+
+function getPublicationStatusTone(publicationStatus = {}) {
+  const status = publicationStatus?.status || "not_published";
+  if (status === "published_all") return "green";
+  if (status === "published_partial") return "blue";
+  return "yellow";
+}
+
+const PUBLICATION_CHANNELS = [
+  { id: "instagram", label: "Instagram" },
+  { id: "telegram", label: "Telegram" },
+  { id: "stories", label: "Stories" },
+  { id: "reels", label: "Reels" },
+];
+
+function getApprovedVideos(videos = []) {
+  return videos.filter((video) => video.publishingPackage?.status === "approved");
+}
+
+function toDateTimeLocal(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function fromDateTimeLocal(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? "" : d.toISOString();
+}
+
+function buildPublishingDrafts(video = {}) {
+  const title = video.title || "горящий тур";
+  const destination = video.destination || title;
+  const price = video.price ? `${video.price} ${video.currency || "USD"}` : "";
+  const code = video.code || "";
+  const priceLine = price ? `Есть пакет за ${price}.` : "Есть пакет по специальной цене.";
+  const codeLine = code ? `Код: ${code}` : "";
+  const lines = (items) => items.filter((line) => line !== null && line !== undefined).join("\n");
+
+  return [
+    {
+      id: "instagram",
+      label: "Instagram",
+      title: "Caption для Instagram",
+      text: lines([
+        "Горящий отказной тур от Travella",
+        "",
+        `${destination}.`,
+        priceLine,
+        "",
+        "Предложение может уйти быстро. Если хочешь забрать этот тур, напиши нам сейчас.",
+        codeLine,
+        "",
+        "#travella #отказнойтур #туры #путешествия",
+      ]),
+    },
+    {
+      id: "telegram",
+      label: "Telegram",
+      title: "Пост для Telegram",
+      text: lines([
+        "Горящее предложение от Travella",
+        "",
+        `Направление: ${destination}`,
+        price ? `Цена: ${price}` : null,
+        codeLine,
+        "",
+        "Отказной тур может уйти в любой момент. Чтобы забрать пакет, свяжитесь с Travella.",
+      ]),
+    },
+    {
+      id: "shorts",
+      label: "Shorts",
+      title: "Shorts title",
+      text: `${code ? `${code}: ` : ""}${title} ${price ? `за ${price}` : "от Travella"}`.trim(),
+    },
+  ];
+}
+
+function buildLocalPublishingPackage(video = {}) {
+  const drafts = buildPublishingDrafts(video);
+  return {
+    status: "ready_for_review",
+    summary: "Пакет публикации готов к ручной проверке.",
+    items: [
+      ...drafts,
+      {
+        id: "story_text",
+        label: "Stories",
+        title: "Текст для Stories",
+        text: `Сторис 1: Горящий отказной тур\nСторис 2: ${video.destination || video.title || "Travella"}${video.price ? ` за ${video.price} ${video.currency || "USD"}` : ""}\nСторис 3: Предложение может уйти быстро\nСторис 4: ${video.code ? `Напиши код ${video.code}` : "Напиши нам"}`,
+      },
+      {
+        id: "first_comment",
+        label: "1-й комментарий",
+        title: "Первый комментарий",
+        text: `${video.code ? `Код: ${video.code}. ` : ""}Для деталей и бронирования напишите Travella в сообщения.`,
+      },
+      {
+        id: "manager_note",
+        label: "Менеджеру",
+        title: "Сообщение менеджеру",
+        text: `Проверь актуальность отказного тура${video.code ? ` ${video.code}` : ""}.\nПеред подтверждением обязательно сверить наличие у поставщика.`,
+      },
+    ],
+    review: {
+      status: "ready_for_review",
+      approvalGate: "Публикация выполняется только после ручной проверки текста",
+      checks: [
+        { id: "real_data", label: "Текст построен на данных Travella", passed: true },
+        { id: "manual_publish", label: "Публикация только после ручной проверки", passed: true },
+      ],
+    },
+  };
+}
+
+function PublishingPackage({ video, copiedKey, onCopy, onSavePackage, onApprovePackage, onSavePublicationStatus, packageLoading }) {
+  const [activeId, setActiveId] = React.useState("");
+  const pkg = video.publishingPackage?.items?.length ? video.publishingPackage : buildLocalPublishingPackage(video);
+  const [editItems, setEditItems] = React.useState(pkg.items || []);
+  const items = editItems || [];
+  const activeItem = items.find((item) => item.id === (activeId || items[0]?.id)) || items[0] || null;
+  const copyKey = activeItem ? `${video.id}:${activeItem.id}` : `${video.id}:publishing`;
+  const allText = items.map((item) => `${item.title || item.label}\n${item.text}`).join("\n\n---\n\n");
+  const loading = packageLoading === video.jobId;
+  const approved = pkg.status === "approved";
+  const publicationStatus = pkg.publicationStatus || {};
+  const channels = publicationStatus.channels || {};
+
+  React.useEffect(() => {
+    setEditItems(pkg.items || []);
+    setActiveId((current) => current || pkg.items?.[0]?.id || "");
+  }, [video.id, pkg.updatedAt, pkg.approvedAt, pkg.generatedAt]);
+
+  function updateActiveText(text) {
+    if (!activeItem) return;
+    setEditItems((prev) => prev.map((item) => (item.id === activeItem.id ? { ...item, text } : item)));
+  }
+
+  return (
+    <div className={cn("mt-4 rounded-2xl border p-4", approved ? "border-emerald-100 bg-emerald-50/70" : "border-blue-100 bg-blue-50/70")}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className={cn("text-xs font-black uppercase tracking-wide", approved ? "text-emerald-700" : "text-blue-700")}>Content Manager</div>
+          <div className="mt-1 text-sm font-black text-slate-950">{activeItem?.title || "Пакет публикации"}</div>
+          <div className="mt-1 text-xs font-bold text-slate-500">
+            {approved ? "Утверждено. Можно публиковать вручную." : pkg.summary || "Готово к ручной проверке."}
+          </div>
+          {approved ? <div className="mt-2"><Pill tone={getPublicationStatusTone(publicationStatus)}>{getPublicationStatusLabel(publicationStatus)}</Pill></div> : null}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => onCopy(copyKey, activeItem?.text || "")}
+            disabled={!activeItem}
+            className="rounded-2xl bg-blue-700 px-4 py-2 text-xs font-black text-white hover:bg-blue-800 disabled:opacity-40"
+          >
+            {copiedKey === copyKey ? "Скопировано" : "Скопировать"}
+          </button>
+          <button
+            type="button"
+            onClick={() => onCopy(`${video.id}:all`, allText)}
+            className="rounded-2xl bg-slate-950 px-4 py-2 text-xs font-black text-white hover:bg-slate-800"
+          >
+            {copiedKey === `${video.id}:all` ? "Скопировано" : "Скопировать всё"}
+          </button>
+          <button
+            type="button"
+            onClick={() => onSavePackage?.(video, items)}
+            disabled={loading || !items.length}
+            className="rounded-2xl bg-white px-4 py-2 text-xs font-black text-slate-800 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-40"
+          >
+            {loading ? "Сохраняю..." : "Сохранить правки"}
+          </button>
+          <button
+            type="button"
+            onClick={() => onApprovePackage?.(video, items)}
+            disabled={loading || !items.length}
+            className="rounded-2xl bg-emerald-700 px-4 py-2 text-xs font-black text-white hover:bg-emerald-800 disabled:opacity-40"
+          >
+            {approved ? "Утверждено" : "Утвердить"}
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        {items.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => setActiveId(item.id)}
+            className={cn(
+              "rounded-full px-3 py-1.5 text-xs font-black ring-1",
+              activeItem?.id === item.id
+                ? "bg-blue-700 text-white ring-blue-700"
+                : "bg-white text-slate-600 ring-blue-100 hover:bg-blue-50"
+            )}
+          >
+            {item.label || item.channel || item.title}
+          </button>
+        ))}
+      </div>
+
+      {activeItem ? (
+        <textarea
+          value={activeItem.text || ""}
+          onChange={(e) => updateActiveText(e.target.value)}
+          className="mt-3 min-h-[180px] w-full resize-y rounded-2xl bg-white p-3 text-sm font-semibold leading-6 text-slate-700 outline-none ring-1 ring-blue-100 focus:ring-2 focus:ring-blue-300"
+        />
+      ) : null}
+
+      {pkg.review?.checks?.length ? (
+        <div className="mt-3 grid gap-2 md:grid-cols-2">
+          {pkg.review.checks.map((check) => (
+            <div key={check.id || check.label} className="rounded-2xl bg-white px-3 py-2 text-xs font-bold text-slate-700 ring-1 ring-blue-100">
+              <span className={check.passed ? "text-emerald-600" : "text-amber-600"}>{check.passed ? "✓" : "!"}</span>{" "}
+              {check.label}
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {approved ? (
+        <div className="mt-3 rounded-2xl bg-white p-3 ring-1 ring-emerald-100">
+          <div className="text-xs font-black uppercase tracking-wide text-emerald-700">Очередь публикации</div>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            {PUBLICATION_CHANNELS.map((channel) => {
+              const checked = Boolean(channels?.[channel.id]?.published);
+              return (
+                <label key={channel.id} className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-100">
+                  <span>{channel.label}</span>
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    disabled={loading}
+                    onChange={(e) => {
+                      const nextChannels = {
+                        ...channels,
+                        [channel.id]: {
+                          ...(channels?.[channel.id] || {}),
+                          published: e.target.checked,
+                        },
+                      };
+                      onSavePublicationStatus?.(video, nextChannels);
+                    }}
+                    className="h-4 w-4 accent-emerald-700"
+                  />
+                </label>
+              );
+            })}
+          </div>
+          <div className="mt-2 text-xs font-bold text-slate-500">Отмечай канал после ручной публикации. Это не публикует автоматически.</div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function VideoLibrary({ videos, jobs, onOpenJob, onSavePackage, onApprovePackage, onSavePublicationStatus, packageLoading, mode = "media" }) {
+  const [copiedKey, setCopiedKey] = React.useState("");
+  const publishingMode = mode === "publishing";
+  const visibleVideos = publishingMode
+    ? [...videos].sort((a, b) => {
+        const aApproved = a.publishingPackage?.status === "approved" ? 1 : 0;
+        const bApproved = b.publishingPackage?.status === "approved" ? 1 : 0;
+        if (aApproved !== bApproved) return bApproved - aApproved;
+        return new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0);
+      })
+    : videos;
+
+  async function copyText(key, text) {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+    }
+    setCopiedKey(key);
+    window.setTimeout(() => setCopiedKey((current) => (current === key ? "" : current)), 1800);
+  }
+
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+      <div className="border-b border-slate-100 p-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <div className="text-xs font-black uppercase tracking-wide text-slate-500">{publishingMode ? "Content Manager" : "Travella Media"}</div>
+            <h2 className="mt-1 text-2xl font-black text-slate-950">{publishingMode ? "Публикации" : "Видео"}</h2>
+            <p className="mt-1 text-sm font-semibold text-slate-500">
+              {publishingMode
+                ? "Очередь публикаций: утверждённые пакеты, captions, stories, комментарии и отметки ручной публикации."
+                : "Готовые AI-ролики Video Operator, сохранённые в Travella Media или доступные из HeyGen."}
+            </p>
+          </div>
+          <Pill tone="green">{videos.length}</Pill>
+        </div>
+      </div>
+
+      <div className="grid gap-4 bg-slate-50/60 p-4 md:grid-cols-2 2xl:grid-cols-3">
+        {visibleVideos.length ? visibleVideos.map((video) => {
+          const job = jobs.find((x) => x.id === video.jobId);
+          const url = video.artifactUrl || video.mediaUrl;
+          return (
+            <article key={video.id} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-xs font-black uppercase tracking-wide text-slate-500">{video.code || "AI video"}</div>
+                  <h3 className="mt-1 line-clamp-2 text-lg font-black text-slate-950">{video.title}</h3>
+                </div>
+                <Pill tone={video.artifactUrl ? "green" : "blue"}>{video.artifactUrl ? "MP4" : "HeyGen"}</Pill>
+              </div>
+
+              {url ? (
+                <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-950">
+                  <video
+                    src={url}
+                    controls
+                    preload="metadata"
+                    playsInline
+                    className="mx-auto aspect-[9/16] max-h-[420px] w-full bg-slate-950 object-contain"
+                  />
+                </div>
+              ) : (
+                <div className="mt-4 flex aspect-[9/16] max-h-[420px] items-center justify-center rounded-2xl border border-slate-200 bg-slate-100 text-sm font-black text-slate-400">
+                  MP4 недоступен
+                </div>
+              )}
+
+              <div className="mt-4 space-y-2 text-sm font-semibold text-slate-600">
+                <div className="flex justify-between rounded-2xl bg-slate-50 p-3"><span>Создано</span><b className="text-slate-950">{fmtDate(video.createdAt)}</b></div>
+                <div className="flex justify-between rounded-2xl bg-slate-50 p-3"><span>Статус</span><b className="text-slate-950">{getJobStatusMeta(job || video).label}</b></div>
+                <div className="flex justify-between rounded-2xl bg-slate-50 p-3"><span>Цена</span><b className="text-slate-950">{video.price ? `${video.price} ${video.currency || "USD"}` : "—"}</b></div>
+                {!publishingMode ? <div className="flex justify-between rounded-2xl bg-slate-50 p-3"><span>Хранилище</span><b className="text-slate-950">{video.storageProvider || (video.artifactUrl ? "Media" : "HeyGen")}</b></div> : null}
+              </div>
+
+              {publishingMode ? (
+                <PublishingPackage
+                  video={video}
+                  copiedKey={copiedKey}
+                  onCopy={copyText}
+                  onSavePackage={onSavePackage}
+                  onApprovePackage={onApprovePackage}
+                  onSavePublicationStatus={onSavePublicationStatus}
+                  packageLoading={packageLoading}
+                />
+              ) : null}
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                {url ? (
+                  <a href={url} target="_blank" rel="noreferrer" className="rounded-2xl bg-slate-950 px-4 py-2 text-xs font-black text-white hover:bg-slate-800">
+                    Открыть MP4
+                  </a>
+                ) : null}
+                {!publishingMode && video.heygenUrl && video.heygenUrl !== url ? (
+                  <a href={video.heygenUrl} target="_blank" rel="noreferrer" className="rounded-2xl bg-emerald-700 px-4 py-2 text-xs font-black text-white hover:bg-emerald-800">
+                    HeyGen
+                  </a>
+                ) : null}
+                {!publishingMode && job ? (
+                  <button type="button" onClick={() => onOpenJob?.(job)} className="rounded-2xl bg-slate-100 px-4 py-2 text-xs font-black text-slate-800 hover:bg-slate-200">
+                    Открыть задачу
+                  </button>
+                ) : null}
+              </div>
+            </article>
+          );
+        }) : (
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 text-sm font-semibold text-slate-500 md:col-span-2 2xl:col-span-3">
+            {publishingMode ? "Пока нет готовых роликов для публикации." : "Пока готовых видео нет. После генерации HeyGen и сохранения MP4 ролики появятся здесь."}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTelegram, packageLoading, publishLoading, publishFeedback, telegramReady }) {
+  const approvedVideos = getApprovedVideos(videos);
+
+  function updateChannel(video, channelId, patch) {
+    const current = video.publishingPackage?.publicationStatus?.channels || {};
+    const nextChannels = {
+      ...current,
+      [channelId]: {
+        ...(current?.[channelId] || {}),
+        ...patch,
+      },
+    };
+    onSavePublicationStatus?.(video, nextChannels);
+  }
+
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+      <div className="border-b border-slate-100 p-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <div className="text-xs font-black uppercase tracking-wide text-slate-500">Publishing Manager</div>
+            <h2 className="mt-1 text-2xl font-black text-slate-950">Очередь публикаций</h2>
+            <p className="mt-1 text-sm font-semibold text-slate-500">Утверждённые пакеты: план, канал, ссылка на опубликованный пост и ручной статус.</p>
+          </div>
+          <Pill tone="green">{approvedVideos.length}</Pill>
+        </div>
+      </div>
+
+      <div className="space-y-4 bg-slate-50/60 p-4">
+        {approvedVideos.length ? approvedVideos.map((video) => {
+          const pkg = video.publishingPackage || {};
+          const publicationStatus = pkg.publicationStatus || {};
+          const channels = publicationStatus.channels || {};
+          const loading = packageLoading === video.jobId;
+          const mediaUrl = video.artifactUrl || video.mediaUrl || "";
+          return (
+            <article key={video.id} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="grid gap-4 xl:grid-cols-[220px_1fr]">
+                <div>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-xs font-black uppercase tracking-wide text-slate-500">{video.code || "AI"}</div>
+                      <h3 className="mt-1 text-lg font-black text-slate-950">{video.title}</h3>
+                    </div>
+                    <Pill tone={getPublicationStatusTone(publicationStatus)}>{getPublicationStatusLabel(publicationStatus)}</Pill>
+                  </div>
+                  {mediaUrl ? (
+                    <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-950">
+                      <video src={mediaUrl} controls preload="metadata" playsInline className="mx-auto aspect-[9/16] max-h-[300px] w-full bg-slate-950 object-contain" />
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="space-y-3">
+                  {PUBLICATION_CHANNELS.map((channel) => {
+                    const item = channels?.[channel.id] || {};
+                    const checked = Boolean(item.published);
+                    const feedback = channel.id === "telegram" ? publishFeedback?.[video.jobId] : null;
+                    return (
+                      <div key={channel.id} className="rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-100">
+                        <div className="grid gap-3 lg:grid-cols-[130px_190px_1fr_240px] lg:items-center">
+                          <label className="flex items-center gap-2 text-sm font-black text-slate-900">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              disabled={loading}
+                              onChange={(e) => updateChannel(video, channel.id, { published: e.target.checked })}
+                              className="h-4 w-4 accent-emerald-700"
+                            />
+                            <span>{channel.label}</span>
+                          </label>
+                          <input
+                            type="datetime-local"
+                            value={toDateTimeLocal(item.plannedAt)}
+                            disabled={loading}
+                            onChange={(e) => updateChannel(video, channel.id, { plannedAt: fromDateTimeLocal(e.target.value) })}
+                            className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-300"
+                          />
+                          <input
+                            type="url"
+                            value={item.url || ""}
+                            disabled={loading}
+                            onChange={(e) => updateChannel(video, channel.id, { url: e.target.value })}
+                            placeholder="Ссылка на пост"
+                            className="min-w-0 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-300"
+                          />
+                          <div className="flex flex-wrap items-center gap-2">
+                            {channel.id === "telegram" ? (
+                              <button
+                                type="button"
+                                onClick={() => onPublishTelegram?.(video)}
+                                disabled={loading || !telegramReady || checked || publishLoading === video.jobId}
+                                className="rounded-2xl bg-emerald-700 px-3 py-2 text-xs font-black text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-40"
+                                title={!telegramReady ? "Нужно настроить AI_PUBLISH_TELEGRAM_CHAT_ID на backend" : ""}
+                              >
+                                {checked ? "Отправлено" : publishLoading === video.jobId ? "Публикую..." : telegramReady ? "Опубликовать" : "Telegram ENV нет"}
+                              </button>
+                            ) : null}
+                            <Pill tone={checked ? "green" : item.plannedAt ? "blue" : "slate"}>{checked ? "Опубликовано" : item.plannedAt ? "Запланировано" : "Ожидает"}</Pill>
+                          </div>
+                        </div>
+                        {feedback ? (
+                          <div
+                            className={cn(
+                              "mt-2 rounded-2xl px-3 py-2 text-xs font-bold ring-1",
+                              feedback.tone === "red"
+                                ? "bg-rose-50 text-rose-700 ring-rose-100"
+                                : feedback.tone === "green"
+                                  ? "bg-emerald-50 text-emerald-700 ring-emerald-100"
+                                  : "bg-blue-50 text-blue-700 ring-blue-100"
+                            )}
+                          >
+                            {feedback.message}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </article>
+          );
+        }) : (
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 text-sm font-semibold text-slate-500">Пока нет утверждённых пакетов. Сначала утверди текст у Content Manager.</div>
+        )}
       </div>
     </div>
   );
@@ -162,10 +894,17 @@ function JobList({ jobs }) {
 
 export default function AdminAiPlatform() {
   const [selectedEmployee, setSelectedEmployee] = React.useState("video_operator");
+  const [activeView, setActiveView] = React.useState("today");
   const [status, setStatus] = React.useState(null);
   const [jobs, setJobs] = React.useState([]);
-  const [command, setCommand] = React.useState("Создай видео для R857");
+  const [videos, setVideos] = React.useState([]);
+  const [command, setCommand] = React.useState("");
   const [loading, setLoading] = React.useState(false);
+  const [heygenLoading, setHeygenLoading] = React.useState("");
+  const [refreshLoading, setRefreshLoading] = React.useState("");
+  const [packageLoading, setPackageLoading] = React.useState("");
+  const [publishLoading, setPublishLoading] = React.useState("");
+  const [publishFeedback, setPublishFeedback] = React.useState({});
   const [error, setError] = React.useState("");
   const [currentTask, setCurrentTask] = React.useState(null);
   const [messages, setMessages] = React.useState([{ id: "hello", role: "assistant", text: "Я Travella AI Runtime. Выбери сотрудника сверху и напиши задачу обычным языком. Для Video Operator можно написать просто: R857, Создай видео R857 или R857 Instagram." }]);
@@ -174,12 +913,14 @@ export default function AdminAiPlatform() {
   async function load() {
     setError("");
     try {
-      const [s, j] = await Promise.all([
+      const [s, j, v] = await Promise.all([
         apiGet("/api/admin/ai-platform/status", "admin"),
         apiGet("/api/admin/ai-platform/video-operator/jobs?limit=30", "admin"),
+        apiGet("/api/admin/ai-platform/video-operator/videos?limit=100", "admin"),
       ]);
       setStatus(s || null);
       setJobs(Array.isArray(j?.jobs) ? j.jobs : []);
+      setVideos(Array.isArray(v?.videos) ? v.videos : []);
     } catch (e) {
       setError(e?.message || "Не удалось загрузить Travella AI OS");
     }
@@ -189,6 +930,40 @@ export default function AdminAiPlatform() {
   React.useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
 
   function addMessage(msg) { setMessages((prev) => [...prev, { id: `${Date.now()}_${Math.random()}`, ...msg }]); }
+
+  function updateJobMessages(nextJob, nextOutput) {
+    if (!nextJob?.id) return;
+    setMessages((prev) => prev.map((msg) => {
+      if (msg.job?.id !== nextJob.id) return msg;
+      return {
+        ...msg,
+        job: nextJob,
+        output: nextOutput || nextJob.output || msg.output,
+        events: nextJob.events || msg.events,
+        text: nextOutput?.nextStep || msg.text,
+      };
+    }));
+  }
+
+  function openJob(job) {
+    if (!job) return;
+    const output = job.output || null;
+    setSelectedEmployee("video_operator");
+    setActiveView("today");
+    setCurrentTask(job);
+    setMessages([
+      { id: "hello", role: "assistant", text: "Я Travella AI Runtime. Выбери сотрудника сверху и напиши задачу обычным языком. Для Video Operator можно написать просто: R857, Создай видео R857 или R857 Instagram." },
+      { id: `job_user_${job.id}`, role: "user", text: job.command || job.type || "Открытая задача" },
+      {
+        id: `job_${job.id}`,
+        role: "assistant",
+        text: output?.nextStep || getJobStatusMeta(job).label,
+        events: job.events || [],
+        output,
+        job,
+      },
+    ]);
+  }
 
   async function runTask() {
     const text = command.trim();
@@ -204,7 +979,7 @@ export default function AdminAiPlatform() {
       const job = res?.job || null;
       const output = res?.output || job?.output || null;
       setCurrentTask(job);
-      addMessage({ role: "assistant", text: output?.nextStep || "Задача выполнена.", events: job?.events || [], output });
+      addMessage({ role: "assistant", text: output?.nextStep || "Задача выполнена.", events: job?.events || [], output, job });
       await load();
     } catch (e) {
       const msg = e?.message || "Не удалось выполнить задачу";
@@ -216,11 +991,164 @@ export default function AdminAiPlatform() {
     }
   }
 
+  async function startHeygen(job) {
+    if (!job?.id || heygenLoading) return;
+    setHeygenLoading(job.id);
+    setError("");
+    addMessage({ role: "assistant", text: `Получил ручное утверждение сценария. Отправляю в HeyGen задачу #${job.id}.` });
+    try {
+      const res = await apiPost(`/api/admin/ai-platform/video-operator/jobs/${job.id}/heygen/start`, {}, "admin");
+      const nextJob = res?.job || null;
+      const output = res?.output || nextJob?.output || null;
+      setCurrentTask(nextJob);
+      updateJobMessages(nextJob, output);
+      addMessage({
+        role: "assistant",
+        text: output?.heygen?.videoId
+          ? `HeyGen принял задачу. Video ID: ${output.heygen.videoId}`
+          : "HeyGen принял задачу.",
+        events: nextJob?.events || [],
+        output,
+        job: nextJob,
+      });
+      await load();
+    } catch (e) {
+      const msg = e?.message || "Не удалось запустить HeyGen";
+      setError(msg);
+      addMessage({ role: "assistant", text: `HeyGen не запустился.\n\nПричина: ${msg}` });
+      await load();
+    } finally {
+      setHeygenLoading("");
+    }
+  }
+
+  async function refreshHeygen(job) {
+    if (!job?.id || refreshLoading) return;
+    setRefreshLoading(job.id);
+    setError("");
+    try {
+      const res = await apiPost(`/api/admin/ai-platform/video-operator/jobs/${job.id}/refresh`, {}, "admin");
+      const nextJob = res?.job || null;
+      const output = res?.output || nextJob?.output || null;
+      setCurrentTask(nextJob);
+      updateJobMessages(nextJob, output);
+      addMessage({
+        role: "assistant",
+        text: output?.heygen?.videoUrl
+          ? "Видео готово. Ссылка появилась в карточке HeyGen."
+          : `Статус HeyGen обновлён: ${output?.heygen?.status || "неизвестно"}.`,
+        events: nextJob?.events || [],
+        output,
+        job: nextJob,
+      });
+      await load();
+    } catch (e) {
+      const msg = e?.message || "Не удалось обновить статус HeyGen";
+      setError(msg);
+      addMessage({ role: "assistant", text: `Не смог обновить статус HeyGen.\n\nПричина: ${msg}` });
+      await load();
+    } finally {
+      setRefreshLoading("");
+    }
+  }
+
+  async function savePublishingPackage(video, items) {
+    if (!video?.jobId || packageLoading) return;
+    setPackageLoading(video.jobId);
+    setError("");
+    try {
+      await apiPatch(`/api/admin/ai-platform/video-operator/jobs/${video.jobId}/publishing-package`, { items }, "admin");
+      await load();
+    } catch (e) {
+      setError(e?.message || "Не удалось сохранить пакет публикации");
+    } finally {
+      setPackageLoading("");
+    }
+  }
+
+  async function approvePublishingPackage(video, items) {
+    if (!video?.jobId || packageLoading) return;
+    setPackageLoading(video.jobId);
+    setError("");
+    try {
+      await apiPost(`/api/admin/ai-platform/video-operator/jobs/${video.jobId}/publishing-package/approve`, { items }, "admin");
+      await load();
+    } catch (e) {
+      setError(e?.message || "Не удалось утвердить пакет публикации");
+    } finally {
+      setPackageLoading("");
+    }
+  }
+
+  async function savePublicationStatus(video, channels) {
+    if (!video?.jobId || packageLoading) return;
+    setPackageLoading(video.jobId);
+    setError("");
+    try {
+      await apiPatch(`/api/admin/ai-platform/video-operator/jobs/${video.jobId}/publication-status`, { channels }, "admin");
+      await load();
+    } catch (e) {
+      setError(e?.message || "Не удалось сохранить статус публикации");
+    } finally {
+      setPackageLoading("");
+    }
+  }
+
+  async function publishTelegram(video) {
+    if (!video?.jobId || publishLoading) return;
+    setPublishLoading(video.jobId);
+    setError("");
+    setPublishFeedback((prev) => ({
+      ...prev,
+      [video.jobId]: { tone: "blue", message: "Отправляю видео и текст в Telegram..." },
+    }));
+    try {
+      const res = await apiPost(`/api/admin/ai-platform/video-operator/jobs/${video.jobId}/publish/telegram`, {}, "admin");
+      const link = res?.telegram?.url ? ` Ссылка: ${res.telegram.url}` : "";
+      setPublishFeedback((prev) => ({
+        ...prev,
+        [video.jobId]: { tone: "green", message: `Telegram опубликован.${link}` },
+      }));
+      await load();
+    } catch (e) {
+      const message = e?.message || "Не удалось опубликовать в Telegram";
+      setError(message);
+      setPublishFeedback((prev) => ({
+        ...prev,
+        [video.jobId]: { tone: "red", message },
+      }));
+      await load();
+    } finally {
+      setPublishLoading("");
+    }
+  }
+
+  function selectEmployee(employeeId) {
+    setSelectedEmployee(employeeId);
+    if (employeeId === "content_manager") {
+      setActiveView("publications");
+      setCurrentTask(null);
+      return;
+    }
+    if (employeeId === "publishing_manager") {
+      setActiveView("publishing_queue");
+      setCurrentTask(null);
+      return;
+    }
+    if (activeView === "publications" || activeView === "publishing_queue") setActiveView("today");
+  }
+
   const employeesCount = status?.employees?.length || 1;
   const activeTasks = jobs.filter((j) => ["created", "queued", "running", "processing"].includes(String(j.status || "").toLowerCase())).length;
   const videosToday = jobs.filter((j) => isToday(j.createdAt) && String(j.type || "").includes("video")).length;
+  const readyVideos = videos.length;
   const heygenReady = Boolean(status?.video?.heygenReady);
   const aiEnabled = Boolean(status?.video?.enabled);
+  const artifactStorageReady = Boolean(status?.video?.artifactStorage?.provider);
+  const isContentManager = selectedEmployee === "content_manager";
+  const isPublishingManager = selectedEmployee === "publishing_manager";
+  const isPublishingWork = isContentManager || isPublishingManager;
+  const approvedVideosCount = getApprovedVideos(videos).length;
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-6">
@@ -241,26 +1169,62 @@ export default function AdminAiPlatform() {
         <Metric label="Digital Employees" value={`${employeesCount} / 8`} helper="Video Operator live" />
         <Metric label="Active Tasks" value={activeTasks} helper="Задачи в работе" />
         <Metric label="Videos Today" value={videosToday} helper="Создано или запущено сегодня" />
-        <Metric label="AI Health" value={aiEnabled && heygenReady ? "Online" : aiEnabled ? "Needs ENV" : "Disabled"} helper={heygenReady ? "HeyGen ENV готов" : "Проверь Railway ENV"} />
+        <Metric label="AI Health" value={aiEnabled && heygenReady ? "Online" : aiEnabled ? "Needs ENV" : "Disabled"} helper={artifactStorageReady ? `Media: ${status.video.artifactStorage.provider}` : heygenReady ? "HeyGen готов, Media ENV нет" : "Проверь Railway ENV"} />
       </section>
 
-      <section className="mt-5"><EmployeeTabs selected={selectedEmployee} onSelect={setSelectedEmployee} /></section>
+      <section className="mt-5"><EmployeeTabs selected={selectedEmployee} onSelect={selectEmployee} /></section>
 
       <section className="mt-5 grid gap-5 xl:grid-cols-[280px_1fr_360px]">
         <aside className="space-y-4">
           <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="text-xs font-black uppercase tracking-wide text-slate-500">Workspace</div>
             <div className="mt-4 space-y-2 text-sm font-black text-slate-700">
-              <button className="w-full rounded-2xl bg-slate-950 px-4 py-3 text-left text-white">Сегодня</button>
-              <button className="w-full rounded-2xl px-4 py-3 text-left hover:bg-slate-50">Последние задачи</button>
-              <button className="w-full rounded-2xl px-4 py-3 text-left hover:bg-slate-50">Черновики</button>
-              <button className="w-full rounded-2xl px-4 py-3 text-left hover:bg-slate-50">Видео</button>
+              {!isPublishingWork ? (
+                <button
+                  type="button"
+                  onClick={() => setActiveView("today")}
+                  className={cn("w-full rounded-2xl px-4 py-3 text-left", activeView === "today" ? "bg-slate-950 text-white" : "hover:bg-slate-50")}
+                >
+                  Сегодня
+                </button>
+              ) : null}
+              {!isPublishingManager ? <button className="w-full rounded-2xl px-4 py-3 text-left hover:bg-slate-50">Черновики</button> : null}
+              <button
+                type="button"
+                onClick={() => setActiveView(isPublishingManager ? "publishing_queue" : isContentManager ? "publications" : "videos")}
+                className={cn("flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left", (activeView === "videos" || activeView === "publications" || activeView === "publishing_queue") ? "bg-slate-950 text-white" : "hover:bg-slate-50")}
+              >
+                <span>{isPublishingManager ? "Очередь" : isContentManager ? "Публикации" : "Видео"}</span>
+                <span className={cn("rounded-full px-2 py-0.5 text-xs", (activeView === "videos" || activeView === "publications" || activeView === "publishing_queue") ? "bg-white/15 text-white" : "bg-slate-100 text-slate-500")}>{isPublishingManager ? approvedVideosCount : readyVideos}</span>
+              </button>
               <button className="w-full rounded-2xl px-4 py-3 text-left hover:bg-slate-50">Избранное</button>
             </div>
           </div>
-          <JobList jobs={jobs} />
+          {isPublishingWork ? <PublishingSummary videos={videos} /> : <JobList jobs={jobs} activeJobId={currentTask?.id} onOpenJob={openJob} />}
         </aside>
 
+        {activeView === "publishing_queue" ? (
+          <PublishingManagerBoard
+            videos={videos}
+            onSavePublicationStatus={savePublicationStatus}
+            onPublishTelegram={publishTelegram}
+            packageLoading={packageLoading}
+            publishLoading={publishLoading}
+            publishFeedback={publishFeedback}
+            telegramReady={Boolean(status?.publishing?.telegramReady)}
+          />
+        ) : activeView === "videos" || activeView === "publications" ? (
+          <VideoLibrary
+            videos={videos}
+            jobs={jobs}
+            onOpenJob={openJob}
+            onSavePackage={savePublishingPackage}
+            onApprovePackage={approvePublishingPackage}
+            onSavePublicationStatus={savePublicationStatus}
+            packageLoading={packageLoading}
+            mode={isContentManager ? "publishing" : "media"}
+          />
+        ) : (
         <main className="rounded-3xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-100 p-5">
             <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -274,7 +1238,17 @@ export default function AdminAiPlatform() {
           </div>
 
           <div className="h-[640px] space-y-4 overflow-y-auto bg-slate-50/60 p-4 md:p-6">
-            {messages.map((m) => <Message key={m.id} msg={m} />)}
+            {messages.map((m) => (
+              <Message
+                key={m.id}
+                msg={m}
+                onStartHeygen={startHeygen}
+                onRefreshHeygen={refreshHeygen}
+                canStartHeygen={aiEnabled && heygenReady}
+                heygenLoading={heygenLoading}
+                refreshLoading={refreshLoading}
+              />
+            ))}
             {loading ? <Message msg={{ role: "assistant", text: "🧠 Думаю...\n⚙️ Вызываю нужные инструменты Travella AI Runtime..." }} /> : null}
             <div ref={endRef} />
           </div>
@@ -295,8 +1269,9 @@ export default function AdminAiPlatform() {
             </div>
           </div>
         </main>
+        )}
 
-        <Inspector task={currentTask} />
+        {isPublishingManager ? <PublishingInspector videos={videos} /> : isContentManager ? <ContentInspector videos={videos} /> : <Inspector task={currentTask} />}
       </section>
     </div>
   );
