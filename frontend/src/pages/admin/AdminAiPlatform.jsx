@@ -799,6 +799,20 @@ function VideoLibrary({ videos, jobs, onOpenJob, onSavePackage, onApprovePackage
 
 function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTelegram, packageLoading, publishLoading, publishFeedback, telegramReady }) {
   const approvedVideos = getApprovedVideos(videos);
+  const [statusFilter, setStatusFilter] = React.useState("all");
+  const [deliveryFilter, setDeliveryFilter] = React.useState("all");
+  const filteredVideos = approvedVideos.filter((video) => {
+    const publicationStatus = video.publishingPackage?.publicationStatus || {};
+    const telegram = publicationStatus.channels?.telegram || {};
+    const status = publicationStatus.status || "not_published";
+    const statusOk =
+      statusFilter === "all" ||
+      (statusFilter === "waiting" && status === "not_published") ||
+      (statusFilter === "partial" && status === "published_partial") ||
+      (statusFilter === "complete" && status === "published_all");
+    const deliveryOk = deliveryFilter === "all" || telegram.deliveryMethod === deliveryFilter;
+    return statusOk && deliveryOk;
+  });
 
   function updateChannel(video, channelId, patch) {
     const current = video.publishingPackage?.publicationStatus?.channels || {};
@@ -821,12 +835,48 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
             <h2 className="mt-1 text-2xl font-black text-slate-950">Очередь публикаций</h2>
             <p className="mt-1 text-sm font-semibold text-slate-500">Утверждённые пакеты: план, канал, ссылка на опубликованный пост и ручной статус.</p>
           </div>
-          <Pill tone="green">{approvedVideos.length}</Pill>
+          <Pill tone="green">{filteredVideos.length} / {approvedVideos.length}</Pill>
+        </div>
+        <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap gap-2">
+            {[
+              ["all", "Все"],
+              ["waiting", "Ожидают"],
+              ["partial", "Частично"],
+              ["complete", "Везде"],
+            ].map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setStatusFilter(id)}
+                className={cn("rounded-2xl px-3 py-2 text-xs font-black ring-1", statusFilter === id ? "bg-slate-950 text-white ring-slate-950" : "bg-white text-slate-600 ring-slate-200 hover:bg-slate-50")}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {[
+              ["all", "Telegram: все"],
+              ["sendVideo", "Видео URL"],
+              ["sendVideoUpload", "Файлом"],
+              ["sendMessage", "Ссылкой"],
+            ].map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setDeliveryFilter(id)}
+                className={cn("rounded-2xl px-3 py-2 text-xs font-black ring-1", deliveryFilter === id ? "bg-emerald-700 text-white ring-emerald-700" : "bg-white text-slate-600 ring-slate-200 hover:bg-slate-50")}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
       <div className="space-y-4 bg-slate-50/60 p-4">
-        {approvedVideos.length ? approvedVideos.map((video) => {
+        {filteredVideos.length ? filteredVideos.map((video) => {
           const pkg = video.publishingPackage || {};
           const publicationStatus = pkg.publicationStatus || {};
           const channels = publicationStatus.channels || {};
@@ -936,7 +986,9 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
             </article>
           );
         }) : (
-          <div className="rounded-3xl border border-slate-200 bg-white p-6 text-sm font-semibold text-slate-500">Пока нет утверждённых пакетов. Сначала утверди текст у Content Manager.</div>
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 text-sm font-semibold text-slate-500">
+            {approvedVideos.length ? "Нет публикаций под выбранные фильтры." : "Пока нет утверждённых пакетов. Сначала утверди текст у Content Manager."}
+          </div>
         )}
       </div>
     </div>
