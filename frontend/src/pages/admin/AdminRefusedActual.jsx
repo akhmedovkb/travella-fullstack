@@ -3844,7 +3844,6 @@ const sortLabel = useMemo(() => {
                             </div>
                           </div>
                         </div>
-                      </div>
                     ))}
                   </div>
                 ) : (
