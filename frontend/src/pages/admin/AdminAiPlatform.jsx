@@ -448,6 +448,25 @@ function getPublicationPublishedTime(video = {}) {
   return Math.max(...times);
 }
 
+function buildPublishingQueueReport(videos = []) {
+  const lines = videos.map((video, index) => {
+    const publicationStatus = video.publishingPackage?.publicationStatus || {};
+    const channels = publicationStatus.channels || {};
+    const channelLines = PUBLICATION_CHANNELS.map((channel) => {
+      const item = channels?.[channel.id] || {};
+      const delivery = channel.id === "telegram" && item.deliveryMethod ? `, ${getDeliveryLogMethodLabel(item.deliveryMethod)}` : "";
+      const planned = item.plannedAt ? `, план: ${fmtDate(item.plannedAt)}` : "";
+      const url = item.url ? `, ${item.url}` : "";
+      return `  - ${channel.label}: ${item.published ? "опубликовано" : "ожидает"}${delivery}${planned}${url}`;
+    });
+    return [
+      `${index + 1}. ${video.code || "AI"} · ${video.title || "Без названия"} · ${getPublicationStatusLabel(publicationStatus)}`,
+      ...channelLines,
+    ].join("\n");
+  });
+  return [`Travella AI OS — очередь публикаций`, `Всего: ${videos.length}`, "", ...lines].join("\n");
+}
+
 function toDateTimeLocal(value) {
   if (!value) return "";
   const d = new Date(value);
@@ -821,6 +840,7 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
   const [deliveryFilter, setDeliveryFilter] = React.useState("all");
   const [query, setQuery] = React.useState("");
   const [sortMode, setSortMode] = React.useState("schedule");
+  const [copiedReport, setCopiedReport] = React.useState(false);
   const normalizedQuery = query.trim().toLowerCase();
   const filteredVideos = approvedVideos.filter((video) => {
     const publicationStatus = video.publishingPackage?.publicationStatus || {};
@@ -861,6 +881,25 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
     onSavePublicationStatus?.(video, nextChannels);
   }
 
+  async function copyQueueReport() {
+    const text = buildPublishingQueueReport(filteredVideos);
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+    }
+    setCopiedReport(true);
+    window.setTimeout(() => setCopiedReport(false), 1800);
+  }
+
   return (
     <div className="rounded-3xl border border-slate-200 bg-white shadow-sm">
       <div className="border-b border-slate-100 p-5">
@@ -870,7 +909,17 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
             <h2 className="mt-1 text-2xl font-black text-slate-950">Очередь публикаций</h2>
             <p className="mt-1 text-sm font-semibold text-slate-500">Утверждённые пакеты: план, канал, ссылка на опубликованный пост и ручной статус.</p>
           </div>
-          <Pill tone="green">{filteredVideos.length} / {approvedVideos.length}</Pill>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={copyQueueReport}
+              disabled={!filteredVideos.length}
+              className="rounded-2xl bg-slate-950 px-4 py-2 text-xs font-black text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {copiedReport ? "Отчёт скопирован" : "Скопировать отчёт"}
+            </button>
+            <Pill tone="green">{filteredVideos.length} / {approvedVideos.length}</Pill>
+          </div>
         </div>
         <div className="mt-4 grid gap-3 xl:grid-cols-[1fr_220px]">
           <input
