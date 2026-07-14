@@ -518,6 +518,21 @@ function getPublicationHistoryItems(publicationStatus = {}) {
   return Array.isArray(publicationStatus.history) ? publicationStatus.history.slice(0, 3) : [];
 }
 
+function getPublishingTextForChannel(pkg = {}, channelId = "") {
+  const items = Array.isArray(pkg.items) ? pkg.items : [];
+  const aliases = {
+    instagram: ["instagram"],
+    telegram: ["telegram"],
+    stories: ["stories", "story", "story_text"],
+    reels: ["reels", "shorts", "shorts_title"],
+  }[channelId] || [channelId];
+  const item = items.find((candidate) => {
+    const values = [candidate?.id, candidate?.channel, candidate?.label, candidate?.title].map((value) => String(value || "").toLowerCase());
+    return aliases.some((alias) => values.some((value) => value === alias || value.includes(alias)));
+  });
+  return String(item?.text || "").trim();
+}
+
 function buildPublishingQueueReport(videos = []) {
   const lines = videos.map((video, index) => {
     const publicationStatus = video.publishingPackage?.publicationStatus || {};
@@ -914,6 +929,7 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
   const [sortMode, setSortMode] = React.useState(initialPrefs.sortMode || "schedule");
   const [copiedReport, setCopiedReport] = React.useState(false);
   const [copiedUrlKey, setCopiedUrlKey] = React.useState("");
+  const [copiedTextKey, setCopiedTextKey] = React.useState("");
   const [selectedIds, setSelectedIds] = React.useState([]);
   const [bulkChannel, setBulkChannel] = React.useState(initialPrefs.bulkChannel || "telegram");
   const [bulkDate, setBulkDate] = React.useState("");
@@ -1068,6 +1084,25 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
     }
     setCopiedUrlKey(key);
     window.setTimeout(() => setCopiedUrlKey((current) => (current === key ? "" : current)), 1800);
+  }
+
+  async function copyChannelText(key, text) {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+    }
+    setCopiedTextKey(key);
+    window.setTimeout(() => setCopiedTextKey((current) => (current === key ? "" : current)), 1800);
   }
 
   return (
@@ -1289,6 +1324,7 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
                     const feedback = channel.id === "telegram" ? publishFeedback?.[video.jobId] : null;
                     const telegramDelivery = channel.id === "telegram" ? getTelegramDeliveryMeta(item.deliveryMethod) : null;
                     const deliveryLog = channel.id === "telegram" && Array.isArray(item.deliveryLog) ? item.deliveryLog : [];
+                    const channelText = getPublishingTextForChannel(pkg, channel.id);
                     return (
                       <div key={channel.id} className="rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-100">
                         <div className="grid gap-3 lg:grid-cols-[130px_190px_1fr_320px] lg:items-center">
@@ -1318,6 +1354,15 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
                             className="min-w-0 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-300"
                           />
                           <div className="flex flex-wrap items-center gap-2">
+                            {channelText ? (
+                              <button
+                                type="button"
+                                onClick={() => copyChannelText(`${video.id}:${channel.id}:text`, channelText)}
+                                className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50"
+                              >
+                                {copiedTextKey === `${video.id}:${channel.id}:text` ? "Текст скопирован" : "Текст"}
+                              </button>
+                            ) : null}
                             {item.url ? (
                               <>
                                 <a
