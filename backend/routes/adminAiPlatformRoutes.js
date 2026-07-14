@@ -175,6 +175,12 @@ function isTelegramWrongWebPageContentError(description) {
     || normalized.includes("wrong type of the web page content");
 }
 
+function shortTelegramError(value) {
+  return String(value || "failed")
+    .replace(/^bad request:\s*/i, "")
+    .slice(0, 180);
+}
+
 function buildTelegramMessageUrl(chat, messageId) {
   const username = String(chat?.username || "").trim();
   if (username && messageId) return `https://t.me/${username}/${messageId}`;
@@ -267,11 +273,14 @@ async function publishVideoToTelegram(job, actor) {
 
   let data;
   let deliveryMethod = "sendVideo";
+  const deliveryLog = [];
   try {
     const res = await axios.post(`${api}/sendVideo`, videoPayload, { timeout: 30000 });
     data = res.data;
+    deliveryLog.push({ method: "sendVideo", status: data?.ok ? "success" : "not_ok", message: data?.ok ? "Telegram accepted video URL" : shortTelegramError(data?.description) });
   } catch (e) {
     const desc = e?.response?.data?.description || e?.message || "Telegram sendVideo failed";
+    deliveryLog.push({ method: "sendVideo", status: "failed", message: shortTelegramError(desc) });
     console.error("[ai-publishing] telegram sendVideo failed", {
       jobId: job.id,
       status: e?.response?.status || null,
@@ -284,7 +293,9 @@ async function publishVideoToTelegram(job, actor) {
     try {
       data = await sendTelegramVideoUpload(api, job, videoUrl, text);
       deliveryMethod = "sendVideoUpload";
+      deliveryLog.push({ method: "sendVideoUpload", status: "success", message: "Backend uploaded mp4 to Telegram" });
     } catch (uploadError) {
+      deliveryLog.push({ method: "sendVideoUpload", status: "failed", message: shortTelegramError(uploadError?.message || uploadError) });
       console.error("[ai-publishing] telegram sendVideo upload fallback failed", {
         jobId: job.id,
         description: uploadError?.message || String(uploadError),
@@ -293,9 +304,11 @@ async function publishVideoToTelegram(job, actor) {
         const fallback = await axios.post(`${api}/sendMessage`, messagePayload, { timeout: 30000 });
         data = fallback.data;
         deliveryMethod = "sendMessage";
+        deliveryLog.push({ method: "sendMessage", status: data?.ok ? "success" : "not_ok", message: data?.ok ? "Published text with video link" : shortTelegramError(data?.description) });
       } catch (fallbackError) {
         const fallbackDesc =
           fallbackError?.response?.data?.description || fallbackError?.message || "Telegram sendMessage failed";
+        deliveryLog.push({ method: "sendMessage", status: "failed", message: shortTelegramError(fallbackDesc) });
         console.error("[ai-publishing] telegram sendMessage fallback failed", {
           jobId: job.id,
           status: fallbackError?.response?.status || null,
@@ -310,7 +323,9 @@ async function publishVideoToTelegram(job, actor) {
     try {
       data = await sendTelegramVideoUpload(api, job, videoUrl, text);
       deliveryMethod = "sendVideoUpload";
+      deliveryLog.push({ method: "sendVideoUpload", status: "success", message: "Backend uploaded mp4 to Telegram" });
     } catch (uploadError) {
+      deliveryLog.push({ method: "sendVideoUpload", status: "failed", message: shortTelegramError(uploadError?.message || uploadError) });
       console.error("[ai-publishing] telegram sendVideo upload fallback failed", {
         jobId: job.id,
         description: uploadError?.message || String(uploadError),
@@ -319,9 +334,11 @@ async function publishVideoToTelegram(job, actor) {
         const fallback = await axios.post(`${api}/sendMessage`, messagePayload, { timeout: 30000 });
         data = fallback.data;
         deliveryMethod = "sendMessage";
+        deliveryLog.push({ method: "sendMessage", status: data?.ok ? "success" : "not_ok", message: data?.ok ? "Published text with video link" : shortTelegramError(data?.description) });
       } catch (fallbackError) {
         const fallbackDesc =
           fallbackError?.response?.data?.description || fallbackError?.message || "Telegram sendMessage failed";
+        deliveryLog.push({ method: "sendMessage", status: "failed", message: shortTelegramError(fallbackDesc) });
         console.error("[ai-publishing] telegram sendMessage fallback failed", {
           jobId: job.id,
           status: fallbackError?.response?.status || null,
@@ -356,6 +373,7 @@ async function publishVideoToTelegram(job, actor) {
         messageId: message.message_id || null,
         chatId: message.chat?.id || AI_PUBLISH_TELEGRAM_CHAT_ID,
         deliveryMethod,
+        deliveryLog,
       },
     },
     actor
@@ -366,7 +384,7 @@ async function publishVideoToTelegram(job, actor) {
     type: "tool_result",
     tool: "PublishingManager",
     message: "Telegram публикация отправлена через клиентский бот.",
-    meta: { channel: "telegram", messageId: message.message_id || null, url: telegramUrl || null, deliveryMethod },
+    meta: { channel: "telegram", messageId: message.message_id || null, url: telegramUrl || null, deliveryMethod, deliveryLog },
   });
 
   console.log("[ai-publishing] telegram publish completed", {
@@ -385,6 +403,7 @@ async function publishVideoToTelegram(job, actor) {
       chatId: message.chat?.id || AI_PUBLISH_TELEGRAM_CHAT_ID,
       url: telegramUrl,
       deliveryMethod,
+      deliveryLog,
     },
   };
 }

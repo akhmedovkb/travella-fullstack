@@ -391,6 +391,16 @@ function getTelegramDeliveryMeta(method = "") {
   return null;
 }
 
+function getDeliveryLogMethodLabel(method = "") {
+  return getTelegramDeliveryMeta(method)?.label || method || "Попытка";
+}
+
+function getDeliveryLogStatusTone(status = "") {
+  if (status === "success") return "text-emerald-700";
+  if (status === "failed") return "text-rose-700";
+  return "text-amber-700";
+}
+
 const PUBLICATION_CHANNELS = [
   { id: "instagram", label: "Instagram" },
   { id: "telegram", label: "Telegram" },
@@ -828,6 +838,7 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
                     const checked = Boolean(item.published);
                     const feedback = channel.id === "telegram" ? publishFeedback?.[video.jobId] : null;
                     const telegramDelivery = channel.id === "telegram" ? getTelegramDeliveryMeta(item.deliveryMethod) : null;
+                    const deliveryLog = channel.id === "telegram" && Array.isArray(item.deliveryLog) ? item.deliveryLog : [];
                     return (
                       <div key={channel.id} className="rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-100">
                         <div className="grid gap-3 lg:grid-cols-[130px_190px_1fr_240px] lg:items-center">
@@ -884,6 +895,19 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
                             )}
                           >
                             {feedback.message}
+                          </div>
+                        ) : null}
+                        {deliveryLog.length ? (
+                          <div className="mt-2 rounded-2xl bg-white px-3 py-2 text-xs font-bold text-slate-600 ring-1 ring-slate-100">
+                            <div className="mb-1 text-[10px] font-black uppercase tracking-wide text-slate-400">Publication run log</div>
+                            <div className="flex flex-wrap gap-2">
+                              {deliveryLog.map((entry, index) => (
+                                <span key={`${entry.method || "step"}_${index}`} className="rounded-full bg-slate-50 px-2.5 py-1 ring-1 ring-slate-100">
+                                  <b className={getDeliveryLogStatusTone(entry.status)}>{getDeliveryLogMethodLabel(entry.method)}</b>
+                                  {entry.message ? <span className="ml-1 text-slate-500">· {entry.message}</span> : null}
+                                </span>
+                              ))}
+                            </div>
                           </div>
                         ) : null}
                       </div>
