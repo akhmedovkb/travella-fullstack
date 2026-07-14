@@ -1255,6 +1255,16 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
                 {allVisibleSelected ? "Снять выбор" : "Выбрать экран"}
               </button>
               <Pill tone={selectedVideos.length ? "blue" : "slate"}>Выбрано: {selectedVideos.length}</Pill>
+              {selectedVideos.length ? (
+                <button
+                  type="button"
+                  onClick={() => setSelectedIds([])}
+                  disabled={bulkLoading}
+                  className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-40"
+                >
+                  Очистить выбор
+                </button>
+              ) : null}
               {bulkFeedback ? <Pill tone={bulkFeedback.startsWith("Обновлено") ? "green" : "red"}>{bulkFeedback}</Pill> : null}
             </div>
             <div className="flex flex-wrap items-center gap-2">
