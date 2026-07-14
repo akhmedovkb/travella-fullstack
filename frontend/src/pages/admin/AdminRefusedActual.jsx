@@ -1660,6 +1660,28 @@ export default function AdminRefusedActual() {
     setEditForm((prev) => syncEditFormImages(prev, nextImages));
   }
 
+  function handleMakePrimaryImage(index) {
+    setEditForm((prev) => {
+      const current = normalizeImagesArray(
+        prev?.images ||
+          safeJsonParse(prev?.rawImagesText || "[]", [])
+      );
+  
+      if (
+        index <= 0 ||
+        index >= current.length
+      ) {
+        return prev;
+      }
+  
+      const nextImages = [...current];
+      const [selectedImage] = nextImages.splice(index, 1);
+      nextImages.unshift(selectedImage);
+  
+      return syncEditFormImages(prev, nextImages);
+    });
+  }
+
   function handleRemoveImage(index) {
     setEditForm((prev) => {
       const current = normalizeImagesArray(prev?.images || safeJsonParse(prev?.rawImagesText || "[]", []));
@@ -3698,10 +3720,24 @@ const sortLabel = useMemo(() => {
               <div className="rounded-2xl border border-gray-200 p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <div className="text-sm font-semibold text-gray-900">Изображения услуги <span className="text-xs font-normal text-gray-500">({Array.isArray(editForm.images) ? editForm.images.length : 0})</span></div>
-                    <div className={classNames("mt-1 text-xs", editValidation.raw?.images ? "text-red-600" : "text-gray-500")}>
-                      {editValidation.raw?.images || "Можно удалять текущие изображения, добавлять новые файлы или вставлять ссылку/data URL."}
-                    </div>
+                  <div className="text-sm font-semibold text-gray-900">
+                    Фотографии карточки{" "}
+                    <span className="text-xs font-normal text-gray-500">
+                      ({Array.isArray(editForm.images) ? editForm.images.length : 0})
+                    </span>
+                  </div>
+                  
+                  <div
+                    className={classNames(
+                      "mt-1 text-xs",
+                      editValidation.raw?.images
+                        ? "text-red-600"
+                        : "text-gray-500"
+                    )}
+                  >
+                    {editValidation.raw?.images ||
+                      "Показываются клиентам на сайте и в Telegram. Первое изображение является главным."}
+                  </div>
                   </div>
                   <div className="text-xs text-gray-500">Максимум 20 изображений</div>
                 </div>
@@ -3741,29 +3777,72 @@ const sortLabel = useMemo(() => {
                 {Array.isArray(editForm.images) && editForm.images.length ? (
                   <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
                     {editForm.images.map((src, idx) => (
-                      <div key={`${idx}-${String(src).slice(0, 30)}`} className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
-                        <div className="aspect-[4/3] bg-gray-100">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              openPreview(editForm.images, idx, "Изображения услуги");
-                            }}
-                            className="block h-full w-full cursor-zoom-in"
-                          >
-                            <img src={src} alt={`service-${idx + 1}`} className="h-full w-full object-cover" />
-                          </button>
-                        </div>
-                        <div className="border-t border-gray-100 p-2">
-                          <div className="truncate text-[11px] text-gray-500">
-                            {String(src).startsWith("data:image/") ? `data:image #${idx + 1}` : short(String(src), 48)}
+                        <div
+                          key={`${idx}-${String(src).slice(0, 30)}`}
+                          className={classNames(
+                            "overflow-hidden rounded-2xl border bg-white transition",
+                            idx === 0
+                              ? "border-emerald-300 ring-2 ring-emerald-100"
+                              : "border-gray-200"
+                          )}
+                        >
+                          <div className="relative aspect-[4/3] bg-gray-100">
+                            {idx === 0 ? (
+                              <div className="absolute left-2 top-2 z-10 rounded-full bg-emerald-600 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white shadow">
+                                Главное фото
+                              </div>
+                            ) : null}
+                        
+                            <button
+                              type="button"
+                              onClick={() => {
+                                openPreview(
+                                  editForm.images,
+                                  idx,
+                                  "Фотографии карточки"
+                                );
+                              }}
+                              className="block h-full w-full cursor-zoom-in"
+                            >
+                              <img
+                                src={src}
+                                alt={`service-${idx + 1}`}
+                                className="h-full w-full object-cover"
+                              />
+                            </button>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveImage(idx)}
-                            className="mt-2 w-full rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 hover:bg-red-100"
-                          >
-                            Удалить
-                          </button>
+                        
+                          <div className="border-t border-gray-100 p-2">
+                            <div className="truncate text-[11px] text-gray-500">
+                              {String(src).startsWith("data:image/")
+                                ? `data:image #${idx + 1}`
+                                : short(String(src), 48)}
+                            </div>
+                        
+                            <div className="mt-2 grid grid-cols-1 gap-2">
+                              {idx !== 0 ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleMakePrimaryImage(idx)}
+                                  className="w-full rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100"
+                                >
+                                  Сделать главным
+                                </button>
+                              ) : (
+                                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-center text-sm font-medium text-emerald-700">
+                                  Используется в карточке
+                                </div>
+                              )}
+                        
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveImage(idx)}
+                                className="w-full rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 hover:bg-red-100"
+                              >
+                                Удалить
+                              </button>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -3812,8 +3891,18 @@ const sortLabel = useMemo(() => {
             <div className="rounded-2xl border border-gray-200 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-sm font-semibold text-gray-900">Изображения пруфа <span className="text-xs font-normal text-gray-500">({Array.isArray(editForm?.details?.proofImages) ? editForm.details.proofImages.length : 0})</span></div>
-                  <div className="mt-1 text-xs text-gray-500">Можно добавлять и удалять proofImages прямо из модалки.</div>
+                <div className="text-sm font-semibold text-gray-900">
+                  Подтверждение услуги{" "}
+                  <span className="text-xs font-normal text-gray-500">
+                    ({Array.isArray(editForm?.details?.proofImages)
+                      ? editForm.details.proofImages.length
+                      : 0})
+                  </span>
+                </div>
+                
+                <div className="mt-1 text-xs text-gray-500">
+                  Эти изображения используются для проверки услуги и не показываются клиентам в публичной карточке.
+                </div>
                 </div>
                 <div className="text-xs text-gray-500">Максимум 20 изображений</div>
               </div>
