@@ -468,30 +468,79 @@ function QuickChip({ active, children, onClick }) {
   );
 }
 
-function Modal({ open, title, onClose, children, footer }) {
+function Modal({
+  open,
+  title,
+  subtitle,
+  onClose,
+  children,
+  footer,
+  fullscreen = false,
+  headerExtra = null,
+}) {
   if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50">
       <div
-        className="absolute inset-0 bg-black/40"
+        className="absolute inset-0 bg-slate-950/55 backdrop-blur-[2px]"
         onClick={onClose}
         aria-hidden="true"
       />
-      <div className="absolute inset-0 flex items-center justify-center p-4">
-        <div className="w-full max-w-6xl overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl">
-          <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
-            <div className="text-base font-semibold text-gray-900">{title}</div>
-            <button
-              onClick={onClose}
-              className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm hover:bg-gray-50"
-            >
-              Закрыть
-            </button>
+
+      <div
+        className={classNames(
+          "absolute inset-0 flex items-center justify-center",
+          fullscreen ? "p-0" : "p-4"
+        )}
+      >
+        <div
+          className={classNames(
+            "flex w-full flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl",
+            fullscreen
+              ? "h-full max-h-full rounded-none"
+              : "max-w-6xl rounded-2xl"
+          )}
+        >
+          <div className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4">
+            <div className="min-w-0">
+              <div className="truncate text-base font-black text-slate-950">
+                {title}
+              </div>
+
+              {subtitle ? (
+                <div className="mt-1 truncate text-xs font-medium text-slate-500">
+                  {subtitle}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="flex shrink-0 items-center gap-3">
+              {headerExtra}
+
+              <button
+                type="button"
+                onClick={onClose}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-xl text-slate-500 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
+                aria-label="Закрыть"
+                title="Закрыть"
+              >
+                ×
+              </button>
+            </div>
           </div>
-          <div className="max-h-[78vh] overflow-auto p-5">{children}</div>
+
+          <div
+            className={classNames(
+              "min-h-0 flex-1 overflow-auto",
+              fullscreen ? "bg-slate-50 p-5" : "max-h-[78vh] p-5"
+            )}
+          >
+            {children}
+          </div>
+
           {footer ? (
-            <div className="border-t border-gray-200 bg-gray-50 px-5 py-4">
+            <div className="shrink-0 border-t border-slate-200 bg-white px-5 py-4 shadow-[0_-8px_24px_rgba(15,23,42,0.04)]">
               {footer}
             </div>
           ) : null}
@@ -500,7 +549,6 @@ function Modal({ open, title, onClose, children, footer }) {
     </div>
   );
 }
-
 function Field({ label, children, hint, error }) {
   return (
     <div>
@@ -1115,6 +1163,8 @@ export default function AdminRefusedActual() {
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState("");
   const [editForm, setEditForm] = useState(null);
+  const [originalEditForm, setOriginalEditForm] = useState(null);
+  const [saveAndCloseRequested, setSaveAndCloseRequested] = useState(false);
   const [hotelQuery, setHotelQuery] = useState("");
   const [hotelOptions, setHotelOptions] = useState([]);
   const [hotelLoading, setHotelLoading] = useState(false);
@@ -1132,6 +1182,15 @@ export default function AdminRefusedActual() {
   }, [previewGallery, previewIndex]);
 
   const editValidation = useMemo(() => validateEditForm(editForm), [editForm]);
+  const hasUnsavedEditChanges = useMemo(() => {
+    if (!editForm || !originalEditForm) return false;
+  
+    try {
+      return JSON.stringify(editForm) !== JSON.stringify(originalEditForm);
+    } catch {
+      return false;
+    }
+  }, [editForm, originalEditForm]);
 
   const [sendingId, setSendingId] = useState(null);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -1525,25 +1584,57 @@ export default function AdminRefusedActual() {
     }
   }
 
-  async function openEdit(id) {
-    setEditOpen(true);
-    setEditLoading(true);
-    setEditError("");
-    setEditForm(null);
-    setHotelQuery("");
-    setHotelOptions([]);
-    setImageUrlDraft("");
-    setProofImageUrlDraft("");
-    try {
-      const resp = await http.get(apiPath(`/admin/services/${id}`));
-      const data = ensureJsonOrThrow(resp, "openEdit");
-      setEditForm(createEditFormFromService(data || {}));
-    } catch (e) {
-      const info = extractAxiosError(e);
-      setEditError(info.msg || "Ошибка загрузки услуги для редактирования");
-    } finally {
-      setEditLoading(false);
+    async function openEdit(id) {
+      setEditOpen(true);
+      setEditLoading(true);
+      setEditError("");
+      setEditForm(null);
+      setOriginalEditForm(null);
+      setSaveAndCloseRequested(false);
+      setHotelQuery("");
+      setHotelOptions([]);
+      setImageUrlDraft("");
+      setProofImageUrlDraft("");
+    
+      try {
+        const resp = await http.get(apiPath(`/admin/services/${id}`));
+        const data = ensureJsonOrThrow(resp, "openEdit");
+    
+        const nextForm = createEditFormFromService(data || {});
+    
+        setEditForm(nextForm);
+        setOriginalEditForm(nextForm);
+      } catch (e) {
+        const info = extractAxiosError(e);
+        setEditError(
+          info.msg || "Ошибка загрузки услуги для редактирования"
+        );
+      } finally {
+        setEditLoading(false);
+      }
     }
+  
+    function closeEditEditor() {
+    if (editSaving) return;
+  
+    if (hasUnsavedEditChanges) {
+      const confirmed = window.confirm(
+        "Есть несохранённые изменения.\n\nЗакрыть редактор и потерять изменения?"
+      );
+  
+      if (!confirmed) return;
+    }
+  
+    closePreview();
+    setEditOpen(false);
+    setEditForm(null);
+    setOriginalEditForm(null);
+    setSaveAndCloseRequested(false);
+    setEditError("");
+  }
+  
+  function cancelEditEditor() {
+    closeEditEditor();
   }
 
   function updateEditRoot(field, value) {
@@ -1673,94 +1764,165 @@ export default function AdminRefusedActual() {
     setEditForm((prev) => ({ ...(prev || {}), rawAvailabilityText: value }));
   }
 
-  async function saveEdit() {
+  async function saveEdit({ closeAfterSave = false } = {}) {
     if (!editForm?.id) return;
-
+  
     const validation = validateEditForm(editForm);
+  
     if (!validation.valid) {
-      setEditError(validation.summary[0] || "Исправь ошибки перед сохранением");
+      setEditError(
+        validation.summary[0] ||
+          "Исправь ошибки перед сохранением"
+      );
       return;
     }
-
+  
     let parsedDetails = {};
     let parsedImages = [];
     let parsedAvailability = [];
+  
     try {
-      parsedDetails = safeJsonParse(editForm.rawDetailsText || "{}", {});
-      parsedImages = safeJsonParse(editForm.rawImagesText || "[]", []);
-      parsedAvailability = safeJsonParse(editForm.rawAvailabilityText || "[]", []);
+      parsedDetails = safeJsonParse(
+        editForm.rawDetailsText || "{}",
+        {}
+      );
+  
+      parsedImages = safeJsonParse(
+        editForm.rawImagesText || "[]",
+        []
+      );
+  
+      parsedAvailability = safeJsonParse(
+        editForm.rawAvailabilityText || "[]",
+        []
+      );
     } catch (e) {
       setEditError(e?.message || "Невалидный JSON");
       return;
     }
-
+  
     setEditSaving(true);
+    setSaveAndCloseRequested(closeAfterSave);
     setEditError("");
-
+  
     try {
       const nextForm = {
         ...editForm,
         details: parsedDetails,
-        images: Array.isArray(parsedImages) ? parsedImages : [],
-        availability: Array.isArray(parsedAvailability) ? parsedAvailability : [],
-        rawDetailsText: JSON.stringify(parsedDetails, null, 2),
-        rawImagesText: JSON.stringify(Array.isArray(parsedImages) ? parsedImages : [], null, 2),
-        rawAvailabilityText: JSON.stringify(Array.isArray(parsedAvailability) ? parsedAvailability : [], null, 2),
+        images: Array.isArray(parsedImages)
+          ? parsedImages
+          : [],
+        availability: Array.isArray(parsedAvailability)
+          ? parsedAvailability
+          : [],
+        rawDetailsText: JSON.stringify(
+          parsedDetails,
+          null,
+          2
+        ),
+        rawImagesText: JSON.stringify(
+          Array.isArray(parsedImages)
+            ? parsedImages
+            : [],
+          null,
+          2
+        ),
+        rawAvailabilityText: JSON.stringify(
+          Array.isArray(parsedAvailability)
+            ? parsedAvailability
+            : [],
+          null,
+          2
+        ),
       };
+  
       const payload = {
         title: nextForm?.title || "",
         description: nextForm?.description || "",
         category: nextForm?.category || "",
         price:
-          nextForm?.price === null || typeof nextForm?.price === "undefined"
+          nextForm?.price === null ||
+          typeof nextForm?.price === "undefined"
             ? null
             : nextForm.price,
         vehicle_model: nextForm?.vehicle_model || "",
-        images: Array.isArray(nextForm?.images) ? nextForm.images : [],
-        availability: Array.isArray(nextForm?.availability) ? nextForm.availability : [],
+        images: Array.isArray(nextForm?.images)
+          ? nextForm.images
+          : [],
+        availability: Array.isArray(nextForm?.availability)
+          ? nextForm.availability
+          : [],
         details:
           nextForm?.details &&
           typeof nextForm.details === "object" &&
           !Array.isArray(nextForm.details)
             ? nextForm.details
             : {},
-        telegram_refused_chat_id: normalizeChatId(nextForm?.telegram_refused_chat_id),
-        telegram_web_chat_id: normalizeChatId(nextForm?.telegram_web_chat_id),
-        telegram_chat_id: normalizeChatId(nextForm?.telegram_chat_id),
+        telegram_refused_chat_id: normalizeChatId(
+          nextForm?.telegram_refused_chat_id
+        ),
+        telegram_web_chat_id: normalizeChatId(
+          nextForm?.telegram_web_chat_id
+        ),
+        telegram_chat_id: normalizeChatId(
+          nextForm?.telegram_chat_id
+        ),
       };
-
+  
       const resp = await http.put(
         apiPath(`/admin/services/${editForm.id}`),
         payload
       );
+  
       const data = ensureJsonOrThrow(resp, "saveEdit");
-
+  
       if (!data?.ok) {
-        throw new Error(data?.message || "Не удалось сохранить услугу");
+        throw new Error(
+          data?.message || "Не удалось сохранить услугу"
+        );
       }
-
-      setEditForm(
-        createEditFormFromService({
-          ...(data?.service || nextForm),
-          telegram_refused_chat_id: nextForm.telegram_refused_chat_id,
-          telegram_web_chat_id: nextForm.telegram_web_chat_id,
-          telegram_chat_id: nextForm.telegram_chat_id,
-          provider_id: nextForm.provider_id,
-          provider_name: nextForm.provider_name,
-        })
+  
+      const savedForm = createEditFormFromService({
+        ...(data?.service || nextForm),
+        telegram_refused_chat_id:
+          nextForm.telegram_refused_chat_id,
+        telegram_web_chat_id:
+          nextForm.telegram_web_chat_id,
+        telegram_chat_id:
+          nextForm.telegram_chat_id,
+        provider_id: nextForm.provider_id,
+        provider_name: nextForm.provider_name,
+      });
+  
+      setEditForm(savedForm);
+      setOriginalEditForm(savedForm);
+  
+      showToast(
+        "ok",
+        `✅ Услуга #${editForm.id} сохранена`
       );
-      setEditOpen(false);
-      showToast("ok", `✅ Услуга #${editForm.id} сохранена`);
+  
       await loadList(page);
-
+  
       if (detailsItem?.id === editForm.id) {
         await openDetails(editForm.id);
       }
+  
+      if (closeAfterSave) {
+        closePreview();
+        setEditOpen(false);
+        setEditForm(null);
+        setOriginalEditForm(null);
+      }
     } catch (e) {
       const info = extractAxiosError(e);
-      setEditError(info.msg || "Ошибка сохранения услуги");
+  
+      setEditError(
+        info.msg || "Ошибка сохранения услуги"
+      );
     } finally {
       setEditSaving(false);
+      setSaveAndCloseRequested(false);
     }
   }
 
@@ -3212,34 +3374,119 @@ const sortLabel = useMemo(() => {
 
       <Modal
         open={editOpen}
-        title={editForm ? `Редактирование услуги #${editForm.id}` : "Редактирование услуги"}
-        onClose={() => {
-          if (editSaving) return;
-          closePreview();
-          setEditOpen(false);
-        }}
-        footer={
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="text-xs text-gray-500">
-              Сохраняются общие поля услуги и весь объект <span className="font-mono">details</span>.
+        fullscreen
+        title={
+          editForm?.id
+            ? `Редактирование услуги #${editForm.id}`
+            : "Редактирование услуги"
+        }
+        subtitle={
+          editForm
+            ? [
+                categoryHumanLabel(editForm.category),
+                editForm.provider_name
+                  ? `Поставщик: ${editForm.provider_name}`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" • ")
+            : ""
+        }
+        onClose={closeEditEditor}
+        headerExtra={
+          editForm ? (
+            <div className="flex items-center gap-2">
+              {hasUnsavedEditChanges ? (
+                <span className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-800">
+                  <span className="h-2 w-2 rounded-full bg-amber-500" />
+                  Есть изменения
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                  Сохранено
+                </span>
+              )}
+      
+              <span
+                className={classNames(
+                  "hidden rounded-full border bg-gradient-to-r px-3 py-1.5 text-xs font-bold md:inline-flex",
+                  categoryAccent(editForm.category)
+                )}
+              >
+                {categoryHumanLabel(editForm.category)}
+              </span>
             </div>
-            <div className="flex flex-wrap gap-2">
+          ) : null
+        }
+        footer={
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="min-w-0">
+              {!editValidation.valid ? (
+                <div className="text-sm font-bold text-red-700">
+                  ⚠ {editValidation.summary.length}{" "}
+                  {editValidation.summary.length === 1
+                    ? "ошибка мешает"
+                    : "ошибки мешают"}{" "}
+                  сохранить
+                </div>
+              ) : hasUnsavedEditChanges ? (
+                <div className="text-sm font-bold text-amber-700">
+                  ● Есть несохранённые изменения
+                </div>
+              ) : (
+                <div className="text-sm font-bold text-emerald-700">
+                  ✓ Все изменения сохранены
+                </div>
+              )}
+        
+              <div className="mt-1 text-xs text-slate-500">
+                Изменения применяются к услуге, карточке сайта и данным Telegram.
+              </div>
+            </div>
+        
+            <div className="flex flex-wrap items-center gap-2">
               <button
-                onClick={() => {
-                  closePreview();
-                  setEditOpen(false);
-                }}
+                type="button"
+                onClick={cancelEditEditor}
                 disabled={editSaving}
-                className="rounded-xl border border-gray-200 px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-60"
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Отмена
+                Закрыть
               </button>
+        
               <button
-                onClick={saveEdit}
-                disabled={editLoading || editSaving || !editForm}
-                className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-2 text-sm text-violet-700 hover:bg-violet-100 disabled:opacity-60"
+                type="button"
+                onClick={() => saveEdit({ closeAfterSave: false })}
+                disabled={
+                  editLoading ||
+                  editSaving ||
+                  !editForm ||
+                  !editValidation.valid ||
+                  !hasUnsavedEditChanges
+                }
+                className="rounded-xl border border-violet-200 bg-violet-50 px-5 py-2.5 text-sm font-bold text-violet-700 transition hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {editSaving ? "Сохранение…" : "Сохранить изменения"}
+                {editSaving && !saveAndCloseRequested
+                  ? "Сохраняю…"
+                  : "Сохранить"}
+              </button>
+        
+              <button
+                type="button"
+                onClick={() => saveEdit({ closeAfterSave: true })}
+                disabled={
+                  editLoading ||
+                  editSaving ||
+                  !editForm ||
+                  !editValidation.valid ||
+                  !hasUnsavedEditChanges
+                }
+                className="rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {editSaving && saveAndCloseRequested
+                  ? "Сохраняю…"
+                  : "Сохранить и закрыть"}
               </button>
             </div>
           </div>
@@ -3247,8 +3494,8 @@ const sortLabel = useMemo(() => {
       >
         {editLoading ? (
           <div className="text-sm text-gray-600">Загрузка…</div>
-        ) : editForm ? (
-          <div className="space-y-5">
+      ) : editForm ? (
+        <div className="mx-auto max-w-[1600px] space-y-5">
             {editError ? (
               <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
                 {editError}
