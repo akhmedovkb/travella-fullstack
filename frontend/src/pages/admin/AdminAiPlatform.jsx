@@ -299,6 +299,9 @@ function PublishingInspector({ videos }) {
   const partial = approved.filter((video) => video.publishingPackage?.publicationStatus?.status === "published_partial").length;
   const complete = approved.filter((video) => video.publishingPackage?.publicationStatus?.status === "published_all").length;
   const waiting = Math.max(0, approved.length - partial - complete);
+  const nextActions = approved.map(getNextPublicationAction);
+  const overdue = nextActions.filter((action) => action.tone === "red").length;
+  const today = nextActions.filter((action) => action.tone === "yellow").length;
   const telegramDelivery = approved.reduce(
     (acc, video) => {
       const telegram = video.publishingPackage?.publicationStatus?.channels?.telegram || {};
@@ -318,6 +321,10 @@ function PublishingInspector({ videos }) {
           <div className="flex justify-between rounded-2xl bg-slate-50 p-4"><span>Не опубликовано</span><b className="text-slate-950">{waiting}</b></div>
           <div className="flex justify-between rounded-2xl bg-slate-50 p-4"><span>Частично</span><b className="text-slate-950">{partial}</b></div>
           <div className="flex justify-between rounded-2xl bg-slate-50 p-4"><span>Везде</span><b className="text-slate-950">{complete}</b></div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-2xl bg-rose-50 p-4"><div className="text-slate-400">Просрочено</div><b className="text-rose-700">{overdue}</b></div>
+            <div className="rounded-2xl bg-amber-50 p-4"><div className="text-slate-400">Сегодня</div><b className="text-amber-700">{today}</b></div>
+          </div>
           <div className="rounded-2xl bg-slate-50 p-4">
             <div className="text-slate-400">Telegram delivery</div>
             <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
@@ -446,6 +453,31 @@ function getPublicationPublishedTime(video = {}) {
     .filter((time) => Number.isFinite(time) && time > 0);
   if (!times.length) return 0;
   return Math.max(...times);
+}
+
+function getNextPublicationAction(video = {}) {
+  const channels = video.publishingPackage?.publicationStatus?.channels || {};
+  const pending = PUBLICATION_CHANNELS.map((channel) => {
+    const item = channels?.[channel.id] || {};
+    const plannedTime = new Date(item.plannedAt || 0).getTime();
+    return {
+      channel,
+      item,
+      plannedTime: Number.isFinite(plannedTime) && plannedTime > 0 ? plannedTime : 0,
+    };
+  }).filter(({ item }) => !item.published);
+  if (!pending.length) return { label: "Всё опубликовано", tone: "green", channel: null, plannedAt: "" };
+  pending.sort((a, b) => {
+    const aTime = a.plannedTime || Number.MAX_SAFE_INTEGER;
+    const bTime = b.plannedTime || Number.MAX_SAFE_INTEGER;
+    return aTime - bTime;
+  });
+  const next = pending[0];
+  const now = Date.now();
+  if (next.plannedTime && next.plannedTime < now) return { label: `Просрочено: ${next.channel.label}`, tone: "red", channel: next.channel, plannedAt: next.item.plannedAt };
+  if (next.item.plannedAt && isToday(next.item.plannedAt)) return { label: `Сегодня: ${next.channel.label}`, tone: "yellow", channel: next.channel, plannedAt: next.item.plannedAt };
+  if (next.item.plannedAt) return { label: `Следующее: ${next.channel.label}`, tone: "blue", channel: next.channel, plannedAt: next.item.plannedAt };
+  return { label: `Назначить план: ${next.channel.label}`, tone: "slate", channel: next.channel, plannedAt: "" };
 }
 
 function buildPublishingQueueReport(videos = []) {
@@ -985,6 +1017,7 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
           const channels = publicationStatus.channels || {};
           const loading = packageLoading === video.jobId;
           const mediaUrl = video.artifactUrl || video.mediaUrl || "";
+          const nextAction = getNextPublicationAction(video);
           return (
             <article key={video.id} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
               <div className="grid gap-4 xl:grid-cols-[220px_1fr]">
@@ -994,8 +1027,12 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
                       <div className="text-xs font-black uppercase tracking-wide text-slate-500">{video.code || "AI"}</div>
                       <h3 className="mt-1 text-lg font-black text-slate-950">{video.title}</h3>
                     </div>
-                    <Pill tone={getPublicationStatusTone(publicationStatus)}>{getPublicationStatusLabel(publicationStatus)}</Pill>
+                    <div className="flex flex-col items-end gap-2 text-right">
+                      <Pill tone={getPublicationStatusTone(publicationStatus)}>{getPublicationStatusLabel(publicationStatus)}</Pill>
+                      <Pill tone={nextAction.tone}>{nextAction.label}</Pill>
+                    </div>
                   </div>
+                  {nextAction.plannedAt ? <div className="mt-2 text-xs font-bold text-slate-500">План: {fmtDate(nextAction.plannedAt)}</div> : null}
                   {mediaUrl ? (
                     <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-950">
                       <video src={mediaUrl} controls preload="metadata" playsInline className="mx-auto aspect-[9/16] max-h-[300px] w-full bg-slate-950 object-contain" />
