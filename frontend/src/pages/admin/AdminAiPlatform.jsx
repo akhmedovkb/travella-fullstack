@@ -873,6 +873,7 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
   const [query, setQuery] = React.useState("");
   const [sortMode, setSortMode] = React.useState("schedule");
   const [copiedReport, setCopiedReport] = React.useState(false);
+  const [copiedUrlKey, setCopiedUrlKey] = React.useState("");
   const normalizedQuery = query.trim().toLowerCase();
   const filteredVideos = approvedVideos.filter((video) => {
     const publicationStatus = video.publishingPackage?.publicationStatus || {};
@@ -930,6 +931,25 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
     }
     setCopiedReport(true);
     window.setTimeout(() => setCopiedReport(false), 1800);
+  }
+
+  async function copyChannelUrl(key, url) {
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = url;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+    }
+    setCopiedUrlKey(key);
+    window.setTimeout(() => setCopiedUrlKey((current) => (current === key ? "" : current)), 1800);
   }
 
   return (
@@ -1049,7 +1069,7 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
                     const deliveryLog = channel.id === "telegram" && Array.isArray(item.deliveryLog) ? item.deliveryLog : [];
                     return (
                       <div key={channel.id} className="rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-100">
-                        <div className="grid gap-3 lg:grid-cols-[130px_190px_1fr_240px] lg:items-center">
+                        <div className="grid gap-3 lg:grid-cols-[130px_190px_1fr_320px] lg:items-center">
                           <label className="flex items-center gap-2 text-sm font-black text-slate-900">
                             <input
                               type="checkbox"
@@ -1076,6 +1096,25 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
                             className="min-w-0 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-300"
                           />
                           <div className="flex flex-wrap items-center gap-2">
+                            {item.url ? (
+                              <>
+                                <a
+                                  href={item.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50"
+                                >
+                                  Открыть
+                                </a>
+                                <button
+                                  type="button"
+                                  onClick={() => copyChannelUrl(`${video.id}:${channel.id}:url`, item.url)}
+                                  className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50"
+                                >
+                                  {copiedUrlKey === `${video.id}:${channel.id}:url` ? "Скопировано" : "Копия"}
+                                </button>
+                              </>
+                            ) : null}
                             {channel.id === "telegram" ? (
                               <button
                                 type="button"
