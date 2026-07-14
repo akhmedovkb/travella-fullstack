@@ -167,8 +167,9 @@ function savePublicationStatus(job, channels, actor) {
   const publishingPackage = output.publishingPackage || buildPublishingPackage(ctx);
   const prevPublicationStatus = publishingPackage.publicationStatus || {};
   const normalizedChannels = normalizePublicationChannels(channels);
+  const newChanges = buildPublicationHistory(prevPublicationStatus.channels || {}, normalizedChannels, actor);
   const history = [
-    ...buildPublicationHistory(prevPublicationStatus.channels || {}, normalizedChannels, actor),
+    ...newChanges,
     ...(Array.isArray(prevPublicationStatus.history) ? prevPublicationStatus.history : []),
   ].slice(0, 20);
   const publicationStatus = {
@@ -194,7 +195,7 @@ function savePublicationStatus(job, channels, actor) {
     type: "tool_result",
     tool: "ContentManager",
     message: "Статус ручной публикации обновлён.",
-    meta: { status: publicationStatus.status, changes: history.length },
+    meta: { status: publicationStatus.status, changes: newChanges.length },
   });
 
   return { success: true, job: nextJob, publicationStatus };
