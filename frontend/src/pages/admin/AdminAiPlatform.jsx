@@ -433,6 +433,25 @@ const PUBLICATION_CHANNELS = [
   { id: "reels", label: "Reels" },
 ];
 
+const PUBLISHING_MANAGER_PREFS_KEY = "travella.aiOS.publishingManagerPrefs.v1";
+
+function readPublishingManagerPrefs() {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(PUBLISHING_MANAGER_PREFS_KEY);
+    return raw ? JSON.parse(raw) || {} : {};
+  } catch {
+    return {};
+  }
+}
+
+function writePublishingManagerPrefs(prefs) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(PUBLISHING_MANAGER_PREFS_KEY, JSON.stringify(prefs || {}));
+  } catch {}
+}
+
 function getApprovedVideos(videos = []) {
   return videos.filter((video) => video.publishingPackage?.status === "approved");
 }
@@ -868,15 +887,16 @@ function VideoLibrary({ videos, jobs, onOpenJob, onSavePackage, onApprovePackage
 
 function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTelegram, packageLoading, publishLoading, publishFeedback, telegramReady }) {
   const approvedVideos = getApprovedVideos(videos);
-  const [workMode, setWorkMode] = React.useState("all");
-  const [statusFilter, setStatusFilter] = React.useState("all");
-  const [deliveryFilter, setDeliveryFilter] = React.useState("all");
+  const initialPrefs = React.useMemo(readPublishingManagerPrefs, []);
+  const [workMode, setWorkMode] = React.useState(initialPrefs.workMode || "all");
+  const [statusFilter, setStatusFilter] = React.useState(initialPrefs.statusFilter || "all");
+  const [deliveryFilter, setDeliveryFilter] = React.useState(initialPrefs.deliveryFilter || "all");
   const [query, setQuery] = React.useState("");
-  const [sortMode, setSortMode] = React.useState("schedule");
+  const [sortMode, setSortMode] = React.useState(initialPrefs.sortMode || "schedule");
   const [copiedReport, setCopiedReport] = React.useState(false);
   const [copiedUrlKey, setCopiedUrlKey] = React.useState("");
   const [selectedIds, setSelectedIds] = React.useState([]);
-  const [bulkChannel, setBulkChannel] = React.useState("telegram");
+  const [bulkChannel, setBulkChannel] = React.useState(initialPrefs.bulkChannel || "telegram");
   const [bulkDate, setBulkDate] = React.useState("");
   const [bulkLoading, setBulkLoading] = React.useState(false);
   const [bulkFeedback, setBulkFeedback] = React.useState("");
@@ -917,6 +937,10 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
   const selectedVideos = filteredVideos.filter((video) => selectedIds.includes(video.id));
   const allVisibleSelected = Boolean(filteredVideos.length) && visibleIds.every((id) => selectedIds.includes(id));
 
+  React.useEffect(() => {
+    writePublishingManagerPrefs({ workMode, statusFilter, deliveryFilter, sortMode, bulkChannel });
+  }, [workMode, statusFilter, deliveryFilter, sortMode, bulkChannel]);
+
   function updateChannel(video, channelId, patch) {
     const current = video.publishingPackage?.publicationStatus?.channels || {};
     const nextChannels = {
@@ -938,6 +962,17 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
       if (allVisibleSelected) return current.filter((id) => !visibleIds.includes(id));
       return Array.from(new Set([...current, ...visibleIds]));
     });
+  }
+
+  function resetQueuePrefs() {
+    setWorkMode("all");
+    setStatusFilter("all");
+    setDeliveryFilter("all");
+    setSortMode("schedule");
+    setBulkChannel("telegram");
+    setQuery("");
+    setSelectedIds([]);
+    setBulkFeedback("");
   }
 
   async function applyBulkPatch(patch) {
@@ -1020,6 +1055,13 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
               className="rounded-2xl bg-slate-950 px-4 py-2 text-xs font-black text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {copiedReport ? "Отчёт скопирован" : "Скопировать отчёт"}
+            </button>
+            <button
+              type="button"
+              onClick={resetQueuePrefs}
+              className="rounded-2xl bg-white px-4 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50"
+            >
+              Сбросить вид
             </button>
             <Pill tone="green">{filteredVideos.length} / {approvedVideos.length}</Pill>
           </div>
