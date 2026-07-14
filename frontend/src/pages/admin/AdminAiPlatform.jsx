@@ -868,6 +868,7 @@ function VideoLibrary({ videos, jobs, onOpenJob, onSavePackage, onApprovePackage
 
 function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTelegram, packageLoading, publishLoading, publishFeedback, telegramReady }) {
   const approvedVideos = getApprovedVideos(videos);
+  const [workMode, setWorkMode] = React.useState("all");
   const [statusFilter, setStatusFilter] = React.useState("all");
   const [deliveryFilter, setDeliveryFilter] = React.useState("all");
   const [query, setQuery] = React.useState("");
@@ -884,7 +885,13 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
     const publicationStatus = video.publishingPackage?.publicationStatus || {};
     const telegram = publicationStatus.channels?.telegram || {};
     const status = publicationStatus.status || "not_published";
+    const nextAction = getNextPublicationAction(video);
     const haystack = [video.code, video.title, video.destination, video.hotelName, telegram.url].filter(Boolean).join(" ").toLowerCase();
+    const modeOk =
+      workMode === "all" ||
+      (workMode === "today" && ["red", "yellow"].includes(nextAction.tone)) ||
+      (workMode === "overdue" && nextAction.tone === "red") ||
+      (workMode === "unscheduled" && nextAction.tone === "slate");
     const statusOk =
       statusFilter === "all" ||
       (statusFilter === "waiting" && status === "not_published") ||
@@ -892,7 +899,7 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
       (statusFilter === "complete" && status === "published_all");
     const deliveryOk = deliveryFilter === "all" || telegram.deliveryMethod === deliveryFilter;
     const queryOk = !normalizedQuery || haystack.includes(normalizedQuery);
-    return statusOk && deliveryOk && queryOk;
+    return modeOk && statusOk && deliveryOk && queryOk;
   }).sort((a, b) => {
     if (sortMode === "newest") return new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0);
     if (sortMode === "status") {
@@ -1016,6 +1023,23 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
             </button>
             <Pill tone="green">{filteredVideos.length} / {approvedVideos.length}</Pill>
           </div>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {[
+            ["all", "Вся очередь"],
+            ["today", "Сегодня"],
+            ["overdue", "Просрочено"],
+            ["unscheduled", "Без плана"],
+          ].map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setWorkMode(id)}
+              className={cn("rounded-2xl px-3 py-2 text-xs font-black ring-1", workMode === id ? "bg-blue-700 text-white ring-blue-700" : "bg-white text-slate-600 ring-slate-200 hover:bg-slate-50")}
+            >
+              {label}
+            </button>
+          ))}
         </div>
         <div className="mt-4 grid gap-3 xl:grid-cols-[1fr_220px]">
           <input
@@ -1280,7 +1304,7 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
           );
         }) : (
           <div className="rounded-3xl border border-slate-200 bg-white p-6 text-sm font-semibold text-slate-500">
-            {approvedVideos.length ? "Нет публикаций под выбранные фильтры." : "Пока нет утверждённых пакетов. Сначала утверди текст у Content Manager."}
+            {approvedVideos.length ? "Нет публикаций под выбранный режим и фильтры." : "Пока нет утверждённых пакетов. Сначала утверди текст у Content Manager."}
           </div>
         )}
       </div>
