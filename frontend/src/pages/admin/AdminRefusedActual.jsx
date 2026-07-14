@@ -1052,7 +1052,7 @@ function renderDetailFields(editForm, setEditForm, extra = {}) {
           <div className="mb-4">
             <div className="text-sm font-black text-slate-950">Отель и размещение</div>
             <div className="mt-1 text-xs text-slate-500">
-              Основные параметры проживания без дублирующих legacy-полей.
+              Отель, категория номера, размещение и питание.
             </div>
           </div>
 
@@ -1136,9 +1136,10 @@ function renderDetailFields(editForm, setEditForm, extra = {}) {
 
             {selectWithCurrent("transfer", "Трансфер", [
               { value: "", label: "Не указано" },
+              { value: "included", label: "Включён" },
               { value: "group", label: "Групповой" },
               { value: "individual", label: "Индивидуальный" },
-              { value: "none", label: "Без трансфера" },
+              { value: "none", label: "Не включён" },
             ])}
           </div>
         </section>
@@ -3950,8 +3951,12 @@ const sortLabel = useMemo(() => {
             {editTab === "details" ? (
               <>
             <div className="rounded-2xl border border-gray-200 p-4">
-              <div className="flex items-center justify-between gap-3"><div className="text-sm font-semibold text-gray-900">Быстрое редактирование details по категории</div>{hotelQuery ? <div className="text-xs text-gray-500">Поиск отеля: {hotelQuery}</div> : null}</div>
-              <div className="mt-4">{renderDetailFields(editForm, setEditForm, {
+              {hotelQuery ? (
+                <div className="mb-3 text-right text-xs text-gray-500">
+                  Поиск отеля: {hotelQuery}
+                </div>
+              ) : null}
+              <div>{renderDetailFields(editForm, setEditForm, {
                 hotelOptions,
                 hotelLoading,
                 onHotelSearch: searchHotels,
