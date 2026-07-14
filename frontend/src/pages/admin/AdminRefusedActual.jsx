@@ -961,39 +961,248 @@ function renderDetailFields(editForm, setEditForm, extra = {}) {
   }
 
   if (category === "refused_tour") {
+    const dateOnlyValue = (value) => String(value || "").slice(0, 10);
+
+    const updateDateOnly = (key) => (e) => {
+      const value = String(e.target.value || "").trim();
+      updateDetailsField(key, value ? `${value}T00:00` : "");
+    };
+
+    const dateOnlyInput = (key, label) => (
+      <Field label={label} key={key} error={detailErrors?.[key]}>
+        <TextInput
+          type="date"
+          value={dateOnlyValue(details?.[key])}
+          onChange={updateDateOnly(key)}
+          invalid={!!detailErrors?.[key]}
+        />
+      </Field>
+    );
+
+    const selectWithCurrent = (key, label, options) => {
+      const current = String(details?.[key] || "").trim();
+      const hasCurrent = options.some((opt) => String(opt.value) === current);
+      const finalOptions = hasCurrent || !current
+        ? options
+        : [{ value: current, label: current }, ...options];
+
+      return (
+        <Field label={label} key={key} error={detailErrors?.[key]}>
+          <SelectInput
+            value={current}
+            onChange={updateText(key)}
+            options={finalOptions}
+            invalid={!!detailErrors?.[key]}
+          />
+        </Field>
+      );
+    };
+
+    const startDate = Date.parse(details?.startDate || "");
+    const endDate = Date.parse(details?.endDate || "");
+    const nightsCount =
+      Number.isFinite(startDate) && Number.isFinite(endDate) && endDate > startDate
+        ? Math.round((endDate - startDate) / 86400000)
+        : null;
+
+    const margin = calcMargin(details);
+
     return (
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        {textField("directionCountry", "Страна направления")}
-        {textField("directionFrom", "Город вылета")}
-        {textField("directionTo", "Город прибытия")}
-        {dateField("startDate", "Дата начала")}
-        {dateField("endDate", "Дата конца")}
-        {dateField("departureFlightDate", "Дата рейса вылета")}
-        {dateField("returnFlightDate", "Дата рейса обратно")}
-        <div className="md:col-span-3">{hotelField("hotel", "Отель")}</div>
-        {textField("hotelName", "Hotel name / legacy")}
-        {textField("accommodationCategory", "Категория номера")}
-        {textField("roomCategory", "Room category / legacy")}
-        {textField("accommodation", "Размещение")}
-        {textField("food", "Питание")}
-        {textField("transfer", "Трансфер")}
-        {textField("netPrice", "Цена нетто")}
-        {textField("grossPrice", "Цена продажи")}
-        {textField("previousPrice", "Предыдущая цена")}
-        {dateField("expiration", "Срок актуальности")}
-        <div className="md:col-span-3">
-          <Field label="Детали рейса" error={detailErrors?.flightDetails}>
-            <TextArea value={details?.flightDetails || ""} onChange={updateText("flightDetails")} rows={3} invalid={!!detailErrors?.flightDetails} />
-          </Field>
-        </div>
-        <div className="md:col-span-3 flex flex-wrap gap-2">
-          <CheckboxField label="Можно менять" checked={details?.changeable} onChange={updateCheckbox("changeable")} />
-          <CheckboxField label="Виза включена" checked={details?.visaIncluded} onChange={updateCheckbox("visaIncluded")} />
-          <CheckboxField label="Страховка включена" checked={details?.insuranceIncluded} onChange={updateCheckbox("insuranceIncluded")} />
-          <CheckboxField label="Раннее заселение" checked={details?.earlyCheckIn} onChange={updateCheckbox("earlyCheckIn")} />
-          <CheckboxField label="Arrival Fast Track" checked={details?.arrivalFastTrack} onChange={updateCheckbox("arrivalFastTrack")} />
-          <CheckboxField label="Актуально" checked={details?.isActive} onChange={updateCheckbox("isActive")} />
-        </div>
+      <div className="space-y-5">
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-4">
+            <div className="text-sm font-black text-slate-950">Маршрут</div>
+            <div className="mt-1 text-xs text-slate-500">
+              Направление и города, которые будут показаны в карточке услуги.
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            {textField("directionCountry", "Страна направления", "Например: Кыргызстан")}
+            {textField("directionFrom", "Город вылета", "Например: Ташкент")}
+            {textField("directionTo", "Город прибытия", "Например: Иссык-Куль")}
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-sm font-black text-slate-950">Даты тура</div>
+              <div className="mt-1 text-xs text-slate-500">
+                Основные даты поездки и отдельные даты рейсов.
+              </div>
+            </div>
+
+            {nightsCount ? (
+              <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
+                {nightsCount} ноч.
+              </span>
+            ) : null}
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {dateOnlyInput("startDate", "Дата начала")}
+            {dateOnlyInput("endDate", "Дата окончания")}
+            {dateOnlyInput("departureFlightDate", "Дата рейса вылета")}
+            {dateOnlyInput("returnFlightDate", "Дата рейса обратно")}
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-4">
+            <div className="text-sm font-black text-slate-950">Отель и размещение</div>
+            <div className="mt-1 text-xs text-slate-500">
+              Основные параметры проживания без дублирующих legacy-полей.
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <div className="md:col-span-3">
+              <Field label="Отель" error={detailErrors?.hotel || detailErrors?.hotelName}>
+                <input
+                  list="admin-hotel-options"
+                  className={classNames(
+                    "w-full rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2",
+                    detailErrors?.hotel || detailErrors?.hotelName
+                      ? "border-red-300 bg-red-50/40 focus:ring-red-100"
+                      : "border-gray-200 focus:ring-gray-200"
+                  )}
+                  value={details?.hotel || details?.hotelName || ""}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setEditForm((prev) => {
+                      const nextDetails = {
+                        ...(prev?.details || {}),
+                        hotel: value,
+                        hotelName: value,
+                      };
+                      return {
+                        ...prev,
+                        details: nextDetails,
+                        rawDetailsText: JSON.stringify(nextDetails, null, 2),
+                      };
+                    });
+                    if (onHotelSearch) onHotelSearch(value);
+                  }}
+                  placeholder="Найдите отель или введите вручную"
+                />
+                <datalist id="admin-hotel-options">
+                  {hotelOptions.map((h, idx) => {
+                    const labelText = [h.name, h.city, h.country].filter(Boolean).join(" • ");
+                    return (
+                      <option key={`${h.id || h.name || "hotel"}-${idx}`} value={h.name || ""}>
+                        {labelText}
+                      </option>
+                    );
+                  })}
+                </datalist>
+              </Field>
+            </div>
+
+            <Field label="Категория номера" error={detailErrors?.accommodationCategory || detailErrors?.roomCategory}>
+              <TextInput
+                value={details?.accommodationCategory || details?.roomCategory || ""}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setEditForm((prev) => {
+                    const nextDetails = {
+                      ...(prev?.details || {}),
+                      accommodationCategory: value,
+                      roomCategory: value,
+                    };
+                    return {
+                      ...prev,
+                      details: nextDetails,
+                      rawDetailsText: JSON.stringify(nextDetails, null, 2),
+                    };
+                  });
+                }}
+                placeholder="Например: Standard Room"
+                invalid={!!(detailErrors?.accommodationCategory || detailErrors?.roomCategory)}
+              />
+            </Field>
+
+            {textField("accommodation", "Размещение", "Например: 2 ADT")}
+
+            {selectWithCurrent("food", "Питание", [
+              { value: "", label: "Не указано" },
+              { value: "RO", label: "RO — без питания" },
+              { value: "BB", label: "BB — завтраки" },
+              { value: "HB", label: "HB — завтрак и ужин" },
+              { value: "FB", label: "FB — полный пансион" },
+              { value: "AI", label: "AI — всё включено" },
+              { value: "UAI", label: "UAI — ультра всё включено" },
+            ])}
+
+            {selectWithCurrent("transfer", "Трансфер", [
+              { value: "", label: "Не указано" },
+              { value: "group", label: "Групповой" },
+              { value: "individual", label: "Индивидуальный" },
+              { value: "none", label: "Без трансфера" },
+            ])}
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-sm font-black text-slate-950">Стоимость</div>
+              <div className="mt-1 text-xs text-slate-500">
+                Цена продажи синхронизируется с основной ценой услуги.
+              </div>
+            </div>
+
+            {margin !== null ? (
+              <span className={classNames(
+                "rounded-full border px-3 py-1 text-xs font-bold",
+                margin >= 0
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : "border-red-200 bg-red-50 text-red-700"
+              )}>
+                Маржа: {margin}
+              </span>
+            ) : null}
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            {textField("netPrice", "Цена нетто")}
+            {textField("grossPrice", "Цена продажи")}
+            {textField("previousPrice", "Предыдущая цена")}
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-4">
+            <div className="text-sm font-black text-slate-950">Рейс и актуальность</div>
+            <div className="mt-1 text-xs text-slate-500">
+              Детали перелёта и срок, до которого предложение считается актуальным.
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
+            <Field label="Детали рейса" error={detailErrors?.flightDetails}>
+              <TextArea
+                value={details?.flightDetails || ""}
+                onChange={updateText("flightDetails")}
+                rows={5}
+                invalid={!!detailErrors?.flightDetails}
+              />
+            </Field>
+
+            <div className="space-y-3">
+              {dateField("expiration", "Срок актуальности")}
+
+              <div className="flex flex-wrap gap-2">
+                <CheckboxField label="Можно менять" checked={details?.changeable} onChange={updateCheckbox("changeable")} />
+                <CheckboxField label="Виза включена" checked={details?.visaIncluded} onChange={updateCheckbox("visaIncluded")} />
+                <CheckboxField label="Страховка включена" checked={details?.insuranceIncluded} onChange={updateCheckbox("insuranceIncluded")} />
+                <CheckboxField label="Раннее заселение" checked={details?.earlyCheckIn} onChange={updateCheckbox("earlyCheckIn")} />
+                <CheckboxField label="Arrival Fast Track" checked={details?.arrivalFastTrack} onChange={updateCheckbox("arrivalFastTrack")} />
+                <CheckboxField label="Актуально" checked={details?.isActive} onChange={updateCheckbox("isActive")} />
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
     );
   }
