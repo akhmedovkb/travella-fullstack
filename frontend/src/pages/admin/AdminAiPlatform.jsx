@@ -430,6 +430,24 @@ function getApprovedVideos(videos = []) {
   return videos.filter((video) => video.publishingPackage?.status === "approved");
 }
 
+function getPublicationScheduleTime(video = {}) {
+  const channels = video.publishingPackage?.publicationStatus?.channels || {};
+  const times = Object.values(channels)
+    .map((item) => new Date(item?.plannedAt || 0).getTime())
+    .filter((time) => Number.isFinite(time) && time > 0);
+  if (!times.length) return 0;
+  return Math.min(...times);
+}
+
+function getPublicationPublishedTime(video = {}) {
+  const channels = video.publishingPackage?.publicationStatus?.channels || {};
+  const times = Object.values(channels)
+    .map((item) => new Date(item?.publishedAt || 0).getTime())
+    .filter((time) => Number.isFinite(time) && time > 0);
+  if (!times.length) return 0;
+  return Math.max(...times);
+}
+
 function toDateTimeLocal(value) {
   if (!value) return "";
   const d = new Date(value);
@@ -801,17 +819,34 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
   const approvedVideos = getApprovedVideos(videos);
   const [statusFilter, setStatusFilter] = React.useState("all");
   const [deliveryFilter, setDeliveryFilter] = React.useState("all");
+  const [query, setQuery] = React.useState("");
+  const [sortMode, setSortMode] = React.useState("schedule");
+  const normalizedQuery = query.trim().toLowerCase();
   const filteredVideos = approvedVideos.filter((video) => {
     const publicationStatus = video.publishingPackage?.publicationStatus || {};
     const telegram = publicationStatus.channels?.telegram || {};
     const status = publicationStatus.status || "not_published";
+    const haystack = [video.code, video.title, video.destination, video.hotelName, telegram.url].filter(Boolean).join(" ").toLowerCase();
     const statusOk =
       statusFilter === "all" ||
       (statusFilter === "waiting" && status === "not_published") ||
       (statusFilter === "partial" && status === "published_partial") ||
       (statusFilter === "complete" && status === "published_all");
     const deliveryOk = deliveryFilter === "all" || telegram.deliveryMethod === deliveryFilter;
-    return statusOk && deliveryOk;
+    const queryOk = !normalizedQuery || haystack.includes(normalizedQuery);
+    return statusOk && deliveryOk && queryOk;
+  }).sort((a, b) => {
+    if (sortMode === "newest") return new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0);
+    if (sortMode === "status") {
+      const rank = { not_published: 0, published_partial: 1, published_all: 2 };
+      const aStatus = a.publishingPackage?.publicationStatus?.status || "not_published";
+      const bStatus = b.publishingPackage?.publicationStatus?.status || "not_published";
+      return (rank[aStatus] ?? 9) - (rank[bStatus] ?? 9);
+    }
+    if (sortMode === "published") return getPublicationPublishedTime(b) - getPublicationPublishedTime(a);
+    const aSchedule = getPublicationScheduleTime(a) || Number.MAX_SAFE_INTEGER;
+    const bSchedule = getPublicationScheduleTime(b) || Number.MAX_SAFE_INTEGER;
+    return aSchedule - bSchedule || new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0);
   });
 
   function updateChannel(video, channelId, patch) {
@@ -837,7 +872,26 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
           </div>
           <Pill tone="green">{filteredVideos.length} / {approvedVideos.length}</Pill>
         </div>
-        <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="mt-4 grid gap-3 xl:grid-cols-[1fr_220px]">
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Поиск по коду, названию или ссылке"
+            className="min-w-0 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:border-blue-300"
+          />
+          <select
+            value={sortMode}
+            onChange={(e) => setSortMode(e.target.value)}
+            className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 outline-none focus:border-blue-300"
+          >
+            <option value="schedule">Сначала по плану</option>
+            <option value="newest">Сначала новые</option>
+            <option value="status">Сначала ожидают</option>
+            <option value="published">Сначала опубликованные</option>
+          </select>
+        </div>
+        <div className="mt-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap gap-2">
             {[
               ["all", "Все"],
