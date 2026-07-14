@@ -955,6 +955,18 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
   const visibleIds = filteredVideos.map((video) => video.id);
   const selectedVideos = filteredVideos.filter((video) => selectedIds.includes(video.id));
   const allVisibleSelected = Boolean(filteredVideos.length) && visibleIds.every((id) => selectedIds.includes(id));
+  const workModeCounts = approvedVideos.reduce(
+    (acc, video) => {
+      const action = getNextPublicationAction(video);
+      return {
+        all: acc.all + 1,
+        today: acc.today + (["red", "yellow"].includes(action.tone) ? 1 : 0),
+        overdue: acc.overdue + (action.tone === "red" ? 1 : 0),
+        unscheduled: acc.unscheduled + (action.tone === "slate" ? 1 : 0),
+      };
+    },
+    { all: 0, today: 0, overdue: 0, unscheduled: 0 }
+  );
 
   React.useEffect(() => {
     writePublishingManagerPrefs({ workMode, statusFilter, deliveryFilter, sortMode, bulkChannel });
@@ -1099,7 +1111,8 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
               onClick={() => setWorkMode(id)}
               className={cn("rounded-2xl px-3 py-2 text-xs font-black ring-1", workMode === id ? "bg-blue-700 text-white ring-blue-700" : "bg-white text-slate-600 ring-slate-200 hover:bg-slate-50")}
             >
-              {label}
+              <span>{label}</span>
+              <span className={cn("ml-2 rounded-full px-2 py-0.5", workMode === id ? "bg-white/15 text-white" : "bg-slate-100 text-slate-500")}>{workModeCounts[id] || 0}</span>
             </button>
           ))}
         </div>
