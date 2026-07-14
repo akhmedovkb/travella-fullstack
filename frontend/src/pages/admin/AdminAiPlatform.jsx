@@ -576,6 +576,26 @@ function countPublishingLinks(videos = []) {
   }, 0);
 }
 
+function buildPublishingTextsReport(videos = [], channelId = "telegram") {
+  const channels = channelId === "all" ? PUBLICATION_CHANNELS : PUBLICATION_CHANNELS.filter((channel) => channel.id === channelId);
+  const lines = videos.flatMap((video) => {
+    const pkg = video.publishingPackage || {};
+    return channels.map((channel) => {
+      const text = getPublishingTextForChannel(pkg, channel.id);
+      return text ? `${video.code || "AI"} · ${channel.label}\n${text}` : "";
+    }).filter(Boolean);
+  });
+  return [`Travella AI OS — тексты публикаций`, `Всего текстов: ${lines.length}`, "", ...lines].join("\n\n");
+}
+
+function countPublishingTexts(videos = [], channelId = "telegram") {
+  const channels = channelId === "all" ? PUBLICATION_CHANNELS : PUBLICATION_CHANNELS.filter((channel) => channel.id === channelId);
+  return videos.reduce((sum, video) => {
+    const pkg = video.publishingPackage || {};
+    return sum + channels.filter((channel) => getPublishingTextForChannel(pkg, channel.id)).length;
+  }, 0);
+}
+
 function toDateTimeLocal(value) {
   if (!value) return "";
   const d = new Date(value);
@@ -953,6 +973,7 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
   const [sortMode, setSortMode] = React.useState(initialPrefs.sortMode || "schedule");
   const [copiedReport, setCopiedReport] = React.useState(false);
   const [copiedLinks, setCopiedLinks] = React.useState(false);
+  const [copiedBulkTexts, setCopiedBulkTexts] = React.useState(false);
   const [copiedUrlKey, setCopiedUrlKey] = React.useState("");
   const [copiedTextKey, setCopiedTextKey] = React.useState("");
   const [selectedIds, setSelectedIds] = React.useState([]);
@@ -1028,6 +1049,7 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
   const allVisibleSelected = Boolean(filteredVideos.length) && visibleIds.every((id) => selectedIds.includes(id));
   const reportSourceVideos = selectedVideos.length ? selectedVideos : filteredVideos;
   const reportLinksCount = countPublishingLinks(reportSourceVideos);
+  const bulkTextsCount = countPublishingTexts(reportSourceVideos, bulkChannel);
   const workModeCounts = approvedVideos.reduce(
     (acc, video) => {
       const action = getNextPublicationAction(video);
@@ -1141,6 +1163,26 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
     }
     setCopiedLinks(true);
     window.setTimeout(() => setCopiedLinks(false), 1800);
+  }
+
+  async function copyBulkTextsReport() {
+    if (!bulkTextsCount) return;
+    const text = buildPublishingTextsReport(reportSourceVideos, bulkChannel);
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+    }
+    setCopiedBulkTexts(true);
+    window.setTimeout(() => setCopiedBulkTexts(false), 1800);
   }
 
   async function copyChannelUrl(key, url) {
@@ -1329,6 +1371,14 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
                 <option value="reels">Reels</option>
                 <option value="all">Все каналы</option>
               </select>
+              <button
+                type="button"
+                onClick={copyBulkTextsReport}
+                disabled={!bulkTextsCount || bulkLoading}
+                className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {copiedBulkTexts ? "Тексты скопированы" : bulkTextsCount ? `Копировать тексты (${bulkTextsCount})` : "Текстов нет"}
+              </button>
               <input
                 type="datetime-local"
                 value={bulkDate}
