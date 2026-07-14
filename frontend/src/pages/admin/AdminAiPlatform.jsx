@@ -1020,7 +1020,8 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
   }
 
   async function copyQueueReport() {
-    const text = buildPublishingQueueReport(filteredVideos);
+    const reportVideos = selectedVideos.length ? selectedVideos : filteredVideos;
+    const text = buildPublishingQueueReport(reportVideos);
     try {
       await navigator.clipboard.writeText(text);
     } catch {
@@ -1073,7 +1074,7 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
               disabled={!filteredVideos.length}
               className="rounded-2xl bg-slate-950 px-4 py-2 text-xs font-black text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {copiedReport ? "Отчёт скопирован" : "Скопировать отчёт"}
+              {copiedReport ? "Отчёт скопирован" : selectedVideos.length ? "Скопировать выбранное" : "Скопировать отчёт"}
             </button>
             <button
               type="button"
