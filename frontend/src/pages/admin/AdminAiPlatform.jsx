@@ -596,6 +596,39 @@ function countPublishingTexts(videos = [], channelId = "telegram") {
   }, 0);
 }
 
+function csvCell(value) {
+  const text = String(value ?? "").replace(/\r?\n/g, " ").trim();
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function buildPublishingCsvReport(videos = []) {
+  const header = ["code", "title", "status", "channel", "published", "planned_at", "url", "delivery_method", "text"];
+  const rows = videos.flatMap((video) => {
+    const pkg = video.publishingPackage || {};
+    const publicationStatus = pkg.publicationStatus || {};
+    const channels = publicationStatus.channels || {};
+    return PUBLICATION_CHANNELS.map((channel) => {
+      const item = channels?.[channel.id] || {};
+      return [
+        video.code || "AI",
+        video.title || "",
+        getPublicationStatusLabel(publicationStatus),
+        channel.label,
+        item.published ? "yes" : "no",
+        item.plannedAt ? fmtDate(item.plannedAt) : "",
+        item.url || "",
+        channel.id === "telegram" && item.deliveryMethod ? getDeliveryLogMethodLabel(item.deliveryMethod) : "",
+        getPublishingTextForChannel(pkg, channel.id),
+      ].map(csvCell).join(";");
+    });
+  });
+  return [header.map(csvCell).join(";"), ...rows].join("\n");
+}
+
+function countPublishingCsvRows(videos = []) {
+  return videos.length * PUBLICATION_CHANNELS.length;
+}
+
 function toDateTimeLocal(value) {
   if (!value) return "";
   const d = new Date(value);
@@ -973,6 +1006,7 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
   const [sortMode, setSortMode] = React.useState(initialPrefs.sortMode || "schedule");
   const [copiedReport, setCopiedReport] = React.useState(false);
   const [copiedLinks, setCopiedLinks] = React.useState(false);
+  const [copiedCsv, setCopiedCsv] = React.useState(false);
   const [copiedBulkTexts, setCopiedBulkTexts] = React.useState(false);
   const [copiedUrlKey, setCopiedUrlKey] = React.useState("");
   const [copiedTextKey, setCopiedTextKey] = React.useState("");
@@ -1049,6 +1083,7 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
   const allVisibleSelected = Boolean(filteredVideos.length) && visibleIds.every((id) => selectedIds.includes(id));
   const reportSourceVideos = selectedVideos.length ? selectedVideos : filteredVideos;
   const reportLinksCount = countPublishingLinks(reportSourceVideos);
+  const reportCsvRows = countPublishingCsvRows(reportSourceVideos);
   const bulkTextsCount = countPublishingTexts(reportSourceVideos, bulkChannel);
   const workModeCounts = approvedVideos.reduce(
     (acc, video) => {
@@ -1165,6 +1200,26 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
     window.setTimeout(() => setCopiedLinks(false), 1800);
   }
 
+  async function copyCsvReport() {
+    if (!reportCsvRows) return;
+    const text = buildPublishingCsvReport(reportSourceVideos);
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+    }
+    setCopiedCsv(true);
+    window.setTimeout(() => setCopiedCsv(false), 1800);
+  }
+
   async function copyBulkTextsReport() {
     if (!bulkTextsCount) return;
     const text = buildPublishingTextsReport(reportSourceVideos, bulkChannel);
@@ -1248,6 +1303,14 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
               className="rounded-2xl bg-white px-4 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {copiedLinks ? "Ссылки скопированы" : reportLinksCount ? `Скопировать ссылки (${reportLinksCount})` : "Ссылок нет"}
+            </button>
+            <button
+              type="button"
+              onClick={copyCsvReport}
+              disabled={!reportCsvRows}
+              className="rounded-2xl bg-white px-4 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {copiedCsv ? "CSV скопирован" : reportCsvRows ? `CSV (${reportCsvRows})` : "CSV пуст"}
             </button>
             <button
               type="button"
