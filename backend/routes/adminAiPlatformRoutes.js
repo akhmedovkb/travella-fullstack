@@ -2,6 +2,7 @@
 
 const express = require("express");
 const axios = require("axios");
+const { Blob } = require("buffer");
 const router = express.Router();
 
 const authenticateToken = require("../middleware/authenticateToken");
@@ -27,6 +28,7 @@ const AI_PUBLISH_TELEGRAM_CHAT_ID = String(
     process.env.TELEGRAM_AI_PUBLISH_CHAT_ID ||
     ""
 ).trim();
+const TELEGRAM_VIDEO_UPLOAD_MAX_BYTES = 49 * 1024 * 1024;
 
 function normalizePublishingItems(items = []) {
   if (!Array.isArray(items)) return [];
@@ -159,6 +161,20 @@ function limitTelegramCaption(text, videoUrl) {
   return `${clean.slice(0, Math.max(0, 980 - suffix.length)).trim()}...${suffix}`;
 }
 
+function limitTelegramTextMessage(text, videoUrl) {
+  const clean = String(text || "").trim();
+  const suffix = videoUrl ? `\n\nВидео: ${videoUrl}` : "";
+  const message = `${clean}${suffix}`;
+  if (message.length <= 4096) return message;
+  return `${clean.slice(0, Math.max(0, 4093 - suffix.length)).trim()}...${suffix}`;
+}
+
+function isTelegramWrongWebPageContentError(description) {
+  const normalized = String(description || "").toLowerCase();
+  return normalized.includes("wrong type of web page content")
+    || normalized.includes("wrong type of the web page content");
+}
+
 function buildTelegramMessageUrl(chat, messageId) {
   const username = String(chat?.username || "").trim();
   if (username && messageId) return `https://t.me/${username}/${messageId}`;
@@ -168,6 +184,42 @@ function buildTelegramMessageUrl(chat, messageId) {
     return `https://t.me/c/${rawId.slice(4)}/${messageId}`;
   }
   return "";
+}
+
+async function sendTelegramVideoUpload(api, job, videoUrl, text) {
+  const download = await axios.get(videoUrl, {
+    responseType: "arraybuffer",
+    timeout: 60000,
+    maxContentLength: TELEGRAM_VIDEO_UPLOAD_MAX_BYTES,
+    maxBodyLength: TELEGRAM_VIDEO_UPLOAD_MAX_BYTES,
+  });
+  const contentType = String(download.headers?.["content-type"] || "video/mp4").split(";")[0].trim() || "video/mp4";
+  const bytes = Buffer.byteLength(download.data);
+  if (bytes > TELEGRAM_VIDEO_UPLOAD_MAX_BYTES) {
+    throw new Error(`Video is too large for Telegram upload fallback (${bytes} bytes)`);
+  }
+
+  const form = new FormData();
+  form.append("chat_id", AI_PUBLISH_TELEGRAM_CHAT_ID);
+  form.append("caption", limitTelegramCaption(text, videoUrl));
+  form.append("supports_streaming", "true");
+  form.append("video", new Blob([download.data], { type: contentType }), "travella-video.mp4");
+
+  const res = await fetch(`${api}/sendVideo`, {
+    method: "POST",
+    body: form,
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data?.ok) {
+    throw new Error(data?.description || `Telegram upload sendVideo failed with HTTP ${res.status}`);
+  }
+
+  console.log("[ai-publishing] telegram sendVideo upload fallback completed", {
+    jobId: job.id,
+    bytes,
+    contentType,
+  });
+  return data;
 }
 
 async function publishVideoToTelegram(job, actor) {
@@ -190,7 +242,7 @@ async function publishVideoToTelegram(job, actor) {
     return { success: false, status: 400, message: "Publishing package must be approved before Telegram publishing" };
   }
 
-  const videoUrl = String(output.heygen?.artifact?.url || output.heygen?.videoUrl || "").trim();
+  const videoUrl = String(output.heygen?.videoUrl || output.heygen?.artifact?.url || "").trim();
   if (!videoUrl) {
     return { success: false, status: 400, message: "Video URL is missing" };
   }
@@ -201,16 +253,22 @@ async function publishVideoToTelegram(job, actor) {
   }
 
   const api = `https://api.telegram.org/bot${TELEGRAM_CLIENT_BOT_TOKEN}`;
-  const payload = {
+  const videoPayload = {
     chat_id: AI_PUBLISH_TELEGRAM_CHAT_ID,
     video: videoUrl,
     caption: limitTelegramCaption(text, videoUrl),
     supports_streaming: true,
   };
+  const messagePayload = {
+    chat_id: AI_PUBLISH_TELEGRAM_CHAT_ID,
+    text: limitTelegramTextMessage(text, videoUrl),
+    disable_web_page_preview: true,
+  };
 
   let data;
+  let deliveryMethod = "sendVideo";
   try {
-    const res = await axios.post(`${api}/sendVideo`, payload, { timeout: 30000 });
+    const res = await axios.post(`${api}/sendVideo`, videoPayload, { timeout: 30000 });
     data = res.data;
   } catch (e) {
     const desc = e?.response?.data?.description || e?.message || "Telegram sendVideo failed";
@@ -219,7 +277,59 @@ async function publishVideoToTelegram(job, actor) {
       status: e?.response?.status || null,
       description: desc,
     });
-    return { success: false, status: 502, message: desc };
+    if (!isTelegramWrongWebPageContentError(desc)) {
+      return { success: false, status: 502, message: desc };
+    }
+
+    try {
+      data = await sendTelegramVideoUpload(api, job, videoUrl, text);
+      deliveryMethod = "sendVideoUpload";
+    } catch (uploadError) {
+      console.error("[ai-publishing] telegram sendVideo upload fallback failed", {
+        jobId: job.id,
+        description: uploadError?.message || String(uploadError),
+      });
+      try {
+        const fallback = await axios.post(`${api}/sendMessage`, messagePayload, { timeout: 30000 });
+        data = fallback.data;
+        deliveryMethod = "sendMessage";
+      } catch (fallbackError) {
+        const fallbackDesc =
+          fallbackError?.response?.data?.description || fallbackError?.message || "Telegram sendMessage failed";
+        console.error("[ai-publishing] telegram sendMessage fallback failed", {
+          jobId: job.id,
+          status: fallbackError?.response?.status || null,
+          description: fallbackDesc,
+        });
+        return { success: false, status: 502, message: fallbackDesc };
+      }
+    }
+  }
+
+  if (!data?.ok && isTelegramWrongWebPageContentError(data?.description)) {
+    try {
+      data = await sendTelegramVideoUpload(api, job, videoUrl, text);
+      deliveryMethod = "sendVideoUpload";
+    } catch (uploadError) {
+      console.error("[ai-publishing] telegram sendVideo upload fallback failed", {
+        jobId: job.id,
+        description: uploadError?.message || String(uploadError),
+      });
+      try {
+        const fallback = await axios.post(`${api}/sendMessage`, messagePayload, { timeout: 30000 });
+        data = fallback.data;
+        deliveryMethod = "sendMessage";
+      } catch (fallbackError) {
+        const fallbackDesc =
+          fallbackError?.response?.data?.description || fallbackError?.message || "Telegram sendMessage failed";
+        console.error("[ai-publishing] telegram sendMessage fallback failed", {
+          jobId: job.id,
+          status: fallbackError?.response?.status || null,
+          description: fallbackDesc,
+        });
+        return { success: false, status: 502, message: fallbackDesc };
+      }
+    }
   }
 
   if (!data?.ok) {
@@ -245,6 +355,7 @@ async function publishVideoToTelegram(job, actor) {
         url: telegramUrl,
         messageId: message.message_id || null,
         chatId: message.chat?.id || AI_PUBLISH_TELEGRAM_CHAT_ID,
+        deliveryMethod,
       },
     },
     actor
@@ -255,13 +366,14 @@ async function publishVideoToTelegram(job, actor) {
     type: "tool_result",
     tool: "PublishingManager",
     message: "Telegram публикация отправлена через клиентский бот.",
-    meta: { channel: "telegram", messageId: message.message_id || null, url: telegramUrl || null },
+    meta: { channel: "telegram", messageId: message.message_id || null, url: telegramUrl || null, deliveryMethod },
   });
 
   console.log("[ai-publishing] telegram publish completed", {
     jobId: job.id,
     messageId: message.message_id || null,
     url: telegramUrl || null,
+    deliveryMethod,
   });
 
   return {
@@ -272,6 +384,7 @@ async function publishVideoToTelegram(job, actor) {
       messageId: message.message_id || null,
       chatId: message.chat?.id || AI_PUBLISH_TELEGRAM_CHAT_ID,
       url: telegramUrl,
+      deliveryMethod,
     },
   };
 }
