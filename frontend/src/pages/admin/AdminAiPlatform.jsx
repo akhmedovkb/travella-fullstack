@@ -299,6 +299,15 @@ function PublishingInspector({ videos }) {
   const partial = approved.filter((video) => video.publishingPackage?.publicationStatus?.status === "published_partial").length;
   const complete = approved.filter((video) => video.publishingPackage?.publicationStatus?.status === "published_all").length;
   const waiting = Math.max(0, approved.length - partial - complete);
+  const telegramDelivery = approved.reduce(
+    (acc, video) => {
+      const telegram = video.publishingPackage?.publicationStatus?.channels?.telegram || {};
+      if (!telegram.published) return acc;
+      const method = telegram.deliveryMethod || "unknown";
+      return { ...acc, [method]: (acc[method] || 0) + 1, total: acc.total + 1 };
+    },
+    { total: 0 }
+  );
   return (
     <aside className="space-y-4">
       <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -309,6 +318,15 @@ function PublishingInspector({ videos }) {
           <div className="flex justify-between rounded-2xl bg-slate-50 p-4"><span>Не опубликовано</span><b className="text-slate-950">{waiting}</b></div>
           <div className="flex justify-between rounded-2xl bg-slate-50 p-4"><span>Частично</span><b className="text-slate-950">{partial}</b></div>
           <div className="flex justify-between rounded-2xl bg-slate-50 p-4"><span>Везде</span><b className="text-slate-950">{complete}</b></div>
+          <div className="rounded-2xl bg-slate-50 p-4">
+            <div className="text-slate-400">Telegram delivery</div>
+            <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+              <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>Видео URL</span><b className="text-emerald-700">{telegramDelivery.sendVideo || 0}</b></div>
+              <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>Файлом</span><b className="text-blue-700">{telegramDelivery.sendVideoUpload || 0}</b></div>
+              <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>Ссылкой</span><b className="text-amber-700">{telegramDelivery.sendMessage || 0}</b></div>
+              <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>Всего</span><b className="text-slate-950">{telegramDelivery.total}</b></div>
+            </div>
+          </div>
           <div className="rounded-2xl bg-slate-50 p-4"><div className="text-slate-400">Задача</div><b className="text-slate-950">Контроль ручных публикаций</b></div>
         </div>
       </div>
