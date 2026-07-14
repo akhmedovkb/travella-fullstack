@@ -941,10 +941,9 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
   const [bulkLoading, setBulkLoading] = React.useState(false);
   const [bulkFeedback, setBulkFeedback] = React.useState("");
   const normalizedQuery = query.trim().toLowerCase();
-  const filteredVideos = approvedVideos.filter((video) => {
+  function matchesWorkModeAndQuery(video) {
     const publicationStatus = video.publishingPackage?.publicationStatus || {};
     const telegram = publicationStatus.channels?.telegram || {};
-    const status = publicationStatus.status || "not_published";
     const nextAction = getNextPublicationAction(video);
     const haystack = [video.code, video.title, video.destination, video.hotelName, telegram.url].filter(Boolean).join(" ").toLowerCase();
     const modeOk =
@@ -952,14 +951,45 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
       (workMode === "today" && ["red", "yellow"].includes(nextAction.tone)) ||
       (workMode === "overdue" && nextAction.tone === "red") ||
       (workMode === "unscheduled" && nextAction.tone === "slate");
+    const queryOk = !normalizedQuery || haystack.includes(normalizedQuery);
+    return modeOk && queryOk;
+  }
+  const baseFilteredVideos = approvedVideos.filter(matchesWorkModeAndQuery);
+  const statusFilterCounts = baseFilteredVideos.reduce(
+    (acc, video) => {
+      const status = video.publishingPackage?.publicationStatus?.status || "not_published";
+      return {
+        all: acc.all + 1,
+        waiting: acc.waiting + (status === "not_published" ? 1 : 0),
+        partial: acc.partial + (status === "published_partial" ? 1 : 0),
+        complete: acc.complete + (status === "published_all" ? 1 : 0),
+      };
+    },
+    { all: 0, waiting: 0, partial: 0, complete: 0 }
+  );
+  const deliveryFilterCounts = baseFilteredVideos.reduce(
+    (acc, video) => {
+      const method = video.publishingPackage?.publicationStatus?.channels?.telegram?.deliveryMethod || "";
+      return {
+        all: acc.all + 1,
+        sendVideo: acc.sendVideo + (method === "sendVideo" ? 1 : 0),
+        sendVideoUpload: acc.sendVideoUpload + (method === "sendVideoUpload" ? 1 : 0),
+        sendMessage: acc.sendMessage + (method === "sendMessage" ? 1 : 0),
+      };
+    },
+    { all: 0, sendVideo: 0, sendVideoUpload: 0, sendMessage: 0 }
+  );
+  const filteredVideos = baseFilteredVideos.filter((video) => {
+    const publicationStatus = video.publishingPackage?.publicationStatus || {};
+    const telegram = publicationStatus.channels?.telegram || {};
+    const status = publicationStatus.status || "not_published";
     const statusOk =
       statusFilter === "all" ||
       (statusFilter === "waiting" && status === "not_published") ||
       (statusFilter === "partial" && status === "published_partial") ||
       (statusFilter === "complete" && status === "published_all");
     const deliveryOk = deliveryFilter === "all" || telegram.deliveryMethod === deliveryFilter;
-    const queryOk = !normalizedQuery || haystack.includes(normalizedQuery);
-    return modeOk && statusOk && deliveryOk && queryOk;
+    return statusOk && deliveryOk;
   }).sort((a, b) => {
     if (sortMode === "newest") return new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0);
     if (sortMode === "status") {
@@ -1189,7 +1219,8 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
                 onClick={() => setStatusFilter(id)}
                 className={cn("rounded-2xl px-3 py-2 text-xs font-black ring-1", statusFilter === id ? "bg-slate-950 text-white ring-slate-950" : "bg-white text-slate-600 ring-slate-200 hover:bg-slate-50")}
               >
-                {label}
+                <span>{label}</span>
+                <span className={cn("ml-2 rounded-full px-2 py-0.5", statusFilter === id ? "bg-white/15 text-white" : "bg-slate-100 text-slate-500")}>{statusFilterCounts[id] || 0}</span>
               </button>
             ))}
           </div>
@@ -1206,7 +1237,8 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
                 onClick={() => setDeliveryFilter(id)}
                 className={cn("rounded-2xl px-3 py-2 text-xs font-black ring-1", deliveryFilter === id ? "bg-emerald-700 text-white ring-emerald-700" : "bg-white text-slate-600 ring-slate-200 hover:bg-slate-50")}
               >
-                {label}
+                <span>{label}</span>
+                <span className={cn("ml-2 rounded-full px-2 py-0.5", deliveryFilter === id ? "bg-white/15 text-white" : "bg-slate-100 text-slate-500")}>{deliveryFilterCounts[id] || 0}</span>
               </button>
             ))}
           </div>
