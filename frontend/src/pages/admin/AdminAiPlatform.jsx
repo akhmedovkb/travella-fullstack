@@ -2487,8 +2487,9 @@ export default function AdminAiPlatform() {
       ...(Array.isArray(run?.resultsPreview) && run.resultsPreview.length
         ? ["", "Results:", ...run.resultsPreview.map((item) => {
             const state = item.success ? (item.deliveryMethod || "ok") : "error";
+            const message = item.message ? ` · ${item.message}` : "";
             const link = item.url ? ` · ${item.url}` : "";
-            return `- ${item.code || item.jobId || "AI"}: ${state}${link}`;
+            return `- ${item.code || item.jobId || "AI"}: ${state}${message}${link}`;
           })]
         : []),
       run?.resultsOverflow ? `+${run.resultsOverflow} more` : "",
