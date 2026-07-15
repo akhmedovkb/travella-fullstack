@@ -582,6 +582,34 @@ function buildPublishingLinksReport(videos = []) {
   return [`Travella AI OS — ссылки публикаций`, `Всего ссылок: ${lines.length}`, "", ...lines].join("\n");
 }
 
+function getPublishedLinkItems(videos = []) {
+  return videos.flatMap((video) => {
+    const channels = video.publishingPackage?.publicationStatus?.channels || {};
+    return PUBLICATION_CHANNELS.map((channel) => {
+      const item = channels?.[channel.id] || {};
+      const url = String(item.url || "").trim();
+      if (!item.published || !url) return null;
+      const publishedAt = item.publishedAt ? new Date(item.publishedAt) : null;
+      return {
+        video,
+        channel,
+        item,
+        url,
+        publishedAt: publishedAt && !Number.isNaN(publishedAt.getTime()) ? publishedAt : null,
+      };
+    }).filter(Boolean);
+  }).sort((a, b) => (b.publishedAt?.getTime() || 0) - (a.publishedAt?.getTime() || 0));
+}
+
+function buildPublishedLinksReport(videos = []) {
+  const items = getPublishedLinkItems(videos);
+  const lines = items.map(({ video, channel, item, url }, index) => {
+    const date = item.publishedAt ? `${fmtDate(item.publishedAt)} · ` : "";
+    return `${index + 1}. ${date}${video.code || "AI"} · ${channel.label}: ${url}`;
+  });
+  return [`Travella AI OS — опубликованные ссылки`, `Всего: ${items.length}`, "", ...lines].join("\n");
+}
+
 function countPublishingLinks(videos = []) {
   return videos.reduce((sum, video) => {
     const channels = video.publishingPackage?.publicationStatus?.channels || {};
@@ -1083,6 +1111,7 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
   const [sortMode, setSortMode] = React.useState(initialPrefs.sortMode || "schedule");
   const [copiedReport, setCopiedReport] = React.useState(false);
   const [copiedLinks, setCopiedLinks] = React.useState(false);
+  const [copiedPublishedLinks, setCopiedPublishedLinks] = React.useState(false);
   const [copiedSchedule, setCopiedSchedule] = React.useState(false);
   const [copiedCsv, setCopiedCsv] = React.useState(false);
   const [copiedErrors, setCopiedErrors] = React.useState(false);
@@ -1183,6 +1212,7 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
   const allVisibleSelected = Boolean(filteredVideos.length) && visibleIds.every((id) => selectedIds.includes(id));
   const reportSourceVideos = selectedVideos.length ? selectedVideos : filteredVideos;
   const reportLinksCount = countPublishingLinks(reportSourceVideos);
+  const reportPublishedLinksCount = getPublishedLinkItems(reportSourceVideos).length;
   const reportScheduleCount = getPublishingScheduleItems(reportSourceVideos).length;
   const reportCsvRows = countPublishingCsvRows(reportSourceVideos);
   const reportErrorsCount = getPublishingErrorVideos(reportSourceVideos, publishFeedback).length;
@@ -1397,6 +1427,26 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
     window.setTimeout(() => setCopiedLinks(false), 1800);
   }
 
+  async function copyPublishedLinksReport() {
+    if (!reportPublishedLinksCount) return;
+    const text = buildPublishedLinksReport(reportSourceVideos);
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+    }
+    setCopiedPublishedLinks(true);
+    window.setTimeout(() => setCopiedPublishedLinks(false), 1800);
+  }
+
   async function copyScheduleReport() {
     if (!reportScheduleCount) return;
     const text = buildPublishingScheduleReport(reportSourceVideos);
@@ -1540,6 +1590,14 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
               className="rounded-2xl bg-white px-4 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {copiedLinks ? "Ссылки скопированы" : reportLinksCount ? `Скопировать ссылки (${reportLinksCount})` : "Ссылок нет"}
+            </button>
+            <button
+              type="button"
+              onClick={copyPublishedLinksReport}
+              disabled={!reportPublishedLinksCount}
+              className="rounded-2xl bg-white px-4 py-2 text-xs font-black text-emerald-700 ring-1 ring-emerald-100 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {copiedPublishedLinks ? "Опубликованное скопировано" : reportPublishedLinksCount ? `Скопировать опубликованное (${reportPublishedLinksCount})` : "Опубликованного нет"}
             </button>
             <button
               type="button"
