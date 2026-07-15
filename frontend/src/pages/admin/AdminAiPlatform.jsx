@@ -312,6 +312,8 @@ function PublishingInspector({ videos, publishingStatus, onRunTelegramDue, sched
   const nextTelegramPlan = telegramQueue[0] || null;
   const schedulerEnabled = Boolean(publishingStatus?.schedulerEnabled);
   const schedulerReadyReason = publishingStatus?.schedulerReadyReason || (schedulerEnabled ? "ready" : "unknown");
+  const telegramDueRun = publishingStatus?.telegramDueRun || {};
+  const lastDueRun = telegramDueRun.lastRun || null;
   const schedulerReasonLabels = {
     ready: "готов",
     disabled_by_env: "выключен ENV",
@@ -387,13 +389,28 @@ function PublishingInspector({ videos, publishingStatus, onRunTelegramDue, sched
                 <span className="ml-1 text-slate-500">{fmtDate(nextTelegramPlan.telegram.plannedAt)}</span>
               </div>
             ) : null}
+            {lastDueRun ? (
+              <div className="mt-2 rounded-xl bg-white px-3 py-2 text-xs">
+                <div className="flex justify-between gap-2">
+                  <span className="font-bold text-slate-500">Последний запуск</span>
+                  <b className={lastDueRun.success ? "text-emerald-700" : "text-rose-700"}>{lastDueRun.success ? "ok" : "error"}</b>
+                </div>
+                <div className="mt-1 text-slate-400">{fmtDate(lastDueRun.finishedAt || lastDueRun.startedAt)}</div>
+                <div className="mt-2 grid grid-cols-3 gap-1 text-[11px]">
+                  <span className="rounded-lg bg-slate-50 px-2 py-1">Проверено: <b>{lastDueRun.checked || 0}</b></span>
+                  <span className="rounded-lg bg-emerald-50 px-2 py-1">ОК: <b>{lastDueRun.published || 0}</b></span>
+                  <span className="rounded-lg bg-rose-50 px-2 py-1">Ошибки: <b>{lastDueRun.failed || 0}</b></span>
+                </div>
+                <div className="mt-1 text-[11px] text-slate-400">{lastDueRun.actor || "system"} · {Math.round(Number(lastDueRun.durationMs || 0) / 1000)} сек.</div>
+              </div>
+            ) : null}
             <button
               type="button"
               onClick={onRunTelegramDue}
-              disabled={schedulerLoading || !telegramDue}
+              disabled={schedulerLoading || telegramDueRun.running || !telegramDue}
               className="mt-3 w-full rounded-2xl bg-emerald-700 px-3 py-2 text-xs font-black text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {schedulerLoading ? "Проверяю..." : "Запустить due Telegram"}
+              {schedulerLoading || telegramDueRun.running ? "Проверяю..." : "Запустить due Telegram"}
             </button>
             <div className="mt-1 text-[11px] font-bold text-slate-400">Авто: каждые {schedulerIntervalMin} мин. Ручной запуск: до {schedulerBatchLimit} публикаций.</div>
             {schedulerFeedback ? <div className="mt-2 rounded-xl bg-white px-3 py-2 text-xs text-slate-600">{schedulerFeedback}</div> : null}

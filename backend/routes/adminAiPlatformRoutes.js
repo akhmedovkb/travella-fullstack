@@ -523,47 +523,101 @@ function getDueTelegramPublishingJobs({ limit = 100 } = {}) {
     });
 }
 
+let telegramDueRunState = {
+  running: false,
+  lastRun: null,
+};
+
 async function runDueTelegramPublishing({ limit = 5, scanLimit = 100, actor = { id: "publishing_scheduler", role: "system" } } = {}) {
+  const startedAt = new Date().toISOString();
+  const startedMs = Date.now();
+  telegramDueRunState = {
+    ...telegramDueRunState,
+    running: true,
+  };
+
   const batchLimit = Math.max(1, Math.min(Number(limit) || 5, 20));
-  const dueJobs = getDueTelegramPublishingJobs({ limit: scanLimit }).slice(0, batchLimit);
-  let published = 0;
-  let failed = 0;
-  const results = [];
+  try {
+    const dueJobs = getDueTelegramPublishingJobs({ limit: scanLimit }).slice(0, batchLimit);
+    let published = 0;
+    let failed = 0;
+    const results = [];
 
-  for (const job of dueJobs) {
-    addEvent(job.id, {
-      step: "publishing",
-      type: "event",
-      tool: "PublishingScheduler",
-      message: "Автопубликация Telegram по расписанию запущена.",
-      meta: { channel: "telegram", actor: actor?.id || null },
-    });
-
-    const result = await publishVideoToTelegram(job, actor);
-    results.push({
-      jobId: job.id,
-      code: getPublishingContext(job)?.code || "",
-      success: Boolean(result?.success),
-      message: result?.message || "",
-      telegram: result?.telegram || null,
-    });
-
-    if (result?.success) {
-      published += 1;
-    } else {
-      failed += 1;
+    for (const job of dueJobs) {
       addEvent(job.id, {
         step: "publishing",
-        type: "tool_result",
+        type: "event",
         tool: "PublishingScheduler",
-        level: "warn",
-        message: result?.message || "Автопубликация Telegram не выполнена.",
-        meta: { channel: "telegram", status: result?.status || null },
+        message: "Автопубликация Telegram по расписанию запущена.",
+        meta: { channel: "telegram", actor: actor?.id || null },
       });
-    }
-  }
 
-  return { success: true, checked: dueJobs.length, published, failed, results };
+      const result = await publishVideoToTelegram(job, actor);
+      results.push({
+        jobId: job.id,
+        code: getPublishingContext(job)?.code || "",
+        success: Boolean(result?.success),
+        message: result?.message || "",
+        telegram: result?.telegram || null,
+      });
+
+      if (result?.success) {
+        published += 1;
+      } else {
+        failed += 1;
+        addEvent(job.id, {
+          step: "publishing",
+          type: "tool_result",
+          tool: "PublishingScheduler",
+          level: "warn",
+          message: result?.message || "Автопубликация Telegram не выполнена.",
+          meta: { channel: "telegram", status: result?.status || null },
+        });
+      }
+    }
+
+    const summary = {
+      success: true,
+      checked: dueJobs.length,
+      published,
+      failed,
+      results,
+      actor: actor?.id || null,
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      durationMs: Date.now() - startedMs,
+    };
+    telegramDueRunState = {
+      running: false,
+      lastRun: {
+        success: summary.success,
+        checked: summary.checked,
+        published: summary.published,
+        failed: summary.failed,
+        actor: summary.actor,
+        startedAt: summary.startedAt,
+        finishedAt: summary.finishedAt,
+        durationMs: summary.durationMs,
+      },
+    };
+    return summary;
+  } catch (err) {
+    telegramDueRunState = {
+      running: false,
+      lastRun: {
+        success: false,
+        checked: 0,
+        published: 0,
+        failed: 1,
+        actor: actor?.id || null,
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        durationMs: Date.now() - startedMs,
+        error: err?.message || String(err),
+      },
+    };
+    throw err;
+  }
 }
 
 router.use(authenticateToken);
@@ -598,6 +652,7 @@ router.get("/status", (req, res) => {
       schedulerReadyReason,
       schedulerIntervalMs: Math.max(60000, intEnv("AI_PUBLISHING_SCHEDULER_INTERVAL_MS", 60000)),
       schedulerBatchLimit: Math.max(1, Math.min(intEnv("AI_PUBLISHING_SCHEDULER_BATCH_LIMIT", 5), 20)),
+      telegramDueRun: telegramDueRunState,
     },
     metrics: {
       jobs: jobs.length,
