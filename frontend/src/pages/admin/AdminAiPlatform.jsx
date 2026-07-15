@@ -380,6 +380,7 @@ function PublishingInspector({ videos, onRunTelegramDue, schedulerLoading, sched
             >
               {schedulerLoading ? "Проверяю..." : "Запустить due Telegram"}
             </button>
+            <div className="mt-1 text-[11px] font-bold text-slate-400">До 5 публикаций за ручной запуск.</div>
             {schedulerFeedback ? <div className="mt-2 rounded-xl bg-white px-3 py-2 text-xs text-slate-600">{schedulerFeedback}</div> : null}
           </div>
           <div className="rounded-2xl bg-slate-50 p-4"><div className="text-slate-400">Задача</div><b className="text-slate-950">Контроль ручных публикаций</b></div>
