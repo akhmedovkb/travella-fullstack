@@ -1126,6 +1126,9 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
     return aSchedule - bSchedule || new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0);
   });
   const visibleIds = filteredVideos.map((video) => video.id);
+  const todayVisibleIds = filteredVideos
+    .filter((video) => ["red", "yellow"].includes(getNextPublicationAction(video).tone))
+    .map((video) => video.id);
   const pendingVisibleIds = filteredVideos
     .filter((video) => video.publishingPackage?.publicationStatus?.status !== "published_all")
     .map((video) => video.id);
@@ -1187,6 +1190,11 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
       if (allVisibleSelected) return current.filter((id) => !visibleIds.includes(id));
       return Array.from(new Set([...current, ...visibleIds]));
     });
+  }
+
+  function selectTodayVisible() {
+    if (!todayVisibleIds.length) return;
+    setSelectedIds((current) => Array.from(new Set([...current, ...todayVisibleIds])));
   }
 
   function selectPendingVisible() {
@@ -1545,6 +1553,14 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
                 className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-40"
               >
                 {allVisibleSelected ? "Снять выбор" : "Выбрать экран"}
+              </button>
+              <button
+                type="button"
+                onClick={selectTodayVisible}
+                disabled={!todayVisibleIds.length || bulkLoading}
+                className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-amber-700 ring-1 ring-amber-100 hover:bg-amber-50 disabled:opacity-40"
+              >
+                Выбрать сегодня ({todayVisibleIds.length})
               </button>
               <button
                 type="button"
