@@ -470,6 +470,14 @@ const telegramPublishingLocks = new Set();
 async function publishVideoToTelegram(job, actor) {
   const lockKey = String(job?.id || "").trim();
   if (lockKey && telegramPublishingLocks.has(lockKey)) {
+    addEvent(job.id, {
+      step: "publishing",
+      type: "event",
+      tool: "PublishingManager",
+      level: "warn",
+      message: "Telegram публикация уже выполняется, повторный запуск отклонён.",
+      meta: { channel: "telegram", actor: actor?.id || null },
+    });
     return { success: false, status: 409, message: "Telegram publishing is already running for this job" };
   }
   if (lockKey) telegramPublishingLocks.add(lockKey);
