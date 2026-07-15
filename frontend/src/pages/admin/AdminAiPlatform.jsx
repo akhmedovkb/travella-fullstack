@@ -2366,13 +2366,19 @@ export default function AdminAiPlatform() {
     setSchedulerLoading(true);
     setSchedulerFeedback("");
     setError("");
+    const formatResultCodes = (codes) => {
+      if (!codes.length) return "";
+      const shown = codes.slice(0, 5).join(", ");
+      const rest = codes.length > 5 ? ` +${codes.length - 5} ещё` : "";
+      return `${shown}${rest}`;
+    };
     try {
       const res = await apiPost("/api/admin/ai-platform/publishing/telegram/run-due", { limit: 5, scanLimit: 100 }, "admin");
       const results = Array.isArray(res?.results) ? res.results : [];
       const publishedCodes = results.filter((item) => item?.success).map((item) => item.code || item.jobId).filter(Boolean);
       const failedCodes = results.filter((item) => !item?.success).map((item) => item.code || item.jobId).filter(Boolean);
-      const publishedText = publishedCodes.length ? ` Опубликовано: ${publishedCodes.join(", ")}.` : "";
-      const failedText = failedCodes.length ? ` Ошибки: ${failedCodes.join(", ")}.` : "";
+      const publishedText = publishedCodes.length ? ` Опубликовано: ${formatResultCodes(publishedCodes)}.` : "";
+      const failedText = failedCodes.length ? ` Ошибки: ${formatResultCodes(failedCodes)}.` : "";
       setSchedulerFeedback(`Проверено: ${res?.checked || 0}. Опубликовано: ${res?.published || 0}. Ошибок: ${res?.failed || 0}.${publishedText}${failedText}`);
       await load();
     } catch (e) {
