@@ -623,6 +623,15 @@ async function runDueTelegramPublishing({ limit = 5, scanLimit = 100, actor = { 
         startedAt: summary.startedAt,
         finishedAt: summary.finishedAt,
         durationMs: summary.durationMs,
+        resultsPreview: results.slice(0, 5).map((item) => ({
+          jobId: item.jobId,
+          code: item.code,
+          success: item.success,
+          message: item.message,
+          url: item.telegram?.url || "",
+          deliveryMethod: item.telegram?.deliveryMethod || "",
+        })),
+        resultsOverflow: Math.max(0, results.length - 5),
       },
     };
     return summary;

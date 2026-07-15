@@ -407,6 +407,17 @@ function PublishingInspector({ videos, publishingStatus, onRunTelegramDue, sched
                   <span className="rounded-lg bg-emerald-50 px-2 py-1">ОК: <b>{lastDueRun.published || 0}</b></span>
                   <span className="rounded-lg bg-rose-50 px-2 py-1">Ошибки: <b>{lastDueRun.failed || 0}</b></span>
                 </div>
+                {Array.isArray(lastDueRun.resultsPreview) && lastDueRun.resultsPreview.length ? (
+                  <div className="mt-2 space-y-1">
+                    {lastDueRun.resultsPreview.map((item) => (
+                      <div key={item.jobId || item.code} className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-2 py-1 text-[11px]">
+                        <span className="truncate font-bold text-slate-700">{item.code || "AI"}</span>
+                        <span className={item.success ? "text-emerald-700" : "text-rose-700"}>{item.success ? (item.deliveryMethod || "ok") : "error"}</span>
+                      </div>
+                    ))}
+                    {lastDueRun.resultsOverflow ? <div className="text-[11px] text-slate-400">+{lastDueRun.resultsOverflow} ещё</div> : null}
+                  </div>
+                ) : null}
                 <div className="mt-1 text-[11px] text-slate-400">{lastDueRun.actor || "system"} · {Math.round(Number(lastDueRun.durationMs || 0) / 1000)} сек.</div>
               </div>
             ) : null}
