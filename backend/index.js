@@ -14,6 +14,7 @@ const cors = require("cors");
 const dotenv = require("dotenv");
 const { startJobsScheduler } = require("./jobs/scheduler");
 const { startAiHeygenPoller } = require("./jobs/aiHeygenPollerJob");
+const { startAiPublishingScheduler } = require("./jobs/aiPublishingSchedulerJob");
 const tbTemplatesRoutes = require("./routes/TBtemplatesRoutes");
 const { getTelegramHealth } = require("./utils/telegram");
 const path = require("path");
@@ -892,6 +893,14 @@ try {
   console.warn("[ai-heygen-poller] start failed:", e?.message || e);
 }
 /** ===================== /Travella AI HeyGen Poller ===================== */
+
+/** ===================== Travella AI Publishing Scheduler ===================== */
+try {
+  startAiPublishingScheduler();
+} catch (e) {
+  console.warn("[ai-publishing-scheduler] start failed:", e?.message || e);
+}
+/** ===================== /Travella AI Publishing Scheduler ===================== */
 
 const TG_DISABLED =
   process.env.DISABLE_TG_BOT === "1" || process.env.NODE_ENV === "test";

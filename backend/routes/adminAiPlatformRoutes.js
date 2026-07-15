@@ -646,3 +646,5 @@ router.post("/video-operator/jobs/:id/refresh", async (req, res) => {
 });
 
 module.exports = router;
+module.exports.publishVideoToTelegram = publishVideoToTelegram;
+module.exports.savePublicationStatus = savePublicationStatus;
