@@ -312,6 +312,12 @@ function PublishingInspector({ videos, publishingStatus, onRunTelegramDue, sched
   const nextTelegramPlan = telegramQueue[0] || null;
   const schedulerEnabled = Boolean(publishingStatus?.schedulerEnabled);
   const schedulerReadyReason = publishingStatus?.schedulerReadyReason || (schedulerEnabled ? "ready" : "unknown");
+  const statusTelegramQueue = publishingStatus?.telegramQueue || {};
+  const statusTelegramDue = Number(statusTelegramQueue.due);
+  const statusTelegramPlanned = Number(statusTelegramQueue.planned);
+  const telegramDueCount = Number.isFinite(statusTelegramDue) ? statusTelegramDue : telegramDue;
+  const telegramPlannedCount = Number.isFinite(statusTelegramPlanned) ? statusTelegramPlanned : telegramQueue.length;
+  const nextTelegramPlanStatus = statusTelegramQueue.next || null;
   const telegramDueRun = publishingStatus?.telegramDueRun || {};
   const lastDueRun = telegramDueRun.lastRun || null;
   const schedulerReasonLabels = {
@@ -377,16 +383,16 @@ function PublishingInspector({ videos, publishingStatus, onRunTelegramDue, sched
           <div className="rounded-2xl bg-slate-50 p-4">
             <div className="text-slate-400">Telegram auto publish</div>
             <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-              <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>К запуску</span><b className={telegramDue ? "text-rose-700" : "text-slate-950"}>{telegramDue}</b></div>
-              <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>В плане</span><b className="text-blue-700">{telegramQueue.length}</b></div>
+              <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>К запуску</span><b className={telegramDueCount ? "text-rose-700" : "text-slate-950"}>{telegramDueCount}</b></div>
+              <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>В плане</span><b className="text-blue-700">{telegramPlannedCount}</b></div>
               <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>Scheduler</span><b className={schedulerEnabled ? "text-emerald-700" : "text-rose-700"}>{schedulerEnabled ? "on" : "off"}</b></div>
               <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>Готовность</span><b className={schedulerEnabled ? "text-emerald-700" : "text-amber-700"}>{schedulerReasonLabel}</b></div>
               <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>Batch</span><b className="text-slate-950">{schedulerBatchLimit}</b></div>
             </div>
-            {nextTelegramPlan ? (
+            {nextTelegramPlan || nextTelegramPlanStatus ? (
               <div className="mt-2 rounded-xl bg-white px-3 py-2 text-xs">
-                <b className="text-slate-900">{nextTelegramPlan.video.code || "AI"}</b>
-                <span className="ml-1 text-slate-500">{fmtDate(nextTelegramPlan.telegram.plannedAt)}</span>
+                <b className="text-slate-900">{nextTelegramPlan?.video?.code || nextTelegramPlanStatus?.code || "AI"}</b>
+                <span className="ml-1 text-slate-500">{fmtDate(nextTelegramPlan?.telegram?.plannedAt || nextTelegramPlanStatus?.plannedAt)}</span>
               </div>
             ) : null}
             {lastDueRun ? (
@@ -407,7 +413,7 @@ function PublishingInspector({ videos, publishingStatus, onRunTelegramDue, sched
             <button
               type="button"
               onClick={onRunTelegramDue}
-              disabled={schedulerLoading || telegramDueRun.running || !telegramDue}
+              disabled={schedulerLoading || telegramDueRun.running || !telegramDueCount}
               className="mt-3 w-full rounded-2xl bg-emerald-700 px-3 py-2 text-xs font-black text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {schedulerLoading || telegramDueRun.running ? "Проверяю..." : "Запустить due Telegram"}

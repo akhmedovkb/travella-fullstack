@@ -523,6 +523,31 @@ function getDueTelegramPublishingJobs({ limit = 100 } = {}) {
     });
 }
 
+function getTelegramPublishingQueueSummary({ limit = 100 } = {}) {
+  const now = Date.now();
+  const queue = listJobs({ employeeId: "video_operator", limit })
+    .map((job) => {
+      const pkg = job.output?.publishingPackage || {};
+      const telegram = pkg.publicationStatus?.channels?.telegram || {};
+      const plannedTime = new Date(telegram.plannedAt || 0).getTime();
+      if (pkg.status !== "approved" || !Number.isFinite(plannedTime) || plannedTime <= 0 || hasTelegramPublicationEvidence(telegram)) return null;
+      return {
+        jobId: job.id,
+        code: getPublishingContext(job)?.code || "",
+        plannedAt: new Date(plannedTime).toISOString(),
+        due: plannedTime <= now,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => new Date(a.plannedAt).getTime() - new Date(b.plannedAt).getTime());
+
+  return {
+    planned: queue.length,
+    due: queue.filter((item) => item.due).length,
+    next: queue[0] || null,
+  };
+}
+
 let telegramDueRunState = {
   running: false,
   lastRun: null,
@@ -626,6 +651,7 @@ router.use(requireAdmin);
 router.get("/status", (req, res) => {
   const config = getAiConfig();
   const jobs = listJobs({ limit: 100 });
+  const telegramQueue = getTelegramPublishingQueueSummary({ limit: 100 });
   const telegramReady = Boolean(TELEGRAM_CLIENT_BOT_TOKEN && AI_PUBLISH_TELEGRAM_CHAT_ID);
   const schedulerDisabledByEnv = boolEnv("DISABLE_AI_PUBLISHING_SCHEDULER", false);
   const schedulerReadyReason = process.env.NODE_ENV === "test"
@@ -652,6 +678,7 @@ router.get("/status", (req, res) => {
       schedulerReadyReason,
       schedulerIntervalMs: Math.max(60000, intEnv("AI_PUBLISHING_SCHEDULER_INTERVAL_MS", 60000)),
       schedulerBatchLimit: Math.max(1, Math.min(intEnv("AI_PUBLISHING_SCHEDULER_BATCH_LIMIT", 5), 20)),
+      telegramQueue,
       telegramDueRun: telegramDueRunState,
     },
     metrics: {
