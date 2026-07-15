@@ -1126,6 +1126,9 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
     return aSchedule - bSchedule || new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0);
   });
   const visibleIds = filteredVideos.map((video) => video.id);
+  const overdueVisibleIds = filteredVideos
+    .filter((video) => getNextPublicationAction(video).tone === "red")
+    .map((video) => video.id);
   const todayVisibleIds = filteredVideos
     .filter((video) => ["red", "yellow"].includes(getNextPublicationAction(video).tone))
     .map((video) => video.id);
@@ -1190,6 +1193,11 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
       if (allVisibleSelected) return current.filter((id) => !visibleIds.includes(id));
       return Array.from(new Set([...current, ...visibleIds]));
     });
+  }
+
+  function selectOverdueVisible() {
+    if (!overdueVisibleIds.length) return;
+    setSelectedIds((current) => Array.from(new Set([...current, ...overdueVisibleIds])));
   }
 
   function selectTodayVisible() {
@@ -1561,6 +1569,14 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
                 className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-amber-700 ring-1 ring-amber-100 hover:bg-amber-50 disabled:opacity-40"
               >
                 Выбрать сегодня ({todayVisibleIds.length})
+              </button>
+              <button
+                type="button"
+                onClick={selectOverdueVisible}
+                disabled={!overdueVisibleIds.length || bulkLoading}
+                className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-rose-700 ring-1 ring-rose-100 hover:bg-rose-50 disabled:opacity-40"
+              >
+                Выбрать просрочено ({overdueVisibleIds.length})
               </button>
               <button
                 type="button"
