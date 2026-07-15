@@ -1271,6 +1271,35 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
     }
   }
 
+  async function applyStaggeredPlan(stepMinutes = 30) {
+    const startIso = fromDateTimeLocal(bulkDate);
+    const startMs = startIso ? new Date(startIso).getTime() : 0;
+    if (!selectedVideos.length || !startMs || bulkLoading) return;
+    setBulkLoading(true);
+    setBulkFeedback("");
+    try {
+      const targetChannels = bulkChannel === "all" ? PUBLICATION_CHANNELS.map((channel) => channel.id) : [bulkChannel];
+      for (let index = 0; index < selectedVideos.length; index += 1) {
+        const video = selectedVideos[index];
+        const plannedAt = new Date(startMs + index * stepMinutes * 60 * 1000).toISOString();
+        const current = video.publishingPackage?.publicationStatus?.channels || {};
+        const nextChannels = { ...current };
+        targetChannels.forEach((channelId) => {
+          nextChannels[channelId] = {
+            ...(current?.[channelId] || {}),
+            plannedAt,
+          };
+        });
+        await onSavePublicationStatus?.(video, nextChannels);
+      }
+      setBulkFeedback(`Разнесено: ${selectedVideos.length} · шаг ${stepMinutes} мин`);
+    } catch (e) {
+      setBulkFeedback(e?.message || "Не удалось разнести план");
+    } finally {
+      setBulkLoading(false);
+    }
+  }
+
   async function publishTelegramBatch(targets, doneLabel = "Обновлено Telegram") {
     if (!targets.length || bulkLoading || !telegramReady) return;
     setBulkLoading(true);
@@ -1636,7 +1665,7 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
                   Очистить выбор
                 </button>
               ) : null}
-              {bulkFeedback ? <Pill tone={bulkFeedback.startsWith("Обновлено") || bulkFeedback.startsWith("Ошибки повторены") ? "green" : bulkFeedback.startsWith("Telegram:") ? "blue" : "red"}>{bulkFeedback}</Pill> : null}
+              {bulkFeedback ? <Pill tone={bulkFeedback.startsWith("Обновлено") || bulkFeedback.startsWith("Ошибки повторены") || bulkFeedback.startsWith("Разнесено") ? "green" : bulkFeedback.startsWith("Telegram:") ? "blue" : "red"}>{bulkFeedback}</Pill> : null}
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <select
@@ -1707,6 +1736,14 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
                 className="rounded-2xl bg-blue-700 px-3 py-2 text-xs font-black text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Назначить план
+              </button>
+              <button
+                type="button"
+                onClick={() => applyStaggeredPlan(30)}
+                disabled={!selectedVideos.length || !bulkDate || bulkLoading}
+                className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-blue-700 ring-1 ring-blue-100 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Разнести 30 мин
               </button>
               <button
                 type="button"
