@@ -2349,10 +2349,14 @@ export default function AdminAiPlatform() {
       return true;
     } catch (e) {
       const message = e?.message || "Не удалось опубликовать в Telegram";
-      setError(message);
+      const alreadyRunning = message.toLowerCase().includes("already running");
+      if (!alreadyRunning) setError(message);
       setPublishFeedback((prev) => ({
         ...prev,
-        [video.jobId]: { tone: "red", message },
+        [video.jobId]: {
+          tone: alreadyRunning ? "blue" : "red",
+          message: alreadyRunning ? "Telegram публикация уже выполняется. Подожди завершения текущего запуска." : message,
+        },
       }));
       await load();
       return false;
