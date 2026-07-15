@@ -589,6 +589,33 @@ function countPublishingLinks(videos = []) {
   }, 0);
 }
 
+function getPublishingScheduleItems(videos = []) {
+  return videos.flatMap((video) => {
+    const channels = video.publishingPackage?.publicationStatus?.channels || {};
+    return PUBLICATION_CHANNELS.map((channel) => {
+      const item = channels?.[channel.id] || {};
+      const plannedAt = item.plannedAt ? new Date(item.plannedAt) : null;
+      if (!plannedAt || Number.isNaN(plannedAt.getTime())) return null;
+      return {
+        video,
+        channel,
+        item,
+        plannedAt,
+      };
+    }).filter(Boolean);
+  }).sort((a, b) => a.plannedAt - b.plannedAt);
+}
+
+function buildPublishingScheduleReport(videos = []) {
+  const items = getPublishingScheduleItems(videos);
+  const lines = items.map(({ video, channel, item }, index) => {
+    const status = item.published ? "опубликовано" : "ожидает";
+    const url = item.url ? ` · ${item.url}` : "";
+    return `${index + 1}. ${fmtDate(item.plannedAt)} · ${video.code || "AI"} · ${channel.label} · ${status}${url}`;
+  });
+  return [`Travella AI OS — план публикаций`, `Всего задач: ${items.length}`, "", ...lines].join("\n");
+}
+
 function buildPublishingTextsReport(videos = [], channelId = "telegram") {
   const channels = channelId === "all" ? PUBLICATION_CHANNELS : PUBLICATION_CHANNELS.filter((channel) => channel.id === channelId);
   const lines = videos.flatMap((video) => {
@@ -1056,6 +1083,7 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
   const [sortMode, setSortMode] = React.useState(initialPrefs.sortMode || "schedule");
   const [copiedReport, setCopiedReport] = React.useState(false);
   const [copiedLinks, setCopiedLinks] = React.useState(false);
+  const [copiedSchedule, setCopiedSchedule] = React.useState(false);
   const [copiedCsv, setCopiedCsv] = React.useState(false);
   const [copiedErrors, setCopiedErrors] = React.useState(false);
   const [copiedBulkTexts, setCopiedBulkTexts] = React.useState(false);
@@ -1155,6 +1183,7 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
   const allVisibleSelected = Boolean(filteredVideos.length) && visibleIds.every((id) => selectedIds.includes(id));
   const reportSourceVideos = selectedVideos.length ? selectedVideos : filteredVideos;
   const reportLinksCount = countPublishingLinks(reportSourceVideos);
+  const reportScheduleCount = getPublishingScheduleItems(reportSourceVideos).length;
   const reportCsvRows = countPublishingCsvRows(reportSourceVideos);
   const reportErrorsCount = getPublishingErrorVideos(reportSourceVideos, publishFeedback).length;
   const bulkTextsCount = countPublishingTexts(reportSourceVideos, bulkChannel);
@@ -1368,6 +1397,26 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
     window.setTimeout(() => setCopiedLinks(false), 1800);
   }
 
+  async function copyScheduleReport() {
+    if (!reportScheduleCount) return;
+    const text = buildPublishingScheduleReport(reportSourceVideos);
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+    }
+    setCopiedSchedule(true);
+    window.setTimeout(() => setCopiedSchedule(false), 1800);
+  }
+
   async function copyCsvReport() {
     if (!reportCsvRows) return;
     const text = buildPublishingCsvReport(reportSourceVideos);
@@ -1491,6 +1540,14 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
               className="rounded-2xl bg-white px-4 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {copiedLinks ? "Ссылки скопированы" : reportLinksCount ? `Скопировать ссылки (${reportLinksCount})` : "Ссылок нет"}
+            </button>
+            <button
+              type="button"
+              onClick={copyScheduleReport}
+              disabled={!reportScheduleCount}
+              className="rounded-2xl bg-white px-4 py-2 text-xs font-black text-blue-700 ring-1 ring-blue-100 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {copiedSchedule ? "План скопирован" : reportScheduleCount ? `Скопировать план (${reportScheduleCount})` : "Плана нет"}
             </button>
             <button
               type="button"
