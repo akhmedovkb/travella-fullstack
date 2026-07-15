@@ -1132,6 +1132,9 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
   const todayVisibleIds = filteredVideos
     .filter((video) => ["red", "yellow"].includes(getNextPublicationAction(video).tone))
     .map((video) => video.id);
+  const unscheduledVisibleIds = filteredVideos
+    .filter((video) => getNextPublicationAction(video).tone === "slate")
+    .map((video) => video.id);
   const pendingVisibleIds = filteredVideos
     .filter((video) => video.publishingPackage?.publicationStatus?.status !== "published_all")
     .map((video) => video.id);
@@ -1203,6 +1206,11 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
   function selectTodayVisible() {
     if (!todayVisibleIds.length) return;
     setSelectedIds((current) => Array.from(new Set([...current, ...todayVisibleIds])));
+  }
+
+  function selectUnscheduledVisible() {
+    if (!unscheduledVisibleIds.length) return;
+    setSelectedIds((current) => Array.from(new Set([...current, ...unscheduledVisibleIds])));
   }
 
   function selectPendingVisible() {
@@ -1577,6 +1585,14 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
                 className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-rose-700 ring-1 ring-rose-100 hover:bg-rose-50 disabled:opacity-40"
               >
                 Выбрать просрочено ({overdueVisibleIds.length})
+              </button>
+              <button
+                type="button"
+                onClick={selectUnscheduledVisible}
+                disabled={!unscheduledVisibleIds.length || bulkLoading}
+                className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-40"
+              >
+                Выбрать без плана ({unscheduledVisibleIds.length})
               </button>
               <button
                 type="button"
