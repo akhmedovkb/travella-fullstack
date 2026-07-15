@@ -1126,6 +1126,9 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
     return aSchedule - bSchedule || new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0);
   });
   const visibleIds = filteredVideos.map((video) => video.id);
+  const pendingVisibleIds = filteredVideos
+    .filter((video) => video.publishingPackage?.publicationStatus?.status !== "published_all")
+    .map((video) => video.id);
   const selectedVideos = filteredVideos.filter((video) => selectedIds.includes(video.id));
   const allVisibleSelected = Boolean(filteredVideos.length) && visibleIds.every((id) => selectedIds.includes(id));
   const reportSourceVideos = selectedVideos.length ? selectedVideos : filteredVideos;
@@ -1178,6 +1181,11 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
       if (allVisibleSelected) return current.filter((id) => !visibleIds.includes(id));
       return Array.from(new Set([...current, ...visibleIds]));
     });
+  }
+
+  function selectPendingVisible() {
+    if (!pendingVisibleIds.length) return;
+    setSelectedIds((current) => Array.from(new Set([...current, ...pendingVisibleIds])));
   }
 
   function resetQueuePrefs() {
@@ -1521,6 +1529,14 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
                 className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-40"
               >
                 {allVisibleSelected ? "Снять выбор" : "Выбрать экран"}
+              </button>
+              <button
+                type="button"
+                onClick={selectPendingVisible}
+                disabled={!pendingVisibleIds.length || bulkLoading}
+                className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-40"
+              >
+                Выбрать ожидающие ({pendingVisibleIds.length})
               </button>
               <Pill tone={selectedVideos.length ? "blue" : "slate"}>Выбрано: {selectedVideos.length}</Pill>
               {selectedVideos.length ? (
