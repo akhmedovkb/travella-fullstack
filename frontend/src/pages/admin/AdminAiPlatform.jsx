@@ -431,6 +431,10 @@ function getTelegramDeliveryMeta(method = "") {
   return null;
 }
 
+function hasTelegramPublicationEvidence(item = {}) {
+  return Boolean(item.published || String(item.url || "").trim() || item.messageId);
+}
+
 function getDeliveryLogMethodLabel(method = "") {
   return getTelegramDeliveryMeta(method)?.label || method || "Попытка";
 }
@@ -1086,7 +1090,7 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
   const reportLinksCount = countPublishingLinks(reportSourceVideos);
   const reportCsvRows = countPublishingCsvRows(reportSourceVideos);
   const bulkTextsCount = countPublishingTexts(reportSourceVideos, bulkChannel);
-  const bulkTelegramTargets = selectedVideos.filter((video) => !video.publishingPackage?.publicationStatus?.channels?.telegram?.published);
+  const bulkTelegramTargets = selectedVideos.filter((video) => !hasTelegramPublicationEvidence(video.publishingPackage?.publicationStatus?.channels?.telegram));
   const workModeCounts = approvedVideos.reduce(
     (acc, video) => {
       const action = getNextPublicationAction(video);
@@ -1566,6 +1570,7 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
                     const checked = Boolean(item.published);
                     const feedback = channel.id === "telegram" ? publishFeedback?.[video.jobId] : null;
                     const telegramDelivery = channel.id === "telegram" ? getTelegramDeliveryMeta(item.deliveryMethod) : null;
+                    const telegramPublishedEvidence = channel.id === "telegram" ? hasTelegramPublicationEvidence(item) : false;
                     const deliveryLog = channel.id === "telegram" && Array.isArray(item.deliveryLog) ? item.deliveryLog : [];
                     const channelText = getPublishingTextForChannel(pkg, channel.id);
                     return (
@@ -1629,11 +1634,17 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
                               <button
                                 type="button"
                                 onClick={() => onPublishTelegram?.(video)}
-                                disabled={loading || !telegramReady || checked || publishLoading === video.jobId}
+                                disabled={loading || !telegramReady || telegramPublishedEvidence || publishLoading === video.jobId}
                                 className="rounded-2xl bg-emerald-700 px-3 py-2 text-xs font-black text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-40"
-                                title={!telegramReady ? "Нужно настроить AI_PUBLISH_TELEGRAM_CHAT_ID на backend" : ""}
+                                title={
+                                  !telegramReady
+                                    ? "Нужно настроить AI_PUBLISH_TELEGRAM_CHAT_ID на backend"
+                                    : telegramPublishedEvidence
+                                      ? "У карточки уже есть Telegram публикация"
+                                      : ""
+                                }
                               >
-                                {checked ? "Отправлено" : publishLoading === video.jobId ? "Публикую..." : telegramReady ? "Опубликовать" : "Telegram ENV нет"}
+                                {telegramPublishedEvidence ? "Уже есть пост" : publishLoading === video.jobId ? "Публикую..." : telegramReady ? "Опубликовать" : "Telegram ENV нет"}
                               </button>
                             ) : null}
                             <Pill tone={checked ? "green" : item.plannedAt ? "blue" : "slate"}>{checked ? "Опубликовано" : item.plannedAt ? "Запланировано" : "Ожидает"}</Pill>
