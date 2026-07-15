@@ -294,7 +294,7 @@ function ContentInspector({ videos }) {
   );
 }
 
-function PublishingInspector({ videos, publishingStatus, onRunTelegramDue, schedulerLoading, schedulerFeedback }) {
+function PublishingInspector({ videos, publishingStatus, onRunTelegramDue, onCopySchedulerReport, schedulerLoading, schedulerFeedback }) {
   const approved = getApprovedVideos(videos);
   const partial = approved.filter((video) => video.publishingPackage?.publicationStatus?.status === "published_partial").length;
   const complete = approved.filter((video) => video.publishingPackage?.publicationStatus?.status === "published_all").length;
@@ -428,6 +428,14 @@ function PublishingInspector({ videos, publishingStatus, onRunTelegramDue, sched
               className="mt-3 w-full rounded-2xl bg-emerald-700 px-3 py-2 text-xs font-black text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {schedulerLoading || telegramDueRun.running ? "Проверяю..." : "Запустить due Telegram"}
+            </button>
+            <button
+              type="button"
+              onClick={onCopySchedulerReport}
+              disabled={!lastDueRun && !telegramPlannedCount}
+              className="mt-2 w-full rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Скопировать отчёт scheduler
             </button>
             <div className="mt-1 text-[11px] font-bold text-slate-400">Авто: каждые {schedulerIntervalMin} мин. Ручной запуск: до {schedulerBatchLimit} публикаций.</div>
             {schedulerFeedback ? <div className="mt-2 rounded-xl bg-white px-3 py-2 text-xs text-slate-600">{schedulerFeedback}</div> : null}
@@ -2444,6 +2452,44 @@ export default function AdminAiPlatform() {
     }
   }
 
+  async function copySchedulerReport() {
+    const publishing = status?.publishing || {};
+    const queue = publishing.telegramQueue || {};
+    const run = publishing.telegramDueRun?.lastRun || null;
+    const rows = [
+      "Travella AI OS · Publishing Manager · Telegram scheduler",
+      `Scheduler: ${publishing.schedulerEnabled ? "on" : "off"} (${publishing.schedulerReadyReason || "unknown"})`,
+      `Queue: due ${queue.due ?? 0}, planned ${queue.planned ?? 0}`,
+      queue.next ? `Next: ${queue.next.code || queue.next.jobId || "AI"} · ${fmtDate(queue.next.plannedAt)}` : "Next: none",
+      "",
+      run
+        ? `Last run: ${run.success ? "ok" : "error"} · ${fmtDate(run.finishedAt || run.startedAt)} · checked ${run.checked || 0}, ok ${run.published || 0}, errors ${run.failed || 0}`
+        : "Last run: none",
+      run?.actor ? `Actor: ${run.actor}` : "",
+      run?.durationMs ? `Duration: ${Math.round(Number(run.durationMs || 0) / 1000)} sec` : "",
+      ...(Array.isArray(run?.resultsPreview) && run.resultsPreview.length
+        ? ["", "Results:", ...run.resultsPreview.map((item) => {
+            const state = item.success ? (item.deliveryMethod || "ok") : "error";
+            const link = item.url ? ` · ${item.url}` : "";
+            return `- ${item.code || item.jobId || "AI"}: ${state}${link}`;
+          })]
+        : []),
+      run?.resultsOverflow ? `+${run.resultsOverflow} more` : "",
+    ].filter(Boolean);
+    const text = rows.join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+    }
+    setSchedulerFeedback("Отчёт scheduler скопирован.");
+  }
+
   function selectEmployee(employeeId) {
     setSelectedEmployee(employeeId);
     if (employeeId === "content_manager") {
@@ -2597,6 +2643,7 @@ export default function AdminAiPlatform() {
             videos={videos}
             publishingStatus={status?.publishing}
             onRunTelegramDue={runTelegramDuePublishing}
+            onCopySchedulerReport={copySchedulerReport}
             schedulerLoading={schedulerLoading}
             schedulerFeedback={schedulerFeedback}
           />
