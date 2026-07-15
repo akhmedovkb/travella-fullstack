@@ -330,6 +330,11 @@ function PublishingInspector({ videos, publishingStatus, onRunTelegramDue, onCop
   const schedulerReasonLabel = schedulerReasonLabels[schedulerReadyReason] || schedulerReasonLabels.unknown;
   const schedulerIntervalMin = Math.max(1, Math.round(Number(publishingStatus?.schedulerIntervalMs || 60000) / 60000));
   const schedulerBatchLimit = Number(publishingStatus?.schedulerBatchLimit || 5);
+  const lastDueRunFinishedMs = new Date(lastDueRun?.finishedAt || lastDueRun?.startedAt || 0).getTime();
+  const schedulerIntervalMs = Math.max(60000, Number(publishingStatus?.schedulerIntervalMs || 60000));
+  const nextSchedulerCheckAt = schedulerEnabled && Number.isFinite(lastDueRunFinishedMs) && lastDueRunFinishedMs > 0
+    ? new Date(lastDueRunFinishedMs + schedulerIntervalMs).toISOString()
+    : "";
   const nextActions = approved.map(getNextPublicationAction);
   const overdue = nextActions.filter((action) => action.tone === "red").length;
   const today = nextActions.filter((action) => action.tone === "yellow").length;
@@ -419,6 +424,7 @@ function PublishingInspector({ videos, publishingStatus, onRunTelegramDue, onCop
                   </div>
                 ) : null}
                 <div className="mt-1 text-[11px] text-slate-400">{lastDueRun.actor || "system"} · {Math.round(Number(lastDueRun.durationMs || 0) / 1000)} сек.</div>
+                {nextSchedulerCheckAt ? <div className="mt-1 text-[11px] font-bold text-blue-700">Следующая проверка: {fmtDate(nextSchedulerCheckAt)}</div> : null}
               </div>
             ) : null}
             <button
@@ -2456,11 +2462,16 @@ export default function AdminAiPlatform() {
     const publishing = status?.publishing || {};
     const queue = publishing.telegramQueue || {};
     const run = publishing.telegramDueRun?.lastRun || null;
+    const lastRunFinishedMs = new Date(run?.finishedAt || run?.startedAt || 0).getTime();
+    const nextSchedulerCheck = publishing.schedulerEnabled && Number.isFinite(lastRunFinishedMs) && lastRunFinishedMs > 0
+      ? new Date(lastRunFinishedMs + Math.max(60000, Number(publishing.schedulerIntervalMs || 60000))).toISOString()
+      : "";
     const rows = [
       "Travella AI OS · Publishing Manager · Telegram scheduler",
       `Scheduler: ${publishing.schedulerEnabled ? "on" : "off"} (${publishing.schedulerReadyReason || "unknown"})`,
       `Queue: due ${queue.due ?? 0}, planned ${queue.planned ?? 0}`,
       queue.next ? `Next: ${queue.next.code || queue.next.jobId || "AI"} · ${fmtDate(queue.next.plannedAt)}` : "Next: none",
+      nextSchedulerCheck ? `Next scheduler check: ${fmtDate(nextSchedulerCheck)}` : "",
       "",
       run
         ? `Last run: ${run.success ? "ok" : "error"} · ${fmtDate(run.finishedAt || run.startedAt)} · checked ${run.checked || 0}, ok ${run.published || 0}, errors ${run.failed || 0}`
