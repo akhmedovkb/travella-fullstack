@@ -435,6 +435,15 @@ function hasTelegramPublicationEvidence(item = {}) {
   return Boolean(item.published || String(item.url || "").trim() || item.messageId);
 }
 
+function hasTelegramPublicationIssue(item = {}, feedback = null) {
+  if (feedback?.tone === "red") return true;
+  const log = Array.isArray(item.deliveryLog) ? item.deliveryLog : [];
+  if (!log.length) return false;
+  const hasSuccess = log.some((entry) => entry?.status === "success");
+  const hasFailure = log.some((entry) => entry?.status === "failed");
+  return hasFailure && !hasSuccess;
+}
+
 function getDeliveryLogMethodLabel(method = "") {
   return getTelegramDeliveryMeta(method)?.label || method || "Попытка";
 }
@@ -1024,13 +1033,15 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
     const publicationStatus = video.publishingPackage?.publicationStatus || {};
     const telegram = publicationStatus.channels?.telegram || {};
     const nextAction = getNextPublicationAction(video);
+    const hasIssue = hasTelegramPublicationIssue(telegram, publishFeedback?.[video.jobId]);
     const haystack = [video.code, video.title, video.destination, video.hotelName, telegram.url].filter(Boolean).join(" ").toLowerCase();
     const modeOk =
       workMode === "all" ||
       (workMode === "today" && ["red", "yellow"].includes(nextAction.tone)) ||
       (workMode === "overdue" && nextAction.tone === "red") ||
       (workMode === "unscheduled" && nextAction.tone === "slate") ||
-      (workMode === "selected" && selectedIds.includes(video.id));
+      (workMode === "selected" && selectedIds.includes(video.id)) ||
+      (workMode === "errors" && hasIssue);
     const queryOk = !normalizedQuery || haystack.includes(normalizedQuery);
     return modeOk && queryOk;
   }
@@ -1100,9 +1111,10 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
         overdue: acc.overdue + (action.tone === "red" ? 1 : 0),
         unscheduled: acc.unscheduled + (action.tone === "slate" ? 1 : 0),
         selected: acc.selected + (selectedIds.includes(video.id) ? 1 : 0),
+        errors: acc.errors + (hasTelegramPublicationIssue(video.publishingPackage?.publicationStatus?.channels?.telegram, publishFeedback?.[video.jobId]) ? 1 : 0),
       };
     },
-    { all: 0, today: 0, overdue: 0, unscheduled: 0, selected: 0 }
+    { all: 0, today: 0, overdue: 0, unscheduled: 0, selected: 0, errors: 0 }
   );
 
   React.useEffect(() => {
@@ -1357,6 +1369,7 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
             ["overdue", "Просрочено"],
             ["unscheduled", "Без плана"],
             ["selected", "Выбранные"],
+            ["errors", "С ошибками"],
           ].map(([id, label]) => (
             <button
               key={id}
