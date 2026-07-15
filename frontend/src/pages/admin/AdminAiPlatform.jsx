@@ -1102,6 +1102,10 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
   const reportCsvRows = countPublishingCsvRows(reportSourceVideos);
   const bulkTextsCount = countPublishingTexts(reportSourceVideos, bulkChannel);
   const bulkTelegramTargets = selectedVideos.filter((video) => !hasTelegramPublicationEvidence(video.publishingPackage?.publicationStatus?.channels?.telegram));
+  const retryTelegramTargets = reportSourceVideos.filter((video) => {
+    const telegram = video.publishingPackage?.publicationStatus?.channels?.telegram || {};
+    return hasTelegramPublicationIssue(telegram, publishFeedback?.[video.jobId]) && !hasTelegramPublicationEvidence(telegram);
+  });
   const workModeCounts = approvedVideos.reduce(
     (acc, video) => {
       const action = getNextPublicationAction(video);
@@ -1180,25 +1184,33 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
     }
   }
 
-  async function publishSelectedTelegram() {
-    if (!bulkTelegramTargets.length || bulkLoading || !telegramReady) return;
+  async function publishTelegramBatch(targets, doneLabel = "Обновлено Telegram") {
+    if (!targets.length || bulkLoading || !telegramReady) return;
     setBulkLoading(true);
     setBulkFeedback("");
     let succeeded = 0;
     let failed = 0;
     try {
-      for (const video of bulkTelegramTargets) {
-        setBulkFeedback(`Telegram: ${succeeded + failed + 1}/${bulkTelegramTargets.length} · ${video.code || video.title || "AI"}`);
+      for (const video of targets) {
+        setBulkFeedback(`Telegram: ${succeeded + failed + 1}/${targets.length} · ${video.code || video.title || "AI"}`);
         const ok = await onPublishTelegram?.(video);
         if (ok === false) failed += 1;
         else succeeded += 1;
       }
-      setBulkFeedback(failed ? `Telegram с ошибками: ${succeeded}/${bulkTelegramTargets.length}` : `Обновлено Telegram: ${succeeded}/${bulkTelegramTargets.length}`);
+      setBulkFeedback(failed ? `Telegram с ошибками: ${succeeded}/${targets.length}` : `${doneLabel}: ${succeeded}/${targets.length}`);
     } catch (e) {
       setBulkFeedback(e?.message || "Не удалось выполнить массовую публикацию Telegram");
     } finally {
       setBulkLoading(false);
     }
+  }
+
+  function publishSelectedTelegram() {
+    publishTelegramBatch(bulkTelegramTargets);
+  }
+
+  function retryTelegramErrors() {
+    publishTelegramBatch(retryTelegramTargets, "Ошибки повторены");
   }
 
   async function copyQueueReport() {
@@ -1461,7 +1473,7 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
                   Очистить выбор
                 </button>
               ) : null}
-              {bulkFeedback ? <Pill tone={bulkFeedback.startsWith("Обновлено") ? "green" : bulkFeedback.startsWith("Telegram:") ? "blue" : "red"}>{bulkFeedback}</Pill> : null}
+              {bulkFeedback ? <Pill tone={bulkFeedback.startsWith("Обновлено") || bulkFeedback.startsWith("Ошибки повторены") ? "green" : bulkFeedback.startsWith("Telegram:") ? "blue" : "red"}>{bulkFeedback}</Pill> : null}
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <select
@@ -1492,6 +1504,15 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
                 title={!telegramReady ? "Нужно настроить AI_PUBLISH_TELEGRAM_CHAT_ID на backend" : ""}
               >
                 {telegramReady ? `Опубликовать Telegram (${bulkTelegramTargets.length})` : "Telegram ENV нет"}
+              </button>
+              <button
+                type="button"
+                onClick={retryTelegramErrors}
+                disabled={!retryTelegramTargets.length || !telegramReady || bulkLoading}
+                className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-rose-700 ring-1 ring-rose-100 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-40"
+                title={!telegramReady ? "Нужно настроить AI_PUBLISH_TELEGRAM_CHAT_ID на backend" : ""}
+              >
+                {telegramReady ? `Повторить ошибки (${retryTelegramTargets.length})` : "Telegram ENV нет"}
               </button>
               <input
                 type="datetime-local"
