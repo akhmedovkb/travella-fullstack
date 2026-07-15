@@ -572,6 +572,15 @@ router.use(requireAdmin);
 router.get("/status", (req, res) => {
   const config = getAiConfig();
   const jobs = listJobs({ limit: 100 });
+  const telegramReady = Boolean(TELEGRAM_CLIENT_BOT_TOKEN && AI_PUBLISH_TELEGRAM_CHAT_ID);
+  const schedulerDisabledByEnv = boolEnv("DISABLE_AI_PUBLISHING_SCHEDULER", false);
+  const schedulerReadyReason = process.env.NODE_ENV === "test"
+    ? "test_mode"
+    : schedulerDisabledByEnv
+      ? "disabled_by_env"
+      : !telegramReady
+        ? "telegram_env_missing"
+        : "ready";
   res.json({
     success: true,
     employees: listAiEmployees(),
@@ -583,9 +592,10 @@ router.get("/status", (req, res) => {
       artifactStorage: getArtifactStorageStatus(),
     },
     publishing: {
-      telegramReady: Boolean(TELEGRAM_CLIENT_BOT_TOKEN && AI_PUBLISH_TELEGRAM_CHAT_ID),
+      telegramReady,
       telegramChatConfigured: Boolean(AI_PUBLISH_TELEGRAM_CHAT_ID),
-      schedulerEnabled: process.env.NODE_ENV !== "test" && !boolEnv("DISABLE_AI_PUBLISHING_SCHEDULER", false),
+      schedulerEnabled: schedulerReadyReason === "ready",
+      schedulerReadyReason,
       schedulerIntervalMs: Math.max(60000, intEnv("AI_PUBLISHING_SCHEDULER_INTERVAL_MS", 60000)),
       schedulerBatchLimit: Math.max(1, Math.min(intEnv("AI_PUBLISHING_SCHEDULER_BATCH_LIMIT", 5), 20)),
     },

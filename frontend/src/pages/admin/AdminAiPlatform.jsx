@@ -311,6 +311,15 @@ function PublishingInspector({ videos, publishingStatus, onRunTelegramDue, sched
   const telegramDue = telegramQueue.filter((item) => item.plannedTime <= Date.now()).length;
   const nextTelegramPlan = telegramQueue[0] || null;
   const schedulerEnabled = Boolean(publishingStatus?.schedulerEnabled);
+  const schedulerReadyReason = publishingStatus?.schedulerReadyReason || (schedulerEnabled ? "ready" : "unknown");
+  const schedulerReasonLabels = {
+    ready: "готов",
+    disabled_by_env: "выключен ENV",
+    telegram_env_missing: "нет Telegram ENV",
+    test_mode: "test mode",
+    unknown: "не готов",
+  };
+  const schedulerReasonLabel = schedulerReasonLabels[schedulerReadyReason] || schedulerReasonLabels.unknown;
   const schedulerIntervalMin = Math.max(1, Math.round(Number(publishingStatus?.schedulerIntervalMs || 60000) / 60000));
   const schedulerBatchLimit = Number(publishingStatus?.schedulerBatchLimit || 5);
   const nextActions = approved.map(getNextPublicationAction);
@@ -369,6 +378,7 @@ function PublishingInspector({ videos, publishingStatus, onRunTelegramDue, sched
               <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>К запуску</span><b className={telegramDue ? "text-rose-700" : "text-slate-950"}>{telegramDue}</b></div>
               <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>В плане</span><b className="text-blue-700">{telegramQueue.length}</b></div>
               <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>Scheduler</span><b className={schedulerEnabled ? "text-emerald-700" : "text-rose-700"}>{schedulerEnabled ? "on" : "off"}</b></div>
+              <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>Готовность</span><b className={schedulerEnabled ? "text-emerald-700" : "text-amber-700"}>{schedulerReasonLabel}</b></div>
               <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>Batch</span><b className="text-slate-950">{schedulerBatchLimit}</b></div>
             </div>
             {nextTelegramPlan ? (
