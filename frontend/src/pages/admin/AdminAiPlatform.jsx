@@ -294,7 +294,7 @@ function ContentInspector({ videos }) {
   );
 }
 
-function PublishingInspector({ videos }) {
+function PublishingInspector({ videos, onRunTelegramDue, schedulerLoading, schedulerFeedback }) {
   const approved = getApprovedVideos(videos);
   const partial = approved.filter((video) => video.publishingPackage?.publicationStatus?.status === "published_partial").length;
   const complete = approved.filter((video) => video.publishingPackage?.publicationStatus?.status === "published_all").length;
@@ -372,6 +372,15 @@ function PublishingInspector({ videos }) {
                 <span className="ml-1 text-slate-500">{fmtDate(nextTelegramPlan.telegram.plannedAt)}</span>
               </div>
             ) : null}
+            <button
+              type="button"
+              onClick={onRunTelegramDue}
+              disabled={schedulerLoading || !telegramDue}
+              className="mt-3 w-full rounded-2xl bg-emerald-700 px-3 py-2 text-xs font-black text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {schedulerLoading ? "Проверяю..." : "Запустить due Telegram"}
+            </button>
+            {schedulerFeedback ? <div className="mt-2 rounded-xl bg-white px-3 py-2 text-xs text-slate-600">{schedulerFeedback}</div> : null}
           </div>
           <div className="rounded-2xl bg-slate-50 p-4"><div className="text-slate-400">Задача</div><b className="text-slate-950">Контроль ручных публикаций</b></div>
         </div>
@@ -2126,6 +2135,8 @@ export default function AdminAiPlatform() {
   const [refreshLoading, setRefreshLoading] = React.useState("");
   const [packageLoading, setPackageLoading] = React.useState("");
   const [publishLoading, setPublishLoading] = React.useState("");
+  const [schedulerLoading, setSchedulerLoading] = React.useState(false);
+  const [schedulerFeedback, setSchedulerFeedback] = React.useState("");
   const [publishFeedback, setPublishFeedback] = React.useState({});
   const [error, setError] = React.useState("");
   const [currentTask, setCurrentTask] = React.useState(null);
@@ -2349,6 +2360,25 @@ export default function AdminAiPlatform() {
     }
   }
 
+  async function runTelegramDuePublishing() {
+    if (schedulerLoading) return;
+    setSchedulerLoading(true);
+    setSchedulerFeedback("");
+    setError("");
+    try {
+      const res = await apiPost("/api/admin/ai-platform/publishing/telegram/run-due", { limit: 5, scanLimit: 100 }, "admin");
+      setSchedulerFeedback(`Проверено: ${res?.checked || 0}. Опубликовано: ${res?.published || 0}. Ошибок: ${res?.failed || 0}.`);
+      await load();
+    } catch (e) {
+      const msg = e?.message || "Не удалось запустить due Telegram";
+      setError(msg);
+      setSchedulerFeedback(msg);
+      await load();
+    } finally {
+      setSchedulerLoading(false);
+    }
+  }
+
   function selectEmployee(employeeId) {
     setSelectedEmployee(employeeId);
     if (employeeId === "content_manager") {
@@ -2497,7 +2527,14 @@ export default function AdminAiPlatform() {
         </main>
         )}
 
-        {isPublishingManager ? <PublishingInspector videos={videos} /> : isContentManager ? <ContentInspector videos={videos} /> : <Inspector task={currentTask} />}
+        {isPublishingManager ? (
+          <PublishingInspector
+            videos={videos}
+            onRunTelegramDue={runTelegramDuePublishing}
+            schedulerLoading={schedulerLoading}
+            schedulerFeedback={schedulerFeedback}
+          />
+        ) : isContentManager ? <ContentInspector videos={videos} /> : <Inspector task={currentTask} />}
       </section>
     </div>
   );
