@@ -1747,6 +1747,22 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
               </button>
               <button
                 type="button"
+                onClick={() => applyStaggeredPlan(15)}
+                disabled={!selectedVideos.length || !bulkDate || bulkLoading}
+                className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-blue-700 ring-1 ring-blue-100 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                15 мин
+              </button>
+              <button
+                type="button"
+                onClick={() => applyStaggeredPlan(60)}
+                disabled={!selectedVideos.length || !bulkDate || bulkLoading}
+                className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-blue-700 ring-1 ring-blue-100 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                60 мин
+              </button>
+              <button
+                type="button"
                 onClick={() => applyBulkPatch(() => ({ plannedAt: "" }))}
                 disabled={!selectedVideos.length || bulkLoading}
                 className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-blue-700 ring-1 ring-blue-100 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40"
