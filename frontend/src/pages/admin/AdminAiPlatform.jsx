@@ -392,6 +392,7 @@ function PublishingInspector({ videos, publishingStatus, onRunTelegramDue, onCop
               <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>В плане</span><b className="text-blue-700">{telegramPlannedCount}</b></div>
               <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>Scheduler</span><b className={schedulerEnabled ? "text-emerald-700" : "text-rose-700"}>{schedulerEnabled ? "on" : "off"}</b></div>
               <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>Готовность</span><b className={schedulerEnabled ? "text-emerald-700" : "text-amber-700"}>{schedulerReasonLabel}</b></div>
+              <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>Состояние</span><b className={telegramDueRun.running ? "text-blue-700" : "text-slate-950"}>{telegramDueRun.running ? "running" : "idle"}</b></div>
               <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>Batch</span><b className="text-slate-950">{schedulerBatchLimit}</b></div>
             </div>
             {nextTelegramPlan || nextTelegramPlanStatus ? (
@@ -2475,6 +2476,7 @@ export default function AdminAiPlatform() {
     const rows = [
       "Travella AI OS · Publishing Manager · Telegram scheduler",
       `Scheduler: ${publishing.schedulerEnabled ? "on" : "off"} (${publishing.schedulerReadyReason || "unknown"})`,
+      `Run state: ${publishing.telegramDueRun?.running ? "running" : "idle"}`,
       `Queue: due ${queue.due ?? 0}, planned ${queue.planned ?? 0}`,
       queue.next ? `Next: ${queue.next.code || queue.next.jobId || "AI"} · ${fmtDate(queue.next.plannedAt)}` : "Next: none",
       nextSchedulerCheck ? `Next scheduler check: ${fmtDate(nextSchedulerCheck)}` : "",
