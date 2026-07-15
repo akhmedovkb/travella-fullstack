@@ -318,6 +318,9 @@ function PublishingInspector({ videos, publishingStatus, onRunTelegramDue, onCop
   const telegramDueCount = Number.isFinite(statusTelegramDue) ? statusTelegramDue : telegramDue;
   const telegramPlannedCount = Number.isFinite(statusTelegramPlanned) ? statusTelegramPlanned : telegramQueue.length;
   const nextTelegramPlanStatus = statusTelegramQueue.next || null;
+  const nextTelegramPlannedAt = nextTelegramPlan?.telegram?.plannedAt || nextTelegramPlanStatus?.plannedAt || "";
+  const nextTelegramPlannedMs = new Date(nextTelegramPlannedAt || 0).getTime();
+  const nextTelegramIsDue = Number.isFinite(nextTelegramPlannedMs) && nextTelegramPlannedMs > 0 && nextTelegramPlannedMs <= Date.now();
   const telegramDueRun = publishingStatus?.telegramDueRun || {};
   const lastDueRun = telegramDueRun.lastRun || null;
   const schedulerReasonLabels = {
@@ -403,8 +406,11 @@ function PublishingInspector({ videos, publishingStatus, onRunTelegramDue, onCop
             </div>
             {nextTelegramPlan || nextTelegramPlanStatus ? (
               <div className="mt-2 rounded-xl bg-white px-3 py-2 text-xs">
-                <b className="text-slate-900">{nextTelegramPlan?.video?.code || nextTelegramPlanStatus?.code || "AI"}</b>
-                <span className="ml-1 text-slate-500">{fmtDate(nextTelegramPlan?.telegram?.plannedAt || nextTelegramPlanStatus?.plannedAt)}</span>
+                <div className="flex items-center justify-between gap-2">
+                  <b className="text-slate-900">{nextTelegramPlan?.video?.code || nextTelegramPlanStatus?.code || "AI"}</b>
+                  <span className={nextTelegramIsDue ? "font-bold text-rose-700" : "font-bold text-blue-700"}>{nextTelegramIsDue ? "к запуску" : "в плане"}</span>
+                </div>
+                <div className="mt-1 text-slate-500">{fmtDate(nextTelegramPlannedAt)}</div>
               </div>
             ) : null}
             {lastDueRun ? (
@@ -2490,12 +2496,14 @@ export default function AdminAiPlatform() {
       && Number.isFinite(nextSchedulerCheckMs)
       && nextSchedulerCheckMs > 0
       && Date.now() > nextSchedulerCheckMs + reportIntervalMs;
+    const nextQueuePlannedMs = new Date(queue.next?.plannedAt || 0).getTime();
+    const nextQueueState = Number.isFinite(nextQueuePlannedMs) && nextQueuePlannedMs > 0 && nextQueuePlannedMs <= Date.now() ? "due" : "planned";
     const rows = [
       "Travella AI OS · Publishing Manager · Telegram scheduler",
       `Scheduler: ${publishing.schedulerEnabled ? "on" : "off"} (${publishing.schedulerReadyReason || "unknown"})`,
       `Run state: ${publishing.telegramDueRun?.running ? "running" : "idle"}`,
       `Queue: due ${queue.due ?? 0}, planned ${queue.planned ?? 0}`,
-      queue.next ? `Next: ${queue.next.code || queue.next.jobId || "AI"} · ${fmtDate(queue.next.plannedAt)}` : "Next: none",
+      queue.next ? `Next: ${queue.next.code || queue.next.jobId || "AI"} · ${nextQueueState} · ${fmtDate(queue.next.plannedAt)}` : "Next: none",
       nextSchedulerCheck ? `Next scheduler check: ${fmtDate(nextSchedulerCheck)}${nextSchedulerCheckOverdue ? " · overdue" : ""}` : "",
       "",
       run
