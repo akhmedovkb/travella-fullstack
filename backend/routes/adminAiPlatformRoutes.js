@@ -30,6 +30,17 @@ const AI_PUBLISH_TELEGRAM_CHAT_ID = String(
 ).trim();
 const TELEGRAM_VIDEO_UPLOAD_MAX_BYTES = 49 * 1024 * 1024;
 
+function boolEnv(name, fallback = false) {
+  const raw = process.env[name];
+  if (raw === undefined || raw === null || String(raw).trim() === "") return fallback;
+  return ["1", "true", "yes", "on", "enabled"].includes(String(raw).trim().toLowerCase());
+}
+
+function intEnv(name, fallback) {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
 function normalizePublishingItems(items = []) {
   if (!Array.isArray(items)) return [];
   return items
@@ -574,6 +585,9 @@ router.get("/status", (req, res) => {
     publishing: {
       telegramReady: Boolean(TELEGRAM_CLIENT_BOT_TOKEN && AI_PUBLISH_TELEGRAM_CHAT_ID),
       telegramChatConfigured: Boolean(AI_PUBLISH_TELEGRAM_CHAT_ID),
+      schedulerEnabled: process.env.NODE_ENV !== "test" && !boolEnv("DISABLE_AI_PUBLISHING_SCHEDULER", false),
+      schedulerIntervalMs: Math.max(60000, intEnv("AI_PUBLISHING_SCHEDULER_INTERVAL_MS", 60000)),
+      schedulerBatchLimit: Math.max(1, Math.min(intEnv("AI_PUBLISHING_SCHEDULER_BATCH_LIMIT", 5), 20)),
     },
     metrics: {
       jobs: jobs.length,

@@ -294,7 +294,7 @@ function ContentInspector({ videos }) {
   );
 }
 
-function PublishingInspector({ videos, onRunTelegramDue, schedulerLoading, schedulerFeedback }) {
+function PublishingInspector({ videos, publishingStatus, onRunTelegramDue, schedulerLoading, schedulerFeedback }) {
   const approved = getApprovedVideos(videos);
   const partial = approved.filter((video) => video.publishingPackage?.publicationStatus?.status === "published_partial").length;
   const complete = approved.filter((video) => video.publishingPackage?.publicationStatus?.status === "published_all").length;
@@ -310,6 +310,9 @@ function PublishingInspector({ videos, onRunTelegramDue, schedulerLoading, sched
     .sort((a, b) => a.plannedTime - b.plannedTime);
   const telegramDue = telegramQueue.filter((item) => item.plannedTime <= Date.now()).length;
   const nextTelegramPlan = telegramQueue[0] || null;
+  const schedulerEnabled = Boolean(publishingStatus?.schedulerEnabled);
+  const schedulerIntervalMin = Math.max(1, Math.round(Number(publishingStatus?.schedulerIntervalMs || 60000) / 60000));
+  const schedulerBatchLimit = Number(publishingStatus?.schedulerBatchLimit || 5);
   const nextActions = approved.map(getNextPublicationAction);
   const overdue = nextActions.filter((action) => action.tone === "red").length;
   const today = nextActions.filter((action) => action.tone === "yellow").length;
@@ -365,6 +368,8 @@ function PublishingInspector({ videos, onRunTelegramDue, schedulerLoading, sched
             <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
               <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>К запуску</span><b className={telegramDue ? "text-rose-700" : "text-slate-950"}>{telegramDue}</b></div>
               <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>В плане</span><b className="text-blue-700">{telegramQueue.length}</b></div>
+              <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>Scheduler</span><b className={schedulerEnabled ? "text-emerald-700" : "text-rose-700"}>{schedulerEnabled ? "on" : "off"}</b></div>
+              <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>Batch</span><b className="text-slate-950">{schedulerBatchLimit}</b></div>
             </div>
             {nextTelegramPlan ? (
               <div className="mt-2 rounded-xl bg-white px-3 py-2 text-xs">
@@ -380,7 +385,7 @@ function PublishingInspector({ videos, onRunTelegramDue, schedulerLoading, sched
             >
               {schedulerLoading ? "Проверяю..." : "Запустить due Telegram"}
             </button>
-            <div className="mt-1 text-[11px] font-bold text-slate-400">До 5 публикаций за ручной запуск.</div>
+            <div className="mt-1 text-[11px] font-bold text-slate-400">Авто: каждые {schedulerIntervalMin} мин. Ручной запуск: до {schedulerBatchLimit} публикаций.</div>
             {schedulerFeedback ? <div className="mt-2 rounded-xl bg-white px-3 py-2 text-xs text-slate-600">{schedulerFeedback}</div> : null}
           </div>
           <div className="rounded-2xl bg-slate-50 p-4"><div className="text-slate-400">Задача</div><b className="text-slate-950">Контроль ручных публикаций</b></div>
@@ -2546,6 +2551,7 @@ export default function AdminAiPlatform() {
         {isPublishingManager ? (
           <PublishingInspector
             videos={videos}
+            publishingStatus={status?.publishing}
             onRunTelegramDue={runTelegramDuePublishing}
             schedulerLoading={schedulerLoading}
             schedulerFeedback={schedulerFeedback}
