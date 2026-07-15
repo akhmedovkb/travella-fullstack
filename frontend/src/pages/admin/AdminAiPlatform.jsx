@@ -2368,7 +2368,12 @@ export default function AdminAiPlatform() {
     setError("");
     try {
       const res = await apiPost("/api/admin/ai-platform/publishing/telegram/run-due", { limit: 5, scanLimit: 100 }, "admin");
-      setSchedulerFeedback(`Проверено: ${res?.checked || 0}. Опубликовано: ${res?.published || 0}. Ошибок: ${res?.failed || 0}.`);
+      const results = Array.isArray(res?.results) ? res.results : [];
+      const publishedCodes = results.filter((item) => item?.success).map((item) => item.code || item.jobId).filter(Boolean);
+      const failedCodes = results.filter((item) => !item?.success).map((item) => item.code || item.jobId).filter(Boolean);
+      const publishedText = publishedCodes.length ? ` Опубликовано: ${publishedCodes.join(", ")}.` : "";
+      const failedText = failedCodes.length ? ` Ошибки: ${failedCodes.join(", ")}.` : "";
+      setSchedulerFeedback(`Проверено: ${res?.checked || 0}. Опубликовано: ${res?.published || 0}. Ошибок: ${res?.failed || 0}.${publishedText}${failedText}`);
       await load();
     } catch (e) {
       const msg = e?.message || "Не удалось запустить due Telegram";
