@@ -609,6 +609,36 @@ function countPublishingTexts(videos = [], channelId = "telegram") {
   }, 0);
 }
 
+function getPublishingErrorVideos(videos = [], feedbackByJobId = {}) {
+  return videos.filter((video) => {
+    const telegram = video.publishingPackage?.publicationStatus?.channels?.telegram || {};
+    return hasTelegramPublicationIssue(telegram, feedbackByJobId?.[video.jobId]);
+  });
+}
+
+function buildPublishingErrorsReport(videos = [], feedbackByJobId = {}) {
+  const problemVideos = getPublishingErrorVideos(videos, feedbackByJobId);
+  const lines = problemVideos.map((video, index) => {
+    const pkg = video.publishingPackage || {};
+    const telegram = pkg.publicationStatus?.channels?.telegram || {};
+    const feedback = feedbackByJobId?.[video.jobId];
+    const log = Array.isArray(telegram.deliveryLog) ? telegram.deliveryLog : [];
+    const logLines = log.length
+      ? log.map((entry) => `  - ${getDeliveryLogMethodLabel(entry.method)}: ${entry.status || "unknown"}${entry.message ? ` · ${entry.message}` : ""}`)
+      : ["  - Нет delivery log"];
+    const text = getPublishingTextForChannel(pkg, "telegram");
+    return [
+      `${index + 1}. ${video.code || "AI"} · ${video.title || "Без названия"}`,
+      feedback?.message ? `  Feedback: ${feedback.message}` : "",
+      telegram.plannedAt ? `  План: ${fmtDate(telegram.plannedAt)}` : "",
+      telegram.url ? `  URL: ${telegram.url}` : "",
+      ...logLines,
+      text ? `  Текст: ${text}` : "",
+    ].filter(Boolean).join("\n");
+  });
+  return [`Travella AI OS — ошибки Telegram`, `Всего: ${problemVideos.length}`, "", ...lines].join("\n");
+}
+
 function csvCell(value) {
   const text = String(value ?? "").replace(/\r?\n/g, " ").trim();
   return `"${text.replace(/"/g, '""')}"`;
@@ -1020,6 +1050,7 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
   const [copiedReport, setCopiedReport] = React.useState(false);
   const [copiedLinks, setCopiedLinks] = React.useState(false);
   const [copiedCsv, setCopiedCsv] = React.useState(false);
+  const [copiedErrors, setCopiedErrors] = React.useState(false);
   const [copiedBulkTexts, setCopiedBulkTexts] = React.useState(false);
   const [copiedUrlKey, setCopiedUrlKey] = React.useState("");
   const [copiedTextKey, setCopiedTextKey] = React.useState("");
@@ -1100,6 +1131,7 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
   const reportSourceVideos = selectedVideos.length ? selectedVideos : filteredVideos;
   const reportLinksCount = countPublishingLinks(reportSourceVideos);
   const reportCsvRows = countPublishingCsvRows(reportSourceVideos);
+  const reportErrorsCount = getPublishingErrorVideos(reportSourceVideos, publishFeedback).length;
   const bulkTextsCount = countPublishingTexts(reportSourceVideos, bulkChannel);
   const bulkTelegramTargets = selectedVideos.filter((video) => !hasTelegramPublicationEvidence(video.publishingPackage?.publicationStatus?.channels?.telegram));
   const retryTelegramTargets = reportSourceVideos.filter((video) => {
@@ -1272,6 +1304,26 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
     window.setTimeout(() => setCopiedCsv(false), 1800);
   }
 
+  async function copyErrorsReport() {
+    if (!reportErrorsCount) return;
+    const text = buildPublishingErrorsReport(reportSourceVideos, publishFeedback);
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+    }
+    setCopiedErrors(true);
+    window.setTimeout(() => setCopiedErrors(false), 1800);
+  }
+
   async function copyBulkTextsReport() {
     if (!bulkTextsCount) return;
     const text = buildPublishingTextsReport(reportSourceVideos, bulkChannel);
@@ -1363,6 +1415,14 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
               className="rounded-2xl bg-white px-4 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {copiedCsv ? "CSV скопирован" : reportCsvRows ? `CSV (${reportCsvRows})` : "CSV пуст"}
+            </button>
+            <button
+              type="button"
+              onClick={copyErrorsReport}
+              disabled={!reportErrorsCount}
+              className="rounded-2xl bg-white px-4 py-2 text-xs font-black text-rose-700 ring-1 ring-rose-100 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {copiedErrors ? "Ошибки скопированы" : reportErrorsCount ? `Скопировать ошибки (${reportErrorsCount})` : "Ошибок нет"}
             </button>
             <button
               type="button"
