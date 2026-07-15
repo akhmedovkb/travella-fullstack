@@ -285,7 +285,7 @@ async function sendTelegramVideoUpload(api, job, videoUrl, text) {
   return data;
 }
 
-async function publishVideoToTelegram(job, actor) {
+async function publishVideoToTelegramUnlocked(job, actor) {
   console.log("[ai-publishing] telegram publish requested", {
     jobId: job?.id || null,
     chatConfigured: Boolean(AI_PUBLISH_TELEGRAM_CHAT_ID),
@@ -463,6 +463,21 @@ async function publishVideoToTelegram(job, actor) {
       deliveryLog,
     },
   };
+}
+
+const telegramPublishingLocks = new Set();
+
+async function publishVideoToTelegram(job, actor) {
+  const lockKey = String(job?.id || "").trim();
+  if (lockKey && telegramPublishingLocks.has(lockKey)) {
+    return { success: false, status: 409, message: "Telegram publishing is already running for this job" };
+  }
+  if (lockKey) telegramPublishingLocks.add(lockKey);
+  try {
+    return await publishVideoToTelegramUnlocked(job, actor);
+  } finally {
+    if (lockKey) telegramPublishingLocks.delete(lockKey);
+  }
 }
 
 function hasTelegramPublicationEvidence(item = {}) {
