@@ -1086,6 +1086,7 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
   const reportLinksCount = countPublishingLinks(reportSourceVideos);
   const reportCsvRows = countPublishingCsvRows(reportSourceVideos);
   const bulkTextsCount = countPublishingTexts(reportSourceVideos, bulkChannel);
+  const bulkTelegramTargets = selectedVideos.filter((video) => !video.publishingPackage?.publicationStatus?.channels?.telegram?.published);
   const workModeCounts = approvedVideos.reduce(
     (acc, video) => {
       const action = getNextPublicationAction(video);
@@ -1158,6 +1159,27 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
       setBulkFeedback(`Обновлено: ${selectedVideos.length}`);
     } catch (e) {
       setBulkFeedback(e?.message || "Не удалось применить массовое действие");
+    } finally {
+      setBulkLoading(false);
+    }
+  }
+
+  async function publishSelectedTelegram() {
+    if (!bulkTelegramTargets.length || bulkLoading || !telegramReady) return;
+    setBulkLoading(true);
+    setBulkFeedback("");
+    let succeeded = 0;
+    let failed = 0;
+    try {
+      for (const video of bulkTelegramTargets) {
+        setBulkFeedback(`Telegram: ${succeeded + failed + 1}/${bulkTelegramTargets.length} · ${video.code || video.title || "AI"}`);
+        const ok = await onPublishTelegram?.(video);
+        if (ok === false) failed += 1;
+        else succeeded += 1;
+      }
+      setBulkFeedback(failed ? `Telegram с ошибками: ${succeeded}/${bulkTelegramTargets.length}` : `Обновлено Telegram: ${succeeded}/${bulkTelegramTargets.length}`);
+    } catch (e) {
+      setBulkFeedback(e?.message || "Не удалось выполнить массовую публикацию Telegram");
     } finally {
       setBulkLoading(false);
     }
@@ -1422,7 +1444,7 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
                   Очистить выбор
                 </button>
               ) : null}
-              {bulkFeedback ? <Pill tone={bulkFeedback.startsWith("Обновлено") ? "green" : "red"}>{bulkFeedback}</Pill> : null}
+              {bulkFeedback ? <Pill tone={bulkFeedback.startsWith("Обновлено") ? "green" : bulkFeedback.startsWith("Telegram:") ? "blue" : "red"}>{bulkFeedback}</Pill> : null}
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <select
@@ -1444,6 +1466,15 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
                 className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {copiedBulkTexts ? "Тексты скопированы" : bulkTextsCount ? `Копировать тексты (${bulkTextsCount})` : "Текстов нет"}
+              </button>
+              <button
+                type="button"
+                onClick={publishSelectedTelegram}
+                disabled={!bulkTelegramTargets.length || !telegramReady || bulkLoading}
+                className="rounded-2xl bg-emerald-700 px-3 py-2 text-xs font-black text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-40"
+                title={!telegramReady ? "Нужно настроить AI_PUBLISH_TELEGRAM_CHAT_ID на backend" : ""}
+              >
+                {telegramReady ? `Опубликовать Telegram (${bulkTelegramTargets.length})` : "Telegram ENV нет"}
               </button>
               <input
                 type="datetime-local"
@@ -1870,7 +1901,7 @@ export default function AdminAiPlatform() {
   }
 
   async function publishTelegram(video) {
-    if (!video?.jobId || publishLoading) return;
+    if (!video?.jobId || publishLoading) return false;
     setPublishLoading(video.jobId);
     setError("");
     setPublishFeedback((prev) => ({
@@ -1887,6 +1918,7 @@ export default function AdminAiPlatform() {
         [video.jobId]: { tone: "green", message: `Telegram опубликован.${deliveryText}${link}` },
       }));
       await load();
+      return true;
     } catch (e) {
       const message = e?.message || "Не удалось опубликовать в Telegram";
       setError(message);
@@ -1895,6 +1927,7 @@ export default function AdminAiPlatform() {
         [video.jobId]: { tone: "red", message },
       }));
       await load();
+      return false;
     } finally {
       setPublishLoading("");
     }
