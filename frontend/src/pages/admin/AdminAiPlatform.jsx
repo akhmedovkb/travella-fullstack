@@ -414,12 +414,18 @@ function PublishingInspector({ videos, publishingStatus, onRunTelegramDue, onCop
                 </div>
                 {Array.isArray(lastDueRun.resultsPreview) && lastDueRun.resultsPreview.length ? (
                   <div className="mt-2 space-y-1">
-                    {lastDueRun.resultsPreview.map((item) => (
-                      <div key={item.jobId || item.code} className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-2 py-1 text-[11px]">
-                        <span className="truncate font-bold text-slate-700">{item.code || "AI"}</span>
-                        <span className={item.success ? "text-emerald-700" : "text-rose-700"}>{item.success ? (item.deliveryMethod || "ok") : "error"}</span>
-                      </div>
-                    ))}
+                    {lastDueRun.resultsPreview.map((item) => {
+                      const message = String(item.message || "").trim();
+                      return (
+                        <div key={item.jobId || item.code} className="rounded-lg bg-slate-50 px-2 py-1 text-[11px]">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="truncate font-bold text-slate-700">{item.code || "AI"}</span>
+                            <span className={item.success ? "text-emerald-700" : "text-rose-700"}>{item.success ? (item.deliveryMethod || "ok") : "error"}</span>
+                          </div>
+                          {message ? <div className={item.success ? "mt-0.5 truncate text-slate-400" : "mt-0.5 truncate text-rose-600"}>{message}</div> : null}
+                        </div>
+                      );
+                    })}
                     {lastDueRun.resultsOverflow ? <div className="text-[11px] text-slate-400">+{lastDueRun.resultsOverflow} ещё</div> : null}
                   </div>
                 ) : null}
