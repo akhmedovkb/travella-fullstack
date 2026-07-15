@@ -1,6 +1,6 @@
 // backend/jobs/aiPublishingSchedulerJob.js
 
-const { initAiJobStore, listJobs, addEvent } = require("../ai/core/aiJobStore");
+const { initAiJobStore } = require("../ai/core/aiJobStore");
 const adminAiPlatformRoutes = require("../routes/adminAiPlatformRoutes");
 
 let timer = null;
@@ -17,74 +17,24 @@ function intEnv(name, fallback) {
   return Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
-function hasTelegramPublicationEvidence(item = {}) {
-  return Boolean(item.published || String(item.url || "").trim() || item.messageId);
-}
-
-function getDueTelegramJobs({ limit = 100 } = {}) {
-  const now = Date.now();
-  return listJobs({ employeeId: "video_operator", limit })
-    .filter((job) => {
-      const pkg = job.output?.publishingPackage || {};
-      const telegram = pkg.publicationStatus?.channels?.telegram || {};
-      const plannedAt = new Date(telegram.plannedAt || 0).getTime();
-      return pkg.status === "approved"
-        && Number.isFinite(plannedAt)
-        && plannedAt > 0
-        && plannedAt <= now
-        && !hasTelegramPublicationEvidence(telegram);
-    })
-    .sort((a, b) => {
-      const aTime = new Date(a.output?.publishingPackage?.publicationStatus?.channels?.telegram?.plannedAt || 0).getTime();
-      const bTime = new Date(b.output?.publishingPackage?.publicationStatus?.channels?.telegram?.plannedAt || 0).getTime();
-      return aTime - bTime;
-    });
-}
-
 async function runAiPublishingSchedulerOnce() {
   if (running) return { skipped: true, reason: "already_running" };
   running = true;
 
   try {
     await initAiJobStore({ limit: intEnv("AI_PUBLISHING_SCHEDULER_STORE_LIMIT", 100) });
-    const batchLimit = Math.max(1, Math.min(intEnv("AI_PUBLISHING_SCHEDULER_BATCH_LIMIT", 5), 20));
-    const dueJobs = getDueTelegramJobs({ limit: intEnv("AI_PUBLISHING_SCHEDULER_SCAN_LIMIT", 100) }).slice(0, batchLimit);
-    let published = 0;
-    let failed = 0;
-
-    for (const job of dueJobs) {
-      addEvent(job.id, {
-        step: "publishing",
-        type: "event",
-        tool: "PublishingScheduler",
-        message: "Автопубликация Telegram по расписанию запущена.",
-        meta: { channel: "telegram" },
-      });
-
-      const result = await adminAiPlatformRoutes.publishVideoToTelegram(job, {
+    const result = await adminAiPlatformRoutes.runDueTelegramPublishing({
+      limit: intEnv("AI_PUBLISHING_SCHEDULER_BATCH_LIMIT", 5),
+      scanLimit: intEnv("AI_PUBLISHING_SCHEDULER_SCAN_LIMIT", 100),
+      actor: {
         id: "publishing_scheduler",
         role: "system",
-      });
-
-      if (result?.success) {
-        published += 1;
-      } else {
-        failed += 1;
-        addEvent(job.id, {
-          step: "publishing",
-          type: "tool_result",
-          tool: "PublishingScheduler",
-          level: "warn",
-          message: result?.message || "Автопубликация Telegram не выполнена.",
-          meta: { channel: "telegram", status: result?.status || null },
-        });
-      }
+      },
+    });
+    if (result.checked > 0 || result.published > 0 || result.failed > 0) {
+      console.log("[ai-publishing-scheduler] finished", result);
     }
-
-    if (dueJobs.length || published || failed) {
-      console.log("[ai-publishing-scheduler] finished", { checked: dueJobs.length, published, failed });
-    }
-    return { success: true, checked: dueJobs.length, published, failed };
+    return result;
   } catch (err) {
     console.warn("[ai-publishing-scheduler] failed:", err?.message || err);
     return { success: false, error: err?.message || String(err) };
@@ -132,5 +82,4 @@ function startAiPublishingScheduler() {
 module.exports = {
   runAiPublishingSchedulerOnce,
   startAiPublishingScheduler,
-  getDueTelegramJobs,
 };

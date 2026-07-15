@@ -465,6 +465,73 @@ async function publishVideoToTelegram(job, actor) {
   };
 }
 
+function hasTelegramPublicationEvidence(item = {}) {
+  return Boolean(item.published || String(item.url || "").trim() || item.messageId);
+}
+
+function getDueTelegramPublishingJobs({ limit = 100 } = {}) {
+  const now = Date.now();
+  return listJobs({ employeeId: "video_operator", limit })
+    .filter((job) => {
+      const pkg = job.output?.publishingPackage || {};
+      const telegram = pkg.publicationStatus?.channels?.telegram || {};
+      const plannedAt = new Date(telegram.plannedAt || 0).getTime();
+      return pkg.status === "approved"
+        && Number.isFinite(plannedAt)
+        && plannedAt > 0
+        && plannedAt <= now
+        && !hasTelegramPublicationEvidence(telegram);
+    })
+    .sort((a, b) => {
+      const aTime = new Date(a.output?.publishingPackage?.publicationStatus?.channels?.telegram?.plannedAt || 0).getTime();
+      const bTime = new Date(b.output?.publishingPackage?.publicationStatus?.channels?.telegram?.plannedAt || 0).getTime();
+      return aTime - bTime;
+    });
+}
+
+async function runDueTelegramPublishing({ limit = 5, scanLimit = 100, actor = { id: "publishing_scheduler", role: "system" } } = {}) {
+  const batchLimit = Math.max(1, Math.min(Number(limit) || 5, 20));
+  const dueJobs = getDueTelegramPublishingJobs({ limit: scanLimit }).slice(0, batchLimit);
+  let published = 0;
+  let failed = 0;
+  const results = [];
+
+  for (const job of dueJobs) {
+    addEvent(job.id, {
+      step: "publishing",
+      type: "event",
+      tool: "PublishingScheduler",
+      message: "Автопубликация Telegram по расписанию запущена.",
+      meta: { channel: "telegram", actor: actor?.id || null },
+    });
+
+    const result = await publishVideoToTelegram(job, actor);
+    results.push({
+      jobId: job.id,
+      code: getPublishingContext(job)?.code || "",
+      success: Boolean(result?.success),
+      message: result?.message || "",
+      telegram: result?.telegram || null,
+    });
+
+    if (result?.success) {
+      published += 1;
+    } else {
+      failed += 1;
+      addEvent(job.id, {
+        step: "publishing",
+        type: "tool_result",
+        tool: "PublishingScheduler",
+        level: "warn",
+        message: result?.message || "Автопубликация Telegram не выполнена.",
+        meta: { channel: "telegram", status: result?.status || null },
+      });
+    }
+  }
+
+  return { success: true, checked: dueJobs.length, published, failed, results };
+}
+
 router.use(authenticateToken);
 router.use(requireAdmin);
 
@@ -637,6 +704,18 @@ router.post("/video-operator/jobs/:id/publish/telegram", async (req, res) => {
   return res.status(result.success ? 200 : result.status || 400).json(result);
 });
 
+router.post("/publishing/telegram/run-due", async (req, res) => {
+  const result = await runDueTelegramPublishing({
+    limit: req.body?.limit || 5,
+    scanLimit: req.body?.scanLimit || 100,
+    actor: {
+      id: req.user?.id || req.user?.userId || "manual_publishing_run",
+      role: req.user?.role || req.user?.roles || "admin",
+    },
+  });
+  return res.status(result.success ? 200 : 400).json(result);
+});
+
 router.post("/video-operator/jobs/:id/refresh", async (req, res) => {
   const job = getJob(req.params.id);
   if (!job) return res.status(404).json({ success: false, message: "Job not found" });
@@ -648,3 +727,5 @@ router.post("/video-operator/jobs/:id/refresh", async (req, res) => {
 module.exports = router;
 module.exports.publishVideoToTelegram = publishVideoToTelegram;
 module.exports.savePublicationStatus = savePublicationStatus;
+module.exports.getDueTelegramPublishingJobs = getDueTelegramPublishingJobs;
+module.exports.runDueTelegramPublishing = runDueTelegramPublishing;
