@@ -299,6 +299,17 @@ function PublishingInspector({ videos }) {
   const partial = approved.filter((video) => video.publishingPackage?.publicationStatus?.status === "published_partial").length;
   const complete = approved.filter((video) => video.publishingPackage?.publicationStatus?.status === "published_all").length;
   const waiting = Math.max(0, approved.length - partial - complete);
+  const telegramQueue = approved
+    .map((video) => {
+      const telegram = video.publishingPackage?.publicationStatus?.channels?.telegram || {};
+      const plannedTime = new Date(telegram.plannedAt || 0).getTime();
+      if (!Number.isFinite(plannedTime) || plannedTime <= 0 || hasTelegramPublicationEvidence(telegram)) return null;
+      return { video, telegram, plannedTime };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.plannedTime - b.plannedTime);
+  const telegramDue = telegramQueue.filter((item) => item.plannedTime <= Date.now()).length;
+  const nextTelegramPlan = telegramQueue[0] || null;
   const nextActions = approved.map(getNextPublicationAction);
   const overdue = nextActions.filter((action) => action.tone === "red").length;
   const today = nextActions.filter((action) => action.tone === "yellow").length;
@@ -348,6 +359,19 @@ function PublishingInspector({ videos }) {
               <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>Ссылкой</span><b className="text-amber-700">{telegramDelivery.sendMessage || 0}</b></div>
               <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>Всего</span><b className="text-slate-950">{telegramDelivery.total}</b></div>
             </div>
+          </div>
+          <div className="rounded-2xl bg-slate-50 p-4">
+            <div className="text-slate-400">Telegram auto publish</div>
+            <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+              <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>К запуску</span><b className={telegramDue ? "text-rose-700" : "text-slate-950"}>{telegramDue}</b></div>
+              <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>В плане</span><b className="text-blue-700">{telegramQueue.length}</b></div>
+            </div>
+            {nextTelegramPlan ? (
+              <div className="mt-2 rounded-xl bg-white px-3 py-2 text-xs">
+                <b className="text-slate-900">{nextTelegramPlan.video.code || "AI"}</b>
+                <span className="ml-1 text-slate-500">{fmtDate(nextTelegramPlan.telegram.plannedAt)}</span>
+              </div>
+            ) : null}
           </div>
           <div className="rounded-2xl bg-slate-50 p-4"><div className="text-slate-400">Задача</div><b className="text-slate-950">Контроль ручных публикаций</b></div>
         </div>
