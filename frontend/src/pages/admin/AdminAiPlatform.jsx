@@ -1132,6 +1132,9 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
   const telegramVisibleIds = filteredVideos
     .filter((video) => !hasTelegramPublicationEvidence(video.publishingPackage?.publicationStatus?.channels?.telegram))
     .map((video) => video.id);
+  const errorVisibleIds = filteredVideos
+    .filter((video) => hasTelegramPublicationIssue(video.publishingPackage?.publicationStatus?.channels?.telegram, publishFeedback?.[video.jobId]))
+    .map((video) => video.id);
   const selectedVideos = filteredVideos.filter((video) => selectedIds.includes(video.id));
   const allVisibleSelected = Boolean(filteredVideos.length) && visibleIds.every((id) => selectedIds.includes(id));
   const reportSourceVideos = selectedVideos.length ? selectedVideos : filteredVideos;
@@ -1194,6 +1197,11 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
   function selectTelegramVisible() {
     if (!telegramVisibleIds.length) return;
     setSelectedIds((current) => Array.from(new Set([...current, ...telegramVisibleIds])));
+  }
+
+  function selectErrorVisible() {
+    if (!errorVisibleIds.length) return;
+    setSelectedIds((current) => Array.from(new Set([...current, ...errorVisibleIds])));
   }
 
   function resetQueuePrefs() {
@@ -1553,6 +1561,14 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
                 className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-emerald-700 ring-1 ring-emerald-100 hover:bg-emerald-50 disabled:opacity-40"
               >
                 Выбрать Telegram ({telegramVisibleIds.length})
+              </button>
+              <button
+                type="button"
+                onClick={selectErrorVisible}
+                disabled={!errorVisibleIds.length || bulkLoading}
+                className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-rose-700 ring-1 ring-rose-100 hover:bg-rose-50 disabled:opacity-40"
+              >
+                Выбрать ошибки ({errorVisibleIds.length})
               </button>
               <Pill tone={selectedVideos.length ? "blue" : "slate"}>Выбрано: {selectedVideos.length}</Pill>
               {selectedVideos.length ? (
