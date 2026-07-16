@@ -10,6 +10,9 @@ Scope: Publishing Manager / Telegram fallback / AI OS staging to production.
 - Vercel check is green on the PR head commit.
 - `travella-staging.vercel.app` points to the validated staging deployment.
 - Railway staging backend responds with `200 Travella API OK`.
+- Railway production backend service is identified as `travella-fullstack`.
+- Railway production backend root responds with `200 Travella API OK`.
+- Production frontend API proxy smoke returns `401` for unauthenticated `/api/admin/ai-platform/status`, as expected.
 - Production has not been changed.
 
 ## Release Size
@@ -32,9 +35,16 @@ Changed areas:
 
 ## Production Blockers
 
-1. Railway production service/environment must be explicitly identified and checked before deploy.
-2. Railway CLI project commands currently returned `Unauthorized` even though `railway whoami` succeeded. Do not deploy backend production until this is resolved.
-3. Confirm production backend env vars before enabling automated Telegram publishing.
+1. Production backend AI publishing env vars are not configured yet.
+2. Confirm production backend env vars before enabling automated Telegram publishing.
+3. Add an explicit scheduler safety flag before the first production deploy.
+
+Resolved:
+
+- Railway production environment is accessible.
+- Production backend service is `travella-fullstack`.
+- Latest listed production backend deployment was `SUCCESS`.
+- Production backend public URL is `https://travella-fullstack-production.up.railway.app`.
 
 ## Required Production Env Review
 
@@ -64,6 +74,11 @@ Backend / Railway:
 - `R2_ACCESS_KEY_ID`
 - `R2_SECRET_ACCESS_KEY`
 - `R2_PUBLIC_URL`
+
+Observed production backend env names on 2026-07-16:
+
+- Present: `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGINS`, `TELEGRAM_CLIENT_BOT_TOKEN`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_PUBLIC_CHANNEL_ID`, `R2_BUCKET`, `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `API_PUBLIC_URL`, `API_BASE_URL`.
+- Missing or not observed: `AI_PUBLISH_TELEGRAM_CHAT_ID`, `DISABLE_AI_PUBLISHING_SCHEDULER`, `AI_VIDEO_ENABLED`, `HEYGEN_API_KEY`, `HEYGEN_AVATAR_ID`, `HEYGEN_VOICE_ID`, `R2_PUBLIC_URL`.
 
 ## Recommended First Production Rollout
 
