@@ -1,0 +1,29 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "routes": [
+    {
+      "src": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "india.travella.uz"
+        }
+      ],
+      "headers": {
+        "Location": "/india/inside"
+      },
+      "status": 307
+    },
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/proxy.js?path=$1"
+    },
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ]
+}
