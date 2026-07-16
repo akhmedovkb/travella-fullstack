@@ -334,6 +334,11 @@ function PublishingInspector({ videos, publishingStatus, onRunTelegramDue, onCop
   const schedulerReasonLabel = schedulerReasonLabels[schedulerReadyReason] || schedulerReasonLabels.unknown;
   const schedulerIntervalMin = Math.max(1, Math.round(Number(publishingStatus?.schedulerIntervalMs || 60000) / 60000));
   const schedulerBatchLimit = Number(publishingStatus?.schedulerBatchLimit || 5);
+  const manualRunHint = schedulerLoading || telegramDueRun.running
+    ? "Ручной запуск недоступен: scheduler уже выполняется."
+    : telegramDueCount
+      ? `Готово к ручному запуску: ${telegramDueCount}.`
+      : "Ручной запуск недоступен: нет due Telegram.";
   const lastDueRunFinishedMs = new Date(lastDueRun?.finishedAt || lastDueRun?.startedAt || 0).getTime();
   const schedulerIntervalMs = Math.max(60000, Number(publishingStatus?.schedulerIntervalMs || 60000));
   const nextSchedulerCheckAt = schedulerEnabled && Number.isFinite(lastDueRunFinishedMs) && lastDueRunFinishedMs > 0
@@ -460,6 +465,7 @@ function PublishingInspector({ videos, publishingStatus, onRunTelegramDue, onCop
             >
               {schedulerLoading || telegramDueRun.running ? "Проверяю..." : "Запустить due Telegram"}
             </button>
+            <div className={telegramDueCount && !telegramDueRun.running && !schedulerLoading ? "mt-1 text-[11px] font-bold text-emerald-700" : "mt-1 text-[11px] font-bold text-slate-400"}>{manualRunHint}</div>
             <button
               type="button"
               onClick={onCopySchedulerReport}
@@ -2501,10 +2507,16 @@ export default function AdminAiPlatform() {
     const nextQueuePlannedMs = new Date(queue.next?.plannedAt || 0).getTime();
     const nextQueueState = Number.isFinite(nextQueuePlannedMs) && nextQueuePlannedMs > 0 && nextQueuePlannedMs <= Date.now() ? "due" : "planned";
     const nextQueueAge = nextQueueState === "due" ? ` · waiting ${Math.max(0, Math.round((Date.now() - nextQueuePlannedMs) / 60000))} min` : "";
+    const manualRunState = publishing.telegramDueRun?.running
+      ? "blocked: running"
+      : Number(queue.due || 0) > 0
+        ? `ready: ${queue.due}`
+        : "blocked: no due";
     const rows = [
       "Travella AI OS · Publishing Manager · Telegram scheduler",
       `Scheduler: ${publishing.schedulerEnabled ? "on" : "off"} (${publishing.schedulerReadyReason || "unknown"})`,
       `Run state: ${publishing.telegramDueRun?.running ? "running" : "idle"}`,
+      `Manual run: ${manualRunState}`,
       `Queue: due ${queue.due ?? 0}, planned ${queue.planned ?? 0}`,
       queue.next ? `Next: ${queue.next.code || queue.next.jobId || "AI"} · ${nextQueueState}${nextQueueAge} · ${fmtDate(queue.next.plannedAt)}` : "Next: none",
       nextSchedulerCheck ? `Next scheduler check: ${fmtDate(nextSchedulerCheck)}${nextSchedulerCheckOverdue ? " · overdue" : ""}` : "",
