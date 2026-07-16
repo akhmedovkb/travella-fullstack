@@ -336,6 +336,7 @@ function PublishingInspector({ videos, publishingStatus, onRunTelegramDue, onCop
   const schedulerBatchLimit = Number(publishingStatus?.schedulerBatchLimit || 5);
   const manualRunWillPublish = Math.min(telegramDueCount, schedulerBatchLimit);
   const manualRunRemaining = Math.max(0, telegramDueCount - manualRunWillPublish);
+  const manualRunBatchCapped = telegramDueCount > schedulerBatchLimit;
   const manualRunHint = schedulerLoading || telegramDueRun.running
     ? "Ручной запуск недоступен: scheduler уже выполняется."
     : telegramDueCount
@@ -410,7 +411,7 @@ function PublishingInspector({ videos, publishingStatus, onRunTelegramDue, onCop
               <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>Scheduler</span><b className={schedulerEnabled ? "text-emerald-700" : "text-rose-700"}>{schedulerEnabled ? "on" : "off"}</b></div>
               <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>Готовность</span><b className={schedulerEnabled ? "text-emerald-700" : "text-amber-700"}>{schedulerReasonLabel}</b></div>
               <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>Состояние</span><b className={telegramDueRun.running ? "text-blue-700" : "text-slate-950"}>{telegramDueRun.running ? "running" : "idle"}</b></div>
-              <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>Batch</span><b className="text-slate-950">{schedulerBatchLimit}</b></div>
+              <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>Batch</span><b className={manualRunBatchCapped ? "text-amber-700" : "text-slate-950"}>{schedulerBatchLimit}{manualRunBatchCapped ? " · лимит" : ""}</b></div>
             </div>
             {nextTelegramPlan || nextTelegramPlanStatus ? (
               <div className="mt-2 rounded-xl bg-white px-3 py-2 text-xs">
@@ -2528,6 +2529,7 @@ export default function AdminAiPlatform() {
       `Scheduler: ${publishing.schedulerEnabled ? "on" : "off"} (${publishing.schedulerReadyReason || "unknown"})`,
       `Run state: ${publishing.telegramDueRun?.running ? "running" : "idle"}`,
       `Manual run: ${manualRunState}`,
+      `Batch capped: ${reportDue > reportBatchLimit ? "yes" : "no"} (${reportBatchLimit})`,
       `Queue: due ${queue.due ?? 0}, planned ${queue.planned ?? 0}`,
       queue.next ? `Next: ${queue.next.code || queue.next.jobId || "AI"} · ${nextQueueState}${nextQueueAge} · ${fmtDate(queue.next.plannedAt)}` : "Next: none",
       nextSchedulerCheck ? `Next scheduler check: ${fmtDate(nextSchedulerCheck)}${nextSchedulerCheckOverdue ? " · overdue" : ""}` : "",
