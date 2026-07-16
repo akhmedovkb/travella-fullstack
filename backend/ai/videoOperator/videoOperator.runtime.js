@@ -340,6 +340,31 @@ async function startHeygenForVideoJob({ jobId, actor = {} }) {
 
     return { success: true, job: getJob(job.id), output: nextOutput };
   } catch (err) {
+    if (err?.code === "AI_VIDEO_DISABLED") {
+      const nextOutput = {
+        ...output,
+        heygen: {
+          provider: "heygen",
+          status: "disabled",
+          error: err.message,
+          checkedAt: new Date().toISOString(),
+        },
+      };
+      updateJob(job.id, { status: "script_ready", output: nextOutput, error: null });
+      addEvent(job.id, {
+        step: "heygen",
+        level: "warn",
+        tool: "HeyGen",
+        message: err.message,
+      });
+      return {
+        success: false,
+        job: getJob(job.id),
+        output: nextOutput,
+        error: { code: "AI_VIDEO_DISABLED", message: err.message },
+      };
+    }
+
     const heygen = {
       provider: "heygen",
       status: "failed",

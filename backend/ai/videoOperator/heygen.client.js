@@ -33,12 +33,14 @@ async function createAvatarVideo({ script, title, aspectRatio, resolution, engin
 
   if (!config.video.enabled) {
     const err = new Error("AI video generation is disabled. Set AI_VIDEO_ENABLED=true.");
+    err.code = "AI_VIDEO_DISABLED";
     err.status = 400;
     throw err;
   }
 
   if (!heygen.ready) {
     const err = new Error("HeyGen is not configured. Check HEYGEN_API_KEY, HEYGEN_AVATAR_ID, HEYGEN_VOICE_ID.");
+    err.code = "HEYGEN_NOT_CONFIGURED";
     err.status = 400;
     throw err;
   }

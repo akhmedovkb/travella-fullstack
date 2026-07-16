@@ -114,7 +114,9 @@ async function main() {
   const jobs = await request("/api/admin/ai-platform/video-operator/jobs?limit=5", { token });
   assert(jobs.res.ok, `jobs failed: HTTP ${jobs.res.status}`);
   assert(Array.isArray(jobs.data?.jobs), "jobs list missing");
-  assert(jobs.data.jobs.some((job) => job.id === jobId), "created smoke job not visible in jobs list");
+  const smokeJob = jobs.data.jobs.find((job) => job.id === jobId);
+  assert(smokeJob, "created smoke job not visible in jobs list");
+  assert(smokeJob.status === "script_ready", `smoke job should remain script_ready, got ${smokeJob.status}`);
 
   console.log("Production AI Platform safe smoke passed.");
   console.log(`API: ${API_BASE}`);
