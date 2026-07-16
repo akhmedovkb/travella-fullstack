@@ -321,6 +321,7 @@ function PublishingInspector({ videos, publishingStatus, onRunTelegramDue, onCop
   const nextTelegramPlannedAt = nextTelegramPlan?.telegram?.plannedAt || nextTelegramPlanStatus?.plannedAt || "";
   const nextTelegramPlannedMs = new Date(nextTelegramPlannedAt || 0).getTime();
   const nextTelegramIsDue = Number.isFinite(nextTelegramPlannedMs) && nextTelegramPlannedMs > 0 && nextTelegramPlannedMs <= Date.now();
+  const nextTelegramDueAgeMin = nextTelegramIsDue ? Math.max(0, Math.round((Date.now() - nextTelegramPlannedMs) / 60000)) : 0;
   const telegramDueRun = publishingStatus?.telegramDueRun || {};
   const lastDueRun = telegramDueRun.lastRun || null;
   const schedulerReasonLabels = {
@@ -411,6 +412,7 @@ function PublishingInspector({ videos, publishingStatus, onRunTelegramDue, onCop
                   <span className={nextTelegramIsDue ? "font-bold text-rose-700" : "font-bold text-blue-700"}>{nextTelegramIsDue ? "к запуску" : "в плане"}</span>
                 </div>
                 <div className="mt-1 text-slate-500">{fmtDate(nextTelegramPlannedAt)}</div>
+                {nextTelegramIsDue ? <div className="mt-1 font-bold text-rose-700">Ждёт {nextTelegramDueAgeMin} мин</div> : null}
               </div>
             ) : null}
             {lastDueRun ? (
@@ -2498,12 +2500,13 @@ export default function AdminAiPlatform() {
       && Date.now() > nextSchedulerCheckMs + reportIntervalMs;
     const nextQueuePlannedMs = new Date(queue.next?.plannedAt || 0).getTime();
     const nextQueueState = Number.isFinite(nextQueuePlannedMs) && nextQueuePlannedMs > 0 && nextQueuePlannedMs <= Date.now() ? "due" : "planned";
+    const nextQueueAge = nextQueueState === "due" ? ` · waiting ${Math.max(0, Math.round((Date.now() - nextQueuePlannedMs) / 60000))} min` : "";
     const rows = [
       "Travella AI OS · Publishing Manager · Telegram scheduler",
       `Scheduler: ${publishing.schedulerEnabled ? "on" : "off"} (${publishing.schedulerReadyReason || "unknown"})`,
       `Run state: ${publishing.telegramDueRun?.running ? "running" : "idle"}`,
       `Queue: due ${queue.due ?? 0}, planned ${queue.planned ?? 0}`,
-      queue.next ? `Next: ${queue.next.code || queue.next.jobId || "AI"} · ${nextQueueState} · ${fmtDate(queue.next.plannedAt)}` : "Next: none",
+      queue.next ? `Next: ${queue.next.code || queue.next.jobId || "AI"} · ${nextQueueState}${nextQueueAge} · ${fmtDate(queue.next.plannedAt)}` : "Next: none",
       nextSchedulerCheck ? `Next scheduler check: ${fmtDate(nextSchedulerCheck)}${nextSchedulerCheckOverdue ? " · overdue" : ""}` : "",
       "",
       run
