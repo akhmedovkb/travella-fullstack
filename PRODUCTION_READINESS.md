@@ -13,7 +13,8 @@ Scope: Publishing Manager / Telegram fallback / AI OS staging to production.
 - Railway production backend service is identified as `travella-fullstack`.
 - Railway production backend root responds with `200 Travella API OK`.
 - Production frontend API proxy smoke returns `401` for unauthenticated `/api/admin/ai-platform/status`, as expected.
-- Production has not been changed.
+- Production application deploy has not been changed.
+- Production safety flags were added with Railway `--skip-deploys`: `DISABLE_AI_PUBLISHING_SCHEDULER=true`, `AI_VIDEO_ENABLED=false`.
 
 ## Release Size
 
@@ -35,9 +36,9 @@ Changed areas:
 
 ## Production Blockers
 
-1. Production backend AI publishing env vars are not configured yet.
+1. Production backend AI publishing target chat is not configured yet.
 2. Confirm production backend env vars before enabling automated Telegram publishing.
-3. Add an explicit scheduler safety flag before the first production deploy.
+3. Keep the scheduler safety flag enabled for the first production deploy.
 
 Resolved:
 
@@ -45,6 +46,7 @@ Resolved:
 - Production backend service is `travella-fullstack`.
 - Latest listed production backend deployment was `SUCCESS`.
 - Production backend public URL is `https://travella-fullstack-production.up.railway.app`.
+- Production safety flags are present: `DISABLE_AI_PUBLISHING_SCHEDULER`, `AI_VIDEO_ENABLED`.
 
 ## Required Production Env Review
 
@@ -77,14 +79,14 @@ Backend / Railway:
 
 Observed production backend env names on 2026-07-16:
 
-- Present: `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGINS`, `TELEGRAM_CLIENT_BOT_TOKEN`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_PUBLIC_CHANNEL_ID`, `R2_BUCKET`, `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `API_PUBLIC_URL`, `API_BASE_URL`.
-- Missing or not observed: `AI_PUBLISH_TELEGRAM_CHAT_ID`, `DISABLE_AI_PUBLISHING_SCHEDULER`, `AI_VIDEO_ENABLED`, `HEYGEN_API_KEY`, `HEYGEN_AVATAR_ID`, `HEYGEN_VOICE_ID`, `R2_PUBLIC_URL`.
+- Present: `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGINS`, `TELEGRAM_CLIENT_BOT_TOKEN`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_PUBLIC_CHANNEL_ID`, `R2_BUCKET`, `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `API_PUBLIC_URL`, `API_BASE_URL`, `DISABLE_AI_PUBLISHING_SCHEDULER`, `AI_VIDEO_ENABLED`.
+- Missing or not observed: `AI_PUBLISH_TELEGRAM_CHAT_ID`, `HEYGEN_API_KEY`, `HEYGEN_AVATAR_ID`, `HEYGEN_VOICE_ID`, `R2_PUBLIC_URL`.
 
 ## Recommended First Production Rollout
 
 Use a guarded first release:
 
-1. Set `DISABLE_AI_PUBLISHING_SCHEDULER=true` in production backend before deploying.
+1. Keep `DISABLE_AI_PUBLISHING_SCHEDULER=true` in production backend for the first deploy.
 2. Keep `AI_VIDEO_ENABLED=false` unless production HeyGen cost controls and approval flow are confirmed.
 3. Merge PR #28 only after Railway production env/service is verified.
 4. Deploy backend production.
