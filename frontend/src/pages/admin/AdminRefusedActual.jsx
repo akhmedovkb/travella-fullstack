@@ -1419,7 +1419,7 @@ export default function AdminRefusedActual() {
   const editValidation = useMemo(() => validateEditForm(editForm), [editForm]);
   const hasUnsavedEditChanges = useMemo(() => {
     if (!editForm || !originalEditForm) return false;
-  
+
     try {
       return JSON.stringify(editForm) !== JSON.stringify(originalEditForm);
     } catch {
@@ -1836,13 +1836,13 @@ export default function AdminRefusedActual() {
       setHotelOptions([]);
       setImageUrlDraft("");
       setProofImageUrlDraft("");
-    
+
       try {
         const resp = await http.get(apiPath(`/admin/services/${id}`));
         const data = ensureJsonOrThrow(resp, "openEdit");
-    
+
         const nextForm = createEditFormFromService(data || {});
-    
+
         setEditForm(nextForm);
         setOriginalEditForm(nextForm);
       } catch (e) {
@@ -1854,18 +1854,18 @@ export default function AdminRefusedActual() {
         setEditLoading(false);
       }
     }
-  
+
     function closeEditEditor() {
     if (editSaving) return;
-  
+
     if (hasUnsavedEditChanges) {
       const confirmed = window.confirm(
         "Есть несохранённые изменения.\n\nЗакрыть редактор и потерять изменения?"
       );
-  
+
       if (!confirmed) return;
     }
-  
+
     closePreview();
     setEditOpen(false);
     setEditForm(null);
@@ -1873,7 +1873,7 @@ export default function AdminRefusedActual() {
     setSaveAndCloseRequested(false);
     setEditError("");
   }
-  
+
   function cancelEditEditor() {
     closeEditEditor();
   }
@@ -1907,18 +1907,18 @@ export default function AdminRefusedActual() {
         prev?.images ||
           safeJsonParse(prev?.rawImagesText || "[]", [])
       );
-  
+
       if (
         index <= 0 ||
         index >= current.length
       ) {
         return prev;
       }
-  
+
       const nextImages = [...current];
       const [selectedImage] = nextImages.splice(index, 1);
       nextImages.unshift(selectedImage);
-  
+
       return syncEditFormImages(prev, nextImages);
     });
   }
@@ -2029,9 +2029,9 @@ export default function AdminRefusedActual() {
 
   async function saveEdit({ closeAfterSave = false } = {}) {
     if (!editForm?.id) return;
-  
+
     const validation = validateEditForm(editForm);
-  
+
     if (!validation.valid) {
       if (Object.keys(validation.root || {}).length > 0) {
         setEditTab("main");
@@ -2049,22 +2049,22 @@ export default function AdminRefusedActual() {
       );
       return;
     }
-  
+
     let parsedDetails = {};
     let parsedImages = [];
     let parsedAvailability = [];
-  
+
     try {
       parsedDetails = safeJsonParse(
         editForm.rawDetailsText || "{}",
         {}
       );
-  
+
       parsedImages = safeJsonParse(
         editForm.rawImagesText || "[]",
         []
       );
-  
+
       parsedAvailability = safeJsonParse(
         editForm.rawAvailabilityText || "[]",
         []
@@ -2073,11 +2073,11 @@ export default function AdminRefusedActual() {
       setEditError(e?.message || "Невалидный JSON");
       return;
     }
-  
+
     setEditSaving(true);
     setSaveAndCloseRequested(closeAfterSave);
     setEditError("");
-  
+
     try {
       const nextForm = {
         ...editForm,
@@ -2108,7 +2108,7 @@ export default function AdminRefusedActual() {
           2
         ),
       };
-  
+
       const payload = {
         title: nextForm?.title || "",
         description: nextForm?.description || "",
@@ -2141,20 +2141,20 @@ export default function AdminRefusedActual() {
           nextForm?.telegram_chat_id
         ),
       };
-  
+
       const resp = await http.put(
         apiPath(`/admin/services/${editForm.id}`),
         payload
       );
-  
+
       const data = ensureJsonOrThrow(resp, "saveEdit");
-  
+
       if (!data?.ok) {
         throw new Error(
           data?.message || "Не удалось сохранить услугу"
         );
       }
-  
+
       const savedForm = createEditFormFromService({
         ...(data?.service || nextForm),
         telegram_refused_chat_id:
@@ -2166,21 +2166,21 @@ export default function AdminRefusedActual() {
         provider_id: nextForm.provider_id,
         provider_name: nextForm.provider_name,
       });
-  
+
       setEditForm(savedForm);
       setOriginalEditForm(savedForm);
-  
+
       showToast(
         "ok",
         `✅ Услуга #${editForm.id} сохранена`
       );
-  
+
       await loadList(page);
-  
+
       if (detailsItem?.id === editForm.id) {
         await openDetails(editForm.id);
       }
-  
+
       if (closeAfterSave) {
         closePreview();
         setEditOpen(false);
@@ -2189,7 +2189,7 @@ export default function AdminRefusedActual() {
       }
     } catch (e) {
       const info = extractAxiosError(e);
-  
+
       setEditError(
         info.msg || "Ошибка сохранения услуги"
       );
@@ -2315,7 +2315,7 @@ async function saveInlineEdit(item) {
       setInlineSaving(false);
     }
   }
-  
+
   async function askActual(id, force = false) {
     setSendingId(id);
     setError("");
@@ -3013,7 +3013,7 @@ const sortLabel = useMemo(() => {
                     it?.provider?.telegram_chat_id ||
                     it?.provider?.chatId ||
                     "";
-                  
+
                   const tgOk = !!effectiveTg;
                   const actual = !!it.isActual;
                   const deleted =
@@ -3115,7 +3115,7 @@ const sortLabel = useMemo(() => {
                                 disabled={inlineSaving}
                               />
                             </div>
-                      
+
                             <div>
                               <div className="text-[11px] text-gray-500">web</div>
                               <input
@@ -3133,7 +3133,7 @@ const sortLabel = useMemo(() => {
                                 disabled={inlineSaving}
                               />
                             </div>
-                      
+
                             <div>
                               <div className="text-[11px] text-gray-500">default</div>
                               <input
@@ -3149,18 +3149,18 @@ const sortLabel = useMemo(() => {
                                 disabled={inlineSaving}
                               />
                             </div>
-                      
+
                             <div className="rounded-lg border border-gray-200 bg-gray-50 px-2 py-2 text-[11px] text-gray-700">
                               Effective:{" "}
                               <span className="font-mono">
                                 {getEffectiveProviderChatId(inlineForm) || "—"}
                               </span>
                             </div>
-                      
+
                             {inlineError ? (
                               <div className="text-[11px] text-red-600">{inlineError}</div>
                             ) : null}
-                      
+
                             <div className="flex flex-wrap gap-2">
                               <button
                                 onClick={() => saveInlineEdit(it)}
@@ -3183,11 +3183,11 @@ const sortLabel = useMemo(() => {
                             <Badge tone={tgOk ? "green" : "red"}>
                               {tgOk ? "chatId OK" : "нет chatId"}
                             </Badge>
-                      
+
                             <div className="mt-1 font-mono text-xs text-gray-600">
                               {effectiveTg || "—"}
                             </div>
-                      
+
                             <button
                               onClick={() => openInlineEdit(it)}
                               className="mt-2 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs text-sky-700 hover:bg-sky-100"
@@ -3680,7 +3680,7 @@ const sortLabel = useMemo(() => {
                   Сохранено
                 </span>
               )}
-      
+
               <span
                 className={classNames(
                   "hidden rounded-full border bg-gradient-to-r px-3 py-1.5 text-xs font-bold md:inline-flex",
@@ -3712,12 +3712,12 @@ const sortLabel = useMemo(() => {
                   ✓ Все изменения сохранены
                 </div>
               )}
-        
+
               <div className="mt-1 text-xs text-slate-500">
                 Изменения применяются к услуге, карточке сайта и данным Telegram.
               </div>
             </div>
-        
+
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
@@ -3727,7 +3727,7 @@ const sortLabel = useMemo(() => {
               >
                 Закрыть
               </button>
-        
+
               <button
                 type="button"
                 onClick={() => saveEdit({ closeAfterSave: false })}
@@ -3744,7 +3744,7 @@ const sortLabel = useMemo(() => {
                   ? "Сохраняю…"
                   : "Сохранить"}
               </button>
-        
+
               <button
                 type="button"
                 onClick={() => saveEdit({ closeAfterSave: true })}
@@ -4044,7 +4044,7 @@ const sortLabel = useMemo(() => {
                       ({Array.isArray(editForm.images) ? editForm.images.length : 0})
                     </span>
                   </div>
-                  
+
                   <div
                     className={classNames(
                       "mt-1 text-xs",
@@ -4110,7 +4110,7 @@ const sortLabel = useMemo(() => {
                                 Главное фото
                               </div>
                             ) : null}
-                        
+
                             <button
                               type="button"
                               onClick={() => {
@@ -4129,14 +4129,14 @@ const sortLabel = useMemo(() => {
                               />
                             </button>
                           </div>
-                        
+
                           <div className="border-t border-gray-100 p-2">
                             <div className="truncate text-[11px] text-gray-500">
                               {String(src).startsWith("data:image/")
                                 ? `data:image #${idx + 1}`
                                 : short(String(src), 48)}
                             </div>
-                        
+
                             <div className="mt-2 grid grid-cols-1 gap-2">
                               {idx !== 0 ? (
                                 <button
@@ -4151,7 +4151,7 @@ const sortLabel = useMemo(() => {
                                   Используется в карточке
                                 </div>
                               )}
-                        
+
                               <button
                                 type="button"
                                 onClick={() => handleRemoveImage(idx)}
@@ -4201,7 +4201,7 @@ const sortLabel = useMemo(() => {
                       : 0})
                   </span>
                 </div>
-                
+
                 <div className="mt-1 text-xs text-gray-500">
                   Эти изображения используются для проверки услуги и не показываются клиентам в публичной карточке.
                 </div>

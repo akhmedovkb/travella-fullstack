@@ -2,6 +2,7 @@
 
 const express = require("express");
 const axios = require("axios");
+const { Blob } = require("buffer");
 const router = express.Router();
 
 const authenticateToken = require("../middleware/authenticateToken");
@@ -27,6 +28,18 @@ const AI_PUBLISH_TELEGRAM_CHAT_ID = String(
     process.env.TELEGRAM_AI_PUBLISH_CHAT_ID ||
     ""
 ).trim();
+const TELEGRAM_VIDEO_UPLOAD_MAX_BYTES = 49 * 1024 * 1024;
+
+function boolEnv(name, fallback = false) {
+  const raw = process.env[name];
+  if (raw === undefined || raw === null || String(raw).trim() === "") return fallback;
+  return ["1", "true", "yes", "on", "enabled"].includes(String(raw).trim().toLowerCase());
+}
+
+function intEnv(name, fallback) {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
 
 function normalizePublishingItems(items = []) {
   if (!Array.isArray(items)) return [];
@@ -96,6 +109,10 @@ function normalizePublicationChannels(channels = {}) {
       publishedAt: published ? item.publishedAt || now : null,
       plannedAt: String(item.plannedAt || "").trim(),
       url: String(item.url || "").trim(),
+      messageId: item.messageId || null,
+      chatId: item.chatId || null,
+      deliveryMethod: String(item.deliveryMethod || "").trim(),
+      deliveryLog: Array.isArray(item.deliveryLog) ? item.deliveryLog : [],
     };
     return acc;
   }, {});
@@ -109,16 +126,69 @@ function getPublicationStatus(channels = {}) {
   return "published_partial";
 }
 
+function buildPublicationHistory(prevChannels = {}, nextChannels = {}, actor = {}) {
+  const now = new Date().toISOString();
+  const labels = {
+    instagram: "Instagram",
+    telegram: "Telegram",
+    stories: "Stories",
+    reels: "Reels",
+  };
+  const changes = [];
+  Object.keys(labels).forEach((key) => {
+    const prev = prevChannels?.[key] || {};
+    const next = nextChannels?.[key] || {};
+    if (Boolean(prev.published) !== Boolean(next.published)) {
+      changes.push({
+        at: now,
+        by: actor?.id || null,
+        channel: key,
+        channelLabel: labels[key],
+        field: "published",
+        label: Boolean(next.published) ? "Отмечено опубликованным" : "Сброшена публикация",
+      });
+    }
+    if (String(prev.plannedAt || "") !== String(next.plannedAt || "")) {
+      changes.push({
+        at: now,
+        by: actor?.id || null,
+        channel: key,
+        channelLabel: labels[key],
+        field: "plannedAt",
+        label: next.plannedAt ? "Изменён план публикации" : "План публикации очищен",
+      });
+    }
+    if (String(prev.url || "") !== String(next.url || "")) {
+      changes.push({
+        at: now,
+        by: actor?.id || null,
+        channel: key,
+        channelLabel: labels[key],
+        field: "url",
+        label: next.url ? "Обновлена ссылка на пост" : "Ссылка на пост очищена",
+      });
+    }
+  });
+  return changes;
+}
+
 function savePublicationStatus(job, channels, actor) {
   const output = job.output || {};
   const ctx = getPublishingContext(job);
   const publishingPackage = output.publishingPackage || buildPublishingPackage(ctx);
+  const prevPublicationStatus = publishingPackage.publicationStatus || {};
   const normalizedChannels = normalizePublicationChannels(channels);
+  const newChanges = buildPublicationHistory(prevPublicationStatus.channels || {}, normalizedChannels, actor);
+  const history = [
+    ...newChanges,
+    ...(Array.isArray(prevPublicationStatus.history) ? prevPublicationStatus.history : []),
+  ].slice(0, 20);
   const publicationStatus = {
     status: getPublicationStatus(normalizedChannels),
     updatedAt: new Date().toISOString(),
     updatedBy: actor?.id || null,
     channels: normalizedChannels,
+    history,
   };
 
   const nextJob = updateJob(job.id, {
@@ -136,7 +206,7 @@ function savePublicationStatus(job, channels, actor) {
     type: "tool_result",
     tool: "ContentManager",
     message: "Статус ручной публикации обновлён.",
-    meta: { status: publicationStatus.status },
+    meta: { status: publicationStatus.status, changes: newChanges.length },
   });
 
   return { success: true, job: nextJob, publicationStatus };
@@ -159,6 +229,26 @@ function limitTelegramCaption(text, videoUrl) {
   return `${clean.slice(0, Math.max(0, 980 - suffix.length)).trim()}...${suffix}`;
 }
 
+function limitTelegramTextMessage(text, videoUrl) {
+  const clean = String(text || "").trim();
+  const suffix = videoUrl ? `\n\nВидео: ${videoUrl}` : "";
+  const message = `${clean}${suffix}`;
+  if (message.length <= 4096) return message;
+  return `${clean.slice(0, Math.max(0, 4093 - suffix.length)).trim()}...${suffix}`;
+}
+
+function isTelegramWrongWebPageContentError(description) {
+  const normalized = String(description || "").toLowerCase();
+  return normalized.includes("wrong type of web page content")
+    || normalized.includes("wrong type of the web page content");
+}
+
+function shortTelegramError(value) {
+  return String(value || "failed")
+    .replace(/^bad request:\s*/i, "")
+    .slice(0, 180);
+}
+
 function buildTelegramMessageUrl(chat, messageId) {
   const username = String(chat?.username || "").trim();
   if (username && messageId) return `https://t.me/${username}/${messageId}`;
@@ -170,7 +260,43 @@ function buildTelegramMessageUrl(chat, messageId) {
   return "";
 }
 
-async function publishVideoToTelegram(job, actor) {
+async function sendTelegramVideoUpload(api, job, videoUrl, text) {
+  const download = await axios.get(videoUrl, {
+    responseType: "arraybuffer",
+    timeout: 60000,
+    maxContentLength: TELEGRAM_VIDEO_UPLOAD_MAX_BYTES,
+    maxBodyLength: TELEGRAM_VIDEO_UPLOAD_MAX_BYTES,
+  });
+  const contentType = String(download.headers?.["content-type"] || "video/mp4").split(";")[0].trim() || "video/mp4";
+  const bytes = Buffer.byteLength(download.data);
+  if (bytes > TELEGRAM_VIDEO_UPLOAD_MAX_BYTES) {
+    throw new Error(`Video is too large for Telegram upload fallback (${bytes} bytes)`);
+  }
+
+  const form = new FormData();
+  form.append("chat_id", AI_PUBLISH_TELEGRAM_CHAT_ID);
+  form.append("caption", limitTelegramCaption(text, videoUrl));
+  form.append("supports_streaming", "true");
+  form.append("video", new Blob([download.data], { type: contentType }), "travella-video.mp4");
+
+  const res = await fetch(`${api}/sendVideo`, {
+    method: "POST",
+    body: form,
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data?.ok) {
+    throw new Error(data?.description || `Telegram upload sendVideo failed with HTTP ${res.status}`);
+  }
+
+  console.log("[ai-publishing] telegram sendVideo upload fallback completed", {
+    jobId: job.id,
+    bytes,
+    contentType,
+  });
+  return data;
+}
+
+async function publishVideoToTelegramUnlocked(job, actor) {
   console.log("[ai-publishing] telegram publish requested", {
     jobId: job?.id || null,
     chatConfigured: Boolean(AI_PUBLISH_TELEGRAM_CHAT_ID),
@@ -190,7 +316,7 @@ async function publishVideoToTelegram(job, actor) {
     return { success: false, status: 400, message: "Publishing package must be approved before Telegram publishing" };
   }
 
-  const videoUrl = String(output.heygen?.artifact?.url || output.heygen?.videoUrl || "").trim();
+  const videoUrl = String(output.heygen?.videoUrl || output.heygen?.artifact?.url || "").trim();
   if (!videoUrl) {
     return { success: false, status: 400, message: "Video URL is missing" };
   }
@@ -201,25 +327,94 @@ async function publishVideoToTelegram(job, actor) {
   }
 
   const api = `https://api.telegram.org/bot${TELEGRAM_CLIENT_BOT_TOKEN}`;
-  const payload = {
+  const videoPayload = {
     chat_id: AI_PUBLISH_TELEGRAM_CHAT_ID,
     video: videoUrl,
     caption: limitTelegramCaption(text, videoUrl),
     supports_streaming: true,
   };
+  const messagePayload = {
+    chat_id: AI_PUBLISH_TELEGRAM_CHAT_ID,
+    text: limitTelegramTextMessage(text, videoUrl),
+    disable_web_page_preview: true,
+  };
 
   let data;
+  let deliveryMethod = "sendVideo";
+  const deliveryLog = [];
   try {
-    const res = await axios.post(`${api}/sendVideo`, payload, { timeout: 30000 });
+    const res = await axios.post(`${api}/sendVideo`, videoPayload, { timeout: 30000 });
     data = res.data;
+    deliveryLog.push({ method: "sendVideo", status: data?.ok ? "success" : "not_ok", message: data?.ok ? "Telegram accepted video URL" : shortTelegramError(data?.description) });
   } catch (e) {
     const desc = e?.response?.data?.description || e?.message || "Telegram sendVideo failed";
+    deliveryLog.push({ method: "sendVideo", status: "failed", message: shortTelegramError(desc) });
     console.error("[ai-publishing] telegram sendVideo failed", {
       jobId: job.id,
       status: e?.response?.status || null,
       description: desc,
     });
-    return { success: false, status: 502, message: desc };
+    if (!isTelegramWrongWebPageContentError(desc)) {
+      return { success: false, status: 502, message: desc };
+    }
+
+    try {
+      data = await sendTelegramVideoUpload(api, job, videoUrl, text);
+      deliveryMethod = "sendVideoUpload";
+      deliveryLog.push({ method: "sendVideoUpload", status: "success", message: "Backend uploaded mp4 to Telegram" });
+    } catch (uploadError) {
+      deliveryLog.push({ method: "sendVideoUpload", status: "failed", message: shortTelegramError(uploadError?.message || uploadError) });
+      console.error("[ai-publishing] telegram sendVideo upload fallback failed", {
+        jobId: job.id,
+        description: uploadError?.message || String(uploadError),
+      });
+      try {
+        const fallback = await axios.post(`${api}/sendMessage`, messagePayload, { timeout: 30000 });
+        data = fallback.data;
+        deliveryMethod = "sendMessage";
+        deliveryLog.push({ method: "sendMessage", status: data?.ok ? "success" : "not_ok", message: data?.ok ? "Published text with video link" : shortTelegramError(data?.description) });
+      } catch (fallbackError) {
+        const fallbackDesc =
+          fallbackError?.response?.data?.description || fallbackError?.message || "Telegram sendMessage failed";
+        deliveryLog.push({ method: "sendMessage", status: "failed", message: shortTelegramError(fallbackDesc) });
+        console.error("[ai-publishing] telegram sendMessage fallback failed", {
+          jobId: job.id,
+          status: fallbackError?.response?.status || null,
+          description: fallbackDesc,
+        });
+        return { success: false, status: 502, message: fallbackDesc };
+      }
+    }
+  }
+
+  if (!data?.ok && isTelegramWrongWebPageContentError(data?.description)) {
+    try {
+      data = await sendTelegramVideoUpload(api, job, videoUrl, text);
+      deliveryMethod = "sendVideoUpload";
+      deliveryLog.push({ method: "sendVideoUpload", status: "success", message: "Backend uploaded mp4 to Telegram" });
+    } catch (uploadError) {
+      deliveryLog.push({ method: "sendVideoUpload", status: "failed", message: shortTelegramError(uploadError?.message || uploadError) });
+      console.error("[ai-publishing] telegram sendVideo upload fallback failed", {
+        jobId: job.id,
+        description: uploadError?.message || String(uploadError),
+      });
+      try {
+        const fallback = await axios.post(`${api}/sendMessage`, messagePayload, { timeout: 30000 });
+        data = fallback.data;
+        deliveryMethod = "sendMessage";
+        deliveryLog.push({ method: "sendMessage", status: data?.ok ? "success" : "not_ok", message: data?.ok ? "Published text with video link" : shortTelegramError(data?.description) });
+      } catch (fallbackError) {
+        const fallbackDesc =
+          fallbackError?.response?.data?.description || fallbackError?.message || "Telegram sendMessage failed";
+        deliveryLog.push({ method: "sendMessage", status: "failed", message: shortTelegramError(fallbackDesc) });
+        console.error("[ai-publishing] telegram sendMessage fallback failed", {
+          jobId: job.id,
+          status: fallbackError?.response?.status || null,
+          description: fallbackDesc,
+        });
+        return { success: false, status: 502, message: fallbackDesc };
+      }
+    }
   }
 
   if (!data?.ok) {
@@ -245,6 +440,8 @@ async function publishVideoToTelegram(job, actor) {
         url: telegramUrl,
         messageId: message.message_id || null,
         chatId: message.chat?.id || AI_PUBLISH_TELEGRAM_CHAT_ID,
+        deliveryMethod,
+        deliveryLog,
       },
     },
     actor
@@ -255,13 +452,14 @@ async function publishVideoToTelegram(job, actor) {
     type: "tool_result",
     tool: "PublishingManager",
     message: "Telegram публикация отправлена через клиентский бот.",
-    meta: { channel: "telegram", messageId: message.message_id || null, url: telegramUrl || null },
+    meta: { channel: "telegram", messageId: message.message_id || null, url: telegramUrl || null, deliveryMethod, deliveryLog },
   });
 
   console.log("[ai-publishing] telegram publish completed", {
     jobId: job.id,
     messageId: message.message_id || null,
     url: telegramUrl || null,
+    deliveryMethod,
   });
 
   return {
@@ -272,8 +470,188 @@ async function publishVideoToTelegram(job, actor) {
       messageId: message.message_id || null,
       chatId: message.chat?.id || AI_PUBLISH_TELEGRAM_CHAT_ID,
       url: telegramUrl,
+      deliveryMethod,
+      deliveryLog,
     },
   };
+}
+
+const telegramPublishingLocks = new Set();
+
+async function publishVideoToTelegram(job, actor) {
+  const lockKey = String(job?.id || "").trim();
+  if (lockKey && telegramPublishingLocks.has(lockKey)) {
+    addEvent(job.id, {
+      step: "publishing",
+      type: "event",
+      tool: "PublishingManager",
+      level: "warn",
+      message: "Telegram публикация уже выполняется, повторный запуск отклонён.",
+      meta: { channel: "telegram", actor: actor?.id || null },
+    });
+    return { success: false, status: 409, message: "Telegram publishing is already running for this job" };
+  }
+  if (lockKey) telegramPublishingLocks.add(lockKey);
+  try {
+    return await publishVideoToTelegramUnlocked(job, actor);
+  } finally {
+    if (lockKey) telegramPublishingLocks.delete(lockKey);
+  }
+}
+
+function hasTelegramPublicationEvidence(item = {}) {
+  return Boolean(item.published || String(item.url || "").trim() || item.messageId);
+}
+
+function getDueTelegramPublishingJobs({ limit = 100 } = {}) {
+  const now = Date.now();
+  return listJobs({ employeeId: "video_operator", limit })
+    .filter((job) => {
+      const pkg = job.output?.publishingPackage || {};
+      const telegram = pkg.publicationStatus?.channels?.telegram || {};
+      const plannedAt = new Date(telegram.plannedAt || 0).getTime();
+      return pkg.status === "approved"
+        && Number.isFinite(plannedAt)
+        && plannedAt > 0
+        && plannedAt <= now
+        && !hasTelegramPublicationEvidence(telegram);
+    })
+    .sort((a, b) => {
+      const aTime = new Date(a.output?.publishingPackage?.publicationStatus?.channels?.telegram?.plannedAt || 0).getTime();
+      const bTime = new Date(b.output?.publishingPackage?.publicationStatus?.channels?.telegram?.plannedAt || 0).getTime();
+      return aTime - bTime;
+    });
+}
+
+function getTelegramPublishingQueueSummary({ limit = 100 } = {}) {
+  const now = Date.now();
+  const queue = listJobs({ employeeId: "video_operator", limit })
+    .map((job) => {
+      const pkg = job.output?.publishingPackage || {};
+      const telegram = pkg.publicationStatus?.channels?.telegram || {};
+      const plannedTime = new Date(telegram.plannedAt || 0).getTime();
+      if (pkg.status !== "approved" || !Number.isFinite(plannedTime) || plannedTime <= 0 || hasTelegramPublicationEvidence(telegram)) return null;
+      return {
+        jobId: job.id,
+        code: getPublishingContext(job)?.code || "",
+        plannedAt: new Date(plannedTime).toISOString(),
+        due: plannedTime <= now,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => new Date(a.plannedAt).getTime() - new Date(b.plannedAt).getTime());
+
+  return {
+    planned: queue.length,
+    due: queue.filter((item) => item.due).length,
+    next: queue[0] || null,
+  };
+}
+
+let telegramDueRunState = {
+  running: false,
+  lastRun: null,
+};
+
+async function runDueTelegramPublishing({ limit = 5, scanLimit = 100, actor = { id: "publishing_scheduler", role: "system" } } = {}) {
+  const startedAt = new Date().toISOString();
+  const startedMs = Date.now();
+  telegramDueRunState = {
+    ...telegramDueRunState,
+    running: true,
+  };
+
+  const batchLimit = Math.max(1, Math.min(Number(limit) || 5, 20));
+  try {
+    const dueJobs = getDueTelegramPublishingJobs({ limit: scanLimit }).slice(0, batchLimit);
+    let published = 0;
+    let failed = 0;
+    const results = [];
+
+    for (const job of dueJobs) {
+      addEvent(job.id, {
+        step: "publishing",
+        type: "event",
+        tool: "PublishingScheduler",
+        message: "Автопубликация Telegram по расписанию запущена.",
+        meta: { channel: "telegram", actor: actor?.id || null },
+      });
+
+      const result = await publishVideoToTelegram(job, actor);
+      results.push({
+        jobId: job.id,
+        code: getPublishingContext(job)?.code || "",
+        success: Boolean(result?.success),
+        message: result?.message || "",
+        telegram: result?.telegram || null,
+      });
+
+      if (result?.success) {
+        published += 1;
+      } else {
+        failed += 1;
+        addEvent(job.id, {
+          step: "publishing",
+          type: "tool_result",
+          tool: "PublishingScheduler",
+          level: "warn",
+          message: result?.message || "Автопубликация Telegram не выполнена.",
+          meta: { channel: "telegram", status: result?.status || null },
+        });
+      }
+    }
+
+    const summary = {
+      success: true,
+      checked: dueJobs.length,
+      published,
+      failed,
+      results,
+      actor: actor?.id || null,
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      durationMs: Date.now() - startedMs,
+    };
+    telegramDueRunState = {
+      running: false,
+      lastRun: {
+        success: summary.success,
+        checked: summary.checked,
+        published: summary.published,
+        failed: summary.failed,
+        actor: summary.actor,
+        startedAt: summary.startedAt,
+        finishedAt: summary.finishedAt,
+        durationMs: summary.durationMs,
+        resultsPreview: results.slice(0, 5).map((item) => ({
+          jobId: item.jobId,
+          code: item.code,
+          success: item.success,
+          message: item.message,
+          url: item.telegram?.url || "",
+          deliveryMethod: item.telegram?.deliveryMethod || "",
+        })),
+        resultsOverflow: Math.max(0, results.length - 5),
+      },
+    };
+    return summary;
+  } catch (err) {
+    telegramDueRunState = {
+      running: false,
+      lastRun: {
+        success: false,
+        checked: 0,
+        published: 0,
+        failed: 1,
+        actor: actor?.id || null,
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        durationMs: Date.now() - startedMs,
+        error: err?.message || String(err),
+      },
+    };
+    throw err;
+  }
 }
 
 router.use(authenticateToken);
@@ -282,6 +660,16 @@ router.use(requireAdmin);
 router.get("/status", (req, res) => {
   const config = getAiConfig();
   const jobs = listJobs({ limit: 100 });
+  const telegramQueue = getTelegramPublishingQueueSummary({ limit: 100 });
+  const telegramReady = Boolean(TELEGRAM_CLIENT_BOT_TOKEN && AI_PUBLISH_TELEGRAM_CHAT_ID);
+  const schedulerDisabledByEnv = boolEnv("DISABLE_AI_PUBLISHING_SCHEDULER", false);
+  const schedulerReadyReason = process.env.NODE_ENV === "test"
+    ? "test_mode"
+    : schedulerDisabledByEnv
+      ? "disabled_by_env"
+      : !telegramReady
+        ? "telegram_env_missing"
+        : "ready";
   res.json({
     success: true,
     employees: listAiEmployees(),
@@ -293,8 +681,14 @@ router.get("/status", (req, res) => {
       artifactStorage: getArtifactStorageStatus(),
     },
     publishing: {
-      telegramReady: Boolean(TELEGRAM_CLIENT_BOT_TOKEN && AI_PUBLISH_TELEGRAM_CHAT_ID),
+      telegramReady,
       telegramChatConfigured: Boolean(AI_PUBLISH_TELEGRAM_CHAT_ID),
+      schedulerEnabled: schedulerReadyReason === "ready",
+      schedulerReadyReason,
+      schedulerIntervalMs: Math.max(60000, intEnv("AI_PUBLISHING_SCHEDULER_INTERVAL_MS", 60000)),
+      schedulerBatchLimit: Math.max(1, Math.min(intEnv("AI_PUBLISHING_SCHEDULER_BATCH_LIMIT", 5), 20)),
+      telegramQueue,
+      telegramDueRun: telegramDueRunState,
     },
     metrics: {
       jobs: jobs.length,
@@ -448,6 +842,18 @@ router.post("/video-operator/jobs/:id/publish/telegram", async (req, res) => {
   return res.status(result.success ? 200 : result.status || 400).json(result);
 });
 
+router.post("/publishing/telegram/run-due", async (req, res) => {
+  const result = await runDueTelegramPublishing({
+    limit: req.body?.limit || 5,
+    scanLimit: req.body?.scanLimit || 100,
+    actor: {
+      id: req.user?.id || req.user?.userId || "manual_publishing_run",
+      role: req.user?.role || req.user?.roles || "admin",
+    },
+  });
+  return res.status(result.success ? 200 : 400).json(result);
+});
+
 router.post("/video-operator/jobs/:id/refresh", async (req, res) => {
   const job = getJob(req.params.id);
   if (!job) return res.status(404).json({ success: false, message: "Job not found" });
@@ -457,3 +863,7 @@ router.post("/video-operator/jobs/:id/refresh", async (req, res) => {
 });
 
 module.exports = router;
+module.exports.publishVideoToTelegram = publishVideoToTelegram;
+module.exports.savePublicationStatus = savePublicationStatus;
+module.exports.getDueTelegramPublishingJobs = getDueTelegramPublishingJobs;
+module.exports.runDueTelegramPublishing = runDueTelegramPublishing;
