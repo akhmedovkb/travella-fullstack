@@ -334,6 +334,8 @@ function PublishingInspector({ videos, publishingStatus, onRunTelegramDue, onCop
   const schedulerReasonLabel = schedulerReasonLabels[schedulerReadyReason] || schedulerReasonLabels.unknown;
   const schedulerIntervalMin = Math.max(1, Math.round(Number(publishingStatus?.schedulerIntervalMs || 60000) / 60000));
   const schedulerBatchLimit = Number(publishingStatus?.schedulerBatchLimit || 5);
+  const manualRunWillPublish = Math.min(telegramDueCount, schedulerBatchLimit);
+  const manualRunRemaining = Math.max(0, telegramDueCount - manualRunWillPublish);
   const manualRunHint = schedulerLoading || telegramDueRun.running
     ? "Ручной запуск недоступен: scheduler уже выполняется."
     : telegramDueCount
@@ -466,6 +468,11 @@ function PublishingInspector({ videos, publishingStatus, onRunTelegramDue, onCop
               {schedulerLoading || telegramDueRun.running ? "Проверяю..." : "Запустить due Telegram"}
             </button>
             <div className={telegramDueCount && !telegramDueRun.running && !schedulerLoading ? "mt-1 text-[11px] font-bold text-emerald-700" : "mt-1 text-[11px] font-bold text-slate-400"}>{manualRunHint}</div>
+            {telegramDueCount ? (
+              <div className="mt-1 text-[11px] font-bold text-slate-500">
+                При запуске: отправит {manualRunWillPublish}{manualRunRemaining ? `, останется ${manualRunRemaining}` : ", очередь закроется"}.
+              </div>
+            ) : null}
             <button
               type="button"
               onClick={onCopySchedulerReport}
@@ -2507,10 +2514,14 @@ export default function AdminAiPlatform() {
     const nextQueuePlannedMs = new Date(queue.next?.plannedAt || 0).getTime();
     const nextQueueState = Number.isFinite(nextQueuePlannedMs) && nextQueuePlannedMs > 0 && nextQueuePlannedMs <= Date.now() ? "due" : "planned";
     const nextQueueAge = nextQueueState === "due" ? ` · waiting ${Math.max(0, Math.round((Date.now() - nextQueuePlannedMs) / 60000))} min` : "";
+    const reportDue = Number(queue.due || 0);
+    const reportBatchLimit = Number(publishing.schedulerBatchLimit || 5);
+    const reportWillPublish = Math.min(reportDue, reportBatchLimit);
+    const reportRemaining = Math.max(0, reportDue - reportWillPublish);
     const manualRunState = publishing.telegramDueRun?.running
       ? "blocked: running"
-      : Number(queue.due || 0) > 0
-        ? `ready: ${queue.due}`
+      : reportDue > 0
+        ? `ready: ${reportDue} · will publish ${reportWillPublish}${reportRemaining ? ` · remaining ${reportRemaining}` : ""}`
         : "blocked: no due";
     const rows = [
       "Travella AI OS · Publishing Manager · Telegram scheduler",
