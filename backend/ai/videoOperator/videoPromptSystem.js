@@ -137,6 +137,31 @@ function formatSpokenDateRange(value) {
   return `с ${formatSpokenDate(parts[0])} по ${formatSpokenDate(parts[1])}`;
 }
 
+function getDateRangeParts(value) {
+  const text = cleanFact(value);
+  const parts = text.match(/\d{4}-\d{2}-\d{2}|\d{1,2}\.\d{1,2}\.\d{4}/g) || [];
+  if (parts.length < 2) return null;
+  const start = parseDateAny(parts[0]);
+  const end = parseDateAny(parts[1]);
+  if (!start || !end) return null;
+  return { start, end, startRaw: parts[0], endRaw: parts[1] };
+}
+
+function getNights(value) {
+  const range = getDateRangeParts(value);
+  if (!range) return null;
+  const start = new Date(Date.UTC(range.start.year, range.start.month - 1, range.start.day));
+  const end = new Date(Date.UTC(range.end.year, range.end.month - 1, range.end.day));
+  const diff = Math.round((end.getTime() - start.getTime()) / 86400000);
+  return diff > 0 && diff < 90 ? diff : null;
+}
+
+function formatSpokenNights(value) {
+  const nights = getNights(value);
+  if (!nights) return "";
+  return `${numberToRuWords(nights)} ${pluralRu(nights, ["ночь", "ночи", "ночей"])}`;
+}
+
 function formatSpokenTime(value) {
   const match = cleanFact(value).match(/(\d{1,2}):(\d{2})/);
   if (!match) return "";
@@ -241,6 +266,20 @@ function formatSpokenPeople(value) {
   return known[normalized] || text;
 }
 
+function parseHotelForSales(value) {
+  const text = cleanFact(value);
+  const match = text.match(/^(.*?)\s+(\d)\s+зв[её]зд/i);
+  const titleCaseName = (name) => compact(name)
+    .split(" ")
+    .map((word) => word ? `${word.slice(0, 1).toUpperCase()}${word.slice(1)}` : word)
+    .join(" ");
+  if (!match) return { name: titleCaseName(text), stars: "" };
+  return {
+    name: titleCaseName(match[1]),
+    stars: `${numberToRuWords(Number(match[2]))} ${pluralRu(Number(match[2]), ["звезда", "звезды", "звёзд"])}`,
+  };
+}
+
 function cleanOfferName(value, fallback = "") {
   const text = compact(value)
     .replace(/через\s+@\S+/gi, "")
@@ -277,6 +316,21 @@ function destinationToTravelCase(value) {
   if (/ия$/i.test(text)) return `${text.slice(0, -2)}ию`;
   if (/я$/i.test(text)) return `${text.slice(0, -1)}ю`;
   if (/а$/i.test(text)) return `${text.slice(0, -1)}у`;
+  return text;
+}
+
+function destinationToPlaceCase(value) {
+  const text = normalizeDestinationName(value);
+  const lower = text.toLowerCase();
+  const known = {
+    "анталья": "Анталье",
+    "алания": "Алании",
+    "турция": "Турции",
+  };
+  if (known[lower]) return known[lower];
+  if (/ия$/i.test(text)) return `${text.slice(0, -2)}ии`;
+  if (/я$/i.test(text)) return `${text.slice(0, -1)}е`;
+  if (/а$/i.test(text)) return `${text.slice(0, -1)}е`;
   return text;
 }
 
@@ -340,37 +394,64 @@ function getSafeFactRules(ctx = {}) {
 }
 
 function buildHook(ctx = {}) {
-  const destination = normalizeDestinationName(ctx.destination || ctx.title) || "это направление";
-  const fromCity = hasValue(ctx.fromCity) ? ` из ${departureFrom(ctx.fromCity)}` : "";
-  const dates = hasValue(ctx.dates) ? `, ${formatSpokenDateRange(ctx.dates)}` : "";
-  const price = formatSpokenPrice(ctx);
-  if (price) return `Смотрите, что появилось в базе отказных туров: ${destination}${fromCity}${dates}, за ${price}.`;
-  return `Смотрите, что появилось в базе отказных туров: ${destination}${fromCity}${dates}.`;
+  return "Стоп! Стоп! Стоп! Не пролистывайте!";
 }
 
 function buildScript(ctx = {}) {
   const title = cleanOfferName(ctx.title, ctx.category || "отказной тур");
   const destination = normalizeDestinationName(ctx.destination || title);
+  const travelDestination = destinationToTravelCase(destination);
+  const placeDestination = destinationToPlaceCase(destination);
+  const fromCity = hasValue(ctx.fromCity) ? departureFrom(ctx.fromCity) : "";
+  const dateRange = getDateRangeParts(ctx.dates);
+  const nights = formatSpokenNights(ctx.dates);
+  const hotel = parseHotelForSales(ctx.hotel);
+  const price = formatSpokenPrice(ctx);
   const lines = [];
 
   lines.push(buildHook(ctx));
+  lines.push("");
+  lines.push("У меня для вас настоящий туристический разрыв из базы отказных туров Узбекистана.");
+  lines.push("");
+  lines.push(`Отказной тур в ${travelDestination}${fromCity ? ` из ${fromCity}` : ""}!`);
+  if (dateRange) {
+    lines.push(`Вылет — ${formatSpokenDate(dateRange.startRaw, false)}.`);
+    lines.push(`Обратно — ${formatSpokenDate(dateRange.endRaw, false)}.`);
+  } else if (hasValue(ctx.dates)) {
+    lines.push(`Даты поездки: ${formatSpokenDateRange(ctx.dates)}.`);
+  }
+  if (nights) lines.push(`Целых ${nights} на отдыхе в ${placeDestination}.`);
 
-  const valueItems = [
-    hasValue(ctx.hotel) ? cleanFact(ctx.hotel) : "",
-    hasValue(ctx.room) ? `номер ${formatSpokenRoom(ctx.room)}` : "",
-    hasValue(ctx.meal) ? formatSpokenMeal(ctx.meal) : "",
-    hasValue(ctx.people) ? `${formatSpokenPeople(ctx.people)} размещение` : "",
-    hasValue(ctx.includes) ? cleanFact(ctx.includes) : "",
-  ].filter(hasValue);
-
-  if (valueItems.length) {
+  if (hotel.name || hotel.stars) {
     lines.push("");
-    lines.push(sentence(`Внутри уже всё самое важное: ${valueItems.join(", ")}`));
+    lines.push("И внимание.");
+    if (hotel.stars) {
+      lines.push("Не три звезды.");
+      lines.push("Не четыре звезды.");
+      lines.push(`А ${hotel.name} — ${hotel.stars}.`);
+    } else {
+      lines.push(`${hotel.name}.`);
+    }
   }
 
+  const stayItems = [
+    hasValue(ctx.people) ? `${formatSpokenPeople(ctx.people)} размещение` : "",
+    hasValue(ctx.room) ? `номер ${formatSpokenRoom(ctx.room)}` : "",
+    hasValue(ctx.meal) ? formatSpokenMeal(ctx.meal) : "",
+  ].filter(hasValue);
+  if (stayItems.length) lines.push(sentence(`Для двоих: ${stayItems.join(", ")}`));
+
   lines.push("");
-  lines.push("Это отказное предложение: пока поставщик подтверждает актуальность, его можно забрать.");
-  lines.push("Нажимайте «Связаться с поставщиком» под видео и забирайте этот вариант.");
+  if (price) {
+    lines.push("И теперь самое главное.");
+    lines.push(`Цена — ${price}.`);
+  }
+  lines.push("Но запомните: это отказной тур.");
+  lines.push("Такие предложения не ждут долго.");
+  lines.push("Пока вы думаете — его могут забрать.");
+  lines.push("");
+  lines.push("Хотите этот вариант?");
+  lines.push("Нажимайте «Связаться с поставщиком» под видео и забирайте тур сейчас.");
 
   return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
@@ -404,9 +485,9 @@ function buildScriptReview(ctx = {}, script = "") {
     { id: "spoken_price", label: "Цена подготовлена для озвучки", passed: !/\b\d+(?:[.,]\d+)?\s*(USD|EUR|UZS|RUB)\b/i.test(script) },
     { id: "spoken_travel_codes", label: "Коды питания и размещения раскрыты для диктора", passed: !/\b(UAI|AI|BB|HB|FB|RO|DBL|SGL|TRPL)\b/i.test(script) },
     { id: "no_flight_voiceover", label: "Детали рейса не озвучиваются", passed: !/перел[её]т|рейс|вылет\s+\d{1,2}\s+[а-яё]+/i.test(script) },
-    { id: "no_repeated_price_label", label: "Цена не повторяется отдельной строкой", passed: (script.match(/цена\s*[—:-]/gi) || []).length === 0 },
-    { id: "sales_pitch_compact", label: "Сценарий собран как короткий продающий pitch", passed: script.split(/\n+/).filter(Boolean).length <= 6 },
-    { id: "live_sales_energy", label: "Есть энергия live-продажи", passed: /смотрите|нажимайте|забирайте/i.test(script) },
+    { id: "no_repeated_price_label", label: "Цена не повторяется лишний раз", passed: (script.match(/цена\s*[—:-]/gi) || []).length <= 1 },
+    { id: "sales_pitch_compact", label: "Сценарий остаётся коротким live pitch", passed: script.split(/\n+/).filter(Boolean).length <= 18 },
+    { id: "live_sales_energy", label: "Есть энергия live-продажи", passed: /стоп|смотрите|внимание|нажимайте|забирайте/i.test(script) },
   ];
 
   return {
