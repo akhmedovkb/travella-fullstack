@@ -350,6 +350,8 @@ function normalizeDisplayCase(value) {
 function departureFrom(value) {
   const city = clean(value, "Ташкент");
   if (/ташкент$/i.test(city)) return "Ташкента";
+  if (/самарканд$/i.test(city)) return "Самарканда";
+  if (/шымкент$/i.test(city)) return "Шымкента";
   return city;
 }
 
@@ -369,6 +371,68 @@ function normalizeUrgency(value) {
     return "Это отказной тур, поэтому предложение может уйти в любой момент";
   }
   return text;
+}
+
+function pickVariant(seed, variants, offset = 0) {
+  const items = Array.isArray(variants) ? variants.filter(Boolean) : [];
+  if (!items.length) return "";
+  let hash = 0;
+  const text = `${String(seed || "travella")}|${offset}`;
+  for (let i = 0; i < text.length; i += 1) {
+    hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0;
+  }
+  return items[Math.abs(hash) % items.length];
+}
+
+function getScriptSeed(ctx = {}) {
+  return [
+    ctx.code,
+    ctx.title,
+    ctx.destination,
+    ctx.fromCity,
+    ctx.dates,
+    ctx.hotel,
+    ctx.price,
+  ].filter(hasValue).join("|");
+}
+
+function buildDateLines(ctx, dateRange) {
+  if (dateRange) {
+    return [
+      `Вылет — ${formatSpokenDate(dateRange.startRaw, false)}.`,
+      `Обратно — ${formatSpokenDate(dateRange.endRaw, false)}.`,
+    ];
+  }
+  if (hasValue(ctx.dates)) return [`Даты поездки: ${formatSpokenDateRange(ctx.dates)}.`];
+  return [];
+}
+
+function buildHotelLines(hotel, variant) {
+  if (!hotel.name && !hotel.stars) return [];
+  if (!hotel.stars) return [hotel.name + "."];
+
+  if (variant === "ladder") {
+    return [
+      "И внимание.",
+      "Не три звезды.",
+      "Не четыре звезды.",
+      `А ${hotel.name} — ${hotel.stars}.`,
+    ];
+  }
+
+  if (variant === "punch") {
+    return [
+      "Теперь смотрите по отелю.",
+      `${hotel.name}.`,
+      `${hotel.stars.slice(0, 1).toUpperCase()}${hotel.stars.slice(1)}.`,
+      "Это уже совсем другой уровень отдыха.",
+    ];
+  }
+
+  return [
+    "По отелю тоже красиво.",
+    `${hotel.name} — ${hotel.stars}.`,
+  ];
 }
 
 function getSafeFactRules(ctx = {}) {
@@ -394,10 +458,18 @@ function getSafeFactRules(ctx = {}) {
 }
 
 function buildHook(ctx = {}) {
-  return "Стоп! Стоп! Стоп! Не пролистывайте!";
+  const seed = getScriptSeed(ctx);
+  return pickVariant(seed, [
+    "Стоп! Стоп! Стоп! Не пролистывайте!",
+    "Подождите! Вот это сейчас надо увидеть!",
+    "Секунду внимания! Тут появился очень горячий отказной тур!",
+    "Не листайте дальше! Смотрите, что есть в базе отказных туров!",
+    "Внимание! Есть вариант, который долго ждать не будет!",
+  ]);
 }
 
 function buildScript(ctx = {}) {
+  const seed = getScriptSeed(ctx);
   const title = cleanOfferName(ctx.title, ctx.category || "отказной тур");
   const destination = normalizeDestinationName(ctx.destination || title);
   const travelDestination = destinationToTravelCase(destination);
@@ -407,31 +479,69 @@ function buildScript(ctx = {}) {
   const nights = formatSpokenNights(ctx.dates);
   const hotel = parseHotelForSales(ctx.hotel);
   const price = formatSpokenPrice(ctx);
+  const sourceLine = pickVariant(seed, [
+    "У меня для вас настоящий туристический разрыв из базы отказных туров Узбекистана.",
+    "В базе отказных туров Узбекистана появился вариант, который точно стоит открыть.",
+    "Смотрите внимательно: это отказной тур из базы Узбекистана, и он уже готов к быстрому решению.",
+    "Вот такие предложения любят те, кто умеет быстро забирать хорошие варианты.",
+  ], 1);
+  const routeLine = pickVariant(seed, [
+    `Отказной тур в ${travelDestination}${fromCity ? ` из ${fromCity}` : ""}!`,
+    `${destination}${fromCity ? ` из ${fromCity}` : ""} — вот что сейчас появилось!`,
+    `Летний вариант в ${travelDestination}${fromCity ? `, вылет из ${fromCity}` : ""}!`,
+  ], 2);
+  const hotelMode = pickVariant(seed, ["ladder", "punch", "compact"], 3);
+  const priceLead = pickVariant(seed, [
+    "И теперь самое главное.",
+    "А теперь момент, ради которого стоит досмотреть.",
+    "Теперь внимание на цену.",
+    "Вот здесь начинается самое интересное.",
+  ], 4);
+  const urgencyLines = pickVariant(seed, [
+    [
+      "Но запомните: это отказной тур.",
+      "Такие предложения не ждут долго.",
+      "Пока вы думаете — его могут забрать.",
+    ],
+    [
+      "Это отказной вариант, поэтому тянуть нельзя.",
+      "Если даты и цена подходят, действовать нужно сразу.",
+      "Такие туры обычно уходят быстро.",
+    ],
+    [
+      "Главное — не откладывать.",
+      "Отказные туры живут в базе недолго.",
+      "Сейчас увидели, сейчас проверили, сейчас забрали.",
+    ],
+  ], 5);
+  const ctaLines = pickVariant(seed, [
+    [
+      "Хотите этот вариант?",
+      "Нажимайте «Связаться с поставщиком» под видео и забирайте тур сейчас.",
+    ],
+    [
+      "Если подходит — не ждите.",
+      "Жмите «Связаться с поставщиком» под видео и уточняйте наличие.",
+    ],
+    [
+      "Кнопка под видео уже ждёт.",
+      "Нажимайте «Связаться с поставщиком» и забирайте этот вариант.",
+    ],
+  ], 6);
   const lines = [];
 
   lines.push(buildHook(ctx));
   lines.push("");
-  lines.push("У меня для вас настоящий туристический разрыв из базы отказных туров Узбекистана.");
+  lines.push(sourceLine);
   lines.push("");
-  lines.push(`Отказной тур в ${travelDestination}${fromCity ? ` из ${fromCity}` : ""}!`);
-  if (dateRange) {
-    lines.push(`Вылет — ${formatSpokenDate(dateRange.startRaw, false)}.`);
-    lines.push(`Обратно — ${formatSpokenDate(dateRange.endRaw, false)}.`);
-  } else if (hasValue(ctx.dates)) {
-    lines.push(`Даты поездки: ${formatSpokenDateRange(ctx.dates)}.`);
-  }
+  lines.push(routeLine);
+  lines.push(...buildDateLines(ctx, dateRange));
   if (nights) lines.push(`Целых ${nights} на отдыхе в ${placeDestination}.`);
 
-  if (hotel.name || hotel.stars) {
+  const hotelLines = buildHotelLines(hotel, hotelMode);
+  if (hotelLines.length) {
     lines.push("");
-    lines.push("И внимание.");
-    if (hotel.stars) {
-      lines.push("Не три звезды.");
-      lines.push("Не четыре звезды.");
-      lines.push(`А ${hotel.name} — ${hotel.stars}.`);
-    } else {
-      lines.push(`${hotel.name}.`);
-    }
+    lines.push(...hotelLines);
   }
 
   const stayItems = [
@@ -443,15 +553,12 @@ function buildScript(ctx = {}) {
 
   lines.push("");
   if (price) {
-    lines.push("И теперь самое главное.");
+    lines.push(priceLead);
     lines.push(`Цена — ${price}.`);
   }
-  lines.push("Но запомните: это отказной тур.");
-  lines.push("Такие предложения не ждут долго.");
-  lines.push("Пока вы думаете — его могут забрать.");
+  lines.push(...urgencyLines);
   lines.push("");
-  lines.push("Хотите этот вариант?");
-  lines.push("Нажимайте «Связаться с поставщиком» под видео и забирайте тур сейчас.");
+  lines.push(...ctaLines);
 
   return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
@@ -479,7 +586,7 @@ function buildScriptReview(ctx = {}, script = "") {
     { id: "no_fake_discount", label: "Не обещает скидку без старой цены", passed: !/скидк|дешевле|эконом/i.test(script) },
     { id: "no_last_seats", label: "Не обещает последние места без подтверждения", passed: !/последн(ие|ее|ий)\s+мест/i.test(script) },
     { id: "urgency_safe", label: "Срочность объяснена через отказной тур", passed: /отказн/i.test(script) },
-    { id: "cta", label: "Есть понятный призыв к действию", passed: /Travella|свяжитесь|забрать|откройте/i.test(script) },
+    { id: "cta", label: "Есть понятный призыв к действию", passed: /Travella|свяжитесь|связаться|забрать|откройте|жмите|нажимайте/i.test(script) },
     { id: "no_raw_title_noise", label: "Нет сырого повтора служебного заголовка", passed: !/отказн(ой|ый)?\s+тур\s+в\s+отказн(ой|ый)?\s+тур/i.test(script) },
     { id: "spoken_dates", label: "Даты подготовлены для озвучки", passed: !/\b\d{4}-\d{2}-\d{2}\b/.test(script) },
     { id: "spoken_price", label: "Цена подготовлена для озвучки", passed: !/\b\d+(?:[.,]\d+)?\s*(USD|EUR|UZS|RUB)\b/i.test(script) },
