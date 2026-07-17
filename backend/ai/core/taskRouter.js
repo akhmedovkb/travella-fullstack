@@ -19,10 +19,20 @@ function routeAiTask(command) {
   if (/сценар|script|текст|caption|кэпшн/i.test(lower)) action = "prepare_script";
   if (/instagram|инстаграм|reels|рилс/i.test(lower)) action = "prepare_video";
 
+  const scriptMode = /короч|25\s*сек|short/i.test(lower)
+    ? "short"
+    : /агрессив|ж[её]стч|продающ|стример|live/i.test(lower)
+      ? "aggressive"
+      : /друг(ой|ие|ая)|передел|reroll|hook|хук/i.test(lower)
+        ? "reroll"
+        : "default";
+
   return {
     employeeId,
     action,
     serviceCode,
+    scriptMode,
+    variantSalt: scriptMode === "default" ? "" : text,
     confidence: serviceCode ? 0.92 : 0.55,
     source: "chat_command",
     rawCommand: text,

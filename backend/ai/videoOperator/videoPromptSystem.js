@@ -361,6 +361,11 @@ function sentence(value) {
   return /[.!?]$/.test(text) ? text : `${text}.`;
 }
 
+function capitalizeFirst(value) {
+  const text = String(value || "");
+  return text ? `${text.slice(0, 1).toUpperCase()}${text.slice(1)}` : "";
+}
+
 function joinSentence(parts) {
   return sentence(parts.filter(hasValue).join(", "));
 }
@@ -384,7 +389,7 @@ function pickVariant(seed, variants, offset = 0) {
   return items[Math.abs(hash) % items.length];
 }
 
-function getScriptSeed(ctx = {}) {
+function getScriptSeed(ctx = {}, options = {}) {
   return [
     ctx.code,
     ctx.title,
@@ -393,6 +398,8 @@ function getScriptSeed(ctx = {}) {
     ctx.dates,
     ctx.hotel,
     ctx.price,
+    options.scriptMode,
+    options.variantSalt,
   ].filter(hasValue).join("|");
 }
 
@@ -457,9 +464,22 @@ function getSafeFactRules(ctx = {}) {
   };
 }
 
-function buildHook(ctx = {}) {
-  const seed = getScriptSeed(ctx);
-  return pickVariant(seed, [
+function buildHook(ctx = {}, options = {}) {
+  const seed = getScriptSeed(ctx, options);
+  const mode = options.scriptMode || "default";
+  const aggressiveHooks = [
+    "Стоп! Не пролистывайте, этот вариант надо увидеть сейчас!",
+    "Секунду! В базе отказных туров появился сильный вариант!",
+    "Внимание сюда! Такой тур долго не ждёт!",
+    "Не листайте дальше! Тут вариант для быстрого решения!",
+    "Смотрите внимательно: это тот самый отказной тур, который забирают быстро!",
+  ];
+  const compactHooks = [
+    "Быстро: есть отказной тур.",
+    "Есть свежий отказной вариант.",
+    "Смотрите, что появилось в базе отказных туров.",
+  ];
+  return pickVariant(seed, mode === "short" ? compactHooks : mode === "aggressive" || mode === "reroll" ? aggressiveHooks : [
     "Стоп! Стоп! Стоп! Не пролистывайте!",
     "Подождите! Вот это сейчас надо увидеть!",
     "Секунду внимания! Тут появился очень горячий отказной тур!",
@@ -468,8 +488,9 @@ function buildHook(ctx = {}) {
   ]);
 }
 
-function buildScript(ctx = {}) {
-  const seed = getScriptSeed(ctx);
+function buildScript(ctx = {}, options = {}) {
+  const seed = getScriptSeed(ctx, options);
+  const mode = options.scriptMode || "default";
   const title = cleanOfferName(ctx.title, ctx.category || "отказной тур");
   const destination = normalizeDestinationName(ctx.destination || title);
   const travelDestination = destinationToTravelCase(destination);
@@ -479,25 +500,54 @@ function buildScript(ctx = {}) {
   const nights = formatSpokenNights(ctx.dates);
   const hotel = parseHotelForSales(ctx.hotel);
   const price = formatSpokenPrice(ctx);
-  const sourceLine = pickVariant(seed, [
+  const sourceLine = pickVariant(seed, mode === "aggressive" ? [
+    "У меня для вас сильный live-вариант из базы отказных туров Узбекистана.",
+    "Это не просто направление, это быстрый шанс забрать готовый отказной тур из базы Узбекистана.",
+    "Сейчас покажу вариант, который в базе отказных туров может долго не прожить.",
+    "В базе отказных туров Узбекистана появился вариант для тех, кто решает быстро.",
+  ] : [
     "У меня для вас настоящий туристический разрыв из базы отказных туров Узбекистана.",
     "В базе отказных туров Узбекистана появился вариант, который точно стоит открыть.",
     "Смотрите внимательно: это отказной тур из базы Узбекистана, и он уже готов к быстрому решению.",
     "Вот такие предложения любят те, кто умеет быстро забирать хорошие варианты.",
   ], 1);
-  const routeLine = pickVariant(seed, [
+  const routeLine = pickVariant(seed, mode === "aggressive" ? [
+    `${destination}${fromCity ? ` из ${fromCity}` : ""}. Готовые даты, понятная цена, и решение надо принимать быстро.`,
+    `Направление — ${travelDestination}${fromCity ? `, вылет из ${fromCity}` : ""}. Всё уже собрано в один пакет.`,
+    `Ловите: ${travelDestination}${fromCity ? ` из ${fromCity}` : ""}. Это именно тот формат, где долго думать опасно.`,
+  ] : [
     `Отказной тур в ${travelDestination}${fromCity ? ` из ${fromCity}` : ""}!`,
     `${destination}${fromCity ? ` из ${fromCity}` : ""} — вот что сейчас появилось!`,
     `Летний вариант в ${travelDestination}${fromCity ? `, вылет из ${fromCity}` : ""}!`,
   ], 2);
   const hotelMode = pickVariant(seed, ["ladder", "punch", "compact"], 3);
-  const priceLead = pickVariant(seed, [
+  const priceLead = pickVariant(seed, mode === "aggressive" ? [
+    "Теперь к главному — к цене.",
+    "И вот почему это предложение стоит проверить прямо сейчас.",
+    "Самый сильный момент — цена.",
+  ] : [
     "И теперь самое главное.",
     "А теперь момент, ради которого стоит досмотреть.",
     "Теперь внимание на цену.",
     "Вот здесь начинается самое интересное.",
   ], 4);
-  const urgencyLines = pickVariant(seed, [
+  const urgencyLines = pickVariant(seed, mode === "aggressive" ? [
+    [
+      "Это отказной тур.",
+      "Такие варианты не лежат в базе спокойно.",
+      "Увидели, проверили, забрали.",
+    ],
+    [
+      "Здесь главное — скорость.",
+      "Пока один думает, другой уже уточняет у поставщика.",
+      "Поэтому действовать лучше сразу.",
+    ],
+    [
+      "Отказные туры живут быстро.",
+      "Если даты и цена подходят — не откладывайте.",
+      "Следующий шаг простой: открыть контакт с поставщиком.",
+    ],
+  ] : [
     [
       "Но запомните: это отказной тур.",
       "Такие предложения не ждут долго.",
@@ -514,7 +564,20 @@ function buildScript(ctx = {}) {
       "Сейчас увидели, сейчас проверили, сейчас забрали.",
     ],
   ], 5);
-  const ctaLines = pickVariant(seed, [
+  const ctaLines = pickVariant(seed, mode === "aggressive" ? [
+    [
+      "Хотите забрать этот вариант?",
+      "Нажимайте «Связаться с поставщиком» под видео и проверяйте наличие сейчас.",
+    ],
+    [
+      "Подходит по датам и цене?",
+      "Жмите «Связаться с поставщиком» под видео и сразу переходите к подтверждению.",
+    ],
+    [
+      "Не откладывайте на вечер.",
+      "Кнопка «Связаться с поставщиком» под видео — ваш следующий шаг.",
+    ],
+  ] : [
     [
       "Хотите этот вариант?",
       "Нажимайте «Связаться с поставщиком» под видео и забирайте тур сейчас.",
@@ -530,7 +593,7 @@ function buildScript(ctx = {}) {
   ], 6);
   const lines = [];
 
-  lines.push(buildHook(ctx));
+  lines.push(buildHook(ctx, options));
   lines.push("");
   lines.push(sourceLine);
   lines.push("");
@@ -559,6 +622,21 @@ function buildScript(ctx = {}) {
   lines.push(...urgencyLines);
   lines.push("");
   lines.push(...ctaLines);
+
+  if (mode === "short") {
+    return [
+      buildHook(ctx, options),
+      "",
+      `${destination}${fromCity ? ` из ${fromCity}` : ""}.`,
+      ...buildDateLines(ctx, dateRange),
+      nights ? `${capitalizeFirst(nights)} отдыха в ${placeDestination}.` : "",
+      hotel.name ? `${hotel.name}${hotel.stars ? ` — ${hotel.stars}` : ""}.` : "",
+      stayItems.length ? sentence(`Для двоих: ${stayItems.join(", ")}`) : "",
+      price ? `Цена — ${price}.` : "",
+      "Это отказной тур, поэтому лучше проверить наличие сразу.",
+      "Нажимайте «Связаться с поставщиком» под видео.",
+    ].filter(hasValue).join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  }
 
   return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }

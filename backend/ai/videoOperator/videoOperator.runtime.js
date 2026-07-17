@@ -228,11 +228,15 @@ async function runVideoOperatorTask({ command, actor = {}, runtimeRoute = null }
     addEvent(job.id, { step: "analysis", type: "thought", message: "Анализирую направление, цену, срочность, аудиторию и главный триггер." });
     addEvent(job.id, { step: "analysis", type: "tool_result", tool: "OfferAnalyzer", message: "Проанализировал оффер, цену, срочность и главный триггер.", meta: analysis });
 
-    const hook = buildHook(ctx);
+    const scriptOptions = {
+      scriptMode: route.scriptMode || "default",
+      variantSalt: route.variantSalt || "",
+    };
+    const hook = buildHook(ctx, scriptOptions);
     addEvent(job.id, { step: "plan", type: "tool_call", tool: "HookBuilder", message: "Подбираю безопасный хук для первых 3 секунд." });
     addEvent(job.id, { step: "plan", type: "tool_result", tool: "HookBuilder", message: "Хук готов без неподтверждённых обещаний." });
 
-    const script = buildScript(ctx);
+    const script = buildScript(ctx, scriptOptions);
     const scriptReview = buildScriptReview(ctx, script);
     const publishingDrafts = buildPublishingDrafts(ctx);
     addEvent(job.id, { step: "plan", type: "tool_call", tool: "AvatarScriptBuilder", message: "Готовлю текст для AI-аватара по правилам Travella." });

@@ -2308,8 +2308,8 @@ export default function AdminAiPlatform() {
     ]);
   }
 
-  async function runTask() {
-    const text = command.trim();
+  async function runTaskText(rawText) {
+    const text = String(rawText || "").trim();
     if (!text || loading) return;
     setCommand("");
     setLoading(true);
@@ -2332,6 +2332,10 @@ export default function AdminAiPlatform() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function runTask() {
+    await runTaskText(command);
   }
 
   async function startHeygen(job) {
@@ -2596,6 +2600,19 @@ export default function AdminAiPlatform() {
   const isPublishingManager = selectedEmployee === "publishing_manager";
   const isPublishingWork = isContentManager || isPublishingManager;
   const approvedVideosCount = getApprovedVideos(videos).length;
+  const currentVideoContext = currentTask?.output?.service?.videoContext || currentTask?.output?.service || currentTask?.input || {};
+  const currentServiceCode = currentTask?.output?.route?.serviceCode || currentVideoContext?.code || "";
+  const quickVideoCommands = [
+    { label: "Сценарий последнего", command: "Создай сценарий для последнего отказного тура" },
+    { label: "Видео последнего", command: "Создай видео для последнего отказного тура" },
+    ...(currentServiceCode ? [
+      { label: `Сценарий ${currentServiceCode}`, command: `Создай сценарий для ${currentServiceCode}` },
+      { label: `Видео ${currentServiceCode}`, command: `Создай видео для ${currentServiceCode}` },
+      { label: "Другой hook", command: `Переделай hook для ${currentServiceCode}` },
+      { label: "Агрессивнее", command: `Сделай сценарий агрессивнее для ${currentServiceCode}` },
+      { label: "Короче", command: `Сократи сценарий до 25 секунд для ${currentServiceCode}` },
+    ] : []),
+  ];
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-6">
@@ -2702,15 +2719,31 @@ export default function AdminAiPlatform() {
 
           <div className="border-t border-slate-100 p-4">
             <div className="rounded-3xl border border-slate-200 bg-white p-3 shadow-sm">
+              {selectedEmployee === "video_operator" ? (
+                <div className="mb-3 flex flex-wrap gap-2">
+                  {quickVideoCommands.map((item) => (
+                    <button
+                      key={item.label}
+                      type="button"
+                      onClick={() => runTaskText(item.command)}
+                      disabled={loading}
+                      className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-black text-slate-700 hover:border-slate-300 hover:bg-white disabled:opacity-40"
+                      title={item.command}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
               <textarea
                 value={command}
                 onChange={(e) => setCommand(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); runTask(); } }}
-                placeholder="Напиши: R857, Создай видео R857, R857 Instagram..."
+                placeholder={currentServiceCode ? `Напиши: Создай видео для ${currentServiceCode}, переделай hook, сделай агрессивнее...` : "Напиши: R857, Создай видео R857, последний отказной тур..."}
                 className="min-h-[78px] w-full resize-none rounded-2xl border-0 px-3 py-2 text-sm font-semibold text-slate-950 outline-none placeholder:text-slate-400"
               />
               <div className="flex flex-col gap-3 border-t border-slate-100 pt-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="text-xs font-bold text-slate-400">Enter — выполнить, Shift+Enter — новая строка</div>
+                <div className="text-xs font-bold text-slate-400">Enter — выполнить, Shift+Enter — новая строка. Можно писать: сценарий, видео, последний отказной тур.</div>
                 <button type="button" onClick={runTask} disabled={loading || !command.trim()} className="rounded-2xl bg-slate-950 px-6 py-3 text-sm font-black text-white hover:bg-slate-800 disabled:opacity-40">▶ Выполнить</button>
               </div>
             </div>
