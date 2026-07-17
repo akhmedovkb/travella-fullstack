@@ -21,6 +21,15 @@ function compact(value) {
     .trim();
 }
 
+function cleanFact(value) {
+  return compact(value)
+    .replace(/([A-Za-zА-Яа-яЁё]{1,6})-\s+(\d)/g, "$1-$2")
+    .replace(/(\d)\s*;\s*(\d{2})/g, "$1:$2")
+    .replace(/\s+([).,])/g, "$1")
+    .replace(/^[\s:;,.()\-]+|[\s:;,.()\-]+$/g, "")
+    .trim();
+}
+
 function cleanOfferName(value, fallback = "") {
   const text = compact(value)
     .replace(/через\s+@\S+/gi, "")
@@ -115,12 +124,12 @@ function buildScript(ctx = {}) {
   if (hasValue(ctx.fromCity) || hasValue(destination)) {
     details.push(sentence(`Вылет из ${departureFrom(ctx.fromCity)}${hasValue(destination) ? `, направление — ${destination}` : ""}`));
   }
-  if (hasValue(ctx.dates)) details.push(sentence(`Даты поездки: ${ctx.dates}`));
-  if (hasValue(ctx.hotel)) details.push(joinSentence([`Отель: ${ctx.hotel}`, hasValue(ctx.room) ? `номер ${ctx.room}` : ""]));
-  if (hasValue(ctx.meal)) details.push(sentence(`Питание: ${ctx.meal}`));
-  if (hasValue(ctx.people)) details.push(sentence(`Размещение: ${ctx.people}`));
-  if (hasValue(ctx.flight)) details.push(sentence(`Перелёт: ${ctx.flight}`));
-  if (hasValue(ctx.includes)) details.push(sentence(`В пакет входит: ${ctx.includes}`));
+  if (hasValue(ctx.dates)) details.push(sentence(`Даты поездки: ${cleanFact(ctx.dates)}`));
+  if (hasValue(ctx.hotel)) details.push(joinSentence([`Отель: ${cleanFact(ctx.hotel)}`, hasValue(ctx.room) ? `номер ${cleanFact(ctx.room)}` : ""]));
+  if (hasValue(ctx.meal)) details.push(sentence(`Питание: ${cleanFact(ctx.meal)}`));
+  if (hasValue(ctx.people)) details.push(sentence(`Размещение: ${cleanFact(ctx.people)}`));
+  if (hasValue(ctx.flight)) details.push(sentence(`Перелёт: ${cleanFact(ctx.flight)}`));
+  if (hasValue(ctx.includes)) details.push(sentence(`В пакет входит: ${cleanFact(ctx.includes)}`));
   if (price) details.push(`Цена: ${price}.`);
 
   if (details.length) {
