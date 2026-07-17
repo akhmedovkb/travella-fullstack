@@ -341,12 +341,11 @@ function getSafeFactRules(ctx = {}) {
 
 function buildHook(ctx = {}) {
   const destination = normalizeDestinationName(ctx.destination || ctx.title) || "это направление";
-  const travelDestination = destinationToTravelCase(destination);
   const fromCity = hasValue(ctx.fromCity) ? ` из ${departureFrom(ctx.fromCity)}` : "";
   const dates = hasValue(ctx.dates) ? `, ${formatSpokenDateRange(ctx.dates)}` : "";
   const price = formatSpokenPrice(ctx);
-  if (price) return `Отказной тур в ${travelDestination}${fromCity}${dates}, за ${price}.`;
-  return `Отказной тур в ${travelDestination}${fromCity}${dates}.`;
+  if (price) return `Смотрите, что появилось в базе отказных туров: ${destination}${fromCity}${dates}, за ${price}.`;
+  return `Смотрите, что появилось в базе отказных туров: ${destination}${fromCity}${dates}.`;
 }
 
 function buildScript(ctx = {}) {
@@ -355,8 +354,6 @@ function buildScript(ctx = {}) {
   const lines = [];
 
   lines.push(buildHook(ctx));
-  lines.push("");
-  lines.push("Это предложение из базы отказных туров Узбекистана; пока поставщик подтверждает актуальность, его можно забрать.");
 
   const valueItems = [
     hasValue(ctx.hotel) ? cleanFact(ctx.hotel) : "",
@@ -368,12 +365,12 @@ function buildScript(ctx = {}) {
 
   if (valueItems.length) {
     lines.push("");
-    lines.push(sentence(`Внутри: ${valueItems.join(", ")}`));
+    lines.push(sentence(`Внутри уже всё самое важное: ${valueItems.join(", ")}`));
   }
 
   lines.push("");
-  lines.push(sentence(normalizeUrgency(ctx.urgency)));
-  lines.push("Чтобы забрать предложение, нажмите кнопку «Связаться с поставщиком» под видео.");
+  lines.push("Это отказное предложение: пока поставщик подтверждает актуальность, его можно забрать.");
+  lines.push("Нажимайте «Связаться с поставщиком» под видео и забирайте этот вариант.");
 
   return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
@@ -409,6 +406,7 @@ function buildScriptReview(ctx = {}, script = "") {
     { id: "no_flight_voiceover", label: "Детали рейса не озвучиваются", passed: !/перел[её]т|рейс|вылет\s+\d{1,2}\s+[а-яё]+/i.test(script) },
     { id: "no_repeated_price_label", label: "Цена не повторяется отдельной строкой", passed: (script.match(/цена\s*[—:-]/gi) || []).length === 0 },
     { id: "sales_pitch_compact", label: "Сценарий собран как короткий продающий pitch", passed: script.split(/\n+/).filter(Boolean).length <= 6 },
+    { id: "live_sales_energy", label: "Есть энергия live-продажи", passed: /смотрите|нажимайте|забирайте/i.test(script) },
   ];
 
   return {
