@@ -31,6 +31,50 @@ function firstNonEmpty(...values) {
   return "";
 }
 
+function normalizeOfferText(value) {
+  const cleaned = String(value || "")
+    .replace(/через\s+@\S+/gi, "")
+    .replace(/отказн[а-яё]*\s+тур[а-яё]*/gi, "")
+    .replace(/горящ[а-яё]*/gi, "")
+    .replace(/[🔥🌍🏨📅]/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/\s+([).,])/g, "$1")
+    .replace(/^[\s:;,.()\-]+|[\s:;,.()\-]+$/g, "")
+    .replace(/^(в|на|во)\s+/i, "")
+    .trim();
+  return normalizeDisplayCase(cleaned);
+}
+
+function titleCaseFallback(value) {
+  const text = normalizeOfferText(value);
+  return text || String(value || "").trim();
+}
+
+function parseRouteFromText(value) {
+  const text = titleCaseFallback(value);
+  const match = text.match(/^(.+?)\s+из\s+(.+)$/i);
+  if (!match) return { destination: text, fromCity: "" };
+  return {
+    destination: titleCaseFallback(match[1]),
+    fromCity: titleCaseFallback(match[2]),
+  };
+}
+
+function normalizeDisplayCase(value) {
+  const text = String(value || "").trim();
+  if (!text || /[a-z]/.test(text)) return text;
+  const letters = text.replace(/[^A-ZА-ЯЁ]/g, "");
+  if (letters.length < 4) return text;
+  const upper = letters.replace(/[^A-ZА-ЯЁ]/g, "");
+  if (upper.length !== letters.length) return text;
+  return text
+    .toLowerCase()
+    .replace(/(^|[\s(-])([a-zа-яё])/g, (match, prefix, ch) => `${prefix}${ch.toUpperCase()}`)
+    .split(" ")
+    .map((word) => (["И", "Из", "В", "На", "Для", "От"].includes(word) ? word.toLowerCase() : word))
+    .join(" ");
+}
+
 function normalizeCode(input) {
   const m = String(input || "").match(/R\s*(\d{1,8})/i);
   if (!m) return null;
@@ -56,10 +100,18 @@ function normalizeService(row) {
   const price = firstNonEmpty(row.price, d.price, d.netPrice, d.grossPrice, d.amount, d.totalPrice);
   const currency = firstNonEmpty(row.currency, d.currency, d.priceCurrency, process.env.PRICE_CURRENCY || "USD");
 
-  const fromCity = pick(d, ["fromCity", "cityFrom", "departureCity", "departure_city", "city", "origin"], "Ташкент");
-  const destination = firstNonEmpty(
+  const title = titleCaseFallback(row.title) || `${categoryLabel(category)} #R${row.id}`;
+  const routeFromTitle = parseRouteFromText(title);
+  const explicitDestination = titleCaseFallback(firstNonEmpty(
     pick(d, ["destination", "direction", "country", "arrivalCity", "arrival_city", "toCity", "cityTo"]),
     row.title
+  ));
+  const destination = routeFromTitle.destination && routeFromTitle.destination !== title
+    ? routeFromTitle.destination
+    : explicitDestination;
+  const fromCity = firstNonEmpty(
+    pick(d, ["fromCity", "cityFrom", "departureCity", "departure_city", "city", "origin"]),
+    routeFromTitle.fromCity
   );
 
   const dateFrom = pick(d, ["startDate", "dateFrom", "date_from", "departureDate", "departure_date", "departureFlightDate", "checkinDate", "checkInDate", "eventDate", "date"]);
@@ -86,7 +138,7 @@ function normalizeService(row) {
     category,
     categoryLabel: categoryLabel(category),
     status: row.status || "",
-    title: row.title || `${categoryLabel(category)} #R${row.id}`,
+    title,
     provider: {
       id: row.provider_id || row.p_id || null,
       name: row.provider_name || row.p_name || "",
@@ -96,7 +148,7 @@ function normalizeService(row) {
     details: d,
     videoContext: {
       code: `R${row.id}`,
-      title: row.title || `${categoryLabel(category)} #R${row.id}`,
+      title,
       category: categoryLabel(category),
       fromCity,
       destination,

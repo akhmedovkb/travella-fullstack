@@ -14,6 +14,63 @@ function formatPrice(ctx) {
   return `${ctx.price} ${clean(ctx.currency, "USD")}`;
 }
 
+function compact(value) {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .replace(/\s+([.,:;!?])/g, "$1")
+    .trim();
+}
+
+function cleanOfferName(value, fallback = "") {
+  const text = compact(value)
+    .replace(/через\s+@\S+/gi, "")
+    .replace(/отказн[а-яё]*\s+тур[а-яё]*/gi, "")
+    .replace(/горящ[а-яё]*/gi, "")
+    .replace(/[🔥🌍🏨📅]/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/^[\s:;,.()\-]+|[\s:;,.()\-]+$/g, "")
+    .replace(/^(в|на|во)\s+/i, "")
+    .trim();
+  return normalizeDisplayCase(text) || clean(fallback);
+}
+
+function normalizeDisplayCase(value) {
+  const text = String(value || "").trim();
+  if (!text || /[a-z]/.test(text)) return text;
+  const letters = text.replace(/[^A-ZА-ЯЁ]/g, "");
+  if (letters.length < 4 || letters.length !== text.replace(/[^A-Za-zА-Яа-яЁё]/g, "").length) return text;
+  return text
+    .toLowerCase()
+    .replace(/(^|[\s(-])([a-zа-яё])/g, (match, prefix, ch) => `${prefix}${ch.toUpperCase()}`)
+    .split(" ")
+    .map((word) => (["И", "Из", "В", "На", "Для", "От"].includes(word) ? word.toLowerCase() : word))
+    .join(" ");
+}
+
+function departureFrom(value) {
+  const city = clean(value, "Ташкент");
+  if (/ташкент$/i.test(city)) return "Ташкента";
+  return city;
+}
+
+function sentence(value) {
+  const text = compact(value);
+  if (!text) return "";
+  return /[.!?]$/.test(text) ? text : `${text}.`;
+}
+
+function joinSentence(parts) {
+  return sentence(parts.filter(hasValue).join(", "));
+}
+
+function normalizeUrgency(value) {
+  const text = clean(value);
+  if (!text || /^(normal|low|medium|high)$/i.test(text)) {
+    return "Это отказной тур, поэтому предложение может уйти в любой момент";
+  }
+  return text;
+}
+
 function getSafeFactRules(ctx = {}) {
   const missing = [];
   if (!hasValue(ctx.destination)) missing.push("направление");
@@ -37,31 +94,33 @@ function getSafeFactRules(ctx = {}) {
 }
 
 function buildHook(ctx = {}) {
-  const destination = clean(ctx.destination, "это направление");
+  const destination = cleanOfferName(ctx.destination, ctx.title) || "это направление";
   const price = formatPrice(ctx);
-  if (price) return `Отказной тур в ${destination}: пакет можно забрать за ${price}, пока предложение актуально.`;
-  return `Появился отказной тур в ${destination}: такие предложения могут уйти быстро.`;
+  if (price) return `Есть отказной вариант: ${destination}. Цена — ${price}.`;
+  return `Есть отказной вариант: ${destination}.`;
 }
 
 function buildScript(ctx = {}) {
-  const title = clean(ctx.title, ctx.category || "отказной тур");
-  const destination = clean(ctx.destination, title);
+  const title = cleanOfferName(ctx.title, ctx.category || "отказной тур");
+  const destination = cleanOfferName(ctx.destination, title);
   const price = formatPrice(ctx);
+  const code = clean(ctx.code);
   const lines = [];
 
   lines.push(buildHook(ctx));
   lines.push("");
-  lines.push("Есть актуальное отказное предложение от Travella.");
-  lines.push(`${title}.`);
+  lines.push("Это готовый пакет от Travella, который можно забрать, пока предложение актуально.");
 
   const details = [];
-  if (hasValue(ctx.fromCity) || hasValue(ctx.destination)) details.push(`Вылет: ${clean(ctx.fromCity, "Ташкент")}. Направление: ${destination}.`);
-  if (hasValue(ctx.dates)) details.push(`Даты: ${ctx.dates}.`);
-  if (hasValue(ctx.hotel)) details.push(`Отель: ${ctx.hotel}${hasValue(ctx.room) ? `, номер ${ctx.room}` : ""}.`);
-  if (hasValue(ctx.meal)) details.push(`Питание: ${ctx.meal}.`);
-  if (hasValue(ctx.people)) details.push(`Размещение: ${ctx.people}.`);
-  if (hasValue(ctx.flight)) details.push(`Перелёт: ${ctx.flight}.`);
-  if (hasValue(ctx.includes)) details.push(`В пакет входит: ${ctx.includes}.`);
+  if (hasValue(ctx.fromCity) || hasValue(destination)) {
+    details.push(sentence(`Вылет из ${departureFrom(ctx.fromCity)}${hasValue(destination) ? `, направление — ${destination}` : ""}`));
+  }
+  if (hasValue(ctx.dates)) details.push(sentence(`Даты поездки: ${ctx.dates}`));
+  if (hasValue(ctx.hotel)) details.push(joinSentence([`Отель: ${ctx.hotel}`, hasValue(ctx.room) ? `номер ${ctx.room}` : ""]));
+  if (hasValue(ctx.meal)) details.push(sentence(`Питание: ${ctx.meal}`));
+  if (hasValue(ctx.people)) details.push(sentence(`Размещение: ${ctx.people}`));
+  if (hasValue(ctx.flight)) details.push(sentence(`Перелёт: ${ctx.flight}`));
+  if (hasValue(ctx.includes)) details.push(sentence(`В пакет входит: ${ctx.includes}`));
   if (price) details.push(`Цена: ${price}.`);
 
   if (details.length) {
@@ -70,8 +129,8 @@ function buildScript(ctx = {}) {
   }
 
   lines.push("");
-  lines.push(`Важно: ${clean(ctx.urgency, "это отказной тур, поэтому предложение может уйти в любой момент")}.`);
-  lines.push("Если хотите забрать этот пакет, откройте Travella и свяжитесь с поставщиком.");
+  lines.push(sentence(normalizeUrgency(ctx.urgency)));
+  lines.push(`Чтобы забрать пакет, откройте Travella, ${code ? `назовите код ${code}` : "назовите код предложения"} и свяжитесь с поставщиком.`);
 
   return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
@@ -100,6 +159,7 @@ function buildScriptReview(ctx = {}, script = "") {
     { id: "no_last_seats", label: "Не обещает последние места без подтверждения", passed: !/последн(ие|ее|ий)\s+мест/i.test(script) },
     { id: "urgency_safe", label: "Срочность объяснена через отказной тур", passed: /отказн/i.test(script) },
     { id: "cta", label: "Есть понятный призыв к действию", passed: /Travella|свяжитесь|забрать|откройте/i.test(script) },
+    { id: "no_raw_title_noise", label: "Нет сырого повтора служебного заголовка", passed: !/отказн(ой|ый)?\s+тур\s+в\s+отказн(ой|ый)?\s+тур/i.test(script) },
   ];
 
   return {
@@ -112,8 +172,8 @@ function buildScriptReview(ctx = {}, script = "") {
 }
 
 function buildPublishingDrafts(ctx = {}) {
-  const title = clean(ctx.title, "горящий тур");
-  const destination = clean(ctx.destination, title);
+  const title = cleanOfferName(ctx.title, "горящий тур");
+  const destination = cleanOfferName(ctx.destination, title);
   const price = formatPrice(ctx);
   const code = clean(ctx.code);
   const codeLine = code ? `Код: ${code}` : "";
