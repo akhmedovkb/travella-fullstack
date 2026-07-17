@@ -14,6 +14,24 @@ function formatPrice(ctx) {
   return `${ctx.price} ${clean(ctx.currency, "USD")}`;
 }
 
+function formatSpokenPrice(ctx) {
+  const raw = clean(ctx.price);
+  if (!raw) return "";
+  const value = Number(String(raw).replace(/\s/g, "").replace(",", "."));
+  const currency = clean(ctx.currency, "USD").toUpperCase();
+  const currencyForms = {
+    USD: ["доллар", "доллара", "долларов"],
+    EUR: ["евро", "евро", "евро"],
+    UZS: ["сум", "сума", "сумов"],
+    RUB: ["рубль", "рубля", "рублей"],
+  };
+  if (!Number.isFinite(value)) return `${raw} ${currency}`.trim();
+
+  const rounded = Math.round(value);
+  const forms = currencyForms[currency] || [currency, currency, currency];
+  return `${numberToRuWords(rounded)} ${pluralRu(rounded, forms)}`;
+}
+
 function compact(value) {
   return String(value || "")
     .replace(/\s+/g, " ")
@@ -25,9 +43,202 @@ function cleanFact(value) {
   return compact(value)
     .replace(/([A-Za-zА-Яа-яЁё]{1,6})-\s+(\d)/g, "$1-$2")
     .replace(/(\d)\s*;\s*(\d{2})/g, "$1:$2")
+    .replace(/(\d)\s*\*/g, "$1 звёзд")
     .replace(/\s+([).,])/g, "$1")
     .replace(/^[\s:;,.()\-]+|[\s:;,.()\-]+$/g, "")
     .trim();
+}
+
+function pluralRu(value, forms) {
+  const n = Math.abs(Number(value)) % 100;
+  const n1 = n % 10;
+  if (n > 10 && n < 20) return forms[2];
+  if (n1 > 1 && n1 < 5) return forms[1];
+  if (n1 === 1) return forms[0];
+  return forms[2];
+}
+
+function numberToRuWords(value) {
+  const n = Math.abs(Math.trunc(Number(value) || 0));
+  if (n === 0) return "ноль";
+  const ones = ["", "один", "два", "три", "четыре", "пять", "шесть", "семь", "восемь", "девять"];
+  const onesFemale = ["", "одна", "две", "три", "четыре", "пять", "шесть", "семь", "восемь", "девять"];
+  const teens = ["десять", "одиннадцать", "двенадцать", "тринадцать", "четырнадцать", "пятнадцать", "шестнадцать", "семнадцать", "восемнадцать", "девятнадцать"];
+  const tens = ["", "", "двадцать", "тридцать", "сорок", "пятьдесят", "шестьдесят", "семьдесят", "восемьдесят", "девяносто"];
+  const hundreds = ["", "сто", "двести", "триста", "четыреста", "пятьсот", "шестьсот", "семьсот", "восемьсот", "девятьсот"];
+
+  function triadToWords(num, female = false) {
+    const result = [];
+    const h = Math.floor(num / 100);
+    const t = Math.floor((num % 100) / 10);
+    const o = num % 10;
+    if (h) result.push(hundreds[h]);
+    if (t === 1) {
+      result.push(teens[o]);
+    } else {
+      if (t) result.push(tens[t]);
+      if (o) result.push((female ? onesFemale : ones)[o]);
+    }
+    return result;
+  }
+
+  const parts = [];
+  const thousands = Math.floor(n / 1000);
+  const rest = n % 1000;
+  if (thousands) {
+    parts.push(...triadToWords(thousands, true), pluralRu(thousands, ["тысяча", "тысячи", "тысяч"]));
+  }
+  if (rest) parts.push(...triadToWords(rest));
+  return parts.join(" ");
+}
+
+const MONTHS_RU = [
+  "января",
+  "февраля",
+  "марта",
+  "апреля",
+  "мая",
+  "июня",
+  "июля",
+  "августа",
+  "сентября",
+  "октября",
+  "ноября",
+  "декабря",
+];
+
+function parseDateAny(value) {
+  const text = cleanFact(value);
+  let match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (match) return { year: Number(match[1]), month: Number(match[2]), day: Number(match[3]) };
+  match = text.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+  if (match) return { year: Number(match[3]), month: Number(match[2]), day: Number(match[1]) };
+  return null;
+}
+
+function formatSpokenDate(value, includeYear = true) {
+  const date = parseDateAny(value);
+  if (!date || !MONTHS_RU[date.month - 1]) return cleanFact(value);
+  return `${date.day} ${MONTHS_RU[date.month - 1]}${includeYear ? ` ${date.year} года` : ""}`;
+}
+
+function formatSpokenDateRange(value) {
+  const text = cleanFact(value);
+  const parts = text.match(/\d{4}-\d{2}-\d{2}|\d{1,2}\.\d{1,2}\.\d{4}/g) || [];
+  if (parts.length < 2) return formatSpokenDate(text);
+
+  const start = parseDateAny(parts[0]);
+  const end = parseDateAny(parts[1]);
+  if (!start || !end || !MONTHS_RU[start.month - 1] || !MONTHS_RU[end.month - 1]) return text;
+
+  if (start.year === end.year && start.month === end.month) {
+    return `с ${start.day} по ${end.day} ${MONTHS_RU[end.month - 1]} ${end.year} года`;
+  }
+  return `с ${formatSpokenDate(parts[0])} по ${formatSpokenDate(parts[1])}`;
+}
+
+function formatSpokenTime(value) {
+  const match = cleanFact(value).match(/(\d{1,2}):(\d{2})/);
+  if (!match) return "";
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const hourText = `${hours} ${pluralRu(hours, ["час", "часа", "часов"])}`;
+  if (!minutes) return hourText;
+  return `${hourText} ${minutes} ${pluralRu(minutes, ["минута", "минуты", "минут"])}`;
+}
+
+function spellFlightCode(value) {
+  const latin = {
+    A: "эй",
+    B: "би",
+    C: "си",
+    D: "ди",
+    E: "и",
+    F: "эф",
+    G: "джи",
+    H: "эйч",
+    I: "ай",
+    J: "джей",
+    K: "кей",
+    L: "эл",
+    M: "эм",
+    N: "эн",
+    O: "оу",
+    P: "пи",
+    Q: "кью",
+    R: "ар",
+    S: "эс",
+    T: "ти",
+    U: "ю",
+    V: "ви",
+    W: "дабл-ю",
+    X: "икс",
+    Y: "уай",
+    Z: "зет",
+  };
+  return String(value || "")
+    .toUpperCase()
+    .split("")
+    .map((ch) => latin[ch] || ch)
+    .join(" ");
+}
+
+function spellDigits(value) {
+  const digits = ["ноль", "один", "два", "три", "четыре", "пять", "шесть", "семь", "восемь", "девять"];
+  return String(value || "")
+    .split("")
+    .map((ch) => digits[Number(ch)] || ch)
+    .join(" ");
+}
+
+function formatSpokenFlight(value) {
+  const text = cleanFact(value);
+  if (!text) return "";
+  const flightNumber = text.match(/\b([A-ZА-Я]{1,4})[-\s]?(\d{2,5})\b/i);
+  const time = text.match(/\b\d{1,2}:\d{2}\b/);
+  const date = text.match(/\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}\.\d{1,2}\.\d{4}\b/);
+  const parts = [];
+  if (flightNumber) parts.push(`рейс ${spellFlightCode(flightNumber[1])} ${spellDigits(flightNumber[2])}`);
+  if (date) parts.push(`вылет ${formatSpokenDate(date[0])}`);
+  if (time) parts.push(`в ${formatSpokenTime(time[0])}`);
+  return parts.length ? parts.join(", ") : text;
+}
+
+function formatSpokenMeal(value) {
+  const text = cleanFact(value);
+  const normalized = text.toUpperCase();
+  const known = {
+    UAI: "ультра всё включено",
+    AI: "всё включено",
+    BB: "завтраки",
+    HB: "полупансион",
+    FB: "полный пансион",
+    RO: "без питания",
+  };
+  return known[normalized] || text;
+}
+
+function formatSpokenRoom(value) {
+  const text = cleanFact(value);
+  const known = {
+    standard: "стандарт",
+    standart: "стандарт",
+    deluxe: "делюкс",
+    superior: "супериор",
+    suite: "сьют",
+  };
+  return known[text.toLowerCase()] || text;
+}
+
+function formatSpokenPeople(value) {
+  const text = cleanFact(value);
+  const normalized = text.toUpperCase();
+  const known = {
+    DBL: "двухместное",
+    SGL: "одноместное",
+    TRPL: "трёхместное",
+  };
+  return known[normalized] || text;
 }
 
 function cleanOfferName(value, fallback = "") {
@@ -131,7 +342,7 @@ function getSafeFactRules(ctx = {}) {
 function buildHook(ctx = {}) {
   const destination = normalizeDestinationName(ctx.destination || ctx.title) || "это направление";
   const travelDestination = destinationToTravelCase(destination);
-  const price = formatPrice(ctx);
+  const price = formatSpokenPrice(ctx);
   if (price) return `Есть отказной вариант в ${travelDestination}. Цена — ${price}.`;
   return `Есть отказной вариант в ${travelDestination}.`;
 }
@@ -139,7 +350,7 @@ function buildHook(ctx = {}) {
 function buildScript(ctx = {}) {
   const title = cleanOfferName(ctx.title, ctx.category || "отказной тур");
   const destination = normalizeDestinationName(ctx.destination || title);
-  const price = formatPrice(ctx);
+  const price = formatSpokenPrice(ctx);
   const code = clean(ctx.code);
   const lines = [];
 
@@ -151,11 +362,11 @@ function buildScript(ctx = {}) {
   if (hasValue(ctx.fromCity) || hasValue(destination)) {
     details.push(sentence(`Вылет из ${departureFrom(ctx.fromCity)}${hasValue(destination) ? `, направление — ${destination}` : ""}`));
   }
-  if (hasValue(ctx.dates)) details.push(sentence(`Даты поездки: ${cleanFact(ctx.dates)}`));
-  if (hasValue(ctx.hotel)) details.push(joinSentence([`Отель: ${cleanFact(ctx.hotel)}`, hasValue(ctx.room) ? `номер ${cleanFact(ctx.room)}` : ""]));
-  if (hasValue(ctx.meal)) details.push(sentence(`Питание: ${cleanFact(ctx.meal)}`));
-  if (hasValue(ctx.people)) details.push(sentence(`Размещение: ${cleanFact(ctx.people)}`));
-  if (hasValue(ctx.flight)) details.push(sentence(`Перелёт: ${cleanFact(ctx.flight)}`));
+  if (hasValue(ctx.dates)) details.push(sentence(`Даты поездки: ${formatSpokenDateRange(ctx.dates)}`));
+  if (hasValue(ctx.hotel)) details.push(joinSentence([`Отель: ${cleanFact(ctx.hotel)}`, hasValue(ctx.room) ? `номер ${formatSpokenRoom(ctx.room)}` : ""]));
+  if (hasValue(ctx.meal)) details.push(sentence(`Питание: ${formatSpokenMeal(ctx.meal)}`));
+  if (hasValue(ctx.people)) details.push(sentence(`Размещение: ${formatSpokenPeople(ctx.people)}`));
+  if (hasValue(ctx.flight)) details.push(sentence(`Перелёт: ${formatSpokenFlight(ctx.flight)}`));
   if (hasValue(ctx.includes)) details.push(sentence(`В пакет входит: ${cleanFact(ctx.includes)}`));
   if (price) details.push(`Цена: ${price}.`);
 
@@ -196,6 +407,9 @@ function buildScriptReview(ctx = {}, script = "") {
     { id: "urgency_safe", label: "Срочность объяснена через отказной тур", passed: /отказн/i.test(script) },
     { id: "cta", label: "Есть понятный призыв к действию", passed: /Travella|свяжитесь|забрать|откройте/i.test(script) },
     { id: "no_raw_title_noise", label: "Нет сырого повтора служебного заголовка", passed: !/отказн(ой|ый)?\s+тур\s+в\s+отказн(ой|ый)?\s+тур/i.test(script) },
+    { id: "spoken_dates", label: "Даты подготовлены для озвучки", passed: !/\b\d{4}-\d{2}-\d{2}\b/.test(script) },
+    { id: "spoken_price", label: "Цена подготовлена для озвучки", passed: !/\b\d+(?:[.,]\d+)?\s*(USD|EUR|UZS|RUB)\b/i.test(script) },
+    { id: "spoken_travel_codes", label: "Коды питания и размещения раскрыты для диктора", passed: !/\b(UAI|AI|BB|HB|FB|RO|DBL|SGL|TRPL)\b/i.test(script) },
   ];
 
   return {
