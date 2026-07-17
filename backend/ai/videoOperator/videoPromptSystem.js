@@ -342,36 +342,33 @@ function getSafeFactRules(ctx = {}) {
 function buildHook(ctx = {}) {
   const destination = normalizeDestinationName(ctx.destination || ctx.title) || "это направление";
   const travelDestination = destinationToTravelCase(destination);
+  const fromCity = hasValue(ctx.fromCity) ? ` из ${departureFrom(ctx.fromCity)}` : "";
+  const dates = hasValue(ctx.dates) ? `, ${formatSpokenDateRange(ctx.dates)}` : "";
   const price = formatSpokenPrice(ctx);
-  if (price) return `Есть отказной вариант в ${travelDestination}. Цена — ${price}.`;
-  return `Есть отказной вариант в ${travelDestination}.`;
+  if (price) return `Отказной тур в ${travelDestination}${fromCity}${dates}, за ${price}.`;
+  return `Отказной тур в ${travelDestination}${fromCity}${dates}.`;
 }
 
 function buildScript(ctx = {}) {
   const title = cleanOfferName(ctx.title, ctx.category || "отказной тур");
   const destination = normalizeDestinationName(ctx.destination || title);
-  const price = formatSpokenPrice(ctx);
-  const code = clean(ctx.code);
   const lines = [];
 
   lines.push(buildHook(ctx));
   lines.push("");
-  lines.push("Предложение взято из базы отказных туров Узбекистана и доступно, пока поставщик подтверждает актуальность.");
+  lines.push("Это предложение из базы отказных туров Узбекистана; пока поставщик подтверждает актуальность, его можно забрать.");
 
-  const details = [];
-  if (hasValue(ctx.fromCity) || hasValue(destination)) {
-    details.push(sentence(`Вылет из ${departureFrom(ctx.fromCity)}${hasValue(destination) ? `, направление — ${destination}` : ""}`));
-  }
-  if (hasValue(ctx.dates)) details.push(sentence(`Даты поездки: ${formatSpokenDateRange(ctx.dates)}`));
-  if (hasValue(ctx.hotel)) details.push(joinSentence([`Отель: ${cleanFact(ctx.hotel)}`, hasValue(ctx.room) ? `номер ${formatSpokenRoom(ctx.room)}` : ""]));
-  if (hasValue(ctx.meal)) details.push(sentence(`Питание: ${formatSpokenMeal(ctx.meal)}`));
-  if (hasValue(ctx.people)) details.push(sentence(`Размещение: ${formatSpokenPeople(ctx.people)}`));
-  if (hasValue(ctx.includes)) details.push(sentence(`В пакет входит: ${cleanFact(ctx.includes)}`));
-  if (price) details.push(`Цена: ${price}.`);
+  const valueItems = [
+    hasValue(ctx.hotel) ? cleanFact(ctx.hotel) : "",
+    hasValue(ctx.room) ? `номер ${formatSpokenRoom(ctx.room)}` : "",
+    hasValue(ctx.meal) ? formatSpokenMeal(ctx.meal) : "",
+    hasValue(ctx.people) ? `${formatSpokenPeople(ctx.people)} размещение` : "",
+    hasValue(ctx.includes) ? cleanFact(ctx.includes) : "",
+  ].filter(hasValue);
 
-  if (details.length) {
+  if (valueItems.length) {
     lines.push("");
-    lines.push(...details);
+    lines.push(sentence(`Внутри: ${valueItems.join(", ")}`));
   }
 
   lines.push("");
@@ -410,6 +407,8 @@ function buildScriptReview(ctx = {}, script = "") {
     { id: "spoken_price", label: "Цена подготовлена для озвучки", passed: !/\b\d+(?:[.,]\d+)?\s*(USD|EUR|UZS|RUB)\b/i.test(script) },
     { id: "spoken_travel_codes", label: "Коды питания и размещения раскрыты для диктора", passed: !/\b(UAI|AI|BB|HB|FB|RO|DBL|SGL|TRPL)\b/i.test(script) },
     { id: "no_flight_voiceover", label: "Детали рейса не озвучиваются", passed: !/перел[её]т|рейс|вылет\s+\d{1,2}\s+[а-яё]+/i.test(script) },
+    { id: "no_repeated_price_label", label: "Цена не повторяется отдельной строкой", passed: (script.match(/цена\s*[—:-]/gi) || []).length === 0 },
+    { id: "sales_pitch_compact", label: "Сценарий собран как короткий продающий pitch", passed: script.split(/\n+/).filter(Boolean).length <= 6 },
   ];
 
   return {
