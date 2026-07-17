@@ -259,7 +259,7 @@ function Inspector({ task }) {
       <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="text-xs font-black uppercase tracking-wide text-slate-500">Inspector</div>
         <h3 className="mt-1 text-xl font-black text-slate-950">Контекст текущей задачи</h3>
-        {!task ? <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm font-semibold text-slate-500">Пока нет активной задачи. Напиши R857, “Создай видео R857” или “R857 Instagram”.</div> : null}
+        {!task ? <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm font-semibold text-slate-500">Пока нет активной задачи. Выбери быструю команду под чатом или напиши: “Создай сценарий для R941”, “Сделай агрессивнее R941”, “Создай видео для последнего отказного тура”.</div> : null}
         {task ? <div className="mt-4 space-y-3 text-sm font-semibold text-slate-600">
           <div className="rounded-2xl bg-slate-50 p-4"><div className="text-slate-400">Задача</div><b className="text-slate-950">{task.command}</b></div>
           <div className="flex justify-between rounded-2xl bg-slate-50 p-4"><span>Статус</span><b className="text-slate-950">{statusMeta.label}</b></div>
@@ -2250,7 +2250,8 @@ export default function AdminAiPlatform() {
   const [publishFeedback, setPublishFeedback] = React.useState({});
   const [error, setError] = React.useState("");
   const [currentTask, setCurrentTask] = React.useState(null);
-  const [messages, setMessages] = React.useState([{ id: "hello", role: "assistant", text: "Я Travella AI Runtime. Выбери сотрудника сверху и напиши задачу обычным языком. Для Video Operator можно написать просто: R857, Создай видео R857 или R857 Instagram." }]);
+  const videoOperatorIntro = "Я Travella AI Runtime. Для Video Operator можно нажать быструю команду под чатом или написать задачу обычным языком: “Создай сценарий для R941”, “Другой hook R941”, “Сделай агрессивнее R941”, “Создай видео для последнего отказного тура”.";
+  const [messages, setMessages] = React.useState([{ id: "hello", role: "assistant", text: videoOperatorIntro }]);
   const endRef = React.useRef(null);
 
   async function load() {
@@ -2295,7 +2296,7 @@ export default function AdminAiPlatform() {
     setActiveView("today");
     setCurrentTask(job);
     setMessages([
-      { id: "hello", role: "assistant", text: "Я Travella AI Runtime. Выбери сотрудника сверху и напиши задачу обычным языком. Для Video Operator можно написать просто: R857, Создай видео R857 или R857 Instagram." },
+      { id: "hello", role: "assistant", text: videoOperatorIntro },
       { id: `job_user_${job.id}`, role: "user", text: job.command || job.type || "Открытая задача" },
       {
         id: `job_${job.id}`,
