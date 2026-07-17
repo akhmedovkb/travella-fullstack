@@ -29,6 +29,12 @@ const AI_PUBLISH_TELEGRAM_CHAT_ID = String(
     ""
 ).trim();
 const TELEGRAM_VIDEO_UPLOAD_MAX_BYTES = 49 * 1024 * 1024;
+const SITE_URL = String(
+  process.env.SITE_PUBLIC_URL ||
+    process.env.SITE_URL ||
+    process.env.FRONTEND_URL ||
+    "https://travella.uz"
+).replace(/\/+$/, "");
 
 function boolEnv(name, fallback = false) {
   const raw = process.env[name];
@@ -260,6 +266,37 @@ function buildTelegramMessageUrl(chat, messageId) {
   return "";
 }
 
+function getJobServiceId(job) {
+  const output = job?.output || {};
+  const service = output.service || {};
+  const ctx = service.videoContext || {};
+  const raw = ctx.code || service.code || service.id || "";
+  const match = String(raw).match(/R?\s*(\d+)/i);
+  return match ? match[1] : "";
+}
+
+function buildMarketplaceServiceUrl(serviceId, params = {}) {
+  const url = new URL("/marketplace", SITE_URL);
+  url.searchParams.set("opened", String(serviceId));
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && String(value).trim() !== "") {
+      url.searchParams.set(key, String(value));
+    }
+  });
+  return url.toString();
+}
+
+function buildTelegramVideoReplyMarkup(job) {
+  const serviceId = getJobServiceId(job);
+  if (!serviceId) return null;
+  return {
+    inline_keyboard: [
+      [{ text: "💬 Связаться с поставщиком", url: buildMarketplaceServiceUrl(serviceId, { action: "contact" }) }],
+      [{ text: "✈️ Детали рейса", url: buildMarketplaceServiceUrl(serviceId, { details: "flight" }) }],
+    ],
+  };
+}
+
 async function sendTelegramVideoUpload(api, job, videoUrl, text) {
   const download = await axios.get(videoUrl, {
     responseType: "arraybuffer",
@@ -277,6 +314,8 @@ async function sendTelegramVideoUpload(api, job, videoUrl, text) {
   form.append("chat_id", AI_PUBLISH_TELEGRAM_CHAT_ID);
   form.append("caption", limitTelegramCaption(text, videoUrl));
   form.append("supports_streaming", "true");
+  const replyMarkup = buildTelegramVideoReplyMarkup(job);
+  if (replyMarkup) form.append("reply_markup", JSON.stringify(replyMarkup));
   form.append("video", new Blob([download.data], { type: contentType }), "travella-video.mp4");
 
   const res = await fetch(`${api}/sendVideo`, {
@@ -333,11 +372,14 @@ async function publishVideoToTelegramUnlocked(job, actor) {
     caption: limitTelegramCaption(text, videoUrl),
     supports_streaming: true,
   };
+  const replyMarkup = buildTelegramVideoReplyMarkup(job);
+  if (replyMarkup) videoPayload.reply_markup = replyMarkup;
   const messagePayload = {
     chat_id: AI_PUBLISH_TELEGRAM_CHAT_ID,
     text: limitTelegramTextMessage(text, videoUrl),
     disable_web_page_preview: true,
   };
+  if (replyMarkup) messagePayload.reply_markup = replyMarkup;
 
   let data;
   let deliveryMethod = "sendVideo";
@@ -784,6 +826,10 @@ router.get("/video-operator/videos", (req, res) => {
         mediaUrl,
         artifactUrl: artifact.url || "",
         storageProvider: artifact.provider || "",
+        actionButtons: buildTelegramVideoReplyMarkup(job)?.inline_keyboard?.flat().map((button) => ({
+          label: button.text,
+          url: button.url,
+        })) || [],
         publishingDrafts: Array.isArray(output.publishingDrafts) ? output.publishingDrafts : [],
         publishingPackage,
       };

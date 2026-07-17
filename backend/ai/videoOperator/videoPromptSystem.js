@@ -366,7 +366,6 @@ function buildScript(ctx = {}) {
   if (hasValue(ctx.hotel)) details.push(joinSentence([`Отель: ${cleanFact(ctx.hotel)}`, hasValue(ctx.room) ? `номер ${formatSpokenRoom(ctx.room)}` : ""]));
   if (hasValue(ctx.meal)) details.push(sentence(`Питание: ${formatSpokenMeal(ctx.meal)}`));
   if (hasValue(ctx.people)) details.push(sentence(`Размещение: ${formatSpokenPeople(ctx.people)}`));
-  if (hasValue(ctx.flight)) details.push(sentence(`Перелёт: ${formatSpokenFlight(ctx.flight)}`));
   if (hasValue(ctx.includes)) details.push(sentence(`В пакет входит: ${cleanFact(ctx.includes)}`));
   if (price) details.push(`Цена: ${price}.`);
 
@@ -377,7 +376,7 @@ function buildScript(ctx = {}) {
 
   lines.push("");
   lines.push(sentence(normalizeUrgency(ctx.urgency)));
-  lines.push(`Чтобы забрать пакет, откройте Travella, ${code ? `назовите код ${code}` : "назовите код предложения"} и свяжитесь с поставщиком.`);
+  lines.push("Чтобы забрать предложение, нажмите кнопку «Связаться с поставщиком» под видео.");
 
   return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
@@ -387,7 +386,7 @@ function buildAnalysis(ctx = {}) {
   if (hasValue(ctx.price)) triggers.push("понятная цена");
   if (hasValue(ctx.hotel)) triggers.push("конкретный отель");
   if (hasValue(ctx.dates)) triggers.push("готовые даты");
-  if (hasValue(ctx.flight)) triggers.push("маршрут/перелёт");
+  if (hasValue(ctx.flight)) triggers.push("детали перелёта доступны отдельно");
   triggers.push("срочность отказного предложения");
 
   return {
@@ -410,6 +409,7 @@ function buildScriptReview(ctx = {}, script = "") {
     { id: "spoken_dates", label: "Даты подготовлены для озвучки", passed: !/\b\d{4}-\d{2}-\d{2}\b/.test(script) },
     { id: "spoken_price", label: "Цена подготовлена для озвучки", passed: !/\b\d+(?:[.,]\d+)?\s*(USD|EUR|UZS|RUB)\b/i.test(script) },
     { id: "spoken_travel_codes", label: "Коды питания и размещения раскрыты для диктора", passed: !/\b(UAI|AI|BB|HB|FB|RO|DBL|SGL|TRPL)\b/i.test(script) },
+    { id: "no_flight_voiceover", label: "Детали рейса не озвучиваются", passed: !/перел[её]т|рейс|вылет\s+\d{1,2}\s+[а-яё]+/i.test(script) },
   ];
 
   return {

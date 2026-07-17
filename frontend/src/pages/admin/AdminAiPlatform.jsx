@@ -1209,6 +1209,13 @@ function VideoLibrary({ videos, jobs, onOpenJob, onSavePackage, onApprovePackage
               ) : null}
 
               <div className="mt-4 flex flex-wrap gap-2">
+                {!publishingMode && Array.isArray(video.actionButtons) ? video.actionButtons.map((button) => (
+                  button?.url ? (
+                    <a key={`${video.id}:${button.label}`} href={button.url} target="_blank" rel="noreferrer" className="rounded-2xl bg-emerald-700 px-4 py-2 text-xs font-black text-white hover:bg-emerald-800">
+                      {button.label}
+                    </a>
+                  ) : null
+                )) : null}
                 {url ? (
                   <a href={url} target="_blank" rel="noreferrer" className="rounded-2xl bg-slate-950 px-4 py-2 text-xs font-black text-white hover:bg-slate-800">
                     Открыть MP4
