@@ -43,6 +43,32 @@ function cleanOfferName(value, fallback = "") {
   return normalizeDisplayCase(text) || clean(fallback);
 }
 
+function normalizeDestinationName(value) {
+  const text = cleanOfferName(value);
+  const lower = text.toLowerCase();
+  const known = {
+    "анталью": "Анталья",
+    "аланию": "Алания",
+    "турцию": "Турция",
+  };
+  return known[lower] || text;
+}
+
+function destinationToTravelCase(value) {
+  const text = normalizeDestinationName(value);
+  const lower = text.toLowerCase();
+  const known = {
+    "анталья": "Анталью",
+    "алания": "Аланию",
+    "турция": "Турцию",
+  };
+  if (known[lower]) return known[lower];
+  if (/ия$/i.test(text)) return `${text.slice(0, -2)}ию`;
+  if (/я$/i.test(text)) return `${text.slice(0, -1)}ю`;
+  if (/а$/i.test(text)) return `${text.slice(0, -1)}у`;
+  return text;
+}
+
 function normalizeDisplayCase(value) {
   const text = String(value || "").trim();
   if (!text || /[a-z]/.test(text)) return text;
@@ -103,15 +129,16 @@ function getSafeFactRules(ctx = {}) {
 }
 
 function buildHook(ctx = {}) {
-  const destination = cleanOfferName(ctx.destination, ctx.title) || "это направление";
+  const destination = normalizeDestinationName(ctx.destination || ctx.title) || "это направление";
+  const travelDestination = destinationToTravelCase(destination);
   const price = formatPrice(ctx);
-  if (price) return `Есть отказной вариант: ${destination}. Цена — ${price}.`;
-  return `Есть отказной вариант: ${destination}.`;
+  if (price) return `Есть отказной вариант в ${travelDestination}. Цена — ${price}.`;
+  return `Есть отказной вариант в ${travelDestination}.`;
 }
 
 function buildScript(ctx = {}) {
   const title = cleanOfferName(ctx.title, ctx.category || "отказной тур");
-  const destination = cleanOfferName(ctx.destination, title);
+  const destination = normalizeDestinationName(ctx.destination || title);
   const price = formatPrice(ctx);
   const code = clean(ctx.code);
   const lines = [];

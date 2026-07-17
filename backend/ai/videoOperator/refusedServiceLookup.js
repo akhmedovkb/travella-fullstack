@@ -50,12 +50,23 @@ function titleCaseFallback(value) {
   return text || String(value || "").trim();
 }
 
+function normalizeDestinationName(value) {
+  const text = titleCaseFallback(value);
+  const lower = text.toLowerCase();
+  const known = {
+    "анталью": "Анталья",
+    "аланию": "Алания",
+    "турцию": "Турция",
+  };
+  return known[lower] || text;
+}
+
 function parseRouteFromText(value) {
   const text = titleCaseFallback(value);
   const match = text.match(/^(.+?)\s+из\s+(.+)$/i);
-  if (!match) return { destination: text, fromCity: "" };
+  if (!match) return { destination: normalizeDestinationName(text), fromCity: "" };
   return {
-    destination: titleCaseFallback(match[1]),
+    destination: normalizeDestinationName(match[1]),
     fromCity: titleCaseFallback(match[2]),
   };
 }
@@ -108,7 +119,7 @@ function normalizeService(row) {
   ));
   const destination = routeFromTitle.destination && routeFromTitle.destination !== title
     ? routeFromTitle.destination
-    : explicitDestination;
+    : normalizeDestinationName(explicitDestination);
   const fromCity = firstNonEmpty(
     pick(d, ["fromCity", "cityFrom", "departureCity", "departure_city", "city", "origin"]),
     routeFromTitle.fromCity
