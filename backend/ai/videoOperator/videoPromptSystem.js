@@ -356,7 +356,7 @@ function buildScript(ctx = {}) {
 
   lines.push(buildHook(ctx));
   lines.push("");
-  lines.push("Это готовый пакет от Travella, который можно забрать, пока предложение актуально.");
+  lines.push("Предложение взято из базы отказных туров Узбекистана и доступно, пока поставщик подтверждает актуальность.");
 
   const details = [];
   if (hasValue(ctx.fromCity) || hasValue(destination)) {
@@ -392,7 +392,7 @@ function buildAnalysis(ctx = {}) {
 
   return {
     mainOffer: `${clean(ctx.category, "Отказное предложение")} ${ctx.code || ""}`.trim(),
-    target: "клиенты, которые готовы быстро принять решение по готовому туру",
+    target: "клиенты, которые готовы быстро принять решение по отказному туру из базы Узбекистана",
     triggers,
     recommendedFormat: "vertical_9_16_avatar_video",
   };
