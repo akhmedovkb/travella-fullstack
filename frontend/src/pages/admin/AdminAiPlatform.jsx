@@ -171,7 +171,7 @@ function findHeygenVideoIdFromEvents(events = []) {
   return "";
 }
 
-function Message({ msg, onStartHeygen, onRefreshHeygen, canStartHeygen, heygenLoading, refreshLoading }) {
+function Message({ msg, onStartHeygen, onRefreshHeygen, canStartHeygen, aiVideoEnabled, heygenReady, heygenLoading, refreshLoading }) {
   const user = msg.role === "user";
   const inferredVideoId = findHeygenVideoIdFromEvents(msg.events || []);
   const heygen = msg.output?.heygen || (inferredVideoId ? { provider: "heygen", status: "submitted", videoId: inferredVideoId } : null);
@@ -179,6 +179,9 @@ function Message({ msg, onStartHeygen, onRefreshHeygen, canStartHeygen, heygenLo
   const jobStatus = String(msg.job?.status || "").toLowerCase();
   const canShowHeygenAction = !user && msg.job?.id && msg.output?.script && !heygen?.videoId && !["video_submitted", "video_ready", "video_failed"].includes(jobStatus);
   const canShowRefreshAction = !user && msg.job?.id && heygen?.videoId && !heygen?.videoUrl;
+  const heygenActionLabel = canStartHeygen
+    ? heygenLoading === msg.job.id ? "Отправляю..." : "Утвердить и отправить в HeyGen"
+    : !heygenReady ? "HeyGen не настроен" : !aiVideoEnabled ? "Включи HeyGen" : "HeyGen недоступен";
   return (
     <div className={cn("flex", user ? "justify-end" : "justify-start")}>
       <div className={cn("max-w-[92%] rounded-[1.6rem] px-5 py-4 shadow-sm", user ? "bg-slate-950 text-white" : "border border-slate-200 bg-white text-slate-900")}>
@@ -241,7 +244,7 @@ function Message({ msg, onStartHeygen, onRefreshHeygen, canStartHeygen, heygenLo
               disabled={!canStartHeygen || heygenLoading === msg.job.id}
               className="rounded-2xl bg-slate-950 px-4 py-2 text-xs font-black text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {canStartHeygen ? heygenLoading === msg.job.id ? "Отправляю..." : "Утвердить и отправить в HeyGen" : "HeyGen не настроен"}
+              {heygenActionLabel}
             </button>
           </div>
         ) : null}
@@ -2812,6 +2815,8 @@ export default function AdminAiPlatform() {
                 onStartHeygen={startHeygen}
                 onRefreshHeygen={refreshHeygen}
                 canStartHeygen={aiEnabled && heygenReady}
+                aiVideoEnabled={aiEnabled}
+                heygenReady={heygenReady}
                 heygenLoading={heygenLoading}
                 refreshLoading={refreshLoading}
               />
