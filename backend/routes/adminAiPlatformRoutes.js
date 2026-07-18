@@ -31,6 +31,12 @@ const { searchRefusedServices } = require("../ai/videoOperator/refusedServiceLoo
 const { buildPublishingPackage, buildContentReview } = require("../ai/contentManager/contentPromptSystem");
 
 const TELEGRAM_CLIENT_BOT_TOKEN = String(process.env.TELEGRAM_CLIENT_BOT_TOKEN || "").trim();
+const TELEGRAM_PUBLIC_BOT_USERNAME = String(
+  process.env.TELEGRAM_CLIENT_BOT_USERNAME ||
+    process.env.TELEGRAM_BOT_USERNAME ||
+    process.env.TELEGRAM_BOT ||
+    ""
+).replace(/^@/, "").trim();
 const AI_PUBLISH_TELEGRAM_CHAT_ID = String(
   process.env.AI_PUBLISH_TELEGRAM_CHAT_ID ||
     process.env.TELEGRAM_PUBLISH_CHAT_ID ||
@@ -384,10 +390,14 @@ function buildMarketplaceServiceUrl(serviceId, params = {}) {
   return url.toString();
 }
 
-function buildContactUnlockPaymentUrl(serviceId) {
+function buildTelegramUnlockBotUrl(serviceId) {
+  if (TELEGRAM_PUBLIC_BOT_USERNAME) {
+    const payload = encodeURIComponent(`unlock_${serviceId}`);
+    return `https://t.me/${TELEGRAM_PUBLIC_BOT_USERNAME}?start=${payload}`;
+  }
   const url = new URL("/client/balance", SITE_URL);
   url.searchParams.set("service_id", String(serviceId));
-  url.searchParams.set("source", "telegram_ai_publish");
+  url.searchParams.set("source", "telegram_ai_publish_fallback");
   return url.toString();
 }
 
@@ -396,7 +406,7 @@ function buildTelegramVideoReplyMarkup(job) {
   if (!serviceId) return null;
   return {
     inline_keyboard: [
-      [{ text: "💳 Оплатить доступ к поставщику", url: buildContactUnlockPaymentUrl(serviceId) }],
+      [{ text: "💬 Связаться с поставщиком", url: buildTelegramUnlockBotUrl(serviceId) }],
       [{ text: "✈️ Детали рейса", url: buildMarketplaceServiceUrl(serviceId, { details: "flight" }) }],
     ],
   };
