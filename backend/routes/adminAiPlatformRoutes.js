@@ -29,6 +29,7 @@ const {
 } = require("../ai/videoOperator/videoOperator.runtime");
 const { searchRefusedServices } = require("../ai/videoOperator/refusedServiceLookup");
 const { buildPublishingPackage, buildContentReview } = require("../ai/contentManager/contentPromptSystem");
+const { buildServiceMessage } = require("../utils/telegramServiceCard");
 
 const TELEGRAM_CLIENT_BOT_TOKEN = String(process.env.TELEGRAM_CLIENT_BOT_TOKEN || "").trim();
 const TELEGRAM_PUBLIC_BOT_USERNAME = String(
@@ -332,11 +333,16 @@ function getPublishingItemText(job, channelId) {
   return String((exact || byChannel || byLabel)?.text || "").trim();
 }
 
+function stripTelegramHtml(text) {
+  return String(text || "").replace(/<[^>]+>/g, "");
+}
+
 function limitTelegramCaption(text, videoUrl) {
   const clean = String(text || "").trim();
   if (clean.length <= 1000) return clean;
   const suffix = videoUrl ? `\n\nВидео: ${videoUrl}` : "";
-  return `${clean.slice(0, Math.max(0, 980 - suffix.length)).trim()}...${suffix}`;
+  const plain = stripTelegramHtml(clean);
+  return `${plain.slice(0, Math.max(0, 980 - suffix.length)).trim()}...${suffix}`;
 }
 
 function limitTelegramTextMessage(text, videoUrl) {
@@ -344,7 +350,8 @@ function limitTelegramTextMessage(text, videoUrl) {
   const suffix = videoUrl ? `\n\nВидео: ${videoUrl}` : "";
   const message = `${clean}${suffix}`;
   if (message.length <= 4096) return message;
-  return `${clean.slice(0, Math.max(0, 4093 - suffix.length)).trim()}...${suffix}`;
+  const plain = stripTelegramHtml(clean);
+  return `${plain.slice(0, Math.max(0, 4093 - suffix.length)).trim()}...${suffix}`;
 }
 
 function isTelegramWrongWebPageContentError(description) {
@@ -412,6 +419,74 @@ function buildTelegramVideoReplyMarkup(job) {
   };
 }
 
+function getTelegramCardCategory(job) {
+  const output = job?.output || {};
+  const service = output.service || {};
+  const ctx = getPublishingContext(job);
+  const raw = String(
+    service.category ||
+      service.serviceCategory ||
+      ctx.categoryKey ||
+      ctx.serviceCategory ||
+      ctx.category ||
+      "refused_tour"
+  ).trim().toLowerCase();
+  if (!raw) return "refused_tour";
+  if (raw.includes("авиа") || raw.includes("flight") || raw.includes("air")) return "refused_flight";
+  if (raw.includes("отел") || raw.includes("hotel")) return "refused_hotel";
+  if (raw.includes("меропр") || raw.includes("билет") || raw.includes("event") || raw.includes("ticket")) return "refused_event_ticket";
+  if (raw.includes("автор") || raw.includes("author")) return "author_tour";
+  if (raw.includes("тур") || raw.includes("refused")) return "refused_tour";
+  return raw;
+}
+
+function buildTelegramCardService(job) {
+  const output = job?.output || {};
+  const service = output.service || {};
+  const ctx = getPublishingContext(job);
+  const details = service.details && typeof service.details === "object" && !Array.isArray(service.details)
+    ? service.details
+    : {};
+
+  return {
+    ...service,
+    id: service.id || service.serviceId || ctx.serviceId || getJobServiceId(job),
+    code: service.code || ctx.code || "",
+    category: service.category || getTelegramCardCategory(job),
+    title: service.title || ctx.title || "",
+    details: {
+      ...details,
+      ...ctx,
+    },
+    provider: service.provider || {
+      name: ctx.supplier || "",
+    },
+  };
+}
+
+function buildTelegramVideoCaption(job) {
+  const fallback = getPublishingItemText(job, "telegram");
+  const serviceId = getJobServiceId(job);
+  if (!serviceId) return fallback;
+
+  try {
+    const category = getTelegramCardCategory(job);
+    const built = buildServiceMessage(buildTelegramCardService(job), category, "client", {
+      unlocked: false,
+      forceRefused: true,
+      publicOpenBotUrl: buildTelegramUnlockBotUrl(serviceId),
+    });
+    const text = String(built?.text || "").trim();
+    return text || fallback;
+  } catch (e) {
+    console.warn("[ai-publishing] telegram card caption fallback", {
+      jobId: job?.id || null,
+      error: e?.message || String(e),
+    });
+    return fallback;
+  }
+}
+
 async function sendTelegramVideoUpload(api, job, videoUrl, text) {
   const download = await axios.get(videoUrl, {
     responseType: "arraybuffer",
@@ -428,6 +503,7 @@ async function sendTelegramVideoUpload(api, job, videoUrl, text) {
   const form = new FormData();
   form.append("chat_id", AI_PUBLISH_TELEGRAM_CHAT_ID);
   form.append("caption", limitTelegramCaption(text, videoUrl));
+  form.append("parse_mode", "HTML");
   form.append("supports_streaming", "true");
   const replyMarkup = buildTelegramVideoReplyMarkup(job);
   if (replyMarkup) form.append("reply_markup", JSON.stringify(replyMarkup));
@@ -498,7 +574,7 @@ async function publishVideoToTelegramUnlocked(job, actor) {
     return { success: false, status: 400, message: "Video URL is missing" };
   }
 
-  const text = getPublishingItemText(job, "telegram");
+  const text = buildTelegramVideoCaption(job);
   if (!text) {
     return { success: false, status: 400, message: "Telegram publishing text is missing" };
   }
@@ -508,6 +584,7 @@ async function publishVideoToTelegramUnlocked(job, actor) {
     chat_id: AI_PUBLISH_TELEGRAM_CHAT_ID,
     video: videoUrl,
     caption: limitTelegramCaption(text, videoUrl),
+    parse_mode: "HTML",
     supports_streaming: true,
   };
   const replyMarkup = buildTelegramVideoReplyMarkup(job);
@@ -515,6 +592,7 @@ async function publishVideoToTelegramUnlocked(job, actor) {
   const messagePayload = {
     chat_id: AI_PUBLISH_TELEGRAM_CHAT_ID,
     text: limitTelegramTextMessage(text, videoUrl),
+    parse_mode: "HTML",
     disable_web_page_preview: true,
   };
   if (replyMarkup) messagePayload.reply_markup = replyMarkup;
