@@ -2607,8 +2607,8 @@ export default function AdminAiPlatform() {
     { label: "Сценарий последнего", command: "Создай сценарий для последнего отказного тура" },
     { label: "Видео последнего", command: "Создай видео для последнего отказного тура" },
     ...(currentServiceCode ? [
-      { label: `Сценарий ${currentServiceCode}`, command: `Создай сценарий для ${currentServiceCode}` },
-      { label: `Видео ${currentServiceCode}`, command: `Создай видео для ${currentServiceCode}` },
+      { label: "Сценарий выбранного", command: `Создай сценарий для ${currentServiceCode}` },
+      { label: "Видео выбранного", command: `Создай видео для ${currentServiceCode}` },
       { label: "Другой hook", command: `Переделай hook для ${currentServiceCode}` },
       { label: "Агрессивнее", command: `Сделай сценарий агрессивнее для ${currentServiceCode}` },
       { label: "Короче", command: `Сократи сценарий до 25 секунд для ${currentServiceCode}` },
