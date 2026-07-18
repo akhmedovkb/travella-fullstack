@@ -40,6 +40,27 @@ const HEYGEN_RESOLUTION_OPTIONS = [
   { value: "4k", label: "4K" },
 ];
 
+const HEYGEN_DELIVERY_PRESETS = [
+  {
+    id: "reels",
+    label: "Reels / Stories",
+    helper: "вертикальный mobile",
+    profile: { aspectRatio: "9:16", resolution: "1080p", engine: "avatar_iv", voiceSpeed: 1, expressiveness: "medium" },
+  },
+  {
+    id: "telegram",
+    label: "Telegram",
+    helper: "канал и бот",
+    profile: { aspectRatio: "9:16", resolution: "1080p", engine: "avatar_iv", voiceSpeed: 1, expressiveness: "medium" },
+  },
+  {
+    id: "youtube",
+    label: "YouTube",
+    helper: "горизонтальный выпуск",
+    profile: { aspectRatio: "16:9", resolution: "1080p", engine: "avatar_iv", voiceSpeed: 1, expressiveness: "medium" },
+  },
+];
+
 function cn(...items) { return items.filter(Boolean).join(" "); }
 function fmtDate(value) { try { return new Date(value).toLocaleString("ru-RU"); } catch { return "—"; } }
 function isToday(value) {
@@ -3516,6 +3537,41 @@ export default function AdminAiPlatform() {
               >
                 ×
               </button>
+            </div>
+
+            <div className="mt-5 rounded-3xl bg-blue-50 p-4 ring-1 ring-blue-100">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs font-black uppercase tracking-wide text-blue-700">Быстрый профиль</div>
+                  <div className="mt-1 text-xs font-bold text-slate-500">Выставляет формат, качество и базовую подачу для канала.</div>
+                </div>
+              </div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                {HEYGEN_DELIVERY_PRESETS.map((preset) => {
+                  const active =
+                    String(videoProfileDraft.aspectRatio || "9:16") === preset.profile.aspectRatio &&
+                    String(videoProfileDraft.resolution || "1080p") === preset.profile.resolution &&
+                    String(videoProfileDraft.engine || "avatar_iv") === preset.profile.engine &&
+                    Number(videoProfileDraft.voiceSpeed || 1) === Number(preset.profile.voiceSpeed) &&
+                    String(videoProfileDraft.expressiveness || "medium") === preset.profile.expressiveness;
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => setVideoProfileDraft((prev) => ({ ...prev, ...preset.profile }))}
+                      disabled={videoProfileLoading}
+                      className={cn(
+                        "min-h-[64px] rounded-2xl px-3 py-2 text-left ring-1 transition disabled:cursor-not-allowed disabled:opacity-40",
+                        active ? "bg-blue-700 text-white ring-blue-700" : "bg-white text-slate-800 ring-blue-100 hover:bg-blue-100"
+                      )}
+                    >
+                      <span className="block text-xs font-black">{preset.label}</span>
+                      <span className={cn("mt-1 block text-[11px] font-bold", active ? "text-white/75" : "text-slate-400")}>{preset.helper}</span>
+                      <span className={cn("mt-1 block text-[10px] font-black", active ? "text-white/80" : "text-blue-700")}>{preset.profile.aspectRatio} · {preset.profile.resolution}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
