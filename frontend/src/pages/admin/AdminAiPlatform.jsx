@@ -13,6 +13,15 @@ const EMPLOYEES = [
   { id: "finance_auditor", icon: "📊", name: "Finance Auditor", subtitle: "Балансы и сверки", live: false },
 ];
 
+const HEYGEN_VOICE_PRESETS = [
+  { label: "MY1", value: "ce04d2becc764610b4b3f89155285a45" },
+  { label: "MY2", value: "2f5588e77acb4d3aa4482570c0390644" },
+  { label: "MY3", value: "aaea0796357b4614a69e14e1d05fc185" },
+  { label: "MY4", value: "e0e96bd5207449f8bd69a6ad0fb95a2d" },
+  { label: "MY5", value: "4ef0fa222bcf488f9145db9a0c716de8" },
+  { label: "MY6", value: "75d34e45780f44888ccaf49cb93222ee" },
+];
+
 function cn(...items) { return items.filter(Boolean).join(" "); }
 function fmtDate(value) { try { return new Date(value).toLocaleString("ru-RU"); } catch { return "—"; } }
 function isToday(value) {
@@ -2706,6 +2715,7 @@ export default function AdminAiPlatform() {
   const aiEnabled = Boolean(status?.video?.enabled);
   const artifactStorageReady = Boolean(status?.video?.artifactStorage?.provider);
   const runtimeProfile = status?.video?.runtimeProfile || {};
+  const selectedVoicePreset = HEYGEN_VOICE_PRESETS.find((voice) => voice.value === videoProfileDraft.voiceId);
   const profileDirty =
     String(videoProfileDraft.avatarId || "") !== String(runtimeProfile.avatarId || "") ||
     String(videoProfileDraft.voiceId || "") !== String(runtimeProfile.voiceId || "");
@@ -2845,12 +2855,27 @@ export default function AdminAiPlatform() {
                     placeholder="Avatar ID"
                     className="h-8 w-[190px] rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-950 outline-none placeholder:text-slate-400 focus:border-slate-300"
                   />
-                  <input
-                    value={videoProfileDraft.voiceId}
-                    onChange={(e) => setVideoProfileDraft((prev) => ({ ...prev, voiceId: e.target.value }))}
-                    placeholder="Voice ID"
-                    className="h-8 w-[190px] rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-950 outline-none placeholder:text-slate-400 focus:border-slate-300"
-                  />
+                  <select
+                    value={selectedVoicePreset?.value || "__custom"}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value !== "__custom") setVideoProfileDraft((prev) => ({ ...prev, voiceId: value }));
+                    }}
+                    className="h-8 w-[116px] rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-950 outline-none focus:border-slate-300"
+                  >
+                    {HEYGEN_VOICE_PRESETS.map((voice) => (
+                      <option key={voice.value} value={voice.value}>{voice.label}</option>
+                    ))}
+                    <option value="__custom">Другой</option>
+                  </select>
+                  {!selectedVoicePreset ? (
+                    <input
+                      value={videoProfileDraft.voiceId}
+                      onChange={(e) => setVideoProfileDraft((prev) => ({ ...prev, voiceId: e.target.value }))}
+                      placeholder="Voice ID"
+                      className="h-8 w-[190px] rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-950 outline-none placeholder:text-slate-400 focus:border-slate-300"
+                    />
+                  ) : null}
                   <button
                     type="button"
                     onClick={saveVideoProfile}
