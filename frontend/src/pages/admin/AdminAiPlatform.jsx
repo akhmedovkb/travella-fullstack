@@ -180,7 +180,7 @@ function Message({ msg, onStartHeygen, onRefreshHeygen, canStartHeygen, aiVideoE
   const canShowHeygenAction = !user && msg.job?.id && msg.output?.script && !heygen?.videoId && !["video_submitted", "video_ready", "video_failed"].includes(jobStatus);
   const canShowRefreshAction = !user && msg.job?.id && heygen?.videoId && !heygen?.videoUrl;
   const heygenActionLabel = canStartHeygen
-    ? heygenLoading === msg.job.id ? "Отправляю..." : "Утвердить и отправить в HeyGen"
+    ? heygenLoading === msg.job?.id ? "Отправляю..." : "Утвердить и отправить в HeyGen"
     : !heygenReady ? "HeyGen не настроен" : !aiVideoEnabled ? "Включи HeyGen" : "HeyGen недоступен";
   return (
     <div className={cn("flex", user ? "justify-end" : "justify-start")}>
