@@ -107,6 +107,10 @@ function categorySql(filters = []) {
   };
 }
 
+function activeServiceStatusSql() {
+  return "LOWER(COALESCE(s.status, '')) NOT IN ('archived', 'deleted', 'draft', 'rejected')";
+}
+
 function categoryLabel(category) {
   const map = {
     refused_tour: "Отказной тур",
@@ -235,6 +239,7 @@ async function findRefusedServiceByCode(code, options = {}) {
       WHERE s.id = $1
         AND ${category.sql.replace("$CATEGORY_PARAM", "$2")}
         AND s.deleted_at IS NULL
+        AND ${activeServiceStatusSql()}
       LIMIT 1
     `,
     [normalized.id, ...(category.values.length ? category.values : [])]
@@ -272,6 +277,7 @@ async function listRecentRefusedServices({ limit = 8, categoryFilters = [], cate
       LEFT JOIN providers p ON p.id = s.provider_id
       WHERE ${category.sql.replace("$CATEGORY_PARAM", "$1")}
         AND s.deleted_at IS NULL
+        AND ${activeServiceStatusSql()}
       ORDER BY s.id DESC
       LIMIT $${limitParam}
     `,
@@ -289,7 +295,7 @@ async function findLatestRefusedService(options = {}) {
 async function searchRefusedServices({ q = "", limit = 10, categoryFilters = [], categories = [] } = {}) {
   const safeLimit = Math.max(1, Math.min(Number(limit) || 10, 20));
   const filters = normalizeCategoryFilters(categoryFilters.length ? categoryFilters : categories);
-  const where = ["s.deleted_at IS NULL"];
+  const where = ["s.deleted_at IS NULL", activeServiceStatusSql()];
   const params = [];
 
   if (filters.length) {
