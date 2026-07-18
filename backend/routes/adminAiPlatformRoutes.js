@@ -8,6 +8,7 @@ const router = express.Router();
 const authenticateToken = require("../middleware/authenticateToken");
 const requireAdmin = require("../middleware/requireAdmin");
 const { getAiConfig } = require("../ai/core/aiConfig");
+const { getAiVideoEnabledSetting, setAiVideoEnabledSetting } = require("../ai/core/aiRuntimeSettings");
 const { getArtifactStorageStatus } = require("../ai/videoOperator/videoArtifactStore");
 const { listAiEmployees } = require("../ai/core/aiEmployeeRegistry");
 const { listJobs, getJob, updateJob, addEvent } = require("../ai/core/aiJobStore");
@@ -700,7 +701,8 @@ async function runDueTelegramPublishing({ limit = 5, scanLimit = 100, actor = { 
 router.use(authenticateToken);
 router.use(requireAdmin);
 
-router.get("/status", (req, res) => {
+router.get("/status", async (req, res) => {
+  const videoSetting = await getAiVideoEnabledSetting();
   const config = getAiConfig();
   const jobs = listJobs({ limit: 100 });
   const telegramQueue = getTelegramPublishingQueueSummary({ limit: 100 });
@@ -718,6 +720,7 @@ router.get("/status", (req, res) => {
     employees: listAiEmployees(),
     video: {
       enabled: config.video.enabled,
+      runtimeControl: videoSetting,
       heygenReady: config.video.heygen.ready,
       format: config.video.format,
       resolution: config.video.resolution,
@@ -736,6 +739,25 @@ router.get("/status", (req, res) => {
     metrics: {
       jobs: jobs.length,
       activeJobs: jobs.filter((x) => ["created", "queued", "running", "processing"].includes(String(x.status || "").toLowerCase())).length,
+    },
+  });
+});
+
+router.patch("/settings/video", async (req, res) => {
+  const enabled = Boolean(req.body?.enabled);
+  const videoSetting = await setAiVideoEnabledSetting(enabled, {
+    id: req.user?.id || req.user?.userId || null,
+  });
+  const config = getAiConfig();
+  return res.json({
+    success: true,
+    video: {
+      enabled: config.video.enabled,
+      runtimeControl: videoSetting,
+      heygenReady: config.video.heygen.ready,
+      format: config.video.format,
+      resolution: config.video.resolution,
+      artifactStorage: getArtifactStorageStatus(),
     },
   });
 });
@@ -821,6 +843,7 @@ router.get("/video-operator/services/search", async (req, res) => {
 });
 
 router.post("/video-operator/jobs/:id/heygen/start", async (req, res) => {
+  await getAiVideoEnabledSetting();
   const result = await startHeygenForVideoJob({
     jobId: req.params.id,
     actor: { id: req.user?.id || req.user?.userId || null, role: req.user?.role || req.user?.roles || null },

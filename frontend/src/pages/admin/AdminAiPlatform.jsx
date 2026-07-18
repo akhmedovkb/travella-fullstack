@@ -2246,6 +2246,7 @@ export default function AdminAiPlatform() {
   const [packageLoading, setPackageLoading] = React.useState("");
   const [publishLoading, setPublishLoading] = React.useState("");
   const [schedulerLoading, setSchedulerLoading] = React.useState(false);
+  const [videoToggleLoading, setVideoToggleLoading] = React.useState(false);
   const [schedulerFeedback, setSchedulerFeedback] = React.useState("");
   const [publishFeedback, setPublishFeedback] = React.useState({});
   const [error, setError] = React.useState("");
@@ -2447,6 +2448,29 @@ export default function AdminAiPlatform() {
       await load();
     } finally {
       setRefreshLoading("");
+    }
+  }
+
+  async function toggleAiVideo() {
+    if (videoToggleLoading) return;
+    const nextEnabled = !Boolean(status?.video?.enabled);
+    setVideoToggleLoading(true);
+    setError("");
+    try {
+      const res = await apiPatch("/api/admin/ai-platform/settings/video", { enabled: nextEnabled }, "admin");
+      setStatus((prev) => ({
+        ...(prev || {}),
+        video: {
+          ...(prev?.video || {}),
+          ...(res?.video || {}),
+        },
+      }));
+      await load();
+    } catch (e) {
+      setError(e?.message || "Не удалось переключить AI Video");
+      await load();
+    } finally {
+      setVideoToggleLoading(false);
     }
   }
 
@@ -2755,7 +2779,28 @@ export default function AdminAiPlatform() {
                 <h2 className="mt-1 text-2xl font-black text-slate-950">🎬 Video Operator</h2>
                 <p className="mt-1 text-sm font-semibold text-slate-500">Рабочий чат. Никаких форм: сотрудник сам определяет задачу, вызывает tools и показывает ход работы.</p>
               </div>
-              <div className="flex flex-wrap gap-2"><Pill tone="green">live</Pill><Pill tone="black">AI Runtime</Pill><Pill tone={aiEnabled ? "green" : "red"}>{aiEnabled ? "AI Video включено" : "AI Video выключено"}</Pill></div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Pill tone="green">live</Pill>
+                <Pill tone="black">AI Runtime</Pill>
+                <Pill tone={aiEnabled ? "green" : "red"}>{aiEnabled ? "AI Video включено" : "AI Video выключено"}</Pill>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={aiEnabled}
+                  onClick={toggleAiVideo}
+                  disabled={videoToggleLoading}
+                  className={cn(
+                    "inline-flex min-h-[34px] items-center gap-2 rounded-full px-2 py-1 text-xs font-black ring-1 transition disabled:cursor-not-allowed disabled:opacity-50",
+                    aiEnabled ? "bg-emerald-50 text-emerald-800 ring-emerald-200" : "bg-white text-slate-700 ring-slate-200 hover:bg-slate-50"
+                  )}
+                  title={heygenReady ? "Включает или выключает отправку сценариев в HeyGen" : "HeyGen ENV ещё не настроен"}
+                >
+                  <span className={cn("relative h-6 w-11 rounded-full transition", aiEnabled ? "bg-emerald-600" : "bg-slate-300")}>
+                    <span className={cn("absolute top-1 h-4 w-4 rounded-full bg-white shadow transition", aiEnabled ? "left-6" : "left-1")} />
+                  </span>
+                  <span>{videoToggleLoading ? "Сохраняю..." : aiEnabled ? "HeyGen on" : "HeyGen off"}</span>
+                </button>
+              </div>
             </div>
           </div>
 
