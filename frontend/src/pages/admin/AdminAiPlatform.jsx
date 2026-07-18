@@ -2966,17 +2966,17 @@ export default function AdminAiPlatform() {
                 </button>
                 <div className="flex max-w-full flex-wrap items-center gap-2 rounded-2xl bg-slate-50 px-2 py-2 ring-1 ring-slate-200">
                   <select
-                    value={selectedAvatarPreset?.value || "__custom"}
+                    value={selectedAvatarPreset?.value || ""}
                     onChange={(e) => {
                       const value = e.target.value;
-                      if (value !== "__custom") setVideoProfileDraft((prev) => ({ ...prev, avatarId: value }));
+                      if (value) setVideoProfileDraft((prev) => ({ ...prev, avatarId: value }));
                     }}
                     className="h-8 w-[116px] rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-950 outline-none focus:border-slate-300"
                   >
+                    {!selectedAvatarPreset ? <option value="">Avatar</option> : null}
                     {avatarPresets.map((avatar) => (
                       <option key={avatar.value} value={avatar.value}>Avatar {avatar.label}</option>
                     ))}
-                    <option value="__custom">Другой avatar</option>
                   </select>
                   {!selectedAvatarPreset ? (
                     <input
@@ -3004,17 +3004,17 @@ export default function AdminAiPlatform() {
                     Удалить
                   </button>
                   <select
-                    value={selectedVoicePreset?.value || "__custom"}
+                    value={selectedVoicePreset?.value || ""}
                     onChange={(e) => {
                       const value = e.target.value;
-                      if (value !== "__custom") setVideoProfileDraft((prev) => ({ ...prev, voiceId: value }));
+                      if (value) setVideoProfileDraft((prev) => ({ ...prev, voiceId: value }));
                     }}
                     className="h-8 w-[116px] rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-950 outline-none focus:border-slate-300"
                   >
+                    {!selectedVoicePreset ? <option value="">Voice</option> : null}
                     {voicePresets.map((voice) => (
                       <option key={voice.value} value={voice.value}>{voice.label}</option>
                     ))}
-                    <option value="__custom">Другой</option>
                   </select>
                   {!selectedVoicePreset ? (
                     <input
