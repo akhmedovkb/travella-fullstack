@@ -173,7 +173,7 @@ function getPublishingContext(job) {
 function savePublishingPackage(job, items, actor, status = "draft") {
   const output = job.output || {};
   const ctx = getPublishingContext(job);
-  const current = output.publishingPackage || buildPublishingPackage(ctx);
+  const current = output.publishingPackage || buildPublishingPackageForJob(job);
   const nextItems = normalizePublishingItems(items);
   if (!nextItems.length) {
     return { success: false, status: 400, message: "Publishing package items are required" };
@@ -285,8 +285,7 @@ function buildPublicationHistory(prevChannels = {}, nextChannels = {}, actor = {
 
 function savePublicationStatus(job, channels, actor) {
   const output = job.output || {};
-  const ctx = getPublishingContext(job);
-  const publishingPackage = output.publishingPackage || buildPublishingPackage(ctx);
+  const publishingPackage = output.publishingPackage || buildPublishingPackageForJob(job);
   const prevPublicationStatus = publishingPackage.publicationStatus || {};
   const normalizedChannels = normalizePublicationChannels(channels);
   const newChanges = buildPublicationHistory(prevPublicationStatus.channels || {}, normalizedChannels, actor);
@@ -326,6 +325,10 @@ function savePublicationStatus(job, channels, actor) {
 function getPublishingItemText(job, channelId) {
   const output = job.output || {};
   const pkg = output.publishingPackage || buildPublishingPackage(getPublishingContext(job));
+  return getPublishingItemTextFromPackage(pkg, channelId);
+}
+
+function getPublishingItemTextFromPackage(pkg, channelId) {
   const items = Array.isArray(pkg.items) ? pkg.items : [];
   const exact = items.find((item) => String(item?.id || "").toLowerCase() === channelId);
   const byChannel = items.find((item) => String(item?.channel || "").toLowerCase() === channelId);
@@ -466,6 +469,10 @@ function buildTelegramCardService(job) {
 
 function buildTelegramVideoCaption(job) {
   const fallback = getPublishingItemText(job, "telegram");
+  const pkg = job?.output?.publishingPackage || null;
+  const operatorTouchedPackage = Boolean(pkg?.updatedBy || pkg?.approvedBy || pkg?.updatedAt || pkg?.approvedAt);
+  if (operatorTouchedPackage && fallback) return fallback;
+
   const serviceId = getJobServiceId(job);
   if (!serviceId) return fallback;
 
@@ -485,6 +492,57 @@ function buildTelegramVideoCaption(job) {
     });
     return fallback;
   }
+}
+
+function buildPublishingPackageForJob(job) {
+  const output = job?.output || {};
+  const ctx = getPublishingContext(job);
+  const base = output.publishingPackage || buildPublishingPackage(ctx);
+  const operatorTouchedPackage = Boolean(base?.updatedBy || base?.approvedBy || base?.updatedAt || base?.approvedAt);
+  if (operatorTouchedPackage) return base;
+
+  const caption = buildTelegramVideoCaption(job);
+  if (!caption) return base;
+
+  const items = Array.isArray(base.items) ? base.items : [];
+  const nextItems = items.map((item) => {
+    const id = String(item?.id || "").toLowerCase();
+    const channel = String(item?.channel || "").toLowerCase();
+    const label = String(item?.label || item?.title || "").toLowerCase();
+    const isTelegram = id.includes("telegram") || channel === "telegram" || label.includes("telegram");
+    if (!isTelegram) return item;
+    return {
+      ...item,
+      id: item.id || "telegram_post",
+      channel: item.channel || "Telegram",
+      label: item.label || "Telegram",
+      title: "Caption для Telegram-видео",
+      text: caption,
+      source: "telegram_service_card",
+    };
+  });
+  const hasTelegram = nextItems.some((item) => String(item?.source || "") === "telegram_service_card");
+  const finalItems = hasTelegram
+    ? nextItems
+    : [
+        ...nextItems,
+        {
+          id: "telegram_post",
+          channel: "Telegram",
+          label: "Telegram",
+          title: "Caption для Telegram-видео",
+          text: caption,
+          source: "telegram_service_card",
+        },
+      ];
+
+  return {
+    ...base,
+    version: `${base.version || "content_manager_v1"}+telegram_card_caption`,
+    summary: "Пакет публикации готов к ручной проверке. Telegram caption подтянут из карточки продукта.",
+    items: finalItems,
+    review: buildContentReview(ctx, finalItems),
+  };
 }
 
 async function sendTelegramVideoUpload(api, job, videoUrl, text) {
@@ -1194,7 +1252,7 @@ router.get("/video-operator/videos", async (req, res) => {
 
       if (!mediaUrl) return null;
 
-      const publishingPackage = output.publishingPackage || buildPublishingPackage(ctx);
+      const publishingPackage = output.publishingPackage || buildPublishingPackageForJob(job);
 
       return {
         id: `${job.id}:${heygen.videoId || "video"}`,
@@ -1244,7 +1302,7 @@ router.post("/video-operator/jobs/:id/publishing-package/approve", (req, res) =>
   const job = getJob(req.params.id);
   if (!job) return res.status(404).json({ success: false, message: "Job not found" });
   const output = job.output || {};
-  const current = output.publishingPackage || buildPublishingPackage(getPublishingContext(job));
+  const current = output.publishingPackage || buildPublishingPackageForJob(job);
   const result = savePublishingPackage(
     job,
     req.body?.items || current.items,
