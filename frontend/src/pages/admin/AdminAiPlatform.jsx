@@ -232,7 +232,7 @@ function Message({ msg, onStartHeygen, onRefreshHeygen, onSaveScript, canStartHe
           <div className="mt-3 rounded-2xl bg-slate-950 p-4 text-white">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <div className="text-xs font-black uppercase tracking-wide text-slate-300">Сценарий для AI-аватара</div>
+                <div className="text-xs font-black uppercase tracking-wide text-slate-300">Речь для HeyGen</div>
                 {msg.output?.scriptEditedAt ? <div className="mt-1 text-xs font-bold text-emerald-300">Отредактирован вручную</div> : null}
               </div>
               {canEditScript && !scriptEditing ? (
@@ -2966,6 +2966,22 @@ export default function AdminAiPlatform() {
     if (activeView === "publications" || activeView === "publishing_queue") setActiveView("today");
   }
 
+  function hydrateMessageFromJobs(msg = {}) {
+    const jobId = msg.job?.id;
+    if (!jobId) return msg;
+    const freshJob =
+      jobs.find((job) => String(job.id) === String(jobId)) ||
+      (String(currentTask?.id || "") === String(jobId) ? currentTask : null);
+    if (!freshJob) return msg;
+    return {
+      ...msg,
+      job: freshJob,
+      output: freshJob.output || msg.output,
+      events: Array.isArray(freshJob.events) && freshJob.events.length ? freshJob.events : msg.events,
+      text: freshJob.output?.nextStep || msg.text,
+    };
+  }
+
   const employeesCount = status?.employees?.length || 1;
   const activeTasks = jobs.filter((j) => ["created", "queued", "running", "processing"].includes(String(j.status || "").toLowerCase())).length;
   const videosToday = jobs.filter((j) => isToday(j.createdAt) && String(j.type || "").includes("video")).length;
@@ -3202,21 +3218,24 @@ export default function AdminAiPlatform() {
           </div>
 
           <div className="h-[640px] space-y-4 overflow-y-auto bg-slate-50/60 p-4 md:p-6">
-            {messages.map((m) => (
-              <Message
-                key={m.id}
-                msg={m}
-                onStartHeygen={startHeygen}
-                onRefreshHeygen={refreshHeygen}
-                onSaveScript={saveJobScript}
-                canStartHeygen={aiEnabled && heygenReady}
-                aiVideoEnabled={aiEnabled}
-                heygenReady={heygenReady}
-                heygenLoading={heygenLoading}
-                refreshLoading={refreshLoading}
-                scriptSaving={scriptSaving}
-              />
-            ))}
+            {messages.map((m) => {
+              const hydratedMessage = hydrateMessageFromJobs(m);
+              return (
+                <Message
+                  key={m.id}
+                  msg={hydratedMessage}
+                  onStartHeygen={startHeygen}
+                  onRefreshHeygen={refreshHeygen}
+                  onSaveScript={saveJobScript}
+                  canStartHeygen={aiEnabled && heygenReady}
+                  aiVideoEnabled={aiEnabled}
+                  heygenReady={heygenReady}
+                  heygenLoading={heygenLoading}
+                  refreshLoading={refreshLoading}
+                  scriptSaving={scriptSaving}
+                />
+              );
+            })}
             {loading ? <Message msg={{ role: "assistant", text: "🧠 Думаю...\n⚙️ Вызываю нужные инструменты Travella AI Runtime..." }} /> : null}
             <div ref={endRef} />
           </div>
