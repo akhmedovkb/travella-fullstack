@@ -21,18 +21,22 @@ function getAiConfig() {
   const heygenAvatarId = readEnv("HEYGEN_AVATAR_ID");
   const heygenVoiceId = readEnv("HEYGEN_VOICE_ID");
   const heygenEngine = readEnv("HEYGEN_ENGINE", "avatar_iv") === "avatar_v" ? "avatar_v" : "avatar_iv";
+  const heygenAspectRatio = readEnv("HEYGEN_ASPECT_RATIO", readEnv("AI_VIDEO_FORMAT", "9:16"));
+  const heygenResolution = readEnv("HEYGEN_RESOLUTION", readEnv("AI_VIDEO_RESOLUTION", "1080p"));
 
   return {
     video: {
       enabled: boolEnv("AI_VIDEO_ENABLED", false),
-      format: readEnv("AI_VIDEO_FORMAT", "9:16"),
-      resolution: readEnv("AI_VIDEO_RESOLUTION", "1080p"),
+      format: heygenAspectRatio,
+      resolution: heygenResolution,
       heygen: {
         apiKey: heygenApiKey,
         avatarId: heygenAvatarId,
         voiceId: heygenVoiceId,
         baseUrl: readEnv("HEYGEN_BASE_URL", "https://api.heygen.com"),
         defaultEngine: heygenEngine,
+        defaultAspectRatio: heygenAspectRatio,
+        defaultResolution: heygenResolution,
         voiceSettings: {
           speed: Math.max(0.5, Math.min(1.5, numberEnv("HEYGEN_VOICE_SPEED", 1))),
         },

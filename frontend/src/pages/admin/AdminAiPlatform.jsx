@@ -27,6 +27,19 @@ const HEYGEN_AVATAR_PRESETS = [
   { label: "MY2", value: "9c8b04c737bc4f2bbc4bd7d42ec33281" },
 ];
 
+const HEYGEN_ASPECT_RATIO_OPTIONS = [
+  { value: "9:16", label: "9:16", helper: "Reels / Stories" },
+  { value: "1:1", label: "1:1", helper: "квадрат" },
+  { value: "16:9", label: "16:9", helper: "горизонталь" },
+];
+
+const HEYGEN_RESOLUTION_OPTIONS = [
+  { value: "720p", label: "720p" },
+  { value: "1080p", label: "1080p" },
+  { value: "2k", label: "2K" },
+  { value: "4k", label: "4K" },
+];
+
 function cn(...items) { return items.filter(Boolean).join(" "); }
 function fmtDate(value) { try { return new Date(value).toLocaleString("ru-RU"); } catch { return "—"; } }
 function isToday(value) {
@@ -2457,7 +2470,7 @@ export default function AdminAiPlatform() {
   const [serviceSearchResults, setServiceSearchResults] = React.useState([]);
   const [selectedService, setSelectedService] = React.useState(null);
   const [serviceSearchLoading, setServiceSearchLoading] = React.useState(false);
-  const [videoProfileDraft, setVideoProfileDraft] = React.useState({ avatarId: "", voiceId: "", engine: "avatar_iv", voiceSpeed: 1, expressiveness: "medium" });
+  const [videoProfileDraft, setVideoProfileDraft] = React.useState({ avatarId: "", voiceId: "", engine: "avatar_iv", voiceSpeed: 1, expressiveness: "medium", aspectRatio: "9:16", resolution: "1080p" });
   const [videoPresetsDraft, setVideoPresetsDraft] = React.useState({
     avatars: HEYGEN_AVATAR_PRESETS,
     voices: HEYGEN_VOICE_PRESETS,
@@ -2494,6 +2507,8 @@ export default function AdminAiPlatform() {
       engine: profile.engine || "avatar_iv",
       voiceSpeed: Number(profile.voiceSpeed || 1),
       expressiveness: profile.expressiveness || "medium",
+      aspectRatio: profile.aspectRatio || profile.format || "9:16",
+      resolution: profile.resolution || "1080p",
     });
   }, [
     status?.video?.runtimeProfile?.avatarId,
@@ -2501,6 +2516,8 @@ export default function AdminAiPlatform() {
     status?.video?.runtimeProfile?.engine,
     status?.video?.runtimeProfile?.voiceSpeed,
     status?.video?.runtimeProfile?.expressiveness,
+    status?.video?.runtimeProfile?.aspectRatio,
+    status?.video?.runtimeProfile?.resolution,
   ]);
   React.useEffect(() => {
     const presets = status?.video?.runtimePresets || {};
@@ -3073,7 +3090,9 @@ export default function AdminAiPlatform() {
     String(videoProfileDraft.voiceId || "") !== String(runtimeProfile.voiceId || "") ||
     String(videoProfileDraft.engine || "avatar_iv") !== String(runtimeProfile.engine || "avatar_iv") ||
     Number(videoProfileDraft.voiceSpeed || 1) !== Number(runtimeProfile.voiceSpeed || 1) ||
-    String(videoProfileDraft.expressiveness || "medium") !== String(runtimeProfile.expressiveness || "medium");
+    String(videoProfileDraft.expressiveness || "medium") !== String(runtimeProfile.expressiveness || "medium") ||
+    String(videoProfileDraft.aspectRatio || "9:16") !== String(runtimeProfile.aspectRatio || "9:16") ||
+    String(videoProfileDraft.resolution || "1080p") !== String(runtimeProfile.resolution || "1080p");
   const videoPresetModalMeta = videoPresetModal ? videoPresetKindMeta(videoPresetModal.kind) : null;
   const isContentManager = selectedEmployee === "content_manager";
   const isPublishingManager = selectedEmployee === "publishing_manager";
@@ -3248,6 +3267,9 @@ export default function AdminAiPlatform() {
                       className="h-8 w-[190px] rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-950 outline-none placeholder:text-slate-400 focus:border-slate-300"
                     />
                   ) : null}
+                  <span className="inline-flex h-8 items-center rounded-xl bg-white px-3 text-xs font-black text-slate-600 ring-1 ring-slate-200">
+                    {videoProfileDraft.aspectRatio || "9:16"} · {videoProfileDraft.resolution || "1080p"}
+                  </span>
                   <button
                     type="button"
                     onClick={() => setHeygenSettingsOpen(true)}
@@ -3404,7 +3426,7 @@ export default function AdminAiPlatform() {
           }}
         >
           <div
-            className="w-full max-w-[560px] rounded-[28px] border border-slate-200 bg-white p-5 shadow-2xl"
+            className="max-h-[92vh] w-full max-w-[560px] overflow-y-auto rounded-[28px] border border-slate-200 bg-white p-5 shadow-2xl"
             role="dialog"
             aria-modal="true"
             aria-labelledby="heygen-settings-title"
@@ -3473,6 +3495,51 @@ export default function AdminAiPlatform() {
             </div>
 
             <div className="mt-5 space-y-4 rounded-3xl bg-slate-50 p-4 ring-1 ring-slate-100">
+              <div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs font-black uppercase tracking-wide text-slate-500">Ratio</span>
+                  <span className="text-xs font-bold text-slate-400">кадр видео</span>
+                </div>
+                <div className="mt-2 grid grid-cols-3 gap-2">
+                  {HEYGEN_ASPECT_RATIO_OPTIONS.map((item) => (
+                    <button
+                      key={item.value}
+                      type="button"
+                      onClick={() => setVideoProfileDraft((prev) => ({ ...prev, aspectRatio: item.value }))}
+                      className={cn(
+                        "min-h-[54px] rounded-2xl px-2 text-center ring-1 transition",
+                        videoProfileDraft.aspectRatio === item.value ? "bg-slate-950 text-white ring-slate-950" : "bg-white text-slate-700 ring-slate-200 hover:bg-slate-100"
+                      )}
+                    >
+                      <span className="block text-sm font-black">{item.label}</span>
+                      <span className={cn("mt-0.5 block text-[10px] font-bold", videoProfileDraft.aspectRatio === item.value ? "text-white/65" : "text-slate-400")}>{item.helper}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs font-black uppercase tracking-wide text-slate-500">Resolution</span>
+                  <span className="text-xs font-bold text-slate-400">качество вывода</span>
+                </div>
+                <div className="mt-2 grid grid-cols-4 gap-2">
+                  {HEYGEN_RESOLUTION_OPTIONS.map((item) => (
+                    <button
+                      key={item.value}
+                      type="button"
+                      onClick={() => setVideoProfileDraft((prev) => ({ ...prev, resolution: item.value }))}
+                      className={cn(
+                        "h-10 rounded-2xl text-xs font-black ring-1 transition",
+                        videoProfileDraft.resolution === item.value ? "bg-emerald-600 text-white ring-emerald-600" : "bg-white text-slate-700 ring-slate-200 hover:bg-slate-100"
+                      )}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div>
                 <div className="text-xs font-black uppercase tracking-wide text-slate-500">Engine</div>
                 <div className="mt-2 grid grid-cols-2 gap-2">

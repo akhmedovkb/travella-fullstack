@@ -13,6 +13,8 @@ const VIDEO_PROFILE_DEFAULTS = {
   engine: "avatar_iv",
   voiceSpeed: 1,
   expressiveness: "medium",
+  aspectRatio: "9:16",
+  resolution: "1080p",
 };
 
 const DEFAULT_VIDEO_PRESETS = {
@@ -86,6 +88,18 @@ function normalizeExpressiveness(value) {
   return VIDEO_PROFILE_DEFAULTS.expressiveness;
 }
 
+function normalizeAspectRatio(value) {
+  const raw = String(value || "").trim();
+  if (["9:16", "16:9", "1:1"].includes(raw)) return raw;
+  return VIDEO_PROFILE_DEFAULTS.aspectRatio;
+}
+
+function normalizeResolution(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (["720p", "1080p", "2k", "4k"].includes(raw)) return raw;
+  return VIDEO_PROFILE_DEFAULTS.resolution;
+}
+
 function getEnvVideoProfile() {
   return {
     avatarId: cleanId(process.env.HEYGEN_AVATAR_ID),
@@ -93,6 +107,8 @@ function getEnvVideoProfile() {
     engine: normalizeEngine(process.env.HEYGEN_ENGINE || VIDEO_PROFILE_DEFAULTS.engine),
     voiceSpeed: normalizeVoiceSpeed(process.env.HEYGEN_VOICE_SPEED || VIDEO_PROFILE_DEFAULTS.voiceSpeed),
     expressiveness: normalizeExpressiveness(process.env.HEYGEN_EXPRESSIVENESS || VIDEO_PROFILE_DEFAULTS.expressiveness),
+    aspectRatio: normalizeAspectRatio(process.env.HEYGEN_ASPECT_RATIO || process.env.AI_VIDEO_FORMAT || VIDEO_PROFILE_DEFAULTS.aspectRatio),
+    resolution: normalizeResolution(process.env.HEYGEN_RESOLUTION || process.env.AI_VIDEO_RESOLUTION || VIDEO_PROFILE_DEFAULTS.resolution),
   };
 }
 
@@ -104,6 +120,8 @@ function applyVideoProfile(profile = {}) {
     engine: normalizeEngine(profile.engine || envProfile.engine),
     voiceSpeed: normalizeVoiceSpeed(profile.voiceSpeed ?? envProfile.voiceSpeed),
     expressiveness: normalizeExpressiveness(profile.expressiveness || envProfile.expressiveness),
+    aspectRatio: normalizeAspectRatio(profile.aspectRatio || envProfile.aspectRatio),
+    resolution: normalizeResolution(profile.resolution || envProfile.resolution),
   };
   cachedVideoProfile = next;
   if (next.avatarId) process.env.HEYGEN_AVATAR_ID = next.avatarId;
@@ -111,6 +129,10 @@ function applyVideoProfile(profile = {}) {
   process.env.HEYGEN_ENGINE = next.engine;
   process.env.HEYGEN_VOICE_SPEED = String(next.voiceSpeed);
   process.env.HEYGEN_EXPRESSIVENESS = next.expressiveness;
+  process.env.HEYGEN_ASPECT_RATIO = next.aspectRatio;
+  process.env.HEYGEN_RESOLUTION = next.resolution;
+  process.env.AI_VIDEO_FORMAT = next.aspectRatio;
+  process.env.AI_VIDEO_RESOLUTION = next.resolution;
   return next;
 }
 

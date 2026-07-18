@@ -393,8 +393,6 @@ async function startHeygenForVideoJob({ jobId, actor = {} }) {
       script: output.script,
       motionPrompt: output.motionPrompt,
       title: `${output.service?.videoContext?.code || "Travella"} ${output.service?.videoContext?.title || "Video"}`,
-      aspectRatio: "9:16",
-      resolution: "1080p",
       idempotencyKey: `travella-ai-video-${job.id}`,
     });
 
