@@ -27,7 +27,7 @@ const {
   refreshHeygenForVideoJob,
   listVideoOperatorJobs,
 } = require("../ai/videoOperator/videoOperator.runtime");
-const { searchRefusedServices } = require("../ai/videoOperator/refusedServiceLookup");
+const { findRefusedServiceByCode, searchRefusedServices } = require("../ai/videoOperator/refusedServiceLookup");
 const { buildPublishingPackage, buildContentReview } = require("../ai/contentManager/contentPromptSystem");
 const { buildServiceMessage } = require("../utils/telegramServiceCard");
 
@@ -170,9 +170,117 @@ function getPublishingContext(job) {
   return service.videoContext || {};
 }
 
+function firstNonEmpty(...values) {
+  for (const value of values) {
+    if (value !== undefined && value !== null && String(value).trim() !== "") return String(value).trim();
+  }
+  return "";
+}
+
+function getServiceDetailsObject(service = {}) {
+  if (!service.details) return {};
+  if (typeof service.details === "object" && !Array.isArray(service.details)) return service.details;
+  if (typeof service.details === "string") {
+    try {
+      const parsed = JSON.parse(service.details);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
+function getAiPublicPrice(service = {}, ctx = {}) {
+  const details = getServiceDetailsObject(service);
+  return firstNonEmpty(
+    details.grossPrice,
+    details.gross_price,
+    details.priceGross,
+    details.price_gross,
+    details.bruttoPrice,
+    details.brutto_price,
+    details.clientPrice,
+    details.client_price,
+    details.publicPrice,
+    details.public_price,
+    details.price,
+    service.grossPrice,
+    service.gross_price,
+    service.price,
+    ctx.grossPrice,
+    ctx.priceGross,
+    ctx.publicPrice,
+    ctx.price
+  );
+}
+
+function getAiPublicCurrency(service = {}, ctx = {}) {
+  const details = getServiceDetailsObject(service);
+  return firstNonEmpty(
+    details.currency,
+    details.priceCurrency,
+    details.price_currency,
+    service.currency,
+    service.price_currency,
+    ctx.currency,
+    "USD"
+  );
+}
+
+function buildPublishingContextForJob(job) {
+  const output = job?.output || {};
+  const service = output.service || {};
+  const ctx = getPublishingContext(job);
+  const price = getAiPublicPrice(service, ctx);
+  const currency = getAiPublicCurrency(service, ctx);
+  return {
+    ...ctx,
+    ...(price ? { price } : {}),
+    currency,
+  };
+}
+
+async function hydrateJobServiceFromDb(job, cache = new Map()) {
+  const output = job?.output || {};
+  const service = output.service || {};
+  const ctx = service.videoContext || {};
+  const code = String(ctx.code || service.taskCode || service.displayCode || service.code || "").trim();
+  const serviceId = getJobServiceId(job);
+  const lookupCode = code || (serviceId ? `R${serviceId}` : "");
+  if (!lookupCode) return job;
+
+  const cacheKey = lookupCode.toUpperCase();
+  if (!cache.has(cacheKey)) {
+    const lookup = await findRefusedServiceByCode(lookupCode).catch((error) => ({
+      found: false,
+      error: error?.message || String(error),
+    }));
+    cache.set(cacheKey, lookup?.found ? lookup.service : null);
+  }
+
+  const freshService = cache.get(cacheKey);
+  if (!freshService) return job;
+
+  return {
+    ...job,
+    output: {
+      ...output,
+      service: {
+        ...service,
+        ...freshService,
+        videoContext: {
+          ...(service.videoContext || {}),
+          ...(freshService.videoContext || {}),
+        },
+      },
+    },
+  };
+}
+
 function savePublishingPackage(job, items, actor, status = "draft") {
   const output = job.output || {};
-  const ctx = getPublishingContext(job);
+  const ctx = buildPublishingContextForJob(job);
   const current = buildPublishingPackageForJob(job);
   const nextItems = normalizePublishingItems(items);
   if (!nextItems.length) {
@@ -324,7 +432,7 @@ function savePublicationStatus(job, channels, actor) {
 
 function getPublishingItemText(job, channelId) {
   const output = job.output || {};
-  const pkg = output.publishingPackage || buildPublishingPackage(getPublishingContext(job));
+  const pkg = output.publishingPackage || buildPublishingPackage(buildPublishingContextForJob(job));
   return getPublishingItemTextFromPackage(pkg, channelId);
 }
 
@@ -353,6 +461,22 @@ function isLegacyTelegramPublishingText(text) {
   return /^(горящ|горяч|направление:|предложение отказное|цена:)/i.test(clean)
     || /направление:\s*/i.test(clean)
     || /код предложения:\s*/i.test(clean);
+}
+
+function isLegacyContentManagerText(item = {}) {
+  const text = String(item?.text || "").trim();
+  if (!text) return true;
+  if (String(item?.source || "").trim() && String(item?.source || "").trim() !== "telegram_service_card") return false;
+  const id = String(item?.id || "").toLowerCase();
+  const title = String(item?.title || item?.label || "").toLowerCase();
+  if (id.includes("telegram") || title.includes("telegram")) return isLegacyTelegramPublishingText(text);
+  if (/горящ(ий|ее)\s+отказн/i.test(text)) return true;
+  if (/предложение\s+отказное/i.test(text)) return true;
+  if (/сторис\s*1:/i.test(text)) return true;
+  if (/для деталей\s+и\s+бронирования/i.test(text)) return true;
+  if (/проверь\s+актуальность\s+отказн/i.test(text)) return true;
+  if (id.includes("reels") || title.includes("reels") || title.includes("shorts")) return /^([A-ZА-Я]\d+:\s*)?.{1,90}\s+за\s+[\d\s.,]+/i.test(text);
+  return false;
 }
 
 function stripTelegramHtml(text) {
@@ -465,10 +589,8 @@ function getTelegramCardCategory(job) {
 function buildTelegramCardService(job) {
   const output = job?.output || {};
   const service = output.service || {};
-  const ctx = getPublishingContext(job);
-  const details = service.details && typeof service.details === "object" && !Array.isArray(service.details)
-    ? service.details
-    : {};
+  const ctx = buildPublishingContextForJob(job);
+  const details = getServiceDetailsObject(service);
 
   return {
     ...service,
@@ -479,6 +601,8 @@ function buildTelegramCardService(job) {
     details: {
       ...details,
       ...ctx,
+      price: ctx.price,
+      currency: ctx.currency,
     },
     provider: service.provider || {
       name: ctx.supplier || "",
@@ -516,20 +640,34 @@ function buildTelegramVideoCaption(job) {
 
 function buildPublishingPackageForJob(job) {
   const output = job?.output || {};
-  const ctx = getPublishingContext(job);
-  const base = output.publishingPackage || buildPublishingPackage(ctx);
+  const ctx = buildPublishingContextForJob(job);
+  const generated = buildPublishingPackage(ctx);
+  const base = output.publishingPackage || generated;
   const caption = buildTelegramVideoCaption(job);
-  if (!caption) return base;
 
   const items = Array.isArray(base.items) ? base.items : [];
+  const generatedItems = Array.isArray(generated.items) ? generated.items : [];
+  const generatedByKey = new Map();
+  generatedItems.forEach((item) => {
+    [item.id, item.channel, item.label, item.title]
+      .map((value) => String(value || "").toLowerCase())
+      .filter(Boolean)
+      .forEach((key) => generatedByKey.set(key, item));
+  });
+
   const nextItems = items.map((item) => {
     const id = String(item?.id || "").toLowerCase();
     const channel = String(item?.channel || "").toLowerCase();
     const label = String(item?.label || item?.title || "").toLowerCase();
     const isTelegram = id.includes("telegram") || channel === "telegram" || label.includes("telegram");
-    if (!isTelegram) return item;
-    const currentText = String(item?.text || "").trim();
-    if (currentText && !isLegacyTelegramPublishingText(currentText)) return item;
+    if (!isLegacyContentManagerText(item)) return item;
+
+    if (!isTelegram) {
+      const generatedItem = generatedByKey.get(id) || generatedByKey.get(channel) || generatedByKey.get(label);
+      return generatedItem ? { ...item, ...generatedItem } : item;
+    }
+
+    if (!caption) return item;
     return {
       ...item,
       id: item.id || "telegram_post",
@@ -904,6 +1042,7 @@ async function runDueTelegramPublishing({ limit = 5, scanLimit = 100, actor = { 
   const batchLimit = Math.max(1, Math.min(Number(limit) || 5, 20));
   try {
     const dueJobs = getDueTelegramPublishingJobs({ limit: scanLimit }).slice(0, batchLimit);
+    const serviceCache = new Map();
     let published = 0;
     let failed = 0;
     const results = [];
@@ -917,10 +1056,11 @@ async function runDueTelegramPublishing({ limit = 5, scanLimit = 100, actor = { 
         meta: { channel: "telegram", actor: actor?.id || null },
       });
 
-      const result = await publishVideoToTelegram(job, actor);
+      const hydratedJob = await hydrateJobServiceFromDb(job, serviceCache);
+      const result = await publishVideoToTelegram(hydratedJob, actor);
       results.push({
         jobId: job.id,
-        code: getPublishingContext(job)?.code || "",
+        code: getPublishingContext(hydratedJob)?.code || "",
         success: Boolean(result?.success),
         message: result?.message || "",
         telegram: result?.telegram || null,
@@ -1177,6 +1317,8 @@ router.get("/video-operator/services/search", async (req, res) => {
       type,
       services: services.map((service) => {
         const ctx = service.videoContext || {};
+        const price = getAiPublicPrice(service, ctx);
+        const currency = getAiPublicCurrency(service, ctx);
         return {
           id: service.id,
           code: service.code,
@@ -1188,8 +1330,8 @@ router.get("/video-operator/services/search", async (req, res) => {
           destination: ctx.destination || "",
           fromCity: ctx.fromCity || "",
           dates: ctx.dates || "",
-          price: ctx.price || "",
-          currency: ctx.currency || "USD",
+          price,
+          currency,
           supplier: ctx.supplier || service.provider?.name || "",
           status: service.status || "",
         };
@@ -1265,11 +1407,14 @@ router.get("/video-operator/jobs", async (req, res) => {
 
 router.get("/video-operator/videos", async (req, res) => {
   const jobs = await listVideoOperatorJobs({ limit: req.query.limit || 100, repair: true });
-  const videos = jobs
+  const serviceCache = new Map();
+  const hydratedJobs = await Promise.all(jobs.map((job) => hydrateJobServiceFromDb(job, serviceCache)));
+  const videos = hydratedJobs
     .map((job) => {
       const output = job.output || {};
       const service = output.service || {};
       const ctx = service.videoContext || {};
+      const publicCtx = buildPublishingContextForJob(job);
       const heygen = output.heygen || {};
       const artifact = heygen.artifact || {};
       const mediaUrl = artifact.url || heygen.videoUrl || "";
@@ -1288,8 +1433,8 @@ router.get("/video-operator/videos", async (req, res) => {
         code: ctx.code || service.code || "",
         title: ctx.title || service.title || job.command || "Travella AI video",
         destination: ctx.destination || "",
-        price: ctx.price || "",
-        currency: ctx.currency || "USD",
+        price: publicCtx.price || "",
+        currency: publicCtx.currency || "USD",
         heygenStatus: heygen.status || "",
         heygenVideoId: heygen.videoId || "",
         heygenUrl: heygen.videoUrl || "",
@@ -1351,7 +1496,8 @@ router.patch("/video-operator/jobs/:id/publication-status", (req, res) => {
 router.post("/video-operator/jobs/:id/publish/telegram", async (req, res) => {
   const job = getJob(req.params.id);
   if (!job) return res.status(404).json({ success: false, message: "Job not found" });
-  const result = await publishVideoToTelegram(job, {
+  const hydratedJob = await hydrateJobServiceFromDb(job);
+  const result = await publishVideoToTelegram(hydratedJob, {
     id: req.user?.id || req.user?.userId || null,
     role: req.user?.role || req.user?.roles || null,
   });
