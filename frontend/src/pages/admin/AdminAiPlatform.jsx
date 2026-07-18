@@ -22,6 +22,11 @@ const HEYGEN_VOICE_PRESETS = [
   { label: "MY6", value: "75d34e45780f44888ccaf49cb93222ee" },
 ];
 
+const HEYGEN_AVATAR_PRESETS = [
+  { label: "MY1", value: "563cee663c5a494a99a34f0867f6c0b2" },
+  { label: "MY2", value: "9c8b04c737bc4f2bbc4bd7d42ec33281" },
+];
+
 function cn(...items) { return items.filter(Boolean).join(" "); }
 function fmtDate(value) { try { return new Date(value).toLocaleString("ru-RU"); } catch { return "—"; } }
 function isToday(value) {
@@ -2715,6 +2720,7 @@ export default function AdminAiPlatform() {
   const aiEnabled = Boolean(status?.video?.enabled);
   const artifactStorageReady = Boolean(status?.video?.artifactStorage?.provider);
   const runtimeProfile = status?.video?.runtimeProfile || {};
+  const selectedAvatarPreset = HEYGEN_AVATAR_PRESETS.find((avatar) => avatar.value === videoProfileDraft.avatarId);
   const selectedVoicePreset = HEYGEN_VOICE_PRESETS.find((voice) => voice.value === videoProfileDraft.voiceId);
   const profileDirty =
     String(videoProfileDraft.avatarId || "") !== String(runtimeProfile.avatarId || "") ||
@@ -2849,12 +2855,27 @@ export default function AdminAiPlatform() {
                   <span>{videoToggleLoading ? "Сохраняю..." : aiEnabled ? "HeyGen on" : "HeyGen off"}</span>
                 </button>
                 <div className="flex max-w-full flex-wrap items-center gap-2 rounded-2xl bg-slate-50 px-2 py-2 ring-1 ring-slate-200">
-                  <input
-                    value={videoProfileDraft.avatarId}
-                    onChange={(e) => setVideoProfileDraft((prev) => ({ ...prev, avatarId: e.target.value }))}
-                    placeholder="Avatar ID"
-                    className="h-8 w-[190px] rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-950 outline-none placeholder:text-slate-400 focus:border-slate-300"
-                  />
+                  <select
+                    value={selectedAvatarPreset?.value || "__custom"}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value !== "__custom") setVideoProfileDraft((prev) => ({ ...prev, avatarId: value }));
+                    }}
+                    className="h-8 w-[116px] rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-950 outline-none focus:border-slate-300"
+                  >
+                    {HEYGEN_AVATAR_PRESETS.map((avatar) => (
+                      <option key={avatar.value} value={avatar.value}>Avatar {avatar.label}</option>
+                    ))}
+                    <option value="__custom">Другой avatar</option>
+                  </select>
+                  {!selectedAvatarPreset ? (
+                    <input
+                      value={videoProfileDraft.avatarId}
+                      onChange={(e) => setVideoProfileDraft((prev) => ({ ...prev, avatarId: e.target.value }))}
+                      placeholder="Avatar ID"
+                      className="h-8 w-[190px] rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-950 outline-none placeholder:text-slate-400 focus:border-slate-300"
+                    />
+                  ) : null}
                   <select
                     value={selectedVoicePreset?.value || "__custom"}
                     onChange={(e) => {
