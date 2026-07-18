@@ -55,12 +55,22 @@ async function createAvatarVideo({ script, motionPrompt, title, aspectRatio, res
     aspect_ratio: aspectRatio || heygen.defaultAspectRatio || "9:16",
     output_format: "mp4",
   };
-  const cleanMotionPrompt = String(motionPrompt || "").trim();
-  if (cleanMotionPrompt) payload.motion_prompt = cleanMotionPrompt;
-
   const engineType = engine || heygen.defaultEngine;
   if (engineType && engineType !== "avatar_iv") {
     payload.engine = { type: engineType };
+  }
+  const cleanMotionPrompt = String(motionPrompt || "").trim();
+  if (cleanMotionPrompt && engineType !== "avatar_v") payload.motion_prompt = cleanMotionPrompt;
+
+  const voiceSpeed = Number(heygen.voiceSettings?.speed);
+  if (Number.isFinite(voiceSpeed)) {
+    payload.voice_settings = {
+      speed: Math.max(0.5, Math.min(1.5, Math.round(voiceSpeed * 100) / 100)),
+    };
+  }
+  const expressiveness = String(heygen.expressiveness || "").trim().toLowerCase();
+  if (engineType !== "avatar_v" && ["low", "medium", "high"].includes(expressiveness)) {
+    payload.expressiveness = expressiveness;
   }
 
   try {

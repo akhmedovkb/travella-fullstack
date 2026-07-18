@@ -780,8 +780,11 @@ router.patch("/settings/video", async (req, res) => {
 router.patch("/settings/video-profile", async (req, res) => {
   const avatarId = String(req.body?.avatarId || "").trim();
   const voiceId = String(req.body?.voiceId || "").trim();
+  const engine = String(req.body?.engine || "").trim();
+  const voiceSpeed = req.body?.voiceSpeed;
+  const expressiveness = String(req.body?.expressiveness || "").trim();
   const videoProfile = await setAiVideoProfileSetting(
-    { avatarId, voiceId },
+    { avatarId, voiceId, engine, voiceSpeed, expressiveness },
     { id: req.user?.id || req.user?.userId || null }
   );
   const videoSetting = await getAiVideoEnabledSetting();

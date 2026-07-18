@@ -2393,7 +2393,7 @@ export default function AdminAiPlatform() {
   const [serviceSearchResults, setServiceSearchResults] = React.useState([]);
   const [selectedService, setSelectedService] = React.useState(null);
   const [serviceSearchLoading, setServiceSearchLoading] = React.useState(false);
-  const [videoProfileDraft, setVideoProfileDraft] = React.useState({ avatarId: "", voiceId: "" });
+  const [videoProfileDraft, setVideoProfileDraft] = React.useState({ avatarId: "", voiceId: "", engine: "avatar_iv", voiceSpeed: 1, expressiveness: "medium" });
   const [videoPresetsDraft, setVideoPresetsDraft] = React.useState({
     avatars: HEYGEN_AVATAR_PRESETS,
     voices: HEYGEN_VOICE_PRESETS,
@@ -2426,8 +2426,17 @@ export default function AdminAiPlatform() {
     setVideoProfileDraft({
       avatarId: profile.avatarId || "",
       voiceId: profile.voiceId || "",
+      engine: profile.engine || "avatar_iv",
+      voiceSpeed: Number(profile.voiceSpeed || 1),
+      expressiveness: profile.expressiveness || "medium",
     });
-  }, [status?.video?.runtimeProfile?.avatarId, status?.video?.runtimeProfile?.voiceId]);
+  }, [
+    status?.video?.runtimeProfile?.avatarId,
+    status?.video?.runtimeProfile?.voiceId,
+    status?.video?.runtimeProfile?.engine,
+    status?.video?.runtimeProfile?.voiceSpeed,
+    status?.video?.runtimeProfile?.expressiveness,
+  ]);
   React.useEffect(() => {
     const presets = status?.video?.runtimePresets || {};
     setVideoPresetsDraft({
@@ -2996,7 +3005,10 @@ export default function AdminAiPlatform() {
   const selectedVoicePreset = voicePresets.find((voice) => voice.value === videoProfileDraft.voiceId);
   const profileDirty =
     String(videoProfileDraft.avatarId || "") !== String(runtimeProfile.avatarId || "") ||
-    String(videoProfileDraft.voiceId || "") !== String(runtimeProfile.voiceId || "");
+    String(videoProfileDraft.voiceId || "") !== String(runtimeProfile.voiceId || "") ||
+    String(videoProfileDraft.engine || "avatar_iv") !== String(runtimeProfile.engine || "avatar_iv") ||
+    Number(videoProfileDraft.voiceSpeed || 1) !== Number(runtimeProfile.voiceSpeed || 1) ||
+    String(videoProfileDraft.expressiveness || "medium") !== String(runtimeProfile.expressiveness || "medium");
   const videoPresetModalMeta = videoPresetModal ? videoPresetKindMeta(videoPresetModal.kind) : null;
   const isContentManager = selectedEmployee === "content_manager";
   const isPublishingManager = selectedEmployee === "publishing_manager";
@@ -3204,6 +3216,38 @@ export default function AdminAiPlatform() {
                   >
                     Удалить
                   </button>
+                  <select
+                    value={videoProfileDraft.engine || "avatar_iv"}
+                    onChange={(e) => setVideoProfileDraft((prev) => ({ ...prev, engine: e.target.value }))}
+                    className="h-8 w-[104px] rounded-xl border border-slate-200 bg-white px-2 text-xs font-black text-slate-950 outline-none focus:border-slate-300"
+                    title="HeyGen engine"
+                  >
+                    <option value="avatar_iv">Avatar IV</option>
+                    <option value="avatar_v">Avatar V</option>
+                  </select>
+                  <label className="flex h-8 items-center gap-1 rounded-xl bg-white px-2 text-xs font-black text-slate-600 ring-1 ring-slate-200" title="Voice speed">
+                    <span>Speed</span>
+                    <input
+                      type="number"
+                      min="0.5"
+                      max="1.5"
+                      step="0.05"
+                      value={videoProfileDraft.voiceSpeed}
+                      onChange={(e) => setVideoProfileDraft((prev) => ({ ...prev, voiceSpeed: Number(e.target.value || 1) }))}
+                      className="h-6 w-[52px] border-0 bg-transparent text-xs font-black text-slate-950 outline-none"
+                    />
+                  </label>
+                  <select
+                    value={videoProfileDraft.expressiveness || "medium"}
+                    onChange={(e) => setVideoProfileDraft((prev) => ({ ...prev, expressiveness: e.target.value }))}
+                    disabled={videoProfileDraft.engine === "avatar_v"}
+                    className="h-8 w-[92px] rounded-xl border border-slate-200 bg-white px-2 text-xs font-black text-slate-950 outline-none focus:border-slate-300 disabled:bg-slate-100 disabled:text-slate-400"
+                    title={videoProfileDraft.engine === "avatar_v" ? "Expressiveness доступен для Avatar IV" : "Expressiveness"}
+                  >
+                    <option value="low">Expr low</option>
+                    <option value="medium">Expr mid</option>
+                    <option value="high">Expr high</option>
+                  </select>
                   <button
                     type="button"
                     onClick={saveVideoProfile}

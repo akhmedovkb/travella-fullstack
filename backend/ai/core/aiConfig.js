@@ -11,10 +11,16 @@ function boolEnv(name, fallback = false) {
   return ["1", "true", "yes", "on", "enabled"].includes(v);
 }
 
+function numberEnv(name, fallback) {
+  const value = Number(readEnv(name, String(fallback)));
+  return Number.isFinite(value) ? value : fallback;
+}
+
 function getAiConfig() {
   const heygenApiKey = readEnv("HEYGEN_API_KEY");
   const heygenAvatarId = readEnv("HEYGEN_AVATAR_ID");
   const heygenVoiceId = readEnv("HEYGEN_VOICE_ID");
+  const heygenEngine = readEnv("HEYGEN_ENGINE", "avatar_iv") === "avatar_v" ? "avatar_v" : "avatar_iv";
 
   return {
     video: {
@@ -26,6 +32,11 @@ function getAiConfig() {
         avatarId: heygenAvatarId,
         voiceId: heygenVoiceId,
         baseUrl: readEnv("HEYGEN_BASE_URL", "https://api.heygen.com"),
+        defaultEngine: heygenEngine,
+        voiceSettings: {
+          speed: Math.max(0.5, Math.min(1.5, numberEnv("HEYGEN_VOICE_SPEED", 1))),
+        },
+        expressiveness: readEnv("HEYGEN_EXPRESSIVENESS", "medium"),
         ready: Boolean(heygenApiKey && heygenAvatarId && heygenVoiceId),
       },
     },

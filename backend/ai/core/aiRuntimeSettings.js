@@ -9,6 +9,12 @@ let settingsTableReadyPromise = null;
 let cachedAiVideoEnabled = null;
 let cachedVideoProfile = null;
 
+const VIDEO_PROFILE_DEFAULTS = {
+  engine: "avatar_iv",
+  voiceSpeed: 1,
+  expressiveness: "medium",
+};
+
 const DEFAULT_VIDEO_PRESETS = {
   avatars: [
     { label: "MY1", value: "563cee663c5a494a99a34f0867f6c0b2" },
@@ -63,10 +69,30 @@ function cleanId(value) {
   return String(value || "").trim();
 }
 
+function normalizeEngine(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  return raw === "avatar_v" ? "avatar_v" : "avatar_iv";
+}
+
+function normalizeVoiceSpeed(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return VIDEO_PROFILE_DEFAULTS.voiceSpeed;
+  return Math.max(0.5, Math.min(1.5, Math.round(n * 100) / 100));
+}
+
+function normalizeExpressiveness(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (["low", "medium", "high"].includes(raw)) return raw;
+  return VIDEO_PROFILE_DEFAULTS.expressiveness;
+}
+
 function getEnvVideoProfile() {
   return {
     avatarId: cleanId(process.env.HEYGEN_AVATAR_ID),
     voiceId: cleanId(process.env.HEYGEN_VOICE_ID),
+    engine: normalizeEngine(process.env.HEYGEN_ENGINE || VIDEO_PROFILE_DEFAULTS.engine),
+    voiceSpeed: normalizeVoiceSpeed(process.env.HEYGEN_VOICE_SPEED || VIDEO_PROFILE_DEFAULTS.voiceSpeed),
+    expressiveness: normalizeExpressiveness(process.env.HEYGEN_EXPRESSIVENESS || VIDEO_PROFILE_DEFAULTS.expressiveness),
   };
 }
 
@@ -75,10 +101,16 @@ function applyVideoProfile(profile = {}) {
   const next = {
     avatarId: cleanId(profile.avatarId) || envProfile.avatarId,
     voiceId: cleanId(profile.voiceId) || envProfile.voiceId,
+    engine: normalizeEngine(profile.engine || envProfile.engine),
+    voiceSpeed: normalizeVoiceSpeed(profile.voiceSpeed ?? envProfile.voiceSpeed),
+    expressiveness: normalizeExpressiveness(profile.expressiveness || envProfile.expressiveness),
   };
   cachedVideoProfile = next;
   if (next.avatarId) process.env.HEYGEN_AVATAR_ID = next.avatarId;
   if (next.voiceId) process.env.HEYGEN_VOICE_ID = next.voiceId;
+  process.env.HEYGEN_ENGINE = next.engine;
+  process.env.HEYGEN_VOICE_SPEED = String(next.voiceSpeed);
+  process.env.HEYGEN_EXPRESSIVENESS = next.expressiveness;
   return next;
 }
 
