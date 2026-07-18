@@ -243,7 +243,7 @@ function addEvent(jobId, event) {
   job.events.push(row);
   job.updatedAt = nowIso();
   schedule(async () => {
-    await persistJob(job);
+    await ensureAiJobTables();
     await persistEvent(job.id, row);
   });
   return row;

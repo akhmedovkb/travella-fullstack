@@ -964,12 +964,13 @@ router.patch("/video-operator/jobs/:id/script", (req, res) => {
   return res.json({ success: true, job: nextJob, output: nextJob.output });
 });
 
-router.get("/video-operator/jobs", (req, res) => {
-  res.json({ success: true, jobs: listVideoOperatorJobs({ limit: req.query.limit || 30 }) });
+router.get("/video-operator/jobs", async (req, res) => {
+  const jobs = await listVideoOperatorJobs({ limit: req.query.limit || 30, repair: true });
+  res.json({ success: true, jobs });
 });
 
-router.get("/video-operator/videos", (req, res) => {
-  const jobs = listVideoOperatorJobs({ limit: req.query.limit || 100 });
+router.get("/video-operator/videos", async (req, res) => {
+  const jobs = await listVideoOperatorJobs({ limit: req.query.limit || 100, repair: true });
   const videos = jobs
     .map((job) => {
       const output = job.output || {};

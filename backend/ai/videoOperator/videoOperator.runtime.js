@@ -181,6 +181,80 @@ function formatServiceSuggestions(services = []) {
     .join("\n");
 }
 
+function buildVideoOperatorOutput({ route = {}, service, scriptOptions = {} }) {
+  const ctx = service.videoContext;
+  const analysis = buildAnalysis(ctx);
+  const hook = buildHook(ctx, scriptOptions);
+  const script = buildScript(ctx, scriptOptions);
+  const motionPrompt = buildMotionPrompt(ctx, scriptOptions);
+  const scriptReview = buildScriptReview(ctx, script);
+  const publishingDrafts = buildPublishingDrafts(ctx);
+
+  return {
+    route,
+    service,
+    analysis,
+    hook,
+    script,
+    motionPrompt,
+    scriptReview,
+    publishingDrafts,
+    nextStep:
+      route.action === "prepare_video"
+        ? "Сценарий готов к проверке. Проверь текст ниже и только потом нажми “Утвердить и отправить в HeyGen”."
+        : "Сценарий готов к проверке. HeyGen не запустится без ручного утверждения.",
+  };
+}
+
+function extractServiceCodeFromJob(job = {}) {
+  const fromInput = job.input?.route?.serviceCode || job.output?.route?.serviceCode || "";
+  if (fromInput) return String(fromInput).trim();
+  const events = Array.isArray(job.events) ? [...job.events].reverse() : [];
+  for (const event of events) {
+    const fromMeta = event?.meta?.code || event?.meta?.serviceCode || "";
+    if (fromMeta) return String(fromMeta).trim();
+  }
+  const match = String(job.command || "").match(/\b([RAHE]\s*\d+)\b/i);
+  return match?.[1] ? match[1].replace(/\s+/g, "").toUpperCase() : "";
+}
+
+function hasPromptBuildCompleted(job = {}) {
+  if (job.output?.script || job.output?.motionPrompt) return true;
+  const events = Array.isArray(job.events) ? job.events : [];
+  return events.some((event) => event.tool === "AvatarScriptBuilder" && /готов/i.test(event.message || "")) &&
+    events.some((event) => event.tool === "MotionPromptBuilder" && /готов/i.test(event.message || ""));
+}
+
+async function repairVideoOperatorJob(job) {
+  if (!job || job.employeeId !== "video_operator" || job.output?.script) return job;
+  if (!hasPromptBuildCompleted(job)) return job;
+  const serviceCode = extractServiceCodeFromJob(job);
+  if (!serviceCode) return job;
+  const route = job.input?.route || routeAiTask(job.command || serviceCode);
+  const lookup = await findRefusedServiceByCode(serviceCode, { categoryFilters: route.categoryFilters || [] }).catch((err) => ({ found: false, error: err }));
+  if (!lookup?.found) return job;
+  const scriptOptions = {
+    scriptMode: route.scriptMode || "default",
+    variantSalt: route.variantSalt || "",
+  };
+  const output = buildVideoOperatorOutput({ route: { ...route, serviceCode }, service: lookup.service, scriptOptions });
+  updateJob(job.id, { status: "script_ready", output });
+  addEvent(job.id, {
+    step: "repair",
+    type: "tool_result",
+    tool: "AiJobStore",
+    message: "Восстановил речь и Custom Motion из Travella DB после неполной записи job.",
+  });
+  return getJob(job.id) || job;
+}
+
+async function listVideoOperatorJobs({ limit = 25, repair = false } = {}) {
+  const rows = listJobs({ employeeId: "video_operator", limit });
+  if (!repair) return rows;
+  await Promise.all(rows.map((job) => repairVideoOperatorJob(job)));
+  return listJobs({ employeeId: "video_operator", limit });
+}
+
 async function runVideoOperatorTask({ command, actor = {}, runtimeRoute = null }) {
   const route = runtimeRoute || routeAiTask(command);
   const job = createJob({
@@ -251,29 +325,12 @@ async function runVideoOperatorTask({ command, actor = {}, runtimeRoute = null }
     addEvent(job.id, { step: "plan", type: "tool_call", tool: "HookBuilder", message: "Подбираю безопасный хук для первых 3 секунд." });
     addEvent(job.id, { step: "plan", type: "tool_result", tool: "HookBuilder", message: "Хук готов без неподтверждённых обещаний." });
 
-    const script = buildScript(ctx, scriptOptions);
-    const motionPrompt = buildMotionPrompt(ctx, scriptOptions);
-    const scriptReview = buildScriptReview(ctx, script);
-    const publishingDrafts = buildPublishingDrafts(ctx);
+    const output = buildVideoOperatorOutput({ route, service, scriptOptions });
+    const scriptReview = output.scriptReview;
     addEvent(job.id, { step: "plan", type: "tool_call", tool: "AvatarScriptBuilder", message: "Готовлю текст для AI-аватара по правилам Travella." });
     addEvent(job.id, { step: "plan", type: "tool_result", tool: "AvatarScriptBuilder", message: "Сценарий готов и ждёт ручного утверждения." });
     addEvent(job.id, { step: "plan", type: "tool_result", tool: "MotionPromptBuilder", message: "Custom Motion для HeyGen готов к ручной проверке." });
     addEvent(job.id, { step: "review", type: "tool_result", tool: "PromptQualityCheck", message: scriptReview.approvalGate, meta: { status: scriptReview.status, missingFields: scriptReview.missingFields } });
-
-    const output = {
-      route,
-      service,
-      analysis,
-      hook,
-      script,
-      motionPrompt,
-      scriptReview,
-      publishingDrafts,
-      nextStep:
-        route.action === "prepare_video"
-          ? "Сценарий готов к проверке. Проверь текст ниже и только потом нажми “Утвердить и отправить в HeyGen”."
-          : "Сценарий готов к проверке. HeyGen не запустится без ручного утверждения.",
-    };
 
     updateJob(job.id, { status: "script_ready", output });
     addEvent(job.id, { step: "result", type: "tool_result", tool: "AiJobStore", message: "Результат сохранён в истории Travella AI OS." });
@@ -571,5 +628,5 @@ module.exports = {
   refreshHeygenForVideoJob,
   handleHeygenWebhook,
   runHeygenVideoPollerOnce,
-  listVideoOperatorJobs: (opts) => listJobs({ employeeId: "video_operator", ...opts }),
+  listVideoOperatorJobs,
 };
