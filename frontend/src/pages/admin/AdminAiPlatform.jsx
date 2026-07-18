@@ -279,6 +279,7 @@ function Message({ msg, onStartHeygen, onRefreshHeygen, onSaveScript, canStartHe
   const inferredVideoId = findHeygenVideoIdFromEvents(msg.events || []);
   const heygen = msg.output?.heygen || (inferredVideoId ? { provider: "heygen", status: "submitted", videoId: inferredVideoId } : null);
   const artifact = heygen?.artifact || null;
+  const heygenAttempts = Array.isArray(msg.output?.heygenAttempts) ? msg.output.heygenAttempts : [];
   const jobStatus = String(msg.job?.status || "").toLowerCase();
   const [scriptEditing, setScriptEditing] = React.useState(false);
   const [scriptDraft, setScriptDraft] = React.useState(msg.output?.script || "");
@@ -292,7 +293,8 @@ function Message({ msg, onStartHeygen, onRefreshHeygen, onSaveScript, canStartHe
   }, [msg.output?.script, msg.output?.motionPrompt, msg.job?.id]);
   const canShowHeygenAction = !user && msg.job?.id && msg.output?.script && !heygen?.videoId && !["video_submitted", "video_ready", "video_failed"].includes(jobStatus);
   const canShowRefreshAction = !user && msg.job?.id && heygen?.videoId && !heygen?.videoUrl;
-  const canEditScript = canShowHeygenAction && !heygenLoading && !scriptSaving;
+  const canShowRegenerateAction = !user && msg.job?.id && msg.output?.script && Boolean(heygen?.videoId || heygen?.status);
+  const canEditScript = !user && msg.job?.id && msg.output?.script && !heygenLoading && !scriptSaving;
   const scriptDirty = String(scriptDraft || "") !== String(msg.output?.script || "");
   const motionDirty = String(motionDraft || "") !== String(msg.output?.motionPrompt || "");
   const promptDirty = scriptDirty || motionDirty;
@@ -425,8 +427,16 @@ function Message({ msg, onStartHeygen, onRefreshHeygen, onSaveScript, canStartHe
         ) : null}
         {heygen ? (
           <div className="mt-3 rounded-2xl bg-emerald-50 p-4 ring-1 ring-emerald-100">
-            <div className="text-xs font-black uppercase tracking-wide text-emerald-700">HeyGen</div>
-            <div className="mt-2 text-sm font-black leading-6 text-slate-950">Статус: {heygen.status || "submitted"}</div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <div className="text-xs font-black uppercase tracking-wide text-emerald-700">HeyGen</div>
+                <div className="mt-2 text-sm font-black leading-6 text-slate-950">Статус: {heygen.status || "submitted"}</div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-slate-700 ring-1 ring-emerald-100">v{heygen.version || heygenAttempts.length + 1}</span>
+                {heygenAttempts.length ? <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-slate-500 ring-1 ring-emerald-100">ещё {heygenAttempts.length}</span> : null}
+              </div>
+            </div>
             {heygen.videoId ? <div className="mt-1 text-xs font-bold text-slate-500">Video ID: {heygen.videoId}</div> : null}
             {heygen.videoUrl ? (
               <a
@@ -451,6 +461,19 @@ function Message({ msg, onStartHeygen, onRefreshHeygen, onSaveScript, canStartHe
               </div>
             ) : null}
             {heygen.error ? <div className="mt-2 text-sm font-bold text-rose-700">{heygen.error}</div> : null}
+            {canShowRegenerateAction ? (
+              <div className="mt-3 flex flex-col gap-2 rounded-2xl bg-white p-3 ring-1 ring-emerald-100 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-xs font-bold text-slate-500">Новая версия сохранит старое видео в истории и отправит текущий сценарий в HeyGen заново.</div>
+                <button
+                  type="button"
+                  onClick={() => onStartHeygen?.(msg.job, { regenerate: true })}
+                  disabled={!canStartHeygen || heygenLoading === msg.job.id || promptDirty || heygenProfileDirty}
+                  className="rounded-2xl bg-slate-950 px-4 py-2 text-xs font-black text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {promptDirty ? "Сначала сохрани промпт" : heygenProfileDirty ? "Сначала сохрани настройки" : heygenLoading === msg.job.id ? "Запускаю..." : "Сделать новую версию"}
+                </button>
+              </div>
+            ) : null}
           </div>
         ) : null}
         {canShowRefreshAction ? (
@@ -2724,13 +2747,14 @@ export default function AdminAiPlatform() {
     await runTaskText(command);
   }
 
-  async function startHeygen(job) {
+  async function startHeygen(job, options = {}) {
     if (!job?.id || heygenLoading) return;
+    const regenerate = Boolean(options.regenerate);
     setHeygenLoading(job.id);
     setError("");
-    addMessage({ role: "assistant", text: `Получил ручное утверждение сценария. Отправляю в HeyGen задачу #${job.id}.` });
+    addMessage({ role: "assistant", text: regenerate ? `Запускаю новую версию HeyGen для задачи #${job.id}.` : `Получил ручное утверждение сценария. Отправляю в HeyGen задачу #${job.id}.` });
     try {
-      const res = await apiPost(`/api/admin/ai-platform/video-operator/jobs/${job.id}/heygen/start`, {}, "admin");
+      const res = await apiPost(`/api/admin/ai-platform/video-operator/jobs/${job.id}/heygen/start`, { regenerate }, "admin");
       const nextJob = res?.job || null;
       const output = res?.output || nextJob?.output || null;
       setCurrentTask(nextJob);
@@ -2738,8 +2762,8 @@ export default function AdminAiPlatform() {
       addMessage({
         role: "assistant",
         text: output?.heygen?.videoId
-          ? `HeyGen принял задачу. Video ID: ${output.heygen.videoId}`
-          : "HeyGen принял задачу.",
+          ? `HeyGen принял версию v${output.heygen.version || 1}. Video ID: ${output.heygen.videoId}`
+          : `HeyGen принял версию v${output?.heygen?.version || 1}.`,
         events: nextJob?.events || [],
         output,
         job: nextJob,

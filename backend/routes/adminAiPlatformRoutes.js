@@ -1350,6 +1350,7 @@ router.post("/video-operator/jobs/:id/heygen/start", async (req, res) => {
   const result = await startHeygenForVideoJob({
     jobId: req.params.id,
     actor: { id: req.user?.id || req.user?.userId || null, role: req.user?.role || req.user?.roles || null },
+    regenerate: Boolean(req.body?.regenerate),
   });
   if (!result.success) {
     const status = result.error?.code === "JOB_NOT_FOUND" ? 404 : 400;
@@ -1364,9 +1365,6 @@ router.patch("/video-operator/jobs/:id/script", (req, res) => {
     return res.status(404).json({ success: false, message: "AI job not found" });
   }
   const output = job.output || {};
-  if (output.heygen?.videoId) {
-    return res.status(409).json({ success: false, message: "HeyGen already started. Script is locked." });
-  }
   const script = String(req.body?.script || "").trim();
   const motionPrompt = String(req.body?.motionPrompt ?? output.motionPrompt ?? "").trim();
   if (script.length < 20) {

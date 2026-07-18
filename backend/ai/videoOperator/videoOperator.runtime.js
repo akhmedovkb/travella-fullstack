@@ -152,6 +152,37 @@ async function saveArtifactIfReady(job, output, heygen) {
   }
 }
 
+function normalizeHeygenAttempts(value) {
+  return Array.isArray(value) ? value.filter(Boolean) : [];
+}
+
+function getNextHeygenVersion(output = {}) {
+  const attempts = normalizeHeygenAttempts(output.heygenAttempts);
+  const versions = attempts
+    .concat(output.heygen ? [output.heygen] : [])
+    .map((item) => Number(item?.version || 0))
+    .filter((value) => Number.isFinite(value));
+  return Math.max(0, ...versions) + 1;
+}
+
+function prepareHeygenOutputForRun(output = {}, regenerate = false) {
+  if (!regenerate) return { output, version: getNextHeygenVersion(output) };
+  const attempts = normalizeHeygenAttempts(output.heygenAttempts);
+  const previous = output.heygen
+    ? {
+        ...output.heygen,
+        version: Number(output.heygen.version || attempts.length + 1),
+        archivedAt: new Date().toISOString(),
+      }
+    : null;
+  const nextOutput = {
+    ...output,
+    heygen: null,
+    heygenAttempts: previous ? attempts.concat(previous) : attempts,
+  };
+  return { output: nextOutput, version: getNextHeygenVersion(nextOutput) };
+}
+
 function shouldUseLatestService(command) {
   const text = String(command || "").toLowerCase();
   return /(сегодня|лучший|последн|актуальн|любой|сам выбери|выбери сам)/i.test(text);
@@ -366,7 +397,7 @@ async function createScriptFromManualContext(ctx = {}) {
   return { success: true, job: getJob(job.id), output };
 }
 
-async function startHeygenForVideoJob({ jobId, actor = {} }) {
+async function startHeygenForVideoJob({ jobId, actor = {}, regenerate = false }) {
   const job = getJob(jobId);
   if (!job) {
     return { success: false, error: { code: "JOB_NOT_FOUND", message: "AI job not found" } };
@@ -377,16 +408,19 @@ async function startHeygenForVideoJob({ jobId, actor = {} }) {
     return { success: false, job, error: { code: "SCRIPT_REQUIRED", message: "Сначала нужно подготовить сценарий." } };
   }
 
-  if (output.heygen?.videoId) {
+  if (output.heygen?.videoId && !regenerate) {
     return { success: true, job, output, message: "HeyGen уже был запущен для этой задачи." };
   }
+  const prepared = prepareHeygenOutputForRun(output, regenerate);
+  const runOutput = prepared.output;
+  const version = prepared.version;
 
   addEvent(job.id, {
     step: "heygen",
     type: "tool_call",
     tool: "HeyGen",
-    message: "Получено ручное утверждение сценария. Отправляю текст в HeyGen.",
-    meta: { actor },
+    message: regenerate ? `Запускаю новую версию HeyGen v${version}.` : "Получено ручное утверждение сценария. Отправляю текст в HeyGen.",
+    meta: { actor, regenerate: Boolean(regenerate), version },
   });
 
   let generationProfile = null;
@@ -403,16 +437,17 @@ async function startHeygenForVideoJob({ jobId, actor = {} }) {
       source: profile.source || "",
     };
     const response = await createAvatarVideo({
-      script: output.script,
-      motionPrompt: output.motionPrompt,
-      title: `${output.service?.videoContext?.code || "Travella"} ${output.service?.videoContext?.title || "Video"}`,
-      idempotencyKey: `travella-ai-video-${job.id}`,
+      script: runOutput.script,
+      motionPrompt: runOutput.motionPrompt,
+      title: `${runOutput.service?.videoContext?.code || "Travella"} ${runOutput.service?.videoContext?.title || "Video"} v${version}`,
+      idempotencyKey: `travella-ai-video-${job.id}-v${version}`,
     });
 
     const videoId = extractHeygenVideoId(response);
     const heygen = {
       provider: "heygen",
       status: getHeygenStatus(response),
+      version,
       videoId,
       videoUrl: extractHeygenVideoUrl(response),
       profile: generationProfile,
@@ -420,7 +455,7 @@ async function startHeygenForVideoJob({ jobId, actor = {} }) {
       submittedAt: new Date().toISOString(),
     };
 
-    const saved = await saveArtifactIfReady(job, output, heygen);
+    const saved = await saveArtifactIfReady(job, runOutput, heygen);
     const nextOutput = saved.output;
     const nextHeygen = saved.heygen;
     updateJob(job.id, { status: isHeygenReady(nextHeygen.status) ? "video_ready" : "video_submitted", output: nextOutput });
@@ -428,18 +463,19 @@ async function startHeygenForVideoJob({ jobId, actor = {} }) {
       step: "heygen",
       type: "tool_result",
       tool: "HeyGen",
-      message: videoId ? `HeyGen принял задачу. Video ID: ${videoId}` : "HeyGen принял задачу.",
-      meta: { videoId, status: nextHeygen.status, profile: nextHeygen.profile },
+      message: videoId ? `HeyGen принял версию v${version}. Video ID: ${videoId}` : `HeyGen принял версию v${version}.`,
+      meta: { videoId, status: nextHeygen.status, profile: nextHeygen.profile, version },
     });
 
     return { success: true, job: getJob(job.id), output: nextOutput };
   } catch (err) {
     if (err?.code === "AI_VIDEO_DISABLED") {
       const nextOutput = {
-        ...output,
+        ...runOutput,
         heygen: {
           provider: "heygen",
           status: "disabled",
+          version,
           error: err.message,
           profile: generationProfile,
           checkedAt: new Date().toISOString(),
@@ -463,11 +499,12 @@ async function startHeygenForVideoJob({ jobId, actor = {} }) {
     const heygen = {
       provider: "heygen",
       status: "failed",
+      version,
       error: err?.message || "HeyGen request failed",
       profile: generationProfile,
       failedAt: new Date().toISOString(),
     };
-    const nextOutput = { ...output, heygen };
+    const nextOutput = { ...runOutput, heygen };
     updateJob(job.id, { status: "video_failed", output: nextOutput, error: { code: "HEYGEN_FAILED", message: heygen.error } });
     addEvent(job.id, { step: "heygen", level: "error", tool: "HeyGen", message: heygen.error });
     return { success: false, job: getJob(job.id), output: nextOutput, error: { code: "HEYGEN_FAILED", message: heygen.error } };
