@@ -53,6 +53,15 @@ const CATEGORY_EMOJI = {
   refused_event_ticket: "🎫",
 };
 
+const CATEGORY_PRODUCT_TITLES = {
+  refused_tour: "ОТКАЗНОЙ ТУР",
+  author_tour: "АВТОРСКИЙ ТУР",
+  refused_hotel: "ОТКАЗНОЙ ОТЕЛЬ",
+  refused_flight: "ОТКАЗНОЙ АВИАБИЛЕТ",
+  refused_ticket: "БИЛЕТ / МЕРОПРИЯТИЕ",
+  refused_event_ticket: "БИЛЕТ / МЕРОПРИЯТИЕ",
+};
+
 /* ===================== pretty labels ===================== */
 
 
@@ -518,6 +527,19 @@ function buildServiceMessage(svc, category, role = "client", options = {}) {
 
   const joinClean = (arr, sep = " • ") =>
     arr.map((x) => String(x || "").trim()).filter(Boolean).join(sep);
+  const joinUniqueClean = (arr, sep = " • ") => {
+    const seen = new Set();
+    return arr
+      .map((x) => String(x || "").trim())
+      .filter(Boolean)
+      .filter((x) => {
+        const key = x.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .join(sep);
+  };
 
   const norm = (v) => (v ? normalizeWeirdSeparator(String(v)) : "");
 
@@ -527,6 +549,10 @@ function buildServiceMessage(svc, category, role = "client", options = {}) {
   const emoji = CATEGORY_EMOJI?.[category] || "";
   const stars = extractStars ? extractStars(d) : "";
   const titleDecor = joinClean([emoji, titlePretty, stars], " ");
+  const showBotAttribution = Boolean(BOT_USERNAME && options?.hideBotAttribution !== true);
+  const productTitle = (CATEGORY_PRODUCT_TITLES?.[category] || CATEGORY_LABELS?.[category] || "ПРЕДЛОЖЕНИЕ").toUpperCase();
+  const productHeader = (fallbackTitle = "ПРЕДЛОЖЕНИЕ") =>
+    `${emoji || "🔥"} <b>${escapeHtml(productTitle || fallbackTitle)}</b> <code>#R${serviceId}</code>`;
 
   const from = norm(d.directionFrom);
   const to = norm(d.directionTo);
@@ -1317,7 +1343,7 @@ const priceKind =
       return !v || v === "авторский тур" || v === "author tour" || v === "author_tour";
     };
 
-    if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
+    if (showBotAttribution) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
     parts.push(`🧭 <b>АВТОРСКИЙ ТУР</b> <code>#R${serviceId}</code>`);
 
     const titleText = normalizeRouteLine(
@@ -1495,9 +1521,9 @@ const priceKind =
 
   if ((role !== "provider" || options?.forceRefused === true) && String(category) === "refused_tour") {
     const parts = [];
-    if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
+    if (showBotAttribution) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
 
-    parts.push(`🔥 <b>${escapeHtml(titlePretty || "Отказной тур")}</b> <code>#R${serviceId}</code>`);
+    parts.push(productHeader("ОТКАЗНОЙ ТУР"));
 
     const departureCity = firstValue(
       d.directionFrom,
@@ -1528,7 +1554,7 @@ const priceKind =
 
     const heroTitle = firstValue(
       destination && country2
-        ? `${destination}, ${country2}`
+        ? joinUniqueClean([destination, country2], ", ")
         : destination || country2,
       route,
       titlePretty
@@ -1610,15 +1636,15 @@ const priceKind =
 
   if ((role !== "provider" || options?.forceRefused === true) && String(category) === "refused_hotel") {
     const parts = [];
-    if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
+    if (showBotAttribution) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
 
-    parts.push(`🏨 <b>${escapeHtml(titlePretty || "Отказной отель")}</b> <code>#R${serviceId}</code>`);
+    parts.push(productHeader("ОТКАЗНОЙ ОТЕЛЬ"));
 
     const hotelName = firstValue(d.hotel, d.hotelName, titlePretty);
     const city = firstValue(d.directionTo, d.city, d.locationCity, d.toCity);
     const country2 = firstValue(d.directionCountry, d.country, d.locationCountry);
     if (hotelName) parts.push(`🏨 <b>${escapeHtml(hotelName)}</b>`);
-    const place = [city, country2].filter(Boolean).join(", ");
+    const place = joinUniqueClean([city, country2], ", ");
     if (place) parts.push(`📍 ${escapeHtml(place)}`);
 
     const dateBits = [];
@@ -1668,9 +1694,9 @@ const priceKind =
 
   if ((role !== "provider" || options?.forceRefused === true) && String(category) === "refused_flight") {
     const parts = [];
-    if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
+    if (showBotAttribution) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
 
-    parts.push(`✈️ <b>${escapeHtml(titlePretty || "Отказной авиабилет")}</b> <code>#R${serviceId}</code>`);
+    parts.push(productHeader("ОТКАЗНОЙ АВИАБИЛЕТ"));
 
     const fromCity = firstValue(d.directionFrom, d.fromCity, d.cityFrom, d.departureCity);
     const toCity = firstValue(d.directionTo, d.toCity, d.cityTo, d.arrivalCity);
@@ -1740,10 +1766,10 @@ const priceKind =
       (String(category) === "refused_ticket" || String(category) === "refused_event_ticket")
     ) {
     const parts = [];
-    if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
+    if (showBotAttribution) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
 
     const evEmoji = ticketEmoji(d.eventCategory || d.ticketType || d.type || svc.title);
-    parts.push(`${evEmoji} <b>${escapeHtml(titlePretty || "Билет на мероприятие")}</b> <code>#R${serviceId}</code>`);
+    parts.push(`${evEmoji} <b>${escapeHtml(productTitle || "БИЛЕТ / МЕРОПРИЯТИЕ")}</b> <code>#R${serviceId}</code>`);
 
     const eventName = firstValue(d.eventName, d.title, svc.title);
     if (eventName) parts.push(`${evEmoji} <b>${escapeHtml(normalizeTitleSoft(eventName))}</b>`);
@@ -1799,7 +1825,7 @@ const priceKind =
   /* ===================== DEFAULT ===================== */
 
   const parts = [];
-  if (BOT_USERNAME) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
+  if (showBotAttribution) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
   parts.push(`<b>${escapeHtml(titleDecor)}</b>`);
   if (route) parts.push(`✈️ ${escapeHtml(route)}`);
   if (dates) parts.push(`🗓 ${escapeHtml(dates)}${nights ? ` (${nights} ноч.)` : ""}`);

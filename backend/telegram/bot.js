@@ -17776,7 +17776,7 @@ bot.on("inline_query", async (ctx) => {
       `${roleForInline}:` +
       `${userId}:` +
       `${category || "all"}:` +
-      `v6`;
+      `v7`;
 
     // отдельно кэшируем:
     // 1) сырой ответ API (короткий TTL)
@@ -17784,7 +17784,7 @@ bot.on("inline_query", async (ctx) => {
     const apiKey = `${baseKey}:api`;
 
     // ✅ resKey теперь зависит от unlockStamp, иначе после оплаты липнет старый текст/markup
-    const resKey = `${baseKey}:res:v6:u${unlockStamp}:o${offset}`;
+    const resKey = `${baseKey}:res:v7:u${unlockStamp}:o${offset}`;
 
     // ✅ Для client-search results-cache можно использовать только если stamp учтён (мы учли)
 const cachedRes = cacheGet(resKey);
@@ -17966,6 +17966,7 @@ const data = await getOrFetchCached(
           forceShowProviderContacts: roleForInline === "provider" || roleForInline === "admin",
           publicSafe: mustHideContactsForInline,
           publicOpenBotUrl: publicDeepLink,
+          hideBotAttribution: true,
         }
       );
       
