@@ -447,6 +447,7 @@ function PublishingInspector({ videos, publishingStatus, onRunTelegramDue, onCop
   const nextTelegramPlan = telegramQueue[0] || null;
   const schedulerEnabled = Boolean(publishingStatus?.schedulerEnabled);
   const schedulerReadyReason = publishingStatus?.schedulerReadyReason || (schedulerEnabled ? "ready" : "unknown");
+  const telegramChat = publishingStatus?.telegramChat || {};
   const statusTelegramQueue = publishingStatus?.telegramQueue || {};
   const statusTelegramDue = Number(statusTelegramQueue.due);
   const statusTelegramPlanned = Number(statusTelegramQueue.planned);
@@ -463,6 +464,11 @@ function PublishingInspector({ videos, publishingStatus, onRunTelegramDue, onCop
     ready: "готов",
     disabled_by_env: "выключен ENV",
     telegram_env_missing: "нет Telegram ENV",
+    telegram_token_missing: "нет bot token",
+    telegram_chat_missing: "нет chat id",
+    chat_not_found: "чат не найден",
+    forbidden: "бот без доступа",
+    telegram_unreachable: "Telegram недоступен",
     test_mode: "test mode",
     unknown: "не готов",
   };
@@ -536,6 +542,20 @@ function PublishingInspector({ videos, publishingStatus, onRunTelegramDue, onCop
               <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>Файлом</span><b className="text-blue-700">{telegramDelivery.sendVideoUpload || 0}</b></div>
               <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>Ссылкой</span><b className="text-amber-700">{telegramDelivery.sendMessage || 0}</b></div>
               <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>Всего</span><b className="text-slate-950">{telegramDelivery.total}</b></div>
+            </div>
+          </div>
+          <div className="rounded-2xl bg-slate-50 p-4">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-slate-400">Telegram chat</span>
+              <b className={telegramChat.ok ? "text-emerald-700" : "text-rose-700"}>{telegramChat.ok ? "ready" : "problem"}</b>
+            </div>
+            <div className="mt-2 space-y-1 text-xs">
+              {telegramChat.chatIdMasked ? (
+                <div className="flex justify-between rounded-xl bg-white px-3 py-2"><span>Target</span><b className="text-slate-950">{telegramChat.chatIdMasked}</b></div>
+              ) : null}
+              <div className="rounded-xl bg-white px-3 py-2 font-bold text-slate-600">
+                {telegramChat.message || (telegramChat.ok ? "Telegram готов к публикации." : "Проверь Telegram-настройки.")}
+              </div>
             </div>
           </div>
           <div className="rounded-2xl bg-slate-50 p-4">
@@ -1379,7 +1399,7 @@ function VideoLibrary({ videos, jobs, onOpenJob, onSavePackage, onApprovePackage
   );
 }
 
-function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTelegram, packageLoading, publishLoading, publishFeedback, telegramReady }) {
+function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTelegram, packageLoading, publishLoading, publishFeedback, telegramReady, telegramChat }) {
   const approvedVideos = getApprovedVideos(videos);
   const initialPrefs = React.useMemo(readPublishingManagerPrefs, []);
   const [workMode, setWorkMode] = React.useState(initialPrefs.workMode === "selected" ? "all" : initialPrefs.workMode || "all");
@@ -1401,6 +1421,16 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
   const [bulkDate, setBulkDate] = React.useState("");
   const [bulkLoading, setBulkLoading] = React.useState(false);
   const [bulkFeedback, setBulkFeedback] = React.useState("");
+  const telegramBlockedMessage = telegramChat?.message || "Telegram публикация недоступна. Проверь настройки backend.";
+  const telegramDisabledLabel = telegramChat?.reason === "chat_not_found"
+    ? "Чат не найден"
+    : telegramChat?.reason === "forbidden"
+      ? "Бот без доступа"
+      : telegramChat?.reason === "telegram_token_missing"
+        ? "Bot token нет"
+        : telegramChat?.reason === "telegram_chat_missing"
+          ? "Chat ID нет"
+          : "Telegram не готов";
   const normalizedQuery = query.trim().toLowerCase();
   function matchesWorkModeAndQuery(video) {
     const publicationStatus = video.publishingPackage?.publicationStatus || {};
@@ -2086,18 +2116,18 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
                 onClick={publishSelectedTelegram}
                 disabled={!bulkTelegramTargets.length || !telegramReady || bulkLoading}
                 className="rounded-2xl bg-emerald-700 px-3 py-2 text-xs font-black text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-40"
-                title={!telegramReady ? "Нужно настроить AI_PUBLISH_TELEGRAM_CHAT_ID на backend" : ""}
+                title={!telegramReady ? telegramBlockedMessage : ""}
               >
-                {telegramReady ? `Опубликовать Telegram (${bulkTelegramTargets.length})` : "Telegram ENV нет"}
+                {telegramReady ? `Опубликовать Telegram (${bulkTelegramTargets.length})` : telegramDisabledLabel}
               </button>
               <button
                 type="button"
                 onClick={retryTelegramErrors}
                 disabled={!retryTelegramTargets.length || !telegramReady || bulkLoading}
                 className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-rose-700 ring-1 ring-rose-100 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-40"
-                title={!telegramReady ? "Нужно настроить AI_PUBLISH_TELEGRAM_CHAT_ID на backend" : ""}
+                title={!telegramReady ? telegramBlockedMessage : ""}
               >
-                {telegramReady ? `Повторить ошибки (${retryTelegramTargets.length})` : "Telegram ENV нет"}
+                {telegramReady ? `Повторить ошибки (${retryTelegramTargets.length})` : telegramDisabledLabel}
               </button>
               <input
                 type="datetime-local"
@@ -2297,13 +2327,13 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
                                 className="rounded-2xl bg-emerald-700 px-3 py-2 text-xs font-black text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-40"
                                 title={
                                   !telegramReady
-                                    ? "Нужно настроить AI_PUBLISH_TELEGRAM_CHAT_ID на backend"
+                                    ? telegramBlockedMessage
                                     : telegramPublishedEvidence
                                       ? "У карточки уже есть Telegram публикация"
                                       : ""
                                 }
                               >
-                                {telegramPublishedEvidence ? "Уже есть пост" : publishLoading === video.jobId ? "Публикую..." : telegramReady ? "Опубликовать" : "Telegram ENV нет"}
+                                {telegramPublishedEvidence ? "Уже есть пост" : publishLoading === video.jobId ? "Публикую..." : telegramReady ? "Опубликовать" : telegramDisabledLabel}
                               </button>
                             ) : null}
                             <Pill tone={checked ? "green" : item.plannedAt ? "blue" : "slate"}>{checked ? "Опубликовано" : item.plannedAt ? "Запланировано" : "Ожидает"}</Pill>
@@ -3098,6 +3128,7 @@ export default function AdminAiPlatform() {
             publishLoading={publishLoading}
             publishFeedback={publishFeedback}
             telegramReady={Boolean(status?.publishing?.telegramReady)}
+            telegramChat={status?.publishing?.telegramChat}
           />
         ) : activeView === "videos" || activeView === "publications" ? (
           <VideoLibrary

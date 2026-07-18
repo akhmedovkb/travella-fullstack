@@ -38,6 +38,7 @@ const AI_PUBLISH_TELEGRAM_CHAT_ID = String(
     ""
 ).trim();
 const TELEGRAM_VIDEO_UPLOAD_MAX_BYTES = 49 * 1024 * 1024;
+const TELEGRAM_CHAT_HEALTH_CACHE_MS = 60000;
 const SITE_URL = String(
   process.env.SITE_PUBLIC_URL ||
     process.env.SITE_URL ||
@@ -54,6 +55,94 @@ function boolEnv(name, fallback = false) {
 function intEnv(name, fallback) {
   const value = Number(process.env[name]);
   return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function maskTelegramChatId(value) {
+  const clean = String(value || "").trim();
+  if (!clean) return "";
+  if (clean.startsWith("@")) {
+    if (clean.length <= 5) return "@***";
+    return `${clean.slice(0, 4)}...${clean.slice(-2)}`;
+  }
+  if (clean.length <= 6) return "***";
+  return `${clean.slice(0, 4)}...${clean.slice(-4)}`;
+}
+
+function getTelegramChatHealthMessage(reason) {
+  const messages = {
+    ready: "Telegram готов к публикации.",
+    telegram_token_missing: "TELEGRAM_CLIENT_BOT_TOKEN is missing",
+    telegram_chat_missing: "AI_PUBLISH_TELEGRAM_CHAT_ID is missing",
+    chat_not_found: "Telegram chat not found. Проверь AI_PUBLISH_TELEGRAM_CHAT_ID и добавь бота в канал/чат.",
+    forbidden: "Telegram bot has no access to this chat. Добавь бота в канал/чат и дай право публиковать.",
+    telegram_unreachable: "Telegram chat check failed. Проверь бота, chat id и доступ к Telegram API.",
+  };
+  return messages[reason] || messages.telegram_unreachable;
+}
+
+let telegramChatHealthCache = { at: 0, value: null };
+
+async function getTelegramPublishChatHealth({ force = false } = {}) {
+  const now = Date.now();
+  if (!force && telegramChatHealthCache.value && now - telegramChatHealthCache.at < TELEGRAM_CHAT_HEALTH_CACHE_MS) {
+    return telegramChatHealthCache.value;
+  }
+
+  const base = {
+    ok: false,
+    configured: Boolean(TELEGRAM_CLIENT_BOT_TOKEN && AI_PUBLISH_TELEGRAM_CHAT_ID),
+    tokenConfigured: Boolean(TELEGRAM_CLIENT_BOT_TOKEN),
+    chatConfigured: Boolean(AI_PUBLISH_TELEGRAM_CHAT_ID),
+    chatIdMasked: maskTelegramChatId(AI_PUBLISH_TELEGRAM_CHAT_ID),
+    reason: "telegram_unreachable",
+    message: getTelegramChatHealthMessage("telegram_unreachable"),
+  };
+
+  if (!TELEGRAM_CLIENT_BOT_TOKEN) {
+    const value = { ...base, reason: "telegram_token_missing", message: getTelegramChatHealthMessage("telegram_token_missing") };
+    telegramChatHealthCache = { at: now, value };
+    return value;
+  }
+  if (!AI_PUBLISH_TELEGRAM_CHAT_ID) {
+    const value = { ...base, reason: "telegram_chat_missing", message: getTelegramChatHealthMessage("telegram_chat_missing") };
+    telegramChatHealthCache = { at: now, value };
+    return value;
+  }
+
+  try {
+    const api = `https://api.telegram.org/bot${TELEGRAM_CLIENT_BOT_TOKEN}`;
+    const res = await axios.post(`${api}/getChat`, { chat_id: AI_PUBLISH_TELEGRAM_CHAT_ID }, { timeout: 10000 });
+    const chat = res.data?.result || {};
+    const value = {
+      ...base,
+      ok: Boolean(res.data?.ok),
+      configured: true,
+      reason: res.data?.ok ? "ready" : "telegram_unreachable",
+      message: res.data?.ok ? getTelegramChatHealthMessage("ready") : getTelegramChatHealthMessage("telegram_unreachable"),
+      chatType: chat.type || "",
+      chatTitle: chat.title || chat.username || "",
+    };
+    telegramChatHealthCache = { at: now, value };
+    return value;
+  } catch (e) {
+    const status = Number(e?.response?.status || 0);
+    const description = String(e?.response?.data?.description || e?.message || "").trim();
+    const normalized = description.toLowerCase();
+    const reason = normalized.includes("chat not found")
+      ? "chat_not_found"
+      : status === 403 || normalized.includes("forbidden")
+        ? "forbidden"
+        : "telegram_unreachable";
+    const value = {
+      ...base,
+      configured: true,
+      reason,
+      message: getTelegramChatHealthMessage(reason),
+      telegramStatus: status || null,
+    };
+    telegramChatHealthCache = { at: now, value };
+    return value;
+  }
 }
 
 function normalizePublishingItems(items = []) {
@@ -356,6 +445,29 @@ async function publishVideoToTelegramUnlocked(job, actor) {
   }
   if (!AI_PUBLISH_TELEGRAM_CHAT_ID) {
     return { success: false, status: 400, message: "AI_PUBLISH_TELEGRAM_CHAT_ID is missing" };
+  }
+
+  const chatHealth = await getTelegramPublishChatHealth({ force: true });
+  if (!chatHealth.ok) {
+    const message = chatHealth.message || "Telegram chat is not reachable";
+    addEvent(job.id, {
+      step: "publishing",
+      type: "tool_result",
+      tool: "PublishingManager",
+      level: "warn",
+      message,
+      meta: {
+        channel: "telegram",
+        reason: chatHealth.reason || "telegram_unreachable",
+        chatIdMasked: chatHealth.chatIdMasked || "",
+      },
+    });
+    return {
+      success: false,
+      status: chatHealth.reason === "chat_not_found" || chatHealth.reason === "forbidden" ? 400 : 502,
+      message,
+      telegramChat: chatHealth,
+    };
   }
 
   const output = job.output || {};
@@ -715,14 +827,15 @@ router.get("/status", async (req, res) => {
   const config = getAiConfig();
   const jobs = listJobs({ limit: 100 });
   const telegramQueue = getTelegramPublishingQueueSummary({ limit: 100 });
-  const telegramReady = Boolean(TELEGRAM_CLIENT_BOT_TOKEN && AI_PUBLISH_TELEGRAM_CHAT_ID);
+  const telegramChat = await getTelegramPublishChatHealth();
+  const telegramReady = Boolean(telegramChat.ok);
   const schedulerDisabledByEnv = boolEnv("DISABLE_AI_PUBLISHING_SCHEDULER", false);
   const schedulerReadyReason = process.env.NODE_ENV === "test"
     ? "test_mode"
     : schedulerDisabledByEnv
       ? "disabled_by_env"
       : !telegramReady
-        ? "telegram_env_missing"
+        ? telegramChat.reason || "telegram_unreachable"
         : "ready";
   res.json({
     success: true,
@@ -740,6 +853,7 @@ router.get("/status", async (req, res) => {
     publishing: {
       telegramReady,
       telegramChatConfigured: Boolean(AI_PUBLISH_TELEGRAM_CHAT_ID),
+      telegramChat,
       schedulerEnabled: schedulerReadyReason === "ready",
       schedulerReadyReason,
       schedulerIntervalMs: Math.max(60000, intEnv("AI_PUBLISHING_SCHEDULER_INTERVAL_MS", 60000)),
