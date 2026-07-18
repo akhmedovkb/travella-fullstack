@@ -198,7 +198,62 @@ function findHeygenVideoIdFromEvents(events = []) {
   return "";
 }
 
-function Message({ msg, onStartHeygen, onRefreshHeygen, onSaveScript, canStartHeygen, aiVideoEnabled, heygenReady, heygenLoading, refreshLoading, scriptSaving }) {
+function findPresetLabel(presets = [], value = "", prefix = "") {
+  const preset = (Array.isArray(presets) ? presets : []).find((item) => item.value === value);
+  if (!preset?.label) return value ? "Custom" : "—";
+  return prefix ? `${prefix} ${preset.label}` : preset.label;
+}
+
+function estimateHeygenDuration(script = "") {
+  const words = String(script || "").trim().split(/\s+/).filter(Boolean).length;
+  if (!words) return "—";
+  const seconds = Math.max(5, Math.round(words / 2.5));
+  if (seconds < 60) return `~${seconds} сек`;
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return `~${minutes}:${String(rest).padStart(2, "0")}`;
+}
+
+function HeygenGenerationPreview({ profile = {}, presets = {}, script = "", locked = false, dirty = false }) {
+  const avatarLabel = findPresetLabel(presets.avatars, profile.avatarId, "Avatar");
+  const voiceLabel = findPresetLabel(presets.voices, profile.voiceId, "Voice");
+  const engineLabel = profile.engine === "avatar_v" ? "Avatar V" : "Avatar IV";
+  const ratio = profile.aspectRatio || "9:16";
+  const resolution = profile.resolution || "1080p";
+  return (
+    <div className={cn("mt-3 rounded-2xl p-4 ring-1", dirty ? "bg-amber-50 ring-amber-100" : locked ? "bg-emerald-50 ring-emerald-100" : "bg-blue-50 ring-blue-100")}>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className={cn("text-xs font-black uppercase tracking-wide", dirty ? "text-amber-700" : locked ? "text-emerald-700" : "text-blue-700")}>
+            {locked ? "Профиль HeyGen в видео" : "Preview перед HeyGen"}
+          </div>
+          <div className="mt-1 text-sm font-black text-slate-950">{ratio} · {resolution} · {engineLabel}</div>
+        </div>
+        <div className="rounded-full bg-white px-3 py-1 text-xs font-black text-slate-700 ring-1 ring-slate-200">
+          {estimateHeygenDuration(script)}
+        </div>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {[
+          ["Avatar", avatarLabel],
+          ["Voice", voiceLabel],
+          ["Speed", Number(profile.voiceSpeed || 1).toFixed(2)],
+          ["Expressiveness", profile.engine === "avatar_v" ? "—" : profile.expressiveness || "medium"],
+          ["Ratio", ratio],
+          ["Resolution", resolution],
+        ].map(([label, value]) => (
+          <div key={label} className="rounded-2xl bg-white px-3 py-2 ring-1 ring-slate-200">
+            <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">{label}</div>
+            <div className="mt-0.5 truncate text-xs font-black text-slate-950" title={String(value)}>{value}</div>
+          </div>
+        ))}
+      </div>
+      {dirty ? <div className="mt-3 text-xs font-black text-amber-800">Настройки HeyGen изменены. Сначала сохрани профиль, чтобы именно эти значения ушли в генерацию.</div> : null}
+    </div>
+  );
+}
+
+function Message({ msg, onStartHeygen, onRefreshHeygen, onSaveScript, canStartHeygen, aiVideoEnabled, heygenReady, heygenLoading, refreshLoading, scriptSaving, runtimeProfile, runtimePresets, heygenProfileDirty }) {
   const user = msg.role === "user";
   const inferredVideoId = findHeygenVideoIdFromEvents(msg.events || []);
   const heygen = msg.output?.heygen || (inferredVideoId ? { provider: "heygen", status: "submitted", videoId: inferredVideoId } : null);
@@ -220,6 +275,7 @@ function Message({ msg, onStartHeygen, onRefreshHeygen, onSaveScript, canStartHe
   const scriptDirty = String(scriptDraft || "") !== String(msg.output?.script || "");
   const motionDirty = String(motionDraft || "") !== String(msg.output?.motionPrompt || "");
   const promptDirty = scriptDirty || motionDirty;
+  const previewProfile = heygen?.profile || runtimeProfile || {};
   const heygenActionLabel = canStartHeygen
     ? heygenLoading === msg.job?.id ? "Отправляю..." : "Утвердить и отправить в HeyGen"
     : !heygenReady ? "HeyGen не настроен" : !aiVideoEnabled ? "Включи HeyGen" : "HeyGen недоступен";
@@ -337,6 +393,15 @@ function Message({ msg, onStartHeygen, onRefreshHeygen, onSaveScript, canStartHe
           </div>
         ) : null}
         <ScriptReview review={msg.output?.scriptReview} />
+        {msg.output?.script && !user ? (
+          <HeygenGenerationPreview
+            profile={previewProfile}
+            presets={runtimePresets}
+            script={msg.output.script}
+            locked={Boolean(heygen?.profile)}
+            dirty={Boolean(canShowHeygenAction && heygenProfileDirty)}
+          />
+        ) : null}
         {heygen ? (
           <div className="mt-3 rounded-2xl bg-emerald-50 p-4 ring-1 ring-emerald-100">
             <div className="text-xs font-black uppercase tracking-wide text-emerald-700">HeyGen</div>
@@ -386,10 +451,10 @@ function Message({ msg, onStartHeygen, onRefreshHeygen, onSaveScript, canStartHe
             <button
               type="button"
               onClick={() => onStartHeygen?.(msg.job)}
-              disabled={!canStartHeygen || heygenLoading === msg.job.id || promptDirty}
+              disabled={!canStartHeygen || heygenLoading === msg.job.id || promptDirty || heygenProfileDirty}
               className="rounded-2xl bg-slate-950 px-4 py-2 text-xs font-black text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {promptDirty ? "Сначала сохрани промпт" : heygenActionLabel}
+              {promptDirty ? "Сначала сохрани промпт" : heygenProfileDirty ? "Сначала сохрани настройки HeyGen" : heygenActionLabel}
             </button>
           </div>
         ) : null}
@@ -3302,6 +3367,9 @@ export default function AdminAiPlatform() {
                   heygenLoading={heygenLoading}
                   refreshLoading={refreshLoading}
                   scriptSaving={scriptSaving}
+                  runtimeProfile={runtimeProfile}
+                  runtimePresets={videoPresetsDraft}
+                  heygenProfileDirty={profileDirty}
                 />
               );
             })}

@@ -2,6 +2,7 @@
 
 const { createJob, addEvent, updateJob, listJobs, getJob } = require("../core/aiJobStore");
 const { routeAiTask } = require("../core/taskRouter");
+const { getAiVideoProfileSetting } = require("../core/aiRuntimeSettings");
 const { createAvatarVideo, getAvatarVideo } = require("./heygen.client");
 const { findRefusedServiceByCode, findLatestRefusedService, listRecentRefusedServices } = require("./refusedServiceLookup");
 const { saveHeygenVideoArtifact } = require("./videoArtifactStore");
@@ -388,7 +389,19 @@ async function startHeygenForVideoJob({ jobId, actor = {} }) {
     meta: { actor },
   });
 
+  let generationProfile = null;
   try {
+    const profile = await getAiVideoProfileSetting();
+    generationProfile = {
+      avatarId: profile.avatarId || "",
+      voiceId: profile.voiceId || "",
+      engine: profile.engine || "avatar_iv",
+      voiceSpeed: profile.voiceSpeed ?? 1,
+      expressiveness: profile.expressiveness || "medium",
+      aspectRatio: profile.aspectRatio || "9:16",
+      resolution: profile.resolution || "1080p",
+      source: profile.source || "",
+    };
     const response = await createAvatarVideo({
       script: output.script,
       motionPrompt: output.motionPrompt,
@@ -402,6 +415,7 @@ async function startHeygenForVideoJob({ jobId, actor = {} }) {
       status: getHeygenStatus(response),
       videoId,
       videoUrl: extractHeygenVideoUrl(response),
+      profile: generationProfile,
       response,
       submittedAt: new Date().toISOString(),
     };
@@ -415,7 +429,7 @@ async function startHeygenForVideoJob({ jobId, actor = {} }) {
       type: "tool_result",
       tool: "HeyGen",
       message: videoId ? `HeyGen принял задачу. Video ID: ${videoId}` : "HeyGen принял задачу.",
-      meta: { videoId, status: nextHeygen.status },
+      meta: { videoId, status: nextHeygen.status, profile: nextHeygen.profile },
     });
 
     return { success: true, job: getJob(job.id), output: nextOutput };
@@ -427,6 +441,7 @@ async function startHeygenForVideoJob({ jobId, actor = {} }) {
           provider: "heygen",
           status: "disabled",
           error: err.message,
+          profile: generationProfile,
           checkedAt: new Date().toISOString(),
         },
       };
@@ -449,6 +464,7 @@ async function startHeygenForVideoJob({ jobId, actor = {} }) {
       provider: "heygen",
       status: "failed",
       error: err?.message || "HeyGen request failed",
+      profile: generationProfile,
       failedAt: new Date().toISOString(),
     };
     const nextOutput = { ...output, heygen };
