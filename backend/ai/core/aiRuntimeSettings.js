@@ -4,9 +4,25 @@ const pool = require("../../db");
 
 const AI_VIDEO_ENABLED_KEY = "ai_video_enabled";
 const AI_VIDEO_PROFILE_KEY = "ai_video_profile";
+const AI_VIDEO_PRESETS_KEY = "ai_video_presets";
 let settingsTableReadyPromise = null;
 let cachedAiVideoEnabled = null;
 let cachedVideoProfile = null;
+
+const DEFAULT_VIDEO_PRESETS = {
+  avatars: [
+    { label: "MY1", value: "563cee663c5a494a99a34f0867f6c0b2" },
+    { label: "MY2", value: "9c8b04c737bc4f2bbc4bd7d42ec33281" },
+  ],
+  voices: [
+    { label: "MY1", value: "ce04d2becc764610b4b3f89155285a45" },
+    { label: "MY2", value: "2f5588e77acb4d3aa4482570c0390644" },
+    { label: "MY3", value: "aaea0796357b4614a69e14e1d05fc185" },
+    { label: "MY4", value: "e0e96bd5207449f8bd69a6ad0fb95a2d" },
+    { label: "MY5", value: "4ef0fa222bcf488f9145db9a0c716de8" },
+    { label: "MY6", value: "75d34e45780f44888ccaf49cb93222ee" },
+  ],
+};
 
 function boolEnv(name, fallback = false) {
   const raw = process.env[name];
@@ -64,6 +80,32 @@ function applyVideoProfile(profile = {}) {
   if (next.avatarId) process.env.HEYGEN_AVATAR_ID = next.avatarId;
   if (next.voiceId) process.env.HEYGEN_VOICE_ID = next.voiceId;
   return next;
+}
+
+function normalizePresets(items = []) {
+  const seen = new Set();
+  return (Array.isArray(items) ? items : [])
+    .map((item) => ({
+      label: String(item?.label || "").trim().slice(0, 40),
+      value: cleanId(item?.value).slice(0, 160),
+    }))
+    .filter((item) => item.label && item.value)
+    .filter((item) => {
+      const key = item.value.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 50);
+}
+
+function normalizeVideoPresets(presets = {}) {
+  const avatars = normalizePresets(presets.avatars);
+  const voices = normalizePresets(presets.voices);
+  return {
+    avatars: avatars.length ? avatars : DEFAULT_VIDEO_PRESETS.avatars,
+    voices: voices.length ? voices : DEFAULT_VIDEO_PRESETS.voices,
+  };
 }
 
 async function getAiVideoEnabledSetting() {
@@ -200,9 +242,65 @@ async function setAiVideoProfileSetting(profile = {}, actor = {}) {
   };
 }
 
+async function getAiVideoPresetsSetting() {
+  if (!(await ensureSettingsTable())) {
+    return { ...DEFAULT_VIDEO_PRESETS, source: "default" };
+  }
+
+  try {
+    const result = await pool.query(
+      "SELECT value, updated_at, updated_by FROM ai_runtime_settings WHERE key = $1 LIMIT 1",
+      [AI_VIDEO_PRESETS_KEY]
+    );
+    const row = result.rows?.[0] || null;
+    if (!row) {
+      return { ...DEFAULT_VIDEO_PRESETS, source: "default", updatedAt: null, updatedBy: null };
+    }
+
+    return {
+      ...normalizeVideoPresets(row.value || {}),
+      source: "db",
+      updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : String(row.updated_at || ""),
+      updatedBy: row.updated_by || null,
+    };
+  } catch (err) {
+    console.warn("[ai-runtime-settings] presets read failed:", err?.message || err);
+    return { ...DEFAULT_VIDEO_PRESETS, source: "default", error: err?.message || String(err) };
+  }
+}
+
+async function setAiVideoPresetsSetting(presets = {}, actor = {}) {
+  const next = normalizeVideoPresets(presets);
+  if (!(await ensureSettingsTable())) {
+    return { ...next, source: "memory", updatedAt: new Date().toISOString(), updatedBy: actor?.id || null };
+  }
+
+  const result = await pool.query(
+    `
+      INSERT INTO ai_runtime_settings (key, value, updated_at, updated_by)
+      VALUES ($1, $2::jsonb, NOW(), $3)
+      ON CONFLICT (key) DO UPDATE SET
+        value = EXCLUDED.value,
+        updated_at = EXCLUDED.updated_at,
+        updated_by = EXCLUDED.updated_by
+      RETURNING value, updated_at, updated_by
+    `,
+    [AI_VIDEO_PRESETS_KEY, JSON.stringify(next), actor?.id || null]
+  );
+  const row = result.rows?.[0] || {};
+  return {
+    ...normalizeVideoPresets(row.value || next),
+    source: "db",
+    updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : String(row.updated_at || ""),
+    updatedBy: row.updated_by || null,
+  };
+}
+
 module.exports = {
   getAiVideoEnabledSetting,
   setAiVideoEnabledSetting,
   getAiVideoProfileSetting,
   setAiVideoProfileSetting,
+  getAiVideoPresetsSetting,
+  setAiVideoPresetsSetting,
 };

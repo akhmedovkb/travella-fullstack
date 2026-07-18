@@ -13,6 +13,8 @@ const {
   setAiVideoEnabledSetting,
   getAiVideoProfileSetting,
   setAiVideoProfileSetting,
+  getAiVideoPresetsSetting,
+  setAiVideoPresetsSetting,
 } = require("../ai/core/aiRuntimeSettings");
 const { getArtifactStorageStatus } = require("../ai/videoOperator/videoArtifactStore");
 const { listAiEmployees } = require("../ai/core/aiEmployeeRegistry");
@@ -709,6 +711,7 @@ router.use(requireAdmin);
 router.get("/status", async (req, res) => {
   const videoSetting = await getAiVideoEnabledSetting();
   const videoProfile = await getAiVideoProfileSetting();
+  const videoPresets = await getAiVideoPresetsSetting();
   const config = getAiConfig();
   const jobs = listJobs({ limit: 100 });
   const telegramQueue = getTelegramPublishingQueueSummary({ limit: 100 });
@@ -728,6 +731,7 @@ router.get("/status", async (req, res) => {
       enabled: config.video.enabled,
       runtimeControl: videoSetting,
       runtimeProfile: videoProfile,
+      runtimePresets: videoPresets,
       heygenReady: config.video.heygen.ready,
       format: config.video.format,
       resolution: config.video.resolution,
@@ -756,6 +760,7 @@ router.patch("/settings/video", async (req, res) => {
     id: req.user?.id || req.user?.userId || null,
   });
   const videoProfile = await getAiVideoProfileSetting();
+  const videoPresets = await getAiVideoPresetsSetting();
   const config = getAiConfig();
   return res.json({
     success: true,
@@ -763,6 +768,7 @@ router.patch("/settings/video", async (req, res) => {
       enabled: config.video.enabled,
       runtimeControl: videoSetting,
       runtimeProfile: videoProfile,
+      runtimePresets: videoPresets,
       heygenReady: config.video.heygen.ready,
       format: config.video.format,
       resolution: config.video.resolution,
@@ -786,6 +792,32 @@ router.patch("/settings/video-profile", async (req, res) => {
       enabled: config.video.enabled,
       runtimeControl: videoSetting,
       runtimeProfile: videoProfile,
+      heygenReady: config.video.heygen.ready,
+      format: config.video.format,
+      resolution: config.video.resolution,
+      artifactStorage: getArtifactStorageStatus(),
+    },
+  });
+});
+
+router.patch("/settings/video-presets", async (req, res) => {
+  const videoPresets = await setAiVideoPresetsSetting(
+    {
+      avatars: req.body?.avatars,
+      voices: req.body?.voices,
+    },
+    { id: req.user?.id || req.user?.userId || null }
+  );
+  const videoSetting = await getAiVideoEnabledSetting();
+  const videoProfile = await getAiVideoProfileSetting();
+  const config = getAiConfig();
+  return res.json({
+    success: true,
+    video: {
+      enabled: config.video.enabled,
+      runtimeControl: videoSetting,
+      runtimeProfile: videoProfile,
+      runtimePresets: videoPresets,
       heygenReady: config.video.heygen.ready,
       format: config.video.format,
       resolution: config.video.resolution,

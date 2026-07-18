@@ -2275,6 +2275,10 @@ export default function AdminAiPlatform() {
   const [selectedService, setSelectedService] = React.useState(null);
   const [serviceSearchLoading, setServiceSearchLoading] = React.useState(false);
   const [videoProfileDraft, setVideoProfileDraft] = React.useState({ avatarId: "", voiceId: "" });
+  const [videoPresetsDraft, setVideoPresetsDraft] = React.useState({
+    avatars: HEYGEN_AVATAR_PRESETS,
+    voices: HEYGEN_VOICE_PRESETS,
+  });
   const videoOperatorIntro = "Я Travella AI Runtime. Для Video Operator можно нажать быструю команду под чатом или написать задачу обычным языком: “Создай сценарий для R941”, “Создай видео для последнего отказного авиабилета”, “Сделай агрессивнее H502”, “Другой hook E77”.";
   const [messages, setMessages] = React.useState([{ id: "hello", role: "assistant", text: videoOperatorIntro }]);
   const endRef = React.useRef(null);
@@ -2304,6 +2308,13 @@ export default function AdminAiPlatform() {
       voiceId: profile.voiceId || "",
     });
   }, [status?.video?.runtimeProfile?.avatarId, status?.video?.runtimeProfile?.voiceId]);
+  React.useEffect(() => {
+    const presets = status?.video?.runtimePresets || {};
+    setVideoPresetsDraft({
+      avatars: Array.isArray(presets.avatars) && presets.avatars.length ? presets.avatars : HEYGEN_AVATAR_PRESETS,
+      voices: Array.isArray(presets.voices) && presets.voices.length ? presets.voices : HEYGEN_VOICE_PRESETS,
+    });
+  }, [status?.video?.runtimePresets?.updatedAt, status?.video?.runtimePresets?.avatars, status?.video?.runtimePresets?.voices]);
   React.useEffect(() => {
     if (selectedEmployee !== "video_operator") return;
     let alive = true;
@@ -2522,6 +2533,65 @@ export default function AdminAiPlatform() {
     }
   }
 
+  async function saveVideoPresets(nextPresets) {
+    setVideoProfileLoading(true);
+    setError("");
+    try {
+      const res = await apiPatch("/api/admin/ai-platform/settings/video-presets", nextPresets, "admin");
+      setVideoPresetsDraft({
+        avatars: res?.video?.runtimePresets?.avatars || nextPresets.avatars || [],
+        voices: res?.video?.runtimePresets?.voices || nextPresets.voices || [],
+      });
+      setStatus((prev) => ({
+        ...(prev || {}),
+        video: {
+          ...(prev?.video || {}),
+          ...(res?.video || {}),
+        },
+      }));
+      await load();
+    } catch (e) {
+      setError(e?.message || "Не удалось сохранить список Avatar / Voice");
+      await load();
+    } finally {
+      setVideoProfileLoading(false);
+    }
+  }
+
+  async function addVideoPreset(kind) {
+    if (videoProfileLoading) return;
+    const currentValue = kind === "avatars" ? videoProfileDraft.avatarId : videoProfileDraft.voiceId;
+    const label = window.prompt(kind === "avatars" ? "Название аватара" : "Название голоса", `MY${(videoPresetsDraft[kind] || []).length + 1}`);
+    if (!label) return;
+    const value = window.prompt(kind === "avatars" ? "Avatar ID" : "Voice ID", currentValue || "");
+    if (!value) return;
+    const nextItem = { label: String(label).trim(), value: String(value).trim() };
+    const nextPresets = {
+      avatars: videoPresetsDraft.avatars || [],
+      voices: videoPresetsDraft.voices || [],
+      [kind]: [...(videoPresetsDraft[kind] || []).filter((item) => item.value !== nextItem.value), nextItem],
+    };
+    setVideoProfileDraft((prev) => ({
+      ...prev,
+      [kind === "avatars" ? "avatarId" : "voiceId"]: nextItem.value,
+    }));
+    await saveVideoPresets(nextPresets);
+  }
+
+  async function deleteVideoPreset(kind) {
+    if (videoProfileLoading) return;
+    const selectedValue = kind === "avatars" ? videoProfileDraft.avatarId : videoProfileDraft.voiceId;
+    const selected = (videoPresetsDraft[kind] || []).find((item) => item.value === selectedValue);
+    if (!selected) return;
+    if (!window.confirm(`Удалить ${selected.label}?`)) return;
+    const nextPresets = {
+      avatars: videoPresetsDraft.avatars || [],
+      voices: videoPresetsDraft.voices || [],
+      [kind]: (videoPresetsDraft[kind] || []).filter((item) => item.value !== selectedValue),
+    };
+    await saveVideoPresets(nextPresets);
+  }
+
   async function savePublishingPackage(video, items) {
     if (!video?.jobId || packageLoading) return;
     setPackageLoading(video.jobId);
@@ -2720,8 +2790,10 @@ export default function AdminAiPlatform() {
   const aiEnabled = Boolean(status?.video?.enabled);
   const artifactStorageReady = Boolean(status?.video?.artifactStorage?.provider);
   const runtimeProfile = status?.video?.runtimeProfile || {};
-  const selectedAvatarPreset = HEYGEN_AVATAR_PRESETS.find((avatar) => avatar.value === videoProfileDraft.avatarId);
-  const selectedVoicePreset = HEYGEN_VOICE_PRESETS.find((voice) => voice.value === videoProfileDraft.voiceId);
+  const avatarPresets = Array.isArray(videoPresetsDraft.avatars) ? videoPresetsDraft.avatars : [];
+  const voicePresets = Array.isArray(videoPresetsDraft.voices) ? videoPresetsDraft.voices : [];
+  const selectedAvatarPreset = avatarPresets.find((avatar) => avatar.value === videoProfileDraft.avatarId);
+  const selectedVoicePreset = voicePresets.find((voice) => voice.value === videoProfileDraft.voiceId);
   const profileDirty =
     String(videoProfileDraft.avatarId || "") !== String(runtimeProfile.avatarId || "") ||
     String(videoProfileDraft.voiceId || "") !== String(runtimeProfile.voiceId || "");
@@ -2863,7 +2935,7 @@ export default function AdminAiPlatform() {
                     }}
                     className="h-8 w-[116px] rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-950 outline-none focus:border-slate-300"
                   >
-                    {HEYGEN_AVATAR_PRESETS.map((avatar) => (
+                    {avatarPresets.map((avatar) => (
                       <option key={avatar.value} value={avatar.value}>Avatar {avatar.label}</option>
                     ))}
                     <option value="__custom">Другой avatar</option>
@@ -2876,6 +2948,23 @@ export default function AdminAiPlatform() {
                       className="h-8 w-[190px] rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-950 outline-none placeholder:text-slate-400 focus:border-slate-300"
                     />
                   ) : null}
+                  <button
+                    type="button"
+                    onClick={() => addVideoPreset("avatars")}
+                    disabled={videoProfileLoading}
+                    className="h-8 rounded-xl bg-white px-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100 disabled:opacity-40"
+                    title="Добавить avatar preset"
+                  >
+                    +
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteVideoPreset("avatars")}
+                    disabled={videoProfileLoading || !selectedAvatarPreset}
+                    className="h-8 rounded-xl bg-white px-2 text-xs font-black text-rose-600 ring-1 ring-rose-100 hover:bg-rose-50 disabled:text-slate-300 disabled:opacity-40"
+                  >
+                    Удалить
+                  </button>
                   <select
                     value={selectedVoicePreset?.value || "__custom"}
                     onChange={(e) => {
@@ -2884,7 +2973,7 @@ export default function AdminAiPlatform() {
                     }}
                     className="h-8 w-[116px] rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-950 outline-none focus:border-slate-300"
                   >
-                    {HEYGEN_VOICE_PRESETS.map((voice) => (
+                    {voicePresets.map((voice) => (
                       <option key={voice.value} value={voice.value}>{voice.label}</option>
                     ))}
                     <option value="__custom">Другой</option>
@@ -2897,6 +2986,23 @@ export default function AdminAiPlatform() {
                       className="h-8 w-[190px] rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-950 outline-none placeholder:text-slate-400 focus:border-slate-300"
                     />
                   ) : null}
+                  <button
+                    type="button"
+                    onClick={() => addVideoPreset("voices")}
+                    disabled={videoProfileLoading}
+                    className="h-8 rounded-xl bg-white px-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100 disabled:opacity-40"
+                    title="Добавить voice preset"
+                  >
+                    +
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteVideoPreset("voices")}
+                    disabled={videoProfileLoading || !selectedVoicePreset}
+                    className="h-8 rounded-xl bg-white px-2 text-xs font-black text-rose-600 ring-1 ring-rose-100 hover:bg-rose-50 disabled:text-slate-300 disabled:opacity-40"
+                  >
+                    Удалить
+                  </button>
                   <button
                     type="button"
                     onClick={saveVideoProfile}
