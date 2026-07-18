@@ -2250,6 +2250,7 @@ export default function AdminAiPlatform() {
   const [publishLoading, setPublishLoading] = React.useState("");
   const [schedulerLoading, setSchedulerLoading] = React.useState(false);
   const [videoToggleLoading, setVideoToggleLoading] = React.useState(false);
+  const [videoProfileLoading, setVideoProfileLoading] = React.useState(false);
   const [schedulerFeedback, setSchedulerFeedback] = React.useState("");
   const [publishFeedback, setPublishFeedback] = React.useState({});
   const [error, setError] = React.useState("");
@@ -2259,6 +2260,7 @@ export default function AdminAiPlatform() {
   const [serviceSearchResults, setServiceSearchResults] = React.useState([]);
   const [selectedService, setSelectedService] = React.useState(null);
   const [serviceSearchLoading, setServiceSearchLoading] = React.useState(false);
+  const [videoProfileDraft, setVideoProfileDraft] = React.useState({ avatarId: "", voiceId: "" });
   const videoOperatorIntro = "Я Travella AI Runtime. Для Video Operator можно нажать быструю команду под чатом или написать задачу обычным языком: “Создай сценарий для R941”, “Создай видео для последнего отказного авиабилета”, “Сделай агрессивнее H502”, “Другой hook E77”.";
   const [messages, setMessages] = React.useState([{ id: "hello", role: "assistant", text: videoOperatorIntro }]);
   const endRef = React.useRef(null);
@@ -2281,6 +2283,13 @@ export default function AdminAiPlatform() {
 
   React.useEffect(() => { load(); }, []);
   React.useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
+  React.useEffect(() => {
+    const profile = status?.video?.runtimeProfile || {};
+    setVideoProfileDraft({
+      avatarId: profile.avatarId || "",
+      voiceId: profile.voiceId || "",
+    });
+  }, [status?.video?.runtimeProfile?.avatarId, status?.video?.runtimeProfile?.voiceId]);
   React.useEffect(() => {
     if (selectedEmployee !== "video_operator") return;
     let alive = true;
@@ -2474,6 +2483,28 @@ export default function AdminAiPlatform() {
       await load();
     } finally {
       setVideoToggleLoading(false);
+    }
+  }
+
+  async function saveVideoProfile() {
+    if (videoProfileLoading) return;
+    setVideoProfileLoading(true);
+    setError("");
+    try {
+      const res = await apiPatch("/api/admin/ai-platform/settings/video-profile", videoProfileDraft, "admin");
+      setStatus((prev) => ({
+        ...(prev || {}),
+        video: {
+          ...(prev?.video || {}),
+          ...(res?.video || {}),
+        },
+      }));
+      await load();
+    } catch (e) {
+      setError(e?.message || "Не удалось сохранить Avatar ID / Voice ID");
+      await load();
+    } finally {
+      setVideoProfileLoading(false);
     }
   }
 
@@ -2674,6 +2705,10 @@ export default function AdminAiPlatform() {
   const heygenReady = Boolean(status?.video?.heygenReady);
   const aiEnabled = Boolean(status?.video?.enabled);
   const artifactStorageReady = Boolean(status?.video?.artifactStorage?.provider);
+  const runtimeProfile = status?.video?.runtimeProfile || {};
+  const profileDirty =
+    String(videoProfileDraft.avatarId || "") !== String(runtimeProfile.avatarId || "") ||
+    String(videoProfileDraft.voiceId || "") !== String(runtimeProfile.voiceId || "");
   const isContentManager = selectedEmployee === "content_manager";
   const isPublishingManager = selectedEmployee === "publishing_manager";
   const isPublishingWork = isContentManager || isPublishingManager;
@@ -2782,7 +2817,7 @@ export default function AdminAiPlatform() {
                 <h2 className="mt-1 text-2xl font-black text-slate-950">🎬 Video Operator</h2>
                 <p className="mt-1 text-sm font-semibold text-slate-500">Рабочий чат. Никаких форм: сотрудник сам определяет задачу, вызывает tools и показывает ход работы.</p>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex max-w-full flex-wrap items-center justify-start gap-2 md:justify-end">
                 <Pill tone="green">live</Pill>
                 <Pill tone="black">AI Runtime</Pill>
                 <Pill tone={aiEnabled ? "green" : "red"}>{aiEnabled ? "AI Video включено" : "AI Video выключено"}</Pill>
@@ -2803,6 +2838,28 @@ export default function AdminAiPlatform() {
                   </span>
                   <span>{videoToggleLoading ? "Сохраняю..." : aiEnabled ? "HeyGen on" : "HeyGen off"}</span>
                 </button>
+                <div className="flex max-w-full flex-wrap items-center gap-2 rounded-2xl bg-slate-50 px-2 py-2 ring-1 ring-slate-200">
+                  <input
+                    value={videoProfileDraft.avatarId}
+                    onChange={(e) => setVideoProfileDraft((prev) => ({ ...prev, avatarId: e.target.value }))}
+                    placeholder="Avatar ID"
+                    className="h-8 w-[190px] rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-950 outline-none placeholder:text-slate-400 focus:border-slate-300"
+                  />
+                  <input
+                    value={videoProfileDraft.voiceId}
+                    onChange={(e) => setVideoProfileDraft((prev) => ({ ...prev, voiceId: e.target.value }))}
+                    placeholder="Voice ID"
+                    className="h-8 w-[190px] rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-950 outline-none placeholder:text-slate-400 focus:border-slate-300"
+                  />
+                  <button
+                    type="button"
+                    onClick={saveVideoProfile}
+                    disabled={videoProfileLoading || !profileDirty}
+                    className="h-8 rounded-xl bg-slate-950 px-3 text-xs font-black text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+                  >
+                    {videoProfileLoading ? "..." : "Сохранить"}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
