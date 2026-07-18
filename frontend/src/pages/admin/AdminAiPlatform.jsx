@@ -2279,6 +2279,7 @@ export default function AdminAiPlatform() {
     avatars: HEYGEN_AVATAR_PRESETS,
     voices: HEYGEN_VOICE_PRESETS,
   });
+  const [videoPresetModal, setVideoPresetModal] = React.useState(null);
   const videoOperatorIntro = "Я Travella AI Runtime. Для Video Operator можно нажать быструю команду под чатом или написать задачу обычным языком: “Создай сценарий для R941”, “Создай видео для последнего отказного авиабилета”, “Сделай агрессивнее H502”, “Другой hook E77”.";
   const [messages, setMessages] = React.useState([{ id: "hello", role: "assistant", text: videoOperatorIntro }]);
   const endRef = React.useRef(null);
@@ -2558,38 +2559,74 @@ export default function AdminAiPlatform() {
     }
   }
 
-  async function addVideoPreset(kind) {
-    if (videoProfileLoading) return;
-    const currentValue = kind === "avatars" ? videoProfileDraft.avatarId : videoProfileDraft.voiceId;
-    const label = window.prompt(kind === "avatars" ? "Название аватара" : "Название голоса", `MY${(videoPresetsDraft[kind] || []).length + 1}`);
-    if (!label) return;
-    const value = window.prompt(kind === "avatars" ? "Avatar ID" : "Voice ID", currentValue || "");
-    if (!value) return;
-    const nextItem = { label: String(label).trim(), value: String(value).trim() };
-    const nextPresets = {
-      avatars: videoPresetsDraft.avatars || [],
-      voices: videoPresetsDraft.voices || [],
-      [kind]: [...(videoPresetsDraft[kind] || []).filter((item) => item.value !== nextItem.value), nextItem],
-    };
-    setVideoProfileDraft((prev) => ({
-      ...prev,
-      [kind === "avatars" ? "avatarId" : "voiceId"]: nextItem.value,
-    }));
-    await saveVideoPresets(nextPresets);
+  function videoPresetKindMeta(kind) {
+    return kind === "avatars"
+      ? { title: "аватар", titleGenitive: "аватара", idLabel: "Avatar ID", field: "avatarId" }
+      : { title: "голос", titleGenitive: "голоса", idLabel: "Voice ID", field: "voiceId" };
   }
 
-  async function deleteVideoPreset(kind) {
+  function addVideoPreset(kind) {
+    if (videoProfileLoading) return;
+    const meta = videoPresetKindMeta(kind);
+    const currentValue = videoProfileDraft[meta.field] || "";
+    setVideoPresetModal({
+      mode: "add",
+      kind,
+      label: `MY${(videoPresetsDraft[kind] || []).length + 1}`,
+      value: currentValue,
+      error: "",
+    });
+  }
+
+  function deleteVideoPreset(kind) {
     if (videoProfileLoading) return;
     const selectedValue = kind === "avatars" ? videoProfileDraft.avatarId : videoProfileDraft.voiceId;
     const selected = (videoPresetsDraft[kind] || []).find((item) => item.value === selectedValue);
     if (!selected) return;
-    if (!window.confirm(`Удалить ${selected.label}?`)) return;
-    const nextPresets = {
-      avatars: videoPresetsDraft.avatars || [],
-      voices: videoPresetsDraft.voices || [],
-      [kind]: (videoPresetsDraft[kind] || []).filter((item) => item.value !== selectedValue),
-    };
-    await saveVideoPresets(nextPresets);
+    setVideoPresetModal({ mode: "delete", kind, item: selected, error: "" });
+  }
+
+  function closeVideoPresetModal() {
+    if (!videoProfileLoading) setVideoPresetModal(null);
+  }
+
+  function updateVideoPresetModal(patch) {
+    setVideoPresetModal((prev) => (prev ? { ...prev, ...patch, error: "" } : prev));
+  }
+
+  async function confirmVideoPresetModal() {
+    if (!videoPresetModal || videoProfileLoading) return;
+    const kind = videoPresetModal.kind;
+    const meta = videoPresetKindMeta(kind);
+    if (videoPresetModal.mode === "add") {
+      const label = String(videoPresetModal.label || "").trim();
+      const value = String(videoPresetModal.value || "").trim();
+      if (!label || !value) {
+        setVideoPresetModal((prev) => (prev ? { ...prev, error: "Заполни название и ID preset’а." } : prev));
+        return;
+      }
+      const nextItem = { label, value };
+      const nextPresets = {
+        avatars: videoPresetsDraft.avatars || [],
+        voices: videoPresetsDraft.voices || [],
+        [kind]: [...(videoPresetsDraft[kind] || []).filter((item) => item.value !== nextItem.value), nextItem],
+      };
+      setVideoProfileDraft((prev) => ({ ...prev, [meta.field]: nextItem.value }));
+      setVideoPresetModal(null);
+      await saveVideoPresets(nextPresets);
+      return;
+    }
+    if (videoPresetModal.mode === "delete") {
+      const value = videoPresetModal.item?.value;
+      if (!value) return;
+      const nextPresets = {
+        avatars: videoPresetsDraft.avatars || [],
+        voices: videoPresetsDraft.voices || [],
+        [kind]: (videoPresetsDraft[kind] || []).filter((item) => item.value !== value),
+      };
+      setVideoPresetModal(null);
+      await saveVideoPresets(nextPresets);
+    }
   }
 
   async function savePublishingPackage(video, items) {
@@ -2797,6 +2834,7 @@ export default function AdminAiPlatform() {
   const profileDirty =
     String(videoProfileDraft.avatarId || "") !== String(runtimeProfile.avatarId || "") ||
     String(videoProfileDraft.voiceId || "") !== String(runtimeProfile.voiceId || "");
+  const videoPresetModalMeta = videoPresetModal ? videoPresetKindMeta(videoPresetModal.kind) : null;
   const isContentManager = selectedEmployee === "content_manager";
   const isPublishingManager = selectedEmployee === "publishing_manager";
   const isPublishingWork = isContentManager || isPublishingManager;
@@ -3143,6 +3181,107 @@ export default function AdminAiPlatform() {
           />
         ) : isContentManager ? <ContentInspector videos={videos} /> : <Inspector task={currentTask} />}
       </section>
+      {videoPresetModal ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) closeVideoPresetModal();
+          }}
+        >
+          <div
+            className="w-full max-w-[460px] rounded-[28px] border border-slate-200 bg-white p-5 shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="video-preset-modal-title"
+            onKeyDown={(e) => {
+              if (e.key === "Escape") closeVideoPresetModal();
+              if (e.key === "Enter" && videoPresetModal.mode === "add") confirmVideoPresetModal();
+            }}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-xs font-black uppercase tracking-wide text-slate-400">HeyGen preset</div>
+                <h3 id="video-preset-modal-title" className="mt-1 text-xl font-black text-slate-950">
+                  {videoPresetModal.mode === "add" ? `Добавить ${videoPresetModalMeta?.title}` : `Удалить ${videoPresetModalMeta?.title}`}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={closeVideoPresetModal}
+                disabled={videoProfileLoading}
+                className="h-9 w-9 rounded-full bg-slate-50 text-lg font-black text-slate-400 ring-1 ring-slate-200 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40"
+                aria-label="Закрыть"
+              >
+                ×
+              </button>
+            </div>
+
+            {videoPresetModal.mode === "add" ? (
+              <div className="mt-5 space-y-3">
+                <label className="block">
+                  <span className="text-xs font-black uppercase tracking-wide text-slate-500">Название {videoPresetModalMeta?.titleGenitive}</span>
+                  <input
+                    autoFocus
+                    value={videoPresetModal.label || ""}
+                    onChange={(e) => updateVideoPresetModal({ label: e.target.value })}
+                    placeholder="Например: MY3"
+                    className="mt-2 h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-950 outline-none placeholder:text-slate-400 focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-black uppercase tracking-wide text-slate-500">{videoPresetModalMeta?.idLabel}</span>
+                  <input
+                    value={videoPresetModal.value || ""}
+                    onChange={(e) => updateVideoPresetModal({ value: e.target.value })}
+                    placeholder={videoPresetModalMeta?.idLabel}
+                    className="mt-2 h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-950 outline-none placeholder:text-slate-400 focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
+                  />
+                </label>
+                <div className="rounded-2xl bg-slate-50 px-4 py-3 text-xs font-bold text-slate-500">
+                  Новый preset сразу попадёт в выпадающий список и станет выбранным для следующих видео.
+                </div>
+              </div>
+            ) : (
+              <div className="mt-5 space-y-3">
+                <div className="rounded-2xl bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700 ring-1 ring-rose-100">
+                  Удалить preset <b>{videoPresetModal.item?.label}</b> из списка HeyGen?
+                </div>
+                <div className="rounded-2xl bg-slate-50 px-4 py-3 text-xs font-bold text-slate-500 break-all">
+                  {videoPresetModal.item?.value}
+                </div>
+              </div>
+            )}
+
+            {videoPresetModal.error ? (
+              <div className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-xs font-black text-amber-700 ring-1 ring-amber-100">
+                {videoPresetModal.error}
+              </div>
+            ) : null}
+
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={closeVideoPresetModal}
+                disabled={videoProfileLoading}
+                className="h-11 rounded-2xl bg-slate-50 px-5 text-sm font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100 disabled:opacity-40"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                onClick={confirmVideoPresetModal}
+                disabled={videoProfileLoading}
+                className={cn(
+                  "h-11 rounded-2xl px-5 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400",
+                  videoPresetModal.mode === "delete" ? "bg-rose-600 hover:bg-rose-700" : "bg-slate-950 hover:bg-slate-800"
+                )}
+              >
+                {videoProfileLoading ? "Сохраняю..." : videoPresetModal.mode === "delete" ? "Удалить" : "Добавить"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
