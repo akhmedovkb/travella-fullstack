@@ -368,7 +368,7 @@ function getJobServiceId(job) {
   const output = job?.output || {};
   const service = output.service || {};
   const ctx = service.videoContext || {};
-  const raw = ctx.code || service.code || service.id || "";
+  const raw = service.id || service.serviceId || ctx.serviceId || ctx.id || ctx.code || service.code || "";
   const match = String(raw).match(/R?\s*(\d+)/i);
   return match ? match[1] : "";
 }
@@ -384,12 +384,19 @@ function buildMarketplaceServiceUrl(serviceId, params = {}) {
   return url.toString();
 }
 
+function buildContactUnlockPaymentUrl(serviceId) {
+  const url = new URL("/client/balance", SITE_URL);
+  url.searchParams.set("service_id", String(serviceId));
+  url.searchParams.set("source", "telegram_ai_publish");
+  return url.toString();
+}
+
 function buildTelegramVideoReplyMarkup(job) {
   const serviceId = getJobServiceId(job);
   if (!serviceId) return null;
   return {
     inline_keyboard: [
-      [{ text: "💬 Связаться с поставщиком", url: buildMarketplaceServiceUrl(serviceId, { action: "contact" }) }],
+      [{ text: "💳 Оплатить доступ к поставщику", url: buildContactUnlockPaymentUrl(serviceId) }],
       [{ text: "✈️ Детали рейса", url: buildMarketplaceServiceUrl(serviceId, { details: "flight" }) }],
     ],
   };

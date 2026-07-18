@@ -25,7 +25,7 @@ function buildContentReview(ctx = {}, packageItems = []) {
     { id: "no_fake_discount", label: "Нет обещания скидки без старой цены", passed: !/скидк|дешевле|эконом/i.test(joined) },
     { id: "no_last_seats", label: "Нет обещания последних мест без подтверждения", passed: !/последн(ие|ее|ий)\s+мест/i.test(joined) },
     { id: "safe_urgency", label: "Срочность объяснена отказным предложением", passed: /отказн|может уйти|актуальн/i.test(joined) },
-    { id: "has_cta", label: "Есть понятный призыв к действию", passed: /напиши|свяжитесь|забрать|Travella/i.test(joined) },
+    { id: "has_cta", label: "Есть понятный призыв к действию", passed: /напиши|свяжитесь|забрать|Travella|оплатите доступ|оплатить доступ/i.test(joined) },
   ];
 
   const missingFields = [];
@@ -85,7 +85,7 @@ function buildPublishingPackage(ctx = {}) {
         priceLine,
         codeLine,
         "",
-        "Предложение отказное и может быстро стать неактуальным. Для бронирования свяжитесь с Travella.",
+        "Предложение отказное и может быстро стать неактуальным. Для бронирования нажмите кнопку «Оплатить доступ к поставщику» под видео.",
       ]),
     },
     {
