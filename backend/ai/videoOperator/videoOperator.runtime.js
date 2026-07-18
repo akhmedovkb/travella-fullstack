@@ -155,6 +155,20 @@ function shouldUseLatestService(command) {
   return /(сегодня|лучший|последн|актуальн|любой|сам выбери|выбери сам)/i.test(text);
 }
 
+function formatRouteCategory(route = {}) {
+  const labels = {
+    refused_tour: "отказной тур",
+    author_tour: "авторский тур",
+    refused_hotel: "отказной отель",
+    refused_flight: "отказной авиабилет",
+    refused_ticket: "отказной билет",
+    refused_event_ticket: "отказной билет на мероприятие",
+  };
+  const filters = Array.isArray(route.categoryFilters) ? route.categoryFilters : [];
+  if (!filters.length) return "отказное предложение";
+  return filters.map((item) => labels[item] || item).join(" / ");
+}
+
 function formatServiceSuggestions(services = []) {
   return services
     .slice(0, 6)
@@ -183,10 +197,10 @@ async function runVideoOperatorTask({ command, actor = {}, runtimeRoute = null }
     let service = null;
 
     if (!route.serviceCode && shouldUseLatestService(command)) {
-      addEvent(job.id, { step: "source", type: "tool_call", tool: "MarketplaceLookup", message: "Код не указан. Ищу последний активный отказной тур в базе Travella." });
-      const latest = await findLatestRefusedService();
+      addEvent(job.id, { step: "source", type: "tool_call", tool: "MarketplaceLookup", message: `Код не указан. Ищу последний активный ${formatRouteCategory(route)} в базе Travella.` });
+      const latest = await findLatestRefusedService({ categoryFilters: route.categoryFilters || [] });
       if (!latest.found) {
-        const error = { code: latest.reason || "NO_REFUSED_SERVICES", message: "Не нашёл активные отказные туры в базе Travella." };
+        const error = { code: latest.reason || "NO_REFUSED_SERVICES", message: `Не нашёл активные предложения: ${formatRouteCategory(route)}.` };
         addEvent(job.id, { step: "source", level: "error", message: error.message });
         updateJob(job.id, { status: "failed", error });
         return { success: false, job: getJob(job.id), error };
@@ -197,23 +211,23 @@ async function runVideoOperatorTask({ command, actor = {}, runtimeRoute = null }
 
     if (!route.serviceCode) {
       addEvent(job.id, { step: "source", level: "error", message: "В задаче не найден код отказного тура формата R857." });
-      const error = { code: "SERVICE_CODE_REQUIRED", message: "Напиши код отказного тура, например: Создай видео для R857" };
+      const error = { code: "SERVICE_CODE_REQUIRED", message: "Напиши код предложения, например: R857, A857, H857 или E857. Можно также написать: “Создай видео для последнего отказного авиабилета”." };
       updateJob(job.id, { status: "failed", error });
       return { success: false, job: getJob(job.id), error };
     }
 
     let lookup = { found: true, service };
     if (!service) {
-      addEvent(job.id, { step: "source", type: "tool_call", tool: "MarketplaceLookup", message: `Ищу реальный отказной тур ${route.serviceCode} в базе Travella.` });
-      lookup = await findRefusedServiceByCode(route.serviceCode);
+      addEvent(job.id, { step: "source", type: "tool_call", tool: "MarketplaceLookup", message: `Ищу реальное предложение ${route.serviceCode} (${formatRouteCategory(route)}) в базе Travella.` });
+      lookup = await findRefusedServiceByCode(route.serviceCode, { categoryFilters: route.categoryFilters || [] });
     }
 
     if (!lookup.found) {
-      const suggestions = await listRecentRefusedServices({ limit: 6 }).catch(() => []);
+      const suggestions = await listRecentRefusedServices({ limit: 6, categoryFilters: route.categoryFilters || [] }).catch(() => []);
       const suggestionText = formatServiceSuggestions(suggestions);
       const message = suggestionText
-        ? `Не нашёл активный отказной тур ${route.serviceCode} в базе Travella.\n\nДоступные отказные предложения:\n${suggestionText}\n\nНапиши, например: “Создай видео для ${suggestions[0]?.code || "R..." }”.`
-        : `Не нашёл активный отказной тур ${route.serviceCode} в базе Travella.`;
+        ? `Не нашёл активное предложение ${route.serviceCode} (${formatRouteCategory(route)}) в базе Travella.\n\nДоступные варианты:\n${suggestionText}\n\nНапиши, например: “Создай видео для ${suggestions[0]?.code || "R..." }”.`
+        : `Не нашёл активное предложение ${route.serviceCode} (${formatRouteCategory(route)}) в базе Travella.`;
       const error = { code: lookup.reason || "NOT_FOUND", message, suggestions: suggestions.map((x) => ({ id: x.id, code: x.code, title: x.title, category: x.category, status: x.status })) };
       addEvent(job.id, { step: "source", level: "error", message: error.message });
       updateJob(job.id, { status: "failed", error });

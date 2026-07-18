@@ -259,7 +259,7 @@ function Inspector({ task }) {
       <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="text-xs font-black uppercase tracking-wide text-slate-500">Inspector</div>
         <h3 className="mt-1 text-xl font-black text-slate-950">Контекст текущей задачи</h3>
-        {!task ? <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm font-semibold text-slate-500">Пока нет активной задачи. Выбери быструю команду под чатом или напиши: “Создай сценарий для R941”, “Сделай агрессивнее R941”, “Создай видео для последнего отказного тура”.</div> : null}
+        {!task ? <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm font-semibold text-slate-500">Пока нет активной задачи. Выбери быструю команду под чатом или напиши: “Создай сценарий для R941”, “Создай видео для последнего отказного авиабилета”, “Сделай агрессивнее H502”.</div> : null}
         {task ? <div className="mt-4 space-y-3 text-sm font-semibold text-slate-600">
           <div className="rounded-2xl bg-slate-50 p-4"><div className="text-slate-400">Задача</div><b className="text-slate-950">{task.command}</b></div>
           <div className="flex justify-between rounded-2xl bg-slate-50 p-4"><span>Статус</span><b className="text-slate-950">{statusMeta.label}</b></div>
@@ -2250,7 +2250,7 @@ export default function AdminAiPlatform() {
   const [publishFeedback, setPublishFeedback] = React.useState({});
   const [error, setError] = React.useState("");
   const [currentTask, setCurrentTask] = React.useState(null);
-  const videoOperatorIntro = "Я Travella AI Runtime. Для Video Operator можно нажать быструю команду под чатом или написать задачу обычным языком: “Создай сценарий для R941”, “Другой hook R941”, “Сделай агрессивнее R941”, “Создай видео для последнего отказного тура”.";
+  const videoOperatorIntro = "Я Travella AI Runtime. Для Video Operator можно нажать быструю команду под чатом или написать задачу обычным языком: “Создай сценарий для R941”, “Создай видео для последнего отказного авиабилета”, “Сделай агрессивнее H502”, “Другой hook E77”.";
   const [messages, setMessages] = React.useState([{ id: "hello", role: "assistant", text: videoOperatorIntro }]);
   const endRef = React.useRef(null);
 
@@ -2740,11 +2740,11 @@ export default function AdminAiPlatform() {
                 value={command}
                 onChange={(e) => setCommand(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); runTask(); } }}
-                placeholder={currentServiceCode ? `Напиши: Создай видео для ${currentServiceCode}, переделай hook, сделай агрессивнее...` : "Напиши: R857, Создай видео R857, последний отказной тур..."}
+                placeholder={currentServiceCode ? `Напиши: Создай видео для ${currentServiceCode}, переделай hook, сделай агрессивнее...` : "Напиши: R857, H502, A1284, последний отказной авиабилет..."}
                 className="min-h-[78px] w-full resize-none rounded-2xl border-0 px-3 py-2 text-sm font-semibold text-slate-950 outline-none placeholder:text-slate-400"
               />
               <div className="flex flex-col gap-3 border-t border-slate-100 pt-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="text-xs font-bold text-slate-400">Enter — выполнить, Shift+Enter — новая строка. Можно писать: сценарий, видео, последний отказной тур.</div>
+                <div className="text-xs font-bold text-slate-400">Enter — выполнить, Shift+Enter — новая строка. Можно писать: сценарий, видео, последний тур, авиабилет, отель или мероприятие.</div>
                 <button type="button" onClick={runTask} disabled={loading || !command.trim()} className="rounded-2xl bg-slate-950 px-6 py-3 text-sm font-black text-white hover:bg-slate-800 disabled:opacity-40">▶ Выполнить</button>
               </div>
             </div>

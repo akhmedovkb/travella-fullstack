@@ -326,6 +326,9 @@ function destinationToPlaceCase(value) {
     "анталья": "Анталье",
     "алания": "Алании",
     "турция": "Турции",
+    "дубай": "Дубае",
+    "стамбул": "Стамбуле",
+    "ташкент": "Ташкенте",
   };
   if (known[lower]) return known[lower];
   if (/ия$/i.test(text)) return `${text.slice(0, -2)}ии`;
@@ -373,9 +376,27 @@ function joinSentence(parts) {
 function normalizeUrgency(value) {
   const text = clean(value);
   if (!text || /^(normal|low|medium|high)$/i.test(text)) {
-    return "Это отказной тур, поэтому предложение может уйти в любой момент";
+    return "Это отказное предложение, поэтому оно может уйти в любой момент";
   }
   return text;
+}
+
+function getOfferKind(ctx = {}) {
+  const text = `${ctx.category || ""} ${ctx.title || ""}`.toLowerCase();
+  if (/авиа|flight|перел[её]т/.test(text)) return "отказной авиабилет";
+  if (/отел|hotel|гостиниц/.test(text)) return "отказной отель";
+  if (/мероприят|event|ticket|билет/.test(text)) return "отказной билет на мероприятие";
+  if (/авторск/.test(text)) return "авторский тур";
+  return "отказной тур";
+}
+
+function getOfferKindPlural(ctx = {}) {
+  const kind = getOfferKind(ctx);
+  if (kind === "отказной авиабилет") return "отказные авиабилеты";
+  if (kind === "отказной отель") return "отказные отели";
+  if (kind === "отказной билет на мероприятие") return "отказные билеты на мероприятия";
+  if (kind === "авторский тур") return "авторские туры";
+  return "отказные туры";
 }
 
 function pickVariant(seed, variants, offset = 0) {
@@ -403,14 +424,26 @@ function getScriptSeed(ctx = {}, options = {}) {
   ].filter(hasValue).join("|");
 }
 
-function buildDateLines(ctx, dateRange) {
+function buildDateLines(ctx, dateRange, offerKind = "") {
+  const isHotel = /отель/.test(offerKind);
+  const isEvent = /мероприят/.test(offerKind);
+  const isFlight = /авиабилет/.test(offerKind);
   if (dateRange) {
+    if (isHotel) {
+      return [
+        `Заезд — ${formatSpokenDate(dateRange.startRaw, false)}.`,
+        `Выезд — ${formatSpokenDate(dateRange.endRaw, false)}.`,
+      ];
+    }
     return [
-      `Вылет — ${formatSpokenDate(dateRange.startRaw, false)}.`,
-      `Обратно — ${formatSpokenDate(dateRange.endRaw, false)}.`,
+      `${isFlight ? "Туда" : "Вылет"} — ${formatSpokenDate(dateRange.startRaw, false)}.`,
+      `${isFlight ? "Обратно" : "Обратно"} — ${formatSpokenDate(dateRange.endRaw, false)}.`,
     ];
   }
-  if (hasValue(ctx.dates)) return [`Даты поездки: ${formatSpokenDateRange(ctx.dates)}.`];
+  if (hasValue(ctx.dates)) {
+    const label = isEvent ? "Дата мероприятия" : isHotel ? "Дата заезда" : isFlight ? "Дата вылета" : "Даты поездки";
+    return [`${label}: ${formatSpokenDateRange(ctx.dates)}.`];
+  }
   return [];
 }
 
@@ -467,23 +500,25 @@ function getSafeFactRules(ctx = {}) {
 function buildHook(ctx = {}, options = {}) {
   const seed = getScriptSeed(ctx, options);
   const mode = options.scriptMode || "default";
+  const offerKind = getOfferKind(ctx);
+  const offerKindPlural = getOfferKindPlural(ctx);
   const aggressiveHooks = [
     "Стоп! Не пролистывайте, этот вариант надо увидеть сейчас!",
-    "Секунду! В базе отказных туров появился сильный вариант!",
-    "Внимание сюда! Такой тур долго не ждёт!",
+    `Секунду! В базе “${offerKindPlural}” появился сильный вариант!`,
+    `Внимание сюда! Такой ${offerKind} долго не ждёт!`,
     "Не листайте дальше! Тут вариант для быстрого решения!",
-    "Смотрите внимательно: это тот самый отказной тур, который забирают быстро!",
+    `Смотрите внимательно: это тот самый ${offerKind}, который забирают быстро!`,
   ];
   const compactHooks = [
-    "Быстро: есть отказной тур.",
+    `Быстро: есть ${offerKind}.`,
     "Есть свежий отказной вариант.",
-    "Смотрите, что появилось в базе отказных туров.",
+    `Смотрите, что появилось в базе “${offerKindPlural}”.`,
   ];
   return pickVariant(seed, mode === "short" ? compactHooks : mode === "aggressive" || mode === "reroll" ? aggressiveHooks : [
     "Стоп! Стоп! Стоп! Не пролистывайте!",
     "Подождите! Вот это сейчас надо увидеть!",
-    "Секунду внимания! Тут появился очень горячий отказной тур!",
-    "Не листайте дальше! Смотрите, что есть в базе отказных туров!",
+    `Секунду внимания! Тут появился очень горячий ${offerKind}!`,
+    `Не листайте дальше! Смотрите, что есть в базе “${offerKindPlural}”!`,
     "Внимание! Есть вариант, который долго ждать не будет!",
   ]);
 }
@@ -491,6 +526,8 @@ function buildHook(ctx = {}, options = {}) {
 function buildScript(ctx = {}, options = {}) {
   const seed = getScriptSeed(ctx, options);
   const mode = options.scriptMode || "default";
+  const offerKind = getOfferKind(ctx);
+  const offerKindPlural = getOfferKindPlural(ctx);
   const title = cleanOfferName(ctx.title, ctx.category || "отказной тур");
   const destination = normalizeDestinationName(ctx.destination || title);
   const travelDestination = destinationToTravelCase(destination);
@@ -501,14 +538,14 @@ function buildScript(ctx = {}, options = {}) {
   const hotel = parseHotelForSales(ctx.hotel);
   const price = formatSpokenPrice(ctx);
   const sourceLine = pickVariant(seed, mode === "aggressive" ? [
-    "У меня для вас сильный live-вариант из базы отказных туров Узбекистана.",
-    "Это не просто направление, это быстрый шанс забрать готовый отказной тур из базы Узбекистана.",
-    "Сейчас покажу вариант, который в базе отказных туров может долго не прожить.",
-    "В базе отказных туров Узбекистана появился вариант для тех, кто решает быстро.",
+    `У меня для вас сильный live-вариант из базы: ${offerKindPlural} Узбекистана.`,
+    `Это быстрый шанс забрать готовое предложение из базы: ${offerKindPlural} Узбекистана.`,
+    `Сейчас покажу вариант, который в базе “${offerKindPlural}” может долго не прожить.`,
+    `В базе Travella появился ${offerKind} для тех, кто решает быстро.`,
   ] : [
-    "У меня для вас настоящий туристический разрыв из базы отказных туров Узбекистана.",
-    "В базе отказных туров Узбекистана появился вариант, который точно стоит открыть.",
-    "Смотрите внимательно: это отказной тур из базы Узбекистана, и он уже готов к быстрому решению.",
+    `У меня для вас настоящий туристический разрыв из базы: ${offerKindPlural} Узбекистана.`,
+    `В базе Travella появился ${offerKind}, который точно стоит открыть.`,
+    `Смотрите внимательно: это ${offerKind} из базы Узбекистана, и он уже готов к быстрому решению.`,
     "Вот такие предложения любят те, кто умеет быстро забирать хорошие варианты.",
   ], 1);
   const routeLine = pickVariant(seed, mode === "aggressive" ? [
@@ -516,7 +553,7 @@ function buildScript(ctx = {}, options = {}) {
     `Направление — ${travelDestination}${fromCity ? `, вылет из ${fromCity}` : ""}. Всё уже собрано в один пакет.`,
     `Ловите: ${travelDestination}${fromCity ? ` из ${fromCity}` : ""}. Это именно тот формат, где долго думать опасно.`,
   ] : [
-    `Отказной тур в ${travelDestination}${fromCity ? ` из ${fromCity}` : ""}!`,
+    `${capitalizeFirst(offerKind)} в ${travelDestination}${fromCity ? ` из ${fromCity}` : ""}!`,
     `${destination}${fromCity ? ` из ${fromCity}` : ""} — вот что сейчас появилось!`,
     `Летний вариант в ${travelDestination}${fromCity ? `, вылет из ${fromCity}` : ""}!`,
   ], 2);
@@ -533,7 +570,7 @@ function buildScript(ctx = {}, options = {}) {
   ], 4);
   const urgencyLines = pickVariant(seed, mode === "aggressive" ? [
     [
-      "Это отказной тур.",
+      `Это ${offerKind}.`,
       "Такие варианты не лежат в базе спокойно.",
       "Увидели, проверили, забрали.",
     ],
@@ -543,20 +580,20 @@ function buildScript(ctx = {}, options = {}) {
       "Поэтому действовать лучше сразу.",
     ],
     [
-      "Отказные туры живут быстро.",
+      `${capitalizeFirst(offerKindPlural)} живут быстро.`,
       "Если даты и цена подходят — не откладывайте.",
       "Следующий шаг простой: открыть контакт с поставщиком.",
     ],
   ] : [
     [
-      "Но запомните: это отказной тур.",
+      `Но запомните: это ${offerKind}.`,
       "Такие предложения не ждут долго.",
       "Пока вы думаете — его могут забрать.",
     ],
     [
       "Это отказной вариант, поэтому тянуть нельзя.",
       "Если даты и цена подходят, действовать нужно сразу.",
-      "Такие туры обычно уходят быстро.",
+      "Такие предложения обычно уходят быстро.",
     ],
     [
       "Главное — не откладывать.",
@@ -598,8 +635,9 @@ function buildScript(ctx = {}, options = {}) {
   lines.push(sourceLine);
   lines.push("");
   lines.push(routeLine);
-  lines.push(...buildDateLines(ctx, dateRange));
-  if (nights) lines.push(`Целых ${nights} на отдыхе в ${placeDestination}.`);
+  lines.push(...buildDateLines(ctx, dateRange, offerKind));
+  if (nights && /отель/.test(offerKind)) lines.push(`${capitalizeFirst(nights)} проживания в ${placeDestination}.`);
+  if (nights && !/отель|авиабилет|мероприят/.test(offerKind)) lines.push(`Целых ${nights} на отдыхе в ${placeDestination}.`);
 
   const hotelLines = buildHotelLines(hotel, hotelMode);
   if (hotelLines.length) {
@@ -628,12 +666,13 @@ function buildScript(ctx = {}, options = {}) {
       buildHook(ctx, options),
       "",
       `${destination}${fromCity ? ` из ${fromCity}` : ""}.`,
-      ...buildDateLines(ctx, dateRange),
-      nights ? `${capitalizeFirst(nights)} отдыха в ${placeDestination}.` : "",
+      ...buildDateLines(ctx, dateRange, offerKind),
+      nights && /отель/.test(offerKind) ? `${capitalizeFirst(nights)} проживания в ${placeDestination}.` : "",
+      nights && !/отель|авиабилет|мероприят/.test(offerKind) ? `${capitalizeFirst(nights)} отдыха в ${placeDestination}.` : "",
       hotel.name ? `${hotel.name}${hotel.stars ? ` — ${hotel.stars}` : ""}.` : "",
       stayItems.length ? sentence(`Для двоих: ${stayItems.join(", ")}`) : "",
       price ? `Цена — ${price}.` : "",
-      "Это отказной тур, поэтому лучше проверить наличие сразу.",
+      `Это ${offerKind}, поэтому лучше проверить наличие сразу.`,
       "Нажимайте «Связаться с поставщиком» под видео.",
     ].filter(hasValue).join("\n").replace(/\n{3,}/g, "\n\n").trim();
   }
@@ -651,7 +690,7 @@ function buildAnalysis(ctx = {}) {
 
   return {
     mainOffer: `${clean(ctx.category, "Отказное предложение")} ${ctx.code || ""}`.trim(),
-    target: "клиенты, которые готовы быстро принять решение по отказному туру из базы Узбекистана",
+    target: `клиенты, которые готовы быстро принять решение: ${getOfferKind(ctx)} из базы Узбекистана`,
     triggers,
     recommendedFormat: "vertical_9_16_avatar_video",
   };
@@ -672,7 +711,7 @@ function buildScriptReview(ctx = {}, script = "") {
     { id: "no_flight_voiceover", label: "Детали рейса не озвучиваются", passed: !/перел[её]т|рейс|вылет\s+\d{1,2}\s+[а-яё]+/i.test(script) },
     { id: "no_repeated_price_label", label: "Цена не повторяется лишний раз", passed: (script.match(/цена\s*[—:-]/gi) || []).length <= 1 },
     { id: "sales_pitch_compact", label: "Сценарий остаётся коротким live pitch", passed: script.split(/\n+/).filter(Boolean).length <= 18 },
-    { id: "live_sales_energy", label: "Есть энергия live-продажи", passed: /стоп|смотрите|внимание|нажимайте|забирайте/i.test(script) },
+    { id: "live_sales_energy", label: "Есть энергия live-продажи", passed: /стоп|смотрите|внимание|нажимайте|забирайте|листайте/i.test(script) },
   ];
 
   return {
