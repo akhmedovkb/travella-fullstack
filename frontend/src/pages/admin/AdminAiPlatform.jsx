@@ -291,7 +291,7 @@ function Message({ msg, onStartHeygen, onRefreshHeygen, onSaveScript, canStartHe
                     disabled={!promptDirty || scriptSaving === msg.job?.id}
                     className="rounded-2xl bg-emerald-600 px-4 py-2 text-xs font-black text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-slate-400"
                   >
-                    {scriptSaving === msg.job?.id ? "Сохраняю..." : "Сохранить сценарий"}
+                    {scriptSaving === msg.job?.id ? "Сохраняю..." : "Сохранить промпт"}
                   </button>
                 </div>
               </div>
@@ -302,9 +302,23 @@ function Message({ msg, onStartHeygen, onRefreshHeygen, onSaveScript, canStartHe
         ) : null}
         {msg.output?.motionPrompt && !scriptEditing ? (
           <div className="mt-3 rounded-2xl bg-slate-900 p-4 text-white ring-1 ring-slate-800">
-            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-              <div className="text-xs font-black uppercase tracking-wide text-slate-300">Custom Motion для HeyGen</div>
-              {msg.output?.motionPromptEditedAt ? <div className="text-xs font-bold text-emerald-300">Отредактирован вручную</div> : null}
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="text-xs font-black uppercase tracking-wide text-slate-300">Custom Motion для HeyGen</div>
+                {msg.output?.motionPromptEditedAt ? <div className="mt-1 text-xs font-bold text-emerald-300">Отредактирован вручную</div> : null}
+              </div>
+              {canEditScript ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setScriptEditing(true);
+                    setScriptError("");
+                  }}
+                  className="rounded-2xl bg-white/10 px-3 py-1.5 text-xs font-black text-white ring-1 ring-white/15 hover:bg-white/15"
+                >
+                  Редактировать
+                </button>
+              ) : null}
             </div>
             <div className="mt-3 whitespace-pre-wrap text-sm font-semibold leading-7 text-slate-100">{msg.output.motionPrompt}</div>
           </div>
