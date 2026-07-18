@@ -1,6 +1,7 @@
 // backend/ai/videoOperator/refusedServiceLookup.js
 
 const db = require("../../db");
+const { isServiceActual } = require("../../telegram/helpers/serviceActual");
 
 function parseDetailsAny(details) {
   if (!details) return {};
@@ -247,6 +248,7 @@ async function findRefusedServiceByCode(code, options = {}) {
 
   const row = q.rows?.[0];
   if (!row) return { found: false, code: normalized.code, id: normalized.id, reason: "NOT_FOUND" };
+  if (!isServiceActual(row.details, row)) return { found: false, code: normalized.code, id: normalized.id, reason: "NOT_ACTUAL" };
   return { found: true, service: normalizeService(row) };
 }
 
@@ -283,7 +285,7 @@ async function listRecentRefusedServices({ limit = 8, categoryFilters = [], cate
     `,
     params
   );
-  return (q.rows || []).map(normalizeService);
+  return (q.rows || []).filter((row) => isServiceActual(row.details, row)).map(normalizeService);
 }
 
 async function findLatestRefusedService(options = {}) {
@@ -348,7 +350,7 @@ async function searchRefusedServices({ q = "", limit = 10, categoryFilters = [],
     `,
     params
   );
-  return (qres.rows || []).map(normalizeService);
+  return (qres.rows || []).filter((row) => isServiceActual(row.details, row)).map(normalizeService);
 }
 
 module.exports = {

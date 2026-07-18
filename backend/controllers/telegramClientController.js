@@ -2,6 +2,7 @@
 
 const pool = require("../db");
 const { tgSendToAdmins } = require("../utils/telegram");
+const { isServiceActual } = require("../telegram/helpers/serviceActual");
 
 const SITE_PUBLIC_URL = (
   process.env.SITE_PUBLIC_URL ||
@@ -139,6 +140,8 @@ function getRefusedActualityDate(details = {}, service = {}) {
 }
 
 function isRefusedServiceActual(service, today = new Date()) {
+  return isServiceActual(service?.details, service);
+  /* legacy implementation kept below for reference/fallback shape */
   const details = normalizeDetails(service?.details);
   const category = String(service?.category || details.category || "").toLowerCase();
   const isRefused = category.startsWith("refused_") || category === "author_tour";
@@ -711,9 +714,11 @@ async function searchCategory(req, res) {
       [type]
     );
 
+    const items = (result.rows || []).filter((row) => isRefusedServiceActual(row));
+
     return res.json({
       success: true,
-      items: result.rows,
+      items,
       chatId,
       type,
     });

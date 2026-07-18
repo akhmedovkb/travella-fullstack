@@ -38,6 +38,14 @@ const UPCOMING_TS = `
   COALESCE(
     ${tsExpr("event_date")},
     ${tsExpr("eventDate")},
+    ${tsExpr("dateFrom")},
+    ${tsExpr("date_from")},
+    ${tsExpr("departureDate")},
+    ${tsExpr("departure_date")},
+    ${tsExpr("flightDate")},
+    ${tsExpr("flight_date")},
+    ${tsExpr("checkIn")},
+    ${tsExpr("check_in")},
     ${tsExpr("hotel_check_in")},
     ${tsExpr("hotelCheckIn")},
     ${tsExpr("start_flight_date")},
@@ -69,8 +77,15 @@ function buildWhere({ category }) {
   // ручное выключение
   clauses.push(`COALESCE(NULLIF(s.details->>'isActive','')::boolean, true) = true`);
 
-    // exp: не истёк (ISO/epoch-safe)
+  // exp: не истёк (ISO/epoch-safe)
   clauses.push(`( ${EXPIRES_AT} IS NULL OR ${EXPIRES_AT} >= NOW() )`);
+
+  // отказные предложения нельзя показывать после даты вылета/заезда/мероприятия
+  clauses.push(`(
+    NOT (s.category LIKE 'refused_%' OR s.category = 'author_tour')
+    OR ${UPCOMING_TS} IS NULL
+    OR (${UPCOMING_TS})::date >= CURRENT_DATE
+  )`);
   
   // ttl_hours от created_at
     clauses.push(`

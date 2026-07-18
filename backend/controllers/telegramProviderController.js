@@ -8,6 +8,7 @@ const { logProviderFunnelEvent } = require("../utils/providerFunnel");
 const { buildRefusedQuality } = require("../utils/refusedQuality");
 const { REFUSED_CATEGORIES } = require("../utils/serviceCategories");
 const { normalizeRefusedFlightDetails } = require("../utils/flightDetailsNormalizer");
+const { isServiceActual } = require("../telegram/helpers/serviceActual");
 const MAX_TITLE_LEN = 100;
 const {
   extractPrices,
@@ -206,6 +207,8 @@ function getRefusedActualityDate(details = {}, service = {}) {
 }
 
 function isRefusedServiceActual(service, today = new Date()) {
+  return isServiceActual(service?.details, service);
+  /* legacy implementation kept below for reference/fallback shape */
   const details = normalizeDetails(service?.details);
   const category = String(service?.category || details.category || "").toLowerCase();
   const isRefused = category.startsWith("refused_") || category === "author_tour";
