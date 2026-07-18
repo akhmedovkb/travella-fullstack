@@ -4,6 +4,7 @@
 const {
   buildHook,
   buildScript,
+  buildMotionPrompt,
   buildScriptReview,
 } = require("./videoPromptSystem");
 
@@ -35,10 +36,12 @@ function buildVideoOperatorScript(input = {}) {
   const facts = buildTourFacts(input);
   const hook = buildHook(facts);
   const script = buildScript(facts);
+  const motionPrompt = buildMotionPrompt(facts);
 
   return {
     hook,
     script,
+    motionPrompt,
     facts,
     scriptReview: buildScriptReview(facts, script),
     style: {

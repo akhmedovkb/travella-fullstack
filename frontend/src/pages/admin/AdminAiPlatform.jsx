@@ -193,16 +193,20 @@ function Message({ msg, onStartHeygen, onRefreshHeygen, onSaveScript, canStartHe
   const jobStatus = String(msg.job?.status || "").toLowerCase();
   const [scriptEditing, setScriptEditing] = React.useState(false);
   const [scriptDraft, setScriptDraft] = React.useState(msg.output?.script || "");
+  const [motionDraft, setMotionDraft] = React.useState(msg.output?.motionPrompt || "");
   const [scriptError, setScriptError] = React.useState("");
   React.useEffect(() => {
     setScriptDraft(msg.output?.script || "");
+    setMotionDraft(msg.output?.motionPrompt || "");
     setScriptEditing(false);
     setScriptError("");
-  }, [msg.output?.script, msg.job?.id]);
+  }, [msg.output?.script, msg.output?.motionPrompt, msg.job?.id]);
   const canShowHeygenAction = !user && msg.job?.id && msg.output?.script && !heygen?.videoId && !["video_submitted", "video_ready", "video_failed"].includes(jobStatus);
   const canShowRefreshAction = !user && msg.job?.id && heygen?.videoId && !heygen?.videoUrl;
   const canEditScript = canShowHeygenAction && !heygenLoading && !scriptSaving;
   const scriptDirty = String(scriptDraft || "") !== String(msg.output?.script || "");
+  const motionDirty = String(motionDraft || "") !== String(msg.output?.motionPrompt || "");
+  const promptDirty = scriptDirty || motionDirty;
   const heygenActionLabel = canStartHeygen
     ? heygenLoading === msg.job?.id ? "Отправляю..." : "Утвердить и отправить в HeyGen"
     : !heygenReady ? "HeyGen не настроен" : !aiVideoEnabled ? "Включи HeyGen" : "HeyGen недоступен";
@@ -213,7 +217,7 @@ function Message({ msg, onStartHeygen, onRefreshHeygen, onSaveScript, canStartHe
       return;
     }
     setScriptError("");
-    await onSaveScript?.(msg.job, nextScript);
+    await onSaveScript?.(msg.job, nextScript, String(motionDraft || "").trim());
     setScriptEditing(false);
   }
   return (
@@ -254,12 +258,25 @@ function Message({ msg, onStartHeygen, onRefreshHeygen, onSaveScript, canStartHe
                   }}
                   className="min-h-[320px] w-full resize-y rounded-2xl border border-white/10 bg-white px-4 py-3 text-sm font-semibold leading-7 text-slate-950 outline-none focus:border-emerald-300 focus:ring-4 focus:ring-emerald-500/15"
                 />
+                <div className="mt-4">
+                  <div className="mb-2 text-xs font-black uppercase tracking-wide text-slate-300">Custom Motion для HeyGen</div>
+                  <textarea
+                    value={motionDraft}
+                    onChange={(e) => {
+                      setMotionDraft(e.target.value);
+                      setScriptError("");
+                    }}
+                    placeholder="Опиши жесты, мимику, взгляд, темп, паузы и акценты для аватара."
+                    className="min-h-[220px] w-full resize-y rounded-2xl border border-white/10 bg-white px-4 py-3 text-sm font-semibold leading-7 text-slate-950 outline-none placeholder:text-slate-400 focus:border-emerald-300 focus:ring-4 focus:ring-emerald-500/15"
+                  />
+                </div>
                 {scriptError ? <div className="mt-2 rounded-2xl bg-amber-100 px-3 py-2 text-xs font-black text-amber-800">{scriptError}</div> : null}
                 <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:justify-end">
                   <button
                     type="button"
                     onClick={() => {
                       setScriptDraft(msg.output?.script || "");
+                      setMotionDraft(msg.output?.motionPrompt || "");
                       setScriptEditing(false);
                       setScriptError("");
                     }}
@@ -271,7 +288,7 @@ function Message({ msg, onStartHeygen, onRefreshHeygen, onSaveScript, canStartHe
                   <button
                     type="button"
                     onClick={saveScriptDraft}
-                    disabled={!scriptDirty || scriptSaving === msg.job?.id}
+                    disabled={!promptDirty || scriptSaving === msg.job?.id}
                     className="rounded-2xl bg-emerald-600 px-4 py-2 text-xs font-black text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-slate-400"
                   >
                     {scriptSaving === msg.job?.id ? "Сохраняю..." : "Сохранить сценарий"}
@@ -281,6 +298,15 @@ function Message({ msg, onStartHeygen, onRefreshHeygen, onSaveScript, canStartHe
             ) : (
               <div className="mt-3 whitespace-pre-wrap text-sm font-semibold leading-7 text-slate-100">{msg.output.script}</div>
             )}
+          </div>
+        ) : null}
+        {msg.output?.motionPrompt && !scriptEditing ? (
+          <div className="mt-3 rounded-2xl bg-slate-900 p-4 text-white ring-1 ring-slate-800">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-xs font-black uppercase tracking-wide text-slate-300">Custom Motion для HeyGen</div>
+              {msg.output?.motionPromptEditedAt ? <div className="text-xs font-bold text-emerald-300">Отредактирован вручную</div> : null}
+            </div>
+            <div className="mt-3 whitespace-pre-wrap text-sm font-semibold leading-7 text-slate-100">{msg.output.motionPrompt}</div>
           </div>
         ) : null}
         <ScriptReview review={msg.output?.scriptReview} />
@@ -333,10 +359,10 @@ function Message({ msg, onStartHeygen, onRefreshHeygen, onSaveScript, canStartHe
             <button
               type="button"
               onClick={() => onStartHeygen?.(msg.job)}
-              disabled={!canStartHeygen || heygenLoading === msg.job.id || scriptDirty}
+              disabled={!canStartHeygen || heygenLoading === msg.job.id || promptDirty}
               className="rounded-2xl bg-slate-950 px-4 py-2 text-xs font-black text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {scriptDirty ? "Сначала сохрани сценарий" : heygenActionLabel}
+              {promptDirty ? "Сначала сохрани промпт" : heygenActionLabel}
             </button>
           </div>
         ) : null}
@@ -2568,12 +2594,12 @@ export default function AdminAiPlatform() {
     }
   }
 
-  async function saveJobScript(job, script) {
+  async function saveJobScript(job, script, motionPrompt = "") {
     if (!job?.id || scriptSaving) return;
     setScriptSaving(job.id);
     setError("");
     try {
-      const res = await apiPatch(`/api/admin/ai-platform/video-operator/jobs/${job.id}/script`, { script }, "admin");
+      const res = await apiPatch(`/api/admin/ai-platform/video-operator/jobs/${job.id}/script`, { script, motionPrompt }, "admin");
       const nextJob = res?.job || null;
       const output = res?.output || nextJob?.output || null;
       setCurrentTask(nextJob);

@@ -27,7 +27,7 @@ function normalizeHeygenError(error) {
   return err;
 }
 
-async function createAvatarVideo({ script, title, aspectRatio, resolution, engine, idempotencyKey }) {
+async function createAvatarVideo({ script, motionPrompt, title, aspectRatio, resolution, engine, idempotencyKey }) {
   const config = getAiConfig();
   const heygen = config.video.heygen;
 
@@ -55,6 +55,8 @@ async function createAvatarVideo({ script, title, aspectRatio, resolution, engin
     aspect_ratio: aspectRatio || heygen.defaultAspectRatio || "9:16",
     output_format: "mp4",
   };
+  const cleanMotionPrompt = String(motionPrompt || "").trim();
+  if (cleanMotionPrompt) payload.motion_prompt = cleanMotionPrompt;
 
   const engineType = engine || heygen.defaultEngine;
   if (engineType && engineType !== "avatar_iv") {

@@ -930,20 +930,26 @@ router.patch("/video-operator/jobs/:id/script", (req, res) => {
     return res.status(409).json({ success: false, message: "HeyGen already started. Script is locked." });
   }
   const script = String(req.body?.script || "").trim();
+  const motionPrompt = String(req.body?.motionPrompt ?? output.motionPrompt ?? "").trim();
   if (script.length < 20) {
     return res.status(400).json({ success: false, message: "Script is too short" });
   }
   if (script.length > 6000) {
     return res.status(400).json({ success: false, message: "Script is too long" });
   }
+  if (motionPrompt.length > 4000) {
+    return res.status(400).json({ success: false, message: "Motion prompt is too long" });
+  }
   const actor = { id: req.user?.id || req.user?.userId || null, role: req.user?.role || req.user?.roles || null };
   const nextOutput = {
     ...output,
     script,
+    motionPrompt,
     scriptReview: output.scriptReview
       ? { ...output.scriptReview, manualEdited: true, updatedAt: new Date().toISOString() }
       : { status: "ready", manualEdited: true, updatedAt: new Date().toISOString() },
     scriptEditedAt: new Date().toISOString(),
+    motionPromptEditedAt: motionPrompt !== String(output.motionPrompt || "").trim() ? new Date().toISOString() : output.motionPromptEditedAt,
     scriptEditedBy: actor,
     nextStep: "Сценарий сохранён. Проверь текст и отправь в HeyGen вручную.",
   };

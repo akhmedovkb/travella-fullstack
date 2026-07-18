@@ -36,6 +36,7 @@ async function createVideoOperatorVideo(input = {}) {
   try {
     const heygenResponse = await createAvatarVideo({
       script: prepared.script,
+      motionPrompt: prepared.motionPrompt,
       title: buildTitle(input),
       aspectRatio: input.aspectRatio || prepared.style.aspectRatio,
       resolution: input.resolution,

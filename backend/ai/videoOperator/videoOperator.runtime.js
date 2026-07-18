@@ -8,6 +8,7 @@ const { saveHeygenVideoArtifact } = require("./videoArtifactStore");
 const {
   buildHook,
   buildScript,
+  buildMotionPrompt,
   buildAnalysis,
   buildScriptReview,
   buildPublishingDrafts,
@@ -251,10 +252,12 @@ async function runVideoOperatorTask({ command, actor = {}, runtimeRoute = null }
     addEvent(job.id, { step: "plan", type: "tool_result", tool: "HookBuilder", message: "Хук готов без неподтверждённых обещаний." });
 
     const script = buildScript(ctx, scriptOptions);
+    const motionPrompt = buildMotionPrompt(ctx, scriptOptions);
     const scriptReview = buildScriptReview(ctx, script);
     const publishingDrafts = buildPublishingDrafts(ctx);
     addEvent(job.id, { step: "plan", type: "tool_call", tool: "AvatarScriptBuilder", message: "Готовлю текст для AI-аватара по правилам Travella." });
     addEvent(job.id, { step: "plan", type: "tool_result", tool: "AvatarScriptBuilder", message: "Сценарий готов и ждёт ручного утверждения." });
+    addEvent(job.id, { step: "plan", type: "tool_result", tool: "MotionPromptBuilder", message: "Custom Motion для HeyGen готов к ручной проверке." });
     addEvent(job.id, { step: "review", type: "tool_result", tool: "PromptQualityCheck", message: scriptReview.approvalGate, meta: { status: scriptReview.status, missingFields: scriptReview.missingFields } });
 
     const output = {
@@ -263,6 +266,7 @@ async function runVideoOperatorTask({ command, actor = {}, runtimeRoute = null }
       analysis,
       hook,
       script,
+      motionPrompt,
       scriptReview,
       publishingDrafts,
       nextStep:
@@ -288,9 +292,11 @@ async function createScriptFromManualContext(ctx = {}) {
   const job = createJob({ employeeId: "video_operator", type: "manual_script", command, input: ctx, status: "running" });
   const normalized = { ...ctx, category: ctx.category || "Отказной тур" };
   const script = buildScript(normalized);
+  const motionPrompt = buildMotionPrompt(normalized);
   const output = {
     hook: buildHook(normalized),
     script,
+    motionPrompt,
     scriptReview: buildScriptReview(normalized, script),
     publishingDrafts: buildPublishingDrafts(normalized),
     service: { videoContext: normalized },
@@ -328,6 +334,7 @@ async function startHeygenForVideoJob({ jobId, actor = {} }) {
   try {
     const response = await createAvatarVideo({
       script: output.script,
+      motionPrompt: output.motionPrompt,
       title: `${output.service?.videoContext?.code || "Travella"} ${output.service?.videoContext?.title || "Video"}`,
       aspectRatio: "9:16",
       resolution: "1080p",
