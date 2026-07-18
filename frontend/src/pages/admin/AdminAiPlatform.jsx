@@ -2399,6 +2399,7 @@ export default function AdminAiPlatform() {
     voices: HEYGEN_VOICE_PRESETS,
   });
   const [videoPresetModal, setVideoPresetModal] = React.useState(null);
+  const [heygenSettingsOpen, setHeygenSettingsOpen] = React.useState(false);
   const videoOperatorIntro = "Я Travella AI Runtime. Для Video Operator можно нажать быструю команду под чатом или написать задачу обычным языком: “Создай сценарий для R941”, “Создай видео для последнего отказного авиабилета”, “Сделай агрессивнее H502”, “Другой hook E77”.";
   const [messages, setMessages] = React.useState([{ id: "hello", role: "assistant", text: videoOperatorIntro }]);
   const endRef = React.useRef(null);
@@ -3161,23 +3162,6 @@ export default function AdminAiPlatform() {
                       className="h-8 w-[190px] rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-950 outline-none placeholder:text-slate-400 focus:border-slate-300"
                     />
                   ) : null}
-                  <button
-                    type="button"
-                    onClick={() => addVideoPreset("avatars")}
-                    disabled={videoProfileLoading}
-                    className="h-8 rounded-xl bg-white px-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100 disabled:opacity-40"
-                    title="Добавить avatar preset"
-                  >
-                    +
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => deleteVideoPreset("avatars")}
-                    disabled={videoProfileLoading || !selectedAvatarPreset}
-                    className="h-8 rounded-xl bg-white px-2 text-xs font-black text-rose-600 ring-1 ring-rose-100 hover:bg-rose-50 disabled:text-slate-300 disabled:opacity-40"
-                  >
-                    Удалить
-                  </button>
                   <select
                     value={selectedVoicePreset?.value || ""}
                     onChange={(e) => {
@@ -3201,60 +3185,14 @@ export default function AdminAiPlatform() {
                   ) : null}
                   <button
                     type="button"
-                    onClick={() => addVideoPreset("voices")}
+                    onClick={() => setHeygenSettingsOpen(true)}
                     disabled={videoProfileLoading}
-                    className="h-8 rounded-xl bg-white px-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100 disabled:opacity-40"
-                    title="Добавить voice preset"
+                    className={cn(
+                      "h-8 rounded-xl px-3 text-xs font-black ring-1 transition disabled:opacity-40",
+                      profileDirty ? "bg-amber-50 text-amber-800 ring-amber-200 hover:bg-amber-100" : "bg-white text-slate-700 ring-slate-200 hover:bg-slate-100"
+                    )}
                   >
-                    +
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => deleteVideoPreset("voices")}
-                    disabled={videoProfileLoading || !selectedVoicePreset}
-                    className="h-8 rounded-xl bg-white px-2 text-xs font-black text-rose-600 ring-1 ring-rose-100 hover:bg-rose-50 disabled:text-slate-300 disabled:opacity-40"
-                  >
-                    Удалить
-                  </button>
-                  <select
-                    value={videoProfileDraft.engine || "avatar_iv"}
-                    onChange={(e) => setVideoProfileDraft((prev) => ({ ...prev, engine: e.target.value }))}
-                    className="h-8 w-[104px] rounded-xl border border-slate-200 bg-white px-2 text-xs font-black text-slate-950 outline-none focus:border-slate-300"
-                    title="HeyGen engine"
-                  >
-                    <option value="avatar_iv">Avatar IV</option>
-                    <option value="avatar_v">Avatar V</option>
-                  </select>
-                  <label className="flex h-8 items-center gap-1 rounded-xl bg-white px-2 text-xs font-black text-slate-600 ring-1 ring-slate-200" title="Voice speed">
-                    <span>Speed</span>
-                    <input
-                      type="number"
-                      min="0.5"
-                      max="1.5"
-                      step="0.05"
-                      value={videoProfileDraft.voiceSpeed}
-                      onChange={(e) => setVideoProfileDraft((prev) => ({ ...prev, voiceSpeed: Number(e.target.value || 1) }))}
-                      className="h-6 w-[52px] border-0 bg-transparent text-xs font-black text-slate-950 outline-none"
-                    />
-                  </label>
-                  <select
-                    value={videoProfileDraft.expressiveness || "medium"}
-                    onChange={(e) => setVideoProfileDraft((prev) => ({ ...prev, expressiveness: e.target.value }))}
-                    disabled={videoProfileDraft.engine === "avatar_v"}
-                    className="h-8 w-[92px] rounded-xl border border-slate-200 bg-white px-2 text-xs font-black text-slate-950 outline-none focus:border-slate-300 disabled:bg-slate-100 disabled:text-slate-400"
-                    title={videoProfileDraft.engine === "avatar_v" ? "Expressiveness доступен для Avatar IV" : "Expressiveness"}
-                  >
-                    <option value="low">Expr low</option>
-                    <option value="medium">Expr mid</option>
-                    <option value="high">Expr high</option>
-                  </select>
-                  <button
-                    type="button"
-                    onClick={saveVideoProfile}
-                    disabled={videoProfileLoading || !profileDirty}
-                    className="h-8 rounded-xl bg-slate-950 px-3 text-xs font-black text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
-                  >
-                    {videoProfileLoading ? "..." : "Сохранить"}
+                    Настройки HeyGen{profileDirty ? " *" : ""}
                   </button>
                 </div>
               </div>
@@ -3393,6 +3331,179 @@ export default function AdminAiPlatform() {
           />
         ) : isContentManager ? <ContentInspector videos={videos} /> : <Inspector task={currentTask} />}
       </section>
+      {heygenSettingsOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget && !videoProfileLoading) setHeygenSettingsOpen(false);
+          }}
+        >
+          <div
+            className="w-full max-w-[560px] rounded-[28px] border border-slate-200 bg-white p-5 shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="heygen-settings-title"
+            onKeyDown={(e) => {
+              if (e.key === "Escape" && !videoProfileLoading) setHeygenSettingsOpen(false);
+            }}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-xs font-black uppercase tracking-wide text-slate-400">HeyGen delivery profile</div>
+                <h3 id="heygen-settings-title" className="mt-1 text-xl font-black text-slate-950">Настройки HeyGen</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHeygenSettingsOpen(false)}
+                disabled={videoProfileLoading}
+                className="h-9 w-9 rounded-full bg-slate-50 text-lg font-black text-slate-400 ring-1 ring-slate-200 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40"
+                aria-label="Закрыть"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <label className="block">
+                <span className="text-xs font-black uppercase tracking-wide text-slate-500">Avatar</span>
+                <div className="mt-2 flex gap-2">
+                  <select
+                    value={selectedAvatarPreset?.value || ""}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value) setVideoProfileDraft((prev) => ({ ...prev, avatarId: value }));
+                    }}
+                    className="h-11 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-black text-slate-950 outline-none focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
+                  >
+                    {!selectedAvatarPreset ? <option value="">Avatar</option> : null}
+                    {avatarPresets.map((avatar) => (
+                      <option key={avatar.value} value={avatar.value}>Avatar {avatar.label}</option>
+                    ))}
+                  </select>
+                  <button type="button" onClick={() => { setHeygenSettingsOpen(false); addVideoPreset("avatars"); }} disabled={videoProfileLoading} className="h-11 w-11 rounded-2xl bg-slate-50 text-sm font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100 disabled:opacity-40">+</button>
+                  <button type="button" onClick={() => { setHeygenSettingsOpen(false); deleteVideoPreset("avatars"); }} disabled={videoProfileLoading || !selectedAvatarPreset} className="h-11 rounded-2xl bg-rose-50 px-3 text-xs font-black text-rose-600 ring-1 ring-rose-100 hover:bg-rose-100 disabled:bg-slate-50 disabled:text-slate-300">Удалить</button>
+                </div>
+              </label>
+
+              <label className="block">
+                <span className="text-xs font-black uppercase tracking-wide text-slate-500">Voice</span>
+                <div className="mt-2 flex gap-2">
+                  <select
+                    value={selectedVoicePreset?.value || ""}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value) setVideoProfileDraft((prev) => ({ ...prev, voiceId: value }));
+                    }}
+                    className="h-11 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-black text-slate-950 outline-none focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
+                  >
+                    {!selectedVoicePreset ? <option value="">Voice</option> : null}
+                    {voicePresets.map((voice) => (
+                      <option key={voice.value} value={voice.value}>{voice.label}</option>
+                    ))}
+                  </select>
+                  <button type="button" onClick={() => { setHeygenSettingsOpen(false); addVideoPreset("voices"); }} disabled={videoProfileLoading} className="h-11 w-11 rounded-2xl bg-slate-50 text-sm font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100 disabled:opacity-40">+</button>
+                  <button type="button" onClick={() => { setHeygenSettingsOpen(false); deleteVideoPreset("voices"); }} disabled={videoProfileLoading || !selectedVoicePreset} className="h-11 rounded-2xl bg-rose-50 px-3 text-xs font-black text-rose-600 ring-1 ring-rose-100 hover:bg-rose-100 disabled:bg-slate-50 disabled:text-slate-300">Удалить</button>
+                </div>
+              </label>
+            </div>
+
+            <div className="mt-5 space-y-4 rounded-3xl bg-slate-50 p-4 ring-1 ring-slate-100">
+              <div>
+                <div className="text-xs font-black uppercase tracking-wide text-slate-500">Engine</div>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  {[
+                    { value: "avatar_iv", label: "Avatar IV" },
+                    { value: "avatar_v", label: "Avatar V" },
+                  ].map((item) => (
+                    <button
+                      key={item.value}
+                      type="button"
+                      onClick={() => setVideoProfileDraft((prev) => ({ ...prev, engine: item.value }))}
+                      className={cn(
+                        "h-11 rounded-2xl text-sm font-black ring-1 transition",
+                        videoProfileDraft.engine === item.value ? "bg-slate-950 text-white ring-slate-950" : "bg-white text-slate-700 ring-slate-200 hover:bg-slate-100"
+                      )}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <label className="block">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs font-black uppercase tracking-wide text-slate-500">Voice speed</span>
+                  <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-slate-950 ring-1 ring-slate-200">{Number(videoProfileDraft.voiceSpeed || 1).toFixed(2)}</span>
+                </div>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="1.5"
+                  step="0.05"
+                  value={videoProfileDraft.voiceSpeed}
+                  onChange={(e) => setVideoProfileDraft((prev) => ({ ...prev, voiceSpeed: Number(e.target.value || 1) }))}
+                  className="mt-3 w-full accent-emerald-600"
+                />
+                <div className="mt-1 flex justify-between text-[11px] font-bold text-slate-400">
+                  <span>медленнее</span>
+                  <span>быстрее</span>
+                </div>
+              </label>
+
+              <div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs font-black uppercase tracking-wide text-slate-500">Expressiveness</span>
+                  {videoProfileDraft.engine === "avatar_v" ? <span className="text-xs font-bold text-slate-400">только Avatar IV</span> : null}
+                </div>
+                <div className="mt-2 grid grid-cols-3 gap-2">
+                  {[
+                    { value: "low", label: "Low" },
+                    { value: "medium", label: "Medium" },
+                    { value: "high", label: "High" },
+                  ].map((item) => (
+                    <button
+                      key={item.value}
+                      type="button"
+                      disabled={videoProfileDraft.engine === "avatar_v"}
+                      onClick={() => setVideoProfileDraft((prev) => ({ ...prev, expressiveness: item.value }))}
+                      className={cn(
+                        "h-10 rounded-2xl text-xs font-black ring-1 transition disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400",
+                        videoProfileDraft.expressiveness === item.value && videoProfileDraft.engine !== "avatar_v"
+                          ? "bg-emerald-600 text-white ring-emerald-600"
+                          : "bg-white text-slate-700 ring-slate-200 hover:bg-slate-100"
+                      )}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setHeygenSettingsOpen(false)}
+                disabled={videoProfileLoading}
+                className="h-11 rounded-2xl bg-slate-50 px-5 text-sm font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100 disabled:opacity-40"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (profileDirty) await saveVideoProfile();
+                  setHeygenSettingsOpen(false);
+                }}
+                disabled={videoProfileLoading}
+                className="h-11 rounded-2xl bg-slate-950 px-5 text-sm font-black text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+              >
+                {videoProfileLoading ? "Сохраняю..." : profileDirty ? "Сохранить" : "Готово"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {videoPresetModal ? (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm"
