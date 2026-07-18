@@ -726,6 +726,19 @@ function hasTelegramPublicationEvidence(item = {}) {
   return Boolean(item.published || String(item.url || "").trim() || item.messageId);
 }
 
+function clearTelegramPublicationEvidence(patch = {}) {
+  return {
+    ...patch,
+    published: false,
+    publishedAt: null,
+    url: "",
+    messageId: null,
+    chatId: null,
+    deliveryMethod: "",
+    deliveryLog: [],
+  };
+}
+
 function hasTelegramPublicationIssue(item = {}, feedback = null) {
   if (feedback?.tone === "red") return true;
   const log = Array.isArray(item.deliveryLog) ? item.deliveryLog : [];
@@ -1625,7 +1638,7 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
         targetChannels.forEach((channelId) => {
           nextChannels[channelId] = {
             ...(current?.[channelId] || {}),
-            ...patch(current?.[channelId] || {}),
+            ...patch(current?.[channelId] || {}, channelId),
           };
         });
         await onSavePublicationStatus?.(video, nextChannels);
@@ -2202,7 +2215,11 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
               </button>
               <button
                 type="button"
-                onClick={() => applyBulkPatch(() => ({ published: false, publishedAt: null }))}
+                onClick={() => applyBulkPatch((item, channelId) => (
+                  channelId === "telegram"
+                    ? clearTelegramPublicationEvidence()
+                    : { published: false, publishedAt: null }
+                ))}
                 disabled={!selectedVideos.length || bulkLoading}
                 className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
               >
@@ -2270,7 +2287,13 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
                               type="checkbox"
                               checked={checked}
                               disabled={loading}
-                              onChange={(e) => updateChannel(video, channel.id, { published: e.target.checked })}
+                              onChange={(e) => updateChannel(
+                                video,
+                                channel.id,
+                                channel.id === "telegram" && !e.target.checked
+                                  ? clearTelegramPublicationEvidence()
+                                  : { published: e.target.checked }
+                              )}
                               className="h-4 w-4 accent-emerald-700"
                             />
                             <span>{channel.label}</span>
@@ -2334,6 +2357,17 @@ function PublishingManagerBoard({ videos, onSavePublicationStatus, onPublishTele
                                 }
                               >
                                 {telegramPublishedEvidence ? "Уже есть пост" : publishLoading === video.jobId ? "Публикую..." : telegramReady ? "Опубликовать" : telegramDisabledLabel}
+                              </button>
+                            ) : null}
+                            {channel.id === "telegram" && telegramPublishedEvidence ? (
+                              <button
+                                type="button"
+                                onClick={() => updateChannel(video, "telegram", clearTelegramPublicationEvidence())}
+                                disabled={loading || publishLoading === video.jobId}
+                                className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-rose-700 ring-1 ring-rose-100 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                title="Очистить ссылку, messageId и delivery log старого Telegram-поста"
+                              >
+                                Сбросить пост
                               </button>
                             ) : null}
                             <Pill tone={checked ? "green" : item.plannedAt ? "blue" : "slate"}>{checked ? "Опубликовано" : item.plannedAt ? "Запланировано" : "Ожидает"}</Pill>
