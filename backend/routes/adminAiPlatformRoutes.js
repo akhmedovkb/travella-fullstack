@@ -19,6 +19,7 @@ const {
   refreshHeygenForVideoJob,
   listVideoOperatorJobs,
 } = require("../ai/videoOperator/videoOperator.runtime");
+const { searchRefusedServices } = require("../ai/videoOperator/refusedServiceLookup");
 const { buildPublishingPackage, buildContentReview } = require("../ai/contentManager/contentPromptSystem");
 
 const TELEGRAM_CLIENT_BOT_TOKEN = String(process.env.TELEGRAM_CLIENT_BOT_TOKEN || "").trim();
@@ -756,7 +757,7 @@ router.post("/tasks", async (req, res) => {
 // Backward compatibility with previous frontend stage.
 router.post("/video-operator/script", async (req, res) => {
   const code = String(req.body?.code || "").trim();
-  if (code && /^R\s*\d+/i.test(code)) {
+  if (code && /^[RAHE]\s*\d+/i.test(code)) {
     const result = await runVideoOperatorTask({ command: `Создай сценарий для ${code}`, actor: { id: req.user?.id || null } });
     return res.status(result.success ? 200 : 404).json(result);
   }
@@ -775,6 +776,48 @@ router.post("/video-operator/heygen-video", async (req, res) => {
       heygen: { status: "not_started", message: "HeyGen запуск будет подключён следующим этапом после утверждения реального data-flow." },
     },
   });
+});
+
+router.get("/video-operator/services/search", async (req, res) => {
+  const type = String(req.query.type || "all").toLowerCase();
+  const categoryFilters = {
+    tour: ["refused_tour", "author_tour"],
+    flight: ["refused_flight"],
+    hotel: ["refused_hotel"],
+    event: ["refused_event_ticket", "refused_ticket"],
+  }[type] || [];
+  try {
+    const services = await searchRefusedServices({
+      q: req.query.q || "",
+      limit: req.query.limit || 10,
+      categoryFilters,
+    });
+    return res.json({
+      success: true,
+      type,
+      services: services.map((service) => {
+        const ctx = service.videoContext || {};
+        return {
+          id: service.id,
+          code: service.code,
+          taskCode: service.taskCode || ctx.code || service.code,
+          displayCode: service.displayCode || service.taskCode || ctx.code || service.code,
+          category: service.category,
+          categoryLabel: service.categoryLabel,
+          title: ctx.title || service.title || "",
+          destination: ctx.destination || "",
+          fromCity: ctx.fromCity || "",
+          dates: ctx.dates || "",
+          price: ctx.price || "",
+          currency: ctx.currency || "USD",
+          supplier: ctx.supplier || service.provider?.name || "",
+          status: service.status || "",
+        };
+      }),
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err?.message || "Service search failed" });
+  }
 });
 
 router.post("/video-operator/jobs/:id/heygen/start", async (req, res) => {

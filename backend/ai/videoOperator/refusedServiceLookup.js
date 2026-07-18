@@ -119,9 +119,18 @@ function categoryLabel(category) {
   return map[String(category || "").toLowerCase()] || String(category || "Услуга");
 }
 
+function categoryTaskPrefix(category) {
+  const normalized = String(category || "").toLowerCase();
+  if (normalized === "refused_flight") return "A";
+  if (normalized === "refused_hotel") return "H";
+  if (normalized === "refused_event_ticket" || normalized === "refused_ticket") return "E";
+  return "R";
+}
+
 function normalizeService(row) {
   const d = parseDetailsAny(row.details);
   const category = String(row.category || "").toLowerCase();
+  const taskCode = `${categoryTaskPrefix(category)}${row.id}`;
 
   const price = firstNonEmpty(row.price, d.price, d.netPrice, d.grossPrice, d.amount, d.totalPrice);
   const currency = firstNonEmpty(row.currency, d.currency, d.priceCurrency, process.env.PRICE_CURRENCY || "USD");
@@ -161,6 +170,8 @@ function normalizeService(row) {
   return {
     id: row.id,
     code: `R${row.id}`,
+    taskCode,
+    displayCode: taskCode,
     category,
     categoryLabel: categoryLabel(category),
     status: row.status || "",
@@ -173,7 +184,8 @@ function normalizeService(row) {
     },
     details: d,
     videoContext: {
-      code: `R${row.id}`,
+      code: taskCode,
+      serviceId: row.id,
       title,
       category: categoryLabel(category),
       fromCity,
@@ -274,10 +286,70 @@ async function findLatestRefusedService(options = {}) {
   return service ? { found: true, service } : { found: false, reason: "NO_REFUSED_SERVICES" };
 }
 
+async function searchRefusedServices({ q = "", limit = 10, categoryFilters = [], categories = [] } = {}) {
+  const safeLimit = Math.max(1, Math.min(Number(limit) || 10, 20));
+  const filters = normalizeCategoryFilters(categoryFilters.length ? categoryFilters : categories);
+  const where = ["s.deleted_at IS NULL"];
+  const params = [];
+
+  if (filters.length) {
+    params.push(filters);
+    where.push(`s.category = ANY($${params.length}::text[])`);
+  } else {
+    where.push("((s.category LIKE 'refused_%') OR s.category = 'author_tour')");
+  }
+
+  const query = String(q || "").trim();
+  const normalizedCode = normalizeCode(query);
+  if (normalizedCode?.id) {
+    params.push(normalizedCode.id);
+    where.push(`s.id = $${params.length}`);
+  } else if (query) {
+    params.push(`%${query}%`);
+    const i = params.length;
+    where.push(`(
+      s.title ILIKE $${i}
+      OR s.category ILIKE $${i}
+      OR COALESCE(s.details::text, '') ILIKE $${i}
+      OR COALESCE(p.name, '') ILIKE $${i}
+    )`);
+  }
+
+  params.push(safeLimit);
+  const qres = await db.query(
+    `
+      SELECT
+        s.id,
+        s.category,
+        s.status,
+        s.title,
+        s.provider_id,
+        s.details,
+        s.price,
+        NULL::text AS currency,
+        s.created_at,
+        s.updated_at,
+        s.deleted_at,
+        p.id AS p_id,
+        p.name AS provider_name,
+        p.phone AS provider_phone,
+        p.social AS provider_social
+      FROM services s
+      LEFT JOIN providers p ON p.id = s.provider_id
+      WHERE ${where.join(" AND ")}
+      ORDER BY s.id DESC
+      LIMIT $${params.length}
+    `,
+    params
+  );
+  return (qres.rows || []).map(normalizeService);
+}
+
 module.exports = {
   findRefusedServiceByCode,
   findLatestRefusedService,
   listRecentRefusedServices,
+  searchRefusedServices,
   normalizeService,
   normalizeCode,
 };

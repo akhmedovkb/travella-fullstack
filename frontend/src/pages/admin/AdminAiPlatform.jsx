@@ -4,7 +4,7 @@ import React from "react";
 import { apiGet, apiPatch, apiPost } from "../../api";
 
 const EMPLOYEES = [
-  { id: "video_operator", icon: "🎬", name: "Video Operator", subtitle: "AI-видео для отказных туров", live: true },
+  { id: "video_operator", icon: "🎬", name: "Video Operator", subtitle: "AI-видео для отказных предложений", live: true },
   { id: "sales_manager", icon: "💼", name: "Sales Manager", subtitle: "Продажи и быстрые заявки", live: false },
   { id: "content_manager", icon: "📝", name: "Content Manager", subtitle: "Посты, captions, сторис", live: true },
   { id: "publishing_manager", icon: "🗓️", name: "Publishing Manager", subtitle: "Очередь и статусы публикаций", live: true },
@@ -2250,6 +2250,11 @@ export default function AdminAiPlatform() {
   const [publishFeedback, setPublishFeedback] = React.useState({});
   const [error, setError] = React.useState("");
   const [currentTask, setCurrentTask] = React.useState(null);
+  const [serviceSearchType, setServiceSearchType] = React.useState("all");
+  const [serviceSearchQuery, setServiceSearchQuery] = React.useState("");
+  const [serviceSearchResults, setServiceSearchResults] = React.useState([]);
+  const [selectedService, setSelectedService] = React.useState(null);
+  const [serviceSearchLoading, setServiceSearchLoading] = React.useState(false);
   const videoOperatorIntro = "Я Travella AI Runtime. Для Video Operator можно нажать быструю команду под чатом или написать задачу обычным языком: “Создай сценарий для R941”, “Создай видео для последнего отказного авиабилета”, “Сделай агрессивнее H502”, “Другой hook E77”.";
   const [messages, setMessages] = React.useState([{ id: "hello", role: "assistant", text: videoOperatorIntro }]);
   const endRef = React.useRef(null);
@@ -2272,6 +2277,30 @@ export default function AdminAiPlatform() {
 
   React.useEffect(() => { load(); }, []);
   React.useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
+  React.useEffect(() => {
+    if (selectedEmployee !== "video_operator") return;
+    let alive = true;
+    const timer = setTimeout(async () => {
+      setServiceSearchLoading(true);
+      try {
+        const params = new URLSearchParams({
+          type: serviceSearchType,
+          q: serviceSearchQuery,
+          limit: "6",
+        });
+        const res = await apiGet(`/api/admin/ai-platform/video-operator/services/search?${params.toString()}`, "admin");
+        if (alive) setServiceSearchResults(Array.isArray(res?.services) ? res.services : []);
+      } catch {
+        if (alive) setServiceSearchResults([]);
+      } finally {
+        if (alive) setServiceSearchLoading(false);
+      }
+    }, 250);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [selectedEmployee, serviceSearchType, serviceSearchQuery]);
 
   function addMessage(msg) { setMessages((prev) => [...prev, { id: `${Date.now()}_${Math.random()}`, ...msg }]); }
 
@@ -2289,12 +2318,32 @@ export default function AdminAiPlatform() {
     }));
   }
 
+  function serviceFromJobOutput(output = {}) {
+    const service = output?.service || {};
+    const ctx = service.videoContext || service || {};
+    const code = output?.route?.serviceCode || service.taskCode || service.displayCode || ctx.code || service.code || "";
+    if (!code && !ctx.title) return null;
+    return {
+      id: service.id || ctx.serviceId || "",
+      taskCode: code,
+      displayCode: code,
+      category: service.category || "",
+      categoryLabel: service.categoryLabel || ctx.category || "Отказное предложение",
+      title: ctx.title || service.title || "",
+      destination: ctx.destination || "",
+      dates: ctx.dates || "",
+      price: ctx.price || "",
+      currency: ctx.currency || "USD",
+    };
+  }
+
   function openJob(job) {
     if (!job) return;
     const output = job.output || null;
     setSelectedEmployee("video_operator");
     setActiveView("today");
     setCurrentTask(job);
+    setSelectedService(serviceFromJobOutput(output));
     setMessages([
       { id: "hello", role: "assistant", text: videoOperatorIntro },
       { id: `job_user_${job.id}`, role: "user", text: job.command || job.type || "Открытая задача" },
@@ -2323,6 +2372,7 @@ export default function AdminAiPlatform() {
       const job = res?.job || null;
       const output = res?.output || job?.output || null;
       setCurrentTask(job);
+      setSelectedService(serviceFromJobOutput(output));
       addMessage({ role: "assistant", text: output?.nextStep || "Задача выполнена.", events: job?.events || [], output, job });
       await load();
     } catch (e) {
@@ -2602,10 +2652,17 @@ export default function AdminAiPlatform() {
   const isPublishingWork = isContentManager || isPublishingManager;
   const approvedVideosCount = getApprovedVideos(videos).length;
   const currentVideoContext = currentTask?.output?.service?.videoContext || currentTask?.output?.service || currentTask?.input || {};
-  const currentServiceCode = currentTask?.output?.route?.serviceCode || currentVideoContext?.code || "";
+  const currentServiceCode = selectedService?.taskCode || selectedService?.displayCode || currentTask?.output?.route?.serviceCode || currentVideoContext?.code || "";
+  const serviceSearchTypes = [
+    { id: "all", label: "Все" },
+    { id: "tour", label: "Туры" },
+    { id: "flight", label: "Авиа" },
+    { id: "hotel", label: "Отели" },
+    { id: "event", label: "События" },
+  ];
   const quickVideoCommands = [
-    { label: "Сценарий последнего", command: "Создай сценарий для последнего отказного тура" },
-    { label: "Видео последнего", command: "Создай видео для последнего отказного тура" },
+    { label: "Сценарий последнего", command: serviceSearchType === "all" ? "Создай сценарий для последнего отказного предложения" : `Создай сценарий для последнего отказного ${serviceSearchType === "flight" ? "авиабилета" : serviceSearchType === "hotel" ? "отеля" : serviceSearchType === "event" ? "билета на мероприятие" : "тура"}` },
+    { label: "Видео последнего", command: serviceSearchType === "all" ? "Создай видео для последнего отказного предложения" : `Создай видео для последнего отказного ${serviceSearchType === "flight" ? "авиабилета" : serviceSearchType === "hotel" ? "отеля" : serviceSearchType === "event" ? "билета на мероприятие" : "тура"}` },
     ...(currentServiceCode ? [
       { label: "Сценарий выбранного", command: `Создай сценарий для ${currentServiceCode}` },
       { label: "Видео выбранного", command: `Создай видео для ${currentServiceCode}` },
@@ -2721,19 +2778,83 @@ export default function AdminAiPlatform() {
           <div className="border-t border-slate-100 p-4">
             <div className="rounded-3xl border border-slate-200 bg-white p-3 shadow-sm">
               {selectedEmployee === "video_operator" ? (
-                <div className="mb-3 flex flex-wrap gap-2">
-                  {quickVideoCommands.map((item) => (
-                    <button
-                      key={item.label}
-                      type="button"
-                      onClick={() => runTaskText(item.command)}
-                      disabled={loading}
-                      className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-black text-slate-700 hover:border-slate-300 hover:bg-white disabled:opacity-40"
-                      title={item.command}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
+                <div className="mb-3 space-y-3">
+                  <div className="rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-100">
+                    <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+                      <div className="flex flex-wrap gap-1.5">
+                        {serviceSearchTypes.map((type) => (
+                          <button
+                            key={type.id}
+                            type="button"
+                            onClick={() => setServiceSearchType(type.id)}
+                            className={cn(
+                              "rounded-full px-3 py-1.5 text-xs font-black ring-1",
+                              serviceSearchType === type.id ? "bg-slate-950 text-white ring-slate-950" : "bg-white text-slate-600 ring-slate-200 hover:bg-slate-100"
+                            )}
+                          >
+                            {type.label}
+                          </button>
+                        ))}
+                      </div>
+                      <input
+                        value={serviceSearchQuery}
+                        onChange={(e) => setServiceSearchQuery(e.target.value)}
+                        placeholder="Найти отказ: Анталья, отель, авиабилет, H502..."
+                        className="min-h-[38px] flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-950 outline-none placeholder:text-slate-400 focus:border-slate-300"
+                      />
+                    </div>
+                    {selectedService ? (
+                      <div className="mt-2 flex flex-wrap items-center gap-2 rounded-2xl bg-white px-3 py-2 text-xs font-bold text-slate-600 ring-1 ring-emerald-100">
+                        <span className="rounded-full bg-emerald-50 px-2 py-1 font-black text-emerald-700">Выбрано</span>
+                        <b className="text-slate-950">{selectedService.displayCode || selectedService.taskCode}</b>
+                        <span>{selectedService.categoryLabel}</span>
+                        <span className="text-slate-400">·</span>
+                        <span className="max-w-[520px] truncate">{selectedService.title || selectedService.destination}</span>
+                        <button type="button" onClick={() => setSelectedService(null)} className="ml-auto rounded-full px-2 py-1 text-slate-400 hover:bg-slate-50 hover:text-slate-700">Снять</button>
+                      </div>
+                    ) : null}
+                    <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                      {serviceSearchResults.slice(0, 6).map((service) => {
+                        const price = service.price ? `${service.price} ${service.currency || "USD"}` : "";
+                        const active = selectedService?.id === service.id && selectedService?.taskCode === service.taskCode;
+                        return (
+                          <button
+                            key={`${service.taskCode}_${service.id}`}
+                            type="button"
+                            onClick={() => setSelectedService(service)}
+                            className={cn(
+                              "min-h-[74px] rounded-2xl px-3 py-2 text-left ring-1 transition",
+                              active ? "bg-emerald-50 ring-emerald-200" : "bg-white ring-slate-100 hover:bg-slate-50"
+                            )}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="rounded-full bg-slate-950 px-2 py-0.5 text-[11px] font-black text-white">{service.displayCode || service.taskCode}</span>
+                              <span className="truncate text-[11px] font-black text-slate-400">{service.categoryLabel}</span>
+                            </div>
+                            <div className="mt-1 truncate text-sm font-black text-slate-950">{service.title || service.destination || "Отказное предложение"}</div>
+                            <div className="mt-1 truncate text-xs font-bold text-slate-500">{[service.dates, price, service.supplier].filter(Boolean).join(" · ")}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {!serviceSearchLoading && !serviceSearchResults.length ? (
+                      <div className="mt-2 rounded-2xl bg-white px-3 py-2 text-xs font-bold text-slate-400 ring-1 ring-slate-100">Ничего не найдено. Попробуй другой тип или запрос.</div>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {quickVideoCommands.map((item) => (
+                      <button
+                        key={item.label}
+                        type="button"
+                        onClick={() => runTaskText(item.command)}
+                        disabled={loading}
+                        className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-black text-slate-700 hover:border-slate-300 hover:bg-white disabled:opacity-40"
+                        title={item.command}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               ) : null}
               <textarea
