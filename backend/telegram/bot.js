@@ -4783,7 +4783,23 @@ function pickPrice(details, svc, role) {
   if (role === "provider") {
     return d.netPrice ?? d.price ?? d.grossPrice ?? svc.price ?? null;
   }
-  return d.grossPrice ?? d.price ?? d.netPrice ?? svc.price ?? null;
+  return (
+    d.grossPrice ??
+    d.gross_price ??
+    d.priceGross ??
+    d.price_gross ??
+    d.bruttoPrice ??
+    d.brutto_price ??
+    d.clientPrice ??
+    d.client_price ??
+    d.publicPrice ??
+    d.public_price ??
+    d.price ??
+    svc.grossPrice ??
+    svc.gross_price ??
+    svc.price ??
+    null
+  );
 }
 
 function buildServiceUrl(serviceId) {

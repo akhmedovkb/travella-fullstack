@@ -217,7 +217,24 @@ function extractServiceFields(item) {
 
   const title = _firstNonEmpty(svc.title, svc.name, details?.title, details?.name, details?.eventName, item?.title, item?.name);
 
-  const rawPrice = _firstNonEmpty(details?.netPrice, details?.price, details?.totalPrice, details?.priceNet, details?.grossPrice, svc.netPrice, svc.price, item?.price);
+  const rawPrice = _firstNonEmpty(
+    details?.grossPrice,
+    details?.gross_price,
+    details?.priceGross,
+    details?.price_gross,
+    details?.bruttoPrice,
+    details?.brutto_price,
+    details?.clientPrice,
+    details?.client_price,
+    details?.publicPrice,
+    details?.public_price,
+    details?.price,
+    details?.totalPrice,
+    svc.grossPrice,
+    svc.gross_price,
+    svc.price,
+    item?.price
+  );
   const prettyPrice = rawPrice == null ? null : new Intl.NumberFormat().format(Number(rawPrice));
 
   const hotel = _firstNonEmpty(details?.hotel, details?.hotelName, details?.hotel?.name, details?.refused_hotel_name, svc.hotel, svc.hotel_name, svc.refused_hotel_name);

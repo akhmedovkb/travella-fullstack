@@ -208,7 +208,20 @@ async function redactMarketplaceRow(row, viewer) {
 /* ===================== /CONTACT SECURITY ===================== */
 
 /* -------------------- константы/хелперы -------------------- */
-const PRICE_SQL = `COALESCE(NULLIF(s.details->>'netPrice','')::numeric, s.price)`;
+const PRICE_SQL = `COALESCE(
+  NULLIF(s.details->>'grossPrice','')::numeric,
+  NULLIF(s.details->>'gross_price','')::numeric,
+  NULLIF(s.details->>'priceGross','')::numeric,
+  NULLIF(s.details->>'price_gross','')::numeric,
+  NULLIF(s.details->>'bruttoPrice','')::numeric,
+  NULLIF(s.details->>'brutto_price','')::numeric,
+  NULLIF(s.details->>'clientPrice','')::numeric,
+  NULLIF(s.details->>'client_price','')::numeric,
+  NULLIF(s.details->>'publicPrice','')::numeric,
+  NULLIF(s.details->>'public_price','')::numeric,
+  NULLIF(s.details->>'price','')::numeric,
+  s.price
+)`;
 
 const CATEGORY_ALIAS = {
   guide: ["city_tour_guide", "mountain_tour_guide"],
