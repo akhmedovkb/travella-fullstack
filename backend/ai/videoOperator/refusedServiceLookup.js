@@ -87,9 +87,24 @@ function normalizeDisplayCase(value) {
 }
 
 function normalizeCode(input) {
-  const m = String(input || "").match(/R\s*(\d{1,8})/i);
+  const m = String(input || "").match(/([RAHE])\s*(\d{1,8})/i);
   if (!m) return null;
-  return { code: `R${m[1]}`.toUpperCase(), id: Number(m[1]) };
+  return { code: `${m[1].toUpperCase()}${m[2]}`, prefix: m[1].toUpperCase(), id: Number(m[2]) };
+}
+
+function normalizeCategoryFilters(categories = []) {
+  return [...new Set((Array.isArray(categories) ? categories : [categories])
+    .map((value) => String(value || "").trim().toLowerCase())
+    .filter(Boolean))];
+}
+
+function categorySql(filters = []) {
+  const normalized = normalizeCategoryFilters(filters);
+  if (!normalized.length) return { sql: "((s.category LIKE 'refused_%') OR s.category = 'author_tour')", values: [] };
+  return {
+    sql: `s.category = ANY($CATEGORY_PARAM::text[])`,
+    values: [normalized],
+  };
 }
 
 function categoryLabel(category) {
@@ -178,11 +193,12 @@ function normalizeService(row) {
   };
 }
 
-async function findRefusedServiceByCode(code) {
+async function findRefusedServiceByCode(code, options = {}) {
   const normalized = normalizeCode(code);
   if (!normalized?.id) {
     return { found: false, code: code || "", reason: "BAD_CODE" };
   }
+  const category = categorySql(options.categoryFilters || options.categories || []);
 
   const q = await db.query(
     `
@@ -205,11 +221,11 @@ async function findRefusedServiceByCode(code) {
       FROM services s
       LEFT JOIN providers p ON p.id = s.provider_id
       WHERE s.id = $1
-        AND ((s.category LIKE 'refused_%') OR s.category = 'author_tour')
+        AND ${category.sql.replace("$CATEGORY_PARAM", "2")}
         AND s.deleted_at IS NULL
       LIMIT 1
     `,
-    [normalized.id]
+    [normalized.id, ...(category.values.length ? category.values : [])]
   );
 
   const row = q.rows?.[0];
@@ -217,8 +233,11 @@ async function findRefusedServiceByCode(code) {
   return { found: true, service: normalizeService(row) };
 }
 
-async function listRecentRefusedServices({ limit = 8 } = {}) {
+async function listRecentRefusedServices({ limit = 8, categoryFilters = [], categories = [] } = {}) {
   const safeLimit = Math.max(1, Math.min(Number(limit) || 8, 20));
+  const category = categorySql(categoryFilters.length ? categoryFilters : categories);
+  const params = category.values.length ? [category.values[0], safeLimit] : [safeLimit];
+  const limitParam = category.values.length ? 2 : 1;
   const q = await db.query(
     `
       SELECT
@@ -239,18 +258,18 @@ async function listRecentRefusedServices({ limit = 8 } = {}) {
         p.social AS provider_social
       FROM services s
       LEFT JOIN providers p ON p.id = s.provider_id
-      WHERE ((s.category LIKE 'refused_%') OR s.category = 'author_tour')
+      WHERE ${category.sql.replace("$CATEGORY_PARAM", "1")}
         AND s.deleted_at IS NULL
       ORDER BY s.id DESC
-      LIMIT $1
+      LIMIT $${limitParam}
     `,
-    [safeLimit]
+    params
   );
   return (q.rows || []).map(normalizeService);
 }
 
-async function findLatestRefusedService() {
-  const services = await listRecentRefusedServices({ limit: 1 });
+async function findLatestRefusedService(options = {}) {
+  const services = await listRecentRefusedServices({ limit: 1, categoryFilters: options.categoryFilters || options.categories || [] });
   const service = services[0] || null;
   return service ? { found: true, service } : { found: false, reason: "NO_REFUSED_SERVICES" };
 }
