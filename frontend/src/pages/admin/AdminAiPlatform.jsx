@@ -185,17 +185,37 @@ function findHeygenVideoIdFromEvents(events = []) {
   return "";
 }
 
-function Message({ msg, onStartHeygen, onRefreshHeygen, canStartHeygen, aiVideoEnabled, heygenReady, heygenLoading, refreshLoading }) {
+function Message({ msg, onStartHeygen, onRefreshHeygen, onSaveScript, canStartHeygen, aiVideoEnabled, heygenReady, heygenLoading, refreshLoading, scriptSaving }) {
   const user = msg.role === "user";
   const inferredVideoId = findHeygenVideoIdFromEvents(msg.events || []);
   const heygen = msg.output?.heygen || (inferredVideoId ? { provider: "heygen", status: "submitted", videoId: inferredVideoId } : null);
   const artifact = heygen?.artifact || null;
   const jobStatus = String(msg.job?.status || "").toLowerCase();
+  const [scriptEditing, setScriptEditing] = React.useState(false);
+  const [scriptDraft, setScriptDraft] = React.useState(msg.output?.script || "");
+  const [scriptError, setScriptError] = React.useState("");
+  React.useEffect(() => {
+    setScriptDraft(msg.output?.script || "");
+    setScriptEditing(false);
+    setScriptError("");
+  }, [msg.output?.script, msg.job?.id]);
   const canShowHeygenAction = !user && msg.job?.id && msg.output?.script && !heygen?.videoId && !["video_submitted", "video_ready", "video_failed"].includes(jobStatus);
   const canShowRefreshAction = !user && msg.job?.id && heygen?.videoId && !heygen?.videoUrl;
+  const canEditScript = canShowHeygenAction && !heygenLoading && !scriptSaving;
+  const scriptDirty = String(scriptDraft || "") !== String(msg.output?.script || "");
   const heygenActionLabel = canStartHeygen
     ? heygenLoading === msg.job?.id ? "Отправляю..." : "Утвердить и отправить в HeyGen"
     : !heygenReady ? "HeyGen не настроен" : !aiVideoEnabled ? "Включи HeyGen" : "HeyGen недоступен";
+  async function saveScriptDraft() {
+    const nextScript = String(scriptDraft || "").trim();
+    if (nextScript.length < 20) {
+      setScriptError("Сценарий слишком короткий.");
+      return;
+    }
+    setScriptError("");
+    await onSaveScript?.(msg.job, nextScript);
+    setScriptEditing(false);
+  }
   return (
     <div className={cn("flex", user ? "justify-end" : "justify-start")}>
       <div className={cn("max-w-[92%] rounded-[1.6rem] px-5 py-4 shadow-sm", user ? "bg-slate-950 text-white" : "border border-slate-200 bg-white text-slate-900")}>
@@ -204,7 +224,65 @@ function Message({ msg, onStartHeygen, onRefreshHeygen, canStartHeygen, aiVideoE
         <ServicePreview service={msg.output?.service} />
         {msg.events?.length ? <div className="mt-4 space-y-2">{msg.events.map((ev, i) => <ToolEvent key={`${ev.at || i}_${i}`} ev={ev} />)}</div> : null}
         {msg.output?.hook ? <div className="mt-4 rounded-2xl bg-amber-50 p-4 ring-1 ring-amber-100"><div className="text-xs font-black uppercase tracking-wide text-amber-700">Хук</div><div className="mt-2 text-sm font-black leading-6 text-slate-950">{msg.output.hook}</div></div> : null}
-        {msg.output?.script ? <div className="mt-3 rounded-2xl bg-slate-950 p-4 text-white"><div className="text-xs font-black uppercase tracking-wide text-slate-300">Сценарий для AI-аватара</div><div className="mt-3 whitespace-pre-wrap text-sm font-semibold leading-7 text-slate-100">{msg.output.script}</div></div> : null}
+        {msg.output?.script ? (
+          <div className="mt-3 rounded-2xl bg-slate-950 p-4 text-white">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="text-xs font-black uppercase tracking-wide text-slate-300">Сценарий для AI-аватара</div>
+                {msg.output?.scriptEditedAt ? <div className="mt-1 text-xs font-bold text-emerald-300">Отредактирован вручную</div> : null}
+              </div>
+              {canEditScript && !scriptEditing ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setScriptEditing(true);
+                    setScriptError("");
+                  }}
+                  className="rounded-2xl bg-white/10 px-3 py-1.5 text-xs font-black text-white ring-1 ring-white/15 hover:bg-white/15"
+                >
+                  Редактировать
+                </button>
+              ) : null}
+            </div>
+            {scriptEditing ? (
+              <div className="mt-3">
+                <textarea
+                  value={scriptDraft}
+                  onChange={(e) => {
+                    setScriptDraft(e.target.value);
+                    setScriptError("");
+                  }}
+                  className="min-h-[320px] w-full resize-y rounded-2xl border border-white/10 bg-white px-4 py-3 text-sm font-semibold leading-7 text-slate-950 outline-none focus:border-emerald-300 focus:ring-4 focus:ring-emerald-500/15"
+                />
+                {scriptError ? <div className="mt-2 rounded-2xl bg-amber-100 px-3 py-2 text-xs font-black text-amber-800">{scriptError}</div> : null}
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setScriptDraft(msg.output?.script || "");
+                      setScriptEditing(false);
+                      setScriptError("");
+                    }}
+                    disabled={scriptSaving === msg.job?.id}
+                    className="rounded-2xl bg-white/10 px-4 py-2 text-xs font-black text-white ring-1 ring-white/15 hover:bg-white/15 disabled:opacity-40"
+                  >
+                    Отмена
+                  </button>
+                  <button
+                    type="button"
+                    onClick={saveScriptDraft}
+                    disabled={!scriptDirty || scriptSaving === msg.job?.id}
+                    className="rounded-2xl bg-emerald-600 px-4 py-2 text-xs font-black text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-slate-400"
+                  >
+                    {scriptSaving === msg.job?.id ? "Сохраняю..." : "Сохранить сценарий"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-3 whitespace-pre-wrap text-sm font-semibold leading-7 text-slate-100">{msg.output.script}</div>
+            )}
+          </div>
+        ) : null}
         <ScriptReview review={msg.output?.scriptReview} />
         {heygen ? (
           <div className="mt-3 rounded-2xl bg-emerald-50 p-4 ring-1 ring-emerald-100">
@@ -255,10 +333,10 @@ function Message({ msg, onStartHeygen, onRefreshHeygen, canStartHeygen, aiVideoE
             <button
               type="button"
               onClick={() => onStartHeygen?.(msg.job)}
-              disabled={!canStartHeygen || heygenLoading === msg.job.id}
+              disabled={!canStartHeygen || heygenLoading === msg.job.id || scriptDirty}
               className="rounded-2xl bg-slate-950 px-4 py-2 text-xs font-black text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {heygenActionLabel}
+              {scriptDirty ? "Сначала сохрани сценарий" : heygenActionLabel}
             </button>
           </div>
         ) : null}
@@ -2260,6 +2338,7 @@ export default function AdminAiPlatform() {
   const [loading, setLoading] = React.useState(false);
   const [heygenLoading, setHeygenLoading] = React.useState("");
   const [refreshLoading, setRefreshLoading] = React.useState("");
+  const [scriptSaving, setScriptSaving] = React.useState("");
   const [packageLoading, setPackageLoading] = React.useState("");
   const [publishLoading, setPublishLoading] = React.useState("");
   const [schedulerLoading, setSchedulerLoading] = React.useState(false);
@@ -2486,6 +2565,34 @@ export default function AdminAiPlatform() {
       await load();
     } finally {
       setRefreshLoading("");
+    }
+  }
+
+  async function saveJobScript(job, script) {
+    if (!job?.id || scriptSaving) return;
+    setScriptSaving(job.id);
+    setError("");
+    try {
+      const res = await apiPatch(`/api/admin/ai-platform/video-operator/jobs/${job.id}/script`, { script }, "admin");
+      const nextJob = res?.job || null;
+      const output = res?.output || nextJob?.output || null;
+      setCurrentTask(nextJob);
+      updateJobMessages(nextJob, output);
+      addMessage({
+        role: "assistant",
+        text: "Сценарий сохранён. Теперь можно отправлять в HeyGen.",
+        events: nextJob?.events || [],
+        output,
+        job: nextJob,
+      });
+      await load();
+    } catch (e) {
+      const msg = e?.message || "Не удалось сохранить сценарий";
+      setError(msg);
+      addMessage({ role: "assistant", text: `Не смог сохранить сценарий.\n\nПричина: ${msg}` });
+      await load();
+    } finally {
+      setScriptSaving("");
     }
   }
 
@@ -3061,11 +3168,13 @@ export default function AdminAiPlatform() {
                 msg={m}
                 onStartHeygen={startHeygen}
                 onRefreshHeygen={refreshHeygen}
+                onSaveScript={saveJobScript}
                 canStartHeygen={aiEnabled && heygenReady}
                 aiVideoEnabled={aiEnabled}
                 heygenReady={heygenReady}
                 heygenLoading={heygenLoading}
                 refreshLoading={refreshLoading}
+                scriptSaving={scriptSaving}
               />
             ))}
             {loading ? <Message msg={{ role: "assistant", text: "🧠 Думаю...\n⚙️ Вызываю нужные инструменты Travella AI Runtime..." }} /> : null}

@@ -920,6 +920,44 @@ router.post("/video-operator/jobs/:id/heygen/start", async (req, res) => {
   return res.json(result);
 });
 
+router.patch("/video-operator/jobs/:id/script", (req, res) => {
+  const job = getJob(req.params.id);
+  if (!job || job.employeeId !== "video_operator") {
+    return res.status(404).json({ success: false, message: "AI job not found" });
+  }
+  const output = job.output || {};
+  if (output.heygen?.videoId) {
+    return res.status(409).json({ success: false, message: "HeyGen already started. Script is locked." });
+  }
+  const script = String(req.body?.script || "").trim();
+  if (script.length < 20) {
+    return res.status(400).json({ success: false, message: "Script is too short" });
+  }
+  if (script.length > 6000) {
+    return res.status(400).json({ success: false, message: "Script is too long" });
+  }
+  const actor = { id: req.user?.id || req.user?.userId || null, role: req.user?.role || req.user?.roles || null };
+  const nextOutput = {
+    ...output,
+    script,
+    scriptReview: output.scriptReview
+      ? { ...output.scriptReview, manualEdited: true, updatedAt: new Date().toISOString() }
+      : { status: "ready", manualEdited: true, updatedAt: new Date().toISOString() },
+    scriptEditedAt: new Date().toISOString(),
+    scriptEditedBy: actor,
+    nextStep: "Сценарий сохранён. Проверь текст и отправь в HeyGen вручную.",
+  };
+  const nextJob = updateJob(job.id, { status: "script_ready", output: nextOutput });
+  addEvent(job.id, {
+    step: "script",
+    type: "tool_result",
+    tool: "ScriptEditor",
+    message: "Оператор вручную отредактировал сценарий перед HeyGen.",
+    meta: { actor },
+  });
+  return res.json({ success: true, job: nextJob, output: nextJob.output });
+});
+
 router.get("/video-operator/jobs", (req, res) => {
   res.json({ success: true, jobs: listVideoOperatorJobs({ limit: req.query.limit || 30 }) });
 });
