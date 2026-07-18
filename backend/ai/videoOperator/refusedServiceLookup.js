@@ -32,6 +32,28 @@ function firstNonEmpty(...values) {
   return "";
 }
 
+function pickGrossPrice(details = {}, row = {}) {
+  return firstNonEmpty(
+    details.grossPrice,
+    details.gross_price,
+    details.priceGross,
+    details.price_gross,
+    details.bruttoPrice,
+    details.brutto_price,
+    details.priceBrut,
+    details.price_brut,
+    details.clientPrice,
+    details.client_price,
+    details.publicPrice,
+    details.public_price,
+    row.price,
+    details.price,
+    details.amount,
+    details.totalPrice,
+    details.total_price
+  );
+}
+
 function normalizeOfferText(value) {
   const cleaned = String(value || "")
     .replace(/через\s+@\S+/gi, "")
@@ -137,7 +159,7 @@ function normalizeService(row) {
   const category = String(row.category || "").toLowerCase();
   const taskCode = `${categoryTaskPrefix(category)}${row.id}`;
 
-  const price = firstNonEmpty(row.price, d.price, d.netPrice, d.grossPrice, d.amount, d.totalPrice);
+  const price = pickGrossPrice(d, row);
   const currency = firstNonEmpty(row.currency, d.currency, d.priceCurrency, process.env.PRICE_CURRENCY || "USD");
 
   const title = titleCaseFallback(row.title) || `${categoryLabel(category)} #R${row.id}`;
