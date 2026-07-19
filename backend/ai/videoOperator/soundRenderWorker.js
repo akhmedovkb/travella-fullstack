@@ -27,6 +27,7 @@ function normalizeEffect(effect = {}, index = 0) {
     label: String(effect.label || effect.assetId || `SFX ${index + 1}`).trim(),
     time: Math.max(0, safeNumber(effect.time, 0)),
     volume: Math.max(0, Math.min(0.8, safeNumber(effect.volume, 0.2))),
+    enabled: effect.enabled === false ? false : true,
   };
 }
 
@@ -41,7 +42,10 @@ function getToneForEffect(assetId = "") {
 
 function buildFfmpegArgs({ inputPath, outputPath, soundPlan = {} }) {
   const musicVolume = Math.max(0, Math.min(0.5, safeNumber(soundPlan.music?.volume, 0.1) * 1.4));
-  const effects = (Array.isArray(soundPlan.effects) ? soundPlan.effects : []).slice(0, 8).map(normalizeEffect);
+  const effects = (Array.isArray(soundPlan.effects) ? soundPlan.effects : [])
+    .slice(0, 8)
+    .map(normalizeEffect)
+    .filter((effect) => effect.enabled !== false && effect.volume > 0);
   const args = ["-y", "-i", inputPath];
   const filterParts = [];
   const audioLabels = ["[0:a]"];

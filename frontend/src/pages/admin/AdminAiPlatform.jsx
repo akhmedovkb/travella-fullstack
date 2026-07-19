@@ -318,13 +318,70 @@ function getHeygenVersions(output = {}) {
     .sort((a, b) => Number(a.version || 0) - Number(b.version || 0));
 }
 
+function createSoundCue(index = 0) {
+  return {
+    id: `manual_sfx_${Date.now()}_${index}`,
+    assetId: "soft_whoosh_01",
+    label: "Soft whoosh",
+    time: 0,
+    volume: 0.22,
+    enabled: true,
+    note: "Ручной SFX.",
+  };
+}
+
+function getSfxTone(assetId = "") {
+  const id = String(assetId || "").toLowerCase();
+  if (id.includes("sparkle") || id.includes("chime")) return { frequency: 1320, duration: 0.34, type: "sine" };
+  if (id.includes("impact") || id.includes("price")) return { frequency: 150, duration: 0.26, type: "triangle" };
+  if (id.includes("click") || id.includes("tap")) return { frequency: 980, duration: 0.08, type: "square" };
+  if (id.includes("urgency")) return { frequency: 520, duration: 0.24, type: "sawtooth" };
+  return { frequency: 720, duration: 0.18, type: "sine" };
+}
+
+function playSfxPreview(effect = {}, delaySeconds = 0) {
+  if (typeof window === "undefined") return;
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return;
+  const ctx = new AudioContextClass();
+  const tone = getSfxTone(effect.assetId);
+  const gain = ctx.createGain();
+  const osc = ctx.createOscillator();
+  const startAt = ctx.currentTime + Math.max(0, Number(delaySeconds) || 0);
+  const volume = Math.max(0.01, Math.min(0.7, Number(effect.volume ?? 0.2) * 1.8));
+  osc.type = tone.type;
+  osc.frequency.setValueAtTime(tone.frequency, startAt);
+  gain.gain.setValueAtTime(0.001, startAt);
+  gain.gain.exponentialRampToValueAtTime(volume, startAt + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.001, startAt + tone.duration);
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(startAt);
+  osc.stop(startAt + tone.duration + 0.05);
+  setTimeout(() => ctx.close().catch(() => {}), (delaySeconds + tone.duration + 0.4) * 1000);
+}
+
 function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoading }) {
   const [draft, setDraft] = React.useState(soundPlan || null);
+  const [soloIndex, setSoloIndex] = React.useState(null);
   React.useEffect(() => { setDraft(soundPlan || null); }, [soundPlan, job?.id]);
   const plan = draft || null;
   const busy = loading === job?.id;
   const rendering = renderLoading === job?.id || plan?.render?.status === "rendering";
   const renderedUrl = plan?.render?.artifact?.url || "";
+  const effects = Array.isArray(plan?.effects) ? plan.effects : [];
+  const duration = Math.max(8, Number(plan?.durationEstimateSeconds || 35));
+  const enabledEffects = effects.filter((effect) => effect.enabled !== false);
+  const playEffect = (effect, index) => {
+    setSoloIndex(index);
+    playSfxPreview(effect);
+    window.setTimeout(() => setSoloIndex(null), 900);
+  };
+  const playPlan = () => {
+    enabledEffects.slice(0, 8).forEach((effect) => {
+      playSfxPreview(effect, Math.min(8, Math.max(0, Number(effect.time || 0))));
+    });
+  };
   const updateEffect = (index, patch) => {
     setDraft((prev) => {
       const base = prev || { preset: "Urgent Deal", music: { assetId: "tropical_luxury_01", label: "Tropical luxury", volume: 0.12 }, effects: [] };
@@ -333,14 +390,24 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
       return { ...base, effects };
     });
   };
+  const removeEffect = (index) => {
+    setDraft((prev) => ({ ...(prev || {}), effects: (Array.isArray(prev?.effects) ? prev.effects : []).filter((_, i) => i !== index) }));
+  };
+  const addEffect = () => {
+    setDraft((prev) => {
+      const base = prev || { preset: "Urgent Deal", music: { assetId: "tropical_luxury_01", label: "Tropical luxury", volume: 0.12 }, effects: [] };
+      const effects = Array.isArray(base.effects) ? [...base.effects] : [];
+      return { ...base, effects: [...effects, createSoundCue(effects.length)] };
+    });
+  };
   if (!job?.id) return null;
   return (
     <div className="mt-3 rounded-2xl bg-indigo-50 p-4 ring-1 ring-indigo-100">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="text-xs font-black uppercase tracking-wide text-indigo-700">Sound Director</div>
-          <div className="mt-1 text-sm font-black text-slate-950">Музыка и SFX после HeyGen</div>
-          <div className="mt-1 text-xs font-bold text-slate-500">План сохранится в задаче. FFmpeg render worker будет следующим этапом.</div>
+          <div className="mt-1 text-sm font-black text-slate-950">Sound Studio перед финальной склейкой</div>
+          <div className="mt-1 text-xs font-bold text-slate-500">Включай, убирай и слушай SFX-план до кнопки “Свести звук”.</div>
         </div>
         <button
           type="button"
@@ -384,9 +451,54 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
               <span className="text-[10px] font-black text-slate-500">{Math.round(Number(plan.music?.volume ?? 0.12) * 100)}%</span>
             </label>
           </div>
+          <div className="rounded-2xl bg-white p-3 ring-1 ring-indigo-100">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Timeline</div>
+                <div className="text-xs font-black text-slate-950">{enabledEffects.length} SFX включено · примерно {Math.round(duration)} сек.</div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={playPlan} className="rounded-2xl bg-indigo-700 px-3 py-2 text-xs font-black text-white hover:bg-indigo-800">Preview SFX</button>
+                <button type="button" onClick={addEffect} className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-950 ring-1 ring-slate-200 hover:bg-slate-50">Добавить SFX</button>
+              </div>
+            </div>
+            <div className="mt-3 h-16 rounded-2xl bg-slate-950 p-3">
+              <div className="relative h-full rounded-xl bg-slate-800">
+                {effects.map((effect, index) => {
+                  const left = Math.max(0, Math.min(96, (Number(effect.time || 0) / duration) * 100));
+                  return (
+                    <button
+                      key={`${effect.id || index}_dot`}
+                      type="button"
+                      onClick={() => playEffect(effect, index)}
+                      className={cn(
+                        "absolute top-1/2 h-7 min-w-7 -translate-y-1/2 rounded-full px-2 text-[10px] font-black text-white ring-2 ring-white/20 transition",
+                        effect.enabled === false ? "bg-slate-500 opacity-50" : "bg-indigo-500",
+                        soloIndex === index && "scale-110 bg-emerald-500"
+                      )}
+                      style={{ left: `${left}%` }}
+                      title={`${effect.label || "SFX"} · ${Number(effect.time || 0).toFixed(1)}s`}
+                    >
+                      {index + 1}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
           <div className="space-y-2">
-            {(Array.isArray(plan.effects) ? plan.effects : []).map((effect, index) => (
-              <div key={`${effect.id || index}_${index}`} className="grid gap-2 rounded-2xl bg-white p-3 ring-1 ring-indigo-100 lg:grid-cols-[1fr_90px_120px_1.4fr]">
+            {effects.map((effect, index) => (
+              <div key={`${effect.id || index}_${index}`} className={cn("grid gap-2 rounded-2xl bg-white p-3 ring-1 ring-indigo-100 lg:grid-cols-[92px_1fr_90px_120px_1.3fr_88px]", effect.enabled === false && "opacity-55")}>
+                <button
+                  type="button"
+                  onClick={() => updateEffect(index, { enabled: effect.enabled === false ? true : false })}
+                  className={cn(
+                    "rounded-xl px-3 py-2 text-xs font-black ring-1",
+                    effect.enabled === false ? "bg-white text-slate-500 ring-slate-200" : "bg-emerald-50 text-emerald-800 ring-emerald-100"
+                  )}
+                >
+                  {effect.enabled === false ? "Muted" : "On"}
+                </button>
                 <input
                   value={effect.label || ""}
                   onChange={(e) => updateEffect(index, { label: e.target.value })}
@@ -404,7 +516,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
                   <input
                     type="range"
                     min="0"
-                    max="0.6"
+                    max="0.8"
                     step="0.01"
                     value={Number(effect.volume ?? 0.2)}
                     onChange={(e) => updateEffect(index, { volume: Number(e.target.value) })}
@@ -417,6 +529,10 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
                   onChange={(e) => updateEffect(index, { note: e.target.value })}
                   className="min-w-0 rounded-xl bg-slate-50 px-3 py-2 text-xs font-bold text-slate-600 outline-none ring-1 ring-slate-100"
                 />
+                <div className="flex gap-1">
+                  <button type="button" onClick={() => playEffect(effect, index)} className="flex-1 rounded-xl bg-slate-950 px-2 py-2 text-xs font-black text-white hover:bg-slate-800">Play</button>
+                  <button type="button" onClick={() => removeEffect(index)} className="flex-1 rounded-xl bg-rose-50 px-2 py-2 text-xs font-black text-rose-700 ring-1 ring-rose-100 hover:bg-rose-100">Del</button>
+                </div>
               </div>
             ))}
           </div>

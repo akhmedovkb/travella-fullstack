@@ -36,6 +36,7 @@ function normalizeSoundCue(cue = {}, index = 0) {
     label: clean(cue.label, "Soft whoosh").slice(0, 80),
     time: Number.isFinite(time) ? Math.max(0, Math.round(time * 100) / 100) : 0,
     volume: Number.isFinite(volume) ? Math.max(0, Math.min(1, Math.round(volume * 100) / 100)) : 0.22,
+    enabled: cue.enabled === false ? false : true,
     fadeIn: Math.max(0, Math.min(3, Number(cue.fadeIn ?? 0.05))),
     fadeOut: Math.max(0, Math.min(3, Number(cue.fadeOut ?? 0.25))),
     note: clean(cue.note, "").slice(0, 200),
