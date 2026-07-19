@@ -569,18 +569,26 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
               </div>
             </div>
             <div className="flex-1 overflow-y-auto p-4 md:p-5">
-              <div className="mb-4 grid items-start gap-3 xl:grid-cols-[300px_360px_minmax(0,1fr)]">
+              <div className="mb-3 grid gap-2 text-xs font-black text-slate-600 sm:grid-cols-3 lg:grid-cols-6">
+                <div className="rounded-2xl bg-white px-3 py-2 ring-1 ring-slate-200">Video <span className="ml-1 text-slate-400">{previewUrl ? "ready" : "none"}</span></div>
+                <div className="rounded-2xl bg-white px-3 py-2 ring-1 ring-slate-200">Duration <span className="ml-1 text-slate-400">{Math.round(duration)}s</span></div>
+                <div className="rounded-2xl bg-white px-3 py-2 ring-1 ring-slate-200">SFX <span className="ml-1 text-slate-400">{enabledEffects.length}</span></div>
+                <div className="rounded-2xl bg-white px-3 py-2 ring-1 ring-slate-200">Text <span className="ml-1 text-slate-400">{textOverlays.length}</span></div>
+                <div className="rounded-2xl bg-white px-3 py-2 ring-1 ring-slate-200">Images <span className="ml-1 text-slate-400">{imageOverlays.length}</span></div>
+                <div className="rounded-2xl bg-amber-50 px-3 py-2 text-amber-800 ring-1 ring-amber-100">Trim plan</div>
+              </div>
+              <div className="mb-3 grid items-start gap-3 xl:grid-cols-[240px_minmax(0,1fr)]">
                 <div className="rounded-3xl bg-slate-950 p-3 text-white">
                   <div className="text-xs font-black uppercase tracking-wide text-slate-400">Preview</div>
                   {previewUrl ? (
-                    <video src={previewUrl} controls className="mt-3 aspect-[9/16] max-h-[390px] w-full rounded-2xl bg-black object-contain" />
+                    <video src={previewUrl} controls className="mt-3 aspect-[9/16] max-h-[300px] w-full rounded-2xl bg-black object-contain" />
                   ) : (
-                    <div className="mt-3 flex aspect-[9/16] max-h-[390px] items-center justify-center rounded-2xl bg-slate-900 text-xs font-black text-slate-500">Видео появится после HeyGen</div>
+                    <div className="mt-3 flex aspect-[9/16] max-h-[300px] items-center justify-center rounded-2xl bg-slate-900 text-xs font-black text-slate-500">Видео появится после HeyGen</div>
                   )}
                 </div>
                 <div className="rounded-3xl bg-white p-4 ring-1 ring-slate-200">
                   <div className="text-xs font-black uppercase tracking-wide text-slate-400">Монтаж</div>
-                  <div className="mt-3 grid gap-2">
+                  <div className="mt-3 grid gap-2 md:grid-cols-4">
                     <label className="rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-100">
                       <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Trim start</span>
                       <input type="number" min="0" step="0.1" value={Number(trim.start || 0)} onChange={(e) => updateTrim({ start: Number(e.target.value) })} className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none" />
@@ -591,14 +599,6 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
                     </label>
                     <div className="rounded-2xl bg-slate-50 p-3 text-xs font-black text-slate-950 ring-1 ring-slate-100"><span className="block text-[10px] uppercase tracking-wide text-slate-400">Duration</span>{Math.max(0, Math.round((duration - Number(trim.start || 0) - Number(trim.end || 0)) * 10) / 10)} sec</div>
                     <div className="rounded-2xl bg-amber-50 p-3 text-xs font-bold text-amber-800 ring-1 ring-amber-100">Trim сохраняется в плане. Следующий шаг — применить его в FFmpeg render.</div>
-                  </div>
-                </div>
-                <div className="hidden min-h-[220px] rounded-3xl border border-dashed border-slate-200 bg-white/60 p-4 xl:block">
-                  <div className="text-xs font-black uppercase tracking-wide text-slate-400">Canvas tools</div>
-                  <div className="mt-3 grid gap-2 text-xs font-black text-slate-600 sm:grid-cols-3">
-                    <div className="rounded-2xl bg-white p-3 ring-1 ring-slate-100">Text overlays<br /><span className="text-slate-400">{textOverlays.length}</span></div>
-                    <div className="rounded-2xl bg-white p-3 ring-1 ring-slate-100">Image overlays<br /><span className="text-slate-400">{imageOverlays.length}</span></div>
-                    <div className="rounded-2xl bg-white p-3 ring-1 ring-slate-100">SFX clips<br /><span className="text-slate-400">{enabledEffects.length}</span></div>
                   </div>
                 </div>
               </div>
