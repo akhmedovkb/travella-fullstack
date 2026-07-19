@@ -89,6 +89,12 @@ function findHeygenVideoId(job = {}) {
   const fromOutput = job.output?.heygen?.videoId || job.output?.heygen?.video_id || "";
   if (fromOutput) return String(fromOutput);
 
+  const attempts = normalizeHeygenAttempts(job.output?.heygenAttempts);
+  for (const attempt of attempts) {
+    const fromAttempt = attempt?.videoId || attempt?.video_id || "";
+    if (fromAttempt) return String(fromAttempt);
+  }
+
   const events = Array.isArray(job.events) ? [...job.events].reverse() : [];
   for (const event of events) {
     const fromMeta = event?.meta?.videoId || event?.meta?.video_id || "";
@@ -102,7 +108,10 @@ function findHeygenVideoId(job = {}) {
 function findVideoOperatorJobByHeygenVideoId(videoId) {
   const target = String(videoId || "").trim();
   if (!target) return null;
-  return listJobs({ employeeId: "video_operator", limit: 100 }).find((job) => findHeygenVideoId(job) === target) || null;
+  return listJobs({ employeeId: "video_operator", limit: 100 }).find((job) => {
+    if (String(job.output?.heygen?.videoId || job.output?.heygen?.video_id || "") === target) return true;
+    return normalizeHeygenAttempts(job.output?.heygenAttempts).some((attempt) => String(attempt?.videoId || attempt?.video_id || "") === target);
+  }) || null;
 }
 
 async function saveArtifactIfReady(job, output, heygen) {
@@ -181,6 +190,58 @@ function prepareHeygenOutputForRun(output = {}, regenerate = false) {
     heygenAttempts: previous ? attempts.concat(previous) : attempts,
   };
   return { output: nextOutput, version: getNextHeygenVersion(nextOutput) };
+}
+
+function listHeygenVersions(output = {}) {
+  const attempts = normalizeHeygenAttempts(output.heygenAttempts);
+  const current = output.heygen ? [{ ...output.heygen, active: true }] : [];
+  return attempts
+    .map((item) => ({ ...item, active: false }))
+    .concat(current)
+    .map((item, index) => ({ ...item, version: Number(item.version || index + 1) }))
+    .sort((a, b) => Number(a.version || 0) - Number(b.version || 0));
+}
+
+function selectHeygenVersionForVideoJob({ jobId, version, actor = {} }) {
+  const job = getJob(jobId);
+  if (!job) {
+    return { success: false, error: { code: "JOB_NOT_FOUND", message: "AI job not found" } };
+  }
+
+  const output = job.output || {};
+  const targetVersion = Number(version);
+  if (!Number.isFinite(targetVersion) || targetVersion < 1) {
+    return { success: false, job, error: { code: "HEYGEN_VERSION_REQUIRED", message: "Нужно выбрать версию HeyGen." } };
+  }
+
+  const versions = listHeygenVersions(output);
+  const selected = versions.find((item) => Number(item.version) === targetVersion);
+  if (!selected) {
+    return { success: false, job, error: { code: "HEYGEN_VERSION_NOT_FOUND", message: `Версия v${targetVersion} не найдена.` } };
+  }
+  if (selected.active) {
+    return { success: true, job, output, message: `Версия v${targetVersion} уже активна.` };
+  }
+
+  const nextHeygen = { ...selected, active: undefined, activatedAt: new Date().toISOString(), activatedBy: actor?.id || null };
+  const nextAttempts = versions
+    .filter((item) => Number(item.version) !== targetVersion)
+    .map((item) => ({ ...item, active: undefined }))
+    .sort((a, b) => Number(a.version || 0) - Number(b.version || 0));
+  const nextOutput = { ...output, heygen: nextHeygen, heygenAttempts: nextAttempts };
+  const nextJob = updateJob(job.id, {
+    status: isHeygenReady(nextHeygen.status) ? "video_ready" : "video_submitted",
+    output: nextOutput,
+    error: null,
+  });
+  addEvent(job.id, {
+    step: "heygen",
+    type: "tool_result",
+    tool: "HeyGenVersionSelector",
+    message: `Активная версия HeyGen: v${targetVersion}.`,
+    meta: { version: targetVersion, actor },
+  });
+  return { success: true, job: getJob(job.id) || nextJob, output: (getJob(job.id) || nextJob).output };
 }
 
 function shouldUseLatestService(command) {
@@ -566,10 +627,15 @@ async function handleHeygenWebhook({ payload = {}, headers = {} } = {}) {
   }
 
   const output = job.output || {};
+  const attempts = normalizeHeygenAttempts(output.heygenAttempts);
+  const activeVideoId = String(output.heygen?.videoId || output.heygen?.video_id || "");
+  const attemptIndex = attempts.findIndex((attempt) => String(attempt?.videoId || attempt?.video_id || "") === payloadVideoId);
+  const webhookTargetsActive = activeVideoId === payloadVideoId || attemptIndex < 0;
+  const targetHeygen = webhookTargetsActive ? (output.heygen || {}) : (attempts[attemptIndex] || {});
   const payloadStatus = getHeygenStatus(payload);
   let response = payload;
   let status = payloadStatus;
-  let videoUrl = extractHeygenVideoUrl(payload) || output.heygen?.videoUrl || "";
+  let videoUrl = extractHeygenVideoUrl(payload) || targetHeygen.videoUrl || "";
 
   if (!videoUrl && isHeygenReady(payloadStatus)) {
     try {
@@ -588,7 +654,7 @@ async function handleHeygenWebhook({ payload = {}, headers = {} } = {}) {
 
   const heygen = {
     provider: "heygen",
-    ...(output.heygen || {}),
+    ...targetHeygen,
     videoId: payloadVideoId,
     status,
     videoUrl,
@@ -600,7 +666,22 @@ async function handleHeygenWebhook({ payload = {}, headers = {} } = {}) {
     },
   };
 
-  const saved = await saveArtifactIfReady(job, output, heygen);
+  const saved = await saveArtifactIfReady(job, webhookTargetsActive ? output : { ...output, heygen }, heygen);
+  if (!webhookTargetsActive) {
+    const nextAttempts = attempts.slice();
+    nextAttempts[attemptIndex] = saved.heygen;
+    const nextOutput = { ...output, heygen: output.heygen || null, heygenAttempts: nextAttempts };
+    updateJob(job.id, { output: nextOutput });
+    addEvent(job.id, {
+      step: "heygen",
+      type: "tool_result",
+      tool: "HeyGenWebhook",
+      message: `HeyGen webhook обновил историю v${saved.heygen.version || attemptIndex + 1}: ${saved.heygen.status}.`,
+      meta: { videoId: payloadVideoId, status: saved.heygen.status, version: saved.heygen.version || attemptIndex + 1, active: false },
+    });
+    return { success: true, accepted: true, job: getJob(job.id), output: nextOutput };
+  }
+
   const nextOutput = saved.output;
   const nextHeygen = saved.heygen;
   const failed = ["failed", "fail", "error"].includes(String(nextHeygen.status || "").toLowerCase());
@@ -676,6 +757,7 @@ module.exports = {
   runVideoOperatorTask,
   createScriptFromManualContext,
   startHeygenForVideoJob,
+  selectHeygenVersionForVideoJob,
   refreshHeygenForVideoJob,
   handleHeygenWebhook,
   runHeygenVideoPollerOnce,

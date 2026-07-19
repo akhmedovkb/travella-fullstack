@@ -274,12 +274,23 @@ function HeygenGenerationPreview({ profile = {}, presets = {}, script = "", lock
   );
 }
 
-function Message({ msg, onStartHeygen, onRefreshHeygen, onSaveScript, canStartHeygen, aiVideoEnabled, heygenReady, heygenLoading, refreshLoading, scriptSaving, runtimeProfile, runtimePresets, heygenProfileDirty }) {
+function getHeygenVersions(output = {}) {
+  const attempts = Array.isArray(output.heygenAttempts) ? output.heygenAttempts : [];
+  const current = output.heygen ? [{ ...output.heygen, active: true }] : [];
+  return attempts
+    .map((item) => ({ ...item, active: false }))
+    .concat(current)
+    .map((item, index) => ({ ...item, version: Number(item.version || index + 1) }))
+    .sort((a, b) => Number(a.version || 0) - Number(b.version || 0));
+}
+
+function Message({ msg, onStartHeygen, onRefreshHeygen, onSaveScript, onSelectHeygenVersion, canStartHeygen, aiVideoEnabled, heygenReady, heygenLoading, refreshLoading, scriptSaving, versionLoading, runtimeProfile, runtimePresets, heygenProfileDirty }) {
   const user = msg.role === "user";
   const inferredVideoId = findHeygenVideoIdFromEvents(msg.events || []);
   const heygen = msg.output?.heygen || (inferredVideoId ? { provider: "heygen", status: "submitted", videoId: inferredVideoId } : null);
   const artifact = heygen?.artifact || null;
-  const heygenAttempts = Array.isArray(msg.output?.heygenAttempts) ? msg.output.heygenAttempts : [];
+  const heygenVersions = getHeygenVersions(msg.output || {});
+  const heygenAttempts = heygenVersions.filter((item) => !item.active);
   const jobStatus = String(msg.job?.status || "").toLowerCase();
   const [scriptEditing, setScriptEditing] = React.useState(false);
   const [scriptDraft, setScriptDraft] = React.useState(msg.output?.script || "");
@@ -438,6 +449,37 @@ function Message({ msg, onStartHeygen, onRefreshHeygen, onSaveScript, canStartHe
               </div>
             </div>
             {heygen.videoId ? <div className="mt-1 text-xs font-bold text-slate-500">Video ID: {heygen.videoId}</div> : null}
+            {heygenVersions.length > 1 ? (
+              <div className="mt-3 rounded-2xl bg-white p-3 ring-1 ring-emerald-100">
+                <div className="text-xs font-black uppercase tracking-wide text-slate-400">Версии HeyGen</div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {heygenVersions.map((item) => {
+                    const active = Boolean(item.active);
+                    const ready = Boolean(item.videoUrl || item.artifact?.url);
+                    return (
+                      <button
+                        key={`${item.version}_${item.videoId || item.status || "video"}`}
+                        type="button"
+                        onClick={() => !active && onSelectHeygenVersion?.(msg.job, item.version)}
+                        disabled={active || versionLoading === msg.job?.id}
+                        className={cn(
+                          "rounded-2xl px-3 py-2 text-left text-xs font-black ring-1 transition disabled:cursor-default",
+                          active
+                            ? "bg-emerald-600 text-white ring-emerald-600"
+                            : "bg-slate-50 text-slate-700 ring-slate-200 hover:bg-slate-100 disabled:opacity-50"
+                        )}
+                        title={active ? "Активная версия" : "Сделать активной"}
+                      >
+                        <span className="block">v{item.version}{active ? " · активная" : ""}</span>
+                        <span className={cn("mt-0.5 block text-[10px]", active ? "text-white/70" : ready ? "text-emerald-700" : "text-slate-400")}>
+                          {active ? "публикуется она" : versionLoading === msg.job?.id ? "переключаю..." : ready ? "готово" : item.status || "submitted"}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
             {heygen.videoUrl ? (
               <a
                 href={heygen.videoUrl}
@@ -2565,6 +2607,7 @@ export default function AdminAiPlatform() {
   const [heygenLoading, setHeygenLoading] = React.useState("");
   const [refreshLoading, setRefreshLoading] = React.useState("");
   const [scriptSaving, setScriptSaving] = React.useState("");
+  const [versionLoading, setVersionLoading] = React.useState("");
   const [packageLoading, setPackageLoading] = React.useState("");
   const [publishLoading, setPublishLoading] = React.useState("");
   const [schedulerLoading, setSchedulerLoading] = React.useState(false);
@@ -2806,6 +2849,34 @@ export default function AdminAiPlatform() {
       await load();
     } finally {
       setRefreshLoading("");
+    }
+  }
+
+  async function selectHeygenVersion(job, version) {
+    if (!job?.id || versionLoading) return;
+    setVersionLoading(job.id);
+    setError("");
+    try {
+      const res = await apiPatch(`/api/admin/ai-platform/video-operator/jobs/${job.id}/heygen/active`, { version }, "admin");
+      const nextJob = res?.job || null;
+      const output = res?.output || nextJob?.output || null;
+      setCurrentTask(nextJob);
+      updateJobMessages(nextJob, output);
+      addMessage({
+        role: "assistant",
+        text: `Активная версия HeyGen: v${output?.heygen?.version || version}. Content Manager и Publishing Manager будут брать её.`,
+        events: nextJob?.events || [],
+        output,
+        job: nextJob,
+      });
+      await load();
+    } catch (e) {
+      const msg = e?.message || "Не удалось выбрать активную версию HeyGen";
+      setError(msg);
+      addMessage({ role: "assistant", text: `Не смог переключить версию HeyGen.\n\nПричина: ${msg}` });
+      await load();
+    } finally {
+      setVersionLoading("");
     }
   }
 
@@ -3406,12 +3477,14 @@ export default function AdminAiPlatform() {
                   onStartHeygen={startHeygen}
                   onRefreshHeygen={refreshHeygen}
                   onSaveScript={saveJobScript}
+                  onSelectHeygenVersion={selectHeygenVersion}
                   canStartHeygen={aiEnabled && heygenReady}
                   aiVideoEnabled={aiEnabled}
                   heygenReady={heygenReady}
                   heygenLoading={heygenLoading}
                   refreshLoading={refreshLoading}
                   scriptSaving={scriptSaving}
+                  versionLoading={versionLoading}
                   runtimeProfile={runtimeProfile}
                   runtimePresets={videoPresetsDraft}
                   heygenProfileDirty={profileDirty}
