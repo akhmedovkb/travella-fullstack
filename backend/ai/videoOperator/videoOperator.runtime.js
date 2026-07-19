@@ -20,6 +20,105 @@ function clean(value, fallback = "") {
   return s || fallback;
 }
 
+function estimateSpeechSeconds(script = "") {
+  const words = String(script || "").trim().split(/\s+/).filter(Boolean).length;
+  if (!words) return 0;
+  return Math.max(5, Math.round(words / 2.5));
+}
+
+function normalizeSoundCue(cue = {}, index = 0) {
+  const time = Number(cue.time);
+  const volume = Number(cue.volume);
+  return {
+    id: clean(cue.id, `sfx_${index + 1}`),
+    assetId: clean(cue.assetId, "soft_whoosh_01"),
+    label: clean(cue.label, "Soft whoosh").slice(0, 80),
+    time: Number.isFinite(time) ? Math.max(0, Math.round(time * 100) / 100) : 0,
+    volume: Number.isFinite(volume) ? Math.max(0, Math.min(1, Math.round(volume * 100) / 100)) : 0.22,
+    fadeIn: Math.max(0, Math.min(3, Number(cue.fadeIn ?? 0.05))),
+    fadeOut: Math.max(0, Math.min(3, Number(cue.fadeOut ?? 0.25))),
+    note: clean(cue.note, "").slice(0, 200),
+  };
+}
+
+function buildSoundPlan(output = {}, options = {}) {
+  const script = String(output.script || "").trim();
+  const seconds = estimateSpeechSeconds(script);
+  const duration = Number(options.durationSeconds || seconds || 35);
+  const clamp = (value) => Math.max(0, Math.min(Math.max(0, duration - 0.4), Math.round(value * 100) / 100));
+  const lower = script.toLowerCase();
+  const cues = [
+    { assetId: "soft_whoosh_01", label: "Soft whoosh", time: clamp(0.35), volume: 0.2, note: "Открывающий hook." },
+  ];
+
+  if (/(отказ|сроч|горит|быстро|сегодня)/i.test(script)) {
+    cues.push({ assetId: "urgency_whoosh_01", label: "Urgency whoosh", time: clamp(duration * 0.68), volume: 0.18, note: "Акцент срочности отказного предложения." });
+  }
+  if (/(цена|usd|доллар|сум|за двоих|за троих|за одного)/i.test(script)) {
+    cues.push({ assetId: "soft_price_impact_01", label: "Soft price impact", time: clamp(duration * 0.55), volume: 0.22, note: "Акцент цены без игрового звучания." });
+  }
+  if (/(пять зв|5 зв|люкс|premium|deluxe|sea view|море|пляж|анталь|дананг|маврик)/i.test(lower)) {
+    cues.push({ assetId: "luxury_sparkle_01", label: "Luxury sparkle", time: clamp(duration * 0.36), volume: 0.16, note: "Премиальный акцент на отель/отдых." });
+  }
+  cues.push({ assetId: "notification_click_01", label: "Notification click", time: clamp(duration * 0.92), volume: 0.18, note: "Финальный CTA." });
+
+  return {
+    status: "draft",
+    preset: clean(options.preset, "Urgent Deal"),
+    durationEstimateSeconds: duration,
+    music: {
+      assetId: clean(options.musicAssetId, "tropical_luxury_01"),
+      label: clean(options.musicLabel, "Tropical luxury"),
+      volume: 0.12,
+      fadeIn: 1.2,
+      fadeOut: 1.8,
+      ducking: true,
+      targetLufs: -21,
+    },
+    effects: cues.slice(0, 5).map(normalizeSoundCue),
+    render: {
+      status: "not_rendered",
+      message: "FFmpeg render worker will mix this plan with the active HeyGen MP4.",
+    },
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function saveSoundPlanForVideoJob({ jobId, soundPlan = null, actor = {} }) {
+  const job = getJob(jobId);
+  if (!job || job.employeeId !== "video_operator") {
+    return { success: false, error: { code: "JOB_NOT_FOUND", message: "AI job not found" } };
+  }
+  const output = job.output || {};
+  const plan = soundPlan && typeof soundPlan === "object"
+    ? {
+        ...buildSoundPlan(output, soundPlan),
+        ...soundPlan,
+        music: { ...buildSoundPlan(output, soundPlan).music, ...(soundPlan.music || {}) },
+        effects: (Array.isArray(soundPlan.effects) ? soundPlan.effects : []).slice(0, 8).map(normalizeSoundCue),
+        status: clean(soundPlan.status, "draft"),
+        updatedAt: new Date().toISOString(),
+        updatedBy: actor,
+      }
+    : { ...buildSoundPlan(output), updatedBy: actor };
+  const nextOutput = {
+    ...output,
+    soundPlan: plan,
+    nextStep: output.heygen?.videoId
+      ? "Sound Director подготовил звуковой план. Следующий этап — рендер музыки и SFX."
+      : "Sound Director подготовил звуковой план. Сначала создай HeyGen video.",
+  };
+  const nextJob = updateJob(job.id, { output: nextOutput });
+  addEvent(job.id, {
+    step: "sound",
+    type: "tool_result",
+    tool: "SoundDirector",
+    message: "Sound Director подготовил музыку и SFX-план для ролика.",
+    meta: { effects: plan.effects.length, preset: plan.preset, actor },
+  });
+  return { success: true, job: nextJob, output: nextJob.output };
+}
+
 function extractHeygenVideoId(response) {
   return (
     response?.data?.video_id ||
@@ -771,6 +870,7 @@ module.exports = {
   createScriptFromManualContext,
   startHeygenForVideoJob,
   selectHeygenVersionForVideoJob,
+  saveSoundPlanForVideoJob,
   refreshHeygenForVideoJob,
   handleHeygenWebhook,
   runHeygenVideoPollerOnce,

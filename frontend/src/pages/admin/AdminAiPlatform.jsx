@@ -318,7 +318,124 @@ function getHeygenVersions(output = {}) {
     .sort((a, b) => Number(a.version || 0) - Number(b.version || 0));
 }
 
-function Message({ msg, onStartHeygen, onRefreshHeygen, onSaveScript, onSelectHeygenVersion, canStartHeygen, aiVideoEnabled, heygenReady, heygenLoading, refreshLoading, scriptSaving, versionLoading, runtimeProfile, runtimePresets, heygenProfileDirty }) {
+function SoundPlanEditor({ job, soundPlan, onSave, loading }) {
+  const [draft, setDraft] = React.useState(soundPlan || null);
+  React.useEffect(() => { setDraft(soundPlan || null); }, [soundPlan, job?.id]);
+  const plan = draft || null;
+  const busy = loading === job?.id;
+  const updateEffect = (index, patch) => {
+    setDraft((prev) => {
+      const base = prev || { preset: "Urgent Deal", music: { assetId: "tropical_luxury_01", label: "Tropical luxury", volume: 0.12 }, effects: [] };
+      const effects = Array.isArray(base.effects) ? [...base.effects] : [];
+      effects[index] = { ...(effects[index] || {}), ...patch };
+      return { ...base, effects };
+    });
+  };
+  if (!job?.id) return null;
+  return (
+    <div className="mt-3 rounded-2xl bg-indigo-50 p-4 ring-1 ring-indigo-100">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="text-xs font-black uppercase tracking-wide text-indigo-700">Sound Director</div>
+          <div className="mt-1 text-sm font-black text-slate-950">Музыка и SFX после HeyGen</div>
+          <div className="mt-1 text-xs font-bold text-slate-500">План сохранится в задаче. FFmpeg render worker будет следующим этапом.</div>
+        </div>
+        <button
+          type="button"
+          onClick={() => onSave?.(job, null)}
+          disabled={busy}
+          className="rounded-2xl bg-indigo-700 px-4 py-2 text-xs font-black text-white hover:bg-indigo-800 disabled:opacity-40"
+        >
+          {busy ? "Готовлю..." : plan ? "Пересобрать AI plan" : "Создать AI sound plan"}
+        </button>
+      </div>
+      {plan ? (
+        <div className="mt-4 space-y-3">
+          <div className="grid gap-2 sm:grid-cols-3">
+            <label className="rounded-2xl bg-white p-3 ring-1 ring-indigo-100">
+              <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Preset</span>
+              <input
+                value={plan.preset || ""}
+                onChange={(e) => setDraft((prev) => ({ ...(prev || {}), preset: e.target.value }))}
+                className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none"
+              />
+            </label>
+            <label className="rounded-2xl bg-white p-3 ring-1 ring-indigo-100">
+              <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Music</span>
+              <input
+                value={plan.music?.label || plan.music?.assetId || ""}
+                onChange={(e) => setDraft((prev) => ({ ...(prev || {}), music: { ...(prev?.music || {}), label: e.target.value } }))}
+                className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none"
+              />
+            </label>
+            <label className="rounded-2xl bg-white p-3 ring-1 ring-indigo-100">
+              <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Music volume</span>
+              <input
+                type="range"
+                min="0"
+                max="0.4"
+                step="0.01"
+                value={Number(plan.music?.volume ?? 0.12)}
+                onChange={(e) => setDraft((prev) => ({ ...(prev || {}), music: { ...(prev?.music || {}), volume: Number(e.target.value) } }))}
+                className="mt-2 w-full accent-indigo-600"
+              />
+              <span className="text-[10px] font-black text-slate-500">{Math.round(Number(plan.music?.volume ?? 0.12) * 100)}%</span>
+            </label>
+          </div>
+          <div className="space-y-2">
+            {(Array.isArray(plan.effects) ? plan.effects : []).map((effect, index) => (
+              <div key={`${effect.id || index}_${index}`} className="grid gap-2 rounded-2xl bg-white p-3 ring-1 ring-indigo-100 lg:grid-cols-[1fr_90px_120px_1.4fr]">
+                <input
+                  value={effect.label || ""}
+                  onChange={(e) => updateEffect(index, { label: e.target.value })}
+                  className="min-w-0 rounded-xl bg-slate-50 px-3 py-2 text-xs font-black text-slate-950 outline-none ring-1 ring-slate-100"
+                />
+                <input
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  value={Number(effect.time || 0)}
+                  onChange={(e) => updateEffect(index, { time: Number(e.target.value) })}
+                  className="rounded-xl bg-slate-50 px-3 py-2 text-xs font-black text-slate-950 outline-none ring-1 ring-slate-100"
+                />
+                <label className="rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
+                  <input
+                    type="range"
+                    min="0"
+                    max="0.6"
+                    step="0.01"
+                    value={Number(effect.volume ?? 0.2)}
+                    onChange={(e) => updateEffect(index, { volume: Number(e.target.value) })}
+                    className="w-full accent-indigo-600"
+                  />
+                  <span className="text-[10px] font-black text-slate-500">{Math.round(Number(effect.volume ?? 0.2) * 100)}%</span>
+                </label>
+                <input
+                  value={effect.note || ""}
+                  onChange={(e) => updateEffect(index, { note: e.target.value })}
+                  className="min-w-0 rounded-xl bg-slate-50 px-3 py-2 text-xs font-bold text-slate-600 outline-none ring-1 ring-slate-100"
+                />
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-xs font-bold text-slate-500">Статус render: {plan.render?.status || "not_rendered"}</div>
+            <button
+              type="button"
+              onClick={() => onSave?.(job, draft)}
+              disabled={busy}
+              className="rounded-2xl bg-slate-950 px-4 py-2 text-xs font-black text-white hover:bg-slate-800 disabled:opacity-40"
+            >
+              {busy ? "Сохраняю..." : "Сохранить sound plan"}
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function Message({ msg, onStartHeygen, onRefreshHeygen, onSaveScript, onSaveSoundPlan, onSelectHeygenVersion, canStartHeygen, aiVideoEnabled, heygenReady, heygenLoading, refreshLoading, scriptSaving, soundPlanSaving, versionLoading, runtimeProfile, runtimePresets, heygenProfileDirty }) {
   const user = msg.role === "user";
   const inferredVideoId = findHeygenVideoIdFromEvents(msg.events || []);
   const heygen = msg.output?.heygen || (inferredVideoId ? { provider: "heygen", status: "submitted", videoId: inferredVideoId } : null);
@@ -564,6 +681,14 @@ function Message({ msg, onStartHeygen, onRefreshHeygen, onSaveScript, onSelectHe
               {refreshLoading === msg.job.id ? "Обновляю..." : "Обновить статус"}
             </button>
           </div>
+        ) : null}
+        {!user && msg.job?.id && msg.output?.script ? (
+          <SoundPlanEditor
+            job={msg.job}
+            soundPlan={msg.output?.soundPlan}
+            onSave={onSaveSoundPlan}
+            loading={soundPlanSaving}
+          />
         ) : null}
         {canShowHeygenAction ? (
           <div className="mt-4 flex flex-col gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between">
@@ -2641,6 +2766,7 @@ export default function AdminAiPlatform() {
   const [heygenLoading, setHeygenLoading] = React.useState("");
   const [refreshLoading, setRefreshLoading] = React.useState("");
   const [scriptSaving, setScriptSaving] = React.useState("");
+  const [soundPlanSaving, setSoundPlanSaving] = React.useState("");
   const [versionLoading, setVersionLoading] = React.useState("");
   const [packageLoading, setPackageLoading] = React.useState("");
   const [publishLoading, setPublishLoading] = React.useState("");
@@ -2946,6 +3072,34 @@ export default function AdminAiPlatform() {
       await load();
     } finally {
       setScriptSaving("");
+    }
+  }
+
+  async function saveSoundPlan(job, soundPlan = null) {
+    if (!job?.id || soundPlanSaving) return;
+    setSoundPlanSaving(job.id);
+    setError("");
+    try {
+      const res = await apiPatch(`/api/admin/ai-platform/video-operator/jobs/${job.id}/sound-plan`, { soundPlan }, "admin");
+      const nextJob = res?.job || null;
+      const output = res?.output || nextJob?.output || null;
+      setCurrentTask(nextJob);
+      updateJobMessages(nextJob, output);
+      addMessage({
+        role: "assistant",
+        text: `Sound Director готов: ${output?.soundPlan?.effects?.length || 0} SFX + музыка ${output?.soundPlan?.music?.label || output?.soundPlan?.music?.assetId || ""}.`,
+        events: nextJob?.events || [],
+        output,
+        job: nextJob,
+      });
+      await load();
+    } catch (e) {
+      const msg = e?.message || "Не удалось сохранить sound plan";
+      setError(msg);
+      addMessage({ role: "assistant", text: `Sound Director не сохранился.\n\nПричина: ${msg}` });
+      await load();
+    } finally {
+      setSoundPlanSaving("");
     }
   }
 
@@ -3527,6 +3681,7 @@ export default function AdminAiPlatform() {
                   onStartHeygen={requestHeygenStart}
                   onRefreshHeygen={refreshHeygen}
                   onSaveScript={saveJobScript}
+                  onSaveSoundPlan={saveSoundPlan}
                   onSelectHeygenVersion={selectHeygenVersion}
                   canStartHeygen={aiEnabled && heygenReady}
                   aiVideoEnabled={aiEnabled}
@@ -3534,6 +3689,7 @@ export default function AdminAiPlatform() {
                   heygenLoading={heygenLoading}
                   refreshLoading={refreshLoading}
                   scriptSaving={scriptSaving}
+                  soundPlanSaving={soundPlanSaving}
                   versionLoading={versionLoading}
                   runtimeProfile={runtimeProfile}
                   runtimePresets={videoPresetsDraft}

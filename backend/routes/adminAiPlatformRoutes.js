@@ -25,6 +25,7 @@ const {
   createScriptFromManualContext,
   startHeygenForVideoJob,
   selectHeygenVersionForVideoJob,
+  saveSoundPlanForVideoJob,
   refreshHeygenForVideoJob,
   listVideoOperatorJobs,
 } = require("../ai/videoOperator/videoOperator.runtime");
@@ -1364,6 +1365,19 @@ router.patch("/video-operator/jobs/:id/heygen/active", (req, res) => {
   const result = selectHeygenVersionForVideoJob({
     jobId: req.params.id,
     version: req.body?.version,
+    actor: { id: req.user?.id || req.user?.userId || null, role: req.user?.role || req.user?.roles || null },
+  });
+  if (!result.success) {
+    const status = result.error?.code === "JOB_NOT_FOUND" ? 404 : 400;
+    return res.status(status).json(result);
+  }
+  return res.json(result);
+});
+
+router.patch("/video-operator/jobs/:id/sound-plan", (req, res) => {
+  const result = saveSoundPlanForVideoJob({
+    jobId: req.params.id,
+    soundPlan: req.body?.soundPlan || null,
     actor: { id: req.user?.id || req.user?.userId || null, role: req.user?.role || req.user?.roles || null },
   });
   if (!result.success) {
