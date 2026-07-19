@@ -3922,8 +3922,20 @@ export default function AdminAiPlatform() {
           <div className="border-t border-slate-100 p-4">
             <div className="rounded-3xl border border-slate-200 bg-white p-3 shadow-sm">
               {selectedEmployee === "video_operator" ? (
-                <div className="mb-3 space-y-3">
-                  <div className="rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-100">
+                <div className="group mb-3 overflow-hidden rounded-2xl bg-slate-50 p-2 ring-1 ring-slate-100 transition-all duration-300 hover:bg-white focus-within:bg-white">
+                  <div className="flex flex-col gap-2 px-2 py-1.5 text-xs font-bold text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="rounded-full bg-slate-950 px-2.5 py-1 font-black text-white">Быстрые задачи</span>
+                      <span className="truncate">
+                        {selectedService
+                          ? `${selectedService.displayCode || selectedService.taskCode} · ${selectedService.title || selectedService.destination || "выбранное предложение"}`
+                          : "выбери отказ или напиши задачу обычным языком"}
+                      </span>
+                    </div>
+                    <span className="font-black text-slate-400">Наведи, чтобы открыть marketplace</span>
+                  </div>
+                  <div className="max-h-0 space-y-3 overflow-hidden opacity-0 transition-all duration-300 group-hover:max-h-[560px] group-hover:opacity-100 group-focus-within:max-h-[560px] group-focus-within:opacity-100">
+                    <div className="rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-100">
                     <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
                       <div className="flex flex-wrap gap-1.5">
                         {serviceSearchTypes.map((type) => (
@@ -3984,20 +3996,21 @@ export default function AdminAiPlatform() {
                     {!serviceSearchLoading && !serviceSearchResults.length ? (
                       <div className="mt-2 rounded-2xl bg-white px-3 py-2 text-xs font-bold text-slate-400 ring-1 ring-slate-100">Ничего не найдено. Попробуй другой тип или запрос.</div>
                     ) : null}
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {quickVideoCommands.map((item) => (
-                      <button
-                        key={item.label}
-                        type="button"
-                        onClick={() => runTaskText(item.command)}
-                        disabled={loading}
-                        className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-black text-slate-700 hover:border-slate-300 hover:bg-white disabled:opacity-40"
-                        title={item.command}
-                      >
-                        {item.label}
-                      </button>
-                    ))}
+                    </div>
+                    <div className="flex flex-wrap gap-2 px-1 pb-1">
+                      {quickVideoCommands.map((item) => (
+                        <button
+                          key={item.label}
+                          type="button"
+                          onClick={() => runTaskText(item.command)}
+                          disabled={loading}
+                          className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-700 hover:border-slate-300 hover:bg-slate-50 disabled:opacity-40"
+                          title={item.command}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               ) : null}
