@@ -569,13 +569,13 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
               </div>
             </div>
             <div className="flex-1 overflow-y-auto p-4 md:p-5">
-              <div className="mb-4 grid gap-3 xl:grid-cols-[360px_1fr]">
+              <div className="mb-4 grid items-start gap-3 xl:grid-cols-[300px_minmax(0,1fr)]">
                 <div className="rounded-3xl bg-slate-950 p-3 text-white">
                   <div className="text-xs font-black uppercase tracking-wide text-slate-400">Preview</div>
                   {previewUrl ? (
-                    <video src={previewUrl} controls className="mt-3 aspect-[9/16] max-h-[520px] w-full rounded-2xl bg-black object-contain" />
+                    <video src={previewUrl} controls className="mt-3 aspect-[9/16] max-h-[390px] w-full rounded-2xl bg-black object-contain" />
                   ) : (
-                    <div className="mt-3 flex aspect-[9/16] max-h-[520px] items-center justify-center rounded-2xl bg-slate-900 text-xs font-black text-slate-500">Видео появится после HeyGen</div>
+                    <div className="mt-3 flex aspect-[9/16] max-h-[390px] items-center justify-center rounded-2xl bg-slate-900 text-xs font-black text-slate-500">Видео появится после HeyGen</div>
                   )}
                 </div>
                 <div className="rounded-3xl bg-white p-4 ring-1 ring-slate-200">
