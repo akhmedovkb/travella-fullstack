@@ -391,6 +391,8 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
   const effects = Array.isArray(plan?.effects) ? plan.effects : [];
   const duration = Math.max(8, Number(plan?.durationEstimateSeconds || 35));
   const enabledEffects = effects.filter((effect) => effect.enabled !== false);
+  const textOverlays = Array.isArray(plan?.textOverlays) ? plan.textOverlays : [];
+  const imageOverlays = Array.isArray(plan?.imageOverlays) ? plan.imageOverlays : [];
   const selectedEffect = effects[selectedIndex] || effects[0] || null;
   React.useEffect(() => {
     if (selectedIndex > Math.max(0, effects.length - 1)) setSelectedIndex(Math.max(0, effects.length - 1));
@@ -452,6 +454,32 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
   const nudgeEffect = (index, amount) => {
     const current = Number(effects[index]?.time || 0);
     updateEffect(index, { time: Math.max(0, Math.min(duration, Math.round((current + amount) * 10) / 10)) });
+  };
+  const addTextOverlay = () => {
+    setDraft((prev) => {
+      const base = prev || {};
+      const items = Array.isArray(base.textOverlays) ? [...base.textOverlays] : [];
+      return {
+        ...base,
+        textOverlays: [
+          ...items,
+          { id: `text_${Date.now()}`, label: "CTA text", text: "Свяжитесь с поставщиком", time: Math.min(3, duration), duration: 3, enabled: true },
+        ],
+      };
+    });
+  };
+  const addImageOverlay = () => {
+    setDraft((prev) => {
+      const base = prev || {};
+      const items = Array.isArray(base.imageOverlays) ? [...base.imageOverlays] : [];
+      return {
+        ...base,
+        imageOverlays: [
+          ...items,
+          { id: `image_${Date.now()}`, label: "Product card", time: Math.min(5, duration), duration: 4, enabled: true },
+        ],
+      };
+    });
   };
   const moveEffectToClientX = (index, clientX) => {
     const rect = timelineRef.current?.getBoundingClientRect();
@@ -526,12 +554,14 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
             <div className="rounded-2xl bg-slate-950 p-3 text-white ring-1 ring-slate-900">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Sound timeline</div>
-                  <div className="text-xs font-black">{enabledEffects.length} SFX включено · примерно {Math.round(duration)} сек.</div>
+                  <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Timeline Studio</div>
+                  <div className="text-xs font-black">Video · Voice · Music · SFX · Text · Images · примерно {Math.round(duration)} сек.</div>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button type="button" onClick={playPlan} className="rounded-2xl bg-indigo-600 px-3 py-2 text-xs font-black text-white hover:bg-indigo-500">Прослушать</button>
                   <button type="button" onClick={() => addEffect()} className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-950 hover:bg-slate-100">Добавить SFX</button>
+                  <button type="button" onClick={addTextOverlay} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Текст</button>
+                  <button type="button" onClick={addImageOverlay} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Картинка</button>
                 </div>
               </div>
               <div className="mt-3 flex gap-2 overflow-x-auto rounded-2xl bg-slate-900 p-2">
@@ -557,8 +587,20 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
                         <div key={point}>{Math.round(duration * point)}s</div>
                       ))}
                     </div>
+                    <div className="py-3 text-xs font-black text-slate-300">Video</div>
+                    <div className="relative h-10 rounded-xl bg-slate-800">
+                      <div className="absolute inset-y-2 left-0 right-0 rounded-lg bg-gradient-to-r from-slate-200 to-slate-400 px-3 py-1 text-xs font-black text-slate-950">
+                        HeyGen video · {job.output?.heygen?.videoId ? "ready" : "pending"}
+                      </div>
+                    </div>
+                    <div className="py-3 text-xs font-black text-slate-300">Voice</div>
+                    <div className="relative h-10 rounded-xl bg-slate-800">
+                      <div className="absolute inset-y-2 left-0 right-0 rounded-lg bg-gradient-to-r from-sky-400 to-blue-500 px-3 py-1 text-xs font-black text-white">
+                        Avatar speech · {String(job.output?.script || "").trim().split(/\s+/).filter(Boolean).length || 0} words
+                      </div>
+                    </div>
                     <div className="py-3 text-xs font-black text-slate-300">Music</div>
-                    <div className="relative h-11 rounded-xl bg-slate-800">
+                    <div className="relative h-10 rounded-xl bg-slate-800">
                       <div className="absolute inset-y-2 left-0 right-0 rounded-lg bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-500 px-3 py-1 text-xs font-black text-slate-950">
                         {plan.music?.label || "Music"} · {Math.round(Number(plan.music?.volume ?? 0.12) * 100)}%
                       </div>
@@ -591,8 +633,40 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
                         );
                       })}
                     </div>
+                    <div className="py-3 text-xs font-black text-slate-300">Text</div>
+                    <div className="relative h-14 rounded-xl bg-slate-800">
+                      <div className="absolute inset-y-0 left-0 right-0 grid grid-cols-5">
+                        {[0, 1, 2, 3, 4].map((line) => <div key={line} className="border-l border-white/5" />)}
+                      </div>
+                      {textOverlays.map((item, index) => {
+                        const left = Math.max(0, Math.min(92, (Number(item.time || 0) / duration) * 100));
+                        const width = Math.max(8, Math.min(40, (Number(item.duration || 3) / duration) * 100));
+                        return (
+                          <div key={item.id || index} className="absolute top-2 h-10 rounded-xl bg-amber-400 px-3 py-1 text-[10px] font-black text-slate-950 shadow" style={{ left: `${left}%`, width: `${width}%` }}>
+                            <span className="block truncate">{item.label || item.text || "Text"}</span>
+                            <span className="block text-[10px] opacity-70">{Number(item.time || 0).toFixed(1)}s</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="py-3 text-xs font-black text-slate-300">Images</div>
+                    <div className="relative h-14 rounded-xl bg-slate-800">
+                      <div className="absolute inset-y-0 left-0 right-0 grid grid-cols-5">
+                        {[0, 1, 2, 3, 4].map((line) => <div key={line} className="border-l border-white/5" />)}
+                      </div>
+                      {imageOverlays.map((item, index) => {
+                        const left = Math.max(0, Math.min(92, (Number(item.time || 0) / duration) * 100));
+                        const width = Math.max(8, Math.min(40, (Number(item.duration || 4) / duration) * 100));
+                        return (
+                          <div key={item.id || index} className="absolute top-2 h-10 rounded-xl bg-fuchsia-500 px-3 py-1 text-[10px] font-black text-white shadow" style={{ left: `${left}%`, width: `${width}%` }}>
+                            <span className="block truncate">{item.label || "Image"}</span>
+                            <span className="block text-[10px] text-white/70">{Number(item.time || 0).toFixed(1)}s</span>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <div className="mt-3 text-[10px] font-bold text-slate-500">Перетащи SFX-клип по дорожке, чтобы изменить время. Двойной клик по клипу — прослушать.</div>
+                  <div className="mt-3 text-[10px] font-bold text-slate-500">SFX уже редактируется и сводится. Text/Images сохраняются как overlay-план; следующий шаг — подключить FFmpeg render этих дорожек.</div>
                 </div>
               </div>
             </div>
