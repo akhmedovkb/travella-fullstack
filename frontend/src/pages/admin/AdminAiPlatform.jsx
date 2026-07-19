@@ -424,6 +424,22 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
   const seekTimeline = (value) => {
     setCurrentTime(Math.max(0, Math.min(duration, Number(value) || 0)));
   };
+  const startScrubTimeline = (event) => {
+    event.preventDefault();
+    const rect = event.currentTarget.getBoundingClientRect();
+    const moveTo = (clientX) => {
+      const ratio = rect.width ? Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) : 0;
+      seekTimeline(Math.round(ratio * duration * 10) / 10);
+    };
+    moveTo(event.clientX);
+    const handleMove = (moveEvent) => moveTo(moveEvent.clientX);
+    const handleUp = () => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+    };
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp, { once: true });
+  };
   const isOverlayVisibleAtTime = (item) => {
     const start = Number(item?.time || 0);
     const length = Number(item?.duration || 0);
@@ -810,15 +826,15 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
                   <div className="mb-3 grid grid-cols-[74px_1fr] gap-3">
                     <div className="py-1 text-[10px] font-black uppercase tracking-wide text-slate-400">Playhead</div>
                     <div className="flex items-center gap-3">
-                      <input
-                        type="range"
-                        min="0"
-                        max={duration}
-                        step="0.1"
-                        value={currentTime}
-                        onChange={(event) => seekTimeline(event.target.value)}
-                        className="w-full accent-indigo-500"
-                      />
+                      <button
+                        type="button"
+                        onPointerDown={startScrubTimeline}
+                        className="relative h-5 flex-1 cursor-pointer rounded-full bg-white/90"
+                        title="Перетащи, чтобы перейти на секунду ролика."
+                      >
+                        <span className="absolute inset-y-0 left-0 rounded-full bg-indigo-500" style={{ width: `${playheadLeft}%` }} />
+                        <span className="absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-indigo-500 ring-2 ring-white shadow" style={{ left: `${playheadLeft}%` }} />
+                      </button>
                       <div className="w-14 rounded-lg bg-slate-800 px-2 py-1 text-center text-[10px] font-black text-white ring-1 ring-white/10">{Math.round(currentTime * 10) / 10}s</div>
                     </div>
                   </div>
@@ -831,7 +847,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
                     </div>
                     <div className="py-3 text-xs font-black text-slate-300">Video</div>
                     <div className="relative h-10 rounded-xl bg-slate-800">
-                      <div className="pointer-events-none absolute -top-1 bottom-[-312px] z-20 w-0.5 bg-rose-400 shadow-[0_0_0_1px_rgba(255,255,255,.7)]" style={{ left: `${playheadLeft}%` }} />
+                      <div className="pointer-events-none absolute -top-1 bottom-[-312px] z-20 w-0.5 -translate-x-1/2 bg-rose-400 shadow-[0_0_0_1px_rgba(255,255,255,.7)]" style={{ left: `${playheadLeft}%` }} />
                       <div className="absolute inset-y-2 left-0 right-0 rounded-lg bg-gradient-to-r from-slate-200 to-slate-400 px-3 py-1 text-xs font-black text-slate-950">
                         HeyGen video · {job.output?.heygen?.videoId ? "ready" : "pending"}
                       </div>
