@@ -339,6 +339,7 @@ function createSoundCue(index = 0, preset = SOUND_EFFECT_PRESETS[0]) {
     assetId: preset.assetId,
     label: preset.label,
     time: 0,
+    duration: preset.tone?.duration || 0.3,
     volume: preset.volume,
     enabled: true,
     note: preset.note,
@@ -382,6 +383,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
   const [draft, setDraft] = React.useState(soundPlan || null);
   const [soloIndex, setSoloIndex] = React.useState(null);
   const [selectedIndex, setSelectedIndex] = React.useState(0);
+  const [selectedClip, setSelectedClip] = React.useState({ type: "sfx", index: 0 });
   const [editorOpen, setEditorOpen] = React.useState(false);
   const timelineRef = React.useRef(null);
   React.useEffect(() => { setDraft(soundPlan || null); }, [soundPlan, job?.id]);
@@ -397,6 +399,12 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
   const textOverlays = Array.isArray(plan?.textOverlays) ? plan.textOverlays : [];
   const imageOverlays = Array.isArray(plan?.imageOverlays) ? plan.imageOverlays : [];
   const selectedEffect = effects[selectedIndex] || effects[0] || null;
+  const selectedItem =
+    selectedClip.type === "text"
+      ? textOverlays[selectedClip.index]
+      : selectedClip.type === "image"
+        ? imageOverlays[selectedClip.index]
+        : effects[selectedClip.index] || selectedEffect;
   React.useEffect(() => {
     if (selectedIndex > Math.max(0, effects.length - 1)) setSelectedIndex(Math.max(0, effects.length - 1));
   }, [effects.length, selectedIndex]);
@@ -418,14 +426,47 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
       return { ...base, effects };
     });
   };
+  const updateOverlay = (type, index, patch) => {
+    const key = type === "image" ? "imageOverlays" : "textOverlays";
+    setDraft((prev) => {
+      const base = prev || {};
+      const items = Array.isArray(base[key]) ? [...base[key]] : [];
+      items[index] = { ...(items[index] || {}), ...patch };
+      return { ...base, [key]: items };
+    });
+  };
+  const removeOverlay = (type, index) => {
+    const key = type === "image" ? "imageOverlays" : "textOverlays";
+    setDraft((prev) => ({ ...(prev || {}), [key]: (Array.isArray(prev?.[key]) ? prev[key] : []).filter((_, i) => i !== index) }));
+    setSelectedClip({ type: "sfx", index: Math.max(0, Math.min(selectedIndex, effects.length - 1)) });
+  };
+  const duplicateOverlay = (type, index) => {
+    const key = type === "image" ? "imageOverlays" : "textOverlays";
+    const source = (type === "image" ? imageOverlays : textOverlays)[index];
+    if (!source) return;
+    setDraft((prev) => {
+      const base = prev || {};
+      const items = Array.isArray(base[key]) ? [...base[key]] : [];
+      const clone = {
+        ...source,
+        id: `${type}_${Date.now()}_${index}`,
+        time: Math.min(duration, Math.round((Number(source.time || 0) + 0.7) * 10) / 10),
+      };
+      items.splice(index + 1, 0, clone);
+      setSelectedClip({ type, index: index + 1 });
+      return { ...base, [key]: items };
+    });
+  };
   const removeEffect = (index) => {
     setDraft((prev) => ({ ...(prev || {}), effects: (Array.isArray(prev?.effects) ? prev.effects : []).filter((_, i) => i !== index) }));
+    setSelectedClip({ type: "sfx", index: Math.max(0, index - 1) });
   };
   const addEffect = (preset = SOUND_EFFECT_PRESETS[0]) => {
     setDraft((prev) => {
       const base = prev || { preset: "Urgent Deal", music: { assetId: "tropical_luxury_01", label: "Tropical luxury", volume: 0.12 }, effects: [] };
       const effects = Array.isArray(base.effects) ? [...base.effects] : [];
       setSelectedIndex(effects.length);
+      setSelectedClip({ type: "sfx", index: effects.length });
       return { ...base, effects: [...effects, createSoundCue(effects.length, preset)] };
     });
   };
@@ -442,6 +483,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
       };
       nextEffects.splice(index + 1, 0, clone);
       setSelectedIndex(index + 1);
+      setSelectedClip({ type: "sfx", index: index + 1 });
       return { ...base, effects: nextEffects };
     });
   };
@@ -457,6 +499,31 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
   const nudgeEffect = (index, amount) => {
     const current = Number(effects[index]?.time || 0);
     updateEffect(index, { time: Math.max(0, Math.min(duration, Math.round((current + amount) * 10) / 10)) });
+  };
+  const updateSelectedClip = (patch) => {
+    if (selectedClip.type === "text" || selectedClip.type === "image") {
+      updateOverlay(selectedClip.type, selectedClip.index, patch);
+      return;
+    }
+    updateEffect(selectedClip.index, patch);
+  };
+  const removeSelectedClip = () => {
+    if (selectedClip.type === "text" || selectedClip.type === "image") {
+      removeOverlay(selectedClip.type, selectedClip.index);
+      return;
+    }
+    removeEffect(selectedClip.index);
+  };
+  const duplicateSelectedClip = () => {
+    if (selectedClip.type === "text" || selectedClip.type === "image") {
+      duplicateOverlay(selectedClip.type, selectedClip.index);
+      return;
+    }
+    duplicateEffect(selectedClip.index);
+  };
+  const nudgeSelectedClip = (amount) => {
+    const current = Number(selectedItem?.time || 0);
+    updateSelectedClip({ time: Math.max(0, Math.min(duration, Math.round((current + amount) * 10) / 10)) });
   };
   const updateTrim = (patch) => {
     setDraft((prev) => ({
@@ -482,6 +549,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
         ],
       };
     });
+    setSelectedClip({ type: "text", index: textOverlays.length });
   };
   const addImageOverlay = () => {
     setDraft((prev) => {
@@ -495,6 +563,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
         ],
       };
     });
+    setSelectedClip({ type: "image", index: imageOverlays.length });
   };
   const moveEffectToClientX = (index, clientX) => {
     const rect = timelineRef.current?.getBoundingClientRect();
@@ -502,11 +571,30 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
     const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     updateEffect(index, { time: Math.round(ratio * duration * 10) / 10 });
   };
+  const moveOverlayToClientX = (type, index, clientX) => {
+    const rect = timelineRef.current?.getBoundingClientRect();
+    if (!rect?.width) return;
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    updateOverlay(type, index, { time: Math.round(ratio * duration * 10) / 10 });
+  };
   const startDragEffect = (event, index) => {
     event.preventDefault();
     setSelectedIndex(index);
+    setSelectedClip({ type: "sfx", index });
     moveEffectToClientX(index, event.clientX);
     const handleMove = (moveEvent) => moveEffectToClientX(index, moveEvent.clientX);
+    const handleUp = () => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+    };
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp, { once: true });
+  };
+  const startDragOverlay = (event, type, index) => {
+    event.preventDefault();
+    setSelectedClip({ type, index });
+    moveOverlayToClientX(type, index, event.clientX);
+    const handleMove = (moveEvent) => moveOverlayToClientX(type, index, moveEvent.clientX);
     const handleUp = () => {
       window.removeEventListener("pointermove", handleMove);
       window.removeEventListener("pointerup", handleUp);
@@ -696,23 +784,25 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
                       </div>
                       {effects.map((effect, index) => {
                         const left = Math.max(0, Math.min(92, (Number(effect.time || 0) / duration) * 100));
+                        const width = Math.max(7, Math.min(28, (Number(effect.duration || getSoundPreset(effect.assetId).tone?.duration || 0.3) / duration) * 100));
                         return (
                           <button
                             key={`${effect.id || index}_clip`}
                             type="button"
                             onPointerDown={(event) => startDragEffect(event, index)}
+                            onClick={() => { setSelectedIndex(index); setSelectedClip({ type: "sfx", index }); }}
                             onDoubleClick={() => playEffect(effect, index)}
                             className={cn(
                               "absolute top-3 h-12 w-28 cursor-grab rounded-xl px-3 text-left text-[10px] font-black text-white shadow-lg ring-2 transition active:cursor-grabbing",
                               effect.enabled === false ? "bg-slate-600 opacity-60 ring-slate-500" : "bg-indigo-600 ring-indigo-400/40",
-                              selectedIndex === index && "bg-emerald-600 ring-white",
+                              selectedClip.type === "sfx" && selectedClip.index === index && "bg-emerald-600 ring-white",
                               soloIndex === index && "scale-105"
                             )}
-                            style={{ left: `${left}%` }}
+                            style={{ left: `${left}%`, width: `${width}%`, minWidth: 96 }}
                             title="Перетащи по таймлайну. Двойной клик — прослушать."
                           >
                             <span className="block truncate">{effect.label || `SFX ${index + 1}`}</span>
-                            <span className="mt-1 block text-[10px] text-white/70">{Number(effect.time || 0).toFixed(1)}s · {Math.round(Number(effect.volume ?? 0.2) * 100)}%</span>
+                            <span className="mt-1 block text-[10px] text-white/70">{Number(effect.time || 0).toFixed(1)}s · {Number(effect.duration || 0.3).toFixed(1)}s</span>
                           </button>
                         );
                       })}
@@ -726,10 +816,10 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
                         const left = Math.max(0, Math.min(92, (Number(item.time || 0) / duration) * 100));
                         const width = Math.max(8, Math.min(40, (Number(item.duration || 3) / duration) * 100));
                         return (
-                          <div key={item.id || index} className="absolute top-2 h-10 rounded-xl bg-amber-400 px-3 py-1 text-[10px] font-black text-slate-950 shadow" style={{ left: `${left}%`, width: `${width}%` }}>
+                          <button type="button" key={item.id || index} onPointerDown={(event) => startDragOverlay(event, "text", index)} onClick={() => setSelectedClip({ type: "text", index })} className={cn("absolute top-2 h-10 cursor-grab rounded-xl bg-amber-400 px-3 py-1 text-left text-[10px] font-black text-slate-950 shadow ring-2 ring-transparent active:cursor-grabbing", selectedClip.type === "text" && selectedClip.index === index && "ring-white")} style={{ left: `${left}%`, width: `${width}%` }}>
                             <span className="block truncate">{item.label || item.text || "Text"}</span>
-                            <span className="block text-[10px] opacity-70">{Number(item.time || 0).toFixed(1)}s</span>
-                          </div>
+                            <span className="block text-[10px] opacity-70">{Number(item.time || 0).toFixed(1)}s · {Number(item.duration || 3).toFixed(1)}s</span>
+                          </button>
                         );
                       })}
                     </div>
@@ -742,78 +832,98 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
                         const left = Math.max(0, Math.min(92, (Number(item.time || 0) / duration) * 100));
                         const width = Math.max(8, Math.min(40, (Number(item.duration || 4) / duration) * 100));
                         return (
-                          <div key={item.id || index} className="absolute top-2 h-10 rounded-xl bg-fuchsia-500 px-3 py-1 text-[10px] font-black text-white shadow" style={{ left: `${left}%`, width: `${width}%` }}>
+                          <button type="button" key={item.id || index} onPointerDown={(event) => startDragOverlay(event, "image", index)} onClick={() => setSelectedClip({ type: "image", index })} className={cn("absolute top-2 h-10 cursor-grab rounded-xl bg-fuchsia-500 px-3 py-1 text-left text-[10px] font-black text-white shadow ring-2 ring-transparent active:cursor-grabbing", selectedClip.type === "image" && selectedClip.index === index && "ring-white")} style={{ left: `${left}%`, width: `${width}%` }}>
                             <span className="block truncate">{item.label || "Image"}</span>
-                            <span className="block text-[10px] text-white/70">{Number(item.time || 0).toFixed(1)}s</span>
-                          </div>
+                            <span className="block text-[10px] text-white/70">{Number(item.time || 0).toFixed(1)}s · {Number(item.duration || 4).toFixed(1)}s</span>
+                          </button>
                         );
                       })}
                     </div>
                   </div>
-                  <div className="mt-3 text-[10px] font-bold text-slate-500">SFX уже редактируется и сводится. Text/Images сохраняются как overlay-план; следующий шаг — подключить FFmpeg render этих дорожек.</div>
+                  <div className="mt-3 text-[10px] font-bold text-slate-500">Кликни клип на дорожке, чтобы редактировать. Text/Images сохраняются как overlay-план; следующий шаг — подключить FFmpeg render этих дорожек.</div>
                 </div>
               </div>
             </div>
             <div className="rounded-2xl bg-white p-3 ring-1 ring-indigo-100">
               <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Inspector</div>
-              {selectedEffect ? (
-                <div className={cn("mt-2 space-y-2", selectedEffect.enabled === false && "opacity-60")}>
+              {selectedItem ? (
+                <div className={cn("mt-2 space-y-2", selectedItem.enabled === false && "opacity-60")}>
                   <button
                     type="button"
-                    onClick={() => updateEffect(selectedIndex, { enabled: selectedEffect.enabled === false ? true : false })}
+                    onClick={() => updateSelectedClip({ enabled: selectedItem.enabled === false ? true : false })}
                     className={cn(
                       "w-full rounded-xl px-3 py-2 text-xs font-black ring-1",
-                      selectedEffect.enabled === false ? "bg-white text-slate-500 ring-slate-200" : "bg-emerald-50 text-emerald-800 ring-emerald-100"
+                      selectedItem.enabled === false ? "bg-white text-slate-500 ring-slate-200" : "bg-emerald-50 text-emerald-800 ring-emerald-100"
                     )}
                   >
-                    {selectedEffect.enabled === false ? "Включить SFX" : "SFX включен"}
+                    {selectedItem.enabled === false ? "Включить клип" : `${selectedClip.type === "sfx" ? "SFX" : selectedClip.type === "text" ? "Text" : "Image"} включен`}
                   </button>
-                  <label className="block rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
-                    <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Тип звука</span>
-                    <select
-                      value={selectedEffect.assetId || ""}
-                      onChange={(e) => applyPresetToEffect(selectedIndex, e.target.value)}
-                      className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none"
-                    >
-                      {SOUND_EFFECT_PRESETS.map((preset) => (
-                        <option key={preset.assetId} value={preset.assetId}>{preset.label}</option>
-                      ))}
-                    </select>
-                  </label>
+                  {selectedClip.type === "sfx" ? (
+                    <label className="block rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
+                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Тип звука</span>
+                      <select
+                        value={selectedItem.assetId || ""}
+                        onChange={(e) => applyPresetToEffect(selectedClip.index, e.target.value)}
+                        className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none"
+                      >
+                        {SOUND_EFFECT_PRESETS.map((preset) => (
+                          <option key={preset.assetId} value={preset.assetId}>{preset.label}</option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
                   <label className="block rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
                     <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Название</span>
-                    <input value={selectedEffect.label || ""} onChange={(e) => updateEffect(selectedIndex, { label: e.target.value })} className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none" />
+                    <input value={selectedItem.label || ""} onChange={(e) => updateSelectedClip({ label: e.target.value })} className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none" />
                   </label>
-                  <div className="grid grid-cols-2 gap-2">
+                  {selectedClip.type === "text" ? (
+                    <label className="block rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
+                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Текст на видео</span>
+                      <textarea value={selectedItem.text || ""} onChange={(e) => updateSelectedClip({ text: e.target.value })} rows={3} className="mt-1 w-full resize-none bg-transparent text-xs font-bold text-slate-700 outline-none" />
+                    </label>
+                  ) : null}
+                  {selectedClip.type === "image" ? (
+                    <label className="block rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
+                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Image URL</span>
+                      <input value={selectedItem.url || ""} onChange={(e) => updateSelectedClip({ url: e.target.value })} placeholder="https://..." className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none" />
+                    </label>
+                  ) : null}
+                  <div className="grid grid-cols-3 gap-2">
                     <label className="rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
-                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Сек.</span>
-                      <input type="number" min="0" step="0.1" value={Number(selectedEffect.time || 0)} onChange={(e) => updateEffect(selectedIndex, { time: Number(e.target.value) })} className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none" />
+                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Start</span>
+                      <input type="number" min="0" step="0.1" value={Number(selectedItem.time || 0)} onChange={(e) => updateSelectedClip({ time: Number(e.target.value) })} className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none" />
                     </label>
                     <label className="rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
-                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Громк.</span>
-                      <div className="mt-1 text-xs font-black text-slate-950">{Math.round(Number(selectedEffect.volume ?? 0.2) * 100)}%</div>
+                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Duration</span>
+                      <input type="number" min="0.1" step="0.1" value={Number(selectedItem.duration || (selectedClip.type === "image" ? 4 : selectedClip.type === "text" ? 3 : 0.3))} onChange={(e) => updateSelectedClip({ duration: Number(e.target.value) })} className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none" />
+                    </label>
+                    <label className="rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
+                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">End</span>
+                      <div className="mt-1 text-xs font-black text-slate-950">{Math.round((Number(selectedItem.time || 0) + Number(selectedItem.duration || 0)) * 10) / 10}s</div>
                     </label>
                   </div>
-                  <label className="block rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
-                    <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Громкость</span>
-                    <input type="range" min="0" max="0.8" step="0.01" value={Number(selectedEffect.volume ?? 0.2)} onChange={(e) => updateEffect(selectedIndex, { volume: Number(e.target.value) })} className="mt-2 w-full accent-indigo-600" />
-                  </label>
+                  {selectedClip.type === "sfx" ? (
+                    <label className="block rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
+                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Громкость · {Math.round(Number(selectedItem.volume ?? 0.2) * 100)}%</span>
+                      <input type="range" min="0" max="0.8" step="0.01" value={Number(selectedItem.volume ?? 0.2)} onChange={(e) => updateSelectedClip({ volume: Number(e.target.value) })} className="mt-2 w-full accent-indigo-600" />
+                    </label>
+                  ) : null}
                   <label className="block rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
                     <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Комментарий</span>
-                    <textarea value={selectedEffect.note || ""} onChange={(e) => updateEffect(selectedIndex, { note: e.target.value })} rows={3} className="mt-1 w-full resize-none bg-transparent text-xs font-bold text-slate-600 outline-none" />
+                    <textarea value={selectedItem.note || ""} onChange={(e) => updateSelectedClip({ note: e.target.value })} rows={3} className="mt-1 w-full resize-none bg-transparent text-xs font-bold text-slate-600 outline-none" />
                   </label>
                   <div className="grid grid-cols-2 gap-2">
-                    <button type="button" onClick={() => playEffect(selectedEffect, selectedIndex)} className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-black text-white hover:bg-slate-800">Слушать</button>
-                    <button type="button" onClick={() => removeEffect(selectedIndex)} className="rounded-xl bg-rose-50 px-3 py-2 text-xs font-black text-rose-700 ring-1 ring-rose-100 hover:bg-rose-100">Удалить</button>
+                    <button type="button" onClick={() => selectedClip.type === "sfx" ? playEffect(selectedItem, selectedClip.index) : null} disabled={selectedClip.type !== "sfx"} className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-black text-white hover:bg-slate-800 disabled:opacity-40">{selectedClip.type === "sfx" ? "Слушать" : "Preview позже"}</button>
+                    <button type="button" onClick={removeSelectedClip} className="rounded-xl bg-rose-50 px-3 py-2 text-xs font-black text-rose-700 ring-1 ring-rose-100 hover:bg-rose-100">Удалить</button>
                   </div>
                   <div className="grid grid-cols-3 gap-2">
-                    <button type="button" onClick={() => nudgeEffect(selectedIndex, -0.5)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">-0.5s</button>
-                    <button type="button" onClick={() => duplicateEffect(selectedIndex)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Дубль</button>
-                    <button type="button" onClick={() => nudgeEffect(selectedIndex, 0.5)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">+0.5s</button>
+                    <button type="button" onClick={() => nudgeSelectedClip(-0.5)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">-0.5s</button>
+                    <button type="button" onClick={duplicateSelectedClip} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Дубль</button>
+                    <button type="button" onClick={() => nudgeSelectedClip(0.5)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">+0.5s</button>
                   </div>
                 </div>
               ) : (
-                <div className="mt-2 rounded-xl bg-slate-50 p-3 text-xs font-bold text-slate-500">Добавь SFX или пересобери AI plan.</div>
+                <div className="mt-2 rounded-xl bg-slate-50 p-3 text-xs font-bold text-slate-500">Выбери клип или добавь SFX/Text/Image.</div>
               )}
             </div>
           </div>
