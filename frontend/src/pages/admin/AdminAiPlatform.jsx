@@ -385,7 +385,9 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
   const [selectedIndex, setSelectedIndex] = React.useState(0);
   const [selectedClip, setSelectedClip] = React.useState({ type: "sfx", index: 0 });
   const [editorOpen, setEditorOpen] = React.useState(false);
+  const [currentTime, setCurrentTime] = React.useState(0);
   const timelineRef = React.useRef(null);
+  const previewFrameRef = React.useRef(null);
   React.useEffect(() => { setDraft(soundPlan || null); }, [soundPlan, job?.id]);
   const plan = draft || null;
   const busy = loading === job?.id;
@@ -405,6 +407,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
       : selectedClip.type === "image"
         ? imageOverlays[selectedClip.index]
         : effects[selectedClip.index] || selectedEffect;
+  const playheadLeft = Math.max(0, Math.min(100, (currentTime / duration) * 100));
   React.useEffect(() => {
     if (selectedIndex > Math.max(0, effects.length - 1)) setSelectedIndex(Math.max(0, effects.length - 1));
   }, [effects.length, selectedIndex]);
@@ -417,6 +420,14 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
     enabledEffects.slice(0, 8).forEach((effect) => {
       playSfxPreview(effect, Math.min(8, Math.max(0, Number(effect.time || 0))));
     });
+  };
+  const seekTimeline = (value) => {
+    setCurrentTime(Math.max(0, Math.min(duration, Number(value) || 0)));
+  };
+  const isOverlayVisibleAtTime = (item) => {
+    const start = Number(item?.time || 0);
+    const length = Number(item?.duration || 0);
+    return currentTime >= start && currentTime <= start + Math.max(0.1, length);
   };
   const updateEffect = (index, patch) => {
     setDraft((prev) => {
@@ -545,7 +556,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
         ...base,
         textOverlays: [
           ...items,
-          { id: `text_${Date.now()}`, label: "CTA text", text: "Свяжитесь с поставщиком", time: Math.min(3, duration), duration: 3, enabled: true },
+          { id: `text_${Date.now()}`, label: "CTA text", text: "Свяжитесь с поставщиком", time: Math.min(3, duration), duration: 3, enabled: true, x: 50, y: 78, fontSize: 22, scale: 1 },
         ],
       };
     });
@@ -559,7 +570,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
         ...base,
         imageOverlays: [
           ...items,
-          { id: `image_${Date.now()}`, label: "Product card", time: Math.min(5, duration), duration: 4, enabled: true },
+          { id: `image_${Date.now()}`, label: "Product card", time: Math.min(5, duration), duration: 4, enabled: true, x: 50, y: 72, scale: 1, width: 34 },
         ],
       };
     });
@@ -595,6 +606,26 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
     setSelectedClip({ type, index });
     moveOverlayToClientX(type, index, event.clientX);
     const handleMove = (moveEvent) => moveOverlayToClientX(type, index, moveEvent.clientX);
+    const handleUp = () => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+    };
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp, { once: true });
+  };
+  const startDragOverlayOnPreview = (event, type, index) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setSelectedClip({ type, index });
+    const moveTo = (clientX, clientY) => {
+      const rect = previewFrameRef.current?.getBoundingClientRect();
+      if (!rect?.width || !rect?.height) return;
+      const x = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
+      const y = Math.max(0, Math.min(100, ((clientY - rect.top) / rect.height) * 100));
+      updateOverlay(type, index, { x: Math.round(x), y: Math.round(y) });
+    };
+    moveTo(event.clientX, event.clientY);
+    const handleMove = (moveEvent) => moveTo(moveEvent.clientX, moveEvent.clientY);
     const handleUp = () => {
       window.removeEventListener("pointermove", handleMove);
       window.removeEventListener("pointerup", handleUp);
@@ -669,7 +700,31 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
                 <div className="rounded-2xl bg-slate-950 p-2 text-white">
                   <div className="text-xs font-black uppercase tracking-wide text-slate-400">Preview</div>
                   {previewUrl ? (
-                    <video src={previewUrl} controls className="mt-2 aspect-[9/16] max-h-[210px] w-full rounded-xl bg-black object-contain" />
+                    <div ref={previewFrameRef} className="relative mt-2 overflow-hidden rounded-xl bg-black">
+                      <video src={previewUrl} controls onTimeUpdate={(event) => seekTimeline(event.currentTarget.currentTime)} className="aspect-[9/16] max-h-[210px] w-full bg-black object-contain" />
+                      {textOverlays.map((item, index) => item.enabled === false || !isOverlayVisibleAtTime(item) ? null : (
+                        <button
+                          key={`preview_text_${item.id || index}`}
+                          type="button"
+                          onPointerDown={(event) => startDragOverlayOnPreview(event, "text", index)}
+                          className={cn("absolute -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-lg bg-black/70 px-2 py-1 text-center font-black text-white ring-2 ring-transparent active:cursor-grabbing", selectedClip.type === "text" && selectedClip.index === index && "ring-white")}
+                          style={{ left: `${Number(item.x ?? 50)}%`, top: `${Number(item.y ?? 78)}%`, fontSize: `${Number(item.fontSize || 22) * Number(item.scale || 1)}px`, maxWidth: "80%" }}
+                        >
+                          {item.text || item.label || "Text"}
+                        </button>
+                      ))}
+                      {imageOverlays.map((item, index) => item.enabled === false || !isOverlayVisibleAtTime(item) ? null : (
+                        <button
+                          key={`preview_image_${item.id || index}`}
+                          type="button"
+                          onPointerDown={(event) => startDragOverlayOnPreview(event, "image", index)}
+                          className={cn("absolute -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-xl bg-fuchsia-500/90 px-3 py-2 text-xs font-black text-white ring-2 ring-transparent active:cursor-grabbing", selectedClip.type === "image" && selectedClip.index === index && "ring-white")}
+                          style={{ left: `${Number(item.x ?? 50)}%`, top: `${Number(item.y ?? 72)}%`, width: `${Number(item.width || 34) * Number(item.scale || 1)}%` }}
+                        >
+                          {item.url ? <img src={item.url} alt={item.label || "Overlay"} className="h-full w-full rounded-lg object-contain" /> : (item.label || "Sticker")}
+                        </button>
+                      ))}
+                    </div>
                   ) : (
                     <div className="mt-2 flex aspect-[9/16] max-h-[210px] items-center justify-center rounded-xl bg-slate-900 text-xs font-black text-slate-500">Видео появится после HeyGen</div>
                   )}
@@ -727,7 +782,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Timeline Studio</div>
-                  <div className="text-xs font-black">Video · Voice · Music · SFX · Text · Images · примерно {Math.round(duration)} сек.</div>
+                  <div className="text-xs font-black">Video · Voice · Music · SFX · Text · Images · сейчас {Math.round(currentTime * 10) / 10}s / {Math.round(duration)}s</div>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button type="button" onClick={playPlan} className="rounded-2xl bg-indigo-600 px-3 py-2 text-xs font-black text-white hover:bg-indigo-500">Прослушать</button>
@@ -752,6 +807,21 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
               </div>
               <div className="mt-3 overflow-x-auto rounded-2xl bg-slate-900 p-3">
                 <div className="min-w-[620px]">
+                  <div className="mb-3 grid grid-cols-[74px_1fr] gap-3">
+                    <div className="py-1 text-[10px] font-black uppercase tracking-wide text-slate-400">Playhead</div>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="range"
+                        min="0"
+                        max={duration}
+                        step="0.1"
+                        value={currentTime}
+                        onChange={(event) => seekTimeline(event.target.value)}
+                        className="w-full accent-indigo-500"
+                      />
+                      <div className="w-14 rounded-lg bg-slate-800 px-2 py-1 text-center text-[10px] font-black text-white ring-1 ring-white/10">{Math.round(currentTime * 10) / 10}s</div>
+                    </div>
+                  </div>
                   <div className="grid grid-cols-[74px_1fr] gap-3">
                     <div className="py-2 text-[10px] font-black uppercase tracking-wide text-slate-400">Time</div>
                     <div className="grid grid-cols-5 text-[10px] font-black text-slate-500">
@@ -761,6 +831,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
                     </div>
                     <div className="py-3 text-xs font-black text-slate-300">Video</div>
                     <div className="relative h-10 rounded-xl bg-slate-800">
+                      <div className="pointer-events-none absolute -top-1 bottom-[-312px] z-20 w-0.5 bg-rose-400 shadow-[0_0_0_1px_rgba(255,255,255,.7)]" style={{ left: `${playheadLeft}%` }} />
                       <div className="absolute inset-y-2 left-0 right-0 rounded-lg bg-gradient-to-r from-slate-200 to-slate-400 px-3 py-1 text-xs font-black text-slate-950">
                         HeyGen video · {job.output?.heygen?.videoId ? "ready" : "pending"}
                       </div>
@@ -902,6 +973,35 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
                       <div className="mt-1 text-xs font-black text-slate-950">{Math.round((Number(selectedItem.time || 0) + Number(selectedItem.duration || 0)) * 10) / 10}s</div>
                     </label>
                   </div>
+                  {(selectedClip.type === "text" || selectedClip.type === "image") ? (
+                    <>
+                      <div className="grid grid-cols-2 gap-2">
+                        <label className="rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
+                          <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">X</span>
+                          <input type="number" min="0" max="100" step="1" value={Number(selectedItem.x ?? 50)} onChange={(e) => updateSelectedClip({ x: Number(e.target.value) })} className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none" />
+                        </label>
+                        <label className="rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
+                          <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Y</span>
+                          <input type="number" min="0" max="100" step="1" value={Number(selectedItem.y ?? 70)} onChange={(e) => updateSelectedClip({ y: Number(e.target.value) })} className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none" />
+                        </label>
+                      </div>
+                      <label className="block rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
+                        <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Размер · {Math.round(Number(selectedItem.scale || 1) * 100)}%</span>
+                        <input type="range" min="0.4" max="2.5" step="0.05" value={Number(selectedItem.scale || 1)} onChange={(e) => updateSelectedClip({ scale: Number(e.target.value) })} className="mt-2 w-full accent-amber-500" />
+                      </label>
+                      {selectedClip.type === "text" ? (
+                        <label className="block rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
+                          <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Font size · {Number(selectedItem.fontSize || 22)}px</span>
+                          <input type="range" min="12" max="56" step="1" value={Number(selectedItem.fontSize || 22)} onChange={(e) => updateSelectedClip({ fontSize: Number(e.target.value) })} className="mt-2 w-full accent-amber-500" />
+                        </label>
+                      ) : (
+                        <label className="block rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
+                          <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Ширина · {Number(selectedItem.width || 34)}%</span>
+                          <input type="range" min="10" max="90" step="1" value={Number(selectedItem.width || 34)} onChange={(e) => updateSelectedClip({ width: Number(e.target.value) })} className="mt-2 w-full accent-fuchsia-500" />
+                        </label>
+                      )}
+                    </>
+                  ) : null}
                   {selectedClip.type === "sfx" ? (
                     <label className="block rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
                       <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Громкость · {Math.round(Number(selectedItem.volume ?? 0.2) * 100)}%</span>
@@ -920,6 +1020,10 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
                     <button type="button" onClick={() => nudgeSelectedClip(-0.5)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">-0.5s</button>
                     <button type="button" onClick={duplicateSelectedClip} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Дубль</button>
                     <button type="button" onClick={() => nudgeSelectedClip(0.5)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">+0.5s</button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button type="button" onClick={() => seekTimeline(Number(selectedItem.time || 0))} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">К началу</button>
+                    <button type="button" onClick={() => updateSelectedClip({ time: Math.round(currentTime * 10) / 10 })} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">На playhead</button>
                   </div>
                 </div>
               ) : (
