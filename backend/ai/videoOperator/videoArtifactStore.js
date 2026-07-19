@@ -96,7 +96,48 @@ async function saveHeygenVideoArtifact({ jobId, videoId, videoUrl, serviceCode =
   };
 }
 
+async function saveRenderedVideoArtifact({ jobId, videoId, buffer, serviceCode = "", suffix = "sound" }) {
+  const provider = getStorageProvider();
+  if (!provider) {
+    const err = new Error("media_storage_not_configured");
+    err.code = "media_storage_not_configured";
+    throw err;
+  }
+  if (!buffer?.length) {
+    const err = new Error("empty_rendered_video");
+    err.code = "empty_rendered_video";
+    throw err;
+  }
+
+  const file = {
+    buffer,
+    mimetype: "video/mp4",
+    originalname: `${safePart(serviceCode || videoId || jobId, "travella-ai")}-${safePart(videoId || jobId, "video")}-${safePart(suffix, "sound")}.mp4`,
+  };
+  const folder = "travella-ai/video-operator";
+  const publicPrefix = safePart(`${serviceCode || "travella"}-${videoId || jobId}-${suffix}`, "travella-video-sound");
+  const uploaded =
+    provider === "r2"
+      ? await getR2Upload().uploadBufferToR2(file, { folder, public_prefix: publicPrefix })
+      : await getCloudinaryUpload().uploadBufferToCloudinary(file, { folder, public_prefix: publicPrefix, resource_type: "video" });
+
+  return {
+    provider,
+    status: "saved",
+    url: uploaded.url,
+    key: uploaded.key || uploaded.public_id || "",
+    publicId: uploaded.public_id || uploaded.key || "",
+    mediaType: uploaded.media_type || "video",
+    resourceType: uploaded.resource_type || "video",
+    thumbnailUrl: uploaded.thumbnail_url || uploaded.url,
+    bytes: buffer.length,
+    savedAt: new Date().toISOString(),
+  };
+}
+
 module.exports = {
   getArtifactStorageStatus,
+  downloadVideoBuffer,
   saveHeygenVideoArtifact,
+  saveRenderedVideoArtifact,
 };

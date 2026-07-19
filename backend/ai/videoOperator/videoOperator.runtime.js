@@ -6,6 +6,7 @@ const { getAiVideoProfileSetting } = require("../core/aiRuntimeSettings");
 const { createAvatarVideo, getAvatarVideo } = require("./heygen.client");
 const { findRefusedServiceByCode, findLatestRefusedService, listRecentRefusedServices } = require("./refusedServiceLookup");
 const { saveHeygenVideoArtifact } = require("./videoArtifactStore");
+const { renderSoundPlanToArtifact } = require("./soundRenderWorker");
 const {
   buildHook,
   buildScript,
@@ -117,6 +118,88 @@ function saveSoundPlanForVideoJob({ jobId, soundPlan = null, actor = {} }) {
     meta: { effects: plan.effects.length, preset: plan.preset, actor },
   });
   return { success: true, job: nextJob, output: nextJob.output };
+}
+
+async function renderSoundPlanForVideoJob({ jobId, actor = {} }) {
+  const job = getJob(jobId);
+  if (!job || job.employeeId !== "video_operator") {
+    return { success: false, error: { code: "JOB_NOT_FOUND", message: "AI job not found" } };
+  }
+  const output = job.output || {};
+  if (!output.heygen?.videoId && !output.heygen?.videoUrl && !output.heygen?.artifact?.url) {
+    return { success: false, job, output, error: { code: "ACTIVE_VIDEO_REQUIRED", message: "Сначала нужно готовое HeyGen video." } };
+  }
+  if (!output.soundPlan) {
+    return { success: false, job, output, error: { code: "SOUND_PLAN_REQUIRED", message: "Сначала создай sound plan." } };
+  }
+
+  const renderingPlan = {
+    ...output.soundPlan,
+    render: {
+      ...(output.soundPlan.render || {}),
+      status: "rendering",
+      startedAt: new Date().toISOString(),
+      actor,
+    },
+  };
+  updateJob(job.id, { output: { ...output, soundPlan: renderingPlan } });
+  addEvent(job.id, {
+    step: "sound",
+    type: "tool_call",
+    tool: "SoundRenderWorker",
+    message: "Начинаю сведение музыки и SFX с активным HeyGen MP4.",
+    meta: { actor, effects: renderingPlan.effects?.length || 0 },
+  });
+
+  try {
+    const artifact = await renderSoundPlanToArtifact({ job, output: { ...output, soundPlan: renderingPlan } });
+    const nextOutput = {
+      ...output,
+      soundPlan: {
+        ...renderingPlan,
+        render: {
+          status: "rendered",
+          artifact,
+          renderedAt: new Date().toISOString(),
+          actor,
+        },
+      },
+      soundEnhancedVideo: artifact,
+      nextStep: "Sound Director свёл звук. Можно передавать sound-enhanced video в Content Manager и Publishing Manager.",
+    };
+    const nextJob = updateJob(job.id, { output: nextOutput });
+    addEvent(job.id, {
+      step: "sound",
+      type: "tool_result",
+      tool: "SoundRenderWorker",
+      message: "Звук сведён, MP4 сохранён в Travella Media.",
+      meta: { url: artifact.url, provider: artifact.provider, actor },
+    });
+    return { success: true, job: nextJob, output: nextJob.output };
+  } catch (err) {
+    const failedOutput = {
+      ...output,
+      soundPlan: {
+        ...renderingPlan,
+        render: {
+          ...(renderingPlan.render || {}),
+          status: "failed",
+          error: err?.message || "sound_render_failed",
+          code: err?.code || "sound_render_failed",
+          failedAt: new Date().toISOString(),
+        },
+      },
+    };
+    const nextJob = updateJob(job.id, { output: failedOutput });
+    addEvent(job.id, {
+      step: "sound",
+      level: "error",
+      tool: "SoundRenderWorker",
+      message: err?.message || "sound_render_failed",
+      meta: { code: err?.code || "sound_render_failed" },
+    });
+    return { success: false, job: nextJob, output: nextJob.output, error: { code: err?.code || "SOUND_RENDER_FAILED", message: err?.message || "sound_render_failed" } };
+  }
 }
 
 function extractHeygenVideoId(response) {
@@ -871,6 +954,7 @@ module.exports = {
   startHeygenForVideoJob,
   selectHeygenVersionForVideoJob,
   saveSoundPlanForVideoJob,
+  renderSoundPlanForVideoJob,
   refreshHeygenForVideoJob,
   handleHeygenWebhook,
   runHeygenVideoPollerOnce,

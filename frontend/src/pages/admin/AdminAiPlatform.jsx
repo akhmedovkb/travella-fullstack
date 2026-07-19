@@ -318,11 +318,13 @@ function getHeygenVersions(output = {}) {
     .sort((a, b) => Number(a.version || 0) - Number(b.version || 0));
 }
 
-function SoundPlanEditor({ job, soundPlan, onSave, loading }) {
+function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoading }) {
   const [draft, setDraft] = React.useState(soundPlan || null);
   React.useEffect(() => { setDraft(soundPlan || null); }, [soundPlan, job?.id]);
   const plan = draft || null;
   const busy = loading === job?.id;
+  const rendering = renderLoading === job?.id || plan?.render?.status === "rendering";
+  const renderedUrl = plan?.render?.artifact?.url || "";
   const updateEffect = (index, patch) => {
     setDraft((prev) => {
       const base = prev || { preset: "Urgent Deal", music: { assetId: "tropical_luxury_01", label: "Tropical luxury", volume: 0.12 }, effects: [] };
@@ -419,15 +421,33 @@ function SoundPlanEditor({ job, soundPlan, onSave, loading }) {
             ))}
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="text-xs font-bold text-slate-500">Статус render: {plan.render?.status || "not_rendered"}</div>
-            <button
-              type="button"
-              onClick={() => onSave?.(job, draft)}
-              disabled={busy}
-              className="rounded-2xl bg-slate-950 px-4 py-2 text-xs font-black text-white hover:bg-slate-800 disabled:opacity-40"
-            >
-              {busy ? "Сохраняю..." : "Сохранить sound plan"}
-            </button>
+            <div className="text-xs font-bold text-slate-500">
+              Статус render: {plan.render?.status || "not_rendered"}
+              {plan.render?.error ? <span className="ml-2 text-rose-600">{plan.render.error}</span> : null}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {renderedUrl ? (
+                <a href={renderedUrl} target="_blank" rel="noreferrer" className="rounded-2xl bg-emerald-700 px-4 py-2 text-xs font-black text-white hover:bg-emerald-800">
+                  Открыть sound MP4
+                </a>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => onSave?.(job, draft)}
+                disabled={busy || rendering}
+                className="rounded-2xl bg-white px-4 py-2 text-xs font-black text-slate-950 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-40"
+              >
+                {busy ? "Сохраняю..." : "Сохранить sound plan"}
+              </button>
+              <button
+                type="button"
+                onClick={() => onRender?.(job)}
+                disabled={busy || rendering}
+                className="rounded-2xl bg-slate-950 px-4 py-2 text-xs font-black text-white hover:bg-slate-800 disabled:opacity-40"
+              >
+                {rendering ? "Свожу..." : renderedUrl ? "Пересвести звук" : "Свести звук"}
+              </button>
+            </div>
           </div>
         </div>
       ) : null}
@@ -435,7 +455,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, loading }) {
   );
 }
 
-function Message({ msg, onStartHeygen, onRefreshHeygen, onSaveScript, onSaveSoundPlan, onSelectHeygenVersion, canStartHeygen, aiVideoEnabled, heygenReady, heygenLoading, refreshLoading, scriptSaving, soundPlanSaving, versionLoading, runtimeProfile, runtimePresets, heygenProfileDirty }) {
+function Message({ msg, onStartHeygen, onRefreshHeygen, onSaveScript, onSaveSoundPlan, onRenderSoundPlan, onSelectHeygenVersion, canStartHeygen, aiVideoEnabled, heygenReady, heygenLoading, refreshLoading, scriptSaving, soundPlanSaving, soundRenderLoading, versionLoading, runtimeProfile, runtimePresets, heygenProfileDirty }) {
   const user = msg.role === "user";
   const inferredVideoId = findHeygenVideoIdFromEvents(msg.events || []);
   const heygen = msg.output?.heygen || (inferredVideoId ? { provider: "heygen", status: "submitted", videoId: inferredVideoId } : null);
@@ -687,7 +707,9 @@ function Message({ msg, onStartHeygen, onRefreshHeygen, onSaveScript, onSaveSoun
             job={msg.job}
             soundPlan={msg.output?.soundPlan}
             onSave={onSaveSoundPlan}
+            onRender={onRenderSoundPlan}
             loading={soundPlanSaving}
+            renderLoading={soundRenderLoading}
           />
         ) : null}
         {canShowHeygenAction ? (
@@ -2767,6 +2789,7 @@ export default function AdminAiPlatform() {
   const [refreshLoading, setRefreshLoading] = React.useState("");
   const [scriptSaving, setScriptSaving] = React.useState("");
   const [soundPlanSaving, setSoundPlanSaving] = React.useState("");
+  const [soundRenderLoading, setSoundRenderLoading] = React.useState("");
   const [versionLoading, setVersionLoading] = React.useState("");
   const [packageLoading, setPackageLoading] = React.useState("");
   const [publishLoading, setPublishLoading] = React.useState("");
@@ -3100,6 +3123,37 @@ export default function AdminAiPlatform() {
       await load();
     } finally {
       setSoundPlanSaving("");
+    }
+  }
+
+  async function renderSoundPlan(job) {
+    if (!job?.id || soundRenderLoading) return;
+    setSoundRenderLoading(job.id);
+    setError("");
+    addMessage({ role: "assistant", text: `Sound Render Worker: свожу музыку и SFX для задачи #${job.id}.` });
+    try {
+      const res = await apiPost(`/api/admin/ai-platform/video-operator/jobs/${job.id}/sound-plan/render`, {}, "admin");
+      const nextJob = res?.job || null;
+      const output = res?.output || nextJob?.output || null;
+      setCurrentTask(nextJob);
+      updateJobMessages(nextJob, output);
+      addMessage({
+        role: "assistant",
+        text: output?.soundPlan?.render?.artifact?.url
+          ? "Sound-enhanced MP4 готов и сохранён в Travella Media."
+          : "Sound Render Worker завершил задачу.",
+        events: nextJob?.events || [],
+        output,
+        job: nextJob,
+      });
+      await load();
+    } catch (e) {
+      const msg = e?.message || "Не удалось свести звук";
+      setError(msg);
+      addMessage({ role: "assistant", text: `Sound Render Worker не смог свести звук.\n\nПричина: ${msg}` });
+      await load();
+    } finally {
+      setSoundRenderLoading("");
     }
   }
 
@@ -3682,6 +3736,7 @@ export default function AdminAiPlatform() {
                   onRefreshHeygen={refreshHeygen}
                   onSaveScript={saveJobScript}
                   onSaveSoundPlan={saveSoundPlan}
+                  onRenderSoundPlan={renderSoundPlan}
                   onSelectHeygenVersion={selectHeygenVersion}
                   canStartHeygen={aiEnabled && heygenReady}
                   aiVideoEnabled={aiEnabled}
@@ -3690,6 +3745,7 @@ export default function AdminAiPlatform() {
                   refreshLoading={refreshLoading}
                   scriptSaving={scriptSaving}
                   soundPlanSaving={soundPlanSaving}
+                  soundRenderLoading={soundRenderLoading}
                   versionLoading={versionLoading}
                   runtimeProfile={runtimeProfile}
                   runtimePresets={videoPresetsDraft}
