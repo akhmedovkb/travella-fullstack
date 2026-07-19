@@ -34,6 +34,9 @@ function normalizeEffect(effect = {}, index = 0) {
 function getToneForEffect(assetId = "") {
   const id = String(assetId || "").toLowerCase();
   if (id.includes("sparkle") || id.includes("chime")) return { frequency: 1320, duration: 0.34 };
+  if (id.includes("cash")) return { frequency: 1180, duration: 0.12 };
+  if (id.includes("pop") || id.includes("deal")) return { frequency: 860, duration: 0.16 };
+  if (id.includes("riser") || id.includes("countdown")) return { frequency: 410, duration: 0.42 };
   if (id.includes("impact") || id.includes("price")) return { frequency: 150, duration: 0.26 };
   if (id.includes("click") || id.includes("tap")) return { frequency: 980, duration: 0.08 };
   if (id.includes("urgency")) return { frequency: 520, duration: 0.24 };

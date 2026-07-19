@@ -318,19 +318,36 @@ function getHeygenVersions(output = {}) {
     .sort((a, b) => Number(a.version || 0) - Number(b.version || 0));
 }
 
-function createSoundCue(index = 0) {
+const SOUND_EFFECT_PRESETS = [
+  { assetId: "soft_whoosh_01", label: "Soft whoosh", volume: 0.22, note: "Мягкий открывающий переход.", tone: { frequency: 720, duration: 0.18, type: "sine" } },
+  { assetId: "urgency_whoosh_01", label: "Urgency whoosh", volume: 0.2, note: "Акцент срочности отказного предложения.", tone: { frequency: 520, duration: 0.28, type: "sawtooth" } },
+  { assetId: "soft_price_impact_01", label: "Soft price impact", volume: 0.24, note: "Акцент цены без игрового звучания.", tone: { frequency: 150, duration: 0.28, type: "triangle" } },
+  { assetId: "luxury_sparkle_01", label: "Luxury sparkle", volume: 0.18, note: "Премиальный акцент на отель/отдых.", tone: { frequency: 1320, duration: 0.38, type: "sine" } },
+  { assetId: "notification_click_01", label: "Notification click", volume: 0.2, note: "Финальный CTA.", tone: { frequency: 980, duration: 0.1, type: "square" } },
+  { assetId: "cash_tick_01", label: "Cash tick", volume: 0.2, note: "Короткий акцент оплаты или цены.", tone: { frequency: 1180, duration: 0.12, type: "triangle" } },
+  { assetId: "deal_pop_01", label: "Deal pop", volume: 0.2, note: "Лёгкий акцент на выгоде.", tone: { frequency: 860, duration: 0.16, type: "square" } },
+  { assetId: "countdown_riser_01", label: "Countdown riser", volume: 0.18, note: "Нарастание перед срочным CTA.", tone: { frequency: 410, duration: 0.42, type: "sawtooth" } },
+];
+
+function getSoundPreset(assetId = "") {
+  return SOUND_EFFECT_PRESETS.find((item) => item.assetId === assetId) || SOUND_EFFECT_PRESETS[0];
+}
+
+function createSoundCue(index = 0, preset = SOUND_EFFECT_PRESETS[0]) {
   return {
     id: `manual_sfx_${Date.now()}_${index}`,
-    assetId: "soft_whoosh_01",
-    label: "Soft whoosh",
+    assetId: preset.assetId,
+    label: preset.label,
     time: 0,
-    volume: 0.22,
+    volume: preset.volume,
     enabled: true,
-    note: "Ручной SFX.",
+    note: preset.note,
   };
 }
 
 function getSfxTone(assetId = "") {
+  const preset = getSoundPreset(assetId);
+  if (preset?.tone) return preset.tone;
   const id = String(assetId || "").toLowerCase();
   if (id.includes("sparkle") || id.includes("chime")) return { frequency: 1320, duration: 0.34, type: "sine" };
   if (id.includes("impact") || id.includes("price")) return { frequency: 150, duration: 0.26, type: "triangle" };
@@ -399,13 +416,42 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
   const removeEffect = (index) => {
     setDraft((prev) => ({ ...(prev || {}), effects: (Array.isArray(prev?.effects) ? prev.effects : []).filter((_, i) => i !== index) }));
   };
-  const addEffect = () => {
+  const addEffect = (preset = SOUND_EFFECT_PRESETS[0]) => {
     setDraft((prev) => {
       const base = prev || { preset: "Urgent Deal", music: { assetId: "tropical_luxury_01", label: "Tropical luxury", volume: 0.12 }, effects: [] };
       const effects = Array.isArray(base.effects) ? [...base.effects] : [];
       setSelectedIndex(effects.length);
-      return { ...base, effects: [...effects, createSoundCue(effects.length)] };
+      return { ...base, effects: [...effects, createSoundCue(effects.length, preset)] };
     });
+  };
+  const duplicateEffect = (index) => {
+    const source = effects[index];
+    if (!source) return;
+    setDraft((prev) => {
+      const base = prev || {};
+      const nextEffects = Array.isArray(base.effects) ? [...base.effects] : [];
+      const clone = {
+        ...source,
+        id: `copy_sfx_${Date.now()}_${index}`,
+        time: Math.min(duration, Math.round((Number(source.time || 0) + 0.7) * 10) / 10),
+      };
+      nextEffects.splice(index + 1, 0, clone);
+      setSelectedIndex(index + 1);
+      return { ...base, effects: nextEffects };
+    });
+  };
+  const applyPresetToEffect = (index, assetId) => {
+    const preset = getSoundPreset(assetId);
+    updateEffect(index, {
+      assetId: preset.assetId,
+      label: preset.label,
+      note: preset.note,
+      volume: preset.volume,
+    });
+  };
+  const nudgeEffect = (index, amount) => {
+    const current = Number(effects[index]?.time || 0);
+    updateEffect(index, { time: Math.max(0, Math.min(duration, Math.round((current + amount) * 10) / 10)) });
   };
   const moveEffectToClientX = (index, clientX) => {
     const rect = timelineRef.current?.getBoundingClientRect();
@@ -485,8 +531,22 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button type="button" onClick={playPlan} className="rounded-2xl bg-indigo-600 px-3 py-2 text-xs font-black text-white hover:bg-indigo-500">Прослушать</button>
-                  <button type="button" onClick={addEffect} className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-950 hover:bg-slate-100">Добавить SFX</button>
+                  <button type="button" onClick={() => addEffect()} className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-950 hover:bg-slate-100">Добавить SFX</button>
                 </div>
+              </div>
+              <div className="mt-3 flex gap-2 overflow-x-auto rounded-2xl bg-slate-900 p-2">
+                {SOUND_EFFECT_PRESETS.map((preset) => (
+                  <button
+                    key={preset.assetId}
+                    type="button"
+                    onClick={() => addEffect(preset)}
+                    className="shrink-0 rounded-xl bg-slate-800 px-3 py-2 text-left text-[10px] font-black text-white ring-1 ring-white/5 hover:bg-slate-700"
+                    title={preset.note}
+                  >
+                    <span className="block">{preset.label}</span>
+                    <span className="mt-0.5 block text-[10px] text-slate-500">+ clip</span>
+                  </button>
+                ))}
               </div>
               <div className="mt-3 overflow-x-auto rounded-2xl bg-slate-900 p-3">
                 <div className="min-w-[620px]">
@@ -551,6 +611,18 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
                     {selectedEffect.enabled === false ? "Включить SFX" : "SFX включен"}
                   </button>
                   <label className="block rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
+                    <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Тип звука</span>
+                    <select
+                      value={selectedEffect.assetId || ""}
+                      onChange={(e) => applyPresetToEffect(selectedIndex, e.target.value)}
+                      className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none"
+                    >
+                      {SOUND_EFFECT_PRESETS.map((preset) => (
+                        <option key={preset.assetId} value={preset.assetId}>{preset.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
                     <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Название</span>
                     <input value={selectedEffect.label || ""} onChange={(e) => updateEffect(selectedIndex, { label: e.target.value })} className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none" />
                   </label>
@@ -575,6 +647,11 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
                   <div className="grid grid-cols-2 gap-2">
                     <button type="button" onClick={() => playEffect(selectedEffect, selectedIndex)} className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-black text-white hover:bg-slate-800">Слушать</button>
                     <button type="button" onClick={() => removeEffect(selectedIndex)} className="rounded-xl bg-rose-50 px-3 py-2 text-xs font-black text-rose-700 ring-1 ring-rose-100 hover:bg-rose-100">Удалить</button>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button type="button" onClick={() => nudgeEffect(selectedIndex, -0.5)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">-0.5s</button>
+                    <button type="button" onClick={() => duplicateEffect(selectedIndex)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Дубль</button>
+                    <button type="button" onClick={() => nudgeEffect(selectedIndex, 0.5)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">+0.5s</button>
                   </div>
                 </div>
               ) : (
