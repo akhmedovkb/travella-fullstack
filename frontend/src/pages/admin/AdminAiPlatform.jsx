@@ -458,7 +458,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
                 <div className="text-xs font-black text-slate-950">{enabledEffects.length} SFX включено · примерно {Math.round(duration)} сек.</div>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={playPlan} className="rounded-2xl bg-indigo-700 px-3 py-2 text-xs font-black text-white hover:bg-indigo-800">Preview SFX</button>
+                <button type="button" onClick={playPlan} className="rounded-2xl bg-indigo-700 px-3 py-2 text-xs font-black text-white hover:bg-indigo-800">Прослушать SFX</button>
                 <button type="button" onClick={addEffect} className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-950 ring-1 ring-slate-200 hover:bg-slate-50">Добавить SFX</button>
               </div>
             </div>
@@ -488,7 +488,8 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
           </div>
           <div className="space-y-2">
             {effects.map((effect, index) => (
-              <div key={`${effect.id || index}_${index}`} className={cn("grid gap-2 rounded-2xl bg-white p-3 ring-1 ring-indigo-100 lg:grid-cols-[92px_1fr_90px_120px_1.3fr_88px]", effect.enabled === false && "opacity-55")}>
+              <div key={`${effect.id || index}_${index}`} className={cn("rounded-2xl bg-white p-3 ring-1 ring-indigo-100", effect.enabled === false && "opacity-55")}>
+                <div className="grid gap-2 lg:grid-cols-[76px_minmax(170px,1fr)_92px_150px_132px]">
                 <button
                   type="button"
                   onClick={() => updateEffect(index, { enabled: effect.enabled === false ? true : false })}
@@ -497,42 +498,53 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
                     effect.enabled === false ? "bg-white text-slate-500 ring-slate-200" : "bg-emerald-50 text-emerald-800 ring-emerald-100"
                   )}
                 >
-                  {effect.enabled === false ? "Muted" : "On"}
+                  {effect.enabled === false ? "Выкл" : "Вкл"}
                 </button>
-                <input
-                  value={effect.label || ""}
-                  onChange={(e) => updateEffect(index, { label: e.target.value })}
-                  className="min-w-0 rounded-xl bg-slate-50 px-3 py-2 text-xs font-black text-slate-950 outline-none ring-1 ring-slate-100"
-                />
-                <input
-                  type="number"
-                  min="0"
-                  step="0.1"
-                  value={Number(effect.time || 0)}
-                  onChange={(e) => updateEffect(index, { time: Number(e.target.value) })}
-                  className="rounded-xl bg-slate-50 px-3 py-2 text-xs font-black text-slate-950 outline-none ring-1 ring-slate-100"
-                />
-                <label className="rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
-                  <input
-                    type="range"
-                    min="0"
-                    max="0.8"
-                    step="0.01"
-                    value={Number(effect.volume ?? 0.2)}
-                    onChange={(e) => updateEffect(index, { volume: Number(e.target.value) })}
-                    className="w-full accent-indigo-600"
-                  />
-                  <span className="text-[10px] font-black text-slate-500">{Math.round(Number(effect.volume ?? 0.2) * 100)}%</span>
-                </label>
-                <input
-                  value={effect.note || ""}
-                  onChange={(e) => updateEffect(index, { note: e.target.value })}
-                  className="min-w-0 rounded-xl bg-slate-50 px-3 py-2 text-xs font-bold text-slate-600 outline-none ring-1 ring-slate-100"
-                />
-                <div className="flex gap-1">
-                  <button type="button" onClick={() => playEffect(effect, index)} className="flex-1 rounded-xl bg-slate-950 px-2 py-2 text-xs font-black text-white hover:bg-slate-800">Play</button>
-                  <button type="button" onClick={() => removeEffect(index)} className="flex-1 rounded-xl bg-rose-50 px-2 py-2 text-xs font-black text-rose-700 ring-1 ring-rose-100 hover:bg-rose-100">Del</button>
+                  <label className="min-w-0 rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
+                    <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">SFX</span>
+                    <input
+                      value={effect.label || ""}
+                      onChange={(e) => updateEffect(index, { label: e.target.value })}
+                      className="mt-1 w-full min-w-0 bg-transparent text-xs font-black text-slate-950 outline-none"
+                    />
+                  </label>
+                  <label className="rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
+                    <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Сек.</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      value={Number(effect.time || 0)}
+                      onChange={(e) => updateEffect(index, { time: Number(e.target.value) })}
+                      className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none"
+                    />
+                  </label>
+                  <label className="rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
+                    <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Громкость</span>
+                    <input
+                      type="range"
+                      min="0"
+                      max="0.8"
+                      step="0.01"
+                      value={Number(effect.volume ?? 0.2)}
+                      onChange={(e) => updateEffect(index, { volume: Number(e.target.value) })}
+                      className="mt-1 w-full accent-indigo-600"
+                    />
+                    <span className="text-[10px] font-black text-slate-500">{Math.round(Number(effect.volume ?? 0.2) * 100)}%</span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-1">
+                    <button type="button" onClick={() => playEffect(effect, index)} className="rounded-xl bg-slate-950 px-2 py-2 text-xs font-black text-white hover:bg-slate-800">Слушать</button>
+                    <button type="button" onClick={() => removeEffect(index)} className="rounded-xl bg-rose-50 px-2 py-2 text-xs font-black text-rose-700 ring-1 ring-rose-100 hover:bg-rose-100">Удалить</button>
+                  </div>
                 </div>
+                <label className="mt-2 block rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
+                  <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Комментарий к эффекту</span>
+                  <input
+                    value={effect.note || ""}
+                    onChange={(e) => updateEffect(index, { note: e.target.value })}
+                    className="mt-1 w-full min-w-0 bg-transparent text-xs font-bold text-slate-600 outline-none"
+                  />
+                </label>
               </div>
             ))}
           </div>
