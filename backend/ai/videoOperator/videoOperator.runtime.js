@@ -500,6 +500,13 @@ async function startHeygenForVideoJob({ jobId, actor = {}, regenerate = false })
     const response = await createAvatarVideo({
       script: runOutput.script,
       motionPrompt: runOutput.motionPrompt,
+      avatarId: generationProfile.avatarId,
+      voiceId: generationProfile.voiceId,
+      aspectRatio: generationProfile.aspectRatio,
+      resolution: generationProfile.resolution,
+      engine: generationProfile.engine,
+      voiceSpeed: generationProfile.voiceSpeed,
+      expressiveness: generationProfile.expressiveness,
       title: `${runOutput.service?.videoContext?.code || "Travella"} ${runOutput.service?.videoContext?.title || "Video"} v${version}`,
       idempotencyKey: `travella-ai-video-${job.id}-v${version}`,
     });
@@ -512,6 +519,8 @@ async function startHeygenForVideoJob({ jobId, actor = {}, regenerate = false })
       videoId,
       videoUrl: extractHeygenVideoUrl(response),
       profile: generationProfile,
+      scriptSnapshot: runOutput.script,
+      motionPromptSnapshot: runOutput.motionPrompt,
       response,
       submittedAt: new Date().toISOString(),
     };
@@ -539,6 +548,8 @@ async function startHeygenForVideoJob({ jobId, actor = {}, regenerate = false })
           version,
           error: err.message,
           profile: generationProfile,
+          scriptSnapshot: runOutput.script,
+          motionPromptSnapshot: runOutput.motionPrompt,
           checkedAt: new Date().toISOString(),
         },
       };
@@ -563,6 +574,8 @@ async function startHeygenForVideoJob({ jobId, actor = {}, regenerate = false })
       version,
       error: err?.message || "HeyGen request failed",
       profile: generationProfile,
+      scriptSnapshot: runOutput.script,
+      motionPromptSnapshot: runOutput.motionPrompt,
       failedAt: new Date().toISOString(),
     };
     const nextOutput = { ...runOutput, heygen };

@@ -225,14 +225,38 @@ function findPresetLabel(presets = [], value = "", prefix = "") {
   return prefix ? `${prefix} ${preset.label}` : preset.label;
 }
 
-function estimateHeygenDuration(script = "") {
+function estimateHeygenDurationStats(script = "", speed = 1) {
   const words = String(script || "").trim().split(/\s+/).filter(Boolean).length;
-  if (!words) return "—";
-  const seconds = Math.max(5, Math.round(words / 2.5));
-  if (seconds < 60) return `~${seconds} сек`;
+  if (!words) return { words: 0, seconds: 0, label: "—" };
+  const normalizedSpeed = Math.max(0.5, Math.min(1.5, Number(speed || 1)));
+  const seconds = Math.max(5, Math.round(words / (2.5 * normalizedSpeed)));
+  if (seconds < 60) return { words, seconds, label: `~${seconds} сек` };
   const minutes = Math.floor(seconds / 60);
   const rest = seconds % 60;
-  return `~${minutes}:${String(rest).padStart(2, "0")}`;
+  return { words, seconds, label: `~${minutes}:${String(rest).padStart(2, "0")}` };
+}
+
+function estimateHeygenDuration(script = "", speed = 1) {
+  const stats = estimateHeygenDurationStats(script, speed);
+  if (typeof stats === "string") return stats;
+  return stats.label;
+}
+
+function getHeygenFormatGuard(profile = {}, script = "") {
+  const ratio = profile.aspectRatio || "9:16";
+  const stats = estimateHeygenDurationStats(script, profile.voiceSpeed || 1);
+  if (!stats.seconds) return { tone: "slate", label: "Нет текста для оценки" };
+  if (ratio === "9:16") {
+    if (stats.seconds > 35) return { tone: "yellow", label: "Для Reels/Stories длинновато. Лучше 20-35 сек." };
+    if (stats.seconds < 15) return { tone: "blue", label: "Очень короткий vertical pitch. Можно усилить оффер." };
+    return { tone: "green", label: "Длина подходит для Reels/Stories." };
+  }
+  if (ratio === "16:9") {
+    if (stats.seconds > 90) return { tone: "yellow", label: "Для 16:9 уже длинно. Проверь темп и удержание." };
+    return { tone: "green", label: "Длина подходит для горизонтального выпуска." };
+  }
+  if (stats.seconds > 60) return { tone: "yellow", label: "Для 1:1 лучше держать ролик короче минуты." };
+  return { tone: "green", label: "Длина подходит для квадратного формата." };
 }
 
 function HeygenGenerationPreview({ profile = {}, presets = {}, script = "", locked = false, dirty = false }) {
@@ -241,6 +265,14 @@ function HeygenGenerationPreview({ profile = {}, presets = {}, script = "", lock
   const engineLabel = profile.engine === "avatar_v" ? "Avatar V" : "Avatar IV";
   const ratio = profile.aspectRatio || "9:16";
   const resolution = profile.resolution || "1080p";
+  const duration = estimateHeygenDurationStats(script, profile.voiceSpeed || 1);
+  const guard = getHeygenFormatGuard(profile, script);
+  const guardClass = {
+    green: "bg-emerald-50 text-emerald-700 ring-emerald-100",
+    yellow: "bg-amber-50 text-amber-800 ring-amber-100",
+    blue: "bg-blue-50 text-blue-700 ring-blue-100",
+    slate: "bg-slate-50 text-slate-500 ring-slate-100",
+  }[guard.tone] || "bg-slate-50 text-slate-500 ring-slate-100";
   return (
     <div className={cn("mt-3 rounded-2xl p-4 ring-1", dirty ? "bg-amber-50 ring-amber-100" : locked ? "bg-emerald-50 ring-emerald-100" : "bg-blue-50 ring-blue-100")}>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -251,7 +283,7 @@ function HeygenGenerationPreview({ profile = {}, presets = {}, script = "", lock
           <div className="mt-1 text-sm font-black text-slate-950">{ratio} · {resolution} · {engineLabel}</div>
         </div>
         <div className="rounded-full bg-white px-3 py-1 text-xs font-black text-slate-700 ring-1 ring-slate-200">
-          {estimateHeygenDuration(script)}
+          {duration.label}
         </div>
       </div>
       <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -262,6 +294,7 @@ function HeygenGenerationPreview({ profile = {}, presets = {}, script = "", lock
           ["Expressiveness", profile.engine === "avatar_v" ? "—" : profile.expressiveness || "medium"],
           ["Ratio", ratio],
           ["Resolution", resolution],
+          ["Words", duration.words || "—"],
         ].map(([label, value]) => (
           <div key={label} className="rounded-2xl bg-white px-3 py-2 ring-1 ring-slate-200">
             <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">{label}</div>
@@ -269,6 +302,7 @@ function HeygenGenerationPreview({ profile = {}, presets = {}, script = "", lock
           </div>
         ))}
       </div>
+      <div className={cn("mt-3 rounded-2xl px-3 py-2 text-xs font-black ring-1", guardClass)}>{guard.label}</div>
       {dirty ? <div className="mt-3 text-xs font-black text-amber-800">Настройки HeyGen изменены. Сначала сохрани профиль, чтобы именно эти значения ушли в генерацию.</div> : null}
     </div>
   );
@@ -2629,6 +2663,7 @@ export default function AdminAiPlatform() {
   });
   const [videoPresetModal, setVideoPresetModal] = React.useState(null);
   const [heygenSettingsOpen, setHeygenSettingsOpen] = React.useState(false);
+  const [heygenConfirm, setHeygenConfirm] = React.useState(null);
   const videoOperatorIntro = "Я Travella AI Runtime. Для Video Operator можно нажать быструю команду под чатом или написать задачу обычным языком: “Создай сценарий для R941”, “Создай видео для последнего отказного авиабилета”, “Сделай агрессивнее H502”, “Другой hook E77”.";
   const [messages, setMessages] = React.useState([{ id: "hello", role: "assistant", text: videoOperatorIntro }]);
   const endRef = React.useRef(null);
@@ -2790,10 +2825,16 @@ export default function AdminAiPlatform() {
     await runTaskText(command);
   }
 
+  function requestHeygenStart(job, options = {}) {
+    if (!job?.id || heygenLoading) return;
+    setHeygenConfirm({ job, regenerate: Boolean(options.regenerate) });
+  }
+
   async function startHeygen(job, options = {}) {
     if (!job?.id || heygenLoading) return;
     const regenerate = Boolean(options.regenerate);
     setHeygenLoading(job.id);
+    setHeygenConfirm(null);
     setError("");
     addMessage({ role: "assistant", text: regenerate ? `Запускаю новую версию HeyGen для задачи #${job.id}.` : `Получил ручное утверждение сценария. Отправляю в HeyGen задачу #${job.id}.` });
     try {
@@ -3299,6 +3340,15 @@ export default function AdminAiPlatform() {
       { label: "Короче", command: `Сократи сценарий до 25 секунд для ${currentServiceCode}` },
     ] : []),
   ];
+  const heygenConfirmJob = heygenConfirm?.job || null;
+  const heygenConfirmOutput = heygenConfirmJob?.output || {};
+  const heygenConfirmVersions = getHeygenVersions(heygenConfirmOutput);
+  const heygenConfirmNextVersion = heygenConfirm?.regenerate
+    ? Math.max(0, ...heygenConfirmVersions.map((item) => Number(item.version || 0))) + 1
+    : Number(heygenConfirmOutput.heygen?.version || 1);
+  const heygenConfirmProfile = profileDirty ? videoProfileDraft : runtimeProfile;
+  const heygenConfirmDuration = estimateHeygenDurationStats(heygenConfirmOutput.script || "", heygenConfirmProfile.voiceSpeed || 1);
+  const heygenConfirmGuard = getHeygenFormatGuard(heygenConfirmProfile, heygenConfirmOutput.script || "");
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-6">
@@ -3474,7 +3524,7 @@ export default function AdminAiPlatform() {
                 <Message
                   key={m.id}
                   msg={hydratedMessage}
-                  onStartHeygen={startHeygen}
+                  onStartHeygen={requestHeygenStart}
                   onRefreshHeygen={refreshHeygen}
                   onSaveScript={saveJobScript}
                   onSelectHeygenVersion={selectHeygenVersion}
@@ -3604,6 +3654,83 @@ export default function AdminAiPlatform() {
           />
         ) : isContentManager ? <ContentInspector videos={videos} /> : <Inspector task={currentTask} />}
       </section>
+      {heygenConfirm ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget && !heygenLoading) setHeygenConfirm(null);
+          }}
+        >
+          <div className="w-full max-w-[620px] rounded-[28px] border border-slate-200 bg-white p-5 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="heygen-confirm-title">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-xs font-black uppercase tracking-wide text-amber-600">HeyGen cost guard</div>
+                <h3 id="heygen-confirm-title" className="mt-1 text-xl font-black text-slate-950">
+                  {heygenConfirm.regenerate ? `Создать новую версию v${heygenConfirmNextVersion}` : "Отправить сценарий в HeyGen"}
+                </h3>
+                <p className="mt-1 text-xs font-bold text-slate-500">Это создаст новый HeyGen video. Проверь настройки перед запуском.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHeygenConfirm(null)}
+                disabled={Boolean(heygenLoading)}
+                className="h-9 w-9 rounded-full bg-slate-50 text-lg font-black text-slate-400 ring-1 ring-slate-200 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40"
+                aria-label="Закрыть"
+              >
+                ×
+              </button>
+            </div>
+            <HeygenGenerationPreview
+              profile={heygenConfirmProfile}
+              presets={videoPresetsDraft}
+              script={heygenConfirmOutput.script || ""}
+              dirty={profileDirty}
+            />
+            <div className="mt-4 grid gap-2 sm:grid-cols-3">
+              <div className="rounded-2xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
+                <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Version</div>
+                <div className="mt-0.5 text-sm font-black text-slate-950">v{heygenConfirmNextVersion}</div>
+              </div>
+              <div className="rounded-2xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
+                <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Duration estimate</div>
+                <div className="mt-0.5 text-sm font-black text-slate-950">{heygenConfirmDuration.label}</div>
+              </div>
+              <div className="rounded-2xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
+                <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Words</div>
+                <div className="mt-0.5 text-sm font-black text-slate-950">{heygenConfirmDuration.words || "—"}</div>
+              </div>
+            </div>
+            {profileDirty ? (
+              <div className="mt-3 rounded-2xl bg-amber-50 px-3 py-2 text-xs font-black text-amber-800 ring-1 ring-amber-100">
+                Настройки HeyGen изменены, но ещё не сохранены. Сначала сохрани профиль, чтобы эти значения ушли в API.
+              </div>
+            ) : null}
+            {heygenConfirmGuard.tone === "yellow" ? (
+              <div className="mt-3 rounded-2xl bg-amber-50 px-3 py-2 text-xs font-black text-amber-800 ring-1 ring-amber-100">
+                Форматный guard: {heygenConfirmGuard.label}
+              </div>
+            ) : null}
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setHeygenConfirm(null)}
+                disabled={Boolean(heygenLoading)}
+                className="h-11 rounded-2xl bg-slate-50 px-5 text-sm font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100 disabled:opacity-40"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                onClick={() => startHeygen(heygenConfirmJob, { regenerate: heygenConfirm.regenerate })}
+                disabled={!heygenConfirmJob?.id || Boolean(heygenLoading) || profileDirty}
+                className="h-11 rounded-2xl bg-slate-950 px-5 text-sm font-black text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+              >
+                {heygenLoading ? "Запускаю..." : heygenConfirm.regenerate ? "Создать новую версию" : "Создать HeyGen video"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {heygenSettingsOpen ? (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm"

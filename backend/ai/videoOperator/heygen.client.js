@@ -27,7 +27,19 @@ function normalizeHeygenError(error) {
   return err;
 }
 
-async function createAvatarVideo({ script, motionPrompt, title, aspectRatio, resolution, engine, idempotencyKey }) {
+async function createAvatarVideo({
+  script,
+  motionPrompt,
+  title,
+  avatarId,
+  voiceId,
+  aspectRatio,
+  resolution,
+  engine,
+  voiceSpeed,
+  expressiveness,
+  idempotencyKey,
+}) {
   const config = getAiConfig();
   const heygen = config.video.heygen;
 
@@ -47,9 +59,9 @@ async function createAvatarVideo({ script, motionPrompt, title, aspectRatio, res
 
   const payload = {
     type: "avatar",
-    avatar_id: heygen.avatarId,
+    avatar_id: avatarId || heygen.avatarId,
     script: String(script || "").trim(),
-    voice_id: heygen.voiceId,
+    voice_id: voiceId || heygen.voiceId,
     title: String(title || "Travella Video Operator").slice(0, 120),
     resolution: resolution || heygen.defaultResolution || "1080p",
     aspect_ratio: aspectRatio || heygen.defaultAspectRatio || "9:16",
@@ -62,15 +74,15 @@ async function createAvatarVideo({ script, motionPrompt, title, aspectRatio, res
   const cleanMotionPrompt = String(motionPrompt || "").trim();
   if (cleanMotionPrompt && engineType !== "avatar_v") payload.motion_prompt = cleanMotionPrompt;
 
-  const voiceSpeed = Number(heygen.voiceSettings?.speed);
-  if (Number.isFinite(voiceSpeed)) {
+  const resolvedVoiceSpeed = Number(voiceSpeed ?? heygen.voiceSettings?.speed);
+  if (Number.isFinite(resolvedVoiceSpeed)) {
     payload.voice_settings = {
-      speed: Math.max(0.5, Math.min(1.5, Math.round(voiceSpeed * 100) / 100)),
+      speed: Math.max(0.5, Math.min(1.5, Math.round(resolvedVoiceSpeed * 100) / 100)),
     };
   }
-  const expressiveness = String(heygen.expressiveness || "").trim().toLowerCase();
-  if (engineType !== "avatar_v" && ["low", "medium", "high"].includes(expressiveness)) {
-    payload.expressiveness = expressiveness;
+  const resolvedExpressiveness = String(expressiveness || heygen.expressiveness || "").trim().toLowerCase();
+  if (engineType !== "avatar_v" && ["low", "medium", "high"].includes(resolvedExpressiveness)) {
+    payload.expressiveness = resolvedExpressiveness;
   }
 
   try {
