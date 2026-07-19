@@ -364,6 +364,8 @@ function playSfxPreview(effect = {}, delaySeconds = 0) {
 function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoading }) {
   const [draft, setDraft] = React.useState(soundPlan || null);
   const [soloIndex, setSoloIndex] = React.useState(null);
+  const [selectedIndex, setSelectedIndex] = React.useState(0);
+  const timelineRef = React.useRef(null);
   React.useEffect(() => { setDraft(soundPlan || null); }, [soundPlan, job?.id]);
   const plan = draft || null;
   const busy = loading === job?.id;
@@ -372,6 +374,10 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
   const effects = Array.isArray(plan?.effects) ? plan.effects : [];
   const duration = Math.max(8, Number(plan?.durationEstimateSeconds || 35));
   const enabledEffects = effects.filter((effect) => effect.enabled !== false);
+  const selectedEffect = effects[selectedIndex] || effects[0] || null;
+  React.useEffect(() => {
+    if (selectedIndex > Math.max(0, effects.length - 1)) setSelectedIndex(Math.max(0, effects.length - 1));
+  }, [effects.length, selectedIndex]);
   const playEffect = (effect, index) => {
     setSoloIndex(index);
     playSfxPreview(effect);
@@ -397,8 +403,27 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
     setDraft((prev) => {
       const base = prev || { preset: "Urgent Deal", music: { assetId: "tropical_luxury_01", label: "Tropical luxury", volume: 0.12 }, effects: [] };
       const effects = Array.isArray(base.effects) ? [...base.effects] : [];
+      setSelectedIndex(effects.length);
       return { ...base, effects: [...effects, createSoundCue(effects.length)] };
     });
+  };
+  const moveEffectToClientX = (index, clientX) => {
+    const rect = timelineRef.current?.getBoundingClientRect();
+    if (!rect?.width) return;
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    updateEffect(index, { time: Math.round(ratio * duration * 10) / 10 });
+  };
+  const startDragEffect = (event, index) => {
+    event.preventDefault();
+    setSelectedIndex(index);
+    moveEffectToClientX(index, event.clientX);
+    const handleMove = (moveEvent) => moveEffectToClientX(index, moveEvent.clientX);
+    const handleUp = () => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+    };
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp, { once: true });
   };
   if (!job?.id) return null;
   return (
@@ -451,102 +476,111 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
               <span className="text-[10px] font-black text-slate-500">{Math.round(Number(plan.music?.volume ?? 0.12) * 100)}%</span>
             </label>
           </div>
-          <div className="rounded-2xl bg-white p-3 ring-1 ring-indigo-100">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Timeline</div>
-                <div className="text-xs font-black text-slate-950">{enabledEffects.length} SFX включено · примерно {Math.round(duration)} сек.</div>
+          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_300px]">
+            <div className="rounded-2xl bg-slate-950 p-3 text-white ring-1 ring-slate-900">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Sound timeline</div>
+                  <div className="text-xs font-black">{enabledEffects.length} SFX включено · примерно {Math.round(duration)} сек.</div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={playPlan} className="rounded-2xl bg-indigo-600 px-3 py-2 text-xs font-black text-white hover:bg-indigo-500">Прослушать</button>
+                  <button type="button" onClick={addEffect} className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-950 hover:bg-slate-100">Добавить SFX</button>
+                </div>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={playPlan} className="rounded-2xl bg-indigo-700 px-3 py-2 text-xs font-black text-white hover:bg-indigo-800">Прослушать SFX</button>
-                <button type="button" onClick={addEffect} className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-950 ring-1 ring-slate-200 hover:bg-slate-50">Добавить SFX</button>
+              <div className="mt-3 overflow-x-auto rounded-2xl bg-slate-900 p-3">
+                <div className="min-w-[620px]">
+                  <div className="grid grid-cols-[74px_1fr] gap-3">
+                    <div className="py-2 text-[10px] font-black uppercase tracking-wide text-slate-400">Time</div>
+                    <div className="grid grid-cols-5 text-[10px] font-black text-slate-500">
+                      {[0, 0.25, 0.5, 0.75, 1].map((point) => (
+                        <div key={point}>{Math.round(duration * point)}s</div>
+                      ))}
+                    </div>
+                    <div className="py-3 text-xs font-black text-slate-300">Music</div>
+                    <div className="relative h-11 rounded-xl bg-slate-800">
+                      <div className="absolute inset-y-2 left-0 right-0 rounded-lg bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-500 px-3 py-1 text-xs font-black text-slate-950">
+                        {plan.music?.label || "Music"} · {Math.round(Number(plan.music?.volume ?? 0.12) * 100)}%
+                      </div>
+                    </div>
+                    <div className="py-3 text-xs font-black text-slate-300">SFX</div>
+                    <div ref={timelineRef} className="relative h-20 rounded-xl bg-slate-800">
+                      <div className="absolute inset-y-0 left-0 right-0 grid grid-cols-5">
+                        {[0, 1, 2, 3, 4].map((line) => <div key={line} className="border-l border-white/5" />)}
+                      </div>
+                      {effects.map((effect, index) => {
+                        const left = Math.max(0, Math.min(92, (Number(effect.time || 0) / duration) * 100));
+                        return (
+                          <button
+                            key={`${effect.id || index}_clip`}
+                            type="button"
+                            onPointerDown={(event) => startDragEffect(event, index)}
+                            onDoubleClick={() => playEffect(effect, index)}
+                            className={cn(
+                              "absolute top-3 h-12 w-28 cursor-grab rounded-xl px-3 text-left text-[10px] font-black text-white shadow-lg ring-2 transition active:cursor-grabbing",
+                              effect.enabled === false ? "bg-slate-600 opacity-60 ring-slate-500" : "bg-indigo-600 ring-indigo-400/40",
+                              selectedIndex === index && "bg-emerald-600 ring-white",
+                              soloIndex === index && "scale-105"
+                            )}
+                            style={{ left: `${left}%` }}
+                            title="Перетащи по таймлайну. Двойной клик — прослушать."
+                          >
+                            <span className="block truncate">{effect.label || `SFX ${index + 1}`}</span>
+                            <span className="mt-1 block text-[10px] text-white/70">{Number(effect.time || 0).toFixed(1)}s · {Math.round(Number(effect.volume ?? 0.2) * 100)}%</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="mt-3 text-[10px] font-bold text-slate-500">Перетащи SFX-клип по дорожке, чтобы изменить время. Двойной клик по клипу — прослушать.</div>
+                </div>
               </div>
             </div>
-            <div className="mt-3 h-16 rounded-2xl bg-slate-950 p-3">
-              <div className="relative h-full rounded-xl bg-slate-800">
-                {effects.map((effect, index) => {
-                  const left = Math.max(0, Math.min(96, (Number(effect.time || 0) / duration) * 100));
-                  return (
-                    <button
-                      key={`${effect.id || index}_dot`}
-                      type="button"
-                      onClick={() => playEffect(effect, index)}
-                      className={cn(
-                        "absolute top-1/2 h-7 min-w-7 -translate-y-1/2 rounded-full px-2 text-[10px] font-black text-white ring-2 ring-white/20 transition",
-                        effect.enabled === false ? "bg-slate-500 opacity-50" : "bg-indigo-500",
-                        soloIndex === index && "scale-110 bg-emerald-500"
-                      )}
-                      style={{ left: `${left}%` }}
-                      title={`${effect.label || "SFX"} · ${Number(effect.time || 0).toFixed(1)}s`}
-                    >
-                      {index + 1}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-          <div className="space-y-2">
-            {effects.map((effect, index) => (
-              <div key={`${effect.id || index}_${index}`} className={cn("rounded-2xl bg-white p-3 ring-1 ring-indigo-100", effect.enabled === false && "opacity-55")}>
-                <div className="grid gap-2 lg:grid-cols-[76px_minmax(170px,1fr)_92px_150px_132px]">
-                <button
-                  type="button"
-                  onClick={() => updateEffect(index, { enabled: effect.enabled === false ? true : false })}
-                  className={cn(
-                    "rounded-xl px-3 py-2 text-xs font-black ring-1",
-                    effect.enabled === false ? "bg-white text-slate-500 ring-slate-200" : "bg-emerald-50 text-emerald-800 ring-emerald-100"
-                  )}
-                >
-                  {effect.enabled === false ? "Выкл" : "Вкл"}
-                </button>
-                  <label className="min-w-0 rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
-                    <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">SFX</span>
-                    <input
-                      value={effect.label || ""}
-                      onChange={(e) => updateEffect(index, { label: e.target.value })}
-                      className="mt-1 w-full min-w-0 bg-transparent text-xs font-black text-slate-950 outline-none"
-                    />
+            <div className="rounded-2xl bg-white p-3 ring-1 ring-indigo-100">
+              <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Inspector</div>
+              {selectedEffect ? (
+                <div className={cn("mt-2 space-y-2", selectedEffect.enabled === false && "opacity-60")}>
+                  <button
+                    type="button"
+                    onClick={() => updateEffect(selectedIndex, { enabled: selectedEffect.enabled === false ? true : false })}
+                    className={cn(
+                      "w-full rounded-xl px-3 py-2 text-xs font-black ring-1",
+                      selectedEffect.enabled === false ? "bg-white text-slate-500 ring-slate-200" : "bg-emerald-50 text-emerald-800 ring-emerald-100"
+                    )}
+                  >
+                    {selectedEffect.enabled === false ? "Включить SFX" : "SFX включен"}
+                  </button>
+                  <label className="block rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
+                    <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Название</span>
+                    <input value={selectedEffect.label || ""} onChange={(e) => updateEffect(selectedIndex, { label: e.target.value })} className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none" />
                   </label>
-                  <label className="rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
-                    <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Сек.</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.1"
-                      value={Number(effect.time || 0)}
-                      onChange={(e) => updateEffect(index, { time: Number(e.target.value) })}
-                      className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none"
-                    />
-                  </label>
-                  <label className="rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
+                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Сек.</span>
+                      <input type="number" min="0" step="0.1" value={Number(selectedEffect.time || 0)} onChange={(e) => updateEffect(selectedIndex, { time: Number(e.target.value) })} className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none" />
+                    </label>
+                    <label className="rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
+                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Громк.</span>
+                      <div className="mt-1 text-xs font-black text-slate-950">{Math.round(Number(selectedEffect.volume ?? 0.2) * 100)}%</div>
+                    </label>
+                  </div>
+                  <label className="block rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
                     <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Громкость</span>
-                    <input
-                      type="range"
-                      min="0"
-                      max="0.8"
-                      step="0.01"
-                      value={Number(effect.volume ?? 0.2)}
-                      onChange={(e) => updateEffect(index, { volume: Number(e.target.value) })}
-                      className="mt-1 w-full accent-indigo-600"
-                    />
-                    <span className="text-[10px] font-black text-slate-500">{Math.round(Number(effect.volume ?? 0.2) * 100)}%</span>
+                    <input type="range" min="0" max="0.8" step="0.01" value={Number(selectedEffect.volume ?? 0.2)} onChange={(e) => updateEffect(selectedIndex, { volume: Number(e.target.value) })} className="mt-2 w-full accent-indigo-600" />
                   </label>
-                  <div className="grid grid-cols-2 gap-1">
-                    <button type="button" onClick={() => playEffect(effect, index)} className="rounded-xl bg-slate-950 px-2 py-2 text-xs font-black text-white hover:bg-slate-800">Слушать</button>
-                    <button type="button" onClick={() => removeEffect(index)} className="rounded-xl bg-rose-50 px-2 py-2 text-xs font-black text-rose-700 ring-1 ring-rose-100 hover:bg-rose-100">Удалить</button>
+                  <label className="block rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
+                    <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Комментарий</span>
+                    <textarea value={selectedEffect.note || ""} onChange={(e) => updateEffect(selectedIndex, { note: e.target.value })} rows={3} className="mt-1 w-full resize-none bg-transparent text-xs font-bold text-slate-600 outline-none" />
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button type="button" onClick={() => playEffect(selectedEffect, selectedIndex)} className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-black text-white hover:bg-slate-800">Слушать</button>
+                    <button type="button" onClick={() => removeEffect(selectedIndex)} className="rounded-xl bg-rose-50 px-3 py-2 text-xs font-black text-rose-700 ring-1 ring-rose-100 hover:bg-rose-100">Удалить</button>
                   </div>
                 </div>
-                <label className="mt-2 block rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
-                  <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Комментарий к эффекту</span>
-                  <input
-                    value={effect.note || ""}
-                    onChange={(e) => updateEffect(index, { note: e.target.value })}
-                    className="mt-1 w-full min-w-0 bg-transparent text-xs font-bold text-slate-600 outline-none"
-                  />
-                </label>
-              </div>
-            ))}
+              ) : (
+                <div className="mt-2 rounded-xl bg-slate-50 p-3 text-xs font-bold text-slate-500">Добавь SFX или пересобери AI plan.</div>
+              )}
+            </div>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="text-xs font-bold text-slate-500">
