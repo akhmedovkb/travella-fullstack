@@ -40,7 +40,7 @@ function getToneForEffect(assetId = "") {
 }
 
 function buildFfmpegArgs({ inputPath, outputPath, soundPlan = {} }) {
-  const musicVolume = Math.max(0, Math.min(0.35, safeNumber(soundPlan.music?.volume, 0.1)));
+  const musicVolume = Math.max(0, Math.min(0.5, safeNumber(soundPlan.music?.volume, 0.1) * 1.4));
   const effects = (Array.isArray(soundPlan.effects) ? soundPlan.effects : []).slice(0, 8).map(normalizeEffect);
   const args = ["-y", "-i", inputPath];
   const filterParts = [];
@@ -57,14 +57,14 @@ function buildFfmpegArgs({ inputPath, outputPath, soundPlan = {} }) {
     const inputIndex = args.filter((item) => item === "-i").length;
     args.push("-f", "lavfi", "-i", `sine=frequency=${tone.frequency}:duration=${tone.duration}:sample_rate=44100`);
     const delay = Math.round(effect.time * 1000);
-    const volume = Math.max(0, Math.min(0.8, effect.volume));
+    const volume = Math.max(0, Math.min(1.2, effect.volume * 2.8));
     const label = `sfx${index}`;
-    filterParts.push(`[${inputIndex}:a]volume=${volume},adelay=${delay}|${delay}[${label}]`);
+    filterParts.push(`[${inputIndex}:a]volume=${volume},afade=t=in:st=0:d=0.02,afade=t=out:st=${Math.max(0.01, tone.duration - 0.08)}:d=0.08,adelay=${delay}|${delay}[${label}]`);
     audioLabels.push(`[${label}]`);
   });
 
   const inputCount = audioLabels.length;
-  filterParts.push(`${audioLabels.join("")}amix=inputs=${inputCount}:duration=first:dropout_transition=0,volume=1.0[aout]`);
+  filterParts.push(`${audioLabels.join("")}amix=inputs=${inputCount}:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.95[aout]`);
   args.push(
     "-filter_complex",
     filterParts.join(";"),
