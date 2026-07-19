@@ -382,14 +382,17 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
   const [draft, setDraft] = React.useState(soundPlan || null);
   const [soloIndex, setSoloIndex] = React.useState(null);
   const [selectedIndex, setSelectedIndex] = React.useState(0);
+  const [editorOpen, setEditorOpen] = React.useState(false);
   const timelineRef = React.useRef(null);
   React.useEffect(() => { setDraft(soundPlan || null); }, [soundPlan, job?.id]);
   const plan = draft || null;
   const busy = loading === job?.id;
   const rendering = renderLoading === job?.id || plan?.render?.status === "rendering";
   const renderedUrl = plan?.render?.artifact?.url || "";
+  const previewUrl = renderedUrl || plan?.render?.sourceUrl || job?.output?.soundEnhancedVideo?.url || job?.output?.heygen?.artifact?.url || job?.output?.heygen?.videoUrl || "";
   const effects = Array.isArray(plan?.effects) ? plan.effects : [];
   const duration = Math.max(8, Number(plan?.durationEstimateSeconds || 35));
+  const trim = plan?.edit?.trim || {};
   const enabledEffects = effects.filter((effect) => effect.enabled !== false);
   const textOverlays = Array.isArray(plan?.textOverlays) ? plan.textOverlays : [];
   const imageOverlays = Array.isArray(plan?.imageOverlays) ? plan.imageOverlays : [];
@@ -455,6 +458,18 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
     const current = Number(effects[index]?.time || 0);
     updateEffect(index, { time: Math.max(0, Math.min(duration, Math.round((current + amount) * 10) / 10)) });
   };
+  const updateTrim = (patch) => {
+    setDraft((prev) => ({
+      ...(prev || {}),
+      edit: {
+        ...(prev?.edit || {}),
+        trim: {
+          ...(prev?.edit?.trim || {}),
+          ...patch,
+        },
+      },
+    }));
+  };
   const addTextOverlay = () => {
     setDraft((prev) => {
       const base = prev || {};
@@ -518,7 +533,68 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
         </button>
       </div>
       {plan ? (
-        <div className="mt-4 space-y-3">
+        <>
+        <div className="mt-4 rounded-2xl bg-white p-3 ring-1 ring-indigo-100">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="grid gap-2 text-xs font-black text-slate-700 sm:grid-cols-5">
+              <div className="rounded-xl bg-slate-50 px-3 py-2"><span className="block text-[10px] uppercase text-slate-400">Video</span>{previewUrl ? "есть" : "нет"}</div>
+              <div className="rounded-xl bg-slate-50 px-3 py-2"><span className="block text-[10px] uppercase text-slate-400">Music</span>{plan.music?.label || "Music"}</div>
+              <div className="rounded-xl bg-slate-50 px-3 py-2"><span className="block text-[10px] uppercase text-slate-400">SFX</span>{enabledEffects.length}</div>
+              <div className="rounded-xl bg-slate-50 px-3 py-2"><span className="block text-[10px] uppercase text-slate-400">Text</span>{textOverlays.length}</div>
+              <div className="rounded-xl bg-slate-50 px-3 py-2"><span className="block text-[10px] uppercase text-slate-400">Images</span>{imageOverlays.length}</div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => setEditorOpen(true)} className="rounded-2xl bg-slate-950 px-4 py-2 text-xs font-black text-white hover:bg-slate-800">Открыть редактор</button>
+              {renderedUrl ? (
+                <a href={renderedUrl} target="_blank" rel="noreferrer" className="rounded-2xl bg-emerald-700 px-4 py-2 text-xs font-black text-white hover:bg-emerald-800">Sound MP4</a>
+              ) : null}
+              <button type="button" onClick={() => onRender?.(job)} disabled={busy || rendering} className="rounded-2xl bg-indigo-700 px-4 py-2 text-xs font-black text-white hover:bg-indigo-800 disabled:opacity-40">
+                {rendering ? "Свожу..." : renderedUrl ? "Пересвести" : "Свести"}
+              </button>
+            </div>
+          </div>
+        </div>
+        {editorOpen ? (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 p-3 backdrop-blur-sm md:p-6">
+          <div className="mx-auto flex h-full max-w-[1500px] flex-col overflow-hidden rounded-3xl bg-slate-50 shadow-2xl ring-1 ring-white/20">
+            <div className="flex flex-col gap-3 border-b border-slate-200 bg-white p-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <div className="text-xs font-black uppercase tracking-wide text-indigo-700">Travella Timeline Studio</div>
+                <div className="mt-1 text-xl font-black text-slate-950">Редактор видео перед финальной склейкой</div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={() => onSave?.(job, draft)} disabled={busy || rendering} className="rounded-2xl bg-white px-4 py-2 text-xs font-black text-slate-950 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-40">{busy ? "Сохраняю..." : "Сохранить"}</button>
+                <button type="button" onClick={() => onRender?.(job)} disabled={busy || rendering} className="rounded-2xl bg-slate-950 px-4 py-2 text-xs font-black text-white hover:bg-slate-800 disabled:opacity-40">{rendering ? "Свожу..." : renderedUrl ? "Пересвести звук" : "Свести звук"}</button>
+                <button type="button" onClick={() => setEditorOpen(false)} className="rounded-2xl bg-rose-50 px-4 py-2 text-xs font-black text-rose-700 ring-1 ring-rose-100 hover:bg-rose-100">Закрыть</button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 md:p-5">
+              <div className="mb-4 grid gap-3 xl:grid-cols-[360px_1fr]">
+                <div className="rounded-3xl bg-slate-950 p-3 text-white">
+                  <div className="text-xs font-black uppercase tracking-wide text-slate-400">Preview</div>
+                  {previewUrl ? (
+                    <video src={previewUrl} controls className="mt-3 aspect-[9/16] max-h-[520px] w-full rounded-2xl bg-black object-contain" />
+                  ) : (
+                    <div className="mt-3 flex aspect-[9/16] max-h-[520px] items-center justify-center rounded-2xl bg-slate-900 text-xs font-black text-slate-500">Видео появится после HeyGen</div>
+                  )}
+                </div>
+                <div className="rounded-3xl bg-white p-4 ring-1 ring-slate-200">
+                  <div className="text-xs font-black uppercase tracking-wide text-slate-400">Монтаж</div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                    <label className="rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-100">
+                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Trim start</span>
+                      <input type="number" min="0" step="0.1" value={Number(trim.start || 0)} onChange={(e) => updateTrim({ start: Number(e.target.value) })} className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none" />
+                    </label>
+                    <label className="rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-100">
+                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Trim end</span>
+                      <input type="number" min="0" step="0.1" value={Number(trim.end || 0)} onChange={(e) => updateTrim({ end: Number(e.target.value) })} className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none" />
+                    </label>
+                    <div className="rounded-2xl bg-slate-50 p-3 text-xs font-black text-slate-950 ring-1 ring-slate-100"><span className="block text-[10px] uppercase tracking-wide text-slate-400">Duration</span>{Math.max(0, Math.round((duration - Number(trim.start || 0) - Number(trim.end || 0)) * 10) / 10)} sec</div>
+                    <div className="rounded-2xl bg-amber-50 p-3 text-xs font-bold text-amber-800 ring-1 ring-amber-100">Trim сохраняется в плане. Следующий шаг — применить его в FFmpeg render.</div>
+                  </div>
+                </div>
+              </div>
+        <div className="space-y-3">
           <div className="grid gap-2 sm:grid-cols-3">
             <label className="rounded-2xl bg-white p-3 ring-1 ring-indigo-100">
               <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Preset</span>
@@ -763,6 +839,11 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
             </div>
           </div>
         </div>
+            </div>
+          </div>
+        </div>
+        ) : null}
+        </>
       ) : null}
     </div>
   );
