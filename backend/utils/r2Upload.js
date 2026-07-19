@@ -61,12 +61,18 @@ function safeExt(file = {}) {
   if (mimetype === "image/gif") return ".gif";
   if (mimetype === "video/mp4") return ".mp4";
   if (mimetype === "video/quicktime") return ".mov";
+  if (mimetype === "audio/mpeg") return ".mp3";
+  if (mimetype === "audio/mp4") return ".m4a";
+  if (mimetype === "audio/aac") return ".aac";
+  if (mimetype === "audio/wav" || mimetype === "audio/x-wav") return ".wav";
+  if (mimetype === "audio/ogg") return ".ogg";
   return "";
 }
 
 function inferMediaType(file = {}) {
   const mimetype = String(file.mimetype || "").toLowerCase();
   if (mimetype.startsWith("video/")) return "video";
+  if (mimetype.startsWith("audio/")) return "audio";
   return "photo";
 }
 
@@ -126,7 +132,7 @@ async function uploadBufferToR2(file, options = {}) {
     url,
     key,
     public_id: key,
-    resource_type: mediaType === "video" ? "video" : "image",
+    resource_type: mediaType === "video" || mediaType === "audio" ? "video" : "image",
     media_type: mediaType,
     width: null,
     height: null,

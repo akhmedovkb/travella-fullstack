@@ -30,6 +30,14 @@ function getStorageProvider() {
   return "";
 }
 
+function inferUploadedMediaType(file = {}) {
+  const mimetype = String(file.mimetype || "").toLowerCase();
+  if (mimetype.startsWith("image/")) return "image";
+  if (mimetype.startsWith("audio/")) return "audio";
+  if (mimetype.startsWith("video/")) return "video";
+  return "file";
+}
+
 function getArtifactStorageStatus() {
   return {
     provider: getStorageProvider(),
@@ -135,9 +143,52 @@ async function saveRenderedVideoArtifact({ jobId, videoId, buffer, serviceCode =
   };
 }
 
+async function saveVideoOperatorImportedMedia({ jobId, file, serviceCode = "" }) {
+  const provider = getStorageProvider();
+  if (!provider) {
+    const err = new Error("media_storage_not_configured");
+    err.code = "media_storage_not_configured";
+    throw err;
+  }
+  if (!file?.buffer?.length) {
+    const err = new Error("empty_upload_file");
+    err.code = "empty_upload_file";
+    throw err;
+  }
+
+  const mediaType = inferUploadedMediaType(file);
+  const folder = "travella-ai/video-operator/imports";
+  const publicPrefix = safePart(`${serviceCode || "travella"}-${jobId}-${safePart(file.originalname || "media", "media")}`, "travella-import");
+  const resourceType = mediaType === "image" ? "image" : mediaType === "file" ? "auto" : "video";
+  const uploaded =
+    provider === "r2"
+      ? await getR2Upload().uploadBufferToR2(file, { folder, public_prefix: publicPrefix })
+      : await getCloudinaryUpload().uploadBufferToCloudinary(file, { folder, public_prefix: publicPrefix, resource_type: resourceType });
+
+  return {
+    provider,
+    status: "saved",
+    type: mediaType,
+    url: uploaded.url,
+    key: uploaded.key || uploaded.public_id || "",
+    publicId: uploaded.public_id || uploaded.key || "",
+    mediaType: uploaded.media_type || mediaType,
+    resourceType: uploaded.resource_type || resourceType,
+    thumbnailUrl: uploaded.thumbnail_url || uploaded.url,
+    width: uploaded.width || null,
+    height: uploaded.height || null,
+    durationSeconds: uploaded.duration_seconds || null,
+    bytes: file.size || file.buffer.length,
+    mimeType: file.mimetype || "application/octet-stream",
+    originalName: file.originalname || "media",
+    savedAt: new Date().toISOString(),
+  };
+}
+
 module.exports = {
   getArtifactStorageStatus,
   downloadVideoBuffer,
   saveHeygenVideoArtifact,
   saveRenderedVideoArtifact,
+  saveVideoOperatorImportedMedia,
 };

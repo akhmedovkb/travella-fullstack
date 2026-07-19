@@ -207,6 +207,24 @@ export async function apiPost(path, body, withAuthOrRole = true) {
   return handle(res);
 }
 
+export async function apiPostForm(path, formData, withAuthOrRole = true) {
+  const explicitRole =
+    withAuthOrRole === "client" ||
+    withAuthOrRole === "provider" ||
+    withAuthOrRole === "admin"
+      ? withAuthOrRole
+      : null;
+  const role = explicitRole || inferRoleFromPath(path);
+  const headers = withAuthOrRole === false ? {} : getAuthHeaders(role);
+  const res = await fetch(buildUrl(path), {
+    method: "POST",
+    headers,
+    body: formData,
+    credentials: "include",
+  });
+  return handle(res);
+}
+
 export async function apiPut(path, body, withAuthOrRole = true) {
   const res = await fetch(buildUrl(path), {
     method: "PUT",

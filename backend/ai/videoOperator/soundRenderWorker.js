@@ -23,10 +23,14 @@ function safeNumber(value, fallback = 0) {
 }
 
 function normalizeEffect(effect = {}, index = 0) {
+  const duration = safeNumber(effect.duration, 0);
   return {
+    id: String(effect.id || `sfx_${index + 1}`).trim(),
     assetId: String(effect.assetId || "soft_whoosh_01").trim(),
     label: String(effect.label || effect.assetId || `SFX ${index + 1}`).trim(),
+    url: String(effect.url || "").trim(),
     time: Math.max(0, safeNumber(effect.time, 0)),
+    duration: duration > 0 ? Math.max(0.05, Math.min(120, duration)) : 0,
     volume: Math.max(0, Math.min(0.8, safeNumber(effect.volume, 0.2))),
     enabled: effect.enabled === false ? false : true,
   };
@@ -88,7 +92,7 @@ function getToneForEffect(assetId = "") {
   return { frequency: 720, duration: 0.18 };
 }
 
-function buildFfmpegArgs({ inputPath, outputPath, soundPlan = {}, imageInputs = [] }) {
+function buildFfmpegArgs({ inputPath, outputPath, soundPlan = {}, imageInputs = [], audioInputs = {} }) {
   const musicVolume = Math.max(0, Math.min(0.5, safeNumber(soundPlan.music?.volume, 0.1) * 1.4));
   const effects = (Array.isArray(soundPlan.effects) ? soundPlan.effects : [])
     .slice(0, 8)
@@ -108,22 +112,34 @@ function buildFfmpegArgs({ inputPath, outputPath, soundPlan = {}, imageInputs = 
   let nextInputIndex = 1;
 
   if (musicVolume > 0) {
-    args.push("-f", "lavfi", "-i", "anoisesrc=color=pink:amplitude=0.16:sample_rate=44100");
+    if (audioInputs.music?.path) {
+      args.push("-i", audioInputs.music.path);
+    } else {
+      args.push("-f", "lavfi", "-i", "anoisesrc=color=pink:amplitude=0.16:sample_rate=44100");
+    }
     const inputIndex = nextInputIndex;
     nextInputIndex += 1;
-    filterParts.push(`[${inputIndex}:a]volume=${musicVolume},highpass=f=120,lowpass=f=4200[music]`);
+    const musicTrim = audioInputs.music?.path ? `atrim=0:${safeNumber(soundPlan.durationEstimateSeconds, 60)},asetpts=PTS-STARTPTS,` : "";
+    filterParts.push(`[${inputIndex}:a]${musicTrim}volume=${musicVolume},highpass=f=120,lowpass=f=4200[music]`);
     audioLabels.push("[music]");
   }
 
   effects.forEach((effect, index) => {
-    const tone = getToneForEffect(effect.assetId);
     const inputIndex = nextInputIndex;
     nextInputIndex += 1;
-    args.push("-f", "lavfi", "-i", `sine=frequency=${tone.frequency}:duration=${tone.duration}:sample_rate=44100`);
+    const customAudio = audioInputs.effects?.find((item) => item.index === index);
+    const tone = getToneForEffect(effect.assetId);
+    const clipDuration = effect.duration || tone.duration;
+    if (customAudio?.path) {
+      args.push("-i", customAudio.path);
+    } else {
+      args.push("-f", "lavfi", "-i", `sine=frequency=${tone.frequency}:duration=${tone.duration}:sample_rate=44100`);
+    }
     const delay = Math.round(effect.time * 1000);
     const volume = Math.max(0, Math.min(1.2, effect.volume * 2.8));
     const label = `sfx${index}`;
-    filterParts.push(`[${inputIndex}:a]volume=${volume},afade=t=in:st=0:d=0.02,afade=t=out:st=${Math.max(0.01, tone.duration - 0.08)}:d=0.08,adelay=${delay}|${delay}[${label}]`);
+    const sourcePrep = customAudio?.path ? `atrim=0:${clipDuration},asetpts=PTS-STARTPTS,` : "";
+    filterParts.push(`[${inputIndex}:a]${sourcePrep}volume=${volume},afade=t=in:st=0:d=0.02,afade=t=out:st=${Math.max(0.01, clipDuration - 0.08)}:d=0.08,adelay=${delay}|${delay}[${label}]`);
     audioLabels.push(`[${label}]`);
   });
 
@@ -258,6 +274,65 @@ async function prepareImageInputs(soundPlan = {}, tempDir) {
   return inputs;
 }
 
+function mediaExtFromContentType(contentType = "", fallback = "bin") {
+  const clean = String(contentType || "").toLowerCase();
+  if (clean.includes("mpeg") || clean.includes("mp3")) return "mp3";
+  if (clean.includes("mp4") || clean.includes("m4a")) return "m4a";
+  if (clean.includes("wav")) return "wav";
+  if (clean.includes("ogg")) return "ogg";
+  if (clean.includes("aac")) return "aac";
+  if (clean.includes("png")) return "png";
+  if (clean.includes("webp")) return "webp";
+  if (clean.includes("jpeg") || clean.includes("jpg")) return "jpg";
+  return fallback;
+}
+
+async function downloadMediaToTemp(url, tempDir, basename, maxBytes = 80 * 1024 * 1024) {
+  const response = await axios.get(url, {
+    responseType: "arraybuffer",
+    timeout: 60000,
+    maxContentLength: maxBytes,
+    maxBodyLength: maxBytes,
+  });
+  const ext = mediaExtFromContentType(response.headers?.["content-type"], path.extname(String(url || "")).replace(".", "") || "bin");
+  const filePath = path.join(tempDir, `${basename}.${ext}`);
+  await fs.writeFile(filePath, Buffer.from(response.data));
+  return filePath;
+}
+
+async function prepareAudioInputs(soundPlan = {}, tempDir) {
+  const inputs = { music: null, effects: [] };
+
+  if (soundPlan.music?.url) {
+    try {
+      inputs.music = { path: await downloadMediaToTemp(soundPlan.music.url, tempDir, "music", 120 * 1024 * 1024) };
+    } catch {
+      inputs.music = null;
+    }
+  }
+
+  const effects = (Array.isArray(soundPlan.effects) ? soundPlan.effects : [])
+    .slice(0, 8)
+    .map(normalizeEffect)
+    .filter((effect) => effect.enabled !== false && effect.url);
+
+  for (const effect of effects) {
+    const index = (Array.isArray(soundPlan.effects) ? soundPlan.effects : [])
+      .slice(0, 8)
+      .findIndex((source) => String(source?.id || source?.url || "") === String(effect.id || effect.url || ""));
+    try {
+      inputs.effects.push({
+        index: index >= 0 ? index : inputs.effects.length,
+        path: await downloadMediaToTemp(effect.url, tempDir, `sfx-${inputs.effects.length}`, 40 * 1024 * 1024),
+      });
+    } catch {
+      // Keep renderable: failed custom SFX falls back to the synthetic tone for that cue.
+    }
+  }
+
+  return inputs;
+}
+
 async function renderSoundPlanToArtifact({ job, output = {} }) {
   const heygen = output.heygen || {};
   const sourceUrl = heygen.artifact?.url || heygen.videoUrl || "";
@@ -279,7 +354,8 @@ async function renderSoundPlanToArtifact({ job, output = {} }) {
     const downloaded = await downloadVideoBuffer(sourceUrl);
     await fs.writeFile(inputPath, downloaded.buffer);
     const imageInputs = await prepareImageInputs(output.soundPlan, tempDir);
-    const args = buildFfmpegArgs({ inputPath, outputPath, soundPlan: output.soundPlan, imageInputs });
+    const audioInputs = await prepareAudioInputs(output.soundPlan, tempDir);
+    const args = buildFfmpegArgs({ inputPath, outputPath, soundPlan: output.soundPlan, imageInputs, audioInputs });
     await runFfmpeg(args);
     const renderedBuffer = await fs.readFile(outputPath);
     return saveRenderedVideoArtifact({

@@ -1,7 +1,7 @@
 // frontend/src/pages/admin/AdminAiPlatform.jsx
 
 import React from "react";
-import { apiGet, apiPatch, apiPost } from "../../api";
+import { apiGet, apiPatch, apiPost, apiPostForm } from "../../api";
 
 const EMPLOYEES = [
   { id: "video_operator", icon: "🎬", name: "Video Operator", subtitle: "AI-видео для отказных предложений", live: true },
@@ -379,7 +379,7 @@ function playSfxPreview(effect = {}, delaySeconds = 0) {
   setTimeout(() => ctx.close().catch(() => {}), (delaySeconds + tone.duration + 0.4) * 1000);
 }
 
-function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoading }) {
+function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, loading, renderLoading, mediaImportLoading }) {
   const [draft, setDraft] = React.useState(soundPlan || null);
   const [soloIndex, setSoloIndex] = React.useState(null);
   const [selectedIndex, setSelectedIndex] = React.useState(0);
@@ -388,6 +388,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
   const [currentTime, setCurrentTime] = React.useState(0);
   const timelineRef = React.useRef(null);
   const previewFrameRef = React.useRef(null);
+  const mediaInputRef = React.useRef(null);
   React.useEffect(() => { setDraft(soundPlan || null); }, [soundPlan, job?.id]);
   const plan = draft || null;
   const busy = loading === job?.id;
@@ -400,6 +401,8 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
   const enabledEffects = effects.filter((effect) => effect.enabled !== false);
   const textOverlays = Array.isArray(plan?.textOverlays) ? plan.textOverlays : [];
   const imageOverlays = Array.isArray(plan?.imageOverlays) ? plan.imageOverlays : [];
+  const mediaLibrary = Array.isArray(plan?.mediaLibrary) ? plan.mediaLibrary : [];
+  const mediaImporting = mediaImportLoading === job?.id;
   const selectedEffect = effects[selectedIndex] || effects[0] || null;
   const selectedItem =
     selectedClip.type === "text"
@@ -413,7 +416,13 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
   }, [effects.length, selectedIndex]);
   const playEffect = (effect, index) => {
     setSoloIndex(index);
-    playSfxPreview(effect);
+    if (effect?.url) {
+      const audio = new Audio(effect.url);
+      audio.volume = Math.max(0.01, Math.min(0.8, Number(effect.volume ?? 0.2)));
+      audio.play().catch(() => playSfxPreview(effect));
+    } else {
+      playSfxPreview(effect);
+    }
     window.setTimeout(() => setSoloIndex(null), 900);
   };
   const playPlan = () => {
@@ -591,6 +600,87 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
       };
     });
     setSelectedClip({ type: "image", index: imageOverlays.length });
+  };
+  const addImageMediaToTrack = (media) => {
+    if (!media?.url) return;
+    setDraft((prev) => {
+      const base = prev || {};
+      const items = Array.isArray(base.imageOverlays) ? [...base.imageOverlays] : [];
+      setSelectedClip({ type: "image", index: items.length });
+      return {
+        ...base,
+        imageOverlays: [
+          ...items,
+          {
+            id: `image_${Date.now()}`,
+            label: media.label || "Image",
+            url: media.url,
+            time: Math.round(currentTime * 10) / 10,
+            duration: 4,
+            enabled: true,
+            x: 50,
+            y: 72,
+            scale: 1,
+            width: 34,
+          },
+        ],
+      };
+    });
+  };
+  const addAudioMediaAsSfx = (media) => {
+    if (!media?.url) return;
+    setDraft((prev) => {
+      const base = prev || { preset: "Urgent Deal", music: { assetId: "tropical_luxury_01", label: "Tropical luxury", volume: 0.12 }, effects: [] };
+      const effects = Array.isArray(base.effects) ? [...base.effects] : [];
+      setSelectedIndex(effects.length);
+      setSelectedClip({ type: "sfx", index: effects.length });
+      return {
+        ...base,
+        effects: [
+          ...effects,
+          {
+            id: `audio_${Date.now()}`,
+            assetId: "custom_audio",
+            label: media.label || "Imported audio",
+            url: media.url,
+            mimeType: media.mimeType || "",
+            time: Math.round(currentTime * 10) / 10,
+            duration: Math.min(8, Math.max(0.3, Number(media.durationSeconds || 2))),
+            volume: 0.22,
+            enabled: true,
+            note: "Импортированный аудио-клип.",
+          },
+        ],
+      };
+    });
+  };
+  const useAudioMediaAsMusic = (media) => {
+    if (!media?.url) return;
+    setDraft((prev) => ({
+      ...(prev || {}),
+      music: {
+        ...(prev?.music || {}),
+        assetId: "custom_music",
+        label: media.label || "Imported music",
+        url: media.url,
+        mimeType: media.mimeType || "",
+        volume: Number(prev?.music?.volume ?? 0.12),
+      },
+    }));
+  };
+  const importMediaFile = async (file) => {
+    if (!file || !onImportMedia) return;
+    const result = await onImportMedia(job, file);
+    const media = result?.media;
+    if (!media) return;
+    if (result?.output?.soundPlan) setDraft(result.output.soundPlan);
+    if (media.type === "image") addImageMediaToTrack(media);
+    if (media.type === "audio") addAudioMediaAsSfx(media);
+  };
+  const handleMediaInput = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    await importMediaFile(file);
   };
   const moveEffectToClientX = (index, clientX) => {
     const rect = timelineRef.current?.getBoundingClientRect();
@@ -793,6 +883,46 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
               <span className="text-[10px] font-black text-slate-500">{Math.round(Number(plan.music?.volume ?? 0.12) * 100)}%</span>
             </label>
           </div>
+          {mediaLibrary.length ? (
+            <div className="rounded-2xl bg-white p-3 ring-1 ring-indigo-100">
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Media Library</div>
+                  <div className="text-xs font-bold text-slate-500">Импортированные файлы этой задачи.</div>
+                </div>
+                <button type="button" onClick={() => mediaInputRef.current?.click()} disabled={mediaImporting} className="rounded-2xl bg-slate-950 px-3 py-2 text-xs font-black text-white hover:bg-slate-800 disabled:opacity-40">{mediaImporting ? "Импорт..." : "Импортировать ещё"}</button>
+              </div>
+              <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                {mediaLibrary.slice(0, 12).map((media) => (
+                  <div key={media.id || media.url} className="rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-100">
+                    <div className="flex items-start gap-3">
+                      {media.type === "image" ? (
+                        <img src={media.thumbnailUrl || media.url} alt="" className="h-12 w-12 rounded-xl object-cover ring-1 ring-slate-200" />
+                      ) : (
+                        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-950 text-xs font-black uppercase text-white">{media.type || "file"}</div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-xs font-black text-slate-950">{media.label || media.originalName || "Media"}</div>
+                        <div className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">{media.type} · {media.mimeType || "media"}</div>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {media.type === "image" ? (
+                            <button type="button" onClick={() => addImageMediaToTrack(media)} className="rounded-xl bg-fuchsia-600 px-2.5 py-1.5 text-[10px] font-black text-white hover:bg-fuchsia-700">На Images</button>
+                          ) : null}
+                          {media.type === "audio" ? (
+                            <>
+                              <button type="button" onClick={() => addAudioMediaAsSfx(media)} className="rounded-xl bg-indigo-600 px-2.5 py-1.5 text-[10px] font-black text-white hover:bg-indigo-700">Как SFX</button>
+                              <button type="button" onClick={() => useAudioMediaAsMusic(media)} className="rounded-xl bg-emerald-600 px-2.5 py-1.5 text-[10px] font-black text-white hover:bg-emerald-700">Как музыка</button>
+                            </>
+                          ) : null}
+                          <a href={media.url} target="_blank" rel="noreferrer" className="rounded-xl bg-white px-2.5 py-1.5 text-[10px] font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100">Открыть</a>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_300px]">
             <div className="rounded-2xl bg-slate-950 p-3 text-white ring-1 ring-slate-900">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -802,11 +932,13 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button type="button" onClick={playPlan} className="rounded-2xl bg-indigo-600 px-3 py-2 text-xs font-black text-white hover:bg-indigo-500">Прослушать</button>
+                  <button type="button" onClick={() => mediaInputRef.current?.click()} disabled={mediaImporting} className="rounded-2xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-500 disabled:opacity-40">{mediaImporting ? "Импорт..." : "Импорт"}</button>
                   <button type="button" onClick={() => addEffect()} className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-950 hover:bg-slate-100">Добавить SFX</button>
                   <button type="button" onClick={addTextOverlay} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Текст</button>
                   <button type="button" onClick={addImageOverlay} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Картинка</button>
                 </div>
               </div>
+              <input ref={mediaInputRef} type="file" accept="image/*,audio/*,video/*" onChange={handleMediaInput} className="hidden" />
               <div className="mt-3 flex gap-2 overflow-x-auto rounded-2xl bg-slate-900 p-2">
                 {SOUND_EFFECT_PRESETS.map((preset) => (
                   <button
@@ -927,7 +1059,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
                       })}
                     </div>
                   </div>
-                  <div className="mt-3 text-[10px] font-bold text-slate-500">Кликни клип на дорожке, чтобы редактировать. Text/Images сохраняются как overlay-план; следующий шаг — подключить FFmpeg render этих дорожек.</div>
+                  <div className="mt-3 text-[10px] font-bold text-slate-500">Кликни клип на дорожке, чтобы редактировать. Text/Images/SFX сохраняются в план и применяются при FFmpeg render.</div>
                 </div>
               </div>
             </div>
@@ -953,6 +1085,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
                         onChange={(e) => applyPresetToEffect(selectedClip.index, e.target.value)}
                         className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none"
                       >
+                        {selectedItem.url ? <option value="custom_audio">Imported audio</option> : null}
                         {SOUND_EFFECT_PRESETS.map((preset) => (
                           <option key={preset.assetId} value={preset.assetId}>{preset.label}</option>
                         ))}
@@ -1087,7 +1220,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, loading, renderLoad
   );
 }
 
-function Message({ msg, onStartHeygen, onRefreshHeygen, onSaveScript, onSaveSoundPlan, onRenderSoundPlan, onSelectHeygenVersion, canStartHeygen, aiVideoEnabled, heygenReady, heygenLoading, refreshLoading, scriptSaving, soundPlanSaving, soundRenderLoading, versionLoading, runtimeProfile, runtimePresets, heygenProfileDirty }) {
+function Message({ msg, onStartHeygen, onRefreshHeygen, onSaveScript, onSaveSoundPlan, onRenderSoundPlan, onImportMedia, onSelectHeygenVersion, canStartHeygen, aiVideoEnabled, heygenReady, heygenLoading, refreshLoading, scriptSaving, soundPlanSaving, soundRenderLoading, mediaImportLoading, versionLoading, runtimeProfile, runtimePresets, heygenProfileDirty }) {
   const user = msg.role === "user";
   const inferredVideoId = findHeygenVideoIdFromEvents(msg.events || []);
   const heygen = msg.output?.heygen || (inferredVideoId ? { provider: "heygen", status: "submitted", videoId: inferredVideoId } : null);
@@ -1340,8 +1473,10 @@ function Message({ msg, onStartHeygen, onRefreshHeygen, onSaveScript, onSaveSoun
             soundPlan={msg.output?.soundPlan}
             onSave={onSaveSoundPlan}
             onRender={onRenderSoundPlan}
+            onImportMedia={onImportMedia}
             loading={soundPlanSaving}
             renderLoading={soundRenderLoading}
+            mediaImportLoading={mediaImportLoading}
           />
         ) : null}
         {canShowHeygenAction ? (
@@ -3422,6 +3557,7 @@ export default function AdminAiPlatform() {
   const [scriptSaving, setScriptSaving] = React.useState("");
   const [soundPlanSaving, setSoundPlanSaving] = React.useState("");
   const [soundRenderLoading, setSoundRenderLoading] = React.useState("");
+  const [mediaImportLoading, setMediaImportLoading] = React.useState("");
   const [versionLoading, setVersionLoading] = React.useState("");
   const [packageLoading, setPackageLoading] = React.useState("");
   const [publishLoading, setPublishLoading] = React.useState("");
@@ -3786,6 +3922,38 @@ export default function AdminAiPlatform() {
       await load();
     } finally {
       setSoundRenderLoading("");
+    }
+  }
+
+  async function importTimelineMedia(job, file) {
+    if (!job?.id || !file || mediaImportLoading) return null;
+    setMediaImportLoading(job.id);
+    setError("");
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await apiPostForm(`/api/admin/ai-platform/video-operator/jobs/${job.id}/media`, form, "admin");
+      const nextJob = res?.job || null;
+      const output = res?.output || nextJob?.output || null;
+      setCurrentTask(nextJob);
+      updateJobMessages(nextJob, output);
+      addMessage({
+        role: "assistant",
+        text: `Media Importer: файл "${res?.media?.label || file.name}" добавлен в Timeline Studio.`,
+        events: nextJob?.events || [],
+        output,
+        job: nextJob,
+      });
+      await load();
+      return res;
+    } catch (e) {
+      const msg = e?.message || "Не удалось импортировать медиа";
+      setError(msg);
+      addMessage({ role: "assistant", text: `Media Importer не смог импортировать файл.\n\nПричина: ${msg}` });
+      await load();
+      return null;
+    } finally {
+      setMediaImportLoading("");
     }
   }
 
@@ -4369,6 +4537,7 @@ export default function AdminAiPlatform() {
                   onSaveScript={saveJobScript}
                   onSaveSoundPlan={saveSoundPlan}
                   onRenderSoundPlan={renderSoundPlan}
+                  onImportMedia={importTimelineMedia}
                   onSelectHeygenVersion={selectHeygenVersion}
                   canStartHeygen={aiEnabled && heygenReady}
                   aiVideoEnabled={aiEnabled}
@@ -4378,6 +4547,7 @@ export default function AdminAiPlatform() {
                   scriptSaving={scriptSaving}
                   soundPlanSaving={soundPlanSaving}
                   soundRenderLoading={soundRenderLoading}
+                  mediaImportLoading={mediaImportLoading}
                   versionLoading={versionLoading}
                   runtimeProfile={runtimeProfile}
                   runtimePresets={videoPresetsDraft}

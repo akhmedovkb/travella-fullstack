@@ -5,7 +5,7 @@ const { routeAiTask } = require("../core/taskRouter");
 const { getAiVideoProfileSetting } = require("../core/aiRuntimeSettings");
 const { createAvatarVideo, getAvatarVideo } = require("./heygen.client");
 const { findRefusedServiceByCode, findLatestRefusedService, listRecentRefusedServices } = require("./refusedServiceLookup");
-const { saveHeygenVideoArtifact } = require("./videoArtifactStore");
+const { saveHeygenVideoArtifact, saveVideoOperatorImportedMedia } = require("./videoArtifactStore");
 const { renderSoundPlanToArtifact } = require("./soundRenderWorker");
 const {
   buildHook,
@@ -30,11 +30,15 @@ function estimateSpeechSeconds(script = "") {
 function normalizeSoundCue(cue = {}, index = 0) {
   const time = Number(cue.time);
   const volume = Number(cue.volume);
+  const duration = Number(cue.duration);
   return {
     id: clean(cue.id, `sfx_${index + 1}`),
     assetId: clean(cue.assetId, "soft_whoosh_01"),
     label: clean(cue.label, "Soft whoosh").slice(0, 80),
+    url: clean(cue.url, ""),
+    mimeType: clean(cue.mimeType, ""),
     time: Number.isFinite(time) ? Math.max(0, Math.round(time * 100) / 100) : 0,
+    duration: Number.isFinite(duration) ? Math.max(0.05, Math.min(120, Math.round(duration * 100) / 100)) : undefined,
     volume: Number.isFinite(volume) ? Math.max(0, Math.min(1, Math.round(volume * 100) / 100)) : 0.22,
     enabled: cue.enabled === false ? false : true,
     fadeIn: Math.max(0, Math.min(3, Number(cue.fadeIn ?? 0.05))),
@@ -119,6 +123,55 @@ function saveSoundPlanForVideoJob({ jobId, soundPlan = null, actor = {} }) {
     meta: { effects: plan.effects.length, preset: plan.preset, actor },
   });
   return { success: true, job: nextJob, output: nextJob.output };
+}
+
+async function importMediaForVideoJob({ jobId, file, actor = {} }) {
+  const job = getJob(jobId);
+  if (!job || job.employeeId !== "video_operator") {
+    return { success: false, error: { code: "JOB_NOT_FOUND", message: "AI job not found" } };
+  }
+  if (!file?.buffer?.length) {
+    return { success: false, job, output: job.output, error: { code: "EMPTY_FILE", message: "Файл пустой." } };
+  }
+
+  const output = job.output || {};
+  const serviceCode = output.service?.code || output.service?.videoContext?.code || "";
+  const artifact = await saveVideoOperatorImportedMedia({ jobId: job.id, file, serviceCode });
+  const media = {
+    id: `media_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`,
+    type: artifact.type,
+    label: clean(file.originalname, artifact.type || "media").slice(0, 120),
+    url: artifact.url,
+    provider: artifact.provider,
+    key: artifact.key || artifact.publicId || "",
+    mimeType: artifact.mimeType,
+    bytes: artifact.bytes,
+    thumbnailUrl: artifact.thumbnailUrl || artifact.url,
+    durationSeconds: artifact.durationSeconds || null,
+    uploadedAt: new Date().toISOString(),
+    uploadedBy: actor,
+  };
+  const soundPlan = output.soundPlan || buildSoundPlan(output);
+  const mediaLibrary = Array.isArray(soundPlan.mediaLibrary) ? soundPlan.mediaLibrary : [];
+  const nextOutput = {
+    ...output,
+    soundPlan: {
+      ...soundPlan,
+      mediaLibrary: [media, ...mediaLibrary].slice(0, 80),
+      updatedAt: new Date().toISOString(),
+      updatedBy: actor,
+    },
+    nextStep: "Медиа импортировано в Timeline Studio. Добавь файл на нужную дорожку и сохрани sound plan.",
+  };
+  const nextJob = updateJob(job.id, { output: nextOutput });
+  addEvent(job.id, {
+    step: "sound",
+    type: "tool_result",
+    tool: "MediaImporter",
+    message: `Импортирован файл для Timeline Studio: ${media.label}.`,
+    meta: { type: media.type, url: media.url, actor },
+  });
+  return { success: true, job: nextJob, output: nextJob.output, media };
 }
 
 async function renderSoundPlanForVideoJob({ jobId, actor = {} }) {
@@ -955,6 +1008,7 @@ module.exports = {
   startHeygenForVideoJob,
   selectHeygenVersionForVideoJob,
   saveSoundPlanForVideoJob,
+  importMediaForVideoJob,
   renderSoundPlanForVideoJob,
   refreshHeygenForVideoJob,
   handleHeygenWebhook,

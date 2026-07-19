@@ -3,6 +3,7 @@
 const express = require("express");
 const axios = require("axios");
 const { Blob } = require("buffer");
+const multer = require("multer");
 const router = express.Router();
 
 const authenticateToken = require("../middleware/authenticateToken");
@@ -26,6 +27,7 @@ const {
   startHeygenForVideoJob,
   selectHeygenVersionForVideoJob,
   saveSoundPlanForVideoJob,
+  importMediaForVideoJob,
   renderSoundPlanForVideoJob,
   refreshHeygenForVideoJob,
   listVideoOperatorJobs,
@@ -49,6 +51,26 @@ const AI_PUBLISH_TELEGRAM_CHAT_ID = String(
 ).trim();
 const TELEGRAM_VIDEO_UPLOAD_MAX_BYTES = 49 * 1024 * 1024;
 const TELEGRAM_CHAT_HEALTH_CACHE_MS = 60000;
+const videoOperatorMediaUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 120 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const mimetype = String(file?.mimetype || "").toLowerCase();
+    if (mimetype.startsWith("image/") || mimetype.startsWith("audio/") || mimetype.startsWith("video/")) return cb(null, true);
+    return cb(new Error("unsupported_media_type"));
+  },
+});
+function handleVideoOperatorMediaUpload(req, res, next) {
+  videoOperatorMediaUpload.single("file")(req, res, (err) => {
+    if (!err) return next();
+    const code = err?.code || err?.message || "media_upload_failed";
+    const message =
+      code === "LIMIT_FILE_SIZE" ? "Файл слишком большой. Максимум 120 MB."
+      : code === "unsupported_media_type" ? "Можно импортировать только image/audio/video."
+      : err?.message || "Не удалось импортировать медиа";
+    return res.status(400).json({ success: false, code, message });
+  });
+}
 const SITE_URL = String(
   process.env.SITE_PUBLIC_URL ||
     process.env.SITE_URL ||
@@ -1386,6 +1408,29 @@ router.patch("/video-operator/jobs/:id/sound-plan", (req, res) => {
     return res.status(status).json(result);
   }
   return res.json(result);
+});
+
+router.post("/video-operator/jobs/:id/media", handleVideoOperatorMediaUpload, async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, message: "Файл не выбран" });
+    const result = await importMediaForVideoJob({
+      jobId: req.params.id,
+      file: req.file,
+      actor: { id: req.user?.id || req.user?.userId || null, role: req.user?.role || req.user?.roles || null },
+    });
+    if (!result.success) {
+      const status = result.error?.code === "JOB_NOT_FOUND" ? 404 : 400;
+      return res.status(status).json(result);
+    }
+    return res.json(result);
+  } catch (err) {
+    const code = err?.code || err?.message || "media_upload_failed";
+    const message =
+      code === "LIMIT_FILE_SIZE" ? "Файл слишком большой. Максимум 120 MB."
+      : code === "unsupported_media_type" ? "Можно импортировать только image/audio/video."
+      : err?.message || "Не удалось импортировать медиа";
+    return res.status(400).json({ success: false, code, message });
+  }
 });
 
 router.post("/video-operator/jobs/:id/sound-plan/render", async (req, res) => {
