@@ -568,6 +568,33 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     const current = Number(selectedItem?.time || 0);
     updateSelectedClip({ time: Math.max(0, Math.min(duration, Math.round((current + amount) * 10) / 10)) });
   };
+  React.useEffect(() => {
+    if (!editorOpen) return undefined;
+    const isTypingTarget = (target) => {
+      const tagName = String(target?.tagName || "").toLowerCase();
+      return tagName === "input" || tagName === "textarea" || tagName === "select" || target?.isContentEditable;
+    };
+    const handleKeyDown = (event) => {
+      if (!selectedItem || isTypingTarget(event.target)) return;
+      if (event.key === "Delete" || event.key === "Backspace") {
+        event.preventDefault();
+        removeSelectedClip();
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && String(event.key).toLowerCase() === "d") {
+        event.preventDefault();
+        duplicateSelectedClip();
+        return;
+      }
+      if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+        event.preventDefault();
+        const direction = event.key === "ArrowLeft" ? -1 : 1;
+        nudgeSelectedClip(direction * (event.shiftKey ? 1 : 0.1));
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [editorOpen, selectedItem, selectedClip, effects, textOverlays, imageOverlays, videoClips, duration]);
   const updateTrim = (patch) => {
     setDraft((prev) => ({
       ...(prev || {}),
@@ -1313,7 +1340,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       })}
                     </div>
                   </div>
-                  <div className="mt-3 text-[10px] font-bold text-slate-500">Кликни клип на дорожке, чтобы редактировать. Video/Text/Images/SFX сохраняются в план и применяются при FFmpeg render.</div>
+                  <div className="mt-3 text-[10px] font-bold text-slate-500">Кликни клип на дорожке, чтобы редактировать. Стрелки двигают клип, Shift+стрелки двигают быстрее, Ctrl+D дублирует, Delete удаляет.</div>
                 </div>
               </div>
             </div>
