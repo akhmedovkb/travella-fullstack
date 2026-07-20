@@ -386,6 +386,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const [selectedClip, setSelectedClip] = React.useState({ type: "sfx", index: 0 });
   const [editorOpen, setEditorOpen] = React.useState(false);
   const [currentTime, setCurrentTime] = React.useState(0);
+  const [editingTextIndex, setEditingTextIndex] = React.useState(null);
   const timelineRef = React.useRef(null);
   const previewFrameRef = React.useRef(null);
   const mediaInputRef = React.useRef(null);
@@ -934,25 +935,57 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                   {previewUrl ? (
                     <div ref={previewFrameRef} className="relative mt-2 overflow-hidden rounded-xl bg-black">
                       <video src={previewUrl} controls onTimeUpdate={(event) => seekTimeline(event.currentTarget.currentTime)} className="aspect-[9/16] max-h-[210px] w-full bg-black object-contain" />
-                      {textOverlays.map((item, index) => item.enabled === false || !isOverlayVisibleAtTime(item) ? null : (
-                        <button
-                          key={`preview_text_${item.id || index}`}
-                          type="button"
-                          onPointerDown={(event) => startDragOverlayOnPreview(event, "text", index)}
-                          className={cn("absolute -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-lg bg-black/70 px-2 py-1 text-center font-black text-white ring-2 ring-transparent active:cursor-grabbing", selectedClip.type === "text" && selectedClip.index === index && "ring-white")}
-                          style={{ left: `${Number(item.x ?? 50)}%`, top: `${Number(item.y ?? 78)}%`, fontSize: `${Number(item.fontSize || 22) * Number(item.scale || 1)}px`, maxWidth: "80%" }}
-                        >
-                          {item.text || item.label || "Text"}
-                          <span
-                            onPointerDown={(event) => startScaleOverlayOnPreview(event, "text", index)}
-                            className={cn(
-                              "absolute -bottom-2 -right-2 h-4 w-4 cursor-nwse-resize rounded-full bg-white shadow ring-2 ring-slate-950/20",
-                              selectedClip.type === "text" && selectedClip.index === index ? "block" : "hidden"
-                            )}
-                            title="Изменить размер текста"
-                          />
-                        </button>
-                      ))}
+                      {textOverlays.map((item, index) => {
+                        if (item.enabled === false || !isOverlayVisibleAtTime(item)) return null;
+                        const textStyle = { left: `${Number(item.x ?? 50)}%`, top: `${Number(item.y ?? 78)}%`, fontSize: `${Number(item.fontSize || 22) * Number(item.scale || 1)}px`, maxWidth: "80%" };
+                        if (editingTextIndex === index) {
+                          return (
+                            <textarea
+                              key={`preview_text_edit_${item.id || index}`}
+                              autoFocus
+                              value={item.text || ""}
+                              onChange={(event) => updateOverlay("text", index, { text: event.target.value })}
+                              onBlur={() => setEditingTextIndex(null)}
+                              onKeyDown={(event) => {
+                                if (event.key === "Escape" || (event.key === "Enter" && (event.ctrlKey || event.metaKey))) {
+                                  event.preventDefault();
+                                  setEditingTextIndex(null);
+                                }
+                              }}
+                              onPointerDown={(event) => event.stopPropagation()}
+                              className="absolute min-h-16 w-[78%] -translate-x-1/2 -translate-y-1/2 resize-none rounded-xl bg-white/95 px-3 py-2 text-center font-black text-slate-950 shadow-2xl outline-none ring-2 ring-indigo-500"
+                              style={textStyle}
+                            />
+                          );
+                        }
+                        return (
+                          <div
+                            key={`preview_text_${item.id || index}`}
+                            role="button"
+                            tabIndex={0}
+                            onPointerDown={(event) => startDragOverlayOnPreview(event, "text", index)}
+                            onDoubleClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              setSelectedClip({ type: "text", index });
+                              setEditingTextIndex(index);
+                            }}
+                            className={cn("absolute -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-lg bg-black/70 px-2 py-1 text-center font-black text-white ring-2 ring-transparent active:cursor-grabbing", selectedClip.type === "text" && selectedClip.index === index && "ring-white")}
+                            style={textStyle}
+                            title="Перетащи текст. Двойной клик — редактировать."
+                          >
+                            {item.text || item.label || "Text"}
+                            <span
+                              onPointerDown={(event) => startScaleOverlayOnPreview(event, "text", index)}
+                              className={cn(
+                                "absolute -bottom-2 -right-2 h-4 w-4 cursor-nwse-resize rounded-full bg-white shadow ring-2 ring-slate-950/20",
+                                selectedClip.type === "text" && selectedClip.index === index ? "block" : "hidden"
+                              )}
+                              title="Изменить размер текста"
+                            />
+                          </div>
+                        );
+                      })}
                       {imageOverlays.map((item, index) => item.enabled === false || !isOverlayVisibleAtTime(item) ? null : (
                         <button
                           key={`preview_image_${item.id || index}`}
