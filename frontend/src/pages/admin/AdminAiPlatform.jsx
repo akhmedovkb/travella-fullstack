@@ -841,6 +841,30 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     window.addEventListener("pointermove", handleMove);
     window.addEventListener("pointerup", handleUp, { once: true });
   };
+  const startScaleOverlayOnPreview = (event, type, index) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setSelectedClip({ type, index });
+    const rect = previewFrameRef.current?.getBoundingClientRect();
+    const item = getOverlayItems(type)[index];
+    if (!rect?.width || !rect?.height || !item) return;
+    const centerX = rect.left + (Number(item.x ?? 50) / 100) * rect.width;
+    const centerY = rect.top + (Number(item.y ?? 50) / 100) * rect.height;
+    const startDistance = Math.max(12, Math.hypot(event.clientX - centerX, event.clientY - centerY));
+    const baseScale = Number(item.scale || 1);
+    const resizeTo = (clientX, clientY) => {
+      const distance = Math.max(12, Math.hypot(clientX - centerX, clientY - centerY));
+      const nextScale = Math.max(0.35, Math.min(3, baseScale * (distance / startDistance)));
+      updateOverlay(type, index, { scale: Math.round(nextScale * 100) / 100 });
+    };
+    const handleMove = (moveEvent) => resizeTo(moveEvent.clientX, moveEvent.clientY);
+    const handleUp = () => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+    };
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp, { once: true });
+  };
   if (!job?.id) return null;
   return (
     <div className="mt-3 rounded-2xl bg-indigo-50 p-4 ring-1 ring-indigo-100">
@@ -919,6 +943,14 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                           style={{ left: `${Number(item.x ?? 50)}%`, top: `${Number(item.y ?? 78)}%`, fontSize: `${Number(item.fontSize || 22) * Number(item.scale || 1)}px`, maxWidth: "80%" }}
                         >
                           {item.text || item.label || "Text"}
+                          <span
+                            onPointerDown={(event) => startScaleOverlayOnPreview(event, "text", index)}
+                            className={cn(
+                              "absolute -bottom-2 -right-2 h-4 w-4 cursor-nwse-resize rounded-full bg-white shadow ring-2 ring-slate-950/20",
+                              selectedClip.type === "text" && selectedClip.index === index ? "block" : "hidden"
+                            )}
+                            title="Изменить размер текста"
+                          />
                         </button>
                       ))}
                       {imageOverlays.map((item, index) => item.enabled === false || !isOverlayVisibleAtTime(item) ? null : (
@@ -930,6 +962,14 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                           style={{ left: `${Number(item.x ?? 50)}%`, top: `${Number(item.y ?? 72)}%`, width: `${Number(item.width || 34) * Number(item.scale || 1)}%` }}
                         >
                           {item.url ? <img src={item.url} alt={item.label || "Overlay"} className="h-full w-full rounded-lg object-contain" /> : (item.label || "Sticker")}
+                          <span
+                            onPointerDown={(event) => startScaleOverlayOnPreview(event, "image", index)}
+                            className={cn(
+                              "absolute -bottom-2 -right-2 h-4 w-4 cursor-nwse-resize rounded-full bg-white shadow ring-2 ring-slate-950/20",
+                              selectedClip.type === "image" && selectedClip.index === index ? "block" : "hidden"
+                            )}
+                            title="Изменить размер картинки"
+                          />
                         </button>
                       ))}
                       {videoClips.map((item, index) => item.enabled === false || !isOverlayVisibleAtTime(item) ? null : (
