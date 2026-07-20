@@ -721,6 +721,26 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     updateEffect(index, { time: Math.round(ratio * duration * 10) / 10 });
   };
+  const resizeEffectToClientX = (index, edge, clientX) => {
+    const rect = timelineRef.current?.getBoundingClientRect();
+    const source = effects[index];
+    if (!rect?.width || !source) return;
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const pointerTime = Math.round(ratio * duration * 10) / 10;
+    const start = Number(source.time || 0);
+    const clipDuration = Number(source.duration || getSoundPreset(source.assetId).tone?.duration || 0.3);
+    const end = start + Math.max(0.1, clipDuration);
+    if (edge === "left") {
+      const nextStart = Math.max(0, Math.min(end - 0.1, pointerTime));
+      updateEffect(index, {
+        time: Math.round(nextStart * 10) / 10,
+        duration: Math.round((end - nextStart) * 10) / 10,
+      });
+      return;
+    }
+    const nextEnd = Math.max(start + 0.1, Math.min(duration, pointerTime));
+    updateEffect(index, { duration: Math.round((nextEnd - start) * 10) / 10 });
+  };
   const moveOverlayToClientX = (type, index, clientX) => {
     const rect = timelineRef.current?.getBoundingClientRect();
     if (!rect?.width) return;
@@ -755,6 +775,20 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     setSelectedClip({ type: "sfx", index });
     moveEffectToClientX(index, event.clientX);
     const handleMove = (moveEvent) => moveEffectToClientX(index, moveEvent.clientX);
+    const handleUp = () => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+    };
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp, { once: true });
+  };
+  const startResizeEffect = (event, index, edge) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setSelectedIndex(index);
+    setSelectedClip({ type: "sfx", index });
+    resizeEffectToClientX(index, edge, event.clientX);
+    const handleMove = (moveEvent) => resizeEffectToClientX(index, edge, moveEvent.clientX);
     const handleUp = () => {
       window.removeEventListener("pointermove", handleMove);
       window.removeEventListener("pointerup", handleUp);
@@ -1139,8 +1173,18 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                             style={{ left: `${left}%`, width: `${width}%`, minWidth: 96 }}
                             title="Перетащи по таймлайну. Двойной клик — прослушать."
                           >
+                            <span
+                              onPointerDown={(event) => startResizeEffect(event, index, "left")}
+                              className="absolute inset-y-0 left-0 w-3 cursor-ew-resize rounded-l-xl bg-white/20 hover:bg-white/40"
+                              title="Обрезать начало SFX"
+                            />
                             <span className="block truncate">{effect.label || `SFX ${index + 1}`}</span>
                             <span className="mt-1 block text-[10px] text-white/70">{Number(effect.time || 0).toFixed(1)}s · {Number(effect.duration || 0.3).toFixed(1)}s</span>
+                            <span
+                              onPointerDown={(event) => startResizeEffect(event, index, "right")}
+                              className="absolute inset-y-0 right-0 w-3 cursor-ew-resize rounded-r-xl bg-white/20 hover:bg-white/40"
+                              title="Обрезать конец SFX"
+                            />
                           </button>
                         );
                       })}
@@ -1155,8 +1199,18 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                         const width = Math.max(8, Math.min(40, (Number(item.duration || 3) / duration) * 100));
                         return (
                           <button type="button" key={item.id || index} onPointerDown={(event) => startDragOverlay(event, "text", index)} onClick={() => setSelectedClip({ type: "text", index })} className={cn("absolute top-2 h-10 cursor-grab rounded-xl bg-amber-400 px-3 py-1 text-left text-[10px] font-black text-slate-950 shadow ring-2 ring-transparent active:cursor-grabbing", selectedClip.type === "text" && selectedClip.index === index && "ring-white")} style={{ left: `${left}%`, width: `${width}%` }}>
+                            <span
+                              onPointerDown={(event) => startResizeOverlay(event, "text", index, "left")}
+                              className="absolute inset-y-0 left-0 w-3 cursor-ew-resize rounded-l-xl bg-white/30 hover:bg-white/50"
+                              title="Обрезать начало текста"
+                            />
                             <span className="block truncate">{item.label || item.text || "Text"}</span>
                             <span className="block text-[10px] opacity-70">{Number(item.time || 0).toFixed(1)}s · {Number(item.duration || 3).toFixed(1)}s</span>
+                            <span
+                              onPointerDown={(event) => startResizeOverlay(event, "text", index, "right")}
+                              className="absolute inset-y-0 right-0 w-3 cursor-ew-resize rounded-r-xl bg-white/30 hover:bg-white/50"
+                              title="Обрезать конец текста"
+                            />
                           </button>
                         );
                       })}
@@ -1171,8 +1225,18 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                         const width = Math.max(8, Math.min(40, (Number(item.duration || 4) / duration) * 100));
                         return (
                           <button type="button" key={item.id || index} onPointerDown={(event) => startDragOverlay(event, "image", index)} onClick={() => setSelectedClip({ type: "image", index })} className={cn("absolute top-2 h-10 cursor-grab rounded-xl bg-fuchsia-500 px-3 py-1 text-left text-[10px] font-black text-white shadow ring-2 ring-transparent active:cursor-grabbing", selectedClip.type === "image" && selectedClip.index === index && "ring-white")} style={{ left: `${left}%`, width: `${width}%` }}>
+                            <span
+                              onPointerDown={(event) => startResizeOverlay(event, "image", index, "left")}
+                              className="absolute inset-y-0 left-0 w-3 cursor-ew-resize rounded-l-xl bg-white/20 hover:bg-white/40"
+                              title="Обрезать начало картинки"
+                            />
                             <span className="block truncate">{item.label || "Image"}</span>
                             <span className="block text-[10px] text-white/70">{Number(item.time || 0).toFixed(1)}s · {Number(item.duration || 4).toFixed(1)}s</span>
+                            <span
+                              onPointerDown={(event) => startResizeOverlay(event, "image", index, "right")}
+                              className="absolute inset-y-0 right-0 w-3 cursor-ew-resize rounded-r-xl bg-white/20 hover:bg-white/40"
+                              title="Обрезать конец картинки"
+                            />
                           </button>
                         );
                       })}
