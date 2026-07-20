@@ -1078,17 +1078,17 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                 <div className="min-w-[620px]">
                   <div className="mb-3 grid grid-cols-[74px_1fr] gap-3">
                     <div className="py-1 text-[10px] font-black uppercase tracking-wide text-slate-400">Playhead</div>
-                    <div className="flex items-center gap-3">
+                    <div className="relative">
                       <button
                         type="button"
                         onPointerDown={startScrubTimeline}
-                        className="relative h-5 flex-1 cursor-pointer rounded-full bg-white/90"
+                        className="relative h-5 w-full cursor-pointer rounded-full bg-white/90"
                         title="Перетащи, чтобы перейти на секунду ролика."
                       >
                         <span className="absolute inset-y-0 left-0 rounded-full bg-indigo-500" style={{ width: `${playheadLeft}%` }} />
                         <span className="absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-indigo-500 ring-2 ring-white shadow" style={{ left: `${playheadLeft}%` }} />
                       </button>
-                      <div className="w-14 rounded-lg bg-slate-800 px-2 py-1 text-center text-[10px] font-black text-white ring-1 ring-white/10">{Math.round(currentTime * 10) / 10}s</div>
+                      <div className="pointer-events-none absolute right-1 top-1/2 min-w-12 -translate-y-1/2 rounded-lg bg-slate-800 px-2 py-1 text-center text-[10px] font-black text-white ring-1 ring-white/10">{Math.round(currentTime * 10) / 10}s</div>
                     </div>
                   </div>
                   <div className="grid grid-cols-[74px_1fr] gap-3">
