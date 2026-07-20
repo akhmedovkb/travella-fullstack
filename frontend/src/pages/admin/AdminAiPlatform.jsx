@@ -1001,49 +1001,6 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
               <span className="text-[10px] font-black text-slate-500">{Math.round(Number(plan.music?.volume ?? 0.12) * 100)}%</span>
             </label>
           </div>
-          {mediaLibrary.length ? (
-            <div className="rounded-2xl bg-white p-3 ring-1 ring-indigo-100">
-              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Media Library</div>
-                  <div className="text-xs font-bold text-slate-500">Импортированные файлы этой задачи.</div>
-                </div>
-                <button type="button" onClick={() => mediaInputRef.current?.click()} disabled={mediaImporting} className="rounded-2xl bg-slate-950 px-3 py-2 text-xs font-black text-white hover:bg-slate-800 disabled:opacity-40">{mediaImporting ? "Импорт..." : "Импортировать ещё"}</button>
-              </div>
-              <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                {mediaLibrary.slice(0, 12).map((media) => (
-                  <div key={media.id || media.url} className="rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-100">
-                    <div className="flex items-start gap-3">
-                      {media.type === "image" ? (
-                        <img src={media.thumbnailUrl || media.url} alt="" className="h-12 w-12 rounded-xl object-cover ring-1 ring-slate-200" />
-                      ) : (
-                        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-950 text-xs font-black uppercase text-white">{media.type || "file"}</div>
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-xs font-black text-slate-950">{media.label || media.originalName || "Media"}</div>
-                        <div className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">{media.type} · {media.mimeType || "media"}</div>
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                          {media.type === "image" ? (
-                            <button type="button" onClick={() => addImageMediaToTrack(media)} className="rounded-xl bg-fuchsia-600 px-2.5 py-1.5 text-[10px] font-black text-white hover:bg-fuchsia-700">На Images</button>
-                          ) : null}
-                          {media.type === "video" ? (
-                            <button type="button" onClick={() => addVideoMediaToTrack(media)} className="rounded-xl bg-sky-600 px-2.5 py-1.5 text-[10px] font-black text-white hover:bg-sky-700">На Video</button>
-                          ) : null}
-                          {media.type === "audio" ? (
-                            <>
-                              <button type="button" onClick={() => addAudioMediaAsSfx(media)} className="rounded-xl bg-indigo-600 px-2.5 py-1.5 text-[10px] font-black text-white hover:bg-indigo-700">Как SFX</button>
-                              <button type="button" onClick={() => useAudioMediaAsMusic(media)} className="rounded-xl bg-emerald-600 px-2.5 py-1.5 text-[10px] font-black text-white hover:bg-emerald-700">Как музыка</button>
-                            </>
-                          ) : null}
-                          <a href={media.url} target="_blank" rel="noreferrer" className="rounded-xl bg-white px-2.5 py-1.5 text-[10px] font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100">Открыть</a>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
           <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_300px]">
             <div className="rounded-2xl bg-slate-950 p-3 text-white ring-1 ring-slate-900">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -1060,6 +1017,47 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                 </div>
               </div>
               <input ref={mediaInputRef} type="file" accept="image/*,audio/*,video/*" onChange={handleMediaInput} className="hidden" />
+              {mediaLibrary.length ? (
+                <div className="mt-3 rounded-2xl bg-slate-900 p-2 ring-1 ring-white/5">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <div>
+                      <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">Asset Bin</div>
+                      <div className="text-[10px] font-bold text-slate-400">Файлы этой задачи. Добавляются на текущую секунду playhead.</div>
+                    </div>
+                    <button type="button" onClick={() => mediaInputRef.current?.click()} disabled={mediaImporting} className="shrink-0 rounded-2xl bg-emerald-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-emerald-500 disabled:opacity-40">{mediaImporting ? "Импорт..." : "+ файл"}</button>
+                  </div>
+                  <div className="flex gap-2 overflow-x-auto pb-1">
+                    {mediaLibrary.slice(0, 14).map((media) => (
+                      <div key={media.id || media.url} className="grid w-52 shrink-0 grid-cols-[44px_1fr] gap-2 rounded-2xl bg-slate-800 p-2 ring-1 ring-white/5">
+                        {media.type === "image" ? (
+                          <img src={media.thumbnailUrl || media.url} alt="" className="h-11 w-11 rounded-xl object-cover ring-1 ring-white/10" />
+                        ) : (
+                          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-950 text-[10px] font-black uppercase text-white ring-1 ring-white/10">{media.type || "file"}</div>
+                        )}
+                        <div className="min-w-0">
+                          <div className="truncate text-[11px] font-black text-white">{media.label || media.originalName || "Media"}</div>
+                          <div className="mt-0.5 text-[9px] font-bold uppercase tracking-wide text-slate-500">{media.type} · {media.mimeType || "media"}</div>
+                          <div className="mt-1.5 flex flex-wrap gap-1">
+                            {media.type === "image" ? (
+                              <button type="button" onClick={() => addImageMediaToTrack(media)} className="rounded-lg bg-fuchsia-500 px-2 py-1 text-[9px] font-black text-white hover:bg-fuchsia-400">Image</button>
+                            ) : null}
+                            {media.type === "video" ? (
+                              <button type="button" onClick={() => addVideoMediaToTrack(media)} className="rounded-lg bg-sky-500 px-2 py-1 text-[9px] font-black text-white hover:bg-sky-400">Video</button>
+                            ) : null}
+                            {media.type === "audio" ? (
+                              <>
+                                <button type="button" onClick={() => addAudioMediaAsSfx(media)} className="rounded-lg bg-indigo-500 px-2 py-1 text-[9px] font-black text-white hover:bg-indigo-400">SFX</button>
+                                <button type="button" onClick={() => useAudioMediaAsMusic(media)} className="rounded-lg bg-emerald-500 px-2 py-1 text-[9px] font-black text-white hover:bg-emerald-400">Music</button>
+                              </>
+                            ) : null}
+                            <a href={media.url} target="_blank" rel="noreferrer" className="rounded-lg bg-white/10 px-2 py-1 text-[9px] font-black text-white hover:bg-white/15">Open</a>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
               <div className="mt-3 flex gap-2 overflow-x-auto rounded-2xl bg-slate-900 p-2">
                 {SOUND_EFFECT_PRESETS.map((preset) => (
                   <button
