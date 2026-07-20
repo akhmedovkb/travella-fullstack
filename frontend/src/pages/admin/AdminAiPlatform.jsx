@@ -727,6 +727,28 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     updateOverlay(type, index, { time: Math.round(ratio * duration * 10) / 10 });
   };
+  const resizeOverlayToClientX = (type, index, edge, clientX) => {
+    const rect = timelineRef.current?.getBoundingClientRect();
+    const source = getOverlayItems(type)[index];
+    if (!rect?.width || !source) return;
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const pointerTime = Math.round(ratio * duration * 10) / 10;
+    const start = Number(source.time || 0);
+    const clipDuration = Number(source.duration || (type === "video" ? 5 : type === "image" ? 4 : 3));
+    const end = start + Math.max(0.1, clipDuration);
+    if (edge === "left") {
+      const nextStart = Math.max(0, Math.min(end - 0.2, pointerTime));
+      const delta = nextStart - start;
+      updateOverlay(type, index, {
+        time: Math.round(nextStart * 10) / 10,
+        duration: Math.round((end - nextStart) * 10) / 10,
+        ...(type === "video" ? { sourceStart: Math.max(0, Math.round((Number(source.sourceStart || 0) + delta) * 10) / 10) } : {}),
+      });
+      return;
+    }
+    const nextEnd = Math.max(start + 0.2, Math.min(duration, pointerTime));
+    updateOverlay(type, index, { duration: Math.round((nextEnd - start) * 10) / 10 });
+  };
   const startDragEffect = (event, index) => {
     event.preventDefault();
     setSelectedIndex(index);
@@ -745,6 +767,19 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     setSelectedClip({ type, index });
     moveOverlayToClientX(type, index, event.clientX);
     const handleMove = (moveEvent) => moveOverlayToClientX(type, index, moveEvent.clientX);
+    const handleUp = () => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+    };
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp, { once: true });
+  };
+  const startResizeOverlay = (event, type, index, edge) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setSelectedClip({ type, index });
+    resizeOverlayToClientX(type, index, edge, event.clientX);
+    const handleMove = (moveEvent) => resizeOverlayToClientX(type, index, edge, moveEvent.clientX);
     const handleUp = () => {
       window.removeEventListener("pointermove", handleMove);
       window.removeEventListener("pointerup", handleUp);
@@ -1052,8 +1087,18 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                             style={{ left: `${left}%`, width: `${width}%`, minWidth: 112 }}
                             title="Видео-вставка. Перетащи по таймлайну."
                           >
+                            <span
+                              onPointerDown={(event) => startResizeOverlay(event, "video", index, "left")}
+                              className="absolute inset-y-0 left-0 w-3 cursor-ew-resize rounded-l-lg bg-white/25 hover:bg-white/45"
+                              title="Обрезать начало"
+                            />
                             <span className="block truncate">{item.label || "Video insert"}</span>
                             <span className="block text-[10px] text-white/70">{Number(item.time || 0).toFixed(1)}s · {Number(item.duration || 5).toFixed(1)}s</span>
+                            <span
+                              onPointerDown={(event) => startResizeOverlay(event, "video", index, "right")}
+                              className="absolute inset-y-0 right-0 w-3 cursor-ew-resize rounded-r-lg bg-white/25 hover:bg-white/45"
+                              title="Обрезать конец"
+                            />
                           </button>
                         );
                       })}
