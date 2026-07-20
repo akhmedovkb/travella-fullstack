@@ -70,6 +70,18 @@ function normalizeImageOverlay(item = {}, index = 0) {
   };
 }
 
+function normalizeVideoClip(item = {}, index = 0) {
+  return {
+    id: String(item.id || `video_${index}`).trim(),
+    label: String(item.label || `Video ${index + 1}`).trim(),
+    url: String(item.url || "").trim(),
+    time: Math.max(0, safeNumber(item.time, 0)),
+    sourceStart: Math.max(0, safeNumber(item.sourceStart, 0)),
+    duration: clampNumber(item.duration, 0.1, 180, 5),
+    enabled: item.enabled === false ? false : true,
+  };
+}
+
 function escapeDrawtext(value = "") {
   return String(value || "")
     .replace(/\\/g, "\\\\")
@@ -92,7 +104,7 @@ function getToneForEffect(assetId = "") {
   return { frequency: 720, duration: 0.18 };
 }
 
-function buildFfmpegArgs({ inputPath, outputPath, soundPlan = {}, imageInputs = [], audioInputs = {} }) {
+function buildFfmpegArgs({ inputPath, outputPath, soundPlan = {}, imageInputs = [], videoInputs = [], audioInputs = {} }) {
   const musicVolume = Math.max(0, Math.min(0.5, safeNumber(soundPlan.music?.volume, 0.1) * 1.4));
   const effects = (Array.isArray(soundPlan.effects) ? soundPlan.effects : [])
     .slice(0, 8)
@@ -149,8 +161,28 @@ function buildFfmpegArgs({ inputPath, outputPath, soundPlan = {}, imageInputs = 
     args.push("-loop", "1", "-i", item.path);
   });
 
+  videoInputs.forEach((item) => {
+    item.inputIndex = nextInputIndex;
+    nextInputIndex += 1;
+    args.push("-i", item.path);
+  });
+
   let videoLabel = "[0:v]";
   let hasVideoFilters = false;
+
+  videoInputs.forEach((item, index) => {
+    const normalized = normalizeVideoClip(item.clip, index);
+    const trimmed = `[vcliptrim${index}]`;
+    const scaled = `[vclipscaled${index}]`;
+    const ref = `[vclipref${index}]`;
+    const out = `[vclip${index}]`;
+    const enable = `between(t\\,${normalized.time}\\,${normalized.time + normalized.duration})`;
+    filterParts.push(`[${item.inputIndex}:v]trim=start=${normalized.sourceStart}:duration=${normalized.duration},setpts=PTS-STARTPTS+${normalized.time}/TB${trimmed}`);
+    filterParts.push(`${trimmed}${videoLabel}scale2ref=w=main_w:h=main_h${scaled}${ref}`);
+    filterParts.push(`${ref}${scaled}overlay=0:0:enable='${enable}'${out}`);
+    videoLabel = out;
+    hasVideoFilters = true;
+  });
 
   textOverlays.forEach((item, index) => {
     const out = `[vtext${index}]`;
@@ -274,6 +306,28 @@ async function prepareImageInputs(soundPlan = {}, tempDir) {
   return inputs;
 }
 
+async function prepareVideoInputs(soundPlan = {}, tempDir) {
+  const clips = (Array.isArray(soundPlan.videoClips) ? soundPlan.videoClips : [])
+    .slice(0, 8)
+    .map(normalizeVideoClip)
+    .filter((item) => item.enabled !== false && item.url);
+  const inputs = [];
+
+  for (let index = 0; index < clips.length; index += 1) {
+    const clip = clips[index];
+    try {
+      inputs.push({
+        path: await downloadMediaToTemp(clip.url, tempDir, `video-clip-${index}`, 350 * 1024 * 1024),
+        clip,
+      });
+    } catch {
+      // Keep renderable: failed video inserts are skipped instead of failing the whole render.
+    }
+  }
+
+  return inputs;
+}
+
 function mediaExtFromContentType(contentType = "", fallback = "bin") {
   const clean = String(contentType || "").toLowerCase();
   if (clean.includes("mpeg") || clean.includes("mp3")) return "mp3";
@@ -281,6 +335,8 @@ function mediaExtFromContentType(contentType = "", fallback = "bin") {
   if (clean.includes("wav")) return "wav";
   if (clean.includes("ogg")) return "ogg";
   if (clean.includes("aac")) return "aac";
+  if (clean.includes("quicktime")) return "mov";
+  if (clean.includes("webm")) return "webm";
   if (clean.includes("png")) return "png";
   if (clean.includes("webp")) return "webp";
   if (clean.includes("jpeg") || clean.includes("jpg")) return "jpg";
@@ -341,7 +397,13 @@ async function renderSoundPlanToArtifact({ job, output = {} }) {
     err.code = "active_video_required";
     throw err;
   }
-  if (!output.soundPlan?.effects?.length && !output.soundPlan?.music) {
+  const hasEditablePlan =
+    output.soundPlan?.music ||
+    output.soundPlan?.effects?.length ||
+    output.soundPlan?.videoClips?.length ||
+    output.soundPlan?.textOverlays?.length ||
+    output.soundPlan?.imageOverlays?.length;
+  if (!hasEditablePlan) {
     const err = new Error("sound_plan_required");
     err.code = "sound_plan_required";
     throw err;
@@ -354,8 +416,9 @@ async function renderSoundPlanToArtifact({ job, output = {} }) {
     const downloaded = await downloadVideoBuffer(sourceUrl);
     await fs.writeFile(inputPath, downloaded.buffer);
     const imageInputs = await prepareImageInputs(output.soundPlan, tempDir);
+    const videoInputs = await prepareVideoInputs(output.soundPlan, tempDir);
     const audioInputs = await prepareAudioInputs(output.soundPlan, tempDir);
-    const args = buildFfmpegArgs({ inputPath, outputPath, soundPlan: output.soundPlan, imageInputs, audioInputs });
+    const args = buildFfmpegArgs({ inputPath, outputPath, soundPlan: output.soundPlan, imageInputs, videoInputs, audioInputs });
     await runFfmpeg(args);
     const renderedBuffer = await fs.readFile(outputPath);
     return saveRenderedVideoArtifact({
