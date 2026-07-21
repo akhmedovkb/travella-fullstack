@@ -384,6 +384,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const [soloIndex, setSoloIndex] = React.useState(null);
   const [selectedIndex, setSelectedIndex] = React.useState(0);
   const [selectedClip, setSelectedClip] = React.useState({ type: "sfx", index: 0 });
+  const [selectedClipKeys, setSelectedClipKeys] = React.useState(["sfx:0"]);
   const [editorOpen, setEditorOpen] = React.useState(false);
   const [currentTime, setCurrentTime] = React.useState(0);
   const [editingTextIndex, setEditingTextIndex] = React.useState(null);
@@ -445,6 +446,19 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const playheadLeft = Math.max(0, Math.min(100, (currentTime / duration) * 100));
   const timelineMinWidth = Math.round(620 * timelineZoom);
   const selectedClipLabel = selectedClip.type === "sfx" ? "SFX" : selectedClip.type === "text" ? "Text" : selectedClip.type === "image" ? "Image" : "Video";
+  const getClipKey = (type, index) => `${type}:${index}`;
+  const isClipMultiSelected = (type, index) => selectedClipKeys.includes(getClipKey(type, index));
+  const selectSingleClip = (type, index) => {
+    setSelectedClip({ type, index });
+    if (type === "sfx") setSelectedIndex(index);
+    setSelectedClipKeys([getClipKey(type, index)]);
+  };
+  const toggleClipSelection = (type, index) => {
+    const key = getClipKey(type, index);
+    setSelectedClip({ type, index });
+    if (type === "sfx") setSelectedIndex(index);
+    setSelectedClipKeys((prev) => prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key]);
+  };
   const canUndo = historyTick >= 0 && historyRef.current.past.length > 0;
   const canRedo = historyTick >= 0 && historyRef.current.future.length > 0;
   const undoTimeline = () => {
@@ -530,7 +544,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const removeOverlay = (type, index) => {
     const key = getOverlayKey(type);
     setDraft((prev) => ({ ...(prev || {}), [key]: (Array.isArray(prev?.[key]) ? prev[key] : []).filter((_, i) => i !== index) }));
-    setSelectedClip({ type: "sfx", index: Math.max(0, Math.min(selectedIndex, effects.length - 1)) });
+    selectSingleClip("sfx", Math.max(0, Math.min(selectedIndex, effects.length - 1)));
   };
   const duplicateOverlay = (type, index) => {
     const key = getOverlayKey(type);
@@ -545,7 +559,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
         time: Math.min(duration, Math.round((Number(source.time || 0) + 0.7) * 10) / 10),
       };
       items.splice(index + 1, 0, clone);
-      setSelectedClip({ type, index: index + 1 });
+      selectSingleClip(type, index + 1);
       return { ...base, [key]: items };
     });
   };
@@ -572,21 +586,20 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       };
       if (type === "video") right.sourceStart = Math.round((Number(source.sourceStart || 0) + leftDuration) * 10) / 10;
       items.splice(index, 1, left, right);
-      setSelectedClip({ type, index: index + 1 });
+      selectSingleClip(type, index + 1);
       return { ...base, [key]: items };
     });
     return true;
   };
   const removeEffect = (index) => {
     setDraft((prev) => ({ ...(prev || {}), effects: (Array.isArray(prev?.effects) ? prev.effects : []).filter((_, i) => i !== index) }));
-    setSelectedClip({ type: "sfx", index: Math.max(0, index - 1) });
+    selectSingleClip("sfx", Math.max(0, index - 1));
   };
   const addEffect = (preset = SOUND_EFFECT_PRESETS[0]) => {
     setDraft((prev) => {
       const base = prev || { preset: "Urgent Deal", music: { assetId: "tropical_luxury_01", label: "Tropical luxury", volume: 0.12 }, effects: [] };
       const effects = Array.isArray(base.effects) ? [...base.effects] : [];
-      setSelectedIndex(effects.length);
-      setSelectedClip({ type: "sfx", index: effects.length });
+      selectSingleClip("sfx", effects.length);
       return { ...base, effects: [...effects, createSoundCue(effects.length, preset)] };
     });
   };
@@ -602,8 +615,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
         time: Math.min(duration, Math.round((Number(source.time || 0) + 0.7) * 10) / 10),
       };
       nextEffects.splice(index + 1, 0, clone);
-      setSelectedIndex(index + 1);
-      setSelectedClip({ type: "sfx", index: index + 1 });
+      selectSingleClip("sfx", index + 1);
       return { ...base, effects: nextEffects };
     });
   };
@@ -626,8 +638,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
         time: cut,
         duration: rightDuration,
       });
-      setSelectedIndex(index + 1);
-      setSelectedClip({ type: "sfx", index: index + 1 });
+      selectSingleClip("sfx", index + 1);
       return { ...base, effects: nextEffects };
     });
     return true;
@@ -653,6 +664,21 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     updateEffect(selectedClip.index, patch);
   };
   const removeSelectedClip = () => {
+    if (selectedClipKeys.length > 1) {
+      const selected = new Set(selectedClipKeys);
+      setDraft((prev) => {
+        const base = prev || {};
+        return {
+          ...base,
+          effects: (Array.isArray(base.effects) ? base.effects : []).filter((_, index) => !selected.has(getClipKey("sfx", index))),
+          textOverlays: (Array.isArray(base.textOverlays) ? base.textOverlays : []).filter((_, index) => !selected.has(getClipKey("text", index))),
+          imageOverlays: (Array.isArray(base.imageOverlays) ? base.imageOverlays : []).filter((_, index) => !selected.has(getClipKey("image", index))),
+          videoClips: (Array.isArray(base.videoClips) ? base.videoClips : []).filter((_, index) => !selected.has(getClipKey("video", index))),
+        };
+      });
+      selectSingleClip("sfx", 0);
+      return;
+    }
     if (selectedClip.type === "text" || selectedClip.type === "image" || selectedClip.type === "video") {
       removeOverlay(selectedClip.type, selectedClip.index);
       return;
@@ -673,6 +699,24 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     return splitEffect(selectedClip.index);
   };
   const nudgeSelectedClip = (amount) => {
+    if (selectedClipKeys.length > 1) {
+      const selected = new Set(selectedClipKeys);
+      const shiftItem = (item) => {
+        const current = Number(item?.time || 0);
+        return { ...item, time: Math.max(0, Math.min(duration, Math.round((current + amount) * 10) / 10)) };
+      };
+      setDraft((prev) => {
+        const base = prev || {};
+        return {
+          ...base,
+          effects: (Array.isArray(base.effects) ? base.effects : []).map((item, index) => selected.has(getClipKey("sfx", index)) ? shiftItem(item) : item),
+          textOverlays: (Array.isArray(base.textOverlays) ? base.textOverlays : []).map((item, index) => selected.has(getClipKey("text", index)) ? shiftItem(item) : item),
+          imageOverlays: (Array.isArray(base.imageOverlays) ? base.imageOverlays : []).map((item, index) => selected.has(getClipKey("image", index)) ? shiftItem(item) : item),
+          videoClips: (Array.isArray(base.videoClips) ? base.videoClips : []).map((item, index) => selected.has(getClipKey("video", index)) ? shiftItem(item) : item),
+        };
+      });
+      return;
+    }
     const current = Number(selectedItem?.time || 0);
     updateSelectedClip({ time: Math.max(0, Math.min(duration, Math.round((current + amount) * 10) / 10)) });
   };
@@ -719,7 +763,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [editorOpen, selectedItem, selectedClip, effects, textOverlays, imageOverlays, videoClips, duration, canUndo, canRedo]);
+  }, [editorOpen, selectedItem, selectedClip, selectedClipKeys, effects, textOverlays, imageOverlays, videoClips, duration, currentTime, canUndo, canRedo]);
   const updateTrim = (patch) => {
     setDraft((prev) => ({
       ...(prev || {}),
@@ -744,7 +788,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
         ],
       };
     });
-    setSelectedClip({ type: "text", index: textOverlays.length });
+    selectSingleClip("text", textOverlays.length);
   };
   const addImageOverlay = () => {
     setDraft((prev) => {
@@ -758,14 +802,14 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
         ],
       };
     });
-    setSelectedClip({ type: "image", index: imageOverlays.length });
+    selectSingleClip("image", imageOverlays.length);
   };
   const addImageMediaToTrack = (media) => {
     if (!media?.url) return;
     setDraft((prev) => {
       const base = prev || {};
       const items = Array.isArray(base.imageOverlays) ? [...base.imageOverlays] : [];
-      setSelectedClip({ type: "image", index: items.length });
+      selectSingleClip("image", items.length);
       return {
         ...base,
         imageOverlays: [
@@ -792,7 +836,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       const base = prev || {};
       const items = Array.isArray(base.videoClips) ? [...base.videoClips] : [];
       const clipDuration = Math.min(12, Math.max(1, Number(media.durationSeconds || 5)));
-      setSelectedClip({ type: "video", index: items.length });
+      selectSingleClip("video", items.length);
       return {
         ...base,
         videoClips: [
@@ -817,8 +861,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     setDraft((prev) => {
       const base = prev || { preset: "Urgent Deal", music: { assetId: "tropical_luxury_01", label: "Tropical luxury", volume: 0.12 }, effects: [] };
       const effects = Array.isArray(base.effects) ? [...base.effects] : [];
-      setSelectedIndex(effects.length);
-      setSelectedClip({ type: "sfx", index: effects.length });
+      selectSingleClip("sfx", effects.length);
       return {
         ...base,
         effects: [
@@ -924,8 +967,12 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   };
   const startDragEffect = (event, index) => {
     event.preventDefault();
-    setSelectedIndex(index);
-    setSelectedClip({ type: "sfx", index });
+    if (event.shiftKey) {
+      event.stopPropagation();
+      toggleClipSelection("sfx", index);
+      return;
+    }
+    selectSingleClip("sfx", index);
     moveEffectToClientX(index, event.clientX);
     const handleMove = (moveEvent) => moveEffectToClientX(index, moveEvent.clientX);
     const handleUp = () => {
@@ -938,8 +985,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const startResizeEffect = (event, index, edge) => {
     event.preventDefault();
     event.stopPropagation();
-    setSelectedIndex(index);
-    setSelectedClip({ type: "sfx", index });
+    selectSingleClip("sfx", index);
     resizeEffectToClientX(index, edge, event.clientX);
     const handleMove = (moveEvent) => resizeEffectToClientX(index, edge, moveEvent.clientX);
     const handleUp = () => {
@@ -951,7 +997,12 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   };
   const startDragOverlay = (event, type, index) => {
     event.preventDefault();
-    setSelectedClip({ type, index });
+    if (event.shiftKey) {
+      event.stopPropagation();
+      toggleClipSelection(type, index);
+      return;
+    }
+    selectSingleClip(type, index);
     moveOverlayToClientX(type, index, event.clientX);
     const handleMove = (moveEvent) => moveOverlayToClientX(type, index, moveEvent.clientX);
     const handleUp = () => {
@@ -964,7 +1015,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const startResizeOverlay = (event, type, index, edge) => {
     event.preventDefault();
     event.stopPropagation();
-    setSelectedClip({ type, index });
+    selectSingleClip(type, index);
     resizeOverlayToClientX(type, index, edge, event.clientX);
     const handleMove = (moveEvent) => resizeOverlayToClientX(type, index, edge, moveEvent.clientX);
     const handleUp = () => {
@@ -977,7 +1028,11 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const startDragOverlayOnPreview = (event, type, index) => {
     event.preventDefault();
     event.stopPropagation();
-    setSelectedClip({ type, index });
+    if (event.shiftKey) {
+      toggleClipSelection(type, index);
+      return;
+    }
+    selectSingleClip(type, index);
     const moveTo = (clientX, clientY) => {
       const rect = previewFrameRef.current?.getBoundingClientRect();
       if (!rect?.width || !rect?.height) return;
@@ -997,7 +1052,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const startScaleOverlayOnPreview = (event, type, index) => {
     event.preventDefault();
     event.stopPropagation();
-    setSelectedClip({ type, index });
+    selectSingleClip(type, index);
     const rect = previewFrameRef.current?.getBoundingClientRect();
     const item = getOverlayItems(type)[index];
     if (!rect?.width || !rect?.height || !item) return;
@@ -1121,10 +1176,10 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                             onDoubleClick={(event) => {
                               event.preventDefault();
                               event.stopPropagation();
-                              setSelectedClip({ type: "text", index });
+                              selectSingleClip("text", index);
                               setEditingTextIndex(index);
                             }}
-                            className={cn("absolute -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-lg bg-black/70 px-2 py-1 text-center font-black text-white ring-2 ring-transparent active:cursor-grabbing", selectedClip.type === "text" && selectedClip.index === index && "ring-white")}
+                            className={cn("absolute -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-lg bg-black/70 px-2 py-1 text-center font-black text-white ring-2 ring-transparent active:cursor-grabbing", ((selectedClip.type === "text" && selectedClip.index === index) || isClipMultiSelected("text", index)) && "ring-white")}
                             style={textStyle}
                             title="Перетащи текст. Двойной клик — редактировать."
                           >
@@ -1145,7 +1200,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                           key={`preview_image_${item.id || index}`}
                           type="button"
                           onPointerDown={(event) => startDragOverlayOnPreview(event, "image", index)}
-                          className={cn("absolute -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-xl bg-fuchsia-500/90 px-3 py-2 text-xs font-black text-white ring-2 ring-transparent active:cursor-grabbing", selectedClip.type === "image" && selectedClip.index === index && "ring-white")}
+                          className={cn("absolute -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-xl bg-fuchsia-500/90 px-3 py-2 text-xs font-black text-white ring-2 ring-transparent active:cursor-grabbing", ((selectedClip.type === "image" && selectedClip.index === index) || isClipMultiSelected("image", index)) && "ring-white")}
                           style={{ left: `${Number(item.x ?? 50)}%`, top: `${Number(item.y ?? 72)}%`, width: `${Number(item.width || 34) * Number(item.scale || 1)}%` }}
                         >
                           {item.url ? <img src={item.url} alt={item.label || "Overlay"} className="h-full w-full rounded-lg object-contain" /> : (item.label || "Sticker")}
@@ -1166,9 +1221,13 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                           onPointerDown={(event) => {
                             event.preventDefault();
                             event.stopPropagation();
-                            setSelectedClip({ type: "video", index });
+                            if (event.shiftKey) {
+                              toggleClipSelection("video", index);
+                              return;
+                            }
+                            selectSingleClip("video", index);
                           }}
-                          className={cn("absolute inset-0 cursor-pointer overflow-hidden rounded-xl ring-2 ring-transparent", selectedClip.type === "video" && selectedClip.index === index && "ring-white")}
+                          className={cn("absolute inset-0 cursor-pointer overflow-hidden rounded-xl ring-2 ring-transparent", (selectedClip.type === "video" && selectedClip.index === index) || isClipMultiSelected("video", index) ? "ring-white" : "")}
                           title="Видео-вставка: двигай её на дорожке Video."
                         >
                           <video src={item.url} muted autoPlay loop playsInline className="h-full w-full object-cover" />
@@ -1233,7 +1292,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Timeline Studio</div>
-                  <div className="text-xs font-black">Video · Voice · Music · SFX · Text · Images · сейчас {Math.round(currentTime * 10) / 10}s / {Math.round(duration)}s</div>
+                  <div className="text-xs font-black">Video · Voice · Music · SFX · Text · Images · сейчас {Math.round(currentTime * 10) / 10}s / {Math.round(duration)}s{selectedClipKeys.length > 1 ? ` · выбрано ${selectedClipKeys.length}` : ""}</div>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button type="button" onClick={playPlan} className="rounded-2xl bg-indigo-600 px-3 py-2 text-xs font-black text-white hover:bg-indigo-500">Прослушать</button>
@@ -1349,11 +1408,11 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                             key={item.id || index}
                             type="button"
                             onPointerDown={(event) => startDragOverlay(event, "video", index)}
-                            onClick={() => setSelectedClip({ type: "video", index })}
+                            onClick={() => selectSingleClip("video", index)}
                             className={cn(
                               "absolute bottom-2 h-7 cursor-grab rounded-lg bg-sky-500 px-3 text-left text-[10px] font-black text-white shadow ring-2 ring-sky-300/40 active:cursor-grabbing",
                               item.enabled === false && "bg-slate-600 opacity-60 ring-slate-500",
-                              selectedClip.type === "video" && selectedClip.index === index && "bg-emerald-600 ring-white"
+                              ((selectedClip.type === "video" && selectedClip.index === index) || isClipMultiSelected("video", index)) && "bg-emerald-600 ring-white"
                             )}
                             style={{ left: `${left}%`, width: `${width}%`, minWidth: 112 }}
                             title="Видео-вставка. Перетащи по таймлайну."
@@ -1399,12 +1458,12 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                             key={`${effect.id || index}_clip`}
                             type="button"
                             onPointerDown={(event) => startDragEffect(event, index)}
-                            onClick={() => { setSelectedIndex(index); setSelectedClip({ type: "sfx", index }); }}
+                            onClick={() => selectSingleClip("sfx", index)}
                             onDoubleClick={() => playEffect(effect, index)}
                             className={cn(
                               "absolute top-3 h-12 w-28 cursor-grab rounded-xl px-3 text-left text-[10px] font-black text-white shadow-lg ring-2 transition active:cursor-grabbing",
                               effect.enabled === false ? "bg-slate-600 opacity-60 ring-slate-500" : "bg-indigo-600 ring-indigo-400/40",
-                              selectedClip.type === "sfx" && selectedClip.index === index && "bg-emerald-600 ring-white",
+                              ((selectedClip.type === "sfx" && selectedClip.index === index) || isClipMultiSelected("sfx", index)) && "bg-emerald-600 ring-white",
                               soloIndex === index && "scale-105"
                             )}
                             style={{ left: `${left}%`, width: `${width}%`, minWidth: 96 }}
@@ -1435,7 +1494,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                         const left = Math.max(0, Math.min(92, (Number(item.time || 0) / duration) * 100));
                         const width = Math.max(8, Math.min(40, (Number(item.duration || 3) / duration) * 100));
                         return (
-                          <button type="button" key={item.id || index} onPointerDown={(event) => startDragOverlay(event, "text", index)} onClick={() => setSelectedClip({ type: "text", index })} className={cn("absolute top-2 h-10 cursor-grab rounded-xl bg-amber-400 px-3 py-1 text-left text-[10px] font-black text-slate-950 shadow ring-2 ring-transparent active:cursor-grabbing", selectedClip.type === "text" && selectedClip.index === index && "ring-white")} style={{ left: `${left}%`, width: `${width}%` }}>
+                          <button type="button" key={item.id || index} onPointerDown={(event) => startDragOverlay(event, "text", index)} onClick={() => selectSingleClip("text", index)} className={cn("absolute top-2 h-10 cursor-grab rounded-xl bg-amber-400 px-3 py-1 text-left text-[10px] font-black text-slate-950 shadow ring-2 ring-transparent active:cursor-grabbing", ((selectedClip.type === "text" && selectedClip.index === index) || isClipMultiSelected("text", index)) && "ring-white")} style={{ left: `${left}%`, width: `${width}%` }}>
                             <span
                               onPointerDown={(event) => startResizeOverlay(event, "text", index, "left")}
                               className="absolute inset-y-0 left-0 w-3 cursor-ew-resize rounded-l-xl bg-white/30 hover:bg-white/50"
@@ -1461,7 +1520,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                         const left = Math.max(0, Math.min(92, (Number(item.time || 0) / duration) * 100));
                         const width = Math.max(8, Math.min(40, (Number(item.duration || 4) / duration) * 100));
                         return (
-                          <button type="button" key={item.id || index} onPointerDown={(event) => startDragOverlay(event, "image", index)} onClick={() => setSelectedClip({ type: "image", index })} className={cn("absolute top-2 h-10 cursor-grab rounded-xl bg-fuchsia-500 px-3 py-1 text-left text-[10px] font-black text-white shadow ring-2 ring-transparent active:cursor-grabbing", selectedClip.type === "image" && selectedClip.index === index && "ring-white")} style={{ left: `${left}%`, width: `${width}%` }}>
+                          <button type="button" key={item.id || index} onPointerDown={(event) => startDragOverlay(event, "image", index)} onClick={() => selectSingleClip("image", index)} className={cn("absolute top-2 h-10 cursor-grab rounded-xl bg-fuchsia-500 px-3 py-1 text-left text-[10px] font-black text-white shadow ring-2 ring-transparent active:cursor-grabbing", ((selectedClip.type === "image" && selectedClip.index === index) || isClipMultiSelected("image", index)) && "ring-white")} style={{ left: `${left}%`, width: `${width}%` }}>
                             <span
                               onPointerDown={(event) => startResizeOverlay(event, "image", index, "left")}
                               className="absolute inset-y-0 left-0 w-3 cursor-ew-resize rounded-l-xl bg-white/20 hover:bg-white/40"
@@ -1479,7 +1538,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       })}
                     </div>
                   </div>
-                  <div className="mt-3 text-[10px] font-bold text-slate-500">Кликни клип на дорожке, чтобы редактировать. S режет по playhead, Ctrl+Z откат, Ctrl+Y повтор, стрелки двигают, Shift+стрелки быстрее, Ctrl+D дублирует, Delete удаляет.</div>
+                  <div className="mt-3 text-[10px] font-bold text-slate-500">Кликни клип на дорожке, чтобы редактировать. Shift+click выбирает несколько, стрелки двигают выбранное, Shift+стрелки быстрее. S режет по playhead, Ctrl+Z откат, Ctrl+Y повтор, Ctrl+D дублирует, Delete удаляет.</div>
                 </div>
               </div>
             </div>
