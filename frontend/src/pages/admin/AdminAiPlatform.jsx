@@ -852,6 +852,28 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     }
     updateSelectedClip({ enabled: selectedItem.enabled === false ? true : false });
   };
+  const selectClipsAtPlayhead = () => {
+    const time = Math.round(currentTime * 10) / 10;
+    const visibleKeys = [];
+    const collectVisible = (items, type, defaultDuration) => {
+      (Array.isArray(items) ? items : []).forEach((item, index) => {
+        if (item?.enabled === false) return;
+        const start = Number(item?.time || 0);
+        const length = Number(item?.duration || defaultDuration(item));
+        if (time >= start && time <= start + Math.max(0.1, length)) visibleKeys.push(getClipKey(type, index));
+      });
+    };
+    collectVisible(videoClips, "video", () => 5);
+    collectVisible(effects, "sfx", (item) => Number(getSoundPreset(item?.assetId).tone?.duration || 0.3));
+    collectVisible(textOverlays, "text", () => 3);
+    collectVisible(imageOverlays, "image", () => 4);
+    if (!visibleKeys.length) return;
+    setSelectedClipKeys(visibleKeys);
+    const [type, rawIndex] = visibleKeys[visibleKeys.length - 1].split(":");
+    const index = Number(rawIndex) || 0;
+    setSelectedClip({ type, index });
+    if (type === "sfx") setSelectedIndex(index);
+  };
   React.useEffect(() => {
     if (!editorOpen) return undefined;
     const isTypingTarget = (target) => {
@@ -869,6 +891,11 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       if ((event.ctrlKey || event.metaKey) && String(event.key).toLowerCase() === "y") {
         event.preventDefault();
         redoTimeline();
+        return;
+      }
+      if (event.key === "Escape" && selectedClipKeys.length > 1) {
+        event.preventDefault();
+        selectSingleClip(selectedClip.type, selectedClip.index);
         return;
       }
       if (!selectedItem) return;
@@ -1428,6 +1455,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button type="button" onClick={playPlan} className="rounded-2xl bg-indigo-600 px-3 py-2 text-xs font-black text-white hover:bg-indigo-500">Прослушать</button>
+                  <button type="button" onClick={selectClipsAtPlayhead} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Выбрать на playhead</button>
                   <button type="button" onClick={() => mediaInputRef.current?.click()} disabled={mediaImporting} className="rounded-2xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-500 disabled:opacity-40">{mediaImporting ? "Импорт..." : "Импорт"}</button>
                   <button type="button" onClick={() => addEffect()} className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-950 hover:bg-slate-100">Добавить SFX</button>
                   <button type="button" onClick={addTextOverlay} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Текст</button>
@@ -1670,7 +1698,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       })}
                     </div>
                   </div>
-                  <div className="mt-3 text-[10px] font-bold text-slate-500">Кликни клип на дорожке, чтобы редактировать. Shift+click выбирает несколько, стрелки двигают выбранное, Shift+стрелки быстрее. S режет по playhead, Ctrl+Z откат, Ctrl+Y повтор, Ctrl+D дублирует, Delete удаляет.</div>
+                  <div className="mt-3 text-[10px] font-bold text-slate-500">Кликни клип на дорожке, чтобы редактировать. Shift+click выбирает несколько, Esc сбрасывает группу, стрелки двигают выбранное, Shift+стрелки быстрее. S режет по playhead, Ctrl+Z откат, Ctrl+Y повтор, Ctrl+D дублирует, Delete удаляет.</div>
                 </div>
               </div>
             </div>
