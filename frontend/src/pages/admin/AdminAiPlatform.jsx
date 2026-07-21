@@ -387,10 +387,37 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const [editorOpen, setEditorOpen] = React.useState(false);
   const [currentTime, setCurrentTime] = React.useState(0);
   const [editingTextIndex, setEditingTextIndex] = React.useState(null);
+  const [historyTick, setHistoryTick] = React.useState(0);
   const timelineRef = React.useRef(null);
   const previewFrameRef = React.useRef(null);
   const mediaInputRef = React.useRef(null);
-  React.useEffect(() => { setDraft(soundPlan || null); }, [soundPlan, job?.id]);
+  const historyRef = React.useRef({ past: [], future: [], last: "", skip: false });
+  const clonePlan = (value) => JSON.parse(JSON.stringify(value || null));
+  React.useEffect(() => {
+    const nextDraft = soundPlan || null;
+    historyRef.current = { past: [], future: [], last: JSON.stringify(nextDraft || null), skip: false };
+    setDraft(nextDraft);
+    setHistoryTick((tick) => tick + 1);
+  }, [soundPlan, job?.id]);
+  React.useEffect(() => {
+    const serial = JSON.stringify(draft || null);
+    const history = historyRef.current;
+    if (history.skip) {
+      history.last = serial;
+      history.skip = false;
+      setHistoryTick((tick) => tick + 1);
+      return;
+    }
+    if (!history.last) {
+      history.last = serial;
+      return;
+    }
+    if (serial === history.last) return;
+    history.past = [...history.past.slice(-39), JSON.parse(history.last)];
+    history.future = [];
+    history.last = serial;
+    setHistoryTick((tick) => tick + 1);
+  }, [draft]);
   const plan = draft || null;
   const busy = loading === job?.id;
   const rendering = renderLoading === job?.id || plan?.render?.status === "rendering";
@@ -416,6 +443,26 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
           : effects[selectedClip.index] || selectedEffect;
   const playheadLeft = Math.max(0, Math.min(100, (currentTime / duration) * 100));
   const selectedClipLabel = selectedClip.type === "sfx" ? "SFX" : selectedClip.type === "text" ? "Text" : selectedClip.type === "image" ? "Image" : "Video";
+  const canUndo = historyTick >= 0 && historyRef.current.past.length > 0;
+  const canRedo = historyTick >= 0 && historyRef.current.future.length > 0;
+  const undoTimeline = () => {
+    const history = historyRef.current;
+    const previous = history.past.pop();
+    if (previous === undefined) return;
+    history.future = [clonePlan(draft), ...history.future].slice(0, 40);
+    history.skip = true;
+    setDraft(previous);
+    setHistoryTick((tick) => tick + 1);
+  };
+  const redoTimeline = () => {
+    const history = historyRef.current;
+    const next = history.future.shift();
+    if (next === undefined) return;
+    history.past = [...history.past.slice(-39), clonePlan(draft)];
+    history.skip = true;
+    setDraft(next);
+    setHistoryTick((tick) => tick + 1);
+  };
   React.useEffect(() => {
     if (selectedIndex > Math.max(0, effects.length - 1)) setSelectedIndex(Math.max(0, effects.length - 1));
   }, [effects.length, selectedIndex]);
@@ -575,7 +622,19 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       return tagName === "input" || tagName === "textarea" || tagName === "select" || target?.isContentEditable;
     };
     const handleKeyDown = (event) => {
-      if (!selectedItem || isTypingTarget(event.target)) return;
+      if (isTypingTarget(event.target)) return;
+      if ((event.ctrlKey || event.metaKey) && String(event.key).toLowerCase() === "z") {
+        event.preventDefault();
+        if (event.shiftKey) redoTimeline();
+        else undoTimeline();
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && String(event.key).toLowerCase() === "y") {
+        event.preventDefault();
+        redoTimeline();
+        return;
+      }
+      if (!selectedItem) return;
       if (event.key === "Delete" || event.key === "Backspace") {
         event.preventDefault();
         removeSelectedClip();
@@ -594,7 +653,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [editorOpen, selectedItem, selectedClip, effects, textOverlays, imageOverlays, videoClips, duration]);
+  }, [editorOpen, selectedItem, selectedClip, effects, textOverlays, imageOverlays, videoClips, duration, canUndo, canRedo]);
   const updateTrim = (patch) => {
     setDraft((prev) => ({
       ...(prev || {}),
@@ -942,6 +1001,8 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                 <div className="mt-1 text-xl font-black text-slate-950">Редактор видео перед финальной склейкой</div>
               </div>
               <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={undoTimeline} disabled={!canUndo || busy || rendering} className="rounded-2xl bg-white px-4 py-2 text-xs font-black text-slate-950 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-40">Undo</button>
+                <button type="button" onClick={redoTimeline} disabled={!canRedo || busy || rendering} className="rounded-2xl bg-white px-4 py-2 text-xs font-black text-slate-950 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-40">Redo</button>
                 <button type="button" onClick={() => onSave?.(job, draft)} disabled={busy || rendering} className="rounded-2xl bg-white px-4 py-2 text-xs font-black text-slate-950 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-40">{busy ? "Сохраняю..." : "Сохранить"}</button>
                 <button type="button" onClick={() => onRender?.(job)} disabled={busy || rendering} className="rounded-2xl bg-slate-950 px-4 py-2 text-xs font-black text-white hover:bg-slate-800 disabled:opacity-40">{rendering ? "Свожу..." : renderedUrl ? "Пересвести звук" : "Свести звук"}</button>
                 <button type="button" onClick={() => setEditorOpen(false)} className="rounded-2xl bg-rose-50 px-4 py-2 text-xs font-black text-rose-700 ring-1 ring-rose-100 hover:bg-rose-100">Закрыть</button>
@@ -1340,7 +1401,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       })}
                     </div>
                   </div>
-                  <div className="mt-3 text-[10px] font-bold text-slate-500">Кликни клип на дорожке, чтобы редактировать. Стрелки двигают клип, Shift+стрелки двигают быстрее, Ctrl+D дублирует, Delete удаляет.</div>
+                  <div className="mt-3 text-[10px] font-bold text-slate-500">Кликни клип на дорожке, чтобы редактировать. Ctrl+Z откат, Ctrl+Y повтор, стрелки двигают клип, Shift+стрелки быстрее, Ctrl+D дублирует, Delete удаляет.</div>
                 </div>
               </div>
             </div>
