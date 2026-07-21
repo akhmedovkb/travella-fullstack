@@ -885,6 +885,20 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     setSelectedClip({ type, index });
     if (type === "sfx") setSelectedIndex(index);
   };
+  const selectAllTimelineClips = () => {
+    const keys = [
+      ...videoClips.map((item, index) => item?.enabled === false ? null : getClipKey("video", index)),
+      ...effects.map((item, index) => item?.enabled === false ? null : getClipKey("sfx", index)),
+      ...textOverlays.map((item, index) => item?.enabled === false ? null : getClipKey("text", index)),
+      ...imageOverlays.map((item, index) => item?.enabled === false ? null : getClipKey("image", index)),
+    ].filter(Boolean);
+    if (!keys.length) return;
+    setSelectedClipKeys(keys);
+    const [type, rawIndex] = keys[keys.length - 1].split(":");
+    const index = Number(rawIndex) || 0;
+    setSelectedClip({ type, index });
+    if (type === "sfx") setSelectedIndex(index);
+  };
   React.useEffect(() => {
     if (!editorOpen) return undefined;
     const isTypingTarget = (target) => {
@@ -902,6 +916,11 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       if ((event.ctrlKey || event.metaKey) && String(event.key).toLowerCase() === "y") {
         event.preventDefault();
         redoTimeline();
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && String(event.key).toLowerCase() === "a") {
+        event.preventDefault();
+        selectAllTimelineClips();
         return;
       }
       if (event.key === "Escape" && selectedClipKeys.length > 1) {
@@ -1466,6 +1485,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button type="button" onClick={playPlan} className="rounded-2xl bg-indigo-600 px-3 py-2 text-xs font-black text-white hover:bg-indigo-500">Прослушать</button>
+                  <button type="button" onClick={selectAllTimelineClips} className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-950 hover:bg-slate-100">Все клипы</button>
                   <button type="button" onClick={selectClipsAtPlayhead} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Выбрать на playhead</button>
                   <button type="button" onClick={() => selectClipsByType("sfx")} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">SFX</button>
                   <button type="button" onClick={() => selectClipsByType("text")} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Text</button>
@@ -1713,7 +1733,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       })}
                     </div>
                   </div>
-                  <div className="mt-3 text-[10px] font-bold text-slate-500">Кликни клип на дорожке, чтобы редактировать. Shift+click выбирает несколько, Esc сбрасывает группу, стрелки двигают выбранное, Shift+стрелки быстрее. S режет по playhead, Ctrl+Z откат, Ctrl+Y повтор, Ctrl+D дублирует, Delete удаляет.</div>
+                  <div className="mt-3 text-[10px] font-bold text-slate-500">Кликни клип на дорожке, чтобы редактировать. Ctrl+A выбирает все клипы, Shift+click выбирает несколько, Esc сбрасывает группу, стрелки двигают выбранное, Shift+стрелки быстрее. S режет по playhead, Ctrl+Z откат, Ctrl+Y повтор, Ctrl+D дублирует, Delete удаляет.</div>
                 </div>
               </div>
             </div>
