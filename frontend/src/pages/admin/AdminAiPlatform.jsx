@@ -732,6 +732,46 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     duplicateEffect(selectedClip.index);
   };
   const splitSelectedClip = () => {
+    if (selectedClipKeys.length > 1) {
+      const selected = new Set(selectedClipKeys);
+      const cut = Math.round(currentTime * 10) / 10;
+      const splitItems = (items, type) => {
+        const nextItems = [];
+        (Array.isArray(items) ? items : []).forEach((item, index) => {
+          const start = Number(item?.time || 0);
+          const defaultDuration = type === "sfx" ? Number(getSoundPreset(item?.assetId).tone?.duration || 0.3) : type === "video" ? 5 : type === "image" ? 4 : 3;
+          const length = Number(item?.duration || defaultDuration);
+          const end = start + Math.max(0.1, length);
+          if (!selected.has(getClipKey(type, index)) || cut <= start + 0.1 || cut >= end - 0.1) {
+            nextItems.push(item);
+            return;
+          }
+          const leftDuration = Math.round((cut - start) * 10) / 10;
+          const rightDuration = Math.round((end - cut) * 10) / 10;
+          const left = { ...item, duration: leftDuration };
+          const right = {
+            ...item,
+            id: `${type}_split_${Date.now()}_${index}_${nextItems.length}`,
+            time: cut,
+            duration: rightDuration,
+          };
+          if (type === "video") right.sourceStart = Math.round((Number(item.sourceStart || 0) + leftDuration) * 10) / 10;
+          nextItems.push(left, right);
+        });
+        return nextItems;
+      };
+      setDraft((prev) => {
+        const base = prev || {};
+        return {
+          ...base,
+          effects: splitItems(base.effects, "sfx"),
+          textOverlays: splitItems(base.textOverlays, "text"),
+          imageOverlays: splitItems(base.imageOverlays, "image"),
+          videoClips: splitItems(base.videoClips, "video"),
+        };
+      });
+      return true;
+    }
     if (selectedClip.type === "text" || selectedClip.type === "image" || selectedClip.type === "video") {
       return splitOverlay(selectedClip.type, selectedClip.index);
     }
