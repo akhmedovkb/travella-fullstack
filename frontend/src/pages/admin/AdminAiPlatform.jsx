@@ -388,6 +388,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const [currentTime, setCurrentTime] = React.useState(0);
   const [editingTextIndex, setEditingTextIndex] = React.useState(null);
   const [historyTick, setHistoryTick] = React.useState(0);
+  const [timelineZoom, setTimelineZoom] = React.useState(1);
   const timelineRef = React.useRef(null);
   const previewFrameRef = React.useRef(null);
   const mediaInputRef = React.useRef(null);
@@ -442,6 +443,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
           ? videoClips[selectedClip.index]
           : effects[selectedClip.index] || selectedEffect;
   const playheadLeft = Math.max(0, Math.min(100, (currentTime / duration) * 100));
+  const timelineMinWidth = Math.round(620 * timelineZoom);
   const selectedClipLabel = selectedClip.type === "sfx" ? "SFX" : selectedClip.type === "text" ? "Text" : selectedClip.type === "image" ? "Image" : "Video";
   const canUndo = historyTick >= 0 && historyRef.current.past.length > 0;
   const canRedo = historyTick >= 0 && historyRef.current.future.length > 0;
@@ -1175,6 +1177,18 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                   <button type="button" onClick={() => addEffect()} className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-950 hover:bg-slate-100">Добавить SFX</button>
                   <button type="button" onClick={addTextOverlay} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Текст</button>
                   <button type="button" onClick={addImageOverlay} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Картинка</button>
+                  <label className="flex min-w-36 items-center gap-2 rounded-2xl bg-white/10 px-3 py-2 text-[10px] font-black text-white ring-1 ring-white/10">
+                    <span>Zoom {timelineZoom.toFixed(1)}x</span>
+                    <input
+                      type="range"
+                      min="1"
+                      max="3"
+                      step="0.25"
+                      value={timelineZoom}
+                      onChange={(event) => setTimelineZoom(Number(event.target.value))}
+                      className="w-20 accent-indigo-400"
+                    />
+                  </label>
                 </div>
               </div>
               <input ref={mediaInputRef} type="file" accept="image/*,audio/*,video/*" onChange={handleMediaInput} className="hidden" />
@@ -1234,7 +1248,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                 ))}
               </div>
               <div className="mt-3 overflow-x-auto rounded-2xl bg-slate-900 p-3">
-                <div className="min-w-[620px]">
+                <div style={{ minWidth: `${timelineMinWidth}px` }}>
                   <div className="mb-3 grid grid-cols-[74px_1fr] gap-3">
                     <div className="py-1 text-[10px] font-black uppercase tracking-wide text-slate-400">Playhead</div>
                     <div className="relative">
