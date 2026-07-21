@@ -448,6 +448,10 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const selectedClipLabel = selectedClip.type === "sfx" ? "SFX" : selectedClip.type === "text" ? "Text" : selectedClip.type === "image" ? "Image" : "Video";
   const getClipKey = (type, index) => `${type}:${index}`;
   const isClipMultiSelected = (type, index) => selectedClipKeys.includes(getClipKey(type, index));
+  const shiftClipTime = (item, amount = 0.7) => {
+    const current = Number(item?.time || 0);
+    return Math.max(0, Math.min(duration, Math.round((current + amount) * 10) / 10));
+  };
   const selectSingleClip = (type, index) => {
     setSelectedClip({ type, index });
     if (type === "sfx") setSelectedIndex(index);
@@ -686,6 +690,41 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     removeEffect(selectedClip.index);
   };
   const duplicateSelectedClip = () => {
+    if (selectedClipKeys.length > 1) {
+      const selected = new Set(selectedClipKeys);
+      const copiedKeys = [];
+      const copySelected = (items, type) => {
+        const nextItems = Array.isArray(items) ? [...items] : [];
+        (Array.isArray(items) ? items : []).forEach((item, index) => {
+          if (!selected.has(getClipKey(type, index))) return;
+          const cloneIndex = nextItems.length;
+          copiedKeys.push(getClipKey(type, cloneIndex));
+          nextItems.push({
+            ...item,
+            id: `${type}_copy_${Date.now()}_${index}_${cloneIndex}`,
+            time: shiftClipTime(item),
+          });
+        });
+        return nextItems;
+      };
+      setDraft((prev) => {
+        const base = prev || {};
+        return {
+          ...base,
+          effects: copySelected(base.effects, "sfx"),
+          textOverlays: copySelected(base.textOverlays, "text"),
+          imageOverlays: copySelected(base.imageOverlays, "image"),
+          videoClips: copySelected(base.videoClips, "video"),
+        };
+      });
+      if (copiedKeys.length) {
+        setSelectedClipKeys(copiedKeys);
+        const [type, index] = copiedKeys[copiedKeys.length - 1].split(":");
+        setSelectedClip({ type, index: Number(index) || 0 });
+        if (type === "sfx") setSelectedIndex(Number(index) || 0);
+      }
+      return;
+    }
     if (selectedClip.type === "text" || selectedClip.type === "image" || selectedClip.type === "video") {
       duplicateOverlay(selectedClip.type, selectedClip.index);
       return;
