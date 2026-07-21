@@ -820,6 +820,38 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     }
     updateSelectedClip({ time: target });
   };
+  const getSelectedClipItems = () => selectedClipKeys
+    .map((key) => {
+      const [type, rawIndex] = key.split(":");
+      const index = Number(rawIndex) || 0;
+      const item = type === "sfx" ? effects[index] : type === "text" ? textOverlays[index] : type === "image" ? imageOverlays[index] : videoClips[index];
+      return item ? { key, type, index, item } : null;
+    })
+    .filter(Boolean);
+  const selectedClipItems = getSelectedClipItems();
+  const selectedGroupEnabledCount = selectedClipItems.filter(({ item }) => item.enabled !== false).length;
+  const selectedGroupHasDisabled = selectedClipItems.some(({ item }) => item.enabled === false);
+  const toggleSelectedClipEnabled = () => {
+    if (selectedClipKeys.length > 1) {
+      const selected = new Set(selectedClipKeys);
+      const enabled = selectedGroupHasDisabled;
+      const toggleItems = (items, type) => (Array.isArray(items) ? items : []).map((item, index) => (
+        selected.has(getClipKey(type, index)) ? { ...item, enabled } : item
+      ));
+      setDraft((prev) => {
+        const base = prev || {};
+        return {
+          ...base,
+          effects: toggleItems(base.effects, "sfx"),
+          textOverlays: toggleItems(base.textOverlays, "text"),
+          imageOverlays: toggleItems(base.imageOverlays, "image"),
+          videoClips: toggleItems(base.videoClips, "video"),
+        };
+      });
+      return;
+    }
+    updateSelectedClip({ enabled: selectedItem.enabled === false ? true : false });
+  };
   React.useEffect(() => {
     if (!editorOpen) return undefined;
     const isTypingTarget = (target) => {
@@ -1645,16 +1677,23 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
             <div className="rounded-2xl bg-white p-3 ring-1 ring-indigo-100">
               <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Inspector</div>
               {selectedItem ? (
-                <div className={cn("mt-2 space-y-2", selectedItem.enabled === false && "opacity-60")}>
+                <div className={cn("mt-2 space-y-2", selectedClipKeys.length <= 1 && selectedItem.enabled === false && "opacity-60")}>
+                  {selectedClipKeys.length > 1 ? (
+                    <div className="rounded-xl bg-indigo-50 px-3 py-2 text-xs font-black text-indigo-800 ring-1 ring-indigo-100">
+                      Группа: {selectedClipKeys.length} клипов · включено {selectedGroupEnabledCount}/{selectedClipItems.length}
+                    </div>
+                  ) : null}
                   <button
                     type="button"
-                    onClick={() => updateSelectedClip({ enabled: selectedItem.enabled === false ? true : false })}
+                    onClick={toggleSelectedClipEnabled}
                     className={cn(
                       "w-full rounded-xl px-3 py-2 text-xs font-black ring-1",
-                      selectedItem.enabled === false ? "bg-white text-slate-500 ring-slate-200" : "bg-emerald-50 text-emerald-800 ring-emerald-100"
+                      (selectedClipKeys.length > 1 ? selectedGroupEnabledCount === 0 : selectedItem.enabled === false) ? "bg-white text-slate-500 ring-slate-200" : "bg-emerald-50 text-emerald-800 ring-emerald-100"
                     )}
                   >
-                    {selectedItem.enabled === false ? "Включить клип" : `${selectedClipLabel} включен`}
+                    {selectedClipKeys.length > 1
+                      ? selectedGroupHasDisabled ? "Включить выбранные" : "Выбранные включены"
+                      : selectedItem.enabled === false ? "Включить клип" : `${selectedClipLabel} включен`}
                   </button>
                   {selectedClip.type === "sfx" ? (
                     <label className="block rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
