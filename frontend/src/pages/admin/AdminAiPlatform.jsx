@@ -874,6 +874,17 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     setSelectedClip({ type, index });
     if (type === "sfx") setSelectedIndex(index);
   };
+  const selectClipsByType = (type) => {
+    const items = type === "sfx" ? effects : type === "text" ? textOverlays : type === "image" ? imageOverlays : videoClips;
+    const keys = (Array.isArray(items) ? items : [])
+      .map((item, index) => item?.enabled === false ? null : getClipKey(type, index))
+      .filter(Boolean);
+    if (!keys.length) return;
+    setSelectedClipKeys(keys);
+    const index = Number(keys[keys.length - 1].split(":")[1]) || 0;
+    setSelectedClip({ type, index });
+    if (type === "sfx") setSelectedIndex(index);
+  };
   React.useEffect(() => {
     if (!editorOpen) return undefined;
     const isTypingTarget = (target) => {
@@ -1456,6 +1467,10 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                 <div className="flex flex-wrap gap-2">
                   <button type="button" onClick={playPlan} className="rounded-2xl bg-indigo-600 px-3 py-2 text-xs font-black text-white hover:bg-indigo-500">Прослушать</button>
                   <button type="button" onClick={selectClipsAtPlayhead} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Выбрать на playhead</button>
+                  <button type="button" onClick={() => selectClipsByType("sfx")} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">SFX</button>
+                  <button type="button" onClick={() => selectClipsByType("text")} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Text</button>
+                  <button type="button" onClick={() => selectClipsByType("image")} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Images</button>
+                  <button type="button" onClick={() => selectClipsByType("video")} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Video</button>
                   <button type="button" onClick={() => mediaInputRef.current?.click()} disabled={mediaImporting} className="rounded-2xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-500 disabled:opacity-40">{mediaImporting ? "Импорт..." : "Импорт"}</button>
                   <button type="button" onClick={() => addEffect()} className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-950 hover:bg-slate-100">Добавить SFX</button>
                   <button type="button" onClick={addTextOverlay} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Текст</button>
