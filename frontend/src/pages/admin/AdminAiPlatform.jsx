@@ -549,6 +549,34 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       return { ...base, [key]: items };
     });
   };
+  const splitOverlay = (type, index) => {
+    const key = getOverlayKey(type);
+    const source = getOverlayItems(type)[index];
+    if (!source) return false;
+    const start = Number(source.time || 0);
+    const length = Number(source.duration || (type === "video" ? 5 : type === "image" ? 4 : 3));
+    const end = start + Math.max(0.1, length);
+    const cut = Math.round(currentTime * 10) / 10;
+    if (cut <= start + 0.1 || cut >= end - 0.1) return false;
+    const leftDuration = Math.round((cut - start) * 10) / 10;
+    const rightDuration = Math.round((end - cut) * 10) / 10;
+    setDraft((prev) => {
+      const base = prev || {};
+      const items = Array.isArray(base[key]) ? [...base[key]] : [];
+      const left = { ...source, duration: leftDuration };
+      const right = {
+        ...source,
+        id: `${type}_split_${Date.now()}_${index}`,
+        time: cut,
+        duration: rightDuration,
+      };
+      if (type === "video") right.sourceStart = Math.round((Number(source.sourceStart || 0) + leftDuration) * 10) / 10;
+      items.splice(index, 1, left, right);
+      setSelectedClip({ type, index: index + 1 });
+      return { ...base, [key]: items };
+    });
+    return true;
+  };
   const removeEffect = (index) => {
     setDraft((prev) => ({ ...(prev || {}), effects: (Array.isArray(prev?.effects) ? prev.effects : []).filter((_, i) => i !== index) }));
     setSelectedClip({ type: "sfx", index: Math.max(0, index - 1) });
@@ -578,6 +606,31 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       setSelectedClip({ type: "sfx", index: index + 1 });
       return { ...base, effects: nextEffects };
     });
+  };
+  const splitEffect = (index) => {
+    const source = effects[index];
+    if (!source) return false;
+    const start = Number(source.time || 0);
+    const length = Number(source.duration || getSoundPreset(source.assetId).tone?.duration || 0.3);
+    const end = start + Math.max(0.1, length);
+    const cut = Math.round(currentTime * 10) / 10;
+    if (cut <= start + 0.1 || cut >= end - 0.1) return false;
+    const leftDuration = Math.round((cut - start) * 10) / 10;
+    const rightDuration = Math.round((end - cut) * 10) / 10;
+    setDraft((prev) => {
+      const base = prev || {};
+      const nextEffects = Array.isArray(base.effects) ? [...base.effects] : [];
+      nextEffects.splice(index, 1, { ...source, duration: leftDuration }, {
+        ...source,
+        id: `split_sfx_${Date.now()}_${index}`,
+        time: cut,
+        duration: rightDuration,
+      });
+      setSelectedIndex(index + 1);
+      setSelectedClip({ type: "sfx", index: index + 1 });
+      return { ...base, effects: nextEffects };
+    });
+    return true;
   };
   const applyPresetToEffect = (index, assetId) => {
     const preset = getSoundPreset(assetId);
@@ -613,6 +666,12 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     }
     duplicateEffect(selectedClip.index);
   };
+  const splitSelectedClip = () => {
+    if (selectedClip.type === "text" || selectedClip.type === "image" || selectedClip.type === "video") {
+      return splitOverlay(selectedClip.type, selectedClip.index);
+    }
+    return splitEffect(selectedClip.index);
+  };
   const nudgeSelectedClip = (amount) => {
     const current = Number(selectedItem?.time || 0);
     updateSelectedClip({ time: Math.max(0, Math.min(duration, Math.round((current + amount) * 10) / 10)) });
@@ -637,6 +696,11 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
         return;
       }
       if (!selectedItem) return;
+      if (!event.ctrlKey && !event.metaKey && !event.altKey && String(event.key).toLowerCase() === "s") {
+        event.preventDefault();
+        splitSelectedClip();
+        return;
+      }
       if (event.key === "Delete" || event.key === "Backspace") {
         event.preventDefault();
         removeSelectedClip();
@@ -1415,7 +1479,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       })}
                     </div>
                   </div>
-                  <div className="mt-3 text-[10px] font-bold text-slate-500">Кликни клип на дорожке, чтобы редактировать. Ctrl+Z откат, Ctrl+Y повтор, стрелки двигают клип, Shift+стрелки быстрее, Ctrl+D дублирует, Delete удаляет.</div>
+                  <div className="mt-3 text-[10px] font-bold text-slate-500">Кликни клип на дорожке, чтобы редактировать. S режет по playhead, Ctrl+Z откат, Ctrl+Y повтор, стрелки двигают, Shift+стрелки быстрее, Ctrl+D дублирует, Delete удаляет.</div>
                 </div>
               </div>
             </div>
@@ -1535,10 +1599,11 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                   </div>
                   <div className="grid grid-cols-3 gap-2">
                     <button type="button" onClick={() => nudgeSelectedClip(-0.5)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">-0.5s</button>
-                    <button type="button" onClick={duplicateSelectedClip} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Дубль</button>
+                    <button type="button" onClick={splitSelectedClip} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Разрезать</button>
                     <button type="button" onClick={() => nudgeSelectedClip(0.5)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">+0.5s</button>
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-3 gap-2">
+                    <button type="button" onClick={duplicateSelectedClip} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Дубль</button>
                     <button type="button" onClick={() => seekTimeline(Number(selectedItem.time || 0))} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">К началу</button>
                     <button type="button" onClick={() => updateSelectedClip({ time: Math.round(currentTime * 10) / 10 })} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">На playhead</button>
                   </div>
