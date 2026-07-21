@@ -799,6 +799,27 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     const current = Number(selectedItem?.time || 0);
     updateSelectedClip({ time: Math.max(0, Math.min(duration, Math.round((current + amount) * 10) / 10)) });
   };
+  const getSelectedGroupStart = () => {
+    if (selectedClipKeys.length <= 1) return Number(selectedItem?.time || 0);
+    const starts = selectedClipKeys
+      .map((key) => {
+        const [type, rawIndex] = key.split(":");
+        const index = Number(rawIndex) || 0;
+        const item = type === "sfx" ? effects[index] : type === "text" ? textOverlays[index] : type === "image" ? imageOverlays[index] : videoClips[index];
+        return item ? Number(item.time || 0) : null;
+      })
+      .filter((value) => value !== null);
+    return starts.length ? Math.min(...starts) : Number(selectedItem?.time || 0);
+  };
+  const moveSelectedClipToTime = (time) => {
+    const target = Math.max(0, Math.min(duration, Math.round((Number(time) || 0) * 10) / 10));
+    if (selectedClipKeys.length > 1) {
+      const current = Number(selectedItem?.time || 0);
+      nudgeSelectedClip(Math.round((target - current) * 10) / 10);
+      return;
+    }
+    updateSelectedClip({ time: target });
+  };
   React.useEffect(() => {
     if (!editorOpen) return undefined;
     const isTypingTarget = (target) => {
@@ -1742,8 +1763,8 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                   </div>
                   <div className="grid grid-cols-3 gap-2">
                     <button type="button" onClick={duplicateSelectedClip} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Дубль</button>
-                    <button type="button" onClick={() => seekTimeline(Number(selectedItem.time || 0))} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">К началу</button>
-                    <button type="button" onClick={() => updateSelectedClip({ time: Math.round(currentTime * 10) / 10 })} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">На playhead</button>
+                    <button type="button" onClick={() => seekTimeline(getSelectedGroupStart())} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">К началу</button>
+                    <button type="button" onClick={() => moveSelectedClipToTime(currentTime)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">На playhead</button>
                   </div>
                 </div>
               ) : (
