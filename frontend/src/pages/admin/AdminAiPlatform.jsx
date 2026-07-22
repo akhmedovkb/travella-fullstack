@@ -675,6 +675,32 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     }
     updateEffect(selectedClip.index, patch);
   };
+  const getOverlayLayer = (type, item, index) => {
+    const base = type === "image" ? 20 : type === "video" ? 10 : 30;
+    return Number(item?.zIndex ?? (base + index));
+  };
+  const updateSelectedOverlayLayer = (action) => {
+    if (selectedClip.type !== "text" && selectedClip.type !== "image") return;
+    const overlays = [
+      ...textOverlays.map((item, index) => ({ type: "text", index, layer: getOverlayLayer("text", item, index) })),
+      ...imageOverlays.map((item, index) => ({ type: "image", index, layer: getOverlayLayer("image", item, index) })),
+    ];
+    const currentKey = getClipKey(selectedClip.type, selectedClip.index);
+    const current = overlays.find((item) => getClipKey(item.type, item.index) === currentKey);
+    if (!current) return;
+    const layers = overlays.map((item) => item.layer);
+    const minLayer = layers.length ? Math.min(...layers) : 0;
+    const maxLayer = layers.length ? Math.max(...layers) : 0;
+    const nextLayer =
+      action === "front"
+        ? maxLayer + 1
+        : action === "back"
+          ? minLayer - 1
+          : action === "up"
+            ? current.layer + 1
+            : current.layer - 1;
+    updateSelectedClip({ zIndex: nextLayer });
+  };
   const removeSelectedClip = () => {
     if (selectedClipKeys.length > 1) {
       const selected = new Set(selectedClipKeys);
@@ -1090,7 +1116,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
         ...base,
         textOverlays: [
           ...items,
-          { id: `text_${Date.now()}`, label: "CTA text", text: "Свяжитесь с поставщиком", time: Math.min(3, duration), duration: 3, enabled: true, x: 50, y: 78, fontSize: 22, scale: 1 },
+          { id: `text_${Date.now()}`, label: "CTA text", text: "Свяжитесь с поставщиком", time: Math.min(3, duration), duration: 3, enabled: true, x: 50, y: 78, fontSize: 22, scale: 1, zIndex: 30 + items.length },
         ],
       };
     });
@@ -1104,7 +1130,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
         ...base,
         imageOverlays: [
           ...items,
-          { id: `image_${Date.now()}`, label: "Product card", time: Math.min(5, duration), duration: 4, enabled: true, x: 50, y: 72, scale: 1, width: 34 },
+          { id: `image_${Date.now()}`, label: "Product card", time: Math.min(5, duration), duration: 4, enabled: true, x: 50, y: 72, scale: 1, width: 34, zIndex: 20 + items.length },
         ],
       };
     });
@@ -1131,6 +1157,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
             y: 72,
             scale: 1,
             width: 34,
+            zIndex: 20 + items.length,
           },
         ],
       };
@@ -1581,7 +1608,13 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       <video src={previewUrl} controls onTimeUpdate={(event) => seekTimeline(event.currentTarget.currentTime)} className="aspect-[9/16] max-h-[210px] w-full bg-black object-contain" />
                       {textOverlays.map((item, index) => {
                         if (item.enabled === false || !isOverlayVisibleAtTime(item)) return null;
-                        const textStyle = { left: `${Number(item.x ?? 50)}%`, top: `${Number(item.y ?? 78)}%`, fontSize: `${Number(item.fontSize || 22) * Number(item.scale || 1)}px`, maxWidth: "80%" };
+                        const textStyle = {
+                          left: `${Number(item.x ?? 50)}%`,
+                          top: `${Number(item.y ?? 78)}%`,
+                          fontSize: `${Number(item.fontSize || 22) * Number(item.scale || 1)}px`,
+                          maxWidth: "80%",
+                          zIndex: getOverlayLayer("text", item, index),
+                        };
                         if (editingTextIndex === index) {
                           return (
                             <textarea
@@ -1636,7 +1669,12 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                           type="button"
                           onPointerDown={(event) => startDragOverlayOnPreview(event, "image", index)}
                           className={cn("absolute -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-xl bg-fuchsia-500/90 px-3 py-2 text-xs font-black text-white ring-2 ring-transparent active:cursor-grabbing", ((selectedClip.type === "image" && selectedClip.index === index) || isClipMultiSelected("image", index)) && "ring-white")}
-                          style={{ left: `${Number(item.x ?? 50)}%`, top: `${Number(item.y ?? 72)}%`, width: `${Number(item.width || 34) * Number(item.scale || 1)}%` }}
+                          style={{
+                            left: `${Number(item.x ?? 50)}%`,
+                            top: `${Number(item.y ?? 72)}%`,
+                            width: `${Number(item.width || 34) * Number(item.scale || 1)}%`,
+                            zIndex: getOverlayLayer("image", item, index),
+                          }}
                         >
                           {item.url ? <img src={item.url} alt={item.label || "Overlay"} className="h-full w-full rounded-lg object-contain" /> : (item.label || "Sticker")}
                           <span
@@ -2089,6 +2127,18 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                         <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Размер · {Math.round(Number(selectedItem.scale || 1) * 100)}%</span>
                         <input type="range" min="0.4" max="2.5" step="0.05" value={Number(selectedItem.scale || 1)} onChange={(e) => updateSelectedClip({ scale: Number(e.target.value) })} className="mt-2 w-full accent-amber-500" />
                       </label>
+                      <div className="rounded-xl bg-slate-50 p-2 ring-1 ring-slate-100">
+                        <div className="mb-2 flex items-center justify-between gap-2 px-1">
+                          <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Слой</span>
+                          <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-slate-600 ring-1 ring-slate-200">{getOverlayLayer(selectedClip.type, selectedItem, selectedClip.index)}</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button type="button" onClick={() => updateSelectedOverlayLayer("front")} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100">На передний</button>
+                          <button type="button" onClick={() => updateSelectedOverlayLayer("back")} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100">На задний</button>
+                          <button type="button" onClick={() => updateSelectedOverlayLayer("up")} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100">Выше</button>
+                          <button type="button" onClick={() => updateSelectedOverlayLayer("down")} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100">Ниже</button>
+                        </div>
+                      </div>
                       {selectedClip.type === "text" ? (
                         <label className="block rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
                           <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Font size · {Number(selectedItem.fontSize || 22)}px</span>
