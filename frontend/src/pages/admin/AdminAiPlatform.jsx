@@ -841,6 +841,11 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       item: clonePlan(item),
     })));
   };
+  const cutSelectedClips = () => {
+    if (!selectedClipItems.length) return;
+    copySelectedClips();
+    removeSelectedClip();
+  };
   const pasteTimelineClipboard = () => {
     if (!timelineClipboard.length) return;
     const pastedKeys = [];
@@ -970,6 +975,11 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       if ((event.ctrlKey || event.metaKey) && String(event.key).toLowerCase() === "c") {
         event.preventDefault();
         copySelectedClips();
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && String(event.key).toLowerCase() === "x") {
+        event.preventDefault();
+        cutSelectedClips();
         return;
       }
       if ((event.ctrlKey || event.metaKey) && String(event.key).toLowerCase() === "v") {
@@ -1541,6 +1551,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                   <button type="button" onClick={playPlan} className="rounded-2xl bg-indigo-600 px-3 py-2 text-xs font-black text-white hover:bg-indigo-500">Прослушать</button>
                   <button type="button" onClick={selectAllTimelineClips} className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-950 hover:bg-slate-100">Все клипы</button>
                   <button type="button" onClick={copySelectedClips} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Copy</button>
+                  <button type="button" onClick={cutSelectedClips} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Cut</button>
                   <button type="button" onClick={pasteTimelineClipboard} disabled={!timelineClipboard.length} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15 disabled:opacity-40">Paste{timelineClipboard.length ? ` ${timelineClipboard.length}` : ""}</button>
                   <button type="button" onClick={selectClipsAtPlayhead} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Выбрать на playhead</button>
                   <button type="button" onClick={() => selectClipsByType("sfx")} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">SFX</button>
@@ -1789,7 +1800,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       })}
                     </div>
                   </div>
-                  <div className="mt-3 text-[10px] font-bold text-slate-500">Кликни клип на дорожке, чтобы редактировать. Ctrl+A выбирает все клипы, Ctrl+C/Ctrl+V копирует и вставляет выбранное, Shift+click выбирает несколько, Esc сбрасывает группу, стрелки двигают выбранное, Shift+стрелки быстрее. S режет по playhead, Ctrl+Z откат, Ctrl+Y повтор, Ctrl+D дублирует, Delete удаляет.</div>
+                  <div className="mt-3 text-[10px] font-bold text-slate-500">Кликни клип на дорожке, чтобы редактировать. Ctrl+A выбирает все клипы, Ctrl+C/Ctrl+X/Ctrl+V копирует, вырезает и вставляет выбранное, Shift+click выбирает несколько, Esc сбрасывает группу, стрелки двигают выбранное, Shift+стрелки быстрее. S режет по playhead, Ctrl+Z откат, Ctrl+Y повтор, Ctrl+D дублирует, Delete удаляет.</div>
                 </div>
               </div>
             </div>
