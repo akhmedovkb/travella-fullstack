@@ -1399,6 +1399,66 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     window.addEventListener("pointermove", handleMove);
     window.addEventListener("pointerup", handleUp, { once: true });
   };
+  const startDragPreviewGroup = (event, type, index) => {
+    const clickedKey = getClipKey(type, index);
+    const overlayItems = selectedClipItems
+      .filter((clip) => clip.type === "text" || clip.type === "image")
+      .map((clip) => ({
+        ...clip,
+        x: Number(clip.item.x ?? 50),
+        y: Number(clip.item.y ?? (clip.type === "text" ? 78 : 72)),
+      }));
+    if (overlayItems.length <= 1 || !selectedClipKeys.includes(clickedKey)) return false;
+    const rect = previewFrameRef.current?.getBoundingClientRect();
+    const clicked = overlayItems.find((clip) => clip.key === clickedKey);
+    if (!rect?.width || !rect?.height || !clicked) return false;
+    const pointerX = ((event.clientX - rect.left) / rect.width) * 100;
+    const pointerY = ((event.clientY - rect.top) / rect.height) * 100;
+    const grabOffsetX = pointerX - clicked.x;
+    const grabOffsetY = pointerY - clicked.y;
+    const minX = Math.min(...overlayItems.map((clip) => clip.x));
+    const maxX = Math.max(...overlayItems.map((clip) => clip.x));
+    const minY = Math.min(...overlayItems.map((clip) => clip.y));
+    const maxY = Math.max(...overlayItems.map((clip) => clip.y));
+    const initialByKey = new Map(overlayItems.map((clip) => [clip.key, { x: clip.x, y: clip.y }]));
+    setSelectedClip({ type, index });
+    const moveGroup = (clientX, clientY) => {
+      const nextRect = previewFrameRef.current?.getBoundingClientRect();
+      if (!nextRect?.width || !nextRect?.height) return;
+      const nextX = ((clientX - nextRect.left) / nextRect.width) * 100;
+      const nextY = ((clientY - nextRect.top) / nextRect.height) * 100;
+      const requestedDx = nextX - grabOffsetX - clicked.x;
+      const requestedDy = nextY - grabOffsetY - clicked.y;
+      const boundedDx = Math.max(-minX, Math.min(100 - maxX, requestedDx));
+      const boundedDy = Math.max(-minY, Math.min(100 - maxY, requestedDy));
+      const moveItems = (items, itemType) => (Array.isArray(items) ? items : []).map((item, itemIndex) => {
+        const key = getClipKey(itemType, itemIndex);
+        const initial = initialByKey.get(key);
+        if (!initial) return item;
+        return {
+          ...item,
+          x: Math.round(initial.x + boundedDx),
+          y: Math.round(initial.y + boundedDy),
+        };
+      });
+      setDraft((prev) => {
+        const base = prev || {};
+        return {
+          ...base,
+          textOverlays: moveItems(base.textOverlays, "text"),
+          imageOverlays: moveItems(base.imageOverlays, "image"),
+        };
+      });
+    };
+    const handleMove = (moveEvent) => moveGroup(moveEvent.clientX, moveEvent.clientY);
+    const handleUp = () => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+    };
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp, { once: true });
+    return true;
+  };
   const startDragOverlayOnPreview = (event, type, index) => {
     event.preventDefault();
     event.stopPropagation();
@@ -1406,6 +1466,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       toggleClipSelection(type, index);
       return;
     }
+    if (startDragPreviewGroup(event, type, index)) return;
     selectSingleClip(type, index);
     const moveTo = (clientX, clientY) => {
       const rect = previewFrameRef.current?.getBoundingClientRect();
