@@ -1164,11 +1164,19 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     event.target.value = "";
     await importMediaFile(file);
   };
-  const moveEffectToClientX = (index, clientX) => {
+  const clientXToTimelineTime = (clientX) => {
     const rect = timelineRef.current?.getBoundingClientRect();
-    if (!rect?.width) return;
+    if (!rect?.width) return null;
     const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    updateEffect(index, { time: Math.round(ratio * duration * 10) / 10 });
+    return Math.round(ratio * duration * 10) / 10;
+  };
+  const moveEffectToClientXWithOffset = (index, clientX, grabOffset = 0) => {
+    const pointerTime = clientXToTimelineTime(clientX);
+    const source = effects[index];
+    if (pointerTime === null || !source) return;
+    const clipDuration = Number(source.duration || getSoundPreset(source.assetId).tone?.duration || 0.3);
+    const target = Math.max(0, Math.min(duration - Math.max(0.1, clipDuration), pointerTime - grabOffset));
+    updateEffect(index, { time: Math.round(target * 10) / 10 });
   };
   const resizeEffectToClientX = (index, edge, clientX) => {
     const rect = timelineRef.current?.getBoundingClientRect();
@@ -1190,11 +1198,14 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     const nextEnd = Math.max(start + 0.1, Math.min(duration, pointerTime));
     updateEffect(index, { duration: Math.round((nextEnd - start) * 10) / 10 });
   };
-  const moveOverlayToClientX = (type, index, clientX) => {
-    const rect = timelineRef.current?.getBoundingClientRect();
-    if (!rect?.width) return;
-    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    updateOverlay(type, index, { time: Math.round(ratio * duration * 10) / 10 });
+  const moveOverlayToClientXWithOffset = (type, index, clientX, grabOffset = 0) => {
+    const pointerTime = clientXToTimelineTime(clientX);
+    const source = getOverlayItems(type)[index];
+    if (pointerTime === null || !source) return;
+    const fallbackDuration = type === "video" ? 5 : type === "image" ? 4 : 3;
+    const clipDuration = Number(source.duration || fallbackDuration);
+    const target = Math.max(0, Math.min(duration - Math.max(0.1, clipDuration), pointerTime - grabOffset));
+    updateOverlay(type, index, { time: Math.round(target * 10) / 10 });
   };
   const resizeOverlayToClientX = (type, index, edge, clientX) => {
     const rect = timelineRef.current?.getBoundingClientRect();
@@ -1226,8 +1237,10 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       return;
     }
     selectSingleClip("sfx", index);
-    moveEffectToClientX(index, event.clientX);
-    const handleMove = (moveEvent) => moveEffectToClientX(index, moveEvent.clientX);
+    const source = effects[index];
+    const pointerTime = clientXToTimelineTime(event.clientX);
+    const grabOffset = source && pointerTime !== null ? Math.max(0, pointerTime - Number(source.time || 0)) : 0;
+    const handleMove = (moveEvent) => moveEffectToClientXWithOffset(index, moveEvent.clientX, grabOffset);
     const handleUp = () => {
       window.removeEventListener("pointermove", handleMove);
       window.removeEventListener("pointerup", handleUp);
@@ -1256,8 +1269,10 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       return;
     }
     selectSingleClip(type, index);
-    moveOverlayToClientX(type, index, event.clientX);
-    const handleMove = (moveEvent) => moveOverlayToClientX(type, index, moveEvent.clientX);
+    const source = getOverlayItems(type)[index];
+    const pointerTime = clientXToTimelineTime(event.clientX);
+    const grabOffset = source && pointerTime !== null ? Math.max(0, pointerTime - Number(source.time || 0)) : 0;
+    const handleMove = (moveEvent) => moveOverlayToClientXWithOffset(type, index, moveEvent.clientX, grabOffset);
     const handleUp = () => {
       window.removeEventListener("pointermove", handleMove);
       window.removeEventListener("pointerup", handleUp);
