@@ -785,12 +785,26 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     }
     return splitEffect(selectedClip.index);
   };
+  const getClipDurationForType = (type, item) => Number(item?.duration || (type === "video" ? 5 : type === "image" ? 4 : type === "text" ? 3 : getSoundPreset(item?.assetId).tone?.duration || 0.3));
   const nudgeSelectedClip = (amount) => {
     if (selectedClipKeys.length > 1) {
       const selected = new Set(selectedClipKeys);
+      const selectedRanges = selectedClipKeys
+        .map((key) => {
+          const [type, rawIndex] = key.split(":");
+          const index = Number(rawIndex) || 0;
+          const item = type === "sfx" ? effects[index] : type === "text" ? textOverlays[index] : type === "image" ? imageOverlays[index] : videoClips[index];
+          if (!item) return null;
+          const start = Number(item.time || 0);
+          return { start, end: start + getClipDurationForType(type, item) };
+        })
+        .filter(Boolean);
+      const groupStart = selectedRanges.length ? Math.min(...selectedRanges.map((item) => item.start)) : 0;
+      const groupEnd = selectedRanges.length ? Math.max(...selectedRanges.map((item) => item.end)) : duration;
+      const boundedAmount = Math.max(-groupStart, Math.min(duration - groupEnd, Math.round(Number(amount || 0) * 10) / 10));
       const shiftItem = (item) => {
         const current = Number(item?.time || 0);
-        return { ...item, time: Math.max(0, Math.min(duration, Math.round((current + amount) * 10) / 10)) };
+        return { ...item, time: Math.max(0, Math.min(duration, Math.round((current + boundedAmount) * 10) / 10)) };
       };
       setDraft((prev) => {
         const base = prev || {};
@@ -805,7 +819,8 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       return;
     }
     const current = Number(selectedItem?.time || 0);
-    updateSelectedClip({ time: Math.max(0, Math.min(duration, Math.round((current + amount) * 10) / 10)) });
+    const maxStart = Math.max(0, duration - getClipDurationForType(selectedClip.type, selectedItem));
+    updateSelectedClip({ time: Math.max(0, Math.min(maxStart, Math.round((current + amount) * 10) / 10)) });
   };
   const getSelectedGroupStart = () => {
     if (selectedClipKeys.length <= 1) return Number(selectedItem?.time || 0);
@@ -819,7 +834,6 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       .filter((value) => value !== null);
     return starts.length ? Math.min(...starts) : Number(selectedItem?.time || 0);
   };
-  const getClipDurationForType = (type, item) => Number(item?.duration || (type === "video" ? 5 : type === "image" ? 4 : type === "text" ? 3 : getSoundPreset(item?.assetId).tone?.duration || 0.3));
   const getSelectedGroupEnd = () => {
     if (selectedClipKeys.length <= 1) {
       return Number(selectedItem?.time || 0) + getClipDurationForType(selectedClip.type, selectedItem);
