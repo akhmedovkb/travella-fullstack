@@ -390,6 +390,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const [editingTextIndex, setEditingTextIndex] = React.useState(null);
   const [historyTick, setHistoryTick] = React.useState(0);
   const [timelineZoom, setTimelineZoom] = React.useState(1);
+  const [timelineClipboard, setTimelineClipboard] = React.useState([]);
   const timelineRef = React.useRef(null);
   const previewFrameRef = React.useRef(null);
   const mediaInputRef = React.useRef(null);
@@ -831,6 +832,49 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const selectedClipItems = getSelectedClipItems();
   const selectedGroupEnabledCount = selectedClipItems.filter(({ item }) => item.enabled !== false).length;
   const selectedGroupHasDisabled = selectedClipItems.some(({ item }) => item.enabled === false);
+  const copySelectedClips = () => {
+    if (!selectedClipItems.length) return;
+    const firstStart = Math.min(...selectedClipItems.map(({ item }) => Number(item.time || 0)));
+    setTimelineClipboard(selectedClipItems.map(({ type, item }) => ({
+      type,
+      offset: Math.max(0, Math.round((Number(item.time || 0) - firstStart) * 10) / 10),
+      item: clonePlan(item),
+    })));
+  };
+  const pasteTimelineClipboard = () => {
+    if (!timelineClipboard.length) return;
+    const pastedKeys = [];
+    const pasteItems = (items, type) => {
+      const nextItems = Array.isArray(items) ? [...items] : [];
+      timelineClipboard.filter((clip) => clip.type === type).forEach((clip, index) => {
+        const cloneIndex = nextItems.length;
+        pastedKeys.push(getClipKey(type, cloneIndex));
+        nextItems.push({
+          ...(clip.item || {}),
+          id: `${type}_paste_${Date.now()}_${index}_${cloneIndex}`,
+          time: Math.max(0, Math.min(duration, Math.round((currentTime + Number(clip.offset || 0)) * 10) / 10)),
+        });
+      });
+      return nextItems;
+    };
+    setDraft((prev) => {
+      const base = prev || {};
+      return {
+        ...base,
+        effects: pasteItems(base.effects, "sfx"),
+        textOverlays: pasteItems(base.textOverlays, "text"),
+        imageOverlays: pasteItems(base.imageOverlays, "image"),
+        videoClips: pasteItems(base.videoClips, "video"),
+      };
+    });
+    if (pastedKeys.length) {
+      setSelectedClipKeys(pastedKeys);
+      const [type, rawIndex] = pastedKeys[pastedKeys.length - 1].split(":");
+      const index = Number(rawIndex) || 0;
+      setSelectedClip({ type, index });
+      if (type === "sfx") setSelectedIndex(index);
+    }
+  };
   const toggleSelectedClipEnabled = () => {
     if (selectedClipKeys.length > 1) {
       const selected = new Set(selectedClipKeys);
@@ -923,6 +967,16 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
         selectAllTimelineClips();
         return;
       }
+      if ((event.ctrlKey || event.metaKey) && String(event.key).toLowerCase() === "c") {
+        event.preventDefault();
+        copySelectedClips();
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && String(event.key).toLowerCase() === "v") {
+        event.preventDefault();
+        pasteTimelineClipboard();
+        return;
+      }
       if (event.key === "Escape" && selectedClipKeys.length > 1) {
         event.preventDefault();
         selectSingleClip(selectedClip.type, selectedClip.index);
@@ -952,7 +1006,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [editorOpen, selectedItem, selectedClip, selectedClipKeys, effects, textOverlays, imageOverlays, videoClips, duration, currentTime, canUndo, canRedo]);
+  }, [editorOpen, selectedItem, selectedClip, selectedClipKeys, effects, textOverlays, imageOverlays, videoClips, duration, currentTime, timelineClipboard, canUndo, canRedo]);
   const updateTrim = (patch) => {
     setDraft((prev) => ({
       ...(prev || {}),
@@ -1486,6 +1540,8 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                 <div className="flex flex-wrap gap-2">
                   <button type="button" onClick={playPlan} className="rounded-2xl bg-indigo-600 px-3 py-2 text-xs font-black text-white hover:bg-indigo-500">Прослушать</button>
                   <button type="button" onClick={selectAllTimelineClips} className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-950 hover:bg-slate-100">Все клипы</button>
+                  <button type="button" onClick={copySelectedClips} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Copy</button>
+                  <button type="button" onClick={pasteTimelineClipboard} disabled={!timelineClipboard.length} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15 disabled:opacity-40">Paste{timelineClipboard.length ? ` ${timelineClipboard.length}` : ""}</button>
                   <button type="button" onClick={selectClipsAtPlayhead} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Выбрать на playhead</button>
                   <button type="button" onClick={() => selectClipsByType("sfx")} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">SFX</button>
                   <button type="button" onClick={() => selectClipsByType("text")} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Text</button>
@@ -1733,7 +1789,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       })}
                     </div>
                   </div>
-                  <div className="mt-3 text-[10px] font-bold text-slate-500">Кликни клип на дорожке, чтобы редактировать. Ctrl+A выбирает все клипы, Shift+click выбирает несколько, Esc сбрасывает группу, стрелки двигают выбранное, Shift+стрелки быстрее. S режет по playhead, Ctrl+Z откат, Ctrl+Y повтор, Ctrl+D дублирует, Delete удаляет.</div>
+                  <div className="mt-3 text-[10px] font-bold text-slate-500">Кликни клип на дорожке, чтобы редактировать. Ctrl+A выбирает все клипы, Ctrl+C/Ctrl+V копирует и вставляет выбранное, Shift+click выбирает несколько, Esc сбрасывает группу, стрелки двигают выбранное, Shift+стрелки быстрее. S режет по playhead, Ctrl+Z откат, Ctrl+Y повтор, Ctrl+D дублирует, Delete удаляет.</div>
                 </div>
               </div>
             </div>
