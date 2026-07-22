@@ -819,14 +819,36 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       .filter((value) => value !== null);
     return starts.length ? Math.min(...starts) : Number(selectedItem?.time || 0);
   };
+  const getClipDurationForType = (type, item) => Number(item?.duration || (type === "video" ? 5 : type === "image" ? 4 : type === "text" ? 3 : getSoundPreset(item?.assetId).tone?.duration || 0.3));
+  const getSelectedGroupEnd = () => {
+    if (selectedClipKeys.length <= 1) {
+      return Number(selectedItem?.time || 0) + getClipDurationForType(selectedClip.type, selectedItem);
+    }
+    const ends = selectedClipKeys
+      .map((key) => {
+        const [type, rawIndex] = key.split(":");
+        const index = Number(rawIndex) || 0;
+        const item = type === "sfx" ? effects[index] : type === "text" ? textOverlays[index] : type === "image" ? imageOverlays[index] : videoClips[index];
+        return item ? Number(item.time || 0) + getClipDurationForType(type, item) : null;
+      })
+      .filter((value) => value !== null);
+    return ends.length ? Math.max(...ends) : Number(selectedItem?.time || 0);
+  };
   const moveSelectedClipToTime = (time) => {
     const target = Math.max(0, Math.min(duration, Math.round((Number(time) || 0) * 10) / 10));
     if (selectedClipKeys.length > 1) {
-      const current = Number(selectedItem?.time || 0);
+      const current = getSelectedGroupStart();
       nudgeSelectedClip(Math.round((target - current) * 10) / 10);
       return;
     }
-    updateSelectedClip({ time: target });
+    const maxStart = Math.max(0, duration - getClipDurationForType(selectedClip.type, selectedItem));
+    updateSelectedClip({ time: Math.min(target, Math.round(maxStart * 10) / 10) });
+  };
+  const moveSelectedClipToEnd = () => {
+    const groupStart = getSelectedGroupStart();
+    const groupEnd = getSelectedGroupEnd();
+    const span = Math.max(0.1, groupEnd - groupStart);
+    moveSelectedClipToTime(Math.max(0, duration - span));
   };
   const getSelectedClipItems = () => selectedClipKeys
     .map((key) => {
@@ -1003,6 +1025,16 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       if (!event.ctrlKey && !event.metaKey && !event.altKey && String(event.key).toLowerCase() === "s") {
         event.preventDefault();
         splitSelectedClip();
+        return;
+      }
+      if (!event.ctrlKey && !event.metaKey && !event.altKey && event.key === "Home") {
+        event.preventDefault();
+        moveSelectedClipToTime(0);
+        return;
+      }
+      if (!event.ctrlKey && !event.metaKey && !event.altKey && event.key === "End") {
+        event.preventDefault();
+        moveSelectedClipToEnd();
         return;
       }
       if (event.key === "Delete" || event.key === "Backspace") {
@@ -1822,7 +1854,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       })}
                     </div>
                   </div>
-                  <div className="mt-3 text-[10px] font-bold text-slate-500">Кликни клип на дорожке, чтобы редактировать. Ctrl+A выбирает все клипы, Ctrl+C/Ctrl+X/Ctrl+V копирует, вырезает и вставляет выбранное, Shift+click выбирает несколько, Esc сбрасывает группу, стрелки двигают выбранное, Shift+стрелки быстрее. S режет по playhead, Ctrl+Z откат, Ctrl+Y повтор, Ctrl+D дублирует, Delete удаляет.</div>
+                  <div className="mt-3 text-[10px] font-bold text-slate-500">Кликни клип на дорожке, чтобы редактировать. Ctrl+A выбирает все клипы, Ctrl+C/Ctrl+X/Ctrl+V копирует, вырезает и вставляет выбранное, Shift+click выбирает несколько, Esc сбрасывает группу, стрелки двигают выбранное, Shift+стрелки быстрее. Home/End ставит выбранное в начало/к финалу. S режет по playhead, Ctrl+Z откат, Ctrl+Y повтор, Ctrl+D дублирует, Delete удаляет.</div>
                 </div>
               </div>
             </div>
@@ -1963,8 +1995,12 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                   </div>
                   <div className="grid grid-cols-3 gap-2">
                     <button type="button" onClick={duplicateSelectedClip} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Дубль</button>
-                    <button type="button" onClick={() => seekTimeline(getSelectedGroupStart())} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">К началу</button>
+                    <button type="button" onClick={() => moveSelectedClipToTime(0)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">В начало</button>
                     <button type="button" onClick={() => moveSelectedClipToTime(currentTime)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">На playhead</button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button type="button" onClick={() => seekTimeline(getSelectedGroupStart())} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Playhead к клипу</button>
+                    <button type="button" onClick={moveSelectedClipToEnd} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">К финалу</button>
                   </div>
                 </div>
               ) : (
