@@ -1229,6 +1229,19 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       },
     }));
   };
+  const removeMediaFromLibrary = (media) => {
+    if (!media?.url && !media?.id) return;
+    const targetId = media.id || "";
+    const targetUrl = media.url || "";
+    setDraft((prev) => ({
+      ...(prev || {}),
+      mediaLibrary: (Array.isArray(prev?.mediaLibrary) ? prev.mediaLibrary : []).filter((item) => {
+        if (targetId && item?.id === targetId) return false;
+        if (targetUrl && item?.url === targetUrl) return false;
+        return true;
+      }),
+    }));
+  };
   const importMediaFile = async (file) => {
     if (!file || !onImportMedia) return;
     const result = await onImportMedia(job, file);
@@ -1819,18 +1832,19 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                           <div className="mt-0.5 text-[9px] font-bold uppercase tracking-wide text-slate-500">{media.type} · {media.mimeType || "media"}</div>
                           <div className="mt-1.5 flex flex-wrap gap-1">
                             {media.type === "image" ? (
-                              <button type="button" onClick={() => addImageMediaToTrack(media)} className="rounded-lg bg-fuchsia-500 px-2 py-1 text-[9px] font-black text-white hover:bg-fuchsia-400">Image</button>
+                              <button type="button" onClick={() => addImageMediaToTrack(media)} className="rounded-lg bg-fuchsia-500 px-2 py-1 text-[9px] font-black text-white hover:bg-fuchsia-400">Image @ playhead</button>
                             ) : null}
                             {media.type === "video" ? (
-                              <button type="button" onClick={() => addVideoMediaToTrack(media)} className="rounded-lg bg-sky-500 px-2 py-1 text-[9px] font-black text-white hover:bg-sky-400">Video</button>
+                              <button type="button" onClick={() => addVideoMediaToTrack(media)} className="rounded-lg bg-sky-500 px-2 py-1 text-[9px] font-black text-white hover:bg-sky-400">Video @ playhead</button>
                             ) : null}
                             {media.type === "audio" ? (
                               <>
-                                <button type="button" onClick={() => addAudioMediaAsSfx(media)} className="rounded-lg bg-indigo-500 px-2 py-1 text-[9px] font-black text-white hover:bg-indigo-400">SFX</button>
+                                <button type="button" onClick={() => addAudioMediaAsSfx(media)} className="rounded-lg bg-indigo-500 px-2 py-1 text-[9px] font-black text-white hover:bg-indigo-400">SFX @ playhead</button>
                                 <button type="button" onClick={() => useAudioMediaAsMusic(media)} className="rounded-lg bg-emerald-500 px-2 py-1 text-[9px] font-black text-white hover:bg-emerald-400">Music</button>
                               </>
                             ) : null}
                             <a href={media.url} target="_blank" rel="noreferrer" className="rounded-lg bg-white/10 px-2 py-1 text-[9px] font-black text-white hover:bg-white/15">Open</a>
+                            <button type="button" onClick={() => removeMediaFromLibrary(media)} className="rounded-lg bg-rose-500/15 px-2 py-1 text-[9px] font-black text-rose-200 ring-1 ring-rose-400/20 hover:bg-rose-500/25">Remove</button>
                           </div>
                         </div>
                       </div>
