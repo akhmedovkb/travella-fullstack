@@ -1282,6 +1282,57 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     const nextEnd = Math.max(start + 0.2, Math.min(duration, pointerTime));
     updateOverlay(type, index, { duration: Math.round((nextEnd - start) * 10) / 10 });
   };
+  const startDragSelectedGroup = (event, type, index) => {
+    const clickedKey = getClipKey(type, index);
+    if (selectedClipKeys.length <= 1 || !selectedClipKeys.includes(clickedKey)) return false;
+    const pointerTime = clientXToTimelineTime(event.clientX);
+    const dragItems = selectedClipItems.map((clip) => {
+      const start = Number(clip.item.time || 0);
+      return {
+        ...clip,
+        start,
+        duration: getClipDurationForType(clip.type, clip.item),
+      };
+    });
+    const clicked = dragItems.find((clip) => clip.key === clickedKey);
+    if (pointerTime === null || !clicked) return false;
+    event.stopPropagation();
+    setSelectedClip({ type, index });
+    if (type === "sfx") setSelectedIndex(index);
+    const groupStart = Math.min(...dragItems.map((clip) => clip.start));
+    const groupEnd = Math.max(...dragItems.map((clip) => clip.start + clip.duration));
+    const grabOffset = Math.max(0, pointerTime - clicked.start);
+    const initialByKey = new Map(dragItems.map((clip) => [clip.key, clip.start]));
+    const moveGroup = (clientX) => {
+      const nextPointerTime = clientXToTimelineTime(clientX);
+      if (nextPointerTime === null) return;
+      const requestedDelta = Math.round((nextPointerTime - grabOffset - clicked.start) * 10) / 10;
+      const boundedDelta = Math.max(-groupStart, Math.min(duration - groupEnd, requestedDelta));
+      const moveItems = (items, itemType) => (Array.isArray(items) ? items : []).map((item, itemIndex) => {
+        const key = getClipKey(itemType, itemIndex);
+        if (!initialByKey.has(key)) return item;
+        return { ...item, time: Math.round((initialByKey.get(key) + boundedDelta) * 10) / 10 };
+      });
+      setDraft((prev) => {
+        const base = prev || {};
+        return {
+          ...base,
+          effects: moveItems(base.effects, "sfx"),
+          textOverlays: moveItems(base.textOverlays, "text"),
+          imageOverlays: moveItems(base.imageOverlays, "image"),
+          videoClips: moveItems(base.videoClips, "video"),
+        };
+      });
+    };
+    const handleMove = (moveEvent) => moveGroup(moveEvent.clientX);
+    const handleUp = () => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+    };
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp, { once: true });
+    return true;
+  };
   const startDragEffect = (event, index) => {
     event.preventDefault();
     if (event.shiftKey) {
@@ -1289,6 +1340,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       toggleClipSelection("sfx", index);
       return;
     }
+    if (startDragSelectedGroup(event, "sfx", index)) return;
     selectSingleClip("sfx", index);
     const source = effects[index];
     const pointerTime = clientXToTimelineTime(event.clientX);
@@ -1321,6 +1373,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       toggleClipSelection(type, index);
       return;
     }
+    if (startDragSelectedGroup(event, type, index)) return;
     selectSingleClip(type, index);
     const source = getOverlayItems(type)[index];
     const pointerTime = clientXToTimelineTime(event.clientX);
