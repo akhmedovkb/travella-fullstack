@@ -451,6 +451,9 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const selectedClipDuration = Number(selectedItem?.duration || selectedClipFallbackDuration);
   const selectedClipStart = Number(selectedItem?.time || 0);
   const selectedClipEnd = Math.round((selectedClipStart + selectedClipDuration) * 10) / 10;
+  const roundTimelineTime = (value) => Math.round(Number(value || 0) * 10) / 10;
+  const clampTimelineTime = (value, min = 0, max = duration) => Math.max(min, Math.min(max, roundTimelineTime(value)));
+  const clampClipDuration = (value, start = selectedClipStart) => Math.max(0.1, Math.min(Math.max(0.1, duration - start), roundTimelineTime(value)));
   const getClipKey = (type, index) => `${type}:${index}`;
   const isClipMultiSelected = (type, index) => selectedClipKeys.includes(getClipKey(type, index));
   const shiftClipTime = (item, amount = 0.7) => {
@@ -1890,16 +1893,22 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                   <div className="grid grid-cols-3 gap-2">
                     <label className="rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
                       <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Start</span>
-                      <input type="number" min="0" step="0.1" value={Number(selectedItem.time || 0)} onChange={(e) => updateSelectedClip({ time: Number(e.target.value) })} className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none" />
+                      <input type="number" min="0" max={Math.max(0, duration - 0.1)} step="0.1" value={selectedClipStart} onChange={(e) => {
+                        const nextStart = clampTimelineTime(e.target.value, 0, Math.max(0, duration - 0.1));
+                        updateSelectedClip({
+                          time: nextStart,
+                          duration: clampClipDuration(selectedClipDuration, nextStart),
+                        });
+                      }} className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none" />
                     </label>
                     <label className="rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
                       <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Duration</span>
-                      <input type="number" min="0.1" step="0.1" value={selectedClipDuration} onChange={(e) => updateSelectedClip({ duration: Math.max(0.1, Math.round(Number(e.target.value || 0) * 10) / 10) })} className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none" />
+                      <input type="number" min="0.1" max={Math.max(0.1, duration - selectedClipStart)} step="0.1" value={selectedClipDuration} onChange={(e) => updateSelectedClip({ duration: clampClipDuration(e.target.value) })} className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none" />
                     </label>
                     <label className="rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
                       <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">End</span>
-                      <input type="number" min="0.1" step="0.1" value={selectedClipEnd} onChange={(e) => {
-                        const nextEnd = Math.max(selectedClipStart + 0.1, Math.round(Number(e.target.value || 0) * 10) / 10);
+                      <input type="number" min={Math.round((selectedClipStart + 0.1) * 10) / 10} max={duration} step="0.1" value={selectedClipEnd} onChange={(e) => {
+                        const nextEnd = clampTimelineTime(e.target.value, selectedClipStart + 0.1, duration);
                         updateSelectedClip({ duration: Math.round((nextEnd - selectedClipStart) * 10) / 10 });
                       }} className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none" />
                     </label>
