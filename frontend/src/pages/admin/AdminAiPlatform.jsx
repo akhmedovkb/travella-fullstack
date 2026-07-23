@@ -393,6 +393,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const [timelineClipboard, setTimelineClipboard] = React.useState([]);
   const [previewMediaKey, setPreviewMediaKey] = React.useState("");
   const [mediaDragActive, setMediaDragActive] = React.useState(false);
+  const [assetBinFilter, setAssetBinFilter] = React.useState("all");
   const timelineRef = React.useRef(null);
   const previewFrameRef = React.useRef(null);
   const mediaInputRef = React.useRef(null);
@@ -436,6 +437,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const imageOverlays = Array.isArray(plan?.imageOverlays) ? plan.imageOverlays : [];
   const videoClips = Array.isArray(plan?.videoClips) ? plan.videoClips : [];
   const mediaLibrary = Array.isArray(plan?.mediaLibrary) ? plan.mediaLibrary : [];
+  const filteredMediaLibrary = assetBinFilter === "all" ? mediaLibrary : mediaLibrary.filter((media) => media.type === assetBinFilter);
   const mediaImporting = mediaImportLoading === job?.id;
   const selectedEffect = effects[selectedIndex] || effects[0] || null;
   const selectedItem =
@@ -1863,11 +1865,33 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                     <div>
                       <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">Asset Bin</div>
                       <div className="text-[10px] font-bold text-slate-400">Файлы этой задачи. Добавляются на текущую секунду playhead.</div>
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {[
+                          ["all", "All", mediaLibrary.length],
+                          ["image", "Images", mediaLibrary.filter((media) => media.type === "image").length],
+                          ["audio", "Audio", mediaLibrary.filter((media) => media.type === "audio").length],
+                          ["video", "Video", mediaLibrary.filter((media) => media.type === "video").length],
+                        ].map(([key, label, count]) => (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => setAssetBinFilter(key)}
+                            className={cn(
+                              "rounded-full px-2 py-1 text-[9px] font-black ring-1",
+                              assetBinFilter === key
+                                ? "bg-white text-slate-950 ring-white"
+                                : "bg-white/5 text-slate-300 ring-white/10 hover:bg-white/10"
+                            )}
+                          >
+                            {label} {count}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                     <button type="button" onClick={() => mediaInputRef.current?.click()} disabled={mediaImporting} className="shrink-0 rounded-2xl bg-emerald-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-emerald-500 disabled:opacity-40">{mediaImporting ? "Импорт..." : "+ файл"}</button>
                   </div>
                   <div className="flex gap-2 overflow-x-auto pb-1">
-                    {mediaLibrary.slice(0, 14).map((media) => {
+                    {filteredMediaLibrary.slice(0, 14).map((media) => {
                       const mediaKey = getMediaKey(media);
                       const previewOpen = previewMediaKey === mediaKey;
                       return (
