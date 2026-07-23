@@ -396,6 +396,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const [assetBinFilter, setAssetBinFilter] = React.useState("all");
   const [assetBinQuery, setAssetBinQuery] = React.useState("");
   const [assetBinSort, setAssetBinSort] = React.useState("recent");
+  const [selectedMediaKey, setSelectedMediaKey] = React.useState("");
   const timelineRef = React.useRef(null);
   const previewFrameRef = React.useRef(null);
   const mediaInputRef = React.useRef(null);
@@ -439,8 +440,10 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const imageOverlays = Array.isArray(plan?.imageOverlays) ? plan.imageOverlays : [];
   const videoClips = Array.isArray(plan?.videoClips) ? plan.videoClips : [];
   const mediaLibrary = Array.isArray(plan?.mediaLibrary) ? plan.mediaLibrary : [];
+  const getMediaIdentity = (media) => media?.id || media?.url || "";
   const assetBinSearch = assetBinQuery.trim().toLowerCase();
   const getMediaSortLabel = (media) => String(media?.label || media?.originalName || media?.url || "Media");
+  const selectedMedia = mediaLibrary.find((media) => getMediaIdentity(media) === selectedMediaKey) || null;
   const filteredMediaLibrary = mediaLibrary
     .map((media, index) => ({ media, index }))
     .filter(({ media }) => assetBinFilter === "all" || media.type === assetBinFilter)
@@ -1252,10 +1255,18 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       },
     }));
   };
+  const addMediaToTimeline = (media, targetTime = currentTime) => {
+    if (media?.type === "image") addImageMediaToTrack(media, targetTime);
+    if (media?.type === "audio") addAudioMediaAsSfx(media, targetTime);
+    if (media?.type === "video") addVideoMediaToTrack(media, targetTime);
+  };
   const removeMediaFromLibrary = (media) => {
     if (!media?.url && !media?.id) return;
     const targetId = media.id || "";
     const targetUrl = media.url || "";
+    const targetKey = getMediaIdentity(media);
+    setSelectedMediaKey((current) => (current === targetKey ? "" : current));
+    setPreviewMediaKey((current) => (current === targetKey ? "" : current));
     setDraft((prev) => ({
       ...(prev || {}),
       mediaLibrary: (Array.isArray(prev?.mediaLibrary) ? prev.mediaLibrary : []).filter((item) => {
@@ -1265,7 +1276,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       }),
     }));
   };
-  const getMediaKey = (media) => media?.id || media?.url || "";
+  const getMediaKey = getMediaIdentity;
   const toggleMediaPreview = (media) => {
     const key = getMediaKey(media);
     if (!key) return;
@@ -1942,8 +1953,24 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                     {filteredMediaLibrary.length ? filteredMediaLibrary.slice(0, 14).map((media) => {
                       const mediaKey = getMediaKey(media);
                       const previewOpen = previewMediaKey === mediaKey;
+                      const mediaSelected = selectedMediaKey === mediaKey;
                       return (
-                        <div key={mediaKey} className="w-64 shrink-0 rounded-2xl bg-slate-800 p-2 ring-1 ring-white/5">
+                        <div
+                          key={mediaKey}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => setSelectedMediaKey(mediaKey)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              setSelectedMediaKey(mediaKey);
+                            }
+                          }}
+                          className={cn(
+                            "w-64 shrink-0 cursor-pointer rounded-2xl bg-slate-800 p-2 ring-1 ring-white/5 transition hover:bg-slate-700",
+                            mediaSelected && "bg-slate-700 ring-2 ring-emerald-400/80"
+                          )}
+                        >
                           <div className="grid grid-cols-[44px_1fr] gap-2">
                             {media.type === "image" ? (
                               <img src={media.thumbnailUrl || media.url} alt="" className="h-11 w-11 rounded-xl object-cover ring-1 ring-white/10" />
@@ -1955,14 +1982,14 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                               <div className="mt-0.5 text-[9px] font-bold uppercase tracking-wide text-slate-500">{media.type} · {media.mimeType || "media"}</div>
                               <div className="mt-1.5 flex flex-wrap gap-1">
                                 {media.type === "image" ? (
-                                  <button type="button" onClick={() => addImageMediaToTrack(media)} className="rounded-lg bg-fuchsia-500 px-2 py-1 text-[9px] font-black text-white hover:bg-fuchsia-400">Image @ playhead</button>
+                                  <button type="button" onClick={() => addMediaToTimeline(media)} className="rounded-lg bg-fuchsia-500 px-2 py-1 text-[9px] font-black text-white hover:bg-fuchsia-400">Image @ playhead</button>
                                 ) : null}
                                 {media.type === "video" ? (
-                                  <button type="button" onClick={() => addVideoMediaToTrack(media)} className="rounded-lg bg-sky-500 px-2 py-1 text-[9px] font-black text-white hover:bg-sky-400">Video @ playhead</button>
+                                  <button type="button" onClick={() => addMediaToTimeline(media)} className="rounded-lg bg-sky-500 px-2 py-1 text-[9px] font-black text-white hover:bg-sky-400">Video @ playhead</button>
                                 ) : null}
                                 {media.type === "audio" ? (
                                   <>
-                                    <button type="button" onClick={() => addAudioMediaAsSfx(media)} className="rounded-lg bg-indigo-500 px-2 py-1 text-[9px] font-black text-white hover:bg-indigo-400">SFX @ playhead</button>
+                                    <button type="button" onClick={() => addMediaToTimeline(media)} className="rounded-lg bg-indigo-500 px-2 py-1 text-[9px] font-black text-white hover:bg-indigo-400">SFX @ playhead</button>
                                     <button type="button" onClick={() => useAudioMediaAsMusic(media)} className="rounded-lg bg-emerald-500 px-2 py-1 text-[9px] font-black text-white hover:bg-emerald-400">Music</button>
                                   </>
                                 ) : null}
@@ -2177,6 +2204,34 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
             </div>
             <div className="rounded-2xl bg-white p-3 ring-1 ring-indigo-100">
               <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Inspector</div>
+              {selectedMedia ? (
+                <div className="mt-2 space-y-2 rounded-2xl bg-slate-950 p-2 text-white ring-1 ring-slate-900">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">Asset Bin</div>
+                      <div className="truncate text-xs font-black">{selectedMedia.label || selectedMedia.originalName || "Media"}</div>
+                      <div className="mt-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">{selectedMedia.type || "file"} · {selectedMedia.mimeType || "media"}</div>
+                    </div>
+                    <button type="button" onClick={() => setSelectedMediaKey("")} className="rounded-full bg-white/10 px-2 py-1 text-[10px] font-black text-slate-300 hover:bg-white/15">Clear</button>
+                  </div>
+                  {previewMediaKey === getMediaKey(selectedMedia) ? (
+                    <div className="overflow-hidden rounded-xl bg-black p-1 ring-1 ring-white/10">
+                      {selectedMedia.type === "image" ? <img src={selectedMedia.url} alt={selectedMedia.label || "Preview"} className="max-h-36 w-full rounded-lg object-contain" /> : null}
+                      {selectedMedia.type === "audio" ? <audio src={selectedMedia.url} controls className="w-full" /> : null}
+                      {selectedMedia.type === "video" ? <video src={selectedMedia.url} controls className="max-h-36 w-full rounded-lg object-contain" /> : null}
+                    </div>
+                  ) : null}
+                  <div className="grid grid-cols-2 gap-2">
+                    <button type="button" onClick={() => addMediaToTimeline(selectedMedia)} className="rounded-xl bg-emerald-500 px-3 py-2 text-xs font-black text-white hover:bg-emerald-400">На playhead</button>
+                    <button type="button" onClick={() => toggleMediaPreview(selectedMedia)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-950 hover:bg-slate-100">{previewMediaKey === getMediaKey(selectedMedia) ? "Скрыть" : "Preview"}</button>
+                    {selectedMedia.type === "audio" ? (
+                      <button type="button" onClick={() => useAudioMediaAsMusic(selectedMedia)} className="rounded-xl bg-cyan-500 px-3 py-2 text-xs font-black text-white hover:bg-cyan-400">Как music</button>
+                    ) : null}
+                    <a href={selectedMedia.url} target="_blank" rel="noreferrer" className="rounded-xl bg-white/10 px-3 py-2 text-center text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Open</a>
+                    <button type="button" onClick={() => removeMediaFromLibrary(selectedMedia)} className="rounded-xl bg-rose-500/15 px-3 py-2 text-xs font-black text-rose-100 ring-1 ring-rose-400/20 hover:bg-rose-500/25">Remove</button>
+                  </div>
+                </div>
+              ) : null}
               {selectedItem ? (
                 <div className={cn("mt-2 space-y-2", selectedClipKeys.length <= 1 && selectedItem.enabled === false && "opacity-60")}>
                   {selectedClipKeys.length > 1 ? (
