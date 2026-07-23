@@ -392,6 +392,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const [timelineZoom, setTimelineZoom] = React.useState(1);
   const [timelineClipboard, setTimelineClipboard] = React.useState([]);
   const [previewMediaKey, setPreviewMediaKey] = React.useState("");
+  const [mediaDragActive, setMediaDragActive] = React.useState(false);
   const timelineRef = React.useRef(null);
   const previewFrameRef = React.useRef(null);
   const mediaInputRef = React.useRef(null);
@@ -1266,6 +1267,15 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       await importMediaFile(file);
     }
   };
+  const handleMediaDrop = async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setMediaDragActive(false);
+    const files = Array.from(event.dataTransfer?.files || []).filter((file) => file.type?.startsWith("image/") || file.type?.startsWith("audio/") || file.type?.startsWith("video/"));
+    for (const file of files) {
+      await importMediaFile(file);
+    }
+  };
   const clientXToTimelineTime = (clientX) => {
     const rect = timelineRef.current?.getBoundingClientRect();
     if (!rect?.width) return null;
@@ -1599,7 +1609,29 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
         </div>
         {editorOpen ? (
         <div className="fixed inset-0 z-50 bg-slate-950/70 p-3 backdrop-blur-sm md:p-6">
-          <div className="mx-auto flex h-full max-w-[96vw] flex-col overflow-hidden rounded-3xl bg-slate-50 shadow-2xl ring-1 ring-white/20">
+          <div
+            className={cn("relative mx-auto flex h-full max-w-[96vw] flex-col overflow-hidden rounded-3xl bg-slate-50 shadow-2xl ring-1 ring-white/20", mediaDragActive && "ring-4 ring-emerald-400")}
+            onDragEnter={(event) => {
+              event.preventDefault();
+              if (event.dataTransfer?.types?.includes("Files")) setMediaDragActive(true);
+            }}
+            onDragOver={(event) => {
+              event.preventDefault();
+              if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+            }}
+            onDragLeave={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget)) setMediaDragActive(false);
+            }}
+            onDrop={handleMediaDrop}
+          >
+            {mediaDragActive ? (
+              <div className="pointer-events-none absolute inset-3 z-20 flex items-center justify-center rounded-3xl border-2 border-dashed border-emerald-400 bg-emerald-500/10 backdrop-blur-[2px]">
+                <div className="rounded-3xl bg-white px-6 py-4 text-center shadow-xl ring-1 ring-emerald-100">
+                  <div className="text-sm font-black text-emerald-700">Отпусти файлы здесь</div>
+                  <div className="mt-1 text-xs font-bold text-slate-500">Картинки, видео и звук добавятся в Asset Bin и на текущий playhead.</div>
+                </div>
+              </div>
+            ) : null}
             <div className="flex flex-col gap-3 border-b border-slate-200 bg-white p-4 md:flex-row md:items-center md:justify-between">
               <div>
                 <div className="text-xs font-black uppercase tracking-wide text-indigo-700">Travella Timeline Studio</div>
