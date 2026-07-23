@@ -1260,11 +1260,15 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     if (media.type === "audio") addAudioMediaAsSfx(media, targetTime);
     if (media.type === "video") addVideoMediaToTrack(media, targetTime);
   };
+  const getBatchImportTime = (baseTime, index) => {
+    const nextTime = Number(baseTime || 0) + (Number(index) || 0) * 0.6;
+    return Math.max(0, Math.min(duration, Math.round(nextTime * 10) / 10));
+  };
   const handleMediaInput = async (event) => {
     const files = Array.from(event.target.files || []);
     event.target.value = "";
-    for (const file of files) {
-      await importMediaFile(file);
+    for (const [index, file] of files.entries()) {
+      await importMediaFile(file, getBatchImportTime(currentTime, index));
     }
   };
   const handleMediaDrop = async (event) => {
@@ -1274,8 +1278,8 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     const files = Array.from(event.dataTransfer?.files || []).filter((file) => file.type?.startsWith("image/") || file.type?.startsWith("audio/") || file.type?.startsWith("video/"));
     const targetTime = clientXToTimelineTime(event.clientX) ?? currentTime;
     seekTimeline(targetTime);
-    for (const file of files) {
-      await importMediaFile(file, targetTime);
+    for (const [index, file] of files.entries()) {
+      await importMediaFile(file, getBatchImportTime(targetTime, index));
     }
   };
   const clientXToTimelineTime = (clientX) => {
