@@ -1,5 +1,6 @@
 // backend/controllers/providerSupportController.js
 const pool = require("../db");
+const { resolveProviderByTelegramActorId } = require("../utils/providerTelegramResolver");
 
 const DEFAULT_SUGGESTED_AMOUNTS = [10000, 25000, 50000, 100000];
 const DEFAULT_MIN_AMOUNT_SUM = 1000;
@@ -373,6 +374,10 @@ function buildPaymeCheckoutUrl({
 async function getProviderByTelegramChatId(db, telegramChatId) {
   const chat = String(telegramChatId || "").trim();
   if (!chat) return null;
+  const resolved = await resolveProviderByTelegramActorId(db, chat, {
+    action: "provider_support",
+  });
+  if (!resolved) return null;
 
   const { rows } = await db.query(
     `
@@ -385,13 +390,9 @@ async function getProviderByTelegramChatId(db, telegramChatId) {
         telegram_refused_chat_id,
         telegram_web_chat_id
       FROM providers
-      WHERE telegram_chat_id::text = $1
-         OR telegram_refused_chat_id::text = $1
-         OR telegram_web_chat_id::text = $1
-      ORDER BY id DESC
-      LIMIT 1
+       WHERE id = $1
     `,
-    [chat]
+    [resolved.id]
   );
 
   return rows[0] || null;

@@ -3,6 +3,10 @@
 const pool = require("../db");
 const { tgSendToAdmins } = require("../utils/telegram");
 const { isServiceActual } = require("../telegram/helpers/serviceActual");
+const {
+  resolveProviderByTelegramActorId,
+  ProviderTelegramResolutionError,
+} = require("../utils/providerTelegramResolver");
 
 const SITE_PUBLIC_URL = (
   process.env.SITE_PUBLIC_URL ||
@@ -644,22 +648,29 @@ async function getProfileByChat(req, res) {
       return res.status(400).json({ error: "invalid role" });
     }
 
-    const result = await pool.query(
-      table === "providers"
-        ? `
-            SELECT id, name, phone, telegram_chat_id
-              FROM providers
-             WHERE telegram_chat_id = $1 OR tg_chat_id = $1
-             LIMIT 1
-          `
-        : `
+    let result;
+    if (table === "providers") {
+      const resolved = await resolveProviderByTelegramActorId(pool, chatId, {
+        endpoint: req.originalUrl || req.path || null,
+        action: "get_provider_profile",
+      });
+      result = resolved
+        ? await pool.query(
+            `SELECT id, name, phone, telegram_chat_id FROM providers WHERE id = $1`,
+            [resolved.id]
+          )
+        : { rowCount: 0, rows: [] };
+    } else {
+      result = await pool.query(
+        `
             SELECT id, name, phone, telegram_chat_id
               FROM clients
              WHERE telegram_chat_id = $1
              LIMIT 1
           `,
-      [chatId]
-    );
+        [chatId]
+      );
+    }
 
     if (result.rowCount === 0) {
       return res.status(404).json({ notFound: true });
@@ -667,6 +678,9 @@ async function getProfileByChat(req, res) {
 
     return res.json({ success: true, user: result.rows[0] });
   } catch (e) {
+    if (e instanceof ProviderTelegramResolutionError) {
+      return res.status(e.status || 409).json({ success: false, error: e.code });
+    }
     console.error("GET /api/telegram/profile error:", e);
     return res.status(500).json({ error: "Internal error" });
   }

@@ -40,6 +40,10 @@ const {
   createProviderSupportDonationOrder,
   getProviderSupportSettings,
 } = require("../controllers/providerSupportController");
+const {
+  resolveProviderByTelegramActorId,
+  ProviderTelegramResolutionError,
+} = require("../utils/providerTelegramResolver");
 
 /* ===================== CONFIG ===================== */
 const OFFER_VERSION = process.env.OFFER_VERSION || "v1.0";
@@ -5262,26 +5266,13 @@ async function ensureProviderServiceDraftsTable() {
   _providerDraftsReady = true;
 }
 
-async function resolveProviderIdByTelegramChatId(chatId) {
-  if (!pool || !chatId) return null;
-  try {
-    const r = await pool.query(
-      `
-      SELECT id
-        FROM providers
-       WHERE telegram_chat_id::text = $1
-          OR tg_chat_id::text = $1
-          OR telegram_refused_chat_id::text = $1
-          OR telegram_web_chat_id::text = $1
-       LIMIT 1
-      `,
-      [String(chatId)]
-    );
-    return r.rows?.[0]?.id ? Number(r.rows[0].id) : null;
-  } catch (e) {
-    console.error("[tg-bot] resolveProviderIdByTelegramChatId error:", e?.message || e);
-    return null;
-  }
+async function resolveProviderIdByTelegramChatId(chatId, options = {}) {
+  if (!pool) return null;
+  const resolved = await resolveProviderByTelegramActorId(pool, chatId, {
+    action: "telegram_bot",
+    ...options,
+  });
+  return resolved?.id || null;
 }
 
 async function getActiveProviderServiceDraft(ctx) {
@@ -5503,12 +5494,16 @@ async function saveProviderServiceDraft(ctx) {
   try {
     await ensureProviderServiceDraftsTable();
 
-    const providerId = await resolveProviderIdByTelegramChatId(chatId);
+    const providerId = await resolveProviderIdByTelegramChatId(chatId, {
+      action: "save_provider_service_draft",
+      ctxFromId: ctx.from?.id,
+      ctxChatId: ctx.chat?.id,
+    });
     const category = payload.category || null;
     const images = Array.isArray(payload.images) ? payload.images : [];
     const wizardStack = Array.isArray(ctx.session?.wizardStack) ? ctx.session.wizardStack : [];
 
-    await pool.query(
+    const savedDraft = await pool.query(
       `
       INSERT INTO telegram_provider_service_drafts (
         chat_id,
@@ -5531,6 +5526,7 @@ async function saveProviderServiceDraft(ctx) {
         images = EXCLUDED.images,
         wizard_stack = EXCLUDED.wizard_stack,
         updated_at = NOW()
+      RETURNING id
       `,
       [
         Number(chatId),
@@ -5542,6 +5538,16 @@ async function saveProviderServiceDraft(ctx) {
         JSON.stringify(wizardStack),
       ]
     );
+    console.info("[tg-bot] provider draft identity", {
+      actorTelegramId: String(chatId),
+      ctxFromId: ctx.from?.id || null,
+      ctxChatId: ctx.chat?.id || null,
+      resolvedProviderId: providerId,
+      endpoint: null,
+      action: "save_provider_service_draft",
+      serviceId: null,
+      draftId: savedDraft.rows?.[0]?.id || null,
+    });
 
     return true;
   } catch (e) {
@@ -6458,12 +6464,39 @@ function buildDraftProofSummary(ctx, serviceId, count = 0) {
 
 async function getProofImagesForService(serviceId) {
   if (!pool || !serviceId) return [];
+  // Ownership is checked by the caller because this helper is also used to render
+  // already-authorized service cards.
   const r = await pool.query(
     `SELECT details FROM services WHERE id = $1 LIMIT 1`,
     [Number(serviceId)]
   );
   const details = r.rows?.[0]?.details && typeof r.rows[0].details === "object" ? r.rows[0].details : {};
   return Array.isArray(details.proofImages) ? details.proofImages.filter(Boolean) : [];
+}
+
+async function assertTelegramActorOwnsService(ctx, serviceId, action) {
+  const actorTelegramId = ctx?.from?.id;
+  const resolved = await resolveProviderByTelegramActorId(pool, actorTelegramId, {
+    action,
+    serviceId,
+  });
+  if (!resolved?.id) {
+    const error = new Error("Provider not found");
+    error.code = "PROVIDER_NOT_FOUND";
+    error.status = 404;
+    throw error;
+  }
+  const owned = await pool.query(
+    `SELECT id, provider_id FROM services WHERE id = $1 AND provider_id = $2 LIMIT 1`,
+    [Number(serviceId), resolved.id]
+  );
+  if (!owned.rowCount) {
+    const error = new Error("Service does not belong to Telegram actor");
+    error.code = "SERVICE_PROVIDER_MISMATCH";
+    error.status = 403;
+    throw error;
+  }
+  return resolved.id;
 }
 
 async function replyProofUploadPrompt(ctx, { serviceId, category, isEditMode = false } = {}) {
@@ -6556,6 +6589,7 @@ async function sendProofCardPreview(ctx, serviceId) {
 async function deleteLastProofImage(ctx) {
   const serviceId = Number(ctx.session?.awaitingProofForServiceId || 0);
   if (!serviceId) return;
+  await assertTelegramActorOwnsService(ctx, serviceId, "proof_delete");
 
   const r = await pool.query(`SELECT details FROM services WHERE id = $1 LIMIT 1`, [serviceId]);
   const currentDetails = r.rows?.[0]?.details && typeof r.rows[0].details === "object" ? r.rows[0].details : {};
@@ -17183,6 +17217,7 @@ bot.on("photo", async (ctx, next) => {
     // 0) Фото-подтверждения для уже созданной refused-услуги
     const proofServiceId = ctx.session?.awaitingProofForServiceId;
     if (proofServiceId) {
+      await assertTelegramActorOwnsService(ctx, proofServiceId, "proof_upload");
       const photos = ctx.message?.photo;
       const best = Array.isArray(photos) && photos.length
         ? photos[photos.length - 1]
@@ -17381,6 +17416,7 @@ async function finishProofSubmissionFromBot(ctx) {
   try {
     const serviceId = Number(ctx.session?.awaitingProofForServiceId || 0);
     if (!serviceId) return;
+    await assertTelegramActorOwnsService(ctx, serviceId, "proof_submit");
 
     const svcRes = await pool.query(
       `
@@ -17488,7 +17524,9 @@ async function finishProofSubmissionFromBot(ctx) {
     console.error("[tg-bot] proof done error:", payload || e);
     await safeReply(
       ctx,
-      labels.length
+      e instanceof ProviderTelegramResolutionError
+        ? "⚠️ Telegram ID неоднозначно привязан к нескольким поставщикам. Отправка остановлена; обратитесь в поддержку."
+        : labels.length
         ? `⚠️ Пока нельзя отправить на модерацию.\n\nИсправьте:\n${labels.map((x) => `• ${x}`).join("\n")}`
         : "⚠️ Ошибка при завершении отправки на модерацию. Попробуйте ещё раз."
     );

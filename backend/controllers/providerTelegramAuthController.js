@@ -6,6 +6,7 @@
 const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 const pool = require("../db");
+const { resolveProviderByTelegramActorId } = require("../utils/providerTelegramResolver");
 
 function getBotToken() {
   // Provider web-login must be verified with the same bot that rendered
@@ -118,23 +119,12 @@ async function findProviderByTelegramId(telegramId) {
     "is_approved",
   ]);
 
-  const whereParts = [];
-  for (const col of ["telegram_chat_id", "tg_chat_id", "telegram_web_chat_id", "telegram_refused_chat_id"]) {
-    if (cols[col]) whereParts.push(`${col}::text = $1`);
-  }
-
-  if (!whereParts.length) return { provider: null, cols };
-
-  const q = await pool.query(
-    `
-      SELECT *
-        FROM providers
-       WHERE ${whereParts.join(" OR ")}
-       ORDER BY id DESC
-       LIMIT 1
-    `,
-    [String(telegramId)]
-  );
+  const resolved = await resolveProviderByTelegramActorId(pool, telegramId, {
+    includeWebChatId: true,
+    action: "provider_telegram_web_login",
+  });
+  if (!resolved) return { provider: null, cols };
+  const q = await pool.query(`SELECT * FROM providers WHERE id = $1`, [resolved.id]);
 
   return { provider: q.rows[0] || null, cols };
 }

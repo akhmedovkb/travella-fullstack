@@ -9,6 +9,10 @@ const { buildRefusedQuality } = require("../utils/refusedQuality");
 const { REFUSED_CATEGORIES } = require("../utils/serviceCategories");
 const { normalizeRefusedFlightDetails } = require("../utils/flightDetailsNormalizer");
 const { isServiceActual } = require("../telegram/helpers/serviceActual");
+const {
+  resolveProviderByTelegramActorId,
+  ProviderTelegramResolutionError,
+} = require("../utils/providerTelegramResolver");
 const MAX_TITLE_LEN = 100;
 const {
   extractPrices,
@@ -41,6 +45,24 @@ const API_PUBLIC_URL = (
 
 function publicBase() {
   return SITE_PUBLIC_URL || API_PUBLIC_URL || "https://travella.uz";
+}
+
+async function resolveTelegramProviderId(req, options = {}) {
+  const resolved = await resolveProviderByTelegramActorId(pool, req.params?.chatId, {
+    endpoint: req.originalUrl || req.path || null,
+    action: options.action || null,
+    serviceId: req.params?.serviceId || null,
+  });
+  return resolved?.id || null;
+}
+
+function sendTelegramProviderResolutionError(res, error) {
+  if (!(error instanceof ProviderTelegramResolutionError)) return false;
+  res.status(error.status || 409).json({
+    success: false,
+    error: error.code,
+  });
+  return true;
 }
 
 function safeParseDate(val, endOfDay = false) {
@@ -460,22 +482,10 @@ async function getProviderBookings(req, res) {
     const { chatId } = req.params;
     const status = req.query.status || "pending";
 
-    const providerRes = await pool.query(
-      `SELECT id, name
-         FROM providers
-        WHERE telegram_chat_id::text = $1
-           OR tg_chat_id::text = $1
-           OR telegram_web_chat_id::text = $1
-           OR telegram_refused_chat_id::text = $1
-        LIMIT 1`,
-      [chatId]
-    );
-
-    if (providerRes.rowCount === 0) {
+    const providerId = await resolveTelegramProviderId(req, { action: "get_bookings" });
+    if (!providerId) {
       return res.status(404).json({ error: "Provider not found" });
     }
-
-    const providerId = providerRes.rows[0].id;
 
     const bookingsRes = await pool.query(
       `SELECT
@@ -509,6 +519,7 @@ async function getProviderBookings(req, res) {
       bookings: bookingsRes.rows,
     });
   } catch (err) {
+    if (sendTelegramProviderResolutionError(res, err)) return;
     console.error("getProviderBookings error:", err);
     return res.status(500).json({ error: "Internal error" });
   }
@@ -517,6 +528,8 @@ async function getProviderBookings(req, res) {
 async function confirmBooking(req, res) {
   try {
     const { chatId, bookingId } = req.params;
+    const providerId = await resolveTelegramProviderId(req, { action: "confirm_booking" });
+    if (!providerId) return res.status(404).json({ error: "Provider not found" });
 
     const bookingRes = await pool.query(
       `SELECT
@@ -528,17 +541,11 @@ async function confirmBooking(req, res) {
          c.telegram_chat_id AS client_chat_id
        FROM bookings b
        JOIN services s ON s.id = b.service_id
-       JOIN providers p ON p.id = b.provider_id
-       JOIN clients  c ON c.id = b.client_id
-      WHERE b.id = $1
-        AND (
-          p.telegram_chat_id::text = $2
-          OR p.tg_chat_id::text = $2
-          OR p.telegram_web_chat_id::text = $2
-          OR p.telegram_refused_chat_id::text = $2
-        )
+        JOIN clients  c ON c.id = b.client_id
+       WHERE b.id = $1
+        AND b.provider_id = $2
       LIMIT 1`,
-      [bookingId, chatId]
+      [bookingId, providerId]
     );
 
     if (bookingRes.rowCount === 0) {
@@ -571,6 +578,7 @@ async function confirmBooking(req, res) {
 
     res.json({ success: true });
   } catch (err) {
+    if (sendTelegramProviderResolutionError(res, err)) return;
     console.error("confirmBooking error:", err);
     res.status(500).json({ error: "Internal error" });
   }
@@ -579,6 +587,8 @@ async function confirmBooking(req, res) {
 async function rejectBooking(req, res) {
   try {
     const { chatId, bookingId } = req.params;
+    const providerId = await resolveTelegramProviderId(req, { action: "reject_booking" });
+    if (!providerId) return res.status(404).json({ error: "Provider not found" });
 
     const bookingRes = await pool.query(
       `SELECT
@@ -588,17 +598,11 @@ async function rejectBooking(req, res) {
          c.telegram_chat_id AS client_chat_id
        FROM bookings b
        JOIN services s ON s.id = b.service_id
-       JOIN providers p ON p.id = b.provider_id
-       JOIN clients  c ON c.id = b.client_id
-      WHERE b.id = $1
-        AND (
-          p.telegram_chat_id::text = $2
-          OR p.tg_chat_id::text = $2
-          OR p.telegram_web_chat_id::text = $2
-          OR p.telegram_refused_chat_id::text = $2
-        )
+        JOIN clients  c ON c.id = b.client_id
+       WHERE b.id = $1
+        AND b.provider_id = $2
       LIMIT 1`,
-      [bookingId, chatId]
+      [bookingId, providerId]
     );
 
     if (bookingRes.rowCount === 0) {
@@ -630,6 +634,7 @@ async function rejectBooking(req, res) {
 
     res.json({ success: true });
   } catch (err) {
+    if (sendTelegramProviderResolutionError(res, err)) return;
     console.error("rejectBooking error:", err);
     res.status(500).json({ error: "Internal error" });
   }
@@ -639,24 +644,12 @@ async function getProviderServices(req, res) {
   try {
     const { chatId } = req.params;
 
-    const providerRes = await pool.query(
-      `SELECT id, name
-         FROM providers
-        WHERE telegram_chat_id::text = $1
-           OR tg_chat_id::text = $1
-           OR telegram_web_chat_id::text = $1
-           OR telegram_refused_chat_id::text = $1
-        LIMIT 1`,
-      [chatId]
-    );
-
-    if (providerRes.rowCount === 0) {
+    const providerId = await resolveTelegramProviderId(req, { action: "list_services" });
+    if (!providerId) {
       return res
         .status(404)
         .json({ success: false, error: "PROVIDER_NOT_FOUND" });
     }
-
-    const providerId = providerRes.rows[0].id;
 
     const categories = REFUSED_CATEGORIES;
 
@@ -711,6 +704,7 @@ async function getProviderServices(req, res) {
       items: servicesRes.rows,
     });
   } catch (err) {
+    if (sendTelegramProviderResolutionError(res, err)) return;
     console.error("[telegram] getProviderServices error:", err);
     return res.status(500).json({
       success: false,
@@ -724,23 +718,10 @@ async function getProviderServicesAll(req, res) {
   try {
     const { chatId } = req.params;
 
-    const provRes = await pool.query(
-      `SELECT id
-         FROM providers
-        WHERE telegram_chat_id::text = $1
-           OR tg_chat_id::text = $1
-           OR telegram_web_chat_id::text = $1
-           OR telegram_refused_chat_id::text = $1
-        LIMIT 1`,
-
-      [chatId]
-    );
-
-    if (!provRes.rowCount) {
+    const providerId = await resolveTelegramProviderId(req, { action: "list_services_all" });
+    if (!providerId) {
       return res.json({ success: true, items: [] });
     }
-
-    const providerId = provRes.rows[0].id;
 
     const servicesRes = await pool.query(
       `
@@ -769,6 +750,7 @@ async function getProviderServicesAll(req, res) {
       items: servicesRes.rows,
     });
   } catch (e) {
+    if (sendTelegramProviderResolutionError(res, e)) return;
     console.error("[tg] getProviderServicesAll error:", e);
     return res.status(500).json({ success: false });
   }
@@ -779,22 +761,10 @@ async function getProviderDraftServices(req, res) {
   try {
     const { chatId } = req.params;
 
-    const provRes = await pool.query(
-      `SELECT id
-         FROM providers
-        WHERE telegram_chat_id::text = $1
-           OR tg_chat_id::text = $1
-           OR telegram_web_chat_id::text = $1
-           OR telegram_refused_chat_id::text = $1
-        LIMIT 1`,
-      [chatId]
-    );
-
-    if (!provRes.rowCount) {
+    const providerId = await resolveTelegramProviderId(req, { action: "list_drafts" });
+    if (!providerId) {
       return res.status(403).json({ success: false });
     }
-
-    const providerId = provRes.rows[0].id;
 
     const q = await pool.query(
       `
@@ -815,6 +785,7 @@ async function getProviderDraftServices(req, res) {
 
     return res.json({ success: true, items: q.rows, services: q.rows });
   } catch (e) {
+    if (sendTelegramProviderResolutionError(res, e)) return;
     console.error("[tg] getProviderDraftServices error:", e);
     return res.status(500).json({ success: false });
   }
@@ -824,22 +795,10 @@ async function getProviderPendingServices(req, res) {
   try {
     const { chatId } = req.params;
 
-    const provRes = await pool.query(
-      `SELECT id
-         FROM providers
-        WHERE telegram_chat_id::text = $1
-           OR tg_chat_id::text = $1
-           OR telegram_web_chat_id::text = $1
-           OR telegram_refused_chat_id::text = $1
-        LIMIT 1`,
-      [chatId]
-    );
-
-    if (!provRes.rowCount) {
+    const providerId = await resolveTelegramProviderId(req, { action: "list_pending" });
+    if (!providerId) {
       return res.status(403).json({ success: false });
     }
-
-    const providerId = provRes.rows[0].id;
 
     const q = await pool.query(
       `
@@ -860,6 +819,7 @@ async function getProviderPendingServices(req, res) {
 
     return res.json({ success: true, items: q.rows, services: q.rows });
   } catch (e) {
+    if (sendTelegramProviderResolutionError(res, e)) return;
     console.error("[tg] getProviderPendingServices error:", e);
     return res.status(500).json({ success: false });
   }
@@ -871,22 +831,10 @@ async function getProviderArchiveServices(req, res) {
   try {
     const { chatId } = req.params;
 
-    const provRes = await pool.query(
-      `SELECT id
-         FROM providers
-        WHERE telegram_chat_id::text = $1
-           OR tg_chat_id::text = $1
-           OR telegram_web_chat_id::text = $1
-           OR telegram_refused_chat_id::text = $1
-        LIMIT 1`,
-      [chatId]
-    );
-
-    if (!provRes.rowCount) {
+    const providerId = await resolveTelegramProviderId(req, { action: "list_archive" });
+    if (!providerId) {
       return res.status(403).json({ success: false });
     }
-
-    const providerId = provRes.rows[0].id;
 
     const q = await pool.query(
       `
@@ -911,6 +859,7 @@ async function getProviderArchiveServices(req, res) {
 
     return res.json({ success: true, items: q.rows });
   } catch (e) {
+    if (sendTelegramProviderResolutionError(res, e)) return;
     console.error("[tg] getProviderArchiveServices error:", e);
     return res.status(500).json({ success: false });
   }
@@ -920,22 +869,10 @@ async function getProviderDeletedServices(req, res) {
   try {
     const { chatId } = req.params;
 
-    const provRes = await pool.query(
-      `SELECT id
-         FROM providers
-        WHERE telegram_chat_id::text = $1
-           OR tg_chat_id::text = $1
-           OR telegram_web_chat_id::text = $1
-           OR telegram_refused_chat_id::text = $1
-        LIMIT 1`,
-      [chatId]
-    );
-
-    if (!provRes.rowCount) {
+    const providerId = await resolveTelegramProviderId(req, { action: "list_deleted" });
+    if (!providerId) {
       return res.status(403).json({ success: false });
     }
-
-    const providerId = provRes.rows[0].id;
 
     const q = await pool.query(
       `
@@ -951,6 +888,7 @@ async function getProviderDeletedServices(req, res) {
 
     return res.json({ success: true, items: q.rows });
   } catch (e) {
+    if (sendTelegramProviderResolutionError(res, e)) return;
     console.error("[tg] getProviderDeletedServices error:", e);
     return res.status(500).json({ success: false });
   }
@@ -984,22 +922,7 @@ async function searchPublicServices(req, res) {
     }
 
     // определим провайдера по chatId (если это провайдер)
-    let providerId = null;
-    try {
-      const pr = await pool.query(
-        `SELECT id
-           FROM providers
-          WHERE telegram_chat_id::text = $1
-             OR tg_chat_id::text = $1
-             OR telegram_web_chat_id::text = $1
-             OR telegram_refused_chat_id::text = $1
-          LIMIT 1`,
-        [chatId]
-      );
-      providerId = pr.rows[0]?.id || null;
-    } catch (e) {
-      providerId = null;
-    }
+    const providerId = await resolveTelegramProviderId(req, { action: "search_public_services" });
 
     const categoryFilter =
       category === "refused_ticket"
@@ -1058,6 +981,7 @@ async function searchPublicServices(req, res) {
 
     return res.json({ success: true, items });
   } catch (err) {
+    if (sendTelegramProviderResolutionError(res, err)) return;
     console.error("[telegram] searchPublicServices error:", err);
     return res.status(500).json({ success: false, error: "SERVER_ERROR" });
   }
@@ -1074,22 +998,12 @@ async function serviceActionFromBot(req, res, action) {
         .json({ success: false, error: "BAD_SERVICE_ID" });
     }
 
-    const providerRes = await pool.query(
-      `SELECT id
-         FROM providers
-        WHERE telegram_chat_id::text = $1
-           OR tg_chat_id::text = $1
-           OR telegram_web_chat_id::text = $1
-           OR telegram_refused_chat_id::text = $1
-        LIMIT 1`,
-      [chatId]
-    );
-    if (providerRes.rowCount === 0) {
+    const providerId = await resolveTelegramProviderId(req, { action: `service_${action}` });
+    if (!providerId) {
       return res
         .status(404)
         .json({ success: false, error: "PROVIDER_NOT_FOUND" });
     }
-    const providerId = providerRes.rows[0].id;
 
     const oldService = await fetchProviderServiceSnapshot(svcId, providerId);
     if (!oldService) {
@@ -1150,6 +1064,7 @@ async function serviceActionFromBot(req, res, action) {
 
     return res.json({ success: true, service: updated });
   } catch (err) {
+    if (sendTelegramProviderResolutionError(res, err)) return;
     console.error("[telegram] serviceActionFromBot error:", err);
     return res
       .status(err?.status || 500)
@@ -1195,22 +1110,12 @@ async function createServiceFromBot(req, res) {
 
     const safeTitle = clampString(title, MAX_TITLE_LEN);
 
-    const providerRes = await pool.query(
-      `SELECT id
-         FROM providers
-        WHERE telegram_chat_id::text = $1
-           OR tg_chat_id::text = $1
-           OR telegram_web_chat_id::text = $1
-           OR telegram_refused_chat_id::text = $1
-        LIMIT 1`,
-      [chatId]
-    );
-    if (providerRes.rowCount === 0) {
+    const providerId = await resolveTelegramProviderId(req, { action: "create_service" });
+    if (!providerId) {
       return res
         .status(404)
         .json({ success: false, error: "PROVIDER_NOT_FOUND" });
     }
-    const providerId = providerRes.rows[0].id;
 
     let priceNum = null;
     if (price !== undefined && price !== null && price !== "") {
@@ -1325,6 +1230,7 @@ async function createServiceFromBot(req, res) {
       service: insertRes.rows[0],
     });
   } catch (err) {
+    if (sendTelegramProviderResolutionError(res, err)) return;
     console.error("[telegram] createServiceFromBot error:", err);
     return res
       .status(500)
@@ -1341,22 +1247,12 @@ async function getProviderServiceByIdFromBot(req, res) {
       return res.status(400).json({ success: false, error: "BAD_SERVICE_ID" });
     }
 
-    const providerRes = await pool.query(
-      `SELECT id
-         FROM providers
-        WHERE telegram_chat_id::text = $1
-           OR tg_chat_id::text = $1
-           OR telegram_web_chat_id::text = $1
-           OR telegram_refused_chat_id::text = $1
-        LIMIT 1`,
-      [chatId]
-    );
-    if (providerRes.rowCount === 0) {
+    const providerId = await resolveTelegramProviderId(req, { action: "get_service" });
+    if (!providerId) {
       return res
         .status(404)
         .json({ success: false, error: "PROVIDER_NOT_FOUND" });
     }
-    const providerId = providerRes.rows[0].id;
 
     const svcRes = await pool.query(
       `
@@ -1389,6 +1285,7 @@ async function getProviderServiceByIdFromBot(req, res) {
 
     return res.json({ success: true, service: svcRes.rows[0] });
   } catch (err) {
+    if (sendTelegramProviderResolutionError(res, err)) return;
     console.error("[telegram] getProviderServiceByIdFromBot error:", err);
     return res.status(500).json({ success: false, error: "SERVER_ERROR" });
   }
@@ -1402,22 +1299,10 @@ async function deleteServiceFromBot(req, res) {
   try {
     const { chatId, serviceId } = req.params;
 
-    const provRes = await pool.query(
-      `SELECT id
-         FROM providers
-        WHERE telegram_chat_id::text = $1
-           OR tg_chat_id::text = $1
-           OR telegram_web_chat_id::text = $1
-           OR telegram_refused_chat_id::text = $1
-        LIMIT 1`,
-      [chatId]
-    );
-
-    if (!provRes.rowCount) {
+    const providerId = await resolveTelegramProviderId(req, { action: "delete_service" });
+    if (!providerId) {
       return res.status(403).json({ success: false, error: "PROVIDER_NOT_FOUND" });
     }
-
-    const providerId = provRes.rows[0].id;
     const applied = await applyServiceLifecycleAction(pool, {
       providerId,
       serviceId,
@@ -1448,22 +1333,10 @@ async function restoreServiceFromBot(req, res) {
   try {
     const { chatId, serviceId } = req.params;
 
-    const provRes = await pool.query(
-      `SELECT id
-         FROM providers
-        WHERE telegram_chat_id::text = $1
-           OR tg_chat_id::text = $1
-           OR telegram_web_chat_id::text = $1
-           OR telegram_refused_chat_id::text = $1
-        LIMIT 1`,
-      [chatId]
-    );
-
-    if (!provRes.rowCount) {
+    const providerId = await resolveTelegramProviderId(req, { action: "restore_service" });
+    if (!providerId) {
       return res.status(403).json({ success: false, error: "PROVIDER_NOT_FOUND" });
     }
-
-    const providerId = provRes.rows[0].id;
     const applied = await applyServiceLifecycleAction(pool, {
       providerId,
       serviceId,
@@ -1495,22 +1368,10 @@ async function purgeServiceFromBot(req, res) {
   try {
     const { chatId, serviceId } = req.params;
 
-    const provRes = await pool.query(
-      `SELECT id
-         FROM providers
-        WHERE telegram_chat_id::text = $1
-           OR tg_chat_id::text = $1
-           OR telegram_web_chat_id::text = $1
-           OR telegram_refused_chat_id::text = $1
-        LIMIT 1`,
-      [chatId]
-    );
-
-    if (!provRes.rowCount) {
+    const providerId = await resolveTelegramProviderId(req, { action: "purge_service" });
+    if (!providerId) {
       return res.status(403).json({ success: false, error: "PROVIDER_NOT_FOUND" });
     }
-
-    const providerId = provRes.rows[0].id;
     const applied = await applyServiceLifecycleAction(pool, {
       providerId,
       serviceId,
@@ -1550,22 +1411,12 @@ async function updateServiceFromBot(req, res) {
       return res.status(400).json({ success: false, error: "BAD_SERVICE_ID" });
     }
 
-    const providerRes = await pool.query(
-      `SELECT id
-         FROM providers
-        WHERE telegram_chat_id::text = $1
-           OR tg_chat_id::text = $1
-           OR telegram_web_chat_id::text = $1
-           OR telegram_refused_chat_id::text = $1
-        LIMIT 1`,
-      [chatId]
-    );
-    if (providerRes.rowCount === 0) {
+    const providerId = await resolveTelegramProviderId(req, { action: "update_service" });
+    if (!providerId) {
       return res
         .status(404)
         .json({ success: false, error: "PROVIDER_NOT_FOUND" });
     }
-    const providerId = providerRes.rows[0].id;
 
     const svcRes = await pool.query(
       `SELECT id, provider_id, category, title, price, status, moderation_status, details, images, expiration_at, deleted_at, created_at, updated_at
@@ -1741,6 +1592,7 @@ async function updateServiceFromBot(req, res) {
     // Уведомление модерации отправляется только после proof + submitServiceFromBot().
     return res.json({ success: true, service: updRes.rows[0] });
   } catch (err) {
+    if (sendTelegramProviderResolutionError(res, err)) return;
     console.error("[telegram] updateServiceFromBot error:", err);
     return res.status(500).json({
       success: false,
@@ -1759,22 +1611,10 @@ async function submitServiceFromBot(req, res) {
       return res.status(400).json({ success: false, error: "BAD_SERVICE_ID" });
     }
 
-    const providerRes = await pool.query(
-      `SELECT id
-         FROM providers
-        WHERE telegram_chat_id::text = $1
-           OR tg_chat_id::text = $1
-           OR telegram_web_chat_id::text = $1
-           OR telegram_refused_chat_id::text = $1
-        LIMIT 1`,
-      [chatId]
-    );
-
-    if (!providerRes.rowCount) {
+    const providerId = await resolveTelegramProviderId(req, { action: "submit_service" });
+    if (!providerId) {
       return res.status(404).json({ success: false, error: "PROVIDER_NOT_FOUND" });
     }
-
-    const providerId = providerRes.rows[0].id;
     const applied = await applyServiceLifecycleAction(pool, {
       providerId,
       serviceId: svcId,
@@ -1810,6 +1650,7 @@ async function submitServiceFromBot(req, res) {
 
     return res.json({ success: true, service: applied.service, quality: buildRefusedQuality(applied.service) });
   } catch (err) {
+    if (sendTelegramProviderResolutionError(res, err)) return;
     console.error("[telegram] submitServiceFromBot error:", err);
     const labels = Array.isArray(err?.blockerDetails) ? err.blockerDetails.map((b) => b.label).filter(Boolean) : [];
     return res.status(err?.status || 500).json({

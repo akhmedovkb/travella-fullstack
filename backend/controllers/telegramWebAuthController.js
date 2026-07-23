@@ -2,6 +2,7 @@
 const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 const pool = require("../db");
+const { resolveProviderByTelegramActorId } = require("../utils/providerTelegramResolver");
 
 const JWT_SECRET = process.env.JWT_SECRET || "changeme_in_env";
 const LOGIN_MAX_AGE_SEC = Number(process.env.TELEGRAM_LOGIN_MAX_AGE_SEC || 86400);
@@ -208,19 +209,12 @@ async function touchClientTelegram(db, clientId, tgUser) {
 }
 
 async function findProviderByTelegram(db, tgId) {
-  return db.query(
-    `
-      SELECT *
-      FROM providers
-      WHERE telegram_chat_id::text = $1
-         OR tg_chat_id::text = $1
-         OR COALESCE(telegram_web_chat_id::text, '') = $1
-         OR COALESCE(telegram_refused_chat_id::text, '') = $1
-      ORDER BY id DESC
-      LIMIT 1
-    `,
-    [tgId]
-  );
+  const resolved = await resolveProviderByTelegramActorId(db, tgId, {
+    includeWebChatId: true,
+    action: "telegram_web_login",
+  });
+  if (!resolved) return { rows: [], rowCount: 0 };
+  return db.query(`SELECT * FROM providers WHERE id = $1`, [resolved.id]);
 }
 
 async function findClientByTelegram(db, tgId) {
