@@ -391,6 +391,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const [historyTick, setHistoryTick] = React.useState(0);
   const [timelineZoom, setTimelineZoom] = React.useState(1);
   const [timelineClipboard, setTimelineClipboard] = React.useState([]);
+  const [previewMediaKey, setPreviewMediaKey] = React.useState("");
   const timelineRef = React.useRef(null);
   const previewFrameRef = React.useRef(null);
   const mediaInputRef = React.useRef(null);
@@ -1242,6 +1243,12 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       }),
     }));
   };
+  const getMediaKey = (media) => media?.id || media?.url || "";
+  const toggleMediaPreview = (media) => {
+    const key = getMediaKey(media);
+    if (!key) return;
+    setPreviewMediaKey((current) => (current === key ? "" : key));
+  };
   const importMediaFile = async (file) => {
     if (!file || !onImportMedia) return;
     const result = await onImportMedia(job, file);
@@ -1820,35 +1827,49 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                     <button type="button" onClick={() => mediaInputRef.current?.click()} disabled={mediaImporting} className="shrink-0 rounded-2xl bg-emerald-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-emerald-500 disabled:opacity-40">{mediaImporting ? "Импорт..." : "+ файл"}</button>
                   </div>
                   <div className="flex gap-2 overflow-x-auto pb-1">
-                    {mediaLibrary.slice(0, 14).map((media) => (
-                      <div key={media.id || media.url} className="grid w-52 shrink-0 grid-cols-[44px_1fr] gap-2 rounded-2xl bg-slate-800 p-2 ring-1 ring-white/5">
-                        {media.type === "image" ? (
-                          <img src={media.thumbnailUrl || media.url} alt="" className="h-11 w-11 rounded-xl object-cover ring-1 ring-white/10" />
-                        ) : (
-                          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-950 text-[10px] font-black uppercase text-white ring-1 ring-white/10">{media.type || "file"}</div>
-                        )}
-                        <div className="min-w-0">
-                          <div className="truncate text-[11px] font-black text-white">{media.label || media.originalName || "Media"}</div>
-                          <div className="mt-0.5 text-[9px] font-bold uppercase tracking-wide text-slate-500">{media.type} · {media.mimeType || "media"}</div>
-                          <div className="mt-1.5 flex flex-wrap gap-1">
+                    {mediaLibrary.slice(0, 14).map((media) => {
+                      const mediaKey = getMediaKey(media);
+                      const previewOpen = previewMediaKey === mediaKey;
+                      return (
+                        <div key={mediaKey} className="w-64 shrink-0 rounded-2xl bg-slate-800 p-2 ring-1 ring-white/5">
+                          <div className="grid grid-cols-[44px_1fr] gap-2">
                             {media.type === "image" ? (
-                              <button type="button" onClick={() => addImageMediaToTrack(media)} className="rounded-lg bg-fuchsia-500 px-2 py-1 text-[9px] font-black text-white hover:bg-fuchsia-400">Image @ playhead</button>
-                            ) : null}
-                            {media.type === "video" ? (
-                              <button type="button" onClick={() => addVideoMediaToTrack(media)} className="rounded-lg bg-sky-500 px-2 py-1 text-[9px] font-black text-white hover:bg-sky-400">Video @ playhead</button>
-                            ) : null}
-                            {media.type === "audio" ? (
-                              <>
-                                <button type="button" onClick={() => addAudioMediaAsSfx(media)} className="rounded-lg bg-indigo-500 px-2 py-1 text-[9px] font-black text-white hover:bg-indigo-400">SFX @ playhead</button>
-                                <button type="button" onClick={() => useAudioMediaAsMusic(media)} className="rounded-lg bg-emerald-500 px-2 py-1 text-[9px] font-black text-white hover:bg-emerald-400">Music</button>
-                              </>
-                            ) : null}
-                            <a href={media.url} target="_blank" rel="noreferrer" className="rounded-lg bg-white/10 px-2 py-1 text-[9px] font-black text-white hover:bg-white/15">Open</a>
-                            <button type="button" onClick={() => removeMediaFromLibrary(media)} className="rounded-lg bg-rose-500/15 px-2 py-1 text-[9px] font-black text-rose-200 ring-1 ring-rose-400/20 hover:bg-rose-500/25">Remove</button>
+                              <img src={media.thumbnailUrl || media.url} alt="" className="h-11 w-11 rounded-xl object-cover ring-1 ring-white/10" />
+                            ) : (
+                              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-950 text-[10px] font-black uppercase text-white ring-1 ring-white/10">{media.type || "file"}</div>
+                            )}
+                            <div className="min-w-0">
+                              <div className="truncate text-[11px] font-black text-white">{media.label || media.originalName || "Media"}</div>
+                              <div className="mt-0.5 text-[9px] font-bold uppercase tracking-wide text-slate-500">{media.type} · {media.mimeType || "media"}</div>
+                              <div className="mt-1.5 flex flex-wrap gap-1">
+                                {media.type === "image" ? (
+                                  <button type="button" onClick={() => addImageMediaToTrack(media)} className="rounded-lg bg-fuchsia-500 px-2 py-1 text-[9px] font-black text-white hover:bg-fuchsia-400">Image @ playhead</button>
+                                ) : null}
+                                {media.type === "video" ? (
+                                  <button type="button" onClick={() => addVideoMediaToTrack(media)} className="rounded-lg bg-sky-500 px-2 py-1 text-[9px] font-black text-white hover:bg-sky-400">Video @ playhead</button>
+                                ) : null}
+                                {media.type === "audio" ? (
+                                  <>
+                                    <button type="button" onClick={() => addAudioMediaAsSfx(media)} className="rounded-lg bg-indigo-500 px-2 py-1 text-[9px] font-black text-white hover:bg-indigo-400">SFX @ playhead</button>
+                                    <button type="button" onClick={() => useAudioMediaAsMusic(media)} className="rounded-lg bg-emerald-500 px-2 py-1 text-[9px] font-black text-white hover:bg-emerald-400">Music</button>
+                                  </>
+                                ) : null}
+                                <button type="button" onClick={() => toggleMediaPreview(media)} className="rounded-lg bg-white px-2 py-1 text-[9px] font-black text-slate-950 hover:bg-slate-100">{previewOpen ? "Hide preview" : "Preview"}</button>
+                                <a href={media.url} target="_blank" rel="noreferrer" className="rounded-lg bg-white/10 px-2 py-1 text-[9px] font-black text-white hover:bg-white/15">Open</a>
+                                <button type="button" onClick={() => removeMediaFromLibrary(media)} className="rounded-lg bg-rose-500/15 px-2 py-1 text-[9px] font-black text-rose-200 ring-1 ring-rose-400/20 hover:bg-rose-500/25">Remove</button>
+                              </div>
+                            </div>
                           </div>
+                          {previewOpen ? (
+                            <div className="mt-2 overflow-hidden rounded-xl bg-slate-950 p-1 ring-1 ring-white/10">
+                              {media.type === "image" ? <img src={media.url} alt={media.label || "Preview"} className="max-h-36 w-full rounded-lg object-contain" /> : null}
+                              {media.type === "audio" ? <audio src={media.url} controls className="w-full" /> : null}
+                              {media.type === "video" ? <video src={media.url} controls className="max-h-36 w-full rounded-lg bg-black object-contain" /> : null}
+                            </div>
+                          ) : null}
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               ) : null}
