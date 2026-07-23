@@ -395,6 +395,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const [mediaDragActive, setMediaDragActive] = React.useState(false);
   const [assetBinFilter, setAssetBinFilter] = React.useState("all");
   const [assetBinQuery, setAssetBinQuery] = React.useState("");
+  const [assetBinSort, setAssetBinSort] = React.useState("recent");
   const timelineRef = React.useRef(null);
   const previewFrameRef = React.useRef(null);
   const mediaInputRef = React.useRef(null);
@@ -439,10 +440,23 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const videoClips = Array.isArray(plan?.videoClips) ? plan.videoClips : [];
   const mediaLibrary = Array.isArray(plan?.mediaLibrary) ? plan.mediaLibrary : [];
   const assetBinSearch = assetBinQuery.trim().toLowerCase();
-  const filteredMediaLibrary = (assetBinFilter === "all" ? mediaLibrary : mediaLibrary.filter((media) => media.type === assetBinFilter)).filter((media) => {
-    if (!assetBinSearch) return true;
-    return [media.label, media.originalName, media.mimeType, media.type].filter(Boolean).join(" ").toLowerCase().includes(assetBinSearch);
-  });
+  const getMediaSortLabel = (media) => String(media?.label || media?.originalName || media?.url || "Media");
+  const filteredMediaLibrary = mediaLibrary
+    .map((media, index) => ({ media, index }))
+    .filter(({ media }) => assetBinFilter === "all" || media.type === assetBinFilter)
+    .filter(({ media }) => {
+      if (!assetBinSearch) return true;
+      return [media.label, media.originalName, media.mimeType, media.type].filter(Boolean).join(" ").toLowerCase().includes(assetBinSearch);
+    })
+    .sort((left, right) => {
+      if (assetBinSort === "name") return getMediaSortLabel(left.media).localeCompare(getMediaSortLabel(right.media), "ru");
+      if (assetBinSort === "type") {
+        return String(left.media?.type || "").localeCompare(String(right.media?.type || ""), "ru")
+          || getMediaSortLabel(left.media).localeCompare(getMediaSortLabel(right.media), "ru");
+      }
+      return right.index - left.index;
+    })
+    .map(({ media }) => media);
   const mediaImporting = mediaImportLoading === job?.id;
   const selectedEffect = effects[selectedIndex] || effects[0] || null;
   const selectedItem =
@@ -1900,6 +1914,27 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                         placeholder="Search media..."
                         className="rounded-2xl bg-white/10 px-3 py-2 text-[10px] font-black text-white outline-none ring-1 ring-white/10 placeholder:text-slate-500 focus:ring-white/30"
                       />
+                      <div className="flex rounded-2xl bg-white/5 p-1 ring-1 ring-white/10">
+                        {[
+                          ["recent", "New"],
+                          ["name", "Name"],
+                          ["type", "Type"],
+                        ].map(([key, label]) => (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => setAssetBinSort(key)}
+                            className={cn(
+                              "flex-1 rounded-xl px-2 py-1 text-[9px] font-black transition",
+                              assetBinSort === key
+                                ? "bg-white text-slate-950"
+                                : "text-slate-400 hover:bg-white/10 hover:text-white"
+                            )}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
                       <button type="button" onClick={() => mediaInputRef.current?.click()} disabled={mediaImporting} className="rounded-2xl bg-emerald-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-emerald-500 disabled:opacity-40">{mediaImporting ? "Импорт..." : "+ файл"}</button>
                     </div>
                   </div>
