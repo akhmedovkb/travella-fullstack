@@ -1138,7 +1138,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     });
     selectSingleClip("image", imageOverlays.length);
   };
-  const addImageMediaToTrack = (media) => {
+  const addImageMediaToTrack = (media, targetTime = currentTime) => {
     if (!media?.url) return;
     setDraft((prev) => {
       const base = prev || {};
@@ -1152,7 +1152,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
             id: `image_${Date.now()}`,
             label: media.label || "Image",
             url: media.url,
-            time: Math.round(currentTime * 10) / 10,
+            time: Math.round(Number(targetTime || 0) * 10) / 10,
             duration: 4,
             enabled: true,
             x: 50,
@@ -1165,7 +1165,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       };
     });
   };
-  const addVideoMediaToTrack = (media) => {
+  const addVideoMediaToTrack = (media, targetTime = currentTime) => {
     if (!media?.url) return;
     setDraft((prev) => {
       const base = prev || {};
@@ -1181,7 +1181,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
             label: media.label || "Video insert",
             url: media.url,
             mimeType: media.mimeType || "",
-            time: Math.round(currentTime * 10) / 10,
+            time: Math.round(Number(targetTime || 0) * 10) / 10,
             sourceStart: 0,
             duration: clipDuration,
             enabled: true,
@@ -1191,7 +1191,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       };
     });
   };
-  const addAudioMediaAsSfx = (media) => {
+  const addAudioMediaAsSfx = (media, targetTime = currentTime) => {
     if (!media?.url) return;
     setDraft((prev) => {
       const base = prev || { preset: "Urgent Deal", music: { assetId: "tropical_luxury_01", label: "Tropical luxury", volume: 0.12 }, effects: [] };
@@ -1207,7 +1207,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
             label: media.label || "Imported audio",
             url: media.url,
             mimeType: media.mimeType || "",
-            time: Math.round(currentTime * 10) / 10,
+            time: Math.round(Number(targetTime || 0) * 10) / 10,
             duration: Math.min(8, Math.max(0.3, Number(media.durationSeconds || 2))),
             volume: 0.22,
             enabled: true,
@@ -1250,15 +1250,15 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     if (!key) return;
     setPreviewMediaKey((current) => (current === key ? "" : key));
   };
-  const importMediaFile = async (file) => {
+  const importMediaFile = async (file, targetTime = currentTime) => {
     if (!file || !onImportMedia) return;
     const result = await onImportMedia(job, file);
     const media = result?.media;
     if (!media) return;
     if (result?.output?.soundPlan) setDraft(result.output.soundPlan);
-    if (media.type === "image") addImageMediaToTrack(media);
-    if (media.type === "audio") addAudioMediaAsSfx(media);
-    if (media.type === "video") addVideoMediaToTrack(media);
+    if (media.type === "image") addImageMediaToTrack(media, targetTime);
+    if (media.type === "audio") addAudioMediaAsSfx(media, targetTime);
+    if (media.type === "video") addVideoMediaToTrack(media, targetTime);
   };
   const handleMediaInput = async (event) => {
     const files = Array.from(event.target.files || []);
@@ -1272,8 +1272,10 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     event.stopPropagation();
     setMediaDragActive(false);
     const files = Array.from(event.dataTransfer?.files || []).filter((file) => file.type?.startsWith("image/") || file.type?.startsWith("audio/") || file.type?.startsWith("video/"));
+    const targetTime = clientXToTimelineTime(event.clientX) ?? currentTime;
+    seekTimeline(targetTime);
     for (const file of files) {
-      await importMediaFile(file);
+      await importMediaFile(file, targetTime);
     }
   };
   const clientXToTimelineTime = (clientX) => {
