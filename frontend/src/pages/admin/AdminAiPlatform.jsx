@@ -394,6 +394,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const [previewMediaKey, setPreviewMediaKey] = React.useState("");
   const [mediaDragActive, setMediaDragActive] = React.useState(false);
   const [assetBinFilter, setAssetBinFilter] = React.useState("all");
+  const [assetBinQuery, setAssetBinQuery] = React.useState("");
   const timelineRef = React.useRef(null);
   const previewFrameRef = React.useRef(null);
   const mediaInputRef = React.useRef(null);
@@ -437,7 +438,11 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const imageOverlays = Array.isArray(plan?.imageOverlays) ? plan.imageOverlays : [];
   const videoClips = Array.isArray(plan?.videoClips) ? plan.videoClips : [];
   const mediaLibrary = Array.isArray(plan?.mediaLibrary) ? plan.mediaLibrary : [];
-  const filteredMediaLibrary = assetBinFilter === "all" ? mediaLibrary : mediaLibrary.filter((media) => media.type === assetBinFilter);
+  const assetBinSearch = assetBinQuery.trim().toLowerCase();
+  const filteredMediaLibrary = (assetBinFilter === "all" ? mediaLibrary : mediaLibrary.filter((media) => media.type === assetBinFilter)).filter((media) => {
+    if (!assetBinSearch) return true;
+    return [media.label, media.originalName, media.mimeType, media.type].filter(Boolean).join(" ").toLowerCase().includes(assetBinSearch);
+  });
   const mediaImporting = mediaImportLoading === job?.id;
   const selectedEffect = effects[selectedIndex] || effects[0] || null;
   const selectedItem =
@@ -1888,10 +1893,18 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                         ))}
                       </div>
                     </div>
-                    <button type="button" onClick={() => mediaInputRef.current?.click()} disabled={mediaImporting} className="shrink-0 rounded-2xl bg-emerald-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-emerald-500 disabled:opacity-40">{mediaImporting ? "Импорт..." : "+ файл"}</button>
+                    <div className="flex shrink-0 flex-col gap-2 sm:w-64">
+                      <input
+                        value={assetBinQuery}
+                        onChange={(event) => setAssetBinQuery(event.target.value)}
+                        placeholder="Search media..."
+                        className="rounded-2xl bg-white/10 px-3 py-2 text-[10px] font-black text-white outline-none ring-1 ring-white/10 placeholder:text-slate-500 focus:ring-white/30"
+                      />
+                      <button type="button" onClick={() => mediaInputRef.current?.click()} disabled={mediaImporting} className="rounded-2xl bg-emerald-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-emerald-500 disabled:opacity-40">{mediaImporting ? "Импорт..." : "+ файл"}</button>
+                    </div>
                   </div>
                   <div className="flex gap-2 overflow-x-auto pb-1">
-                    {filteredMediaLibrary.slice(0, 14).map((media) => {
+                    {filteredMediaLibrary.length ? filteredMediaLibrary.slice(0, 14).map((media) => {
                       const mediaKey = getMediaKey(media);
                       const previewOpen = previewMediaKey === mediaKey;
                       return (
@@ -1933,7 +1946,11 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                           ) : null}
                         </div>
                       );
-                    })}
+                    }) : (
+                      <div className="flex min-h-24 min-w-64 items-center justify-center rounded-2xl bg-slate-800 px-4 text-center text-xs font-bold text-slate-400 ring-1 ring-white/5">
+                        Ничего не найдено в Asset Bin.
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : null}
