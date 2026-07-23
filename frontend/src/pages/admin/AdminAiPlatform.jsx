@@ -1260,9 +1260,11 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     if (media.type === "video") addVideoMediaToTrack(media);
   };
   const handleMediaInput = async (event) => {
-    const file = event.target.files?.[0];
+    const files = Array.from(event.target.files || []);
     event.target.value = "";
-    await importMediaFile(file);
+    for (const file of files) {
+      await importMediaFile(file);
+    }
   };
   const clientXToTimelineTime = (clientX) => {
     const rect = timelineRef.current?.getBoundingClientRect();
@@ -1816,7 +1818,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                   </label>
                 </div>
               </div>
-              <input ref={mediaInputRef} type="file" accept="image/*,audio/*,video/*" onChange={handleMediaInput} className="hidden" />
+              <input ref={mediaInputRef} type="file" accept="image/*,audio/*,video/*" multiple onChange={handleMediaInput} className="hidden" />
               {mediaLibrary.length ? (
                 <div className="mt-3 rounded-2xl bg-slate-900 p-2 ring-1 ring-white/5">
                   <div className="mb-2 flex items-center justify-between gap-2">
