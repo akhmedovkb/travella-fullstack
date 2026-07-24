@@ -1260,6 +1260,40 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     if (media?.type === "audio") addAudioMediaAsSfx(media, targetTime);
     if (media?.type === "video") addVideoMediaToTrack(media, targetTime);
   };
+  const canReplaceSelectedClipWithMedia = (media = selectedMedia) => {
+    if (!media?.url || !selectedItem || selectedClipKeys.length > 1) return false;
+    if (media.type === "audio") return selectedClip.type === "sfx";
+    return media.type === selectedClip.type;
+  };
+  const replaceSelectedClipWithMedia = (media = selectedMedia) => {
+    if (!canReplaceSelectedClipWithMedia(media)) return;
+    const label = media.label || media.originalName || selectedItem?.label || "Media";
+    if (media.type === "audio") {
+      updateSelectedClip({
+        assetId: "custom_audio",
+        label,
+        url: media.url,
+        mimeType: media.mimeType || "",
+        note: selectedItem?.note || "Импортированный аудио-клип.",
+      });
+      return;
+    }
+    if (media.type === "image") {
+      updateSelectedClip({
+        label,
+        url: media.url,
+      });
+      return;
+    }
+    if (media.type === "video") {
+      updateSelectedClip({
+        label,
+        url: media.url,
+        mimeType: media.mimeType || "",
+        sourceStart: Number(selectedItem?.sourceStart || 0),
+      });
+    }
+  };
   const removeMediaFromLibrary = (media) => {
     if (!media?.url && !media?.id) return;
     const targetId = media.id || "";
@@ -2223,6 +2257,9 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                   ) : null}
                   <div className="grid grid-cols-2 gap-2">
                     <button type="button" onClick={() => addMediaToTimeline(selectedMedia)} className="rounded-xl bg-emerald-500 px-3 py-2 text-xs font-black text-white hover:bg-emerald-400">На playhead</button>
+                    {canReplaceSelectedClipWithMedia(selectedMedia) ? (
+                      <button type="button" onClick={() => replaceSelectedClipWithMedia(selectedMedia)} className="rounded-xl bg-indigo-500 px-3 py-2 text-xs font-black text-white hover:bg-indigo-400">Заменить клип</button>
+                    ) : null}
                     <button type="button" onClick={() => toggleMediaPreview(selectedMedia)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-950 hover:bg-slate-100">{previewMediaKey === getMediaKey(selectedMedia) ? "Скрыть" : "Preview"}</button>
                     {selectedMedia.type === "audio" ? (
                       <button type="button" onClick={() => useAudioMediaAsMusic(selectedMedia)} className="rounded-xl bg-cyan-500 px-3 py-2 text-xs font-black text-white hover:bg-cyan-400">Как music</button>
