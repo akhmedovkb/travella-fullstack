@@ -2645,6 +2645,10 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                     <button type="button" onClick={() => nudgeSelectedClip(0.5)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">+0.5s</button>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
+                    <button type="button" onClick={() => nudgeSelectedClip(-0.1)} className="rounded-xl bg-slate-50 px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-white">Точно -0.1s</button>
+                    <button type="button" onClick={() => nudgeSelectedClip(0.1)} className="rounded-xl bg-slate-50 px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-white">Точно +0.1s</button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
                     <button type="button" onClick={trimSelectedClipStartToPlayhead} disabled={selectedClipKeys.length > 1} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-40">Начало к playhead</button>
                     <button type="button" onClick={trimSelectedClipEndToPlayhead} disabled={selectedClipKeys.length > 1} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-40">Конец к playhead</button>
                   </div>
