@@ -1341,6 +1341,16 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     event.preventDefault();
     event.stopPropagation();
     setMediaDragActive(false);
+    const draggedMediaKey = event.dataTransfer?.getData("application/x-travella-media") || "";
+    if (draggedMediaKey) {
+      const media = mediaLibrary.find((item) => getMediaKey(item) === draggedMediaKey);
+      if (!media) return;
+      const targetTime = clientXToTimelineTime(event.clientX) ?? currentTime;
+      seekTimeline(targetTime);
+      setSelectedMediaKey(draggedMediaKey);
+      addMediaToTimeline(media, targetTime);
+      return;
+    }
     const files = Array.from(event.dataTransfer?.files || []).filter((file) => file.type?.startsWith("image/") || file.type?.startsWith("audio/") || file.type?.startsWith("video/"));
     const targetTime = clientXToTimelineTime(event.clientX) ?? currentTime;
     seekTimeline(targetTime);
@@ -1993,6 +2003,12 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                           key={mediaKey}
                           role="button"
                           tabIndex={0}
+                          draggable
+                          onDragStart={(event) => {
+                            event.dataTransfer.setData("application/x-travella-media", mediaKey);
+                            event.dataTransfer.effectAllowed = "copy";
+                            setSelectedMediaKey(mediaKey);
+                          }}
                           onClick={() => setSelectedMediaKey(mediaKey)}
                           onKeyDown={(event) => {
                             if (event.key === "Enter" || event.key === " ") {
@@ -2014,6 +2030,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                             <div className="min-w-0">
                               <div className="truncate text-[11px] font-black text-white">{media.label || media.originalName || "Media"}</div>
                               <div className="mt-0.5 text-[9px] font-bold uppercase tracking-wide text-slate-500">{media.type} · {media.mimeType || "media"}</div>
+                              <div className="mt-0.5 text-[9px] font-bold text-emerald-300">Drag to timeline</div>
                               <div className="mt-1.5 flex flex-wrap gap-1">
                                 {media.type === "image" ? (
                                   <button type="button" onClick={() => addMediaToTimeline(media)} className="rounded-lg bg-fuchsia-500 px-2 py-1 text-[9px] font-black text-white hover:bg-fuchsia-400">Image @ playhead</button>
