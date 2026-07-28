@@ -502,6 +502,10 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const selectedClipDuration = Number(selectedItem?.duration || selectedClipFallbackDuration);
   const selectedClipStart = Number(selectedItem?.time || 0);
   const selectedClipEnd = Math.round((selectedClipStart + selectedClipDuration) * 10) / 10;
+  const selectedClipName = selectedClipKeys.length > 1
+    ? `${selectedClipKeys.length} clips`
+    : selectedItem?.label || selectedItem?.text || selectedItem?.assetId || selectedClipLabel;
+  const selectedClipRangeLabel = `${Math.round(selectedClipStart * 10) / 10}s-${selectedClipEnd}s`;
   const roundTimelineTime = (value) => Math.round(Number(value || 0) * 10) / 10;
   const clampTimelineTime = (value, min = 0, max = duration) => Math.max(min, Math.min(max, roundTimelineTime(value)));
   const clampClipDuration = (value, start = selectedClipStart) => Math.max(0.1, Math.min(Math.max(0.1, duration - start), roundTimelineTime(value)));
@@ -2477,6 +2481,20 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
               ) : null}
               {selectedItem ? (
                 <div className={cn("mt-2 space-y-2", selectedClipKeys.length <= 1 && selectedItem.enabled === false && "opacity-60")}>
+                  <div className="rounded-2xl bg-slate-950 p-3 text-white ring-1 ring-slate-900">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">Selected clip</div>
+                        <div className="mt-1 truncate text-sm font-black">{selectedClipName}</div>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-white/10 px-2 py-1 text-[10px] font-black uppercase text-slate-200 ring-1 ring-white/10">{selectedClipLabel}</span>
+                    </div>
+                    <div className="mt-3 grid grid-cols-3 gap-2 text-[10px] font-black">
+                      <div className="rounded-xl bg-white/10 px-2 py-2 ring-1 ring-white/10"><span className="block uppercase text-slate-500">Range</span>{selectedClipRangeLabel}</div>
+                      <div className="rounded-xl bg-white/10 px-2 py-2 ring-1 ring-white/10"><span className="block uppercase text-slate-500">Length</span>{roundTimelineTime(selectedClipDuration)}s</div>
+                      <div className="rounded-xl bg-white/10 px-2 py-2 ring-1 ring-white/10"><span className="block uppercase text-slate-500">Playhead</span>{roundTimelineTime(currentTime)}s</div>
+                    </div>
+                  </div>
                   {selectedClipKeys.length > 1 ? (
                     <div className="rounded-xl bg-indigo-50 px-3 py-2 text-xs font-black text-indigo-800 ring-1 ring-indigo-100">
                       Группа: {selectedClipKeys.length} клипов · включено {selectedGroupEnabledCount}/{selectedClipItems.length}
