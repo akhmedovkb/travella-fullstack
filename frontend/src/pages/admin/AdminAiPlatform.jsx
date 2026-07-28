@@ -941,6 +941,25 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     const span = Math.max(0.1, groupEnd - groupStart);
     moveSelectedClipToTime(Math.max(0, duration - span));
   };
+  const trimSelectedClipStartToPlayhead = () => {
+    if (selectedClipKeys.length > 1 || !selectedItem) return;
+    const start = Number(selectedItem.time || 0);
+    const length = getClipDurationForType(selectedClip.type, selectedItem);
+    const end = start + Math.max(0.1, length);
+    const nextStart = clampTimelineTime(currentTime, 0, Math.max(0, end - 0.1));
+    const delta = nextStart - start;
+    updateSelectedClip({
+      time: nextStart,
+      duration: Math.round((end - nextStart) * 10) / 10,
+      ...(selectedClip.type === "video" ? { sourceStart: Math.max(0, Math.round((Number(selectedItem.sourceStart || 0) + delta) * 10) / 10) } : {}),
+    });
+  };
+  const trimSelectedClipEndToPlayhead = () => {
+    if (selectedClipKeys.length > 1 || !selectedItem) return;
+    const start = Number(selectedItem.time || 0);
+    const nextEnd = clampTimelineTime(currentTime, start + 0.1, duration);
+    updateSelectedClip({ duration: Math.round((nextEnd - start) * 10) / 10 });
+  };
   const getSelectedClipItems = () => selectedClipKeys
     .map((key) => {
       const [type, rawIndex] = key.split(":");
@@ -2600,6 +2619,10 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                     <button type="button" onClick={() => nudgeSelectedClip(-0.5)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">-0.5s</button>
                     <button type="button" onClick={splitSelectedClip} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Разрезать</button>
                     <button type="button" onClick={() => nudgeSelectedClip(0.5)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">+0.5s</button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button type="button" onClick={trimSelectedClipStartToPlayhead} disabled={selectedClipKeys.length > 1} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-40">Начало к playhead</button>
+                    <button type="button" onClick={trimSelectedClipEndToPlayhead} disabled={selectedClipKeys.length > 1} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-40">Конец к playhead</button>
                   </div>
                   <div className="grid grid-cols-3 gap-2">
                     <button type="button" onClick={duplicateSelectedClip} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Дубль</button>
