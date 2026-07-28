@@ -504,6 +504,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const selectedClipStart = Number(selectedItem?.time || 0);
   const selectedClipEnd = Math.round((selectedClipStart + selectedClipDuration) * 10) / 10;
   const selectedClipAlreadyEndsAtTimelineEnd = selectedClipEnd >= Math.round(duration * 10) / 10;
+  const selectedClipRemainingToTimelineEnd = Math.max(0, Math.round((duration - selectedClipEnd) * 10) / 10);
   const selectedClipName = selectedClipKeys.length > 1
     ? `${selectedClipKeys.length} clips`
     : selectedItem?.label || selectedItem?.text || selectedItem?.assetId || selectedClipLabel;
@@ -2514,10 +2515,11 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       </div>
                       <span className="shrink-0 rounded-full bg-white/10 px-2 py-1 text-[10px] font-black uppercase text-slate-200 ring-1 ring-white/10">{selectedClipLabel}</span>
                     </div>
-                    <div className="mt-3 grid grid-cols-3 gap-2 text-[10px] font-black">
+                    <div className="mt-3 grid grid-cols-4 gap-2 text-[10px] font-black">
                       <div className="rounded-xl bg-white/10 px-2 py-2 ring-1 ring-white/10"><span className="block uppercase text-slate-500">Range</span>{selectedClipRangeLabel}</div>
                       <div className="rounded-xl bg-white/10 px-2 py-2 ring-1 ring-white/10"><span className="block uppercase text-slate-500">Length</span>{roundTimelineTime(selectedClipDuration)}s</div>
                       <div className="rounded-xl bg-white/10 px-2 py-2 ring-1 ring-white/10"><span className="block uppercase text-slate-500">Playhead</span>{roundTimelineTime(currentTime)}s</div>
+                      <div className="rounded-xl bg-white/10 px-2 py-2 ring-1 ring-white/10"><span className="block uppercase text-slate-500">До конца</span>{selectedClipRemainingToTimelineEnd}s</div>
                     </div>
                   </div>
                   {selectedClipKeys.length > 1 ? (
