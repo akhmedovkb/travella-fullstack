@@ -445,6 +445,15 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const assetBinSearch = assetBinQuery.trim().toLowerCase();
   const getMediaSortLabel = (media) => String(media?.label || media?.originalName || media?.url || "Media");
   const selectedMedia = mediaLibrary.find((media) => getMediaIdentity(media) === selectedMediaKey) || null;
+  const getMediaTimelineUsage = (media) => {
+    if (!media?.url) return [];
+    const usage = [];
+    if (videoClips.some((item) => item?.url === media.url)) usage.push("Video");
+    if (effects.some((item) => item?.url === media.url)) usage.push("SFX");
+    if (imageOverlays.some((item) => item?.url === media.url)) usage.push("Images");
+    if (plan?.music?.url === media.url) usage.push("Music");
+    return usage;
+  };
   const filteredMediaLibrary = mediaLibrary
     .map((media, index) => ({ media, index }))
     .filter(({ media }) => assetBinFilter === "all" || media.type === assetBinFilter)
@@ -2030,6 +2039,9 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       const mediaKey = getMediaKey(media);
                       const previewOpen = previewMediaKey === mediaKey;
                       const mediaSelected = selectedMediaKey === mediaKey;
+                      const usageLabels = getMediaTimelineUsage(media);
+                      const mediaPlaced = usageLabels.length > 0;
+                      const canReplaceWithThisMedia = canReplaceSelectedClipWithMedia(media);
                       return (
                         <div
                           key={mediaKey}
@@ -2064,7 +2076,9 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                             <div className="min-w-0">
                               <div className="truncate text-[11px] font-black text-white">{media.label || media.originalName || "Media"}</div>
                               <div className="mt-0.5 text-[9px] font-bold uppercase tracking-wide text-slate-500">{media.type} · {media.mimeType || "media"}</div>
-                              <div className="mt-0.5 text-[9px] font-bold text-emerald-300">Drag to timeline</div>
+                              <div className={cn("mt-0.5 truncate text-[9px] font-bold", mediaPlaced ? "text-emerald-300" : "text-slate-400")}>
+                                {mediaPlaced ? `On timeline · ${usageLabels.join(", ")}` : "Drag to timeline"}
+                              </div>
                               <div className="mt-1.5 flex flex-wrap gap-1">
                                 {media.type === "image" ? (
                                   <button type="button" onClick={() => addMediaToTimeline(media)} className="rounded-lg bg-fuchsia-500 px-2 py-1 text-[9px] font-black text-white hover:bg-fuchsia-400">Image @ playhead</button>
@@ -2077,6 +2091,9 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                                     <button type="button" onClick={() => addMediaToTimeline(media)} className="rounded-lg bg-indigo-500 px-2 py-1 text-[9px] font-black text-white hover:bg-indigo-400">SFX @ playhead</button>
                                     <button type="button" onClick={() => useAudioMediaAsMusic(media)} className="rounded-lg bg-emerald-500 px-2 py-1 text-[9px] font-black text-white hover:bg-emerald-400">Music</button>
                                   </>
+                                ) : null}
+                                {canReplaceWithThisMedia ? (
+                                  <button type="button" onClick={() => replaceSelectedClipWithMedia(media)} className="rounded-lg bg-amber-400 px-2 py-1 text-[9px] font-black text-slate-950 hover:bg-amber-300">Replace selected</button>
                                 ) : null}
                                 <button type="button" onClick={() => toggleMediaPreview(media)} className="rounded-lg bg-white px-2 py-1 text-[9px] font-black text-slate-950 hover:bg-slate-100">{previewOpen ? "Hide preview" : "Preview"}</button>
                                 <a href={media.url} target="_blank" rel="noreferrer" className="rounded-lg bg-white/10 px-2 py-1 text-[9px] font-black text-white hover:bg-white/15">Open</a>
