@@ -918,6 +918,10 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     if (selectedClipKeys.length > 1 || !selectedItem) return;
     updateSelectedClip({ duration: clampClipDuration(selectedClipDuration + amount) });
   };
+  const stretchSelectedClipToEnd = () => {
+    if (selectedClipKeys.length > 1 || !selectedItem) return;
+    updateSelectedClip({ duration: clampClipDuration(duration - selectedClipStart) });
+  };
   const getSelectedGroupStart = () => {
     if (selectedClipKeys.length <= 1) return Number(selectedItem?.time || 0);
     const starts = selectedClipKeys
@@ -2686,6 +2690,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                     <button type="button" onClick={trimSelectedClipStartToPlayhead} disabled={selectedClipKeys.length > 1} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-40">Начало к playhead</button>
                     <button type="button" onClick={trimSelectedClipEndToPlayhead} disabled={selectedClipKeys.length > 1} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-40">Конец к playhead</button>
                   </div>
+                  <button type="button" onClick={stretchSelectedClipToEnd} disabled={selectedClipKeys.length > 1} className="w-full rounded-xl bg-indigo-600 px-3 py-2 text-xs font-black text-white hover:bg-indigo-500 disabled:opacity-40">Растянуть до конца</button>
                   <div className="grid grid-cols-3 gap-2">
                     <button type="button" onClick={duplicateSelectedClip} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Дубль</button>
                     <button type="button" onClick={() => moveSelectedClipToTime(0)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">В начало</button>
