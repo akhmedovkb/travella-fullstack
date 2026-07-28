@@ -503,6 +503,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const selectedClipDuration = Number(selectedItem?.duration || selectedClipFallbackDuration);
   const selectedClipStart = Number(selectedItem?.time || 0);
   const selectedClipEnd = Math.round((selectedClipStart + selectedClipDuration) * 10) / 10;
+  const selectedClipAlreadyEndsAtTimelineEnd = selectedClipEnd >= Math.round(duration * 10) / 10;
   const selectedClipName = selectedClipKeys.length > 1
     ? `${selectedClipKeys.length} clips`
     : selectedItem?.label || selectedItem?.text || selectedItem?.assetId || selectedClipLabel;
@@ -2690,7 +2691,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                     <button type="button" onClick={trimSelectedClipStartToPlayhead} disabled={selectedClipKeys.length > 1} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-40">Начало к playhead</button>
                     <button type="button" onClick={trimSelectedClipEndToPlayhead} disabled={selectedClipKeys.length > 1} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-40">Конец к playhead</button>
                   </div>
-                  <button type="button" onClick={stretchSelectedClipToEnd} disabled={selectedClipKeys.length > 1} className="w-full rounded-xl bg-indigo-600 px-3 py-2 text-xs font-black text-white hover:bg-indigo-500 disabled:opacity-40">Растянуть до конца</button>
+                  <button type="button" onClick={stretchSelectedClipToEnd} disabled={selectedClipKeys.length > 1 || selectedClipAlreadyEndsAtTimelineEnd} className="w-full rounded-xl bg-indigo-600 px-3 py-2 text-xs font-black text-white hover:bg-indigo-500 disabled:opacity-40">Растянуть до конца</button>
                   <div className="grid grid-cols-3 gap-2">
                     <button type="button" onClick={duplicateSelectedClip} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Дубль</button>
                     <button type="button" onClick={() => moveSelectedClipToTime(0)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">В начало</button>
