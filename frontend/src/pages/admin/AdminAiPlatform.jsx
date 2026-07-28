@@ -278,7 +278,7 @@ function HeygenGenerationPreview({ profile = {}, presets = {}, script = "", lock
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className={cn("text-xs font-black uppercase tracking-wide", dirty ? "text-amber-700" : locked ? "text-emerald-700" : "text-blue-700")}>
-            {locked ? "Профиль HeyGen в видео" : "Preview перед HeyGen"}
+            {locked ? "Профиль HeyGen в видео" : "Превью перед HeyGen"}
           </div>
           <div className="mt-1 text-sm font-black text-slate-950">{ratio} · {resolution} · {engineLabel}</div>
         </div>
@@ -1297,7 +1297,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
           {
             id: `audio_${Date.now()}`,
             assetId: "custom_audio",
-            label: media.label || "Imported audio",
+            label: media.label || "Импортированный звук",
             url: media.url,
             mimeType: media.mimeType || "",
             time: Math.round(Number(targetTime || 0) * 10) / 10,
@@ -1819,7 +1819,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
               <div className="pointer-events-none absolute inset-3 z-20 flex items-center justify-center rounded-3xl border-2 border-dashed border-emerald-400 bg-emerald-500/10 backdrop-blur-[2px]">
                 <div className="rounded-3xl bg-white px-6 py-4 text-center shadow-xl ring-1 ring-emerald-100">
                   <div className="text-sm font-black text-emerald-700">Отпусти файлы здесь</div>
-                  <div className="mt-1 text-xs font-bold text-slate-500">Картинки, видео и звук добавятся в Asset Bin и на текущий playhead.</div>
+                  <div className="mt-1 text-xs font-bold text-slate-500">Картинки, видео и звук добавятся в медиатеку и на текущий курсор.</div>
                 </div>
               </div>
             ) : null}
@@ -1829,8 +1829,8 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                 <div className="mt-1 text-xl font-black text-slate-950">Редактор видео перед финальной склейкой</div>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={undoTimeline} disabled={!canUndo || busy || rendering} className="rounded-2xl bg-white px-4 py-2 text-xs font-black text-slate-950 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-40">Undo</button>
-                <button type="button" onClick={redoTimeline} disabled={!canRedo || busy || rendering} className="rounded-2xl bg-white px-4 py-2 text-xs font-black text-slate-950 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-40">Redo</button>
+                <button type="button" onClick={undoTimeline} disabled={!canUndo || busy || rendering} className="rounded-2xl bg-white px-4 py-2 text-xs font-black text-slate-950 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-40">Отменить</button>
+                <button type="button" onClick={redoTimeline} disabled={!canRedo || busy || rendering} className="rounded-2xl bg-white px-4 py-2 text-xs font-black text-slate-950 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-40">Повторить</button>
                 <button type="button" onClick={() => onSave?.(job, draft)} disabled={busy || rendering} className="rounded-2xl bg-white px-4 py-2 text-xs font-black text-slate-950 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-40">{busy ? "Сохраняю..." : "Сохранить"}</button>
                 <button type="button" onClick={() => onRender?.(job)} disabled={busy || rendering} className="rounded-2xl bg-slate-950 px-4 py-2 text-xs font-black text-white hover:bg-slate-800 disabled:opacity-40">{rendering ? "Свожу..." : renderedUrl ? "Пересвести звук" : "Свести звук"}</button>
                 <button type="button" onClick={() => setEditorOpen(false)} className="rounded-2xl bg-rose-50 px-4 py-2 text-xs font-black text-rose-700 ring-1 ring-rose-100 hover:bg-rose-100">Закрыть</button>
@@ -1838,16 +1838,16 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
             </div>
             <div className="flex-1 overflow-y-auto p-3 md:p-4">
               <div className="mb-2 grid gap-1.5 text-[11px] font-black text-slate-600 sm:grid-cols-3 lg:grid-cols-6">
-                <div className="rounded-xl bg-white px-2.5 py-1.5 ring-1 ring-slate-200">Video <span className="ml-1 text-slate-400">{videoClips.length ? `${videoClips.length} clips` : previewUrl ? "ready" : "none"}</span></div>
-                <div className="rounded-xl bg-white px-2.5 py-1.5 ring-1 ring-slate-200">Duration <span className="ml-1 text-slate-400">{Math.round(duration)}s</span></div>
+                <div className="rounded-xl bg-white px-2.5 py-1.5 ring-1 ring-slate-200">Видео <span className="ml-1 text-slate-400">{videoClips.length ? `${videoClips.length} клип.` : previewUrl ? "готово" : "нет"}</span></div>
+                <div className="rounded-xl bg-white px-2.5 py-1.5 ring-1 ring-slate-200">Длина <span className="ml-1 text-slate-400">{Math.round(duration)}s</span></div>
                 <div className="rounded-xl bg-white px-2.5 py-1.5 ring-1 ring-slate-200">SFX <span className="ml-1 text-slate-400">{enabledEffects.length}</span></div>
-                <div className="rounded-xl bg-white px-2.5 py-1.5 ring-1 ring-slate-200">Text <span className="ml-1 text-slate-400">{textOverlays.length}</span></div>
-                <div className="rounded-xl bg-white px-2.5 py-1.5 ring-1 ring-slate-200">Images <span className="ml-1 text-slate-400">{imageOverlays.length}</span></div>
-                <div className="rounded-xl bg-amber-50 px-2.5 py-1.5 text-amber-800 ring-1 ring-amber-100">Trim plan</div>
+                <div className="rounded-xl bg-white px-2.5 py-1.5 ring-1 ring-slate-200">Текст <span className="ml-1 text-slate-400">{textOverlays.length}</span></div>
+                <div className="rounded-xl bg-white px-2.5 py-1.5 ring-1 ring-slate-200">Картинки <span className="ml-1 text-slate-400">{imageOverlays.length}</span></div>
+                <div className="rounded-xl bg-amber-50 px-2.5 py-1.5 text-amber-800 ring-1 ring-amber-100">План обрезки</div>
               </div>
               <div className="mb-2 grid items-start gap-2 xl:grid-cols-[160px_minmax(0,1fr)]">
                 <div className="rounded-2xl bg-slate-950 p-2 text-white">
-                  <div className="text-xs font-black uppercase tracking-wide text-slate-400">Preview</div>
+                  <div className="text-xs font-black uppercase tracking-wide text-slate-400">Превью</div>
                   {previewUrl ? (
                     <div ref={previewFrameRef} className="relative mt-2 overflow-hidden rounded-xl bg-black">
                       <video src={previewUrl} controls onTimeUpdate={(event) => seekTimeline(event.currentTarget.currentTime)} className="aspect-[9/16] max-h-[210px] w-full bg-black object-contain" />
@@ -1984,7 +1984,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
               />
             </label>
             <label className="rounded-xl bg-white p-2.5 ring-1 ring-indigo-100">
-              <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Music</span>
+              <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Музыка</span>
               <input
                 value={plan.music?.label || plan.music?.assetId || ""}
                 onChange={(e) => setDraft((prev) => ({ ...(prev || {}), music: { ...(prev?.music || {}), label: e.target.value } }))}
@@ -1992,7 +1992,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
               />
             </label>
             <label className="rounded-xl bg-white p-2.5 ring-1 ring-indigo-100">
-              <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Music volume</span>
+              <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Громкость музыки</span>
               <input
                 type="range"
                 min="0"
@@ -2015,14 +2015,14 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                 <div className="flex flex-wrap gap-2">
                   <button type="button" onClick={playPlan} className="rounded-2xl bg-indigo-600 px-3 py-2 text-xs font-black text-white hover:bg-indigo-500">Прослушать</button>
                   <button type="button" onClick={selectAllTimelineClips} className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-950 hover:bg-slate-100">Все клипы</button>
-                  <button type="button" onClick={copySelectedClips} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Copy</button>
-                  <button type="button" onClick={cutSelectedClips} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Cut</button>
-                  <button type="button" onClick={pasteTimelineClipboard} disabled={!timelineClipboard.length} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15 disabled:opacity-40">Paste{timelineClipboard.length ? ` ${timelineClipboard.length}` : ""}</button>
-                  <button type="button" onClick={selectClipsAtPlayhead} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Выбрать на playhead</button>
+                  <button type="button" onClick={copySelectedClips} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Копировать</button>
+                  <button type="button" onClick={cutSelectedClips} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Вырезать</button>
+                  <button type="button" onClick={pasteTimelineClipboard} disabled={!timelineClipboard.length} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15 disabled:opacity-40">Вставить{timelineClipboard.length ? ` ${timelineClipboard.length}` : ""}</button>
+                  <button type="button" onClick={selectClipsAtPlayhead} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Выбрать на курсоре</button>
                   <button type="button" onClick={() => selectClipsByType("sfx")} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">SFX</button>
-                  <button type="button" onClick={() => selectClipsByType("text")} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Text</button>
-                  <button type="button" onClick={() => selectClipsByType("image")} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Images</button>
-                  <button type="button" onClick={() => selectClipsByType("video")} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Video</button>
+                  <button type="button" onClick={() => selectClipsByType("text")} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Текст</button>
+                  <button type="button" onClick={() => selectClipsByType("image")} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Картинки</button>
+                  <button type="button" onClick={() => selectClipsByType("video")} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Видео</button>
                   <button type="button" onClick={() => mediaInputRef.current?.click()} disabled={mediaImporting} className="rounded-2xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-500 disabled:opacity-40">{mediaImporting ? "Импорт..." : "Импорт"}</button>
                   <button type="button" onClick={() => addEffect()} className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-950 hover:bg-slate-100">Добавить SFX</button>
                   <button type="button" onClick={addTextOverlay} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Текст</button>
@@ -2051,16 +2051,16 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                 <div className="mt-3 rounded-2xl bg-slate-900 p-2 ring-1 ring-white/5">
                   <div className="mb-2 flex items-center justify-between gap-2">
                     <div>
-                      <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">Asset Bin</div>
+                      <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">Медиатека</div>
                       <div className="text-[10px] font-bold text-slate-400">
                         Файлы этой задачи · на таймлайне {mediaLibraryUsedCount} · не добавлено {Math.max(0, mediaLibrary.length - mediaLibraryUsedCount)}
                       </div>
                       <div className="mt-1 flex flex-wrap gap-1">
                         {[
-                          ["all", "All", mediaLibrary.length],
-                          ["image", "Images", mediaLibrary.filter((media) => media.type === "image").length],
-                          ["audio", "Audio", mediaLibrary.filter((media) => media.type === "audio").length],
-                          ["video", "Video", mediaLibrary.filter((media) => media.type === "video").length],
+                          ["all", "Все", mediaLibrary.length],
+                          ["image", "Картинки", mediaLibrary.filter((media) => media.type === "image").length],
+                          ["audio", "Аудио", mediaLibrary.filter((media) => media.type === "audio").length],
+                          ["video", "Видео", mediaLibrary.filter((media) => media.type === "video").length],
                         ].map(([key, label, count]) => (
                           <button
                             key={key}
@@ -2082,14 +2082,14 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       <input
                         value={assetBinQuery}
                         onChange={(event) => setAssetBinQuery(event.target.value)}
-                        placeholder="Search media..."
+                        placeholder="Найти файл..."
                         className="rounded-2xl bg-white/10 px-3 py-2 text-[10px] font-black text-white outline-none ring-1 ring-white/10 placeholder:text-slate-500 focus:ring-white/30"
                       />
                       <div className="flex rounded-2xl bg-white/5 p-1 ring-1 ring-white/10">
                         {[
-                          ["recent", "New"],
-                          ["name", "Name"],
-                          ["type", "Type"],
+                          ["recent", "Новые"],
+                          ["name", "Имя"],
+                          ["type", "Тип"],
                         ].map(([key, label]) => (
                           <button
                             key={key}
@@ -2150,37 +2150,37 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-950 text-[10px] font-black uppercase text-white ring-1 ring-white/10">{media.type || "file"}</div>
                             )}
                             <div className="min-w-0">
-                              <div className="truncate text-[11px] font-black text-white">{media.label || media.originalName || "Media"}</div>
+                              <div className="truncate text-[11px] font-black text-white">{media.label || media.originalName || "Медиа"}</div>
                               <div className="mt-0.5 text-[9px] font-bold uppercase tracking-wide text-slate-500">{media.type} · {media.mimeType || "media"}</div>
                               <div className={cn("mt-0.5 truncate text-[9px] font-bold", mediaPlaced ? "text-emerald-300" : "text-slate-400")}>
-                                {mediaPlaced ? `On timeline · ${usageLabels.join(", ")}` : "Drag to timeline"}
+                                {mediaPlaced ? `На таймлайне · ${usageLabels.join(", ")}` : "Перетащи на таймлайн"}
                               </div>
-                              <div className="mt-0.5 truncate text-[9px] font-bold text-indigo-200">Target: {dropTargetLabel}</div>
+                              <div className="mt-0.5 truncate text-[9px] font-bold text-indigo-200">Куда попадёт: {dropTargetLabel}</div>
                               <div className="mt-1.5 flex flex-wrap gap-1">
                                 {media.type === "image" ? (
-                                  <button type="button" onClick={() => addMediaToTimeline(media)} className="rounded-lg bg-fuchsia-500 px-2 py-1 text-[9px] font-black text-white hover:bg-fuchsia-400">Image @ playhead</button>
+                                  <button type="button" onClick={() => addMediaToTimeline(media)} className="rounded-lg bg-fuchsia-500 px-2 py-1 text-[9px] font-black text-white hover:bg-fuchsia-400">Картинка на курсор</button>
                                 ) : null}
                                 {media.type === "video" ? (
-                                  <button type="button" onClick={() => addMediaToTimeline(media)} className="rounded-lg bg-sky-500 px-2 py-1 text-[9px] font-black text-white hover:bg-sky-400">Video @ playhead</button>
+                                  <button type="button" onClick={() => addMediaToTimeline(media)} className="rounded-lg bg-sky-500 px-2 py-1 text-[9px] font-black text-white hover:bg-sky-400">Видео на курсор</button>
                                 ) : null}
                                 {media.type === "audio" ? (
                                   <>
-                                    <button type="button" onClick={() => addMediaToTimeline(media)} className="rounded-lg bg-indigo-500 px-2 py-1 text-[9px] font-black text-white hover:bg-indigo-400">SFX @ playhead</button>
-                                    <button type="button" onClick={() => useAudioMediaAsMusic(media)} className="rounded-lg bg-emerald-500 px-2 py-1 text-[9px] font-black text-white hover:bg-emerald-400">Music</button>
+                                    <button type="button" onClick={() => addMediaToTimeline(media)} className="rounded-lg bg-indigo-500 px-2 py-1 text-[9px] font-black text-white hover:bg-indigo-400">SFX на курсор</button>
+                                    <button type="button" onClick={() => useAudioMediaAsMusic(media)} className="rounded-lg bg-emerald-500 px-2 py-1 text-[9px] font-black text-white hover:bg-emerald-400">Музыка</button>
                                   </>
                                 ) : null}
                                 {canReplaceWithThisMedia ? (
-                                  <button type="button" onClick={() => replaceSelectedClipWithMedia(media)} className="rounded-lg bg-amber-400 px-2 py-1 text-[9px] font-black text-slate-950 hover:bg-amber-300">Replace selected</button>
+                                  <button type="button" onClick={() => replaceSelectedClipWithMedia(media)} className="rounded-lg bg-amber-400 px-2 py-1 text-[9px] font-black text-slate-950 hover:bg-amber-300">Заменить выбранный</button>
                                 ) : null}
-                                <button type="button" onClick={() => toggleMediaPreview(media)} className="rounded-lg bg-white px-2 py-1 text-[9px] font-black text-slate-950 hover:bg-slate-100">{previewOpen ? "Hide preview" : "Preview"}</button>
-                                <a href={media.url} target="_blank" rel="noreferrer" className="rounded-lg bg-white/10 px-2 py-1 text-[9px] font-black text-white hover:bg-white/15">Open</a>
-                                <button type="button" onClick={() => removeMediaFromLibrary(media)} className="rounded-lg bg-rose-500/15 px-2 py-1 text-[9px] font-black text-rose-200 ring-1 ring-rose-400/20 hover:bg-rose-500/25">Remove</button>
+                                <button type="button" onClick={() => toggleMediaPreview(media)} className="rounded-lg bg-white px-2 py-1 text-[9px] font-black text-slate-950 hover:bg-slate-100">{previewOpen ? "Скрыть" : "Превью"}</button>
+                                <a href={media.url} target="_blank" rel="noreferrer" className="rounded-lg bg-white/10 px-2 py-1 text-[9px] font-black text-white hover:bg-white/15">Открыть</a>
+                                <button type="button" onClick={() => removeMediaFromLibrary(media)} className="rounded-lg bg-rose-500/15 px-2 py-1 text-[9px] font-black text-rose-200 ring-1 ring-rose-400/20 hover:bg-rose-500/25">Убрать</button>
                               </div>
                             </div>
                           </div>
                           {previewOpen ? (
                             <div className="mt-2 overflow-hidden rounded-xl bg-slate-950 p-1 ring-1 ring-white/10">
-                              {media.type === "image" ? <img src={media.url} alt={media.label || "Preview"} className="max-h-36 w-full rounded-lg object-contain" /> : null}
+                              {media.type === "image" ? <img src={media.url} alt={media.label || "Превью"} className="max-h-36 w-full rounded-lg object-contain" /> : null}
                               {media.type === "audio" ? <audio src={media.url} controls className="w-full" /> : null}
                               {media.type === "video" ? <video src={media.url} controls className="max-h-36 w-full rounded-lg bg-black object-contain" /> : null}
                             </div>
@@ -2189,7 +2189,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       );
                     }) : (
                       <div className="flex min-h-24 min-w-64 items-center justify-center rounded-2xl bg-slate-800 px-4 text-center text-xs font-bold text-slate-400 ring-1 ring-white/5">
-                        Ничего не найдено в Asset Bin.
+                        Ничего не найдено в медиатеке.
                       </div>
                     )}
                   </div>
@@ -2202,34 +2202,34 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                           <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-slate-800 text-[10px] font-black uppercase text-white ring-1 ring-white/10">{selectedMedia.type || "file"}</div>
                         )}
                         <div className="min-w-0">
-                          <div className="truncate text-xs font-black text-white">{selectedMedia.label || selectedMedia.originalName || "Selected media"}</div>
+                          <div className="truncate text-xs font-black text-white">{selectedMedia.label || selectedMedia.originalName || "Выбранный файл"}</div>
                           <div className="mt-1 flex flex-wrap gap-1">
                             <span className="rounded-full bg-white/10 px-2 py-1 text-[9px] font-black uppercase text-slate-300">{selectedMedia.type || "media"}</span>
                             <span className="rounded-full bg-indigo-500/15 px-2 py-1 text-[9px] font-black text-indigo-100 ring-1 ring-indigo-400/20">{selectedMediaDropTarget}</span>
                             <span className={cn("rounded-full px-2 py-1 text-[9px] font-black ring-1", selectedMediaUsage.length ? "bg-emerald-500/15 text-emerald-100 ring-emerald-400/20" : "bg-white/5 text-slate-400 ring-white/10")}>
-                              {selectedMediaUsage.length ? `On timeline: ${selectedMediaUsage.join(", ")}` : "Not placed yet"}
+                              {selectedMediaUsage.length ? `На таймлайне: ${selectedMediaUsage.join(", ")}` : "Ещё не добавлен"}
                             </span>
-                            <span className="rounded-full bg-slate-800 px-2 py-1 text-[9px] font-black text-slate-300 ring-1 ring-white/10">Playhead {roundTimelineTime(currentTime)}s</span>
-                            <span className="rounded-full bg-slate-800 px-2 py-1 text-[9px] font-black text-slate-300 ring-1 ring-white/10">End slot {roundTimelineTime(selectedMediaEndTime)}s</span>
+                            <span className="rounded-full bg-slate-800 px-2 py-1 text-[9px] font-black text-slate-300 ring-1 ring-white/10">Курсор {roundTimelineTime(currentTime)}s</span>
+                            <span className="rounded-full bg-slate-800 px-2 py-1 text-[9px] font-black text-slate-300 ring-1 ring-white/10">Конец {roundTimelineTime(selectedMediaEndTime)}s</span>
                           </div>
                         </div>
                       </div>
                       <div className="flex flex-wrap items-center gap-1 lg:justify-end">
-                        <button type="button" onClick={() => addMediaToTimeline(selectedMedia, 0)} className="rounded-xl bg-white/10 px-3 py-2 text-[10px] font-black text-white ring-1 ring-white/10 hover:bg-white/15">At start</button>
-                        <button type="button" onClick={() => addMediaToTimeline(selectedMedia)} className="rounded-xl bg-white px-3 py-2 text-[10px] font-black text-slate-950 hover:bg-slate-100">At playhead</button>
-                        <button type="button" onClick={() => addMediaToTimelineEnd(selectedMedia)} className="rounded-xl bg-white/10 px-3 py-2 text-[10px] font-black text-white ring-1 ring-white/10 hover:bg-white/15">At end</button>
+                        <button type="button" onClick={() => addMediaToTimeline(selectedMedia, 0)} className="rounded-xl bg-white/10 px-3 py-2 text-[10px] font-black text-white ring-1 ring-white/10 hover:bg-white/15">В начало</button>
+                        <button type="button" onClick={() => addMediaToTimeline(selectedMedia)} className="rounded-xl bg-white px-3 py-2 text-[10px] font-black text-slate-950 hover:bg-slate-100">На курсор</button>
+                        <button type="button" onClick={() => addMediaToTimelineEnd(selectedMedia)} className="rounded-xl bg-white/10 px-3 py-2 text-[10px] font-black text-white ring-1 ring-white/10 hover:bg-white/15">В конец</button>
                         {selectedMedia.type === "audio" ? (
-                          <button type="button" onClick={() => useAudioMediaAsMusic(selectedMedia)} className="rounded-xl bg-emerald-500 px-3 py-2 text-[10px] font-black text-white hover:bg-emerald-400">Use as music</button>
+                          <button type="button" onClick={() => useAudioMediaAsMusic(selectedMedia)} className="rounded-xl bg-emerald-500 px-3 py-2 text-[10px] font-black text-white hover:bg-emerald-400">Сделать музыкой</button>
                         ) : null}
                         {canReplaceSelectedClipWithMedia(selectedMedia) ? (
-                          <button type="button" onClick={() => replaceSelectedClipWithMedia(selectedMedia)} className="rounded-xl bg-amber-400 px-3 py-2 text-[10px] font-black text-slate-950 hover:bg-amber-300">Replace selected</button>
+                          <button type="button" onClick={() => replaceSelectedClipWithMedia(selectedMedia)} className="rounded-xl bg-amber-400 px-3 py-2 text-[10px] font-black text-slate-950 hover:bg-amber-300">Заменить выбранный</button>
                         ) : null}
-                        <button type="button" onClick={() => toggleMediaPreview(selectedMedia)} className="rounded-xl bg-white/10 px-3 py-2 text-[10px] font-black text-white ring-1 ring-white/10 hover:bg-white/15">Preview</button>
-                        <a href={selectedMedia.url} target="_blank" rel="noreferrer" className="rounded-xl bg-white/10 px-3 py-2 text-[10px] font-black text-white ring-1 ring-white/10 hover:bg-white/15">Open</a>
+                        <button type="button" onClick={() => toggleMediaPreview(selectedMedia)} className="rounded-xl bg-white/10 px-3 py-2 text-[10px] font-black text-white ring-1 ring-white/10 hover:bg-white/15">Превью</button>
+                        <a href={selectedMedia.url} target="_blank" rel="noreferrer" className="rounded-xl bg-white/10 px-3 py-2 text-[10px] font-black text-white ring-1 ring-white/10 hover:bg-white/15">Открыть</a>
                       </div>
                       {previewMediaKey === getMediaKey(selectedMedia) ? (
                         <div className="overflow-hidden rounded-2xl bg-slate-900 p-2 ring-1 ring-white/10 lg:col-span-2">
-                          {selectedMedia.type === "image" ? <img src={selectedMedia.url} alt={selectedMedia.label || "Selected media preview"} className="max-h-48 w-full rounded-xl object-contain" /> : null}
+                          {selectedMedia.type === "image" ? <img src={selectedMedia.url} alt={selectedMedia.label || "Превью выбранного файла"} className="max-h-48 w-full rounded-xl object-contain" /> : null}
                           {selectedMedia.type === "audio" ? <audio src={selectedMedia.url} controls className="w-full" /> : null}
                           {selectedMedia.type === "video" ? <video src={selectedMedia.url} controls className="max-h-56 w-full rounded-xl bg-black object-contain" /> : null}
                         </div>
@@ -2468,40 +2468,40 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       })}
                     </div>
                   </div>
-                  <div className="mt-3 text-[10px] font-bold text-slate-500">Кликни клип на дорожке, чтобы редактировать. Ctrl+A выбирает все клипы, Ctrl+C/Ctrl+X/Ctrl+V копирует, вырезает и вставляет выбранное, Shift+click выбирает несколько, Esc сбрасывает группу, стрелки двигают выбранное, Shift+стрелки быстрее. Home/End ставит выбранное в начало/к финалу. S режет по playhead, Ctrl+Z откат, Ctrl+Y повтор, Ctrl+D дублирует, Delete удаляет.</div>
+                  <div className="mt-3 text-[10px] font-bold text-slate-500">Кликни клип на дорожке, чтобы редактировать. Ctrl+A выбирает все клипы, Ctrl+C/Ctrl+X/Ctrl+V копирует, вырезает и вставляет выбранное, Shift+click выбирает несколько, Esc сбрасывает группу, стрелки двигают выбранное, Shift+стрелки быстрее. Home/End ставит выбранное в начало/к финалу. S режет по курсору, Ctrl+Z откат, Ctrl+Y повтор, Ctrl+D дублирует, Delete удаляет.</div>
                 </div>
               </div>
             </div>
             <div className="rounded-2xl bg-white p-3 ring-1 ring-indigo-100">
-              <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Inspector</div>
+              <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Инспектор</div>
               {selectedMedia ? (
                 <div className="mt-2 space-y-2 rounded-2xl bg-slate-950 p-2 text-white ring-1 ring-slate-900">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">Asset Bin</div>
-                      <div className="truncate text-xs font-black">{selectedMedia.label || selectedMedia.originalName || "Media"}</div>
+                      <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">Медиатека</div>
+                      <div className="truncate text-xs font-black">{selectedMedia.label || selectedMedia.originalName || "Медиа"}</div>
                       <div className="mt-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">{selectedMedia.type || "file"} · {selectedMedia.mimeType || "media"}</div>
                     </div>
-                    <button type="button" onClick={() => setSelectedMediaKey("")} className="rounded-full bg-white/10 px-2 py-1 text-[10px] font-black text-slate-300 hover:bg-white/15">Clear</button>
+                    <button type="button" onClick={() => setSelectedMediaKey("")} className="rounded-full bg-white/10 px-2 py-1 text-[10px] font-black text-slate-300 hover:bg-white/15">Снять</button>
                   </div>
                   {previewMediaKey === getMediaKey(selectedMedia) ? (
                     <div className="overflow-hidden rounded-xl bg-black p-1 ring-1 ring-white/10">
-                      {selectedMedia.type === "image" ? <img src={selectedMedia.url} alt={selectedMedia.label || "Preview"} className="max-h-36 w-full rounded-lg object-contain" /> : null}
+                      {selectedMedia.type === "image" ? <img src={selectedMedia.url} alt={selectedMedia.label || "Превью"} className="max-h-36 w-full rounded-lg object-contain" /> : null}
                       {selectedMedia.type === "audio" ? <audio src={selectedMedia.url} controls className="w-full" /> : null}
                       {selectedMedia.type === "video" ? <video src={selectedMedia.url} controls className="max-h-36 w-full rounded-lg object-contain" /> : null}
                     </div>
                   ) : null}
                   <div className="grid grid-cols-2 gap-2">
-                    <button type="button" onClick={() => addMediaToTimeline(selectedMedia)} className="rounded-xl bg-emerald-500 px-3 py-2 text-xs font-black text-white hover:bg-emerald-400">На playhead</button>
+                    <button type="button" onClick={() => addMediaToTimeline(selectedMedia)} className="rounded-xl bg-emerald-500 px-3 py-2 text-xs font-black text-white hover:bg-emerald-400">На курсор</button>
                     {canReplaceSelectedClipWithMedia(selectedMedia) ? (
                       <button type="button" onClick={() => replaceSelectedClipWithMedia(selectedMedia)} className="rounded-xl bg-indigo-500 px-3 py-2 text-xs font-black text-white hover:bg-indigo-400">Заменить клип</button>
                     ) : null}
-                    <button type="button" onClick={() => toggleMediaPreview(selectedMedia)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-950 hover:bg-slate-100">{previewMediaKey === getMediaKey(selectedMedia) ? "Скрыть" : "Preview"}</button>
+                    <button type="button" onClick={() => toggleMediaPreview(selectedMedia)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-950 hover:bg-slate-100">{previewMediaKey === getMediaKey(selectedMedia) ? "Скрыть" : "Превью"}</button>
                     {selectedMedia.type === "audio" ? (
-                      <button type="button" onClick={() => useAudioMediaAsMusic(selectedMedia)} className="rounded-xl bg-cyan-500 px-3 py-2 text-xs font-black text-white hover:bg-cyan-400">Как music</button>
+                      <button type="button" onClick={() => useAudioMediaAsMusic(selectedMedia)} className="rounded-xl bg-cyan-500 px-3 py-2 text-xs font-black text-white hover:bg-cyan-400">Как музыку</button>
                     ) : null}
-                    <a href={selectedMedia.url} target="_blank" rel="noreferrer" className="rounded-xl bg-white/10 px-3 py-2 text-center text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Open</a>
-                    <button type="button" onClick={() => removeMediaFromLibrary(selectedMedia)} className="rounded-xl bg-rose-500/15 px-3 py-2 text-xs font-black text-rose-100 ring-1 ring-rose-400/20 hover:bg-rose-500/25">Remove</button>
+                    <a href={selectedMedia.url} target="_blank" rel="noreferrer" className="rounded-xl bg-white/10 px-3 py-2 text-center text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Открыть</a>
+                    <button type="button" onClick={() => removeMediaFromLibrary(selectedMedia)} className="rounded-xl bg-rose-500/15 px-3 py-2 text-xs font-black text-rose-100 ring-1 ring-rose-400/20 hover:bg-rose-500/25">Убрать</button>
                   </div>
                 </div>
               ) : null}
@@ -2548,7 +2548,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                         onChange={(e) => applyPresetToEffect(selectedClip.index, e.target.value)}
                         className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none"
                       >
-                        {selectedItem.url ? <option value="custom_audio">Imported audio</option> : null}
+                        {selectedItem.url ? <option value="custom_audio">Импортированный звук</option> : null}
                         {SOUND_EFFECT_PRESETS.map((preset) => (
                           <option key={preset.assetId} value={preset.assetId}>{preset.label}</option>
                         ))}
@@ -2567,25 +2567,25 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                   ) : null}
                   {selectedClip.type === "image" ? (
                     <label className="block rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
-                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Image URL</span>
+                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Ссылка на картинку</span>
                       <input value={selectedItem.url || ""} onChange={(e) => updateSelectedClip({ url: e.target.value })} placeholder="https://..." className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none" />
                     </label>
                   ) : null}
                   {selectedClip.type === "video" ? (
                     <>
                       <label className="block rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
-                        <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Video URL</span>
+                        <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Ссылка на видео</span>
                         <input value={selectedItem.url || ""} onChange={(e) => updateSelectedClip({ url: e.target.value })} placeholder="https://..." className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none" />
                       </label>
                       <label className="block rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
-                        <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Source start</span>
+                        <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Старт исходника</span>
                         <input type="number" min="0" step="0.1" value={Number(selectedItem.sourceStart || 0)} onChange={(e) => updateSelectedClip({ sourceStart: Number(e.target.value) })} className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none" />
                       </label>
                     </>
                   ) : null}
                   <div className="grid grid-cols-3 gap-2">
                     <label className="rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
-                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Start</span>
+                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Старт</span>
                       <input type="number" min="0" max={Math.max(0, duration - 0.1)} step="0.1" value={selectedClipStart} onChange={(e) => {
                         const nextStart = clampTimelineTime(e.target.value, 0, Math.max(0, duration - 0.1));
                         updateSelectedClip({
@@ -2595,11 +2595,11 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       }} className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none" />
                     </label>
                     <label className="rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
-                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Duration</span>
+                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Длительность</span>
                       <input type="number" min="0.1" max={Math.max(0.1, duration - selectedClipStart)} step="0.1" value={selectedClipDuration} onChange={(e) => updateSelectedClip({ duration: clampClipDuration(e.target.value) })} className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none" />
                     </label>
                     <label className="rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
-                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">End</span>
+                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Конец</span>
                       <input type="number" min={Math.round((selectedClipStart + 0.1) * 10) / 10} max={duration} step="0.1" value={selectedClipEnd} onChange={(e) => {
                         const nextEnd = clampTimelineTime(e.target.value, selectedClipStart + 0.1, duration);
                         updateSelectedClip({ duration: Math.round((nextEnd - selectedClipStart) * 10) / 10 });
@@ -2650,7 +2650,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       </div>
                       {selectedClip.type === "text" ? (
                         <label className="block rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
-                          <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Font size · {Number(selectedItem.fontSize || 22)}px</span>
+                          <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Размер текста · {Number(selectedItem.fontSize || 22)}px</span>
                           <input type="range" min="12" max="56" step="1" value={Number(selectedItem.fontSize || 22)} onChange={(e) => updateSelectedClip({ fontSize: Number(e.target.value) })} className="mt-2 w-full accent-amber-500" />
                         </label>
                       ) : (
@@ -2672,7 +2672,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                     <textarea value={selectedItem.note || ""} onChange={(e) => updateSelectedClip({ note: e.target.value })} rows={3} className="mt-1 w-full resize-none bg-transparent text-xs font-bold text-slate-600 outline-none" />
                   </label>
                   <div className="grid grid-cols-2 gap-2">
-                    <button type="button" onClick={() => selectedClip.type === "sfx" ? playEffect(selectedItem, selectedClip.index) : selectedClip.type === "video" && selectedItem?.url ? window.open(selectedItem.url, "_blank", "noopener,noreferrer") : null} disabled={selectedClip.type !== "sfx" && selectedClip.type !== "video"} className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-black text-white hover:bg-slate-800 disabled:opacity-40">{selectedClip.type === "sfx" ? "Слушать" : selectedClip.type === "video" ? "Открыть видео" : "Preview позже"}</button>
+                    <button type="button" onClick={() => selectedClip.type === "sfx" ? playEffect(selectedItem, selectedClip.index) : selectedClip.type === "video" && selectedItem?.url ? window.open(selectedItem.url, "_blank", "noopener,noreferrer") : null} disabled={selectedClip.type !== "sfx" && selectedClip.type !== "video"} className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-black text-white hover:bg-slate-800 disabled:opacity-40">{selectedClip.type === "sfx" ? "Слушать" : selectedClip.type === "video" ? "Открыть видео" : "Превью позже"}</button>
                     <button type="button" onClick={removeSelectedClip} className="rounded-xl bg-rose-50 px-3 py-2 text-xs font-black text-rose-700 ring-1 ring-rose-100 hover:bg-rose-100">Удалить</button>
                   </div>
                   <div className="grid grid-cols-3 gap-2">
@@ -2691,14 +2691,14 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                     <button type="button" onClick={() => stretchSelectedClip(0.5)} disabled={selectedClipKeys.length > 1} className="rounded-xl bg-indigo-50 px-2 py-2 text-xs font-black text-indigo-800 ring-1 ring-indigo-100 hover:bg-white disabled:opacity-40">Дл. +0.5</button>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
-                    <button type="button" onClick={trimSelectedClipStartToPlayhead} disabled={selectedClipKeys.length > 1} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-40">Начало к playhead</button>
-                    <button type="button" onClick={trimSelectedClipEndToPlayhead} disabled={selectedClipKeys.length > 1} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-40">Конец к playhead</button>
+                    <button type="button" onClick={trimSelectedClipStartToPlayhead} disabled={selectedClipKeys.length > 1} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-40">Начало к курсору</button>
+                    <button type="button" onClick={trimSelectedClipEndToPlayhead} disabled={selectedClipKeys.length > 1} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-40">Конец к курсору</button>
                   </div>
                   <button type="button" onClick={stretchSelectedClipToEnd} disabled={selectedClipKeys.length > 1 || selectedClipAlreadyEndsAtTimelineEnd} className="w-full rounded-xl bg-indigo-600 px-3 py-2 text-xs font-black text-white hover:bg-indigo-500 disabled:opacity-40">Растянуть до конца</button>
                   <div className="grid grid-cols-3 gap-2">
                     <button type="button" onClick={duplicateSelectedClip} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Дубль</button>
                     <button type="button" onClick={() => moveSelectedClipToTime(0)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">В начало</button>
-                    <button type="button" onClick={() => moveSelectedClipToTime(currentTime)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">На playhead</button>
+                    <button type="button" onClick={() => moveSelectedClipToTime(currentTime)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">На курсор</button>
                   </div>
                   <div className="grid grid-cols-3 gap-2">
                     <button type="button" onClick={copySelectedClips} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Копировать</button>
@@ -2706,8 +2706,8 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                     <button type="button" onClick={pasteTimelineClipboard} disabled={!timelineClipboard.length} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-40">Вставить{timelineClipboard.length ? ` ${timelineClipboard.length}` : ""}</button>
                   </div>
                   <div className="grid grid-cols-3 gap-2">
-                    <button type="button" onClick={() => seekTimeline(getSelectedGroupStart())} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Playhead к началу</button>
-                    <button type="button" onClick={() => seekTimeline(getSelectedGroupEnd())} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Playhead к концу</button>
+                    <button type="button" onClick={() => seekTimeline(getSelectedGroupStart())} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Курсор к началу</button>
+                    <button type="button" onClick={() => seekTimeline(getSelectedGroupEnd())} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Курсор к концу</button>
                     <button type="button" onClick={moveSelectedClipToEnd} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">К финалу</button>
                   </div>
                 </div>
