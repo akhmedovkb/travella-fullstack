@@ -2677,10 +2677,10 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                     <button type="button" onClick={() => nudgeSelectedClip(0.1)} className="rounded-xl bg-slate-50 px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-white">Точно +0.1s</button>
                   </div>
                   <div className="grid grid-cols-4 gap-2">
-                    <button type="button" onClick={() => stretchSelectedClip(-0.5)} disabled={selectedClipKeys.length > 1} className="rounded-xl bg-indigo-50 px-2 py-2 text-xs font-black text-indigo-800 ring-1 ring-indigo-100 hover:bg-white disabled:opacity-40">Len -0.5</button>
+                    <button type="button" onClick={() => stretchSelectedClip(-0.5)} disabled={selectedClipKeys.length > 1} className="rounded-xl bg-indigo-50 px-2 py-2 text-xs font-black text-indigo-800 ring-1 ring-indigo-100 hover:bg-white disabled:opacity-40">Дл. -0.5</button>
                     <button type="button" onClick={() => stretchSelectedClip(-0.1)} disabled={selectedClipKeys.length > 1} className="rounded-xl bg-indigo-50 px-2 py-2 text-xs font-black text-indigo-800 ring-1 ring-indigo-100 hover:bg-white disabled:opacity-40">-0.1</button>
                     <button type="button" onClick={() => stretchSelectedClip(0.1)} disabled={selectedClipKeys.length > 1} className="rounded-xl bg-indigo-50 px-2 py-2 text-xs font-black text-indigo-800 ring-1 ring-indigo-100 hover:bg-white disabled:opacity-40">+0.1</button>
-                    <button type="button" onClick={() => stretchSelectedClip(0.5)} disabled={selectedClipKeys.length > 1} className="rounded-xl bg-indigo-50 px-2 py-2 text-xs font-black text-indigo-800 ring-1 ring-indigo-100 hover:bg-white disabled:opacity-40">Len +0.5</button>
+                    <button type="button" onClick={() => stretchSelectedClip(0.5)} disabled={selectedClipKeys.length > 1} className="rounded-xl bg-indigo-50 px-2 py-2 text-xs font-black text-indigo-800 ring-1 ring-indigo-100 hover:bg-white disabled:opacity-40">Дл. +0.5</button>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <button type="button" onClick={trimSelectedClipStartToPlayhead} disabled={selectedClipKeys.length > 1} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-40">Начало к playhead</button>
