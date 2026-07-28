@@ -463,6 +463,12 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   };
   const selectedMediaUsage = selectedMedia ? getMediaTimelineUsage(selectedMedia) : [];
   const selectedMediaDropTarget = selectedMedia ? getMediaDropTargetLabel(selectedMedia) : "";
+  const getMediaDefaultDuration = (media) => {
+    if (media?.type === "video") return Math.min(12, Math.max(1, Number(media.durationSeconds || 5)));
+    if (media?.type === "image") return 4;
+    return Math.min(8, Math.max(0.3, Number(media?.durationSeconds || 2)));
+  };
+  const selectedMediaEndTime = selectedMedia ? Math.max(0, duration - getMediaDefaultDuration(selectedMedia)) : 0;
   const filteredMediaLibrary = mediaLibrary
     .map((media, index) => ({ media, index }))
     .filter(({ media }) => assetBinFilter === "all" || media.type === assetBinFilter)
@@ -1280,12 +1286,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     if (media?.type === "video") addVideoMediaToTrack(media, targetTime);
   };
   const addMediaToTimelineEnd = (media) => {
-    const fallbackDuration = media?.type === "video"
-      ? Math.min(12, Math.max(1, Number(media.durationSeconds || 5)))
-      : media?.type === "image"
-        ? 4
-        : Math.min(8, Math.max(0.3, Number(media?.durationSeconds || 2)));
-    addMediaToTimeline(media, Math.max(0, duration - fallbackDuration));
+    addMediaToTimeline(media, Math.max(0, duration - getMediaDefaultDuration(media)));
   };
   const canReplaceSelectedClipWithMedia = (media = selectedMedia) => {
     if (!media?.url || !selectedItem || selectedClipKeys.length > 1) return false;
@@ -2153,6 +2154,8 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                             <span className={cn("rounded-full px-2 py-1 text-[9px] font-black ring-1", selectedMediaUsage.length ? "bg-emerald-500/15 text-emerald-100 ring-emerald-400/20" : "bg-white/5 text-slate-400 ring-white/10")}>
                               {selectedMediaUsage.length ? `On timeline: ${selectedMediaUsage.join(", ")}` : "Not placed yet"}
                             </span>
+                            <span className="rounded-full bg-slate-800 px-2 py-1 text-[9px] font-black text-slate-300 ring-1 ring-white/10">Playhead {roundTimelineTime(currentTime)}s</span>
+                            <span className="rounded-full bg-slate-800 px-2 py-1 text-[9px] font-black text-slate-300 ring-1 ring-white/10">End slot {roundTimelineTime(selectedMediaEndTime)}s</span>
                           </div>
                         </div>
                       </div>
