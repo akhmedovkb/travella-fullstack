@@ -463,7 +463,6 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   };
   const selectedMediaUsage = selectedMedia ? getMediaTimelineUsage(selectedMedia) : [];
   const selectedMediaDropTarget = selectedMedia ? getMediaDropTargetLabel(selectedMedia) : "";
-  const canReplaceWithSelectedMedia = canReplaceSelectedClipWithMedia(selectedMedia);
   const filteredMediaLibrary = mediaLibrary
     .map((media, index) => ({ media, index }))
     .filter(({ media }) => assetBinFilter === "all" || media.type === assetBinFilter)
@@ -2154,12 +2153,19 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                         {selectedMedia.type === "audio" ? (
                           <button type="button" onClick={() => useAudioMediaAsMusic(selectedMedia)} className="rounded-xl bg-emerald-500 px-3 py-2 text-[10px] font-black text-white hover:bg-emerald-400">Use as music</button>
                         ) : null}
-                        {canReplaceWithSelectedMedia ? (
+                        {canReplaceSelectedClipWithMedia(selectedMedia) ? (
                           <button type="button" onClick={() => replaceSelectedClipWithMedia(selectedMedia)} className="rounded-xl bg-amber-400 px-3 py-2 text-[10px] font-black text-slate-950 hover:bg-amber-300">Replace selected</button>
                         ) : null}
                         <button type="button" onClick={() => toggleMediaPreview(selectedMedia)} className="rounded-xl bg-white/10 px-3 py-2 text-[10px] font-black text-white ring-1 ring-white/10 hover:bg-white/15">Preview</button>
                         <a href={selectedMedia.url} target="_blank" rel="noreferrer" className="rounded-xl bg-white/10 px-3 py-2 text-[10px] font-black text-white ring-1 ring-white/10 hover:bg-white/15">Open</a>
                       </div>
+                      {previewMediaKey === getMediaKey(selectedMedia) ? (
+                        <div className="overflow-hidden rounded-2xl bg-slate-900 p-2 ring-1 ring-white/10 lg:col-span-2">
+                          {selectedMedia.type === "image" ? <img src={selectedMedia.url} alt={selectedMedia.label || "Selected media preview"} className="max-h-48 w-full rounded-xl object-contain" /> : null}
+                          {selectedMedia.type === "audio" ? <audio src={selectedMedia.url} controls className="w-full" /> : null}
+                          {selectedMedia.type === "video" ? <video src={selectedMedia.url} controls className="max-h-56 w-full rounded-xl bg-black object-contain" /> : null}
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
                 </div>
