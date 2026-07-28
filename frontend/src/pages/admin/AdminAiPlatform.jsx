@@ -904,6 +904,10 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     const maxStart = Math.max(0, duration - getClipDurationForType(selectedClip.type, selectedItem));
     updateSelectedClip({ time: Math.max(0, Math.min(maxStart, Math.round((current + amount) * 10) / 10)) });
   };
+  const stretchSelectedClip = (amount) => {
+    if (selectedClipKeys.length > 1 || !selectedItem) return;
+    updateSelectedClip({ duration: clampClipDuration(selectedClipDuration + amount) });
+  };
   const getSelectedGroupStart = () => {
     if (selectedClipKeys.length <= 1) return Number(selectedItem?.time || 0);
     const starts = selectedClipKeys
@@ -2647,6 +2651,12 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                   <div className="grid grid-cols-2 gap-2">
                     <button type="button" onClick={() => nudgeSelectedClip(-0.1)} className="rounded-xl bg-slate-50 px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-white">Точно -0.1s</button>
                     <button type="button" onClick={() => nudgeSelectedClip(0.1)} className="rounded-xl bg-slate-50 px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-white">Точно +0.1s</button>
+                  </div>
+                  <div className="grid grid-cols-4 gap-2">
+                    <button type="button" onClick={() => stretchSelectedClip(-0.5)} disabled={selectedClipKeys.length > 1} className="rounded-xl bg-indigo-50 px-2 py-2 text-xs font-black text-indigo-800 ring-1 ring-indigo-100 hover:bg-white disabled:opacity-40">Len -0.5</button>
+                    <button type="button" onClick={() => stretchSelectedClip(-0.1)} disabled={selectedClipKeys.length > 1} className="rounded-xl bg-indigo-50 px-2 py-2 text-xs font-black text-indigo-800 ring-1 ring-indigo-100 hover:bg-white disabled:opacity-40">-0.1</button>
+                    <button type="button" onClick={() => stretchSelectedClip(0.1)} disabled={selectedClipKeys.length > 1} className="rounded-xl bg-indigo-50 px-2 py-2 text-xs font-black text-indigo-800 ring-1 ring-indigo-100 hover:bg-white disabled:opacity-40">+0.1</button>
+                    <button type="button" onClick={() => stretchSelectedClip(0.5)} disabled={selectedClipKeys.length > 1} className="rounded-xl bg-indigo-50 px-2 py-2 text-xs font-black text-indigo-800 ring-1 ring-indigo-100 hover:bg-white disabled:opacity-40">Len +0.5</button>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <button type="button" onClick={trimSelectedClipStartToPlayhead} disabled={selectedClipKeys.length > 1} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-40">Начало к playhead</button>
