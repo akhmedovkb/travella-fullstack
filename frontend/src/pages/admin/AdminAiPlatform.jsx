@@ -221,8 +221,16 @@ function findHeygenVideoIdFromEvents(events = []) {
 
 function findPresetLabel(presets = [], value = "", prefix = "") {
   const preset = (Array.isArray(presets) ? presets : []).find((item) => item.value === value);
-  if (!preset?.label) return value ? "Custom" : "—";
+  if (!preset?.label) return value ? "Свой" : "—";
   return prefix ? `${prefix} ${preset.label}` : preset.label;
+}
+
+function formatHeygenExpressiveness(value = "") {
+  return ({
+    low: "Низкая",
+    medium: "Средняя",
+    high: "Высокая",
+  }[String(value || "").toLowerCase()] || value || "—");
 }
 
 function estimateHeygenDurationStats(script = "", speed = 1) {
@@ -260,8 +268,8 @@ function getHeygenFormatGuard(profile = {}, script = "") {
 }
 
 function HeygenGenerationPreview({ profile = {}, presets = {}, script = "", locked = false, dirty = false }) {
-  const avatarLabel = findPresetLabel(presets.avatars, profile.avatarId, "Avatar");
-  const voiceLabel = findPresetLabel(presets.voices, profile.voiceId, "Voice");
+  const avatarLabel = findPresetLabel(presets.avatars, profile.avatarId, "Аватар");
+  const voiceLabel = findPresetLabel(presets.voices, profile.voiceId, "Голос");
   const engineLabel = profile.engine === "avatar_v" ? "Avatar V" : "Avatar IV";
   const ratio = profile.aspectRatio || "9:16";
   const resolution = profile.resolution || "1080p";
@@ -288,13 +296,13 @@ function HeygenGenerationPreview({ profile = {}, presets = {}, script = "", lock
       </div>
       <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {[
-          ["Avatar", avatarLabel],
-          ["Voice", voiceLabel],
-          ["Speed", Number(profile.voiceSpeed || 1).toFixed(2)],
-          ["Expressiveness", profile.engine === "avatar_v" ? "—" : profile.expressiveness || "medium"],
-          ["Ratio", ratio],
-          ["Resolution", resolution],
-          ["Words", duration.words || "—"],
+          ["Аватар", avatarLabel],
+          ["Голос", voiceLabel],
+          ["Скорость", Number(profile.voiceSpeed || 1).toFixed(2)],
+          ["Экспрессия", profile.engine === "avatar_v" ? "—" : formatHeygenExpressiveness(profile.expressiveness || "medium")],
+          ["Формат", ratio],
+          ["Разрешение", resolution],
+          ["Слова", duration.words || "—"],
         ].map(([label, value]) => (
           <div key={label} className="rounded-2xl bg-white px-3 py-2 ring-1 ring-slate-200">
             <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">{label}</div>
@@ -443,12 +451,12 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const mediaLibrary = Array.isArray(plan?.mediaLibrary) ? plan.mediaLibrary : [];
   const getMediaIdentity = (media) => media?.id || media?.url || "";
   const assetBinSearch = assetBinQuery.trim().toLowerCase();
-  const getMediaSortLabel = (media) => String(media?.label || media?.originalName || media?.url || "Media");
+  const getMediaSortLabel = (media) => String(media?.label || media?.originalName || media?.url || "Медиа");
   const selectedMedia = mediaLibrary.find((media) => getMediaIdentity(media) === selectedMediaKey) || null;
   const getMediaTimelineUsage = (media) => {
     if (!media?.url) return [];
     const usage = [];
-    if (videoClips.some((item) => item?.url === media.url)) usage.push("Video");
+    if (videoClips.some((item) => item?.url === media.url)) usage.push("Видео");
     if (effects.some((item) => item?.url === media.url)) usage.push("SFX");
     if (imageOverlays.some((item) => item?.url === media.url)) usage.push("Картинки");
     if (plan?.music?.url === media.url) usage.push("Музыка");
@@ -1243,7 +1251,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
           ...items,
           {
             id: `image_${Date.now()}`,
-            label: media.label || "Image",
+            label: media.label || "Картинка",
             url: media.url,
             time: Math.round(Number(targetTime || 0) * 10) / 10,
             duration: 4,
@@ -1271,7 +1279,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
           ...items,
           {
             id: `video_${Date.now()}`,
-            label: media.label || "Video insert",
+            label: media.label || "Видео-вставка",
             url: media.url,
             mimeType: media.mimeType || "",
             time: Math.round(Number(targetTime || 0) * 10) / 10,
@@ -1339,7 +1347,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   };
   const replaceSelectedClipWithMedia = (media = selectedMedia) => {
     if (!canReplaceSelectedClipWithMedia(media)) return;
-    const label = media.label || media.originalName || selectedItem?.label || "Media";
+    const label = media.label || media.originalName || selectedItem?.label || "Медиа";
     if (media.type === "audio") {
       updateSelectedClip({
         assetId: "custom_audio",
@@ -1921,7 +1929,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                             zIndex: getOverlayLayer("image", item, index),
                           }}
                         >
-                          {item.url ? <img src={item.url} alt={item.label || "Overlay"} className="h-full w-full rounded-lg object-contain" /> : (item.label || "Sticker")}
+                          {item.url ? <img src={item.url} alt={item.label || "Оверлей"} className="h-full w-full rounded-lg object-contain" /> : (item.label || "Стикер")}
                           <span
                             onPointerDown={(event) => startScaleOverlayOnPreview(event, "image", index)}
                             className={cn(
@@ -1946,10 +1954,10 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                             selectSingleClip("video", index);
                           }}
                           className={cn("absolute inset-0 cursor-pointer overflow-hidden rounded-xl ring-2 ring-transparent", (selectedClip.type === "video" && selectedClip.index === index) || isClipMultiSelected("video", index) ? "ring-white" : "")}
-                          title="Видео-вставка: двигай её на дорожке Video."
+                          title="Видео-вставка: двигай её на дорожке видео."
                         >
                           <video src={item.url} muted autoPlay loop playsInline className="h-full w-full object-cover" />
-                          <span className="absolute left-2 top-2 rounded-lg bg-black/70 px-2 py-1 text-[10px] font-black text-white">{item.label || "Video insert"}</span>
+                          <span className="absolute left-2 top-2 rounded-lg bg-black/70 px-2 py-1 text-[10px] font-black text-white">{item.label || "Видео-вставка"}</span>
                         </button>
                       ))}
                     </div>
@@ -1961,22 +1969,22 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                   <div className="text-xs font-black uppercase tracking-wide text-slate-400">Монтаж</div>
                   <div className="mt-2 grid gap-2 md:grid-cols-4">
                     <label className="rounded-xl bg-slate-50 p-2.5 ring-1 ring-slate-100">
-                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Trim start</span>
+                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Начало обрезки</span>
                       <input type="number" min="0" step="0.1" value={Number(trim.start || 0)} onChange={(e) => updateTrim({ start: Number(e.target.value) })} className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none" />
                     </label>
                     <label className="rounded-xl bg-slate-50 p-2.5 ring-1 ring-slate-100">
-                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Trim end</span>
+                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Конец обрезки</span>
                       <input type="number" min="0" step="0.1" value={Number(trim.end || 0)} onChange={(e) => updateTrim({ end: Number(e.target.value) })} className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none" />
                     </label>
-                    <div className="rounded-xl bg-slate-50 p-2.5 text-xs font-black text-slate-950 ring-1 ring-slate-100"><span className="block text-[10px] uppercase tracking-wide text-slate-400">Duration</span>{Math.max(0, Math.round((duration - Number(trim.start || 0) - Number(trim.end || 0)) * 10) / 10)} sec</div>
-                    <div className="rounded-xl bg-amber-50 p-2.5 text-xs font-bold text-amber-800 ring-1 ring-amber-100">Trim сохранится в плане для FFmpeg render.</div>
+                    <div className="rounded-xl bg-slate-50 p-2.5 text-xs font-black text-slate-950 ring-1 ring-slate-100"><span className="block text-[10px] uppercase tracking-wide text-slate-400">Длительность</span>{Math.max(0, Math.round((duration - Number(trim.start || 0) - Number(trim.end || 0)) * 10) / 10)} сек</div>
+                    <div className="rounded-xl bg-amber-50 p-2.5 text-xs font-bold text-amber-800 ring-1 ring-amber-100">Обрезка сохранится в плане для FFmpeg-рендера.</div>
                   </div>
                 </div>
               </div>
         <div className="space-y-3">
           <div className="grid gap-2 sm:grid-cols-3">
             <label className="rounded-xl bg-white p-2.5 ring-1 ring-indigo-100">
-              <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Preset</span>
+              <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Пресет</span>
               <input
                 value={plan.preset || ""}
                 onChange={(e) => setDraft((prev) => ({ ...(prev || {}), preset: e.target.value }))}
@@ -2320,7 +2328,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                               className="absolute inset-y-0 left-0 w-3 cursor-ew-resize rounded-l-lg bg-white/25 hover:bg-white/45"
                               title="Обрезать начало"
                             />
-                            <span className="block truncate">{item.label || "Video insert"}</span>
+                            <span className="block truncate">{item.label || "Видео-вставка"}</span>
                             <span className="block text-[10px] text-white/70">{Number(item.time || 0).toFixed(1)}s · {Number(item.duration || 5).toFixed(1)}s</span>
                             <span
                               onPointerDown={(event) => startResizeOverlay(event, "video", index, "right")}
@@ -2331,10 +2339,10 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                         );
                       })}
                     </div>
-                    <div className="py-3 text-xs font-black text-slate-300">Voice</div>
+                    <div className="py-3 text-xs font-black text-slate-300">Голос</div>
                     <div className="relative h-10 rounded-xl bg-slate-800">
                       <div className="absolute inset-y-2 left-0 right-0 rounded-lg bg-gradient-to-r from-sky-400 to-blue-500 px-3 py-1 text-xs font-black text-white">
-                        Avatar speech · {String(job.output?.script || "").trim().split(/\s+/).filter(Boolean).length || 0} words
+                        Речь аватара · {String(job.output?.script || "").trim().split(/\s+/).filter(Boolean).length || 0} слов
                       </div>
                     </div>
                     <div className="py-3 text-xs font-black text-slate-300">Музыка</div>
@@ -2456,7 +2464,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                               className="absolute inset-y-0 left-0 w-3 cursor-ew-resize rounded-l-xl bg-white/20 hover:bg-white/40"
                               title="Обрезать начало картинки"
                             />
-                            <span className="block truncate">{item.label || "Image"}</span>
+                            <span className="block truncate">{item.label || "Картинка"}</span>
                             <span className="block text-[10px] text-white/70">{Number(item.time || 0).toFixed(1)}s · {Number(item.duration || 4).toFixed(1)}s</span>
                             <span
                               onPointerDown={(event) => startResizeOverlay(event, "image", index, "right")}
@@ -2480,7 +2488,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                     <div className="min-w-0">
                       <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">Медиатека</div>
                       <div className="truncate text-xs font-black">{selectedMedia.label || selectedMedia.originalName || "Медиа"}</div>
-                      <div className="mt-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">{selectedMedia.type || "file"} · {selectedMedia.mimeType || "media"}</div>
+                      <div className="mt-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">{selectedMedia.type || "файл"} · {selectedMedia.mimeType || "медиа"}</div>
                     </div>
                     <button type="button" onClick={() => setSelectedMediaKey("")} className="rounded-full bg-white/10 px-2 py-1 text-[10px] font-black text-slate-300 hover:bg-white/15">Снять</button>
                   </div>
@@ -6008,9 +6016,9 @@ export default function AdminAiPlatform() {
                     }}
                     className="h-8 w-[116px] rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-950 outline-none focus:border-slate-300"
                   >
-                    {!selectedAvatarPreset ? <option value="">Avatar</option> : null}
+                    {!selectedAvatarPreset ? <option value="">Аватар</option> : null}
                     {avatarPresets.map((avatar) => (
-                      <option key={avatar.value} value={avatar.value}>Avatar {avatar.label}</option>
+                      <option key={avatar.value} value={avatar.value}>Аватар {avatar.label}</option>
                     ))}
                   </select>
                   {!selectedAvatarPreset ? (
@@ -6029,7 +6037,7 @@ export default function AdminAiPlatform() {
                     }}
                     className="h-8 w-[116px] rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-950 outline-none focus:border-slate-300"
                   >
-                    {!selectedVoicePreset ? <option value="">Voice</option> : null}
+                    {!selectedVoicePreset ? <option value="">Голос</option> : null}
                     {voicePresets.map((voice) => (
                       <option key={voice.value} value={voice.value}>{voice.label}</option>
                     ))}
@@ -6251,15 +6259,15 @@ export default function AdminAiPlatform() {
             />
             <div className="mt-4 grid gap-2 sm:grid-cols-3">
               <div className="rounded-2xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
-                <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Version</div>
+                <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Версия</div>
                 <div className="mt-0.5 text-sm font-black text-slate-950">v{heygenConfirmNextVersion}</div>
               </div>
               <div className="rounded-2xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
-                <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Duration estimate</div>
+                <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Оценка длительности</div>
                 <div className="mt-0.5 text-sm font-black text-slate-950">{heygenConfirmDuration.label}</div>
               </div>
               <div className="rounded-2xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
-                <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Words</div>
+                <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Слова</div>
                 <div className="mt-0.5 text-sm font-black text-slate-950">{heygenConfirmDuration.words || "—"}</div>
               </div>
             </div>
@@ -6288,7 +6296,7 @@ export default function AdminAiPlatform() {
                 disabled={!heygenConfirmJob?.id || Boolean(heygenLoading) || profileDirty}
                 className="h-11 rounded-2xl bg-slate-950 px-5 text-sm font-black text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
               >
-                {heygenLoading ? "Запускаю..." : heygenConfirm.regenerate ? "Создать новую версию" : "Создать HeyGen video"}
+                {heygenLoading ? "Запускаю..." : heygenConfirm.regenerate ? "Создать новую версию" : "Создать видео HeyGen"}
               </button>
             </div>
           </div>
@@ -6312,7 +6320,7 @@ export default function AdminAiPlatform() {
           >
             <div className="flex items-start justify-between gap-4">
               <div>
-                <div className="text-xs font-black uppercase tracking-wide text-slate-400">HeyGen delivery profile</div>
+                <div className="text-xs font-black uppercase tracking-wide text-slate-400">Профиль генерации HeyGen</div>
                 <h3 id="heygen-settings-title" className="mt-1 text-xl font-black text-slate-950">Настройки HeyGen</h3>
               </div>
               <button
@@ -6363,7 +6371,7 @@ export default function AdminAiPlatform() {
 
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               <label className="block">
-                <span className="text-xs font-black uppercase tracking-wide text-slate-500">Avatar</span>
+                <span className="text-xs font-black uppercase tracking-wide text-slate-500">Аватар</span>
                 <div className="mt-2 flex gap-2">
                   <select
                     value={selectedAvatarPreset?.value || ""}
@@ -6373,9 +6381,9 @@ export default function AdminAiPlatform() {
                     }}
                     className="h-11 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-black text-slate-950 outline-none focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
                   >
-                    {!selectedAvatarPreset ? <option value="">Avatar</option> : null}
+                    {!selectedAvatarPreset ? <option value="">Аватар</option> : null}
                     {avatarPresets.map((avatar) => (
-                      <option key={avatar.value} value={avatar.value}>Avatar {avatar.label}</option>
+                      <option key={avatar.value} value={avatar.value}>Аватар {avatar.label}</option>
                     ))}
                   </select>
                   <button type="button" onClick={() => { setHeygenSettingsOpen(false); addVideoPreset("avatars"); }} disabled={videoProfileLoading} className="h-11 w-11 rounded-2xl bg-slate-50 text-sm font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100 disabled:opacity-40">+</button>
@@ -6384,7 +6392,7 @@ export default function AdminAiPlatform() {
               </label>
 
               <label className="block">
-                <span className="text-xs font-black uppercase tracking-wide text-slate-500">Voice</span>
+                <span className="text-xs font-black uppercase tracking-wide text-slate-500">Голос</span>
                 <div className="mt-2 flex gap-2">
                   <select
                     value={selectedVoicePreset?.value || ""}
@@ -6394,7 +6402,7 @@ export default function AdminAiPlatform() {
                     }}
                     className="h-11 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-black text-slate-950 outline-none focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
                   >
-                    {!selectedVoicePreset ? <option value="">Voice</option> : null}
+                    {!selectedVoicePreset ? <option value="">Голос</option> : null}
                     {voicePresets.map((voice) => (
                       <option key={voice.value} value={voice.value}>{voice.label}</option>
                     ))}
@@ -6408,7 +6416,7 @@ export default function AdminAiPlatform() {
             <div className="mt-5 space-y-4 rounded-3xl bg-slate-50 p-4 ring-1 ring-slate-100">
               <div>
                 <div className="flex items-center justify-between gap-3">
-                  <span className="text-xs font-black uppercase tracking-wide text-slate-500">Ratio</span>
+                  <span className="text-xs font-black uppercase tracking-wide text-slate-500">Формат</span>
                   <span className="text-xs font-bold text-slate-400">кадр видео</span>
                 </div>
                 <div className="mt-2 grid grid-cols-3 gap-2">
@@ -6431,7 +6439,7 @@ export default function AdminAiPlatform() {
 
               <div>
                 <div className="flex items-center justify-between gap-3">
-                  <span className="text-xs font-black uppercase tracking-wide text-slate-500">Resolution</span>
+                  <span className="text-xs font-black uppercase tracking-wide text-slate-500">Разрешение</span>
                   <span className="text-xs font-bold text-slate-400">качество вывода</span>
                 </div>
                 <div className="mt-2 grid grid-cols-4 gap-2">
@@ -6452,7 +6460,7 @@ export default function AdminAiPlatform() {
               </div>
 
               <div>
-                <div className="text-xs font-black uppercase tracking-wide text-slate-500">Engine</div>
+                <div className="text-xs font-black uppercase tracking-wide text-slate-500">Движок</div>
                 <div className="mt-2 grid grid-cols-2 gap-2">
                   {[
                     { value: "avatar_iv", label: "Avatar IV" },
@@ -6475,7 +6483,7 @@ export default function AdminAiPlatform() {
 
               <label className="block">
                 <div className="flex items-center justify-between gap-3">
-                  <span className="text-xs font-black uppercase tracking-wide text-slate-500">Voice speed</span>
+                  <span className="text-xs font-black uppercase tracking-wide text-slate-500">Скорость голоса</span>
                   <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-slate-950 ring-1 ring-slate-200">{Number(videoProfileDraft.voiceSpeed || 1).toFixed(2)}</span>
                 </div>
                 <input
@@ -6495,14 +6503,14 @@ export default function AdminAiPlatform() {
 
               <div>
                 <div className="flex items-center justify-between gap-3">
-                  <span className="text-xs font-black uppercase tracking-wide text-slate-500">Expressiveness</span>
+                  <span className="text-xs font-black uppercase tracking-wide text-slate-500">Экспрессия</span>
                   {videoProfileDraft.engine === "avatar_v" ? <span className="text-xs font-bold text-slate-400">только Avatar IV</span> : null}
                 </div>
                 <div className="mt-2 grid grid-cols-3 gap-2">
                   {[
-                    { value: "low", label: "Low" },
-                    { value: "medium", label: "Medium" },
-                    { value: "high", label: "High" },
+                    { value: "low", label: "Низкая" },
+                    { value: "medium", label: "Средняя" },
+                    { value: "high", label: "Высокая" },
                   ].map((item) => (
                     <button
                       key={item.value}
