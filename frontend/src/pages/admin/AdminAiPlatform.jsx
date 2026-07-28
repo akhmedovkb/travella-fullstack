@@ -2212,6 +2212,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                         <span className="absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-indigo-500 ring-2 ring-white shadow" style={{ left: `${playheadLeft}%` }} />
                       </button>
                       <div className="pointer-events-none absolute right-1 top-1/2 min-w-12 -translate-y-1/2 rounded-lg bg-slate-800 px-2 py-1 text-center text-[10px] font-black text-white ring-1 ring-white/10">{Math.round(currentTime * 10) / 10}s</div>
+                      <div className="pointer-events-none absolute top-7 z-20 h-[330px] w-0.5 -translate-x-1/2 bg-rose-400 shadow-[0_0_0_1px_rgba(255,255,255,.7)]" style={{ left: `${playheadLeft}%` }} />
                     </div>
                   </div>
                   <div className="grid grid-cols-[74px_1fr] gap-3">
@@ -2231,7 +2232,6 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       onDragOver={allowAssetDropOnTrack}
                       onDrop={(event) => handleAssetDropOnTrack(event, "video")}
                     >
-                      <div className="pointer-events-none absolute -top-1 bottom-[-312px] z-20 w-0.5 -translate-x-1/2 bg-rose-400 shadow-[0_0_0_1px_rgba(255,255,255,.7)]" style={{ left: `${playheadLeft}%` }} />
                       <div className="absolute inset-x-0 top-2 h-6 rounded-lg bg-gradient-to-r from-slate-200 to-slate-400 px-3 py-1 text-xs font-black text-slate-950">
                         HeyGen video · {job.output?.heygen?.videoId ? "ready" : "pending"}
                       </div>
