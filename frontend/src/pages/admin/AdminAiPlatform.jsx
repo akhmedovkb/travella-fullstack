@@ -1279,6 +1279,14 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     if (media?.type === "audio") addAudioMediaAsSfx(media, targetTime);
     if (media?.type === "video") addVideoMediaToTrack(media, targetTime);
   };
+  const addMediaToTimelineEnd = (media) => {
+    const fallbackDuration = media?.type === "video"
+      ? Math.min(12, Math.max(1, Number(media.durationSeconds || 5)))
+      : media?.type === "image"
+        ? 4
+        : Math.min(8, Math.max(0.3, Number(media?.durationSeconds || 2)));
+    addMediaToTimeline(media, Math.max(0, duration - fallbackDuration));
+  };
   const canReplaceSelectedClipWithMedia = (media = selectedMedia) => {
     if (!media?.url || !selectedItem || selectedClipKeys.length > 1) return false;
     if (media.type === "audio") return selectedClip.type === "sfx";
@@ -2149,7 +2157,9 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                         </div>
                       </div>
                       <div className="flex flex-wrap items-center gap-1 lg:justify-end">
-                        <button type="button" onClick={() => addMediaToTimeline(selectedMedia)} className="rounded-xl bg-white px-3 py-2 text-[10px] font-black text-slate-950 hover:bg-slate-100">Add @ playhead</button>
+                        <button type="button" onClick={() => addMediaToTimeline(selectedMedia, 0)} className="rounded-xl bg-white/10 px-3 py-2 text-[10px] font-black text-white ring-1 ring-white/10 hover:bg-white/15">At start</button>
+                        <button type="button" onClick={() => addMediaToTimeline(selectedMedia)} className="rounded-xl bg-white px-3 py-2 text-[10px] font-black text-slate-950 hover:bg-slate-100">At playhead</button>
+                        <button type="button" onClick={() => addMediaToTimelineEnd(selectedMedia)} className="rounded-xl bg-white/10 px-3 py-2 text-[10px] font-black text-white ring-1 ring-white/10 hover:bg-white/15">At end</button>
                         {selectedMedia.type === "audio" ? (
                           <button type="button" onClick={() => useAudioMediaAsMusic(selectedMedia)} className="rounded-xl bg-emerald-500 px-3 py-2 text-[10px] font-black text-white hover:bg-emerald-400">Use as music</button>
                         ) : null}
