@@ -461,6 +461,9 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     if (media?.type === "audio") return "SFX or Music";
     return "Timeline";
   };
+  const selectedMediaUsage = selectedMedia ? getMediaTimelineUsage(selectedMedia) : [];
+  const selectedMediaDropTarget = selectedMedia ? getMediaDropTargetLabel(selectedMedia) : "";
+  const canReplaceWithSelectedMedia = canReplaceSelectedClipWithMedia(selectedMedia);
   const filteredMediaLibrary = mediaLibrary
     .map((media, index) => ({ media, index }))
     .filter(({ media }) => assetBinFilter === "all" || media.type === assetBinFilter)
@@ -2127,6 +2130,38 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       </div>
                     )}
                   </div>
+                  {selectedMedia ? (
+                    <div className="mt-3 grid gap-2 rounded-2xl bg-slate-950 p-2 ring-1 ring-white/10 lg:grid-cols-[minmax(0,1fr)_auto]">
+                      <div className="grid min-w-0 gap-2 sm:grid-cols-[56px_minmax(0,1fr)]">
+                        {selectedMedia.type === "image" ? (
+                          <img src={selectedMedia.thumbnailUrl || selectedMedia.url} alt="" className="h-14 w-14 rounded-xl object-cover ring-1 ring-white/10" />
+                        ) : (
+                          <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-slate-800 text-[10px] font-black uppercase text-white ring-1 ring-white/10">{selectedMedia.type || "file"}</div>
+                        )}
+                        <div className="min-w-0">
+                          <div className="truncate text-xs font-black text-white">{selectedMedia.label || selectedMedia.originalName || "Selected media"}</div>
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            <span className="rounded-full bg-white/10 px-2 py-1 text-[9px] font-black uppercase text-slate-300">{selectedMedia.type || "media"}</span>
+                            <span className="rounded-full bg-indigo-500/15 px-2 py-1 text-[9px] font-black text-indigo-100 ring-1 ring-indigo-400/20">{selectedMediaDropTarget}</span>
+                            <span className={cn("rounded-full px-2 py-1 text-[9px] font-black ring-1", selectedMediaUsage.length ? "bg-emerald-500/15 text-emerald-100 ring-emerald-400/20" : "bg-white/5 text-slate-400 ring-white/10")}>
+                              {selectedMediaUsage.length ? `On timeline: ${selectedMediaUsage.join(", ")}` : "Not placed yet"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1 lg:justify-end">
+                        <button type="button" onClick={() => addMediaToTimeline(selectedMedia)} className="rounded-xl bg-white px-3 py-2 text-[10px] font-black text-slate-950 hover:bg-slate-100">Add @ playhead</button>
+                        {selectedMedia.type === "audio" ? (
+                          <button type="button" onClick={() => useAudioMediaAsMusic(selectedMedia)} className="rounded-xl bg-emerald-500 px-3 py-2 text-[10px] font-black text-white hover:bg-emerald-400">Use as music</button>
+                        ) : null}
+                        {canReplaceWithSelectedMedia ? (
+                          <button type="button" onClick={() => replaceSelectedClipWithMedia(selectedMedia)} className="rounded-xl bg-amber-400 px-3 py-2 text-[10px] font-black text-slate-950 hover:bg-amber-300">Replace selected</button>
+                        ) : null}
+                        <button type="button" onClick={() => toggleMediaPreview(selectedMedia)} className="rounded-xl bg-white/10 px-3 py-2 text-[10px] font-black text-white ring-1 ring-white/10 hover:bg-white/15">Preview</button>
+                        <a href={selectedMedia.url} target="_blank" rel="noreferrer" className="rounded-xl bg-white/10 px-3 py-2 text-[10px] font-black text-white ring-1 ring-white/10 hover:bg-white/15">Open</a>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
               <div className="mt-3 flex gap-2 overflow-x-auto rounded-2xl bg-slate-900 p-2">
