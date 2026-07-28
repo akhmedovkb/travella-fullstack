@@ -1389,6 +1389,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       || (targetType === "image" && draggedAssetType === "image")
       || (targetType === "video" && draggedAssetType === "video");
   };
+  const isTrackBlockedForDraggedAsset = (targetType) => Boolean(draggedAssetType) && !isTrackCompatibleWithDraggedAsset(targetType);
   const clientXToTimelineTime = (clientX) => {
     const rect = timelineRef.current?.getBoundingClientRect();
     if (!rect?.width) return null;
@@ -2142,7 +2143,8 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                     <div
                       className={cn(
                         "relative h-16 rounded-xl bg-slate-800 ring-1 ring-transparent transition",
-                        isTrackCompatibleWithDraggedAsset("video") && "bg-sky-950/80 ring-sky-400"
+                        isTrackCompatibleWithDraggedAsset("video") && "bg-sky-950/80 ring-sky-400",
+                        isTrackBlockedForDraggedAsset("video") && "opacity-50 ring-rose-400/40"
                       )}
                       onDragOver={allowAssetDropOnTrack}
                       onDrop={(event) => handleAssetDropOnTrack(event, "video")}
@@ -2153,6 +2155,9 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       </div>
                       {!videoClips.length ? (
                         <div className="pointer-events-none absolute bottom-2 right-3 rounded-lg bg-slate-950/60 px-2 py-1 text-[10px] font-black text-slate-400">Drop video here</div>
+                      ) : null}
+                      {isTrackBlockedForDraggedAsset("video") ? (
+                        <div className="pointer-events-none absolute right-3 top-1/2 z-10 -translate-y-1/2 rounded-lg bg-rose-500/15 px-2 py-1 text-[10px] font-black text-rose-200 ring-1 ring-rose-400/20">Wrong type</div>
                       ) : null}
                       {videoClips.map((item, index) => {
                         const left = Math.max(0, Math.min(92, (Number(item.time || 0) / duration) * 100));
@@ -2204,7 +2209,8 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       ref={timelineRef}
                       className={cn(
                         "relative h-20 rounded-xl bg-slate-800 ring-1 ring-transparent transition",
-                        isTrackCompatibleWithDraggedAsset("sfx") && "bg-indigo-950/80 ring-indigo-400"
+                        isTrackCompatibleWithDraggedAsset("sfx") && "bg-indigo-950/80 ring-indigo-400",
+                        isTrackBlockedForDraggedAsset("sfx") && "opacity-50 ring-rose-400/40"
                       )}
                       onDragOver={allowAssetDropOnTrack}
                       onDrop={(event) => handleAssetDropOnTrack(event, "sfx")}
@@ -2214,6 +2220,9 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       </div>
                       {!effects.length ? (
                         <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded-lg bg-slate-950/60 px-2 py-1 text-[10px] font-black text-slate-400">Drop audio here</div>
+                      ) : null}
+                      {isTrackBlockedForDraggedAsset("sfx") ? (
+                        <div className="pointer-events-none absolute right-3 top-1/2 z-10 -translate-y-1/2 rounded-lg bg-rose-500/15 px-2 py-1 text-[10px] font-black text-rose-200 ring-1 ring-rose-400/20">Wrong type</div>
                       ) : null}
                       {effects.map((effect, index) => {
                         const left = Math.max(0, Math.min(92, (Number(effect.time || 0) / duration) * 100));
@@ -2280,7 +2289,8 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                     <div
                       className={cn(
                         "relative h-14 rounded-xl bg-slate-800 ring-1 ring-transparent transition",
-                        isTrackCompatibleWithDraggedAsset("image") && "bg-fuchsia-950/80 ring-fuchsia-400"
+                        isTrackCompatibleWithDraggedAsset("image") && "bg-fuchsia-950/80 ring-fuchsia-400",
+                        isTrackBlockedForDraggedAsset("image") && "opacity-50 ring-rose-400/40"
                       )}
                       onDragOver={allowAssetDropOnTrack}
                       onDrop={(event) => handleAssetDropOnTrack(event, "image")}
@@ -2290,6 +2300,9 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       </div>
                       {!imageOverlays.length ? (
                         <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded-lg bg-slate-950/60 px-2 py-1 text-[10px] font-black text-slate-400">Drop image here</div>
+                      ) : null}
+                      {isTrackBlockedForDraggedAsset("image") ? (
+                        <div className="pointer-events-none absolute right-3 top-1/2 z-10 -translate-y-1/2 rounded-lg bg-rose-500/15 px-2 py-1 text-[10px] font-black text-rose-200 ring-1 ring-rose-400/20">Wrong type</div>
                       ) : null}
                       {imageOverlays.map((item, index) => {
                         const left = Math.max(0, Math.min(92, (Number(item.time || 0) / duration) * 100));
