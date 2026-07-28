@@ -497,6 +497,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
           : effects[selectedClip.index] || selectedEffect;
   const playheadLeft = Math.max(0, Math.min(100, (currentTime / duration) * 100));
   const timelineMinWidth = Math.round(620 * timelineZoom);
+  const setTimelineZoomPreset = (value) => setTimelineZoom(Math.max(1, Math.min(3, Number(value) || 1)));
   const selectedClipLabel = selectedClip.type === "sfx" ? "SFX" : selectedClip.type === "text" ? "Text" : selectedClip.type === "image" ? "Image" : "Video";
   const selectedClipFallbackDuration = selectedClip.type === "video" ? 5 : selectedClip.type === "image" ? 4 : selectedClip.type === "text" ? 3 : 0.3;
   const selectedClipDuration = Number(selectedItem?.duration || selectedClipFallbackDuration);
@@ -2006,6 +2007,11 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                   <button type="button" onClick={() => addEffect()} className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-950 hover:bg-slate-100">Добавить SFX</button>
                   <button type="button" onClick={addTextOverlay} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Текст</button>
                   <button type="button" onClick={addImageOverlay} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Картинка</button>
+                  <div className="flex items-center gap-1 rounded-2xl bg-white/10 p-1 ring-1 ring-white/10">
+                    <button type="button" onClick={() => setTimelineZoomPreset(1)} className={`rounded-xl px-2 py-1.5 text-[10px] font-black ${timelineZoom === 1 ? "bg-white text-slate-950" : "text-white hover:bg-white/10"}`}>Обзор</button>
+                    <button type="button" onClick={() => setTimelineZoomPreset(1.75)} className={`rounded-xl px-2 py-1.5 text-[10px] font-black ${timelineZoom === 1.75 ? "bg-white text-slate-950" : "text-white hover:bg-white/10"}`}>1.75x</button>
+                    <button type="button" onClick={() => setTimelineZoomPreset(3)} className={`rounded-xl px-2 py-1.5 text-[10px] font-black ${timelineZoom === 3 ? "bg-white text-slate-950" : "text-white hover:bg-white/10"}`}>Точно</button>
+                  </div>
                   <label className="flex min-w-36 items-center gap-2 rounded-2xl bg-white/10 px-3 py-2 text-[10px] font-black text-white ring-1 ring-white/10">
                     <span>Zoom {timelineZoom.toFixed(1)}x</span>
                     <input
