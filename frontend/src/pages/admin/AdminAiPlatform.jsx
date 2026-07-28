@@ -1358,6 +1358,28 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       await importMediaFile(file, getBatchImportTime(targetTime, index));
     }
   };
+  const handleAssetDropOnTrack = (event, targetType) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setMediaDragActive(false);
+    const draggedMediaKey = event.dataTransfer?.getData("application/x-travella-media") || "";
+    const media = mediaLibrary.find((item) => getMediaKey(item) === draggedMediaKey);
+    if (!media) return;
+    const matchesTrack =
+      (targetType === "sfx" && media.type === "audio")
+      || (targetType === "image" && media.type === "image")
+      || (targetType === "video" && media.type === "video");
+    if (!matchesTrack) return;
+    const targetTime = clientXToTimelineTime(event.clientX) ?? currentTime;
+    seekTimeline(targetTime);
+    setSelectedMediaKey(draggedMediaKey);
+    addMediaToTimeline(media, targetTime);
+  };
+  const allowAssetDropOnTrack = (event) => {
+    if (!event.dataTransfer?.types?.includes("application/x-travella-media")) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  };
   const clientXToTimelineTime = (clientX) => {
     const rect = timelineRef.current?.getBoundingClientRect();
     if (!rect?.width) return null;
@@ -2106,11 +2128,18 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       ))}
                     </div>
                     <div className="py-3 text-xs font-black text-slate-300">Video</div>
-                    <div className="relative h-16 rounded-xl bg-slate-800">
+                    <div
+                      className="relative h-16 rounded-xl bg-slate-800"
+                      onDragOver={allowAssetDropOnTrack}
+                      onDrop={(event) => handleAssetDropOnTrack(event, "video")}
+                    >
                       <div className="pointer-events-none absolute -top-1 bottom-[-312px] z-20 w-0.5 -translate-x-1/2 bg-rose-400 shadow-[0_0_0_1px_rgba(255,255,255,.7)]" style={{ left: `${playheadLeft}%` }} />
                       <div className="absolute inset-x-0 top-2 h-6 rounded-lg bg-gradient-to-r from-slate-200 to-slate-400 px-3 py-1 text-xs font-black text-slate-950">
                         HeyGen video · {job.output?.heygen?.videoId ? "ready" : "pending"}
                       </div>
+                      {!videoClips.length ? (
+                        <div className="pointer-events-none absolute bottom-2 right-3 rounded-lg bg-slate-950/60 px-2 py-1 text-[10px] font-black text-slate-400">Drop video here</div>
+                      ) : null}
                       {videoClips.map((item, index) => {
                         const left = Math.max(0, Math.min(92, (Number(item.time || 0) / duration) * 100));
                         const width = Math.max(8, Math.min(65, (Number(item.duration || 5) / duration) * 100));
@@ -2157,10 +2186,18 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       </div>
                     </div>
                     <div className="py-3 text-xs font-black text-slate-300">SFX</div>
-                    <div ref={timelineRef} className="relative h-20 rounded-xl bg-slate-800">
+                    <div
+                      ref={timelineRef}
+                      className="relative h-20 rounded-xl bg-slate-800"
+                      onDragOver={allowAssetDropOnTrack}
+                      onDrop={(event) => handleAssetDropOnTrack(event, "sfx")}
+                    >
                       <div className="absolute inset-y-0 left-0 right-0 grid grid-cols-5">
                         {[0, 1, 2, 3, 4].map((line) => <div key={line} className="border-l border-white/5" />)}
                       </div>
+                      {!effects.length ? (
+                        <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded-lg bg-slate-950/60 px-2 py-1 text-[10px] font-black text-slate-400">Drop audio here</div>
+                      ) : null}
                       {effects.map((effect, index) => {
                         const left = Math.max(0, Math.min(92, (Number(effect.time || 0) / duration) * 100));
                         const width = Math.max(7, Math.min(28, (Number(effect.duration || getSoundPreset(effect.assetId).tone?.duration || 0.3) / duration) * 100));
@@ -2223,10 +2260,17 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       })}
                     </div>
                     <div className="py-3 text-xs font-black text-slate-300">Images</div>
-                    <div className="relative h-14 rounded-xl bg-slate-800">
+                    <div
+                      className="relative h-14 rounded-xl bg-slate-800"
+                      onDragOver={allowAssetDropOnTrack}
+                      onDrop={(event) => handleAssetDropOnTrack(event, "image")}
+                    >
                       <div className="absolute inset-y-0 left-0 right-0 grid grid-cols-5">
                         {[0, 1, 2, 3, 4].map((line) => <div key={line} className="border-l border-white/5" />)}
                       </div>
+                      {!imageOverlays.length ? (
+                        <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded-lg bg-slate-950/60 px-2 py-1 text-[10px] font-black text-slate-400">Drop image here</div>
+                      ) : null}
                       {imageOverlays.map((item, index) => {
                         const left = Math.max(0, Math.min(92, (Number(item.time || 0) / duration) * 100));
                         const width = Math.max(8, Math.min(40, (Number(item.duration || 4) / duration) * 100));
