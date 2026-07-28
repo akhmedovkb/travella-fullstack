@@ -450,15 +450,15 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     const usage = [];
     if (videoClips.some((item) => item?.url === media.url)) usage.push("Video");
     if (effects.some((item) => item?.url === media.url)) usage.push("SFX");
-    if (imageOverlays.some((item) => item?.url === media.url)) usage.push("Images");
-    if (plan?.music?.url === media.url) usage.push("Music");
+    if (imageOverlays.some((item) => item?.url === media.url)) usage.push("Картинки");
+    if (plan?.music?.url === media.url) usage.push("Музыка");
     return usage;
   };
   const mediaLibraryUsedCount = mediaLibrary.filter((media) => getMediaTimelineUsage(media).length > 0).length;
   const getMediaDropTargetLabel = (media) => {
-    if (media?.type === "image") return "Images track";
-    if (media?.type === "video") return "Video track";
-    if (media?.type === "audio") return "SFX or Music";
+    if (media?.type === "image") return "Дорожка картинок";
+    if (media?.type === "video") return "Дорожка видео";
+    if (media?.type === "audio") return "SFX или музыка";
     return "Timeline";
   };
   const selectedMediaUsage = selectedMedia ? getMediaTimelineUsage(selectedMedia) : [];
@@ -498,7 +498,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const playheadLeft = Math.max(0, Math.min(100, (currentTime / duration) * 100));
   const timelineMinWidth = Math.round(620 * timelineZoom);
   const setTimelineZoomPreset = (value) => setTimelineZoom(Math.max(1, Math.min(3, Number(value) || 1)));
-  const selectedClipLabel = selectedClip.type === "sfx" ? "SFX" : selectedClip.type === "text" ? "Text" : selectedClip.type === "image" ? "Image" : "Video";
+  const selectedClipLabel = selectedClip.type === "sfx" ? "SFX" : selectedClip.type === "text" ? "Текст" : selectedClip.type === "image" ? "Картинка" : "Видео";
   const selectedClipFallbackDuration = selectedClip.type === "video" ? 5 : selectedClip.type === "image" ? 4 : selectedClip.type === "text" ? 3 : 0.3;
   const selectedClipDuration = Number(selectedItem?.duration || selectedClipFallbackDuration);
   const selectedClipStart = Number(selectedItem?.time || 0);
@@ -506,7 +506,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const selectedClipAlreadyEndsAtTimelineEnd = selectedClipEnd >= Math.round(duration * 10) / 10;
   const selectedClipRemainingToTimelineEnd = Math.max(0, Math.round((duration - selectedClipEnd) * 10) / 10);
   const selectedClipName = selectedClipKeys.length > 1
-    ? `${selectedClipKeys.length} clips`
+    ? `${selectedClipKeys.length} клип.`
     : selectedItem?.label || selectedItem?.text || selectedItem?.assetId || selectedClipLabel;
   const selectedClipRangeLabel = `${Math.round(selectedClipStart * 10) / 10}s-${selectedClipEnd}s`;
   const roundTimelineTime = (value) => Math.round(Number(value || 0) * 10) / 10;
@@ -1317,7 +1317,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       music: {
         ...(prev?.music || {}),
         assetId: "custom_music",
-        label: media.label || "Imported music",
+        label: media.label || "Импортированная музыка",
         url: media.url,
         mimeType: media.mimeType || "",
         volume: Number(prev?.music?.volume ?? 0.12),
@@ -1781,11 +1781,11 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
         <div className="mt-4 rounded-2xl bg-white p-3 ring-1 ring-indigo-100">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="grid gap-2 text-xs font-black text-slate-700 sm:grid-cols-5">
-              <div className="rounded-xl bg-slate-50 px-3 py-2"><span className="block text-[10px] uppercase text-slate-400">Video</span>{videoClips.length ? `${videoClips.length} clips` : previewUrl ? "есть" : "нет"}</div>
-              <div className="rounded-xl bg-slate-50 px-3 py-2"><span className="block text-[10px] uppercase text-slate-400">Music</span>{plan.music?.label || "Music"}</div>
+              <div className="rounded-xl bg-slate-50 px-3 py-2"><span className="block text-[10px] uppercase text-slate-400">Видео</span>{videoClips.length ? `${videoClips.length} клип.` : previewUrl ? "есть" : "нет"}</div>
+              <div className="rounded-xl bg-slate-50 px-3 py-2"><span className="block text-[10px] uppercase text-slate-400">Музыка</span>{plan.music?.label || "Музыка"}</div>
               <div className="rounded-xl bg-slate-50 px-3 py-2"><span className="block text-[10px] uppercase text-slate-400">SFX</span>{enabledEffects.length}</div>
-              <div className="rounded-xl bg-slate-50 px-3 py-2"><span className="block text-[10px] uppercase text-slate-400">Text</span>{textOverlays.length}</div>
-              <div className="rounded-xl bg-slate-50 px-3 py-2"><span className="block text-[10px] uppercase text-slate-400">Images</span>{imageOverlays.length}</div>
+              <div className="rounded-xl bg-slate-50 px-3 py-2"><span className="block text-[10px] uppercase text-slate-400">Текст</span>{textOverlays.length}</div>
+              <div className="rounded-xl bg-slate-50 px-3 py-2"><span className="block text-[10px] uppercase text-slate-400">Картинки</span>{imageOverlays.length}</div>
             </div>
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={() => setEditorOpen(true)} className="rounded-2xl bg-slate-950 px-4 py-2 text-xs font-black text-white hover:bg-slate-800">Открыть редактор</button>
@@ -1896,7 +1896,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                             style={textStyle}
                             title="Перетащи текст. Двойной клик — редактировать."
                           >
-                            {item.text || item.label || "Text"}
+                            {item.text || item.label || "Текст"}
                             <span
                               onPointerDown={(event) => startScaleOverlayOnPreview(event, "text", index)}
                               className={cn(
@@ -2010,7 +2010,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Timeline Studio</div>
-                  <div className="text-xs font-black">Video · Voice · Music · SFX · Text · Images · сейчас {Math.round(currentTime * 10) / 10}s / {Math.round(duration)}s{selectedClipKeys.length > 1 ? ` · выбрано ${selectedClipKeys.length}` : ""}</div>
+                  <div className="text-xs font-black">Видео · Голос · Музыка · SFX · Текст · Картинки · сейчас {Math.round(currentTime * 10) / 10}s / {Math.round(duration)}s{selectedClipKeys.length > 1 ? ` · выбрано ${selectedClipKeys.length}` : ""}</div>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button type="button" onClick={playPlan} className="rounded-2xl bg-indigo-600 px-3 py-2 text-xs font-black text-white hover:bg-indigo-500">Прослушать</button>
@@ -2033,7 +2033,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                     <button type="button" onClick={() => setTimelineZoomPreset(3)} className={`rounded-xl px-2 py-1.5 text-[10px] font-black ${timelineZoom === 3 ? "bg-white text-slate-950" : "text-white hover:bg-white/10"}`}>Точно</button>
                   </div>
                   <label className="flex min-w-36 items-center gap-2 rounded-2xl bg-white/10 px-3 py-2 text-[10px] font-black text-white ring-1 ring-white/10">
-                    <span>Zoom {timelineZoom.toFixed(1)}x</span>
+                    <span>Масштаб {timelineZoom.toFixed(1)}x</span>
                     <input
                       type="range"
                       min="1"
@@ -2289,13 +2289,13 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       onClick={seekTimelineFromTrackClick}
                     >
                       <div className="absolute inset-x-0 top-2 h-6 rounded-lg bg-gradient-to-r from-slate-200 to-slate-400 px-3 py-1 text-xs font-black text-slate-950">
-                        HeyGen video · {job.output?.heygen?.videoId ? "ready" : "pending"}
+                        HeyGen видео · {job.output?.heygen?.videoId ? "готово" : "ожидает"}
                       </div>
                       {!videoClips.length ? (
-                        <div className="pointer-events-none absolute bottom-2 right-3 rounded-lg bg-slate-950/60 px-2 py-1 text-[10px] font-black text-slate-400">Drop video here</div>
+                        <div className="pointer-events-none absolute bottom-2 right-3 rounded-lg bg-slate-950/60 px-2 py-1 text-[10px] font-black text-slate-400">Перетащи видео сюда</div>
                       ) : null}
                       {isTrackBlockedForDraggedAsset("video") ? (
-                        <div className="pointer-events-none absolute right-3 top-1/2 z-10 -translate-y-1/2 rounded-lg bg-rose-500/15 px-2 py-1 text-[10px] font-black text-rose-200 ring-1 ring-rose-400/20">Wrong type</div>
+                        <div className="pointer-events-none absolute right-3 top-1/2 z-10 -translate-y-1/2 rounded-lg bg-rose-500/15 px-2 py-1 text-[10px] font-black text-rose-200 ring-1 ring-rose-400/20">Не тот тип</div>
                       ) : null}
                       {videoClips.map((item, index) => {
                         const left = Math.max(0, Math.min(92, (Number(item.time || 0) / duration) * 100));
@@ -2337,10 +2337,10 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                         Avatar speech · {String(job.output?.script || "").trim().split(/\s+/).filter(Boolean).length || 0} words
                       </div>
                     </div>
-                    <div className="py-3 text-xs font-black text-slate-300">Music</div>
+                    <div className="py-3 text-xs font-black text-slate-300">Музыка</div>
                     <div className="relative h-10 rounded-xl bg-slate-800">
                       <div className="absolute inset-y-2 left-0 right-0 rounded-lg bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-500 px-3 py-1 text-xs font-black text-slate-950">
-                        {plan.music?.label || "Music"} · {Math.round(Number(plan.music?.volume ?? 0.12) * 100)}%
+                        {plan.music?.label || "Музыка"} · {Math.round(Number(plan.music?.volume ?? 0.12) * 100)}%
                       </div>
                     </div>
                     <div className="py-3 text-xs font-black text-slate-300">SFX</div>
@@ -2359,10 +2359,10 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                         {[0, 1, 2, 3, 4].map((line) => <div key={line} className="border-l border-white/5" />)}
                       </div>
                       {!effects.length ? (
-                        <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded-lg bg-slate-950/60 px-2 py-1 text-[10px] font-black text-slate-400">Drop audio here</div>
+                        <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded-lg bg-slate-950/60 px-2 py-1 text-[10px] font-black text-slate-400">Перетащи аудио сюда</div>
                       ) : null}
                       {isTrackBlockedForDraggedAsset("sfx") ? (
-                        <div className="pointer-events-none absolute right-3 top-1/2 z-10 -translate-y-1/2 rounded-lg bg-rose-500/15 px-2 py-1 text-[10px] font-black text-rose-200 ring-1 ring-rose-400/20">Wrong type</div>
+                        <div className="pointer-events-none absolute right-3 top-1/2 z-10 -translate-y-1/2 rounded-lg bg-rose-500/15 px-2 py-1 text-[10px] font-black text-rose-200 ring-1 ring-rose-400/20">Не тот тип</div>
                       ) : null}
                       {effects.map((effect, index) => {
                         const left = Math.max(0, Math.min(92, (Number(effect.time || 0) / duration) * 100));
@@ -2400,7 +2400,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                         );
                       })}
                     </div>
-                    <div className="py-3 text-xs font-black text-slate-300">Text</div>
+                    <div className="py-3 text-xs font-black text-slate-300">Текст</div>
                     <div className="relative h-14 rounded-xl bg-slate-800" onClick={seekTimelineFromTrackClick}>
                       <div className="absolute inset-y-0 left-0 right-0 grid grid-cols-5">
                         {[0, 1, 2, 3, 4].map((line) => <div key={line} className="border-l border-white/5" />)}
@@ -2415,7 +2415,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                               className="absolute inset-y-0 left-0 w-3 cursor-ew-resize rounded-l-xl bg-white/30 hover:bg-white/50"
                               title="Обрезать начало текста"
                             />
-                            <span className="block truncate">{item.label || item.text || "Text"}</span>
+                            <span className="block truncate">{item.label || item.text || "Текст"}</span>
                             <span className="block text-[10px] opacity-70">{Number(item.time || 0).toFixed(1)}s · {Number(item.duration || 3).toFixed(1)}s</span>
                             <span
                               onPointerDown={(event) => startResizeOverlay(event, "text", index, "right")}
@@ -2426,7 +2426,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                         );
                       })}
                     </div>
-                    <div className="py-3 text-xs font-black text-slate-300">Images</div>
+                    <div className="py-3 text-xs font-black text-slate-300">Картинки</div>
                     <div
                       className={cn(
                         "relative h-14 rounded-xl bg-slate-800 ring-1 ring-transparent transition",
@@ -2441,10 +2441,10 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                         {[0, 1, 2, 3, 4].map((line) => <div key={line} className="border-l border-white/5" />)}
                       </div>
                       {!imageOverlays.length ? (
-                        <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded-lg bg-slate-950/60 px-2 py-1 text-[10px] font-black text-slate-400">Drop image here</div>
+                        <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded-lg bg-slate-950/60 px-2 py-1 text-[10px] font-black text-slate-400">Перетащи картинку сюда</div>
                       ) : null}
                       {isTrackBlockedForDraggedAsset("image") ? (
-                        <div className="pointer-events-none absolute right-3 top-1/2 z-10 -translate-y-1/2 rounded-lg bg-rose-500/15 px-2 py-1 text-[10px] font-black text-rose-200 ring-1 ring-rose-400/20">Wrong type</div>
+                        <div className="pointer-events-none absolute right-3 top-1/2 z-10 -translate-y-1/2 rounded-lg bg-rose-500/15 px-2 py-1 text-[10px] font-black text-rose-200 ring-1 ring-rose-400/20">Не тот тип</div>
                       ) : null}
                       {imageOverlays.map((item, index) => {
                         const left = Math.max(0, Math.min(92, (Number(item.time || 0) / duration) * 100));
@@ -2712,7 +2712,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                   </div>
                 </div>
               ) : (
-                <div className="mt-2 rounded-xl bg-slate-50 p-3 text-xs font-bold text-slate-500">Выбери клип или добавь SFX/Text/Image/Video.</div>
+                <div className="mt-2 rounded-xl bg-slate-50 p-3 text-xs font-bold text-slate-500">Выбери клип или добавь SFX, текст, картинку или видео.</div>
               )}
             </div>
           </div>
