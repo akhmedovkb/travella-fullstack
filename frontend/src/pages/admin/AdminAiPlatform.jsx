@@ -2647,8 +2647,9 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                     <button type="button" onClick={() => moveSelectedClipToTime(0)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">В начало</button>
                     <button type="button" onClick={() => moveSelectedClipToTime(currentTime)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">На playhead</button>
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button type="button" onClick={() => seekTimeline(getSelectedGroupStart())} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Playhead к клипу</button>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button type="button" onClick={() => seekTimeline(getSelectedGroupStart())} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Playhead к началу</button>
+                    <button type="button" onClick={() => seekTimeline(getSelectedGroupEnd())} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Playhead к концу</button>
                     <button type="button" onClick={moveSelectedClipToEnd} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">К финалу</button>
                   </div>
                 </div>
