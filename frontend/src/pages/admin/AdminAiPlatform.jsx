@@ -731,6 +731,16 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     }
     updateEffect(selectedClip.index, patch);
   };
+  const moveSelectedOverlayPosition = (dx = 0, dy = 0) => {
+    if (selectedClip.type !== "text" && selectedClip.type !== "image") return;
+    const nextX = Math.max(0, Math.min(100, Math.round((Number(selectedItem?.x ?? 50) + dx) * 10) / 10));
+    const nextY = Math.max(0, Math.min(100, Math.round((Number(selectedItem?.y ?? 70) + dy) * 10) / 10));
+    updateSelectedClip({ x: nextX, y: nextY });
+  };
+  const centerSelectedOverlay = () => {
+    if (selectedClip.type !== "text" && selectedClip.type !== "image") return;
+    updateSelectedClip({ x: 50, y: 50 });
+  };
   const getOverlayLayer = (type, item, index) => {
     const base = type === "image" ? 20 : type === "video" ? 10 : 30;
     return Number(item?.zIndex ?? (base + index));
@@ -2599,6 +2609,20 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                           <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Y</span>
                           <input type="number" min="0" max="100" step="1" value={Number(selectedItem.y ?? 70)} onChange={(e) => updateSelectedClip({ y: Number(e.target.value) })} className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none" />
                         </label>
+                      </div>
+                      <div className="rounded-xl bg-slate-50 p-2 ring-1 ring-slate-100">
+                        <div className="mb-2 px-1 text-[10px] font-black uppercase tracking-wide text-slate-400">Позиция</div>
+                        <div className="grid grid-cols-3 gap-2">
+                          <button type="button" onClick={() => moveSelectedOverlayPosition(-2, 0)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100">Влево</button>
+                          <button type="button" onClick={() => moveSelectedOverlayPosition(0, -2)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100">Вверх</button>
+                          <button type="button" onClick={() => moveSelectedOverlayPosition(2, 0)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100">Вправо</button>
+                          <button type="button" onClick={() => moveSelectedOverlayPosition(-0.5, 0)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100">-0.5X</button>
+                          <button type="button" onClick={centerSelectedOverlay} className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-black text-white hover:bg-slate-800">Центр</button>
+                          <button type="button" onClick={() => moveSelectedOverlayPosition(0.5, 0)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100">+0.5X</button>
+                          <button type="button" onClick={() => moveSelectedOverlayPosition(0, 2)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100">Вниз</button>
+                          <button type="button" onClick={() => moveSelectedOverlayPosition(0, -0.5)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100">-0.5Y</button>
+                          <button type="button" onClick={() => moveSelectedOverlayPosition(0, 0.5)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100">+0.5Y</button>
+                        </div>
                       </div>
                       <label className="block rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
                         <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Размер · {Math.round(Number(selectedItem.scale || 1) * 100)}%</span>
