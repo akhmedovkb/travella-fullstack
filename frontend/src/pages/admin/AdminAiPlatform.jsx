@@ -393,6 +393,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const [timelineClipboard, setTimelineClipboard] = React.useState([]);
   const [previewMediaKey, setPreviewMediaKey] = React.useState("");
   const [mediaDragActive, setMediaDragActive] = React.useState(false);
+  const [draggedAssetType, setDraggedAssetType] = React.useState("");
   const [assetBinFilter, setAssetBinFilter] = React.useState("all");
   const [assetBinQuery, setAssetBinQuery] = React.useState("");
   const [assetBinSort, setAssetBinSort] = React.useState("recent");
@@ -1341,6 +1342,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     event.preventDefault();
     event.stopPropagation();
     setMediaDragActive(false);
+    setDraggedAssetType("");
     const draggedMediaKey = event.dataTransfer?.getData("application/x-travella-media") || "";
     if (draggedMediaKey) {
       const media = mediaLibrary.find((item) => getMediaKey(item) === draggedMediaKey);
@@ -1362,6 +1364,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     event.preventDefault();
     event.stopPropagation();
     setMediaDragActive(false);
+    setDraggedAssetType("");
     const draggedMediaKey = event.dataTransfer?.getData("application/x-travella-media") || "";
     const media = mediaLibrary.find((item) => getMediaKey(item) === draggedMediaKey);
     if (!media) return;
@@ -1379,6 +1382,12 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     if (!event.dataTransfer?.types?.includes("application/x-travella-media")) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = "copy";
+  };
+  const isTrackCompatibleWithDraggedAsset = (targetType) => {
+    if (!draggedAssetType) return false;
+    return (targetType === "sfx" && draggedAssetType === "audio")
+      || (targetType === "image" && draggedAssetType === "image")
+      || (targetType === "video" && draggedAssetType === "video");
   };
   const clientXToTimelineTime = (clientX) => {
     const rect = timelineRef.current?.getBoundingClientRect();
@@ -2030,7 +2039,9 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                             event.dataTransfer.setData("application/x-travella-media", mediaKey);
                             event.dataTransfer.effectAllowed = "copy";
                             setSelectedMediaKey(mediaKey);
+                            setDraggedAssetType(media.type || "");
                           }}
+                          onDragEnd={() => setDraggedAssetType("")}
                           onClick={() => setSelectedMediaKey(mediaKey)}
                           onKeyDown={(event) => {
                             if (event.key === "Enter" || event.key === " ") {
@@ -2129,7 +2140,10 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                     </div>
                     <div className="py-3 text-xs font-black text-slate-300">Video</div>
                     <div
-                      className="relative h-16 rounded-xl bg-slate-800"
+                      className={cn(
+                        "relative h-16 rounded-xl bg-slate-800 ring-1 ring-transparent transition",
+                        isTrackCompatibleWithDraggedAsset("video") && "bg-sky-950/80 ring-sky-400"
+                      )}
                       onDragOver={allowAssetDropOnTrack}
                       onDrop={(event) => handleAssetDropOnTrack(event, "video")}
                     >
@@ -2188,7 +2202,10 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                     <div className="py-3 text-xs font-black text-slate-300">SFX</div>
                     <div
                       ref={timelineRef}
-                      className="relative h-20 rounded-xl bg-slate-800"
+                      className={cn(
+                        "relative h-20 rounded-xl bg-slate-800 ring-1 ring-transparent transition",
+                        isTrackCompatibleWithDraggedAsset("sfx") && "bg-indigo-950/80 ring-indigo-400"
+                      )}
                       onDragOver={allowAssetDropOnTrack}
                       onDrop={(event) => handleAssetDropOnTrack(event, "sfx")}
                     >
@@ -2261,7 +2278,10 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                     </div>
                     <div className="py-3 text-xs font-black text-slate-300">Images</div>
                     <div
-                      className="relative h-14 rounded-xl bg-slate-800"
+                      className={cn(
+                        "relative h-14 rounded-xl bg-slate-800 ring-1 ring-transparent transition",
+                        isTrackCompatibleWithDraggedAsset("image") && "bg-fuchsia-950/80 ring-fuchsia-400"
+                      )}
                       onDragOver={allowAssetDropOnTrack}
                       onDrop={(event) => handleAssetDropOnTrack(event, "image")}
                     >
