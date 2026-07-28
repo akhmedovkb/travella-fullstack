@@ -1423,6 +1423,12 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     return Math.round(ratio * duration * 10) / 10;
   };
+  const seekTimelineFromTrackClick = (event) => {
+    if (event.target?.closest?.("[data-timeline-clip='true']")) return;
+    const targetTime = clientXToTimelineTime(event.clientX);
+    if (targetTime === null) return;
+    seekTimeline(targetTime);
+  };
   const moveEffectToClientXWithOffset = (index, clientX, grabOffset = 0) => {
     const pointerTime = clientXToTimelineTime(clientX);
     const source = effects[index];
@@ -2231,6 +2237,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       )}
                       onDragOver={allowAssetDropOnTrack}
                       onDrop={(event) => handleAssetDropOnTrack(event, "video")}
+                      onClick={seekTimelineFromTrackClick}
                     >
                       <div className="absolute inset-x-0 top-2 h-6 rounded-lg bg-gradient-to-r from-slate-200 to-slate-400 px-3 py-1 text-xs font-black text-slate-950">
                         HeyGen video · {job.output?.heygen?.videoId ? "ready" : "pending"}
@@ -2248,6 +2255,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                           <button
                             key={item.id || index}
                             type="button"
+                            data-timeline-clip="true"
                             onPointerDown={(event) => startDragOverlay(event, "video", index)}
                             onClick={() => selectSingleClip("video", index)}
                             className={cn(
@@ -2296,6 +2304,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       )}
                       onDragOver={allowAssetDropOnTrack}
                       onDrop={(event) => handleAssetDropOnTrack(event, "sfx")}
+                      onClick={seekTimelineFromTrackClick}
                     >
                       <div className="absolute inset-y-0 left-0 right-0 grid grid-cols-5">
                         {[0, 1, 2, 3, 4].map((line) => <div key={line} className="border-l border-white/5" />)}
@@ -2313,6 +2322,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                           <button
                             key={`${effect.id || index}_clip`}
                             type="button"
+                            data-timeline-clip="true"
                             onPointerDown={(event) => startDragEffect(event, index)}
                             onClick={() => selectSingleClip("sfx", index)}
                             onDoubleClick={() => playEffect(effect, index)}
@@ -2342,7 +2352,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       })}
                     </div>
                     <div className="py-3 text-xs font-black text-slate-300">Text</div>
-                    <div className="relative h-14 rounded-xl bg-slate-800">
+                    <div className="relative h-14 rounded-xl bg-slate-800" onClick={seekTimelineFromTrackClick}>
                       <div className="absolute inset-y-0 left-0 right-0 grid grid-cols-5">
                         {[0, 1, 2, 3, 4].map((line) => <div key={line} className="border-l border-white/5" />)}
                       </div>
@@ -2350,7 +2360,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                         const left = Math.max(0, Math.min(92, (Number(item.time || 0) / duration) * 100));
                         const width = Math.max(8, Math.min(40, (Number(item.duration || 3) / duration) * 100));
                         return (
-                          <button type="button" key={item.id || index} onPointerDown={(event) => startDragOverlay(event, "text", index)} onClick={() => selectSingleClip("text", index)} className={cn("absolute top-2 h-10 cursor-grab rounded-xl bg-amber-400 px-3 py-1 text-left text-[10px] font-black text-slate-950 shadow ring-2 ring-transparent active:cursor-grabbing", ((selectedClip.type === "text" && selectedClip.index === index) || isClipMultiSelected("text", index)) && "ring-white")} style={{ left: `${left}%`, width: `${width}%` }}>
+                          <button type="button" key={item.id || index} data-timeline-clip="true" onPointerDown={(event) => startDragOverlay(event, "text", index)} onClick={() => selectSingleClip("text", index)} className={cn("absolute top-2 h-10 cursor-grab rounded-xl bg-amber-400 px-3 py-1 text-left text-[10px] font-black text-slate-950 shadow ring-2 ring-transparent active:cursor-grabbing", ((selectedClip.type === "text" && selectedClip.index === index) || isClipMultiSelected("text", index)) && "ring-white")} style={{ left: `${left}%`, width: `${width}%` }}>
                             <span
                               onPointerDown={(event) => startResizeOverlay(event, "text", index, "left")}
                               className="absolute inset-y-0 left-0 w-3 cursor-ew-resize rounded-l-xl bg-white/30 hover:bg-white/50"
@@ -2376,6 +2386,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       )}
                       onDragOver={allowAssetDropOnTrack}
                       onDrop={(event) => handleAssetDropOnTrack(event, "image")}
+                      onClick={seekTimelineFromTrackClick}
                     >
                       <div className="absolute inset-y-0 left-0 right-0 grid grid-cols-5">
                         {[0, 1, 2, 3, 4].map((line) => <div key={line} className="border-l border-white/5" />)}
@@ -2390,7 +2401,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                         const left = Math.max(0, Math.min(92, (Number(item.time || 0) / duration) * 100));
                         const width = Math.max(8, Math.min(40, (Number(item.duration || 4) / duration) * 100));
                         return (
-                          <button type="button" key={item.id || index} onPointerDown={(event) => startDragOverlay(event, "image", index)} onClick={() => selectSingleClip("image", index)} className={cn("absolute top-2 h-10 cursor-grab rounded-xl bg-fuchsia-500 px-3 py-1 text-left text-[10px] font-black text-white shadow ring-2 ring-transparent active:cursor-grabbing", ((selectedClip.type === "image" && selectedClip.index === index) || isClipMultiSelected("image", index)) && "ring-white")} style={{ left: `${left}%`, width: `${width}%` }}>
+                          <button type="button" key={item.id || index} data-timeline-clip="true" onPointerDown={(event) => startDragOverlay(event, "image", index)} onClick={() => selectSingleClip("image", index)} className={cn("absolute top-2 h-10 cursor-grab rounded-xl bg-fuchsia-500 px-3 py-1 text-left text-[10px] font-black text-white shadow ring-2 ring-transparent active:cursor-grabbing", ((selectedClip.type === "image" && selectedClip.index === index) || isClipMultiSelected("image", index)) && "ring-white")} style={{ left: `${left}%`, width: `${width}%` }}>
                             <span
                               onPointerDown={(event) => startResizeOverlay(event, "image", index, "left")}
                               className="absolute inset-y-0 left-0 w-3 cursor-ew-resize rounded-l-xl bg-white/20 hover:bg-white/40"
