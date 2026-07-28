@@ -454,6 +454,13 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     if (plan?.music?.url === media.url) usage.push("Music");
     return usage;
   };
+  const mediaLibraryUsedCount = mediaLibrary.filter((media) => getMediaTimelineUsage(media).length > 0).length;
+  const getMediaDropTargetLabel = (media) => {
+    if (media?.type === "image") return "Images track";
+    if (media?.type === "video") return "Video track";
+    if (media?.type === "audio") return "SFX or Music";
+    return "Timeline";
+  };
   const filteredMediaLibrary = mediaLibrary
     .map((media, index) => ({ media, index }))
     .filter(({ media }) => assetBinFilter === "all" || media.type === assetBinFilter)
@@ -1979,7 +1986,9 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                   <div className="mb-2 flex items-center justify-between gap-2">
                     <div>
                       <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">Asset Bin</div>
-                      <div className="text-[10px] font-bold text-slate-400">Файлы этой задачи. Добавляются на текущую секунду playhead.</div>
+                      <div className="text-[10px] font-bold text-slate-400">
+                        Файлы этой задачи · на таймлайне {mediaLibraryUsedCount} · не добавлено {Math.max(0, mediaLibrary.length - mediaLibraryUsedCount)}
+                      </div>
                       <div className="mt-1 flex flex-wrap gap-1">
                         {[
                           ["all", "All", mediaLibrary.length],
@@ -2042,6 +2051,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       const usageLabels = getMediaTimelineUsage(media);
                       const mediaPlaced = usageLabels.length > 0;
                       const canReplaceWithThisMedia = canReplaceSelectedClipWithMedia(media);
+                      const dropTargetLabel = getMediaDropTargetLabel(media);
                       return (
                         <div
                           key={mediaKey}
@@ -2079,6 +2089,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                               <div className={cn("mt-0.5 truncate text-[9px] font-bold", mediaPlaced ? "text-emerald-300" : "text-slate-400")}>
                                 {mediaPlaced ? `On timeline · ${usageLabels.join(", ")}` : "Drag to timeline"}
                               </div>
+                              <div className="mt-0.5 truncate text-[9px] font-bold text-indigo-200">Target: {dropTargetLabel}</div>
                               <div className="mt-1.5 flex flex-wrap gap-1">
                                 {media.type === "image" ? (
                                   <button type="button" onClick={() => addMediaToTimeline(media)} className="rounded-lg bg-fuchsia-500 px-2 py-1 text-[9px] font-black text-white hover:bg-fuchsia-400">Image @ playhead</button>
