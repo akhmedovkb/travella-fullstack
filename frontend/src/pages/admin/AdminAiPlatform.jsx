@@ -2279,6 +2279,8 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                           {selectedMediaUsage.length ? `· ${selectedMediaUsage.join(", ")}` : `· ${selectedMediaDropTarget}`}
                         </span>
                       </div>
+                      <span className="rounded-xl bg-slate-900/70 px-2 py-1.5 text-[10px] font-black text-slate-200 ring-1 ring-white/10">Курсор {roundTimelineTime(currentTime)}s</span>
+                      <span className="rounded-xl bg-slate-900/70 px-2 py-1.5 text-[10px] font-black text-slate-200 ring-1 ring-white/10">Макс. {roundTimelineTime(selectedMediaEndTime)}s</span>
                       <button type="button" onClick={() => addMediaToTimeline(selectedMedia, 0)} className="rounded-xl bg-white/10 px-2 py-1.5 text-[10px] font-black text-white ring-1 ring-white/10 hover:bg-white/15">В начало</button>
                       <button type="button" onClick={() => addMediaToTimeline(selectedMedia)} className="rounded-xl bg-white px-2 py-1.5 text-[10px] font-black text-slate-950 hover:bg-slate-100">На курсор</button>
                       <button type="button" onClick={() => addMediaToTimelineEnd(selectedMedia)} className="rounded-xl bg-white/10 px-2 py-1.5 text-[10px] font-black text-white ring-1 ring-white/10 hover:bg-white/15">В конец</button>
