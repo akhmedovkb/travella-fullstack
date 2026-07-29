@@ -2128,6 +2128,11 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                         </div>
                         <button type="button" onClick={() => setSelectedMediaKey("")} className="rounded-full bg-white/10 px-2 py-1 text-[10px] font-black text-slate-300 hover:bg-white/15">Снять</button>
                       </div>
+                      <div className="mt-2 overflow-hidden rounded-xl bg-black/60 p-1 ring-1 ring-white/10">
+                        {selectedMedia.type === "image" ? <img src={selectedMedia.url} alt={selectedMedia.label || "Выбранный файл"} className="max-h-36 w-full rounded-lg object-contain" /> : null}
+                        {selectedMedia.type === "audio" ? <audio src={selectedMedia.url} controls className="w-full" /> : null}
+                        {selectedMedia.type === "video" ? <video src={selectedMedia.url} controls className="max-h-36 w-full rounded-lg bg-black object-contain" /> : null}
+                      </div>
                       <div className="mt-2 flex flex-wrap gap-1">
                         <button type="button" onClick={() => addMediaToTimeline(selectedMedia, 0)} className="rounded-lg bg-white/10 px-2 py-1 text-[9px] font-black text-white ring-1 ring-white/10 hover:bg-white/15">В начало</button>
                         <button type="button" onClick={() => addMediaToTimeline(selectedMedia)} className="rounded-lg bg-white px-2 py-1 text-[9px] font-black text-slate-950 hover:bg-slate-100">На курсор</button>
@@ -2135,6 +2140,11 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                         {selectedMedia.type === "audio" ? (
                           <button type="button" onClick={() => useAudioMediaAsMusic(selectedMedia)} className="rounded-lg bg-emerald-500 px-2 py-1 text-[9px] font-black text-white hover:bg-emerald-400">Музыка</button>
                         ) : null}
+                        {canReplaceSelectedClipWithMedia(selectedMedia) ? (
+                          <button type="button" onClick={() => replaceSelectedClipWithMedia(selectedMedia)} className="rounded-lg bg-amber-400 px-2 py-1 text-[9px] font-black text-slate-950 hover:bg-amber-300">Заменить</button>
+                        ) : null}
+                        <a href={selectedMedia.url} target="_blank" rel="noreferrer" className="rounded-lg bg-white/10 px-2 py-1 text-[9px] font-black text-white ring-1 ring-white/10 hover:bg-white/15">Открыть</a>
+                        <button type="button" onClick={() => removeMediaFromLibrary(selectedMedia)} className="rounded-lg bg-rose-500/15 px-2 py-1 text-[9px] font-black text-rose-100 ring-1 ring-rose-400/20 hover:bg-rose-500/25">Убрать</button>
                       </div>
                     </div>
                   ) : null}
