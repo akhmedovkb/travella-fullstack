@@ -2028,6 +2028,27 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                     placeholder="Найти файл..."
                     className="mt-3 w-full rounded-2xl bg-slate-50 px-3 py-2 text-xs font-black text-slate-950 outline-none ring-1 ring-slate-200 placeholder:text-slate-400 focus:ring-indigo-200"
                   />
+                  <div className="mt-2 flex rounded-2xl bg-slate-50 p-1 ring-1 ring-slate-200">
+                    {[
+                      ["recent", "Новые"],
+                      ["name", "Имя"],
+                      ["type", "Тип"],
+                    ].map(([key, label]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setAssetBinSort(key)}
+                        className={cn(
+                          "flex-1 rounded-xl px-2 py-1.5 text-[10px] font-black transition",
+                          assetBinSort === key
+                            ? "bg-white text-slate-950 shadow-sm ring-1 ring-slate-200"
+                            : "text-slate-500 hover:bg-white hover:text-slate-950"
+                        )}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                   <div className="mt-3 max-h-[260px] space-y-2 overflow-y-auto pr-1">
                     {filteredMediaLibrary.length ? filteredMediaLibrary.slice(0, 10).map((media) => {
                       const mediaKey = getMediaKey(media);
@@ -2097,6 +2118,26 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       </div>
                     )}
                   </div>
+                  {selectedMedia ? (
+                    <div className="mt-3 rounded-2xl bg-slate-950 p-3 text-white ring-1 ring-slate-900">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">Выбранный файл</div>
+                          <div className="mt-1 truncate text-xs font-black">{selectedMedia.label || selectedMedia.originalName || "Медиа"}</div>
+                          <div className="mt-1 text-[10px] font-bold text-slate-400">{formatTimelineMediaType(selectedMedia.type || "media")} · попадёт: {selectedMediaDropTarget}</div>
+                        </div>
+                        <button type="button" onClick={() => setSelectedMediaKey("")} className="rounded-full bg-white/10 px-2 py-1 text-[10px] font-black text-slate-300 hover:bg-white/15">Снять</button>
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        <button type="button" onClick={() => addMediaToTimeline(selectedMedia, 0)} className="rounded-lg bg-white/10 px-2 py-1 text-[9px] font-black text-white ring-1 ring-white/10 hover:bg-white/15">В начало</button>
+                        <button type="button" onClick={() => addMediaToTimeline(selectedMedia)} className="rounded-lg bg-white px-2 py-1 text-[9px] font-black text-slate-950 hover:bg-slate-100">На курсор</button>
+                        <button type="button" onClick={() => addMediaToTimelineEnd(selectedMedia)} className="rounded-lg bg-white/10 px-2 py-1 text-[9px] font-black text-white ring-1 ring-white/10 hover:bg-white/15">В конец</button>
+                        {selectedMedia.type === "audio" ? (
+                          <button type="button" onClick={() => useAudioMediaAsMusic(selectedMedia)} className="rounded-lg bg-emerald-500 px-2 py-1 text-[9px] font-black text-white hover:bg-emerald-400">Музыка</button>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               </div>
         <div className="space-y-3">
