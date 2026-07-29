@@ -1459,9 +1459,15 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     if (!media) return;
     const matchesTrack =
       (targetType === "sfx" && media.type === "audio")
+      || (targetType === "music" && media.type === "audio")
       || (targetType === "image" && media.type === "image")
       || (targetType === "video" && media.type === "video");
     if (!matchesTrack) return;
+    if (targetType === "music") {
+      setSelectedMediaKey(draggedMediaKey);
+      useAudioMediaAsMusic(media);
+      return;
+    }
     const targetTime = clientXToTimelineTime(event.clientX) ?? currentTime;
     seekTimeline(targetTime);
     setSelectedMediaKey(draggedMediaKey);
@@ -1475,6 +1481,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const isTrackCompatibleWithDraggedAsset = (targetType) => {
     if (!draggedAssetType) return false;
     return (targetType === "sfx" && draggedAssetType === "audio")
+      || (targetType === "music" && draggedAssetType === "audio")
       || (targetType === "image" && draggedAssetType === "image")
       || (targetType === "video" && draggedAssetType === "video");
   };
@@ -2564,10 +2571,25 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       </div>
                     </div>
                     <div className="py-3 text-xs font-black text-slate-300">Музыка</div>
-                    <div className="relative h-10 rounded-xl bg-slate-800">
+                    <div
+                      className={cn(
+                        "relative h-10 rounded-xl bg-slate-800 ring-1 ring-transparent transition",
+                        isTrackCompatibleWithDraggedAsset("music") && "bg-emerald-950/80 ring-emerald-400",
+                        isTrackBlockedForDraggedAsset("music") && "opacity-50 ring-rose-400/40"
+                      )}
+                      onDragOver={allowAssetDropOnTrack}
+                      onDrop={(event) => handleAssetDropOnTrack(event, "music")}
+                      onClick={seekTimelineFromTrackClick}
+                    >
                       <div className="absolute inset-y-2 left-0 right-0 rounded-lg bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-500 px-3 py-1 text-xs font-black text-slate-950">
                         {plan.music?.label || "Музыка"} · {Math.round(Number(plan.music?.volume ?? 0.12) * 100)}%
                       </div>
+                      {isTrackCompatibleWithDraggedAsset("music") ? (
+                        <div className="pointer-events-none absolute right-3 top-1/2 z-10 -translate-y-1/2 rounded-lg bg-emerald-500/20 px-2 py-1 text-[10px] font-black text-emerald-100 ring-1 ring-emerald-300/30">Заменит музыку</div>
+                      ) : null}
+                      {isTrackBlockedForDraggedAsset("music") ? (
+                        <div className="pointer-events-none absolute right-3 top-1/2 z-10 -translate-y-1/2 rounded-lg bg-rose-500/15 px-2 py-1 text-[10px] font-black text-rose-200 ring-1 ring-rose-400/20">Только аудио</div>
+                      ) : null}
                     </div>
                     <div className="py-3 text-xs font-black text-slate-300">SFX</div>
                     <div
