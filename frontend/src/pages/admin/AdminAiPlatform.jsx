@@ -2031,9 +2031,11 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                   <div className="mt-3 max-h-[260px] space-y-2 overflow-y-auto pr-1">
                     {filteredMediaLibrary.length ? filteredMediaLibrary.slice(0, 10).map((media) => {
                       const mediaKey = getMediaKey(media);
+                      const previewOpen = previewMediaKey === mediaKey;
                       const mediaSelected = selectedMediaKey === mediaKey;
                       const usageLabels = getMediaTimelineUsage(media);
                       const mediaPlaced = usageLabels.length > 0;
+                      const canReplaceWithThisMedia = canReplaceSelectedClipWithMedia(media);
                       return (
                         <div
                           key={`compact_${mediaKey}`}
@@ -2066,10 +2068,27 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                               {mediaPlaced ? `На дорожке: ${usageLabels.join(", ")}` : "Перетащи на таймлайн"}
                             </div>
                             <div className="mt-1 flex flex-wrap gap-1">
+                              <button type="button" onClick={(event) => { event.stopPropagation(); addMediaToTimeline(media, 0); }} className="rounded-lg bg-white px-2 py-1 text-[9px] font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">В начало</button>
                               <button type="button" onClick={(event) => { event.stopPropagation(); addMediaToTimeline(media); }} className="rounded-lg bg-slate-950 px-2 py-1 text-[9px] font-black text-white hover:bg-slate-800">На курсор</button>
-                              <button type="button" onClick={(event) => { event.stopPropagation(); toggleMediaPreview(media); }} className="rounded-lg bg-white px-2 py-1 text-[9px] font-black text-slate-950 ring-1 ring-slate-200 hover:bg-slate-50">Превью</button>
+                              <button type="button" onClick={(event) => { event.stopPropagation(); addMediaToTimelineEnd(media); }} className="rounded-lg bg-white px-2 py-1 text-[9px] font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">В конец</button>
+                              {media.type === "audio" ? (
+                                <button type="button" onClick={(event) => { event.stopPropagation(); useAudioMediaAsMusic(media); }} className="rounded-lg bg-emerald-600 px-2 py-1 text-[9px] font-black text-white hover:bg-emerald-500">Музыка</button>
+                              ) : null}
+                              {canReplaceWithThisMedia ? (
+                                <button type="button" onClick={(event) => { event.stopPropagation(); replaceSelectedClipWithMedia(media); }} className="rounded-lg bg-amber-400 px-2 py-1 text-[9px] font-black text-slate-950 hover:bg-amber-300">Заменить</button>
+                              ) : null}
+                              <button type="button" onClick={(event) => { event.stopPropagation(); toggleMediaPreview(media); }} className="rounded-lg bg-white px-2 py-1 text-[9px] font-black text-slate-950 ring-1 ring-slate-200 hover:bg-slate-50">{previewOpen ? "Скрыть" : "Превью"}</button>
+                              <a href={media.url} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} className="rounded-lg bg-white px-2 py-1 text-[9px] font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Открыть</a>
+                              <button type="button" onClick={(event) => { event.stopPropagation(); removeMediaFromLibrary(media); }} className="rounded-lg bg-rose-50 px-2 py-1 text-[9px] font-black text-rose-700 ring-1 ring-rose-100 hover:bg-rose-100">Убрать</button>
                             </div>
                           </div>
+                          {previewOpen ? (
+                            <div className="col-span-2 overflow-hidden rounded-xl bg-slate-950 p-1 ring-1 ring-slate-200">
+                              {media.type === "image" ? <img src={media.url} alt={media.label || "Превью"} className="max-h-36 w-full rounded-lg object-contain" /> : null}
+                              {media.type === "audio" ? <audio src={media.url} controls className="w-full" /> : null}
+                              {media.type === "video" ? <video src={media.url} controls className="max-h-36 w-full rounded-lg bg-black object-contain" /> : null}
+                            </div>
+                          ) : null}
                         </div>
                       );
                     }) : (
