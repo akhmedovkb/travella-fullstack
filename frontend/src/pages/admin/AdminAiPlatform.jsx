@@ -233,6 +233,16 @@ function formatHeygenExpressiveness(value = "") {
   }[String(value || "").toLowerCase()] || value || "—");
 }
 
+function formatTimelineMediaType(type = "") {
+  return ({
+    image: "картинка",
+    audio: "аудио",
+    video: "видео",
+    file: "файл",
+    media: "медиа",
+  }[String(type || "").toLowerCase()] || type || "медиа");
+}
+
 function estimateHeygenDurationStats(script = "", speed = 1) {
   const words = String(script || "").trim().split(/\s+/).filter(Boolean).length;
   if (!words) return { words: 0, seconds: 0, label: "—" };
@@ -1798,7 +1808,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={() => setEditorOpen(true)} className="rounded-2xl bg-slate-950 px-4 py-2 text-xs font-black text-white hover:bg-slate-800">Открыть редактор</button>
               {renderedUrl ? (
-                <a href={renderedUrl} target="_blank" rel="noreferrer" className="rounded-2xl bg-emerald-700 px-4 py-2 text-xs font-black text-white hover:bg-emerald-800">Sound MP4</a>
+                <a href={renderedUrl} target="_blank" rel="noreferrer" className="rounded-2xl bg-emerald-700 px-4 py-2 text-xs font-black text-white hover:bg-emerald-800">MP4 со звуком</a>
               ) : null}
               <button type="button" onClick={() => onRender?.(job)} disabled={busy || rendering} className="rounded-2xl bg-indigo-700 px-4 py-2 text-xs font-black text-white hover:bg-indigo-800 disabled:opacity-40">
                 {rendering ? "Свожу..." : renderedUrl ? "Пересвести" : "Свести"}
@@ -2155,11 +2165,11 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                             {media.type === "image" ? (
                               <img src={media.thumbnailUrl || media.url} alt="" className="h-11 w-11 rounded-xl object-cover ring-1 ring-white/10" />
                             ) : (
-                              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-950 text-[10px] font-black uppercase text-white ring-1 ring-white/10">{media.type || "file"}</div>
+                              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-950 text-[10px] font-black uppercase text-white ring-1 ring-white/10">{formatTimelineMediaType(media.type || "file")}</div>
                             )}
                             <div className="min-w-0">
                               <div className="truncate text-[11px] font-black text-white">{media.label || media.originalName || "Медиа"}</div>
-                              <div className="mt-0.5 text-[9px] font-bold uppercase tracking-wide text-slate-500">{media.type} · {media.mimeType || "media"}</div>
+                              <div className="mt-0.5 text-[9px] font-bold uppercase tracking-wide text-slate-500">{formatTimelineMediaType(media.type)} · {media.mimeType || "медиа"}</div>
                               <div className={cn("mt-0.5 truncate text-[9px] font-bold", mediaPlaced ? "text-emerald-300" : "text-slate-400")}>
                                 {mediaPlaced ? `На таймлайне · ${usageLabels.join(", ")}` : "Перетащи на таймлайн"}
                               </div>
@@ -2207,12 +2217,12 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                         {selectedMedia.type === "image" ? (
                           <img src={selectedMedia.thumbnailUrl || selectedMedia.url} alt="" className="h-14 w-14 rounded-xl object-cover ring-1 ring-white/10" />
                         ) : (
-                          <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-slate-800 text-[10px] font-black uppercase text-white ring-1 ring-white/10">{selectedMedia.type || "file"}</div>
+                          <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-slate-800 text-[10px] font-black uppercase text-white ring-1 ring-white/10">{formatTimelineMediaType(selectedMedia.type || "file")}</div>
                         )}
                         <div className="min-w-0">
                           <div className="truncate text-xs font-black text-white">{selectedMedia.label || selectedMedia.originalName || "Выбранный файл"}</div>
                           <div className="mt-1 flex flex-wrap gap-1">
-                            <span className="rounded-full bg-white/10 px-2 py-1 text-[9px] font-black uppercase text-slate-300">{selectedMedia.type || "media"}</span>
+                            <span className="rounded-full bg-white/10 px-2 py-1 text-[9px] font-black uppercase text-slate-300">{formatTimelineMediaType(selectedMedia.type || "media")}</span>
                             <span className="rounded-full bg-indigo-500/15 px-2 py-1 text-[9px] font-black text-indigo-100 ring-1 ring-indigo-400/20">{selectedMediaDropTarget}</span>
                             <span className={cn("rounded-full px-2 py-1 text-[9px] font-black ring-1", selectedMediaUsage.length ? "bg-emerald-500/15 text-emerald-100 ring-emerald-400/20" : "bg-white/5 text-slate-400 ring-white/10")}>
                               {selectedMediaUsage.length ? `На таймлайне: ${selectedMediaUsage.join(", ")}` : "Ещё не добавлен"}
@@ -5442,7 +5452,7 @@ export default function AdminAiPlatform() {
     if (!job?.id || soundRenderLoading) return;
     setSoundRenderLoading(job.id);
     setError("");
-    addMessage({ role: "assistant", text: `Sound Render Worker: свожу музыку и SFX для задачи #${job.id}.` });
+    addMessage({ role: "assistant", text: `Sound Studio: свожу музыку и SFX для задачи #${job.id}.` });
     try {
       const res = await apiPost(`/api/admin/ai-platform/video-operator/jobs/${job.id}/sound-plan/render`, {}, "admin");
       const nextJob = res?.job || null;
@@ -5452,8 +5462,8 @@ export default function AdminAiPlatform() {
       addMessage({
         role: "assistant",
         text: output?.soundPlan?.render?.artifact?.url
-          ? "Sound-enhanced MP4 готов и сохранён в Travella Media."
-          : "Sound Render Worker завершил задачу.",
+          ? "MP4 со звуком готов и сохранён в Travella Media."
+          : "Sound Studio завершил сведение звука.",
         events: nextJob?.events || [],
         output,
         job: nextJob,
@@ -5462,7 +5472,7 @@ export default function AdminAiPlatform() {
     } catch (e) {
       const msg = e?.message || "Не удалось свести звук";
       setError(msg);
-      addMessage({ role: "assistant", text: `Sound Render Worker не смог свести звук.\n\nПричина: ${msg}` });
+      addMessage({ role: "assistant", text: `Sound Studio не смог свести звук.\n\nПричина: ${msg}` });
       await load();
     } finally {
       setSoundRenderLoading("");
@@ -5483,7 +5493,7 @@ export default function AdminAiPlatform() {
       updateJobMessages(nextJob, output);
       addMessage({
         role: "assistant",
-        text: `Media Importer: файл "${res?.media?.label || file.name}" добавлен в Timeline Studio.`,
+        text: `Медиатека: файл "${res?.media?.label || file.name}" добавлен в Timeline Studio.`,
         events: nextJob?.events || [],
         output,
         job: nextJob,
@@ -5493,7 +5503,7 @@ export default function AdminAiPlatform() {
     } catch (e) {
       const msg = e?.message || "Не удалось импортировать медиа";
       setError(msg);
-      addMessage({ role: "assistant", text: `Media Importer не смог импортировать файл.\n\nПричина: ${msg}` });
+      addMessage({ role: "assistant", text: `Медиатека не смогла импортировать файл.\n\nПричина: ${msg}` });
       await load();
       return null;
     } finally {
@@ -5766,41 +5776,41 @@ export default function AdminAiPlatform() {
       && nextSchedulerCheckMs > 0
       && Date.now() > nextSchedulerCheckMs + reportIntervalMs;
     const nextQueuePlannedMs = new Date(queue.next?.plannedAt || 0).getTime();
-    const nextQueueState = Number.isFinite(nextQueuePlannedMs) && nextQueuePlannedMs > 0 && nextQueuePlannedMs <= Date.now() ? "due" : "planned";
-    const nextQueueAge = nextQueueState === "due" ? ` · waiting ${Math.max(0, Math.round((Date.now() - nextQueuePlannedMs) / 60000))} min` : "";
+    const nextQueueState = Number.isFinite(nextQueuePlannedMs) && nextQueuePlannedMs > 0 && nextQueuePlannedMs <= Date.now() ? "к запуску" : "в плане";
+    const nextQueueAge = nextQueueState === "к запуску" ? ` · ждёт ${Math.max(0, Math.round((Date.now() - nextQueuePlannedMs) / 60000))} мин` : "";
     const reportDue = Number(queue.due || 0);
     const reportBatchLimit = Number(publishing.schedulerBatchLimit || 5);
     const reportWillPublish = Math.min(reportDue, reportBatchLimit);
     const reportRemaining = Math.max(0, reportDue - reportWillPublish);
     const manualRunState = publishing.telegramDueRun?.running
-      ? "blocked: running"
+      ? "недоступно: уже выполняется"
       : reportDue > 0
-        ? `ready: ${reportDue} · will publish ${reportWillPublish}${reportRemaining ? ` · remaining ${reportRemaining}` : ""}`
-        : "blocked: no due";
+        ? `готово: ${reportDue} · будет опубликовано ${reportWillPublish}${reportRemaining ? ` · останется ${reportRemaining}` : ""}`
+        : "недоступно: нет задач к запуску";
     const rows = [
       "Travella AI OS · Publishing Manager · Telegram scheduler",
-      `Scheduler: ${publishing.schedulerEnabled ? "on" : "off"} (${publishing.schedulerReadyReason || "unknown"})`,
-      `Run state: ${publishing.telegramDueRun?.running ? "running" : "idle"}`,
-      `Manual run: ${manualRunState}`,
-      `Batch capped: ${reportDue > reportBatchLimit ? "yes" : "no"} (${reportBatchLimit})`,
-      `Queue: due ${queue.due ?? 0}, planned ${queue.planned ?? 0}`,
-      queue.next ? `Next: ${queue.next.code || queue.next.jobId || "AI"} · ${nextQueueState}${nextQueueAge} · ${fmtDate(queue.next.plannedAt)}` : "Next: none",
-      nextSchedulerCheck ? `Next scheduler check: ${fmtDate(nextSchedulerCheck)}${nextSchedulerCheckOverdue ? " · overdue" : ""}` : "",
+      `Scheduler: ${publishing.schedulerEnabled ? "включён" : "выключен"} (${publishing.schedulerReadyReason || "неизвестно"})`,
+      `Состояние: ${publishing.telegramDueRun?.running ? "выполняется" : "ожидает"}`,
+      `Ручной запуск: ${manualRunState}`,
+      `Лимит batch: ${reportDue > reportBatchLimit ? "сработает" : "не сработает"} (${reportBatchLimit})`,
+      `Очередь: к запуску ${queue.due ?? 0}, в плане ${queue.planned ?? 0}`,
+      queue.next ? `Следующая: ${queue.next.code || queue.next.jobId || "AI"} · ${nextQueueState}${nextQueueAge} · ${fmtDate(queue.next.plannedAt)}` : "Следующая: нет",
+      nextSchedulerCheck ? `Следующая проверка scheduler: ${fmtDate(nextSchedulerCheck)}${nextSchedulerCheckOverdue ? " · просрочена" : ""}` : "",
       "",
       run
-        ? `Last run: ${run.success ? "ok" : "error"} · ${fmtDate(run.finishedAt || run.startedAt)} · checked ${run.checked || 0}, ok ${run.published || 0}, errors ${run.failed || 0}`
-        : "Last run: none",
-      run?.actor ? `Actor: ${run.actor}` : "",
-      run?.durationMs ? `Duration: ${Math.round(Number(run.durationMs || 0) / 1000)} sec` : "",
+        ? `Последний запуск: ${run.success ? "ok" : "ошибка"} · ${fmtDate(run.finishedAt || run.startedAt)} · проверено ${run.checked || 0}, опубликовано ${run.published || 0}, ошибок ${run.failed || 0}`
+        : "Последний запуск: нет",
+      run?.actor ? `Кто запустил: ${run.actor}` : "",
+      run?.durationMs ? `Длительность: ${Math.round(Number(run.durationMs || 0) / 1000)} сек` : "",
       ...(Array.isArray(run?.resultsPreview) && run.resultsPreview.length
-        ? ["", "Results:", ...run.resultsPreview.map((item) => {
-            const state = item.success ? (item.deliveryMethod || "ok") : "error";
+        ? ["", "Результаты:", ...run.resultsPreview.map((item) => {
+            const state = item.success ? (item.deliveryMethod || "ok") : "ошибка";
             const message = item.message ? ` · ${item.message}` : "";
             const link = item.url ? ` · ${item.url}` : "";
             return `- ${item.code || item.jobId || "AI"}: ${state}${message}${link}`;
           })]
         : []),
-      run?.resultsOverflow ? `+${run.resultsOverflow} more` : "",
+      run?.resultsOverflow ? `+${run.resultsOverflow} ещё` : "",
     ].filter(Boolean);
     const text = rows.join("\n");
     try {
