@@ -416,6 +416,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const [assetBinQuery, setAssetBinQuery] = React.useState("");
   const [assetBinSort, setAssetBinSort] = React.useState("recent");
   const [selectedMediaKey, setSelectedMediaKey] = React.useState("");
+  const [mediaToolbarNotice, setMediaToolbarNotice] = React.useState("");
   const timelineRef = React.useRef(null);
   const previewFrameRef = React.useRef(null);
   const mediaInputRef = React.useRef(null);
@@ -427,6 +428,9 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     setDraft(nextDraft);
     setHistoryTick((tick) => tick + 1);
   }, [soundPlan, job?.id]);
+  React.useEffect(() => {
+    setMediaToolbarNotice("");
+  }, [selectedMediaKey]);
   React.useEffect(() => {
     const serial = JSON.stringify(draft || null);
     const history = historyRef.current;
@@ -481,6 +485,17 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   };
   const selectedMediaUsage = selectedMedia ? getMediaTimelineUsage(selectedMedia) : [];
   const selectedMediaDropTarget = selectedMedia ? getMediaDropTargetLabel(selectedMedia) : "";
+  const copySelectedMediaUrl = async () => {
+    if (!selectedMedia?.url) return;
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
+      await navigator.clipboard.writeText(selectedMedia.url);
+      setMediaToolbarNotice("URL скопирован");
+    } catch {
+      setMediaToolbarNotice("Не удалось скопировать");
+    }
+    window.setTimeout(() => setMediaToolbarNotice(""), 1600);
+  };
   const getMediaDefaultDuration = (media) => {
     if (media?.type === "video") return Math.min(12, Math.max(1, Number(media.durationSeconds || 5)));
     if (media?.type === "image") return 4;
@@ -2277,7 +2292,10 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                         {previewMediaKey === getMediaKey(selectedMedia) ? "Скрыть" : "Превью"}
                       </button>
                       <a href={selectedMedia.url} target="_blank" rel="noreferrer" className="rounded-xl bg-white/10 px-2 py-1.5 text-[10px] font-black text-white ring-1 ring-white/10 hover:bg-white/15">Открыть</a>
-                      <button type="button" onClick={() => navigator.clipboard?.writeText(selectedMedia.url || "")} className="rounded-xl bg-white/10 px-2 py-1.5 text-[10px] font-black text-white ring-1 ring-white/10 hover:bg-white/15">Копия URL</button>
+                      <button type="button" onClick={copySelectedMediaUrl} className="rounded-xl bg-white/10 px-2 py-1.5 text-[10px] font-black text-white ring-1 ring-white/10 hover:bg-white/15">Копия URL</button>
+                      {mediaToolbarNotice ? (
+                        <span className="rounded-xl bg-emerald-400/15 px-2 py-1.5 text-[10px] font-black text-emerald-100 ring-1 ring-emerald-300/20">{mediaToolbarNotice}</span>
+                      ) : null}
                       <button type="button" onClick={() => setSelectedMediaKey("")} className="rounded-xl bg-white/10 px-2 py-1.5 text-[10px] font-black text-slate-300 ring-1 ring-white/10 hover:bg-white/15">Снять</button>
                     </div>
                   ) : null}
