@@ -2112,9 +2112,9 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
               <span className="text-[10px] font-black text-slate-500">{Math.round(Number(plan.music?.volume ?? 0.12) * 100)}%</span>
             </label>
           </div>
-          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_300px]">
-            <div className="rounded-2xl bg-slate-950 p-3 text-white ring-1 ring-slate-900">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="overflow-hidden rounded-2xl bg-slate-950 text-white ring-1 ring-slate-900">
+              <div className="sticky top-0 z-20 flex flex-col gap-2 border-b border-white/10 bg-slate-950/95 p-3 backdrop-blur sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Timeline Studio</div>
                   <div className="text-xs font-black">Видео · Голос · Музыка · SFX · Текст · Картинки · сейчас {Math.round(currentTime * 10) / 10}s / {Math.round(duration)}s{selectedClipKeys.length > 1 ? ` · выбрано ${selectedClipKeys.length}` : ""}</div>
@@ -2345,7 +2345,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                   ) : null}
                 </div>
               ) : null}
-              <div className="mt-3 flex gap-2 overflow-x-auto rounded-2xl bg-slate-900 p-2">
+              <div className="mx-3 mt-3 flex gap-2 overflow-x-auto rounded-2xl bg-slate-900 p-2">
                 {SOUND_EFFECT_PRESETS.map((preset) => (
                   <button
                     key={preset.assetId}
@@ -2359,7 +2359,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                   </button>
                 ))}
               </div>
-              <div className="mt-3 overflow-x-auto rounded-2xl bg-slate-900 p-3">
+              <div className="m-3 overflow-x-auto rounded-2xl bg-slate-900 p-3">
                 <div style={{ minWidth: `${timelineMinWidth}px` }}>
                   <div className="mb-3 grid grid-cols-[74px_1fr] gap-3">
                     <div className="py-1 text-[10px] font-black uppercase tracking-wide text-slate-400">Playhead</div>
@@ -2579,7 +2579,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                 </div>
               </div>
             </div>
-            <div className="rounded-2xl bg-white p-3 ring-1 ring-indigo-100">
+            <div className="max-h-[calc(100vh-220px)] overflow-y-auto rounded-2xl bg-white p-3 ring-1 ring-indigo-100 xl:sticky xl:top-3">
               <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Инспектор</div>
               {selectedMedia ? (
                 <div className="mt-2 space-y-2 rounded-2xl bg-slate-950 p-2 text-white ring-1 ring-slate-900">
