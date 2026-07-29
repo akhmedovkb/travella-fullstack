@@ -1863,12 +1863,12 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                 <div className="rounded-xl bg-white px-2.5 py-1.5 ring-1 ring-slate-200">Картинки <span className="ml-1 text-slate-400">{imageOverlays.length}</span></div>
                 <div className="rounded-xl bg-amber-50 px-2.5 py-1.5 text-amber-800 ring-1 ring-amber-100">План обрезки</div>
               </div>
-              <div className="mb-2 grid items-start gap-2 xl:grid-cols-[160px_minmax(0,1fr)]">
-                <div className="rounded-2xl bg-slate-950 p-2 text-white">
+              <div className="mb-3 grid items-start gap-3 xl:grid-cols-[300px_minmax(0,1fr)_320px]">
+                <div className="rounded-2xl bg-slate-950 p-3 text-white">
                   <div className="text-xs font-black uppercase tracking-wide text-slate-400">Превью</div>
                   {previewUrl ? (
                     <div ref={previewFrameRef} className="relative mt-2 overflow-hidden rounded-xl bg-black">
-                      <video src={previewUrl} controls onTimeUpdate={(event) => seekTimeline(event.currentTarget.currentTime)} className="aspect-[9/16] max-h-[210px] w-full bg-black object-contain" />
+                      <video src={previewUrl} controls onTimeUpdate={(event) => seekTimeline(event.currentTarget.currentTime)} className="aspect-[9/16] max-h-[340px] w-full bg-black object-contain" />
                       {textOverlays.map((item, index) => {
                         if (item.enabled === false || !isOverlayVisibleAtTime(item)) return null;
                         const textStyle = {
@@ -1972,7 +1972,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       ))}
                     </div>
                   ) : (
-                    <div className="mt-2 flex aspect-[9/16] max-h-[210px] items-center justify-center rounded-xl bg-slate-900 text-xs font-black text-slate-500">Видео появится после HeyGen</div>
+                    <div className="mt-2 flex aspect-[9/16] max-h-[340px] items-center justify-center rounded-xl bg-slate-900 text-xs font-black text-slate-500">Видео появится после HeyGen</div>
                   )}
                 </div>
                 <div className="rounded-2xl bg-white p-3 ring-1 ring-slate-200">
@@ -1988,6 +1988,95 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                     </label>
                     <div className="rounded-xl bg-slate-50 p-2.5 text-xs font-black text-slate-950 ring-1 ring-slate-100"><span className="block text-[10px] uppercase tracking-wide text-slate-400">Длительность</span>{Math.max(0, Math.round((duration - Number(trim.start || 0) - Number(trim.end || 0)) * 10) / 10)} сек</div>
                     <div className="rounded-xl bg-amber-50 p-2.5 text-xs font-bold text-amber-800 ring-1 ring-amber-100">Обрезка сохранится в плане для FFmpeg-рендера.</div>
+                  </div>
+                </div>
+                <div className="rounded-2xl bg-white p-3 ring-1 ring-slate-200">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-xs font-black uppercase tracking-wide text-slate-400">Медиатека</div>
+                      <div className="mt-1 text-xs font-bold text-slate-500">
+                        Файлы задачи: {mediaLibrary.length} · на таймлайне {mediaLibraryUsedCount}
+                      </div>
+                    </div>
+                    <button type="button" onClick={() => mediaInputRef.current?.click()} disabled={mediaImporting} className="rounded-2xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-500 disabled:opacity-40">{mediaImporting ? "Импорт..." : "+ файл"}</button>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-1">
+                    {[
+                      ["all", "Все", mediaLibrary.length],
+                      ["image", "Картинки", mediaLibrary.filter((media) => media.type === "image").length],
+                      ["audio", "Аудио", mediaLibrary.filter((media) => media.type === "audio").length],
+                      ["video", "Видео", mediaLibrary.filter((media) => media.type === "video").length],
+                    ].map(([key, label, count]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setAssetBinFilter(key)}
+                        className={cn(
+                          "rounded-full px-2 py-1 text-[10px] font-black ring-1",
+                          assetBinFilter === key
+                            ? "bg-slate-950 text-white ring-slate-950"
+                            : "bg-white text-slate-600 ring-slate-200 hover:bg-slate-50"
+                        )}
+                      >
+                        {label} {count}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    value={assetBinQuery}
+                    onChange={(event) => setAssetBinQuery(event.target.value)}
+                    placeholder="Найти файл..."
+                    className="mt-3 w-full rounded-2xl bg-slate-50 px-3 py-2 text-xs font-black text-slate-950 outline-none ring-1 ring-slate-200 placeholder:text-slate-400 focus:ring-indigo-200"
+                  />
+                  <div className="mt-3 max-h-[260px] space-y-2 overflow-y-auto pr-1">
+                    {filteredMediaLibrary.length ? filteredMediaLibrary.slice(0, 10).map((media) => {
+                      const mediaKey = getMediaKey(media);
+                      const mediaSelected = selectedMediaKey === mediaKey;
+                      const usageLabels = getMediaTimelineUsage(media);
+                      const mediaPlaced = usageLabels.length > 0;
+                      return (
+                        <div
+                          key={`compact_${mediaKey}`}
+                          role="button"
+                          tabIndex={0}
+                          draggable
+                          onDragStart={(event) => {
+                            event.dataTransfer.setData("application/x-travella-media", mediaKey);
+                            event.dataTransfer.effectAllowed = "copy";
+                            setSelectedMediaKey(mediaKey);
+                            setDraggedAssetType(media.type || "");
+                          }}
+                          onDragEnd={() => setDraggedAssetType("")}
+                          onClick={() => setSelectedMediaKey(mediaKey)}
+                          className={cn(
+                            "grid cursor-pointer grid-cols-[44px_1fr] gap-2 rounded-2xl bg-slate-50 p-2 ring-1 ring-slate-100 transition hover:bg-slate-100",
+                            mediaSelected && "bg-emerald-50 ring-2 ring-emerald-300"
+                          )}
+                          title="Перетащи файл на нужную дорожку таймлайна."
+                        >
+                          {media.type === "image" ? (
+                            <img src={media.thumbnailUrl || media.url} alt="" className="h-11 w-11 rounded-xl object-cover ring-1 ring-slate-200" />
+                          ) : (
+                            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-950 text-[10px] font-black uppercase text-white">{formatTimelineMediaType(media.type || "file")}</div>
+                          )}
+                          <div className="min-w-0">
+                            <div className="truncate text-xs font-black text-slate-950">{media.label || media.originalName || "Медиа"}</div>
+                            <div className="mt-0.5 truncate text-[10px] font-bold text-slate-500">{formatTimelineMediaType(media.type)} · {media.mimeType || "медиа"}</div>
+                            <div className={cn("mt-0.5 truncate text-[10px] font-bold", mediaPlaced ? "text-emerald-700" : "text-slate-500")}>
+                              {mediaPlaced ? `На дорожке: ${usageLabels.join(", ")}` : "Перетащи на таймлайн"}
+                            </div>
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              <button type="button" onClick={(event) => { event.stopPropagation(); addMediaToTimeline(media); }} className="rounded-lg bg-slate-950 px-2 py-1 text-[9px] font-black text-white hover:bg-slate-800">На курсор</button>
+                              <button type="button" onClick={(event) => { event.stopPropagation(); toggleMediaPreview(media); }} className="rounded-lg bg-white px-2 py-1 text-[9px] font-black text-slate-950 ring-1 ring-slate-200 hover:bg-slate-50">Превью</button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }) : (
+                      <div className="rounded-2xl bg-slate-50 px-4 py-6 text-center text-xs font-bold text-slate-500 ring-1 ring-slate-100">
+                        Файлы появятся здесь после импорта.
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -2065,7 +2154,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                 </div>
               </div>
               <input ref={mediaInputRef} type="file" accept="image/*,audio/*,video/*" multiple onChange={handleMediaInput} className="hidden" />
-              {mediaLibrary.length ? (
+              {false && mediaLibrary.length ? (
                 <div className="mt-3 rounded-2xl bg-slate-900 p-2 ring-1 ring-white/5">
                   <div className="mb-2 flex items-center justify-between gap-2">
                     <div>
