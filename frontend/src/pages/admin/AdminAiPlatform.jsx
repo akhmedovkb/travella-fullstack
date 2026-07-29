@@ -2256,6 +2256,17 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                   <button type="button" onClick={() => selectClipsByType("text")} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Текст</button>
                   <button type="button" onClick={() => selectClipsByType("image")} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Картинки</button>
                   <button type="button" onClick={() => selectClipsByType("video")} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Видео</button>
+                  {selectedMedia ? (
+                    <div className="flex items-center gap-1 rounded-2xl bg-emerald-500/10 p-1 ring-1 ring-emerald-300/20">
+                      <div className="max-w-40 truncate px-2 text-[10px] font-black text-emerald-100" title={`${selectedMedia.label || selectedMedia.originalName || "Медиа"} · ${selectedMediaDropTarget}`}>
+                        {formatTimelineMediaType(selectedMedia.type || "media")} · {selectedMedia.label || selectedMedia.originalName || "Медиа"}
+                      </div>
+                      <button type="button" onClick={() => addMediaToTimeline(selectedMedia)} className="rounded-xl bg-white px-2 py-1.5 text-[10px] font-black text-slate-950 hover:bg-slate-100">На курсор</button>
+                      {selectedMedia.type === "audio" ? (
+                        <button type="button" onClick={() => useAudioMediaAsMusic(selectedMedia)} className="rounded-xl bg-emerald-500 px-2 py-1.5 text-[10px] font-black text-white hover:bg-emerald-400">В музыку</button>
+                      ) : null}
+                    </div>
+                  ) : null}
                   <button type="button" onClick={() => mediaInputRef.current?.click()} disabled={mediaImporting} className="rounded-2xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-500 disabled:opacity-40">{mediaImporting ? "Импорт..." : "Импорт"}</button>
                   <button type="button" onClick={() => addEffect()} className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-950 hover:bg-slate-100">Добавить SFX</button>
                   <button type="button" onClick={addTextOverlay} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Текст</button>
