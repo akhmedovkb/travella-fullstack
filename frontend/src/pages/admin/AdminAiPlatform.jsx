@@ -2283,6 +2283,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       <span className="rounded-xl bg-slate-900/70 px-2 py-1.5 text-[10px] font-black text-slate-200 ring-1 ring-white/10">Макс. {roundTimelineTime(selectedMediaEndTime)}s</span>
                       <button type="button" onClick={() => addMediaToTimeline(selectedMedia, 0)} className="rounded-xl bg-white/10 px-2 py-1.5 text-[10px] font-black text-white ring-1 ring-white/10 hover:bg-white/15">В начало</button>
                       <button type="button" onClick={() => addMediaToTimeline(selectedMedia)} className="rounded-xl bg-white px-2 py-1.5 text-[10px] font-black text-slate-950 hover:bg-slate-100">На курсор</button>
+                      <button type="button" onClick={() => addMediaToTimeline(selectedMedia, selectedMediaEndTime)} className="rounded-xl bg-white/10 px-2 py-1.5 text-[10px] font-black text-white ring-1 ring-white/10 hover:bg-white/15">На макс.</button>
                       <button type="button" onClick={() => addMediaToTimelineEnd(selectedMedia)} className="rounded-xl bg-white/10 px-2 py-1.5 text-[10px] font-black text-white ring-1 ring-white/10 hover:bg-white/15">В конец</button>
                       {selectedMedia.type === "audio" ? (
                         <button type="button" onClick={() => useAudioMediaAsMusic(selectedMedia)} className="rounded-xl bg-emerald-500 px-2 py-1.5 text-[10px] font-black text-white hover:bg-emerald-400">В музыку</button>
@@ -2790,6 +2791,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                   <div className="grid grid-cols-2 gap-2">
                     <button type="button" onClick={() => addMediaToTimeline(selectedMedia, 0)} className="rounded-xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">В начало</button>
                     <button type="button" onClick={() => addMediaToTimeline(selectedMedia)} className="rounded-xl bg-emerald-500 px-3 py-2 text-xs font-black text-white hover:bg-emerald-400">На курсор</button>
+                    <button type="button" onClick={() => addMediaToTimeline(selectedMedia, selectedMediaEndTime)} className="rounded-xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">На макс.</button>
                     <button type="button" onClick={() => addMediaToTimelineEnd(selectedMedia)} className="rounded-xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">В конец</button>
                     {canReplaceSelectedClipWithMedia(selectedMedia) ? (
                       <button type="button" onClick={() => replaceSelectedClipWithMedia(selectedMedia)} className="rounded-xl bg-indigo-500 px-3 py-2 text-xs font-black text-white hover:bg-indigo-400">Заменить клип</button>
