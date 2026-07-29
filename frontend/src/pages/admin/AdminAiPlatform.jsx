@@ -2760,7 +2760,9 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                     </div>
                   ) : null}
                   <div className="grid grid-cols-2 gap-2">
+                    <button type="button" onClick={() => addMediaToTimeline(selectedMedia, 0)} className="rounded-xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">В начало</button>
                     <button type="button" onClick={() => addMediaToTimeline(selectedMedia)} className="rounded-xl bg-emerald-500 px-3 py-2 text-xs font-black text-white hover:bg-emerald-400">На курсор</button>
+                    <button type="button" onClick={() => addMediaToTimelineEnd(selectedMedia)} className="rounded-xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">В конец</button>
                     {canReplaceSelectedClipWithMedia(selectedMedia) ? (
                       <button type="button" onClick={() => replaceSelectedClipWithMedia(selectedMedia)} className="rounded-xl bg-indigo-500 px-3 py-2 text-xs font-black text-white hover:bg-indigo-400">Заменить клип</button>
                     ) : null}
