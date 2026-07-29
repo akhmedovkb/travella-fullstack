@@ -1863,12 +1863,12 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                 <div className="rounded-xl bg-white px-2.5 py-1.5 ring-1 ring-slate-200">Картинки <span className="ml-1 text-slate-400">{imageOverlays.length}</span></div>
                 <div className="rounded-xl bg-amber-50 px-2.5 py-1.5 text-amber-800 ring-1 ring-amber-100">План обрезки</div>
               </div>
-              <div className="mb-3 grid items-start gap-3 xl:grid-cols-[300px_minmax(0,1fr)_320px]">
-                <div className="rounded-2xl bg-slate-950 p-3 text-white">
+              <div className="mb-3 grid items-start gap-3 xl:grid-cols-[320px_minmax(360px,1fr)_320px]">
+                <div className="rounded-2xl bg-slate-950 p-3 text-white xl:order-2">
                   <div className="text-xs font-black uppercase tracking-wide text-slate-400">Превью</div>
                   {previewUrl ? (
-                    <div ref={previewFrameRef} className="relative mt-2 overflow-hidden rounded-xl bg-black">
-                      <video src={previewUrl} controls onTimeUpdate={(event) => seekTimeline(event.currentTarget.currentTime)} className="aspect-[9/16] max-h-[340px] w-full bg-black object-contain" />
+                    <div ref={previewFrameRef} className="relative mt-2 flex justify-center overflow-hidden rounded-xl bg-black">
+                      <video src={previewUrl} controls onTimeUpdate={(event) => seekTimeline(event.currentTarget.currentTime)} className="aspect-[9/16] max-h-[520px] w-full bg-black object-contain" />
                       {textOverlays.map((item, index) => {
                         if (item.enabled === false || !isOverlayVisibleAtTime(item)) return null;
                         const textStyle = {
@@ -1972,10 +1972,10 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       ))}
                     </div>
                   ) : (
-                    <div className="mt-2 flex aspect-[9/16] max-h-[340px] items-center justify-center rounded-xl bg-slate-900 text-xs font-black text-slate-500">Видео появится после HeyGen</div>
+                    <div className="mt-2 flex aspect-[9/16] min-h-[420px] items-center justify-center rounded-xl bg-slate-900 text-xs font-black text-slate-500">Видео появится после HeyGen</div>
                   )}
                 </div>
-                <div className="rounded-2xl bg-white p-3 ring-1 ring-slate-200">
+                <div className="rounded-2xl bg-white p-3 ring-1 ring-slate-200 xl:order-3">
                   <div className="text-xs font-black uppercase tracking-wide text-slate-400">Монтаж</div>
                   <div className="mt-2 grid gap-2 md:grid-cols-4">
                     <label className="rounded-xl bg-slate-50 p-2.5 ring-1 ring-slate-100">
@@ -1990,7 +1990,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                     <div className="rounded-xl bg-amber-50 p-2.5 text-xs font-bold text-amber-800 ring-1 ring-amber-100">Обрезка сохранится в плане для FFmpeg-рендера.</div>
                   </div>
                 </div>
-                <div className="rounded-2xl bg-white p-3 ring-1 ring-slate-200">
+                <div className="rounded-2xl bg-white p-3 ring-1 ring-slate-200 xl:order-1">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="text-xs font-black uppercase tracking-wide text-slate-400">Медиатека</div>
