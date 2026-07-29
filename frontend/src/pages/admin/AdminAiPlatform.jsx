@@ -2746,6 +2746,9 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">Медиатека</div>
                       <div className="truncate text-xs font-black">{selectedMedia.label || selectedMedia.originalName || "Медиа"}</div>
                       <div className="mt-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">{selectedMedia.type || "файл"} · {selectedMedia.mimeType || "медиа"}</div>
+                      <div className="mt-1 text-[10px] font-black text-emerald-300">
+                        {selectedMediaUsage.length ? `Уже на таймлайне: ${selectedMediaUsage.join(", ")}` : `Добавится: ${selectedMediaDropTarget}`}
+                      </div>
                     </div>
                     <button type="button" onClick={() => setSelectedMediaKey("")} className="rounded-full bg-white/10 px-2 py-1 text-[10px] font-black text-slate-300 hover:bg-white/15">Снять</button>
                   </div>
